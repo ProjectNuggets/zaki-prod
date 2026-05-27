@@ -62,6 +62,19 @@ async function request(path, { method = "GET", token, json } = {}) {
   return { status: response.status, data, raw };
 }
 
+async function expectStatus(user, path, status, { method = "GET", json } = {}) {
+  const result = await request(path, {
+    method,
+    token: user.token,
+    json,
+  });
+  assert(
+    result.status === status,
+    `${user.label} expected ${status} from ${method} ${path}, got ${result.status}: ${result.raw}`
+  );
+  return result;
+}
+
 function leadId(lead) {
   return String(lead?.job_id || lead?.id || "").trim();
 }
@@ -112,6 +125,30 @@ async function listLeads(user) {
   const result = await request("/api/hire/leads", { token: user.token });
   assert(result.status === 200, `${user.label} lead list failed: ${result.status} ${result.raw}`);
   return normalizeLeads(result.data);
+}
+
+async function verifyCannotAccessOtherLead(actor, owner) {
+  const encoded = encodeURIComponent(owner.createdLeadId);
+  await expectStatus(actor, `/api/hire/leads/${encoded}`, 404);
+  await expectStatus(actor, `/api/hire/leads/${encoded}/versions`, 404);
+  await expectStatus(actor, `/api/hire/leads/${encoded}/pdf`, 404);
+  await expectStatus(actor, `/api/hire/leads/${encoded}/status`, 404, {
+    method: "PUT",
+    json: { status: "approved" },
+  });
+  await expectStatus(actor, `/api/hire/leads/${encoded}/feedback`, 404, {
+    method: "PUT",
+    json: { feedback: "good", note: "cross-tenant probe" },
+  });
+  await expectStatus(actor, `/api/hire/leads/${encoded}/followup`, 404, {
+    method: "PUT",
+    json: { days: 7 },
+  });
+  await expectStatus(actor, `/api/hire/leads/${encoded}`, 404, { method: "DELETE" });
+
+  const events = await request(`/api/hire/events?job_id=${encoded}`, { token: actor.token });
+  assert(events.status === 200, `${actor.label} events failed: ${events.status} ${events.raw}`);
+  assert(!JSON.stringify(events.data || []).includes(owner.createdLeadId), `${actor.label} can see ${owner.label} Hire events`);
 }
 
 async function deleteLead(user) {
@@ -165,6 +202,18 @@ async function main() {
     assert(bTitles.includes(users[1].uniqueTitle), "user-b cannot see its own Hire lead");
     assert(!aTitles.includes(users[1].uniqueTitle), "user-a can see user-b Hire lead");
     assert(!bTitles.includes(users[0].uniqueTitle), "user-b can see user-a Hire lead");
+
+    logStep("Verifying known-id cross-tenant access is rejected");
+    await verifyCannotAccessOtherLead(users[0], users[1]);
+    await verifyCannotAccessOtherLead(users[1], users[0]);
+
+    logStep("Verifying cross-tenant delete probes did not remove owner data");
+    const [aLead, bLead] = await Promise.all([
+      request(`/api/hire/leads/${encodeURIComponent(users[0].createdLeadId)}`, { token: users[0].token }),
+      request(`/api/hire/leads/${encodeURIComponent(users[1].createdLeadId)}`, { token: users[1].token }),
+    ]);
+    assert(aLead.status === 200, `user-a lead disappeared after cross-tenant probes: ${aLead.status} ${aLead.raw}`);
+    assert(bLead.status === 200, `user-b lead disappeared after cross-tenant probes: ${bLead.status} ${bLead.raw}`);
   } catch (error) {
     primaryError = error;
     throw error;

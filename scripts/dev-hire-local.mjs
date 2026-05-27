@@ -12,10 +12,13 @@
 
 import http from "node:http";
 import { spawn, spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+loadLocalEnv(path.join(ROOT, ".env.hire.local"));
+
 const BACKEND_DIR = path.join(ROOT, "backend");
 const ENGINE_REPO = process.env.ZAKI_HIRE_ENGINE_REPO || path.resolve(ROOT, "..", "zaki-hire-engine");
 
@@ -37,6 +40,31 @@ const HIRE_ENGINE_IMAGE = process.env.ZAKI_HIRE_ENGINE_IMAGE || "zaki-hire-engin
 const INTERNAL_TOKEN = process.env.ZAKI_HIRE_LOCAL_INTERNAL_TOKEN || "zaki-e2e-hire-token";
 const PASSWORD = process.env.ZAKI_HIRE_LOCAL_PASSWORD || "ZakiE2E!2026";
 const LEGAL_POLICY_VERSION = process.env.ZAKI_LEGAL_POLICY_VERSION || "2026-02-17.v2";
+const LOCAL_HIRE_LLM_PROVIDER = process.env.HIRE_LLM_PROVIDER || process.env.ZAKI_HIRE_LLM_PROVIDER || "ollama";
+const LOCAL_HIRE_LLM_MODEL = process.env.HIRE_LLM_MODEL || process.env.ZAKI_HIRE_LLM_MODEL || defaultHireModel(LOCAL_HIRE_LLM_PROVIDER);
+const LOCAL_HIRE_OLLAMA_URL = process.env.HIRE_OLLAMA_URL || process.env.ZAKI_HIRE_OLLAMA_URL || process.env.OLLAMA_URL || "http://host.docker.internal:11434/v1";
+const LOCAL_HIRE_WEEKLY_PROMPT_LIMIT = process.env.ZAKI_HIRE_WEEKLY_PROMPT_LIMIT || process.env.HIRE_WEEKLY_PROMPT_LIMIT || "20";
+const PROVIDER_KEY_ENVS = [
+  "OPENAI_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "DEEPSEEK_API_KEY",
+  "GROQ_API_KEY",
+  "NVIDIA_API_KEY",
+  "XAI_API_KEY",
+  "MOONSHOT_API_KEY",
+  "MISTRAL_API_KEY",
+  "OPENROUTER_API_KEY",
+  "TOGETHER_API_KEY",
+  "FIREWORKS_API_KEY",
+  "CEREBRAS_API_KEY",
+  "PERPLEXITY_API_KEY",
+  "HUGGINGFACE_API_KEY",
+  "COHERE_API_KEY",
+  "SAMBANOVA_API_KEY",
+  "QWEN_API_KEY",
+  "GOOGLE_API_KEY",
+  "OPENAI_COMPAT_API_KEY",
+];
 
 const USERS = [
   { id: 1001, email: "zaki-e2e-admin@example.com", name: "ZAKI E2E Admin" },
@@ -49,6 +77,40 @@ let typMockServer = null;
 
 function log(message) {
   process.stdout.write(`[hire-local] ${message}\n`);
+}
+
+function loadLocalEnv(envPath) {
+  if (!fs.existsSync(envPath)) return;
+  const content = fs.readFileSync(envPath, "utf8");
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const separator = line.indexOf("=");
+    if (separator <= 0) continue;
+    const key = line.slice(0, separator).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || process.env[key]) continue;
+    process.env[key] = stripEnvValue(line.slice(separator + 1).trim());
+  }
+  log(`Loaded local Hire env overrides from ${envPath}`);
+}
+
+function stripEnvValue(value) {
+  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
+function defaultHireModel(provider) {
+  return String(provider).trim().toLowerCase() === "kimi" ? "kimi-k2.5" : "llama3";
+}
+
+function dockerEnv(name, value) {
+  return ["-e", `${name}=${value}`];
+}
+
+function dockerProviderKeyEnvArgs() {
+  return PROVIDER_KEY_ENVS.flatMap((name) => (process.env[name] ? dockerEnv(name, process.env[name]) : []));
 }
 
 function run(command, args, options = {}) {
@@ -237,9 +299,11 @@ function ensureHireEngineContainer() {
       "-e", "HIRE_TENANT_DATA_ROOT=/tmp/zaki-hire/users",
       "-e", "HIRE_ARTIFACT_STORAGE_PROVIDER=filesystem",
       "-e", "HIRE_ARTIFACT_FILESYSTEM_DURABLE=true",
-      "-e", "HIRE_LLM_PROVIDER=ollama",
-      "-e", "HIRE_LLM_MODEL=llama3",
+      ...dockerEnv("HIRE_LLM_PROVIDER", LOCAL_HIRE_LLM_PROVIDER),
+      ...dockerEnv("HIRE_LLM_MODEL", LOCAL_HIRE_LLM_MODEL),
+      ...dockerEnv("HIRE_OLLAMA_URL", LOCAL_HIRE_OLLAMA_URL),
       "-e", "HIRE_ALLOW_INTERNAL_OLLAMA=true",
+      ...dockerProviderKeyEnvArgs(),
       "-e", "HIRE_SOURCE_POLICY_VERSION=2026-05-20.local",
       "-e", "HIRE_SOURCE_CONFIG_RUNTIME_READY=true",
       "-e", "X_BEARER_TOKEN=local-x-token",
@@ -370,15 +434,16 @@ function backendEnv() {
     ZAKI_HIRE_ENGINE_IMAGE_TAG: "ghcr.io/projectnuggets/zaki-hire-engine:sha-0000000",
     ZAKI_HIRE_ENGINE_SOURCE_REPOSITORY: "github.com/projectnuggets/zaki-hire-engine",
     ZAKI_HIRE_ENGINE_SOURCE_COMMIT: "0".repeat(40),
-    ZAKI_HIRE_LLM_PROVIDER: "ollama",
-    ZAKI_HIRE_LLM_MODEL: "llama3",
+    ZAKI_HIRE_LLM_PROVIDER: LOCAL_HIRE_LLM_PROVIDER,
+    ZAKI_HIRE_LLM_MODEL: LOCAL_HIRE_LLM_MODEL,
+    ZAKI_HIRE_OLLAMA_URL: LOCAL_HIRE_OLLAMA_URL,
     ZAKI_HIRE_SOURCE_POLICY_VERSION: "2026-05-20.local",
     ZAKI_HIRE_BROWSER_AUTOMATION_ENABLED: "true",
     ZAKI_HIRE_AUTO_APPLY_ENABLED: "true",
     ZAKI_HIRE_AUTO_APPLY_CONSENT_REQUIRED: "true",
     ZAKI_HIRE_AUTO_APPLY_AUDIT_REQUIRED: "true",
     ZAKI_HIRE_WEEKLY_PROMPT_BUCKET: "hire_weekly",
-    ZAKI_HIRE_WEEKLY_PROMPT_LIMIT: "20",
+    ZAKI_HIRE_WEEKLY_PROMPT_LIMIT: LOCAL_HIRE_WEEKLY_PROMPT_LIMIT,
   };
   return env;
 }

@@ -1,7 +1,7 @@
 # ZAKI Hire Integration Spec
 
 Status: planning source of truth.
-Last updated: 2026-05-20.
+Last updated: 2026-05-25.
 
 ## Reader And Action
 
@@ -229,7 +229,11 @@ Primary BFF route families:
 - `GET /api/hire/events`
 - `GET /api/hire/me/settings`
 - `PATCH /api/hire/me/settings`
-- `GET /api/internal/hire/*`
+- `GET /api/internal/hire/status`
+- `GET /api/internal/hire/deployment-readiness`
+- `GET /api/internal/hire/operator/readiness`
+- `GET /api/internal/hire/operator/provider-health`
+- `POST /api/internal/hire/operator/provider-smoke`
 
 WebSocket and long-running tasks can be added under `/api/hire/ws` or task
 polling routes. The BFF must normalize task state so the frontend does not need
@@ -294,6 +298,11 @@ Implementation checkpoint on 2026-05-20:
   `/api/hire/status`, generic `/api/hire/*` proxying to `/api/v1/*`, and
   super-admin `/api/internal/hire/status` plus
   `/api/internal/hire/deployment-readiness`.
+- The hidden operator handshake now includes super-admin BFF endpoints for
+  engine operator readiness, provider health, and cost-guarded provider smoke.
+  These routes preserve provider/model/status facts for operators while
+  redacting API-key, token, password, and secret-shaped values before they leave
+  the ZAKI backend.
 - The BFF uses central ZAKI auth, derives the canonical ZAKI user id, strips
   browser auth/cookies/internal spoofing headers, forwards the operator token as
   Bearer and `X-Internal-Token`, and sends `X-Zaki-User-Id` downstream.

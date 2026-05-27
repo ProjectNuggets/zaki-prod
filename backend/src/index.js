@@ -121,6 +121,7 @@ import {
   resolveCanonicalHireUserId,
   sanitizeHireClientPayload,
   sanitizeHireHealthPayload,
+  sanitizeHireOperatorPayload,
   sanitizeHireUpstreamPayload,
   shouldConsumeHireIngressQuota,
 } from "./hire-bff-contract.js";
@@ -140,6 +141,9 @@ import {
 } from "./hire-metering-contract.js";
 import {
   fetchHireDeploymentReadiness,
+  fetchHireOperatorProviderHealth,
+  fetchHireOperatorProviderSmoke,
+  fetchHireOperatorReadiness,
   fetchHirePath,
   fetchHireProxyPath,
   getHireBase,
@@ -13725,6 +13729,90 @@ app.get("/api/internal/hire/status", async (req, res) => {
   }
 });
 
+async function handleHireOperatorHandshake(req, res, {
+  fetcher,
+  payloadKey,
+  label,
+  timeoutMs = Math.min(HIRE_ENGINE_REQUEST_TIMEOUT_MS, 10_000),
+}) {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+
+    const requestId = getOrCreateRequestId(req);
+    const userId = resolveCanonicalHireUserId(authResult);
+    const configured = Boolean(getHireBase(HIRE_ENGINE_BASE_URL) && HIRE_ENGINE_INTERNAL_TOKEN);
+    const basePayload = {
+      success: true,
+      enabled: ZAKI_HIRE_ENABLED,
+      configured,
+      baseUrlConfigured: Boolean(getHireBase(HIRE_ENGINE_BASE_URL)),
+      internalTokenConfigured: Boolean(HIRE_ENGINE_INTERNAL_TOKEN),
+      requestTimeoutMs: HIRE_ENGINE_REQUEST_TIMEOUT_MS,
+      requestId,
+    };
+
+    if (!ZAKI_HIRE_ENABLED || !configured || !userId) {
+      return res.status(200).json({
+        ...basePayload,
+        ok: false,
+        code: !ZAKI_HIRE_ENABLED
+          ? "zaki_hire_disabled"
+          : !configured
+            ? "zaki_hire_bff_config"
+            : "zaki_hire_user_id",
+        [payloadKey]: null,
+      });
+    }
+
+    const upstream = await fetcher({
+      baseUrl: HIRE_ENGINE_BASE_URL,
+      internalToken: HIRE_ENGINE_INTERNAL_TOKEN,
+      userId,
+      requestId,
+      fetchWithTimeout,
+      timeoutMs,
+      label,
+    });
+    const payload = await upstream.json().catch(() => null);
+    const sanitized = sanitizeHireOperatorPayload(payload || {});
+
+    if (!upstream.ok) {
+      const mapped = mapHireUpstreamFailure(upstream.status, requestId);
+      return res.status(200).json({
+        ...basePayload,
+        ok: false,
+        upstreamStatus: upstream.status,
+        upstreamError: {
+          status: upstream.status,
+          message: mapped?.body?.message || `${label} failed.`,
+        },
+        [payloadKey]: sanitized,
+      });
+    }
+
+    return res.status(200).json({
+      ...basePayload,
+      ok: Boolean(sanitized?.ok ?? sanitized?.ready ?? upstream.ok),
+      upstreamStatus: upstream.status,
+      [payloadKey]: sanitized,
+    });
+  } catch (error) {
+    console.error("[Hire] Operator handshake error:", {
+      requestId: getOrCreateRequestId(req),
+      label,
+      error: error?.message || "Unable to load Hire operator handshake.",
+    });
+    res.status(503).json({
+      code: "hire_unavailable",
+      error: "Hire is unavailable.",
+      message: "Hire operator handshake could not be checked.",
+      retryable: true,
+      requestId: getOrCreateRequestId(req),
+    });
+  }
+}
+
 app.get("/api/internal/hire/deployment-readiness", async (req, res) => {
   try {
     const authResult = await requireSuperAdminUser(req, res);
@@ -13819,6 +13907,31 @@ app.get("/api/internal/hire/deployment-readiness", async (req, res) => {
       requestId: getOrCreateRequestId(req),
     });
   }
+});
+
+app.get("/api/internal/hire/operator/readiness", async (req, res) => {
+  await handleHireOperatorHandshake(req, res, {
+    fetcher: fetchHireOperatorReadiness,
+    payloadKey: "operatorReadiness",
+    label: "Hire operator readiness request",
+  });
+});
+
+app.get("/api/internal/hire/operator/provider-health", async (req, res) => {
+  await handleHireOperatorHandshake(req, res, {
+    fetcher: fetchHireOperatorProviderHealth,
+    payloadKey: "providerHealth",
+    label: "Hire operator provider health request",
+  });
+});
+
+app.post("/api/internal/hire/operator/provider-smoke", async (req, res) => {
+  await handleHireOperatorHandshake(req, res, {
+    fetcher: fetchHireOperatorProviderSmoke,
+    payloadKey: "providerSmoke",
+    label: "Hire operator provider smoke request",
+    timeoutMs: Math.min(HIRE_ENGINE_STREAM_TIMEOUT_MS, 45_000),
+  });
 });
 
 app.get("/api/hire/readiness", requireHireContext, async (req, res) => {

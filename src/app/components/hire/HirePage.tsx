@@ -1,27 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import {
-  Activity,
-  AlertCircle,
-  BriefcaseBusiness,
-  CheckCircle2,
-  Clock3,
-  ExternalLink,
-  FileText,
-  Loader2,
-  Play,
-  RefreshCw,
-  Search,
-  ShieldCheck,
-  Sparkles,
-  Square,
-  Upload,
-  User,
-  Wand2,
-} from "lucide-react";
+import { CheckCircle2, Loader2, RefreshCw, Search, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { fetchUsageQuota } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
   createHireManualLead,
@@ -51,195 +32,28 @@ import {
   type HireLead,
   type HireLeadStatus,
   type HireProfile,
-  type HireReadiness,
 } from "@/lib/hireApi";
-
-type HireView = "dashboard" | "pipeline" | "profile" | "import" | "activity";
-type HireIdentityDraft = {
-  email: string;
-  phone: string;
-  linkedin_url: string;
-  github_url: string;
-  website_url: string;
-  city: string;
-};
-
-const HIRE_VIEWS: Array<{ view: HireView; label: string; icon: ReactNode }> = [
-  { view: "dashboard", label: "Dashboard", icon: <Activity className="size-4" /> },
-  { view: "pipeline", label: "Pipeline", icon: <BriefcaseBusiness className="size-4" /> },
-  { view: "profile", label: "Profile", icon: <User className="size-4" /> },
-  { view: "import", label: "Import", icon: <Upload className="size-4" /> },
-  { view: "activity", label: "Activity", icon: <Clock3 className="size-4" /> },
-];
-
-const LEAD_STATUSES: HireLeadStatus[] = [
-  "discovered",
-  "evaluating",
-  "tailoring",
-  "approved",
-  "applied",
-  "interviewing",
-  "rejected",
-  "discarded",
-];
-
-function normalizeHireView(value: string | null): HireView {
-  const normalized = String(value || "dashboard").trim().toLowerCase();
-  if (["pipeline", "profile", "import", "activity"].includes(normalized)) {
-    return normalized as HireView;
-  }
-  return "dashboard";
-}
-
-function leadId(lead: HireLead | null | undefined) {
-  return String(lead?.job_id || lead?.id || "").trim();
-}
-
-function normalizeLeads(payload: HireLead[] | { items?: HireLead[]; total?: number } | undefined) {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.items)) return payload.items;
-  return [];
-}
-
-function profileCandidate(profile: HireProfile | undefined) {
-  const candidate = profile?.candidate || {};
-  return {
-    n: String(profile?.n || candidate.n || candidate.name || ""),
-    s: String(profile?.s || candidate.s || candidate.summary || ""),
-  };
-}
-
-function profileIdentity(profile: HireProfile | undefined): HireIdentityDraft {
-  return {
-    email: String(profile?.identity?.email || ""),
-    phone: String(profile?.identity?.phone || ""),
-    linkedin_url: String(profile?.identity?.linkedin_url || ""),
-    github_url: String(profile?.identity?.github_url || ""),
-    website_url: String(profile?.identity?.website_url || ""),
-    city: String(profile?.identity?.city || ""),
-  };
-}
-
-function profileSignalCount(profile: HireProfile | undefined) {
-  if (!profile) return 0;
-  const experience = profile.exp || profile.experience || [];
-  return [
-    profileCandidate(profile).n,
-    profileCandidate(profile).s,
-    profile.skills?.length,
-    experience.length,
-    profile.projects?.length,
-    profile.education?.length,
-    profile.certifications?.length,
-    profile.achievements?.length,
-  ].filter(Boolean).length;
-}
-
-function statusTone(status: string | undefined) {
-  const normalized = String(status || "unknown").toLowerCase();
-  if (["approved", "applied", "interviewing", "accepted"].includes(normalized)) {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200";
-  }
-  if (["tailoring", "evaluating", "matched"].includes(normalized)) {
-    return "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200";
-  }
-  if (["rejected", "discarded"].includes(normalized)) {
-    return "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200";
-  }
-  return "border-zaki-subtle bg-zaki-base text-zaki-secondary dark:border-[#2a2018] dark:bg-[#14100d] dark:text-[#c9b8a4]";
-}
-
-function scoreTone(score: number | undefined) {
-  const value = Number(score || 0);
-  if (value >= 80) return "text-emerald-700 dark:text-emerald-300";
-  if (value >= 60) return "text-amber-700 dark:text-amber-300";
-  return "text-zaki-secondary dark:text-[#c9b8a4]";
-}
-
-function shortDate(value: string | undefined) {
-  if (!value) return "Not set";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function isHealthy(health: HireHealth | undefined) {
-  return ["alive", "ok"].includes(String(health?.status || "").toLowerCase());
-}
-
-function hireReady(readiness: HireReadiness | undefined) {
-  return readiness?.available !== false;
-}
-
-function readinessTone(readiness: HireReadiness | undefined) {
-  if (!readiness) {
-    return "border-zaki-subtle bg-zaki-base text-zaki-secondary dark:border-[#2a2018] dark:bg-[#0c0a09] dark:text-[#c9b8a4]";
-  }
-  if (readiness.available) {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200";
-  }
-  if (["disabled", "not_configured", "activating"].includes(String(readiness.status || ""))) {
-    return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200";
-  }
-  return "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200";
-}
-
-function readinessLabel(readiness: HireReadiness | undefined, loading: boolean) {
-  if (loading && !readiness) return "Checking activation";
-  if (readiness?.available) return "Product ready";
-  if (readiness?.status === "activating") return "Activation running";
-  if (readiness?.status === "disabled" || readiness?.status === "not_configured") return "Activation pending";
-  if (readiness) return "Product unavailable";
-  return "Activation unknown";
-}
-
-function extractError(error: unknown) {
-  return error instanceof Error ? error.message : "Request failed";
-}
-
-function MetricCard({
-  label,
-  value,
-  detail,
-  icon,
-}: {
-  label: string;
-  value: ReactNode;
-  detail: string;
-  icon: ReactNode;
-}) {
-  return (
-    <div className="rounded-zaki-md border border-zaki-subtle bg-white p-4 dark:border-[#2a2018] dark:bg-[#14100d]">
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-xs font-semibold uppercase tracking-[0.08em] text-zaki-muted dark:text-[#a89684]">
-          {label}
-        </div>
-        <div className="flex size-8 items-center justify-center rounded-zaki-md bg-zaki-hover text-zaki-brand dark:bg-[#1d1712]">
-          {icon}
-        </div>
-      </div>
-      <div className="mt-3 text-2xl font-semibold text-zaki-primary dark:text-[#efe6d9]">{value}</div>
-      <div className="mt-1 text-xs text-zaki-secondary dark:text-[#c9b8a4]">{detail}</div>
-    </div>
-  );
-}
-
-function HireStatusChip({ status }: { status: string | undefined }) {
-  return (
-    <span className={cn("inline-flex items-center rounded-zaki-md border px-2 py-1 text-xs font-semibold", statusTone(status))}>
-      {status || "unknown"}
-    </span>
-  );
-}
-
-function EmptyState({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="rounded-zaki-md border border-dashed border-zaki-strong bg-zaki-base p-6 text-center dark:border-[#3a3026] dark:bg-[#14100d]">
-      <p className="text-sm font-semibold text-zaki-primary dark:text-[#efe6d9]">{title}</p>
-      <p className="mt-2 text-sm text-zaki-secondary dark:text-[#c9b8a4]">{body}</p>
-    </div>
-  );
-}
+import { HireMobileViewNav, HireShellHeader, HireStatusBand } from "./HireShell";
+import { HireLeadDossier } from "./HireLeadDossier";
+import { HireTodayCommandCenter } from "./HireTodayCommandCenter";
+import {
+  EmptyState,
+  HireStatusChip,
+  LEAD_STATUSES,
+  type HireIdentityDraft,
+  type HireView,
+  extractError,
+  hireReady,
+  leadId,
+  normalizeHireView,
+  normalizeLeads,
+  profileCandidate,
+  profileIdentity,
+  profileSignalCount,
+  scoreTone,
+  statusTone,
+} from "./hireUi";
+import "./hireV2.css";
 
 export function HirePage() {
   const queryClient = useQueryClient();
@@ -294,15 +108,6 @@ export function HirePage() {
     queryFn: getHireProfile,
     retry: 1,
   });
-  const quotaQuery = useQuery({
-    queryKey: hireKeys.quota,
-    queryFn: async () => {
-      const { data } = await fetchUsageQuota("hire");
-      return data;
-    },
-    retry: 1,
-  });
-
   const leads = useMemo(() => normalizeLeads(leadsQuery.data), [leadsQuery.data]);
   const filteredLeads = useMemo(() => {
     const needle = leadSearch.trim().toLowerCase();
@@ -336,7 +141,6 @@ export function HirePage() {
     return !Number.isNaN(due) && due <= Date.now();
   }).length;
   const profileSignals = profileSignalCount(profileQuery.data);
-  const quota = quotaQuery.data;
   const readiness = readinessQuery.data;
   const hireActionsDisabled = readinessQuery.isLoading || readinessQuery.isError || !hireReady(readiness);
 
@@ -530,171 +334,67 @@ export function HirePage() {
     pipelineMutation.isPending;
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-[#fbf7f0] text-zaki-primary dark:bg-[#0c0a09] dark:text-[#efe6d9]">
-      <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-4 px-4 py-4 lg:px-6">
-        <header className="flex flex-col gap-3 border-b border-zaki-subtle pb-4 dark:border-[#2a2018] lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-zaki-muted dark:text-[#a89684]">
-              <BriefcaseBusiness className="size-4 text-zaki-brand" />
-              ZAKI Hire
-            </div>
-            <h1 className="mt-1 text-2xl font-semibold tracking-normal text-zaki-primary dark:text-[#efe6d9]">
-              Job pipeline
-            </h1>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="zaki-btn-sm zaki-btn-secondary inline-flex items-center gap-2"
-              onClick={() => void invalidateHire()}
-            >
-              <RefreshCw className="size-4" />
-              Refresh
-            </button>
-            <button
-              type="button"
-              className="zaki-btn-sm zaki-btn-secondary inline-flex items-center gap-2"
-              disabled={hireActionsDisabled || stopScanMutation.isPending}
-              onClick={() => stopScanMutation.mutate()}
-            >
-              <Square className="size-4" />
-              Stop
-            </button>
-            <button
-              type="button"
-              className="zaki-btn-sm zaki-btn-primary inline-flex items-center gap-2"
-              disabled={hireActionsDisabled || scanMutation.isPending}
-              onClick={() => scanMutation.mutate()}
-            >
-              {scanMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
-              Run scan
-            </button>
-          </div>
-        </header>
+    <div className="zaki-hire-v2 min-h-0 flex-1 overflow-y-auto" data-v2-density="compact">
+      <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-4 px-4 py-4 lg:px-6">
+        <HireShellHeader
+          activeView={activeView}
+          leadsCount={leads.length}
+          approvedCount={approvedCount}
+          generatedCount={generatedCount}
+          profileSignals={profileSignals}
+          readiness={readiness}
+          readinessLoading={readinessQuery.isLoading}
+          readinessError={readinessQuery.error}
+          scanPending={scanMutation.isPending}
+          stopPending={stopScanMutation.isPending}
+          actionsDisabled={hireActionsDisabled}
+          onRefresh={() => void invalidateHire()}
+          onStop={() => stopScanMutation.mutate()}
+          onScan={() => scanMutation.mutate()}
+        />
 
-        <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label="Leads" value={leads.length} detail={`${approvedCount} active or approved`} icon={<BriefcaseBusiness className="size-4" />} />
-          <MetricCard label="Generated" value={generatedCount} detail="Resume or cover-letter packages" icon={<FileText className="size-4" />} />
-          <MetricCard label="Profile" value={`${profileSignals}/8`} detail="Candidate evidence signals" icon={<User className="size-4" />} />
-          <MetricCard
-            label="Quota"
-            value={quota?.unlimited ? "Unlimited" : quota?.remaining ?? "?"}
-            detail={quota?.unlimited ? "Plan has Hire access" : `Remaining this ${quota?.period || "period"}`}
-            icon={<ShieldCheck className="size-4" />}
-          />
-        </section>
+        <HireStatusBand
+          readiness={readiness}
+          readinessLoading={readinessQuery.isLoading}
+          readinessError={readinessQuery.error}
+          health={healthQuery.data}
+          healthLoading={healthQuery.isLoading}
+          healthError={healthQuery.error}
+          status={statusQuery.data}
+          dueFollowups={dueFollowups}
+        />
 
-        <section className="rounded-zaki-md border border-zaki-subtle bg-white p-3 dark:border-[#2a2018] dark:bg-[#14100d]">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap items-center gap-2">
-              <span
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-zaki-md border px-2.5 py-1.5 text-xs font-semibold",
-                  readinessTone(readiness),
-                )}
-              >
-                {readiness?.available ? <CheckCircle2 className="size-3.5" /> : <AlertCircle className="size-3.5" />}
-                {readinessLabel(readiness, readinessQuery.isLoading)}
-              </span>
-              <span
-                className={cn(
-                  "inline-flex items-center gap-2 rounded-zaki-md border px-2.5 py-1.5 text-xs font-semibold",
-                  isHealthy(healthQuery.data)
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
-                    : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
-                )}
-              >
-                {isHealthy(healthQuery.data) ? <CheckCircle2 className="size-3.5" /> : <AlertCircle className="size-3.5" />}
-                {healthQuery.isLoading ? "Checking engine" : isHealthy(healthQuery.data) ? "Engine online" : "Engine needs attention"}
-              </span>
-              <span className="inline-flex items-center gap-2 rounded-zaki-md border border-zaki-subtle bg-zaki-base px-2.5 py-1.5 text-xs font-semibold text-zaki-secondary dark:border-[#2a2018] dark:bg-[#0c0a09] dark:text-[#c9b8a4]">
-                <Activity className="size-3.5" />
-                Scan {statusQuery.data?.scanning ? "running" : "idle"}
-              </span>
-              <span className="inline-flex items-center gap-2 rounded-zaki-md border border-zaki-subtle bg-zaki-base px-2.5 py-1.5 text-xs font-semibold text-zaki-secondary dark:border-[#2a2018] dark:bg-[#0c0a09] dark:text-[#c9b8a4]">
-                <RefreshCw className="size-3.5" />
-                Re-eval {statusQuery.data?.reevaluating ? "running" : "idle"}
-              </span>
-              {dueFollowups > 0 ? (
-                <span className="inline-flex items-center gap-2 rounded-zaki-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                  <Clock3 className="size-3.5" />
-                  {dueFollowups} due follow-up{dueFollowups === 1 ? "" : "s"}
-                </span>
-              ) : null}
-            </div>
-            {healthQuery.error ? (
-              <div className="text-xs text-zaki-brand">{extractError(healthQuery.error)}</div>
-            ) : null}
-            {readiness?.message || readinessQuery.error ? (
-              <div className="text-xs text-zaki-secondary dark:text-[#c9b8a4]">
-                {readiness?.message || extractError(readinessQuery.error)}
-              </div>
-            ) : null}
-          </div>
-        </section>
-
-        <nav className="flex gap-2 overflow-x-auto pb-1">
-          {HIRE_VIEWS.map((item) => (
-            <button
-              key={item.view}
-              type="button"
-              onClick={() => setView(item.view)}
-              className={cn(
-                "inline-flex shrink-0 items-center gap-2 rounded-zaki-md border px-3 py-2 text-sm font-semibold transition-colors",
-                activeView === item.view
-                  ? "border-zaki-strong bg-zaki-primary text-white dark:border-[#efe6d9] dark:bg-[#efe6d9] dark:text-[#0c0a09]"
-                  : "border-zaki-subtle bg-white text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-primary dark:border-[#2a2018] dark:bg-[#14100d] dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]",
-              )}
-            >
-              {item.icon}
-              {item.label}
-            </button>
-          ))}
-        </nav>
+        <HireMobileViewNav activeView={activeView} onView={setView} />
 
         {activeView === "dashboard" ? (
-          <div className="grid min-h-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.75fr)]">
-            <LeadWorkbench
-              leads={filteredLeads}
-              selectedLead={selectedLead}
-              selectedLeadId={selectedLeadId}
-              leadSearch={leadSearch}
-              statusFilter={statusFilter}
-              minScore={minScore}
-              actionsDisabled={hireActionsDisabled}
-              isLoading={leadsQuery.isLoading}
-              onSearch={setLeadSearch}
-              onStatusFilter={setStatusFilter}
-              onMinScore={setMinScore}
-              onSelectLead={setSelectedLeadId}
-              onStatusChange={(id, status) => statusMutation.mutate({ id, status })}
-              onGenerate={(id) => generationMutation.mutate(id)}
-              onPipeline={(id) => pipelineMutation.mutate(id)}
-              onFollowup={(id) => followupMutation.mutate(id)}
-            />
-            <div className="flex min-w-0 flex-col gap-4">
-              <ManualLeadPanel
-                text={manualLeadText}
-                url={manualLeadUrl}
-                isPending={manualLeadMutation.isPending}
-                disabled={hireActionsDisabled}
-                onText={setManualLeadText}
-                onUrl={setManualLeadUrl}
-                onSubmit={() => manualLeadMutation.mutate()}
-              />
-              <AutomationPanel
-                lead={selectedLead}
-                consent={automationConsent}
-                disabled={automationDisabled || hireActionsDisabled}
-                serviceDisabled={hireActionsDisabled}
-                busy={formReadMutation.isPending || previewMutation.isPending || fireMutation.isPending}
-                onConsent={setAutomationConsent}
-                onReadForm={(id, url) => formReadMutation.mutate({ id, url })}
-                onPreview={(id) => previewMutation.mutate(id)}
-                onFire={(id) => fireMutation.mutate(id)}
-              />
-            </div>
-          </div>
+          <HireTodayCommandCenter
+            leads={filteredLeads}
+            selectedLead={selectedLead}
+            selectedLeadId={selectedLeadId}
+            leadsLoading={leadsQuery.isLoading}
+            profileSignals={profileSignals}
+            generatedCount={generatedCount}
+            dueFollowups={dueFollowups}
+            actionsDisabled={hireActionsDisabled}
+            manualLeadText={manualLeadText}
+            manualLeadUrl={manualLeadUrl}
+            manualLeadPending={manualLeadMutation.isPending}
+            automationConsent={automationConsent}
+            automationDisabled={automationDisabled || hireActionsDisabled}
+            automationBusy={formReadMutation.isPending || previewMutation.isPending || fireMutation.isPending}
+            onSelectLead={setSelectedLeadId}
+            onManualText={setManualLeadText}
+            onManualUrl={setManualLeadUrl}
+            onManualSubmit={() => manualLeadMutation.mutate()}
+            onStatusChange={(id, status) => statusMutation.mutate({ id, status })}
+            onGenerate={(id) => generationMutation.mutate(id)}
+            onPipeline={(id) => pipelineMutation.mutate(id)}
+            onFollowup={(id) => followupMutation.mutate(id)}
+            onConsent={setAutomationConsent}
+            onReadForm={(id, url) => formReadMutation.mutate({ id, url })}
+            onPreview={(id) => previewMutation.mutate(id)}
+            onFire={(id) => fireMutation.mutate(id)}
+          />
         ) : null}
 
         {activeView === "pipeline" ? (
@@ -805,22 +505,22 @@ function LeadWorkbench({
 }) {
   return (
     <section className="grid min-h-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(360px,0.82fr)_minmax(0,1.18fr)]">
-      <div className="rounded-zaki-md border border-zaki-subtle bg-white dark:border-[#2a2018] dark:bg-[#14100d]">
-        <div className="border-b border-zaki-subtle p-3 dark:border-[#2a2018]">
+      <div className="zaki-hire-panel">
+        <div className="zaki-hire-rule border-b p-3">
           <div className="flex flex-col gap-2 md:flex-row md:items-center">
             <label className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zaki-muted" />
+              <Search className="zaki-hire-muted pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2" />
               <input
                 value={leadSearch}
                 onChange={(event) => onSearch(event.target.value)}
-                className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-base py-2 pl-9 pr-3 text-sm text-zaki-primary outline-none transition focus:border-zaki-accent dark:border-[#3a3026] dark:bg-[#0c0a09] dark:text-[#efe6d9]"
+                className="zaki-hire-input w-full py-2 pl-9 pr-3"
                 placeholder="Search leads"
               />
             </label>
             <select
               value={statusFilter}
               onChange={(event) => onStatusFilter(event.target.value)}
-              className="rounded-zaki-md border border-zaki-strong bg-zaki-base px-3 py-2 text-sm text-zaki-primary outline-none dark:border-[#3a3026] dark:bg-[#0c0a09] dark:text-[#efe6d9]"
+              className="zaki-hire-select px-3 py-2"
               aria-label="Filter by status"
             >
               <option value="all">All statuses</option>
@@ -836,14 +536,14 @@ function LeadWorkbench({
               max={100}
               value={minScore}
               onChange={(event) => onMinScore(Number(event.target.value || 0))}
-              className="w-24 rounded-zaki-md border border-zaki-strong bg-zaki-base px-3 py-2 text-sm text-zaki-primary outline-none dark:border-[#3a3026] dark:bg-[#0c0a09] dark:text-[#efe6d9]"
+              className="zaki-hire-input w-24 px-3 py-2"
               aria-label="Minimum score"
             />
           </div>
         </div>
         <div className="max-h-[680px] overflow-y-auto p-2 zaki-scrollbar-fade">
           {isLoading ? (
-            <div className="flex items-center gap-2 p-4 text-sm text-zaki-secondary dark:text-[#c9b8a4]">
+            <div className="zaki-hire-text flex items-center gap-2 p-4 text-sm">
               <Loader2 className="size-4 animate-spin" />
               Loading leads
             </div>
@@ -859,19 +559,14 @@ function LeadWorkbench({
                     key={id || `${lead.title}-${lead.company}`}
                     type="button"
                     onClick={() => onSelectLead(id)}
-                    className={cn(
-                      "w-full rounded-zaki-md border p-3 text-left transition-colors",
-                      active
-                        ? "border-zaki-strong bg-zaki-selected dark:border-[#5c4735] dark:bg-[#1d1712]"
-                        : "border-transparent hover:border-zaki-subtle hover:bg-zaki-hover dark:hover:border-[#2a2018] dark:hover:bg-[#1d1712]",
-                    )}
+                    className={cn("zaki-hire-row-button w-full p-3 text-left", active && "is-active")}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-zaki-primary dark:text-[#efe6d9]">
+                        <p className="zaki-hire-num truncate text-sm font-semibold">
                           {lead.title || "Untitled role"}
                         </p>
-                        <p className="mt-1 truncate text-xs text-zaki-secondary dark:text-[#c9b8a4]">
+                        <p className="zaki-hire-muted mt-1 truncate text-xs">
                           {lead.company || "Unknown company"} · {lead.platform || "source"}
                         </p>
                       </div>
@@ -881,7 +576,7 @@ function LeadWorkbench({
                     </div>
                     <div className="mt-3 flex items-center justify-between gap-2">
                       <HireStatusChip status={String(lead.status || "discovered")} />
-                      <span className="truncate text-xs text-zaki-muted dark:text-[#a89684]">{lead.location || lead.seniority_level || "No location"}</span>
+                      <span className="zaki-hire-muted truncate text-xs">{lead.location || lead.seniority_level || "No location"}</span>
                     </div>
                   </button>
                 );
@@ -891,7 +586,7 @@ function LeadWorkbench({
         </div>
       </div>
 
-      <LeadDetail
+      <HireLeadDossier
         lead={selectedLead}
         disabled={actionsDisabled}
         onStatusChange={onStatusChange}
@@ -899,255 +594,6 @@ function LeadWorkbench({
         onPipeline={onPipeline}
         onFollowup={onFollowup}
       />
-    </section>
-  );
-}
-
-function LeadDetail({
-  lead,
-  disabled,
-  onStatusChange,
-  onGenerate,
-  onPipeline,
-  onFollowup,
-}: {
-  lead: HireLead | null;
-  disabled: boolean;
-  onStatusChange: (id: string, status: HireLeadStatus) => void;
-  onGenerate: (id: string) => void;
-  onPipeline: (id: string) => void;
-  onFollowup: (id: string) => void;
-}) {
-  const id = leadId(lead);
-  if (!lead || !id) {
-    return (
-      <div className="rounded-zaki-md border border-zaki-subtle bg-white p-4 dark:border-[#2a2018] dark:bg-[#14100d]">
-        <EmptyState title="Select a lead" body="Lead details, generated assets, and actions appear here." />
-      </div>
-    );
-  }
-  return (
-    <article className="rounded-zaki-md border border-zaki-subtle bg-white dark:border-[#2a2018] dark:bg-[#14100d]">
-      <div className="border-b border-zaki-subtle p-4 dark:border-[#2a2018]">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <HireStatusChip status={String(lead.status || "discovered")} />
-              <span className="text-xs text-zaki-muted dark:text-[#a89684]">{id}</span>
-            </div>
-            <h2 className="mt-2 text-xl font-semibold text-zaki-primary dark:text-[#efe6d9]">{lead.title || "Untitled role"}</h2>
-            <p className="mt-1 text-sm text-zaki-secondary dark:text-[#c9b8a4]">
-              {lead.company || "Unknown company"} · {lead.location || "Location not listed"}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right">
-              <div className={cn("text-3xl font-semibold", scoreTone(lead.score))}>{lead.score ?? "-"}</div>
-              <div className="text-xs text-zaki-muted dark:text-[#a89684]">fit score</div>
-            </div>
-            {lead.url ? (
-              <a
-                href={lead.url}
-                target="_blank"
-                rel="noreferrer"
-                className="zaki-icon-btn size-9 rounded-zaki-md"
-                aria-label="Open job"
-              >
-                <ExternalLink className="size-4" />
-              </a>
-            ) : null}
-          </div>
-        </div>
-      </div>
-      <div className="grid gap-4 p-4">
-        <div className="min-w-0 space-y-4">
-          <section>
-            <h3 className="text-sm font-semibold text-zaki-primary dark:text-[#efe6d9]">Why it matched</h3>
-            <p className="mt-2 text-sm leading-6 text-zaki-secondary dark:text-[#c9b8a4]">
-              {lead.reason || lead.signal_reason || "No scoring explanation was returned yet."}
-            </p>
-          </section>
-          <TwoColumnList title="Match points" items={lead.match_points || []} empty="No match points yet." />
-          <TwoColumnList title="Gaps" items={lead.gaps || []} empty="No gaps reported." />
-          <section>
-            <h3 className="text-sm font-semibold text-zaki-primary dark:text-[#efe6d9]">Description</h3>
-            <p className="mt-2 max-h-44 overflow-y-auto whitespace-pre-wrap rounded-zaki-md border border-zaki-subtle bg-zaki-base p-3 text-sm leading-6 text-zaki-secondary dark:border-[#2a2018] dark:bg-[#0c0a09] dark:text-[#c9b8a4] zaki-scrollbar-fade">
-              {lead.description || lead.text || "No description available."}
-            </p>
-          </section>
-        </div>
-        <aside className="space-y-3">
-          <label className="block">
-            <span className="text-xs font-semibold uppercase tracking-[0.08em] text-zaki-muted dark:text-[#a89684]">Status</span>
-            <select
-              value={String(lead.status || "discovered")}
-              disabled={disabled}
-              onChange={(event) => onStatusChange(id, event.target.value as HireLeadStatus)}
-              className="mt-1 w-full rounded-zaki-md border border-zaki-strong bg-zaki-base px-3 py-2 text-sm text-zaki-primary outline-none dark:border-[#3a3026] dark:bg-[#0c0a09] dark:text-[#efe6d9]"
-            >
-              {LEAD_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="button" disabled={disabled} className="zaki-btn-sm zaki-btn-primary flex w-full items-center justify-center gap-2" onClick={() => onGenerate(id)}>
-            <Sparkles className="size-4" />
-            Generate package
-          </button>
-          <button type="button" disabled={disabled} className="zaki-btn-sm zaki-btn-secondary flex w-full items-center justify-center gap-2" onClick={() => onPipeline(id)}>
-            <Wand2 className="size-4" />
-            Run pipeline
-          </button>
-          <button type="button" disabled={disabled} className="zaki-btn-sm zaki-btn-secondary flex w-full items-center justify-center gap-2" onClick={() => onFollowup(id)}>
-            <Clock3 className="size-4" />
-            Follow up in 5 days
-          </button>
-          <div className="rounded-zaki-md border border-zaki-subtle bg-zaki-base p-3 text-xs text-zaki-secondary dark:border-[#2a2018] dark:bg-[#0c0a09] dark:text-[#c9b8a4]">
-            <div className="font-semibold text-zaki-primary dark:text-[#efe6d9]">Assets</div>
-            <div className="mt-2 space-y-1">
-              <div>Resume: {lead.resume_asset || lead.asset || "Not generated"}</div>
-              <div>Cover letter: {lead.cover_letter_asset || "Not generated"}</div>
-              <div>Follow-up: {shortDate(lead.followup_due_at)}</div>
-            </div>
-          </div>
-        </aside>
-      </div>
-    </article>
-  );
-}
-
-function TwoColumnList({ title, items, empty }: { title: string; items: string[]; empty: string }) {
-  return (
-    <section>
-      <h3 className="text-sm font-semibold text-zaki-primary dark:text-[#efe6d9]">{title}</h3>
-      {items.length ? (
-        <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-          {items.slice(0, 8).map((item) => (
-            <li key={item} className="rounded-zaki-md border border-zaki-subtle bg-zaki-base px-3 py-2 text-sm text-zaki-secondary dark:border-[#2a2018] dark:bg-[#0c0a09] dark:text-[#c9b8a4]">
-              {item}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mt-2 text-sm text-zaki-secondary dark:text-[#c9b8a4]">{empty}</p>
-      )}
-    </section>
-  );
-}
-
-function ManualLeadPanel({
-  text,
-  url,
-  isPending,
-  disabled,
-  onText,
-  onUrl,
-  onSubmit,
-}: {
-  text: string;
-  url: string;
-  isPending: boolean;
-  disabled: boolean;
-  onText: (value: string) => void;
-  onUrl: (value: string) => void;
-  onSubmit: () => void;
-}) {
-  return (
-    <section className="rounded-zaki-md border border-zaki-subtle bg-white p-4 dark:border-[#2a2018] dark:bg-[#14100d]">
-      <h2 className="text-sm font-semibold text-zaki-primary dark:text-[#efe6d9]">Add lead</h2>
-      <div className="mt-3 space-y-3">
-        <input
-          value={url}
-          onChange={(event) => onUrl(event.target.value)}
-          className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-base px-3 py-2 text-sm outline-none dark:border-[#3a3026] dark:bg-[#0c0a09]"
-          placeholder="Job URL"
-        />
-        <textarea
-          value={text}
-          onChange={(event) => onText(event.target.value)}
-          className="min-h-28 w-full resize-y rounded-zaki-md border border-zaki-strong bg-zaki-base px-3 py-2 text-sm outline-none dark:border-[#3a3026] dark:bg-[#0c0a09]"
-          placeholder="Paste job text"
-        />
-        <button
-          type="button"
-          disabled={disabled || isPending || (!text.trim() && !url.trim())}
-          className="zaki-btn-sm zaki-btn-primary flex w-full items-center justify-center gap-2"
-          onClick={onSubmit}
-        >
-          {isPending ? <Loader2 className="size-4 animate-spin" /> : <BriefcaseBusiness className="size-4" />}
-          Add to pipeline
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function AutomationPanel({
-  lead,
-  consent,
-  disabled,
-  serviceDisabled,
-  busy,
-  onConsent,
-  onReadForm,
-  onPreview,
-  onFire,
-}: {
-  lead: HireLead | null;
-  consent: boolean;
-  disabled: boolean;
-  serviceDisabled: boolean;
-  busy: boolean;
-  onConsent: (value: boolean) => void;
-  onReadForm: (id: string, url: string) => void;
-  onPreview: (id: string) => void;
-  onFire: (id: string) => void;
-}) {
-  const id = leadId(lead);
-  return (
-    <section className="rounded-zaki-md border border-zaki-subtle bg-white p-4 dark:border-[#2a2018] dark:bg-[#14100d]">
-      <h2 className="text-sm font-semibold text-zaki-primary dark:text-[#efe6d9]">Automation</h2>
-      <label className="mt-3 flex items-start gap-3 rounded-zaki-md border border-zaki-strong bg-zaki-base p-3 text-xs text-zaki-secondary dark:border-[#3a3026] dark:bg-[#0c0a09] dark:text-[#c9b8a4]">
-        <input
-          type="checkbox"
-          checked={consent}
-          disabled={serviceDisabled || !id}
-          onChange={(event) => onConsent(event.target.checked)}
-          className="mt-0.5 size-4 accent-[var(--zaki-brand)]"
-        />
-        <span>I approve this lead-specific automation action for the selected job application.</span>
-      </label>
-      <div className="mt-3 grid gap-2">
-        <button
-          type="button"
-          disabled={disabled || busy || !lead?.url}
-          className="zaki-btn-sm zaki-btn-secondary flex items-center justify-center gap-2"
-          onClick={() => onReadForm(id, lead?.url || "")}
-        >
-          <FileText className="size-4" />
-          Read form
-        </button>
-        <button
-          type="button"
-          disabled={disabled || busy}
-          className="zaki-btn-sm zaki-btn-secondary flex items-center justify-center gap-2"
-          onClick={() => onPreview(id)}
-        >
-          <Search className="size-4" />
-          Preview apply
-        </button>
-        <button
-          type="button"
-          disabled={disabled || busy}
-          className="zaki-btn-sm zaki-btn-primary flex items-center justify-center gap-2"
-          onClick={() => onFire(id)}
-        >
-          {busy ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
-          Auto-apply
-        </button>
-      </div>
     </section>
   );
 }
@@ -1173,13 +619,13 @@ function ProfilePanel({
 }) {
   return (
     <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-      <div className="rounded-zaki-md border border-zaki-subtle bg-white p-4 dark:border-[#2a2018] dark:bg-[#14100d]">
+      <div className="zaki-hire-panel p-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-zaki-primary dark:text-[#efe6d9]">Candidate profile</h2>
+          <h2 className="zaki-hire-label-strong">Candidate profile</h2>
           <button
             type="button"
             disabled={disabled || isSaving || (!candidate.n.trim() && !candidate.s.trim())}
-            className="zaki-btn-sm zaki-btn-primary inline-flex items-center gap-2"
+            className="zaki-hire-button zaki-hire-button-primary"
             onClick={onSave}
           >
             {isSaving ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
@@ -1188,44 +634,44 @@ function ProfilePanel({
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <label className="block">
-            <span className="text-xs font-semibold text-zaki-muted dark:text-[#a89684]">Name</span>
+            <span className="zaki-hire-label">Name</span>
             <input
               value={candidate.n}
               onChange={(event) => onCandidate({ ...candidate, n: event.target.value })}
-              className="mt-1 w-full rounded-zaki-md border border-zaki-strong bg-zaki-base px-3 py-2 text-sm outline-none dark:border-[#3a3026] dark:bg-[#0c0a09]"
+              className="zaki-hire-input mt-1 w-full px-3 py-2"
             />
           </label>
           <label className="block">
-            <span className="text-xs font-semibold text-zaki-muted dark:text-[#a89684]">Email</span>
+            <span className="zaki-hire-label">Email</span>
             <input
               value={identity.email || ""}
               onChange={(event) => onIdentity({ ...identity, email: event.target.value })}
-              className="mt-1 w-full rounded-zaki-md border border-zaki-strong bg-zaki-base px-3 py-2 text-sm outline-none dark:border-[#3a3026] dark:bg-[#0c0a09]"
+              className="zaki-hire-input mt-1 w-full px-3 py-2"
             />
           </label>
           <label className="block md:col-span-2">
-            <span className="text-xs font-semibold text-zaki-muted dark:text-[#a89684]">Summary</span>
+            <span className="zaki-hire-label">Summary</span>
             <textarea
               value={candidate.s}
               onChange={(event) => onCandidate({ ...candidate, s: event.target.value })}
-              className="mt-1 min-h-32 w-full resize-y rounded-zaki-md border border-zaki-strong bg-zaki-base px-3 py-2 text-sm outline-none dark:border-[#3a3026] dark:bg-[#0c0a09]"
+              className="zaki-hire-input mt-1 min-h-32 w-full resize-y px-3 py-2"
             />
           </label>
           {(["phone", "linkedin_url", "github_url", "website_url", "city"] as const).map((key) => (
             <label key={key} className="block">
-              <span className="text-xs font-semibold text-zaki-muted dark:text-[#a89684]">{key.replace(/_/g, " ")}</span>
+              <span className="zaki-hire-label">{key.replace(/_/g, " ")}</span>
               <input
                 value={String(identity[key] || "")}
                 onChange={(event) => onIdentity({ ...identity, [key]: event.target.value })}
-                className="mt-1 w-full rounded-zaki-md border border-zaki-strong bg-zaki-base px-3 py-2 text-sm outline-none dark:border-[#3a3026] dark:bg-[#0c0a09]"
+                className="zaki-hire-input mt-1 w-full px-3 py-2"
               />
             </label>
           ))}
         </div>
       </div>
-      <div className="rounded-zaki-md border border-zaki-subtle bg-white p-4 dark:border-[#2a2018] dark:bg-[#14100d]">
-        <h2 className="text-sm font-semibold text-zaki-primary dark:text-[#efe6d9]">Evidence</h2>
-        <div className="mt-3 grid gap-2 text-sm text-zaki-secondary dark:text-[#c9b8a4]">
+      <div className="zaki-hire-panel p-4">
+        <h2 className="zaki-hire-label-strong">Evidence</h2>
+        <div className="zaki-hire-text mt-3 grid gap-2 text-sm">
           <div className="flex justify-between"><span>Skills</span><span>{profile?.skills?.length || 0}</span></div>
           <div className="flex justify-between"><span>Experience</span><span>{(profile?.exp || profile?.experience || []).length}</span></div>
           <div className="flex justify-between"><span>Projects</span><span>{profile?.projects?.length || 0}</span></div>
@@ -1273,12 +719,12 @@ function ImportPanel({
 }) {
   return (
     <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-      <div className="rounded-zaki-md border border-zaki-subtle bg-white p-4 dark:border-[#2a2018] dark:bg-[#14100d]">
-        <h2 className="text-sm font-semibold text-zaki-primary dark:text-[#efe6d9]">Resume and notes</h2>
+      <div className="zaki-hire-panel p-4">
+        <h2 className="zaki-hire-label-strong">Resume and notes</h2>
         <textarea
           value={resumeRaw}
           onChange={(event) => onResumeRaw(event.target.value)}
-          className="mt-3 min-h-60 w-full resize-y rounded-zaki-md border border-zaki-strong bg-zaki-base px-3 py-2 text-sm outline-none dark:border-[#3a3026] dark:bg-[#0c0a09]"
+          className="zaki-hire-input mt-3 min-h-60 w-full resize-y px-3 py-2"
           placeholder="Paste resume, profile notes, or role preferences"
         />
         <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1286,13 +732,13 @@ function ImportPanel({
             type="file"
             accept=".pdf,.doc,.docx,.txt,.md"
             onChange={(event) => onResumeFile(event.target.files?.[0] || null)}
-            className="text-sm text-zaki-secondary dark:text-[#c9b8a4]"
+            className="zaki-hire-text text-sm"
           />
           <button
             type="button"
             disabled={disabled || resumePending || (!resumeRaw.trim() && !resumeFile)}
             onClick={onResumeSubmit}
-            className="zaki-btn-sm zaki-btn-primary inline-flex items-center justify-center gap-2"
+            className="zaki-hire-button zaki-hire-button-primary"
           >
             {resumePending ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
             Import profile
@@ -1300,37 +746,37 @@ function ImportPanel({
         </div>
       </div>
       <div className="space-y-4">
-        <div className="rounded-zaki-md border border-zaki-subtle bg-white p-4 dark:border-[#2a2018] dark:bg-[#14100d]">
-          <h2 className="text-sm font-semibold text-zaki-primary dark:text-[#efe6d9]">GitHub</h2>
+        <div className="zaki-hire-panel p-4">
+          <h2 className="zaki-hire-label-strong">GitHub</h2>
           <input
             value={githubUsername}
             onChange={(event) => onGithubUsername(event.target.value)}
-            className="mt-3 w-full rounded-zaki-md border border-zaki-strong bg-zaki-base px-3 py-2 text-sm outline-none dark:border-[#3a3026] dark:bg-[#0c0a09]"
+            className="zaki-hire-input mt-3 w-full px-3 py-2"
             placeholder="GitHub username"
           />
           <button
             type="button"
             disabled={disabled || githubPending || !githubUsername.trim()}
             onClick={onGithubSubmit}
-            className="zaki-btn-sm zaki-btn-secondary mt-3 flex w-full items-center justify-center gap-2"
+            className="zaki-hire-button mt-3 flex w-full"
           >
             {githubPending ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
             Import GitHub
           </button>
         </div>
-        <div className="rounded-zaki-md border border-zaki-subtle bg-white p-4 dark:border-[#2a2018] dark:bg-[#14100d]">
-          <h2 className="text-sm font-semibold text-zaki-primary dark:text-[#efe6d9]">Portfolio</h2>
+        <div className="zaki-hire-panel p-4">
+          <h2 className="zaki-hire-label-strong">Portfolio</h2>
           <input
             value={portfolioUrl}
             onChange={(event) => onPortfolioUrl(event.target.value)}
-            className="mt-3 w-full rounded-zaki-md border border-zaki-strong bg-zaki-base px-3 py-2 text-sm outline-none dark:border-[#3a3026] dark:bg-[#0c0a09]"
+            className="zaki-hire-input mt-3 w-full px-3 py-2"
             placeholder="https://portfolio.example"
           />
           <button
             type="button"
             disabled={disabled || portfolioPending || !portfolioUrl.trim()}
             onClick={onPortfolioSubmit}
-            className="zaki-btn-sm zaki-btn-secondary mt-3 flex w-full items-center justify-center gap-2"
+            className="zaki-hire-button mt-3 flex w-full"
           >
             {portfolioPending ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
             Import portfolio
@@ -1364,46 +810,46 @@ function ActivityPanel({
   return (
     <section className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
       <div className="space-y-4">
-        <div className="rounded-zaki-md border border-zaki-subtle bg-white p-4 dark:border-[#2a2018] dark:bg-[#14100d]">
-          <h2 className="text-sm font-semibold text-zaki-primary dark:text-[#efe6d9]">Operations</h2>
+        <div className="zaki-hire-panel p-4">
+          <h2 className="zaki-hire-label-strong">Operations</h2>
           <div className="mt-3 grid gap-2">
-            <button type="button" disabled={disabled || busy} className="zaki-btn-sm zaki-btn-secondary inline-flex items-center justify-center gap-2" onClick={onFreeSourceScan}>
+            <button type="button" disabled={disabled || busy} className="zaki-hire-button" onClick={onFreeSourceScan}>
               <Search className="size-4" />
               Scan free sources
             </button>
-            <button type="button" disabled={disabled || busy} className="zaki-btn-sm zaki-btn-secondary inline-flex items-center justify-center gap-2" onClick={onReevaluate}>
+            <button type="button" disabled={disabled || busy} className="zaki-hire-button" onClick={onReevaluate}>
               <RefreshCw className="size-4" />
               Re-evaluate leads
             </button>
           </div>
         </div>
-        <div className="rounded-zaki-md border border-zaki-subtle bg-white p-4 dark:border-[#2a2018] dark:bg-[#14100d]">
-          <h2 className="text-sm font-semibold text-zaki-primary dark:text-[#efe6d9]">Task status</h2>
-          <div className="mt-3 space-y-2 text-sm text-zaki-secondary dark:text-[#c9b8a4]">
+        <div className="zaki-hire-panel p-4">
+          <h2 className="zaki-hire-label-strong">Task status</h2>
+          <div className="zaki-hire-text mt-3 space-y-2 text-sm">
             <div className="flex justify-between"><span>Scan</span><span>{status?.scanning ? "running" : "idle"}</span></div>
             <div className="flex justify-between"><span>Re-evaluation</span><span>{status?.reevaluating ? "running" : "idle"}</span></div>
             <div className="flex justify-between"><span>Engine</span><span>{health?.status || "unknown"}</span></div>
           </div>
         </div>
       </div>
-      <div className="rounded-zaki-md border border-zaki-subtle bg-white p-4 dark:border-[#2a2018] dark:bg-[#14100d]">
-        <h2 className="text-sm font-semibold text-zaki-primary dark:text-[#efe6d9]">Pipeline counts</h2>
+      <div className="zaki-hire-panel p-4">
+        <h2 className="zaki-hire-label-strong">Pipeline counts</h2>
         <div className="mt-3 flex flex-wrap gap-2">
           {counts.length ? counts.map(([key, value]) => (
-            <span key={key} className={cn("inline-flex items-center gap-2 rounded-zaki-md border px-2.5 py-1.5 text-xs font-semibold", statusTone(key))}>
+            <span key={key} className={cn("zaki-hire-status", statusTone(key))}>
               {key} <span>{value}</span>
             </span>
-          )) : <span className="text-sm text-zaki-secondary dark:text-[#c9b8a4]">No lead statuses yet.</span>}
+          )) : <span className="zaki-hire-text text-sm">No lead statuses yet.</span>}
         </div>
-        <h2 className="mt-6 text-sm font-semibold text-zaki-primary dark:text-[#efe6d9]">Last result</h2>
+        <h2 className="zaki-hire-label-strong mt-6">Last result</h2>
         {lastResult ? (
-          <pre className="mt-3 max-h-[420px] overflow-auto rounded-zaki-md border border-zaki-subtle bg-zaki-base p-3 text-xs text-zaki-secondary dark:border-[#2a2018] dark:bg-[#0c0a09] dark:text-[#c9b8a4] zaki-scrollbar-fade">
+          <pre className="zaki-hire-sunken zaki-hire-text mt-3 max-h-[420px] overflow-auto p-3 text-xs zaki-scrollbar-fade">
             {lastResult.title}
             {"\n"}
             {JSON.stringify(lastResult.payload, null, 2)}
           </pre>
         ) : (
-          <p className="mt-3 text-sm text-zaki-secondary dark:text-[#c9b8a4]">Run an action to see its response payload.</p>
+          <p className="zaki-hire-text mt-3 text-sm">Run an action to see its response payload.</p>
         )}
       </div>
     </section>

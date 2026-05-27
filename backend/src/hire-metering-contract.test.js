@@ -240,6 +240,7 @@ describe("hire metering contract", () => {
         finalStatus: 200,
         durationMs: 321,
         rawUsageFacts: expect.objectContaining({
+          status: "success",
           inputTokens: 120,
           outputTokens: 30,
           model: "operator-model",
@@ -275,6 +276,7 @@ describe("hire metering contract", () => {
       storageBytes: null,
       model: null,
       provider: null,
+      status: "success",
     });
   });
 
@@ -301,6 +303,7 @@ describe("hire metering contract", () => {
         finalStatus: 502,
       })
     );
+    expect(event.metadata.rawUsageFacts.status).toBe("failed");
   });
 
   it("persists receipt events through the central usage event helper", async () => {

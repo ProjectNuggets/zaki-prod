@@ -113,4 +113,32 @@ export async function fetchHireDeploymentReadiness(options) {
   });
 }
 
+export async function fetchHireOperatorReadiness(options) {
+  return fetchHirePath({
+    ...options,
+    path: "/internal/v1/operator/hire/readiness",
+    method: "GET",
+    label: options.label || "Hire operator readiness request",
+  });
+}
+
+export async function fetchHireOperatorProviderHealth(options) {
+  return fetchHirePath({
+    ...options,
+    path: "/internal/v1/operator/hire/provider-health",
+    method: "GET",
+    label: options.label || "Hire operator provider health request",
+  });
+}
+
+export async function fetchHireOperatorProviderSmoke(options) {
+  return fetchHirePath({
+    ...options,
+    path: "/internal/v1/operator/hire/provider-smoke",
+    method: "POST",
+    body: {},
+    label: options.label || "Hire operator provider smoke request",
+  });
+}
+
 export { getHireBase };

@@ -1,7 +1,7 @@
 # ZAKI Hire Operator Deployment Checklist
 
 Status: planning source of truth.
-Last updated: 2026-05-20.
+Last updated: 2026-05-25.
 
 Related dependency source: `docs/zaki-hire-dependency-inventory.md`.
 
@@ -142,6 +142,7 @@ Provider and source configuration:
 HIRE_LLM_PROVIDER=<operator-provider>
 HIRE_LLM_MODEL=<operator-model>
 OPENAI_API_KEY=<operator-secret-if-openai-selected>
+MOONSHOT_API_KEY=<operator-secret-if-kimi-selected>
 HIRE_EMBEDDING_PROVIDER=<operator-provider>
 HIRE_EMBEDDING_MODEL=<operator-model>
 HIRE_EMBEDDING_API_KEY=<operator-secret>
@@ -163,6 +164,22 @@ HIRE_AUTO_APPLY_CONSENT_REQUIRED=true
 HIRE_BROWSER_SANDBOX_READY=true
 HIRE_AUTO_APPLY_AUDIT_READY=true
 HIRE_AUTO_APPLY_KILL_SWITCH_READY=true
+```
+
+For production Kimi/Moonshot routing, use:
+
+```bash
+HIRE_LLM_PROVIDER=kimi
+HIRE_LLM_MODEL=kimi-k2.5
+MOONSHOT_API_KEY=<moonshot-secret>
+```
+
+Local E2E can use a host Ollama runtime without spending provider credits:
+
+```bash
+HIRE_LLM_PROVIDER=ollama
+HIRE_LLM_MODEL=gemma4:26b
+HIRE_OLLAMA_URL=http://host.docker.internal:11434/v1
 ```
 
 ## Prerequisite Inventory Gate
@@ -231,6 +248,24 @@ curl "$ZAKI_BACKEND_URL/api/internal/hire/deployment-readiness" \
 
 `deploymentReadiness.ready` must be `true` before paid-user rollout.
 
+Hidden operator handshake checks:
+
+```bash
+curl "$ZAKI_BACKEND_URL/api/internal/hire/operator/readiness" \
+  -H "Authorization: Bearer $SUPER_ADMIN_ZAKI_TOKEN"
+
+curl "$ZAKI_BACKEND_URL/api/internal/hire/operator/provider-health" \
+  -H "Authorization: Bearer $SUPER_ADMIN_ZAKI_TOKEN"
+
+curl -X POST "$ZAKI_BACKEND_URL/api/internal/hire/operator/provider-smoke" \
+  -H "Authorization: Bearer $SUPER_ADMIN_ZAKI_TOKEN"
+```
+
+The provider smoke calls the configured engine LLM route. It is safe to run for
+local `ollama`; paid/external providers such as Kimi/Moonshot require the engine
+environment to include `HIRE_PROVIDER_SMOKE_ALLOW_COST=1` for an intentional
+launch-gate smoke.
+
 ## Live Smoke Secrets
 
 The backend CI workflow includes optional live ZAKI Hire smoke gates. They are
@@ -246,18 +281,45 @@ HIRE_SMOKE_USER_EMAIL=<paid-user-email>
 HIRE_SMOKE_USER_PASSWORD=<paid-user-password>
 ```
 
+Provider smoke:
+
+```bash
+npm run smoke:hire-provider
+```
+
+This command runs inside the Hire engine container and checks the resolved
+operator LLM path. It is cost-safe by default: local `ollama` routes run
+immediately, but paid/external providers such as Kimi/Moonshot fail unless the
+operator explicitly sets `HIRE_PROVIDER_SMOKE_ALLOW_COST=1`.
+
 Two-user isolation smoke:
 
 ```bash
-HIRE_SMOKE_USER_A_EMAIL=<paid-user-a-email>
-HIRE_SMOKE_USER_A_PASSWORD=<paid-user-a-password>
-HIRE_SMOKE_USER_B_EMAIL=<paid-user-b-email>
-HIRE_SMOKE_USER_B_PASSWORD=<paid-user-b-password>
+HIRE_USER_A_EMAIL=<paid-user-a-email>
+HIRE_USER_A_PASSWORD=<paid-user-a-password>
+HIRE_USER_B_EMAIL=<paid-user-b-email>
+HIRE_USER_B_PASSWORD=<paid-user-b-password>
+npm run smoke:hire-isolation
 ```
 
 The isolation smoke creates one manual lead for each user through `/api/hire`,
-verifies each tenant can only see its own marker, then deletes the created
-leads unless `HIRE_ISOLATION_CLEANUP=false` is set for manual debugging.
+verifies each tenant can only see its own marker, attempts known-id cross-tenant
+reads, writes, deletes, PDF/version access, and event reads, verifies the owner
+data survived those probes, then deletes the created leads unless
+`HIRE_ISOLATION_CLEANUP=false` is set for manual debugging.
+
+Value E2E smoke:
+
+```bash
+HIRE_VALUE_EMAIL=<paid-user-email>
+HIRE_VALUE_PASSWORD=<paid-user-password>
+npm run smoke:hire-value
+```
+
+The value smoke saves a candidate profile, creates a detailed job lead,
+generates a resume and cover-letter package through the configured provider
+path, verifies safe artifact references, downloads both PDFs through ZAKI, and
+deletes the lead unless `HIRE_VALUE_CLEANUP=false` is set.
 
 Blocking gates:
 
@@ -281,6 +343,9 @@ Blocking gates:
   engine probe covers PostgreSQL, tenant headers, artifact paths, graph/vector
   paths, hosted LLM config, embedding route, source policy credentials, and
   browser automation safety acknowledgements.
+- `hire_operator_provider_smoke`: the ZAKI BFF hidden operator handshake can
+  reach the engine provider-health endpoint and run the configured LLM provider
+  smoke without leaking secrets.
 
 ## Deployment Sequence
 
@@ -325,16 +390,25 @@ As of 2026-05-20, the local `zaki-hire-engine` branch
   tenant artifact root
 - internal `/internal/v1/deployment-readiness` endpoint protected by the engine
   internal token
+- internal `/internal/v1/operator/hire/readiness`,
+  `/internal/v1/operator/hire/provider-health`, and
+  `/internal/v1/operator/hire/provider-smoke` endpoints protected by the engine
+  internal token
 - hosted gateway startup uses the configured operator internal token for
   internal routes
 - hosted LLM operator env resolution through `HIRE_LLM_PROVIDER` and
   `HIRE_LLM_MODEL`, with provider keys taken only from operator environment in
   hosted mode
+- cost-guarded operator LLM provider smoke through `python -m ops.llm_smoke`,
+  exposed locally as `npm run smoke:hire-provider` and through the hidden ZAKI
+  BFF operator handshake
 - bounded PostgreSQL connect timeout through `ZAKI_HIRE_PG_CONNECT_TIMEOUT`
 - optional integration test that passes against PostgreSQL 16
 - initial ZAKI-prod BFF routes for `/api/hire/health`, `/api/hire/status`,
   generic `/api/hire/*`, `/api/internal/hire/status`, and
   `/api/internal/hire/deployment-readiness`
+- hidden ZAKI-prod BFF operator routes for readiness, provider health, and
+  provider smoke under `/api/internal/hire/operator/*`
 - initial BFF route allowlist that keeps engine-local operator/runtime routes
   hidden from normal users while preserving the user-facing Hire product routes
 - first-class ZAKI Hire platform/quota surface and weekly BFF quota enforcement
@@ -370,6 +444,8 @@ Still pending before staging deployment:
   task duration
 - route-specific browser UAT against a live hosted engine and staging smoke with
   real operator secrets
+- value E2E smoke in staging with production Kimi/Moonshot provider enabled by
+  an explicit paid-provider smoke allowance
 
 ## Deployment Validator
 

@@ -51,6 +51,32 @@ const OPERATOR_MANAGED_HIRE_FIELDS = new Set([
   "hireconsent",
   "zakihireconsent",
 ]);
+const HIRE_OPERATOR_CONFIG_STATE_FIELDS = new Set([
+  "baseurlconfigured",
+  "configured",
+  "costguard",
+  "costtier",
+  "detailsavailable",
+  "endpointconfigured",
+  "endpointhost",
+  "env",
+  "keyconfigured",
+  "keyenvname",
+  "model",
+  "modelid",
+  "modelname",
+  "paidprovider",
+  "paidproviderallowed",
+  "provider",
+  "providerconfigured",
+  "requestid",
+  "status",
+  "tokenconfigured",
+  "internaltokenconfigured",
+  "toolusemode",
+]);
+const HIRE_OPERATOR_SECRET_VALUE_PATTERN =
+  /\b(?:sk-[A-Za-z0-9_-]{8,}|Bearer\s+[A-Za-z0-9._~+/=-]+|password\s*=|api[_-]?key\s*=|token\s*=|secret\s*=)/i;
 const HIRE_ARTIFACT_REF_FIELDS = new Set([
   "asset",
   "assetpath",
@@ -469,6 +495,27 @@ export function sanitizeHireHealthPayload(value) {
   return output;
 }
 
+export function sanitizeHireOperatorPayload(value) {
+  if (typeof value === "string") {
+    const text = sanitizeHireProviderText(value);
+    return HIRE_OPERATOR_SECRET_VALUE_PATTERN.test(text) ? "[redacted]" : text;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeHireOperatorPayload(item));
+  }
+  if (!value || typeof value !== "object") return value;
+
+  const output = {};
+  for (const [field, nested] of Object.entries(value)) {
+    if (isOperatorSecretHireField(field)) {
+      output[field] = "[redacted]";
+      continue;
+    }
+    output[field] = sanitizeHireOperatorPayload(nested);
+  }
+  return output;
+}
+
 export function isHireUserFacingPath(req = {}) {
   const method = normalizeHireRequestMethod(req);
   const path = normalizeHireRequestPath(req.originalUrl || req.path || req.url || req);
@@ -548,6 +595,29 @@ function isOperatorManagedHireField(key) {
   const normalized = normalizeHirePayloadKey(key);
   return (
     OPERATOR_MANAGED_HIRE_FIELDS.has(normalized) ||
+    normalized.endsWith("apikey") ||
+    normalized.endsWith("apitoken") ||
+    normalized.endsWith("credential") ||
+    normalized.endsWith("credentials") ||
+    normalized.endsWith("password") ||
+    normalized.endsWith("secret") ||
+    normalized.endsWith("token")
+  );
+}
+
+function isOperatorSecretHireField(key) {
+  const normalized = normalizeHirePayloadKey(key);
+  if (HIRE_OPERATOR_CONFIG_STATE_FIELDS.has(normalized)) return false;
+  return (
+    normalized === "apikey" ||
+    normalized === "apitoken" ||
+    normalized === "credential" ||
+    normalized === "credentials" ||
+    normalized === "internaltoken" ||
+    normalized === "password" ||
+    normalized === "secret" ||
+    normalized === "secrets" ||
+    normalized === "token" ||
     normalized.endsWith("apikey") ||
     normalized.endsWith("apitoken") ||
     normalized.endsWith("credential") ||

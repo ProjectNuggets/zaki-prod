@@ -4,18 +4,23 @@
  * ZAKI Hire operator readiness smoke.
  *
  * Usage:
- *   SMOKE_BASE_URL=https://api.chatzaki.com \
- *   SMOKE_ADMIN_EMAIL=admin@example.com \
- *   SMOKE_ADMIN_PASSWORD=... \
+ *   HIRE_SMOKE_BASE_URL=https://api.chatzaki.com \
+ *   HIRE_SMOKE_ADMIN_EMAIL=admin@example.com \
+ *   HIRE_SMOKE_ADMIN_PASSWORD=... \
  *   node scripts/smoke-hire-readiness.mjs
  */
 
-const baseUrl = String(process.env.SMOKE_BASE_URL || process.env.ZAKI_BASE_URL || "http://127.0.0.1:8787")
-  .replace(/\/+$/, "");
-const adminEmail = String(process.env.SMOKE_ADMIN_EMAIL || "").trim();
-const adminPassword = String(process.env.SMOKE_ADMIN_PASSWORD || process.env.SMOKE_PASSWORD || "").trim();
-const userEmail = String(process.env.SMOKE_USER_EMAIL || adminEmail).trim();
-const userPassword = String(process.env.SMOKE_USER_PASSWORD || process.env.SMOKE_PASSWORD || adminPassword).trim();
+const baseUrl = String(
+  process.env.HIRE_SMOKE_BASE_URL || process.env.SMOKE_BASE_URL || process.env.ZAKI_BASE_URL || "http://127.0.0.1:8787"
+).replace(/\/+$/, "");
+const adminEmail = String(process.env.HIRE_SMOKE_ADMIN_EMAIL || process.env.SMOKE_ADMIN_EMAIL || "").trim();
+const adminPassword = String(
+  process.env.HIRE_SMOKE_ADMIN_PASSWORD || process.env.SMOKE_ADMIN_PASSWORD || process.env.SMOKE_PASSWORD || ""
+).trim();
+const userEmail = String(process.env.HIRE_SMOKE_USER_EMAIL || process.env.SMOKE_USER_EMAIL || adminEmail).trim();
+const userPassword = String(
+  process.env.HIRE_SMOKE_USER_PASSWORD || process.env.SMOKE_USER_PASSWORD || process.env.SMOKE_PASSWORD || adminPassword
+).trim();
 
 function logStep(message) {
   process.stdout.write(`\n[HIRE-SMOKE] ${message}\n`);
@@ -68,6 +73,13 @@ function assertNoInternalHealthDetails(payload) {
   assert(payload?.details_available === false, "Hire health details should be hidden from user-facing smoke calls");
 }
 
+function assertNoSecretValues(payload, label) {
+  const raw = JSON.stringify(payload || {});
+  for (const marker of ["sk-", "Bearer ", "password=", "api_key=", "token="]) {
+    assert(!raw.includes(marker), `${label} leaked secret-looking value ${marker}`);
+  }
+}
+
 async function main() {
   logStep(`Target base URL: ${baseUrl}`);
   const adminToken = await login(adminEmail, adminPassword, "admin");
@@ -86,6 +98,27 @@ async function main() {
   assert(readiness.status === 200, `Deployment readiness failed: ${readiness.status} ${readiness.raw}`);
   assert(readiness.data?.ok === true, `Hire deployment readiness not ok: ${readiness.raw}`);
   assert(readiness.data?.deploymentReadiness?.ready === true, `Hire engine is not ready: ${readiness.raw}`);
+
+  logStep("Checking internal Hire operator handshake");
+  const operatorReadiness = await request("/api/internal/hire/operator/readiness", { token: adminToken });
+  assert(operatorReadiness.status === 200, `Operator readiness failed: ${operatorReadiness.status} ${operatorReadiness.raw}`);
+  assert(operatorReadiness.data?.ok === true, `Hire operator readiness not ok: ${operatorReadiness.raw}`);
+  assert(operatorReadiness.data?.operatorReadiness?.product?.id === "hire", `Unexpected Hire operator product: ${operatorReadiness.raw}`);
+  assertNoSecretValues(operatorReadiness.data, "operator readiness");
+
+  const providerHealth = await request("/api/internal/hire/operator/provider-health", { token: adminToken });
+  assert(providerHealth.status === 200, `Provider health failed: ${providerHealth.status} ${providerHealth.raw}`);
+  assert(providerHealth.data?.providerHealth?.llm?.provider, `Provider health did not include LLM provider: ${providerHealth.raw}`);
+  assert(providerHealth.data?.providerHealth?.llm?.model, `Provider health did not include LLM model: ${providerHealth.raw}`);
+  assertNoSecretValues(providerHealth.data, "provider health");
+
+  const providerSmoke = await request("/api/internal/hire/operator/provider-smoke", {
+    method: "POST",
+    token: adminToken,
+  });
+  assert(providerSmoke.status === 200, `Provider smoke failed: ${providerSmoke.status} ${providerSmoke.raw}`);
+  assert(providerSmoke.data?.providerSmoke?.ok === true, `Hire provider smoke not ok: ${providerSmoke.raw}`);
+  assertNoSecretValues(providerSmoke.data, "provider smoke");
 
   logStep("Checking user-facing Hire health sanitization");
   const health = await request("/api/hire/health", { token: userToken });
@@ -109,6 +142,9 @@ async function main() {
         ok: true,
         baseUrl,
         readinessStatus: readiness.data?.deploymentReadiness?.status,
+        operatorProvider: providerHealth.data?.providerHealth?.llm?.provider,
+        operatorModel: providerHealth.data?.providerHealth?.llm?.model,
+        providerSmokeDurationMs: providerSmoke.data?.providerSmoke?.durationMs,
       },
       null,
       2

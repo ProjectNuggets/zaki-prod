@@ -14,6 +14,7 @@ import {
   resolveCanonicalHireUserId,
   sanitizeHireClientPayload,
   sanitizeHireHealthPayload,
+  sanitizeHireOperatorPayload,
   sanitizeHirePath,
   sanitizeHireProviderText,
   sanitizeHireUpstreamPayload,
@@ -177,6 +178,34 @@ describe("hire BFF contract", () => {
       cover_letter_asset: "",
       nested: {
         message: "Ready",
+      },
+    });
+  });
+
+  test("sanitizes operator payloads while preserving provider handshake facts", () => {
+    expect(
+      sanitizeHireOperatorPayload({
+        provider: "kimi",
+        model: "kimi-k2.5",
+        keyConfigured: true,
+        keyEnvName: "MOONSHOT_API_KEY",
+        apiKey: "sk-super-secret-moonshot-key",
+        nested: {
+          token: "Bearer super-secret-token",
+          message: "JustHireMe provider is ready",
+          endpointHost: "api.moonshot.ai",
+        },
+      })
+    ).toEqual({
+      provider: "kimi",
+      model: "kimi-k2.5",
+      keyConfigured: true,
+      keyEnvName: "MOONSHOT_API_KEY",
+      apiKey: "[redacted]",
+      nested: {
+        token: "[redacted]",
+        message: "ZAKI Hire provider is ready",
+        endpointHost: "api.moonshot.ai",
       },
     });
   });

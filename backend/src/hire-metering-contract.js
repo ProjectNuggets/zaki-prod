@@ -332,6 +332,10 @@ export function buildHireMeterReceiptEvent({
     ? "success"
     : "failed";
   const idempotencyKey = `${grant.grantId}:receipt`;
+  const rawUsageFacts = {
+    ...normalizeUsageFacts(responsePayload, upstreamHeaders),
+    status: receiptStatus,
+  };
   return {
     userId: zakiUser.id || grant.userId,
     productId: ZAKI_PRODUCT_IDS.HIRE,
@@ -362,7 +366,7 @@ export function buildHireMeterReceiptEvent({
       upstreamStatus: Number.isInteger(status) ? status : null,
       finalStatus: Number.isInteger(visibleStatus) ? visibleStatus : null,
       durationMs: normalizeNumber(durationMs),
-      rawUsageFacts: normalizeUsageFacts(responsePayload, upstreamHeaders),
+      rawUsageFacts,
     },
   };
 }

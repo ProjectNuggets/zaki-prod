@@ -1,6 +1,9 @@
 import { describe, expect, test, jest } from "@jest/globals";
 import {
   fetchHireDeploymentReadiness,
+  fetchHireOperatorProviderHealth,
+  fetchHireOperatorProviderSmoke,
+  fetchHireOperatorReadiness,
   fetchHirePath,
   fetchHireProxyPath,
   getHireBase,
@@ -48,6 +51,52 @@ describe("hire client", () => {
       expect.objectContaining({ method: "GET" }),
       1000,
       "Hire deployment readiness request"
+    );
+  });
+
+  test("calls operator handshake endpoints with downstream headers", async () => {
+    const fetchWithTimeout = jest.fn().mockResolvedValue({ ok: true, status: 200 });
+    const base = {
+      baseUrl: "http://hire:8002/",
+      internalToken: "secret",
+      userId: "7",
+      requestId: "req-operator",
+      fetchWithTimeout,
+      timeoutMs: 1000,
+    };
+
+    await fetchHireOperatorReadiness(base);
+    await fetchHireOperatorProviderHealth(base);
+    await fetchHireOperatorProviderSmoke(base);
+
+    expect(fetchWithTimeout).toHaveBeenNthCalledWith(
+      1,
+      "http://hire:8002/internal/v1/operator/hire/readiness",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          Authorization: "Bearer secret",
+          "X-Internal-Token": "secret",
+          "X-Zaki-User-Id": "7",
+          "X-Request-Id": "req-operator",
+        }),
+      }),
+      1000,
+      "Hire operator readiness request"
+    );
+    expect(fetchWithTimeout).toHaveBeenNthCalledWith(
+      2,
+      "http://hire:8002/internal/v1/operator/hire/provider-health",
+      expect.objectContaining({ method: "GET" }),
+      1000,
+      "Hire operator provider health request"
+    );
+    expect(fetchWithTimeout).toHaveBeenNthCalledWith(
+      3,
+      "http://hire:8002/internal/v1/operator/hire/provider-smoke",
+      expect.objectContaining({ method: "POST", body: "{}" }),
+      1000,
+      "Hire operator provider smoke request"
     );
   });
 

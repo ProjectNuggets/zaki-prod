@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { fetchUsageQuota } from "@/lib/api";
 import * as hireApi from "@/lib/hireApi";
 import { HirePage } from "./HirePage";
 
@@ -15,10 +14,6 @@ jest.mock("sonner", () => ({
   },
 }));
 
-jest.mock("@/lib/api", () => ({
-  fetchUsageQuota: jest.fn(),
-}));
-
 jest.mock("@/lib/hireApi", () => ({
   hireKeys: {
     readiness: ["hire", "readiness"],
@@ -26,7 +21,6 @@ jest.mock("@/lib/hireApi", () => ({
     status: ["hire", "status"],
     leads: ["hire", "leads"],
     profile: ["hire", "profile"],
-    quota: ["hire", "quota"],
   },
   getHireReadiness: jest.fn(),
   getHireHealth: jest.fn(),
@@ -52,7 +46,6 @@ jest.mock("@/lib/hireApi", () => ({
   fireHireApplication: jest.fn(),
 }));
 
-const fetchUsageQuotaMock = fetchUsageQuota as jest.MockedFunction<typeof fetchUsageQuota>;
 const lead = {
   job_id: "job_123",
   title: "Senior Product Engineer",
@@ -115,32 +108,22 @@ describe("HirePage", () => {
       exp: [{ role: "Engineer", co: "Acme" }],
       projects: [{ title: "ZAKI" }],
     });
-    fetchUsageQuotaMock.mockResolvedValue({
-      response: {} as Response,
-      data: {
-        success: true,
-        surface: "hire",
-        period: "week",
-        remaining: 8,
-        used: 2,
-        limit: 10,
-      },
-    });
     (hireApi.createHireManualLead as jest.Mock).mockResolvedValue({ ...lead, job_id: "job_456" });
     (hireApi.fireHireApplication as jest.Mock).mockResolvedValue({ status: "firing" });
     (hireApi.readHireLeadForm as jest.Mock).mockResolvedValue({ fields: [] });
     (hireApi.previewHireApplication as jest.Mock).mockResolvedValue({ preview: true });
   });
 
-  it("renders the authenticated Hire workbench with lead and quota data", async () => {
+  it("renders the authenticated V2 Hire workbench with central product state", async () => {
     renderHirePage();
 
     expect(await screen.findByText("ZAKI Hire")).toBeInTheDocument();
     expect(await screen.findAllByText("Senior Product Engineer")).toHaveLength(2);
-    expect(screen.getByText("Product ready")).toBeInTheDocument();
+    expect(screen.getByText("operational")).toBeInTheDocument();
     expect(screen.getByText("Engine online")).toBeInTheDocument();
-    expect(screen.getByText("8")).toBeInTheDocument();
-    expect(fetchUsageQuotaMock).toHaveBeenCalledWith("hire");
+    expect(screen.getByText("central")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "billing" })).toHaveAttribute("href", "/settings?section=billing");
+    expect(screen.getByRole("link", { name: "usage" })).toHaveAttribute("href", "/settings?section=usage");
   });
 
   it("creates a manual lead through the BFF client", async () => {
@@ -148,7 +131,7 @@ describe("HirePage", () => {
     renderHirePage();
 
     await screen.findAllByText("Senior Product Engineer");
-    await screen.findByText("Product ready");
+    await screen.findByText("operational");
     await user.type(screen.getByPlaceholderText("Job URL"), "https://jobs.example/new");
     await user.type(screen.getByPlaceholderText("Paste job text"), "Build workflow automation.");
     await user.click(screen.getByRole("button", { name: /add to pipeline/i }));
@@ -166,7 +149,7 @@ describe("HirePage", () => {
     renderHirePage();
 
     await screen.findAllByText("Senior Product Engineer");
-    await screen.findByText("Product ready");
+    await screen.findByText("operational");
     expect(screen.getByRole("button", { name: /auto-apply/i })).toBeDisabled();
 
     await user.click(screen.getByRole("checkbox"));
@@ -175,6 +158,27 @@ describe("HirePage", () => {
     await waitFor(() => {
       expect(hireApi.fireHireApplication).toHaveBeenCalledWith("job_123");
     });
+  });
+
+  it("renders an empty operational queue without marketing fallback", async () => {
+    (hireApi.listHireLeads as jest.Mock).mockResolvedValueOnce([]);
+
+    renderHirePage();
+
+    expect(await screen.findByText("operational")).toBeInTheDocument();
+    expect(screen.getByText("No lead queue yet")).toBeInTheDocument();
+    expect(screen.getByText("Add first lead")).toBeInTheDocument();
+    expect(screen.getByText("Select a lead")).toBeInTheDocument();
+  });
+
+  it("renders loading product state and blocks expensive actions", async () => {
+    (hireApi.getHireReadiness as jest.Mock).mockImplementationOnce(() => new Promise(() => {}));
+
+    renderHirePage();
+
+    expect((await screen.findAllByText("loading")).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /run scan/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /add to pipeline/i })).toBeDisabled();
   });
 
   it("disables high-impact actions when central Hire activation is pending", async () => {
@@ -193,7 +197,7 @@ describe("HirePage", () => {
 
     renderHirePage();
 
-    expect(await screen.findByText("Activation pending")).toBeInTheDocument();
+    expect((await screen.findAllByText("disabled")).length).toBeGreaterThan(0);
     expect(screen.getByText("ZAKI Hire activation is pending.")).toBeInTheDocument();
     await user.type(screen.getByPlaceholderText("Job URL"), "https://jobs.example/new");
     await user.type(screen.getByPlaceholderText("Paste job text"), "Build workflow automation.");
@@ -201,5 +205,32 @@ describe("HirePage", () => {
     expect(screen.getByRole("button", { name: /add to pipeline/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /generate package/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /auto-apply/i })).toBeDisabled();
+  });
+
+  it.each([
+    ["degraded", "ZAKI Hire is degraded."],
+    ["maintenance", "ZAKI Hire is in maintenance."],
+    ["read_only", "ZAKI Hire is read-only."],
+    ["private_beta", "ZAKI Hire private beta is closed."],
+  ])("renders %s product state and blocks expensive actions", async (status, message) => {
+    (hireApi.getHireReadiness as jest.Mock).mockResolvedValueOnce({
+      available: status === "degraded",
+      status,
+      message,
+      operations: {
+        operatorManagedSettings: true,
+        userProviderSettingsExposed: false,
+        billingManagedCentrally: true,
+        quotaManagedCentrally: true,
+      },
+    });
+
+    renderHirePage();
+
+    const expected = status === "read_only" ? "read-only" : status === "private_beta" ? "private beta" : status;
+    expect((await screen.findAllByText(expected)).length).toBeGreaterThan(0);
+    expect(screen.getByText(message)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /run scan/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /generate package/i })).toBeDisabled();
   });
 });
