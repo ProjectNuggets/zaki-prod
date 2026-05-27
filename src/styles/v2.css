@@ -4754,6 +4754,303 @@
   overflow-wrap: anywhere;
 }
 
+.zaki-agent-power-sheet {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background:
+    linear-gradient(to right, var(--v2-hairline-faint) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--v2-hairline-faint) 1px, transparent 1px),
+    var(--v2-bg);
+  background-size: 32px 32px;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+}
+
+.zaki-agent-power-sheet :where(.rounded-full, .rounded-zaki-md, .rounded-zaki-lg, .rounded-zaki-xl, .rounded-zaki-2xl) {
+  border-radius: 0 !important;
+}
+
+.zaki-agent-power-sheet :where(.shadow, .shadow-sm, .shadow-zaki-sm, [class*="shadow-"]) {
+  box-shadow: none !important;
+}
+
+.zaki-agent-power-sheet :where(.bg-zaki-raised, .bg-zaki-hover, .dark\:bg-zaki-dark-card) {
+  background-color: var(--v2-bg-raised) !important;
+}
+
+.zaki-agent-power-sheet :where(.border-zaki, .border-zaki-subtle, .dark\:border-zaki-dark-card) {
+  border-color: var(--v2-hairline) !important;
+}
+
+.zaki-agent-power-sheet :where(.text-zaki-primary) {
+  color: var(--v2-ink-1) !important;
+}
+
+.zaki-agent-power-sheet :where(.text-zaki-secondary, .text-zaki-muted) {
+  color: var(--v2-ink-3) !important;
+}
+
+.zaki-agent-power-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-hairline);
+}
+
+.zaki-agent-power-tab {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 0;
+  background: var(--v2-bg);
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.zaki-agent-power-tab:hover {
+  color: var(--v2-ink-1);
+}
+
+.zaki-agent-power-tab.is-active {
+  background: var(--v2-selected);
+  color: var(--v2-accent);
+}
+
+.zaki-agent-power-tab svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.zaki-agent-power-tab__badge {
+  display: inline-flex;
+  min-width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid currentColor;
+  color: inherit;
+  font-size: 9px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.zaki-agent-power-controls,
+.zaki-agent-power-pane {
+  display: grid;
+  gap: 12px;
+}
+
+.zaki-agent-power-panel,
+.zaki-agent-power-metric,
+.zaki-agent-power-approval {
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-raised);
+}
+
+.zaki-agent-power-empty {
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-raised);
+  padding: 22px 14px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.45;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.zaki-agent-power-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-agent-power-section-title,
+.zaki-agent-power-metric__label {
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-agent-power-section-helper,
+.zaki-agent-power-metric__meta,
+.zaki-agent-power-session-key {
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.zaki-agent-power-session-key {
+  flex: 0 0 auto;
+  color: var(--v2-ink-4);
+  text-transform: uppercase;
+}
+
+.zaki-agent-power-mode {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--v2-hairline);
+}
+
+.zaki-agent-power-mode__button {
+  min-height: 36px;
+  border: 0;
+  background: var(--v2-bg);
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.zaki-agent-power-mode__button:hover:not(:disabled) {
+  color: var(--v2-ink-1);
+}
+
+.zaki-agent-power-mode__button.is-active {
+  background: var(--v2-accent);
+  color: var(--v2-ink-on-accent);
+}
+
+.zaki-agent-power-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-hairline);
+}
+
+.zaki-agent-power-metric {
+  min-width: 0;
+  padding: 12px;
+}
+
+.zaki-agent-power-metric__value {
+  margin-top: 8px;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 22px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.zaki-agent-power-metric__meta {
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+
+.zaki-agent-power-note {
+  border: 1px dashed var(--v2-hairline-strong);
+  padding: 10px 12px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.zaki-agent-power-approval {
+  border-color: var(--v2-warn);
+  background: var(--v2-warn-faint);
+  padding: 12px;
+}
+
+.zaki-agent-power-approval__head {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  color: var(--v2-warn);
+}
+
+.zaki-agent-power-approval__title {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  line-height: 1.35;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.zaki-agent-power-approval__reason {
+  margin-top: 5px;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-prose);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.zaki-agent-power-approval__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1px;
+  margin-top: 12px;
+  background: var(--v2-hairline);
+}
+
+.zaki-agent-power-button {
+  min-height: 32px;
+  min-width: 92px;
+  border: 0;
+  background: var(--v2-bg-raised);
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.zaki-agent-power-button:hover:not(:disabled) {
+  background: var(--v2-hover);
+  color: var(--v2-ink-1);
+}
+
+.zaki-agent-power-button.is-primary {
+  background: var(--v2-accent);
+  color: var(--v2-ink-on-accent);
+}
+
+.zaki-agent-power-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 640px) {
+  .zaki-agent-power-sheet {
+    padding: 10px;
+  }
+
+  .zaki-agent-power-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .zaki-agent-power-metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .zaki-agent-power-panel__head {
+    flex-direction: column;
+  }
+}
+
 @media (max-width: 767px) {
   .zaki-agent-inspector__trace-now {
     grid-template-columns: repeat(2, minmax(0, 1fr));

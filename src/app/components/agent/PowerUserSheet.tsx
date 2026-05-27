@@ -510,7 +510,7 @@ export function PowerUserSheet({
 
   const header = (
     <div
-      className="flex max-w-full items-center gap-1 overflow-x-auto rounded-zaki-lg border border-zaki bg-zaki-hover p-1 zaki-scrollbar-fade"
+      className="zaki-agent-power-tabs"
       role="tablist"
       aria-label={t("zakiControls.powerUser.tabsAria")}
     >
@@ -528,16 +528,14 @@ export function PowerUserSheet({
             data-testid={`power-user-tab-${tabId}`}
             onClick={() => setTab(tabId)}
             className={cn(
-              "flex shrink-0 items-center gap-1.5 rounded-zaki-md px-3 py-1.5 text-xs font-semibold transition-colors",
-              active
-                ? "bg-zaki-raised text-zaki-primary shadow-zaki-sm"
-                : "text-zaki-secondary hover:text-zaki-primary"
+              "zaki-agent-power-tab",
+              active && "is-active"
             )}
           >
             <Icon className="size-3.5" />
             {t(`zakiControls.powerUser.tabs.${tabId}`)}
             {badge ? (
-              <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-zaki-brand px-1.5 py-0.5 text-[10px] font-bold text-white">
+              <span className="zaki-agent-power-tab__badge">
                 {badge}
               </span>
             ) : null}
@@ -558,9 +556,9 @@ export function PowerUserSheet({
   };
 
   const renderApprovals = () => (
-    <div className="space-y-3" data-testid="power-user-approvals">
+    <div className="zaki-agent-power-pane" data-testid="power-user-approvals">
       {pendingApprovals.length === 0 ? (
-        <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-6 text-center text-sm text-zaki-muted dark:bg-zaki-dark-card dark:border-zaki-dark-card">
+        <div className="zaki-agent-power-empty">
           {t("zakiControls.powerUser.approvals.empty")}
         </div>
       ) : (
@@ -569,28 +567,28 @@ export function PowerUserSheet({
           return (
             <div
               key={request.id}
-              className="rounded-zaki-lg border border-amber-400/40 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/40 dark:bg-amber-950/30 dark:text-amber-100"
+              className="zaki-agent-power-approval"
               data-testid="power-user-approval-item"
             >
-              <div className="flex items-start gap-2">
-                <ShieldCheck className="mt-0.5 size-4 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold">
+              <div className="zaki-agent-power-approval__head">
+                <ShieldCheck className="size-4 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <div className="zaki-agent-power-approval__title">
                     {request.tool || t("zakiControls.powerUser.approvals.toolFallback")} —{" "}
                     {request.riskLevel || t("zakiControls.powerUser.approvals.riskUnknown")}
                   </div>
-                  <div className="mt-0.5 leading-relaxed opacity-90">
+                  <div className="zaki-agent-power-approval__reason">
                     {request.reason || t("zakiControls.powerUser.approvals.reasonFallback")}
                   </div>
                 </div>
               </div>
-              <div className="mt-3 flex items-center justify-end gap-2">
+              <div className="zaki-agent-power-approval__actions">
                 <button
                   type="button"
                   disabled={isBusy || !onApproveRequest}
                   onClick={() => void handleAction(request.id, false)}
                   data-testid={`power-user-approval-deny-${request.id}`}
-                  className="rounded-full border border-amber-500/40 px-3 py-1 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50"
+                  className="zaki-agent-power-button"
                 >
                   {t("zakiControls.powerUser.approvals.deny")}
                 </button>
@@ -599,7 +597,7 @@ export function PowerUserSheet({
                   disabled={isBusy || !onApproveRequest}
                   onClick={() => void handleAction(request.id, true)}
                   data-testid={`power-user-approval-approve-${request.id}`}
-                  className="rounded-full bg-amber-500 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+                  className="zaki-agent-power-button is-primary"
                 >
                   {isBusy ? "..." : t("zakiControls.powerUser.approvals.approve")}
                 </button>
@@ -627,24 +625,24 @@ export function PowerUserSheet({
         : "—";
 
     return (
-      <div className="space-y-3" data-testid="power-user-controls">
-        <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 dark:bg-zaki-dark-card dark:border-zaki-dark-card">
-          <div className="mb-3 flex items-center justify-between gap-2">
+      <div className="zaki-agent-power-controls" data-testid="power-user-controls">
+        <div className="zaki-agent-power-panel">
+          <div className="zaki-agent-power-panel__head">
             <div>
-              <div className="text-sm font-semibold text-zaki-primary">
+              <div className="zaki-agent-power-section-title">
                 {t("zakiControls.powerUser.controls.sessionModeTitle")}
               </div>
-              <div className="text-xs text-zaki-muted">
+              <div className="zaki-agent-power-section-helper">
                 {t("zakiControls.powerUser.controls.sessionModeHelper")}
               </div>
             </div>
             {activeSessionKey ? (
-              <span className="font-mono-ui text-[10px] text-zaki-muted">
+              <span className="zaki-agent-power-session-key">
                 {activeSessionKey.split(":").slice(-2).join(":")}
               </span>
             ) : null}
           </div>
-          <div className="inline-flex items-center gap-1 rounded-full bg-zaki-hover p-1">
+          <div className="zaki-agent-power-mode">
             {modeButtons.map((mode) => {
               const active = modeValue === mode;
               return (
@@ -654,10 +652,8 @@ export function PowerUserSheet({
                   disabled={modePending || !onModeChange}
                   onClick={() => void onModeChange?.(mode)}
                   className={cn(
-                    "rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
-                    active
-                      ? "bg-zaki-brand text-white"
-                      : "text-zaki-secondary hover:text-zaki-primary",
+                    "zaki-agent-power-mode__button",
+                    active && "is-active",
                     (modePending || !onModeChange) && "opacity-70"
                   )}
                 >
@@ -668,47 +664,47 @@ export function PowerUserSheet({
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card">
-            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
+        <div className="zaki-agent-power-metric-grid">
+          <div className="zaki-agent-power-metric">
+            <div className="zaki-agent-power-metric__label">
               {t("zakiControls.powerUser.controls.sandboxTitle")}
             </div>
-            <div className="mt-2 text-2xl font-semibold text-zaki-primary">
+            <div className="zaki-agent-power-metric__value">
               {sandbox?.enabled === true ? t("zakiControls.sandbox.active") : "—"}
             </div>
-            <div className="mt-1 text-xs text-zaki-muted">
+            <div className="zaki-agent-power-metric__meta">
               {sandboxLabel}
             </div>
           </div>
 
-          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card">
-            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
+          <div className="zaki-agent-power-metric">
+            <div className="zaki-agent-power-metric__label">
               {t("zakiControls.powerUser.controls.approvalsTitle")}
             </div>
-            <div className="mt-2 text-2xl font-semibold text-zaki-primary">
+            <div className="zaki-agent-power-metric__value">
               {pendingCount}
             </div>
-            <div className="mt-1 text-xs text-zaki-muted">
+            <div className="zaki-agent-power-metric__meta">
               {pendingCount > 0
                 ? t("zakiControls.powerUser.controls.approvalsPending")
                 : t("zakiControls.powerUser.controls.approvalsClear")}
             </div>
           </div>
 
-          <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card">
-            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-zaki-muted">
+          <div className="zaki-agent-power-metric">
+            <div className="zaki-agent-power-metric__label">
               {t("zakiControls.powerUser.controls.contextTitle")}
             </div>
-            <div className={cn("mt-2 text-2xl font-semibold", contextTone)}>
+            <div className={cn("zaki-agent-power-metric__value", contextTone)}>
               {typeof contextPressurePercent === "number" ? `${Math.round(contextPressurePercent)}%` : "—"}
             </div>
-            <div className="mt-1 text-xs text-zaki-muted">
+            <div className="zaki-agent-power-metric__meta">
               {t("zakiControls.context.normal")}
             </div>
           </div>
         </div>
 
-        <div className="rounded-zaki-lg border border-dashed border-zaki bg-transparent p-3 text-2xs leading-relaxed text-zaki-muted">
+        <div className="zaki-agent-power-note">
           {t("zakiControls.powerUser.controls.footer")}
         </div>
       </div>
@@ -1543,7 +1539,7 @@ export function PowerUserSheet({
       width="lg"
       padded={false}
     >
-      <div className="flex flex-col gap-3 px-4 py-4">
+      <div className="zaki-agent-power-sheet">
         {header}
         {body}
       </div>
