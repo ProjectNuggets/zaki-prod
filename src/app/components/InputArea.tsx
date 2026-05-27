@@ -1405,7 +1405,7 @@ export function InputArea({
           <div className="relative" ref={menuRef}>
             <button
               type="button"
-              className="size-9 bg-zaki-elevated rounded-full flex items-center justify-center border border-zaki-strong hover:bg-zaki-sunken dark:hover:bg-zaki-dark-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
+              className="zaki-composer-menu-trigger size-9 bg-zaki-elevated rounded-full flex items-center justify-center border border-zaki-strong hover:bg-zaki-sunken dark:hover:bg-zaki-dark-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
               onClick={() =>
                 setMenuOpen((open) => {
                   const nextOpen = isOnboardingControlsLocked ? true : !open;
@@ -1425,25 +1425,42 @@ export function InputArea({
             {menuOpen && (
               <div
                 className={cn(
-                  "absolute bottom-10 w-56 rounded-zaki-lg border border-zaki-strong bg-zaki-raised font-body shadow-[0px_16px_30px_rgba(15,15,15,0.12)] p-1 z-30 dark:bg-[#1a1714]",
+                  "zaki-composer-menu",
                   isRtl ? "right-0" : "left-0"
                 )}
                 role="menu"
               >
+                <div className="zaki-composer-menu__head">
+                  <span>
+                    {t("input.menu.turnTools", { defaultValue: "Turn tools" })}
+                  </span>
+                  <span>
+                    {t("input.menu.escapeHint", { defaultValue: "Esc closes" })}
+                  </span>
+                </div>
                 {zakiBotMode ? (
                   <>
                     <button
-                      className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+                      className="zaki-composer-menu__item"
                       type="button"
                       role="menuitem"
                       onClick={handleOpenZakiAttachmentPicker}
                       data-testid="zaki-composer-upload"
                     >
-                      <Paperclip className="size-4 text-zaki-muted" />
-                      {t("input.zaki.uploadFile")}
+                      <Paperclip className="zaki-composer-menu__icon" aria-hidden />
+                      <span className="zaki-composer-menu__copy">
+                        <span className="zaki-composer-menu__label">
+                          {t("input.zaki.uploadFile")}
+                        </span>
+                        <span className="zaki-composer-menu__meta">
+                          {t("input.zaki.uploadFileMeta", {
+                            defaultValue: "Attach files to this turn",
+                          })}
+                        </span>
+                      </span>
                     </button>
                     <button
-                      className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+                      className="zaki-composer-menu__item"
                       type="button"
                       role="menuitem"
                       onClick={() => {
@@ -1452,11 +1469,20 @@ export function InputArea({
                       }}
                       data-testid="zaki-composer-schedule-followup"
                     >
-                      <CalendarClock className="size-4 text-zaki-muted" />
-                      {t("input.zaki.scheduleFollowUp", { defaultValue: "Schedule a follow-up" })}
+                      <CalendarClock className="zaki-composer-menu__icon" aria-hidden />
+                      <span className="zaki-composer-menu__copy">
+                        <span className="zaki-composer-menu__label">
+                          {t("input.zaki.scheduleFollowUp", { defaultValue: "Schedule a follow-up" })}
+                        </span>
+                        <span className="zaki-composer-menu__meta">
+                          {t("input.zaki.scheduleFollowUpMeta", {
+                            defaultValue: "Create an autonomous reminder",
+                          })}
+                        </span>
+                      </span>
                     </button>
                     <button
-                      className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+                      className="zaki-composer-menu__item"
                       type="button"
                       role="menuitem"
                       disabled={!agentUserId}
@@ -1466,26 +1492,34 @@ export function InputArea({
                       }}
                       data-testid="zaki-composer-pin-context"
                     >
-                      <Pin className="size-4 text-zaki-muted" />
-                      {t("input.zaki.pinContext", { defaultValue: "Pin a memory" })}
+                      <Pin className="zaki-composer-menu__icon" aria-hidden />
+                      <span className="zaki-composer-menu__copy">
+                        <span className="zaki-composer-menu__label">
+                          {t("input.zaki.pinContext", { defaultValue: "Pin a memory" })}
+                        </span>
+                        <span className="zaki-composer-menu__meta">
+                          {t("input.zaki.pinContextMeta", {
+                            defaultValue: "Add brain context",
+                          })}
+                        </span>
+                      </span>
                       {pinnedMemories.length > 0 ? (
-                        <span className="ml-auto inline-flex items-center rounded-full bg-zaki-brand/10 px-1.5 text-[10px] font-semibold text-zaki-brand">
+                        <span className="zaki-composer-menu__badge">
                           {pinnedMemories.length}
                         </span>
                       ) : null}
                     </button>
-                    <div className="my-1 h-px bg-zaki-subtle" />
+                    <div className="zaki-composer-menu__section">
+                      {t("input.zaki.modeSection", { defaultValue: "Mode" })}
+                    </div>
                     {(["plan", "execute", "review"] as AgentSessionMode[]).map((mode) => {
                       const selected = effectiveZakiMode === mode;
                       return (
                         <button
                           key={mode}
                           className={cn(
-                            "w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm transition-colors",
-                            selected
-                              ? "bg-zaki-hover text-zaki-primary"
-                              : "text-zaki-primary hover:bg-zaki-hover",
-                            (zakiModePending || !onZakiModeChange) && "opacity-60 cursor-not-allowed"
+                            "zaki-composer-menu__item zaki-composer-menu__item--radio",
+                            selected && "is-active"
                           )}
                           type="button"
                           role="menuitemradio"
@@ -1494,11 +1528,24 @@ export function InputArea({
                           disabled={zakiModePending || !onZakiModeChange}
                           data-testid={`zaki-composer-mode-${mode}`}
                         >
-                          <span className="flex-1 text-left rtl:text-right">
-                            {t(`zakiControls.modes.${mode}`)}
+                          <span className="zaki-composer-menu__mode-mark" aria-hidden />
+                          <span className="zaki-composer-menu__copy">
+                            <span className="zaki-composer-menu__label">
+                              {t(`zakiControls.modes.${mode}`)}
+                            </span>
+                            <span className="zaki-composer-menu__meta">
+                              {t(`input.zaki.modeMeta.${mode}`, {
+                                defaultValue:
+                                  mode === "plan"
+                                    ? "Think first, then wait"
+                                    : mode === "review"
+                                      ? "Inspect and critique"
+                                      : "Act on the task",
+                              })}
+                            </span>
                           </span>
                           {selected ? (
-                            <Check className={cn("size-4 text-zaki-primary", isRtl ? "mr-auto" : "ml-auto")} />
+                            <Check className="zaki-composer-menu__check" aria-hidden />
                           ) : null}
                         </button>
                       );
@@ -1508,28 +1555,34 @@ export function InputArea({
                   <>
                     <button
                       className={cn(
-                        "w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm transition-colors",
-                        queryModeEnabled
-                          ? "bg-zaki-accent/10 text-zaki-primary"
-                          : "text-zaki-primary hover:bg-zaki-hover",
-                        !canToggleQueryMode && "opacity-60 cursor-not-allowed"
+                        "zaki-composer-menu__item",
+                        queryModeEnabled && "is-active"
                       )}
                       type="button"
                       role="menuitem"
                       onClick={handleToggleQueryMode}
                       disabled={!canToggleQueryMode}
                     >
-                      <FileText className="size-4 text-zaki-muted" />
-                      {t("input.queryMode.label")}
+                      <FileText className="zaki-composer-menu__icon" aria-hidden />
+                      <span className="zaki-composer-menu__copy">
+                        <span className="zaki-composer-menu__label">
+                          {t("input.queryMode.label")}
+                        </span>
+                        <span className="zaki-composer-menu__meta">
+                          {t("input.queryMode.meta", {
+                            defaultValue: "Search inside workspace files",
+                          })}
+                        </span>
+                      </span>
                       {queryModeEnabled ? (
-                        <span className={cn("ml-auto inline-flex items-center gap-1 rounded-full bg-zaki-accent/20 px-2 py-0.5 text-[10px] font-semibold text-zaki-accent", isRtl && "ml-0 mr-auto")}>
-                          <Check className="size-3" />
+                        <span className="zaki-composer-menu__badge">
+                          <Check className="size-3" aria-hidden />
                           {t("input.queryMode.onBadge")}
                         </span>
                       ) : null}
                     </button>
                     <button
-                      className="w-full flex items-center gap-2 rounded-zaki-md px-2.5 py-2 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors"
+                      className="zaki-composer-menu__item"
                       type="button"
                       role="menuitem"
                       onClick={() => {
@@ -1540,8 +1593,17 @@ export function InputArea({
                       }}
                       data-onboarding-id="chat-control-upload-file"
                     >
-                      <Paperclip className="size-4 text-zaki-muted" />
-                      {t("input.menu.uploadFile")}
+                      <Paperclip className="zaki-composer-menu__icon" aria-hidden />
+                      <span className="zaki-composer-menu__copy">
+                        <span className="zaki-composer-menu__label">
+                          {t("input.menu.uploadFile")}
+                        </span>
+                        <span className="zaki-composer-menu__meta">
+                          {t("input.menu.uploadFileMeta", {
+                            defaultValue: "Attach files to the chat",
+                          })}
+                        </span>
+                      </span>
                     </button>
                   </>
                 )}

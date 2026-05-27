@@ -1538,6 +1538,7 @@ export function PowerUserSheet({
       subtitle={t("zakiControls.powerUser.subtitle")}
       width="lg"
       padded={false}
+      className="zaki-agent-power-shell"
     >
       <div className="zaki-agent-power-sheet">
         {header}
