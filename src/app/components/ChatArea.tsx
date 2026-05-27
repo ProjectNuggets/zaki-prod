@@ -1453,10 +1453,33 @@ export function extractNullalisTaskItem(
   };
 }
 
-function extractNullalisApprovalRequest(
+function stringPayloadField(payload: Record<string, unknown>, ...keys: string[]): string | null {
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+export function extractNullalisApprovalRequest(
   payload: Record<string, unknown>,
   now = Date.now()
 ): NullalisApprovalRequest {
+  const tool =
+    stringPayloadField(payload, "tool", "tool_name", "toolName") ||
+    "tool";
+  const wireId = stringPayloadField(
+    payload,
+    "approval_id",
+    "approvalId",
+    "id",
+    "request_id",
+    "requestId",
+    "tool_use_id",
+    "toolUseId"
+  );
+  const runId = stringPayloadField(payload, "run_id", "runId");
+  const id = wireId || (runId ? `run:${runId}:tool:${tool}` : null);
   const inputPreview =
     (typeof payload.input_preview === "string" && payload.input_preview.trim()) ||
     (typeof payload.inputPreview === "string" && payload.inputPreview.trim()) ||
@@ -1474,11 +1497,8 @@ function extractNullalisApprovalRequest(
     (typeof payload.expiresAt === "string" && payload.expiresAt.trim()) ||
     null;
   return {
-    id: `approval-${now}-${Math.random().toString(36).slice(2, 8)}`,
-    tool:
-      (typeof payload.tool === "string" && payload.tool.trim()) ||
-      (typeof payload.tool_name === "string" && payload.tool_name.trim()) ||
-      "tool",
+    id: id || `approval-${now}-${Math.random().toString(36).slice(2, 8)}`,
+    tool,
     reason:
       (typeof payload.reason === "string" && payload.reason.trim()) ||
       "Mutating operation requires approval.",
@@ -2354,6 +2374,13 @@ export function ChatArea() {
     activeSessionRecord?.mode === "review"
       ? activeSessionRecord.mode
       : null);
+  const powerUserPendingApprovals = useMemo(() => {
+    const pending = activeSessionUi?.pendingApprovals ?? [];
+    if (!nullalisApprovalRequest?.id) return pending;
+    return pending.some((approval) => approval.id === nullalisApprovalRequest.id)
+      ? pending
+      : [nullalisApprovalRequest, ...pending];
+  }, [activeSessionUi?.pendingApprovals, nullalisApprovalRequest]);
   const zakiThreadSessions = useMemo(
     () => zakiSessions.filter((session) => isThreadLaneZakiSessionKey(session.session_key)),
     [zakiSessions]
@@ -2577,6 +2604,12 @@ export function ChatArea() {
   const messages = activeThreadId ? messagesByThread[activeThreadId] ?? [] : [];
   const primarySpace = spacesList[0] ?? null;
   const isZakiBotActiveSpace = isZakiBotSpaceId(activeWorkspaceSlug);
+  const zakiApprovalCount = isZakiBotActiveSpace
+    ? Math.max(
+        activeSessionUi?.approvalCount ?? activeSessionRecord?.pending_approval_count ?? 0,
+        powerUserPendingApprovals.length
+      )
+    : 0;
   const isAgentSurface =
     isZakiBotActiveSpace && !showZakiHome && !showAbout && !showSpacesView && !showSpaceDetail;
   const isAnonymousSpacesActive = !authUserId && !isZakiBotActiveSpace;
@@ -7321,13 +7354,7 @@ export function ChatArea() {
                 zakiMode={activeSessionMode ?? "execute"}
                 onZakiModeChange={isZakiBotActiveSpace ? handleSessionModeChange : undefined}
                 zakiModePending={isZakiBotActiveSpace ? sessionModePending : false}
-                zakiApprovalCount={
-                  isZakiBotActiveSpace
-                    ? activeSessionUi?.approvalCount ??
-                      activeSessionRecord?.pending_approval_count ??
-                      0
-                    : 0
-                }
+                zakiApprovalCount={zakiApprovalCount}
                 zakiArtifactCount={isZakiBotActiveSpace ? agentArtifactEventCount : 0}
                 zakiSandboxLabel={
                   isZakiBotActiveSpace
@@ -7488,7 +7515,7 @@ export function ChatArea() {
           onModeChange={handleSessionModeChange}
           contextPressurePercent={agentContextPercent}
           sandbox={sandboxState}
-          pendingApprovals={activeSessionUi?.pendingApprovals ?? []}
+          pendingApprovals={powerUserPendingApprovals}
           onApproveRequest={handleApprovalAction}
           artifactEventCount={agentArtifactEventCount}
         />

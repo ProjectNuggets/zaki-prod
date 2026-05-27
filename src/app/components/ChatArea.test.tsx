@@ -16,6 +16,7 @@ import {
   extractProgressPayload,
   extractNullalisNarrationFrame,
   extractNullalisReasoningNarrationFrame,
+  extractNullalisApprovalRequest,
   extractNullalisTranscriptEntry,
   extractNullalisTaskItem,
   extractNullalisUsageSummary,
@@ -820,6 +821,36 @@ describe("ChatArea Component", () => {
       description: "Build component",
       progressPct: 100,
       updatedAt: 456,
+    });
+  });
+
+  it("uses stable wire correlation for nullalis approval requests", () => {
+    expect(
+      extractNullalisApprovalRequest(
+        {
+          approval_id: "approval-123",
+          tool: "write_file",
+          risk_level: "high",
+        },
+        456
+      )
+    ).toMatchObject({
+      id: "approval-123",
+      tool: "write_file",
+      riskLevel: "high",
+    });
+
+    expect(
+      extractNullalisApprovalRequest(
+        {
+          run_id: "run-789",
+          tool: "browser_click",
+        },
+        456
+      )
+    ).toMatchObject({
+      id: "run:run-789:tool:browser_click",
+      tool: "browser_click",
     });
   });
 
