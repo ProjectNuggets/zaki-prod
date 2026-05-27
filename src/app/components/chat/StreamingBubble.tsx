@@ -66,13 +66,16 @@ export function StreamingBubble({
   return (
     <div
       className={[
-        "zaki-message-row flex gap-4 justify-start items-start zaki-message-enter-assistant",
+        "zaki-message-row zaki-message-row--assistant flex gap-4 justify-start items-start zaki-message-enter-assistant",
+        isStreaming ? "is-streaming" : "",
         streamingModeVariant === "final_reply_reveal" ? "zaki-message-reveal" : "",
       ]
         .filter(Boolean)
         .join(" ")}
+      data-message-role="assistant"
+      data-streaming={isStreaming ? "true" : undefined}
     >
-      <div className="size-8 shrink-0 flex items-start justify-center pt-[6px]">
+      <div className="zaki-message-avatar size-8 shrink-0 flex items-start justify-center pt-[6px]">
         <div className="scale-75">
           <CenterLogo />
         </div>
@@ -82,7 +85,7 @@ export function StreamingBubble({
         {badgeLabel ? (
           <span
             className={[
-              "inline-flex items-center rounded-full border border-zaki bg-zaki-raised px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-zaki-muted shadow-sm dark:border-[rgba(240,236,230,0.08)] dark:bg-[#141210]",
+              "zaki-streaming-badge inline-flex items-center rounded-full border border-zaki bg-zaki-raised px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-zaki-muted shadow-sm dark:border-[rgba(240,236,230,0.08)] dark:bg-[#141210]",
               streamingModeVariant === "final_reply_reveal" ? "zaki-process-enter" : "",
             ]
               .filter(Boolean)
@@ -92,7 +95,7 @@ export function StreamingBubble({
           </span>
         ) : null}
         {helperText && !content.trim() ? (
-          <div className="zaki-process-enter rounded-zaki-md border border-zaki bg-zaki-raised px-3 py-2 text-xs font-medium text-zaki-secondary shadow-sm dark:border-[rgba(240,236,230,0.08)] dark:bg-[#141210]">
+          <div className="zaki-streaming-helper zaki-process-enter rounded-zaki-md border border-zaki bg-zaki-raised px-3 py-2 text-xs font-medium text-zaki-secondary shadow-sm dark:border-[rgba(240,236,230,0.08)] dark:bg-[#141210]">
             {helperText}
           </div>
         ) : null}

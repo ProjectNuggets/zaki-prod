@@ -2910,6 +2910,12 @@
   font-family: var(--v2-font-mono);
 }
 
+.zaki-app-v2 .zaki-agent-v2 :where(.font-display, .font-mono-ui, .font-mono, button, input, select, textarea, label) {
+  font-family: var(--v2-font-mono) !important;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-variant-numeric: tabular-nums;
+}
+
 .zaki-app-v2 .zaki-agent-v2 :where(h1, h2, h3, p, dl, dt, dd) {
   letter-spacing: 0;
 }
@@ -3351,20 +3357,57 @@
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-message-row--assistant {
+  position: relative;
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
   align-items: start;
 }
 
+.zaki-app-v2 .zaki-agent-v2 .zaki-message-row--assistant::before {
+  content: "";
+  position: absolute;
+  top: 32px;
+  bottom: -16px;
+  left: 14px;
+  width: 1px;
+  background: var(--v2-hairline-faint);
+  opacity: 0.85;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-message-row--assistant.is-streaming::before {
+  background: var(--v2-accent-hairline);
+  opacity: 1;
+}
+
 .zaki-app-v2 .zaki-agent-v2 .zaki-message-avatar {
+  position: relative;
+  z-index: 1;
   width: 28px;
   height: 28px;
   align-items: center;
   justify-content: center;
   padding-top: 0;
+  border-radius: 0;
   background: var(--v2-accent);
   color: var(--v2-ink-on-accent);
   box-shadow: inset 0 0 0 1px var(--v2-accent-hairline);
+  overflow: hidden;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-message-avatar::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 4px;
+  height: 4px;
+  background: var(--v2-bg);
+  opacity: 0.85;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-message-row--assistant.is-streaming .zaki-message-avatar::after {
+  background: var(--v2-ink-on-accent);
+  animation: v2-caret-blink 530ms steps(2, end) infinite;
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-message-avatar .scale-75 {
@@ -3393,6 +3436,7 @@
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-user-bubble {
+  position: relative;
   border: 1px solid var(--v2-hairline-strong);
   border-radius: 0;
   background: var(--v2-bg-raised);
@@ -3404,10 +3448,16 @@
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-assistant-bubble {
+  border-left: 1px solid var(--v2-hairline);
+  padding-left: 12px;
   color: var(--v2-ink-1);
   font-family: var(--v2-font-prose);
   font-size: 15px;
   line-height: 1.65;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-message-row--assistant.is-streaming .zaki-assistant-bubble {
+  border-left-color: var(--v2-accent-hairline);
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-message-content {
@@ -3437,9 +3487,39 @@
   box-shadow: none;
 }
 
+.zaki-app-v2 .zaki-agent-v2 .zaki-streaming-caret {
+  width: 7px;
+  height: 12px;
+  margin-left: 2px;
+  background: var(--v2-accent);
+  animation: v2-caret-blink 530ms steps(2, end) infinite;
+}
+
 .zaki-app-v2 .zaki-agent-v2 .zaki-message-stack > :where(.mt-0\.5),
 .zaki-app-v2 .zaki-agent-v2 [class*="source"] {
   font-family: var(--v2-font-mono);
+}
+
+.zaki-app-v2 .zaki-agent-v2 [data-testid="source-chip"] {
+  gap: 4px;
+}
+
+.zaki-app-v2 .zaki-agent-v2 [data-testid="source-chip"] > span {
+  border: 1px solid var(--v2-hairline) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--v2-ink-3) !important;
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.zaki-app-v2 .zaki-agent-v2 [data-testid="source-chip"] svg {
+  width: 11px;
+  height: 11px;
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-message-stack :where(.rounded-full, .rounded-zaki-xl, .rounded-zaki-lg, .rounded-zaki-md) {
@@ -3465,6 +3545,15 @@
   box-shadow: none;
 }
 
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-composer-shell {
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: 0;
+  background:
+    linear-gradient(90deg, var(--v2-accent) 0 2px, transparent 2px),
+    var(--v2-bg-raised);
+  box-shadow: none;
+}
+
 .zaki-app-v2 .zaki-agent-v2 .zaki-input-form > div:last-child {
   border: 1px solid var(--v2-hairline-strong);
   border-radius: 0;
@@ -3477,6 +3566,10 @@
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-composer-box {
+  background: transparent !important;
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-input-form > div:last-child > div:first-child {
@@ -3603,6 +3696,37 @@
   color: var(--v2-ink-4);
 }
 
+.zaki-app-v2 .zaki-agent-v2 .zaki-pinned-context-rail {
+  border-top: 1px solid var(--v2-hairline);
+  padding: 7px 2px 2px;
+  font-family: var(--v2-font-mono);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-pinned-context-rail > span:first-child {
+  color: var(--v2-ink-3) !important;
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-pinned-context-rail svg {
+  color: var(--v2-accent) !important;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-pinned-context-token {
+  border: 1px solid var(--v2-hairline) !important;
+  border-radius: 0 !important;
+  background: var(--v2-bg-sunken) !important;
+  color: var(--v2-ink-2) !important;
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-pinned-context-token button {
+  border-radius: 0;
+}
+
 .zaki-app-v2 .zaki-agent-v2 .zaki-input-row {
   margin-top: 2px;
   padding: 6px 10px;
@@ -3654,6 +3778,62 @@
   font-size: 11px;
 }
 
+.zaki-app-v2 .zaki-agent-v2 .zaki-quick-reply-strip {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-self: flex-start;
+  gap: 1px;
+  padding-top: 0;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-hairline);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-quick-reply {
+  min-height: 28px;
+  border: 0;
+  border-radius: 0;
+  background: var(--v2-bg);
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: lowercase;
+  box-shadow: none;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-quick-reply:hover {
+  background: var(--v2-hover);
+  color: var(--v2-ink-1);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-quick-reply svg {
+  width: 13px;
+  height: 13px;
+  color: var(--v2-accent);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-streaming-badge,
+.zaki-app-v2 .zaki-agent-v2 .zaki-streaming-helper {
+  border: 1px solid var(--v2-hairline-strong) !important;
+  border-radius: 0 !important;
+  background: var(--v2-bg-raised) !important;
+  color: var(--v2-ink-2) !important;
+  box-shadow: none !important;
+  font-family: var(--v2-font-mono);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-streaming-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  background: var(--v2-accent);
+  animation: v2-caret-blink 530ms steps(2, end) infinite;
+}
+
 .zaki-app-v2 .zaki-agent-v2 details,
 .zaki-app-v2 .zaki-agent-v2 [role="alertdialog"] {
   border-radius: 0;
@@ -3683,6 +3863,11 @@
 
 .zaki-app-v2 .zaki-agent-v2__workspace {
   min-height: 0;
+  background-image:
+    linear-gradient(to right, var(--v2-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--v2-grid) 1px, transparent 1px);
+  background-position: -1px -1px;
+  background-size: 32px 32px;
 }
 
 .zaki-app-v2 .zaki-agent-v2__scroll {

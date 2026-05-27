@@ -944,7 +944,7 @@ export function InputArea({
           }
           isRtl={isRtl}
         />
-        <div className="rounded-zaki-xl border border-zaki-strong bg-zaki-raised font-body shadow-[0px_16px_36px_rgba(15,15,15,0.06)] overflow-visible p-0">
+        <div className="zaki-agent-composer-shell rounded-zaki-xl border border-zaki-strong bg-zaki-raised font-body shadow-[0px_16px_36px_rgba(15,15,15,0.06)] overflow-visible p-0">
           {showUpgradeStrip ? (
             <div
               className={cn(
@@ -1023,7 +1023,7 @@ export function InputArea({
           ) : null}
           <div
             className={cn(
-              "w-full rounded-[16px] border border-zaki-strong bg-zaki-raised font-body px-3 py-2.5 flex flex-col gap-2 relative dark:bg-[#141210]",
+              "zaki-agent-composer-box w-full rounded-[16px] border border-zaki-strong bg-zaki-raised font-body px-3 py-2.5 flex flex-col gap-2 relative dark:bg-[#141210]",
               showUpgradeStrip ? "mt-2" : "mt-0"
             )}
           >
@@ -1132,7 +1132,7 @@ export function InputArea({
         ) : null}
         {zakiBotMode && pinnedMemories.length > 0 && (
           <div
-            className="flex flex-wrap items-center gap-1.5 px-1"
+            className="zaki-pinned-context-rail flex flex-wrap items-center gap-1.5 px-1"
             data-testid="zaki-pinned-context-rail"
           >
             <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-zaki-muted">
@@ -1142,7 +1142,7 @@ export function InputArea({
             {pinnedMemories.map((p) => (
               <span
                 key={p.id}
-                className="inline-flex items-center gap-1 rounded-full border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[11px] text-zaki-primary"
+                className="zaki-pinned-context-token inline-flex items-center gap-1 rounded-full border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[11px] text-zaki-primary"
               >
                 <span className="max-w-[160px] truncate">{p.label}</span>
                 <button

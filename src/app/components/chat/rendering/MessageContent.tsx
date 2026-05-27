@@ -79,7 +79,7 @@ export function MessageContent({
       streamingVariant !== "final_reply_reveal" &&
       content.trim() ? (
         <div aria-hidden className="inline-flex h-5 items-end">
-          <span className="inline-block h-4 w-px animate-pulse rounded-full bg-zaki-brand/70" />
+          <span className="zaki-streaming-caret inline-block" />
         </div>
       ) : null}
     </div>

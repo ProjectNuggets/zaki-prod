@@ -23,7 +23,7 @@ describe("MessageContent", () => {
       <MessageContent role="assistant" content={"Working"} streaming />,
     );
 
-    expect(container.querySelector(".animate-pulse")).not.toBeNull();
+    expect(container.querySelector(".zaki-streaming-caret")).not.toBeNull();
   });
 
   it("preserves structured formatting for shared user content when requested", () => {

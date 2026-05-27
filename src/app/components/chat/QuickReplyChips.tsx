@@ -45,7 +45,7 @@ export function QuickReplyChips({
       role="group"
       aria-label={t("zakiControls.quickReplies.aria")}
       className={cn(
-        "flex flex-wrap items-center gap-2 pt-1",
+        "zaki-quick-reply-strip flex flex-wrap items-center gap-2 pt-1",
         isRtl && "flex-row-reverse",
         className
       )}
@@ -62,7 +62,7 @@ export function QuickReplyChips({
             onClick={() => onPick(prefill)}
             data-testid={`quick-reply-${kind}`}
             className={cn(
-              "v2-btn v2-btn--sm inline-flex min-h-0 items-center gap-1.5 px-2.5 py-1 text-[11px] normal-case tracking-[0.02em]",
+              "zaki-quick-reply v2-btn v2-btn--sm inline-flex min-h-0 items-center gap-1.5 px-2.5 py-1 text-[11px] normal-case tracking-[0.02em]",
               isRtl && "flex-row-reverse"
             )}
           >

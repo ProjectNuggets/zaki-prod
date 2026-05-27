@@ -228,6 +228,7 @@ export function ChatView({
               {String(msg.content || "").trim() ? (
                 <MessageBubble
                   message={msg}
+                  isStreaming={isStreamingMessage}
                   onCopy={onCopyMessage}
                   onRegenerate={onRegenerateMessage}
                   onThumbsUp={onThumbsUpMessage}

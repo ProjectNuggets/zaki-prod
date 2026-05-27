@@ -76,8 +76,6 @@ export function MessageBubble({
   onThumbsDown,
   reaction = null,
 }: MessageBubbleProps) {
-  // isStreaming can be used to show typing indicator or disable actions
-  void isStreaming;
   const isUser = message.role === 'user';
   const isAssistantError = !isUser && Boolean(message.error);
   const [showWhy, setShowWhy] = useState(false);
@@ -119,10 +117,12 @@ export function MessageBubble({
       className={cn(
         "group zaki-message-row flex gap-4 font-body",
         isUser ? "zaki-message-row--user" : "zaki-message-row--assistant",
+        !isUser && isStreaming && "is-streaming",
         isUser ? "justify-end items-start" : "justify-start items-start",
         animate && (isUser ? "zaki-message-enter-user" : "zaki-message-enter-assistant")
       )}
       data-message-role={message.role}
+      data-streaming={!isUser && isStreaming ? "true" : undefined}
     >
       {!isUser && (
         <div className="zaki-message-avatar size-8 shrink-0 flex items-start justify-center pt-[6px]">

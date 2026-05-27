@@ -14,6 +14,18 @@ jest.mock("react-i18next", () => ({
 }));
 
 describe("MessageBubble source chip", () => {
+  it("marks assistant rows while the response is streaming", () => {
+    const message: Message = {
+      id: "streaming-1",
+      role: "assistant",
+      content: "working",
+    };
+    const { container } = render(<MessageBubble message={message} isStreaming animate={false} />);
+    const row = container.querySelector(".zaki-message-row");
+    expect(row).toHaveClass("is-streaming");
+    expect(row).toHaveAttribute("data-streaming", "true");
+  });
+
   it("renders a Web chip by default for web-app messages", () => {
     const message: Message = {
       id: "1",
