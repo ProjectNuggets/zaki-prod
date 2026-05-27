@@ -5138,7 +5138,19 @@ export function ChatArea() {
     openSpacesMemoryViewer({ enabled: isMemoryPipelineEnabled, query, tab });
   }, [isMemoryPipelineEnabled]);
 
+  const openPowerUserSheet = useCallback((tab: PowerUserTab = "controls") => {
+    setAgentMobileInspectorOpen(false);
+    setPowerUserInitialTab(tab);
+    setPowerUserOpen(true);
+  }, []);
+
+  const openAgentCronSheet = useCallback(() => {
+    setAgentMobileInspectorOpen(false);
+    setAgentCronOpen(true);
+  }, []);
+
   const openAgentMemorySurface = useCallback(() => {
+    setAgentMobileInspectorOpen(false);
     navigate("/brain");
   }, [navigate]);
 
@@ -6219,15 +6231,14 @@ export function ChatArea() {
     const handleOpenPowerUser = (event: Event) => {
       if (!isAgentSurface) return;
       const detail = (event as CustomEvent<{ tab?: unknown } | undefined>).detail;
-      setPowerUserInitialTab(normalizePowerUserTab(detail?.tab));
-      setPowerUserOpen(true);
+      openPowerUserSheet(normalizePowerUserTab(detail?.tab));
     };
 
     window.addEventListener("zaki:open-power-user", handleOpenPowerUser);
     return () => {
       window.removeEventListener("zaki:open-power-user", handleOpenPowerUser);
     };
-  }, [isAgentSurface]);
+  }, [isAgentSurface, openPowerUserSheet]);
 
   useEffect(() => {
     const handleOpenMobileInspector = () => {
@@ -6244,9 +6255,8 @@ export function ChatArea() {
     if (!isAgentSurface) return;
     const pendingTab = takePendingPowerUserTab();
     if (!pendingTab) return;
-    setPowerUserInitialTab(pendingTab);
-    setPowerUserOpen(true);
-  }, [isAgentSurface]);
+    openPowerUserSheet(pendingTab);
+  }, [isAgentSurface, openPowerUserSheet]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -6931,19 +6941,10 @@ export function ChatArea() {
       usageSummary={zakiUsageSummary}
       quotaInfo={zakiBotQuotaInfo}
       onOpenMemory={openAgentMemorySurface}
-      onOpenCron={() => setAgentCronOpen(true)}
-      onOpenBrowser={() => {
-        setPowerUserInitialTab("browser");
-        setPowerUserOpen(true);
-      }}
-      onOpenArtifacts={() => {
-        setPowerUserInitialTab("artifacts");
-        setPowerUserOpen(true);
-      }}
-      onOpenTrace={() => {
-        setPowerUserInitialTab("trace");
-        setPowerUserOpen(true);
-      }}
+      onOpenCron={openAgentCronSheet}
+      onOpenBrowser={() => openPowerUserSheet("browser")}
+      onOpenArtifacts={() => openPowerUserSheet("artifacts")}
+      onOpenTrace={() => openPowerUserSheet("trace")}
     />
   ) : null;
 
@@ -7337,26 +7338,17 @@ export function ChatArea() {
                 }
                 onOpenZakiApprovals={
                   isZakiBotActiveSpace
-                    ? () => {
-                        setPowerUserInitialTab("approvals");
-                        setPowerUserOpen(true);
-                      }
+                    ? () => openPowerUserSheet("approvals")
                     : undefined
                 }
                 onOpenZakiBrowser={
                   isZakiBotActiveSpace
-                    ? () => {
-                        setPowerUserInitialTab("browser");
-                        setPowerUserOpen(true);
-                      }
+                    ? () => openPowerUserSheet("browser")
                     : undefined
                 }
                 onOpenZakiArtifacts={
                   isZakiBotActiveSpace
-                    ? () => {
-                        setPowerUserInitialTab("artifacts");
-                        setPowerUserOpen(true);
-                      }
+                    ? () => openPowerUserSheet("artifacts")
                     : undefined
                 }
                 zakiContextPressurePercent={

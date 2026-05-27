@@ -6,7 +6,7 @@
 import "@testing-library/jest-dom";
 import { describe, it, expect, beforeEach, jest } from "@jest/globals";
 import { act } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -596,6 +596,30 @@ describe("ChatArea Component", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("agent-mobile-inspector")).not.toBeInTheDocument();
     });
+  });
+
+  it("hands off from the Agent mobile inspector to backend-backed power surfaces", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+
+    await renderChatAreaAndWaitForEffects();
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent("zaki:open-agent-mobile-inspector"));
+    });
+
+    const inspector = await screen.findByTestId("agent-mobile-inspector");
+    fireEvent.click(within(inspector).getByRole("tab", { name: /Artifacts/i }));
+    fireEvent.click(within(inspector).getByRole("button", { name: "Open artifacts manager" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("power-user-tab-artifacts")).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
+    });
+    expect(screen.queryByTestId("agent-mobile-inspector")).not.toBeInTheDocument();
   });
 
   it("opens a pending Agent controls tab after route handoff", async () => {
