@@ -74,9 +74,20 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
-import { buildApiUrl } from "@/lib/api";
+import { buildApiUrl, type MeterWindowSnapshot, type ProductOperationalState } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useMeterStatus } from "@/queries";
+import { useProductRegistry } from "@/queries/useProducts";
 import { useAuthStore } from "@/stores";
+import {
+  V2Badge,
+  V2Button,
+  V2Panel,
+  V2PanelBody,
+  V2PanelHead,
+  V2StatusStrip,
+  V2UsageGauge,
+} from "@/app/components/v2";
 import { useLearningProtectedAsset } from "./learningProtectedAsset";
 import {
   addLearningNotebookRecordManual,
@@ -228,6 +239,62 @@ type LearningChannelSchemaEntry = {
   secret_fields: string[];
   json_schema: LearningChannelJsonSchema;
 };
+
+const LEARNING_PRODUCT_ID = "learning";
+
+type LearningOperationalState = ProductOperationalState | "privateBeta" | "loading" | "unknown";
+
+function formatMeterNumber(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "pending";
+  return value.toLocaleString();
+}
+
+function formatLearningReset(value: string | null | undefined) {
+  if (!value) return "reset pending";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "reset pending";
+  return `resets ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+}
+
+function getLearningWindow(meterWindow: MeterWindowSnapshot | null | undefined) {
+  return {
+    used: typeof meterWindow?.used === "number" ? meterWindow.used : null,
+    limit: typeof meterWindow?.limit === "number" ? meterWindow.limit : null,
+    remaining: typeof meterWindow?.remaining === "number" ? meterWindow.remaining : null,
+    resetAt: meterWindow?.resetAt || null,
+  };
+}
+
+function learningStateTone(state: LearningOperationalState): "accent" | "success" | "warn" | "danger" {
+  if (state === "enabled") return "success";
+  if (state === "degraded" || state === "readOnly" || state === "privateBeta" || state === "loading") return "warn";
+  if (state === "disabled" || state === "maintenance" || state === "hidden") return "danger";
+  return "accent";
+}
+
+function learningStateLabel(state: LearningOperationalState) {
+  const labels: Record<LearningOperationalState, string> = {
+    enabled: "Operational",
+    disabled: "Disabled",
+    maintenance: "Maintenance",
+    degraded: "Degraded",
+    hidden: "Unavailable",
+    readOnly: "Read-only",
+    privateBeta: "Private beta",
+    loading: "Syncing",
+    unknown: "Registry pending",
+  };
+  return labels[state] ?? "Registry pending";
+}
+
+function learningStateMessage(state: LearningOperationalState) {
+  if (state === "disabled") return "Learn is disabled centrally. Existing study material is visible, but new learning work is paused.";
+  if (state === "maintenance") return "Learn is in maintenance. Keep reading saved material; generation and mutations may be paused.";
+  if (state === "readOnly") return "Learn is read-only from the central registry. Saved material is available; new expensive work should wait.";
+  if (state === "degraded") return "Learn is degraded. Core study flows remain visible while upstream learning services recover.";
+  if (state === "privateBeta") return "Learn is in private beta. Access is controlled centrally; learner memory remains separate.";
+  return "";
+}
 
 type LearningChannelSchemaCatalog = {
   channels: Record<string, LearningChannelSchemaEntry>;
@@ -621,6 +688,8 @@ export function LearningPage() {
   const queryClient = useQueryClient();
   const authUser = useAuthStore((state) => state.user);
   const [searchParams] = useSearchParams();
+  const productRegistry = useProductRegistry();
+  const meterStatus = useMeterStatus();
   const requestedView = searchParams.get("view");
   const requestedDocumentId = searchParams.get("doc") || "";
   const requestedAgentId = searchParams.get("agent") || "";
@@ -776,6 +845,28 @@ export function LearningPage() {
     queryFn: listLearningSolveSessions,
     retry: 1,
   });
+
+  const learningProduct = useMemo(
+    () =>
+      (productRegistry.data?.data?.products ?? []).find(
+        (product) => product.productId === LEARNING_PRODUCT_ID,
+      ) ?? null,
+    [productRegistry.data?.data?.products],
+  );
+  const learningMeter = meterStatus.data?.data?.products?.[LEARNING_PRODUCT_ID] ?? null;
+  const centralProductState = learningProduct?.state || learningMeter?.state || null;
+  const productState: LearningOperationalState = productRegistry.isLoading
+    ? "loading"
+    : centralProductState
+      ? centralProductState
+      : learningProduct?.lifecycle && learningProduct.lifecycle !== "current"
+      ? "privateBeta"
+      : "unknown";
+  const productWeekly = getLearningWindow(learningMeter?.weekly ?? meterStatus.data?.data?.weekly);
+  const productRolling = getLearningWindow(learningMeter?.rolling ?? meterStatus.data?.data?.rolling);
+  const learningStateBlocksWork =
+    productState === "disabled" || productState === "maintenance" || productState === "hidden";
+  const learningStateBanner = learningStateMessage(productState);
 
   const knowledgeItems = useMemo(
     () => itemList(knowledge.data, ["knowledge_bases", "items", "databases"]),
@@ -1063,9 +1154,109 @@ export function LearningPage() {
   };
 
   return (
-    <div className="h-full overflow-hidden bg-zaki-base">
-      <div className="h-full">
-        {tab === "books" ? (
+    <div
+      className="zaki-app-v2 h-full overflow-hidden bg-[var(--v2-bg)]"
+      data-product-id={LEARNING_PRODUCT_ID}
+    >
+      <V2StatusStrip
+        aria-live="polite"
+        items={[
+          {
+            id: "state",
+            label: "Learn",
+            value: learningStateLabel(productState),
+            active: true,
+            tone: learningStateTone(productState),
+          },
+          {
+            id: "meter",
+            label: "Central meter",
+            value:
+              productWeekly.limit != null
+                ? `${formatMeterNumber(productWeekly.used)} / ${formatMeterNumber(productWeekly.limit)}`
+                : "linked",
+          },
+          {
+            id: "remaining",
+            label: "Remaining",
+            value: formatMeterNumber(productWeekly.remaining),
+          },
+          {
+            id: "memory",
+            label: "Memory",
+            value: learningProduct?.memoryScope || "learner_memory",
+          },
+        ]}
+      />
+      <div className="grid h-[calc(100%-30px)] min-h-0 grid-rows-[auto_1fr]">
+        <div className="border-b border-[var(--v2-hairline)] bg-[var(--v2-bg)] px-3 py-2">
+          <div className="grid gap-2 lg:grid-cols-[1fr_260px_auto] lg:items-center">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <V2Badge tone={learningStateTone(productState)} dot>
+                  {learningStateLabel(productState)}
+                </V2Badge>
+                {learningProduct?.lifecycle && learningProduct.lifecycle !== "current" ? (
+                  <V2Badge tone="warn">Private beta</V2Badge>
+                ) : null}
+                {productRegistry.isError || meterStatus.isError ? (
+                  <V2Badge tone="warn">Central state degraded</V2Badge>
+                ) : null}
+              </div>
+              <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--v2-ink-3)]">
+                Sources / study plans / notebooks / books / tutor loop. Global account, billing,
+                OAuth, privacy, and product usage stay in central settings.
+              </p>
+            </div>
+            <V2UsageGauge
+              label="Learning usage"
+              used={productWeekly.used}
+              limit={productWeekly.limit}
+              remaining={`${formatMeterNumber(productWeekly.remaining)} remaining`}
+              reset={formatLearningReset(productWeekly.resetAt)}
+              unit={productWeekly.limit != null ? "units" : "central"}
+              className="hidden p-2 lg:block [&_.v2-usage-gauge__bar]:mt-2 [&_.v2-usage-gauge__foot]:mt-1 [&_.v2-usage-gauge__number]:mt-1 [&_.v2-usage-gauge__number_strong]:text-[20px]"
+            />
+            <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
+              <a href="/settings#settings-products" className="v2-btn v2-btn--sm">
+                Usage settings
+              </a>
+              <a href="/settings#settings-privacy" className="v2-btn v2-btn--sm">
+                Privacy
+              </a>
+            </div>
+          </div>
+          {learningStateBanner ? (
+            <div className="mt-2 border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg-sunken)] px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--v2-ink-2)]">
+              {learningStateBanner}
+              {productRolling.remaining != null
+                ? ` Rolling window: ${formatMeterNumber(productRolling.remaining)} remaining.`
+                : ""}
+            </div>
+          ) : null}
+        </div>
+        <div className="min-h-0 overflow-hidden">
+        {learningStateBlocksWork ? (
+          <V2Panel className="m-4">
+            <V2PanelHead title={learningStateLabel(productState)} meta="Central product state" />
+            <V2PanelBody>
+              <p className="font-mono text-[12px] uppercase tracking-[0.12em] text-[var(--v2-ink-2)]">
+                {learningStateBanner}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <V2Button
+                  size="sm"
+                  onClick={() => window.location.assign("/settings#settings-products")}
+                >
+                  Open central settings
+                </V2Button>
+                <V2Button size="sm" variant="ghost" onClick={() => void productRegistry.refetch()}>
+                  Refresh state
+                </V2Button>
+              </div>
+            </V2PanelBody>
+          </V2Panel>
+        ) : tab === "books" ? (
           <LearningBookWorkspace
             bookTopic={bookTopic}
             setBookTopic={setBookTopic}
@@ -1192,6 +1383,7 @@ export function LearningPage() {
             onOpen={(item) => openObject("solve", item, `solve-${solveItems.indexOf(item) + 1}`)}
           />
         ) : null}
+        </div>
       </div>
       <LearningDetailSheet
         selected={selectedObject}
@@ -4044,9 +4236,9 @@ function LearningChatPanel({
   };
 
   return (
-    <div className="flex h-[calc(100vh-7.5rem)] min-h-[680px] flex-col overflow-hidden bg-[var(--background)]">
-      <div className="mx-auto flex w-full max-w-[960px] items-center justify-between px-6 pb-0 pt-3">
-        <span className="text-[15px] font-semibold text-[var(--foreground)]">
+    <div className="flex h-full min-h-[680px] flex-col overflow-hidden bg-[var(--v2-bg)]">
+      <div className="mx-auto flex w-full max-w-[980px] items-center justify-between border-b border-[var(--v2-hairline)] px-4 py-2">
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--v2-ink-1)]">
           {activeCapability.label}
         </span>
         <div className="flex items-center gap-2">
@@ -4054,7 +4246,7 @@ function LearningChatPanel({
             type="button"
             onClick={() => setSaveNotebookOpen(true)}
             disabled={!messages.length}
-            className="rounded-lg border border-[var(--border)]/50 px-3 py-1.5 text-[12px] font-medium text-[var(--muted-foreground)] transition-colors hover:border-[var(--border)] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-40"
+            className="v2-btn v2-btn--sm"
           >
             Save to Notebook
           </button>
@@ -4063,20 +4255,20 @@ function LearningChatPanel({
             onClick={handleDownloadMarkdown}
             disabled={!messages.length}
             title="Download chat history as Markdown"
-            className="rounded-lg border border-[var(--border)]/50 px-3 py-1.5 text-[12px] font-medium text-[var(--muted-foreground)] transition-colors hover:border-[var(--border)] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-40"
+            className="v2-btn v2-btn--sm"
           >
             Download Markdown
           </button>
           <button
             type="button"
             onClick={handleNewChat}
-            className="rounded-lg border border-[var(--border)]/50 px-3 py-1.5 text-[12px] font-medium text-[var(--muted-foreground)] transition-colors hover:border-[var(--border)] hover:text-[var(--foreground)]"
+            className="v2-btn v2-btn--sm"
           >
             New chat
           </button>
         </div>
       </div>
-      <div className="mx-auto flex min-h-0 w-full max-w-[960px] flex-1 flex-col overflow-hidden px-6">
+      <div className="mx-auto flex min-h-0 w-full max-w-[980px] flex-1 flex-col overflow-hidden px-4">
         <LearningStudySetupPanel
           profile={studyDraft}
           savedProfile={studyProfile}
@@ -4093,10 +4285,10 @@ function LearningChatPanel({
         {!hasMessages && !studyPanelOpen ? (
           <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-1 pb-36 pt-8">
             <div className="text-center">
-              <h1 className="font-serif text-[36px] font-medium text-[var(--foreground)]">
+              <h1 className="font-mono text-[24px] font-semibold uppercase tracking-[0.14em] text-[var(--v2-ink-1)]">
                 What would you like to learn?
               </h1>
-              <p className="mt-4 text-[15px] text-[var(--muted-foreground)]">
+              <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--v2-ink-3)]">
                 Ask anything - I'm here to help you understand.
               </p>
             </div>
@@ -4106,7 +4298,7 @@ function LearningChatPanel({
                   key={action.label}
                   type="button"
                   onClick={() => startStarterAction(action)}
-                  className="inline-flex h-9 items-center rounded-zaki-md border border-[var(--border)] bg-[var(--card)] px-3 text-[12px] font-semibold text-[var(--foreground)] shadow-sm transition-colors hover:border-zaki-brand-40 hover:bg-zaki-brand-10 hover:text-zaki-brand"
+                  className="v2-btn v2-btn--sm"
                 >
                   {action.label}
                 </button>
@@ -4219,10 +4411,10 @@ function LearningChatPanel({
           />
           <div
         className={cn(
-          "relative rounded-2xl border bg-[var(--card)] shadow-[0_1px_8px_rgba(0,0,0,0.03)] transition-colors",
+          "relative border bg-[var(--v2-bg-raised)] transition-colors",
           dragging
-            ? "border-[var(--primary)] bg-[var(--primary)]/[0.03]"
-            : "border-[var(--border)]",
+            ? "border-[var(--v2-accent)] bg-[var(--v2-bg-sunken)]"
+            : "border-[var(--v2-hairline-strong)]",
         )}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
@@ -4230,11 +4422,11 @@ function LearningChatPanel({
         onDrop={handleDrop}
       >
         {dragging ? (
-          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl border-2 border-dashed border-[var(--primary)]/50 bg-[var(--primary)]/[0.04]">
-            <div className="flex flex-col items-center gap-1 text-[var(--primary)]">
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center border border-dashed border-[var(--v2-accent)] bg-[var(--v2-bg-sunken)]">
+            <div className="flex flex-col items-center gap-1 font-mono uppercase tracking-[0.12em] text-[var(--v2-accent)]">
               <Paperclip size={22} strokeWidth={1.6} />
-              <span className="text-[13px] font-medium">Drop files here</span>
-              <span className="text-[11px] text-[var(--primary)]/70">
+              <span className="text-[12px] font-medium">Drop files here</span>
+              <span className="text-[10px] text-[var(--v2-ink-3)]">
                 Images, Office docs, code & text
               </span>
             </div>
@@ -4347,7 +4539,7 @@ function LearningChatPanel({
         {attachmentError ? (
           <div className="px-4 pb-2 text-xs text-red-600">{attachmentError}</div>
         ) : null}
-        <div className="border-t border-[var(--border)]/35 px-3 py-2">
+        <div className="border-t border-[var(--v2-hairline)] px-3 py-2">
           <div className="flex items-center gap-2 max-sm:flex-wrap">
             <div ref={capabilityMenuRef} className="relative shrink-0">
               <button

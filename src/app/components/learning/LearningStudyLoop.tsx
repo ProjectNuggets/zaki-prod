@@ -18,6 +18,7 @@ import {
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
+import { V2Button, V2Panel, V2PanelBody, V2PanelHead } from "@/app/components/v2";
 import { cn } from "@/lib/utils";
 
 type Item = Record<string, unknown>;
@@ -155,14 +156,14 @@ export function LearningStudySetupPanel({
 
   if (!open) {
     return (
-      <div className="mb-3 mt-2 flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3.5 py-2.5">
+      <div className="mb-3 mt-2 flex items-center justify-between gap-3 border border-[var(--v2-hairline)] bg-[var(--v2-bg-raised)] px-3 py-2">
         <div className="flex min-w-0 items-center gap-2.5">
-          <GraduationCap className="size-4 shrink-0 text-zaki-brand" />
+          <GraduationCap className="size-4 shrink-0 text-[var(--v2-accent)]" />
           <div className="min-w-0">
-            <div className="truncate text-[12px] font-semibold text-[var(--foreground)]">
+            <div className="truncate font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--v2-ink-1)]">
               {configured ? savedProfile.course || "Personal study setup" : "Set up your study loop"}
             </div>
-            <div className="truncate text-[11px] text-[var(--muted-foreground)]">
+            <div className="truncate font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--v2-ink-3)]">
               {configured
                 ? [
                     savedProfile.examDate ? `Deadline ${savedProfile.examDate}` : "",
@@ -175,146 +176,141 @@ export function LearningStudySetupPanel({
             </div>
           </div>
         </div>
-        <button
-          type="button"
+        <V2Button
+          size="sm"
           onClick={() => onOpenChange(true)}
-          className="inline-flex h-10 shrink-0 items-center rounded-full border border-zaki-brand-40 bg-zaki-brand-10 px-3 text-[11px] font-semibold text-zaki-brand transition-colors hover:bg-zaki-brand-15 hover:text-zaki-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand/35"
+          className="shrink-0"
         >
           {configured ? "Edit" : "Start"}
-        </button>
+        </V2Button>
       </div>
     );
   }
 
   return (
-    <section className="mb-3 mt-2 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-[14px] font-semibold text-[var(--foreground)]">Study setup</h2>
-          <p className="mt-1 text-[12px] leading-relaxed text-[var(--muted-foreground)]">
-            ZAKI will use this to shape plans, quizzes, practice, review, and notebook saves.
-          </p>
-        </div>
-        <button
-          type="button"
+    <V2Panel className="mb-3 mt-2">
+      <V2PanelHead>
+        <span>Study setup</span>
+        <span>Learner preferences</span>
+        <V2Button
+          size="sm"
+          variant="ghost"
+          iconOnly
           onClick={() => onOpenChange(false)}
-          className="rounded-lg p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
           title="Collapse study setup"
+          aria-label="Collapse study setup"
         >
           <ChevronDown className="size-4" />
-        </button>
-      </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
-        <label className="space-y-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-          Course
-          <input
-            value={profile.course}
-            onChange={(event) => update("course", event.target.value)}
-            placeholder="e.g. Calculus II"
-            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-zaki-brand"
-          />
-        </label>
-        <label className="space-y-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-          Exam date
-          <input
-            value={profile.examDate}
-            onChange={(event) => update("examDate", event.target.value)}
-            placeholder="e.g. 2026-06-15"
-            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-zaki-brand"
-          />
-        </label>
-        <label className="space-y-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)] md:col-span-2">
-          Topics
-          <input
-            value={profile.topics}
-            onChange={(event) => update("topics", event.target.value)}
-            placeholder="e.g. limits, derivatives, integrals, series"
-            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-zaki-brand"
-          />
-        </label>
-        <label className="space-y-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)] md:col-span-2">
-          Goal
-          <input
-            value={profile.goal}
-            onChange={(event) => update("goal", event.target.value)}
-            placeholder="e.g. score 90% and understand proofs"
-            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-zaki-brand"
-          />
-        </label>
-        <label className="space-y-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-          Weak topics
-          <input
-            value={profile.weakTopics}
-            onChange={(event) => update("weakTopics", event.target.value)}
-            placeholder="e.g. series, integration by parts"
-            className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-zaki-brand"
-          />
-        </label>
-        <div className="grid grid-cols-[1fr_150px_160px] gap-3 max-sm:grid-cols-1 md:col-span-2">
-          <label className="space-y-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-            Hours/week
+        </V2Button>
+      </V2PanelHead>
+      <V2PanelBody>
+        <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--v2-ink-3)]">
+          ZAKI uses this to shape plans, quizzes, practice, review, and notebook saves.
+        </p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="space-y-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--v2-ink-3)]">
+            Course
             <input
-              value={profile.weeklyHours}
-              onChange={(event) => update("weeklyHours", event.target.value)}
-              placeholder="e.g. 6"
-              className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-zaki-brand"
+              value={profile.course}
+              onChange={(event) => update("course", event.target.value)}
+              placeholder="e.g. Calculus II"
+              className="h-9 w-full border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg)] px-3 font-mono text-[12px] font-normal normal-case tracking-normal text-[var(--v2-ink-1)] outline-none focus:border-[var(--v2-accent)]"
             />
           </label>
-          <label className="space-y-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-            Study difficulty
-            <select
-              value={profile.difficulty}
-              onChange={(event) => update("difficulty", event.target.value)}
-              className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-zaki-brand"
-            >
-              <option value="easy">Easy</option>
-              <option value="medium">Medium</option>
-              <option value="hard">Hard</option>
-              <option value="exam">Exam</option>
-            </select>
+          <label className="space-y-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--v2-ink-3)]">
+            Exam date
+            <input
+              value={profile.examDate}
+              onChange={(event) => update("examDate", event.target.value)}
+              placeholder="e.g. 2026-06-15"
+              className="h-9 w-full border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg)] px-3 font-mono text-[12px] font-normal normal-case tracking-normal text-[var(--v2-ink-1)] outline-none focus:border-[var(--v2-accent)]"
+            />
           </label>
-          <label className="space-y-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-            Study style
-            <select
-              value={profile.preferredStyle}
-              onChange={(event) => update("preferredStyle", event.target.value)}
-              className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-[13px] font-normal normal-case tracking-normal text-[var(--foreground)] outline-none focus:border-zaki-brand"
-            >
-              <option value="balanced">Balanced</option>
-              <option value="simple">Simple</option>
-              <option value="deep">Deep</option>
-              <option value="exam">Exam</option>
-              <option value="visual">Visual</option>
-              <option value="practice">Practice</option>
-            </select>
+          <label className="space-y-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--v2-ink-3)] md:col-span-2">
+            Topics
+            <input
+              value={profile.topics}
+              onChange={(event) => update("topics", event.target.value)}
+              placeholder="e.g. limits, derivatives, integrals, series"
+              className="h-9 w-full border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg)] px-3 font-mono text-[12px] font-normal normal-case tracking-normal text-[var(--v2-ink-1)] outline-none focus:border-[var(--v2-accent)]"
+            />
           </label>
+          <label className="space-y-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--v2-ink-3)] md:col-span-2">
+            Goal
+            <input
+              value={profile.goal}
+              onChange={(event) => update("goal", event.target.value)}
+              placeholder="e.g. score 90% and understand proofs"
+              className="h-9 w-full border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg)] px-3 font-mono text-[12px] font-normal normal-case tracking-normal text-[var(--v2-ink-1)] outline-none focus:border-[var(--v2-accent)]"
+            />
+          </label>
+          <label className="space-y-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--v2-ink-3)]">
+            Weak topics
+            <input
+              value={profile.weakTopics}
+              onChange={(event) => update("weakTopics", event.target.value)}
+              placeholder="e.g. series, integration by parts"
+              className="h-9 w-full border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg)] px-3 font-mono text-[12px] font-normal normal-case tracking-normal text-[var(--v2-ink-1)] outline-none focus:border-[var(--v2-accent)]"
+            />
+          </label>
+          <div className="grid grid-cols-[1fr_150px_160px] gap-3 max-sm:grid-cols-1 md:col-span-2">
+            <label className="space-y-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--v2-ink-3)]">
+              Hours/week
+              <input
+                value={profile.weeklyHours}
+                onChange={(event) => update("weeklyHours", event.target.value)}
+                placeholder="e.g. 6"
+                className="h-9 w-full border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg)] px-3 font-mono text-[12px] font-normal normal-case tracking-normal text-[var(--v2-ink-1)] outline-none focus:border-[var(--v2-accent)]"
+              />
+            </label>
+            <label className="space-y-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--v2-ink-3)]">
+              Study difficulty
+              <select
+                value={profile.difficulty}
+                onChange={(event) => update("difficulty", event.target.value)}
+                className="h-9 w-full border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg)] px-3 font-mono text-[12px] font-normal normal-case tracking-normal text-[var(--v2-ink-1)] outline-none focus:border-[var(--v2-accent)]"
+              >
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+                <option value="exam">Exam</option>
+              </select>
+            </label>
+            <label className="space-y-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--v2-ink-3)]">
+              Study style
+              <select
+                value={profile.preferredStyle}
+                onChange={(event) => update("preferredStyle", event.target.value)}
+                className="h-9 w-full border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg)] px-3 font-mono text-[12px] font-normal normal-case tracking-normal text-[var(--v2-ink-1)] outline-none focus:border-[var(--v2-accent)]"
+              >
+                <option value="balanced">Balanced</option>
+                <option value="simple">Simple</option>
+                <option value="deep">Deep</option>
+                <option value="exam">Exam</option>
+                <option value="visual">Visual</option>
+                <option value="practice">Practice</option>
+              </select>
+            </label>
+          </div>
         </div>
-      </div>
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <span className="text-[11px] text-[var(--muted-foreground)]">
-          {notebooksCount
-            ? `${notebooksCount} notebooks available for saving answers`
-            : "Create a notebook to save important answers"}
-        </span>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onSave}
-            className="inline-flex h-10 items-center rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[12px] font-semibold text-zaki-text transition-colors hover:bg-zaki-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand/35"
-          >
-            Save setup
-          </button>
-          <button
-            type="button"
-            onClick={onBuildPlan}
-            className="inline-flex h-10 items-center gap-2 rounded-zaki-md bg-zaki-brand px-3 text-[12px] font-semibold text-white transition-colors hover:bg-zaki-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand/35"
-          >
-            <Sparkles className="size-3.5" />
-            Build study plan
-          </button>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--v2-ink-3)]">
+            {notebooksCount
+              ? `${notebooksCount} notebooks available for saving answers`
+              : "Create a notebook to save important answers"}
+          </span>
+          <div className="flex items-center gap-2">
+            <V2Button size="sm" onClick={onSave}>
+              Save setup
+            </V2Button>
+            <V2Button size="sm" variant="accent" onClick={onBuildPlan}>
+              <Sparkles className="size-3.5" />
+              Build study plan
+            </V2Button>
+          </div>
         </div>
-      </div>
-    </section>
+      </V2PanelBody>
+    </V2Panel>
   );
 }
 
@@ -338,13 +334,13 @@ export function LearningRunStateStrip({
   if (!hasMessages && state.phase === "idle" && connected) return null;
   const tone =
     state.phase === "error"
-      ? "border-red-500/25 bg-red-500/5 text-red-600"
+      ? "border-[var(--v2-danger)] bg-[var(--v2-danger-faint)] text-[var(--v2-danger)]"
       : state.phase === "complete"
-        ? "border-emerald-500/25 bg-emerald-500/5 text-emerald-700"
-        : "border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]";
+        ? "border-[rgba(33,145,111,0.4)] bg-[var(--v2-bg-sunken)] text-[var(--v2-success)]"
+        : "border-[var(--v2-hairline)] bg-[var(--v2-bg-raised)] text-[var(--v2-ink-3)]";
   const visibleSteps = steps.filter(Boolean).slice(-3);
   return (
-    <div className={cn("mb-2 rounded-lg border px-3 py-2 text-[12px]", tone)}>
+    <div className={cn("mb-2 border px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em]", tone)}>
       <div className="flex items-center gap-2">
         {streaming || state.phase === "connecting" ? (
           <Loader2 className="size-3.5 animate-spin" />
@@ -359,15 +355,16 @@ export function LearningRunStateStrip({
           {connected ? state.label : "Reconnecting to ZAKI learning"}
         </span>
         {onRetry ? (
-          <button
-            type="button"
+          <V2Button
+            size="sm"
+            variant="ghost"
             onClick={onRetry}
-            className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-zaki-md border border-current/20 px-2 text-[11px] font-semibold transition-colors hover:bg-current/10"
+            className="shrink-0"
             title={retryLabel ? `Retry: ${retryLabel}` : "Retry last learning turn"}
           >
             <RefreshCw className="size-3" />
             Retry
-          </button>
+          </V2Button>
         ) : null}
       </div>
       {visibleSteps.length ? (
@@ -402,7 +399,7 @@ export function LearningQualityChecklist({ message }: { message: StudyActionMess
       {items.map((item) => (
         <span
           key={`${message.id}-quality-${item}`}
-          className="inline-flex items-center gap-1 rounded-full border border-[var(--border)]/60 px-2 py-1 text-[10px] font-medium text-[var(--muted-foreground)]"
+          className="inline-flex items-center gap-1 border border-[var(--v2-hairline)] px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-[var(--v2-ink-3)]"
         >
           <CheckCircle2 className="size-3 text-emerald-600" />
           {item}
@@ -442,16 +439,16 @@ export function LearningNextActionRow({
       {actions.map((action) => {
         const Icon = action.icon;
         return (
-          <button
+          <V2Button
             key={action.id}
-            type="button"
+            size="sm"
+            variant="ghost"
             disabled={action.disabled}
             onClick={() => onAction(action.id)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--muted-foreground)] transition-colors hover:border-[var(--primary)]/40 hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Icon className="size-3.5" />
             {action.label}
-          </button>
+          </V2Button>
         );
       })}
     </div>
@@ -482,52 +479,48 @@ export function LearningStudyPlanHome({
   const nextTasks = pendingTasks.slice(0, 4);
   if (!plan || !tasks.length) {
     return (
-      <section className="mt-8 w-full max-w-[720px] rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-left">
+      <V2Panel className="mt-8 w-full max-w-[720px] text-left">
+        <V2PanelHead title="Start with a plan" meta="Course / exam / weak areas" />
+        <V2PanelBody>
         <div className="flex items-start gap-3">
-          <GraduationCap className="mt-0.5 size-5 shrink-0 text-zaki-brand" />
+          <GraduationCap className="mt-0.5 size-5 shrink-0 text-[var(--v2-accent)]" />
           <div className="min-w-0 flex-1">
-            <h2 className="text-[14px] font-semibold text-[var(--foreground)]">Start with a plan</h2>
-            <p className="mt-1 text-[12px] leading-5 text-[var(--muted-foreground)]">
+            <p className="font-mono text-[11px] uppercase leading-5 tracking-[0.12em] text-[var(--v2-ink-3)]">
               Set your course, exam date, weak topics, and weekly time so ZAKI can turn answers,
               quizzes, notebooks, and books into one study loop.
             </p>
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={onOpenSetup}
-            className="inline-flex h-10 items-center gap-1.5 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[12px] font-semibold text-zaki-text hover:bg-zaki-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand/35"
-          >
+          <V2Button size="sm" onClick={onOpenSetup}>
             <PenLine className="size-3.5" />
             Configure setup
-          </button>
-          <button
-            type="button"
-            onClick={onBuildPlan}
-            className="inline-flex h-10 items-center gap-1.5 rounded-zaki-md bg-zaki-brand px-3 text-[12px] font-semibold text-white hover:bg-zaki-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand/35"
-          >
+          </V2Button>
+          <V2Button size="sm" variant="accent" onClick={onBuildPlan}>
             <Sparkles className="size-3.5" />
             Build study plan
-          </button>
+          </V2Button>
         </div>
-      </section>
+        </V2PanelBody>
+      </V2Panel>
     );
   }
 
   return (
-    <section className="mt-8 w-full max-w-[760px] rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-left">
+    <V2Panel className="mt-8 w-full max-w-[760px] text-left">
+      <V2PanelHead title={title} meta={`${doneTasks}/${tasks.length} done`} />
+      <V2PanelBody>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <GraduationCap className="size-4 text-zaki-brand" />
-            <h2 className="truncate text-[14px] font-semibold text-[var(--foreground)]">{title}</h2>
+            <GraduationCap className="size-4 text-[var(--v2-accent)]" />
+            <h2 className="truncate font-mono text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--v2-ink-1)]">{title}</h2>
           </div>
           {summary ? (
-            <p className="mt-1 text-[12px] leading-5 text-[var(--muted-foreground)]">{summary}</p>
+            <p className="mt-1 font-mono text-[11px] uppercase leading-5 tracking-[0.12em] text-[var(--v2-ink-3)]">{summary}</p>
           ) : null}
         </div>
-        <div className="rounded-zaki-md border border-zaki-border bg-zaki-base px-2.5 py-1.5 text-[11px] font-semibold text-zaki-text">
+        <div className="border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg-sunken)] px-2.5 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--v2-ink-2)]">
           {doneTasks}/{tasks.length} done
         </div>
       </div>
@@ -540,7 +533,7 @@ export function LearningStudyPlanHome({
           return (
             <div
               key={taskId}
-              className="rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2.5"
+              className="border border-[var(--v2-hairline)] bg-[var(--v2-bg)] px-3 py-2.5"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
@@ -550,33 +543,32 @@ export function LearningStudyPlanHome({
                     ) : (
                       <Clock3 className="size-3.5 shrink-0 text-zaki-muted" />
                     )}
-                    <span className="truncate text-[13px] font-semibold text-zaki-text">
+                    <span className="truncate font-mono text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--v2-ink-1)]">
                       {textOf(task.title, `Task ${index + 1}`)}
                     </span>
                   </div>
                   {textOf(task.description) ? (
-                    <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-zaki-muted">
+                    <p className="mt-1 line-clamp-2 font-mono text-[10px] uppercase leading-5 tracking-[0.08em] text-[var(--v2-ink-3)]">
                       {textOf(task.description)}
                     </p>
                   ) : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
                   {!done ? (
-                    <button
-                      type="button"
+                    <V2Button
+                      size="sm"
                       onClick={() => onStartTask(task)}
-                      className="inline-flex h-10 items-center gap-1.5 rounded-zaki-md border border-zaki-border bg-zaki-raised px-2.5 text-[11px] font-semibold text-zaki-text hover:bg-zaki-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand/35"
                     >
                       <Play className="size-3.5" />
                       Start
-                    </button>
+                    </V2Button>
                   ) : null}
                   {!done ? (
-                    <button
-                      type="button"
+                    <V2Button
+                      size="sm"
+                      variant="ghost"
                       disabled={completingTaskId === taskId}
                       onClick={() => onCompleteTask(taskId)}
-                      className="inline-flex h-10 items-center gap-1.5 rounded-zaki-md border border-emerald-500/30 px-2.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 disabled:opacity-50"
                     >
                       {completingTaskId === taskId ? (
                         <Loader2 className="size-3.5 animate-spin" />
@@ -584,7 +576,7 @@ export function LearningStudyPlanHome({
                         <CheckCircle2 className="size-3.5" />
                       )}
                       Done
-                    </button>
+                    </V2Button>
                   ) : null}
                 </div>
               </div>
@@ -594,23 +586,16 @@ export function LearningStudyPlanHome({
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={onOpenSetup}
-          className="inline-flex h-10 items-center gap-1.5 rounded-zaki-md border border-zaki-border bg-zaki-base px-3 text-[12px] font-semibold text-zaki-text hover:bg-zaki-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand/35"
-        >
+        <V2Button size="sm" onClick={onOpenSetup}>
           <PenLine className="size-3.5" />
           Edit setup
-        </button>
-        <button
-          type="button"
-          onClick={onBuildPlan}
-          className="inline-flex h-10 items-center gap-1.5 rounded-zaki-md border border-zaki-brand/35 bg-zaki-brand/10 px-3 text-[12px] font-semibold text-zaki-brand hover:bg-zaki-brand/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand/35"
-        >
+        </V2Button>
+        <V2Button size="sm" variant="accent" onClick={onBuildPlan}>
           <RefreshCw className="size-3.5" />
           Rebuild plan
-        </button>
+        </V2Button>
       </div>
-    </section>
+      </V2PanelBody>
+    </V2Panel>
   );
 }
