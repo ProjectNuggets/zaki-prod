@@ -1598,9 +1598,36 @@
 
 .zaki-app-topbar__toggle {
   height: 26px;
+  gap: 6px;
   padding: 0 8px;
   font-size: 11px;
   text-transform: uppercase;
+}
+
+.zaki-app-topbar__toggle kbd {
+  border: 1px solid var(--v2-hairline);
+  padding: 1px 5px;
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.zaki-app-topbar__toggle-icon {
+  width: 13px;
+  height: 13px;
+  stroke-width: 1.5;
+}
+
+.zaki-app-topbar__toggle.is-active {
+  border-color: var(--v2-hairline-strong);
+  background: var(--v2-hover);
+  color: var(--v2-ink-1);
+}
+
+.zaki-app-topbar__toggle.is-active kbd {
+  color: var(--v2-ink-2);
 }
 
 .zaki-app-topbar__avatar {
@@ -1617,6 +1644,30 @@
 .zaki-app-topbar__avatar:hover {
   border-color: var(--v2-hairline-strong);
   color: var(--v2-ink-1);
+}
+
+body.zaki-agent-focus-active .zaki-app-topbar__command {
+  display: none;
+}
+
+body.zaki-agent-focus-active .zaki-app-topbar__agent-panel,
+body.zaki-agent-focus-active .zaki-app-topbar__actions > .zaki-app-topbar__toggle:not(.zaki-app-topbar__agent-focus),
+body.zaki-agent-focus-active .zaki-app-topbar__avatar {
+  display: none;
+}
+
+body.zaki-agent-focus-active .zaki-product-rail {
+  background: transparent;
+  border-right-color: transparent;
+}
+
+body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"]),
+body.zaki-agent-focus-active .zaki-product-rail__sep {
+  opacity: 0.35;
+}
+
+body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"]):hover {
+  opacity: 1;
 }
 
 .zaki-app-v2 .zaki-sidebar--context {
@@ -3869,6 +3920,67 @@
 
 .zaki-app-v2 .zaki-agent-v2__scroll {
   min-width: 0;
+}
+
+.zaki-app-v2 .zaki-agent-v2--focus .zaki-agent-v2__surface > .v2-status-strip,
+.zaki-app-v2 .zaki-agent-v2--focus .zaki-agent-session-rail,
+.zaki-app-v2 .zaki-agent-v2--focus .zaki-agent-inspector,
+.zaki-app-v2 .zaki-agent-v2--focus .zaki-agent-head-actions,
+.zaki-app-v2 .zaki-agent-v2--focus .zaki-composer-control-strip,
+.zaki-app-v2 .zaki-agent-v2--focus .zaki-quick-reply-strip,
+.zaki-app-v2 .zaki-agent-v2--focus .zaki-pinned-context-rail {
+  display: none !important;
+}
+
+.zaki-app-v2 .zaki-agent-v2--focus .zaki-agent-v2__grid,
+.zaki-app-v2 .zaki-agent-v2--focus.zaki-agent-v2--inspector .zaki-agent-v2__grid {
+  grid-template-columns: minmax(0, 1fr) !important;
+  justify-items: center;
+}
+
+.zaki-app-v2 .zaki-agent-v2--focus .zaki-agent-v2__chat {
+  width: min(100%, 860px);
+  justify-self: center;
+}
+
+.zaki-app-v2 .zaki-agent-v2--focus .zaki-agent-v2__head {
+  min-height: 44px;
+  justify-content: center;
+  border-bottom-color: transparent;
+  padding: 8px 24px;
+}
+
+.zaki-app-v2 .zaki-agent-v2--focus .zaki-agent-thread-head {
+  text-align: center;
+}
+
+.zaki-app-v2 .zaki-agent-v2--focus .zaki-agent-thread-head h1 {
+  color: var(--v2-ink-2);
+  font-size: 13px;
+}
+
+.zaki-app-v2 .zaki-agent-v2--focus .zaki-agent-thread-head p {
+  color: var(--v2-ink-4);
+}
+
+.zaki-app-v2 .zaki-agent-v2--focus .zaki-chat-thread {
+  width: min(100%, 760px);
+  max-width: 760px;
+  padding: 24px 40px 18px;
+  gap: 24px;
+}
+
+.zaki-app-v2 .zaki-agent-v2--focus .zaki-message-row--assistant::before {
+  opacity: 0.35;
+}
+
+.zaki-app-v2 .zaki-agent-v2--focus .zaki-input-shell {
+  max-width: 760px;
+  padding: 12px 40px 28px;
+}
+
+.zaki-app-v2 .zaki-agent-v2--focus .zaki-input-form > div:last-child {
+  background: transparent;
 }
 
 .zaki-agent-inspector {

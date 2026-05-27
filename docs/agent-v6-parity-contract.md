@@ -58,6 +58,14 @@ Tabs:
 - If data is not wired, show a precise empty state and leave the tab present. Production UX should reveal capability shape without pretending data exists.
 - Settings remain outside this panel. Right-panel controls may deep-link to Settings, Memory, Browser, Artifacts, or Trace surfaces.
 
+## S-tier Shell Lock
+
+- The global product topbar owns route-level Agent controls: command palette, focus mode, right panel, stage, and account. Agent-local headers should not duplicate those controls.
+- Focus mode is a first-class reading/execution mode. It hides session rail, status strip, inspector, and composer control chrome, then centers the live conversation and composer.
+- The right panel is collapsible from the topbar and by `Cmd .`; focus mode is toggled by `Cmd \` and exits with `Esc`.
+- Product rail remains visible in focus mode but recedes. The active Agent product stays legible so the user never loses app position.
+- No backend contract change is required for this shell lock. It is pure UI state and local persistence.
+
 ## Execution Slices
 
 S01: Contract and six-tab shell

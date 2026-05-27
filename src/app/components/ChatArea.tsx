@@ -2,7 +2,7 @@ import { BackgroundPattern } from "./BackgroundPattern";
 import { InputArea, type InputAreaHandle } from "./InputArea";
 import { AgentSessionRail } from "@/app/components/agent/AgentSessionRail";
 import { SandboxBadge } from "@/app/components/agent/SandboxBadge";
-import { Share2, MoreVertical, Download, Brain, ChevronDown, PanelRight } from "lucide-react";
+import { Share2, MoreVertical, Download, Brain, ChevronDown } from "lucide-react";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
@@ -129,6 +129,7 @@ const POWER_USER_EVENT_TABS: PowerUserTab[] = [
 
 const POWER_USER_PENDING_TAB_KEY = "zaki:pendingPowerUserTab";
 const AGENT_INSPECTOR_OPEN_KEY = "zaki:agentInspectorOpen";
+const AGENT_FOCUS_MODE_KEY = "zaki:agentFocusMode";
 
 function normalizePowerUserTab(value: unknown): PowerUserTab {
   return POWER_USER_EVENT_TABS.includes(value as PowerUserTab)
@@ -2292,6 +2293,10 @@ export function ChatArea() {
   const [agentInspectorOpen, setAgentInspectorOpen] = useState(() => {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem(AGENT_INSPECTOR_OPEN_KEY) !== "false";
+  });
+  const [agentFocusMode, setAgentFocusMode] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(AGENT_FOCUS_MODE_KEY) === "true";
   });
   const approvalSeenBySessionRef = useRef<Record<string, Set<string>>>({});
 
@@ -6237,18 +6242,70 @@ export function ChatArea() {
       AGENT_INSPECTOR_OPEN_KEY,
       agentInspectorOpen ? "true" : "false"
     );
-  }, [agentInspectorOpen]);
+    if (isAgentSurface) {
+      window.dispatchEvent(
+        new CustomEvent("zaki:agent-panel-state", {
+          detail: { open: agentInspectorOpen },
+        })
+      );
+    }
+  }, [agentInspectorOpen, isAgentSurface]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (isAgentSurface) {
+      window.localStorage.setItem(
+        AGENT_FOCUS_MODE_KEY,
+        agentFocusMode ? "true" : "false"
+      );
+      window.dispatchEvent(
+        new CustomEvent("zaki:agent-focus-state", {
+          detail: { enabled: agentFocusMode },
+        })
+      );
+      document.body.classList.toggle("zaki-agent-focus-active", agentFocusMode);
+    } else {
+      document.body.classList.remove("zaki-agent-focus-active");
+      window.dispatchEvent(
+        new CustomEvent("zaki:agent-focus-state", {
+          detail: { enabled: false },
+        })
+      );
+    }
+    return () => {
+      document.body.classList.remove("zaki-agent-focus-active");
+    };
+  }, [agentFocusMode, isAgentSurface]);
 
   useEffect(() => {
     if (!isAgentSurface) return;
+    const togglePanel = () => setAgentInspectorOpen((open) => !open);
+    const toggleFocus = () => setAgentFocusMode((enabled) => !enabled);
     const handlePanelShortcut = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.key !== ".") return;
       event.preventDefault();
-      setAgentInspectorOpen((open) => !open);
+      togglePanel();
+    };
+    const handleFocusShortcut = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.code !== "Backslash") return;
+      event.preventDefault();
+      toggleFocus();
+    };
+    const handleEscapeFocus = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setAgentFocusMode(false);
     };
     window.addEventListener("keydown", handlePanelShortcut);
+    window.addEventListener("keydown", handleFocusShortcut);
+    window.addEventListener("keydown", handleEscapeFocus);
+    window.addEventListener("zaki:toggle-agent-panel", togglePanel);
+    window.addEventListener("zaki:toggle-agent-focus", toggleFocus);
     return () => {
       window.removeEventListener("keydown", handlePanelShortcut);
+      window.removeEventListener("keydown", handleFocusShortcut);
+      window.removeEventListener("keydown", handleEscapeFocus);
+      window.removeEventListener("zaki:toggle-agent-panel", togglePanel);
+      window.removeEventListener("zaki:toggle-agent-focus", toggleFocus);
     };
   }, [isAgentSurface]);
 
@@ -6839,7 +6896,8 @@ export function ChatArea() {
         "zaki-chat flex-1 relative flex min-h-0 flex-col h-full bg-transparent overflow-x-hidden",
         isAgentSurface && "zaki-agent-v2",
         isAgentSurface && agentInspectorOpen && "zaki-agent-v2--inspector",
-        isAgentSurface && !agentInspectorOpen && "zaki-agent-v2--inspector-collapsed"
+        isAgentSurface && !agentInspectorOpen && "zaki-agent-v2--inspector-collapsed",
+        isAgentSurface && agentFocusMode && "zaki-agent-v2--focus"
       )}
       data-agent-surface={isAgentSurface ? "true" : undefined}
       style={
@@ -7005,26 +7063,10 @@ export function ChatArea() {
                 sandbox={sandboxState}
                 className={cn("ml-2", isAgentSurface && "zaki-agent-v2__sandbox")}
               />
-              <div className="relative z-30 ml-auto flex items-center gap-2" ref={menuRef}>
-                {isAgentSurface ? (
-                  <button
-                    type="button"
-                    className="zaki-panel-toggle inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white/80 px-3 py-1.5 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
-                    onClick={() => setAgentInspectorOpen((open) => !open)}
-                    aria-pressed={agentInspectorOpen}
-                    aria-label={
-                      agentInspectorOpen
-                        ? t("agent.inspector.hideAria", { defaultValue: "Hide agent panel" })
-                        : t("agent.inspector.showAria", { defaultValue: "Show agent panel" })
-                    }
-                    title={t("agent.inspector.shortcut", { defaultValue: "Panel · Command Period" })}
-                    data-testid="agent-inspector-toggle"
-                  >
-                    <PanelRight className="size-4 text-zaki-muted" aria-hidden />
-                    <span>{t("agent.inspector.panel", { defaultValue: "Panel" })}</span>
-                    <kbd>⌘.</kbd>
-                  </button>
-                ) : null}
+              <div
+                className="zaki-agent-head-actions relative z-30 ml-auto flex items-center gap-2"
+                ref={menuRef}
+              >
                 <button
                   type="button"
                   className="zaki-share-pill inline-flex items-center gap-2 rounded-full border border-zaki-subtle bg-white/80 px-3 py-1.5 text-sm text-zaki-primary hover:bg-zaki-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2"
@@ -7313,7 +7355,7 @@ export function ChatArea() {
             }}
           />
           </section>
-          {isAgentSurface && agentInspectorOpen ? (
+          {isAgentSurface && agentInspectorOpen && !agentFocusMode ? (
             <AgentInspectorRail
               mode={activeSessionMode ?? "execute"}
               isStreaming={isStreaming}

@@ -1,4 +1,5 @@
-import { Search } from "lucide-react";
+import { Focus, PanelRight, Search } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore, useUIStore } from "@/stores";
@@ -29,13 +30,34 @@ export function AppTopbar() {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const { resolvedTheme, setThemePreference } = useUIStore();
+  const [agentPanelOpen, setAgentPanelOpen] = useState(true);
+  const [agentFocusMode, setAgentFocusMode] = useState(false);
   const stage = resolvedTheme() === "dark" ? "dark" : "light";
+  const isAgentRoute = (location.pathname.replace(/\/+$/, "") || "/") === "/agent";
   const displayName =
     user?.fullName?.trim() ||
     user?.username?.trim() ||
     t("appTopbar.defaultUser", { defaultValue: "ZAKI" });
   const initials = getInitials(displayName);
   const crumb = getRouteCrumb(location.pathname);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handlePanelState = (event: Event) => {
+      const next = (event as CustomEvent<{ open?: boolean }>).detail?.open;
+      if (typeof next === "boolean") setAgentPanelOpen(next);
+    };
+    const handleFocusState = (event: Event) => {
+      const next = (event as CustomEvent<{ enabled?: boolean }>).detail?.enabled;
+      if (typeof next === "boolean") setAgentFocusMode(next);
+    };
+    window.addEventListener("zaki:agent-panel-state", handlePanelState);
+    window.addEventListener("zaki:agent-focus-state", handleFocusState);
+    return () => {
+      window.removeEventListener("zaki:agent-panel-state", handlePanelState);
+      window.removeEventListener("zaki:agent-focus-state", handleFocusState);
+    };
+  }, []);
 
   return (
     <header className="zaki-app-topbar hidden md:flex">
@@ -66,6 +88,44 @@ export function AppTopbar() {
           <span>{t("appTopbar.command", { defaultValue: "Search, run, jump" })}</span>
           <kbd>⌘K</kbd>
         </button>
+        {isAgentRoute ? (
+          <>
+            <button
+              type="button"
+              className={`zaki-app-topbar__toggle zaki-app-topbar__agent-focus ${agentFocusMode ? "is-active" : ""}`}
+              aria-pressed={agentFocusMode}
+              onClick={() => window.dispatchEvent(new CustomEvent("zaki:toggle-agent-focus"))}
+              aria-label={
+                agentFocusMode
+                  ? t("appTopbar.agent.exitFocusAria", { defaultValue: "Exit agent focus mode" })
+                  : t("appTopbar.agent.focusAria", { defaultValue: "Enter agent focus mode" })
+              }
+              title={t("appTopbar.agent.focusShortcut", { defaultValue: "Focus mode · Command Backslash" })}
+              data-testid="agent-focus-toggle"
+            >
+              <Focus className="zaki-app-topbar__toggle-icon" aria-hidden="true" />
+              <span>{t("appTopbar.agent.focus", { defaultValue: "Focus" })}</span>
+              <kbd>⌘\</kbd>
+            </button>
+            <button
+              type="button"
+              className={`zaki-app-topbar__toggle zaki-app-topbar__agent-panel ${agentPanelOpen ? "is-active" : ""}`}
+              aria-pressed={agentPanelOpen}
+              onClick={() => window.dispatchEvent(new CustomEvent("zaki:toggle-agent-panel"))}
+              aria-label={
+                agentPanelOpen
+                  ? t("appTopbar.agent.hidePanelAria", { defaultValue: "Hide agent panel" })
+                  : t("appTopbar.agent.showPanelAria", { defaultValue: "Show agent panel" })
+              }
+              title={t("appTopbar.agent.panelShortcut", { defaultValue: "Panel · Command Period" })}
+              data-testid="agent-inspector-toggle"
+            >
+              <PanelRight className="zaki-app-topbar__toggle-icon" aria-hidden="true" />
+              <span>{t("appTopbar.agent.panel", { defaultValue: "Panel" })}</span>
+              <kbd>⌘.</kbd>
+            </button>
+          </>
+        ) : null}
         <button
           type="button"
           className="zaki-app-topbar__toggle"
