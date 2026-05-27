@@ -2643,6 +2643,13 @@ export function ChatArea() {
     : freeDailyQuota?.unlimited
       ? "unlimited"
       : "metering";
+  const agentHeaderTitle = activeSessionRecord?.title?.trim() || headerThreadName;
+  const agentHeaderMeta = [
+    activeSessionMode ?? "execute",
+    agentContextPercent != null ? `${Math.round(agentContextPercent)}% ctx` : "0% ctx",
+    agentWeeklyLabel,
+    isStreaming || activeSessionUi?.live || activeSessionRecord?.live ? "live" : "ready",
+  ].join(" · ");
   const isZakiBotSendLocked = Boolean(
     zakiBotQuotaInfo && zakiBotQuotaInfo.remaining <= 0
   );
@@ -6778,6 +6785,48 @@ export function ChatArea() {
         {/* Background */}
         {!isAgentSurface ? <BackgroundPattern /> : null}
 
+        {isAgentSurface ? (
+          <V2StatusStrip
+            aria-label={t("agent.status.ariaLabel", { defaultValue: "Agent status" })}
+            items={[
+              {
+                id: "runtime",
+                label:
+                  isStreaming || activeSessionUi?.live || activeSessionRecord?.live
+                    ? t("agent.status.online", { defaultValue: "Online" })
+                    : t("agent.status.ready", { defaultValue: "Ready" }),
+                active: Boolean(
+                  isStreaming || activeSessionUi?.live || activeSessionRecord?.live
+                ),
+                tone: "accent",
+              },
+              {
+                id: "mode",
+                label: t("agent.status.mode", { defaultValue: "Mode" }),
+                value: activeSessionMode ?? "execute",
+              },
+              {
+                id: "context",
+                label: t("agent.status.context", { defaultValue: "Context" }),
+                value:
+                  agentContextPercent != null
+                    ? `${Math.round(agentContextPercent)}%`
+                    : "0%",
+              },
+              {
+                id: "weekly",
+                label: t("agent.status.weekly", { defaultValue: "Weekly" }),
+                value: agentWeeklyLabel,
+              },
+              {
+                id: "trace",
+                label: t("agent.status.trace", { defaultValue: "Trace" }),
+                value: nullalisTranscriptEntries.length,
+              },
+            ]}
+          />
+        ) : null}
+
         <div
           className={cn(
             "relative z-20 h-full",
@@ -6789,37 +6838,12 @@ export function ChatArea() {
               sessions={zakiThreadSessions}
               isLoading={zakiSessionsLoading}
               activeSessionKey={normalizedActiveZakiSessionKey}
-              activeMode={activeSessionMode}
-              isStreaming={isStreaming}
-              live={activeSessionUi?.live ?? activeSessionRecord?.live ?? null}
-              pendingApprovals={
-                activeSessionUi?.approvalCount ??
-                activeSessionRecord?.pending_approval_count ??
-                0
-              }
-              contextLabel={
-                agentContextPercent != null
-                  ? `${Math.round(agentContextPercent)}% ctx`
-                  : "0% ctx"
-              }
-              quotaLabel={agentWeeklyLabel}
               isRtl={isRtl}
               onSelectSession={selectAgentSession}
               onCreateSession={handleCreateAgentSession}
               onDownloadSession={handleDownloadAgentSession}
               onShareSession={handleShareAgentSession}
               onDeleteSession={handleDeleteAgentSession}
-              onOpenMemory={openAgentMemorySurface}
-              onOpenControls={() => {
-                setPowerUserInitialTab(
-                  (activeSessionUi?.approvalCount ??
-                    activeSessionRecord?.pending_approval_count ??
-                    0) > 0
-                    ? "approvals"
-                    : "controls"
-                );
-                setPowerUserOpen(true);
-              }}
             />
           ) : null}
 
@@ -6838,15 +6862,26 @@ export function ChatArea() {
               )}
               dir="ltr"
             >
-              <span
-                className="zaki-subheader-pill"
-                dir={isRtl ? "rtl" : "ltr"}
-                title={`${headerSpaceName} / ${headerThreadName}`}
-              >
-                {headerSpaceName}
-                <span className="text-zaki-muted">/</span>
-                {headerThreadName}
-              </span>
+              {isAgentSurface ? (
+                <div
+                  className="zaki-agent-thread-head"
+                  dir={isRtl ? "rtl" : "ltr"}
+                  title={`${agentHeaderTitle} · ${agentHeaderMeta}`}
+                >
+                  <h1>{agentHeaderTitle}</h1>
+                  <p>{agentHeaderMeta}</p>
+                </div>
+              ) : (
+                <span
+                  className="zaki-subheader-pill"
+                  dir={isRtl ? "rtl" : "ltr"}
+                  title={`${headerSpaceName} / ${headerThreadName}`}
+                >
+                  {headerSpaceName}
+                  <span className="text-zaki-muted">/</span>
+                  {headerThreadName}
+                </span>
+              )}
               <SandboxBadge
                 active={isZakiBotActiveSpace}
                 sandbox={sandboxState}
@@ -6942,48 +6977,6 @@ export function ChatArea() {
 	            <div className="h-[64px]" aria-hidden="true" />
 	          )}
 
-          {isAgentSurface ? (
-            <V2StatusStrip
-              aria-label={t("agent.status.ariaLabel", { defaultValue: "Agent status" })}
-              items={[
-                {
-                  id: "runtime",
-                  label:
-                    isStreaming || activeSessionUi?.live || activeSessionRecord?.live
-                      ? t("agent.status.online", { defaultValue: "Online" })
-                      : t("agent.status.ready", { defaultValue: "Ready" }),
-                  active: Boolean(
-                    isStreaming || activeSessionUi?.live || activeSessionRecord?.live
-                  ),
-                  tone: "accent",
-                },
-                {
-                  id: "mode",
-                  label: t("agent.status.mode", { defaultValue: "Mode" }),
-                  value: activeSessionMode ?? "execute",
-                },
-                {
-                  id: "context",
-                  label: t("agent.status.context", { defaultValue: "Context" }),
-                  value:
-                    agentContextPercent != null
-                      ? `${Math.round(agentContextPercent)}%`
-                      : "0%",
-                },
-                {
-                  id: "weekly",
-                  label: t("agent.status.weekly", { defaultValue: "Weekly" }),
-                  value: agentWeeklyLabel,
-                },
-                {
-                  id: "trace",
-                  label: t("agent.status.trace", { defaultValue: "Trace" }),
-                  value: nullalisTranscriptEntries.length,
-                },
-              ]}
-            />
-          ) : null}
-
           {/* C5: System notices — rendered here so they appear on ALL views
               (home, spaces, chat, brain) regardless of which view is active */}
           <SystemNoticesStack className="-mb-2" />
@@ -7019,36 +7012,6 @@ export function ChatArea() {
               {renderContent()}
             </div>
 
-            {isAgentSurface && agentInspectorOpen ? (
-              <AgentInspectorRail
-                mode={activeSessionMode ?? "execute"}
-                isStreaming={isStreaming}
-                lastChannel={activeSessionUi?.lastChannel ?? activeSessionRecord?.last_channel ?? null}
-                sandbox={sandboxState}
-                tasks={nullalisTaskItems}
-                transcriptEntries={nullalisTranscriptEntries}
-                narrationFrame={nullalisNarrationFrame}
-                approvalRequest={nullalisApprovalRequest}
-                artifactCount={agentArtifactEventCount}
-                contextGaugeData={nullalisContextGauge}
-                usageSummary={zakiUsageSummary}
-                quotaInfo={zakiBotQuotaInfo}
-                onOpenMemory={openAgentMemorySurface}
-                onOpenCron={() => setAgentCronOpen(true)}
-                onOpenBrowser={() => {
-                  setPowerUserInitialTab("browser");
-                  setPowerUserOpen(true);
-                }}
-                onOpenArtifacts={() => {
-                  setPowerUserInitialTab("artifacts");
-                  setPowerUserOpen(true);
-                }}
-                onOpenTrace={() => {
-                  setPowerUserInitialTab("trace");
-                  setPowerUserOpen(true);
-                }}
-              />
-            ) : null}
           </div>
 
           {showScrollToBottom && !showZakiHome && !showSpacesView && !showSpaceDetail && (
@@ -7232,6 +7195,36 @@ export function ChatArea() {
             }}
           />
           </section>
+          {isAgentSurface && agentInspectorOpen ? (
+            <AgentInspectorRail
+              mode={activeSessionMode ?? "execute"}
+              isStreaming={isStreaming}
+              lastChannel={activeSessionUi?.lastChannel ?? activeSessionRecord?.last_channel ?? null}
+              sandbox={sandboxState}
+              tasks={nullalisTaskItems}
+              transcriptEntries={nullalisTranscriptEntries}
+              narrationFrame={nullalisNarrationFrame}
+              approvalRequest={nullalisApprovalRequest}
+              artifactCount={agentArtifactEventCount}
+              contextGaugeData={nullalisContextGauge}
+              usageSummary={zakiUsageSummary}
+              quotaInfo={zakiBotQuotaInfo}
+              onOpenMemory={openAgentMemorySurface}
+              onOpenCron={() => setAgentCronOpen(true)}
+              onOpenBrowser={() => {
+                setPowerUserInitialTab("browser");
+                setPowerUserOpen(true);
+              }}
+              onOpenArtifacts={() => {
+                setPowerUserInitialTab("artifacts");
+                setPowerUserOpen(true);
+              }}
+              onOpenTrace={() => {
+                setPowerUserInitialTab("trace");
+                setPowerUserOpen(true);
+              }}
+            />
+          ) : null}
         </div>
       </div>
 
