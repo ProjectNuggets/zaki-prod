@@ -182,6 +182,40 @@ export function ApprovalRequiredCard({
     tool: request.tool,
   });
   const denyLabel = t("zakiControls.approval.denyAria", { tool: request.tool });
+  const previewRows = [
+    request.effectPreview
+      ? {
+          label: t("zakiControls.approval.effectPreview", {
+            defaultValue: "Effect",
+          }),
+          value: request.effectPreview,
+        }
+      : null,
+    request.inputPreview
+      ? {
+          label: t("zakiControls.approval.inputPreview", {
+            defaultValue: "Input",
+          }),
+          value: request.inputPreview,
+        }
+      : null,
+    request.command
+      ? {
+          label: t("zakiControls.approval.commandPreview", {
+            defaultValue: "Command",
+          }),
+          value: request.command,
+        }
+      : null,
+    request.files?.length
+      ? {
+          label: t("zakiControls.approval.filesPreview", {
+            defaultValue: "Files",
+          }),
+          value: request.files.join(", "),
+        }
+      : null,
+  ].filter((row): row is { label: string; value: string } => row != null && row.value.trim().length > 0);
   const timerLabel =
     secondsRemaining > 0
       ? t("zakiControls.approval.timer", {
@@ -223,9 +257,20 @@ export function ApprovalRequiredCard({
           >
             {request.reason || t("zakiControls.approval.defaultReason")}
           </div>
+          {previewRows.length ? (
+            <dl className="zaki-approval-card__preview" aria-label={t("zakiControls.approval.previewAria", { defaultValue: "Approval preview" })}>
+              {previewRows.map((row) => (
+                <div key={row.label}>
+                  <dt>{row.label}</dt>
+                  <dd>{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
           <div className="zaki-approval-card__meta">
             <span>{t("zakiControls.approval.riskLabel")} {request.riskLevel || "unknown"}</span>
             <span>{request.tool}</span>
+            {request.expiresAt ? <span>{request.expiresAt}</span> : null}
           </div>
           <div className="zaki-approval-card__actions">
             <button

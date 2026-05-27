@@ -98,12 +98,41 @@ describe("AgentInspectorRail", () => {
       ],
     });
 
-    fireEvent.click(screen.getByRole("tab", { name: /Artifacts/i }));
-
     expect(screen.getByText("output · captured")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Artifacts/i })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
     expect(screen.getAllByText("launch-brief.md").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Open artifacts manager" }));
     expect(onOpenArtifacts).toHaveBeenCalledTimes(1);
+  });
+
+  it("auto-routes pending approvals to the Plan panel before manual tab selection", () => {
+    renderRail({
+      isStreaming: true,
+      transcriptEntries: [
+        {
+          id: "browser-1",
+          kind: "tool",
+          tool: "browser.open",
+          text: "Opened the target page.",
+          timestamp: 1,
+        },
+      ],
+      approvalRequest: {
+        id: "approval-1",
+        tool: "extension_click",
+        reason: "supervised_mutating_requires_approval",
+        riskLevel: "high",
+        timestamp: 1,
+      },
+    });
+
+    const planTab = screen.getByRole("tab", { name: /Plan/i });
+    expect(planTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Waiting on extension_click")).toBeInTheDocument();
+    expect(screen.getByText("supervised_mutating_requires_approval")).toBeInTheDocument();
   });
 
   it("keeps browser control in its own panel", () => {

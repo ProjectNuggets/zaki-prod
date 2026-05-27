@@ -38,6 +38,10 @@ const request: NullalisApprovalRequest = {
   reason: "supervised_mutating_requires_approval",
   riskLevel: "high",
   timestamp: 1_000_000,
+  inputPreview: '{ selector: "#send" }',
+  effectPreview: "Clicks the send button in the active tab.",
+  command: "extension.click #send",
+  files: ["active-tab"],
 };
 
 describe("ApprovalRequiredCard", () => {
@@ -54,6 +58,9 @@ describe("ApprovalRequiredCard", () => {
     expect(screen.getByText("Approval gate")).toBeInTheDocument();
     expect(screen.getByText("Approval required for extension_click")).toBeInTheDocument();
     expect(screen.getByText("60s to decide")).toBeInTheDocument();
+    expect(screen.getByText("Clicks the send button in the active tab.")).toBeInTheDocument();
+    expect(screen.getByText('{ selector: "#send" }')).toBeInTheDocument();
+    expect(screen.getByText("extension.click #send")).toBeInTheDocument();
 
     act(() => {
       jest.advanceTimersByTime(30_000);

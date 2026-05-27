@@ -155,6 +155,8 @@ export function isAgentBrowserEntry(entry: NullalisTranscriptEntry): boolean {
 export function isAgentCronEntry(entry: NullalisTranscriptEntry): boolean {
   return (
     normalize(entry.phase) === "tool_only_turn" ||
+    normalize(entry.phase) === "tool_only_summary" ||
+    normalize(entry.phase) === "subagent_completion" ||
     includesAny(entry, [
       "cron",
       "automation",
@@ -164,6 +166,7 @@ export function isAgentCronEntry(entry: NullalisTranscriptEntry): boolean {
       "follow-up",
       "follow up",
       "subagent",
+      "delegate",
       "spawned",
       "wake",
     ])

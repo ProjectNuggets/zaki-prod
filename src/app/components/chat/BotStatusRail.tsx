@@ -170,6 +170,11 @@ export type NullalisApprovalRequest = {
   reason: string;
   riskLevel: string;
   timestamp: number;
+  inputPreview?: string | null;
+  effectPreview?: string | null;
+  command?: string | null;
+  files?: string[];
+  expiresAt?: string | null;
 };
 
 export type ZakiUsageSummary = {

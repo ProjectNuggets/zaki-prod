@@ -943,6 +943,10 @@ describe("ChatArea Component", () => {
         {
           tool: "write_file",
           risk_level: "high",
+          input_preview: '{ "path": "docs/brief.md" }',
+          effect_preview: "Writes the launch brief.",
+          command: "write docs/brief.md",
+          files: ["docs/brief.md"],
         },
         555
       )
@@ -951,6 +955,10 @@ describe("ChatArea Component", () => {
       text: "Approval required for write_file",
       tool: "write_file",
       status: "high",
+      inputPreview: '{ "path": "docs/brief.md" }',
+      resultSummary: "Writes the launch brief.",
+      command: "write docs/brief.md",
+      files: ["docs/brief.md"],
     });
 
     expect(
@@ -990,6 +998,48 @@ describe("ChatArea Component", () => {
       status: "background",
       resultSummary: "task-a, task-b",
       resultState: "running",
+    });
+
+    expect(
+      extractNullalisTranscriptEntry(
+        "tool_only_summary",
+        {
+          toolCallsExecuted: 2,
+          spawnedTaskIds: ["task-c"],
+        },
+        558
+      )
+    ).toMatchObject({
+      kind: "task",
+      text: "2 tools ran · 1 background task spawned",
+      phase: "tool_only_summary",
+      status: "background",
+    });
+
+    expect(
+      extractNullalisTranscriptEntry(
+        "subagent_completion",
+        {
+          task_id: "worker-1",
+          summary: "Research finished",
+          success: true,
+        },
+        559
+      )
+    ).toMatchObject({
+      kind: "task",
+      text: "Completed subagent: Research finished",
+      phase: "subagent_completion",
+      taskId: "worker-1",
+      status: "done",
+      resultState: "done",
+    });
+
+    expect(extractNullalisTranscriptEntry("audio_reply", {}, 560)).toMatchObject({
+      kind: "status",
+      text: "Audio reply generated",
+      phase: "audio_reply",
+      status: "done",
     });
 
     expect(extractNullalisTranscriptEntry("done", {}, 666)).toMatchObject({

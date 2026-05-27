@@ -1456,6 +1456,22 @@ function extractNullalisApprovalRequest(
   payload: Record<string, unknown>,
   now = Date.now()
 ): NullalisApprovalRequest {
+  const inputPreview =
+    (typeof payload.input_preview === "string" && payload.input_preview.trim()) ||
+    (typeof payload.inputPreview === "string" && payload.inputPreview.trim()) ||
+    (typeof payload.args_preview === "string" && payload.args_preview.trim()) ||
+    (typeof payload.argsPreview === "string" && payload.argsPreview.trim()) ||
+    null;
+  const effectPreview =
+    (typeof payload.effect_preview === "string" && payload.effect_preview.trim()) ||
+    (typeof payload.effectPreview === "string" && payload.effectPreview.trim()) ||
+    (typeof payload.preview === "string" && payload.preview.trim()) ||
+    (typeof payload.summary === "string" && payload.summary.trim()) ||
+    null;
+  const expiresAt =
+    (typeof payload.expires_at === "string" && payload.expires_at.trim()) ||
+    (typeof payload.expiresAt === "string" && payload.expiresAt.trim()) ||
+    null;
   return {
     id: `approval-${now}-${Math.random().toString(36).slice(2, 8)}`,
     tool:
@@ -1470,6 +1486,11 @@ function extractNullalisApprovalRequest(
       (typeof payload.riskLevel === "string" && payload.riskLevel.trim()) ||
       "unknown",
     timestamp: now,
+    inputPreview,
+    effectPreview,
+    command: extractNullalisCommand(payload),
+    files: extractNullalisFiles(payload),
+    expiresAt,
   };
 }
 
@@ -1959,7 +1980,7 @@ export function extractNullalisTranscriptEntry(
     };
   }
 
-  if (type === "tool_only_turn") {
+  if (type === "tool_only_turn" || type === "tool_only_summary") {
     const toolCount = numericValue(payload.tool_calls_executed ?? payload.toolCallsExecuted) ?? 0;
     const taskIds = Array.isArray(payload.spawned_task_ids)
       ? payload.spawned_task_ids.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
@@ -1981,7 +2002,7 @@ export function extractNullalisTranscriptEntry(
       text: textParts.join(" · ") || "Background agent work dispatched",
       timestamp: now,
       importance: 84,
-      phase: "tool_only_turn",
+      phase: type,
       status: taskIds.length ? "background" : "done",
       resultSummary: taskIds.length ? taskIds.join(", ") : null,
       resultState: taskIds.length ? "running" : "done",
@@ -2002,6 +2023,10 @@ export function extractNullalisTranscriptEntry(
       phase: "approval_required",
       tool: approval.tool,
       status: approval.riskLevel,
+      files: approval.files,
+      command: approval.command,
+      inputPreview: approval.inputPreview,
+      resultSummary: approval.effectPreview || approval.reason,
       resultState: "blocked",
       groupKey: `approval:${approval.tool}`,
       source: "approval",
@@ -2056,6 +2081,55 @@ export function extractNullalisTranscriptEntry(
       resultState: "done",
       groupKey: "done",
       source: "done",
+    };
+  }
+
+  if (type === "subagent_completion") {
+    const taskId =
+      (typeof payload.task_id === "string" && payload.task_id.trim()) ||
+      (typeof payload.taskId === "string" && payload.taskId.trim()) ||
+      (typeof payload.id === "string" && payload.id.trim()) ||
+      "subagent";
+    const failed =
+      payload.success === false ||
+      String(payload.status || payload.state || "").trim().toLowerCase() === "failed";
+    const summary =
+      (typeof payload.summary === "string" && payload.summary.trim()) ||
+      (typeof payload.result_summary === "string" && payload.result_summary.trim()) ||
+      (typeof payload.resultSummary === "string" && payload.resultSummary.trim()) ||
+      (typeof payload.output_preview === "string" && payload.output_preview.trim()) ||
+      (typeof payload.outputPreview === "string" && payload.outputPreview.trim()) ||
+      "Background work completed";
+    return {
+      id: nullalisEntryId(`subagent-${taskId}`, now),
+      kind: "task",
+      intent: "planning",
+      text: `${failed ? "Failed" : "Completed"} subagent: ${summary}`,
+      timestamp: now,
+      importance: failed ? 92 : 84,
+      phase: "subagent_completion",
+      taskId,
+      status: failed ? "failed" : "done",
+      resultSummary: summary,
+      resultState: failed ? "failed" : "done",
+      groupKey: `task:${taskId}`,
+      source: "task",
+    };
+  }
+
+  if (type === "audio_reply") {
+    return {
+      id: nullalisEntryId("audio-reply", now),
+      kind: "status",
+      intent: "final",
+      text: "Audio reply generated",
+      timestamp: now,
+      importance: 58,
+      phase: "audio_reply",
+      status: "done",
+      resultState: "done",
+      groupKey: "audio-reply",
+      source: "progress",
     };
   }
 
@@ -4423,6 +4497,11 @@ export function ChatArea() {
         payloadType === "finalizeResponseStream"
       ) {
         if (isZakiAgentSpace) {
+          if (payload.tool_only_turn === true || payload.toolOnlyTurn === true) {
+            pushNullalisTranscriptEntry(
+              extractNullalisTranscriptEntry("tool_only_summary", payload)
+            );
+          }
           const usageSummary = extractNullalisUsageSummary(payload);
           if (usageSummary) {
             setZakiUsageSummary(usageSummary);
@@ -4513,26 +4592,37 @@ export function ChatArea() {
       // task status) is a follow-up after the design is locked.
       if (
         isZakiAgentSpace &&
-        (eventType === "tool_only_turn" || payloadType === "tool_only_turn")
+        (eventType === "tool_only_turn" ||
+          payloadType === "tool_only_turn" ||
+          eventType === "tool_only_summary" ||
+          payloadType === "tool_only_summary")
       ) {
         const toolCount =
           typeof payload.tool_calls_executed === "number"
             ? (payload.tool_calls_executed as number)
-            : 0;
+            : typeof payload.toolCallsExecuted === "number"
+              ? (payload.toolCallsExecuted as number)
+              : 0;
         const taskIds = Array.isArray(payload.spawned_task_ids)
           ? (payload.spawned_task_ids as string[])
+          : Array.isArray(payload.spawnedTaskIds)
+            ? (payload.spawnedTaskIds as string[])
           : [];
         const iters =
           typeof payload.iterations_used === "number"
             ? (payload.iterations_used as number)
-            : 0;
+            : typeof payload.iterationsUsed === "number"
+              ? (payload.iterationsUsed as number)
+              : 0;
         // eslint-disable-next-line no-console
-        console.info("[zaki-runtime] tool_only_turn", {
+        console.info("[zaki-runtime] tool_only_summary", {
           tool_calls_executed: toolCount,
           spawned_task_ids: taskIds,
           iterations_used: iters,
         });
-        pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("tool_only_turn", payload));
+        pushNullalisTranscriptEntry(
+          extractNullalisTranscriptEntry(eventType || payloadType || "tool_only_summary", payload)
+        );
         // Don't return done — the gateway will still emit a final
         // chunk (placeholder or real) plus the close frame.
         return {};
@@ -4571,9 +4661,37 @@ export function ChatArea() {
           upsertNullalisTaskItem(payload);
           return {};
         }
+        if (eventType === "subagent_completion" || payloadType === "subagent_completion") {
+          const taskId =
+            (typeof payload.task_id === "string" && payload.task_id.trim()) ||
+            (typeof payload.taskId === "string" && payload.taskId.trim()) ||
+            (typeof payload.id === "string" && payload.id.trim()) ||
+            "";
+          if (taskId) {
+            upsertNullalisTaskItem({
+              ...payload,
+              task_id: taskId,
+              status: payload.status ?? payload.state ?? (payload.success === false ? "failed" : "done"),
+              description:
+                payload.description ??
+                payload.summary ??
+                payload.result_summary ??
+                payload.resultSummary ??
+                "Subagent completed",
+            });
+          }
+          pushNullalisTranscriptEntry(
+            extractNullalisTranscriptEntry("subagent_completion", payload)
+          );
+          return {};
+        }
         if (eventType === "artifact_event" || payloadType === "artifact_event") {
           setAgentArtifactEventCount((count) => count + 1);
           pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("artifact_event", payload));
+          return {};
+        }
+        if (eventType === "audio_reply" || payloadType === "audio_reply") {
+          pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("audio_reply", payload));
           return {};
         }
         if (eventType === "approval_required" || payloadType === "approval_required") {

@@ -92,11 +92,19 @@ describe("AgentInspectorPanelModel", () => {
       text: "Scheduled weekly automation run.",
       timestamp: 2,
     });
+    const completion = entry({
+      id: "completion",
+      kind: "task",
+      phase: "subagent_completion",
+      text: "Completed subagent: research finished",
+      timestamp: 3,
+    });
 
     expect(isAgentCronEntry(spawned)).toBe(true);
     expect(isAgentCronEntry(scheduled)).toBe(true);
+    expect(isAgentCronEntry(completion)).toBe(true);
 
-    const model = buildAgentInspectorPanelModel([spawned, scheduled]);
-    expect(model.cron.map((event) => event.id)).toEqual(["scheduled", "spawned"]);
+    const model = buildAgentInspectorPanelModel([spawned, scheduled, completion]);
+    expect(model.cron.map((event) => event.id)).toEqual(["completion", "scheduled", "spawned"]);
   });
 });

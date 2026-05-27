@@ -269,15 +269,51 @@ export function AgentInspectorRail({
   const latestLatency =
     recentTrace.find((event) => typeof event.durationMs === "number")?.durationMs ?? null;
   const primaryArtifact = artifactEntries[0] ?? null;
+  const latestPlanSignal =
+    narrationFrame?.label ||
+    runningTask?.description ||
+    recentTrace[0]?.summary ||
+    (isStreaming ? "Waiting for the next runtime event." : "No active run.");
   const handleTabChange = (nextTab: AgentInspectorTab) => {
     setManualTabSelected(true);
     setTab(nextTab);
   };
 
   useEffect(() => {
-    if (!isStreaming || !browserActivity || manualTabSelected) return;
-    setTab("browser");
-  }, [browserActivity, isStreaming, manualTabSelected]);
+    if (manualTabSelected) return;
+    if (approvalRequest) {
+      setTab("plan");
+      return;
+    }
+    if (sortedTasks.length) {
+      setTab("plan");
+      return;
+    }
+    if (artifactCount || artifactEntries.length) {
+      setTab("artifacts");
+      return;
+    }
+    if (browserActivity) {
+      setTab("browser");
+      return;
+    }
+    if (cronEntries.length) {
+      setTab("cron");
+      return;
+    }
+    if (sourceEntries.length) {
+      setTab("sources");
+    }
+  }, [
+    approvalRequest,
+    artifactCount,
+    artifactEntries.length,
+    browserActivity,
+    cronEntries.length,
+    manualTabSelected,
+    sourceEntries.length,
+    sortedTasks.length,
+  ]);
 
   return (
     <aside className="zaki-agent-inspector" aria-label="Agent inspector">
@@ -288,7 +324,7 @@ export function AgentInspectorRail({
         value={tab}
         onChange={handleTabChange}
         options={[
-          { id: "plan", label: "Plan", count: sortedTasks.length || undefined },
+          { id: "plan", label: "Plan", count: approvalRequest ? "!" : sortedTasks.length || undefined },
           { id: "cron", label: "Cron", count: cronEntries.length || undefined },
           { id: "sources", label: "Sources", count: sourceEntries.length || undefined },
           {
@@ -378,8 +414,20 @@ export function AgentInspectorRail({
                 ))}
               </ol>
             ) : (
-              <div className="v2-empty-line">
-                {isStreaming ? "Plan is forming." : "No active plan."}
+              <div className={cn("zaki-agent-inspector__live-signal", isStreaming && "is-live")}>
+                <span>{approvalRequest ? "approval gate" : isStreaming ? "live signal" : "idle"}</span>
+                <strong>
+                  {approvalRequest
+                    ? `Waiting on ${approvalRequest.tool}`
+                    : latestPlanSignal}
+                </strong>
+                <small>
+                  {approvalRequest
+                    ? approvalRequest.reason || "Tool permission is required before the run can continue."
+                    : isStreaming
+                      ? "The run has not emitted structured plan steps yet."
+                      : "Multi-step tasks and subagents will appear here."}
+                </small>
               </div>
             )}
             <div className="zaki-agent-inspector__plan-foot">
