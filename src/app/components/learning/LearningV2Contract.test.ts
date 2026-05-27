@@ -36,4 +36,12 @@ describe("Learning V2 product contract", () => {
       expect(learningPageSource).toContain(state);
     }
   });
+
+  it("keeps saved learning visible while central read-only states fail writes closed", () => {
+    expect(learningPageSource).toContain("const learningWritesDisabled");
+    expect(learningPageSource).toContain('productState === "readOnly"');
+    expect(learningPageSource).toContain("assertLearningWritesAllowed");
+    expect(learningPageSource).toContain("<LearningWriteGateContext.Provider");
+    expect(learningPageSource).not.toContain("learningStateBlocksWork");
+  });
 });

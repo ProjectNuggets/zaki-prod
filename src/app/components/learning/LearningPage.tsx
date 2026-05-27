@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseMutationResult } from "@tanstack/react-query";
 import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent, ReactNode, RefObject } from "react";
@@ -81,10 +81,6 @@ import { useProductRegistry } from "@/queries/useProducts";
 import { useAuthStore } from "@/stores";
 import {
   V2Badge,
-  V2Button,
-  V2Panel,
-  V2PanelBody,
-  V2PanelHead,
   V2StatusStrip,
   V2UsageGauge,
 } from "@/app/components/v2";
@@ -239,6 +235,12 @@ type LearningChannelSchemaEntry = {
   secret_fields: string[];
   json_schema: LearningChannelJsonSchema;
 };
+
+const LearningWriteGateContext = createContext<() => void>(() => {});
+
+function useLearningWriteGate() {
+  return useContext(LearningWriteGateContext);
+}
 
 const LEARNING_PRODUCT_ID = "learning";
 
@@ -864,9 +866,18 @@ export function LearningPage() {
       : "unknown";
   const productWeekly = getLearningWindow(learningMeter?.weekly ?? meterStatus.data?.data?.weekly);
   const productRolling = getLearningWindow(learningMeter?.rolling ?? meterStatus.data?.data?.rolling);
-  const learningStateBlocksWork =
-    productState === "disabled" || productState === "maintenance" || productState === "hidden";
+  const learningWritesDisabled =
+    productState === "disabled" ||
+    productState === "maintenance" ||
+    productState === "hidden" ||
+    productState === "readOnly";
   const learningStateBanner = learningStateMessage(productState);
+  const learningWriteDisabledMessage =
+    learningStateBanner || "Learn writes are paused by central product state.";
+  const assertLearningWritesAllowed = useCallback(() => {
+    if (!learningWritesDisabled) return;
+    throw new Error(learningWriteDisabledMessage);
+  }, [learningWriteDisabledMessage, learningWritesDisabled]);
 
   const knowledgeItems = useMemo(
     () => itemList(knowledge.data, ["knowledge_bases", "items", "databases"]),
@@ -912,8 +923,10 @@ export function LearningPage() {
   );
 
   const createKb = useMutation({
-    mutationFn: ({ name, files }: { name: string; files: FileList | File[] }) =>
-      createLearningKnowledge(name, files),
+    mutationFn: ({ name, files }: { name: string; files: FileList | File[] }) => {
+      assertLearningWritesAllowed();
+      return createLearningKnowledge(name, files);
+    },
     onSuccess: (payload) => {
       setLastResult(payload);
       toast.success("Source library created");
@@ -923,8 +936,10 @@ export function LearningPage() {
   });
 
   const uploadKb = useMutation({
-    mutationFn: ({ name, files }: { name: string; files: FileList | File[] }) =>
-      uploadLearningKnowledge(name, files),
+    mutationFn: ({ name, files }: { name: string; files: FileList | File[] }) => {
+      assertLearningWritesAllowed();
+      return uploadLearningKnowledge(name, files);
+    },
     onSuccess: (payload) => {
       setLastResult(payload);
       toast.success("Upload started");
@@ -934,8 +949,10 @@ export function LearningPage() {
   });
 
   const uploadKbFolder = useMutation({
-    mutationFn: ({ name, files }: { name: string; files: FileList | File[] }) =>
-      uploadLearningKnowledgeFolder(name, files),
+    mutationFn: ({ name, files }: { name: string; files: FileList | File[] }) => {
+      assertLearningWritesAllowed();
+      return uploadLearningKnowledgeFolder(name, files);
+    },
     onSuccess: (payload) => {
       setLastResult(payload);
       toast.success("Folder upload started");
@@ -945,8 +962,10 @@ export function LearningPage() {
   });
 
   const uploadKbArchive = useMutation({
-    mutationFn: ({ name, files }: { name: string; files: FileList | File[] }) =>
-      uploadLearningKnowledgeArchive(name, files),
+    mutationFn: ({ name, files }: { name: string; files: FileList | File[] }) => {
+      assertLearningWritesAllowed();
+      return uploadLearningKnowledgeArchive(name, files);
+    },
     onSuccess: (payload) => {
       setLastResult(payload);
       toast.success("Archive upload started");
@@ -956,7 +975,10 @@ export function LearningPage() {
   });
 
   const reindexKb = useMutation({
-    mutationFn: (name: string) => reindexLearningKnowledge(name),
+    mutationFn: (name: string) => {
+      assertLearningWritesAllowed();
+      return reindexLearningKnowledge(name);
+    },
     onSuccess: (payload) => {
       setLastResult(payload);
       toast.success("Reindex started");
@@ -966,7 +988,10 @@ export function LearningPage() {
   });
 
   const setDefaultKb = useMutation({
-    mutationFn: (name: string) => setDefaultLearningKnowledge(name),
+    mutationFn: (name: string) => {
+      assertLearningWritesAllowed();
+      return setDefaultLearningKnowledge(name);
+    },
     onSuccess: (payload) => {
       setLastResult(payload);
       toast.success("Default source library updated");
@@ -976,7 +1001,10 @@ export function LearningPage() {
   });
 
   const deleteKb = useMutation({
-    mutationFn: (name: string) => deleteLearningKnowledge(name),
+    mutationFn: (name: string) => {
+      assertLearningWritesAllowed();
+      return deleteLearningKnowledge(name);
+    },
     onSuccess: (payload) => {
       setLastResult(payload);
       toast.success("Knowledge base deleted");
@@ -986,7 +1014,10 @@ export function LearningPage() {
   });
 
   const createBook = useMutation({
-    mutationFn: (payload: LearningJson) => createLearningBook(payload),
+    mutationFn: (payload: LearningJson) => {
+      assertLearningWritesAllowed();
+      return createLearningBook(payload);
+    },
     onSuccess: (payload) => {
       setLastResult(payload);
       setBookTopic("");
@@ -997,13 +1028,15 @@ export function LearningPage() {
   });
 
   const createNotebook = useMutation({
-    mutationFn: ({ name, description }: NotebookCreateDraft) =>
-      createLearningNotebook({
+    mutationFn: ({ name, description }: NotebookCreateDraft) => {
+      assertLearningWritesAllowed();
+      return createLearningNotebook({
         name,
         description,
         color: "#f10202",
         icon: "book",
-      }),
+      });
+    },
     onSuccess: (payload) => {
       setLastResult(payload);
       setNotebookName("");
@@ -1014,8 +1047,10 @@ export function LearningPage() {
   });
 
   const createDocument = useMutation({
-    mutationFn: ({ title, content }: CoWriterCreateDraft) =>
-      createLearningCoWriterDocument({ title, content }),
+    mutationFn: ({ title, content }: CoWriterCreateDraft) => {
+      assertLearningWritesAllowed();
+      return createLearningCoWriterDocument({ title, content });
+    },
     onSuccess: (payload) => {
       setLastResult(payload);
       const createdId = itemId(asRecord(payload));
@@ -1027,7 +1062,10 @@ export function LearningPage() {
   });
 
   const deleteDocument = useMutation({
-    mutationFn: (documentId: string) => deleteLearningCoWriterDocument(documentId),
+    mutationFn: (documentId: string) => {
+      assertLearningWritesAllowed();
+      return deleteLearningCoWriterDocument(documentId);
+    },
     onSuccess: (payload) => {
       setLastResult(payload);
       toast.success("Document deleted");
@@ -1037,12 +1075,14 @@ export function LearningPage() {
   });
 
   const createAgent = useMutation({
-    mutationFn: () =>
-      createLearningTutorAgent({
+    mutationFn: () => {
+      assertLearningWritesAllowed();
+      return createLearningTutorAgent({
         bot_id: agentId,
         name: agentName || agentId,
         persona: agentPersona,
-      }),
+      });
+    },
     onSuccess: (payload) => {
       setLastResult(payload);
       setAgentId("");
@@ -1056,7 +1096,10 @@ export function LearningPage() {
   });
 
   const destroyAgent = useMutation({
-    mutationFn: (nextAgentId: string) => destroyLearningTutorAgent(nextAgentId),
+    mutationFn: (nextAgentId: string) => {
+      assertLearningWritesAllowed();
+      return destroyLearningTutorAgent(nextAgentId);
+    },
     onSuccess: (payload) => {
       setLastResult(payload);
       toast.success("Tutor deleted");
@@ -1067,7 +1110,10 @@ export function LearningPage() {
   });
 
   const stopAgent = useMutation({
-    mutationFn: (nextAgentId: string) => stopLearningTutorAgent(nextAgentId),
+    mutationFn: (nextAgentId: string) => {
+      assertLearningWritesAllowed();
+      return stopLearningTutorAgent(nextAgentId);
+    },
     onSuccess: (payload) => {
       setLastResult(payload);
       toast.success("Tutor stopped");
@@ -1078,7 +1124,10 @@ export function LearningPage() {
   });
 
   const startAgent = useMutation({
-    mutationFn: (nextAgentId: string) => createLearningTutorAgent({ bot_id: nextAgentId }),
+    mutationFn: (nextAgentId: string) => {
+      assertLearningWritesAllowed();
+      return createLearningTutorAgent({ bot_id: nextAgentId });
+    },
     onSuccess: (payload) => {
       setLastResult(payload);
       toast.success("Tutor started");
@@ -1090,6 +1139,7 @@ export function LearningPage() {
 
   const analyzeVision = useMutation({
     mutationFn: async () => {
+      assertLearningWritesAllowed();
       const image_base64 = visionImage ? await fileToBase64(visionImage) : undefined;
       return analyzeLearningVision({
         question: visionQuestion,
@@ -1104,8 +1154,10 @@ export function LearningPage() {
   });
 
   const saveMemory = useMutation({
-    mutationFn: ({ file, content }: { file: "summary" | "profile"; content: string }) =>
-      updateLearningMemory(file, content),
+    mutationFn: ({ file, content }: { file: "summary" | "profile"; content: string }) => {
+      assertLearningWritesAllowed();
+      return updateLearningMemory(file, content);
+    },
     onSuccess: (payload) => {
       setLastResult(payload);
       toast.success("Memory saved");
@@ -1188,6 +1240,7 @@ export function LearningPage() {
           },
         ]}
       />
+      <LearningWriteGateContext.Provider value={assertLearningWritesAllowed}>
       <div className="grid h-[calc(100%-30px)] min-h-0 grid-rows-[auto_1fr]">
         <div className="border-b border-[var(--v2-hairline)] bg-[var(--v2-bg)] px-3 py-2">
           <div className="grid gap-2 lg:grid-cols-[1fr_260px_auto] lg:items-center">
@@ -1236,27 +1289,7 @@ export function LearningPage() {
           ) : null}
         </div>
         <div className="min-h-0 overflow-hidden">
-        {learningStateBlocksWork ? (
-          <V2Panel className="m-4">
-            <V2PanelHead title={learningStateLabel(productState)} meta="Central product state" />
-            <V2PanelBody>
-              <p className="font-mono text-[12px] uppercase tracking-[0.12em] text-[var(--v2-ink-2)]">
-                {learningStateBanner}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <V2Button
-                  size="sm"
-                  onClick={() => window.location.assign("/settings#settings-products")}
-                >
-                  Open central settings
-                </V2Button>
-                <V2Button size="sm" variant="ghost" onClick={() => void productRegistry.refetch()}>
-                  Refresh state
-                </V2Button>
-              </div>
-            </V2PanelBody>
-          </V2Panel>
-        ) : tab === "books" ? (
+        {tab === "books" ? (
           <LearningBookWorkspace
             bookTopic={bookTopic}
             setBookTopic={setBookTopic}
@@ -1266,6 +1299,7 @@ export function LearningPage() {
             sessionItems={sessionItems}
             notebookItems={notebookItems}
             questionItems={questionItems}
+            readOnly={learningWritesDisabled}
           />
         ) : tab === "chat" ? (
           <LearningChatPanel
@@ -1280,6 +1314,8 @@ export function LearningPage() {
             notebookItems={notebookItems}
             questionItems={questionItems}
             skillItems={skillItems}
+            readOnly={learningWritesDisabled}
+            readOnlyReason={learningWriteDisabledMessage}
           />
         ) : tab === "sources" ? (
           <SourcesPanel
@@ -1390,6 +1426,7 @@ export function LearningPage() {
         onClose={() => setSelectedObject(null)}
         onResult={setLastResult}
       />
+      </LearningWriteGateContext.Provider>
     </div>
   );
 }
@@ -3035,6 +3072,8 @@ function LearningChatPanel({
   notebookItems,
   questionItems,
   skillItems,
+  readOnly = false,
+  readOnlyReason = "Learn is read-only.",
 }: {
   kbName: string;
   setKbName: (name: string) => void;
@@ -3047,6 +3086,8 @@ function LearningChatPanel({
   notebookItems: Item[];
   questionItems: Item[];
   skillItems: Item[];
+  readOnly?: boolean;
+  readOnlyReason?: string;
 }) {
   const authUser = useAuthStore((state) => state.user);
   const pendingDraftStorageKey = useMemo(() => pendingLearningDraftStorageKey(authUser), [
@@ -3144,9 +3185,16 @@ function LearningChatPanel({
     enabled: isPrimaryChatView,
     staleTime: 60_000,
   });
+  const assertChatWritesAllowed = useCallback(() => {
+    if (!readOnly) return;
+    throw new Error(readOnlyReason);
+  }, [readOnly, readOnlyReason]);
 
   const saveStudyProfileMutation = useMutation({
-    mutationFn: updateLearningStudyProfile,
+    mutationFn: (profile: LearningStudyProfile) => {
+      assertChatWritesAllowed();
+      return updateLearningStudyProfile(profile);
+    },
     onSuccess: (payload) => {
       const nextProfile = payload.profile;
       setStudyProfile(nextProfile);
@@ -3164,7 +3212,10 @@ function LearningChatPanel({
   });
 
   const createStudyPlanMutation = useMutation({
-    mutationFn: createLearningStudyPlan,
+    mutationFn: (profile: LearningStudyProfile) => {
+      assertChatWritesAllowed();
+      return createLearningStudyPlan(profile);
+    },
     onSuccess: (payload) => {
       const nextProfile = payload.profile;
       setStudyProfile(nextProfile);
@@ -3184,7 +3235,10 @@ function LearningChatPanel({
   });
 
   const createStudyTaskMutation = useMutation({
-    mutationFn: createLearningStudyTask,
+    mutationFn: (payload: Parameters<typeof createLearningStudyTask>[0]) => {
+      assertChatWritesAllowed();
+      return createLearningStudyTask(payload);
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: learningKeys.study });
       toast.success("Added to study plan");
@@ -3195,7 +3249,10 @@ function LearningChatPanel({
   });
 
   const completeStudyTaskMutation = useMutation({
-    mutationFn: completeLearningStudyTask,
+    mutationFn: (taskId: string) => {
+      assertChatWritesAllowed();
+      return completeLearningStudyTask(taskId);
+    },
     onMutate: (taskId) => {
       setCompletingStudyTaskId(taskId);
     },
@@ -3370,6 +3427,7 @@ function LearningChatPanel({
   const canSend =
     connected &&
     !streaming &&
+    !readOnly &&
     Boolean(
       input.trim() ||
         attachments.length ||
@@ -3849,6 +3907,10 @@ function LearningChatPanel({
   };
 
   const saveStudyProfile = (nextProfile: LearningStudyProfile) => {
+    if (readOnly) {
+      toast.error(readOnlyReason);
+      return;
+    }
     saveStudyProfileMutation.mutate(nextProfile);
   };
 
@@ -3869,6 +3931,10 @@ function LearningChatPanel({
   };
 
   const startStudyPlan = () => {
+    if (readOnly) {
+      toast.error(readOnlyReason);
+      return;
+    }
     const nextProfile = studyDraft;
     createStudyPlanMutation.mutate(nextProfile);
   };
@@ -3899,11 +3965,19 @@ function LearningChatPanel({
   };
 
   const completeStudyTask = (taskId: string) => {
+    if (readOnly) {
+      toast.error(readOnlyReason);
+      return;
+    }
     if (!taskId || completeStudyTaskMutation.isPending) return;
     completeStudyTaskMutation.mutate(taskId);
   };
 
   const applyStudyAction = (action: LearningStudyAction, message: TutorChatMessage) => {
+    if (readOnly) {
+      toast.error(readOnlyReason);
+      return;
+    }
     if (action === "save") {
       setSaveNotebookOpen(true);
       return;
@@ -3986,6 +4060,10 @@ function LearningChatPanel({
   };
 
   const sendMessage = async () => {
+    if (readOnly) {
+      toast.error(readOnlyReason);
+      return;
+    }
     const fallbackContent = attachments.some((attachment) => attachment.type === "image")
       ? "Please analyze the attached image(s)."
       : isQuizMode
@@ -4169,6 +4247,7 @@ function LearningChatPanel({
 
   const saveChatToNotebook = useMutation({
     mutationFn: () => {
+      assertChatWritesAllowed();
       if (!saveNotebookIds.length) throw new Error("Choose at least one notebook.");
       const firstUserMessage = messages.find((message) => message.role === "user");
       const firstAssistantMessage = messages.find((message) => message.role === "assistant");
@@ -4245,7 +4324,7 @@ function LearningChatPanel({
           <button
             type="button"
             onClick={() => setSaveNotebookOpen(true)}
-            disabled={!messages.length}
+            disabled={!messages.length || readOnly}
             className="v2-btn v2-btn--sm"
           >
             Save to Notebook
@@ -4281,7 +4360,14 @@ function LearningChatPanel({
           onSave={() => saveStudyProfile(studyDraft)}
           onBuildPlan={startStudyPlan}
           notebooksCount={notebookItems.length}
+          readOnly={readOnly}
+          readOnlyReason={readOnlyReason}
         />
+        {readOnly ? (
+          <div className="mb-3 border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg-sunken)] px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--v2-ink-2)]">
+            {readOnlyReason}
+          </div>
+        ) : null}
         {!hasMessages && !studyPanelOpen ? (
           <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-1 pb-36 pt-8">
             <div className="text-center">
@@ -4298,6 +4384,7 @@ function LearningChatPanel({
                   key={action.label}
                   type="button"
                   onClick={() => startStarterAction(action)}
+                  disabled={readOnly}
                   className="v2-btn v2-btn--sm"
                 >
                   {action.label}
@@ -4311,6 +4398,7 @@ function LearningChatPanel({
               onStartTask={startStudyTask}
               onCompleteTask={completeStudyTask}
               completingTaskId={completingStudyTaskId}
+              readOnly={readOnly}
             />
           </div>
         ) : hasMessages ? (
@@ -4367,6 +4455,7 @@ function LearningChatPanel({
                       <LearningNextActionRow
                         onAction={(action) => applyStudyAction(action, message)}
                         canSave={notebookItems.length > 0}
+                        disabled={readOnly}
                       />
                     </>
                   ) : null}
@@ -5116,6 +5205,7 @@ function LearningSpacePanel({
   const [skillTags, setSkillTags] = useState("");
   const [skillError, setSkillError] = useState("");
   const queryClient = useQueryClient();
+  const assertLearningWritesAllowed = useLearningWriteGate();
   const activeMemoryDraft = memoryFile === "summary" ? summaryDraft : profileDraft;
   const activeMemoryUpdated =
     textOf(memoryRecord[`${memoryFile}_updated_at`]) ||
@@ -5182,7 +5272,10 @@ function LearningSpacePanel({
   }, [memoryRecord.summary, memoryRecord.profile]);
 
   const refreshMemory = useMutation({
-    mutationFn: () => refreshLearningMemory({}),
+    mutationFn: () => {
+      assertLearningWritesAllowed();
+      return refreshLearningMemory({});
+    },
     onSuccess: (payload) => {
       toast.success("Memory refreshed");
       void queryClient.invalidateQueries({ queryKey: learningKeys.memory });
@@ -5194,7 +5287,10 @@ function LearningSpacePanel({
   });
 
   const clearMemory = useMutation({
-    mutationFn: () => clearLearningMemory(memoryFile),
+    mutationFn: () => {
+      assertLearningWritesAllowed();
+      return clearLearningMemory(memoryFile);
+    },
     onSuccess: () => {
       if (memoryFile === "summary") setSummaryDraft("");
       if (memoryFile === "profile") setProfileDraft("");
@@ -5234,6 +5330,7 @@ function LearningSpacePanel({
 
   const saveSkill = useMutation({
     mutationFn: () => {
+      assertLearningWritesAllowed();
       const name = skillName.trim().toLowerCase();
       if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
         throw new Error("Skill name must use lowercase letters, numbers, and hyphens.");
@@ -5260,7 +5357,10 @@ function LearningSpacePanel({
   });
 
   const deleteSkill = useMutation({
-    mutationFn: (name: string) => deleteLearningSkill(name),
+    mutationFn: (name: string) => {
+      assertLearningWritesAllowed();
+      return deleteLearningSkill(name);
+    },
     onSuccess: () => {
       toast.success("Skill deleted");
       resetSkillEditor();
@@ -6375,6 +6475,7 @@ function NotebooksPanel({
   onStartStudyFromNotebook: (content: string, capability?: string) => void;
 }) {
   const queryClient = useQueryClient();
+  const assertLearningWritesAllowed = useLearningWriteGate();
   const [notebookDescription, setNotebookDescription] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
@@ -6510,7 +6611,10 @@ function NotebooksPanel({
   };
 
   const deleteNotebook = useMutation({
-    mutationFn: (notebookId: string) => deleteLearningNotebook(notebookId),
+    mutationFn: (notebookId: string) => {
+      assertLearningWritesAllowed();
+      return deleteLearningNotebook(notebookId);
+    },
     onSuccess: (_, notebookId) => {
       if (selectedId === notebookId) {
         setSelectedId("");
@@ -6523,8 +6627,10 @@ function NotebooksPanel({
   });
 
   const deleteRecord = useMutation({
-    mutationFn: ({ notebookId, recordId }: { notebookId: string; recordId: string }) =>
-      deleteLearningNotebookRecord(notebookId, recordId),
+    mutationFn: ({ notebookId, recordId }: { notebookId: string; recordId: string }) => {
+      assertLearningWritesAllowed();
+      return deleteLearningNotebookRecord(notebookId, recordId);
+    },
     onSuccess: (_, variables) => {
       setExpandedRecordId(null);
       toast.success("Record removed");
@@ -6535,6 +6641,12 @@ function NotebooksPanel({
   });
 
   const handleCreate = () => {
+    try {
+      assertLearningWritesAllowed();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Learn writes are paused.");
+      return;
+    }
     const name = notebookName.trim();
     if (!name) return;
     createNotebook.mutate(
@@ -7178,6 +7290,7 @@ function CoWriterDocumentEditor({
   notebookItems: Item[];
 }) {
   const queryClient = useQueryClient();
+  const assertLearningWritesAllowed = useLearningWriteGate();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [title, setTitle] = useState("");
   const [markdown, setMarkdown] = useState("");
@@ -7220,11 +7333,13 @@ function CoWriterDocumentEditor({
   }, [notebookId, notebookItems]);
 
   const updateDocument = useMutation({
-    mutationFn: () =>
-      updateLearningCoWriterDocument(documentId, {
+    mutationFn: () => {
+      assertLearningWritesAllowed();
+      return updateLearningCoWriterDocument(documentId, {
         title: title.trim() || null,
         content: markdown,
-      }),
+      });
+    },
     onSuccess: (payload) => {
       onResult(payload);
       setStatus("Saved");
@@ -7239,6 +7354,7 @@ function CoWriterDocumentEditor({
 
   const fullDraftEdit = useMutation({
     mutationFn: () => {
+      assertLearningWritesAllowed();
       if (!instruction.trim()) throw new Error("Enter an editing instruction first.");
       return runLearningCoWriterEdit({
         text: markdown,
@@ -7258,7 +7374,10 @@ function CoWriterDocumentEditor({
   });
 
   const autoMark = useMutation({
-    mutationFn: () => runLearningCoWriterAutoMark({ text: markdown }),
+    mutationFn: () => {
+      assertLearningWritesAllowed();
+      return runLearningCoWriterAutoMark({ text: markdown });
+    },
     onSuccess: (payload) => {
       const marked = textOf(asRecord(payload).marked_text);
       if (marked) setMarkdown(marked);
@@ -7270,6 +7389,7 @@ function CoWriterDocumentEditor({
 
   const saveToNotebook = useMutation({
     mutationFn: () => {
+      assertLearningWritesAllowed();
       if (!notebookId) throw new Error("Choose a notebook first.");
       return addLearningNotebookRecordManual({
         notebook_ids: [notebookId],
@@ -7660,6 +7780,7 @@ function questionEntryCategories(item: Item) {
 
 function QuestionBankPanel({ items, onOpen }: { items: Item[]; onOpen: (item: Item) => void }) {
   const queryClient = useQueryClient();
+  const assertLearningWritesAllowed = useLearningWriteGate();
   const [filter, setFilter] = useState<QuestionBankFilter>("all");
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
   const [managerOpen, setManagerOpen] = useState(false);
@@ -7696,30 +7817,40 @@ function QuestionBankPanel({ items, onOpen }: { items: Item[]; onOpen: (item: It
   };
 
   const toggleBookmark = useMutation({
-    mutationFn: ({ id, bookmarked }: { id: string; bookmarked: boolean }) =>
-      updateLearningQuestionEntry(id, { bookmarked }),
+    mutationFn: ({ id, bookmarked }: { id: string; bookmarked: boolean }) => {
+      assertLearningWritesAllowed();
+      return updateLearningQuestionEntry(id, { bookmarked });
+    },
     onMutate: ({ id }) => setPendingActionId(id),
     onSuccess: refreshQuestions,
     onError: (error) => toast.error(error.message),
     onSettled: () => setPendingActionId(null),
   });
   const deleteEntry = useMutation({
-    mutationFn: (id: string) => deleteLearningQuestionEntry(id),
+    mutationFn: (id: string) => {
+      assertLearningWritesAllowed();
+      return deleteLearningQuestionEntry(id);
+    },
     onMutate: (id) => setPendingActionId(id),
     onSuccess: refreshQuestions,
     onError: (error) => toast.error(error.message),
     onSettled: () => setPendingActionId(null),
   });
   const removeFromCategory = useMutation({
-    mutationFn: ({ entryId, categoryId }: { entryId: string; categoryId: string }) =>
-      removeLearningQuestionEntryCategory(entryId, categoryId),
+    mutationFn: ({ entryId, categoryId }: { entryId: string; categoryId: string }) => {
+      assertLearningWritesAllowed();
+      return removeLearningQuestionEntryCategory(entryId, categoryId);
+    },
     onMutate: ({ entryId }) => setPendingActionId(entryId),
     onSuccess: refreshQuestions,
     onError: (error) => toast.error(error.message),
     onSettled: () => setPendingActionId(null),
   });
   const createCategory = useMutation({
-    mutationFn: (name: string) => createLearningQuestionCategory(name),
+    mutationFn: (name: string) => {
+      assertLearningWritesAllowed();
+      return createLearningQuestionCategory(name);
+    },
     onSuccess: () => {
       setNewCategoryName("");
       refreshQuestions();
@@ -7727,8 +7858,10 @@ function QuestionBankPanel({ items, onOpen }: { items: Item[]; onOpen: (item: It
     onError: (error) => toast.error(error.message),
   });
   const renameCategory = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) =>
-      renameLearningQuestionCategory(id, name),
+    mutationFn: ({ id, name }: { id: string; name: string }) => {
+      assertLearningWritesAllowed();
+      return renameLearningQuestionCategory(id, name);
+    },
     onSuccess: () => {
       setRenamingCategory(null);
       refreshQuestions();
@@ -7736,7 +7869,10 @@ function QuestionBankPanel({ items, onOpen }: { items: Item[]; onOpen: (item: It
     onError: (error) => toast.error(error.message),
   });
   const deleteCategory = useMutation({
-    mutationFn: (id: string) => deleteLearningQuestionCategory(id),
+    mutationFn: (id: string) => {
+      assertLearningWritesAllowed();
+      return deleteLearningQuestionCategory(id);
+    },
     onSuccess: (_, id) => {
       if (activeCategoryId === id) setActiveCategoryId(null);
       refreshQuestions();
@@ -8298,6 +8434,7 @@ function TutorChannelsPanel({
   channelsSchema: unknown;
 }) {
   const queryClient = useQueryClient();
+  const assertLearningWritesAllowed = useLearningWriteGate();
   const catalog = useMemo(() => learningChannelSchemaCatalog(channelsSchema), [channelsSchema]);
   const channelEntries = useMemo(() => Object.entries(catalog.channels), [catalog.channels]);
   const [selectedBot, setSelectedBot] = useState("");
@@ -8342,6 +8479,7 @@ function TutorChannelsPanel({
 
   const saveChannels = useMutation({
     mutationFn: () => {
+      assertLearningWritesAllowed();
       if (!selectedBot) throw new Error("Choose a tutor first.");
       return updateLearningTutorAgent(selectedBot, { channels });
     },
@@ -8486,6 +8624,7 @@ function TutorChannelsPanel({
 
 function TutorProfilesPanel({ bots, souls }: { bots: Item[]; souls: Item[] }) {
   const queryClient = useQueryClient();
+  const assertLearningWritesAllowed = useLearningWriteGate();
   const [selectedBot, setSelectedBot] = useState("");
   const [activeFile, setActiveFile] = useState<TutorProfileFile>("SOUL.md");
   const [files, setFiles] = useState<Record<string, string>>({});
@@ -8593,6 +8732,7 @@ function TutorProfilesPanel({ bots, souls }: { bots: Item[]; souls: Item[] }) {
       mode: "file_only" | "update_template" | "new_template";
       templateName?: string;
     }) => {
+      assertLearningWritesAllowed();
       if (!selectedBot) throw new Error("Choose a tutor first.");
       if (activeFile === "SOUL.md") {
         const content = editor.trim();
@@ -8908,6 +9048,7 @@ function TutorProfilesPanel({ bots, souls }: { bots: Item[]; souls: Item[] }) {
 
 function TutorSoulsPanel({ souls }: { souls: Item[] }) {
   const queryClient = useQueryClient();
+  const assertLearningWritesAllowed = useLearningWriteGate();
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -8927,7 +9068,10 @@ function TutorSoulsPanel({ souls }: { souls: Item[] }) {
   };
 
   const createSoul = useMutation({
-    mutationFn: (payload: LearningJson) => createLearningTutorAgentSoul(payload),
+    mutationFn: (payload: LearningJson) => {
+      assertLearningWritesAllowed();
+      return createLearningTutorAgentSoul(payload);
+    },
     onSuccess: () => {
       toast.success("Soul template created");
       setCreating(false);
@@ -8939,8 +9083,10 @@ function TutorSoulsPanel({ souls }: { souls: Item[] }) {
   });
 
   const updateSoul = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: LearningJson }) =>
-      updateLearningTutorAgentSoul(id, payload),
+    mutationFn: ({ id, payload }: { id: string; payload: LearningJson }) => {
+      assertLearningWritesAllowed();
+      return updateLearningTutorAgentSoul(id, payload);
+    },
     onSuccess: () => {
       toast.success("Soul template saved");
       setEditingId(null);
@@ -8952,7 +9098,10 @@ function TutorSoulsPanel({ souls }: { souls: Item[] }) {
   });
 
   const deleteSoul = useMutation({
-    mutationFn: (id: string) => deleteLearningTutorAgentSoul(id),
+    mutationFn: (id: string) => {
+      assertLearningWritesAllowed();
+      return deleteLearningTutorAgentSoul(id);
+    },
     onSuccess: () => {
       toast.success("Soul template deleted");
       setPendingDeleteId(null);
@@ -9890,6 +10039,7 @@ function LearningDetailSheet({
   onResult: (value: unknown) => void;
 }) {
   const queryClient = useQueryClient();
+  const assertLearningWritesAllowed = useLearningWriteGate();
   const [draftTitle, setDraftTitle] = useState("");
   const [draftContent, setDraftContent] = useState("");
   const query = useQuery({
@@ -9958,6 +10108,7 @@ function LearningDetailSheet({
 
   const updateDocument = useMutation({
     mutationFn: () => {
+      assertLearningWritesAllowed();
       if (!selected) throw new Error("No document selected.");
       return updateLearningCoWriterDocument(selected.id, {
         title: draftTitle,
@@ -10133,6 +10284,7 @@ function TutorAgentChatPanel({
   onMessagesChange?: (messages: TutorChatMessage[]) => void;
   onTurnComplete?: () => void;
 }) {
+  const assertLearningWritesAllowed = useLearningWriteGate();
   const [messages, setMessages] = useState<TutorChatMessage[]>([]);
   const [thinking, setThinking] = useState<string[]>([]);
   const [input, setInput] = useState("");
@@ -10270,6 +10422,12 @@ function TutorAgentChatPanel({
   }, [agentId, onTurnComplete, socketAuthReady]);
 
   const sendMessage = () => {
+    try {
+      assertLearningWritesAllowed();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Learn writes are paused.");
+      return;
+    }
     const content = input.trim();
     const socket = socketRef.current;
     if (!content || !socket || socket.readyState !== WebSocket.OPEN) return;

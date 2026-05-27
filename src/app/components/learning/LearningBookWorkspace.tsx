@@ -563,6 +563,7 @@ export function LearningBookWorkspace({
   sessionItems,
   notebookItems,
   questionItems,
+  readOnly = false,
 }: {
   bookTopic: string;
   setBookTopic: (value: string) => void;
@@ -572,6 +573,7 @@ export function LearningBookWorkspace({
   sessionItems: Item[];
   notebookItems: Item[];
   questionItems: Item[];
+  readOnly?: boolean;
 }) {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
@@ -630,6 +632,10 @@ export function LearningBookWorkspace({
       await queryClient.invalidateQueries({ queryKey: [...learningKeys.books, "detail", selectedBookId] });
       await queryClient.invalidateQueries({ queryKey: [...learningKeys.books, "health", selectedBookId] });
     }
+  };
+  const assertBookWritesAllowed = () => {
+    if (!readOnly) return;
+    throw new Error("Learn is read-only from central product state.");
   };
 
   const stopDetailPolling = () => {
@@ -883,6 +889,7 @@ export function LearningBookWorkspace({
       afterSuccess?: (payload: unknown) => void | Promise<void>;
       retry?: () => void;
     }) => {
+      assertBookWritesAllowed();
       const bookId = selectedBookId || activeBook?.id || "";
       retryBookActionRef.current = retry || null;
       setBookTask({
@@ -935,6 +942,10 @@ export function LearningBookWorkspace({
   });
 
   const handleCreate = async () => {
+    if (readOnly) {
+      toast.error("Learn is read-only from central product state.");
+      return;
+    }
     const topic = bookTopic.trim();
     if (!topic) return;
     try {

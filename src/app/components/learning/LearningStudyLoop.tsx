@@ -139,6 +139,8 @@ export function LearningStudySetupPanel({
   onSave,
   onBuildPlan,
   notebooksCount,
+  readOnly = false,
+  readOnlyReason = "Learn is read-only.",
 }: {
   profile: LearningStudyProfile;
   savedProfile: LearningStudyProfile;
@@ -148,6 +150,8 @@ export function LearningStudySetupPanel({
   onSave: () => void;
   onBuildPlan: () => void;
   notebooksCount: number;
+  readOnly?: boolean;
+  readOnlyReason?: string;
 }) {
   const configured = studyProfileConfigured(savedProfile);
   const update = (field: keyof LearningStudyProfile, value: string) => {
@@ -180,6 +184,7 @@ export function LearningStudySetupPanel({
           size="sm"
           onClick={() => onOpenChange(true)}
           className="shrink-0"
+          title={readOnly ? readOnlyReason : undefined}
         >
           {configured ? "Edit" : "Start"}
         </V2Button>
@@ -213,6 +218,7 @@ export function LearningStudySetupPanel({
             <input
               value={profile.course}
               onChange={(event) => update("course", event.target.value)}
+              disabled={readOnly}
               placeholder="e.g. Calculus II"
               className="h-9 w-full border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg)] px-3 font-mono text-[12px] font-normal normal-case tracking-normal text-[var(--v2-ink-1)] outline-none focus:border-[var(--v2-accent)]"
             />
@@ -222,6 +228,7 @@ export function LearningStudySetupPanel({
             <input
               value={profile.examDate}
               onChange={(event) => update("examDate", event.target.value)}
+              disabled={readOnly}
               placeholder="e.g. 2026-06-15"
               className="h-9 w-full border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg)] px-3 font-mono text-[12px] font-normal normal-case tracking-normal text-[var(--v2-ink-1)] outline-none focus:border-[var(--v2-accent)]"
             />
@@ -231,6 +238,7 @@ export function LearningStudySetupPanel({
             <input
               value={profile.topics}
               onChange={(event) => update("topics", event.target.value)}
+              disabled={readOnly}
               placeholder="e.g. limits, derivatives, integrals, series"
               className="h-9 w-full border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg)] px-3 font-mono text-[12px] font-normal normal-case tracking-normal text-[var(--v2-ink-1)] outline-none focus:border-[var(--v2-accent)]"
             />
@@ -240,6 +248,7 @@ export function LearningStudySetupPanel({
             <input
               value={profile.goal}
               onChange={(event) => update("goal", event.target.value)}
+              disabled={readOnly}
               placeholder="e.g. score 90% and understand proofs"
               className="h-9 w-full border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg)] px-3 font-mono text-[12px] font-normal normal-case tracking-normal text-[var(--v2-ink-1)] outline-none focus:border-[var(--v2-accent)]"
             />
@@ -249,6 +258,7 @@ export function LearningStudySetupPanel({
             <input
               value={profile.weakTopics}
               onChange={(event) => update("weakTopics", event.target.value)}
+              disabled={readOnly}
               placeholder="e.g. series, integration by parts"
               className="h-9 w-full border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg)] px-3 font-mono text-[12px] font-normal normal-case tracking-normal text-[var(--v2-ink-1)] outline-none focus:border-[var(--v2-accent)]"
             />
@@ -259,6 +269,7 @@ export function LearningStudySetupPanel({
               <input
                 value={profile.weeklyHours}
                 onChange={(event) => update("weeklyHours", event.target.value)}
+                disabled={readOnly}
                 placeholder="e.g. 6"
                 className="h-9 w-full border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg)] px-3 font-mono text-[12px] font-normal normal-case tracking-normal text-[var(--v2-ink-1)] outline-none focus:border-[var(--v2-accent)]"
               />
@@ -268,6 +279,7 @@ export function LearningStudySetupPanel({
               <select
                 value={profile.difficulty}
                 onChange={(event) => update("difficulty", event.target.value)}
+                disabled={readOnly}
                 className="h-9 w-full border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg)] px-3 font-mono text-[12px] font-normal normal-case tracking-normal text-[var(--v2-ink-1)] outline-none focus:border-[var(--v2-accent)]"
               >
                 <option value="easy">Easy</option>
@@ -281,6 +293,7 @@ export function LearningStudySetupPanel({
               <select
                 value={profile.preferredStyle}
                 onChange={(event) => update("preferredStyle", event.target.value)}
+                disabled={readOnly}
                 className="h-9 w-full border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg)] px-3 font-mono text-[12px] font-normal normal-case tracking-normal text-[var(--v2-ink-1)] outline-none focus:border-[var(--v2-accent)]"
               >
                 <option value="balanced">Balanced</option>
@@ -300,10 +313,10 @@ export function LearningStudySetupPanel({
               : "Create a notebook to save important answers"}
           </span>
           <div className="flex items-center gap-2">
-            <V2Button size="sm" onClick={onSave}>
+            <V2Button size="sm" onClick={onSave} disabled={readOnly} title={readOnly ? readOnlyReason : undefined}>
               Save setup
             </V2Button>
-            <V2Button size="sm" variant="accent" onClick={onBuildPlan}>
+            <V2Button size="sm" variant="accent" onClick={onBuildPlan} disabled={readOnly} title={readOnly ? readOnlyReason : undefined}>
               <Sparkles className="size-3.5" />
               Build study plan
             </V2Button>
@@ -412,9 +425,11 @@ export function LearningQualityChecklist({ message }: { message: StudyActionMess
 export function LearningNextActionRow({
   onAction,
   canSave,
+  disabled = false,
 }: {
   onAction: (action: LearningStudyAction) => void;
   canSave: boolean;
+  disabled?: boolean;
 }) {
   const actions: Array<{
     id: LearningStudyAction;
@@ -443,7 +458,7 @@ export function LearningNextActionRow({
             key={action.id}
             size="sm"
             variant="ghost"
-            disabled={action.disabled}
+            disabled={disabled || action.disabled}
             onClick={() => onAction(action.id)}
           >
             <Icon className="size-3.5" />
@@ -462,6 +477,7 @@ export function LearningStudyPlanHome({
   onStartTask,
   onCompleteTask,
   completingTaskId = "",
+  readOnly = false,
 }: {
   plan: Item | null | undefined;
   onBuildPlan: () => void;
@@ -469,6 +485,7 @@ export function LearningStudyPlanHome({
   onStartTask: (task: Item) => void;
   onCompleteTask: (taskId: string) => void;
   completingTaskId?: string;
+  readOnly?: boolean;
 }) {
   const tasks = Array.isArray(plan?.tasks) ? (plan.tasks as Item[]) : [];
   const title = textOf(plan?.title, "Study plan");
@@ -496,7 +513,7 @@ export function LearningStudyPlanHome({
             <PenLine className="size-3.5" />
             Configure setup
           </V2Button>
-          <V2Button size="sm" variant="accent" onClick={onBuildPlan}>
+          <V2Button size="sm" variant="accent" onClick={onBuildPlan} disabled={readOnly}>
             <Sparkles className="size-3.5" />
             Build study plan
           </V2Button>
@@ -558,6 +575,7 @@ export function LearningStudyPlanHome({
                     <V2Button
                       size="sm"
                       onClick={() => onStartTask(task)}
+                      disabled={readOnly}
                     >
                       <Play className="size-3.5" />
                       Start
@@ -567,7 +585,7 @@ export function LearningStudyPlanHome({
                     <V2Button
                       size="sm"
                       variant="ghost"
-                      disabled={completingTaskId === taskId}
+                      disabled={readOnly || completingTaskId === taskId}
                       onClick={() => onCompleteTask(taskId)}
                     >
                       {completingTaskId === taskId ? (
@@ -590,7 +608,7 @@ export function LearningStudyPlanHome({
           <PenLine className="size-3.5" />
           Edit setup
         </V2Button>
-        <V2Button size="sm" variant="accent" onClick={onBuildPlan}>
+        <V2Button size="sm" variant="accent" onClick={onBuildPlan} disabled={readOnly}>
           <RefreshCw className="size-3.5" />
           Rebuild plan
         </V2Button>
