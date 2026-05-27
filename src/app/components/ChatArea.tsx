@@ -2294,6 +2294,7 @@ export function ChatArea() {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem(AGENT_INSPECTOR_OPEN_KEY) !== "false";
   });
+  const [agentMobileInspectorOpen, setAgentMobileInspectorOpen] = useState(false);
   const [agentFocusMode, setAgentFocusMode] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem(AGENT_FOCUS_MODE_KEY) === "true";
@@ -6229,6 +6230,17 @@ export function ChatArea() {
   }, [isAgentSurface]);
 
   useEffect(() => {
+    const handleOpenMobileInspector = () => {
+      if (!isAgentSurface) return;
+      setAgentMobileInspectorOpen(true);
+    };
+    window.addEventListener("zaki:open-agent-mobile-inspector", handleOpenMobileInspector);
+    return () => {
+      window.removeEventListener("zaki:open-agent-mobile-inspector", handleOpenMobileInspector);
+    };
+  }, [isAgentSurface]);
+
+  useEffect(() => {
     if (!isAgentSurface) return;
     const pendingTab = takePendingPowerUserTab();
     if (!pendingTab) return;
@@ -6278,6 +6290,20 @@ export function ChatArea() {
   }, [agentFocusMode, isAgentSurface]);
 
   useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.body.classList.toggle(
+      "zaki-agent-mobile-inspector-active",
+      isAgentSurface && agentMobileInspectorOpen && !agentFocusMode
+    );
+    if (!isAgentSurface) {
+      setAgentMobileInspectorOpen(false);
+    }
+    return () => {
+      document.body.classList.remove("zaki-agent-mobile-inspector-active");
+    };
+  }, [agentFocusMode, agentMobileInspectorOpen, isAgentSurface]);
+
+  useEffect(() => {
     if (!isAgentSurface) return;
     const togglePanel = () => setAgentInspectorOpen((open) => !open);
     const toggleFocus = () => setAgentFocusMode((enabled) => !enabled);
@@ -6293,6 +6319,7 @@ export function ChatArea() {
     };
     const handleEscapeFocus = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      setAgentMobileInspectorOpen(false);
       setAgentFocusMode(false);
     };
     window.addEventListener("keydown", handlePanelShortcut);
@@ -6889,6 +6916,37 @@ export function ChatArea() {
     );
   };
 
+  const renderAgentInspectorRail = () => isAgentSurface ? (
+    <AgentInspectorRail
+      mode={activeSessionMode ?? "execute"}
+      isStreaming={isStreaming}
+      lastChannel={activeSessionUi?.lastChannel ?? activeSessionRecord?.last_channel ?? null}
+      sandbox={sandboxState}
+      tasks={nullalisTaskItems}
+      transcriptEntries={nullalisTranscriptEntries}
+      narrationFrame={nullalisNarrationFrame}
+      approvalRequest={nullalisApprovalRequest}
+      artifactCount={agentArtifactEventCount}
+      contextGaugeData={nullalisContextGauge}
+      usageSummary={zakiUsageSummary}
+      quotaInfo={zakiBotQuotaInfo}
+      onOpenMemory={openAgentMemorySurface}
+      onOpenCron={() => setAgentCronOpen(true)}
+      onOpenBrowser={() => {
+        setPowerUserInitialTab("browser");
+        setPowerUserOpen(true);
+      }}
+      onOpenArtifacts={() => {
+        setPowerUserInitialTab("artifacts");
+        setPowerUserOpen(true);
+      }}
+      onOpenTrace={() => {
+        setPowerUserInitialTab("trace");
+        setPowerUserOpen(true);
+      }}
+    />
+  ) : null;
+
   return (
     <div
       ref={containerRef}
@@ -7356,37 +7414,48 @@ export function ChatArea() {
           />
           </section>
           {isAgentSurface && agentInspectorOpen && !agentFocusMode ? (
-            <AgentInspectorRail
-              mode={activeSessionMode ?? "execute"}
-              isStreaming={isStreaming}
-              lastChannel={activeSessionUi?.lastChannel ?? activeSessionRecord?.last_channel ?? null}
-              sandbox={sandboxState}
-              tasks={nullalisTaskItems}
-              transcriptEntries={nullalisTranscriptEntries}
-              narrationFrame={nullalisNarrationFrame}
-              approvalRequest={nullalisApprovalRequest}
-              artifactCount={agentArtifactEventCount}
-              contextGaugeData={nullalisContextGauge}
-              usageSummary={zakiUsageSummary}
-              quotaInfo={zakiBotQuotaInfo}
-              onOpenMemory={openAgentMemorySurface}
-              onOpenCron={() => setAgentCronOpen(true)}
-              onOpenBrowser={() => {
-                setPowerUserInitialTab("browser");
-                setPowerUserOpen(true);
-              }}
-              onOpenArtifacts={() => {
-                setPowerUserInitialTab("artifacts");
-                setPowerUserOpen(true);
-              }}
-              onOpenTrace={() => {
-                setPowerUserInitialTab("trace");
-                setPowerUserOpen(true);
-              }}
-            />
+            renderAgentInspectorRail()
           ) : null}
         </div>
       </div>
+
+      {isAgentSurface && agentMobileInspectorOpen && !agentFocusMode ? (
+        <div
+          className="zaki-agent-mobile-inspector"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t("agent.mobilePanel.ariaLabel", { defaultValue: "Agent panel" })}
+          data-testid="agent-mobile-inspector"
+        >
+          <button
+            type="button"
+            className="zaki-agent-mobile-inspector__backdrop"
+            onClick={() => setAgentMobileInspectorOpen(false)}
+            aria-label={t("agent.mobilePanel.closeBackdropAria", {
+              defaultValue: "Close agent panel",
+            })}
+          />
+          <section className="zaki-agent-mobile-inspector__sheet">
+            <div className="zaki-agent-mobile-inspector__handle" aria-hidden />
+            <header className="zaki-agent-mobile-inspector__head">
+              <div>
+                <span>{t("agent.mobilePanel.kicker", { defaultValue: "Agent" })}</span>
+                <strong>{t("agent.mobilePanel.title", { defaultValue: "Inspector" })}</strong>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAgentMobileInspectorOpen(false)}
+                aria-label={t("agent.mobilePanel.closeAria", {
+                  defaultValue: "Close agent panel",
+                })}
+              >
+                {t("agent.mobilePanel.close", { defaultValue: "Close" })}
+              </button>
+            </header>
+            {renderAgentInspectorRail()}
+          </section>
+        </div>
+      ) : null}
 
       {/* Modals */}
       <EditInstructionsModal

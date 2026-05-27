@@ -4140,6 +4140,130 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   display: none;
 }
 
+.zaki-agent-mobile-inspector {
+  display: none;
+}
+
+@media (max-width: 1279px) {
+  body.zaki-agent-mobile-inspector-active {
+    overflow: hidden;
+  }
+
+  .zaki-agent-mobile-inspector {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    display: block;
+    font-family: var(--v2-font-mono);
+  }
+
+  .zaki-agent-mobile-inspector__backdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: color-mix(in srgb, var(--v2-bg) 72%, transparent);
+    cursor: default;
+  }
+
+  .zaki-agent-mobile-inspector__sheet {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    max-height: min(78vh, 680px);
+    min-height: 420px;
+    flex-direction: column;
+    border-top: 1px solid var(--v2-hairline-strong);
+    background: var(--v2-bg);
+    color: var(--v2-ink-1);
+    box-shadow: 0 -1px 0 var(--v2-hairline);
+  }
+
+  .zaki-agent-mobile-inspector__handle {
+    width: 52px;
+    height: 1px;
+    margin: 10px auto 8px;
+    background: var(--v2-ink-4);
+  }
+
+  .zaki-agent-mobile-inspector__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 44px;
+    padding: 0 14px 10px;
+    border-bottom: 1px solid var(--v2-hairline);
+  }
+
+  .zaki-agent-mobile-inspector__head div {
+    display: grid;
+    gap: 3px;
+  }
+
+  .zaki-agent-mobile-inspector__head span {
+    color: var(--v2-ink-3);
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  .zaki-agent-mobile-inspector__head strong {
+    color: var(--v2-ink-1);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  .zaki-agent-mobile-inspector__head button {
+    min-height: 28px;
+    border: 1px solid var(--v2-hairline-strong);
+    background: transparent;
+    color: var(--v2-ink-2);
+    padding: 0 10px;
+    font-family: var(--v2-font-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .zaki-agent-mobile-inspector__head button:hover,
+  .zaki-agent-mobile-inspector__head button:focus-visible {
+    border-color: var(--v2-accent);
+    color: var(--v2-accent);
+  }
+
+  .zaki-agent-mobile-inspector .zaki-agent-inspector {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    border-left: 0;
+    background: var(--v2-bg);
+    overflow: hidden;
+  }
+
+  .zaki-agent-mobile-inspector .zaki-agent-inspector__tabs {
+    overflow-x: auto;
+  }
+
+  .zaki-agent-mobile-inspector .zaki-agent-inspector__tabs button {
+    min-width: 86px;
+    min-height: 38px;
+  }
+
+  .zaki-agent-mobile-inspector .zaki-agent-inspector__body {
+    padding: 10px 12px max(16px, env(safe-area-inset-bottom));
+  }
+}
+
 @media (min-width: 1280px) {
   .zaki-app-v2 .zaki-agent-v2--inspector {
     --zaki-agent-inspector-width: 380px;

@@ -22,11 +22,9 @@ export function MobileHeader() {
     threadId && threadId !== ZAKI_BOT_THREAD_ID
       ? threadId.replace(/[-_]+/g, " ")
       : t("mobileHeader.agentTitle", { defaultValue: "Direct chat" });
-  const openAgentControls = () => {
+  const openAgentPanel = () => {
     window.dispatchEvent(
-      new CustomEvent("zaki:open-power-user", {
-        detail: { tab: "controls" },
-      })
+      new CustomEvent("zaki:open-agent-mobile-inspector")
     );
   };
 
@@ -61,9 +59,9 @@ export function MobileHeader() {
           <button
             type="button"
             className="zaki-mobile-topbar__button"
-            onClick={openAgentControls}
-            aria-label={t("mobileHeader.openAgentControls", {
-              defaultValue: "Open agent controls",
+            onClick={openAgentPanel}
+            aria-label={t("mobileHeader.openAgentPanel", {
+              defaultValue: "Open agent panel",
             })}
           >
             <SlidersHorizontal className="size-5" />

@@ -576,6 +576,28 @@ describe("ChatArea Component", () => {
     });
   });
 
+  it("opens and closes the Agent mobile inspector from the mobile panel event", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+
+    await renderChatAreaAndWaitForEffects();
+
+    expect(screen.queryByTestId("agent-mobile-inspector")).not.toBeInTheDocument();
+    act(() => {
+      window.dispatchEvent(new CustomEvent("zaki:open-agent-mobile-inspector"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("agent-mobile-inspector")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "agent.mobilePanel.closeAria" }));
+    await waitFor(() => {
+      expect(screen.queryByTestId("agent-mobile-inspector")).not.toBeInTheDocument();
+    });
+  });
+
   it("opens a pending Agent controls tab after route handoff", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
