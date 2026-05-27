@@ -7264,6 +7264,10 @@ export function ChatArea() {
           progress={onboardingProgress}
           setStage={setOnboardingStage}
           gates={{
+            // The Agent workbench is an execution surface, not a tour
+            // surface. Generic composer onboarding blocks the V2 command
+            // center and belongs in dashboard/settings onboarding instead.
+            plusMenuEligible: false,
             compactionArmed: (() => {
               const g = nullalisContextGauge;
               if (!g || !g.tokenCount || !g.contextMax) return false;

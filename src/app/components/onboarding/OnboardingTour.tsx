@@ -50,6 +50,7 @@ const STAGE_CONFIGS: StageConfig[] = [
     defaultTitle: "More than just typing",
     defaultBody:
       "Tap the plus to schedule follow-ups, pin a memory to this thread, or switch ZAKI between Plan, Execute, and Review modes.",
+    gateKey: "plusMenuEligible",
   },
   {
     id: "compaction",
