@@ -141,6 +141,14 @@ import {
   probeDesignReady,
 } from "./design-client.js";
 import {
+  extractDesignProjectFromPayload,
+  markDesignProjectActive,
+  markDesignProjectDeleted,
+  markDesignProjectFailed,
+  recordDesignProjectAuditEvent,
+  upsertDesignProjectProvisioning,
+} from "./design-project-store.js";
+import {
   completeLearningStudyTask,
   createLearningStudyTask,
   createLearningStudyPlan,
@@ -12156,6 +12164,20 @@ function generateDesignProjectId() {
   return `design-${crypto.randomUUID()}`;
 }
 
+function isDesignProjectCreateRequest(method, targetPath) {
+  const normalizedMethod = String(method || "GET").toUpperCase();
+  const normalizedPath = String(targetPath || "").split("?")[0];
+  return normalizedMethod === "POST" && normalizedPath === "/api/projects";
+}
+
+function designProjectIdFromTargetPath(method, targetPath) {
+  const normalizedMethod = String(method || "GET").toUpperCase();
+  if (normalizedMethod !== "DELETE") return null;
+  const normalizedPath = String(targetPath || "").split("?")[0];
+  const match = /^\/api\/projects\/([^/]+)$/.exec(normalizedPath);
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
 function buildDesignPathBlockedPayload(reason, requestId) {
   return {
     code: "design_path_not_available",
@@ -12163,6 +12185,139 @@ function buildDesignPathBlockedPayload(reason, requestId) {
     message: reason,
     requestId,
   };
+}
+
+async function prepareDesignCentralProjectRecord(req, res, preparedBody) {
+  if (!preparedBody || typeof preparedBody !== "object" || Array.isArray(preparedBody)) return true;
+  const projectId = String(preparedBody.id || "").trim();
+  if (!projectId) return true;
+  const requestId = getOrCreateRequestId(req);
+  try {
+    await upsertDesignProjectProvisioning({
+      dbQuery,
+      userId: req.designUserId,
+      projectId,
+      name: preparedBody.name,
+      metadata: preparedBody.metadata,
+      requestId,
+    });
+    await recordDesignProjectAuditEvent({
+      dbQuery,
+      userId: req.designUserId,
+      projectId,
+      action: "project_create_requested",
+      status: "success",
+      requestId,
+    });
+    return true;
+  } catch (error) {
+    console.warn("[Design] Central project registry unavailable:", {
+      requestId,
+      projectId,
+      error: error?.message || "Design central registry unavailable.",
+    });
+    res.status(503).json({
+      code: "design_project_registry_unavailable",
+      error: "Design project registry is unavailable.",
+      message: "Design cannot safely create a project until central project ownership is recorded.",
+      retryable: true,
+      requestId,
+    });
+    return false;
+  }
+}
+
+async function recordDesignCentralMutationBestEffort(req, {
+  targetPath,
+  method,
+  upstreamStatus,
+  payload,
+}) {
+  if (upstreamStatus < 200 || upstreamStatus >= 300) return;
+  const requestId = getOrCreateRequestId(req);
+  const normalizedMethod = String(method || req.method || "GET").toUpperCase();
+  try {
+    if (isDesignProjectCreateRequest(normalizedMethod, targetPath)) {
+      const project = extractDesignProjectFromPayload(payload);
+      if (!project) return;
+      await markDesignProjectActive({
+        dbQuery,
+        userId: req.designUserId,
+        project: payload.project,
+        requestId,
+      });
+      await recordDesignProjectAuditEvent({
+        dbQuery,
+        userId: req.designUserId,
+        projectId: project.projectId,
+        action: "project_created",
+        status: "success",
+        requestId,
+      });
+      return;
+    }
+    const deletedProjectId = designProjectIdFromTargetPath(normalizedMethod, targetPath);
+    if (deletedProjectId) {
+      await markDesignProjectDeleted({
+        dbQuery,
+        userId: req.designUserId,
+        projectId: deletedProjectId,
+        requestId,
+      });
+      await recordDesignProjectAuditEvent({
+        dbQuery,
+        userId: req.designUserId,
+        projectId: deletedProjectId,
+        action: "project_deleted",
+        status: "success",
+        requestId,
+      });
+    }
+  } catch (error) {
+    console.warn("[Design] Central project mutation recording failed:", {
+      requestId,
+      targetPath,
+      error: error?.message || "Design central mutation recording failed.",
+    });
+  }
+}
+
+async function recordDesignCentralCreateFailureBestEffort(req, {
+  projectId,
+  targetPath,
+  upstreamStatus = null,
+  errorCode = null,
+}) {
+  const normalizedProjectId = String(projectId || "").trim();
+  if (!normalizedProjectId) return;
+  const requestId = getOrCreateRequestId(req);
+  try {
+    await markDesignProjectFailed({
+      dbQuery,
+      userId: req.designUserId,
+      projectId: normalizedProjectId,
+      requestId,
+    });
+    await recordDesignProjectAuditEvent({
+      dbQuery,
+      userId: req.designUserId,
+      projectId: normalizedProjectId,
+      action: "project_create_failed",
+      status: "failed",
+      requestId,
+      details: {
+        upstreamStatus,
+        targetPath,
+        errorCode,
+      },
+    });
+  } catch (error) {
+    console.warn("[Design] Central project create failure recording failed:", {
+      requestId,
+      projectId: normalizedProjectId,
+      error: error?.message || "Design central failure recording failed.",
+    });
+  }
 }
 
 function buildDesignMeterIdentity(req) {
@@ -12419,7 +12574,10 @@ async function requireDesignQuotaForIngress(req, res, next) {
   });
 }
 
-async function pipeDesignResponse(req, res, upstream) {
+async function pipeDesignResponse(req, res, upstream, {
+  targetPath = normalizeDesignProxyPath(req),
+  method = req.method,
+} = {}) {
   const requestId = getOrCreateRequestId(req);
   if (!upstream.ok) {
     const mapped = mapDesignUpstreamFailure(upstream.status, requestId);
@@ -12440,7 +12598,14 @@ async function pipeDesignResponse(req, res, upstream) {
     try {
       const raw = await upstream.text();
       const payload = raw ? JSON.parse(raw) : null;
-      res.json(sanitizeDesignUpstreamPayload(payload));
+      const sanitized = sanitizeDesignUpstreamPayload(payload);
+      await recordDesignCentralMutationBestEffort(req, {
+        targetPath,
+        method,
+        upstreamStatus: upstream.status,
+        payload: sanitized,
+      });
+      res.json(sanitized);
       return;
     } catch {
       // Fall back to streaming below.
@@ -12466,6 +12631,7 @@ async function proxyDesignRequest(req, res, targetPath, {
       durationMs: Date.now() - startedAtMs,
     });
   };
+  let preparedCreateProjectId = null;
 
   try {
     const contentType = String(req.headers?.["content-type"] || "").toLowerCase();
@@ -12473,19 +12639,29 @@ async function proxyDesignRequest(req, res, targetPath, {
       contentType.includes("application/json") &&
       req.body &&
       typeof req.body === "object";
+    const preparedJsonBody = hasParsedJsonBody
+      ? prepareDesignClientPayload({
+          method,
+          path: targetPath,
+          payload: req.body,
+          generateProjectId: generateDesignProjectId,
+        })
+      : undefined;
+    preparedCreateProjectId = isDesignProjectCreateRequest(method, targetPath)
+      ? String(preparedJsonBody?.id || "").trim() || null
+      : null;
+    if (
+      preparedCreateProjectId &&
+      !(await prepareDesignCentralProjectRecord(req, res, preparedJsonBody))
+    ) {
+      return;
+    }
     const upstream = hasParsedJsonBody || ["GET", "HEAD"].includes(String(method).toUpperCase())
       ? await fetchDesignPath({
           ...designClientOptions(req, label),
           path: targetPath,
           method,
-          body: hasParsedJsonBody
-            ? prepareDesignClientPayload({
-                method,
-                path: targetPath,
-                payload: req.body,
-                generateProjectId: generateDesignProjectId,
-              })
-            : undefined,
+          body: preparedJsonBody,
           contentType: hasParsedJsonBody ? "application/json" : null,
         })
       : await fetchDesignProxyPath({
@@ -12501,10 +12677,24 @@ async function proxyDesignRequest(req, res, targetPath, {
           label,
         });
     await recordReceipt(upstream.ok ? "success" : "failed");
-    await pipeDesignResponse(req, res, upstream);
+    if (preparedCreateProjectId && !upstream.ok) {
+      await recordDesignCentralCreateFailureBestEffort(req, {
+        projectId: preparedCreateProjectId,
+        targetPath,
+        upstreamStatus: upstream.status,
+      });
+    }
+    await pipeDesignResponse(req, res, upstream, { targetPath, method });
   } catch (error) {
     const requestId = getOrCreateRequestId(req);
     await recordReceipt("failed");
+    if (preparedCreateProjectId) {
+      await recordDesignCentralCreateFailureBestEffort(req, {
+        projectId: preparedCreateProjectId,
+        targetPath,
+        errorCode: "design_unavailable",
+      });
+    }
     console.error("[Design] Upstream proxy error:", {
       requestId,
       error: error?.message || "Design request failed.",

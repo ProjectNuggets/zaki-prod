@@ -307,6 +307,61 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_design_projects (
+      project_id TEXT PRIMARY KEY,
+      owner_user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'provisioning'
+        CHECK (status IN ('provisioning', 'active', 'deleted', 'failed')),
+      source TEXT NOT NULL DEFAULT 'zaki-design-engine',
+      metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      last_request_id TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      deleted_at TIMESTAMPTZ
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_design_projects_owner_status
+    ON zaki_design_projects(owner_user_id, status, updated_at DESC);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_design_project_roles (
+      project_id TEXT NOT NULL REFERENCES zaki_design_projects(project_id) ON DELETE CASCADE,
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      role TEXT NOT NULL CHECK (role IN ('owner', 'editor', 'viewer')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (project_id, user_id)
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_design_project_roles_user
+    ON zaki_design_project_roles(user_id, role, updated_at DESC);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_design_project_audit_events (
+      id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      user_id BIGINT REFERENCES zaki_users(id) ON DELETE SET NULL,
+      project_id TEXT,
+      action TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('success', 'failed')),
+      request_id TEXT,
+      details_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_design_project_audit_user_created
+    ON zaki_design_project_audit_events(user_id, created_at DESC);
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS access_code_orders (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
