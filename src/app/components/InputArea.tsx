@@ -1374,6 +1374,8 @@ export function InputArea({
                   isRtl ? "right-0" : "left-0"
                 )}
                 role="menu"
+                aria-label={t("input.menu.turnTools", { defaultValue: "Turn tools" })}
+                data-testid="zaki-composer-menu"
               >
                 <div className="zaki-composer-menu__head">
                   <span>

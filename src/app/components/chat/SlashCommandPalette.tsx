@@ -112,9 +112,9 @@ export function SlashCommandPalette({
         aria-selected={isHighlighted}
         aria-label={`${cmd.name}${cmd.args ? " " + cmd.args : ""} — ${cmd.description}`}
         className={cn(
-          "flex cursor-pointer items-baseline gap-2 rounded-zaki-md px-2.5 py-1.5 text-sm transition-colors",
+          "zaki-slash-palette__item flex cursor-pointer items-baseline gap-2 rounded-zaki-md px-2.5 py-1.5 text-sm transition-colors",
           isHighlighted
-            ? "bg-zaki-hover text-zaki-primary"
+            ? "is-highlighted bg-zaki-hover text-zaki-primary"
             : "text-zaki-primary hover:bg-zaki-hover",
         )}
         onMouseEnter={() => {
@@ -127,19 +127,19 @@ export function SlashCommandPalette({
           onSelect(cmd);
         }}
       >
-        <span className="font-mono font-semibold text-zaki-brand whitespace-nowrap">
+        <span className="zaki-slash-palette__cmd font-mono font-semibold text-zaki-brand whitespace-nowrap">
           {cmd.name}
         </span>
         {cmd.args ? (
-          <span className="font-mono text-xs text-zaki-muted whitespace-nowrap">
+          <span className="zaki-slash-palette__args font-mono text-xs text-zaki-muted whitespace-nowrap">
             {cmd.args}
           </span>
         ) : null}
-        <span className="flex-1 truncate text-zaki-secondary">
+        <span className="zaki-slash-palette__desc flex-1 truncate text-zaki-secondary">
           {cmd.description}
         </span>
         {cmd.isAlias ? (
-          <span className="text-2xs uppercase tracking-wide text-zaki-muted">
+          <span className="zaki-slash-palette__alias text-2xs uppercase tracking-wide text-zaki-muted">
             alias
           </span>
         ) : null}
@@ -151,19 +151,19 @@ export function SlashCommandPalette({
     <div
       ref={containerRef}
       className={cn(
-        "absolute bottom-full mb-2 z-40 w-full max-w-xl rounded-zaki-lg border border-zaki-strong bg-zaki-raised font-body shadow-[0px_16px_36px_rgba(15,15,15,0.12)] dark:bg-[#1a1714]",
+        "zaki-slash-palette absolute bottom-full mb-2 z-40 w-full max-w-xl rounded-zaki-lg border border-zaki-strong bg-zaki-raised font-body shadow-[0px_16px_36px_rgba(15,15,15,0.12)] dark:bg-[#1a1714]",
         isRtl ? "right-0" : "left-0",
       )}
       dir={isRtl ? "rtl" : "ltr"}
       data-testid="slash-command-palette"
     >
-      <div className="flex items-center justify-between border-b border-zaki-subtle px-3 py-1.5">
+      <div className="zaki-slash-palette__head flex items-center justify-between border-b border-zaki-subtle px-3 py-1.5">
         <span className="text-2xs uppercase tracking-wide text-zaki-muted">
           Slash commands
         </span>
         <button
           type="button"
-          className="text-2xs text-zaki-muted hover:text-zaki-primary transition-colors"
+          className="zaki-slash-palette__toggle text-2xs text-zaki-muted hover:text-zaki-primary transition-colors"
           onMouseDown={(event) => {
             event.preventDefault();
             onToggleAliases();
@@ -179,14 +179,14 @@ export function SlashCommandPalette({
         id={listboxId}
         role="listbox"
         aria-label="Slash command suggestions"
-        className="max-h-[320px] overflow-y-auto py-1 px-1 zaki-scrollbar-fade"
+        className="zaki-slash-palette__list max-h-[320px] overflow-y-auto py-1 px-1 zaki-scrollbar-fade"
       >
         {flatOrder.length === 0 ? (
           <li
             role="option"
             aria-disabled="true"
             aria-selected={false}
-            className="px-2.5 py-2 text-sm text-zaki-muted"
+            className="zaki-slash-palette__empty px-2.5 py-2 text-sm text-zaki-muted"
           >
             No matching commands
           </li>
@@ -202,7 +202,7 @@ export function SlashCommandPalette({
               >
                 <div
                   id={headingId}
-                  className="px-2.5 py-1 text-2xs uppercase tracking-wide text-zaki-muted"
+                  className="zaki-slash-palette__group px-2.5 py-1 text-2xs uppercase tracking-wide text-zaki-muted"
                 >
                   {group.category.label}
                 </div>
@@ -218,7 +218,7 @@ export function SlashCommandPalette({
       </ul>
 
       {helpTarget?.extendedHelp ? (
-        <div className="border-t border-zaki-subtle px-3 py-2 text-xs text-zaki-secondary">
+        <div className="zaki-slash-palette__help border-t border-zaki-subtle px-3 py-2 text-xs text-zaki-secondary">
           <span className="font-mono font-semibold text-zaki-primary">
             {helpTarget.name}
           </span>{" "}

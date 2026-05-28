@@ -4589,13 +4589,15 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   bottom: calc(100% + 8px);
   z-index: 60;
   width: min(340px, calc(100vw - 32px));
+  max-height: min(360px, calc(100vh - 180px));
   border: 1px solid var(--v2-hairline-strong);
   border-radius: 0 !important;
   background: var(--v2-bg-raised);
-  box-shadow: var(--v2-elev-3) !important;
+  box-shadow: none !important;
   color: var(--v2-ink-1);
   font-family: var(--v2-font-mono);
-  overflow: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-composer-menu__head {
@@ -4749,6 +4751,111 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   line-height: 1;
   padding: 0 10px;
   text-transform: uppercase;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-slash-palette {
+  width: min(560px, calc(100vw - 32px));
+  max-width: none;
+  border: 1px solid var(--v2-hairline-strong) !important;
+  border-radius: 0 !important;
+  background: var(--v2-bg-raised) !important;
+  box-shadow: none !important;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  overflow: hidden;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-slash-palette__head {
+  min-height: 32px;
+  border-bottom: 1px solid var(--v2-hairline);
+  padding: 0 10px;
+  color: var(--v2-ink-3);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-slash-palette__toggle {
+  border: 0;
+  background: transparent;
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  padding: 0;
+  text-transform: lowercase;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-slash-palette__toggle:hover,
+.zaki-app-v2 .zaki-agent-v2 .zaki-slash-palette__toggle:focus-visible {
+  color: var(--v2-ink-1);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-slash-palette__list {
+  max-height: min(320px, calc(100vh - 210px));
+  padding: 4px;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-slash-palette__group {
+  padding: 8px 8px 5px;
+  color: var(--v2-ink-4);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-slash-palette__item {
+  display: grid;
+  min-height: 30px;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 0 !important;
+  padding: 6px 8px;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-slash-palette__item:hover,
+.zaki-app-v2 .zaki-agent-v2 .zaki-slash-palette__item.is-highlighted,
+.zaki-app-v2 .zaki-agent-v2 .zaki-slash-palette__item[aria-selected="true"] {
+  border-color: var(--v2-hairline);
+  background: var(--v2-bg-sunken) !important;
+  color: var(--v2-ink-1);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-slash-palette__cmd {
+  color: var(--v2-accent) !important;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-slash-palette__args,
+.zaki-app-v2 .zaki-agent-v2 .zaki-slash-palette__alias {
+  color: var(--v2-ink-4) !important;
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-slash-palette__desc {
+  min-width: 0;
+  color: var(--v2-ink-3) !important;
+  font-family: var(--v2-font-prose);
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-slash-palette__empty,
+.zaki-app-v2 .zaki-agent-v2 .zaki-slash-palette__help {
+  border-top-color: var(--v2-hairline);
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-prose);
+  font-size: 12px;
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-input-row button[type="submit"],
