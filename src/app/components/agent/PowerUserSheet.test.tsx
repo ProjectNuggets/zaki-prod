@@ -7,6 +7,7 @@ import type { NullalisApprovalRequest } from "@/app/components/chat/BotStatusRai
 
 jest.mock("@/lib/api", () => ({
   exportAgentArtifact: jest.fn(),
+  fetchAgentTrace: jest.fn(),
   fetchAgentDiagnostics: jest.fn(),
   fetchUsageQuota: jest.fn(),
   fetchContextDiagnostics: jest.fn(),
@@ -94,6 +95,7 @@ const fetchContextDiagnosticsMock = jest.requireMock("@/lib/api")
 const fetchMemoryDoctorMock = jest.requireMock("@/lib/api")
   .fetchMemoryDoctor as jest.Mock;
 const exportAgentArtifactMock = jest.requireMock("@/lib/api").exportAgentArtifact as jest.Mock;
+const fetchAgentTraceMock = jest.requireMock("@/lib/api").fetchAgentTrace as jest.Mock;
 const listAgentArtifactsMock = jest.requireMock("@/lib/api").listAgentArtifacts as jest.Mock;
 const listAgentTracesMock = jest.requireMock("@/lib/api").listAgentTraces as jest.Mock;
 const shareAgentArtifactMock = jest.requireMock("@/lib/api").shareAgentArtifact as jest.Mock;
@@ -125,6 +127,10 @@ beforeEach(() => {
   exportAgentArtifactMock.mockResolvedValue({
     response: { ok: true },
     data: { url: "https://download.local/artifact.pdf" },
+  });
+  fetchAgentTraceMock.mockResolvedValue({
+    response: { ok: true },
+    data: { run_id: "run-1", events: [] },
   });
   listAgentTracesMock.mockResolvedValue({
     response: { ok: true },
@@ -323,6 +329,52 @@ describe("PowerUserSheet", () => {
     });
     await waitFor(() => {
       expect(shareAgentTraceMock).toHaveBeenCalledWith("run-1");
+    });
+  });
+
+  it("opens trace details from the runtime trace endpoint", async () => {
+    listAgentTracesMock.mockResolvedValueOnce({
+      response: { ok: true },
+      data: {
+        traces: [
+          {
+            run_id: "run-detail",
+            status: "completed",
+            started_at: "2026-05-25T10:00:00Z",
+          },
+        ],
+      },
+    });
+    fetchAgentTraceMock.mockResolvedValueOnce({
+      response: { ok: true },
+      data: {
+        run_id: "run-detail",
+        events: [
+          {
+            type: "tool_start",
+            message: "Opening browser lane",
+            timestamp: "2026-05-25T10:00:02Z",
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      render(<PowerUserSheet isOpen onClose={() => {}} initialTab="trace" />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("run-detail")).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("power-user-trace-details-run-detail"));
+    });
+
+    await waitFor(() => {
+      expect(fetchAgentTraceMock).toHaveBeenCalledWith("run-detail");
+      expect(screen.getByTestId("power-user-trace-detail")).toHaveTextContent("tool_start");
+      expect(screen.getByText("Opening browser lane")).toBeInTheDocument();
     });
   });
 

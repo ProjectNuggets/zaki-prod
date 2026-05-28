@@ -190,6 +190,31 @@ describe("AgentInspectorRail", () => {
     expect(onOpenArtifacts).toHaveBeenCalledTimes(1);
   });
 
+  it("renders stored artifacts from the backend ledger", () => {
+    const onOpenArtifacts = jest.fn();
+    renderRail({
+      onOpenArtifacts,
+      artifacts: [
+        {
+          id: "artifact-backend-1",
+          title: "Stored execution report",
+          type: "markdown",
+          version: 4,
+          updatedAt: 1_800_000_000_000,
+        },
+      ],
+    });
+
+    expect(screen.getByRole("tab", { name: /Artifacts/i })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(screen.getAllByText("Stored execution report").length).toBeGreaterThan(0);
+    expect(screen.getByText("Stored artifact from the backend ledger.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open artifacts manager" }));
+    expect(onOpenArtifacts).toHaveBeenCalledTimes(1);
+  });
+
   it("auto-routes pending approvals to the Plan panel before manual tab selection", () => {
     renderRail({
       isStreaming: true,
@@ -280,6 +305,45 @@ describe("AgentInspectorRail", () => {
     expect(screen.getByText("schedules")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open schedule manager" }));
     expect(onOpenCron).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders backend task and cron ledgers as the durable source of record", () => {
+    renderRail({
+      tasks: [
+        {
+          taskId: "backend-task-1",
+          status: "queued",
+          description: "Queued backend task",
+          updatedAt: 1,
+        },
+      ],
+      tasksError: "stale_cache",
+      cronJobs: [
+        {
+          id: "cron-1",
+          name: "Weekly investor scan",
+          schedule: "0 9 * * 1",
+          prompt: "Review market signals every Monday.",
+          status: "queued",
+          enabled: true,
+          paused: false,
+          nextRunAt: 1_800_000_000_000,
+          lastRunAt: null,
+          lastStatus: null,
+          failureCount: 0,
+        },
+      ],
+    });
+
+    expect(screen.getByText("Queued backend task")).toBeInTheDocument();
+    expect(screen.getByText(/Task ledger unavailable: stale_cache/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: /Cron/i }));
+
+    expect(screen.getByText("Weekly investor scan")).toBeInTheDocument();
+    expect(screen.getByText(/0 9 \* \* 1/)).toBeInTheDocument();
+    expect(screen.getByText("Review market signals every Monday.")).toBeInTheDocument();
+    expect(screen.getByText(/backend ledger/)).toBeInTheDocument();
   });
 
   it("renders V6 plan progress and delegated subagent work", () => {

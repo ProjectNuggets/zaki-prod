@@ -48,6 +48,28 @@ export type AgentInspectorTabRequest = {
   id: number;
 };
 
+export type AgentInspectorCronJob = {
+  id: string;
+  name: string;
+  schedule: string | null;
+  prompt: string | null;
+  status: string | null;
+  enabled: boolean;
+  paused: boolean;
+  nextRunAt: number | null;
+  lastRunAt: number | null;
+  lastStatus: string | null;
+  failureCount: number;
+};
+
+export type AgentInspectorArtifact = {
+  id: string;
+  title: string;
+  type: string | null;
+  version: string | number | null;
+  updatedAt: number | null;
+};
+
 const APP_BROWSER_TOOLS = ["web_fetch", "web_search", "playwright_*"] as const;
 const EXTENSION_BROWSER_TOOLS = [
   "extension_navigate",
@@ -68,6 +90,14 @@ export type AgentInspectorRailProps = {
   lastChannel?: string | null;
   sandbox: ZakiRuntimeSandbox | null;
   tasks: NullalisTaskItem[];
+  tasksLoading?: boolean;
+  tasksError?: string | null;
+  cronJobs?: AgentInspectorCronJob[];
+  cronLoading?: boolean;
+  cronError?: string | null;
+  artifacts?: AgentInspectorArtifact[];
+  artifactsLoading?: boolean;
+  artifactsError?: string | null;
   transcriptEntries: NullalisTranscriptEntry[];
   narrationFrame: NullalisNarrationFrame | null;
   approvalRequest: NullalisApprovalRequest | null;
@@ -174,6 +204,21 @@ function formatClock(timestamp: number): string {
   }
 }
 
+function formatCalendarStamp(timestamp?: number | null): string {
+  if (!timestamp) return "not scheduled";
+  try {
+    return new Intl.DateTimeFormat("en-GB", {
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date(timestamp));
+  } catch {
+    return "not scheduled";
+  }
+}
+
 function formatDurationShort(ms?: number | null): string {
   if (typeof ms !== "number" || !Number.isFinite(ms)) return "--";
   if (ms < 1000) return `${Math.max(1, Math.round(ms))}ms`;
@@ -231,6 +276,28 @@ function eventHasAppBrowserSignal(event: {
   );
 }
 
+function cronJobHealth(job: AgentInspectorCronJob) {
+  if (job.paused || !job.enabled) return "paused";
+  if (job.failureCount > 0 || /\b(failed|error|lost|timed_out)\b/i.test(job.lastStatus || "")) {
+    return "attention";
+  }
+  if (/\brunning\b/i.test(job.status || "")) return "running";
+  return "scheduled";
+}
+
+function cronJobHealthLabel(job: AgentInspectorCronJob) {
+  const health = cronJobHealth(job);
+  if (health === "attention") {
+    return job.failureCount > 0 ? `${job.failureCount} failures` : "attention";
+  }
+  return health;
+}
+
+function artifactVersionLabel(artifact: AgentInspectorArtifact, index: number) {
+  const version = artifact.version != null ? `v${artifact.version}` : `v${index + 1}`;
+  return `${version} · ${formatCalendarStamp(artifact.updatedAt)}`;
+}
+
 function PanelActionButton({
   children,
   onClick,
@@ -259,6 +326,14 @@ export function AgentInspectorRail({
   lastChannel = null,
   sandbox,
   tasks,
+  tasksLoading = false,
+  tasksError = null,
+  cronJobs = [],
+  cronLoading = false,
+  cronError = null,
+  artifacts = [],
+  artifactsLoading = false,
+  artifactsError = null,
   transcriptEntries,
   narrationFrame,
   approvalRequest,
@@ -288,8 +363,11 @@ export function AgentInspectorRail({
   const recentTrace = panelModel.trace;
   const sourceEntries = panelModel.sources;
   const artifactEntries = panelModel.artifacts;
+  const primaryBackendArtifact = artifacts[0] ?? null;
+  const artifactSourceCount = artifactCount || artifactEntries.length || artifacts.length;
   const browserEntries = panelModel.browser;
   const cronEntries = panelModel.cron;
+  const cronSourceCount = cronJobs.length || cronEntries.length;
   const sortedTasks = useMemo(
     () => [...tasks].sort((a, b) => a.updatedAt - b.updatedAt),
     [tasks]
@@ -364,7 +442,7 @@ export function AgentInspectorRail({
       setTab("plan");
       return;
     }
-    if (artifactCount || artifactEntries.length) {
+    if (artifactSourceCount) {
       setTab("artifacts");
       return;
     }
@@ -372,7 +450,7 @@ export function AgentInspectorRail({
       setTab("browser");
       return;
     }
-    if (cronEntries.length) {
+    if (cronSourceCount) {
       setTab("cron");
       return;
     }
@@ -381,10 +459,9 @@ export function AgentInspectorRail({
     }
   }, [
     approvalRequest,
-    artifactCount,
-    artifactEntries.length,
+    artifactSourceCount,
     browserActivity,
-    cronEntries.length,
+    cronSourceCount,
     manualTabSelected,
     sourceEntries.length,
     sortedTasks.length,
@@ -418,12 +495,12 @@ export function AgentInspectorRail({
         onChange={handleTabChange}
         options={[
           { id: "plan", label: "Plan", count: approvalRequest ? "!" : sortedTasks.length || undefined },
-          { id: "cron", label: "Cron", count: cronEntries.length || undefined },
+          { id: "cron", label: "Cron", count: cronSourceCount || undefined },
           { id: "sources", label: "Sources", count: sourceEntries.length || undefined },
           {
             id: "artifacts",
             label: "Artifacts",
-            count: artifactCount || artifactEntries.length || undefined,
+            count: artifactSourceCount || undefined,
           },
           {
             id: "browser",
@@ -536,8 +613,18 @@ export function AgentInspectorRail({
                 ))}
               </ol>
             ) : null}
+            {tasksLoading && !sortedTasks.length ? (
+              <div className="v2-empty-line">Loading task ledger...</div>
+            ) : null}
+            {tasksError ? (
+              <div className="v2-empty-line">Task ledger unavailable: {tasksError}</div>
+            ) : null}
             <div className="zaki-agent-inspector__plan-foot">
-              <span>{isStreaming ? "Live plan updates are attached to this run." : "Plan state is scoped to this session."}</span>
+              <span>
+                {isStreaming
+                  ? "Live plan updates are attached to this run."
+                  : "Backend task ledger and live run events are scoped to this session."}
+              </span>
             </div>
           </V2Panel>
         ) : null}
@@ -549,18 +636,63 @@ export function AgentInspectorRail({
                 <div className="zaki-agent-inspector__cron-title">schedules</div>
                 <div className="zaki-agent-inspector__cron-meta">
                   <span>
-                    <span className={cn("dot", cronEntries.length || isStreaming ? "running" : "")} aria-hidden />
-                    {cronEntries.length
-                      ? `${cronEntries.length} linked`
+                    <span className={cn("dot", cronSourceCount || isStreaming ? "running" : "")} aria-hidden />
+                    {cronJobs.length
+                      ? `${cronJobs.length} scheduled`
+                      : cronEntries.length
+                        ? `${cronEntries.length} linked`
                       : isStreaming
                         ? "foreground run active"
                         : "none active"}
                   </span>
                   <span className="sep">.</span>
-                  <span>session scoped</span>
+                  <span>{cronJobs.length ? "backend ledger" : "session scoped"}</span>
                 </div>
               </div>
             </div>
+            {cronLoading && !cronJobs.length ? (
+              <div className="v2-empty-line">Loading schedule ledger...</div>
+            ) : null}
+            {cronError ? (
+              <div className="v2-empty-line">Schedule ledger unavailable: {cronError}</div>
+            ) : null}
+            {cronJobs.length ? (
+              <ol className="zaki-agent-inspector__cron-list">
+                {cronJobs.map((job) => {
+                  const health = cronJobHealth(job);
+                  return (
+                    <li
+                      key={job.id}
+                      className={cn(
+                        "zaki-agent-inspector__cron-row",
+                        health === "running" ? "is-running" : "is-scheduled"
+                      )}
+                    >
+                      <div className="zaki-agent-inspector__cron-status" aria-hidden>
+                        <span className={health === "running" ? "dot" : "ring"} />
+                      </div>
+                      <div className="zaki-agent-inspector__cron-main">
+                        <div className="zaki-agent-inspector__cron-name">{job.name}</div>
+                        <div className="zaki-agent-inspector__cron-sched">
+                          {job.schedule || "schedule pending"}
+                          {" · "}
+                          {cronJobHealthLabel(job)}
+                        </div>
+                        {job.prompt ? (
+                          <div className="zaki-agent-inspector__cron-sched">
+                            {job.prompt}
+                          </div>
+                        ) : null}
+                        <div className="zaki-agent-inspector__cron-sched">
+                          next {formatCalendarStamp(job.nextRunAt)} · last{" "}
+                          {formatCalendarStamp(job.lastRunAt)}
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            ) : null}
             {cronEntries.length ? (
               <ol className="zaki-agent-inspector__cron-list">
                 {cronEntries.map((event) => (
@@ -584,11 +716,11 @@ export function AgentInspectorRail({
                   </li>
                 ))}
               </ol>
-            ) : (
+            ) : !cronJobs.length && !cronLoading ? (
               <div className="v2-empty-line">
                 No linked cron jobs or autonomous follow-ups in this session.
               </div>
-            )}
+            ) : null}
             <PanelActionButton onClick={onOpenCron} ariaLabel="Open schedule manager">
               <CalendarClock className="size-4" aria-hidden />
               New schedule
@@ -656,39 +788,64 @@ export function AgentInspectorRail({
         {tab === "artifacts" ? (
           <V2Panel aria-label="Artifacts" className="zaki-agent-inspector__pane">
             <div className="zaki-agent-inspector__artifact-versions">
-              {(artifactEntries.length ? artifactEntries : primaryArtifact ? [primaryArtifact] : [])
+              {(artifactEntries.length
+                ? artifactEntries
+                : artifacts.length
+                  ? artifacts
+                  : primaryArtifact
+                    ? [primaryArtifact]
+                    : [])
                 .slice(0, 3)
                 .map((event, index) => (
                   <span
                     key={event.id}
                     className={cn("version", index === 0 && "is-active")}
                   >
-                    v{artifactEntries.length - index || 1} · {index === 0 && isStreaming ? "live" : formatClock(event.timestamp)}
+                    {"timestamp" in event
+                      ? `v${artifactEntries.length - index || 1} · ${
+                          index === 0 && isStreaming ? "live" : formatClock(event.timestamp)
+                        }`
+                      : artifactVersionLabel(event, index)}
                   </span>
                 ))}
-              {!artifactEntries.length ? (
+              {!artifactEntries.length && !artifacts.length ? (
                 <span className="version is-active">v0 · waiting</span>
               ) : null}
-              <span className="diff">{artifactCount || artifactEntries.length || 0} events</span>
+              <span className="diff">{artifactSourceCount || 0} records</span>
             </div>
             <article className="zaki-agent-inspector__artifact-doc">
               <header className="zaki-agent-inspector__artifact-head">
-                <div className="tag">output · {primaryArtifact ? "captured" : "idle"}</div>
+                <div className="tag">
+                  output · {primaryArtifact ? "captured" : primaryBackendArtifact ? "stored" : "idle"}
+                </div>
                 <div className="title">
-                  {primaryArtifact?.files[0] || primaryArtifact?.label || "No artifact activity"}
+                  {primaryArtifact?.files[0] ||
+                    primaryArtifact?.label ||
+                    primaryBackendArtifact?.title ||
+                    "No artifact activity"}
                 </div>
                 <div className="sub">
-                  {primaryArtifact?.meta || "Documents, canvases, exports, and generated files"}
+                  {primaryArtifact?.meta ||
+                    primaryBackendArtifact?.type ||
+                    "Documents, canvases, exports, and generated files"}
                 </div>
               </header>
               <div className="zaki-agent-inspector__artifact-body">
                 {primaryArtifact ? (
                   <p>{primaryArtifact.summary}</p>
+                ) : primaryBackendArtifact ? (
+                  <p>Stored artifact from the backend ledger.</p>
                 ) : (
                   <p>Generated outputs will appear here as the agent creates them.</p>
                 )}
               </div>
             </article>
+            {artifactsLoading && !artifacts.length ? (
+              <div className="v2-empty-line">Loading artifact ledger...</div>
+            ) : null}
+            {artifactsError ? (
+              <div className="v2-empty-line">Artifact ledger unavailable: {artifactsError}</div>
+            ) : null}
             {artifactEntries.length ? (
               <ol className="zaki-agent-inspector__event-list">
                 {artifactEntries.map((event) => (
@@ -698,6 +855,20 @@ export function AgentInspectorRail({
                       <strong>{event.label}</strong>
                       <span>{event.summary}</span>
                       {event.files.length ? <small>{event.files.join(", ")}</small> : event.meta ? <small>{event.meta}</small> : null}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+            {!artifactEntries.length && artifacts.length ? (
+              <ol className="zaki-agent-inspector__event-list">
+                {artifacts.slice(0, 5).map((artifact) => (
+                  <li key={artifact.id}>
+                    <Boxes className="zaki-agent-inspector__event-icon" aria-hidden />
+                    <div>
+                      <strong>{artifact.title}</strong>
+                      <span>{artifact.type || "artifact"}</span>
+                      <small>{artifactVersionLabel(artifact, 0)}</small>
                     </div>
                   </li>
                 ))}

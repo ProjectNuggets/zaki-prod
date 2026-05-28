@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { SheetShell } from "@/app/components/ui/zaki";
 import {
   exportAgentArtifact,
+  fetchAgentTrace,
   fetchContextDiagnostics,
   fetchAgentDiagnostics,
   fetchMemoryDoctor,
@@ -201,6 +202,28 @@ function getTraceId(trace: AgentTrace): string {
   return trace.run_id || trace.id || "";
 }
 
+function getTraceEventType(event: Record<string, unknown>, index: number): string {
+  const candidates = [event.type, event.event, event.kind, event.phase, event.name, event.tool];
+  const match = candidates.find((value) => typeof value === "string" && value.trim());
+  return typeof match === "string" ? match : `event ${index + 1}`;
+}
+
+function getTraceEventPreview(event: Record<string, unknown>): string {
+  const candidates = [
+    event.summary,
+    event.message,
+    event.text,
+    event.content,
+    event.delta,
+    event.output_preview,
+    event.outputPreview,
+    event.error,
+  ];
+  const match = candidates.find((value) => typeof value === "string" && value.trim());
+  if (typeof match !== "string") return "No preview";
+  return match.length > 220 ? `${match.slice(0, 220)}...` : match;
+}
+
 function getPublicShareUrl(item: Record<string, unknown>): string | null {
   const candidates = [
     item.public_url,
@@ -319,10 +342,23 @@ export function PowerUserSheet({
   const [traces, setTraces] = useState<AgentTrace[] | null>(null);
   const [tracesLoading, setTracesLoading] = useState(false);
   const [tracesError, setTracesError] = useState<string | null>(null);
+  const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
+  const [traceDetail, setTraceDetail] = useState<AgentTrace | null>(null);
+  const [traceDetailLoading, setTraceDetailLoading] = useState(false);
+  const [traceDetailError, setTraceDetailError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) setTab(initialTab);
   }, [isOpen, initialTab]);
+
+  useEffect(() => {
+    if (!isOpen || tab !== "trace") {
+      setSelectedTraceId(null);
+      setTraceDetail(null);
+      setTraceDetailError(null);
+      setTraceDetailLoading(false);
+    }
+  }, [isOpen, tab]);
 
   useEffect(() => {
     if (!isOpen || tab !== "context") return;
@@ -1198,6 +1234,32 @@ export function PowerUserSheet({
     }
   };
 
+  const handleTraceDetails = async (trace: AgentTrace) => {
+    const traceId = getTraceId(trace);
+    if (!traceId) return;
+    if (selectedTraceId === traceId && traceDetail) {
+      setSelectedTraceId(null);
+      setTraceDetail(null);
+      setTraceDetailError(null);
+      return;
+    }
+    setSelectedTraceId(traceId);
+    setTraceDetail(null);
+    setTraceDetailError(null);
+    setTraceDetailLoading(true);
+    try {
+      const { response, data } = await fetchAgentTrace(traceId);
+      if (!response.ok) {
+        throw new Error(String((data as { error?: unknown })?.error || "trace_unavailable"));
+      }
+      setTraceDetail(data);
+    } catch {
+      setTraceDetailError("trace_unavailable");
+    } finally {
+      setTraceDetailLoading(false);
+    }
+  };
+
   const renderBrowser = () => {
     const controlPlane = agentDiagnostics?.upstreamControlPlane || null;
     const extensionEnabled =
@@ -1483,6 +1545,16 @@ export function PowerUserSheet({
               </button>
               <button
                 type="button"
+                disabled={!traceId || traceDetailLoading}
+                onClick={() => void handleTraceDetails(trace)}
+                data-testid={`power-user-trace-details-${traceId || index}`}
+                className="inline-flex items-center gap-1.5 rounded-zaki-md border border-zaki-subtle px-2.5 py-1.5 text-xs font-semibold text-zaki-primary hover:bg-zaki-hover disabled:opacity-50"
+              >
+                <Activity className="size-3.5" aria-hidden />
+                Details
+              </button>
+              <button
+                type="button"
                 disabled={!traceId || !shareUrl || busyId === `trace-revoke:${traceId}`}
                 onClick={() => void handleTraceRevoke(trace)}
                 data-testid={`power-user-trace-revoke-${traceId || index}`}
@@ -1492,6 +1564,56 @@ export function PowerUserSheet({
                 {t("zakiControls.powerUser.trace.revoke")}
               </button>
             </div>
+            {selectedTraceId === traceId ? (
+              <div
+                className="mt-3 rounded-zaki-md border border-zaki-subtle bg-zaki-raised p-3 dark:bg-black/20"
+                data-testid="power-user-trace-detail"
+              >
+                {traceDetailLoading ? (
+                  <div className="text-xs text-zaki-muted">Loading trace events...</div>
+                ) : traceDetailError ? (
+                  <div className="text-xs text-rose-700 dark:text-rose-200">
+                    Trace detail unavailable.
+                  </div>
+                ) : (
+                  (() => {
+                    const events = Array.isArray(traceDetail?.events) ? traceDetail.events : [];
+                    if (!events.length) {
+                      return <div className="text-xs text-zaki-muted">No trace events recorded.</div>;
+                    }
+                    return (
+                      <ol className="space-y-2">
+                        {events.slice(0, 24).map((event, eventIndex) => {
+                          const record = event as Record<string, unknown>;
+                          return (
+                            <li
+                              key={`${traceId}-event-${eventIndex}`}
+                              className="grid gap-1 border-b border-zaki-subtle/70 pb-2 last:border-b-0 last:pb-0"
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="font-mono-ui text-[11px] font-semibold text-zaki-primary">
+                                  {getTraceEventType(record, eventIndex)}
+                                </span>
+                                <span className="text-[11px] text-zaki-muted">
+                                  {formatTs(
+                                    (record.ts as string | number | null | undefined) ??
+                                      (record.timestamp as string | number | null | undefined) ??
+                                      (record.created_at as string | number | null | undefined)
+                                  )}
+                                </span>
+                              </div>
+                              <div className="break-words text-xs leading-relaxed text-zaki-secondary">
+                                {getTraceEventPreview(record)}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    );
+                  })()
+                )}
+              </div>
+            ) : null}
           </article>
         );
       })}
@@ -1534,6 +1656,10 @@ export function PowerUserSheet({
     traces,
     tracesLoading,
     tracesError,
+    selectedTraceId,
+    traceDetail,
+    traceDetailLoading,
+    traceDetailError,
     artifactEventCount,
     activeSessionKey,
     activeMode,

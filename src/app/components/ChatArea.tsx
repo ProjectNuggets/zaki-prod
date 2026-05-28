@@ -23,6 +23,9 @@ import {
   compactAgentSession,
   deleteAgentSession,
   fetchBotRuntimeStatus,
+  listAgentArtifacts,
+  listAgentCron,
+  listAgentTasks,
   setAgentSessionMode,
   approveAgentSession,
   fetchUsageQuota,
@@ -34,6 +37,8 @@ import {
   type MemoryCaptureResponse,
   type UsageQuotaSurface,
   type AgentSession,
+  type AgentArtifact,
+  type AgentTask,
 } from "@/lib/api";
 import { DEFAULT_THREAD_LABEL, isDefaultThreadLabel } from "@/lib/threadTitles";
 import { createAnonymousThreadId } from "@/lib/anonymousSpaces";
@@ -55,6 +60,8 @@ import {
 } from "./chat";
 import {
   AgentInspectorRail,
+  type AgentInspectorArtifact,
+  type AgentInspectorCronJob,
   type AgentInspectorTab,
   type AgentInspectorTabRequest,
 } from "./chat/AgentInspectorRail";
@@ -1457,6 +1464,196 @@ export function extractNullalisTaskItem(
   };
 }
 
+function timestampMillis(value: unknown, fallback: number | null = null): number | null {
+  const numeric = numericValue(value);
+  if (numeric != null && numeric > 0) {
+    return numeric < 10_000_000_000 ? numeric * 1000 : numeric;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+}
+
+function recordStringValue(data: Record<string, unknown>, ...keys: string[]): string | null {
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function normalizeAgentTaskStatus(status: unknown): NullalisTaskStatus {
+  const raw = String(status || "queued").trim().toLowerCase();
+  if (raw === "completed" || raw === "complete" || raw === "success") return "done";
+  if (raw === "succeeded") return "succeeded";
+  if (raw === "in_progress" || raw === "started" || raw === "active") return "running";
+  if (raw === "timed_out" || raw === "timeout" || raw === "lost" || raw === "error") {
+    return "failed";
+  }
+  if (
+    raw === "done" ||
+    raw === "running" ||
+    raw === "queued" ||
+    raw === "failed" ||
+    raw === "cancelled" ||
+    raw === "blocked" ||
+    raw === "deferred"
+  ) {
+    return raw;
+  }
+  return "queued";
+}
+
+function agentTaskToNullalisTaskItem(task: AgentTask): NullalisTaskItem | null {
+  const record = task as Record<string, unknown>;
+  const taskId =
+    recordStringValue(record, "task_id", "taskId", "id") ||
+    recordStringValue(record, "job_id", "jobId");
+  if (!taskId) return null;
+  const updatedAt =
+    timestampMillis(
+      record.updated_at ??
+        record.updatedAt ??
+        record.completed_at ??
+        record.completedAt ??
+        record.started_at ??
+        record.startedAt ??
+        record.created_at ??
+        record.createdAt,
+      Date.now()
+    ) ?? Date.now();
+  const description =
+    recordStringValue(record, "title", "label", "description", "summary", "prompt", "command") ||
+    (typeof record.error === "string" && record.error.trim()) ||
+    taskId;
+  return {
+    taskId,
+    status: normalizeAgentTaskStatus(record.status ?? record.state),
+    description,
+    progressPct: numericValue(
+      record.progress_pct ??
+        record.progressPct ??
+        record.percent_complete ??
+        record.percentComplete
+    ),
+    updatedAt,
+  };
+}
+
+function mergeNullalisTaskItems(
+  backendTasks: NullalisTaskItem[],
+  liveTasks: NullalisTaskItem[]
+): NullalisTaskItem[] {
+  const byId = new Map<string, NullalisTaskItem>();
+  for (const task of backendTasks) {
+    byId.set(task.taskId, task);
+  }
+  for (const task of liveTasks) {
+    const existing = byId.get(task.taskId);
+    if (!existing) {
+      byId.set(task.taskId, task);
+      continue;
+    }
+    const liveIsNewer = task.updatedAt >= existing.updatedAt;
+    byId.set(task.taskId, {
+      ...(liveIsNewer ? existing : task),
+      ...(liveIsNewer ? task : existing),
+      description: task.description || existing.description,
+    });
+  }
+  return Array.from(byId.values())
+    .sort((a, b) => a.updatedAt - b.updatedAt)
+    .slice(-12);
+}
+
+function normalizeAgentCronJobsPayload(data: unknown): AgentInspectorCronJob[] {
+  const container = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  const rawJobs = Array.isArray(data)
+    ? data
+    : Array.isArray(container.jobs)
+      ? container.jobs
+      : Array.isArray(container.items)
+        ? container.items
+        : [];
+  return rawJobs
+    .map((item, index) => normalizeAgentCronJob(item, index))
+    .filter((job): job is AgentInspectorCronJob => Boolean(job));
+}
+
+function normalizeAgentCronJob(item: unknown, index: number): AgentInspectorCronJob | null {
+  if (!item || typeof item !== "object") return null;
+  const record = item as Record<string, unknown>;
+  const id =
+    recordStringValue(record, "id", "job_id", "jobId", "key") ||
+    `cron-${index}`;
+  const prompt = recordStringValue(record, "prompt", "description", "summary", "command");
+  const schedule = recordStringValue(record, "expression", "cron", "schedule", "rrule");
+  const name =
+    recordStringValue(record, "name", "title", "label") ||
+    prompt?.slice(0, 64) ||
+    schedule ||
+    id;
+  const paused = record.paused === true || record.enabled === false;
+  const enabled = typeof record.enabled === "boolean" ? record.enabled : !paused;
+  return {
+    id,
+    name,
+    schedule,
+    prompt,
+    status: recordStringValue(record, "status", "state"),
+    enabled,
+    paused,
+    nextRunAt: timestampMillis(
+      record.next_run_at ?? record.nextRunAt ?? record.next_run_secs ?? record.nextRunSecs
+    ),
+    lastRunAt: timestampMillis(
+      record.last_run_at ?? record.lastRunAt ?? record.last_run_secs ?? record.lastRunSecs
+    ),
+    lastStatus: recordStringValue(record, "last_status", "lastStatus"),
+    failureCount:
+      numericValue(record.consecutive_failures ?? record.consecutiveFailures ?? record.failures) ?? 0,
+  };
+}
+
+function normalizeAgentArtifactsPayload(data: unknown): AgentInspectorArtifact[] {
+  const container = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  const rawArtifacts = Array.isArray(data)
+    ? data
+    : Array.isArray(container.artifacts)
+      ? container.artifacts
+      : Array.isArray(container.items)
+        ? container.items
+        : [];
+  return rawArtifacts
+    .map((item) => normalizeAgentArtifact(item))
+    .filter((artifact): artifact is AgentInspectorArtifact => Boolean(artifact));
+}
+
+function normalizeAgentArtifact(item: unknown): AgentInspectorArtifact | null {
+  if (!item || typeof item !== "object") return null;
+  const record = item as AgentArtifact & Record<string, unknown>;
+  const id = recordStringValue(record, "id", "artifact_id", "artifactId");
+  if (!id) return null;
+  const title =
+    recordStringValue(record, "title", "name", "label") ||
+    recordStringValue(record, "type", "mime_type", "mimeType") ||
+    id;
+  return {
+    id,
+    title,
+    type: recordStringValue(record, "type", "mime_type", "mimeType"),
+    version:
+      typeof record.version === "string" || typeof record.version === "number"
+        ? record.version
+        : null,
+    updatedAt: timestampMillis(
+      record.updated_at ?? record.updatedAt ?? record.created_at ?? record.createdAt
+    ),
+  };
+}
+
 function stringPayloadField(payload: Record<string, unknown>, ...keys: string[]): string | null {
   for (const key of keys) {
     const value = payload[key];
@@ -2297,6 +2494,15 @@ export function ChatArea() {
     NullalisTranscriptEntry[]
   >([]);
   const [nullalisTaskItems, setNullalisTaskItems] = useState<NullalisTaskItem[]>([]);
+  const [agentTaskSnapshots, setAgentTaskSnapshots] = useState<NullalisTaskItem[]>([]);
+  const [agentTasksLoading, setAgentTasksLoading] = useState(false);
+  const [agentTasksError, setAgentTasksError] = useState<string | null>(null);
+  const [agentCronJobs, setAgentCronJobs] = useState<AgentInspectorCronJob[]>([]);
+  const [agentCronLoading, setAgentCronLoading] = useState(false);
+  const [agentCronError, setAgentCronError] = useState<string | null>(null);
+  const [agentArtifactSnapshots, setAgentArtifactSnapshots] = useState<AgentInspectorArtifact[]>([]);
+  const [agentArtifactsLoading, setAgentArtifactsLoading] = useState(false);
+  const [agentArtifactsError, setAgentArtifactsError] = useState<string | null>(null);
   const [nullalisApprovalRequest, setNullalisApprovalRequest] =
     useState<NullalisApprovalRequest | null>(null);
   const [agentArtifactEventCount, setAgentArtifactEventCount] = useState(0);
@@ -2347,6 +2553,7 @@ export function ChatArea() {
   const [powerUserInitialTab, setPowerUserInitialTab] =
     useState<PowerUserTab>("controls");
   const [agentCronOpen, setAgentCronOpen] = useState(false);
+  const previousAgentCronOpenRef = useRef(false);
   const [agentInspectorOpen, setAgentInspectorOpen] = useState(() => {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem(AGENT_INSPECTOR_OPEN_KEY) !== "false";
@@ -2804,6 +3011,10 @@ export function ChatArea() {
           )
         )
       : null;
+  const agentTaskItems = useMemo(
+    () => mergeNullalisTaskItems(agentTaskSnapshots, nullalisTaskItems),
+    [agentTaskSnapshots, nullalisTaskItems]
+  );
   const agentWeeklyLabel = zakiBotQuotaInfo
     ? `${zakiBotQuotaInfo.remaining}/${zakiBotQuotaInfo.limit}`
     : freeDailyQuota?.unlimited
@@ -3535,6 +3746,122 @@ export function ChatArea() {
       // non-critical — gauge just won't update
     }
   }, [activeSessionRecord, activeThreadId, activeZakiSessionKey, agentUserId, setSessionContextPressure, zakiBotProvisionReady]);
+
+  const refreshAgentRuntimePanelData = useCallback(async () => {
+    if (!isAgentSurface || !zakiBotProvisionReady) return;
+
+    setAgentTasksLoading(true);
+    setAgentTasksError(null);
+    setAgentCronLoading(true);
+    setAgentCronError(null);
+    setAgentArtifactsLoading(true);
+    setAgentArtifactsError(null);
+
+    const [taskResult, cronResult, artifactResult] = await Promise.allSettled([
+      listAgentTasks({ limit: 24 }),
+      listAgentCron(),
+      listAgentArtifacts({
+        limit: 12,
+        session_key: normalizedActiveZakiSessionKey || undefined,
+      }),
+    ]);
+
+    if (taskResult.status === "fulfilled") {
+      const { response, data } = taskResult.value;
+      if (!response.ok) {
+        const error =
+          (data as { error?: string | null; reason?: string | null })?.error ||
+          (data as { error?: string | null; reason?: string | null })?.reason ||
+          "unavailable";
+        setAgentTaskSnapshots([]);
+        setAgentTasksError(error);
+      } else {
+        const rawTasks = Array.isArray(data.tasks)
+          ? data.tasks
+          : Array.isArray(data.items)
+            ? data.items
+            : [];
+        const activeSession = normalizedActiveZakiSessionKey;
+        const mapped = rawTasks
+          .filter((task) => {
+            if (!activeSession) return true;
+            const sessionKey = recordStringValue(
+              task as Record<string, unknown>,
+              "session_key",
+              "sessionKey"
+            );
+            return !sessionKey || normalizeZakiSessionKey(sessionKey) === activeSession;
+          })
+          .map(agentTaskToNullalisTaskItem)
+          .filter((task): task is NullalisTaskItem => Boolean(task))
+          .slice(-12);
+        setAgentTaskSnapshots(mapped);
+      }
+    } else {
+      setAgentTaskSnapshots([]);
+      setAgentTasksError("network_error");
+    }
+    setAgentTasksLoading(false);
+
+    if (cronResult.status === "fulfilled") {
+      const { response, data } = cronResult.value;
+      if (!response.ok) {
+        const error =
+          (data as { error?: string | null; reason?: string | null })?.error ||
+          (data as { error?: string | null; reason?: string | null })?.reason ||
+          "unavailable";
+        setAgentCronJobs([]);
+        setAgentCronError(error);
+      } else {
+        setAgentCronJobs(normalizeAgentCronJobsPayload(data));
+      }
+    } else {
+      setAgentCronJobs([]);
+      setAgentCronError("network_error");
+    }
+    setAgentCronLoading(false);
+
+    if (artifactResult.status === "fulfilled") {
+      const { response, data } = artifactResult.value;
+      if (!response.ok) {
+        const error =
+          (data as { error?: string | null; reason?: string | null })?.error ||
+          (data as { error?: string | null; reason?: string | null })?.reason ||
+          "unavailable";
+        setAgentArtifactSnapshots([]);
+        setAgentArtifactsError(error);
+      } else {
+        setAgentArtifactSnapshots(normalizeAgentArtifactsPayload(data));
+      }
+    } else {
+      setAgentArtifactSnapshots([]);
+      setAgentArtifactsError("network_error");
+    }
+    setAgentArtifactsLoading(false);
+  }, [isAgentSurface, normalizedActiveZakiSessionKey, zakiBotProvisionReady]);
+
+  useEffect(() => {
+    if (!isAgentSurface) {
+      setAgentTaskSnapshots([]);
+      setAgentTasksError(null);
+      setAgentTasksLoading(false);
+      setAgentCronJobs([]);
+      setAgentCronError(null);
+      setAgentCronLoading(false);
+      setAgentArtifactSnapshots([]);
+      setAgentArtifactsError(null);
+      setAgentArtifactsLoading(false);
+      return;
+    }
+    void refreshAgentRuntimePanelData();
+  }, [isAgentSurface, refreshAgentRuntimePanelData]);
+
+  useEffect(() => {
+    const wasOpen = previousAgentCronOpenRef.current;
+    previousAgentCronOpenRef.current = agentCronOpen;
+    if (!isAgentSurface || !wasOpen || agentCronOpen) return;
+    void refreshAgentRuntimePanelData();
+  }, [agentCronOpen, isAgentSurface, refreshAgentRuntimePanelData]);
 
   // 2026-05-08 — Programmatic compact. Replaces the old "/compact" text
   // hack the pre-flight banner used to send. Direct API call against
@@ -5811,7 +6138,8 @@ export function ChatArea() {
     const snapshot = nullalisTranscriptEntries.slice();
     setLocalTurnSnapshots((prev) => ({ ...prev, [msgId]: snapshot }));
     currentTurnAssistantIdRef.current = null;
-  }, [isStreaming, isZakiBotActiveSpace, nullalisTranscriptEntries]);
+    void refreshAgentRuntimePanelData();
+  }, [isStreaming, isZakiBotActiveSpace, nullalisTranscriptEntries, refreshAgentRuntimePanelData]);
 
   // Multi-session: allow any threadId in the agent space (no longer force "main")
 
@@ -7020,7 +7348,7 @@ export function ChatArea() {
         nullalisMode={isZakiBotActiveSpace}
         nullalisNarrationFrame={isZakiBotActiveSpace ? nullalisNarrationFrame : null}
         nullalisTranscriptEntries={isZakiBotActiveSpace ? nullalisTranscriptEntries : []}
-        nullalisTaskItems={isZakiBotActiveSpace ? nullalisTaskItems : []}
+        nullalisTaskItems={isZakiBotActiveSpace ? agentTaskItems : []}
         nullalisApprovalRequest={isZakiBotActiveSpace ? nullalisApprovalRequest : null}
         contextGaugeData={isZakiBotActiveSpace ? nullalisContextGauge : null}
         zakiUsageSummary={isZakiBotActiveSpace ? zakiUsageSummary : null}
@@ -7057,7 +7385,15 @@ export function ChatArea() {
       isStreaming={isStreaming}
       lastChannel={activeSessionUi?.lastChannel ?? activeSessionRecord?.last_channel ?? null}
       sandbox={sandboxState}
-      tasks={nullalisTaskItems}
+      tasks={agentTaskItems}
+      tasksLoading={agentTasksLoading}
+      tasksError={agentTasksError}
+      cronJobs={agentCronJobs}
+      cronLoading={agentCronLoading}
+      cronError={agentCronError}
+      artifacts={agentArtifactSnapshots}
+      artifactsLoading={agentArtifactsLoading}
+      artifactsError={agentArtifactsError}
       transcriptEntries={nullalisTranscriptEntries}
       narrationFrame={nullalisNarrationFrame}
       approvalRequest={nullalisApprovalRequest}
