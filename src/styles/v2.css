@@ -5538,6 +5538,98 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   overflow-wrap: anywhere;
 }
 
+.zaki-agent-inspector__narration {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--v2-accent) 8%, transparent), transparent 42%),
+    var(--v2-bg-sunken);
+}
+
+.zaki-agent-inspector__narration.is-live {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--v2-accent) 12%, transparent), transparent 48%),
+    var(--v2-bg-raised);
+}
+
+.zaki-agent-inspector__narration-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__narration strong {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.zaki-agent-inspector__narration small {
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-prose);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.zaki-agent-inspector__narration-log {
+  display: grid;
+  gap: 1px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  background: var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__narration-log li {
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+  padding: 6px 0;
+  background: var(--v2-bg);
+}
+
+.zaki-agent-inspector__narration-log .time,
+.zaki-agent-inspector__narration-log .meta {
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__narration-log .time {
+  padding-left: 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+.zaki-agent-inspector__narration-log .meta {
+  padding-right: 7px;
+  text-align: right;
+}
+
+.zaki-agent-inspector__narration-log .text {
+  min-width: 0;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .zaki-agent-inspector__todo-mark {
   display: flex;
   align-items: center;
@@ -5827,6 +5919,69 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
 .zaki-agent-inspector__artifact-body p {
   margin: 0;
+}
+
+.zaki-agent-inspector__browser-lanes {
+  display: grid;
+  gap: 1px;
+  border-top: 1px solid var(--v2-hairline-faint);
+  border-bottom: 1px solid var(--v2-hairline-faint);
+  background: var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__browser-lane {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 11px 12px;
+  background: var(--v2-bg);
+}
+
+.zaki-agent-inspector__browser-lane.is-active {
+  background: var(--v2-bg-raised);
+}
+
+.zaki-agent-inspector__browser-lane .lane-kicker {
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__browser-lane .lane-title {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__browser-lane p {
+  margin: 0;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-prose);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.zaki-agent-inspector__browser-lane .lane-tools {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.zaki-agent-inspector__browser-lane .lane-tools span {
+  min-width: 0;
+  border: 1px solid var(--v2-hairline-faint);
+  padding: 3px 5px;
+  background: var(--v2-bg-sunken);
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  line-height: 1;
+  overflow-wrap: anywhere;
 }
 
 .zaki-agent-inspector__trace-now {

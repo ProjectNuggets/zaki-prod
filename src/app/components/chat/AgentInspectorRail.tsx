@@ -42,6 +42,20 @@ type AgentInspectorTab =
   | "browser"
   | "trace";
 
+const APP_BROWSER_TOOLS = ["web_fetch", "web_search", "playwright_*"] as const;
+const EXTENSION_BROWSER_TOOLS = [
+  "extension_navigate",
+  "extension_click",
+  "extension_type",
+  "extension_fill_form",
+  "extension_screenshot",
+  "extension_get_text",
+  "extension_get_dom",
+  "extension_wait_for",
+  "extension_scroll",
+  "extension_list_tabs",
+] as const;
+
 export type AgentInspectorRailProps = {
   mode: AgentSessionMode | null;
   isStreaming: boolean;
@@ -170,6 +184,45 @@ function eventText(event: {
   return `${event.label} · ${event.summary}`;
 }
 
+function eventMetaShort(event: { meta: string | null; durationMs: number | null }) {
+  if (event.meta) return event.meta;
+  return typeof event.durationMs === "number" ? formatDurationShort(event.durationMs) : "";
+}
+
+function frameMeta(frame: NullalisNarrationFrame | null) {
+  if (!frame) return "session scoped";
+  const bits = [
+    frame.phase.replace(/_/g, " "),
+    frame.tool,
+    frame.stepIndex != null && frame.stepTotal != null
+      ? `${frame.stepIndex + 1}/${frame.stepTotal}`
+      : null,
+    typeof frame.durationMs === "number" ? formatDurationShort(frame.durationMs) : null,
+  ].filter(Boolean);
+  return bits.join(" · ");
+}
+
+function eventHasExtensionSignal(event: {
+  label: string;
+  summary: string;
+  command: string | null;
+  files: string[];
+}) {
+  return /\bextension[_\w]*\b/i.test(eventText(event));
+}
+
+function eventHasAppBrowserSignal(event: {
+  label: string;
+  summary: string;
+  command: string | null;
+  files: string[];
+}) {
+  if (eventHasExtensionSignal(event)) return false;
+  return /\b(browser|playwright|web_fetch|web_search|page\.|screenshot|navigate)\b/i.test(
+    eventText(event)
+  );
+}
+
 function PanelActionButton({
   children,
   onClick,
@@ -257,6 +310,10 @@ export function AgentInspectorRail({
       : null;
   const browserActivity =
     browserEntries.length > 0 || /\b(browser|playwright|extension)\b/i.test(lastChannel ?? "");
+  const extensionActivity = browserEntries.some(eventHasExtensionSignal);
+  const appBrowserActivity =
+    browserEntries.some(eventHasAppBrowserSignal) ||
+    /\b(browser|playwright|web_fetch|web_search)\b/i.test(lastChannel ?? "");
   const delegatedEvent = cronEntries.find((event) =>
     /\b(subagent|spawned|background|worker)\b/i.test(`${event.label} ${event.summary}`)
   );
@@ -274,6 +331,7 @@ export function AgentInspectorRail({
     runningTask?.description ||
     recentTrace[0]?.summary ||
     (isStreaming ? "Waiting for the next runtime event." : "No active run.");
+  const narrationLog = recentTrace.slice(0, 4);
   const handleTabChange = (nextTab: AgentInspectorTab) => {
     setManualTabSelected(true);
     setTab(nextTab);
@@ -375,6 +433,35 @@ export function AgentInspectorRail({
                 meta={approvalRequest.riskLevel || "approval needed"}
               />
             ) : null}
+            <section
+              className={cn("zaki-agent-inspector__narration", isStreaming && "is-live")}
+              aria-live={isStreaming ? "polite" : undefined}
+              data-testid="agent-narration-box"
+            >
+              <div className="zaki-agent-inspector__narration-head">
+                <span>narration</span>
+                <span>{frameMeta(narrationFrame)}</span>
+              </div>
+              <strong>{approvalRequest ? `Waiting on ${approvalRequest.tool}` : latestPlanSignal}</strong>
+              <small>
+                {approvalRequest
+                  ? approvalRequest.reason || "Approval required before this run continues."
+                  : isStreaming
+                    ? "Live operational trail from the agent runtime."
+                    : "Latest operational trail for this session."}
+              </small>
+              {narrationLog.length ? (
+                <ol className="zaki-agent-inspector__narration-log">
+                  {narrationLog.map((event) => (
+                    <li key={event.id}>
+                      <span className="time">{formatClock(event.timestamp)}</span>
+                      <span className="text">{eventText(event)}</span>
+                      <span className="meta">{eventMetaShort(event)}</span>
+                    </li>
+                  ))}
+                </ol>
+              ) : null}
+            </section>
             {sortedTasks.length ? (
               <ol className="zaki-agent-inspector__plan-list">
                 {sortedTasks.map((task) => (
@@ -413,23 +500,7 @@ export function AgentInspectorRail({
                   </li>
                 ))}
               </ol>
-            ) : (
-              <div className={cn("zaki-agent-inspector__live-signal", isStreaming && "is-live")}>
-                <span>{approvalRequest ? "approval gate" : isStreaming ? "live signal" : "idle"}</span>
-                <strong>
-                  {approvalRequest
-                    ? `Waiting on ${approvalRequest.tool}`
-                    : latestPlanSignal}
-                </strong>
-                <small>
-                  {approvalRequest
-                    ? approvalRequest.reason || "Tool permission is required before the run can continue."
-                    : isStreaming
-                      ? "The run has not emitted structured plan steps yet."
-                      : "Multi-step tasks and subagents will appear here."}
-                </small>
-              </div>
-            )}
+            ) : null}
             <div className="zaki-agent-inspector__plan-foot">
               <span>{isStreaming ? "Live plan updates are attached to this run." : "Plan state is scoped to this session."}</span>
             </div>
@@ -610,17 +681,44 @@ export function AgentInspectorRail({
             <V2InlineRow
               tone={browserActivity || sandbox?.enabled ? "accent" : "default"}
               icon={<Globe2 className="size-4" aria-hidden />}
-              title={browserActivity ? "Browser activity detected" : "Browser lane ready"}
-              meta="Server Playwright plus extension handoff"
+              title={browserActivity ? "Browser activity detected" : "Dual browser lanes ready"}
+              meta="App browser plus user-browser extension"
             />
+            <div className="zaki-agent-inspector__browser-lanes" data-testid="agent-browser-lanes">
+              <article className={cn("zaki-agent-inspector__browser-lane", appBrowserActivity && "is-active")}>
+                <div className="lane-kicker">app browser</div>
+                <div className="lane-title">
+                  {appBrowserActivity ? "public-web automation active" : "public-web automation"}
+                </div>
+                <p>Public pages, screenshots, search, and Playwright control without user-login cookies.</p>
+                <div className="lane-tools" aria-label="App browser tools">
+                  {APP_BROWSER_TOOLS.map((tool) => (
+                    <span key={tool}>{tool}</span>
+                  ))}
+                </div>
+              </article>
+              <article className={cn("zaki-agent-inspector__browser-lane", extensionActivity && "is-active")}>
+                <div className="lane-kicker">user browser extension</div>
+                <div className="lane-title">
+                  {extensionActivity ? "logged-in browser active" : "logged-in browser lane"}
+                </div>
+                <p>Paired extension lane for the user's authenticated tabs, with supervised approval gates.</p>
+                <div className="lane-tools" aria-label="User browser extension tools">
+                  {EXTENSION_BROWSER_TOOLS.slice(0, 4).map((tool) => (
+                    <span key={tool}>{tool}</span>
+                  ))}
+                  <span>+{EXTENSION_BROWSER_TOOLS.length - 4}</span>
+                </div>
+              </article>
+            </div>
             <dl className="zaki-agent-inspector__fact-grid">
               <div>
-                <dt>Sandbox</dt>
+                <dt>App lane</dt>
                 <dd>{sandboxLabel}</dd>
               </div>
               <div>
-                <dt>Extension</dt>
-                <dd>{sandbox?.enabled ? "available" : "idle"}</dd>
+                <dt>Extension lane</dt>
+                <dd>{extensionActivity ? "active" : "pairing"}</dd>
               </div>
             </dl>
             {browserEntries.length ? (

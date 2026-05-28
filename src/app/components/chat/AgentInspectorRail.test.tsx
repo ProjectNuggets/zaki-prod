@@ -45,7 +45,40 @@ describe("AgentInspectorRail", () => {
       "aria-selected",
       "true"
     );
-    expect(screen.getByText("Map the agent surface")).toBeInTheDocument();
+    expect(screen.getAllByText("Map the agent surface").length).toBeGreaterThan(0);
+  });
+
+  it("renders a live narration box from Nullalis operational events", () => {
+    renderRail({
+      isStreaming: true,
+      narrationFrame: {
+        id: "frame-1",
+        phase: "tool_start",
+        label: "Reading the agent handoff",
+        tool: "read_file",
+        durationMs: 42,
+        timestamp: 1_800_000,
+      },
+      transcriptEntries: [
+        {
+          id: "trace-1",
+          kind: "tool",
+          tool: "read_file",
+          text: "Read docs/ui-handoff.md",
+          resultSummary: "Read docs/ui-handoff.md",
+          resultState: "done",
+          durationMs: 42,
+          timestamp: 1_800_000,
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: /Plan/i }));
+    const narration = screen.getByTestId("agent-narration-box");
+    expect(within(narration).getByText("Reading the agent handoff")).toBeInTheDocument();
+    expect(within(narration).getByText(/tool start/i)).toBeInTheDocument();
+    expect(within(narration).getAllByText(/read_file/).length).toBeGreaterThan(0);
+    expect(within(narration).getByText(/Read docs\/ui-handoff\.md/)).toBeInTheDocument();
   });
 
   it("surfaces memory and context evidence in the Sources tab", () => {
@@ -131,8 +164,8 @@ describe("AgentInspectorRail", () => {
 
     const planTab = screen.getByRole("tab", { name: /Plan/i });
     expect(planTab).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("Waiting on extension_click")).toBeInTheDocument();
-    expect(screen.getByText("supervised_mutating_requires_approval")).toBeInTheDocument();
+    expect(screen.getAllByText("Waiting on extension_click").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("supervised_mutating_requires_approval").length).toBeGreaterThan(0);
   });
 
   it("keeps browser control in its own panel", () => {
@@ -152,12 +185,27 @@ describe("AgentInspectorRail", () => {
           text: "Opened the checkout page.",
           timestamp: 1,
         },
+        {
+          id: "extension-1",
+          kind: "tool",
+          intent: "tool",
+          tool: "extension_click",
+          text: "Clicked the logged-in checkout button.",
+          resultState: "done",
+          timestamp: 2,
+        },
       ],
     });
 
     fireEvent.click(screen.getByRole("tab", { name: /Browser/i }));
 
     expect(screen.getByText("Browser activity detected")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-browser-lanes")).toBeInTheDocument();
+    expect(screen.getByText("app browser")).toBeInTheDocument();
+    expect(screen.getByText("user browser extension")).toBeInTheDocument();
+    expect(screen.getByText("web_fetch")).toBeInTheDocument();
+    expect(screen.getByText("extension_navigate")).toBeInTheDocument();
+    expect(screen.getAllByText("active").length).toBeGreaterThan(0);
     expect(screen.getAllByText("playwright")).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "Open browser controls" }));
     expect(onOpenBrowser).toHaveBeenCalledTimes(1);
@@ -218,9 +266,9 @@ describe("AgentInspectorRail", () => {
 
     expect(screen.getByText("current plan")).toBeInTheDocument();
     expect(screen.getByText("1 / 2")).toBeInTheDocument();
-    expect(screen.getByText("Polish the right rail")).toBeInTheDocument();
+    expect(screen.getAllByText("Polish the right rail").length).toBeGreaterThan(0);
     expect(screen.getByText("subagent")).toBeInTheDocument();
-    expect(screen.getByText("subagent verifying trace rows against V6")).toBeInTheDocument();
+    expect(screen.getAllByText("subagent verifying trace rows against V6").length).toBeGreaterThan(0);
   });
 
   it("renders trace as V6 operation rows with latency and warning count", () => {

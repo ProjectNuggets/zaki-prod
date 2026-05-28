@@ -43,7 +43,9 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiControls.powerUser.tabs.usage": "Usage",
     "zakiControls.powerUser.approvals.approve": "Approve",
     "zakiControls.powerUser.approvals.deny": "Deny",
-    "zakiControls.powerUser.browser.toolSurface": "Extension tool surface",
+    "zakiControls.powerUser.browser.serverLane": "App browser",
+    "zakiControls.powerUser.browser.extensionLane": "User browser extension",
+    "zakiControls.powerUser.browser.toolSurface": "Extension command contract",
     "zakiControls.powerUser.browser.ready": "Ready",
     "zakiControls.powerUser.browser.pairingRequired": "Pairing required",
     "zakiControls.powerUser.artifacts.share": "Share",
@@ -198,6 +200,8 @@ describe("PowerUserSheet", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("power-user-browser")).toBeInTheDocument();
+      expect(screen.getByText("App browser")).toBeInTheDocument();
+      expect(screen.getByText("User browser extension")).toBeInTheDocument();
       expect(screen.getByText("extension_navigate")).toBeInTheDocument();
     });
     expect(screen.getByText("extension_list_tabs")).toBeInTheDocument();
