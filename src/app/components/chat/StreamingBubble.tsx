@@ -65,6 +65,8 @@ export function StreamingBubble({
     lastContentLenRef.current = content.length;
   }, [content.length]);
 
+  const agentRune = isStreaming ? "▸" : "✓";
+
   return (
     <div
       className={[
@@ -77,10 +79,19 @@ export function StreamingBubble({
       data-message-role="assistant"
       data-streaming={isStreaming ? "true" : undefined}
     >
-      <div className="zaki-message-avatar size-8 shrink-0 flex items-start justify-center pt-[6px]">
-        <div className="scale-75">
-          <CenterLogo />
-        </div>
+      <div
+        className="zaki-message-avatar size-8 shrink-0 flex items-start justify-center pt-[6px]"
+        data-state={isStreaming ? "streaming" : "done"}
+      >
+        {botMode ? (
+          <span className="zaki-message-rune" aria-hidden>
+            {agentRune}
+          </span>
+        ) : (
+          <div className="scale-75">
+            <CenterLogo />
+          </div>
+        )}
       </div>
 
       <div className="zaki-message-stack w-full max-w-[780px] flex flex-col gap-2 items-start">
@@ -88,7 +99,7 @@ export function StreamingBubble({
           <div className="zaki-message-meta zaki-message-meta--assistant">
             <strong>ZAKI</strong>
             <span className="sep">.</span>
-            <span className="badge is-live">live</span>
+            <span className="badge is-live">{isStreaming ? "v2 · live" : "v2 · final"}</span>
           </div>
         ) : null}
         {badgeLabel ? (

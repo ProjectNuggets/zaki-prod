@@ -6999,6 +6999,10 @@ export function ChatArea() {
           if (isZakiBotSendLocked) return;
           composerHandleRef.current?.submitWith(prefill);
         }}
+        onOpenAgentArtifacts={
+          isZakiBotActiveSpace ? () => openPowerUserSheet("artifacts") : undefined
+        }
+        onOpenAgentSources={isZakiBotActiveSpace ? openAgentMemorySurface : undefined}
         isRtl={isRtl}
       />
     );

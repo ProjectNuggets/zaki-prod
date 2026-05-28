@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom";
 import { describe, expect, it, jest } from "@jest/globals";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 
 jest.mock("../index", () => ({
   MessageBubble: ({
@@ -137,5 +137,69 @@ describe("ChatView", () => {
     expect(screen.getByText(longReasoning)).toBeInTheDocument();
     expect(screen.getByText("Analyzing request...")).toBeInTheDocument();
     expect(screen.getByText(/1 step/)).toBeInTheDocument();
+  });
+
+  it("renders artifact and source evidence under agent replies with wired panel actions", () => {
+    const openArtifacts = jest.fn();
+    const openSources = jest.fn();
+
+    render(
+      <ChatView
+        messages={[
+          { id: "user-1", role: "user", content: "Create the brief." },
+          { id: "assistant-1", role: "assistant", content: "Done." },
+        ]}
+        replayTimelines={{
+          "assistant-1": [
+            {
+              id: "artifact-1",
+              kind: "tool",
+              intent: "final",
+              text: "Generated the brief.",
+              timestamp: 2,
+              phase: "artifact_event",
+              tool: "produce_document",
+              files: ["launch-brief.md"],
+              resultSummary: "Created a launch brief for review.",
+              resultState: "done",
+            },
+            {
+              id: "source-1",
+              kind: "tool",
+              intent: "context",
+              text: "Read source file.",
+              timestamp: 1,
+              tool: "read_file",
+              files: ["docs/ui-handoff.md"],
+              resultSummary: "Loaded the UI handoff.",
+              resultState: "done",
+            },
+          ],
+        }}
+        isHistoryLoading={false}
+        isStreaming={false}
+        botMode
+        firstMessageTransition={false}
+        onOpenAgentArtifacts={openArtifacts}
+        onOpenAgentSources={openSources}
+      />
+    );
+
+    expect(
+      within(screen.getByTestId("agent-reply-artifact")).getByText("launch-brief.md")
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("agent-reply-touched")).getByText("docs/ui-handoff.md")
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /open in panel/i }));
+    fireEvent.click(
+      within(screen.getByTestId("agent-reply-touched")).getByRole("button", {
+        name: /docs\/ui-handoff\.md/i,
+      })
+    );
+
+    expect(openArtifacts).toHaveBeenCalledTimes(1);
+    expect(openSources).toHaveBeenCalledTimes(1);
   });
 });

@@ -101,7 +101,8 @@ export function MessageBubble({
   const { t, i18n } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const messageTime = formatMessageTime(message.createdAt);
-  const agentBadge = isStreaming ? "live" : isAssistantError ? "error" : "final";
+  const agentBadge = isStreaming ? "v2 · live" : isAssistantError ? "error" : "v2 · final";
+  const agentRune = isStreaming ? "▸" : isAssistantError ? "!" : "✓";
 
   // 2026-05-08 — Hoist agent-generated images out of the collapsed
   // tool-result expansion into the main reply slot. The image_generate
@@ -145,10 +146,19 @@ export function MessageBubble({
       data-streaming={!isUser && isStreaming ? "true" : undefined}
     >
       {!isUser && (
-        <div className="zaki-message-avatar size-8 shrink-0 flex items-start justify-center pt-[6px]">
-          <div className="scale-75">
-            <CenterLogo />
-          </div>
+        <div
+          className="zaki-message-avatar size-8 shrink-0 flex items-start justify-center pt-[6px]"
+          data-state={isStreaming ? "streaming" : isAssistantError ? "error" : "done"}
+        >
+          {botMode ? (
+            <span className="zaki-message-rune" aria-hidden>
+              {agentRune}
+            </span>
+          ) : (
+            <div className="scale-75">
+              <CenterLogo />
+            </div>
+          )}
         </div>
       )}
 

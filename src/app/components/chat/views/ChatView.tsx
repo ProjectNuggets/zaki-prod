@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
+import { Boxes, ExternalLink, FileText } from "lucide-react";
 import { MessageBubble, type Message } from "../index";
 import { StreamingMessage } from "../StreamingMessage";
 import { ThinkingIndicator } from "../ThinkingIndicator";
@@ -22,6 +23,7 @@ import {
   type TimelineRevealPhase,
 } from "../NullalisTurnTimeline";
 import { QuickReplyChips } from "../QuickReplyChips";
+import { buildAgentInspectorPanelModel } from "../AgentInspectorPanelModel";
 
 interface ChatViewProps {
   messages: Message[];
@@ -55,7 +57,141 @@ interface ChatViewProps {
    *  immediately. Renders one row of chips below the last assistant
    *  message when the chat is idle. */
   onQuickReply?: (prefill: string) => void;
+  onOpenAgentArtifacts?: () => void;
+  onOpenAgentSources?: () => void;
   isRtl?: boolean;
+}
+
+type AgentReplyEvidenceProps = {
+  entries: NullalisTranscriptEntry[];
+  isStreaming?: boolean;
+  onOpenArtifacts?: () => void;
+  onOpenSources?: () => void;
+};
+
+function AgentReplyEvidence({
+  entries,
+  isStreaming = false,
+  onOpenArtifacts,
+  onOpenSources,
+}: AgentReplyEvidenceProps) {
+  if (entries.length === 0) return null;
+
+  const model = buildAgentInspectorPanelModel(entries);
+  const primaryArtifact = model.artifacts[0] ?? null;
+  const touched = [
+    ...model.artifacts.map((event) => ({
+      id: `artifact:${event.id}`,
+      kind: "artifact" as const,
+      label: event.files[0] || event.label || "Artifact",
+      meta: event.meta || "artifact",
+      summary: event.summary,
+    })),
+    ...model.sources.map((event) => ({
+      id: `source:${event.id}`,
+      kind: "source" as const,
+      label: event.files[0] || event.label || "Source",
+      meta: event.meta || "source",
+      summary: event.summary,
+    })),
+  ];
+  const seen = new Set<string>();
+  const visibleTouched = touched
+    .filter((item) => {
+      const key = `${item.kind}:${item.label}:${item.summary}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 4);
+
+  if (!primaryArtifact && visibleTouched.length === 0) return null;
+
+  const artifactTitle = primaryArtifact?.files[0] || primaryArtifact?.label || "Artifact";
+  const artifactMeta =
+    primaryArtifact?.meta || (isStreaming ? "live capture" : "captured output");
+
+  return (
+    <div className="zaki-agent-reply-evidence" aria-label="Agent reply evidence">
+      {primaryArtifact ? (
+        <div className="zaki-agent-reply-artifact" data-testid="agent-reply-artifact">
+          <div className="zaki-agent-reply-artifact__head">
+            <span className="zaki-agent-reply-artifact__type">
+              <Boxes className="size-3" aria-hidden />
+              artifact
+            </span>
+            {onOpenArtifacts ? (
+              <button
+                type="button"
+                className="zaki-agent-reply-artifact__action"
+                onClick={onOpenArtifacts}
+              >
+                open in panel
+                <ExternalLink className="size-3" aria-hidden />
+              </button>
+            ) : (
+              <span className="zaki-agent-reply-artifact__action is-static">
+                in panel
+              </span>
+            )}
+          </div>
+          <div className="zaki-agent-reply-artifact__body">
+            <div className="zaki-agent-reply-artifact__title">{artifactTitle}</div>
+            <div className="zaki-agent-reply-artifact__sub">{artifactMeta}</div>
+            {primaryArtifact.summary ? (
+              <div className="zaki-agent-reply-artifact__preview">
+                {primaryArtifact.summary}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+      {visibleTouched.length > 0 ? (
+        <div className="zaki-agent-reply-touched" data-testid="agent-reply-touched">
+          <span className="zaki-agent-reply-touched__label">
+            {visibleTouched.some((item) => item.kind === "source") ? "evidence" : "files"}
+          </span>
+          {visibleTouched.map((item) => {
+            const onClick = item.kind === "artifact" ? onOpenArtifacts : onOpenSources;
+            const content = (
+              <>
+                {item.kind === "artifact" ? (
+                  <Boxes className="size-3" aria-hidden />
+                ) : (
+                  <FileText className="size-3" aria-hidden />
+                )}
+                <span>{item.label}</span>
+                <span className="meta">{item.meta}</span>
+              </>
+            );
+            return onClick ? (
+              <button
+                key={item.id}
+                type="button"
+                className={cn(
+                  "zaki-agent-reply-touched__item",
+                  item.kind === "artifact" ? "is-artifact" : "is-source"
+                )}
+                onClick={onClick}
+              >
+                {content}
+              </button>
+            ) : (
+              <span
+                key={item.id}
+                className={cn(
+                  "zaki-agent-reply-touched__item",
+                  item.kind === "artifact" ? "is-artifact" : "is-source"
+                )}
+              >
+                {content}
+              </span>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function ChatView({
@@ -86,6 +222,8 @@ export function ChatView({
   onThumbsDownMessage,
   getReaction,
   onQuickReply,
+  onOpenAgentArtifacts,
+  onOpenAgentSources,
   isRtl = false,
 }: ChatViewProps) {
   const { t } = useTranslation();
@@ -220,6 +358,14 @@ export function ChatView({
                   streamingModeVariant={streamingModeVariant}
                   botMode={botMode}
                 />
+                {botMode ? (
+                  <AgentReplyEvidence
+                    entries={nullalisTranscriptEntries}
+                    isStreaming={isStreamingMessage}
+                    onOpenArtifacts={onOpenAgentArtifacts}
+                    onOpenSources={onOpenAgentSources}
+                  />
+                ) : null}
               </div>
             );
           }
@@ -245,12 +391,24 @@ export function ChatView({
                   />
                 )
               )}
+              {botMode ? (
+                <AgentReplyEvidence
+                  entries={nullalisTranscriptEntries}
+                  isStreaming={isStreamingMessage}
+                  onOpenArtifacts={onOpenAgentArtifacts}
+                  onOpenSources={onOpenAgentSources}
+                />
+              ) : null}
             </div>
           );
         }
 
         const replayEntries =
           msg.role === "assistant" ? replayTimelines?.[msg.id] : undefined;
+        const evidenceEntries =
+          msg.role === "assistant"
+            ? replayEntries ?? (isLast ? nullalisTranscriptEntries : [])
+            : [];
 
         return (
           <div key={msg.id} className="flex flex-col gap-2">
@@ -272,6 +430,14 @@ export function ChatView({
               onThumbsDown={onThumbsDownMessage}
               reaction={getReaction ? getReaction(msg.id) : null}
             />
+            {botMode && msg.role === "assistant" ? (
+              <AgentReplyEvidence
+                entries={evidenceEntries}
+                isStreaming={false}
+                onOpenArtifacts={onOpenAgentArtifacts}
+                onOpenSources={onOpenAgentSources}
+              />
+            ) : null}
             {isLast && msg.role === "assistant"
               ? renderTimelineArtifacts({ phase: "done" })
               : null}

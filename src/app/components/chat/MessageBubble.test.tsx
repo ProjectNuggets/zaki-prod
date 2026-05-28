@@ -65,7 +65,8 @@ describe("MessageBubble source chip", () => {
     );
 
     expect(screen.getByText("ZAKI")).toBeInTheDocument();
-    expect(screen.getByText("final")).toBeInTheDocument();
+    expect(screen.getByText("v2 · final")).toBeInTheDocument();
+    expect(document.querySelector(".zaki-message-rune")).not.toBeNull();
     expect(document.querySelector('[data-testid="source-chip"]')).toBeNull();
   });
 
