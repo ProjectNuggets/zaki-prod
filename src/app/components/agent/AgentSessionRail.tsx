@@ -1,7 +1,10 @@
-import { Plus } from "lucide-react";
+import { useEffect, useId, useMemo, useState } from "react";
+import { MessageSquare, Plus, Search, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { AgentSession } from "@/lib/api";
 import { ZakiSessionList } from "@/app/components/sidebar/ZakiSessionList";
+import { formatZakiSessionLabel, normalizeZakiSessionKey } from "@/lib/zakiSessions";
+import { useSessionTitleOverlay } from "@/queries/useSessionTitleOverlay";
 
 type AgentSessionRailProps = {
   sessions: AgentSession[];
@@ -15,6 +18,22 @@ type AgentSessionRailProps = {
   onDeleteSession: (sessionKey: string, label: string) => void;
 };
 
+type SessionFilter = "all" | "live" | "approvals";
+
+const INITIAL_SESSION_LIMIT = 72;
+const SESSION_LIMIT_STEP = 72;
+
+function sessionMatchesFilter(session: AgentSession, filter: SessionFilter) {
+  if (filter === "live") return session.live === true;
+  if (filter === "approvals") {
+    return (
+      typeof session.pending_approval_count === "number" &&
+      session.pending_approval_count > 0
+    );
+  }
+  return true;
+}
+
 export function AgentSessionRail({
   sessions,
   isLoading,
@@ -27,9 +46,81 @@ export function AgentSessionRail({
   onDeleteSession,
 }: AgentSessionRailProps) {
   const { t } = useTranslation();
+  const { getLabel: getOverlayLabel } = useSessionTitleOverlay();
+  const searchId = useId();
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<SessionFilter>("all");
+  const [visibleLimit, setVisibleLimit] = useState(INITIAL_SESSION_LIMIT);
+  const normalizedActiveSessionKey = activeSessionKey
+    ? normalizeZakiSessionKey(activeSessionKey)
+    : null;
+  const trimmedQuery = query.trim().toLowerCase();
+  const liveCount = useMemo(
+    () => sessions.filter((session) => session.live === true).length,
+    [sessions]
+  );
+  const approvalCount = useMemo(
+    () =>
+      sessions.filter(
+        (session) =>
+          typeof session.pending_approval_count === "number" &&
+          session.pending_approval_count > 0
+      ).length,
+    [sessions]
+  );
+  const filteredSessions = useMemo(() => {
+    return sessions.filter((session) => {
+      if (!sessionMatchesFilter(session, filter)) return false;
+      if (!trimmedQuery) return true;
+      const sessionKey = normalizeZakiSessionKey(session.session_key);
+      const label =
+        getOverlayLabel(sessionKey) ||
+        formatZakiSessionLabel({
+          sessionKey,
+          title: session.title,
+          createdAt: session.created_at ?? session.last_active ?? null,
+        });
+      const haystack = [
+        label,
+        sessionKey,
+        session.title,
+        session.mode,
+        session.last_channel,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(trimmedQuery);
+    });
+  }, [filter, getOverlayLabel, sessions, trimmedQuery]);
+  const visibleSessions = useMemo(() => {
+    const next = filteredSessions.slice(0, visibleLimit);
+    if (!normalizedActiveSessionKey) return next;
+    const activeSession = filteredSessions.find(
+      (session) => normalizeZakiSessionKey(session.session_key) === normalizedActiveSessionKey
+    );
+    if (
+      activeSession &&
+      !next.some(
+        (session) => normalizeZakiSessionKey(session.session_key) === normalizedActiveSessionKey
+      )
+    ) {
+      return [activeSession, ...next];
+    }
+    return next;
+  }, [filteredSessions, normalizedActiveSessionKey, visibleLimit]);
+  const hasOverflow = filteredSessions.length > visibleLimit;
+  const hasFilter = filter !== "all" || trimmedQuery.length > 0;
+
+  useEffect(() => {
+    setVisibleLimit(INITIAL_SESSION_LIMIT);
+  }, [filter, trimmedQuery, sessions.length]);
 
   return (
-    <aside className="zaki-agent-session-rail" aria-label={t("agent.sessionRail.ariaLabel", { defaultValue: "Agent sessions" })}>
+    <aside
+      className="zaki-agent-session-rail"
+      aria-label={t("agent.sessionRail.ariaLabel", { defaultValue: "Agent sessions" })}
+    >
       <div className="zaki-agent-session-rail__head">
         <div className="min-w-0">
           <h2>
@@ -39,22 +130,115 @@ export function AgentSessionRail({
         </div>
       </div>
 
+      <div className="zaki-agent-session-rail__tools">
+        <div className="zaki-agent-session-rail__search">
+          <Search aria-hidden="true" />
+          <label htmlFor={searchId} className="sr-only">
+            {t("agent.sessionRail.searchLabel", { defaultValue: "Search threads" })}
+          </label>
+          <input
+            id={searchId}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("agent.sessionRail.searchPlaceholder", { defaultValue: "Search" })}
+            type="search"
+          />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label={t("agent.sessionRail.clearSearch", { defaultValue: "Clear search" })}
+            >
+              <X aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+        <div
+          className="zaki-agent-session-rail__filters"
+          aria-label={t("agent.sessionRail.filterLabel", { defaultValue: "Thread filters" })}
+        >
+          {([
+            ["all", sessions.length],
+            ["live", liveCount],
+            ["approvals", approvalCount],
+          ] as Array<[SessionFilter, number]>).map(([option, count]) => (
+            <button
+              key={option}
+              type="button"
+              className={filter === option ? "is-active" : undefined}
+              onClick={() => setFilter(option)}
+              aria-pressed={filter === option}
+            >
+              {t(`agent.sessionRail.filters.${option}`, {
+                defaultValue:
+                  option === "all" ? "All" : option === "live" ? "Live" : "Approvals",
+              })}
+              <span>{count}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="zaki-agent-session-rail__list">
-        <ZakiSessionList
-          sessions={sessions}
-          isLoading={isLoading}
-          activeSessionKey={activeSessionKey}
-          onSelectSession={onSelectSession}
-          onCreateSession={onCreateSession}
-          onDownloadSession={onDownloadSession}
-          onShareSession={onShareSession}
-          onDeleteSession={onDeleteSession}
-          showRuntimeBadges={false}
-          isRtl={isRtl}
-        />
+        {sessions.length > 0 && filteredSessions.length === 0 && !isLoading ? (
+          <div className="zaki-agent-session-rail__empty" data-testid="agent-session-empty-filter">
+            <MessageSquare aria-hidden="true" />
+            <strong>
+              {t("agent.sessionRail.noMatches", { defaultValue: "No matching threads" })}
+            </strong>
+            <span>
+              {t("agent.sessionRail.noMatchesHelp", {
+                defaultValue: "Clear filters or start a new thread.",
+              })}
+            </span>
+          </div>
+        ) : (
+          <ZakiSessionList
+            sessions={visibleSessions}
+            isLoading={isLoading}
+            activeSessionKey={activeSessionKey}
+            onSelectSession={onSelectSession}
+            onCreateSession={onCreateSession}
+            onDownloadSession={onDownloadSession}
+            onShareSession={onShareSession}
+            onDeleteSession={onDeleteSession}
+            showRuntimeBadges={false}
+            isRtl={isRtl}
+          />
+        )}
       </div>
 
       <div className="zaki-agent-session-rail__foot">
+        {sessions.length > 0 ? (
+          <div className="zaki-agent-session-rail__meta">
+            <span>
+              {t("agent.sessionRail.showing", {
+                defaultValue: "{{shown}} of {{total}} visible",
+                shown: Math.min(visibleSessions.length, filteredSessions.length),
+                total: filteredSessions.length,
+              })}
+            </span>
+            {hasFilter ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setFilter("all");
+                }}
+              >
+                {t("agent.sessionRail.reset", { defaultValue: "Reset" })}
+              </button>
+            ) : null}
+            {hasOverflow ? (
+              <button
+                type="button"
+                onClick={() => setVisibleLimit((limit) => limit + SESSION_LIMIT_STEP)}
+              >
+                {t("agent.sessionRail.more", { defaultValue: "More" })}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         <button
           type="button"
           className="zaki-agent-session-rail__new-thread"
