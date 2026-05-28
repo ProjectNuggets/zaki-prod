@@ -5,7 +5,15 @@ import {
   type BrainGraphResponse,
 } from "@/lib/api";
 
-export function useBrainGraph(userId: string, opts?: BrainGraphFetchOpts) {
+export type BrainGraphQueryOptions = {
+  enabled?: boolean;
+};
+
+export function useBrainGraph(
+  userId: string,
+  opts?: BrainGraphFetchOpts,
+  queryOptions?: BrainGraphQueryOptions
+) {
   return useQuery<BrainGraphResponse>({
     queryKey: [
       "brain",
@@ -20,7 +28,7 @@ export function useBrainGraph(userId: string, opts?: BrainGraphFetchOpts) {
       opts?.semantic_min_weight,
     ],
     queryFn: () => fetchBrainGraph(userId, opts),
-    enabled: !!userId,
+    enabled: !!userId && (queryOptions?.enabled ?? true),
     staleTime: 30_000,
   });
 }

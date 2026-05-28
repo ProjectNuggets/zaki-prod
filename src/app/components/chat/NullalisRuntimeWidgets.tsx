@@ -46,33 +46,34 @@ export function TaskChecklist({ tasks }: { tasks: NullalisTaskItem[] }) {
 
   return (
     <details
-      className="mt-2 max-w-[88%] rounded-zaki-xl border border-zaki bg-zaki-raised p-3 text-xs shadow-sm dark:border-[rgba(240,236,230,0.08)] dark:bg-[#141210]"
+      className="zaki-agent-plan-inline"
       open={open}
       onToggle={(event) =>
         setOpen((event.currentTarget as HTMLDetailsElement).open)
       }
     >
       <summary
-        className="cursor-pointer select-none text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary"
+        className="zaki-agent-plan-inline__summary"
         aria-expanded={open}
         aria-label={`${t("task.plan")}, ${sortedTasks.length} ${sortedTasks.length === 1 ? t("task.task") : t("task.tasks")}`}
       >
-        {t("task.plan")}
+        <span>{t("task.plan")}</span>
+        <span>{sortedTasks.length}</span>
       </summary>
-      <ul className="mt-2 space-y-2 list-none p-0">
+      <ul className="zaki-agent-plan-inline__list">
         {sortedTasks.map((task) => (
           <li
             key={task.taskId}
-            className="flex items-center gap-2 text-zaki-secondary dark:text-zaki-dark-subtle"
+            className="zaki-agent-plan-inline__item"
           >
             <span aria-hidden>{taskStatusIcon(task.status)}</span>
             <span className="sr-only">Status: {taskStatusCopy(task.status)}. </span>
-            <span className="min-w-0 flex-1 truncate">
+            <span className="zaki-agent-plan-inline__text">
               {task.description || task.taskId}
             </span>
             {typeof task.progressPct === "number" && task.status === "running" ? (
               <span
-                className="shrink-0 text-[11px] text-zaki-muted dark:text-zaki-dark-muted"
+                className="zaki-agent-plan-inline__progress"
                 aria-label={`${Math.round(task.progressPct)} percent complete`}
               >
                 {Math.round(task.progressPct)}%
@@ -80,7 +81,7 @@ export function TaskChecklist({ tasks }: { tasks: NullalisTaskItem[] }) {
             ) : null}
             <span
               aria-hidden
-              className="shrink-0 rounded-full bg-zaki-elevated px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-zaki-muted dark:bg-[#1a1714] dark:text-zaki-dark-muted"
+              className="zaki-agent-plan-inline__status"
             >
               {taskStatusCopy(task.status)}
             </span>

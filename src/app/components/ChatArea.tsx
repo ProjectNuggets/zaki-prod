@@ -2413,6 +2413,9 @@ export function ChatArea() {
     activeSessionRecord?.mode === "review"
       ? activeSessionRecord.mode
       : null);
+  const isActiveZakiSessionLive = Boolean(
+    isStreaming || activeSessionUi?.live || activeSessionRecord?.live
+  );
   const powerUserPendingApprovals = useMemo(() => {
     const pending = activeSessionUi?.pendingApprovals ?? [];
     if (!nullalisApprovalRequest?.id) return pending;
@@ -2478,7 +2481,9 @@ export function ChatArea() {
   // Brain memory count drives the brain_panel stage gate — we only
   // surface "open your brain" once ZAKI has actually saved a few facts
   // worth showing.
-  const onboardingBrainGraph = useBrainGraph(authUserId || "");
+  const onboardingBrainGraph = useBrainGraph(authUserId || "", undefined, {
+    enabled: showZakiHome,
+  });
   const onboardingBrainCount =
     onboardingBrainGraph.data?.total_nodes_in_corpus ?? 0;
   const [memoryImportOpen, setMemoryImportOpen] = useState(false);
@@ -2728,8 +2733,17 @@ export function ChatArea() {
 
   useEffect(() => {
     if (!isZakiBotActiveSpace || !normalizedActiveZakiSessionKey || !zakiBotProvisionReady) return;
+    if (zakiSessionsLoading) return;
+    if (!isActiveZakiSessionLive) return;
     void hydrateActiveSessionDetail(normalizedActiveZakiSessionKey);
-  }, [hydrateActiveSessionDetail, isZakiBotActiveSpace, normalizedActiveZakiSessionKey, zakiBotProvisionReady]);
+  }, [
+    hydrateActiveSessionDetail,
+    isActiveZakiSessionLive,
+    isZakiBotActiveSpace,
+    normalizedActiveZakiSessionKey,
+    zakiBotProvisionReady,
+    zakiSessionsLoading,
+  ]);
 
   useEffect(() => {
     if (!isZakiBotActiveSpace) return;
@@ -2800,7 +2814,7 @@ export function ChatArea() {
     activeSessionMode ?? "execute",
     agentContextPercent != null ? `${Math.round(agentContextPercent)}% ctx` : "0% ctx",
     agentWeeklyLabel,
-    isStreaming || activeSessionUi?.live || activeSessionRecord?.live ? "live" : "ready",
+    isActiveZakiSessionLive ? "live" : "ready",
   ].join(" · ");
   const isZakiBotSendLocked = Boolean(
     zakiBotQuotaInfo && zakiBotQuotaInfo.remaining <= 0
@@ -6278,10 +6292,13 @@ export function ChatArea() {
         toast.error(t("zakiControls.errors.sessionNotReady"));
         return;
       }
-      const previousMode = activeSessionUi?.mode ?? "execute";
+      const previousMode = activeSessionMode ?? "execute";
       if (previousMode === mode) return;
-      setSessionModePending(true);
       setZakiSessionModeUi(sessionKey, mode);
+      if (!isActiveZakiSessionLive) {
+        return;
+      }
+      setSessionModePending(true);
       try {
         const { response, data } = await setAgentSessionMode(sessionKey, mode);
         if (!response.ok) {
@@ -6297,11 +6314,12 @@ export function ChatArea() {
       }
     },
     [
-      activeSessionUi?.mode,
+      activeSessionMode,
       activeThreadId,
       activeZakiSessionKey,
       agentUserId,
       hydrateActiveSessionDetail,
+      isActiveZakiSessionLive,
       queryClient,
       setZakiSessionModeUi,
       t,

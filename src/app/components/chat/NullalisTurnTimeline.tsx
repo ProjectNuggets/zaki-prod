@@ -462,6 +462,15 @@ export function NullalisTurnTimeline({
     .join(" · ");
 
   if (showThinkingOnly) {
+    const liveLabel = frame?.label || "Thinking";
+    const liveMeta = [
+      framePhase,
+      frame?.tool || "runtime",
+      elapsedLabel,
+      frame?.stepIndex != null && frame?.stepTotal != null
+        ? `${frame.stepIndex + 1}/${frame.stepTotal}`
+        : null,
+    ].filter(Boolean);
     return (
       <section
         className="zaki-agent-timeline zaki-agent-timeline--thinking zaki-agent-lane zaki-process-enter max-w-[92%] py-1 text-zaki-primary dark:text-zaki-dark-primary"
@@ -475,11 +484,25 @@ export function NullalisTurnTimeline({
         </div>
         <div className="zaki-agent-lane__body">
           <div className="zaki-agent-lane__head">
-            <span>thinking</span>
-            <span className="sep">·</span>
-            <span>runtime</span>
+            {liveMeta.map((item, index) => (
+              <span key={`${item}-${index}`} className={index === 0 ? undefined : "with-sep"}>
+                {item}
+              </span>
+            ))}
           </div>
-          <TextShimmer text="Thinking" />
+          <div className="zaki-agent-lane__narration-card">
+            <div className="zaki-agent-lane__narration-head">
+              <span>narration</span>
+              <span>{frame?.tool || "session scoped"}</span>
+            </div>
+            <strong>{liveLabel}</strong>
+            <small>
+              {frame?.tool
+                ? "Live runtime signal from the active tool lane."
+                : "Live operational trail from the agent runtime."}
+            </small>
+          </div>
+          {!frame?.label ? <TextShimmer text="Thinking" /> : null}
         </div>
       </section>
     );

@@ -269,6 +269,7 @@ type TestZakiSessionUiState = {
     string,
     {
       mode: "plan" | "execute" | "review";
+      live?: boolean;
       approvalCount: number;
       pendingApprovals: Array<{
         id: string;
@@ -360,6 +361,7 @@ describe("ChatArea Component", () => {
       if (!zakiSessionUiState.sessions[sessionKey]) {
         zakiSessionUiState.sessions[sessionKey] = {
           mode: "execute",
+          live: false,
           approvalCount: 0,
           pendingApprovals: [],
           lastChannel: "Web",
@@ -373,6 +375,10 @@ describe("ChatArea Component", () => {
           sessions: TestZakiSessionUiState["sessions"];
           sandbox: TestZakiSessionUiState["sandbox"];
           ensureSession: typeof ensureSession;
+          hydrateSession: (
+            sessionKey: string,
+            patch: Partial<TestZakiSessionUiState["sessions"][string]>
+          ) => void;
           setMode: (sessionKey: string, mode: "plan" | "execute" | "review") => void;
           incrementApprovalCount: (sessionKey: string, approval?: unknown) => void;
           decrementApprovalCount: (sessionKey: string) => void;
@@ -385,6 +391,16 @@ describe("ChatArea Component", () => {
           sessions: zakiSessionUiState.sessions,
           sandbox: zakiSessionUiState.sandbox,
           ensureSession,
+          hydrateSession: (
+            sessionKey: string,
+            patch: Partial<TestZakiSessionUiState["sessions"][string]>
+          ) => {
+            ensureSession(sessionKey);
+            zakiSessionUiState.sessions[sessionKey] = {
+              ...zakiSessionUiState.sessions[sessionKey],
+              ...patch,
+            };
+          },
           setMode: (sessionKey: string, mode: "plan" | "execute" | "review") => {
             ensureSession(sessionKey);
             zakiSessionUiState.sessions[sessionKey].mode = mode;
@@ -544,6 +560,79 @@ describe("ChatArea Component", () => {
         threadId: "main",
       });
     });
+  });
+
+  it("does not hydrate live-only session detail for an inactive persisted Agent session", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+
+    (fetchAgentMe as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (listAgentSessions as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({ sessions: [] }), headers: new Headers() },
+      data: {
+        sessions: [
+          {
+            session_key: "agent:zaki-bot:user:1:thread:main",
+            title: "Main",
+            live: false,
+            mode: null,
+            message_count: 24,
+            last_active: "2026-05-27T17:56:49.377Z",
+          },
+        ],
+      },
+    });
+
+    await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(provisionAgent).toHaveBeenCalledWith({
+        spaceId: "zaki-bot",
+        threadId: "main",
+      });
+    });
+    expect(fetchAgentSession).not.toHaveBeenCalled();
+  });
+
+  it("keeps Agent mode changes local when the selected session is not live yet", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    navState.zakiSessionKey = "agent:zaki-bot:user:1:thread:main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+
+    (fetchAgentMe as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (listAgentSessions as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({ sessions: [] }), headers: new Headers() },
+      data: {
+        sessions: [
+          {
+            session_key: "agent:zaki-bot:user:1:thread:main",
+            title: "Main",
+            live: false,
+            mode: null,
+            message_count: 24,
+            last_active: "2026-05-27T17:56:49.377Z",
+          },
+        ],
+      },
+    });
+
+    await renderChatAreaAndWaitForEffects();
+    await waitFor(() => expect(screen.getByTestId("zaki-composer-mode")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("zaki-composer-mode"));
+
+    expect(setAgentSessionMode).not.toHaveBeenCalled();
+    expect(zakiSessionUiState.sessions["agent:zaki-bot:user:1:thread:main"]?.mode).toBe("plan");
   });
 
   it("does not auto-title ZAKI bot threads", async () => {

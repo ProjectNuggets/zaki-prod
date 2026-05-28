@@ -46,7 +46,32 @@ describe("ChatView", () => {
       />
     );
 
-    expect(screen.getByText("Thinking")).toBeInTheDocument();
+    expect(screen.getAllByText("Thinking").length).toBeGreaterThan(0);
+  });
+
+  it("surfaces the active agent narration frame when the turn has no concrete tool rows yet", () => {
+    render(
+      <ChatView
+        messages={[
+          { id: "user-1", role: "user", content: "Check the repo." },
+          { id: "assistant-1", role: "assistant", content: "" },
+        ]}
+        isHistoryLoading={false}
+        isStreaming
+        botMode
+        nullalisNarrationFrame={{
+          id: "n1",
+          phase: "thinking",
+          label: "Reading backend contract",
+          tool: "agent_bff",
+          timestamp: Date.now(),
+        }}
+        firstMessageTransition={false}
+      />
+    );
+
+    expect(screen.getByText("Reading backend contract")).toBeInTheDocument();
+    expect(screen.getAllByText("agent_bff").length).toBeGreaterThan(0);
   });
 
   it("hides source chips for bot mode messages because provenance lives in the Agent panel", () => {
