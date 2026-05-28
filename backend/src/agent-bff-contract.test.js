@@ -191,8 +191,30 @@ describe("agent BOT BFF contract", () => {
       { method: "get",    path: "/api/agent/sessions/:sessionKey/context",  upstreamSuffix: "/context", json: false },
       { method: "get",    path: "/api/agent/sessions/:sessionKey/export",   upstreamSuffix: "/export",  json: false },
       { method: "get",    path: "/api/agent/sessions/:sessionKey/history",  upstreamSuffix: "/history", json: false },
+      { method: "post",   path: "/api/agent/sessions/:sessionKey/mode",     upstreamSuffix: "/mode",    json: true  },
       { method: "post",   path: "/api/agent/sessions/:sessionKey/approve",  upstreamSuffix: "/approve", json: true  },
     ]);
+  });
+
+  it("includes the POST /mode route (frontend setAgentSessionMode contract)", () => {
+    // The composer mode toggle calls
+    //   POST /api/agent/sessions/:sessionKey/mode  body: { mode }
+    // which proxies to nullalis
+    //   POST /api/v1/users/${userId}/sessions/${sessionKey}/mode
+    // → handleSessionMode → the /mode slash command. This regression test
+    // pins the BFF surface so the frontend toggle never silently 404s.
+    const modeRoute = AGENT_SESSION_BFF_ROUTES.find(
+      (route) =>
+        route.method === "post" &&
+        route.path === "/api/agent/sessions/:sessionKey/mode"
+    );
+    expect(modeRoute).toBeDefined();
+    expect(modeRoute).toMatchObject({
+      method: "post",
+      path: "/api/agent/sessions/:sessionKey/mode",
+      upstreamSuffix: "/mode",
+      json: true,
+    });
   });
 
   describe("registerAgentSessionBffRoutes", () => {
@@ -245,6 +267,7 @@ describe("agent BOT BFF contract", () => {
       ]);
       expect(verbCalls("post")).toEqual([
         "/api/agent/sessions/:sessionKey/compact",
+        "/api/agent/sessions/:sessionKey/mode",
         "/api/agent/sessions/:sessionKey/approve",
       ]);
     });
@@ -270,6 +293,14 @@ describe("agent BOT BFF contract", () => {
       expect(getDetailCall).toBeDefined();
       expect(getDetailCall).toHaveLength(3);
       expect(getDetailCall[1]).toBe(handlers.requireAgentContext);
+
+      const modeCall = app.post.mock.calls.find(
+        (args) => args[0] === "/api/agent/sessions/:sessionKey/mode"
+      );
+      expect(modeCall).toBeDefined();
+      expect(modeCall).toHaveLength(4);
+      expect(modeCall[1]).toBe(handlers.requireAgentContext);
+      expect(modeCall[2]).toBe(handlers.agentJson1mb);
     });
 
     it("encodes the userId segment in upstream paths but forwards the raw session key", () => {
@@ -282,6 +313,17 @@ describe("agent BOT BFF contract", () => {
         (args) => args[0] === "/api/agent/sessions/:sessionKey/approve"
       );
       expect(approveCall).toBeDefined();
+      const modeCall = app.post.mock.calls.find(
+        (args) => args[0] === "/api/agent/sessions/:sessionKey/mode"
+      );
+      expect(modeCall).toBeDefined();
+      const modeProxyHandler = modeCall[modeCall.length - 1];
+      const modeUpstream = modeProxyHandler.pathBuilder("user with space", {
+        params: { sessionKey: "agent:zaki-bot:user:42:thread:main" },
+      });
+      expect(modeUpstream).toBe(
+        "/api/v1/users/user%20with%20space/sessions/agent:zaki-bot:user:42:thread:main/mode"
+      );
       const proxyHandler = approveCall[approveCall.length - 1];
       const upstream = proxyHandler.pathBuilder("user with space", {
         params: { sessionKey: "agent:zaki-bot:user:42:thread:main" },

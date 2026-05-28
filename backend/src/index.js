@@ -14211,7 +14211,7 @@ app.get(
 );
 
 // All session-proxy routes (GET/DELETE detail, compact, context, export,
-// history, approve) are wired declaratively from AGENT_SESSION_BFF_ROUTES so
+// history, mode, approve) are wired declaratively from AGENT_SESSION_BFF_ROUTES so
 // the contract listing the frontend depends on stays in lockstep with what's
 // actually registered.
 registerAgentSessionBffRoutes(app, {
