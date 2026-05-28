@@ -1,12 +1,9 @@
 import {
   ArrowUp,
-  Boxes,
-  Brain,
   CalendarClock,
   Check,
   File as FileIcon,
   FileText,
-  Globe2,
   Mic,
   Paperclip,
   Pin,
@@ -95,6 +92,47 @@ export type InputAreaHandle = {
   setDraft: (text: string) => void;
 };
 
+export type ZakiTurnAutonomyLevel = "read_only" | "supervised" | "full";
+export type ZakiTurnReasoningEffort = "low" | "medium" | "high";
+
+export type InputAreaSendOptions = {
+  zaki?: {
+    mode: AgentSessionMode;
+    autonomy: ZakiTurnAutonomyLevel;
+    assistant_mode: "fast" | "balanced" | "deep";
+    reasoning_effort: ZakiTurnReasoningEffort;
+  };
+};
+
+const ZAKI_MODE_ORDER: AgentSessionMode[] = ["plan", "review", "execute"];
+const ZAKI_AUTONOMY_ORDER: ZakiTurnAutonomyLevel[] = ["read_only", "supervised", "full"];
+const ZAKI_REASONING_ORDER: ZakiTurnReasoningEffort[] = ["low", "medium", "high"];
+
+const ZAKI_AUTONOMY_LABELS: Record<ZakiTurnAutonomyLevel, string> = {
+  read_only: "read-only",
+  supervised: "supervised",
+  full: "full",
+};
+
+const ZAKI_REASONING_LABELS: Record<ZakiTurnReasoningEffort, string> = {
+  low: "low",
+  medium: "mid",
+  high: "high",
+};
+
+function nextCycleValue<T extends string>(values: readonly T[], value: T): T {
+  const index = values.indexOf(value);
+  return values[(index + 1) % values.length] ?? values[0]!;
+}
+
+function assistantModeFromReasoning(
+  effort: ZakiTurnReasoningEffort
+): "fast" | "balanced" | "deep" {
+  if (effort === "low") return "fast";
+  if (effort === "medium") return "balanced";
+  return "deep";
+}
+
 export function InputArea({
   onSend,
   attachments,
@@ -115,12 +153,6 @@ export function InputArea({
   zakiContextPressurePercent = null,
   zakiCompactionThresholdPct = null,
   zakiContextTooltipCopy = null,
-  zakiApprovalCount = 0,
-  zakiArtifactCount = 0,
-  zakiSandboxLabel = null,
-  onOpenZakiApprovals,
-  onOpenZakiBrowser,
-  onOpenZakiArtifacts,
   threadKey = null,
   lastUserMessage = null,
   composerHandleRef = null,
@@ -128,7 +160,7 @@ export function InputArea({
   isCompacting = false,
   agentUserId = null,
 }: {
-  onSend: (text: string, attachments: File[]) => void;
+  onSend: (text: string, attachments: File[], options?: InputAreaSendOptions) => void;
   /** Programmatic compact handler. When provided, the high-pressure
    *  pre-flight banner button calls this directly via the agent
    *  /compact endpoint instead of sending the literal "/compact" text
@@ -163,6 +195,7 @@ export function InputArea({
    *  null, falls back to a conservative 70% FE default. */
   zakiCompactionThresholdPct?: number | null;
   zakiContextTooltipCopy?: string | null;
+  /** Kept for parent API compatibility; Agent controls now live in the inspector/power sheet. */
   zakiApprovalCount?: number;
   zakiArtifactCount?: number;
   zakiSandboxLabel?: string | null;
@@ -186,6 +219,10 @@ export function InputArea({
   const [menuOpen, setMenuOpen] = useState(false);
   const [scheduleFollowUpOpen, setScheduleFollowUpOpen] = useState(false);
   const [pinContextOpen, setPinContextOpen] = useState(false);
+  const [zakiAutonomy, setZakiAutonomy] =
+    useState<ZakiTurnAutonomyLevel>("supervised");
+  const [zakiReasoningEffort, setZakiReasoningEffort] =
+    useState<ZakiTurnReasoningEffort>("high");
   const [isOnboardingControlsLocked, setIsOnboardingControlsLocked] = useState(false);
   // 2026-05-08 — Drop-overlay visual state. Tracks pixel-level dragenter
   // depth (a dragenter on a child fires another dragenter) so the overlay
@@ -242,9 +279,6 @@ export function InputArea({
   const activeViaAccessCode = effectiveEntitlement.source === "access_code";
   const canToggleQueryMode = typeof onToggleQueryMode === "function";
   const canToggleWebSearch = typeof onToggleWebSearch === "function";
-  const normalizedApprovalCount = Math.max(0, Math.round(zakiApprovalCount || 0));
-  const normalizedArtifactCount = Math.max(0, Math.round(zakiArtifactCount || 0));
-  const sandboxCopy = zakiSandboxLabel || "off";
   const slashFilter = useMemo(() => detectSlash(inputValue).filter, [inputValue]);
   const filteredSlashCommands = useMemo<SlashCommand[]>(
     () => getDisplayOrder({ filter: slashFilter, showAliases, isOperator: false }).flat,
@@ -271,7 +305,7 @@ export function InputArea({
   const { pins: pinnedMemories, pin: pinMemory, unpin: unpinMemory, limit: pinLimit } =
     usePinnedContext(pinnedThreadKey);
   const effectiveZakiMode: AgentSessionMode = zakiMode ?? "execute";
-  const showZakiModeHint = zakiBotMode && effectiveZakiMode !== "execute";
+  const zakiAssistantMode = assistantModeFromReasoning(zakiReasoningEffort);
   const zakiContextTooltip = zakiContextTooltipCopy || t("input.zaki.contextTooltip");
 
   // 2026-05-08 — Composer-level paste + drag-drop for files.
@@ -664,7 +698,18 @@ export function InputArea({
       const pinnedPrefix =
         !isOverride && !isCommand ? buildPinnedContextPrefix(pinnedMemories) : "";
       const wireText = pinnedPrefix && text ? `${pinnedPrefix}${text}` : text;
-      onSend(wireText, attachments);
+      if (zakiBotMode) {
+        onSend(wireText, attachments, {
+          zaki: {
+            mode: effectiveZakiMode,
+            autonomy: zakiAutonomy,
+            assistant_mode: zakiAssistantMode,
+            reasoning_effort: zakiReasoningEffort,
+          },
+        });
+      } else {
+        onSend(wireText, attachments);
+      }
       // Always clear the textarea after a send. For an override path
       // (compact / quick reply) the textarea may have held an unrelated
       // draft — that draft is intentionally consumed because the user
@@ -685,6 +730,11 @@ export function InputArea({
       inputValue,
       attachments,
       onSend,
+      zakiBotMode,
+      effectiveZakiMode,
+      zakiAutonomy,
+      zakiAssistantMode,
+      zakiReasoningEffort,
       setAttachments,
       draftStorageKey,
       pinnedMemories,
@@ -1027,109 +1077,6 @@ export function InputArea({
               showUpgradeStrip ? "mt-2" : "mt-0"
             )}
           >
-        {zakiBotMode ? (
-          <div
-            className="zaki-composer-control-strip"
-            data-testid="zaki-composer-control-strip"
-          >
-            <div
-              className="zaki-composer-mode-switch"
-              role="group"
-              aria-label={t("input.zaki.autonomyAria", {
-                defaultValue: "Agent autonomy mode",
-              })}
-            >
-              {(["plan", "execute", "review"] as AgentSessionMode[]).map((mode) => {
-                const selected = effectiveZakiMode === mode;
-                return (
-                  <button
-                    key={mode}
-                    type="button"
-                    aria-pressed={selected}
-                    disabled={zakiModePending || !onZakiModeChange}
-                    onClick={() => handleSelectZakiMode(mode)}
-                    data-testid={`zaki-composer-autonomy-${mode}`}
-                    className={cn(
-                      "zaki-composer-mode-switch__button",
-                      selected && "is-active"
-                    )}
-                  >
-                    {t(`zakiControls.modes.${mode}`)}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="zaki-composer-surface-actions">
-              <button
-                type="button"
-                className={cn(
-                  "zaki-composer-surface-action",
-                  normalizedApprovalCount > 0 && "is-warn"
-                )}
-                onClick={onOpenZakiApprovals}
-                disabled={!onOpenZakiApprovals}
-                aria-label={t("input.zaki.approvalsAria", {
-                  defaultValue: "{{count}} pending approvals",
-                  count: normalizedApprovalCount,
-                })}
-                title={t("input.zaki.approvals", { defaultValue: "Approvals" })}
-                data-testid="zaki-composer-open-approvals"
-              >
-                <ShieldCheck className="size-3.5" aria-hidden />
-                <span>{t("input.zaki.approvals", { defaultValue: "Approvals" })}</span>
-                <b>{normalizedApprovalCount}</b>
-              </button>
-              <button
-                type="button"
-                className="zaki-composer-surface-action"
-                onClick={onOpenZakiBrowser}
-                disabled={!onOpenZakiBrowser}
-                aria-label={t("input.zaki.browserAria", {
-                  defaultValue: "Open browser controls. Sandbox {{state}}",
-                  state: sandboxCopy,
-                })}
-                title={t("input.zaki.browser", { defaultValue: "Browser" })}
-                data-testid="zaki-composer-open-browser"
-              >
-                <Globe2 className="size-3.5" aria-hidden />
-                <span>{t("input.zaki.browser", { defaultValue: "Browser" })}</span>
-                <b>{sandboxCopy}</b>
-              </button>
-              <button
-                type="button"
-                className="zaki-composer-surface-action"
-                onClick={() => setPinContextOpen(true)}
-                disabled={!agentUserId}
-                aria-label={t("input.zaki.memoryAria", {
-                  defaultValue: "{{count}} pinned memories",
-                  count: pinnedMemories.length,
-                })}
-                title={t("input.zaki.memory", { defaultValue: "Memory" })}
-                data-testid="zaki-composer-open-memory"
-              >
-                <Brain className="size-3.5" aria-hidden />
-                <span>{t("input.zaki.memory", { defaultValue: "Memory" })}</span>
-                <b>{pinnedMemories.length || "pin"}</b>
-              </button>
-              <button
-                type="button"
-                className="zaki-composer-surface-action"
-                onClick={onOpenZakiArtifacts}
-                disabled={!onOpenZakiArtifacts}
-                aria-label={t("input.zaki.outputAria", {
-                  defaultValue: "{{count}} outputs available",
-                  count: normalizedArtifactCount,
-                })}
-                title={t("input.zaki.output", { defaultValue: "Output" })}
-                data-testid="zaki-composer-open-output"
-              >
-                <Boxes className="size-3.5" aria-hidden />
-                <span>{t("input.zaki.output", { defaultValue: "Output" })}</span>
-                <b>{normalizedArtifactCount}</b>
-              </button>
-            </div>
-          </div>
-        ) : null}
         {zakiBotMode && pinnedMemories.length > 0 && (
           <div
             className="zaki-pinned-context-rail flex flex-wrap items-center gap-1.5 px-1"
@@ -1509,47 +1456,6 @@ export function InputArea({
                         </span>
                       ) : null}
                     </button>
-                    <div className="zaki-composer-menu__section">
-                      {t("input.zaki.modeSection", { defaultValue: "Mode" })}
-                    </div>
-                    {(["plan", "execute", "review"] as AgentSessionMode[]).map((mode) => {
-                      const selected = effectiveZakiMode === mode;
-                      return (
-                        <button
-                          key={mode}
-                          className={cn(
-                            "zaki-composer-menu__item zaki-composer-menu__item--radio",
-                            selected && "is-active"
-                          )}
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={selected}
-                          onClick={() => handleSelectZakiMode(mode)}
-                          disabled={zakiModePending || !onZakiModeChange}
-                          data-testid={`zaki-composer-mode-${mode}`}
-                        >
-                          <span className="zaki-composer-menu__mode-mark" aria-hidden />
-                          <span className="zaki-composer-menu__copy">
-                            <span className="zaki-composer-menu__label">
-                              {t(`zakiControls.modes.${mode}`)}
-                            </span>
-                            <span className="zaki-composer-menu__meta">
-                              {t(`input.zaki.modeMeta.${mode}`, {
-                                defaultValue:
-                                  mode === "plan"
-                                    ? "Think first, then wait"
-                                    : mode === "review"
-                                      ? "Inspect and critique"
-                                      : "Act on the task",
-                              })}
-                            </span>
-                          </span>
-                          {selected ? (
-                            <Check className="zaki-composer-menu__check" aria-hidden />
-                          ) : null}
-                        </button>
-                      );
-                    })}
                   </>
                 ) : (
                   <>
@@ -1610,27 +1516,84 @@ export function InputArea({
               </div>
             )}
           </div>
-          {/* Phase 4-B (2026-05-08) — Mode indicator. The 3-pill always-on row
-              was redundant with the "+" composer menu's mode selector; it
-              shouted the available modes at every turn. The composer menu
-              is the source of truth for switching mode. We surface only
-              the active selection, and only when it is something other
-              than the default "execute" — Plan / Review get a subtle
-              brand-tinted pill, Execute stays silent. */}
-          {showZakiModeHint ? (
-            <button
-              type="button"
-              onClick={() => handleSelectZakiMode("execute")}
-              disabled={zakiModePending || !onZakiModeChange}
-              aria-label={t("input.zaki.modeHint", { mode: t(`zakiControls.modes.${effectiveZakiMode}`) })}
-              data-testid="zaki-mode-hint"
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full bg-zaki-brand-10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zaki-brand transition-colors hover:bg-zaki-brand-15",
-                (zakiModePending || !onZakiModeChange) && "opacity-60 cursor-not-allowed"
-              )}
+          {zakiBotMode ? (
+            <div
+              className="zaki-turn-controls"
+              data-testid="zaki-turn-controls"
             >
-              {t(`zakiControls.modes.${effectiveZakiMode}`)}
-            </button>
+              <div
+                className="zaki-turn-mode"
+                role="group"
+                aria-label={t("input.zaki.modeSection", { defaultValue: "Mode" })}
+              >
+                {ZAKI_MODE_ORDER.map((mode) => {
+                  const selected = effectiveZakiMode === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      aria-pressed={selected}
+                      disabled={zakiModePending || !onZakiModeChange}
+                      onClick={() => handleSelectZakiMode(mode)}
+                      data-testid={`zaki-composer-mode-${mode}`}
+                      className={cn("zaki-turn-mode__button", selected && "is-active")}
+                    >
+                      {t(`zakiControls.modes.${mode}`)}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                className="zaki-turn-chip"
+                onClick={() =>
+                  setZakiReasoningEffort((current) =>
+                    nextCycleValue(ZAKI_REASONING_ORDER, current)
+                  )
+                }
+                aria-label={t("input.zaki.reasoningAria", {
+                  defaultValue: "Reasoning effort: {{value}}",
+                  value: ZAKI_REASONING_LABELS[zakiReasoningEffort],
+                })}
+                title={t("input.zaki.reasoningTitle", {
+                  defaultValue: "Reasoning effort",
+                })}
+                data-testid="zaki-composer-reasoning"
+              >
+                <span className="zaki-turn-chip__bars" aria-hidden>
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                <span>{ZAKI_REASONING_LABELS[zakiReasoningEffort]}</span>
+                <span className="zaki-turn-chip__caret" aria-hidden>
+                  ▾
+                </span>
+              </button>
+              <button
+                type="button"
+                className="zaki-turn-chip"
+                onClick={() =>
+                  setZakiAutonomy((current) =>
+                    nextCycleValue(ZAKI_AUTONOMY_ORDER, current)
+                  )
+                }
+                aria-label={t("input.zaki.autonomyAria", {
+                  defaultValue: "Autonomy level: {{value}}",
+                  value: ZAKI_AUTONOMY_LABELS[zakiAutonomy],
+                })}
+                title={t("input.zaki.autonomyTitle", {
+                  defaultValue: "Autonomy level",
+                })}
+                data-testid="zaki-composer-autonomy"
+              >
+                <ShieldCheck className="size-3.5" aria-hidden />
+                <span>{ZAKI_AUTONOMY_LABELS[zakiAutonomy]}</span>
+                <span className="zaki-turn-chip__caret" aria-hidden>
+                  ▾
+                </span>
+              </button>
+            </div>
           ) : null}
           {!zakiBotMode ? (
             <button
@@ -1681,7 +1644,7 @@ export function InputArea({
               {t("input.queryMode.activePill")}
             </span>
           ) : null}
-          <span className="flex-1" />
+          <span className={zakiBotMode ? "zaki-agent-composer-spacer" : "flex-1"} />
           {/* M3: Context pressure meter. When pressure crosses the
                compact-arming line the meter itself becomes the compact
                trigger — click to free space. Hysteresis on
@@ -1779,8 +1742,8 @@ export function InputArea({
               </TooltipContent>
             </Tooltip>
           ) : null}
-          {/* Mic button — STT voice input (available on all chat surfaces) */}
-          {!isStopMode ? (
+          {/* Mic button — STT voice input stays on non-Agent chat surfaces; the V2 Agent composer reserves this row for turn controls. */}
+          {!zakiBotMode && !isStopMode ? (
             <>
               {isRecording ? (
                 <>

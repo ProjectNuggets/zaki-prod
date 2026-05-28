@@ -1,5 +1,5 @@
 import { BackgroundPattern } from "./BackgroundPattern";
-import { InputArea, type InputAreaHandle } from "./InputArea";
+import { InputArea, type InputAreaHandle, type InputAreaSendOptions } from "./InputArea";
 import { AgentSessionRail } from "@/app/components/agent/AgentSessionRail";
 import { SandboxBadge } from "@/app/components/agent/SandboxBadge";
 import { Share2, MoreVertical, Download, Brain, ChevronDown } from "lucide-react";
@@ -4375,6 +4375,7 @@ export function ChatArea() {
     assistantId,
     signal,
     disableResponseEnvelope = false,
+    turnOptions = null,
   }: {
     workspaceSlug: string;
     threadSlug: string;
@@ -4382,6 +4383,7 @@ export function ChatArea() {
     assistantId: string;
     signal?: AbortSignal;
     disableResponseEnvelope?: boolean;
+    turnOptions?: InputAreaSendOptions["zaki"] | null;
   }) => {
     const activeSpace = spacesList.find((s) => s.id === workspaceSlug);
     const instructions = activeSpace?.instructions ?? "";
@@ -4400,6 +4402,14 @@ export function ChatArea() {
           message,
           threadId: threadSlug,
           spaceId: workspaceSlug,
+          ...(turnOptions?.mode ? { mode: turnOptions.mode } : {}),
+          ...(turnOptions?.autonomy ? { autonomy: turnOptions.autonomy } : {}),
+          ...(turnOptions?.assistant_mode
+            ? { assistant_mode: turnOptions.assistant_mode }
+            : {}),
+          ...(turnOptions?.reasoning_effort
+            ? { reasoning_effort: turnOptions.reasoning_effort }
+            : {}),
         }
       : {
           message,
@@ -5739,6 +5749,7 @@ export function ChatArea() {
   const handleSend = useCallback(async (
     text: string,
     files: File[],
+    turnOptions?: InputAreaSendOptions,
     preferredWorkspaceSlug?: string | null
   ) => {
     const trimmed = text.trim();
@@ -5981,6 +5992,7 @@ export function ChatArea() {
         message: sendText,
         assistantId: assistantMessageId,
         signal: streamController.signal,
+        turnOptions: isZakiBotTarget ? turnOptions?.zaki ?? null : null,
       });
       if (isZakiBotTarget && agentUserId) {
         const sessionKey = buildAgentSessionKey(threadId, agentUserId);

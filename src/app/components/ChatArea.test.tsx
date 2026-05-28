@@ -640,7 +640,7 @@ describe("ChatArea Component", () => {
     expect(window.sessionStorage.getItem("zaki:pendingPowerUserTab")).toBeNull();
   });
 
-  it("opens exact Agent power tabs from composer control actions", async () => {
+  it("keeps Agent power tabs out of the composer and opens them through the canonical handoff", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
@@ -649,7 +649,18 @@ describe("ChatArea Component", () => {
 
     await renderChatAreaAndWaitForEffects();
 
-    fireEvent.click(screen.getByTestId("zaki-composer-open-approvals"));
+    expect(screen.getByTestId("zaki-turn-controls")).toBeInTheDocument();
+    expect(screen.queryByTestId("zaki-composer-open-approvals")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("zaki-composer-open-browser")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("zaki-composer-open-output")).not.toBeInTheDocument();
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("zaki:open-power-user", {
+          detail: { tab: "approvals" },
+        })
+      );
+    });
     await waitFor(() => {
       expect(screen.getByTestId("power-user-tab-approvals")).toHaveAttribute(
         "aria-selected",
@@ -657,7 +668,13 @@ describe("ChatArea Component", () => {
       );
     });
 
-    fireEvent.click(screen.getByTestId("zaki-composer-open-browser"));
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("zaki:open-power-user", {
+          detail: { tab: "browser" },
+        })
+      );
+    });
     await waitFor(() => {
       expect(screen.getByTestId("power-user-tab-browser")).toHaveAttribute(
         "aria-selected",
@@ -665,7 +682,13 @@ describe("ChatArea Component", () => {
       );
     });
 
-    fireEvent.click(screen.getByTestId("zaki-composer-open-output"));
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("zaki:open-power-user", {
+          detail: { tab: "artifacts" },
+        })
+      );
+    });
     await waitFor(() => {
       expect(screen.getByTestId("power-user-tab-artifacts")).toHaveAttribute(
         "aria-selected",

@@ -184,7 +184,7 @@ describe("InputArea primary action button", () => {
     expect((composer as HTMLTextAreaElement).value).toBe("/health");
   });
 
-  it("shows ZAKI mode actions inside the plus menu and calls the mode change handler", () => {
+  it("shows ZAKI turn controls inline and keeps file actions in the plus menu", () => {
     const onZakiModeChange = jest.fn();
 
     render(
@@ -198,19 +198,19 @@ describe("InputArea primary action button", () => {
       />
     );
 
+    expect(screen.getByTestId("zaki-turn-controls")).toBeInTheDocument();
+    expect(screen.queryByTestId("zaki-composer-control-strip")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("zaki-mode-hint")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("zaki-composer-mode-plan"));
+    expect(onZakiModeChange).toHaveBeenCalledWith("plan");
+
     fireEvent.click(screen.getByRole("button", { name: "input.menu.addOptions" }));
     expect(screen.getByTestId("zaki-composer-upload")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("zaki-composer-mode-plan"));
-
-    expect(onZakiModeChange).toHaveBeenCalledWith("plan");
-    expect(screen.getByTestId("zaki-mode-hint")).toBeInTheDocument();
   });
 
-  it("surfaces non-model Agent controls around the composer", () => {
+  it("surfaces only mode, autonomy, and reasoning as composer turn controls", () => {
     const onZakiModeChange = jest.fn();
-    const onOpenApprovals = jest.fn();
-    const onOpenBrowser = jest.fn();
-    const onOpenArtifacts = jest.fn();
 
     render(
       <InputArea
@@ -223,31 +223,67 @@ describe("InputArea primary action button", () => {
         zakiApprovalCount={2}
         zakiSandboxLabel="playwright"
         zakiArtifactCount={3}
-        onOpenZakiApprovals={onOpenApprovals}
-        onOpenZakiBrowser={onOpenBrowser}
-        onOpenZakiArtifacts={onOpenArtifacts}
         agentUserId="tester@example.com"
       />
     );
 
-    expect(screen.getByTestId("zaki-composer-control-strip")).toBeInTheDocument();
-    expect(screen.getByTestId("zaki-composer-autonomy-review")).toHaveAttribute(
+    expect(screen.getByTestId("zaki-turn-controls")).toBeInTheDocument();
+    expect(screen.getByTestId("zaki-composer-mode-review")).toHaveAttribute(
       "aria-pressed",
       "true"
     );
+    expect(screen.queryByTestId("zaki-composer-open-approvals")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("zaki-composer-open-browser")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("zaki-composer-open-output")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "input.voice.tapToRecord" })
+    ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId("zaki-composer-autonomy-execute"));
+    fireEvent.click(screen.getByTestId("zaki-composer-mode-execute"));
     expect(onZakiModeChange).toHaveBeenCalledWith("execute");
 
-    fireEvent.click(screen.getByTestId("zaki-composer-open-approvals"));
-    fireEvent.click(screen.getByTestId("zaki-composer-open-browser"));
-    fireEvent.click(screen.getByTestId("zaki-composer-open-output"));
-    expect(onOpenApprovals).toHaveBeenCalledTimes(1);
-    expect(onOpenBrowser).toHaveBeenCalledTimes(1);
-    expect(onOpenArtifacts).toHaveBeenCalledTimes(1);
+    const reasoning = screen.getByTestId("zaki-composer-reasoning");
+    expect(reasoning).toHaveTextContent("high");
+    fireEvent.click(reasoning);
+    expect(reasoning).toHaveTextContent("low");
 
-    fireEvent.click(screen.getByTestId("zaki-composer-open-memory"));
+    const autonomy = screen.getByTestId("zaki-composer-autonomy");
+    expect(autonomy).toHaveTextContent("supervised");
+    fireEvent.click(autonomy);
+    expect(autonomy).toHaveTextContent("full");
+
+    fireEvent.click(screen.getByRole("button", { name: "input.menu.addOptions" }));
+    fireEvent.click(screen.getByTestId("zaki-composer-pin-context"));
     expect(screen.getAllByText("pinContext.title").length).toBeGreaterThan(0);
+  });
+
+  it("sends ZAKI turn options with the message payload", () => {
+    const onSend = jest.fn();
+
+    render(
+      <InputArea
+        onSend={onSend}
+        attachments={[]}
+        setAttachments={jest.fn()}
+        zakiBotMode
+        zakiMode="review"
+        onZakiModeChange={jest.fn()}
+      />
+    );
+
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "inspect the browser lane" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    expect(onSend).toHaveBeenCalledWith("inspect the browser lane", [], {
+      zaki: {
+        mode: "review",
+        autonomy: "supervised",
+        assistant_mode: "deep",
+        reasoning_effort: "high",
+      },
+    });
   });
 
   it("shows the context meter when ZAKI has known or pending context pressure", () => {
