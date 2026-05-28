@@ -1137,7 +1137,22 @@ export function PowerUserSheet({
     setBusyId(`artifact-export:${artifactId}:${format}`);
     try {
       const { response, data } = await exportAgentArtifact(artifactId, format);
-      if (!response.ok) throw new Error(String(data?.error || "export_failed"));
+      if (!response.ok) {
+        // The nullalis bridge to produce_document returns 501 +
+        // { error: "export_not_yet_available" } while that tool is
+        // parked. Surface a "coming soon" message instead of a generic
+        // failure so users know the feature isn't broken — just gated.
+        const code = typeof data?.error === "string" ? data.error : "";
+        if (response.status === 501 || code === "export_not_yet_available") {
+          toast.message(
+            t("zakiControls.powerUser.artifacts.exportNotAvailable", {
+              format: format.toUpperCase(),
+            })
+          );
+          return;
+        }
+        throw new Error(String(data?.error || "export_failed"));
+      }
       const url = getExportDownloadUrl(data);
       if (url && typeof window !== "undefined") {
         window.open(url, "_blank", "noopener,noreferrer");
