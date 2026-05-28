@@ -2084,6 +2084,8 @@ export type BotRuntimeStatusResponse = {
   sandbox?: {
     enabled?: boolean;
     backend?: BotSandboxBackend | null;
+    initialized?: boolean;
+    has_real_backend?: boolean;
   } | null;
 };
 
@@ -2227,7 +2229,7 @@ export async function setAgentSessionMode(
 }
 
 export async function fetchBotRuntimeStatus() {
-  const response = await backendRequest("/v1/me/bot/runtime", { method: "GET" });
+  const response = await backendAuthRequest("/api/agent/diagnostics", { method: "GET" });
   const data = await parseApiJson<BotRuntimeStatusResponse>(response);
   return { response, data };
 }

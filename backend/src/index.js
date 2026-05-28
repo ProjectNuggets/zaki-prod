@@ -2338,6 +2338,20 @@ function trackAgentStreamDiagnostic(userId, error) {
   });
 }
 
+function clearAgentStreamDiagnostic(userId) {
+  const key = String(userId || "").trim();
+  if (!key) return;
+  agentStreamDiagnosticsByUser.delete(key);
+}
+
+function normalizeAgentSandboxBackend(value) {
+  const backend = String(value || "").trim().toLowerCase();
+  if (backend === "bubblewrap" || backend === "firejail" || backend === "docker") {
+    return backend;
+  }
+  return null;
+}
+
 async function novaAdminRequest(path, options = {}) {
   const apiBase = getApiBase();
   if (!apiBase) throw new Error("NOVA_TYP_BASE_URL is not configured.");
@@ -10956,6 +10970,9 @@ const agentChatStreamHandler = async (req, res) => {
     if (!isSse) {
       const nodeStream = Readable.fromWeb(upstream.body);
       const pipeResult = await pipeReadableToResponseWithCompletion(nodeStream, res, "Agent stream");
+      if (upstream.ok && pipeResult.status === "success") {
+        clearAgentStreamDiagnostic(userId);
+      }
       await recordAgentMeterReceiptBestEffort(req, {
         status: upstream.ok && pipeResult.status === "success" ? "success" : pipeResult.status,
         durationMs: Date.now() - meterStartedAtMs,
@@ -11041,8 +11058,13 @@ const agentChatStreamHandler = async (req, res) => {
       );
     }
 
+    const streamStatus = upstream.ok && !streamMetrics.sawError ? "success" : "failed";
+    if (streamStatus === "success") {
+      clearAgentStreamDiagnostic(userId);
+    }
+
     await recordAgentMeterReceiptBestEffort(req, {
-      status: upstream.ok && !streamMetrics.sawError ? "success" : "failed",
+      status: streamStatus,
       durationMs: Date.now() - meterStartedAtMs,
       message: originalMessage,
       streamMetrics,
@@ -11382,6 +11404,7 @@ app.get("/api/agent/diagnostics", requireAgentContext, async (req, res) => {
   let upstreamReady = { ok: false, status: 0, latencyMs: null, reason: "not_configured" };
   let upstreamSummary = null;
   let upstreamControlPlane = null;
+  let upstreamSandbox = null;
   const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
   if (nullclawBase && NULLCLAW_INTERNAL_TOKEN) {
     const requestId = String(req.requestId || crypto.randomUUID());
@@ -11457,6 +11480,15 @@ app.get("/api/agent/diagnostics", requireAgentContext, async (req, res) => {
       const diagnosticsPayload = await diagnostics.json().catch(() => ({}));
       if (diagnostics.ok) {
         upstreamControlPlane = diagnosticsPayload?.control_plane || null;
+        upstreamSandbox =
+          diagnosticsPayload?.sandbox && typeof diagnosticsPayload.sandbox === "object"
+            ? {
+                initialized: Boolean(diagnosticsPayload.sandbox.initialized),
+                enabled: Boolean(diagnosticsPayload.sandbox.enabled),
+                backend: normalizeAgentSandboxBackend(diagnosticsPayload.sandbox.backend),
+                has_real_backend: Boolean(diagnosticsPayload.sandbox.has_real_backend),
+              }
+            : null;
         upstreamSummary = {
           provider:
             diagnosticsPayload?.startup_self_check?.chat_provider_effective ||
@@ -11496,6 +11528,7 @@ app.get("/api/agent/diagnostics", requireAgentContext, async (req, res) => {
     upstreamReady,
     upstreamSummary,
     upstreamControlPlane,
+    sandbox: upstreamSandbox,
     lastAgentStreamError: streamState,
   });
 });

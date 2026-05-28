@@ -286,6 +286,22 @@ describe("agent runtime API clients", () => {
     );
   });
 
+  it("loads runtime sandbox status from the authenticated Agent diagnostics facade", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeResponse(200, { sandbox: { enabled: true, backend: "docker" } })
+    );
+
+    const { fetchBotRuntimeStatus } = await import("@/lib/api");
+    const { data } = await fetchBotRuntimeStatus();
+
+    expect(data.sandbox?.enabled).toBe(true);
+    expect(data.sandbox?.backend).toBe("docker");
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/agent/diagnostics",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
   it("lists Agent tasks with allowlisted query params", async () => {
     mockFetch.mockResolvedValueOnce(makeResponse(200, { tasks: [] }));
 
