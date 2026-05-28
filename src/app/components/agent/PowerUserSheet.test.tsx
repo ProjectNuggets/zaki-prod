@@ -23,6 +23,7 @@ jest.mock("@/lib/api", () => ({
 jest.mock("sonner", () => ({
   toast: {
     error: jest.fn(),
+    message: jest.fn(),
     success: jest.fn(),
   },
 }));
@@ -100,6 +101,7 @@ const listAgentArtifactsMock = jest.requireMock("@/lib/api").listAgentArtifacts 
 const listAgentTracesMock = jest.requireMock("@/lib/api").listAgentTraces as jest.Mock;
 const shareAgentArtifactMock = jest.requireMock("@/lib/api").shareAgentArtifact as jest.Mock;
 const shareAgentTraceMock = jest.requireMock("@/lib/api").shareAgentTrace as jest.Mock;
+const toastMessageMock = jest.requireMock("sonner").toast.message as jest.Mock;
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -256,6 +258,38 @@ describe("PowerUserSheet", () => {
     });
   });
 
+  it("supports camelCase artifact ids from upstream payloads", async () => {
+    listAgentArtifactsMock.mockResolvedValueOnce({
+      response: { ok: true },
+      data: {
+        artifacts: [
+          {
+            artifactId: "artifact-camel",
+            title: "Camel artifact",
+            type: "markdown",
+            version: 1,
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      render(<PowerUserSheet isOpen onClose={() => {}} initialTab="artifacts" />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Camel artifact")).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("power-user-artifact-share-artifact-camel"));
+    });
+
+    await waitFor(() => {
+      expect(shareAgentArtifactMock).toHaveBeenCalledWith("artifact-camel");
+    });
+  });
+
   it("does not treat private artifact export urls as public share links", async () => {
     const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
     listAgentArtifactsMock.mockResolvedValueOnce({
@@ -299,6 +333,45 @@ describe("PowerUserSheet", () => {
       "noopener,noreferrer"
     );
     openSpy.mockRestore();
+  });
+
+  it("surfaces parked artifact export as an unavailable action", async () => {
+    exportAgentArtifactMock.mockResolvedValueOnce({
+      response: { ok: false, status: 501 },
+      data: { error: "export_not_yet_available" },
+    });
+    listAgentArtifactsMock.mockResolvedValueOnce({
+      response: { ok: true },
+      data: {
+        artifacts: [
+          {
+            id: "artifact-export-parked",
+            title: "Export parked",
+            type: "markdown",
+            version: 1,
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      render(<PowerUserSheet isOpen onClose={() => {}} initialTab="artifacts" />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Export parked")).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("power-user-artifact-export-pdf-artifact-export-parked"));
+    });
+
+    await waitFor(() => {
+      expect(exportAgentArtifactMock).toHaveBeenCalledWith("artifact-export-parked", "pdf");
+      expect(toastMessageMock).toHaveBeenCalledWith(
+        "zakiControls.powerUser.artifacts.exportNotAvailable"
+      );
+    });
   });
 
   it("lists traces and can request a sanitized share", async () => {

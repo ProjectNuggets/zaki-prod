@@ -78,6 +78,14 @@ import {
   requestNullclawChatStream,
 } from "./agent-client.js";
 import {
+  appendAgentCronJob,
+  applyAgentCronPatch,
+  ensureAgentCronJobIds,
+  isAgentCronJobIdSafe,
+  normalizeAgentCronJobsPayload,
+  removeAgentCronJob,
+} from "./agent-cron-facade.js";
+import {
   DEFAULT_NULLCLAW_JSON_PROXY_MAX_BYTES,
   parseRequiredJson,
   readResponseTextWithLimit,
@@ -13707,6 +13715,124 @@ const makeAgentSecretsTwoPhaseHandler = (action) => async (req, res) => {
 const agentSecretsPutHandler = makeAgentSecretsTwoPhaseHandler("put");
 const agentSecretsDeleteHandler = makeAgentSecretsTwoPhaseHandler("delete");
 
+async function readAgentCronJobsForUser(userId, requestId) {
+  const result = await callNullclawJson({
+    method: "GET",
+    path: `/api/v1/users/${encodeURIComponent(userId)}/cron`,
+    userId,
+    requestId,
+  });
+  if (!result.ok) {
+    const error = new Error(result.data?.error || "agent_cron_read_failed");
+    error.status = result.status;
+    error.data = result.data;
+    throw error;
+  }
+  return normalizeAgentCronJobsPayload(result.data);
+}
+
+async function writeAgentCronJobsForUser(userId, jobs, requestId) {
+  const jobsWithIds = ensureAgentCronJobIds(jobs);
+  const result = await callNullclawJson({
+    method: "POST",
+    path: `/api/v1/users/${encodeURIComponent(userId)}/cron`,
+    userId,
+    requestId,
+    body: jobsWithIds,
+  });
+  if (!result.ok) {
+    const error = new Error(result.data?.error || "agent_cron_write_failed");
+    error.status = result.status;
+    error.data = result.data;
+    throw error;
+  }
+  return { result, jobs: jobsWithIds };
+}
+
+function sendAgentCronError(res, error) {
+  const status = Number(error?.status || 500);
+  if (status >= 400 && status < 600) {
+    return res.status(status).json(error?.data || { error: error?.message || "agent_cron_failed" });
+  }
+  return res.status(500).json({ error: error?.message || "agent_cron_failed" });
+}
+
+const agentCronListHandler = async (req, res) => {
+  try {
+    const userId = String(req.agentUserId || "");
+    const jobs = await readAgentCronJobsForUser(userId, getOrCreateRequestId(req));
+    return res.status(200).json(jobs);
+  } catch (error) {
+    console.error("[Agent] Cron list failed:", error);
+    return sendAgentCronError(res, error);
+  }
+};
+
+const agentCronReplaceOrCreateHandler = async (req, res) => {
+  try {
+    const userId = String(req.agentUserId || "");
+    const requestId = getOrCreateRequestId(req);
+    if (Array.isArray(req.body)) {
+      const { result, jobs } = await writeAgentCronJobsForUser(userId, req.body, requestId);
+      return res.status(result.status || 200).json(result.data || { status: "updated", jobs });
+    }
+    if (!req.body || typeof req.body !== "object") {
+      return res.status(400).json({ error: "cron_job_must_be_object_or_array" });
+    }
+    const current = await readAgentCronJobsForUser(userId, requestId);
+    const { jobs, job } = appendAgentCronJob(current, req.body);
+    await writeAgentCronJobsForUser(userId, jobs, requestId);
+    return res.status(201).json({ status: "created", job });
+  } catch (error) {
+    console.error("[Agent] Cron create/replace failed:", error);
+    return sendAgentCronError(res, error);
+  }
+};
+
+const agentCronPatchHandler = async (req, res) => {
+  try {
+    const userId = String(req.agentUserId || "");
+    const requestId = getOrCreateRequestId(req);
+    const jobId = String(req.params?.id || "").trim();
+    if (!isAgentCronJobIdSafe(jobId)) {
+      return res.status(400).json({ error: "invalid_cron_job_id" });
+    }
+    if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
+      return res.status(400).json({ error: "cron_patch_must_be_object" });
+    }
+    const current = await readAgentCronJobsForUser(userId, requestId);
+    const { found, jobs, job } = applyAgentCronPatch(current, jobId, req.body);
+    if (!found) {
+      return res.status(404).json({ error: "cron_job_not_found" });
+    }
+    await writeAgentCronJobsForUser(userId, jobs, requestId);
+    return res.status(200).json({ status: "updated", job });
+  } catch (error) {
+    console.error("[Agent] Cron patch failed:", error);
+    return sendAgentCronError(res, error);
+  }
+};
+
+const agentCronDeleteHandler = async (req, res) => {
+  try {
+    const userId = String(req.agentUserId || "");
+    const requestId = getOrCreateRequestId(req);
+    const jobId = String(req.params?.id || "").trim();
+    if (!isAgentCronJobIdSafe(jobId)) {
+      return res.status(400).json({ error: "invalid_cron_job_id" });
+    }
+    const current = await readAgentCronJobsForUser(userId, requestId);
+    const { found, jobs } = removeAgentCronJob(current, jobId);
+    if (found) {
+      await writeAgentCronJobsForUser(userId, jobs, requestId);
+    }
+    return res.status(200).json({ ok: true, status: "deleted", deleted: found });
+  } catch (error) {
+    console.error("[Agent] Cron delete failed:", error);
+    return sendAgentCronError(res, error);
+  }
+};
+
 const makeAgentUserProxyHandler = (pathBuilder, proxyOptions = {}) => async (req, res) => {
   try {
     const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
@@ -14176,21 +14302,19 @@ app.put(
 app.get(
   "/api/agent/cron",
   requireAgentContext,
-  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/cron`)
+  agentCronListHandler
 );
 app.post(
   "/api/agent/cron",
   requireAgentContext,
   agentJson1mb,
-  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/cron`)
+  agentCronReplaceOrCreateHandler
 );
 app.patch(
   "/api/agent/cron/:id",
   requireAgentContext,
   agentJson1mb,
-  makeAgentUserProxyHandler(
-    (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/cron/${encodeURIComponent(req.params.id)}`
-  )
+  agentCronPatchHandler
 );
 
 registerBotBffAliases(app, {
@@ -14212,9 +14336,7 @@ registerBotBffAliases(app, {
 app.delete(
   "/api/agent/cron/:id",
   requireAgentContext,
-  makeAgentUserProxyHandler(
-    (userId, req) => `/api/v1/users/${encodeURIComponent(userId)}/cron/${encodeURIComponent(req.params.id)}`
-  )
+  agentCronDeleteHandler
 );
 
 // =============================================================================

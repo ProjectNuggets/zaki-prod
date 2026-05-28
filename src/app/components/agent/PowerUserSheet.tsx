@@ -191,7 +191,7 @@ function normalizeList<T>(data: { items?: T[] } & Record<string, unknown>, key: 
 }
 
 function getArtifactId(artifact: AgentArtifact): string {
-  return artifact.id || artifact.artifact_id || "";
+  return artifact.id || artifact.artifact_id || artifact.artifactId || "";
 }
 
 function getArtifactTitle(artifact: AgentArtifact): string {

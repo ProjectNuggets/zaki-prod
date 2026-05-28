@@ -2318,6 +2318,7 @@ export type AgentTrace = {
 export type AgentArtifact = {
   id?: string;
   artifact_id?: string;
+  artifactId?: string;
   title?: string;
   type?: string;
   mime_type?: string;
