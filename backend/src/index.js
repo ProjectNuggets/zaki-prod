@@ -11227,34 +11227,7 @@ async function agentSessionsListHandler(req, res) {
       return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
     }
 
-    const localThreads = await loadZakiBotLocalThreadSummaries(userId);
-    let upstreamSessions = [];
-    let upstreamWarning = null;
-
-    try {
-      const upstream = await sendBotBffUpstreamRequest({
-        method: "GET",
-        path: `/api/v1/users/${encodeURIComponent(userId)}/sessions`,
-        userId,
-        requestId,
-      });
-      const upstreamData = await upstream.json().catch(() => ({}));
-      if (upstream.ok) {
-        upstreamSessions = Array.isArray(upstreamData?.sessions)
-          ? upstreamData.sessions
-          : Array.isArray(upstreamData)
-          ? upstreamData
-          : [];
-      } else {
-        upstreamWarning =
-          String(upstreamData?.code || upstreamData?.error || "").trim() ||
-          `upstream_${upstream.status}`;
-      }
-    } catch (error) {
-      upstreamWarning = error?.message || "upstream_sessions_unavailable";
-    }
-
-    const sessions = mergeZakiAgentSessions({ upstreamSessions, localThreads });
+    const { sessions, upstreamWarning } = await loadMergedZakiAgentSessionsForUser(userId, requestId);
     res.status(200).json({
       sessions,
       ...(upstreamWarning ? { warning: upstreamWarning } : {}),
@@ -11265,6 +11238,121 @@ async function agentSessionsListHandler(req, res) {
       error: error?.message || "session list failed",
     });
     res.status(500).json({ error: error?.message || "Unable to load agent sessions." });
+  }
+}
+
+async function loadMergedZakiAgentSessionsForUser(userId, requestId) {
+  const localThreads = await loadZakiBotLocalThreadSummaries(userId);
+  let upstreamSessions = [];
+  let upstreamWarning = null;
+
+  try {
+    const upstream = await sendBotBffUpstreamRequest({
+      method: "GET",
+      path: `/api/v1/users/${encodeURIComponent(userId)}/sessions`,
+      userId,
+      requestId,
+    });
+    const upstreamData = await upstream.json().catch(() => ({}));
+    if (upstream.ok) {
+      upstreamSessions = Array.isArray(upstreamData?.sessions)
+        ? upstreamData.sessions
+        : Array.isArray(upstreamData)
+        ? upstreamData
+        : [];
+    } else {
+      upstreamWarning =
+        String(upstreamData?.code || upstreamData?.error || "").trim() ||
+        `upstream_${upstream.status}`;
+    }
+  } catch (error) {
+    upstreamWarning = error?.message || "upstream_sessions_unavailable";
+  }
+
+  return {
+    sessions: mergeZakiAgentSessions({ upstreamSessions, localThreads }),
+    upstreamWarning,
+  };
+}
+
+async function agentSessionDetailHandler(req, res) {
+  const sessionKey = validateSessionKeyParam(req, res);
+  if (!sessionKey) return;
+
+  const requestId = String(req.requestId || crypto.randomUUID());
+  try {
+    const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+    if (!authResult) return;
+    const userId = resolveCanonicalAgentUserId(authResult);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    }
+
+    const parsed = parseZakiSessionKey(sessionKey);
+    if (parsed.userId !== String(userId)) {
+      return res.status(403).json({ error: "session_not_owned" });
+    }
+
+    if (parsed.lane === "thread") {
+      const { sessions, upstreamWarning: listWarning } = await loadMergedZakiAgentSessionsForUser(
+        userId,
+        requestId
+      );
+      const localSession = sessions.find((session) => session?.session_key === parsed.normalized);
+      if (localSession) {
+        return res.status(200).json({
+          ...localSession,
+          ...(listWarning ? { warning: listWarning } : {}),
+        });
+      }
+    }
+
+    let upstreamWarning = null;
+    try {
+      const upstream = await sendBotBffUpstreamRequest({
+        method: "GET",
+        path: `/api/v1/users/${encodeURIComponent(userId)}/sessions/${sessionKey}`,
+        userId,
+        requestId,
+      });
+      const upstreamData = await upstream.json().catch(() => ({}));
+      if (upstream.ok) {
+        return res.status(200).json(upstreamData);
+      }
+      upstreamWarning =
+        String(upstreamData?.code || upstreamData?.error || "").trim() ||
+        `upstream_${upstream.status}`;
+      if (upstream.status !== 404) {
+        return res.status(upstream.status).json(upstreamData);
+      }
+    } catch (error) {
+      upstreamWarning = error?.message || "upstream_session_unavailable";
+    }
+
+    const { sessions, upstreamWarning: listWarning } = await loadMergedZakiAgentSessionsForUser(
+      userId,
+      requestId
+    );
+    const normalizedSessionKey = parsed.normalized;
+    const localSession = sessions.find((session) => session?.session_key === normalizedSessionKey);
+    if (localSession) {
+      return res.status(200).json({
+        ...localSession,
+        warning: upstreamWarning || listWarning || "upstream_session_unavailable",
+      });
+    }
+
+    return res.status(404).json({
+      error: "session_not_found",
+      warning: upstreamWarning || listWarning || "upstream_session_unavailable",
+    });
+  } catch (error) {
+    console.error("[Agent] Session detail error:", {
+      requestId,
+      sessionKey,
+      error: error?.message || "session detail failed",
+    });
+    return res.status(500).json({ error: error?.message || "Unable to load agent session." });
   }
 }
 
@@ -14242,11 +14330,16 @@ app.get(
   requireAgentContext,
   agentSessionsListHandler
 );
+app.get(
+  "/api/agent/sessions/:sessionKey",
+  requireAgentContext,
+  agentSessionDetailHandler
+);
 
-// All session-proxy routes (GET/DELETE detail, compact, context, export,
-// history, mode, approve) are wired declaratively from AGENT_SESSION_BFF_ROUTES so
+// Session-proxy routes are wired declaratively from AGENT_SESSION_BFF_ROUTES so
 // the contract listing the frontend depends on stays in lockstep with what's
-// actually registered.
+// actually registered. GET detail has the custom fallback route above; the
+// declarative route remains registered after it as a transparent upstream proxy.
 registerAgentSessionBffRoutes(app, {
   requireAgentContext,
   agentJson1mb,
