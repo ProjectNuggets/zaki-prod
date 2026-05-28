@@ -202,8 +202,10 @@ describe("InputArea primary action button", () => {
     expect(screen.queryByTestId("zaki-composer-control-strip")).not.toBeInTheDocument();
     expect(screen.queryByTestId("zaki-mode-hint")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId("zaki-composer-mode-plan"));
-    expect(onZakiModeChange).toHaveBeenCalledWith("plan");
+    const modeToggle = screen.getByTestId("zaki-composer-mode");
+    expect(modeToggle).toHaveAttribute("data-mode", "review");
+    fireEvent.click(modeToggle);
+    expect(onZakiModeChange).toHaveBeenCalledWith("execute");
 
     fireEvent.click(screen.getByRole("button", { name: "input.menu.addOptions" }));
     expect(screen.getByTestId("zaki-composer-upload")).toBeInTheDocument();
@@ -228,10 +230,8 @@ describe("InputArea primary action button", () => {
     );
 
     expect(screen.getByTestId("zaki-turn-controls")).toBeInTheDocument();
-    expect(screen.getByTestId("zaki-composer-mode-review")).toHaveAttribute(
-      "aria-pressed",
-      "true"
-    );
+    expect(screen.getByTestId("zaki-composer-mode")).toHaveTextContent("review");
+    expect(screen.getByTestId("zaki-composer-mode")).toHaveAttribute("data-mode", "review");
     expect(screen.queryByTestId("zaki-composer-open-approvals")).not.toBeInTheDocument();
     expect(screen.queryByTestId("zaki-composer-open-browser")).not.toBeInTheDocument();
     expect(screen.queryByTestId("zaki-composer-open-output")).not.toBeInTheDocument();
@@ -239,7 +239,7 @@ describe("InputArea primary action button", () => {
       screen.queryByRole("button", { name: "input.voice.tapToRecord" })
     ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId("zaki-composer-mode-execute"));
+    fireEvent.click(screen.getByTestId("zaki-composer-mode"));
     expect(onZakiModeChange).toHaveBeenCalledWith("execute");
 
     const reasoning = screen.getByTestId("zaki-composer-reasoning");

@@ -9,7 +9,6 @@ import {
   Pin,
   Plus,
   Search,
-  ShieldCheck,
   Square,
   X,
   Zap,
@@ -107,6 +106,12 @@ export type InputAreaSendOptions = {
 const ZAKI_MODE_ORDER: AgentSessionMode[] = ["plan", "review", "execute"];
 const ZAKI_AUTONOMY_ORDER: ZakiTurnAutonomyLevel[] = ["read_only", "supervised", "full"];
 const ZAKI_REASONING_ORDER: ZakiTurnReasoningEffort[] = ["low", "medium", "high"];
+
+const ZAKI_MODE_LABELS: Record<AgentSessionMode, string> = {
+  plan: "plan",
+  review: "review",
+  execute: "execute",
+};
 
 const ZAKI_AUTONOMY_LABELS: Record<ZakiTurnAutonomyLevel, string> = {
   read_only: "read-only",
@@ -482,7 +487,6 @@ export function InputArea({
   const zakiContextValue = hasZakiContextValue
     ? Math.max(0, Math.min(100, Math.round(zakiContextPressurePercent as number)))
     : 0;
-  const pressureColor = "var(--zaki-accent)";
 
   // Table-stakes #10 (2026-05-08, refined per WR-05 review) —
   // High-pressure pre-flight nudge.
@@ -518,21 +522,6 @@ export function InputArea({
   // the meter from flickering between actionable/inert states.
   const compactArmed =
     zakiBotMode && !isSending && hasZakiContextValue && compactArmedRef.current;
-
-  // P1-03 — discoverability nudge. When the meter first becomes armed
-  // we briefly pulse a ring around it so the user notices the new
-  // affordance without us adding a permanent label.
-  const [armedPulse, setArmedPulse] = useState(false);
-  const wasArmedRef = useRef(false);
-  useEffect(() => {
-    if (compactArmed && !wasArmedRef.current) {
-      setArmedPulse(true);
-      const timer = setTimeout(() => setArmedPulse(false), 1800);
-      wasArmedRef.current = true;
-      return () => clearTimeout(timer);
-    }
-    if (!compactArmed) wasArmedRef.current = false;
-  }, [compactArmed]);
 
   // ── Voice recording (STT) ──────────────────────────────────────────
   const [isRecording, setIsRecording] = useState(false);
@@ -940,6 +929,9 @@ export function InputArea({
     },
     [isOnboardingControlsLocked, onZakiModeChange, zakiModePending]
   );
+  const handleCycleZakiMode = useCallback(() => {
+    handleSelectZakiMode(nextCycleValue(ZAKI_MODE_ORDER, effectiveZakiMode));
+  }, [effectiveZakiMode, handleSelectZakiMode]);
 
   return (
     <div
@@ -1175,7 +1167,13 @@ export function InputArea({
               "zaki-input-field flex-1 bg-transparent font-body text-zaki-primary placeholder-zaki text-sm px-1 py-1.5 resize-none min-h-[30px] max-h-[160px] overflow-y-auto outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 zaki-scrollbar-fade",
               isRtl ? "text-right" : "text-left"
             )}
-            placeholder={placeholderSuggestions[placeholderIndex]}
+            placeholder={
+              zakiBotMode
+                ? t("input.zaki.placeholder", {
+                    defaultValue: "continue · / commands · ↑ edit last",
+                  })
+                : placeholderSuggestions[placeholderIndex]
+            }
             autoComplete="off"
             dir="auto"
             value={inputValue}
@@ -1516,36 +1514,48 @@ export function InputArea({
               </div>
             )}
           </div>
+          {zakiBotMode ? <span className="zaki-turn-separator" aria-hidden="true" /> : null}
           {zakiBotMode ? (
             <div
               className="zaki-turn-controls"
               data-testid="zaki-turn-controls"
             >
-              <div
-                className="zaki-turn-mode"
-                role="group"
-                aria-label={t("input.zaki.modeSection", { defaultValue: "Mode" })}
-              >
-                {ZAKI_MODE_ORDER.map((mode) => {
-                  const selected = effectiveZakiMode === mode;
-                  return (
-                    <button
-                      key={mode}
-                      type="button"
-                      aria-pressed={selected}
-                      disabled={zakiModePending || !onZakiModeChange}
-                      onClick={() => handleSelectZakiMode(mode)}
-                      data-testid={`zaki-composer-mode-${mode}`}
-                      className={cn("zaki-turn-mode__button", selected && "is-active")}
-                    >
-                      {t(`zakiControls.modes.${mode}`)}
-                    </button>
-                  );
-                })}
-              </div>
               <button
                 type="button"
-                className="zaki-turn-chip"
+                className={cn("zaki-turn-chip zaki-turn-chip--mode", `is-mode-${effectiveZakiMode}`)}
+                onClick={handleCycleZakiMode}
+                disabled={zakiModePending || !onZakiModeChange}
+                aria-label={t("input.zaki.modeCycleAria", {
+                  defaultValue: "Agent mode: {{value}}. Click to cycle.",
+                  value: ZAKI_MODE_LABELS[effectiveZakiMode],
+                })}
+                title={t("input.zaki.modeCycleTitle", {
+                  defaultValue: "This turn · mode — {{value}}. Click to cycle.",
+                  value: ZAKI_MODE_LABELS[effectiveZakiMode],
+                })}
+                data-testid="zaki-composer-mode"
+                data-mode={effectiveZakiMode}
+              >
+                <svg
+                  className="zaki-turn-chip__glyph zaki-turn-chip__glyph--mode"
+                  viewBox="0 0 10 10"
+                  aria-hidden
+                >
+                  <rect x="2" y="2" width="6" height="6" fill="currentColor" />
+                </svg>
+                <span className="zaki-turn-chip__value">
+                  {ZAKI_MODE_LABELS[effectiveZakiMode]}
+                </span>
+                <span className="zaki-turn-chip__caret" aria-hidden>
+                  ▾
+                </span>
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "zaki-turn-chip zaki-turn-chip--reasoning",
+                  `is-reasoning-${zakiReasoningEffort}`
+                )}
                 onClick={() =>
                   setZakiReasoningEffort((current) =>
                     nextCycleValue(ZAKI_REASONING_ORDER, current)
@@ -1556,23 +1566,35 @@ export function InputArea({
                   value: ZAKI_REASONING_LABELS[zakiReasoningEffort],
                 })}
                 title={t("input.zaki.reasoningTitle", {
-                  defaultValue: "Reasoning effort",
+                  defaultValue: "This turn · reasoning effort — {{value}}. Click to cycle.",
+                  value: ZAKI_REASONING_LABELS[zakiReasoningEffort],
                 })}
                 data-testid="zaki-composer-reasoning"
+                data-reasoning={zakiReasoningEffort}
               >
-                <span className="zaki-turn-chip__bars" aria-hidden>
-                  <span />
-                  <span />
-                  <span />
+                <svg
+                  className="zaki-turn-chip__glyph zaki-turn-chip__glyph--reasoning"
+                  viewBox="0 0 10 10"
+                  data-level={ZAKI_REASONING_ORDER.indexOf(zakiReasoningEffort) + 1}
+                  aria-hidden
+                >
+                  <rect x="1" y="6" width="2" height="3" />
+                  <rect x="4" y="3" width="2" height="6" />
+                  <rect x="7" y="1" width="2" height="8" />
+                </svg>
+                <span className="zaki-turn-chip__value">
+                  {ZAKI_REASONING_LABELS[zakiReasoningEffort]}
                 </span>
-                <span>{ZAKI_REASONING_LABELS[zakiReasoningEffort]}</span>
                 <span className="zaki-turn-chip__caret" aria-hidden>
                   ▾
                 </span>
               </button>
               <button
                 type="button"
-                className="zaki-turn-chip"
+                className={cn(
+                  "zaki-turn-chip zaki-turn-chip--autonomy",
+                  `is-autonomy-${zakiAutonomy}`
+                )}
                 onClick={() =>
                   setZakiAutonomy((current) =>
                     nextCycleValue(ZAKI_AUTONOMY_ORDER, current)
@@ -1583,12 +1605,24 @@ export function InputArea({
                   value: ZAKI_AUTONOMY_LABELS[zakiAutonomy],
                 })}
                 title={t("input.zaki.autonomyTitle", {
-                  defaultValue: "Autonomy level",
+                  defaultValue:
+                    "This turn · autonomy — {{value}}. ZAKI asks before risky actions. Click to cycle.",
+                  value: ZAKI_AUTONOMY_LABELS[zakiAutonomy],
                 })}
                 data-testid="zaki-composer-autonomy"
+                data-autonomy={zakiAutonomy}
               >
-                <ShieldCheck className="size-3.5" aria-hidden />
-                <span>{ZAKI_AUTONOMY_LABELS[zakiAutonomy]}</span>
+                <svg
+                  className="zaki-turn-chip__glyph zaki-turn-chip__glyph--autonomy"
+                  viewBox="0 0 10 10"
+                  aria-hidden
+                >
+                  <path d="M5 1L1.5 2.5V5.5C1.5 7.4 5 9 5 9z" fill="currentColor" />
+                  <path d="M5 1L8.5 2.5V5.5C8.5 7.4 5 9 5 9" fill="none" stroke="currentColor" strokeWidth="1" />
+                </svg>
+                <span className="zaki-turn-chip__value">
+                  {ZAKI_AUTONOMY_LABELS[zakiAutonomy]}
+                </span>
                 <span className="zaki-turn-chip__caret" aria-hidden>
                   ▾
                 </span>
@@ -1664,7 +1698,7 @@ export function InputArea({
                   }}
                   disabled={compactArmed && isCompacting}
                   className={cn(
-                    "group relative inline-flex size-9 items-center justify-center rounded-full border bg-zaki-elevated transition-colors focus-visible:ring-2 focus-visible:ring-offset-2",
+                    "zaki-context-text-meter group relative inline-flex size-9 items-center justify-center rounded-full border bg-zaki-elevated transition-colors focus-visible:ring-2 focus-visible:ring-offset-2",
                     compactArmed
                       ? "cursor-pointer border-zaki-warning text-zaki-warning hover:bg-zaki-warning/10 focus-visible:ring-zaki-warning"
                       : "cursor-default border-zaki-strong text-zaki-muted hover:bg-zaki-sunken focus-visible:ring-zaki-accent",
@@ -1683,36 +1717,12 @@ export function InputArea({
                   }
                   data-testid="zaki-context-meter"
                   data-armed={compactArmed ? "true" : "false"}
+                  data-display="text"
                 >
-                  {armedPulse ? (
-                    <span
-                      aria-hidden="true"
-                      className="pointer-events-none absolute inset-0 rounded-full border-2 border-zaki-warning animate-ping opacity-70"
-                    />
-                  ) : null}
-                  {compactArmed && isCompacting ? (
-                    <span className="size-4 animate-spin rounded-full border-2 border-zaki-warning border-t-transparent" />
-                  ) : (
-                    <span
-                      className={cn(
-                        "relative block size-4 rounded-full",
-                        !hasZakiContextValue && "border border-dashed border-zaki-muted/50"
-                      )}
-                      style={
-                        hasZakiContextValue
-                          ? {
-                              background: `conic-gradient(${
-                                compactArmed ? "var(--zaki-warning)" : pressureColor
-                              } ${zakiContextValue}%, rgba(120,114,106,0.18) ${zakiContextValue}% 100%)`,
-                            }
-                          : undefined
-                      }
-                    >
-                      {hasZakiContextValue ? (
-                        <span className="absolute inset-[3px] rounded-full bg-zaki-elevated" />
-                      ) : null}
-                    </span>
-                  )}
+                  <span className="zaki-context-text-meter__label">ctx</span>
+                  <span>
+                    {hasZakiContextValue ? `${zakiContextValue}%` : "--"}
+                  </span>
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top" sideOffset={8} className="max-w-[240px]">
@@ -1789,11 +1799,19 @@ export function InputArea({
             type={isStopMode ? "button" : "submit"}
             onClick={isStopMode ? onStop : undefined}
             disabled={isStopMode ? typeof onStop !== "function" : !canSend}
-            className="zaki-button-bounce size-11 sm:size-9 bg-zaki-brand hover:bg-zaki-brand-hover rounded-full flex items-center justify-center border border-zaki-brand/30 shadow-[0_2px_8px_rgba(241,2,2,0.15)] hover:shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-shadow disabled:opacity-60 disabled:shadow-none focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
+            className={cn(
+              "zaki-button-bounce size-11 sm:size-9 bg-zaki-brand hover:bg-zaki-brand-hover rounded-full flex items-center justify-center border border-zaki-brand/30 shadow-[0_2px_8px_rgba(241,2,2,0.15)] hover:shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-shadow disabled:opacity-60 disabled:shadow-none focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2",
+              zakiBotMode && !isStopMode && "zaki-send-button--agent"
+            )}
             aria-label={isStopMode ? t("input.stopAria") : t("input.sendAria")}
           >
             {isStopMode ? (
               <X className="size-4 text-white" />
+            ) : zakiBotMode ? (
+              <>
+                <span>SEND</span>
+                <span className="zaki-send-button__kbd">⌘↵</span>
+              </>
             ) : (
               <ArrowUp className="size-4 text-white" />
             )}
