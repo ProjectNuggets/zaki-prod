@@ -35,13 +35,18 @@ import type { ContextGaugeData } from "./NullalisRuntimeWidgets";
 import { composeTurnTimeline } from "./NullalisTurnTimeline";
 import { buildAgentInspectorPanelModel } from "./AgentInspectorPanelModel";
 
-type AgentInspectorTab =
+export type AgentInspectorTab =
   | "plan"
   | "cron"
   | "sources"
   | "artifacts"
   | "browser"
   | "trace";
+
+export type AgentInspectorTabRequest = {
+  tab: AgentInspectorTab;
+  id: number;
+};
 
 const APP_BROWSER_TOOLS = ["web_fetch", "web_search", "playwright_*"] as const;
 const EXTENSION_BROWSER_TOOLS = [
@@ -75,6 +80,7 @@ export type AgentInspectorRailProps = {
   onOpenBrowser?: () => void;
   onOpenArtifacts?: () => void;
   onOpenTrace?: () => void;
+  tabRequest?: AgentInspectorTabRequest | null;
   onClose?: () => void;
 };
 
@@ -265,6 +271,7 @@ export function AgentInspectorRail({
   onOpenBrowser,
   onOpenArtifacts,
   onOpenTrace,
+  tabRequest = null,
   onClose,
 }: AgentInspectorRailProps) {
   const [tab, setTab] = useState<AgentInspectorTab>("plan");
@@ -341,6 +348,13 @@ export function AgentInspectorRail({
   };
 
   useEffect(() => {
+    if (!tabRequest) return;
+    setManualTabSelected(true);
+    setTab(tabRequest.tab);
+  }, [tabRequest?.id, tabRequest?.tab]);
+
+  useEffect(() => {
+    if (tabRequest) return;
     if (manualTabSelected) return;
     if (approvalRequest) {
       setTab("plan");
@@ -374,6 +388,7 @@ export function AgentInspectorRail({
     manualTabSelected,
     sourceEntries.length,
     sortedTasks.length,
+    tabRequest,
   ]);
 
   return (

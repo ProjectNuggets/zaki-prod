@@ -8,6 +8,8 @@ export type V2StatusStripItem = {
   active?: boolean;
   showPip?: boolean;
   tone?: "default" | "accent" | "success" | "warn" | "danger";
+  onClick?: () => void;
+  ariaLabel?: string;
 };
 
 export type V2StatusStripProps = HTMLAttributes<HTMLDivElement> & {
@@ -24,8 +26,8 @@ export function V2StatusStrip({
     <div className={cn("v2-status-strip", className)} role={role} {...props}>
       {items.map((item) => {
         const showPip = item.showPip ?? Boolean(item.active || item.tone);
-        return (
-          <span key={item.id} className="v2-status-strip__item">
+        const content = (
+          <>
             {showPip ? (
               <span
                 className={cn(
@@ -38,6 +40,24 @@ export function V2StatusStrip({
             ) : null}
             {item.label}
             {item.value != null ? <strong>{item.value}</strong> : null}
+          </>
+        );
+        if (item.onClick) {
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className="v2-status-strip__item is-action"
+              onClick={item.onClick}
+              aria-label={item.ariaLabel}
+            >
+              {content}
+            </button>
+          );
+        }
+        return (
+          <span key={item.id} className="v2-status-strip__item">
+            {content}
           </span>
         );
       })}

@@ -15,6 +15,7 @@ import {
 
 describe("V2 component primitives", () => {
   it("renders status strips and metric grids from structured data", () => {
+    const onTrace = jest.fn();
     render(
       <>
         <V2StatusStrip
@@ -22,6 +23,13 @@ describe("V2 component primitives", () => {
           items={[
             { id: "state", label: "Online", active: true, tone: "accent" },
             { id: "quota", label: "Weekly", value: "4/5" },
+            {
+              id: "trace",
+              label: "Trace",
+              value: 3,
+              onClick: onTrace,
+              ariaLabel: "Open trace panel",
+            },
           ]}
         />
         <V2MetricGrid
@@ -37,6 +45,8 @@ describe("V2 component primitives", () => {
     expect(screen.getByText("Weekly")).toBeInTheDocument();
     expect(screen.getByText("4/5")).toBeInTheDocument();
     expect(screen.getByText("Execute")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open trace panel" }));
+    expect(onTrace).toHaveBeenCalledTimes(1);
   });
 
   it("supports keyboard-native segmented controls and tabs", () => {

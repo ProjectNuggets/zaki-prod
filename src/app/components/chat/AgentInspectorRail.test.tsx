@@ -85,6 +85,51 @@ describe("AgentInspectorRail", () => {
     expect(within(narration).getByText(/Read docs\/ui-handoff\.md/)).toBeInTheDocument();
   });
 
+  it("honors external tab requests from status strip and inline evidence links", () => {
+    const { rerender } = renderRail({
+      tabRequest: { tab: "trace", id: 1 },
+      transcriptEntries: [
+        {
+          id: "trace-1",
+          kind: "tool",
+          tool: "read_file",
+          text: "Read docs/ui-handoff.md",
+          resultSummary: "Read docs/ui-handoff.md",
+          resultState: "done",
+          durationMs: 42,
+          timestamp: 1_800_000,
+        },
+      ],
+    });
+
+    expect(screen.getByRole("tab", { name: /Trace/i })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+
+    rerender(
+      <AgentInspectorRail
+        mode="execute"
+        isStreaming={false}
+        lastChannel={null}
+        sandbox={null}
+        tasks={[]}
+        transcriptEntries={[]}
+        narrationFrame={null}
+        approvalRequest={null}
+        contextGaugeData={null}
+        usageSummary={null}
+        quotaInfo={null}
+        tabRequest={{ tab: "sources", id: 2 }}
+      />
+    );
+
+    expect(screen.getByRole("tab", { name: /Sources/i })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+  });
+
   it("surfaces memory and context evidence in the Sources tab", () => {
     const onOpenMemory = jest.fn();
     renderRail({

@@ -53,7 +53,11 @@ import {
   EditInstructionsModal,
   ApprovalRequiredCard,
 } from "./chat";
-import { AgentInspectorRail } from "./chat/AgentInspectorRail";
+import {
+  AgentInspectorRail,
+  type AgentInspectorTab,
+  type AgentInspectorTabRequest,
+} from "./chat/AgentInspectorRail";
 import { ZakiDashboard } from "./chat/views/ZakiDashboard";
 import { V2StatusStrip } from "@/app/components/v2";
 import type { BotToolCall } from "./chat/BotToolCallBlock";
@@ -2347,6 +2351,8 @@ export function ChatArea() {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem(AGENT_INSPECTOR_OPEN_KEY) !== "false";
   });
+  const [agentInspectorTabRequest, setAgentInspectorTabRequest] =
+    useState<AgentInspectorTabRequest | null>(null);
   const [agentMobileInspectorOpen, setAgentMobileInspectorOpen] = useState(false);
   const [agentFocusMode, setAgentFocusMode] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -5220,6 +5226,23 @@ export function ChatArea() {
     setPowerUserOpen(true);
   }, []);
 
+  const openAgentInspectorTab = useCallback((tab: AgentInspectorTab) => {
+    const mobile =
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px)").matches;
+    setAgentFocusMode(false);
+    if (mobile) {
+      setAgentMobileInspectorOpen(true);
+    } else {
+      setAgentMobileInspectorOpen(false);
+      setAgentInspectorOpen(true);
+    }
+    setAgentInspectorTabRequest((previous) => ({
+      tab,
+      id: (previous?.id ?? 0) + 1,
+    }));
+  }, []);
+
   const openAgentCronSheet = useCallback(() => {
     setAgentMobileInspectorOpen(false);
     setAgentCronOpen(true);
@@ -7000,9 +7023,11 @@ export function ChatArea() {
           composerHandleRef.current?.submitWith(prefill);
         }}
         onOpenAgentArtifacts={
-          isZakiBotActiveSpace ? () => openPowerUserSheet("artifacts") : undefined
+          isZakiBotActiveSpace ? () => openAgentInspectorTab("artifacts") : undefined
         }
-        onOpenAgentSources={isZakiBotActiveSpace ? openAgentMemorySurface : undefined}
+        onOpenAgentSources={
+          isZakiBotActiveSpace ? () => openAgentInspectorTab("sources") : undefined
+        }
         isRtl={isRtl}
       />
     );
@@ -7027,6 +7052,7 @@ export function ChatArea() {
       onOpenBrowser={() => openPowerUserSheet("browser")}
       onOpenArtifacts={() => openPowerUserSheet("artifacts")}
       onOpenTrace={() => openPowerUserSheet("trace")}
+      tabRequest={agentInspectorTabRequest}
       onClose={
         options?.mobile
           ? () => setAgentMobileInspectorOpen(false)
@@ -7144,6 +7170,10 @@ export function ChatArea() {
                 id: "trace",
                 label: t("agent.status.trace", { defaultValue: "Trace" }),
                 value: nullalisTranscriptEntries.length,
+                onClick: () => openAgentInspectorTab("trace"),
+                ariaLabel: t("agent.status.openTrace", {
+                  defaultValue: "Open trace panel",
+                }),
               },
             ]}
           />
