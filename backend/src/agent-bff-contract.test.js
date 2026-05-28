@@ -1,10 +1,12 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import {
   AGENT_RUNTIME_FACADE_ROUTES,
+  AGENT_SESSION_BFF_ROUTES,
   BOT_BFF_ALIAS_ROUTES,
   BOT_CHAT_STREAM_SESSION_KEY_CONTRACT,
   buildBotProvisionPayload,
   normalizeTelegramDisconnectErrorPayload,
+  registerAgentSessionBffRoutes,
   registerBotBffAliases,
   registerTelegramDisconnectAliases,
 } from "./agent-bff-contract.js";
@@ -179,6 +181,116 @@ describe("agent BOT BFF contract", () => {
       handlers.requireAgentContext,
       handlers.usageHandler
     );
+  });
+
+  it("defines the agent session BFF proxy surface (matches src/lib/api.ts)", () => {
+    expect(AGENT_SESSION_BFF_ROUTES).toEqual([
+      { method: "get",    path: "/api/agent/sessions/:sessionKey",          upstreamSuffix: "",         json: false },
+      { method: "delete", path: "/api/agent/sessions/:sessionKey",          upstreamSuffix: "",         json: false },
+      { method: "post",   path: "/api/agent/sessions/:sessionKey/compact",  upstreamSuffix: "/compact", json: false },
+      { method: "get",    path: "/api/agent/sessions/:sessionKey/context",  upstreamSuffix: "/context", json: false },
+      { method: "get",    path: "/api/agent/sessions/:sessionKey/export",   upstreamSuffix: "/export",  json: false },
+      { method: "get",    path: "/api/agent/sessions/:sessionKey/history",  upstreamSuffix: "/history", json: false },
+      { method: "post",   path: "/api/agent/sessions/:sessionKey/approve",  upstreamSuffix: "/approve", json: true  },
+    ]);
+  });
+
+  describe("registerAgentSessionBffRoutes", () => {
+    function buildApp() {
+      return {
+        get: jest.fn(),
+        post: jest.fn(),
+        delete: jest.fn(),
+      };
+    }
+
+    function buildHandlers() {
+      const requireAgentContext = jest.fn();
+      const agentJson1mb = jest.fn();
+      // The factory returns a fresh stub handler per call so we can later
+      // assert per-route wiring + invoke a single handler to check the
+      // upstream path it would build.
+      const proxyHandlersBySuffix = new Map();
+      const makeSessionProxyHandler = jest.fn((pathBuilder) => {
+        const proxyHandler = jest.fn();
+        proxyHandler.pathBuilder = pathBuilder;
+        proxyHandlersBySuffix.set(pathBuilder, proxyHandler);
+        return proxyHandler;
+      });
+      return {
+        requireAgentContext,
+        agentJson1mb,
+        makeSessionProxyHandler,
+        proxyHandlersBySuffix,
+      };
+    }
+
+    it("registers every entry from AGENT_SESSION_BFF_ROUTES", () => {
+      const app = buildApp();
+      const { proxyHandlersBySuffix, ...handlers } = buildHandlers();
+
+      registerAgentSessionBffRoutes(app, handlers);
+
+      const verbCalls = (verb) =>
+        app[verb].mock.calls.map((args) => args[0]);
+
+      expect(verbCalls("get")).toEqual([
+        "/api/agent/sessions/:sessionKey",
+        "/api/agent/sessions/:sessionKey/context",
+        "/api/agent/sessions/:sessionKey/export",
+        "/api/agent/sessions/:sessionKey/history",
+      ]);
+      expect(verbCalls("delete")).toEqual([
+        "/api/agent/sessions/:sessionKey",
+      ]);
+      expect(verbCalls("post")).toEqual([
+        "/api/agent/sessions/:sessionKey/compact",
+        "/api/agent/sessions/:sessionKey/approve",
+      ]);
+    });
+
+    it("omits the JSON body parser for read-only and non-body POST proxy routes", () => {
+      const app = buildApp();
+      const { proxyHandlersBySuffix, ...handlers } = buildHandlers();
+
+      registerAgentSessionBffRoutes(app, handlers);
+
+      const compactCall = app.post.mock.calls.find(
+        (args) => args[0] === "/api/agent/sessions/:sessionKey/compact"
+      );
+      expect(compactCall).toBeDefined();
+      // requireAgentContext + proxy handler only — no body parser.
+      expect(compactCall).toHaveLength(3);
+      expect(compactCall[1]).toBe(handlers.requireAgentContext);
+      expect(compactCall[2]).not.toBe(handlers.agentJson1mb);
+
+      const getDetailCall = app.get.mock.calls.find(
+        (args) => args[0] === "/api/agent/sessions/:sessionKey"
+      );
+      expect(getDetailCall).toBeDefined();
+      expect(getDetailCall).toHaveLength(3);
+      expect(getDetailCall[1]).toBe(handlers.requireAgentContext);
+    });
+
+    it("encodes the userId segment in upstream paths but forwards the raw session key", () => {
+      const app = buildApp();
+      const { proxyHandlersBySuffix, ...handlers } = buildHandlers();
+
+      registerAgentSessionBffRoutes(app, handlers);
+
+      const approveCall = app.post.mock.calls.find(
+        (args) => args[0] === "/api/agent/sessions/:sessionKey/approve"
+      );
+      expect(approveCall).toBeDefined();
+      const proxyHandler = approveCall[approveCall.length - 1];
+      const upstream = proxyHandler.pathBuilder("user with space", {
+        params: { sessionKey: "agent:zaki-bot:user:42:thread:main" },
+      });
+      // userId is URI-encoded so spaces don't injection-break the path.
+      expect(upstream).toBe(
+        "/api/v1/users/user%20with%20space/sessions/agent:zaki-bot:user:42:thread:main/approve"
+      );
+    });
   });
 
   it("registers both DELETE and POST disconnect aliases on /api/agent/channels/telegram/disconnect", () => {

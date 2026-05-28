@@ -1,3 +1,24 @@
+// Session-scoped BFF proxy routes — declarative source of truth so the wiring in
+// index.js stays in lockstep with what the frontend (src/lib/api.ts) calls. Each
+// entry maps a `/api/agent/sessions/:sessionKey/...` surface to the equivalent
+// nullalis `/api/v1/users/${userId}/sessions/${sessionKey}/...` upstream path.
+//
+// - method:         HTTP verb registered on express.
+// - path:           BFF path (browser-facing).
+// - upstreamSuffix: appended to `/api/v1/users/${userId}/sessions/${sessionKey}`
+//                   to build the nullalis target. Empty string is valid.
+// - json:           when true, `agentJson1mb` is inserted before the proxy
+//                   handler so `req.body` is parsed for forwarding.
+export const AGENT_SESSION_BFF_ROUTES = Object.freeze([
+  { method: "get",    path: "/api/agent/sessions/:sessionKey",          upstreamSuffix: "",         json: false },
+  { method: "delete", path: "/api/agent/sessions/:sessionKey",          upstreamSuffix: "",         json: false },
+  { method: "post",   path: "/api/agent/sessions/:sessionKey/compact",  upstreamSuffix: "/compact", json: false },
+  { method: "get",    path: "/api/agent/sessions/:sessionKey/context",  upstreamSuffix: "/context", json: false },
+  { method: "get",    path: "/api/agent/sessions/:sessionKey/export",   upstreamSuffix: "/export",  json: false },
+  { method: "get",    path: "/api/agent/sessions/:sessionKey/history",  upstreamSuffix: "/history", json: false },
+  { method: "post",   path: "/api/agent/sessions/:sessionKey/approve",  upstreamSuffix: "/approve", json: true  },
+]);
+
 export const BOT_BFF_ALIAS_ROUTES = Object.freeze([
   { method: "post", path: "/v1/me/bot/provision" },
   { method: "get", path: "/v1/me/bot/onboarding" },
@@ -179,6 +200,29 @@ export function registerBotBffAliases(app, handlers) {
     telegramDisconnectHandler
   );
   app.get("/v1/me/bot/usage", requireAgentContext, usageHandler);
+}
+
+// Registers every `/api/agent/sessions/:sessionKey/...` proxy entry from
+// `AGENT_SESSION_BFF_ROUTES` on the express app. Keeping registration here lets
+// the contract test cover wiring directly and prevents drift between the
+// listing the frontend depends on (`src/lib/api.ts`) and what the BFF wires up.
+//
+// `handlers.makeSessionProxyHandler(pathBuilder)` must return an express
+// handler that proxies the request to the nullalis path built by
+// `pathBuilder(userId, req)`. `agentJson1mb` is the JSON body parser; it is
+// applied only for routes that opt in via `json: true`.
+export function registerAgentSessionBffRoutes(app, handlers) {
+  const { requireAgentContext, agentJson1mb, makeSessionProxyHandler } = handlers;
+  for (const route of AGENT_SESSION_BFF_ROUTES) {
+    const proxyHandler = makeSessionProxyHandler(
+      (userId, req) =>
+        `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}${route.upstreamSuffix}`
+    );
+    const middlewares = [requireAgentContext];
+    if (route.json) middlewares.push(agentJson1mb);
+    middlewares.push(proxyHandler);
+    app[route.method](route.path, ...middlewares);
+  }
 }
 
 export function registerTelegramDisconnectAliases(app, handlers) {

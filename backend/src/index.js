@@ -160,6 +160,7 @@ import {
 import {
   buildBotProvisionPayload,
   normalizeTelegramDisconnectErrorPayload,
+  registerAgentSessionBffRoutes,
   registerBotBffAliases,
   registerTelegramDisconnectAliases,
 } from "./agent-bff-contract.js";
@@ -14209,69 +14210,15 @@ app.get(
   agentSessionsListHandler
 );
 
-app.get(
-  "/api/agent/sessions/:sessionKey",
-  requireAgentContext,
-  makeSessionProxyHandler(
-    (userId, req) =>
-      `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}`
-  )
-);
-
-app.delete(
-  "/api/agent/sessions/:sessionKey",
-  requireAgentContext,
-  makeSessionProxyHandler(
-    (userId, req) =>
-      `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}`
-  )
-);
-
-app.post(
-  "/api/agent/sessions/:sessionKey/compact",
-  requireAgentContext,
-  makeSessionProxyHandler(
-    (userId, req) =>
-      `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}/compact`
-  )
-);
-
-app.get(
-  "/api/agent/sessions/:sessionKey/context",
-  requireAgentContext,
-  makeSessionProxyHandler(
-    (userId, req) =>
-      `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}/context`
-  )
-);
-
-app.get(
-  "/api/agent/sessions/:sessionKey/export",
-  requireAgentContext,
-  makeSessionProxyHandler(
-    (userId, req) =>
-      `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}/export`
-  )
-);
-
-app.get(
-  "/api/agent/sessions/:sessionKey/history",
-  requireAgentContext,
-  makeSessionProxyHandler(
-    (userId, req) =>
-      `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}/history`
-  )
-);
-
-app.post(
-  "/api/agent/sessions/:sessionKey/approve",
+// All session-proxy routes (GET/DELETE detail, compact, context, export,
+// history, approve) are wired declaratively from AGENT_SESSION_BFF_ROUTES so
+// the contract listing the frontend depends on stays in lockstep with what's
+// actually registered.
+registerAgentSessionBffRoutes(app, {
   requireAgentContext,
   agentJson1mb,
-  makeSessionProxyHandler(
-    (userId, req) =>
-      `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}/approve`
-  )
-);
+  makeSessionProxyHandler,
+});
 
 // =============================================================================
 // AGENT RUNTIME FACADE
