@@ -304,9 +304,65 @@ function formatElapsed(ms: number): string {
 
 export type TimelineRevealPhase = "working" | "revealing" | "done";
 
+function formatFramePhase(value?: string | null) {
+  return String(value || "")
+    .replace(/_/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function frameState({
+  frame,
+  isStreaming,
+  revealPhase,
+}: {
+  frame: NullalisNarrationFrame | null;
+  isStreaming: boolean;
+  revealPhase: TimelineRevealPhase;
+}): "thinking" | "searching" | "streaming" | "done" | "error" {
+  if (revealPhase === "done" || (!isStreaming && revealPhase !== "working")) return "done";
+  const haystack = [frame?.phase, frame?.tool, frame?.label].filter(Boolean).join(" ");
+  if (/\b(error|failed|blocked)\b/i.test(haystack)) return "error";
+  if (/\b(search|browser|web|fetch|retrieve|memory)\b/i.test(haystack)) return "searching";
+  if (/\b(reply|draft|compose|write|stream)\b/i.test(haystack)) return "streaming";
+  return "thinking";
+}
+
+function frameGlyph(state: ReturnType<typeof frameState>) {
+  if (state === "done") return "✓";
+  if (state === "error") return "!";
+  if (state === "streaming") return "▸";
+  return "◌";
+}
+
+function timelineStats(blocks: TimelineBlock[]) {
+  const toolCount = blocks.reduce((count, block) => {
+    if (block.kind === "tool") return count + 1;
+    if (block.kind === "group") return count + block.children.length;
+    return count;
+  }, 0);
+  const warningCount = blocks.reduce((count, block) => {
+    if (block.kind === "tool") {
+      return count + (block.props.status === "failed" || block.props.status === "blocked" ? 1 : 0);
+    }
+    if (block.kind === "group") {
+      return (
+        count +
+        block.children.filter((child) => child.status === "failed" || child.status === "blocked").length
+      );
+    }
+    return count;
+  }, 0);
+  return {
+    stepCount: blocks.length,
+    toolCount,
+    warningCount,
+  };
+}
+
 export function NullalisTurnTimeline({
   entries,
-  frame: _frame,
+  frame,
   isStreaming,
   revealPhase = "working",
   turnStartedAt = null,
@@ -326,6 +382,7 @@ export function NullalisTurnTimeline({
   usage?: ZakiUsageSummary | null;
 }) {
   const blocks = useMemo(() => composeTurnTimeline(entries), [entries]);
+  const stats = timelineStats(blocks);
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -390,21 +447,48 @@ export function NullalisTurnTimeline({
 
   // Reveal phase: collapse trail into "Worked for Ns ›" details.
   const shouldCollapse = revealPhase === "revealing" || revealPhase === "done";
+  const framePhase = formatFramePhase(frame?.phase) || (isStreaming ? "thinking" : "done");
+  const frameLabel =
+    frame?.label ||
+    (stats.stepCount > 0 ? `${stats.stepCount} runtime step${stats.stepCount === 1 ? "" : "s"}` : "Working");
+  const state = frameState({ frame, isStreaming, revealPhase });
+  const statsLabel = [
+    `${stats.stepCount} step${stats.stepCount === 1 ? "" : "s"}`,
+    stats.toolCount ? `${stats.toolCount} tool${stats.toolCount === 1 ? "" : "s"}` : null,
+    elapsedLabel,
+    stats.warningCount ? `${stats.warningCount} warning${stats.warningCount === 1 ? "" : "s"}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   if (showThinkingOnly) {
     return (
       <section
-        className="zaki-agent-timeline zaki-agent-timeline--thinking zaki-process-enter max-w-[92%] py-1 text-zaki-primary dark:text-zaki-dark-primary"
+        className="zaki-agent-timeline zaki-agent-timeline--thinking zaki-agent-lane zaki-process-enter max-w-[92%] py-1 text-zaki-primary dark:text-zaki-dark-primary"
         aria-live="polite"
         dir="auto"
       >
-        <TextShimmer text="Thinking" />
+        <div className="zaki-agent-lane__gutter" aria-hidden>
+          <div className="zaki-agent-lane__rune z-rune" data-state="thinking">
+            <span className="glyph">◌</span>
+          </div>
+        </div>
+        <div className="zaki-agent-lane__body">
+          <div className="zaki-agent-lane__head">
+            <span>thinking</span>
+            <span className="sep">·</span>
+            <span>runtime</span>
+          </div>
+          <TextShimmer text="Thinking" />
+        </div>
       </section>
     );
   }
 
   if (shouldCollapse) {
-    const summaryLabel = elapsedLabel ? `Worked for ${elapsedLabel}` : "Worked";
+    const summaryLabel = elapsedLabel
+      ? `Worked for ${elapsedLabel}${stats.toolCount ? ` · ${stats.toolCount} tools` : ""}`
+      : statsLabel || "Worked";
     return (
       <details
         className="zaki-agent-timeline zaki-agent-timeline--compact zaki-process-compact group max-w-[92%] py-1 text-zaki-primary dark:text-zaki-dark-primary [&[open]_svg.zaki-timeline-chevron]:rotate-90"
@@ -428,7 +512,7 @@ export function NullalisTurnTimeline({
   }
 
   if (compact) {
-    const stepCount = blocks.length;
+    const stepCount = stats.stepCount;
     const stepLabel = stepCount === 1 ? "1 step" : `${stepCount} steps`;
     return (
       <details
@@ -453,28 +537,41 @@ export function NullalisTurnTimeline({
 
   return (
     <section
-      className="zaki-agent-timeline zaki-agent-timeline--live zaki-process-enter max-w-[92%] text-zaki-primary dark:text-zaki-dark-primary"
+      className="zaki-agent-timeline zaki-agent-timeline--live zaki-agent-lane zaki-process-enter max-w-[92%] text-zaki-primary dark:text-zaki-dark-primary"
       aria-live="polite"
       aria-busy={isStreaming || undefined}
       aria-label={isStreaming ? "Agent working" : "Agent finished"}
       dir="auto"
     >
-      {elapsedLabel ? (
-        <div className="mb-1 text-[13px] leading-6 text-zaki-muted dark:text-zaki-dark-muted">
-          {isStreaming ? `Working for ${elapsedLabel}` : `Worked for ${elapsedLabel}`}
+      <div className="zaki-agent-lane__gutter" aria-hidden>
+        <div className="zaki-agent-lane__rune z-rune" data-state={state}>
+          <span className="glyph">{frameGlyph(state)}</span>
         </div>
-      ) : null}
-      {renderBlocks(blocks)}
-      {(usage?.usageTokens != null || usage?.costUsd != null) && !isStreaming ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zaki-muted dark:text-zaki-dark-muted">
-          {formatTokens(usage?.usageTokens) ? (
-            <span className="font-mono-ui">{formatTokens(usage?.usageTokens)}</span>
-          ) : null}
-          {formatCost(usage?.costUsd) ? (
-            <span className="font-mono-ui">· {formatCost(usage?.costUsd)}</span>
+      </div>
+      <div className="zaki-agent-lane__body">
+        <div className="zaki-agent-lane__head">
+          <span>{framePhase}</span>
+          <span className="sep">·</span>
+          <span>{frameLabel}</span>
+          {statsLabel ? (
+            <>
+              <span className="sep">·</span>
+              <span>{statsLabel}</span>
+            </>
           ) : null}
         </div>
-      ) : null}
+        {renderBlocks(blocks)}
+        {(usage?.usageTokens != null || usage?.costUsd != null) && !isStreaming ? (
+          <div className="zaki-agent-lane__usage">
+            {formatTokens(usage?.usageTokens) ? (
+              <span>{formatTokens(usage?.usageTokens)}</span>
+            ) : null}
+            {formatCost(usage?.costUsd) ? (
+              <span>· {formatCost(usage?.costUsd)}</span>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }

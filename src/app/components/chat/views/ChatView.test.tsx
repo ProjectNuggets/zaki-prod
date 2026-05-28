@@ -135,6 +135,7 @@ describe("ChatView", () => {
     );
 
     expect(screen.getByText(longReasoning)).toBeInTheDocument();
-    expect(screen.getByText(/Working for/)).toBeInTheDocument();
+    expect(screen.getByText("Analyzing request...")).toBeInTheDocument();
+    expect(screen.getByText(/1 step/)).toBeInTheDocument();
   });
 });

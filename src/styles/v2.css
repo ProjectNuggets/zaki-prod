@@ -3853,6 +3853,163 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   padding-left: 14px;
 }
 
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-lane {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-lane__gutter {
+  position: relative;
+  padding-top: 1px;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-lane__gutter::before {
+  content: "";
+  position: absolute;
+  top: 32px;
+  bottom: -16px;
+  left: 13px;
+  width: 1px;
+  background: var(--v2-hairline-strong);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-lane__rune {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  background: var(--v2-bg-sunken);
+  color: var(--v2-ink-1);
+  box-shadow: inset 0 0 0 1px var(--v2-hairline-strong);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-lane__rune .glyph {
+  display: inline-block;
+  color: inherit;
+  font-family: var(--v2-font-mono);
+  font-size: 16px;
+  line-height: 1;
+  transition: opacity 80ms steps(2, end), transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-lane__rune[data-state="thinking"] .glyph {
+  animation: zaki-v2-glyph-thinking 1.4s steps(3, end) infinite;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-lane__rune[data-state="searching"] .glyph {
+  animation: zaki-v2-glyph-search 1.1s linear infinite;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-lane__rune[data-state="streaming"] .glyph {
+  animation: zaki-v2-glyph-stream 1.2s ease-in-out infinite;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-lane__rune[data-state="done"] .glyph {
+  animation: zaki-v2-glyph-done 640ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-lane__rune[data-state="error"] {
+  color: var(--v2-danger);
+  box-shadow: inset 0 0 0 1px var(--v2-danger);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-lane__body {
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-lane__head {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-lane__head .sep {
+  color: var(--v2-ink-4);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-lane .zaki-cot-blocks {
+  border-left: 0;
+  margin-left: 0;
+  padding-left: 0;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-lane__usage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@keyframes zaki-v2-glyph-thinking {
+  0%,
+  33% {
+    opacity: 0.6;
+    transform: rotate(0deg);
+  }
+  34%,
+  66% {
+    opacity: 1;
+    transform: rotate(120deg);
+  }
+  67%,
+  100% {
+    opacity: 0.6;
+    transform: rotate(240deg);
+  }
+}
+
+@keyframes zaki-v2-glyph-search {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes zaki-v2-glyph-stream {
+  0%,
+  100% {
+    opacity: 0.85;
+    transform: translateX(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(2px);
+  }
+}
+
+@keyframes zaki-v2-glyph-done {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .zaki-app-v2 .zaki-agent-v2 .zaki-cot-thought {
   border: 0 !important;
   border-radius: 0 !important;
@@ -4630,6 +4787,34 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   display: none;
 }
 
+.zaki-agent-inspector-peek {
+  position: absolute;
+  top: 72px;
+  right: 14px;
+  z-index: 35;
+  display: none;
+  min-height: 30px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg-raised);
+  color: var(--v2-ink-2);
+  padding: 0 9px;
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+  box-shadow: none;
+}
+
+.zaki-agent-inspector-peek:hover,
+.zaki-agent-inspector-peek:focus-visible {
+  border-color: var(--v2-accent);
+  color: var(--v2-accent);
+  outline: none;
+}
+
 .zaki-agent-mobile-inspector {
   display: none;
 }
@@ -4740,6 +4925,10 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
     overflow: hidden;
   }
 
+  .zaki-agent-mobile-inspector .zaki-agent-inspector__topline {
+    display: none;
+  }
+
   .zaki-agent-mobile-inspector .zaki-agent-inspector__tabs {
     overflow-x: auto;
   }
@@ -4775,6 +4964,10 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
     color: var(--v2-ink-1);
     font-family: var(--v2-font-mono);
     overflow-y: auto;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2--inspector-collapsed .zaki-agent-inspector-peek {
+    display: inline-flex;
   }
 }
 
@@ -5174,6 +5367,64 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
 .zaki-agent-inspector :where(button, input, textarea, select) {
   font-family: var(--v2-font-mono);
+}
+
+.zaki-agent-inspector__topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+  border-bottom: 1px solid var(--v2-hairline);
+  padding: 0 10px 0 12px;
+}
+
+.zaki-agent-inspector__topline div {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.zaki-agent-inspector__topline span,
+.zaki-agent-inspector__topline strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zaki-agent-inspector__topline span {
+  color: var(--v2-ink-4);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__topline strong {
+  color: var(--v2-ink-2);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__close {
+  display: inline-flex;
+  width: 27px;
+  height: 27px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--v2-ink-3);
+}
+
+.zaki-agent-inspector__close:hover,
+.zaki-agent-inspector__close:focus-visible {
+  border-color: var(--v2-hairline-strong);
+  color: var(--v2-accent);
+  outline: none;
 }
 
 .zaki-agent-inspector__head {

@@ -1065,9 +1065,13 @@ describe("ChatArea Component", () => {
       extractNullalisTranscriptEntry(
         "artifact_event",
         {
-          event: "created",
+          op: "created",
+          artifact_id: "artifact_123",
           title: "Launch plan",
-          artifact_type: "docx",
+          kind: "docx",
+          version: 2,
+          url: "/api/v1/artifacts/artifact_123",
+          change_summary: "Drafted the launch plan.",
         },
         556
       )
@@ -1077,7 +1081,12 @@ describe("ChatArea Component", () => {
       text: "Artifact created: Launch plan",
       tool: "artifact",
       status: "created",
-      resultSummary: "docx",
+      files: ["/api/v1/artifacts/artifact_123"],
+      activityLabel: "Launch plan",
+      inputPreview: "v2",
+      outputPreview: "Drafted the launch plan.",
+      resultSummary: "Drafted the launch plan.",
+      groupKey: "artifact:artifact_123",
     });
 
     expect(

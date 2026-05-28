@@ -60,6 +60,7 @@ function includesAny(entry: NullalisTranscriptEntry, terms: readonly string[]) {
 
 function primaryLabel(entry: NullalisTranscriptEntry): string {
   return (
+    valueToText(entry.activityLabel) ||
     valueToText(entry.tool) ||
     valueToText(entry.intent) ||
     valueToText(entry.phase) ||
@@ -70,7 +71,6 @@ function primaryLabel(entry: NullalisTranscriptEntry): string {
 
 function primarySummary(entry: NullalisTranscriptEntry): string {
   return (
-    valueToText(entry.activityLabel) ||
     valueToText(entry.resultSummary) ||
     valueToText(entry.outputPreview) ||
     valueToText(entry.inputPreview) ||

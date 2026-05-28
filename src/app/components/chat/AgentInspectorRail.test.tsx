@@ -24,7 +24,9 @@ function renderRail(overrides: Partial<AgentInspectorRailProps> = {}) {
 
 describe("AgentInspectorRail", () => {
   it("renders the V6 execution rail as six MECE tabs", () => {
+    const onClose = jest.fn();
     renderRail({
+      onClose,
       tasks: [
         {
           taskId: "task-1",
@@ -45,6 +47,8 @@ describe("AgentInspectorRail", () => {
       "aria-selected",
       "true"
     );
+    fireEvent.click(screen.getByRole("button", { name: "Hide right agent panel" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
     expect(screen.getAllByText("Map the agent surface").length).toBeGreaterThan(0);
   });
 

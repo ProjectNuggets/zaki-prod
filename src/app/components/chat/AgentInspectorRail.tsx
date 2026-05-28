@@ -8,6 +8,7 @@ import {
   Circle,
   Globe2,
   Loader2,
+  PanelRightClose,
   ShieldAlert,
 } from "lucide-react";
 import type { AgentSessionMode } from "@/lib/api";
@@ -74,6 +75,7 @@ export type AgentInspectorRailProps = {
   onOpenBrowser?: () => void;
   onOpenArtifacts?: () => void;
   onOpenTrace?: () => void;
+  onClose?: () => void;
 };
 
 function taskStatusLabel(status: NullalisTaskStatus) {
@@ -263,6 +265,7 @@ export function AgentInspectorRail({
   onOpenBrowser,
   onOpenArtifacts,
   onOpenTrace,
+  onClose,
 }: AgentInspectorRailProps) {
   const [tab, setTab] = useState<AgentInspectorTab>("plan");
   const [manualTabSelected, setManualTabSelected] = useState(false);
@@ -375,6 +378,23 @@ export function AgentInspectorRail({
 
   return (
     <aside className="zaki-agent-inspector" aria-label="Agent inspector">
+      <div className="zaki-agent-inspector__topline">
+        <div>
+          <span>Agent panel</span>
+          <strong>{isStreaming ? "Live" : "Ready"}</strong>
+        </div>
+        {onClose ? (
+          <button
+            type="button"
+            className="zaki-agent-inspector__close"
+            onClick={onClose}
+            aria-label="Hide right agent panel"
+            title="Hide panel"
+          >
+            <PanelRightClose className="size-4" aria-hidden />
+          </button>
+        ) : null}
+      </div>
       <V2Tabs
         fullWidth
         className="zaki-agent-inspector__tabs"

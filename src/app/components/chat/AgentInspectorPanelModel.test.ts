@@ -58,6 +58,11 @@ describe("AgentInspectorPanelModel", () => {
 
     const model = buildAgentInspectorPanelModel([artifact]);
     expect(model.artifacts).toHaveLength(1);
+    expect(model.artifacts[0]).toMatchObject({
+      label: "artifact",
+      summary: "Artifact created: Launch brief",
+      files: ["launch-brief.md"],
+    });
     expect(model.sources).toHaveLength(0);
   });
 

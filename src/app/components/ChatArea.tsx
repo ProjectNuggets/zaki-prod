@@ -2,7 +2,7 @@ import { BackgroundPattern } from "./BackgroundPattern";
 import { InputArea, type InputAreaHandle, type InputAreaSendOptions } from "./InputArea";
 import { AgentSessionRail } from "@/app/components/agent/AgentSessionRail";
 import { SandboxBadge } from "@/app/components/agent/SandboxBadge";
-import { Share2, MoreVertical, Download, Brain, ChevronDown } from "lucide-react";
+import { Share2, MoreVertical, Download, Brain, ChevronDown, PanelRightOpen } from "lucide-react";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
@@ -2055,23 +2055,52 @@ export function extractNullalisTranscriptEntry(
   }
 
   if (type === "artifact_event") {
+    const artifactId =
+      (typeof payload.artifact_id === "string" && payload.artifact_id.trim()) ||
+      (typeof payload.artifactId === "string" && payload.artifactId.trim()) ||
+      null;
     const artifactTitle =
       (typeof payload.title === "string" && payload.title.trim()) ||
       (typeof payload.name === "string" && payload.name.trim()) ||
-      (typeof payload.artifact_id === "string" && payload.artifact_id.trim()) ||
-      (typeof payload.artifactId === "string" && payload.artifactId.trim()) ||
+      artifactId ||
       "artifact";
     const eventName =
+      (typeof payload.op === "string" && payload.op.trim()) ||
       (typeof payload.event === "string" && payload.event.trim()) ||
       (typeof payload.action === "string" && payload.action.trim()) ||
       (typeof payload.status === "string" && payload.status.trim()) ||
       "updated";
     const artifactType =
+      (typeof payload.kind === "string" && payload.kind.trim()) ||
       (typeof payload.artifact_type === "string" && payload.artifact_type.trim()) ||
       (typeof payload.artifactType === "string" && payload.artifactType.trim()) ||
       (typeof payload.type_name === "string" && payload.type_name.trim()) ||
       null;
+    const version =
+      (typeof payload.version === "string" && payload.version.trim()) ||
+      (typeof payload.version === "number" && Number.isFinite(payload.version)
+        ? `v${payload.version}`
+        : null);
+    const changeSummary =
+      (typeof payload.change_summary === "string" && payload.change_summary.trim()) ||
+      (typeof payload.changeSummary === "string" && payload.changeSummary.trim()) ||
+      (typeof payload.summary === "string" && payload.summary.trim()) ||
+      null;
+    const artifactUrl =
+      (typeof payload.url === "string" && payload.url.trim()) ||
+      (typeof payload.href === "string" && payload.href.trim()) ||
+      null;
+    const files = Array.from(
+      new Set(
+        [
+          ...extractNullalisFiles(payload),
+          artifactUrl,
+          artifactId && !artifactId.includes("/") ? null : artifactId,
+        ].filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      )
+    );
     const text = `Artifact ${eventName}: ${artifactTitle}`;
+    const eventNameLower = eventName.toLowerCase();
     return {
       id: nullalisEntryId("artifact", now),
       kind: "tool",
@@ -2082,9 +2111,13 @@ export function extractNullalisTranscriptEntry(
       phase: "artifact_event",
       tool: "artifact",
       status: eventName,
-      resultSummary: artifactType,
-      resultState: eventName.toLowerCase().includes("fail") ? "failed" : "done",
-      groupKey: `artifact:${artifactTitle}`,
+      files,
+      activityLabel: artifactTitle,
+      inputPreview: version,
+      outputPreview: changeSummary,
+      resultSummary: changeSummary || artifactType || version,
+      resultState: eventNameLower.includes("fail") || eventNameLower.includes("error") ? "failed" : eventNameLower.includes("stream") || eventNameLower.includes("draft") ? "running" : "done",
+      groupKey: artifactId ? `artifact:${artifactId}` : `artifact:${artifactTitle}`,
       source: "tool",
     };
   }
@@ -6971,7 +7004,7 @@ export function ChatArea() {
     );
   };
 
-  const renderAgentInspectorRail = () => isAgentSurface ? (
+  const renderAgentInspectorRail = (options?: { mobile?: boolean }) => isAgentSurface ? (
     <AgentInspectorRail
       mode={activeSessionMode ?? "execute"}
       isStreaming={isStreaming}
@@ -6990,6 +7023,11 @@ export function ChatArea() {
       onOpenBrowser={() => openPowerUserSheet("browser")}
       onOpenArtifacts={() => openPowerUserSheet("artifacts")}
       onOpenTrace={() => openPowerUserSheet("trace")}
+      onClose={
+        options?.mobile
+          ? () => setAgentMobileInspectorOpen(false)
+          : () => setAgentInspectorOpen(false)
+      }
     />
   ) : null;
 
@@ -7300,6 +7338,19 @@ export function ChatArea() {
             </div>
           )}
 
+          {isAgentSurface && !agentInspectorOpen && !agentFocusMode ? (
+            <button
+              type="button"
+              className="zaki-agent-inspector-peek"
+              onClick={() => setAgentInspectorOpen(true)}
+              aria-label={t("agent.panel.showAria", { defaultValue: "Show agent panel" })}
+              title={t("agent.panel.showTitle", { defaultValue: "Show panel" })}
+            >
+              <PanelRightOpen className="size-4" aria-hidden />
+              <span>{t("agent.panel.show", { defaultValue: "Panel" })}</span>
+            </button>
+          ) : null}
+
           {/* Input Area */}
           {!showAbout && !showSpacesView && !showSpaceDetail && !(showZakiHome && sidebarMode === "zaki") && (
             <div
@@ -7483,7 +7534,7 @@ export function ChatArea() {
                 {t("agent.mobilePanel.close", { defaultValue: "Close" })}
               </button>
             </header>
-            {renderAgentInspectorRail()}
+            {renderAgentInspectorRail({ mobile: true })}
           </section>
         </div>
       ) : null}
