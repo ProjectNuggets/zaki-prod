@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { Boxes, CircleDot, SlidersHorizontal, X } from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Boxes, CircleDot, Shield, SlidersHorizontal, X } from "lucide-react";
 import { useAuthStore } from "@/stores";
 import { useBrainGraph, useBrainMe } from "@/queries";
 import { SkeletonBrainPage } from "@/app/components/ui/skeleton";
@@ -35,6 +35,32 @@ type ActivePanel = "filters" | "clusters" | "orphans" | null;
 // Debounce search input -> server-side ?search= filter to avoid hammering the
 // backend on every keystroke.
 const SEARCH_DEBOUNCE_MS = 250;
+
+// Brain V2 closeout (2026-05-30) — the desktop filters rail
+// (.zaki-brain-v2__filters-rail) is always visible above 900px, while the
+// floating filters overlay is the ≤900px mechanism (the rail is set to
+// display:none there). Without this guard, pressing `f` or loading
+// `?panel=filters` on a desktop viewport rendered BrainFilterPanel twice —
+// the always-on rail *and* the overlay — duplicating the SCOPE block and the
+// governance Settings deep-link in the DOM/accessibility tree. This hook makes
+// the rail and overlay mutually exclusive, matching the CSS breakpoint. It is
+// test-safe: jsdom has no matchMedia, so it reports "not narrow" (overlay off).
+const BRAIN_NARROW_QUERY = "(max-width: 900px)";
+
+function useBrainNarrow() {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+    const mql = window.matchMedia(BRAIN_NARROW_QUERY);
+    const onChange = () => setNarrow(mql.matches);
+    onChange();
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+  return narrow;
+}
 
 export function BrainPage() {
   const { t } = useTranslation();
@@ -82,6 +108,7 @@ export function BrainPage() {
   // V1.11 — floating-overlay panel toggle (Obsidian Graph View pattern).
   // null = canvas-only (default); set by clicking a corner icon.
   const [activePanel, setActivePanel] = useState<ActivePanel>(initialPanel);
+  const isNarrow = useBrainNarrow();
 
   // Debounce search input into filters.search
   useEffect(() => {
@@ -217,7 +244,7 @@ export function BrainPage() {
           {
             id: "scope",
             label: t("brain.status.scope", { defaultValue: "Scope" }),
-            value: t("brain.status.userScoped", { defaultValue: "User memory" }),
+            value: t("brain.status.userScoped", { defaultValue: "Personal brain" }),
           },
           {
             id: "nodes",
@@ -242,10 +269,30 @@ export function BrainPage() {
       <div className="zaki-brain-v2__wrap">
         <header className="zaki-brain-v2__hero">
           <div>
-            <p>{t("brain.status.userScoped", { defaultValue: "User memory" })}</p>
+            <p>{t("brain.status.userScoped", { defaultValue: "Personal brain" })}</p>
             <h1>{t("brain.title")}</h1>
           </div>
-          <span>{t("brain.subtitle")}</span>
+          <div className="zaki-brain-v2__hero-meta">
+            <span>{t("brain.subtitle")}</span>
+            {/*
+              ZAKI Brain V2 closeout (2026-05-30) — account-level memory
+              governance is owned by route-level Settings (AGENTS.md §4:
+              Memory & Brain control plane). This surface stays read-only +
+              compose-additive; forget / PII purge / export live in Settings
+              so they are not duplicated inside the product workbench. The
+              deep-link keeps the brain page "Settings-link ready".
+            */}
+            <Link
+              to="/settings#settings-memory-data"
+              className="zaki-brain-v2__governance-link"
+              data-testid="brain-manage-memory-link"
+            >
+              <Shield className="size-3.5" aria-hidden="true" />
+              {t("brain.governance.manageLink", {
+                defaultValue: "Memory & privacy in Settings",
+              })}
+            </Link>
+          </div>
         </header>
 
         {semanticDegraded && !degradedDismissed && (
@@ -479,8 +526,14 @@ export function BrainPage() {
               />
             </div>
 
-            {/* Floating overlay panels — only one shown at a time */}
-            {activePanel === "filters" && (
+            {/*
+              Floating overlay panels — only one shown at a time. The filters
+              overlay renders ONLY on narrow viewports; above 900px the
+              always-visible filters rail is the single source of truth, so
+              rendering the overlay too would duplicate the SCOPE block and the
+              governance Settings deep-link (see useBrainNarrow above).
+            */}
+            {activePanel === "filters" && isNarrow && (
               <FloatingOverlay onClose={() => setActivePanel(null)}>
                 <BrainFilterPanel filters={filters} onChange={setFilters} />
               </FloatingOverlay>

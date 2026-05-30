@@ -2664,11 +2664,43 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   line-height: 1.02;
 }
 
-.zaki-brain-v2__hero > span {
+.zaki-brain-v2__hero-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.zaki-brain-v2__hero-meta > span {
   color: var(--v2-ink-2);
   font-family: var(--v2-font-prose);
   font-size: 14px;
   line-height: 1.6;
+}
+
+/* Brain V2 closeout (2026-05-30) — governance deep-link. Memory
+   forget / PII purge / export are account-level and live in route-level
+   Settings (AGENTS.md §4); this is the honest, hairline-led link that
+   keeps /brain Settings-link ready without faking governance inline. */
+.zaki-brain-v2__governance-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--v2-hairline);
+  border-radius: var(--v2-r-2);
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-decoration: none;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.zaki-brain-v2__governance-link:hover {
+  border-color: var(--v2-hairline-strong);
+  color: var(--v2-ink-1);
 }
 
 .zaki-brain-v2__banner {

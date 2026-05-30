@@ -1819,8 +1819,23 @@
         "linked": "Linked memories",
         "priorVersions_one": "{{count}} prior version",
         "priorVersions_other": "{{count}} prior versions",
-        "confidence": "Confidence"
+        "confidence": "Confidence",
+        "manageInSettings": "Forget or export in Settings"
       }
+    },
+    "scope": {
+      "title": "Scope",
+      "personal": "Personal brain",
+      "shownHere": "Shown here",
+      "workspace": "Workspace",
+      "learner": "Learner",
+      "hire": "Hire",
+      "separate": "Separate",
+      "note": "Workspace, Learner, and Hire memory are kept separate and live in their own surfaces.",
+      "manageLink": "Memory scopes & privacy"
+    },
+    "governance": {
+      "manageLink": "Memory & privacy in Settings"
     },
     "timeline": {
       "loading": "Loading more…",
