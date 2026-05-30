@@ -8,7 +8,26 @@
 
 import { SignJWT } from "jose";
 import { createHash, randomBytes, createSecretKey } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import dotenv from "dotenv";
 import pg from "pg";
+
+function loadEnv() {
+  const candidates = [
+    path.resolve(process.cwd(), ".env"),
+    path.resolve(process.cwd(), "backend", ".env"),
+    path.resolve(process.cwd(), ".env.local"),
+    path.resolve(process.cwd(), "backend", ".env.local"),
+  ];
+  for (const envPath of candidates) {
+    if (fs.existsSync(envPath)) {
+      dotenv.config({ path: envPath, override: envPath.endsWith(".env.local") });
+    }
+  }
+}
+
+loadEnv();
 
 const BASE = `http://localhost:${process.env.PORT || 8787}`;
 const KEY_HEX = process.env.ZAKI_JWT_SIGNING_KEY;
@@ -259,11 +278,11 @@ if (testUser) {
 section("6. Real login flow");
 
 if (EMAIL_ARG && PASS_ARG) {
-  const { status, json, headers } = await request("POST", "/api/auth/login", {
+  const { status, json, headers } = await request("POST", "/login", {
     body: { email: EMAIL_ARG, password: PASS_ARG },
   });
   if (status === 200 && json?.token) {
-    ok(`POST /api/auth/login → 200, ZAKI token issued`);
+    ok(`POST /login → 200, ZAKI token issued`);
     const setCookie = headers.get("set-cookie") || "";
     setCookie.includes("zaki_refresh")
       ? ok("HttpOnly zaki_refresh cookie set")
@@ -279,7 +298,7 @@ if (EMAIL_ARG && PASS_ARG) {
       fail("Could not decode login JWT", e.message);
     }
   } else {
-    fail("POST /api/auth/login", `status=${status} body=${JSON.stringify(json)}`);
+    fail("POST /login", `status=${status} body=${JSON.stringify(json)}`);
   }
 } else {
   console.log("  (skipped — pass email and password as args to test real login)");
