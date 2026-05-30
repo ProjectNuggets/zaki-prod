@@ -343,6 +343,8 @@ describe("ZakiDashboard", () => {
     expect(screen.getByTestId("zaki-product-card-spaces")).toHaveTextContent("Chat");
     expect(screen.getByTestId("zaki-product-card-brain")).toHaveTextContent("Brain");
     expect(screen.getByTestId("zaki-product-card-learning")).toHaveTextContent("Learn");
+    expect(screen.getByTestId("zaki-product-card-learning")).toHaveTextContent("Private beta");
+    expect(screen.getByTestId("zaki-product-card-learning")).toHaveTextContent("Not available");
     expect(screen.getByTestId("zaki-product-card-hire")).toHaveTextContent("Not available");
     expect(screen.getByTestId("zaki-product-card-design")).toHaveTextContent("Not available");
     expect(screen.queryByText("ZAKI CLI")).not.toBeInTheDocument();

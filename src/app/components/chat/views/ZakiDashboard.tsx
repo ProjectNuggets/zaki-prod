@@ -77,6 +77,12 @@ const PRODUCT_ORDER: ProductRegistryProductId[] = [
   "design",
 ];
 
+const PUBLIC_RELEASE_PRODUCT_IDS = new Set<ProductRegistryProductId>([
+  "agent",
+  "spaces",
+  "brain",
+]);
+
 const MEMORY_SCOPE_ORDER = [
   "personal_brain",
   "workspace_memory",
@@ -199,6 +205,7 @@ function getProductRoute(product: ProductRegistryItem) {
 }
 
 function canOpenProduct(product: ProductRegistryItem) {
+  if (!PUBLIC_RELEASE_PRODUCT_IDS.has(product.productId)) return false;
   return (
     product.state === "enabled" ||
     product.state === "degraded" ||
@@ -229,7 +236,9 @@ function getBadgeTone(state?: ProductOperationalState): V2BadgeTone {
 }
 
 function getProductTag(t: TranslateFn, product: ProductRegistryItem) {
-  if (product.productId === "hire") return t("zakiDashboard.products.tags.privateBeta");
+  if (product.productId === "learning" || product.productId === "hire") {
+    return t("zakiDashboard.products.tags.privateBeta");
+  }
   if (product.productId === "design") return t("zakiDashboard.products.tags.waitlist");
   if (product.productId === "brain") return t("zakiDashboard.products.tags.controlPlane");
   if (product.state === "degraded") return t("zakiDashboard.products.tags.degraded");

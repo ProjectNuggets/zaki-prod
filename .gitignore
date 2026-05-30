@@ -4,6 +4,7 @@ node_modules
 website/.env.local
 playwright-report/
 test-results/
+e2e/__screenshots__/
 tmp/
 .next/
 .claude/

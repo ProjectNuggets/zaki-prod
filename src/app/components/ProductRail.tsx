@@ -99,6 +99,7 @@ export function ProductRail() {
       fallback: "Learn",
       shortcut: "⌘5",
       icon: GraduationCap,
+      disabled: true,
       action: () => {
         setSidebarMode("learning");
         navigate("/learn");
