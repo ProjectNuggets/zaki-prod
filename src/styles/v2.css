@@ -2688,7 +2688,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   gap: 6px;
   padding: 5px 10px;
   border: 1px solid var(--v2-hairline);
-  border-radius: var(--v2-radius-sm, 6px);
+  border-radius: var(--v2-r-2);
   color: var(--v2-ink-2);
   font-family: var(--v2-font-mono);
   font-size: 11px;
@@ -2699,7 +2699,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-brain-v2__governance-link:hover {
-  border-color: var(--v2-hairline-strong, var(--v2-ink-3));
+  border-color: var(--v2-hairline-strong);
   color: var(--v2-ink-1);
 }
 

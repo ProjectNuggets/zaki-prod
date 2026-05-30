@@ -135,8 +135,10 @@ describe("BrainPage", () => {
   it("labels the surface scope as the personal brain (kept separate from other scopes)", () => {
     mockGraph = { ...POPULATED };
     renderPage();
-    // Appears in both the hero kicker and the status strip value.
-    expect(screen.getAllByText("Personal brain").length).toBeGreaterThanOrEqual(1);
+    // Renders in exactly two places: the hero kicker and the status-strip
+    // value. Asserting the exact count defends the label alignment — a
+    // regression to "User memory" in either spot would drop this below 2.
+    expect(screen.getAllByText("Personal brain")).toHaveLength(2);
   });
 
   it("defaults to the timeline view and switches to the graph view", () => {
@@ -148,6 +150,16 @@ describe("BrainPage", () => {
     const tabs = screen.getAllByRole("tab");
     fireEvent.click(tabs[1]); // graph tab
     expect(screen.getByTestId("brain-graph-slot")).toBeInTheDocument();
+  });
+
+  it("renders the filters scope block only once on the graph tab (no rail/overlay duplication)", () => {
+    mockGraph = { ...POPULATED };
+    // tab=graph + panel=filters would, before the fix, render BrainFilterPanel
+    // in both the always-on rail and the floating overlay on a desktop
+    // viewport — duplicating the scope block and its Settings deep-link.
+    renderPage("/brain?tab=graph&panel=filters");
+    expect(screen.getAllByTestId("brain-scope-settings-link")).toHaveLength(1);
+    expect(screen.getAllByTestId("brain-scope-active")).toHaveLength(1);
   });
 
   it("exposes an honest account-level governance deep-link to Settings (Settings-link ready)", () => {
