@@ -26,7 +26,8 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { X } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Shield, X } from "lucide-react";
 import { useBrainGraph, useBrainLocalGraph, useBrainMemory } from "@/queries";
 import type {
   BrainGraphEdge,
@@ -1301,7 +1302,7 @@ function DetailPanel({
         )}
       </div>
 
-      <div className="shrink-0 border-t border-white/10 px-4 py-3">
+      <div className="shrink-0 space-y-2 border-t border-white/10 px-4 py-3">
         <button
           type="button"
           onClick={() => onShowLocal(node.key ?? node.id)}
@@ -1310,6 +1311,27 @@ function DetailPanel({
         >
           {t("brain.graph.detail.showLocal", { defaultValue: "Show local graph" })}
         </button>
+        {/*
+          ZAKI Brain V2 closeout (2026-05-30) — Memory governance is
+          account-level and lives in route-level Settings → Memory & data
+          (AGENTS.md §3, §4). The V2 mockup's per-memory FORGET / PURGE
+          actions have no authenticated BFF route in this build
+          (backend `memory_forget` / `memory_purge_pii` exist in Nullalis
+          but are not yet exposed through /api/agent/brain/*). Per the
+          backend-truth rules we do NOT fake a destructive inline action;
+          we deep-link to where governance is (or will be) wired so the
+          affordance is honest and Settings-link ready.
+        */}
+        <Link
+          to="/settings#settings-memory-data"
+          className="flex w-full items-center justify-center gap-1.5 rounded-zaki-md border border-white/10 px-3 py-1.5 text-xs font-medium text-white/60 transition hover:border-white/25 hover:text-white/85"
+          data-testid="brain-detail-manage-in-settings"
+        >
+          <Shield className="size-3.5" aria-hidden="true" />
+          {t("brain.graph.detail.manageInSettings", {
+            defaultValue: "Forget or export in Settings",
+          })}
+        </Link>
         {isDeprecated && (
           <div className="mt-2 rounded-full bg-zaki-warning px-2 py-0.5 text-center text-[10px] font-semibold text-zaki-warning">
             {t("brain.graph.superseded", { defaultValue: "Superseded" })}

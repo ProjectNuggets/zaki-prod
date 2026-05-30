@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { Boxes, CircleDot, SlidersHorizontal, X } from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Boxes, CircleDot, Shield, SlidersHorizontal, X } from "lucide-react";
 import { useAuthStore } from "@/stores";
 import { useBrainGraph, useBrainMe } from "@/queries";
 import { SkeletonBrainPage } from "@/app/components/ui/skeleton";
@@ -217,7 +217,7 @@ export function BrainPage() {
           {
             id: "scope",
             label: t("brain.status.scope", { defaultValue: "Scope" }),
-            value: t("brain.status.userScoped", { defaultValue: "User memory" }),
+            value: t("brain.status.userScoped", { defaultValue: "Personal brain" }),
           },
           {
             id: "nodes",
@@ -242,10 +242,30 @@ export function BrainPage() {
       <div className="zaki-brain-v2__wrap">
         <header className="zaki-brain-v2__hero">
           <div>
-            <p>{t("brain.status.userScoped", { defaultValue: "User memory" })}</p>
+            <p>{t("brain.status.userScoped", { defaultValue: "Personal brain" })}</p>
             <h1>{t("brain.title")}</h1>
           </div>
-          <span>{t("brain.subtitle")}</span>
+          <div className="zaki-brain-v2__hero-meta">
+            <span>{t("brain.subtitle")}</span>
+            {/*
+              ZAKI Brain V2 closeout (2026-05-30) — account-level memory
+              governance is owned by route-level Settings (AGENTS.md §4:
+              Memory & Brain control plane). This surface stays read-only +
+              compose-additive; forget / PII purge / export live in Settings
+              so they are not duplicated inside the product workbench. The
+              deep-link keeps the brain page "Settings-link ready".
+            */}
+            <Link
+              to="/settings#settings-memory-data"
+              className="zaki-brain-v2__governance-link"
+              data-testid="brain-manage-memory-link"
+            >
+              <Shield className="size-3.5" aria-hidden="true" />
+              {t("brain.governance.manageLink", {
+                defaultValue: "Memory & privacy in Settings",
+              })}
+            </Link>
+          </div>
         </header>
 
         {semanticDegraded && !degradedDismissed && (

@@ -1831,8 +1831,23 @@
         "priorVersions_few": "{{count}} نسخ سابقة",
         "priorVersions_many": "{{count}} نسخة سابقة",
         "priorVersions_other": "{{count}} نسخ سابقة",
-        "confidence": "الثقة"
+        "confidence": "الثقة",
+        "manageInSettings": "النسيان أو التصدير في الإعدادات"
       }
+    },
+    "scope": {
+      "title": "النطاق",
+      "personal": "الدماغ الشخصي",
+      "shownHere": "معروض هنا",
+      "workspace": "مساحة العمل",
+      "learner": "المتعلّم",
+      "hire": "التوظيف",
+      "separate": "منفصل",
+      "note": "تبقى ذاكرة مساحة العمل والمتعلّم والتوظيف منفصلة وتعيش في أسطحها الخاصة.",
+      "manageLink": "نطاقات الذاكرة والخصوصية"
+    },
+    "governance": {
+      "manageLink": "الذاكرة والخصوصية في الإعدادات"
     },
     "timeline": {
       "loading": "جاري التحميل…",
