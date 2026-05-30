@@ -4,6 +4,11 @@ Date: 2026-05-30
 
 Purpose: turn the current ZAKI prod + Nullalis code truth into a user-facing activation map. A backend feature is not product-ready until it is surfaced in the app, routed through the ZAKI BFF, tested end to end, and represented truthfully in Settings, Agent, Brain, or operator-only pages.
 
+Companion scan: `docs/zaki-client-value-activation-map-2026-05-30.md` is the
+current whole-repo client-value map. It starts with channel truth, then covers
+Agent, Brain, Chat/Spaces, Learning, Design, Hire, developer clients,
+operator/admin, and public website endpoints.
+
 ## Readiness Rule
 
 Production-ready means all five are true:
@@ -99,7 +104,18 @@ Remaining product work:
 
 ### Channels
 
-Backend code supports a broad channel catalog. Active/available families include Telegram, Discord, Slack, Webhooks, WhatsApp, Email, Matrix, iMessage, and MaixCam, with other channels marked coming soon or build-flag dependent.
+Backend code supports a broad channel catalog, but the launch surface must be
+narrower than the adapter list.
+
+Code truth from Nullalis:
+
+- V1 keeper/default channels: CLI, Telegram, Discord, Slack, WhatsApp, Email,
+  and MaixCam.
+- Delete-eligible or flag-gated channels: Signal, iMessage, Matrix,
+  Mattermost, IRC, Line, Lark, OneBot, QQ, plus other non-launch adapters.
+- Teams has code/config/docs signal but is not in the Nullalis V1 keeper list,
+  so it stays enterprise backlog until the backend reconciles build and product
+  status.
 
 ZAKI user-facing rule:
 
@@ -107,11 +123,19 @@ ZAKI user-facing rule:
 - Product-specific surfaces can show quick status and deep links only.
 - Only show channels as connectable when the ZAKI BFF can list status, validate required inputs, connect/test/disconnect, and preserve secret fields safely.
 
-First Settings implementation should include:
+Settings implementation status:
 
-- Telegram: connect/disconnect/status, because BFF routes already exist.
-- Read-only registry rows for other available channels until BFF connect/test/disconnect contracts are exposed.
-- Clear hidden/coming-soon treatment for unsupported channels.
+- Telegram: launch-ready direct connect/disconnect exists on the base branch.
+  The Agent closeout branch adds the fuller channel status/bindings facade.
+- Slack, Discord, Email: base branch is operator-managed/read-only. The Agent
+  closeout branch maps status and identity bindings, but runtime app
+  credentials remain operator-managed until per-user connect/test/disconnect
+  contracts exist.
+- WhatsApp: candidate next launch channel after a ZAKI BFF contract.
+- MaixCam: hidden/niche until product story exists.
+- Teams and delete-eligible channels: hidden from public V1.
+
+Detailed matrix: `docs/zaki-client-value-activation-map-2026-05-30.md`.
 
 ### Secrets Vault
 
@@ -238,4 +262,8 @@ Work:
 
 ## Immediate Priority
 
-Continue Slice A into a signed-in action matrix, then move immediately to Slice B. The remaining SaaS confidence gap is no longer the central meter or secret-vault plumbing; it is route-level Settings ownership of Channels, Secrets/API keys, provider profiles, browser extension devices, and clear private-beta gating.
+Continue Slice A into a signed-in action matrix, then move immediately to Slice
+B. The remaining SaaS confidence gap is no longer the central meter or
+secret-vault plumbing; it is route-level Settings ownership of Channels,
+Secrets/API keys, provider profiles, browser extension devices, memory
+governance, and clear private-beta gating.

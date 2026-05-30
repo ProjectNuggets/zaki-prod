@@ -4,6 +4,9 @@ Date: 2026-05-30
 Owner: ZAKI app finalization orchestrator
 Source checkout: `/Users/nova/Desktop/nullalis` at `main` commit `b7d1eb4b`
 
+Companion app activation map:
+`docs/zaki-client-value-activation-map-2026-05-30.md`
+
 ## Purpose
 
 Map Nullalis code truth to ZAKI Settings and product surfaces so the V2 app
@@ -112,6 +115,17 @@ Channel implementations exist for Telegram, Slack, Discord, Email, Teams,
 WhatsApp, Signal, Line, Lark, Matrix, iMessage, IRC, Nostr, OneBot, QQ,
 Mattermost, MaixCam, and CLI depending on build/config.
 
+Launch interpretation from `src/channels/root.zig`:
+
+- V1 keeper/default set: CLI, Telegram, Discord, Slack, WhatsApp, Email, and
+  MaixCam.
+- Public-launch now: Telegram.
+- Launch next after contract hardening: Slack, Discord, Email, then WhatsApp.
+- Hidden/niche: MaixCam until the product story is clear.
+- Future client: CLI belongs in Developer Access later.
+- Hidden until deliberately promoted: Teams, Signal, Line, Lark, Matrix,
+  iMessage, IRC, Nostr, OneBot, QQ, Mattermost.
+
 Production user routes currently documented and wired:
 
 - Telegram connect/disconnect:
@@ -146,11 +160,25 @@ Partially mapped today:
 - Nullalis exposes generic channel identity bindings, but ZAKI does not yet
   expose productized BFF routes for listing, binding, or revoking identities per
   channel.
+- `codex/v2-agent-closeout` contains the first ZAKI BFF/UI pass for
+  Telegram/Slack/Discord/Email status and identity bindings. That branch should
+  be reviewed and merged before treating those rows as mainline product truth.
 
 Not production-mapped in ZAKI today:
 
-- Slack, Discord, Email, Teams, WhatsApp, Signal, Line, Lark, Matrix, iMessage,
-  IRC, Nostr, OneBot, QQ, Mattermost, MaixCam, and CLI.
+- Slack, Discord, Email direct self-service connect/test/disconnect; WhatsApp;
+  Teams; Signal; Line; Lark; Matrix; iMessage; IRC; Nostr; OneBot; QQ;
+  Mattermost; MaixCam; and CLI.
+
+Product priority within that list:
+
+- Slack, Discord, and Email need direct self-service connection contracts.
+- WhatsApp deserves the next backend contract review.
+- CLI belongs to Developer Access later.
+- MaixCam remains hidden until the product story is clear.
+- Teams is enterprise backlog because code/docs mention it but V1 keeper status
+  is not settled.
+- The remaining adapters stay hidden.
 
 Required central contract before these become user-facing:
 
@@ -281,7 +309,7 @@ Hidden V1 claims:
 |---|---|
 | Agent Runtime Defaults | `/v1/me/bot/settings`: assistant_mode, autonomy, session timeout |
 | Models & Providers | `selected_model`; operator provider readiness; provider profile contract later |
-| Channels | Telegram connect/disconnect; bindings after BFF exposure |
+| Channels | Telegram connect/disconnect; Slack/Discord/Email bindings/status after Agent branch merge; WhatsApp contract next |
 | Secrets & API Keys | `/api/agent/secrets*`; metadata-only vault |
 | Browser Extension & Devices | `/api/agent/diagnostics/extension`; pairing contract needed |
 | Memory & Brain | `dream_enabled`, `query_expansion_enabled`, Brain route deep links |
@@ -297,3 +325,6 @@ Hidden V1 claims:
    secret refs.
 5. Expose memory governance actions from ZAKI BFF if not already present:
    forget, purge PII dry-run/apply, export memories.
+6. Add channel connect/test/disconnect contracts for Slack, Discord, Email, and
+   WhatsApp using vault-backed secret refs.
+7. Reconcile Teams docs/config/build status before any user-facing Teams claim.

@@ -53,6 +53,7 @@ Authoritative app checkout:
 
 Related worktrees:
 
+- `/Users/nova/Desktop/zaki-prod-agent` on `codex/v2-agent-closeout`
 - `/Users/nova/Desktop/zaki-prod-hire` on `codex/zaki-hire`
 
 Authoritative backend checkout:
@@ -63,6 +64,13 @@ Authoritative backend checkout:
 
 Nullalis backend is S1-S6 production-readiness merged. ZAKI app still needs
 app-level UI, Settings, Brain, and E2E release gates.
+
+Whole-repo client-value scan:
+
+- `docs/zaki-client-value-activation-map-2026-05-30.md`
+- This is now the channel-first activation source of truth. Workers should use
+  it to decide whether a backend capability is launch, partial, private beta,
+  operator-only, or hidden.
 
 ## Why Multi-Agent Now
 
@@ -600,8 +608,10 @@ Recommended sequence:
 2. Brain is not V2 complete.
 3. Settings has the right route-level direction but needs deeper control-plane
    ownership.
-4. Agent channel wiring is fully productized only for Telegram today. Other
-   Nullalis channels need central BFF status/connect/test/disconnect/bindings.
+4. Agent channel wiring is fully productized only for Telegram on the
+   orchestrator base. `codex/v2-agent-closeout` adds Telegram/Slack/Discord/Email
+   status and bindings, but Slack/Discord/Email still need self-service
+   connect/test/disconnect contracts before full launch.
 5. Browser extension pairing/revocation is not yet user-productized.
 6. Provider/BYOK/OpenAI-compatible API needs a real profile contract before UI
    create/test/delete.
@@ -609,4 +619,6 @@ Recommended sequence:
    expanded control-plane UX and explicit full-access guard validation for
    `as@novanuggets.com`.
 8. Nullalis OpenAPI ProductSettings schema needs sync with code.
-9. App-level E2E is the remaining confidence gate after backend S1-S6.
+9. Memory governance needs user-facing forget, purge PII dry-run/apply, export,
+   provenance, and Brain deep links.
+10. App-level E2E is the remaining confidence gate after backend S1-S6.
