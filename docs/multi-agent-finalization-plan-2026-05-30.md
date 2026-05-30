@@ -48,8 +48,7 @@ Authoritative app checkout:
 - `/Users/nova/Desktop/zaki-prod`
 - Branch: `codex/zaki-prod-finalization`
 - Current branch is ahead of `origin/codex/zaki-prod-finalization`.
-- Worktree is dirty with in-progress V2 Agent/Settings/BFF plumbing and built
-  `dist` assets.
+- Worktree was clean at the 2026-05-30 execution-board checkpoint.
 
 Related worktrees:
 
@@ -71,6 +70,13 @@ Whole-repo client-value scan:
 - This is now the channel-first activation source of truth. Workers should use
   it to decide whether a backend capability is launch, partial, private beta,
   operator-only, or hidden.
+
+Execution board:
+
+- `docs/multi-agent-execution-board-2026-05-30.md`
+- This is the numbered worker plan and prompt source. Use it for Agent 1 through
+  Agent 9 assignments, worktree ownership, dependencies, and verification
+  commands.
 
 ## Why Multi-Agent Now
 
@@ -589,7 +595,7 @@ git diff --check
 
 ## Immediate Next Slice
 
-Do not start all four workers at once from the dirty orchestrator checkout.
+Do not start all implementation workers at once from the orchestrator checkout.
 
 Recommended sequence:
 

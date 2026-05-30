@@ -10,12 +10,14 @@ usage, identity, and settings.
 
 Before editing code, read:
 
-1. `docs/multi-agent-finalization-plan-2026-05-30.md`
-2. `docs/nullalis-user-config-surface-map-2026-05-30.md`
-3. `docs/zaki-v2-surface-activation-inventory-2026-05-30.md`
-4. `docs/zaki-prod-end-state-spec.md`
-5. `docs/agent-v6-parity-contract.md`
-6. The relevant V2 mockup in `/Users/nova/Desktop/ZAKI Design System/v2/`
+1. `docs/multi-agent-execution-board-2026-05-30.md`
+2. `docs/multi-agent-finalization-plan-2026-05-30.md`
+3. `docs/zaki-client-value-activation-map-2026-05-30.md`
+4. `docs/nullalis-user-config-surface-map-2026-05-30.md`
+5. `docs/zaki-v2-surface-activation-inventory-2026-05-30.md`
+6. `docs/zaki-prod-end-state-spec.md`
+7. `docs/agent-v6-parity-contract.md`
+8. The relevant V2 mockup in `/Users/nova/Desktop/ZAKI Design System/v2/`
 
 For Agent/Brain backend truth, the authoritative Nullalis checkout is:
 
@@ -124,6 +126,10 @@ Backend readiness alone does not count. UI affordance alone does not count.
 Use isolated branches/worktrees for parallel work. Never have two agents edit
 the same checkout.
 
+Current agent work is assigned in:
+
+`docs/multi-agent-execution-board-2026-05-30.md`
+
 Branch naming:
 
 - `codex/v2-agent-closeout`
@@ -139,6 +145,7 @@ Each agent must:
 
 - State its branch/worktree in the first response.
 - Read this file and the relevant docs above.
+- Read its numbered agent section in the execution board.
 - Keep changes inside its assigned surface unless the orchestrator approves a
   shared contract change.
 - Avoid unrelated formatting churn.
@@ -192,7 +199,10 @@ Required routes for final V1 app QA:
 
 ## 9. Known Coordination Constraints
 
-- `zaki-prod` currently has active dirty work on `codex/zaki-prod-finalization`.
+- `/Users/nova/Desktop/zaki-prod` is the integration checkout on
+  `codex/zaki-prod-finalization`.
+- `/Users/nova/Desktop/zaki-prod-agent` is the active Agent closeout worktree on
+  `codex/v2-agent-closeout`.
 - `/Users/nova/Desktop/zaki-prod-hire` is the dedicated Hire worktree.
 - `/Users/nova/Desktop/nullalis` is the production backend truth on `main`.
 - Nullalis backend S1-S6 are merged and documented as backend-ready, but ZAKI UI
