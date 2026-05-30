@@ -27,14 +27,20 @@ import {
 } from "@/queries";
 import {
   exportAccountData,
+  deleteAgentChannelBinding,
   deleteAgentSecret,
+  fetchAgentChannels,
   fetchAgentExtensionDiagnostics,
   fetchBotSettings,
   fetchGoogleOAuthStatus,
+  upsertAgentChannelBinding,
   listAgentSecrets,
   putAgentSecret,
   updateBotSettings,
   updateProfile,
+  type AgentChannelBindingPayload,
+  type AgentChannelId,
+  type AgentChannelStatus,
   type AgentExtensionDiagnosticsResponse,
   type BotSettingsPatch,
   type BotSettingsProfile,
@@ -115,6 +121,57 @@ const DEFAULT_AGENT_SETTINGS: Pick<
   query_expansion_enabled: false,
   selected_model: null,
 };
+
+const AGENT_LAUNCH_CHANNELS: Array<{
+  id: AgentChannelId;
+  label: string;
+  helper: string;
+  principalPlaceholder: string;
+  scopePlaceholder: string;
+}> = [
+  {
+    id: "telegram",
+    label: "Telegram",
+    helper: "Direct connect plus identity bindings for Telegram chats.",
+    principalPlaceholder: "telegram-user-id",
+    scopePlaceholder: "telegram-chat-id",
+  },
+  {
+    id: "slack",
+    label: "Slack",
+    helper: "Workspace bot is live downstream; bind Slack users or channels to this account.",
+    principalPlaceholder: "U123456",
+    scopePlaceholder: "C123456",
+  },
+  {
+    id: "discord",
+    label: "Discord",
+    helper: "Discord gateway is live downstream; bind Discord users or guild channels.",
+    principalPlaceholder: "discord-user-id",
+    scopePlaceholder: "discord-channel-id",
+  },
+  {
+    id: "email",
+    label: "Email",
+    helper: "IMAP/SMTP channel is live downstream; bind sender addresses or domains.",
+    principalPlaceholder: "person@example.com",
+    scopePlaceholder: "inbox@example.com",
+  },
+];
+
+type ChannelBindingDraft = Pick<
+  AgentChannelBindingPayload,
+  "account_id" | "principal_key" | "scope_key" | "thread_key"
+>;
+
+function defaultChannelBindingDraft(): ChannelBindingDraft {
+  return {
+    account_id: "main",
+    principal_key: "",
+    scope_key: "",
+    thread_key: "",
+  };
+}
 
 function formatUsageCount(value?: number | null) {
   if (value == null || Number.isNaN(value)) return "—";
@@ -232,6 +289,20 @@ function getStateTone(state?: ProductOperationalState) {
   return "default";
 }
 
+function getChannelTone(channel?: AgentChannelStatus | null) {
+  if (channel?.connected || channel?.configured) return "success";
+  if (channel?.available || channel?.live) return "warn";
+  return "default";
+}
+
+function getChannelStatusLabel(channel?: AgentChannelStatus | null) {
+  if (!channel) return "Checking";
+  if (channel.connected) return "Connected";
+  if (channel.configured) return "Configured";
+  if (channel.available || channel.live) return "Ready";
+  return "Not configured";
+}
+
 function normalizeWeeklyWindow(
   meterWeekly?: MeterWindowSnapshot | null,
   fallback?: {
@@ -269,6 +340,17 @@ export function SettingsPage() {
   const [agentSecretsAction, setAgentSecretsAction] = useState<string | null>(null);
   const [newSecretKey, setNewSecretKey] = useState("");
   const [newSecretValue, setNewSecretValue] = useState("");
+  const [agentChannels, setAgentChannels] = useState<AgentChannelStatus[]>([]);
+  const [agentChannelsLoading, setAgentChannelsLoading] = useState(true);
+  const [channelAction, setChannelAction] = useState<string | null>(null);
+  const [channelBindingDrafts, setChannelBindingDrafts] = useState<
+    Record<AgentChannelId, ChannelBindingDraft>
+  >({
+    telegram: defaultChannelBindingDraft(),
+    slack: defaultChannelBindingDraft(),
+    discord: defaultChannelBindingDraft(),
+    email: defaultChannelBindingDraft(),
+  });
   const [extensionDiagnostics, setExtensionDiagnostics] =
     useState<AgentExtensionDiagnosticsResponse | null>(null);
   const [extensionDiagnosticsLoading, setExtensionDiagnosticsLoading] = useState(true);
@@ -364,6 +446,38 @@ export function SettingsPage() {
       })
       .finally(() => {
         if (active) setAgentSecretsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const loadAgentChannels = async () => {
+    setAgentChannelsLoading(true);
+    try {
+      const { response, data } = await fetchAgentChannels();
+      if (!response.ok) throw new Error("agent_channels_unavailable");
+      setAgentChannels(Array.isArray(data?.channels) ? data.channels : []);
+    } catch {
+      setAgentChannels([]);
+    } finally {
+      setAgentChannelsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    setAgentChannelsLoading(true);
+    fetchAgentChannels()
+      .then(({ response, data }) => {
+        if (!active) return;
+        setAgentChannels(response.ok && Array.isArray(data?.channels) ? data.channels : []);
+      })
+      .catch(() => {
+        if (active) setAgentChannels([]);
+      })
+      .finally(() => {
+        if (active) setAgentChannelsLoading(false);
       });
     return () => {
       active = false;
@@ -494,6 +608,92 @@ export function SettingsPage() {
   const effectiveAgentModelId = agentSettingsDraft.selected_model || DEFAULT_AGENT_MODEL_ID;
   const effectiveAgentModel = resolveAgentModel(effectiveAgentModelId);
   const selectedModelIsOperatorDefault = !agentSettingsDraft.selected_model;
+  const agentChannelsById = useMemo(
+    () => new Map(agentChannels.map((channel) => [channel.id, channel])),
+    [agentChannels]
+  );
+
+  const updateChannelBindingDraft = (
+    channel: AgentChannelId,
+    patch: Partial<ChannelBindingDraft>
+  ) => {
+    setChannelBindingDrafts((current) => ({
+      ...current,
+      [channel]: {
+        ...current[channel],
+        ...patch,
+      },
+    }));
+  };
+
+  const handleSaveChannelBinding = async (channel: AgentChannelId) => {
+    const draft = channelBindingDrafts[channel] || defaultChannelBindingDraft();
+    const accountId = draft.account_id.trim();
+    const principalKey = draft.principal_key.trim();
+    const scopeKey = draft.scope_key.trim();
+    if (!accountId || !principalKey || !scopeKey) {
+      toast.error(
+        t("settingsModal.channels.bindings.missing", {
+          defaultValue: "Account, principal, and scope are required.",
+        })
+      );
+      return;
+    }
+    setChannelAction(`${channel}:save`);
+    try {
+      const { response, data } = await upsertAgentChannelBinding(channel, {
+        account_id: accountId,
+        principal_key: principalKey,
+        scope_key: scopeKey,
+        thread_key: draft.thread_key?.trim() || null,
+      });
+      if (!response.ok) throw new Error(data?.message || data?.error || "channel_binding_failed");
+      setChannelBindingDrafts((current) => ({
+        ...current,
+        [channel]: defaultChannelBindingDraft(),
+      }));
+      await loadAgentChannels();
+      toast.success(
+        t("settingsModal.channels.bindings.saved", {
+          defaultValue: "Channel binding saved.",
+        })
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("settingsModal.channels.bindings.saveError", {
+              defaultValue: "Unable to save channel binding.",
+            })
+      );
+    } finally {
+      setChannelAction(null);
+    }
+  };
+
+  const handleDeleteChannelBinding = async (channel: AgentChannelId, bindingId: string) => {
+    setChannelAction(`${channel}:${bindingId}`);
+    try {
+      const { response, data } = await deleteAgentChannelBinding(channel, bindingId);
+      if (!response.ok) throw new Error(data?.message || data?.error || "channel_binding_delete_failed");
+      await loadAgentChannels();
+      toast.success(
+        t("settingsModal.channels.bindings.deleted", {
+          defaultValue: "Channel binding deleted.",
+        })
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("settingsModal.channels.bindings.deleteError", {
+              defaultValue: "Unable to delete channel binding.",
+            })
+      );
+    } finally {
+      setChannelAction(null);
+    }
+  };
 
   const navItems: V2SettingsNavItem[] = [
     { href: "#settings-account", label: t("settingsModal.nav.account"), icon: UserRound },
@@ -817,32 +1017,169 @@ export function SettingsPage() {
               id="settings-channels"
               data-testid="settings-channels"
               title={t("settingsModal.sections.channels", { defaultValue: "Channels" })}
+              meta={
+                agentChannelsLoading
+                  ? t("settingsModal.channels.loading", { defaultValue: "Checking channels" })
+                  : t("settingsModal.channels.count", {
+                      count: AGENT_LAUNCH_CHANNELS.length,
+                      defaultValue: `${AGENT_LAUNCH_CHANNELS.length} launch channels`,
+                    })
+              }
             >
-              <V2SettingsRow
-                name={t("settingsModal.channels.agentTelegram.name", {
-                  defaultValue: "Agent Telegram",
-                })}
-                description={t("settingsModal.channels.agentTelegram.description", {
-                  defaultValue: "Connect, disconnect, and rotate the Agent Telegram channel.",
-                })}
-              >
-                <div className="zaki-settings-v2__actions">
-                  <V2Badge tone={agentSecretsKeys.includes("telegram_bot_token") ? "success" : "default"}>
-                    {agentSecretsKeys.includes("telegram_bot_token")
-                      ? t("settingsModal.channels.status.configured", {
-                          defaultValue: "Configured",
-                        })
-                      : t("settingsModal.channels.status.notConfigured", {
-                          defaultValue: "Not configured",
-                        })}
-                  </V2Badge>
-                  <V2Button size="sm" onClick={() => navigate("/agent?settings=channels")}>
-                    {t("settingsModal.channels.openAgentChannels", {
-                      defaultValue: "Open channels",
-                    })}
-                  </V2Button>
-                </div>
-              </V2SettingsRow>
+              {AGENT_LAUNCH_CHANNELS.map((config) => {
+                const channel = agentChannelsById.get(config.id);
+                const draft = channelBindingDrafts[config.id] || defaultChannelBindingDraft();
+                const bindings = channel?.bindings?.items ?? [];
+                const statusLabel = agentChannelsLoading
+                  ? t("settingsModal.channels.status.checking", { defaultValue: "Checking" })
+                  : getChannelStatusLabel(channel);
+                const missingSecrets = channel?.missing_secrets ?? [];
+                const configuredSecrets = channel?.configured_secrets ?? [];
+                const requiredSecrets = channel?.required_secrets ?? [];
+                return (
+                  <div key={config.id} className="border-b border-[var(--v2-line)] last:border-b-0">
+                    <V2SettingsRow
+                      name={config.label}
+                      description={
+                        channel?.operator_managed_runtime
+                          ? `${config.helper} Runtime app credentials are operator-managed; user identity bindings are live.`
+                          : config.helper
+                      }
+                    >
+                      <div className="grid min-w-[280px] gap-2">
+                        <div className="zaki-settings-v2__actions">
+                          <V2Badge tone={getChannelTone(channel)}>{statusLabel}</V2Badge>
+                          {channel?.bindings_supported ? (
+                            <V2Badge tone={bindings.length > 0 ? "success" : "default"}>
+                              {t("settingsModal.channels.bindings.count", {
+                                count: bindings.length,
+                                defaultValue: `${bindings.length} bindings`,
+                              })}
+                            </V2Badge>
+                          ) : null}
+                          {config.id === "telegram" ? (
+                            <V2Button size="sm" onClick={() => navigate("/agent?settings=channels")}>
+                              {t("settingsModal.channels.openAgentChannels", {
+                                defaultValue: "Open channels",
+                              })}
+                            </V2Button>
+                          ) : null}
+                        </div>
+                        {requiredSecrets.length > 0 ? (
+                          <p className="text-[11px] leading-5 text-[var(--v2-text-muted)]">
+                            {channel?.operator_managed_runtime
+                              ? t("settingsModal.channels.secrets.vaultRefs", {
+                                  defaultValue: `Vault refs: ${requiredSecrets.join(", ")}`,
+                                })
+                              : configuredSecrets.length > 0
+                              ? t("settingsModal.channels.secrets.configured", {
+                                  count: configuredSecrets.length,
+                                  defaultValue: `${configuredSecrets.length} secrets stored`,
+                                })
+                              : t("settingsModal.channels.secrets.required", {
+                                  defaultValue: `Secrets: ${requiredSecrets.join(", ")}`,
+                                })}
+                            {!channel?.operator_managed_runtime && missingSecrets.length > 0
+                              ? ` · Missing: ${missingSecrets.join(", ")}`
+                              : ""}
+                          </p>
+                        ) : null}
+                      </div>
+                    </V2SettingsRow>
+                    {channel?.bindings_supported ? (
+                      <div className="grid gap-3 px-4 pb-4 md:ml-[min(280px,38%)]">
+                        <div className="grid gap-2 md:grid-cols-4">
+                          <input
+                            className="v2-input"
+                            value={draft.account_id}
+                            onChange={(event) =>
+                              updateChannelBindingDraft(config.id, { account_id: event.target.value })
+                            }
+                            placeholder={t("settingsModal.channels.bindings.account", {
+                              defaultValue: "Account",
+                            })}
+                            aria-label={`${config.label} account id`}
+                          />
+                          <input
+                            className="v2-input"
+                            value={draft.principal_key}
+                            onChange={(event) =>
+                              updateChannelBindingDraft(config.id, { principal_key: event.target.value })
+                            }
+                            placeholder={config.principalPlaceholder}
+                            aria-label={`${config.label} principal key`}
+                          />
+                          <input
+                            className="v2-input"
+                            value={draft.scope_key}
+                            onChange={(event) =>
+                              updateChannelBindingDraft(config.id, { scope_key: event.target.value })
+                            }
+                            placeholder={config.scopePlaceholder}
+                            aria-label={`${config.label} scope key`}
+                          />
+                          <input
+                            className="v2-input"
+                            value={draft.thread_key || ""}
+                            onChange={(event) =>
+                              updateChannelBindingDraft(config.id, { thread_key: event.target.value })
+                            }
+                            placeholder={t("settingsModal.channels.bindings.thread", {
+                              defaultValue: "Thread optional",
+                            })}
+                            aria-label={`${config.label} thread key`}
+                          />
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <V2Button
+                            size="sm"
+                            onClick={() => void handleSaveChannelBinding(config.id)}
+                            disabled={channelAction === `${config.id}:save`}
+                          >
+                            {channelAction === `${config.id}:save`
+                              ? t("settingsModal.channels.bindings.saving", {
+                                  defaultValue: "Saving",
+                                })
+                              : t("settingsModal.channels.bindings.save", {
+                                  defaultValue: "Save binding",
+                                })}
+                          </V2Button>
+                          <span className="text-[11px] text-[var(--v2-text-muted)]">
+                            {t("settingsModal.channels.bindings.helper", {
+                              defaultValue:
+                                "Bindings route inbound identities to your Agent without exposing channel secrets.",
+                            })}
+                          </span>
+                        </div>
+                        {bindings.length > 0 ? (
+                          <div className="grid gap-1">
+                            {bindings.map((binding) => (
+                              <div
+                                key={binding.id}
+                                className="flex flex-wrap items-center justify-between gap-2 border border-[var(--v2-line)] px-3 py-2 text-xs"
+                              >
+                                <span className="font-mono text-[var(--v2-text)]">
+                                  {binding.account_id} / {binding.principal_key} / {binding.scope_key}
+                                </span>
+                                <V2Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => void handleDeleteChannelBinding(config.id, binding.id)}
+                                  disabled={channelAction === `${config.id}:${binding.id}`}
+                                >
+                                  {t("settingsModal.channels.bindings.delete", {
+                                    defaultValue: "Delete",
+                                  })}
+                                </V2Button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
               <V2SettingsRow
                 name={t("settingsModal.channels.learningTutors.name", {
                   defaultValue: "Learning tutor channels",
@@ -859,10 +1196,11 @@ export function SettingsPage() {
               </V2SettingsRow>
               <V2SettingsRow
                 name={t("settingsModal.channels.otherChannels.name", {
-                  defaultValue: "Slack, Discord, Teams, Email",
+                  defaultValue: "Additional channels",
                 })}
                 description={t("settingsModal.channels.otherChannels.description", {
-                  defaultValue: "Contracts exist downstream; self-service connect stays gated until BFF status/test routes are exposed.",
+                  defaultValue:
+                    "Teams, WhatsApp, Signal, Matrix, and other adapters stay hidden until their user-safe BFF contracts are exposed.",
                 })}
               >
                 <V2Badge>

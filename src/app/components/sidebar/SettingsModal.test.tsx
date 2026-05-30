@@ -40,6 +40,82 @@ jest.mock("@/lib/api", () => ({
       last_command_result: "",
     },
   })),
+  fetchAgentChannels: jest.fn(async () => ({
+    response: { ok: true },
+    data: {
+      channels: [
+        {
+          id: "telegram",
+          label: "Telegram",
+          configured: true,
+          connected: true,
+          live: true,
+          available: true,
+          bindings_supported: true,
+          required_secrets: ["telegram_bot_token"],
+          configured_secrets: ["telegram_bot_token"],
+          missing_secrets: [],
+          bindings: { count: 0, items: [] },
+        },
+        {
+          id: "slack",
+          label: "Slack",
+          configured: true,
+          live: true,
+          available: true,
+          bindings_supported: true,
+          operator_managed_runtime: true,
+          required_secrets: ["slack_bot_token", "slack_app_token", "slack_signing_secret"],
+          configured_secrets: [],
+          missing_secrets: ["slack_bot_token", "slack_app_token", "slack_signing_secret"],
+          bindings: {
+            count: 1,
+            items: [
+              {
+                id: "bnd_1",
+                account_id: "main",
+                principal_key: "U123",
+                scope_key: "C123",
+                thread_key: null,
+              },
+            ],
+          },
+        },
+        {
+          id: "discord",
+          label: "Discord",
+          live: true,
+          available: true,
+          bindings_supported: true,
+          operator_managed_runtime: true,
+          required_secrets: ["discord_bot_token"],
+          configured_secrets: [],
+          missing_secrets: ["discord_bot_token"],
+          bindings: { count: 0, items: [] },
+        },
+        {
+          id: "email",
+          label: "Email",
+          live: true,
+          available: true,
+          bindings_supported: true,
+          operator_managed_runtime: true,
+          required_secrets: ["email_smtp_password", "email_imap_password"],
+          configured_secrets: [],
+          missing_secrets: ["email_smtp_password", "email_imap_password"],
+          bindings: { count: 0, items: [] },
+        },
+      ],
+    },
+  })),
+  upsertAgentChannelBinding: jest.fn(async () => ({
+    response: { ok: true },
+    data: { status: "upserted", id: "bnd_2" },
+  })),
+  deleteAgentChannelBinding: jest.fn(async () => ({
+    response: { ok: true },
+    data: { status: "deleted" },
+  })),
   listAgentSecrets: jest.fn(async () => ({
     response: { ok: true },
     data: { keys: ["telegram_bot_token"] },
@@ -128,14 +204,33 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.channels.learningTutors.name": "Learning tutor channels",
     "settingsModal.channels.learningTutors.description":
       "Private-beta tutor channel schema is available through Learning.",
-    "settingsModal.channels.otherChannels.name": "Slack, Discord, Teams, Email",
+    "settingsModal.channels.loading": "Checking channels",
+    "settingsModal.channels.count": "{{count}} launch channels",
+    "settingsModal.channels.status.checking": "Checking",
+    "settingsModal.channels.otherChannels.name": "Additional channels",
     "settingsModal.channels.otherChannels.description":
-      "Contracts exist downstream; self-service connect stays gated until BFF status/test routes are exposed.",
+      "Teams, WhatsApp, Signal, Matrix, and other adapters stay hidden until their user-safe BFF contracts are exposed.",
     "settingsModal.channels.status.configured": "Configured",
     "settingsModal.channels.status.notConfigured": "Not configured",
     "settingsModal.channels.status.privateBeta": "Private beta",
     "settingsModal.channels.status.operatorManaged": "Operator managed",
     "settingsModal.channels.openAgentChannels": "Open channels",
+    "settingsModal.channels.bindings.count": "{{count}} bindings",
+    "settingsModal.channels.bindings.account": "Account",
+    "settingsModal.channels.bindings.thread": "Thread optional",
+    "settingsModal.channels.bindings.save": "Save binding",
+    "settingsModal.channels.bindings.saving": "Saving",
+    "settingsModal.channels.bindings.helper":
+      "Bindings route inbound identities to your Agent without exposing channel secrets.",
+    "settingsModal.channels.bindings.delete": "Delete",
+    "settingsModal.channels.bindings.missing": "Account, principal, and scope are required.",
+    "settingsModal.channels.bindings.saved": "Channel binding saved.",
+    "settingsModal.channels.bindings.deleted": "Channel binding deleted.",
+    "settingsModal.channels.bindings.saveError": "Unable to save channel binding.",
+    "settingsModal.channels.bindings.deleteError": "Unable to delete channel binding.",
+    "settingsModal.channels.secrets.configured": "{{count}} secrets stored",
+    "settingsModal.channels.secrets.required": "Secrets required",
+    "settingsModal.channels.secrets.vaultRefs": "Vault refs",
     "settingsModal.secrets.loading": "Loading secrets",
     "settingsModal.secrets.count": "{{count}} stored",
     "settingsModal.secrets.addOrRotate": "Add or rotate secret",
@@ -737,7 +832,10 @@ describe("SettingsPage", () => {
     expect(within(screen.getByTestId("settings-products-access")).getByText("ZAKI Design")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-agent-model")).getAllByText("Kimi K2.6").length).toBeGreaterThan(0);
     expect(within(screen.getByTestId("settings-agent-model")).getByText("Claude Opus 4.7")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-channels")).getByText("Agent Telegram")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-channels")).getByText("Telegram")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-channels")).getByText("Slack")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-channels")).getByText("Discord")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-channels")).getByText("Email")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-providers")).getByText("OpenAI-compatible provider")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-memory-data")).getByText("Personal brain")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-memory-data")).getByText("Dream reflection")).toBeInTheDocument();
@@ -746,6 +844,8 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(within(screen.getByTestId("settings-connections")).getByText("Available")).toBeInTheDocument();
       expect(within(screen.getByTestId("settings-channels")).getByText("Configured")).toBeInTheDocument();
+      expect(within(screen.getByTestId("settings-channels")).getByText("1 bindings")).toBeInTheDocument();
+      expect(within(screen.getByTestId("settings-channels")).getByText(/U123/)).toBeInTheDocument();
       expect(within(screen.getByTestId("settings-secrets")).getByText("telegram_bot_token")).toBeInTheDocument();
       expect(within(screen.getByTestId("settings-secrets")).getByText("Metadata only")).toBeInTheDocument();
       expect(within(screen.getByTestId("settings-devices")).getAllByText("Not paired").length).toBeGreaterThan(0);

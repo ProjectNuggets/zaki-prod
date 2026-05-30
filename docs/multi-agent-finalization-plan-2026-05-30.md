@@ -614,9 +614,9 @@ Recommended sequence:
 2. Brain is not V2 complete.
 3. Settings has the right route-level direction but needs deeper control-plane
    ownership.
-4. Agent channel wiring is fully productized only for Telegram on the
-   orchestrator base. `codex/v2-agent-closeout` adds Telegram/Slack/Discord/Email
-   status and bindings, but Slack/Discord/Email still need self-service
+4. Agent channel wiring now has Telegram/Slack/Discord/Email status and
+   bindings in the orchestrator base. Telegram is the only direct
+   connect/disconnect path; Slack/Discord/Email still need self-service
    connect/test/disconnect contracts before full launch.
 5. Browser extension pairing/revocation is not yet user-productized.
 6. Provider/BYOK/OpenAI-compatible API needs a real profile contract before UI

@@ -125,12 +125,11 @@ ZAKI user-facing rule:
 
 Settings implementation status:
 
-- Telegram: launch-ready direct connect/disconnect exists on the base branch.
-  The Agent closeout branch adds the fuller channel status/bindings facade.
-- Slack, Discord, Email: base branch is operator-managed/read-only. The Agent
-  closeout branch maps status and identity bindings, but runtime app
-  credentials remain operator-managed until per-user connect/test/disconnect
-  contracts exist.
+- Telegram: launch-ready direct connect/disconnect, status, and identity
+  bindings exist in Settings.
+- Slack, Discord, Email: status and identity bindings are mapped in Settings,
+  but runtime app credentials remain operator-managed until per-user
+  connect/test/disconnect contracts exist.
 - WhatsApp: candidate next launch channel after a ZAKI BFF contract.
 - MaixCam: hidden/niche until product story exists.
 - Teams and delete-eligible channels: hidden from public V1.

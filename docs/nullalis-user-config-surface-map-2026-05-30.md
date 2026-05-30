@@ -160,9 +160,8 @@ Partially mapped today:
 - Nullalis exposes generic channel identity bindings, but ZAKI does not yet
   expose productized BFF routes for listing, binding, or revoking identities per
   channel.
-- `codex/v2-agent-closeout` contains the first ZAKI BFF/UI pass for
-  Telegram/Slack/Discord/Email status and identity bindings. That branch should
-  be reviewed and merged before treating those rows as mainline product truth.
+- ZAKI now contains the first BFF/UI pass for Telegram/Slack/Discord/Email
+  status and identity bindings.
 
 Not production-mapped in ZAKI today:
 
@@ -309,7 +308,7 @@ Hidden V1 claims:
 |---|---|
 | Agent Runtime Defaults | `/v1/me/bot/settings`: assistant_mode, autonomy, session timeout |
 | Models & Providers | `selected_model`; operator provider readiness; provider profile contract later |
-| Channels | Telegram connect/disconnect; Slack/Discord/Email bindings/status after Agent branch merge; WhatsApp contract next |
+| Channels | Telegram connect/disconnect; Slack/Discord/Email bindings/status; WhatsApp contract next |
 | Secrets & API Keys | `/api/agent/secrets*`; metadata-only vault |
 | Browser Extension & Devices | `/api/agent/diagnostics/extension`; pairing contract needed |
 | Memory & Brain | `dream_enabled`, `query_expansion_enabled`, Brain route deep links |

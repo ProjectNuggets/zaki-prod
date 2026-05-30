@@ -1565,6 +1565,65 @@ export type BotTelegramConnectionState = BotApiError & {
   channel?: "telegram";
 };
 
+export type AgentChannelId = "telegram" | "slack" | "discord" | "email";
+
+export type AgentChannelBinding = {
+  id: string;
+  account_id: string;
+  principal_key: string;
+  scope_key: string;
+  thread_key?: string | null;
+};
+
+export type AgentChannelBindingPayload = {
+  account_id: string;
+  principal_key: string;
+  scope_key: string;
+  thread_key?: string | null;
+  peer_kind?: string | null;
+  peer_id?: string | null;
+  metadata_json?: string | null;
+};
+
+export type AgentChannelStatus = {
+  id: AgentChannelId;
+  label: string;
+  live?: boolean;
+  available?: boolean;
+  status?: string;
+  connected?: boolean;
+  configured?: boolean;
+  connect_supported?: boolean;
+  disconnect_supported?: boolean;
+  bindings_supported?: boolean;
+  operator_managed_runtime?: boolean;
+  required_secrets?: string[];
+  configured_secrets?: string[];
+  missing_secrets?: string[];
+  instructions?: string[];
+  bindings?: {
+    status?: "ok" | "unavailable" | string;
+    count?: number;
+    items?: AgentChannelBinding[];
+  };
+};
+
+export type AgentChannelsResponse = BotApiError & {
+  channels?: AgentChannelStatus[];
+  degraded?: boolean;
+  errors?: string[];
+};
+
+export type AgentChannelBindingsResponse = BotApiError & {
+  channel?: AgentChannelId | string;
+  items?: AgentChannelBinding[];
+};
+
+export type AgentChannelBindingMutationResponse = BotApiError & {
+  status?: string;
+  id?: string;
+};
+
 export type BotUsageSummary = BotApiError & {
   state?: string;
   requests_day?: number;
@@ -1750,6 +1809,45 @@ export async function disconnectBotTelegram() {
     body: JSON.stringify({}),
   });
   const data = await parseApiJson<BotTelegramConnectionState>(response);
+  return { response, data };
+}
+
+export async function fetchAgentChannels() {
+  const response = await backendAuthRequest("/api/agent/channels", { method: "GET" });
+  const data = await parseApiJson<AgentChannelsResponse>(response);
+  return { response, data };
+}
+
+export async function listAgentChannelBindings(channel: AgentChannelId) {
+  const response = await backendAuthRequest(
+    `/api/agent/channels/${encodeURIComponent(channel)}/bindings`,
+    { method: "GET" }
+  );
+  const data = await parseApiJson<AgentChannelBindingsResponse>(response);
+  return { response, data };
+}
+
+export async function upsertAgentChannelBinding(
+  channel: AgentChannelId,
+  payload: AgentChannelBindingPayload
+) {
+  const response = await backendAuthRequest(
+    `/api/agent/channels/${encodeURIComponent(channel)}/bindings`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+  const data = await parseApiJson<AgentChannelBindingMutationResponse>(response);
+  return { response, data };
+}
+
+export async function deleteAgentChannelBinding(channel: AgentChannelId, bindingId: string) {
+  const response = await backendAuthRequest(
+    `/api/agent/channels/${encodeURIComponent(channel)}/bindings/${encodeURIComponent(bindingId)}`,
+    { method: "DELETE" }
+  );
+  const data = await parseApiJson<AgentChannelBindingMutationResponse>(response);
   return { response, data };
 }
 

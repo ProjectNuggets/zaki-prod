@@ -324,6 +324,74 @@ describe("agent runtime API clients", () => {
     );
   });
 
+  it("loads launch Agent channel status through the central channel facade", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeResponse(200, {
+        channels: [
+          {
+            id: "slack",
+            label: "Slack",
+            configured: true,
+            bindings: { count: 1, items: [] },
+          },
+        ],
+      })
+    );
+
+    const { fetchAgentChannels } = await import("@/lib/api");
+    const { data } = await fetchAgentChannels();
+
+    expect(data.channels?.[0]?.id).toBe("slack");
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/agent/channels",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("manages Agent channel identity bindings through channel-scoped BFF routes", async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeResponse(200, { channel: "discord", items: [] }))
+      .mockResolvedValueOnce(makeResponse(200, { status: "upserted", id: "bnd_1" }))
+      .mockResolvedValueOnce(makeResponse(200, { status: "deleted" }));
+
+    const {
+      listAgentChannelBindings,
+      upsertAgentChannelBinding,
+      deleteAgentChannelBinding,
+    } = await import("@/lib/api");
+
+    await listAgentChannelBindings("discord");
+    await upsertAgentChannelBinding("discord", {
+      account_id: "main",
+      principal_key: "U123",
+      scope_key: "C123",
+    });
+    await deleteAgentChannelBinding("discord", "bnd_1");
+
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      "http://test.local/api/agent/channels/discord/bindings",
+      expect.objectContaining({ method: "GET" })
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      "http://test.local/api/agent/channels/discord/bindings",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          account_id: "main",
+          principal_key: "U123",
+          scope_key: "C123",
+        }),
+      })
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      3,
+      "http://test.local/api/agent/channels/discord/bindings/bnd_1",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+
   it("cancels active Agent turns through the session-scoped BFF route", async () => {
     mockFetch.mockResolvedValueOnce(
       makeResponse(200, {

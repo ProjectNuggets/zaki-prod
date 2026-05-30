@@ -1,14 +1,20 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import {
+  AGENT_CHANNEL_BINDING_BFF_ROUTES,
+  AGENT_LAUNCH_CHANNELS,
+  AGENT_LAUNCH_CHANNEL_IDS,
   AGENT_RUNTIME_FACADE_ROUTES,
   AGENT_SESSION_BFF_ROUTES,
   BOT_BFF_ALIAS_ROUTES,
   BOT_CHAT_STREAM_SESSION_KEY_CONTRACT,
   buildBotProvisionPayload,
+  getAgentLaunchChannel,
   normalizeTelegramDisconnectErrorPayload,
+  normalizeAgentLaunchChannelId,
   registerAgentSessionBffRoutes,
   registerBotBffAliases,
   registerTelegramDisconnectAliases,
+  sanitizeAgentChannelBindingPayload,
 } from "./agent-bff-contract.js";
 
 describe("agent BOT BFF contract", () => {
@@ -35,6 +41,55 @@ describe("agent BOT BFF contract", () => {
       { method: "post", path: "/api/agent/artifacts/:artifactId/export" },
       { method: "get", path: "/api/agent/brain/documents" },
     ]);
+  });
+
+  it("defines the launch channel control-plane surface", () => {
+    expect(AGENT_LAUNCH_CHANNEL_IDS).toEqual(["telegram", "slack", "discord", "email"]);
+    expect(AGENT_CHANNEL_BINDING_BFF_ROUTES).toEqual([
+      { method: "get", path: "/api/agent/channels/:channel/bindings" },
+      { method: "post", path: "/api/agent/channels/:channel/bindings" },
+      { method: "delete", path: "/api/agent/channels/:channel/bindings/:bindingId" },
+    ]);
+    expect(AGENT_LAUNCH_CHANNELS.find((channel) => channel.id === "telegram")).toMatchObject({
+      directConnect: true,
+      bindings: true,
+      secretKeys: ["telegram_bot_token"],
+    });
+    expect(AGENT_LAUNCH_CHANNELS.find((channel) => channel.id === "slack")).toMatchObject({
+      directConnect: false,
+      bindings: true,
+      secretKeys: ["slack_bot_token", "slack_app_token", "slack_signing_secret"],
+    });
+  });
+
+  it("normalizes and rejects unsupported Agent channel ids", () => {
+    expect(normalizeAgentLaunchChannelId(" Slack ")).toBe("slack");
+    expect(getAgentLaunchChannel("DISCORD")?.label).toBe("Discord");
+    expect(normalizeAgentLaunchChannelId("whatsapp")).toBeNull();
+  });
+
+  it("sanitizes Agent channel binding payloads before proxying", () => {
+    expect(
+      sanitizeAgentChannelBindingPayload({
+        account_id: " main ",
+        principal_key: " U123 ",
+        scope_key: " C456 ",
+        thread_key: " thread:ops ",
+        ignored: "drop",
+      })
+    ).toEqual({
+      ok: true,
+      payload: {
+        account_id: "main",
+        principal_key: "U123",
+        scope_key: "C456",
+        thread_key: "thread:ops",
+      },
+    });
+    expect(sanitizeAgentChannelBindingPayload({ account_id: "main" })).toEqual({
+      ok: false,
+      error: "missing_binding_fields",
+    });
   });
 
   it("defines the expected /v1/me/bot alias surface", () => {

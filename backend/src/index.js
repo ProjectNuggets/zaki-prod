@@ -166,11 +166,15 @@ import {
   upsertLearningStudyProfile,
 } from "./learning-study.js";
 import {
+  AGENT_LAUNCH_CHANNELS,
+  getAgentLaunchChannel,
   buildBotProvisionPayload,
   normalizeTelegramDisconnectErrorPayload,
+  normalizeAgentLaunchChannelId,
   registerAgentSessionBffRoutes,
   registerBotBffAliases,
   registerTelegramDisconnectAliases,
+  sanitizeAgentChannelBindingPayload,
 } from "./agent-bff-contract.js";
 import {
   createBotBffHandlers,
@@ -13473,6 +13477,20 @@ async function callNullclawJson({ method, path, userId, body, requestId }) {
   return { ok: upstream.ok, status: upstream.status, data };
 }
 
+async function callNullclawJsonBestEffort(args) {
+  try {
+    return await callNullclawJson(args);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 503,
+      data: {
+        error: error?.message || "nullclaw_unavailable",
+      },
+    };
+  }
+}
+
 async function sendBufferedNullclawJsonResponse(upstream, res, label = "Nullclaw proxy response") {
   let text = "";
   try {
@@ -13689,6 +13707,246 @@ const makeAgentSecretsTwoPhaseHandler = (action) => async (req, res) => {
 };
 const agentSecretsPutHandler = makeAgentSecretsTwoPhaseHandler("put");
 const agentSecretsDeleteHandler = makeAgentSecretsTwoPhaseHandler("delete");
+
+function asObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function asStringArray(value) {
+  return Array.isArray(value)
+    ? value.map((entry) => String(entry || "").trim()).filter(Boolean)
+    : [];
+}
+
+function extractAgentChannelGuide(onboarding, channelId) {
+  const setup = asObject(onboarding?.setup);
+  const channels = asObject(setup.channels);
+  const channelGuides = asObject(setup.channel_guides);
+  return asObject(channels[channelId] || channelGuides[channelId] || setup[channelId]);
+}
+
+function normalizeAgentChannelBindingsPayload(payload) {
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  return items
+    .map((entry) => {
+      const item = asObject(entry);
+      const id = String(item.id || "").trim();
+      const accountId = String(item.account_id || "").trim();
+      const principalKey = String(item.principal_key || "").trim();
+      const scopeKey = String(item.scope_key || "").trim();
+      if (!id || !accountId || !principalKey || !scopeKey) return null;
+      return {
+        id,
+        account_id: accountId,
+        principal_key: principalKey,
+        scope_key: scopeKey,
+        thread_key: item.thread_key ? String(item.thread_key).trim() : null,
+      };
+    })
+    .filter(Boolean);
+}
+
+function buildAgentChannelStatus({
+  definition,
+  onboarding,
+  secretKeys,
+  bindings,
+  bindingsStatus,
+}) {
+  const guide = extractAgentChannelGuide(onboarding, definition.id);
+  const guideStatus = String(guide.status || guide.connection_status || guide.state || "").trim();
+  const connected =
+    typeof guide.connected === "boolean"
+      ? guide.connected
+      : ["connected", "active", "normal"].includes(guideStatus.toLowerCase());
+  const requiredSecrets = Array.from(definition.secretKeys || []);
+  const configuredSecrets = requiredSecrets.filter((key) => secretKeys.includes(key));
+  const operatorConfigured =
+    /(^|[^a-z])configured([^a-z]|$)/i.test(guideStatus) &&
+    !/not[_\s-]*configured/i.test(guideStatus);
+  const configured =
+    connected ||
+    operatorConfigured ||
+    (definition.directConnect && configuredSecrets.length > 0) ||
+    (Array.isArray(bindings) && bindings.length > 0);
+  const available =
+    typeof guide.available === "boolean" ? guide.available : Boolean(definition.live);
+  const connectSupported =
+    typeof guide.connect_supported === "boolean"
+      ? guide.connect_supported
+      : Boolean(definition.directConnect);
+
+  return {
+    id: definition.id,
+    label: definition.label,
+    live: Boolean(definition.live),
+    available,
+    status: guideStatus || (configured ? "configured" : "not_configured"),
+    connected,
+    configured,
+    connect_supported: connectSupported,
+    disconnect_supported: definition.id === "telegram" && connectSupported,
+    bindings_supported: Boolean(definition.bindings),
+    operator_managed_runtime: definition.id !== "telegram",
+    required_secrets: requiredSecrets,
+    configured_secrets: configuredSecrets,
+    missing_secrets: requiredSecrets.filter((key) => !configuredSecrets.includes(key)),
+    instructions: asStringArray(guide.instructions),
+    bindings: {
+      status: bindingsStatus || "ok",
+      count: Array.isArray(bindings) ? bindings.length : 0,
+      items: Array.isArray(bindings) ? bindings : [],
+    },
+  };
+}
+
+async function resolveAgentChannelAuth(req, res) {
+  const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+  if (!authResult) return null;
+  const userId = resolveCanonicalAgentUserId(authResult);
+  if (!userId) {
+    res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    return null;
+  }
+  return { authResult, userId };
+}
+
+const agentChannelsStatusHandler = async (req, res) => {
+  try {
+    const context = await resolveAgentChannelAuth(req, res);
+    if (!context) return;
+    const { userId } = context;
+    const requestId = getOrCreateRequestId(req);
+
+    const [onboardingResult, secretsResult, ...bindingResults] = await Promise.all([
+      callNullclawJsonBestEffort({
+        method: "GET",
+        path: `/api/v1/users/${encodeURIComponent(userId)}/onboarding`,
+        userId,
+        requestId,
+      }),
+      callNullclawJsonBestEffort({
+        method: "GET",
+        path: `/api/v1/users/${encodeURIComponent(userId)}/secrets`,
+        userId,
+        requestId,
+      }),
+      ...AGENT_LAUNCH_CHANNELS.map((definition) =>
+        callNullclawJsonBestEffort({
+          method: "GET",
+          path: `/api/v1/users/${encodeURIComponent(userId)}/channels/${definition.id}/bindings`,
+          userId,
+          requestId,
+        })
+      ),
+    ]);
+
+    const secretKeys = asStringArray(secretsResult.data?.keys);
+    const channels = AGENT_LAUNCH_CHANNELS.map((definition, index) => {
+      const bindingsResult = bindingResults[index];
+      const bindings = bindingsResult?.ok
+        ? normalizeAgentChannelBindingsPayload(bindingsResult.data)
+        : [];
+      return buildAgentChannelStatus({
+        definition,
+        onboarding: onboardingResult.ok ? onboardingResult.data : null,
+        secretKeys,
+        bindings,
+        bindingsStatus: bindingsResult?.ok ? "ok" : "unavailable",
+      });
+    });
+
+    return res.status(200).json({
+      channels,
+      degraded: !onboardingResult.ok || !secretsResult.ok || bindingResults.some((result) => !result?.ok),
+      errors: [
+        !onboardingResult.ok ? "onboarding_unavailable" : null,
+        !secretsResult.ok ? "secrets_unavailable" : null,
+        ...bindingResults.map((result, index) =>
+          result?.ok ? null : `${AGENT_LAUNCH_CHANNELS[index].id}_bindings_unavailable`
+        ),
+      ].filter(Boolean),
+    });
+  } catch (error) {
+    console.error("[Agent] Channel status failed:", error);
+    return res.status(500).json({ error: error?.message || "Agent channels status failed." });
+  }
+};
+
+function resolveAgentChannelParam(req, res) {
+  const channel = normalizeAgentLaunchChannelId(req.params?.channel);
+  if (!channel || !getAgentLaunchChannel(channel)) {
+    res.status(404).json({ error: "unsupported_channel", code: "unsupported_channel" });
+    return null;
+  }
+  return channel;
+}
+
+const agentChannelBindingsListHandler = async (req, res) => {
+  try {
+    const channel = resolveAgentChannelParam(req, res);
+    if (!channel) return;
+    const context = await resolveAgentChannelAuth(req, res);
+    if (!context) return;
+    const result = await callNullclawJson({
+      method: "GET",
+      path: `/api/v1/users/${encodeURIComponent(context.userId)}/channels/${channel}/bindings`,
+      userId: context.userId,
+      requestId: getOrCreateRequestId(req),
+    });
+    return res.status(result.status).json(result.data);
+  } catch (error) {
+    console.error("[Agent] Channel bindings list failed:", error);
+    return res.status(500).json({ error: error?.message || "Agent channel bindings list failed." });
+  }
+};
+
+const agentChannelBindingUpsertHandler = async (req, res) => {
+  try {
+    const channel = resolveAgentChannelParam(req, res);
+    if (!channel) return;
+    const sanitized = sanitizeAgentChannelBindingPayload(req.body);
+    if (!sanitized.ok) {
+      return res.status(400).json({ error: sanitized.error, code: sanitized.error });
+    }
+    const context = await resolveAgentChannelAuth(req, res);
+    if (!context) return;
+    const result = await callNullclawJson({
+      method: "POST",
+      path: `/api/v1/users/${encodeURIComponent(context.userId)}/channels/${channel}/bindings`,
+      userId: context.userId,
+      requestId: getOrCreateRequestId(req),
+      body: sanitized.payload,
+    });
+    return res.status(result.status).json(result.data);
+  } catch (error) {
+    console.error("[Agent] Channel binding upsert failed:", error);
+    return res.status(500).json({ error: error?.message || "Agent channel binding upsert failed." });
+  }
+};
+
+const agentChannelBindingDeleteHandler = async (req, res) => {
+  try {
+    const channel = resolveAgentChannelParam(req, res);
+    if (!channel) return;
+    const bindingId = String(req.params?.bindingId || "").trim();
+    if (!bindingId || !AGENT_RUNTIME_ID_SAFE_PATTERN.test(bindingId)) {
+      return res.status(400).json({ error: "invalid_binding_id", code: "invalid_binding_id" });
+    }
+    const context = await resolveAgentChannelAuth(req, res);
+    if (!context) return;
+    const result = await callNullclawJson({
+      method: "DELETE",
+      path: `/api/v1/users/${encodeURIComponent(context.userId)}/channels/${channel}/bindings/${encodeURIComponent(bindingId)}`,
+      userId: context.userId,
+      requestId: getOrCreateRequestId(req),
+    });
+    return res.status(result.status).json(result.data);
+  } catch (error) {
+    console.error("[Agent] Channel binding delete failed:", error);
+    return res.status(500).json({ error: error?.message || "Agent channel binding delete failed." });
+  }
+};
 
 async function readAgentCronJobsForUser(userId, requestId) {
   const result = await callNullclawJson({
@@ -14222,6 +14480,27 @@ app.get(
   makeAgentUserProxyHandler(
     (userId) => `/api/v1/users/${encodeURIComponent(userId)}/secrets`
   )
+);
+app.get(
+  "/api/agent/channels",
+  requireAgentContext,
+  agentChannelsStatusHandler
+);
+app.get(
+  "/api/agent/channels/:channel/bindings",
+  requireAgentContext,
+  agentChannelBindingsListHandler
+);
+app.post(
+  "/api/agent/channels/:channel/bindings",
+  requireAgentContext,
+  agentJson1mb,
+  agentChannelBindingUpsertHandler
+);
+app.delete(
+  "/api/agent/channels/:channel/bindings/:bindingId",
+  requireAgentContext,
+  agentChannelBindingDeleteHandler
 );
 // ── Attachments: upload a file into the user's agent workspace ──────
 // POST /api/agent/attachments

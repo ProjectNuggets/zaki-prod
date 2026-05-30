@@ -54,10 +54,10 @@ code exists.
 
 | Channel | Backend truth | ZAKI surface today | Verdict | Product action |
 |---|---|---|---|---|
-| Telegram | V1 keeper; OpenAPI has connect/disconnect plus bindings | Current base has Telegram BFF and Settings deep link; Agent branch adds fuller channel rows | Launch | Keep. Move any remaining Agent-only setup into Settings deep links |
-| Slack | V1 keeper; config, events route, bindings, adapter code | Base is operator-managed/read-only; Agent branch adds status + bindings | Partial | Add self-service connect/test/disconnect contract before claiming full user setup |
-| Discord | V1 keeper; gateway config, bindings, adapter code | Base is operator-managed/read-only; Agent branch adds status + bindings | Partial | Same as Slack |
-| Email | V1 keeper; IMAP/SMTP config and adapter code | Base is operator-managed/read-only; Agent branch adds status + bindings | Partial | Add mailbox profile contract with vault refs and test action |
+| Telegram | V1 keeper; OpenAPI has connect/disconnect plus bindings | Settings has direct connect/disconnect, status, and bindings | Launch | Keep. Move any remaining Agent-only setup into Settings deep links |
+| Slack | V1 keeper; config, events route, bindings, adapter code | Settings has status + bindings; runtime app creds are operator-managed | Partial | Add self-service connect/test/disconnect contract before claiming full user setup |
+| Discord | V1 keeper; gateway config, bindings, adapter code | Settings has status + bindings; runtime app creds are operator-managed | Partial | Same as Slack |
+| Email | V1 keeper; IMAP/SMTP config and adapter code | Settings has status + bindings; runtime mailbox creds are operator-managed | Partial | Add mailbox profile contract with vault refs and test action |
 | WhatsApp | V1 keeper; webhook route documented, adapter present | Not surfaced | Candidate | Add connect/test/disconnect and product copy before surfacing |
 | MaixCam | V1 keeper; niche/send-only value | Not surfaced | Hidden for V1 | Keep internal until there is a product story |
 | Teams | Code/config/docs mention it, but it is not in the V1 keeper/default list | Not surfaced | Enterprise backlog | Do not expose until build/config status is reconciled |
@@ -132,10 +132,9 @@ Client value already surfaced or partly surfaced:
 - Agent composer controls for mode, autonomy, assistant mode, reasoning effort.
 - Attachments, approvals, stop/cancel, sessions, inspector rail, artifacts,
   traces, cron, browser diagnostics, runtime panels.
-- Settings exposes Telegram, secret rows, provider readiness rows, extension
-  diagnostics, and memory toggles on the base branch. The Agent closeout branch
-  adds the fuller Telegram/Slack/Discord/Email channel status and binding
-  facade.
+- Settings exposes Telegram/Slack/Discord/Email channel status and bindings,
+  secret rows, provider readiness rows, extension diagnostics, and memory
+  toggles.
 
 Remaining Agent activation work:
 

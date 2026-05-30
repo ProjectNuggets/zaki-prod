@@ -66,6 +66,83 @@ export const AGENT_RUNTIME_FACADE_ROUTES = Object.freeze([
   { method: "get", path: "/api/agent/brain/documents" },
 ]);
 
+export const AGENT_LAUNCH_CHANNELS = Object.freeze([
+  Object.freeze({
+    id: "telegram",
+    label: "Telegram",
+    live: true,
+    directConnect: true,
+    bindings: true,
+    secretKeys: Object.freeze(["telegram_bot_token"]),
+  }),
+  Object.freeze({
+    id: "slack",
+    label: "Slack",
+    live: true,
+    directConnect: false,
+    bindings: true,
+    secretKeys: Object.freeze(["slack_bot_token", "slack_app_token", "slack_signing_secret"]),
+  }),
+  Object.freeze({
+    id: "discord",
+    label: "Discord",
+    live: true,
+    directConnect: false,
+    bindings: true,
+    secretKeys: Object.freeze(["discord_bot_token"]),
+  }),
+  Object.freeze({
+    id: "email",
+    label: "Email",
+    live: true,
+    directConnect: false,
+    bindings: true,
+    secretKeys: Object.freeze(["email_smtp_password", "email_imap_password"]),
+  }),
+]);
+
+export const AGENT_LAUNCH_CHANNEL_IDS = Object.freeze(
+  AGENT_LAUNCH_CHANNELS.map((channel) => channel.id)
+);
+
+export const AGENT_CHANNEL_BINDING_BFF_ROUTES = Object.freeze([
+  { method: "get", path: "/api/agent/channels/:channel/bindings" },
+  { method: "post", path: "/api/agent/channels/:channel/bindings" },
+  { method: "delete", path: "/api/agent/channels/:channel/bindings/:bindingId" },
+]);
+
+export function normalizeAgentLaunchChannelId(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return AGENT_LAUNCH_CHANNEL_IDS.includes(normalized) ? normalized : null;
+}
+
+export function getAgentLaunchChannel(channelId) {
+  const normalized = normalizeAgentLaunchChannelId(channelId);
+  if (!normalized) return null;
+  return AGENT_LAUNCH_CHANNELS.find((channel) => channel.id === normalized) || null;
+}
+
+export function sanitizeAgentChannelBindingPayload(payload) {
+  const source = payload && typeof payload === "object" ? payload : {};
+  const accountId = String(source.account_id || "").trim();
+  const principalKey = String(source.principal_key || "").trim();
+  const scopeKey = String(source.scope_key || "").trim();
+  if (!accountId || !principalKey || !scopeKey) {
+    return { ok: false, error: "missing_binding_fields" };
+  }
+
+  const sanitized = {
+    account_id: accountId,
+    principal_key: principalKey,
+    scope_key: scopeKey,
+  };
+  for (const key of ["thread_key", "peer_kind", "peer_id", "metadata_json"]) {
+    const value = String(source[key] || "").trim();
+    if (value) sanitized[key] = value;
+  }
+  return { ok: true, payload: sanitized };
+}
+
 export function buildBotProvisionPayload(userId, payload = {}) {
   return {
     ...(payload && typeof payload === "object" ? payload : {}),
