@@ -27,21 +27,45 @@ import {
 } from "@/queries";
 import {
   exportAccountData,
+  connectAgentChannelControl,
+  createAgentProviderProfile,
   deleteAgentChannelBinding,
+  deleteAgentProviderProfile,
   deleteAgentSecret,
+  disconnectAgentChannelControl,
+  exportAgentMemory,
+  fetchAgentChannelControls,
   fetchAgentChannels,
+  fetchAgentExtensionDevices,
   fetchAgentExtensionDiagnostics,
+  fetchAgentIntegrations,
+  fetchAgentMemoryGovernance,
+  fetchAgentProviderProfiles,
   fetchBotSettings,
   fetchGoogleOAuthStatus,
+  forgetAgentMemory,
   upsertAgentChannelBinding,
   listAgentSecrets,
+  pairAgentExtensionDevice,
   putAgentSecret,
+  purgeAgentMemoryPii,
+  revokeAgentExtensionDevice,
+  testAgentChannelControl,
+  testAgentProviderProfile,
   updateBotSettings,
   updateProfile,
   type AgentChannelBindingPayload,
+  type AgentChannelControlId,
+  type AgentChannelControlStatus,
   type AgentChannelId,
   type AgentChannelStatus,
+  type AgentExtensionDevice,
   type AgentExtensionDiagnosticsResponse,
+  type AgentIntegrationsResponse,
+  type AgentMemoryGovernanceResponse,
+  type AgentMemoryPurgePiiResponse,
+  type AgentProviderProfile,
+  type AgentProviderProfilePayload,
   type BotSettingsPatch,
   type BotSettingsProfile,
   type MeterStatusProduct,
@@ -159,6 +183,43 @@ const AGENT_LAUNCH_CHANNELS: Array<{
   },
 ];
 
+const USER_MANAGED_CHANNELS: AgentChannelControlId[] = ["slack", "discord", "email", "whatsapp"];
+
+const CHANNEL_ACTIVATION_FIELDS: Record<
+  Exclude<AgentChannelControlId, "telegram">,
+  Array<{ key: string; label: string; placeholder: string; secret?: boolean }>
+> = {
+  slack: [
+    { key: "slack_bot_token", label: "Bot token", placeholder: "xoxb-...", secret: true },
+    { key: "slack_signing_secret", label: "Signing secret", placeholder: "Slack signing secret", secret: true },
+  ],
+  discord: [
+    { key: "discord_bot_token", label: "Bot token", placeholder: "Discord bot token", secret: true },
+  ],
+  email: [
+    { key: "username", label: "Mailbox", placeholder: "inbox@example.com" },
+    { key: "imap_host", label: "IMAP host", placeholder: "imap.example.com" },
+    { key: "smtp_host", label: "SMTP host", placeholder: "smtp.example.com" },
+    { key: "email_imap_password", label: "IMAP password", placeholder: "IMAP password", secret: true },
+    { key: "email_smtp_password", label: "SMTP password", placeholder: "SMTP password", secret: true },
+  ],
+  whatsapp: [
+    { key: "whatsapp_access_token", label: "Access token", placeholder: "WhatsApp access token", secret: true },
+    { key: "whatsapp_verify_token", label: "Verify token", placeholder: "Webhook verify token", secret: true },
+    { key: "phone_number_id", label: "Phone number ID", placeholder: "Meta phone number ID" },
+  ],
+};
+
+const DEFAULT_PROVIDER_DRAFT: AgentProviderProfilePayload = {
+  label: "",
+  provider_kind: "openai_compatible",
+  base_url: "",
+  auth_style: "bearer",
+  api_key: "",
+  model_allowlist: [],
+  default_model: null,
+};
+
 type ChannelBindingDraft = Pick<
   AgentChannelBindingPayload,
   "account_id" | "principal_key" | "scope_key" | "thread_key"
@@ -171,6 +232,44 @@ function defaultChannelBindingDraft(): ChannelBindingDraft {
     scope_key: "",
     thread_key: "",
   };
+}
+
+function buildEmptyChannelActivationDrafts() {
+  return USER_MANAGED_CHANNELS.reduce<Record<string, Record<string, string>>>((drafts, channel) => {
+    drafts[channel] = CHANNEL_ACTIVATION_FIELDS[channel as Exclude<AgentChannelControlId, "telegram">]
+      .reduce<Record<string, string>>((fields, field) => {
+        fields[field.key] = "";
+        return fields;
+      }, {});
+    return drafts;
+  }, {});
+}
+
+function compactStringPayload(payload: Record<string, string>) {
+  return Object.fromEntries(
+    Object.entries(payload)
+      .map(([key, value]) => [key, String(value || "").trim()])
+      .filter(([, value]) => Boolean(value))
+  ) as Record<string, string>;
+}
+
+function formatUnixDate(value?: number | null) {
+  if (!value) return null;
+  const date = new Date(value * 1000);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function normalizeProviderModels(value: string) {
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }
 
 function formatUsageCount(value?: number | null) {
@@ -303,6 +402,28 @@ function getChannelStatusLabel(channel?: AgentChannelStatus | null) {
   return "Not configured";
 }
 
+function getChannelControlTone(control?: AgentChannelControlStatus | null) {
+  if (control?.user_connected || control?.status === "connected") return "success";
+  if (control?.status === "partial") return "warn";
+  if (control?.status === "operator_managed") return "accent";
+  if (control?.build_enabled === false || control?.status === "disabled_in_build") return "danger";
+  return "default";
+}
+
+function getProviderTone(profile?: AgentProviderProfile | null) {
+  if (profile?.policy_state === "blocked") return "danger";
+  if (profile?.policy_state === "disabled") return "warn";
+  if (profile?.secret_ref?.present) return "success";
+  return "default";
+}
+
+function getDeviceTone(device?: AgentExtensionDevice | null) {
+  if (device?.connection_state === "connected") return "success";
+  if (device?.status === "revoked" || device?.connection_state === "revoked") return "danger";
+  if (device?.connection_state === "disconnected") return "warn";
+  return "default";
+}
+
 function normalizeWeeklyWindow(
   meterWeekly?: MeterWindowSnapshot | null,
   fallback?: {
@@ -342,6 +463,13 @@ export function SettingsPage() {
   const [newSecretValue, setNewSecretValue] = useState("");
   const [agentChannels, setAgentChannels] = useState<AgentChannelStatus[]>([]);
   const [agentChannelsLoading, setAgentChannelsLoading] = useState(true);
+  const [channelControls, setChannelControls] = useState<AgentChannelControlStatus[]>([]);
+  const [channelControlsLoading, setChannelControlsLoading] = useState(true);
+  const [channelControlsAvailable, setChannelControlsAvailable] = useState(true);
+  const [channelControlAction, setChannelControlAction] = useState<string | null>(null);
+  const [channelActivationDrafts, setChannelActivationDrafts] = useState<
+    Record<string, Record<string, string>>
+  >(() => buildEmptyChannelActivationDrafts());
   const [channelAction, setChannelAction] = useState<string | null>(null);
   const [channelBindingDrafts, setChannelBindingDrafts] = useState<
     Record<AgentChannelId, ChannelBindingDraft>
@@ -354,6 +482,31 @@ export function SettingsPage() {
   const [extensionDiagnostics, setExtensionDiagnostics] =
     useState<AgentExtensionDiagnosticsResponse | null>(null);
   const [extensionDiagnosticsLoading, setExtensionDiagnosticsLoading] = useState(true);
+  const [extensionDevices, setExtensionDevices] = useState<AgentExtensionDevice[]>([]);
+  const [extensionDevicesLoading, setExtensionDevicesLoading] = useState(true);
+  const [extensionDevicesAvailable, setExtensionDevicesAvailable] = useState(true);
+  const [extensionDeviceLabel, setExtensionDeviceLabel] = useState("");
+  const [extensionDeviceAction, setExtensionDeviceAction] = useState<string | null>(null);
+  const [providerProfiles, setProviderProfiles] = useState<AgentProviderProfile[]>([]);
+  const [providersLoading, setProvidersLoading] = useState(true);
+  const [providersAvailable, setProvidersAvailable] = useState(true);
+  const [providerAction, setProviderAction] = useState<string | null>(null);
+  const [providerDraft, setProviderDraft] =
+    useState<AgentProviderProfilePayload>(DEFAULT_PROVIDER_DRAFT);
+  const [providerModelText, setProviderModelText] = useState("");
+  const [integrations, setIntegrations] = useState<
+    NonNullable<AgentIntegrationsResponse["integrations"]>
+  >([]);
+  const [integrationsLoading, setIntegrationsLoading] = useState(true);
+  const [integrationsAvailable, setIntegrationsAvailable] = useState(true);
+  const [memoryGovernance, setMemoryGovernance] =
+    useState<AgentMemoryGovernanceResponse | null>(null);
+  const [memoryGovernanceLoading, setMemoryGovernanceLoading] = useState(true);
+  const [memoryGovernanceAvailable, setMemoryGovernanceAvailable] = useState(true);
+  const [piiAction, setPiiAction] = useState<string | null>(null);
+  const [lastPiiPurgeResult, setLastPiiPurgeResult] =
+    useState<AgentMemoryPurgePiiResponse | null>(null);
+  const [memoryForgetKey, setMemoryForgetKey] = useState("");
   const [agentSettingsDraft, setAgentSettingsDraft] =
     useState<Pick<BotSettingsProfile, "dream_enabled" | "query_expansion_enabled" | "selected_model">>(
       DEFAULT_AGENT_SETTINGS
@@ -484,6 +637,43 @@ export function SettingsPage() {
     };
   }, []);
 
+  const loadChannelControls = async () => {
+    setChannelControlsLoading(true);
+    try {
+      const { response, data } = await fetchAgentChannelControls();
+      if (!response.ok) throw new Error("channel_control_unavailable");
+      setChannelControlsAvailable(true);
+      setChannelControls(Array.isArray(data?.channels) ? data.channels : []);
+    } catch {
+      setChannelControlsAvailable(false);
+      setChannelControls([]);
+    } finally {
+      setChannelControlsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    setChannelControlsLoading(true);
+    fetchAgentChannelControls()
+      .then(({ response, data }) => {
+        if (!active) return;
+        setChannelControlsAvailable(response.ok);
+        setChannelControls(response.ok && Array.isArray(data?.channels) ? data.channels : []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setChannelControlsAvailable(false);
+        setChannelControls([]);
+      })
+      .finally(() => {
+        if (active) setChannelControlsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   useEffect(() => {
     let active = true;
     setExtensionDiagnosticsLoading(true);
@@ -496,6 +686,139 @@ export function SettingsPage() {
       })
       .finally(() => {
         if (active) setExtensionDiagnosticsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const loadExtensionDevices = async () => {
+    setExtensionDevicesLoading(true);
+    try {
+      const { response, data } = await fetchAgentExtensionDevices();
+      if (!response.ok) throw new Error("extension_devices_unavailable");
+      setExtensionDevicesAvailable(true);
+      setExtensionDevices(Array.isArray(data?.devices) ? data.devices : []);
+    } catch {
+      setExtensionDevicesAvailable(false);
+      setExtensionDevices([]);
+    } finally {
+      setExtensionDevicesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    setExtensionDevicesLoading(true);
+    fetchAgentExtensionDevices()
+      .then(({ response, data }) => {
+        if (!active) return;
+        setExtensionDevicesAvailable(response.ok);
+        setExtensionDevices(response.ok && Array.isArray(data?.devices) ? data.devices : []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setExtensionDevicesAvailable(false);
+        setExtensionDevices([]);
+      })
+      .finally(() => {
+        if (active) setExtensionDevicesLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const loadProviderProfiles = async () => {
+    setProvidersLoading(true);
+    try {
+      const { response, data } = await fetchAgentProviderProfiles();
+      if (!response.ok) throw new Error("providers_unavailable");
+      setProvidersAvailable(true);
+      setProviderProfiles(Array.isArray(data?.providers) ? data.providers : []);
+    } catch {
+      setProvidersAvailable(false);
+      setProviderProfiles([]);
+    } finally {
+      setProvidersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    setProvidersLoading(true);
+    fetchAgentProviderProfiles()
+      .then(({ response, data }) => {
+        if (!active) return;
+        setProvidersAvailable(response.ok);
+        setProviderProfiles(response.ok && Array.isArray(data?.providers) ? data.providers : []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setProvidersAvailable(false);
+        setProviderProfiles([]);
+      })
+      .finally(() => {
+        if (active) setProvidersLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setIntegrationsLoading(true);
+    fetchAgentIntegrations()
+      .then(({ response, data }) => {
+        if (!active) return;
+        setIntegrationsAvailable(response.ok);
+        setIntegrations(response.ok && Array.isArray(data?.integrations) ? data.integrations : []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setIntegrationsAvailable(false);
+        setIntegrations([]);
+      })
+      .finally(() => {
+        if (active) setIntegrationsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const loadMemoryGovernance = async () => {
+    setMemoryGovernanceLoading(true);
+    try {
+      const { response, data } = await fetchAgentMemoryGovernance();
+      if (!response.ok) throw new Error("memory_governance_unavailable");
+      setMemoryGovernanceAvailable(true);
+      setMemoryGovernance(data);
+    } catch {
+      setMemoryGovernanceAvailable(false);
+      setMemoryGovernance(null);
+    } finally {
+      setMemoryGovernanceLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    setMemoryGovernanceLoading(true);
+    fetchAgentMemoryGovernance()
+      .then(({ response, data }) => {
+        if (!active) return;
+        setMemoryGovernanceAvailable(response.ok);
+        setMemoryGovernance(response.ok ? data : null);
+      })
+      .catch(() => {
+        if (!active) return;
+        setMemoryGovernanceAvailable(false);
+        setMemoryGovernance(null);
+      })
+      .finally(() => {
+        if (active) setMemoryGovernanceLoading(false);
       });
     return () => {
       active = false;
@@ -612,6 +935,10 @@ export function SettingsPage() {
     () => new Map(agentChannels.map((channel) => [channel.id, channel])),
     [agentChannels]
   );
+  const channelControlsById = useMemo(
+    () => new Map(channelControls.map((channel) => [channel.channel, channel])),
+    [channelControls]
+  );
 
   const updateChannelBindingDraft = (
     channel: AgentChannelId,
@@ -624,6 +951,120 @@ export function SettingsPage() {
         ...patch,
       },
     }));
+  };
+
+  const updateChannelActivationDraft = (
+    channel: AgentChannelControlId,
+    key: string,
+    value: string
+  ) => {
+    setChannelActivationDrafts((current) => ({
+      ...current,
+      [channel]: {
+        ...(current[channel] || {}),
+        [key]: value,
+      },
+    }));
+  };
+
+  const handleConnectChannelControl = async (channel: AgentChannelControlId) => {
+    if (!channelControlsAvailable) return;
+    const payload = compactStringPayload(channelActivationDrafts[channel] || {});
+    if (Object.keys(payload).length === 0) {
+      toast.error(
+        t("settingsModal.channels.control.missing", {
+          defaultValue: "Enter the required channel fields first.",
+        })
+      );
+      return;
+    }
+    setChannelControlAction(`${channel}:connect`);
+    try {
+      const { response, data } = await connectAgentChannelControl(channel, payload);
+      if (!response.ok || data?.error) {
+        throw new Error(data?.message || data?.error || "channel_connect_failed");
+      }
+      setChannelActivationDrafts((current) => ({
+        ...current,
+        [channel]: Object.fromEntries(Object.keys(current[channel] || {}).map((key) => [key, ""])),
+      }));
+      await loadChannelControls();
+      await loadAgentChannels();
+      toast.success(
+        t("settingsModal.channels.control.connected", {
+          defaultValue: "Channel connected.",
+        })
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("settingsModal.channels.control.connectError", {
+              defaultValue: "Unable to connect channel.",
+            })
+      );
+    } finally {
+      setChannelControlAction(null);
+    }
+  };
+
+  const handleTestChannelControl = async (channel: AgentChannelControlId) => {
+    if (!channelControlsAvailable) return;
+    setChannelControlAction(`${channel}:test`);
+    try {
+      const { response, data } = await testAgentChannelControl(channel);
+      if (!response.ok || data?.error) {
+        throw new Error(data?.message || data?.error || "channel_test_failed");
+      }
+      await loadChannelControls();
+      toast.success(
+        data.last_test?.ok
+          ? t("settingsModal.channels.control.testOk", {
+              defaultValue: "Channel check passed.",
+            })
+          : t("settingsModal.channels.control.testComplete", {
+              defaultValue: "Channel check completed.",
+            })
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("settingsModal.channels.control.testError", {
+              defaultValue: "Unable to test channel.",
+            })
+      );
+    } finally {
+      setChannelControlAction(null);
+    }
+  };
+
+  const handleDisconnectChannelControl = async (channel: AgentChannelControlId) => {
+    if (!channelControlsAvailable) return;
+    setChannelControlAction(`${channel}:disconnect`);
+    try {
+      const { response, data } = await disconnectAgentChannelControl(channel);
+      if (!response.ok || data?.error) {
+        throw new Error(data?.message || data?.error || "channel_disconnect_failed");
+      }
+      await loadChannelControls();
+      await loadAgentChannels();
+      toast.success(
+        t("settingsModal.channels.control.disconnected", {
+          defaultValue: "Channel disconnected.",
+        })
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("settingsModal.channels.control.disconnectError", {
+              defaultValue: "Unable to disconnect channel.",
+            })
+      );
+    } finally {
+      setChannelControlAction(null);
+    }
   };
 
   const handleSaveChannelBinding = async (channel: AgentChannelId) => {
@@ -692,6 +1133,163 @@ export function SettingsPage() {
       );
     } finally {
       setChannelAction(null);
+    }
+  };
+
+  const handleCreateProviderProfile = async () => {
+    if (!providersAvailable) return;
+    const modelAllowlist = normalizeProviderModels(providerModelText);
+    const payload: AgentProviderProfilePayload = {
+      ...providerDraft,
+      label: String(providerDraft.label || "").trim(),
+      base_url: String(providerDraft.base_url || "").trim(),
+      api_key: String(providerDraft.api_key || "").trim(),
+      model_allowlist: modelAllowlist,
+      default_model: String(providerDraft.default_model || "").trim() || modelAllowlist[0] || null,
+    };
+    if (!payload.base_url || !payload.api_key) {
+      toast.error(
+        t("settingsModal.providers.errors.required", {
+          defaultValue: "Base URL and API key are required.",
+        })
+      );
+      return;
+    }
+    setProviderAction("create");
+    try {
+      const { response, data } = await createAgentProviderProfile(payload);
+      if (!response.ok || data?.error) {
+        throw new Error(data?.message || data?.error || "provider_create_failed");
+      }
+      setProviderDraft(DEFAULT_PROVIDER_DRAFT);
+      setProviderModelText("");
+      await loadProviderProfiles();
+      toast.success(
+        t("settingsModal.providers.success.created", {
+          defaultValue: "Provider profile saved.",
+        })
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("settingsModal.providers.errors.create", {
+              defaultValue: "Unable to save provider profile.",
+            })
+      );
+    } finally {
+      setProviderAction(null);
+    }
+  };
+
+  const handleTestProviderProfile = async (profileId: string) => {
+    if (!providersAvailable) return;
+    setProviderAction(`${profileId}:test`);
+    try {
+      const { response, data } = await testAgentProviderProfile(profileId);
+      if (!response.ok || data?.error) {
+        throw new Error(data?.message || data?.error || "provider_test_failed");
+      }
+      await loadProviderProfiles();
+      toast.success(
+        t("settingsModal.providers.success.tested", {
+          defaultValue: "Provider profile checked.",
+        })
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("settingsModal.providers.errors.test", {
+              defaultValue: "Unable to test provider profile.",
+            })
+      );
+    } finally {
+      setProviderAction(null);
+    }
+  };
+
+  const handleDeleteProviderProfile = async (profileId: string) => {
+    if (!providersAvailable) return;
+    setProviderAction(`${profileId}:delete`);
+    try {
+      const { response, data } = await deleteAgentProviderProfile(profileId);
+      if (!response.ok || data?.error) {
+        throw new Error(data?.message || data?.error || "provider_delete_failed");
+      }
+      await loadProviderProfiles();
+      toast.success(
+        t("settingsModal.providers.success.deleted", {
+          defaultValue: "Provider profile deleted.",
+        })
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("settingsModal.providers.errors.delete", {
+              defaultValue: "Unable to delete provider profile.",
+            })
+      );
+    } finally {
+      setProviderAction(null);
+    }
+  };
+
+  const handlePairExtensionDevice = async () => {
+    if (!extensionDevicesAvailable) return;
+    setExtensionDeviceAction("pair");
+    try {
+      const { response, data } = await pairAgentExtensionDevice({
+        label: extensionDeviceLabel.trim() || undefined,
+      });
+      if (!response.ok || data?.error) {
+        throw new Error(data?.message || data?.error || "extension_device_pair_failed");
+      }
+      setExtensionDeviceLabel("");
+      await loadExtensionDevices();
+      toast.success(
+        t("settingsModal.devices.success.paired", {
+          defaultValue: "Device registered.",
+        })
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("settingsModal.devices.errors.pair", {
+              defaultValue: "Unable to register device.",
+            })
+      );
+    } finally {
+      setExtensionDeviceAction(null);
+    }
+  };
+
+  const handleRevokeExtensionDevice = async (deviceId: string) => {
+    if (!extensionDevicesAvailable) return;
+    setExtensionDeviceAction(`${deviceId}:revoke`);
+    try {
+      const { response, data } = await revokeAgentExtensionDevice(deviceId);
+      if (!response.ok || data?.error) {
+        throw new Error(data?.message || data?.error || "extension_device_revoke_failed");
+      }
+      await loadExtensionDevices();
+      toast.success(
+        t("settingsModal.devices.success.revoked", {
+          defaultValue: "Device revoked.",
+        })
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("settingsModal.devices.errors.revoke", {
+              defaultValue: "Unable to revoke device.",
+            })
+      );
+    } finally {
+      setExtensionDeviceAction(null);
     }
   };
 
@@ -893,6 +1491,121 @@ export function SettingsPage() {
       );
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleExportAgentMemory = async () => {
+    if (!memoryGovernanceAvailable) return;
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      const { response, data } = await exportAgentMemory();
+      if (!response.ok || data?.error) {
+        throw new Error(data?.message || data?.error || "memory_export_failed");
+      }
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const datePart = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `zaki-agent-memory-export-${datePart}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success(
+        t("settingsModal.memoryData.exportDownloaded", {
+          defaultValue: "Memory export downloaded.",
+        })
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("settingsModal.memoryData.exportError", {
+              defaultValue: "Unable to export Agent memory.",
+            })
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handlePurgePii = async (category: "phone" | "email" | "all", dryRun: boolean) => {
+    if (!memoryGovernanceAvailable) return;
+    setPiiAction(`${category}:${dryRun ? "dry" : "apply"}`);
+    try {
+      const { response, data } = await purgeAgentMemoryPii({
+        category,
+        dry_run: dryRun,
+      });
+      if (!response.ok || data?.error) {
+        throw new Error(data?.message || data?.error || "memory_pii_purge_failed");
+      }
+      setLastPiiPurgeResult(data);
+      await loadMemoryGovernance();
+      toast.success(
+        dryRun
+          ? t("settingsModal.memoryData.piiDryRunComplete", {
+              defaultValue: "PII dry run complete.",
+            })
+          : t("settingsModal.memoryData.piiPurgeComplete", {
+              defaultValue: "PII purge complete.",
+            })
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("settingsModal.memoryData.piiPurgeError", {
+              defaultValue: "Unable to run PII purge.",
+            })
+      );
+    } finally {
+      setPiiAction(null);
+    }
+  };
+
+  const handleForgetMemoryKey = async () => {
+    if (!memoryGovernanceAvailable) return;
+    const key = memoryForgetKey.trim();
+    if (!key) {
+      toast.error(
+        t("settingsModal.memoryData.forgetMissing", {
+          defaultValue: "Enter a memory key first.",
+        })
+      );
+      return;
+    }
+    setPiiAction("forget");
+    try {
+      const { response, data } = await forgetAgentMemory(key);
+      if (!response.ok || data?.error) {
+        throw new Error(data?.message || data?.error || "memory_forget_failed");
+      }
+      setMemoryForgetKey("");
+      await loadMemoryGovernance();
+      toast.success(
+        data.forgotten
+          ? t("settingsModal.memoryData.forgetComplete", {
+              defaultValue: "Memory forgotten.",
+            })
+          : t("settingsModal.memoryData.forgetNoop", {
+              defaultValue: "No matching memory was found.",
+            })
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("settingsModal.memoryData.forgetError", {
+              defaultValue: "Unable to forget memory.",
+            })
+      );
+    } finally {
+      setPiiAction(null);
     }
   };
 
@@ -1180,6 +1893,147 @@ export function SettingsPage() {
                   </div>
                 );
               })}
+              <div className="grid gap-3 border-t border-[var(--v2-line)] px-4 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <strong className="font-mono text-xs uppercase tracking-[0.08em] text-[var(--v2-text)]">
+                      {t("settingsModal.channels.control.title", {
+                        defaultValue: "User-managed channel credentials",
+                      })}
+                    </strong>
+                    <p className="v2-body-sm">
+                      {t("settingsModal.channels.control.helper", {
+                        defaultValue:
+                          "Slack, Discord, Email, and WhatsApp use the central channel control plane. Secret values are write-only.",
+                      })}
+                    </p>
+                  </div>
+                  <V2Badge
+                    tone={
+                      channelControlsLoading
+                        ? "default"
+                        : channelControlsAvailable
+                          ? "success"
+                          : "danger"
+                    }
+                  >
+                    {channelControlsLoading
+                      ? t("settingsModal.channels.loading", { defaultValue: "Checking" })
+                      : channelControlsAvailable
+                        ? t("settingsModal.channels.control.loaded", {
+                            defaultValue: "Control plane live",
+                          })
+                        : t("settingsModal.channels.control.unavailable", {
+                            defaultValue: "Control plane unavailable",
+                          })}
+                  </V2Badge>
+                </div>
+                {USER_MANAGED_CHANNELS.map((channelId) => {
+                  if (channelId === "telegram") return null;
+                  const fields =
+                    CHANNEL_ACTIVATION_FIELDS[
+                      channelId as Exclude<AgentChannelControlId, "telegram">
+                    ];
+                  const control = channelControlsById.get(channelId);
+                  const draft = channelActivationDrafts[channelId] || {};
+                  const presentSecrets =
+                    control?.secret_refs?.filter((secret) => secret.present).length ?? 0;
+                  const requiredSecrets =
+                    control?.secret_refs?.filter((secret) => secret.required).length ??
+                    fields.filter((field) => field.secret).length;
+                  const lastTestDate = formatUnixDate(control?.last_test?.checked_at_s);
+                  return (
+                    <article
+                      key={channelId}
+                      className="zaki-settings-v2__product-row"
+                      data-testid={`settings-channel-control-${channelId}`}
+                    >
+                      <header>
+                        <strong>{control?.label || channelId}</strong>
+                        <div className="zaki-settings-v2__actions">
+                          <V2Badge tone={getChannelControlTone(control)}>
+                            {control?.status || "not_connected"}
+                          </V2Badge>
+                          <V2Badge tone={presentSecrets >= requiredSecrets ? "success" : "default"}>
+                            {presentSecrets}/{requiredSecrets} secrets
+                          </V2Badge>
+                        </div>
+                      </header>
+                      <dl>
+                        <div>
+                          <dt>{t("settingsModal.channels.control.operator", { defaultValue: "Operator" })}</dt>
+                          <dd>{control?.operator_configured ? "configured" : "not configured"}</dd>
+                        </div>
+                        <div>
+                          <dt>{t("settingsModal.channels.control.lastTest", { defaultValue: "Last test" })}</dt>
+                          <dd>
+                            {control?.last_test
+                              ? `${control.last_test.ok ? "ok" : "failed"} · ${control.last_test.detail || "checked"}${
+                                  lastTestDate ? ` · ${lastTestDate}` : ""
+                                }`
+                              : "not tested"}
+                          </dd>
+                        </div>
+                      </dl>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        {fields.map((field) => (
+                          <input
+                            key={field.key}
+                            className="v2-input"
+                            type={field.secret ? "password" : "text"}
+                            value={draft[field.key] || ""}
+                            placeholder={`${field.label}: ${field.placeholder}`}
+                            aria-label={`${control?.label || channelId} ${field.label}`}
+                            onChange={(event) =>
+                              updateChannelActivationDraft(channelId, field.key, event.target.value)
+                            }
+                          />
+                        ))}
+                      </div>
+                      <div className="zaki-settings-v2__actions">
+                        <V2Button
+                          size="sm"
+                          variant="accent"
+                          disabled={
+                            !channelControlsAvailable ||
+                            channelControlAction === `${channelId}:connect`
+                          }
+                          onClick={() => void handleConnectChannelControl(channelId)}
+                        >
+                          {channelControlAction === `${channelId}:connect`
+                            ? t("app.legal.saving")
+                            : t("settingsModal.channels.control.connect", {
+                                defaultValue: "Save credentials",
+                              })}
+                        </V2Button>
+                        <V2Button
+                          size="sm"
+                          disabled={
+                            !channelControlsAvailable ||
+                            channelControlAction === `${channelId}:test`
+                          }
+                          onClick={() => void handleTestChannelControl(channelId)}
+                        >
+                          {t("settingsModal.channels.control.test", { defaultValue: "Test" })}
+                        </V2Button>
+                        <V2Button
+                          size="sm"
+                          variant="danger"
+                          disabled={
+                            !channelControlsAvailable ||
+                            channelControlAction === `${channelId}:disconnect`
+                          }
+                          onClick={() => void handleDisconnectChannelControl(channelId)}
+                        >
+                          {t("settingsModal.channels.control.disconnect", {
+                            defaultValue: "Disconnect",
+                          })}
+                        </V2Button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
               <V2SettingsRow
                 name={t("settingsModal.channels.learningTutors.name", {
                   defaultValue: "Learning tutor channels",
@@ -1200,7 +2054,7 @@ export function SettingsPage() {
                 })}
                 description={t("settingsModal.channels.otherChannels.description", {
                   defaultValue:
-                    "Teams, WhatsApp, Signal, Matrix, and other adapters stay hidden until their user-safe BFF contracts are exposed.",
+                    "Teams, Signal, Matrix, and other adapters stay hidden until their user-safe BFF contracts are exposed.",
                 })}
               >
                 <V2Badge>
@@ -1327,29 +2181,248 @@ export function SettingsPage() {
                   defaultValue: "OpenAI-compatible provider",
                 })}
                 description={t("settingsModal.providers.openAiCompatible.description", {
-                  defaultValue: "BYOK provider profiles require a BFF profile/test contract before self-service launch.",
+                  defaultValue: "Add a user-scoped provider profile. API keys are stored write-only in the vault.",
                 })}
               >
-                <V2Badge>
-                  {t("settingsModal.providers.status.contractNeeded", {
-                    defaultValue: "Contract needed",
-                  })}
+                <V2Badge
+                  tone={providersLoading ? "default" : providersAvailable ? "success" : "danger"}
+                >
+                  {providersLoading
+                    ? t("settingsModal.providers.loading", { defaultValue: "Loading" })
+                    : providersAvailable
+                      ? t("settingsModal.providers.count", {
+                          count: providerProfiles.length,
+                          defaultValue: `${providerProfiles.length} profiles`,
+                        })
+                      : t("settingsModal.providers.unavailable", {
+                          defaultValue: "Unavailable",
+                        })}
                 </V2Badge>
               </V2SettingsRow>
+              <div className="zaki-settings-v2__product-row" data-testid="settings-provider-create">
+                <header>
+                  <strong>
+                    {t("settingsModal.providers.create.title", {
+                      defaultValue: "Create provider profile",
+                    })}
+                  </strong>
+                  <V2Badge>{providerDraft.provider_kind || "openai_compatible"}</V2Badge>
+                </header>
+                <div className="grid gap-2 md:grid-cols-2">
+                  <input
+                    className="v2-input"
+                    value={providerDraft.label || ""}
+                    placeholder={t("settingsModal.providers.fields.label", {
+                      defaultValue: "Label",
+                    })}
+                    onChange={(event) =>
+                      setProviderDraft((current) => ({ ...current, label: event.target.value }))
+                    }
+                  />
+                  <input
+                    className="v2-input"
+                    value={providerDraft.base_url || ""}
+                    placeholder={t("settingsModal.providers.fields.baseUrl", {
+                      defaultValue: "https://api.example.com/v1",
+                    })}
+                    onChange={(event) =>
+                      setProviderDraft((current) => ({ ...current, base_url: event.target.value }))
+                    }
+                  />
+                  <input
+                    className="v2-input"
+                    type="password"
+                    value={providerDraft.api_key || ""}
+                    placeholder={t("settingsModal.providers.fields.apiKey", {
+                      defaultValue: "API key",
+                    })}
+                    onChange={(event) =>
+                      setProviderDraft((current) => ({ ...current, api_key: event.target.value }))
+                    }
+                  />
+                  <input
+                    className="v2-input"
+                    value={providerModelText}
+                    placeholder={t("settingsModal.providers.fields.models", {
+                      defaultValue: "model-a, model-b",
+                    })}
+                    onChange={(event) => setProviderModelText(event.target.value)}
+                  />
+                  <input
+                    className="v2-input"
+                    value={String(providerDraft.default_model || "")}
+                    placeholder={t("settingsModal.providers.fields.defaultModel", {
+                      defaultValue: "Default model",
+                    })}
+                    onChange={(event) =>
+                      setProviderDraft((current) => ({
+                        ...current,
+                        default_model: event.target.value,
+                      }))
+                    }
+                  />
+                  <select
+                    className="v2-input"
+                    value={providerDraft.auth_style || "bearer"}
+                    onChange={(event) =>
+                      setProviderDraft((current) => ({
+                        ...current,
+                        auth_style: event.target.value as NonNullable<
+                          AgentProviderProfilePayload["auth_style"]
+                        >,
+                      }))
+                    }
+                  >
+                    <option value="bearer">Bearer</option>
+                    <option value="api_key_header">API key header</option>
+                    <option value="query_param">Query param</option>
+                  </select>
+                </div>
+                <div className="zaki-settings-v2__actions">
+                  <V2Button
+                    size="sm"
+                    variant="accent"
+                    disabled={!providersAvailable || providerAction === "create"}
+                    onClick={() => void handleCreateProviderProfile()}
+                  >
+                    {providerAction === "create"
+                      ? t("app.legal.saving")
+                      : t("settingsModal.providers.actions.save", {
+                          defaultValue: "Save provider",
+                        })}
+                  </V2Button>
+                </div>
+              </div>
+              <div className="zaki-settings-v2__product-list">
+                {providerProfiles.map((profile) => {
+                  const lastTestDate = formatUnixDate(profile.last_test?.checked_at_s);
+                  return (
+                    <article
+                      key={profile.id}
+                      className="zaki-settings-v2__product-row"
+                      data-testid={`settings-provider-${profile.id}`}
+                    >
+                      <header>
+                        <strong>{profile.label || profile.id}</strong>
+                        <div className="zaki-settings-v2__actions">
+                          <V2Badge tone={getProviderTone(profile)}>
+                            {profile.policy_state || "active"}
+                          </V2Badge>
+                          <V2Badge tone={profile.secret_ref?.present ? "success" : "default"}>
+                            {profile.secret_ref?.present ? "key present" : "key missing"}
+                          </V2Badge>
+                        </div>
+                      </header>
+                      <dl>
+                        <div>
+                          <dt>{t("settingsModal.providers.fields.baseUrl", { defaultValue: "Base URL" })}</dt>
+                          <dd>{profile.base_url}</dd>
+                        </div>
+                        <div>
+                          <dt>{t("settingsModal.providers.fields.defaultModel", { defaultValue: "Default model" })}</dt>
+                          <dd>{profile.default_model || "not set"}</dd>
+                        </div>
+                        <div>
+                          <dt>{t("settingsModal.providers.fields.lastTest", { defaultValue: "Last test" })}</dt>
+                          <dd>
+                            {profile.last_test
+                              ? `${profile.last_test.ok ? "ok" : "failed"} · ${
+                                  profile.last_test.detail || "checked"
+                                }${lastTestDate ? ` · ${lastTestDate}` : ""}`
+                              : "not tested"}
+                          </dd>
+                        </div>
+                      </dl>
+                      <div className="zaki-settings-v2__actions">
+                        <V2Button
+                          size="sm"
+                          disabled={!providersAvailable || providerAction === `${profile.id}:test`}
+                          onClick={() => void handleTestProviderProfile(profile.id)}
+                        >
+                          {t("settingsModal.providers.actions.test", { defaultValue: "Test" })}
+                        </V2Button>
+                        <V2Button
+                          size="sm"
+                          variant="danger"
+                          disabled={!providersAvailable || providerAction === `${profile.id}:delete`}
+                          onClick={() => void handleDeleteProviderProfile(profile.id)}
+                        >
+                          {t("settingsModal.providers.actions.delete", { defaultValue: "Delete" })}
+                        </V2Button>
+                      </div>
+                    </article>
+                  );
+                })}
+                {!providersLoading && providerProfiles.length === 0 ? (
+                  <p className="v2-body-sm">
+                    {t("settingsModal.providers.empty", {
+                      defaultValue: "No user-managed provider profiles yet.",
+                    })}
+                  </p>
+                ) : null}
+              </div>
               <V2SettingsRow
                 name={t("settingsModal.providers.openapiConnector.name", {
                   defaultValue: "OpenAPI connectors",
                 })}
                 description={t("settingsModal.providers.openapiConnector.description", {
-                  defaultValue: "User-managed connector credentials stay hidden until vault auth_ref support is ready.",
+                  defaultValue: "Operator-managed OpenAPI/MCP/Composio inventory is visible below.",
                 })}
               >
-                <V2Badge>
-                  {t("settingsModal.providers.status.operatorManaged", {
-                    defaultValue: "Operator managed",
-                  })}
+                <V2Badge
+                  tone={
+                    integrationsAvailable && integrations.length > 0
+                      ? "success"
+                      : integrationsAvailable
+                        ? "default"
+                        : "danger"
+                  }
+                >
+                  {integrationsAvailable
+                    ? t("settingsModal.providers.status.operatorManaged", {
+                        defaultValue: "Operator managed",
+                      })
+                    : t("settingsModal.providers.status.unavailable", {
+                        defaultValue: "Unavailable",
+                      })}
                 </V2Badge>
               </V2SettingsRow>
+              <div className="zaki-settings-v2__product-list">
+                {integrations.map((integration) => (
+                  <article
+                    key={`${integration.kind}:${integration.label}`}
+                    className="zaki-settings-v2__product-row"
+                  >
+                    <header>
+                      <strong>{integration.label}</strong>
+                      <V2Badge tone={integration.configured ? "success" : "default"}>
+                        {integration.configured ? "configured" : "not configured"}
+                      </V2Badge>
+                    </header>
+                    <dl>
+                      <div>
+                        <dt>{t("settingsModal.providers.integrations.kind", { defaultValue: "Kind" })}</dt>
+                        <dd>{integration.kind}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("settingsModal.providers.integrations.managedBy", { defaultValue: "Managed by" })}</dt>
+                        <dd>{integration.managed_by || "operator"}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("settingsModal.providers.integrations.count", { defaultValue: "Count" })}</dt>
+                        <dd>{integration.count ?? integration.items?.length ?? "—"}</dd>
+                      </div>
+                    </dl>
+                  </article>
+                ))}
+                {!integrationsLoading && integrations.length === 0 ? (
+                  <p className="v2-body-sm">
+                    {t("settingsModal.providers.integrations.empty", {
+                      defaultValue: "No operator-managed integrations are reported by the Agent backend.",
+                    })}
+                  </p>
+                ) : null}
+              </div>
             </V2SettingsBlock>
 
             <V2SettingsBlock
@@ -1392,9 +2465,96 @@ export function SettingsPage() {
                     extensionDiagnostics?.last_command_result ||
                     t("settingsModal.devices.extension.noCommand", {
                       defaultValue: "No command recorded",
-                    })}
+                  })}
                 </span>
               </V2SettingsRow>
+              <V2SettingsRow
+                name={t("settingsModal.devices.pairDevice", { defaultValue: "Register device" })}
+                description={t("settingsModal.devices.pairDeviceHelper", {
+                  defaultValue:
+                    "Create a user-scoped browser extension device record. Runtime token enforcement stays in the extension bridge.",
+                })}
+              >
+                <div className="grid min-w-[260px] gap-2">
+                  <input
+                    className="v2-input"
+                    value={extensionDeviceLabel}
+                    placeholder={t("settingsModal.devices.labelPlaceholder", {
+                      defaultValue: "Work laptop",
+                    })}
+                    onChange={(event) => setExtensionDeviceLabel(event.target.value)}
+                  />
+                  <V2Button
+                    size="sm"
+                    variant="accent"
+                    disabled={!extensionDevicesAvailable || extensionDeviceAction === "pair"}
+                    onClick={() => void handlePairExtensionDevice()}
+                  >
+                    {extensionDeviceAction === "pair"
+                      ? t("app.legal.saving")
+                      : t("settingsModal.devices.actions.register", {
+                          defaultValue: "Register",
+                        })}
+                  </V2Button>
+                </div>
+              </V2SettingsRow>
+              <div className="zaki-settings-v2__product-list">
+                {extensionDevices.map((device) => {
+                  const deviceId = device.id || device.device_id || "";
+                  const lastSeen = formatUnixDate(device.last_seen_at_s);
+                  return (
+                    <article
+                      key={deviceId || device.label}
+                      className="zaki-settings-v2__product-row"
+                      data-testid={`settings-extension-device-${deviceId}`}
+                    >
+                      <header>
+                        <strong>{device.label || deviceId || "Browser device"}</strong>
+                        <div className="zaki-settings-v2__actions">
+                          <V2Badge tone={getDeviceTone(device)}>
+                            {device.connection_state || device.status || "never_connected"}
+                          </V2Badge>
+                          <V2Button
+                            size="sm"
+                            variant="danger"
+                            disabled={
+                              !extensionDevicesAvailable ||
+                              !deviceId ||
+                              extensionDeviceAction === `${deviceId}:revoke`
+                            }
+                            onClick={() => void handleRevokeExtensionDevice(deviceId)}
+                          >
+                            {t("settingsModal.devices.actions.revoke", {
+                              defaultValue: "Revoke",
+                            })}
+                          </V2Button>
+                        </div>
+                      </header>
+                      <dl>
+                        <div>
+                          <dt>{t("settingsModal.devices.fields.lastSeen", { defaultValue: "Last seen" })}</dt>
+                          <dd>{lastSeen || "never"}</dd>
+                        </div>
+                        <div>
+                          <dt>{t("settingsModal.devices.fields.lastCommand", { defaultValue: "Last command" })}</dt>
+                          <dd>{device.last_command || "none"}</dd>
+                        </div>
+                        <div>
+                          <dt>{t("settingsModal.devices.fields.lastError", { defaultValue: "Last error" })}</dt>
+                          <dd>{device.last_error || "none"}</dd>
+                        </div>
+                      </dl>
+                    </article>
+                  );
+                })}
+                {!extensionDevicesLoading && extensionDevices.length === 0 ? (
+                  <p className="v2-body-sm">
+                    {t("settingsModal.devices.empty", {
+                      defaultValue: "No extension devices registered yet.",
+                    })}
+                  </p>
+                ) : null}
+              </div>
             </V2SettingsBlock>
 
             <V2SettingsBlock id="settings-billing" data-testid="settings-billing" title={t("settingsModal.sections.billing")}>
@@ -1687,6 +2847,118 @@ export function SettingsPage() {
                   </div>
                 ))}
               </div>
+              <div className="zaki-settings-v2__product-row" data-testid="settings-memory-governance">
+                <header>
+                  <strong>
+                    {t("settingsModal.memoryData.governance.title", {
+                      defaultValue: "Agent memory governance",
+                    })}
+                  </strong>
+                  <V2Badge
+                    tone={
+                      memoryGovernanceLoading
+                        ? "default"
+                        : memoryGovernanceAvailable
+                          ? "success"
+                          : "danger"
+                    }
+                  >
+                    {memoryGovernanceLoading
+                      ? t("settingsModal.usage.loading", { defaultValue: "Loading" })
+                      : memoryGovernanceAvailable
+                        ? t("settingsModal.memoryData.governance.total", {
+                            count: memoryGovernance?.total ?? 0,
+                            defaultValue: `${memoryGovernance?.total ?? 0} memories`,
+                          })
+                        : t("settingsModal.memoryData.governance.unavailable", {
+                            defaultValue: "Unavailable",
+                          })}
+                  </V2Badge>
+                </header>
+                <dl>
+                  <div>
+                    <dt>{t("settingsModal.memoryData.governance.phone", { defaultValue: "Phone PII" })}</dt>
+                    <dd>{memoryGovernance?.pii?.phone ?? 0}</dd>
+                  </div>
+                  <div>
+                    <dt>{t("settingsModal.memoryData.governance.email", { defaultValue: "Email PII" })}</dt>
+                    <dd>{memoryGovernance?.pii?.email ?? 0}</dd>
+                  </div>
+                  <div>
+                    <dt>{t("settingsModal.memoryData.governance.all", { defaultValue: "All PII" })}</dt>
+                    <dd>{memoryGovernance?.pii?.all ?? 0}</dd>
+                  </div>
+                </dl>
+                <div className="zaki-settings-v2__actions">
+                  <V2Button
+                    size="sm"
+                    disabled={!memoryGovernanceAvailable || piiAction === "all:dry"}
+                    onClick={() => void handlePurgePii("all", true)}
+                  >
+                    {t("settingsModal.memoryData.actions.dryRunPii", {
+                      defaultValue: "Dry run PII purge",
+                    })}
+                  </V2Button>
+                  <V2Button
+                    size="sm"
+                    variant="danger"
+                    disabled={!memoryGovernanceAvailable || piiAction === "all:apply"}
+                    onClick={() => void handlePurgePii("all", false)}
+                  >
+                    {t("settingsModal.memoryData.actions.applyPii", {
+                      defaultValue: "Purge phone/email PII",
+                    })}
+                  </V2Button>
+                  <V2Button
+                    size="sm"
+                    disabled={!memoryGovernanceAvailable || isExporting}
+                    onClick={() => void handleExportAgentMemory()}
+                  >
+                    {t("settingsModal.memoryData.actions.exportMemory", {
+                      defaultValue: "Export Agent memory",
+                    })}
+                  </V2Button>
+                </div>
+                {lastPiiPurgeResult ? (
+                  <p className="v2-body-sm">
+                    {t("settingsModal.memoryData.piiResult", {
+                      defaultValue: `PII ${lastPiiPurgeResult.dry_run ? "dry run" : "purge"}: ${
+                        lastPiiPurgeResult.candidate_count ?? 0
+                      } candidates, ${lastPiiPurgeResult.deleted ?? 0} deleted.`,
+                    })}
+                  </p>
+                ) : null}
+              </div>
+              <V2SettingsRow
+                name={t("settingsModal.memoryData.forgetOne.name", {
+                  defaultValue: "Forget one memory",
+                })}
+                description={t("settingsModal.memoryData.forgetOne.helper", {
+                  defaultValue:
+                    "Delete by stable memory key. Topic-substring purges remain agent-only.",
+                })}
+              >
+                <div className="grid min-w-[260px] gap-2">
+                  <input
+                    className="v2-input"
+                    value={memoryForgetKey}
+                    placeholder={t("settingsModal.memoryData.forgetOne.placeholder", {
+                      defaultValue: "memory key",
+                    })}
+                    onChange={(event) => setMemoryForgetKey(event.target.value)}
+                  />
+                  <V2Button
+                    size="sm"
+                    variant="danger"
+                    disabled={!memoryGovernanceAvailable || piiAction === "forget"}
+                    onClick={() => void handleForgetMemoryKey()}
+                  >
+                    {t("settingsModal.memoryData.actions.forget", {
+                      defaultValue: "Forget",
+                    })}
+                  </V2Button>
+                </div>
+              </V2SettingsRow>
               <V2SettingsRow
                 name={t("settingsModal.memoryData.dreamReflection")}
                 description={t("settingsModal.memoryData.dreamReflectionHelper")}

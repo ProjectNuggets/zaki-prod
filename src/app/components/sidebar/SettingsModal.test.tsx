@@ -108,6 +108,148 @@ jest.mock("@/lib/api", () => ({
       ],
     },
   })),
+  fetchAgentChannelControls: jest.fn(async () => ({
+    response: { ok: true },
+    data: {
+      channels: [
+        {
+          channel: "slack",
+          label: "Slack",
+          build_enabled: true,
+          operator_configured: true,
+          user_managed: true,
+          user_connected: false,
+          status: "not_connected",
+          secret_refs: [
+            { key: "slack_bot_token", label: "Bot token", required: true, present: false },
+            { key: "slack_signing_secret", label: "Signing secret", required: true, present: false },
+          ],
+          config: {},
+          last_test: null,
+        },
+        {
+          channel: "discord",
+          label: "Discord",
+          build_enabled: true,
+          operator_configured: true,
+          user_managed: true,
+          user_connected: false,
+          status: "not_connected",
+          secret_refs: [
+            { key: "discord_bot_token", label: "Bot token", required: true, present: false },
+          ],
+          config: {},
+          last_test: null,
+        },
+        {
+          channel: "email",
+          label: "Email",
+          build_enabled: true,
+          operator_configured: true,
+          user_managed: true,
+          user_connected: false,
+          status: "not_connected",
+          secret_refs: [
+            { key: "email_imap_password", label: "IMAP password", required: true, present: false },
+            { key: "email_smtp_password", label: "SMTP password", required: true, present: false },
+          ],
+          config: {},
+          last_test: null,
+        },
+        {
+          channel: "whatsapp",
+          label: "WhatsApp",
+          build_enabled: true,
+          operator_configured: false,
+          user_managed: true,
+          user_connected: false,
+          status: "not_connected",
+          secret_refs: [
+            { key: "whatsapp_access_token", label: "Access token", required: true, present: false },
+            { key: "whatsapp_verify_token", label: "Verify token", required: true, present: false },
+          ],
+          config: {},
+          last_test: null,
+        },
+      ],
+    },
+  })),
+  connectAgentChannelControl: jest.fn(async () => ({
+    response: { ok: true },
+    data: { channel: "slack", status: "connected" },
+  })),
+  testAgentChannelControl: jest.fn(async () => ({
+    response: { ok: true },
+    data: { channel: "slack", last_test: { ok: true, detail: "credentials_present" } },
+  })),
+  disconnectAgentChannelControl: jest.fn(async () => ({
+    response: { ok: true },
+    data: { status: "disconnected", channel: "slack" },
+  })),
+  fetchAgentProviderProfiles: jest.fn(async () => ({
+    response: { ok: true },
+    data: { providers: [] },
+  })),
+  createAgentProviderProfile: jest.fn(async () => ({
+    response: { ok: true },
+    data: { id: "provider_1", label: "Local", secret_ref: { present: true } },
+  })),
+  testAgentProviderProfile: jest.fn(async () => ({
+    response: { ok: true },
+    data: { id: "provider_1", last_test: { ok: true } },
+  })),
+  deleteAgentProviderProfile: jest.fn(async () => ({
+    response: { ok: true },
+    data: { status: "deleted", id: "provider_1" },
+  })),
+  fetchAgentExtensionDevices: jest.fn(async () => ({
+    response: { ok: true },
+    data: { devices: [] },
+  })),
+  pairAgentExtensionDevice: jest.fn(async () => ({
+    response: { ok: true },
+    data: { device_id: "device_1", label: "Work laptop" },
+  })),
+  revokeAgentExtensionDevice: jest.fn(async () => ({
+    response: { ok: true },
+    data: { status: "revoked", device_id: "device_1" },
+  })),
+  fetchAgentIntegrations: jest.fn(async () => ({
+    response: { ok: true },
+    data: {
+      integrations: [
+        {
+          kind: "composio",
+          label: "Composio",
+          configured: true,
+          user_manageable: false,
+          managed_by: "operator",
+        },
+      ],
+    },
+  })),
+  fetchAgentMemoryGovernance: jest.fn(async () => ({
+    response: { ok: true },
+    data: { total: 12, pii: { phone: 1, email: 1, all: 2 } },
+  })),
+  purgeAgentMemoryPii: jest.fn(async () => ({
+    response: { ok: true },
+    data: {
+      category: "all",
+      dry_run: true,
+      candidate_count: 2,
+      deleted: null,
+      sample_keys: [],
+    },
+  })),
+  forgetAgentMemory: jest.fn(async () => ({
+    response: { ok: true },
+    data: { key: "mem_1", forgotten: true },
+  })),
+  exportAgentMemory: jest.fn(async () => ({
+    response: { ok: true },
+    data: { user_id: "1", count: 0, memories: [] },
+  })),
   upsertAgentChannelBinding: jest.fn(async () => ({
     response: { ok: true },
     data: { status: "upserted", id: "bnd_2" },

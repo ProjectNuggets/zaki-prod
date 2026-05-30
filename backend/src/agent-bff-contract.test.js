@@ -1,15 +1,18 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import {
   AGENT_CHANNEL_BINDING_BFF_ROUTES,
+  AGENT_CONTROL_CHANNEL_IDS,
   AGENT_LAUNCH_CHANNELS,
   AGENT_LAUNCH_CHANNEL_IDS,
   AGENT_RUNTIME_FACADE_ROUTES,
+  AGENT_SETTINGS_CONTROL_PLANE_ROUTES,
   AGENT_SESSION_BFF_ROUTES,
   BOT_BFF_ALIAS_ROUTES,
   BOT_CHAT_STREAM_SESSION_KEY_CONTRACT,
   buildBotProvisionPayload,
   getAgentLaunchChannel,
   normalizeTelegramDisconnectErrorPayload,
+  normalizeAgentControlChannelId,
   normalizeAgentLaunchChannelId,
   registerAgentSessionBffRoutes,
   registerBotBffAliases,
@@ -66,6 +69,35 @@ describe("agent BOT BFF contract", () => {
     expect(normalizeAgentLaunchChannelId(" Slack ")).toBe("slack");
     expect(getAgentLaunchChannel("DISCORD")?.label).toBe("Discord");
     expect(normalizeAgentLaunchChannelId("whatsapp")).toBeNull();
+  });
+
+  it("defines the settings control-plane surface for S7 contracts", () => {
+    expect(AGENT_CONTROL_CHANNEL_IDS).toEqual([
+      "telegram",
+      "slack",
+      "discord",
+      "email",
+      "whatsapp",
+    ]);
+    expect(normalizeAgentControlChannelId(" WhatsApp ")).toBe("whatsapp");
+    expect(normalizeAgentControlChannelId("signal")).toBeNull();
+    expect(AGENT_SETTINGS_CONTROL_PLANE_ROUTES).toEqual(
+      expect.arrayContaining([
+        { method: "get", path: "/api/agent/integrations" },
+        { method: "get", path: "/api/agent/channel-control" },
+        { method: "post", path: "/api/agent/channel-control/:channel/connect" },
+        { method: "post", path: "/api/agent/channel-control/:channel/test" },
+        { method: "post", path: "/api/agent/channel-control/:channel/disconnect" },
+        { method: "get", path: "/api/agent/providers" },
+        { method: "post", path: "/api/agent/providers" },
+        { method: "post", path: "/api/agent/providers/:profileId/test" },
+        { method: "get", path: "/api/agent/extension/devices" },
+        { method: "post", path: "/api/agent/extension/devices" },
+        { method: "post", path: "/api/agent/extension/devices/:deviceId/revoke" },
+        { method: "get", path: "/api/agent/memory/governance" },
+        { method: "post", path: "/api/agent/memory/purge-pii" },
+      ])
+    );
   });
 
   it("sanitizes Agent channel binding payloads before proxying", () => {

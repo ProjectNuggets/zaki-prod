@@ -392,6 +392,163 @@ describe("agent runtime API clients", () => {
     );
   });
 
+  it("calls the S7 Agent settings control-plane routes", async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeResponse(200, { channels: [] }))
+      .mockResolvedValueOnce(makeResponse(200, { channel: "slack", status: "connected" }))
+      .mockResolvedValueOnce(makeResponse(200, { channel: "slack", last_test: { ok: true } }))
+      .mockResolvedValueOnce(makeResponse(200, { status: "disconnected", channel: "slack" }))
+      .mockResolvedValueOnce(makeResponse(200, { integrations: [] }));
+
+    const {
+      fetchAgentChannelControls,
+      connectAgentChannelControl,
+      testAgentChannelControl,
+      disconnectAgentChannelControl,
+      fetchAgentIntegrations,
+    } = await import("@/lib/api");
+
+    await fetchAgentChannelControls();
+    await connectAgentChannelControl("slack", {
+      slack_bot_token: "xoxb-token",
+      slack_signing_secret: "secret",
+    });
+    await testAgentChannelControl("slack");
+    await disconnectAgentChannelControl("slack");
+    await fetchAgentIntegrations();
+
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      "http://test.local/api/agent/channel-control",
+      expect.objectContaining({ method: "GET" })
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      "http://test.local/api/agent/channel-control/slack/connect",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          slack_bot_token: "xoxb-token",
+          slack_signing_secret: "secret",
+        }),
+      })
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      3,
+      "http://test.local/api/agent/channel-control/slack/test",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      4,
+      "http://test.local/api/agent/channel-control/slack/disconnect",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      5,
+      "http://test.local/api/agent/integrations",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("manages Agent providers, extension devices, and memory governance through BFF routes", async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeResponse(200, { providers: [] }))
+      .mockResolvedValueOnce(makeResponse(201, { id: "prov_1", label: "Local" }))
+      .mockResolvedValueOnce(makeResponse(200, { id: "prov_1", last_test: { ok: true } }))
+      .mockResolvedValueOnce(makeResponse(200, { status: "deleted", id: "prov_1" }))
+      .mockResolvedValueOnce(makeResponse(200, { devices: [] }))
+      .mockResolvedValueOnce(makeResponse(201, { device_id: "dev_1", label: "Laptop" }))
+      .mockResolvedValueOnce(makeResponse(200, { status: "revoked", device_id: "dev_1" }))
+      .mockResolvedValueOnce(makeResponse(200, { total: 12, pii: { all: 2 } }))
+      .mockResolvedValueOnce(
+        makeResponse(200, {
+          category: "all",
+          dry_run: true,
+          candidate_count: 2,
+          deleted: null,
+          sample_keys: ["mem_1"],
+        })
+      );
+
+    const {
+      fetchAgentProviderProfiles,
+      createAgentProviderProfile,
+      testAgentProviderProfile,
+      deleteAgentProviderProfile,
+      fetchAgentExtensionDevices,
+      pairAgentExtensionDevice,
+      revokeAgentExtensionDevice,
+      fetchAgentMemoryGovernance,
+      purgeAgentMemoryPii,
+    } = await import("@/lib/api");
+
+    await fetchAgentProviderProfiles();
+    await createAgentProviderProfile({
+      provider_kind: "openai_compatible",
+      label: "Local",
+      base_url: "https://models.example.com/v1",
+      api_key: "sk-test",
+      model_allowlist: ["gpt-4.1"],
+      default_model: "gpt-4.1",
+    });
+    await testAgentProviderProfile("prov_1");
+    await deleteAgentProviderProfile("prov_1");
+    await fetchAgentExtensionDevices();
+    await pairAgentExtensionDevice({ label: "Laptop" });
+    await revokeAgentExtensionDevice("dev_1");
+    await fetchAgentMemoryGovernance();
+    await purgeAgentMemoryPii({ category: "all", dry_run: true });
+
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      "http://test.local/api/agent/providers",
+      expect.objectContaining({ method: "GET" })
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      "http://test.local/api/agent/providers",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      3,
+      "http://test.local/api/agent/providers/prov_1/test",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      4,
+      "http://test.local/api/agent/providers/prov_1",
+      expect.objectContaining({ method: "DELETE" })
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      5,
+      "http://test.local/api/agent/extension/devices",
+      expect.objectContaining({ method: "GET" })
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      6,
+      "http://test.local/api/agent/extension/devices",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ label: "Laptop" }) })
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      7,
+      "http://test.local/api/agent/extension/devices/dev_1/revoke",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      8,
+      "http://test.local/api/agent/memory/governance",
+      expect.objectContaining({ method: "GET" })
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      9,
+      "http://test.local/api/agent/memory/purge-pii",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ category: "all", dry_run: true }),
+      })
+    );
+  });
+
   it("cancels active Agent turns through the session-scoped BFF route", async () => {
     mockFetch.mockResolvedValueOnce(
       makeResponse(200, {

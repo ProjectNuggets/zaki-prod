@@ -1624,6 +1624,128 @@ export type AgentChannelBindingMutationResponse = BotApiError & {
   id?: string;
 };
 
+export type AgentChannelControlId = AgentChannelId | "whatsapp";
+
+export type AgentChannelControlStatus = {
+  channel: AgentChannelControlId | string;
+  label?: string;
+  build_enabled?: boolean;
+  operator_configured?: boolean;
+  user_managed?: boolean;
+  user_connected?: boolean;
+  status?: "disabled_in_build" | "connected" | "partial" | "operator_managed" | "not_connected" | string;
+  secret_refs?: Array<{
+    key: string;
+    label?: string;
+    required?: boolean;
+    present?: boolean;
+  }>;
+  config?: Record<string, string>;
+  last_test?: {
+    ok?: boolean;
+    checked_at_s?: number;
+    detail?: string;
+  } | null;
+  endpoints?: Record<string, string>;
+};
+
+export type AgentChannelControlResponse = BotApiError & {
+  channels?: AgentChannelControlStatus[];
+};
+
+export type AgentProviderProfile = {
+  id: string;
+  label: string;
+  provider_kind: string;
+  base_url: string;
+  auth_style: string;
+  model_allowlist: string[];
+  default_model?: string | null;
+  policy_state?: "active" | "disabled" | "blocked" | string;
+  secret_ref?: {
+    key?: string;
+    present?: boolean;
+  };
+  last_test?: {
+    ok?: boolean;
+    checked_at_s?: number;
+    detail?: string;
+  } | null;
+  created_at_s?: number;
+  updated_at_s?: number;
+};
+
+export type AgentProviderProfilePayload = {
+  label?: string;
+  provider_kind?: string;
+  base_url?: string;
+  auth_style?: "bearer" | "api_key_header" | "query_param";
+  api_key?: string;
+  model_allowlist?: string[];
+  default_model?: string | null;
+  policy_state?: "active" | "disabled";
+};
+
+export type AgentProviderProfilesResponse = BotApiError & {
+  providers?: AgentProviderProfile[];
+};
+
+export type AgentExtensionDevice = {
+  id?: string;
+  device_id?: string;
+  label?: string;
+  status?: "active" | "revoked" | string;
+  connection_state?: "connected" | "disconnected" | "never_connected" | "revoked" | string;
+  paired_at_s?: number;
+  last_seen_at_s?: number | null;
+  last_command?: string | null;
+  last_command_at_s?: number | null;
+  last_error?: string | null;
+  last_error_at_s?: number | null;
+};
+
+export type AgentExtensionDevicesResponse = BotApiError & {
+  devices?: AgentExtensionDevice[];
+};
+
+export type AgentIntegrationsResponse = BotApiError & {
+  integrations?: Array<{
+    kind: "composio" | "openapi" | "mcp_client" | string;
+    label: string;
+    configured?: boolean;
+    user_manageable?: boolean;
+    managed_by?: string;
+    count?: number;
+    detail?: Record<string, unknown>;
+    items?: Array<Record<string, unknown>>;
+  }>;
+};
+
+export type AgentMemoryGovernanceResponse = BotApiError & {
+  total?: number;
+  pii?: {
+    phone?: number;
+    email?: number;
+    all?: number;
+  };
+};
+
+export type AgentMemoryPurgePiiResponse = BotApiError & {
+  category?: "phone" | "email" | "all" | string;
+  dry_run?: boolean;
+  candidate_count?: number;
+  deleted?: number | null;
+  sample_keys?: string[];
+  sample_truncated?: boolean;
+};
+
+export type AgentMemoryExportResponse = BotApiError & {
+  user_id?: string;
+  count?: number;
+  exported_at_s?: number;
+  memories?: unknown[];
+};
+
 export type BotUsageSummary = BotApiError & {
   state?: string;
   requests_day?: number;
@@ -1848,6 +1970,156 @@ export async function deleteAgentChannelBinding(channel: AgentChannelId, binding
     { method: "DELETE" }
   );
   const data = await parseApiJson<AgentChannelBindingMutationResponse>(response);
+  return { response, data };
+}
+
+export async function fetchAgentChannelControls() {
+  const response = await backendAuthRequest("/api/agent/channel-control", { method: "GET" });
+  const data = await parseApiJson<AgentChannelControlResponse>(response);
+  return { response, data };
+}
+
+export async function connectAgentChannelControl(
+  channel: AgentChannelControlId,
+  payload: Record<string, string>
+) {
+  const response = await backendAuthRequest(
+    `/api/agent/channel-control/${encodeURIComponent(channel)}/connect`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+  const data = await parseApiJson<AgentChannelControlStatus & BotApiError>(response);
+  return { response, data };
+}
+
+export async function testAgentChannelControl(channel: AgentChannelControlId) {
+  const response = await backendAuthRequest(
+    `/api/agent/channel-control/${encodeURIComponent(channel)}/test`,
+    { method: "POST" }
+  );
+  const data = await parseApiJson<AgentChannelControlStatus & BotApiError>(response);
+  return { response, data };
+}
+
+export async function disconnectAgentChannelControl(channel: AgentChannelControlId) {
+  const response = await backendAuthRequest(
+    `/api/agent/channel-control/${encodeURIComponent(channel)}/disconnect`,
+    { method: "POST" }
+  );
+  const data = await parseApiJson<BotApiError & { status?: string; channel?: string }>(response);
+  return { response, data };
+}
+
+export async function fetchAgentIntegrations() {
+  const response = await backendAuthRequest("/api/agent/integrations", { method: "GET" });
+  const data = await parseApiJson<AgentIntegrationsResponse>(response);
+  return { response, data };
+}
+
+export async function fetchAgentProviderProfiles() {
+  const response = await backendAuthRequest("/api/agent/providers", { method: "GET" });
+  const data = await parseApiJson<AgentProviderProfilesResponse>(response);
+  return { response, data };
+}
+
+export async function createAgentProviderProfile(payload: AgentProviderProfilePayload) {
+  const response = await backendAuthRequest("/api/agent/providers", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<AgentProviderProfile & BotApiError>(response);
+  return { response, data };
+}
+
+export async function updateAgentProviderProfile(
+  profileId: string,
+  payload: AgentProviderProfilePayload
+) {
+  const response = await backendAuthRequest(
+    `/api/agent/providers/${encodeURIComponent(profileId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }
+  );
+  const data = await parseApiJson<AgentProviderProfile & BotApiError>(response);
+  return { response, data };
+}
+
+export async function deleteAgentProviderProfile(profileId: string) {
+  const response = await backendAuthRequest(
+    `/api/agent/providers/${encodeURIComponent(profileId)}`,
+    { method: "DELETE" }
+  );
+  const data = await parseApiJson<BotApiError & { status?: string; id?: string }>(response);
+  return { response, data };
+}
+
+export async function testAgentProviderProfile(profileId: string) {
+  const response = await backendAuthRequest(
+    `/api/agent/providers/${encodeURIComponent(profileId)}/test`,
+    { method: "POST" }
+  );
+  const data = await parseApiJson<AgentProviderProfile & BotApiError>(response);
+  return { response, data };
+}
+
+export async function fetchAgentExtensionDevices() {
+  const response = await backendAuthRequest("/api/agent/extension/devices", { method: "GET" });
+  const data = await parseApiJson<AgentExtensionDevicesResponse>(response);
+  return { response, data };
+}
+
+export async function pairAgentExtensionDevice(payload: { label?: string }) {
+  const response = await backendAuthRequest("/api/agent/extension/devices", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<AgentExtensionDevice & BotApiError>(response);
+  return { response, data };
+}
+
+export async function revokeAgentExtensionDevice(deviceId: string) {
+  const response = await backendAuthRequest(
+    `/api/agent/extension/devices/${encodeURIComponent(deviceId)}/revoke`,
+    { method: "POST" }
+  );
+  const data = await parseApiJson<BotApiError & { status?: string; device_id?: string }>(response);
+  return { response, data };
+}
+
+export async function fetchAgentMemoryGovernance() {
+  const response = await backendAuthRequest("/api/agent/memory/governance", { method: "GET" });
+  const data = await parseApiJson<AgentMemoryGovernanceResponse>(response);
+  return { response, data };
+}
+
+export async function purgeAgentMemoryPii(payload: {
+  category: "phone" | "email" | "all";
+  dry_run?: boolean;
+}) {
+  const response = await backendAuthRequest("/api/agent/memory/purge-pii", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<AgentMemoryPurgePiiResponse>(response);
+  return { response, data };
+}
+
+export async function forgetAgentMemory(key: string) {
+  const response = await backendAuthRequest("/api/agent/memory/forget", {
+    method: "POST",
+    body: JSON.stringify({ key }),
+  });
+  const data = await parseApiJson<BotApiError & { key?: string; forgotten?: boolean }>(response);
+  return { response, data };
+}
+
+export async function exportAgentMemory() {
+  const response = await backendAuthRequest("/api/agent/memory/export", { method: "GET" });
+  const data = await parseApiJson<AgentMemoryExportResponse>(response);
   return { response, data };
 }
 

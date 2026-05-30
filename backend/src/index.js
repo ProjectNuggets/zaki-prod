@@ -166,10 +166,12 @@ import {
   upsertLearningStudyProfile,
 } from "./learning-study.js";
 import {
+  AGENT_CONTROL_CHANNEL_IDS,
   AGENT_LAUNCH_CHANNELS,
   getAgentLaunchChannel,
   buildBotProvisionPayload,
   normalizeTelegramDisconnectErrorPayload,
+  normalizeAgentControlChannelId,
   normalizeAgentLaunchChannelId,
   registerAgentSessionBffRoutes,
   registerBotBffAliases,
@@ -14126,6 +14128,82 @@ const makeAgentRuntimeProxyHandler = (paramNames, pathBuilder, proxyOptions = {}
   };
 };
 
+function resolveAgentControlChannelParam(req, res) {
+  const channel = normalizeAgentControlChannelId(req.params?.channel);
+  if (!channel) {
+    res.status(404).json({
+      error: "channel_not_supported",
+      code: "channel_not_supported",
+      supported: AGENT_CONTROL_CHANNEL_IDS,
+    });
+    return null;
+  }
+  return channel;
+}
+
+function resolveAgentControlIdParam(req, res, paramName) {
+  const value = String(req.params?.[paramName] || "").trim();
+  if (!value || value.length > 255 || !AGENT_RUNTIME_ID_SAFE_PATTERN.test(value)) {
+    res.status(400).json({
+      error: `invalid_${paramName}`,
+      code: `invalid_${paramName}`,
+    });
+    return null;
+  }
+  return value;
+}
+
+const makeAgentControlChannelProxyHandler = (suffix, proxyOptions = {}) => {
+  return async (req, res) => {
+    const channel = resolveAgentControlChannelParam(req, res);
+    if (!channel) return;
+    const handler = makeAgentUserProxyHandler(
+      (userId) =>
+        `/api/v1/users/${encodeURIComponent(userId)}/channels/${encodeURIComponent(channel)}${suffix}`,
+      {
+        responseMode: "json",
+        label: "Nullclaw Agent channel-control response",
+        ...proxyOptions,
+      }
+    );
+    return handler(req, res);
+  };
+};
+
+const makeAgentProviderProfileProxyHandler = (suffixBuilder, proxyOptions = {}) => {
+  return async (req, res) => {
+    const profileId = resolveAgentControlIdParam(req, res, "profileId");
+    if (!profileId) return;
+    const handler = makeAgentUserProxyHandler(
+      (userId) =>
+        `/api/v1/users/${encodeURIComponent(userId)}/providers/${encodeURIComponent(profileId)}${suffixBuilder(req)}`,
+      {
+        responseMode: "json",
+        label: "Nullclaw Agent provider response",
+        ...proxyOptions,
+      }
+    );
+    return handler(req, res);
+  };
+};
+
+const makeAgentExtensionDeviceProxyHandler = (suffix, proxyOptions = {}) => {
+  return async (req, res) => {
+    const deviceId = resolveAgentControlIdParam(req, res, "deviceId");
+    if (!deviceId) return;
+    const handler = makeAgentUserProxyHandler(
+      (userId) =>
+        `/api/v1/users/${encodeURIComponent(userId)}/extension/devices/${encodeURIComponent(deviceId)}${suffix}`,
+      {
+        responseMode: "json",
+        label: "Nullclaw Agent extension device response",
+        ...proxyOptions,
+      }
+    );
+    return handler(req, res);
+  };
+};
+
 const agentTelegramConnectHandler = async (req, res) => {
   try {
     const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
@@ -14501,6 +14579,153 @@ app.delete(
   "/api/agent/channels/:channel/bindings/:bindingId",
   requireAgentContext,
   agentChannelBindingDeleteHandler
+);
+app.get(
+  "/api/agent/integrations",
+  requireAgentContext,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/integrations`,
+    { responseMode: "json", label: "Nullclaw Agent integrations response" }
+  )
+);
+app.get(
+  "/api/agent/channel-control",
+  requireAgentContext,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/channels`,
+    { responseMode: "json", label: "Nullclaw Agent channel-control response" }
+  )
+);
+app.get(
+  "/api/agent/channel-control/:channel",
+  requireAgentContext,
+  makeAgentControlChannelProxyHandler("")
+);
+app.post(
+  "/api/agent/channel-control/:channel/connect",
+  requireAgentContext,
+  agentJson1mb,
+  makeAgentControlChannelProxyHandler("/connect")
+);
+app.post(
+  "/api/agent/channel-control/:channel/test",
+  requireAgentContext,
+  makeAgentControlChannelProxyHandler("/test")
+);
+app.post(
+  "/api/agent/channel-control/:channel/disconnect",
+  requireAgentContext,
+  makeAgentControlChannelProxyHandler("/disconnect")
+);
+app.delete(
+  "/api/agent/channel-control/:channel/disconnect",
+  requireAgentContext,
+  makeAgentControlChannelProxyHandler("/disconnect")
+);
+app.get(
+  "/api/agent/providers",
+  requireAgentContext,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/providers`,
+    { responseMode: "json", label: "Nullclaw Agent providers response" }
+  )
+);
+app.post(
+  "/api/agent/providers",
+  requireAgentContext,
+  agentJson1mb,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/providers`,
+    { responseMode: "json", label: "Nullclaw Agent providers response" }
+  )
+);
+app.get(
+  "/api/agent/providers/:profileId",
+  requireAgentContext,
+  makeAgentProviderProfileProxyHandler(() => "")
+);
+app.patch(
+  "/api/agent/providers/:profileId",
+  requireAgentContext,
+  agentJson1mb,
+  makeAgentProviderProfileProxyHandler(() => "")
+);
+app.put(
+  "/api/agent/providers/:profileId",
+  requireAgentContext,
+  agentJson1mb,
+  makeAgentProviderProfileProxyHandler(() => "")
+);
+app.delete(
+  "/api/agent/providers/:profileId",
+  requireAgentContext,
+  makeAgentProviderProfileProxyHandler(() => "")
+);
+app.post(
+  "/api/agent/providers/:profileId/test",
+  requireAgentContext,
+  makeAgentProviderProfileProxyHandler(() => "/test")
+);
+app.get(
+  "/api/agent/extension/devices",
+  requireAgentContext,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/extension/devices`,
+    { responseMode: "json", label: "Nullclaw Agent extension devices response" }
+  )
+);
+app.post(
+  "/api/agent/extension/devices",
+  requireAgentContext,
+  agentJson1mb,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/extension/devices`,
+    { responseMode: "json", label: "Nullclaw Agent extension devices response" }
+  )
+);
+app.delete(
+  "/api/agent/extension/devices/:deviceId",
+  requireAgentContext,
+  makeAgentExtensionDeviceProxyHandler("")
+);
+app.post(
+  "/api/agent/extension/devices/:deviceId/revoke",
+  requireAgentContext,
+  makeAgentExtensionDeviceProxyHandler("/revoke")
+);
+app.get(
+  "/api/agent/memory/governance",
+  requireAgentContext,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/memory/governance`,
+    { responseMode: "json", label: "Nullclaw Agent memory-governance response" }
+  )
+);
+app.post(
+  "/api/agent/memory/forget",
+  requireAgentContext,
+  agentJson1mb,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/memory/forget`,
+    { responseMode: "json", label: "Nullclaw Agent memory-forget response" }
+  )
+);
+app.post(
+  "/api/agent/memory/purge-pii",
+  requireAgentContext,
+  agentJson1mb,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/memory/purge-pii`,
+    { responseMode: "json", label: "Nullclaw Agent memory-purge response" }
+  )
+);
+app.get(
+  "/api/agent/memory/export",
+  requireAgentContext,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/memory/export`,
+    { responseMode: "json", label: "Nullclaw Agent memory-export response" }
+  )
 );
 // ── Attachments: upload a file into the user's agent workspace ──────
 // POST /api/agent/attachments

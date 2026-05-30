@@ -111,9 +111,47 @@ export const AGENT_CHANNEL_BINDING_BFF_ROUTES = Object.freeze([
   { method: "delete", path: "/api/agent/channels/:channel/bindings/:bindingId" },
 ]);
 
+export const AGENT_CONTROL_CHANNEL_IDS = Object.freeze([
+  "telegram",
+  "slack",
+  "discord",
+  "email",
+  "whatsapp",
+]);
+
+export const AGENT_SETTINGS_CONTROL_PLANE_ROUTES = Object.freeze([
+  { method: "get", path: "/api/agent/integrations" },
+  { method: "get", path: "/api/agent/channel-control" },
+  { method: "get", path: "/api/agent/channel-control/:channel" },
+  { method: "post", path: "/api/agent/channel-control/:channel/connect" },
+  { method: "post", path: "/api/agent/channel-control/:channel/test" },
+  { method: "post", path: "/api/agent/channel-control/:channel/disconnect" },
+  { method: "delete", path: "/api/agent/channel-control/:channel/disconnect" },
+  { method: "get", path: "/api/agent/providers" },
+  { method: "post", path: "/api/agent/providers" },
+  { method: "get", path: "/api/agent/providers/:profileId" },
+  { method: "patch", path: "/api/agent/providers/:profileId" },
+  { method: "put", path: "/api/agent/providers/:profileId" },
+  { method: "delete", path: "/api/agent/providers/:profileId" },
+  { method: "post", path: "/api/agent/providers/:profileId/test" },
+  { method: "get", path: "/api/agent/extension/devices" },
+  { method: "post", path: "/api/agent/extension/devices" },
+  { method: "delete", path: "/api/agent/extension/devices/:deviceId" },
+  { method: "post", path: "/api/agent/extension/devices/:deviceId/revoke" },
+  { method: "get", path: "/api/agent/memory/governance" },
+  { method: "post", path: "/api/agent/memory/forget" },
+  { method: "post", path: "/api/agent/memory/purge-pii" },
+  { method: "get", path: "/api/agent/memory/export" },
+]);
+
 export function normalizeAgentLaunchChannelId(value) {
   const normalized = String(value || "").trim().toLowerCase();
   return AGENT_LAUNCH_CHANNEL_IDS.includes(normalized) ? normalized : null;
+}
+
+export function normalizeAgentControlChannelId(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return AGENT_CONTROL_CHANNEL_IDS.includes(normalized) ? normalized : null;
 }
 
 export function getAgentLaunchChannel(channelId) {
