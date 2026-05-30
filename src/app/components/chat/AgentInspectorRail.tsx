@@ -11,7 +11,7 @@ import {
   PanelRightClose,
   ShieldAlert,
 } from "lucide-react";
-import type { AgentSessionMode } from "@/lib/api";
+import type { AgentExtensionDiagnosticsResponse, AgentSessionMode } from "@/lib/api";
 import { DEFAULT_AGENT_MODEL_ID, resolveAgentModel } from "@/lib/agentModelCatalog";
 import { cn } from "@/lib/utils";
 import type { ZakiRuntimeSandbox } from "@/stores/zakiSessionUiStore";
@@ -98,6 +98,9 @@ export type AgentInspectorRailProps = {
   artifacts?: AgentInspectorArtifact[];
   artifactsLoading?: boolean;
   artifactsError?: string | null;
+  extensionDiagnostics?: AgentExtensionDiagnosticsResponse | null;
+  extensionDiagnosticsLoading?: boolean;
+  extensionDiagnosticsError?: string | null;
   transcriptEntries: NullalisTranscriptEntry[];
   narrationFrame: NullalisNarrationFrame | null;
   approvalRequest: NullalisApprovalRequest | null;
@@ -151,7 +154,11 @@ function formatWeight(value?: number | null): string {
 }
 
 function contextPercent(data: ContextGaugeData | null): number | null {
-  if (!data || !data.contextMax || data.contextMax <= 0) return null;
+  if (!data) return null;
+  if (typeof data.context_pressure_percent === "number") {
+    return Math.min(100, Math.max(0, data.context_pressure_percent));
+  }
+  if (!data.contextMax || data.contextMax <= 0) return null;
   const tokenCount =
     data.tokenCount ??
     Math.round(((data.context_pressure_percent ?? 0) / 100) * data.contextMax);
@@ -334,6 +341,9 @@ export function AgentInspectorRail({
   artifacts = [],
   artifactsLoading = false,
   artifactsError = null,
+  extensionDiagnostics = null,
+  extensionDiagnosticsLoading = false,
+  extensionDiagnosticsError = null,
   transcriptEntries,
   narrationFrame,
   approvalRequest,
@@ -385,6 +395,11 @@ export function AgentInspectorRail({
     ? Math.round((weightedTaskProgress / sortedTasks.length) * 100)
     : 0;
   const ctxPct = contextPercent(contextGaugeData);
+  const contextTokenCountForDisplay =
+    contextGaugeData?.tokenCount ??
+    (ctxPct != null && contextGaugeData?.contextMax
+      ? Math.round((ctxPct / 100) * contextGaugeData.contextMax)
+      : null);
   const currentMode = mode ?? "execute";
   const sandboxLabel = sandbox?.enabled
     ? sandbox.backend
@@ -399,6 +414,21 @@ export function AgentInspectorRail({
   const browserActivity =
     browserEntries.length > 0 || /\b(browser|playwright|extension)\b/i.test(lastChannel ?? "");
   const extensionActivity = browserEntries.some(eventHasExtensionSignal);
+  const extensionPaired = Boolean(extensionDiagnostics?.paired);
+  const extensionLaneActive = extensionActivity || extensionPaired;
+  const extensionLastCommandResult = String(extensionDiagnostics?.last_command_result || "").trim();
+  const extensionLastCommandTool = String(extensionDiagnostics?.last_command_tool || "").trim();
+  const extensionLaneStatus = extensionDiagnosticsLoading
+    ? "checking"
+    : extensionDiagnosticsError
+      ? "status unavailable"
+      : extensionPaired
+        ? extensionLastCommandResult
+          ? extensionLastCommandResult
+          : "paired"
+        : extensionActivity
+          ? "activity detected"
+        : "not paired";
   const appBrowserActivity =
     browserEntries.some(eventHasAppBrowserSignal) ||
     /\b(browser|playwright|web_fetch|web_search)\b/i.test(lastChannel ?? "");
@@ -735,9 +765,11 @@ export function AgentInspectorRail({
               label="Context window"
               value={ctxPct}
               detail={
-                contextGaugeData
-                  ? `${formatTokens(contextGaugeData.tokenCount)} / ${formatTokens(contextGaugeData.contextMax)} tokens`
-                  : "No context sample"
+                contextGaugeData?.contextMax
+                  ? `${formatTokens(contextTokenCountForDisplay)} / ${formatTokens(contextGaugeData.contextMax)} tokens`
+                  : ctxPct != null
+                    ? `${Math.round(ctxPct)}% pressure`
+                    : "No context sample"
               }
             />
             {weeklyRemaining != null ? (
@@ -903,10 +935,10 @@ export function AgentInspectorRail({
                   ))}
                 </div>
               </article>
-              <article className={cn("zaki-agent-inspector__browser-lane", extensionActivity && "is-active")}>
+              <article className={cn("zaki-agent-inspector__browser-lane", extensionLaneActive && "is-active")}>
                 <div className="lane-kicker">user browser extension</div>
                 <div className="lane-title">
-                  {extensionActivity ? "logged-in browser active" : "logged-in browser lane"}
+                  {extensionLaneActive ? "logged-in browser active" : "logged-in browser lane"}
                 </div>
                 <p>Paired extension lane for the user's authenticated tabs, with supervised approval gates.</p>
                 <div className="lane-tools" aria-label="User browser extension tools">
@@ -924,7 +956,10 @@ export function AgentInspectorRail({
               </div>
               <div>
                 <dt>Extension lane</dt>
-                <dd>{extensionActivity ? "active" : "pairing"}</dd>
+                <dd>
+                  {extensionLaneStatus}
+                  {extensionLastCommandTool ? ` · ${extensionLastCommandTool}` : ""}
+                </dd>
               </div>
             </dl>
             {browserEntries.length ? (

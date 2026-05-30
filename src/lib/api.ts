@@ -2061,12 +2061,17 @@ export type AgentSession = {
 };
 
 export type AgentSessionContext = {
-  session_key: string;
-  token_count: number;
-  context_window_max: number;
-  context_window_used_pct: number;
+  session_key?: string;
+  token_count?: number;
+  tokens_used?: number;
+  context_window_used?: number;
+  context_window_max?: number;
+  token_limit?: number;
+  context_window_used_pct?: number;
   context_pressure_percent?: number;
-  message_count: number;
+  message_count?: number;
+  history_len?: number;
+  max_history?: number;
 };
 
 export type AgentSessionMode = "plan" | "execute" | "review";
@@ -2093,6 +2098,25 @@ export type AgentSessionModeResponse = {
   ok?: boolean;
   mode?: AgentSessionMode;
   session_key?: string;
+  error?: string | null;
+  message?: string | null;
+};
+
+export type AgentSessionCancelResponse = {
+  status?: "cancellation_signalled" | string;
+  session_key?: string;
+  was_active?: boolean;
+  error?: string | null;
+  message?: string | null;
+};
+
+export type AgentExtensionDiagnosticsResponse = {
+  user_id?: string;
+  paired?: boolean;
+  connected_at_unix?: number;
+  last_command_at_unix?: number;
+  last_command_tool?: string;
+  last_command_result?: string;
   error?: string | null;
   message?: string | null;
 };
@@ -2250,6 +2274,14 @@ export async function fetchMemoryDoctor() {
   return { response, data };
 }
 
+export async function fetchAgentExtensionDiagnostics() {
+  const response = await backendAuthRequest("/api/agent/diagnostics/extension", {
+    method: "GET",
+  });
+  const data = await parseApiJson<AgentExtensionDiagnosticsResponse>(response);
+  return { response, data };
+}
+
 export async function approveAgentSession(
   sessionKey: string,
   payload: AgentSessionApprovalPayload
@@ -2261,6 +2293,16 @@ export async function approveAgentSession(
     body: JSON.stringify(payload),
   });
   const data = await parseApiJson<{ ok: boolean }>(response);
+  return { response, data };
+}
+
+export async function cancelAgentSession(sessionKey: string) {
+  assertSafeSessionKey(sessionKey);
+  const encoded = encodeURIComponent(sessionKey);
+  const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/cancel`, {
+    method: "POST",
+  });
+  const data = await parseApiJson<AgentSessionCancelResponse>(response);
   return { response, data };
 }
 

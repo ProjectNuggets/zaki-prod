@@ -3,8 +3,7 @@
 // Triggered from the plus menu in zaki bot mode. Lets the user pick a
 // quick-time chip (in 1 hour / tomorrow 9am / weekdays 9am / custom)
 // plus a prompt that ZAKI will run when the time fires. Submitting
-// appends a job via the cron API (read-modify-write inside
-// scheduleAgentFollowUp).
+// appends a job via the central cron BFF.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";

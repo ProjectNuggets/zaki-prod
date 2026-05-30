@@ -249,10 +249,10 @@ import {
 } from "./learning-observability.js";
 import {
   getAccessStatus,
-  getCommercialPlanState,
   getEffectiveEntitlementState,
   isPaidActive,
 } from "./effective-entitlements.js";
+import { resolveEffectivePlatformEntitlement } from "./platform-entitlement-context.js";
 import {
   buildPlatformEntitlementSummary,
   buildPlatformMeterPolicy,
@@ -3920,7 +3920,7 @@ function buildUserQuotaContext(zakiUser, { surface = APP_CHAT_SURFACE } = {}) {
   const tier = resolveTier(zakiUser?.plan_tier || "free");
   const status = zakiUser?.plan_status || "inactive";
   const access = getAccessStatus(zakiUser);
-  const effective = getEffectiveEntitlementState(zakiUser);
+  const effective = resolveEffectivePlatformEntitlement(zakiUser);
   const localUnlimitedBypass = hasLocalUnlimitedQuotaBypass(zakiUser);
   let unlimited = localUnlimitedBypass;
   if (!unlimited && normalizedSurface === ZAKI_BOT_SURFACE) {
@@ -6145,6 +6145,7 @@ app.get("/api/usage/quota", async (req, res) => {
     const authResult = await requireAuthUser(req, res);
     if (!authResult) return;
     const { zakiUser } = authResult;
+    const effective = resolveEffectivePlatformEntitlement(zakiUser);
     const requestedSurface =
       typeof req.query.surface === "string" ? req.query.surface : APP_CHAT_SURFACE;
     const surface = resolveQuotaSurface(requestedSurface);
@@ -6162,6 +6163,7 @@ app.get("/api/usage/quota", async (req, res) => {
         zakiUser,
         promptQuota: payload,
         absoluteMaxRequestBytes: ZAKI_LEARNING_MAX_REQUEST_BYTES,
+        effectiveEntitlement: effective,
       });
     }
     res.status(200).json(payload);
@@ -6176,7 +6178,7 @@ app.get("/api/usage/summary", async (req, res) => {
     const authResult = await requireAuthUser(req, res);
     if (!authResult) return;
     const { zakiUser } = authResult;
-    const effective = getEffectiveEntitlementState(zakiUser);
+    const effective = resolveEffectivePlatformEntitlement(zakiUser);
     const commercial = effective.commercial || {};
     const platform = buildPlatformEntitlementSummary({
       commercialPlanId: commercial.planId || "spaces_free",
@@ -6218,6 +6220,7 @@ app.get("/api/usage/summary", async (req, res) => {
           zakiUser,
           promptQuota,
           absoluteMaxRequestBytes: ZAKI_LEARNING_MAX_REQUEST_BYTES,
+          effectiveEntitlement: effective,
         }),
     });
     res.status(200).json(payload);
@@ -6270,7 +6273,7 @@ function resolveMeterEntitlementStartedAt(zakiUser, effective) {
 
 function buildPlatformForMeterIdentity(identity) {
   if (identity?.type === "user") {
-    const effective = getEffectiveEntitlementState(identity.zakiUser);
+    const effective = resolveEffectivePlatformEntitlement(identity.zakiUser);
     const commercial = effective.commercial || {};
     return buildPlatformEntitlementSummary({
       commercialPlanId: commercial.planId || "spaces_free",
@@ -7781,37 +7784,8 @@ app.get("/api/entitlements", async (req, res) => {
       stripePricingCatalog,
       zakiUser.stripe_price_id || null
     );
-    const storedAccess = getAccessStatus(zakiUser);
-    const localFullAppBypass = hasLocalUnlimitedQuotaBypass(zakiUser);
-    const baseEffective = getEffectiveEntitlementState(zakiUser);
-    const localCommercial = localFullAppBypass
-      ? getCommercialPlanState({ source: "access_code", accessActive: true })
-      : null;
-    const effective = localFullAppBypass
-      ? {
-          ...baseEffective,
-          tier: "personal",
-          status: "active",
-          source: "access_code",
-          premium: true,
-          access: {
-            ...baseEffective.access,
-            active: true,
-            expiresAt: null,
-            campaign: baseEffective.access?.campaign || "local_unlimited_quota",
-          },
-          commercial: localCommercial,
-          products: localCommercial?.products || baseEffective.products,
-        }
-      : baseEffective;
-    const access = localFullAppBypass
-      ? {
-          ...storedAccess,
-          active: true,
-          expiresAt: null,
-          campaign: storedAccess.campaign || "local_unlimited_quota",
-        }
-      : storedAccess;
+    const effective = resolveEffectivePlatformEntitlement(zakiUser);
+    const access = effective.access || getAccessStatus(zakiUser);
     const readOnly = !effective.premium;
     const products = effective.products || {};
     const commercial = effective.commercial || {};
@@ -12054,6 +12028,7 @@ async function requireLearningQuotaForIngress(req, res, next) {
   await requireLearningContext(req, res, async () => {
     const learningPolicy = resolveLearningQuotaPolicy(req.learningAuthResult?.zakiUser, {
       absoluteMaxRequestBytes: ZAKI_LEARNING_MAX_REQUEST_BYTES,
+      effectiveEntitlement: resolveEffectivePlatformEntitlement(req.learningAuthResult?.zakiUser),
     });
     req.learningQuotaPolicy = learningPolicy;
     const planSizeDecision = checkLearningQuotaContentLength(req.headers, learningPolicy);
@@ -14481,6 +14456,15 @@ const AGENT_RUNTIME_JSON_PROXY_OPTIONS = {
 };
 
 app.get(
+  "/api/agent/diagnostics/extension",
+  requireAgentContext,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/diagnostics/extension/users/${encodeURIComponent(userId)}`,
+    AGENT_RUNTIME_JSON_PROXY_OPTIONS
+  )
+);
+
+app.get(
   "/api/agent/tasks",
   requireAgentContext,
   makeAgentUserProxyHandler((userId, req) => {
@@ -15232,6 +15216,7 @@ app.get("/api/learning/account/usage", requireLearningContext, async (req, res) 
   try {
     const policy = resolveLearningQuotaPolicy(req.learningAuthResult?.zakiUser, {
       absoluteMaxRequestBytes: ZAKI_LEARNING_MAX_REQUEST_BYTES,
+      effectiveEntitlement: resolveEffectivePlatformEntitlement(req.learningAuthResult?.zakiUser),
     });
     const usage = await fetchLearningStorageUsageForRequest(req);
     const storageDecision = checkLearningStorageQuota({
@@ -17130,6 +17115,7 @@ learningProxyWss.on("connection", (clientSocket, req, context) => {
           context.learningQuotaPolicy ||
             resolveLearningQuotaPolicy(context.authResult?.zakiUser, {
               absoluteMaxRequestBytes: ZAKI_LEARNING_MAX_REQUEST_BYTES,
+              effectiveEntitlement: resolveEffectivePlatformEntitlement(context.authResult?.zakiUser),
             })
         );
         if (!actionDecision.allowed) {
@@ -17250,6 +17236,7 @@ server.on("upgrade", (req, socket, head) => {
         }
         const learningPolicy = resolveLearningQuotaPolicy(context.authResult?.zakiUser, {
           absoluteMaxRequestBytes: ZAKI_LEARNING_MAX_REQUEST_BYTES,
+          effectiveEntitlement: resolveEffectivePlatformEntitlement(context.authResult?.zakiUser),
         });
         const activeCount = getActiveLearningWsCount(context.userId);
         const concurrentLimit = Math.max(1, Number(learningPolicy?.generation?.concurrentSessions || 1));

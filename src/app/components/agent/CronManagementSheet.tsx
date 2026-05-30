@@ -11,8 +11,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  listAgentCron,
   createAgentCron,
+  deleteAgentCron,
+  listAgentCron,
+  updateAgentCron,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EmptyState, InlineConfirm, SheetShell } from "@/app/components/ui/zaki";
@@ -71,15 +73,6 @@ async function fetchCurrentJobs(): Promise<CronJob[]> {
   return raw as CronJob[];
 }
 
-/**
- * All cron mutations use read-modify-write: fetch all jobs, mutate the array,
- * POST the full array back. This is required because nullalis only has a bulk
- * replace API (replaceJobsJson) — there is no per-job PATCH/DELETE endpoint.
- */
-async function postFullJobsArray(jobs: CronJob[]) {
-  await createAgentCron(jobs as unknown[]);
-}
-
 export function CronManagementSheet({ isOpen, onClose }: Props) {
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(false);
@@ -125,12 +118,15 @@ export function CronManagementSheet({ isOpen, onClose }: Props) {
     async (job: CronJob) => {
       setActionInProgress(`toggle:${job.id}`);
       try {
-        const current = await fetchCurrentJobs();
-        const updated = current.map((j) =>
-          j.id === job.id ? { ...j, paused: !j.paused } : j
+        const nextPaused = !job.paused;
+        const { response, data } = await updateAgentCron(job.id, { paused: nextPaused });
+        if (!response.ok) {
+          throw new Error(String((data as { error?: unknown })?.error || "cron_update_failed"));
+        }
+        const updatedJob = (data as { job?: CronJob })?.job ?? { ...job, paused: nextPaused };
+        setJobs((current) =>
+          current.map((j) => (j.id === job.id ? { ...j, ...updatedJob } : j))
         );
-        await postFullJobsArray(updated);
-        setJobs(updated);
         toast.success(job.paused ? "Job resumed" : "Job paused");
       } catch {
         toast.error("Failed to update job");
@@ -145,10 +141,11 @@ export function CronManagementSheet({ isOpen, onClose }: Props) {
     async (id: string) => {
       setActionInProgress(`delete:${id}`);
       try {
-        const current = await fetchCurrentJobs();
-        const filtered = current.filter((j) => j.id !== id);
-        await postFullJobsArray(filtered);
-        setJobs(filtered);
+        const { response, data } = await deleteAgentCron(id);
+        if (!response.ok) {
+          throw new Error(String(data?.error || "cron_delete_failed"));
+        }
+        setJobs((current) => current.filter((j) => j.id !== id));
         toast.success("Job deleted");
       } catch {
         toast.error("Failed to delete job");
@@ -168,28 +165,42 @@ export function CronManagementSheet({ isOpen, onClose }: Props) {
     }
     setActionInProgress(editingJobId ? "update" : "create");
     try {
-      const current = await fetchCurrentJobs();
-      let updated: CronJob[];
       if (editingJobId) {
-        updated = current.map((j) =>
-          j.id === editingJobId
-            ? { ...j, expression: expr, prompt, name: newName.trim() || null }
-            : j
+        const patch = { expression: expr, prompt, name: newName.trim() || null };
+        const { response, data } = await updateAgentCron(editingJobId, patch);
+        if (!response.ok) {
+          throw new Error(String((data as { error?: unknown })?.error || "cron_update_failed"));
+        }
+        const updatedJob = (data as { job?: CronJob })?.job ?? { id: editingJobId, ...patch };
+        setJobs((current) =>
+          current.map((job) =>
+            job.id === editingJobId ? { ...job, ...updatedJob } : job
+          )
         );
       } else {
-        const newJob = {
+        const newJobPayload = {
           expression: expr,
           prompt,
           name: newName.trim() || null,
           job_type: "agent",
         };
-        updated = [...current, newJob as unknown as CronJob];
+        const { response, data } = await createAgentCron(newJobPayload);
+        if (!response.ok) {
+          throw new Error(String((data as { error?: unknown })?.error || "cron_create_failed"));
+        }
+        const createdJob = (data as { job?: CronJob })?.job;
+        if (createdJob) {
+          setJobs((current) => [
+            ...current.filter((job) => job.id !== createdJob.id),
+            createdJob,
+          ]);
+        } else {
+          await loadJobs();
+        }
       }
-      await postFullJobsArray(updated);
       resetForm();
       setShowForm(false);
       toast.success(editingJobId ? "Cron job updated" : "Cron job created");
-      loadJobs();
     } catch {
       toast.error(editingJobId ? "Failed to update cron job" : "Failed to create cron job");
     } finally {

@@ -250,6 +250,14 @@ describe("AgentInspectorRail", () => {
         enabled: true,
         backend: "playwright",
       } as AgentInspectorRailProps["sandbox"],
+      extensionDiagnostics: {
+        user_id: "1",
+        paired: true,
+        connected_at_unix: 1_800_000,
+        last_command_at_unix: 1_800_100,
+        last_command_tool: "extension_click",
+        last_command_result: "ok",
+      },
       transcriptEntries: [
         {
           id: "browser-1",
@@ -279,7 +287,7 @@ describe("AgentInspectorRail", () => {
     expect(screen.getByText("user browser extension")).toBeInTheDocument();
     expect(screen.getByText("web_fetch")).toBeInTheDocument();
     expect(screen.getByText("extension_navigate")).toBeInTheDocument();
-    expect(screen.getAllByText("active").length).toBeGreaterThan(0);
+    expect(screen.getByText("ok · extension_click")).toBeInTheDocument();
     expect(screen.getAllByText("playwright")).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "Open browser controls" }));
     expect(onOpenBrowser).toHaveBeenCalledTimes(1);

@@ -20,6 +20,7 @@ import { SheetShell } from "@/app/components/ui/zaki";
 import {
   exportAgentArtifact,
   fetchAgentTrace,
+  fetchAgentExtensionDiagnostics,
   fetchContextDiagnostics,
   fetchAgentDiagnostics,
   fetchMemoryDoctor,
@@ -31,6 +32,7 @@ import {
   shareAgentArtifact,
   shareAgentTrace,
   type AgentArtifact,
+  type AgentExtensionDiagnosticsResponse,
   type AgentTrace,
   type AgentSessionMode,
   type ContextDiagnosticsResponse,
@@ -336,6 +338,10 @@ export function PowerUserSheet({
     useState<AgentDiagnosticsSurface | null>(null);
   const [agentDiagnosticsLoading, setAgentDiagnosticsLoading] = useState(false);
   const [agentDiagnosticsError, setAgentDiagnosticsError] = useState<string | null>(null);
+  const [extensionDiagnostics, setExtensionDiagnostics] =
+    useState<AgentExtensionDiagnosticsResponse | null>(null);
+  const [extensionDiagnosticsLoading, setExtensionDiagnosticsLoading] = useState(false);
+  const [extensionDiagnosticsError, setExtensionDiagnosticsError] = useState<string | null>(null);
   const [artifacts, setArtifacts] = useState<AgentArtifact[] | null>(null);
   const [artifactsLoading, setArtifactsLoading] = useState(false);
   const [artifactsError, setArtifactsError] = useState<string | null>(null);
@@ -421,9 +427,18 @@ export function PowerUserSheet({
     let active = true;
     setAgentDiagnosticsLoading(true);
     setAgentDiagnosticsError(null);
+    setExtensionDiagnosticsLoading(true);
+    setExtensionDiagnosticsError(null);
     void (async () => {
-      try {
-        const { response, data } = await fetchAgentDiagnostics();
+      const [agentResult, extensionResult] = await Promise.allSettled([
+        fetchAgentDiagnostics(),
+        fetchAgentExtensionDiagnostics(),
+      ]);
+
+      if (!active) return;
+
+      if (agentResult.status === "fulfilled") {
+        const { response, data } = agentResult.value;
         if (!active) return;
         if (!response.ok) {
           setAgentDiagnosticsError(data?.error || "unavailable");
@@ -431,13 +446,26 @@ export function PowerUserSheet({
         } else {
           setAgentDiagnostics(data);
         }
-      } catch {
-        if (!active) return;
+      } else {
         setAgentDiagnosticsError("network_error");
         setAgentDiagnostics(null);
-      } finally {
-        if (active) setAgentDiagnosticsLoading(false);
       }
+
+      if (extensionResult.status === "fulfilled") {
+        const { response, data } = extensionResult.value;
+        if (!response.ok) {
+          setExtensionDiagnosticsError(data?.error || "unavailable");
+          setExtensionDiagnostics(null);
+        } else {
+          setExtensionDiagnostics(data);
+        }
+      } else {
+        setExtensionDiagnosticsError("network_error");
+        setExtensionDiagnostics(null);
+      }
+
+      setAgentDiagnosticsLoading(false);
+      setExtensionDiagnosticsLoading(false);
     })();
     return () => {
       active = false;
@@ -1265,6 +1293,13 @@ export function PowerUserSheet({
     const extensionEnabled =
       getBooleanRecordValue(controlPlane, "extension_ws_enabled") ??
       getBooleanRecordValue(agentDiagnostics, "extension_ws_enabled");
+    const extensionPaired = Boolean(extensionDiagnostics?.paired);
+    const extensionConnectedAt =
+      typeof extensionDiagnostics?.connected_at_unix === "number"
+        ? formatTs(extensionDiagnostics.connected_at_unix)
+        : null;
+    const extensionLastCommandTool = String(extensionDiagnostics?.last_command_tool || "").trim();
+    const extensionLastCommandResult = String(extensionDiagnostics?.last_command_result || "").trim();
     const upstreamReady = agentDiagnostics?.upstreamReady?.ok;
     const upstreamHealth = agentDiagnostics?.upstreamHealth?.ok;
     const latency =
@@ -1309,10 +1344,25 @@ export function PowerUserSheet({
             <div className="mt-2 text-lg font-semibold text-zaki-primary">
               {extensionEnabled === false
                 ? t("zakiControls.powerUser.browser.disabled")
-                : t("zakiControls.powerUser.browser.pairingRequired")}
+                : extensionDiagnosticsLoading
+                  ? t("zakiControls.powerUser.browser.checking")
+                  : extensionDiagnosticsError
+                    ? t("zakiControls.powerUser.browser.statusUnavailable")
+                    : extensionPaired
+                      ? t("zakiControls.powerUser.browser.paired")
+                      : t("zakiControls.powerUser.browser.pairingRequired")}
             </div>
             <div className="mt-1 text-xs text-zaki-muted">
-              {t("zakiControls.powerUser.browser.loggedInSessions")}
+              {extensionLastCommandTool
+                ? t("zakiControls.powerUser.browser.lastCommand", {
+                    result: extensionLastCommandResult || "seen",
+                    tool: extensionLastCommandTool,
+                  })
+                : extensionConnectedAt
+                  ? t("zakiControls.powerUser.browser.connectedAt", {
+                      time: extensionConnectedAt,
+                    })
+                  : t("zakiControls.powerUser.browser.loggedInSessions")}
             </div>
           </div>
           <div className="rounded-zaki-lg border border-zaki bg-zaki-raised p-4 text-sm dark:bg-zaki-dark-card dark:border-zaki-dark-card">
@@ -1650,6 +1700,9 @@ export function PowerUserSheet({
     agentDiagnostics,
     agentDiagnosticsLoading,
     agentDiagnosticsError,
+    extensionDiagnostics,
+    extensionDiagnosticsLoading,
+    extensionDiagnosticsError,
     artifacts,
     artifactsLoading,
     artifactsError,

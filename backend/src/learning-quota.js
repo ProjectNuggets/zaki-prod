@@ -168,8 +168,21 @@ function applyTierEnvOverrides(plan, tier, env, absoluteMaxRequestBytes) {
   };
 }
 
-export function resolveLearningQuotaTier(zakiUser, { nowDate = new Date() } = {}) {
-  const effective = getEffectiveEntitlementState(zakiUser, nowDate);
+function resolveEffectiveEntitlement(
+  zakiUser,
+  { nowDate = new Date(), effectiveEntitlement = null } = {}
+) {
+  return effectiveEntitlement || getEffectiveEntitlementState(zakiUser, nowDate);
+}
+
+export function resolveLearningQuotaTier(
+  zakiUser,
+  { nowDate = new Date(), effectiveEntitlement = null } = {}
+) {
+  const effective = resolveEffectiveEntitlement(zakiUser, {
+    nowDate,
+    effectiveEntitlement,
+  });
   if (!effective?.products?.learn?.access) return "free";
   return normalizeTier(effective.tier);
 }
@@ -180,10 +193,17 @@ export function resolveLearningQuotaPolicy(
     env = process.env,
     nowDate = new Date(),
     absoluteMaxRequestBytes = DEFAULT_LEARNING_ABSOLUTE_MAX_REQUEST_BYTES,
+    effectiveEntitlement = null,
   } = {}
 ) {
-  const tier = resolveLearningQuotaTier(zakiUser, { nowDate });
-  const entitlement = getEffectiveEntitlementState(zakiUser, nowDate);
+  const entitlement = resolveEffectiveEntitlement(zakiUser, {
+    nowDate,
+    effectiveEntitlement,
+  });
+  const tier = resolveLearningQuotaTier(zakiUser, {
+    nowDate,
+    effectiveEntitlement: entitlement,
+  });
   const basePlan = clonePlan(PLAN_DEFAULTS[tier] || PLAN_DEFAULTS.free);
   const policy = applyTierEnvOverrides(basePlan, tier, env, absoluteMaxRequestBytes);
   policy.uploads.maxRequestBytes = clampBytes(policy.uploads.maxRequestBytes, absoluteMaxRequestBytes);
@@ -296,11 +316,13 @@ export function buildLearningQuotaStatus({
   env = process.env,
   nowDate = new Date(),
   absoluteMaxRequestBytes = DEFAULT_LEARNING_ABSOLUTE_MAX_REQUEST_BYTES,
+  effectiveEntitlement = null,
 } = {}) {
   const policy = resolveLearningQuotaPolicy(zakiUser, {
     env,
     nowDate,
     absoluteMaxRequestBytes,
+    effectiveEntitlement,
   });
 
   return {

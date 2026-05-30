@@ -21,12 +21,17 @@ import {
   extractNullalisTaskItem,
   extractNullalisUsageSummary,
   inferStreamingModeFromProgress,
+  buildNullalisContextGauge,
+  resolveContextGaugePercent,
 } from "./ChatArea";
 import { useNavigationStore, useAuthStore, useZakiSessionUiStore } from "@/stores";
 import { useMessages } from "@/queries/useThreads";
 import {
   apiRequest,
   approveAgentSession,
+  cancelAgentSession,
+  fetchAgentExtensionDiagnostics,
+  fetchAgentDiagnostics,
   fetchAgentHistory,
   fetchAgentMe,
   fetchAgentSession,
@@ -152,6 +157,57 @@ jest.mock("@/lib/api", () => ({
       headers: new Headers(),
     },
     data: { ok: true },
+  })),
+  cancelAgentSession: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "cancellation_signalled", was_active: true }),
+      headers: new Headers(),
+    },
+    data: { status: "cancellation_signalled", was_active: true },
+  })),
+  fetchAgentExtensionDiagnostics: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        user_id: "1",
+        paired: false,
+        connected_at_unix: 0,
+        last_command_at_unix: 0,
+        last_command_tool: "",
+        last_command_result: "",
+      }),
+      headers: new Headers(),
+    },
+    data: {
+      user_id: "1",
+      paired: false,
+      connected_at_unix: 0,
+      last_command_at_unix: 0,
+      last_command_tool: "",
+      last_command_result: "",
+    },
+  })),
+  fetchAgentDiagnostics: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        agentBackendEnabled: true,
+        upstreamReady: { ok: true, latencyMs: 20 },
+        upstreamHealth: { ok: true, latencyMs: 18 },
+        upstreamControlPlane: { extension_ws_enabled: true },
+      }),
+      headers: new Headers(),
+    },
+    data: {
+      agentBackendEnabled: true,
+      upstreamReady: { ok: true, latencyMs: 20 },
+      upstreamHealth: { ok: true, latencyMs: 18 },
+      upstreamControlPlane: { extension_ws_enabled: true },
+    },
   })),
   listAgentCron: jest.fn(async () => ({
     response: {
@@ -343,6 +399,9 @@ describe("ChatArea Component", () => {
     (provisionAgent as jest.Mock).mockClear();
     (setAgentSessionMode as jest.Mock).mockClear();
     (approveAgentSession as jest.Mock).mockClear();
+    (cancelAgentSession as jest.Mock).mockClear();
+    (fetchAgentExtensionDiagnostics as jest.Mock).mockClear();
+    (fetchAgentDiagnostics as jest.Mock).mockClear();
     window.sessionStorage.clear();
     window.localStorage.clear();
     navState = {
@@ -456,6 +515,81 @@ describe("ChatArea Component", () => {
     );
 
     (useMessages as jest.Mock).mockReturnValue({ data: [], isLoading: false });
+  });
+
+  it("normalizes Nullalis session context fields into the context meter model", () => {
+    const gauge = buildNullalisContextGauge({
+      history_len: 43,
+      tokens_used: 33_771,
+      token_limit: 460_000,
+      context_pressure_percent: 7.3,
+    });
+
+    expect(gauge).toEqual({
+      tokenCount: 33_771,
+      contextMax: 460_000,
+      messageCount: 43,
+      context_pressure_percent: 7.3,
+    });
+    expect(resolveContextGaugePercent(gauge)).toBe(7.3);
+  });
+
+  it("prefers backend context_pressure_percent over a recomputed token ratio", () => {
+    const gauge = buildNullalisContextGauge({
+      token_count: 10_000,
+      context_window_max: 100_000,
+      context_pressure_percent: 42,
+    });
+
+    expect(resolveContextGaugePercent(gauge)).toBe(42);
+  });
+
+  it("keeps pressure-only Nullalis context samples when token max is omitted", () => {
+    const gauge = buildNullalisContextGauge({
+      history_len: 3,
+      max_history: 0,
+      context_pressure_percent: 21,
+    });
+
+    expect(gauge).toEqual({
+      messageCount: 3,
+      context_pressure_percent: 21,
+    });
+    expect(resolveContextGaugePercent(gauge)).toBe(21);
+  });
+
+  it("renders Agent context pressure from the live session context endpoint", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    (fetchAgentMe as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (fetchAgentSessionContext as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, headers: new Headers() },
+      data: {
+        history_len: 43,
+        tokens_used: 33_771,
+        token_limit: 460_000,
+        context_pressure_percent: 7.3,
+      },
+    });
+
+    await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(fetchAgentSessionContext).toHaveBeenCalledWith(
+        "agent:zaki-bot:user:1:thread:main"
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("zaki-context-meter")).toHaveTextContent("7%");
+    });
+    expect(
+      zakiSessionUiState.sessions["agent:zaki-bot:user:1:thread:main"]?.contextPressurePercent
+    ).toBe(7.3);
   });
 
   it("renders ready state for a new chat", async () => {

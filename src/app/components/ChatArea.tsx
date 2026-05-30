@@ -21,8 +21,10 @@ import {
   fetchAgentSession,
   fetchAgentSessionContext,
   compactAgentSession,
+  cancelAgentSession,
   deleteAgentSession,
   fetchBotRuntimeStatus,
+  fetchAgentExtensionDiagnostics,
   listAgentArtifacts,
   listAgentCron,
   listAgentTasks,
@@ -36,9 +38,9 @@ import {
   type MemoryActivity,
   type MemoryCaptureResponse,
   type UsageQuotaSurface,
-  type AgentSession,
   type AgentArtifact,
   type AgentTask,
+  type AgentExtensionDiagnosticsResponse,
 } from "@/lib/api";
 import { DEFAULT_THREAD_LABEL, isDefaultThreadLabel } from "@/lib/threadTitles";
 import { createAnonymousThreadId } from "@/lib/anonymousSpaces";
@@ -57,6 +59,7 @@ import {
   CreateSpaceModal,
   EditInstructionsModal,
   ApprovalRequiredCard,
+  type ContextGaugeData,
 } from "./chat";
 import {
   AgentInspectorRail,
@@ -251,14 +254,67 @@ function numericValue(value: unknown) {
   return null;
 }
 
-function sessionHasContextSnapshot(session: Partial<AgentSession> | null | undefined) {
-  if (!session) return false;
-  return [
-    session.context_pressure_percent,
-    session.context_window_used,
-    session.context_window_max,
-    session.token_count,
-  ].some((value) => typeof value === "number" && Number.isFinite(value));
+function clampPercent(value: number) {
+  return Math.min(100, Math.max(0, value));
+}
+
+function resolveRuntimeContextPressurePercent(data: Record<string, unknown> | null | undefined) {
+  if (!data) return null;
+  const explicitPressure =
+    numericValue(data.context_pressure_percent) ??
+    numericValue(data.context_window_used_pct);
+  if (explicitPressure != null) return clampPercent(explicitPressure);
+  const used =
+    numericValue(data.token_count) ??
+    numericValue(data.tokens_used) ??
+    numericValue(data.context_window_used) ??
+    numericValue(data.context_tokens);
+  const max =
+    numericValue(data.context_window_max) ??
+    numericValue(data.token_limit) ??
+    numericValue(data.context_max);
+  if (used == null || max == null || max <= 0) return null;
+  return clampPercent((used / max) * 100);
+}
+
+export function buildNullalisContextGauge(
+  data: Record<string, unknown> | null | undefined
+): ContextGaugeData | null {
+  if (!data) return null;
+  const contextMax =
+    numericValue(data.context_window_max) ??
+    numericValue(data.token_limit) ??
+    numericValue(data.context_max);
+  const pressurePct = resolveRuntimeContextPressurePercent(data);
+  if ((contextMax == null || contextMax <= 0) && pressurePct == null) return null;
+  const tokenCount =
+    numericValue(data.token_count) ??
+    numericValue(data.tokens_used) ??
+    numericValue(data.context_window_used) ??
+    numericValue(data.context_tokens) ??
+    null;
+  const messageCount =
+    numericValue(data.message_count) ??
+    numericValue(data.history_len) ??
+    null;
+  return {
+    tokenCount: tokenCount ?? undefined,
+    contextMax: contextMax && contextMax > 0 ? contextMax : undefined,
+    messageCount: messageCount ?? undefined,
+    context_pressure_percent: pressurePct,
+  };
+}
+
+export function resolveContextGaugePercent(data: ContextGaugeData | null | undefined) {
+  if (!data) return null;
+  if (typeof data.context_pressure_percent === "number") {
+    return clampPercent(data.context_pressure_percent);
+  }
+  if (!data.contextMax || data.contextMax <= 0) return null;
+  if (typeof data.tokenCount === "number") {
+    return clampPercent((data.tokenCount / data.contextMax) * 100);
+  }
+  return null;
 }
 
 /**
@@ -2503,14 +2559,15 @@ export function ChatArea() {
   const [agentArtifactSnapshots, setAgentArtifactSnapshots] = useState<AgentInspectorArtifact[]>([]);
   const [agentArtifactsLoading, setAgentArtifactsLoading] = useState(false);
   const [agentArtifactsError, setAgentArtifactsError] = useState<string | null>(null);
+  const [agentExtensionDiagnostics, setAgentExtensionDiagnostics] =
+    useState<AgentExtensionDiagnosticsResponse | null>(null);
+  const [agentExtensionDiagnosticsLoading, setAgentExtensionDiagnosticsLoading] = useState(false);
+  const [agentExtensionDiagnosticsError, setAgentExtensionDiagnosticsError] = useState<string | null>(null);
   const [nullalisApprovalRequest, setNullalisApprovalRequest] =
     useState<NullalisApprovalRequest | null>(null);
   const [agentArtifactEventCount, setAgentArtifactEventCount] = useState(0);
-  const [nullalisContextGauge, setNullalisContextGauge] = useState<{
-    tokenCount: number;
-    contextMax: number;
-    messageCount?: number;
-  } | null>(null);
+  const [nullalisContextGauge, setNullalisContextGauge] =
+    useState<ContextGaugeData | null>(null);
   const [zakiUsageSummary, setZakiUsageSummary] = useState<ZakiUsageSummary | null>(null);
   const [freeDailyQuota, setFreeDailyQuota] = useState<{
     unlimited: boolean;
@@ -2544,6 +2601,7 @@ export function ChatArea() {
   const [queryModeEnabled, setQueryModeEnabled] = useState(false);
   const [webSearchArmed, setWebSearchArmed] = useState(false);
   const streamAbortRef = useRef<AbortController | null>(null);
+  const agentCancelInFlightRef = useRef(false);
   const zakiBotProcessClearTimerRef = useRef<number | null>(null);
   const zakiBotProvisionedRef = useRef(false);
   const zakiBotProvisionPromiseRef = useRef<Promise<boolean> | null>(null);
@@ -2601,6 +2659,7 @@ export function ChatArea() {
       [normalizedActiveZakiSessionKey]
     )
   );
+  const contextUnavailableSessionKeysRef = useRef<Set<string>>(new Set());
   const ensureZakiSessionUi = useZakiSessionUiStore((state) => state.ensureSession);
   const hydrateSessionUi = useZakiSessionUiStore((state) => state.hydrateSession);
   const setZakiSessionModeUi = useZakiSessionUiStore((state) => state.setMode);
@@ -2622,6 +2681,9 @@ export function ChatArea() {
       : null);
   const isActiveZakiSessionLive = Boolean(
     isStreaming || activeSessionUi?.live || activeSessionRecord?.live
+  );
+  const isActiveSessionKnownCold = Boolean(
+    !isActiveZakiSessionLive && (activeSessionUi?.live === false || activeSessionRecord?.live === false)
   );
   const powerUserPendingApprovals = useMemo(() => {
     const pending = activeSessionUi?.pendingApprovals ?? [];
@@ -3000,17 +3062,12 @@ export function ChatArea() {
           ),
         }
       : null;
-  const agentContextPercent =
-    isZakiBotActiveSpace && nullalisContextGauge?.contextMax
-      ? Math.min(
-          100,
-          Math.max(
-            0,
-            ((nullalisContextGauge.tokenCount ?? 0) / nullalisContextGauge.contextMax) *
-              100
-          )
-        )
-      : null;
+  const agentContextPercent = isZakiBotActiveSpace
+    ? resolveContextGaugePercent(nullalisContextGauge) ??
+      activeSessionUi?.contextPressurePercent ??
+      activeSessionRecord?.context_pressure_percent ??
+      null
+    : null;
   const agentTaskItems = useMemo(
     () => mergeNullalisTaskItems(agentTaskSnapshots, nullalisTaskItems),
     [agentTaskSnapshots, nullalisTaskItems]
@@ -3717,35 +3774,49 @@ export function ChatArea() {
   const refreshContextGauge = useCallback(async () => {
     try {
       if (!zakiBotProvisionReady) return;
-      if (!activeSessionRecord) return;
-      if (!sessionHasContextSnapshot(activeSessionRecord)) return;
       const sessionKey = activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
       if (!sessionKey) return; // agent user ID not yet resolved
+      if (
+        isActiveSessionKnownCold &&
+        contextUnavailableSessionKeysRef.current.has(sessionKey)
+      ) {
+        return;
+      }
       const { response, data } = await fetchAgentSessionContext(sessionKey);
       // Don't clobber a good in-store pressure value with `null` on a
       // 4xx/5xx or on a 200 that omitted the field. Only write when the
       // response succeeded AND we actually have a numeric pressure.
-      if (!response.ok) return;
-      const pressurePct =
-        typeof data?.context_pressure_percent === "number"
-          ? data.context_pressure_percent
-          : typeof data?.context_window_used_pct === "number"
-          ? data.context_window_used_pct
-          : null;
+      if (!response.ok) {
+        const errorCode = String(
+          (data as { error?: string | null; code?: string | null } | null)?.error ||
+            (data as { error?: string | null; code?: string | null } | null)?.code ||
+            ""
+        );
+        if (isActiveSessionKnownCold && errorCode === "no_session_manager") {
+          contextUnavailableSessionKeysRef.current.add(sessionKey);
+        }
+        return;
+      }
+      contextUnavailableSessionKeysRef.current.delete(sessionKey);
+      const pressurePct = resolveRuntimeContextPressurePercent(data as Record<string, unknown>);
       if (typeof pressurePct === "number") {
         setSessionContextPressure(sessionKey, pressurePct);
       }
-      if (data && typeof data.token_count === "number") {
-        setNullalisContextGauge({
-          tokenCount: data.token_count,
-          contextMax: data.context_window_max ?? 0,
-          messageCount: data.message_count,
-        });
+      const gauge = buildNullalisContextGauge(data as Record<string, unknown>);
+      if (gauge) {
+        setNullalisContextGauge(gauge);
       }
     } catch {
       // non-critical — gauge just won't update
     }
-  }, [activeSessionRecord, activeThreadId, activeZakiSessionKey, agentUserId, setSessionContextPressure, zakiBotProvisionReady]);
+  }, [
+    activeThreadId,
+    activeZakiSessionKey,
+    agentUserId,
+    isActiveSessionKnownCold,
+    setSessionContextPressure,
+    zakiBotProvisionReady,
+  ]);
 
   const refreshAgentRuntimePanelData = useCallback(async () => {
     if (!isAgentSurface || !zakiBotProvisionReady) return;
@@ -3756,14 +3827,17 @@ export function ChatArea() {
     setAgentCronError(null);
     setAgentArtifactsLoading(true);
     setAgentArtifactsError(null);
+    setAgentExtensionDiagnosticsLoading(true);
+    setAgentExtensionDiagnosticsError(null);
 
-    const [taskResult, cronResult, artifactResult] = await Promise.allSettled([
+    const [taskResult, cronResult, artifactResult, extensionResult] = await Promise.allSettled([
       listAgentTasks({ limit: 24 }),
       listAgentCron(),
       listAgentArtifacts({
         limit: 12,
         session_key: normalizedActiveZakiSessionKey || undefined,
       }),
+      fetchAgentExtensionDiagnostics(),
     ]);
 
     if (taskResult.status === "fulfilled") {
@@ -3838,6 +3912,24 @@ export function ChatArea() {
       setAgentArtifactsError("network_error");
     }
     setAgentArtifactsLoading(false);
+
+    if (extensionResult.status === "fulfilled") {
+      const { response, data } = extensionResult.value;
+      if (!response.ok) {
+        const error =
+          (data as { error?: string | null; reason?: string | null })?.error ||
+          (data as { error?: string | null; reason?: string | null })?.reason ||
+          "unavailable";
+        setAgentExtensionDiagnostics(null);
+        setAgentExtensionDiagnosticsError(error);
+      } else {
+        setAgentExtensionDiagnostics(data);
+      }
+    } else {
+      setAgentExtensionDiagnostics(null);
+      setAgentExtensionDiagnosticsError("network_error");
+    }
+    setAgentExtensionDiagnosticsLoading(false);
   }, [isAgentSurface, normalizedActiveZakiSessionKey, zakiBotProvisionReady]);
 
   useEffect(() => {
@@ -3851,6 +3943,9 @@ export function ChatArea() {
       setAgentArtifactSnapshots([]);
       setAgentArtifactsError(null);
       setAgentArtifactsLoading(false);
+      setAgentExtensionDiagnostics(null);
+      setAgentExtensionDiagnosticsError(null);
+      setAgentExtensionDiagnosticsLoading(false);
       return;
     }
     void refreshAgentRuntimePanelData();
@@ -3964,6 +4059,7 @@ export function ChatArea() {
 
   useEffect(() => {
     if (!isZakiBotActiveSpace || !normalizedActiveZakiSessionKey) return;
+    if (zakiSessionsLoading) return;
     // Initial fetch on mount + recurring polling while the user is in
     // ZAKI bot mode. Without periodic refresh, out-of-band pressure
     // changes (another channel posting into the same session, background
@@ -3998,7 +4094,7 @@ export function ChatArea() {
       if (timer != null) window.clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [isZakiBotActiveSpace, normalizedActiveZakiSessionKey, refreshContextGauge]);
+  }, [isZakiBotActiveSpace, normalizedActiveZakiSessionKey, refreshContextGauge, zakiSessionsLoading]);
 
   const upsertZakiBotToolCall = useCallback(
     (payload: Record<string, unknown>) => {
@@ -4938,19 +5034,17 @@ export function ChatArea() {
           if (typeof payload.duration_ms === "number") {
             setTurnDurationMs(payload.duration_ms);
           }
-          // Extract inline context data if nullalis sends it with done
-          if (
-            typeof payload.context_tokens === "number" &&
-            typeof payload.context_max === "number"
-          ) {
-            setNullalisContextGauge({
-              tokenCount: payload.context_tokens as number,
-              contextMax: payload.context_max as number,
-              messageCount:
-                typeof payload.message_count === "number"
-                  ? (payload.message_count as number)
-                  : undefined,
-            });
+          // Extract inline context data if nullalis sends it with done.
+          // Accept both runtime names (`context_tokens/context_max`) and
+          // session-context names (`tokens_used/token_limit`) so the meter
+          // mirrors the actual backend pressure signal.
+          const contextGauge = buildNullalisContextGauge(payload);
+          const contextPressure = resolveRuntimeContextPressurePercent(payload);
+          if (contextPressure != null && activeZakiSessionKey) {
+            setSessionContextPressure(activeZakiSessionKey, contextPressure);
+          }
+          if (contextGauge) {
+            setNullalisContextGauge(contextGauge);
           }
           pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("done", payload));
           setNullalisNarrationFrame(null);
@@ -6467,8 +6561,40 @@ export function ChatArea() {
   ]);
 
   const handleStopStreaming = useCallback(() => {
+    const sessionKey =
+      activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
+    if (isZakiBotActiveSpace && sessionKey && !agentCancelInFlightRef.current) {
+      agentCancelInFlightRef.current = true;
+      void cancelAgentSession(sessionKey)
+        .then(({ response, data }) => {
+          if (!response.ok) {
+            throw new Error(
+              data?.message ||
+                data?.error ||
+                "Agent cancel request failed."
+            );
+          }
+          if (data?.was_active === false) {
+            toast.info("No active Agent turn was running on the server.");
+          }
+        })
+        .catch((error) => {
+          console.error("[agent-cancel]", error);
+          toast.error("Unable to cancel the Agent run on the server. The local stream was closed.");
+        })
+        .finally(() => {
+          agentCancelInFlightRef.current = false;
+          void refreshAgentRuntimePanelData();
+        });
+    }
     streamAbortRef.current?.abort();
-  }, []);
+  }, [
+    activeThreadId,
+    activeZakiSessionKey,
+    agentUserId,
+    isZakiBotActiveSpace,
+    refreshAgentRuntimePanelData,
+  ]);
 
   const handleRegenerateMessage = useCallback(
     (message: Message) => {
@@ -7394,6 +7520,9 @@ export function ChatArea() {
       artifacts={agentArtifactSnapshots}
       artifactsLoading={agentArtifactsLoading}
       artifactsError={agentArtifactsError}
+      extensionDiagnostics={agentExtensionDiagnostics}
+      extensionDiagnosticsLoading={agentExtensionDiagnosticsLoading}
+      extensionDiagnosticsError={agentExtensionDiagnosticsError}
       transcriptEntries={nullalisTranscriptEntries}
       narrationFrame={nullalisNarrationFrame}
       approvalRequest={nullalisApprovalRequest}
@@ -7663,9 +7792,9 @@ export function ChatArea() {
                 )}
               </div>
             </div>
-	          ) : (
-	            <div className="h-[64px]" aria-hidden="true" />
-	          )}
+              ) : (
+                <div className="h-[64px]" aria-hidden="true" />
+              )}
 
           {/* C5: System notices — rendered here so they appear on ALL views
               (home, spaces, chat, brain) regardless of which view is active */}
@@ -7831,7 +7960,8 @@ export function ChatArea() {
                 }
                 zakiContextPressurePercent={
                   isZakiBotActiveSpace
-                    ? activeSessionUi?.contextPressurePercent ??
+                    ? agentContextPercent ??
+                      activeSessionUi?.contextPressurePercent ??
                       activeSessionRecord?.context_pressure_percent ??
                       null
                     : null
@@ -7999,9 +8129,8 @@ export function ChatArea() {
             // center and belongs in dashboard/settings onboarding instead.
             plusMenuEligible: false,
             compactionArmed: (() => {
-              const g = nullalisContextGauge;
-              if (!g || !g.tokenCount || !g.contextMax) return false;
-              return g.tokenCount / g.contextMax >= 0.6;
+              const pct = resolveContextGaugePercent(nullalisContextGauge);
+              return pct != null && pct >= 60;
             })(),
             // Brain panel tooltip anchors at the dashboard's brain
             // entry. Only fire when both the anchor is in the DOM

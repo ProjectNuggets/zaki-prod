@@ -1,10 +1,8 @@
 // 2026-05-08 — Schedule-a-follow-up helper for the composer.
 //
-// The cron API (POST /api/agent/cron) is a full-array replace — there
-// is no per-job append endpoint. So adding one job means: list current
-// jobs, push the new one, POST the whole array back. Mutations are
-// guarded by an in-memory mutex so concurrent calls (e.g. two clicks)
-// don't race the read-modify-write.
+// The cron BFF accepts a single job object for append and keeps the
+// downstream runtime's bulk-replace detail server-side. The composer
+// should never read-modify-write cron jobs in the browser.
 //
 // One-time vs recurring:
 //   • For "in N hours" / "at YYYY-MM-DD HH:MM" we send one_shot=true so
@@ -14,10 +12,9 @@
 //
 // `0 9 * * *` is the canonical 5-field cron expression (minute hour
 // dom month dow). All cron parsers in the nullalis runtime use this
-// format. See CronManagementSheet for the existing read-modify-write
-// pattern this module follows.
+// format.
 
-import { listAgentCron, createAgentCron } from "@/lib/api";
+import { createAgentCron } from "@/lib/api";
 
 export type FollowUpJob = {
   id?: string;
@@ -83,20 +80,9 @@ export function compileSchedule(
   }
 }
 
-let mutationLock: Promise<unknown> | null = null;
-
-async function readCurrentJobs(): Promise<FollowUpJob[]> {
-  const { data } = await listAgentCron();
-  const raw =
-    (data as { jobs?: FollowUpJob[] })?.jobs ??
-    (Array.isArray(data) ? (data as FollowUpJob[]) : []);
-  return raw;
-}
-
 /**
- * Append a follow-up job. Performs a serialized read-modify-write so
- * two concurrent calls don't clobber each other (the API replaces the
- * whole array). Resolves with the compiled job entry.
+ * Append a follow-up job through the Agent cron BFF. Resolves with the
+ * compiled job entry used for the user-facing preview.
  */
 export async function scheduleAgentFollowUp(input: {
   schedule: FollowUpSchedule;
@@ -107,28 +93,16 @@ export async function scheduleAgentFollowUp(input: {
   if (!trimmedPrompt) throw new Error("prompt is required");
   const compiled = compileSchedule(input.schedule);
 
-  const run = async () => {
-    const current = await readCurrentJobs();
-    const next: FollowUpJob = {
-      expression: compiled.expression,
-      prompt: trimmedPrompt,
-      name: input.name?.trim() || null,
-      job_type: "agent",
-      one_shot: compiled.oneShot,
-    };
-    const updated = [...current, next];
-    const { response } = await createAgentCron(updated as unknown[]);
-    if (!response.ok) {
-      throw new Error(`createAgentCron ${response.status}`);
-    }
+  const next: FollowUpJob = {
+    expression: compiled.expression,
+    prompt: trimmedPrompt,
+    name: input.name?.trim() || null,
+    job_type: "agent",
+    one_shot: compiled.oneShot,
   };
-
-  // Chain onto any in-flight mutation to serialize R-M-W.
-  const previous = mutationLock ?? Promise.resolve();
-  const next = previous.then(run, run);
-  mutationLock = next.finally(() => {
-    if (mutationLock === next) mutationLock = null;
-  });
-  await next;
+  const { response } = await createAgentCron(next);
+  if (!response.ok) {
+    throw new Error(`createAgentCron ${response.status}`);
+  }
   return compiled;
 }

@@ -331,7 +331,7 @@ export function ApprovalRequiredCard({
 
 export type ContextGaugeData = {
   tokenCount?: number;
-  contextMax: number;
+  contextMax?: number;
   messageCount?: number;
   context_pressure_percent?: number | null;
 };
@@ -344,15 +344,38 @@ export function ContextGauge({
   compact?: boolean;
 }) {
   const { t } = useTranslation();
-  if (!data || !data.contextMax || data.contextMax <= 0) return null;
+  if (!data) return null;
 
-  // L4: back-derive tokenCount from context_pressure_percent when tokenCount is missing
-  const tokenCount = data.tokenCount ?? Math.round(((data.context_pressure_percent ?? 0) / 100) * (data.contextMax ?? 0));
-  const pct = Math.min(100, Math.max(0, (tokenCount / data.contextMax) * 100));
+  // Prefer the backend pressure field when present. It is the runtime's
+  // canonical context-pressure signal; token counts are supporting detail.
+  const hasContextMax = typeof data.contextMax === "number" && data.contextMax > 0;
+  const pct =
+    typeof data.context_pressure_percent === "number"
+      ? Math.min(100, Math.max(0, data.context_pressure_percent))
+      : hasContextMax
+        ? Math.min(
+            100,
+            Math.max(
+              0,
+              ((data.tokenCount ?? 0) / data.contextMax!) * 100
+            )
+          )
+        : null;
+  if (pct == null) return null;
+  const tokenCount =
+    hasContextMax && data.contextMax
+      ? data.tokenCount ?? Math.round((pct / 100) * data.contextMax)
+      : null;
   const pctLabel = pct.toFixed(0);
-  const tokenLabel = new Intl.NumberFormat("en-US").format(tokenCount);
-  const maxLabel = new Intl.NumberFormat("en-US").format(data.contextMax);
-  const ariaLabel = `Context window ${tokenLabel} of ${maxLabel} tokens, ${pctLabel} percent used`;
+  const tokenLabel = tokenCount != null ? new Intl.NumberFormat("en-US").format(tokenCount) : null;
+  const maxLabel =
+    hasContextMax && data.contextMax
+      ? new Intl.NumberFormat("en-US").format(data.contextMax)
+      : null;
+  const ariaLabel =
+    tokenLabel && maxLabel
+      ? `Context window ${tokenLabel} of ${maxLabel} tokens, ${pctLabel} percent used`
+      : `Context pressure ${pctLabel} percent`;
 
   // 2026-05-08 — Single color, no FE-side tier buckets. Pressure is the
   // raw signal nullalis emits; the actual compaction trigger lives in
@@ -389,7 +412,7 @@ export function ContextGauge({
       <div className="flex items-center justify-between gap-2 mb-0.5">
         <span className="text-zaki-muted dark:text-zaki-dark-muted">{t("contextGauge.label")}</span>
         <span className={cn("font-mono-ui", textColor)}>
-          {tokenLabel} / {maxLabel} ({pctLabel}%)
+          {tokenLabel && maxLabel ? `${tokenLabel} / ${maxLabel} (${pctLabel}%)` : `${pctLabel}%`}
         </span>
       </div>
       <div

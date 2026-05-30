@@ -39,6 +39,36 @@ describe("learning quota policy", () => {
     ).toBe("personal");
   });
 
+  test("can use the centralized platform entitlement override", () => {
+    const effectiveEntitlement = {
+      tier: "personal",
+      source: "access_code",
+      premium: true,
+      products: {
+        learn: { access: true },
+      },
+    };
+
+    expect(
+      resolveLearningQuotaTier(
+        { plan_tier: "free", plan_status: "inactive" },
+        { nowDate: NOW, effectiveEntitlement }
+      )
+    ).toBe("personal");
+
+    const policy = resolveLearningQuotaPolicy(
+      { plan_tier: "free", plan_status: "inactive" },
+      { nowDate: NOW, effectiveEntitlement }
+    );
+    expect(policy).toEqual(
+      expect.objectContaining({
+        tier: "personal",
+        source: "access_code",
+        premium: true,
+      })
+    );
+  });
+
   test("keeps every hosted upload capability available while scaling limits by plan", () => {
     const free = resolveLearningQuotaPolicy(
       { plan_tier: "free", plan_status: "inactive" },

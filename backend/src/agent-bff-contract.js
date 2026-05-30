@@ -18,6 +18,7 @@ export const AGENT_SESSION_BFF_ROUTES = Object.freeze([
   { method: "get",    path: "/api/agent/sessions/:sessionKey/history",  upstreamSuffix: "/history", json: false },
   { method: "post",   path: "/api/agent/sessions/:sessionKey/mode",     upstreamSuffix: "/mode",    json: true  },
   { method: "post",   path: "/api/agent/sessions/:sessionKey/approve",  upstreamSuffix: "/approve", json: true  },
+  { method: "post",   path: "/api/agent/sessions/:sessionKey/cancel",   upstreamSuffix: "/cancel",  json: false },
 ]);
 
 export const BOT_BFF_ALIAS_ROUTES = Object.freeze([
@@ -45,6 +46,7 @@ export const BOT_CHAT_STREAM_SESSION_KEY_CONTRACT = Object.freeze({
 export const AGENT_RUNTIME_FACADE_ROUTES = Object.freeze([
   { method: "get", path: "/api/agent/diagnostics/context" },
   { method: "get", path: "/api/agent/diagnostics/memory-doctor" },
+  { method: "get", path: "/api/agent/diagnostics/extension" },
   { method: "get", path: "/api/agent/tasks" },
   { method: "get", path: "/api/agent/tasks/:taskId" },
   { method: "post", path: "/api/agent/tasks/:taskId/stop" },

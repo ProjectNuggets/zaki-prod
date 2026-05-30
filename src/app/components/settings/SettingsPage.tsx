@@ -3,12 +3,15 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import {
   Boxes,
+  Cable,
   Cpu,
   CreditCard,
   Database,
   Gauge,
   KeyRound,
   LockKeyhole,
+  MonitorSmartphone,
+  ServerCog,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
@@ -24,10 +27,15 @@ import {
 } from "@/queries";
 import {
   exportAccountData,
+  deleteAgentSecret,
+  fetchAgentExtensionDiagnostics,
   fetchBotSettings,
   fetchGoogleOAuthStatus,
+  listAgentSecrets,
+  putAgentSecret,
   updateBotSettings,
   updateProfile,
+  type AgentExtensionDiagnosticsResponse,
   type BotSettingsPatch,
   type BotSettingsProfile,
   type MeterStatusProduct,
@@ -256,6 +264,14 @@ export function SettingsPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [googleOAuthEnabled, setGoogleOAuthEnabled] = useState<boolean | null>(null);
+  const [agentSecretsKeys, setAgentSecretsKeys] = useState<string[]>([]);
+  const [agentSecretsLoading, setAgentSecretsLoading] = useState(true);
+  const [agentSecretsAction, setAgentSecretsAction] = useState<string | null>(null);
+  const [newSecretKey, setNewSecretKey] = useState("");
+  const [newSecretValue, setNewSecretValue] = useState("");
+  const [extensionDiagnostics, setExtensionDiagnostics] =
+    useState<AgentExtensionDiagnosticsResponse | null>(null);
+  const [extensionDiagnosticsLoading, setExtensionDiagnosticsLoading] = useState(true);
   const [agentSettingsDraft, setAgentSettingsDraft] =
     useState<Pick<BotSettingsProfile, "dream_enabled" | "query_expansion_enabled" | "selected_model">>(
       DEFAULT_AGENT_SETTINGS
@@ -316,6 +332,56 @@ export function SettingsPage() {
       })
       .catch(() => {
         if (active) setGoogleOAuthEnabled(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const loadAgentSecrets = async () => {
+    setAgentSecretsLoading(true);
+    try {
+      const { response, data } = await listAgentSecrets();
+      if (!response.ok) throw new Error("agent_secrets_unavailable");
+      setAgentSecretsKeys(Array.isArray(data?.keys) ? data.keys : []);
+    } catch {
+      setAgentSecretsKeys([]);
+    } finally {
+      setAgentSecretsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    setAgentSecretsLoading(true);
+    listAgentSecrets()
+      .then(({ response, data }) => {
+        if (!active) return;
+        setAgentSecretsKeys(response.ok && Array.isArray(data?.keys) ? data.keys : []);
+      })
+      .catch(() => {
+        if (active) setAgentSecretsKeys([]);
+      })
+      .finally(() => {
+        if (active) setAgentSecretsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setExtensionDiagnosticsLoading(true);
+    fetchAgentExtensionDiagnostics()
+      .then(({ response, data }) => {
+        if (active) setExtensionDiagnostics(response.ok ? data : null);
+      })
+      .catch(() => {
+        if (active) setExtensionDiagnostics(null);
+      })
+      .finally(() => {
+        if (active) setExtensionDiagnosticsLoading(false);
       });
     return () => {
       active = false;
@@ -432,6 +498,27 @@ export function SettingsPage() {
   const navItems: V2SettingsNavItem[] = [
     { href: "#settings-account", label: t("settingsModal.nav.account"), icon: UserRound },
     { href: "#settings-connections", label: t("settingsModal.nav.connections"), icon: KeyRound },
+    {
+      href: "#settings-channels",
+      label: t("settingsModal.nav.channels", { defaultValue: "Channels" }),
+      icon: Cable,
+    },
+    {
+      href: "#settings-secrets",
+      label: t("settingsModal.nav.secrets", { defaultValue: "Secrets" }),
+      icon: LockKeyhole,
+      meta: agentSecretsKeys.length || undefined,
+    },
+    {
+      href: "#settings-providers",
+      label: t("settingsModal.nav.providers", { defaultValue: "Providers" }),
+      icon: ServerCog,
+    },
+    {
+      href: "#settings-devices",
+      label: t("settingsModal.nav.devices", { defaultValue: "Devices" }),
+      icon: MonitorSmartphone,
+    },
     { href: "#settings-billing", label: t("settingsModal.nav.billing"), icon: CreditCard },
     {
       href: "#settings-products",
@@ -444,7 +531,7 @@ export function SettingsPage() {
     {
       href: "#settings-developer-access",
       label: t("settingsModal.nav.developerAccess"),
-      icon: LockKeyhole,
+      icon: KeyRound,
       meta: developerAccessRows.length || undefined,
     },
     { href: "#settings-privacy", label: t("settingsModal.nav.privacy"), icon: ShieldCheck, tone: "danger" },
@@ -509,6 +596,73 @@ export function SettingsPage() {
       );
     } finally {
       setAgentSettingsSaving(false);
+    }
+  };
+
+  const handleSaveSecret = async () => {
+    const key = newSecretKey.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+    if (!key || !newSecretValue) {
+      toast.error(
+        t("settingsModal.secrets.errors.required", {
+          defaultValue: "Secret key and value are required.",
+        })
+      );
+      return;
+    }
+    setAgentSecretsAction("save");
+    try {
+      const { response, data } = await putAgentSecret(key, newSecretValue);
+      if (!response.ok || data?.error) {
+        throw new Error(
+          typeof data?.error === "string" ? data.error : "agent_secret_save_failed"
+        );
+      }
+      setNewSecretKey("");
+      setNewSecretValue("");
+      await loadAgentSecrets();
+      toast.success(
+        t("settingsModal.secrets.success.saved", {
+          defaultValue: "Secret saved.",
+        })
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("settingsModal.secrets.errors.save", {
+              defaultValue: "Unable to save secret.",
+            })
+      );
+    } finally {
+      setAgentSecretsAction(null);
+    }
+  };
+
+  const handleDeleteSecret = async (key: string) => {
+    setAgentSecretsAction(key);
+    try {
+      const { response, data } = await deleteAgentSecret(key);
+      if (!response.ok || data?.error) {
+        throw new Error(
+          typeof data?.error === "string" ? data.error : "agent_secret_delete_failed"
+        );
+      }
+      await loadAgentSecrets();
+      toast.success(
+        t("settingsModal.secrets.success.deleted", {
+          defaultValue: "Secret deleted.",
+        })
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("settingsModal.secrets.errors.delete", {
+              defaultValue: "Unable to delete secret.",
+            })
+      );
+    } finally {
+      setAgentSecretsAction(null);
     }
   };
 
@@ -656,6 +810,252 @@ export function SettingsPage() {
                       ? t("settingsModal.connections.available")
                       : t("settingsModal.connections.notConfigured")}
                 </V2Badge>
+              </V2SettingsRow>
+            </V2SettingsBlock>
+
+            <V2SettingsBlock
+              id="settings-channels"
+              data-testid="settings-channels"
+              title={t("settingsModal.sections.channels", { defaultValue: "Channels" })}
+            >
+              <V2SettingsRow
+                name={t("settingsModal.channels.agentTelegram.name", {
+                  defaultValue: "Agent Telegram",
+                })}
+                description={t("settingsModal.channels.agentTelegram.description", {
+                  defaultValue: "Connect, disconnect, and rotate the Agent Telegram channel.",
+                })}
+              >
+                <div className="zaki-settings-v2__actions">
+                  <V2Badge tone={agentSecretsKeys.includes("telegram_bot_token") ? "success" : "default"}>
+                    {agentSecretsKeys.includes("telegram_bot_token")
+                      ? t("settingsModal.channels.status.configured", {
+                          defaultValue: "Configured",
+                        })
+                      : t("settingsModal.channels.status.notConfigured", {
+                          defaultValue: "Not configured",
+                        })}
+                  </V2Badge>
+                  <V2Button size="sm" onClick={() => navigate("/agent?settings=channels")}>
+                    {t("settingsModal.channels.openAgentChannels", {
+                      defaultValue: "Open channels",
+                    })}
+                  </V2Button>
+                </div>
+              </V2SettingsRow>
+              <V2SettingsRow
+                name={t("settingsModal.channels.learningTutors.name", {
+                  defaultValue: "Learning tutor channels",
+                })}
+                description={t("settingsModal.channels.learningTutors.description", {
+                  defaultValue: "Private-beta tutor channel schema is available through Learning.",
+                })}
+              >
+                <V2Badge tone="warn">
+                  {t("settingsModal.channels.status.privateBeta", {
+                    defaultValue: "Private beta",
+                  })}
+                </V2Badge>
+              </V2SettingsRow>
+              <V2SettingsRow
+                name={t("settingsModal.channels.otherChannels.name", {
+                  defaultValue: "Slack, Discord, Teams, Email",
+                })}
+                description={t("settingsModal.channels.otherChannels.description", {
+                  defaultValue: "Contracts exist downstream; self-service connect stays gated until BFF status/test routes are exposed.",
+                })}
+              >
+                <V2Badge>
+                  {t("settingsModal.channels.status.operatorManaged", {
+                    defaultValue: "Operator managed",
+                  })}
+                </V2Badge>
+              </V2SettingsRow>
+            </V2SettingsBlock>
+
+            <V2SettingsBlock
+              id="settings-secrets"
+              data-testid="settings-secrets"
+              title={t("settingsModal.sections.secrets", { defaultValue: "Secrets & API keys" })}
+              meta={
+                agentSecretsLoading
+                  ? t("settingsModal.secrets.loading", { defaultValue: "Loading secrets" })
+                  : t("settingsModal.secrets.count", {
+                      count: agentSecretsKeys.length,
+                      defaultValue: `${agentSecretsKeys.length} stored`,
+                    })
+              }
+            >
+              <V2SettingsRow
+                name={t("settingsModal.secrets.addOrRotate", {
+                  defaultValue: "Add or rotate secret",
+                })}
+                description={t("settingsModal.secrets.addOrRotateHelper", {
+                  defaultValue: "Values are write-only after save; Settings shows metadata keys only.",
+                })}
+              >
+                <div className="grid min-w-[260px] gap-2">
+                  <input
+                    className="v2-input"
+                    value={newSecretKey}
+                    placeholder={t("settingsModal.secrets.keyPlaceholder", {
+                      defaultValue: "OPENAI_API_KEY",
+                    })}
+                    onChange={(event) =>
+                      setNewSecretKey(event.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_"))
+                    }
+                  />
+                  <input
+                    className="v2-input"
+                    type="password"
+                    value={newSecretValue}
+                    placeholder={t("settingsModal.secrets.valuePlaceholder", {
+                      defaultValue: "Secret value",
+                    })}
+                    onChange={(event) => setNewSecretValue(event.target.value)}
+                  />
+                  <V2Button
+                    size="sm"
+                    variant="accent"
+                    disabled={agentSecretsAction === "save"}
+                    onClick={() => void handleSaveSecret()}
+                  >
+                    {agentSecretsAction === "save"
+                      ? t("app.legal.saving")
+                      : t("settingsModal.secrets.save", { defaultValue: "Save secret" })}
+                  </V2Button>
+                </div>
+              </V2SettingsRow>
+              <div className="zaki-settings-v2__product-list">
+                {agentSecretsKeys.map((key) => (
+                  <article key={key} className="zaki-settings-v2__product-row">
+                    <header>
+                      <strong>{key}</strong>
+                      <V2Badge tone="success">
+                        {t("settingsModal.secrets.metadataOnly", {
+                          defaultValue: "Metadata only",
+                        })}
+                      </V2Badge>
+                    </header>
+                    <div className="zaki-settings-v2__actions">
+                      <V2Button
+                        size="sm"
+                        variant="danger"
+                        disabled={agentSecretsAction === key}
+                        onClick={() => void handleDeleteSecret(key)}
+                      >
+                        {agentSecretsAction === key
+                          ? t("app.legal.saving")
+                          : t("settingsModal.secrets.delete", { defaultValue: "Delete" })}
+                      </V2Button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+              {!agentSecretsLoading && agentSecretsKeys.length === 0 ? (
+                <p className="v2-body-sm">
+                  {t("settingsModal.secrets.empty", {
+                    defaultValue: "No secrets stored yet.",
+                  })}
+                </p>
+              ) : null}
+            </V2SettingsBlock>
+
+            <V2SettingsBlock
+              id="settings-providers"
+              data-testid="settings-providers"
+              title={t("settingsModal.sections.providers", {
+                defaultValue: "Models & providers",
+              })}
+            >
+              <V2SettingsRow
+                name={t("settingsModal.providers.operatorDefault.name", {
+                  defaultValue: "Operator model routing",
+                })}
+                description={t("settingsModal.providers.operatorDefault.description", {
+                  defaultValue: "ZAKI chooses the production model route unless a controlled Agent model override is set.",
+                })}
+              >
+                <V2Badge tone="success">
+                  {selectedModelIsOperatorDefault
+                    ? t("settingsModal.agentModel.operatorDefault", {
+                        defaultValue: "Operator default",
+                      })
+                    : effectiveAgentModel.label}
+                </V2Badge>
+              </V2SettingsRow>
+              <V2SettingsRow
+                name={t("settingsModal.providers.openAiCompatible.name", {
+                  defaultValue: "OpenAI-compatible provider",
+                })}
+                description={t("settingsModal.providers.openAiCompatible.description", {
+                  defaultValue: "BYOK provider profiles require a BFF profile/test contract before self-service launch.",
+                })}
+              >
+                <V2Badge>
+                  {t("settingsModal.providers.status.contractNeeded", {
+                    defaultValue: "Contract needed",
+                  })}
+                </V2Badge>
+              </V2SettingsRow>
+              <V2SettingsRow
+                name={t("settingsModal.providers.openapiConnector.name", {
+                  defaultValue: "OpenAPI connectors",
+                })}
+                description={t("settingsModal.providers.openapiConnector.description", {
+                  defaultValue: "User-managed connector credentials stay hidden until vault auth_ref support is ready.",
+                })}
+              >
+                <V2Badge>
+                  {t("settingsModal.providers.status.operatorManaged", {
+                    defaultValue: "Operator managed",
+                  })}
+                </V2Badge>
+              </V2SettingsRow>
+            </V2SettingsBlock>
+
+            <V2SettingsBlock
+              id="settings-devices"
+              data-testid="settings-devices"
+              title={t("settingsModal.sections.devices", {
+                defaultValue: "Browser extension & devices",
+              })}
+              meta={
+                extensionDiagnosticsLoading
+                  ? t("settingsModal.devices.loading", { defaultValue: "Checking" })
+                  : extensionDiagnostics?.paired
+                    ? t("settingsModal.devices.paired", { defaultValue: "Paired" })
+                    : t("settingsModal.devices.notPaired", { defaultValue: "Not paired" })
+              }
+            >
+              <V2SettingsRow
+                name={t("settingsModal.devices.extension.name", {
+                  defaultValue: "Browser extension",
+                })}
+                description={t("settingsModal.devices.extension.description", {
+                  defaultValue: "Per-user extension diagnostics are live; pairing and revocation UI remain gated.",
+                })}
+              >
+                <V2Badge tone={extensionDiagnostics?.paired ? "success" : "default"}>
+                  {extensionDiagnosticsLoading
+                    ? t("settingsModal.devices.loading", { defaultValue: "Checking" })
+                    : extensionDiagnostics?.paired
+                      ? t("settingsModal.devices.paired", { defaultValue: "Paired" })
+                      : t("settingsModal.devices.notPaired", { defaultValue: "Not paired" })}
+                </V2Badge>
+              </V2SettingsRow>
+              <V2SettingsRow
+                name={t("settingsModal.devices.extension.lastCommand", {
+                  defaultValue: "Last extension command",
+                })}
+              >
+                <span className="v2-body-sm">
+                  {extensionDiagnostics?.last_command_tool ||
+                    extensionDiagnostics?.last_command_result ||
+                    t("settingsModal.devices.extension.noCommand", {
+                      defaultValue: "No command recorded",
+                    })}
+                </span>
               </V2SettingsRow>
             </V2SettingsBlock>
 

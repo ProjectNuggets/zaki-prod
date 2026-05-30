@@ -32,6 +32,26 @@ jest.mock("@/lib/api", () => ({
     response: { ok: true },
     data: { enabled: true },
   })),
+  fetchAgentExtensionDiagnostics: jest.fn(async () => ({
+    response: { ok: true },
+    data: {
+      paired: false,
+      last_command_tool: "",
+      last_command_result: "",
+    },
+  })),
+  listAgentSecrets: jest.fn(async () => ({
+    response: { ok: true },
+    data: { keys: ["telegram_bot_token"] },
+  })),
+  putAgentSecret: jest.fn(async () => ({
+    response: { ok: true },
+    data: { status: "updated" },
+  })),
+  deleteAgentSecret: jest.fn(async () => ({
+    response: { ok: true },
+    data: { status: "deleted" },
+  })),
   updateBotSettings: jest.fn(async (payload) => ({
     response: { ok: true },
     data: {
@@ -62,6 +82,10 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.nav.label": "Settings sections",
     "settingsModal.nav.account": "Account",
     "settingsModal.nav.connections": "Connections",
+    "settingsModal.nav.channels": "Channels",
+    "settingsModal.nav.secrets": "Secrets",
+    "settingsModal.nav.providers": "Providers",
+    "settingsModal.nav.devices": "Devices",
     "settingsModal.nav.billing": "Billing",
     "settingsModal.nav.products": "Products",
     "settingsModal.nav.usage": "Usage",
@@ -72,6 +96,10 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.sections.profile": "Profile",
     "settingsModal.sections.preferences": "Preferences",
     "settingsModal.sections.connections": "Connected accounts",
+    "settingsModal.sections.channels": "Channels",
+    "settingsModal.sections.secrets": "Secrets & API keys",
+    "settingsModal.sections.providers": "Models & providers",
+    "settingsModal.sections.devices": "Browser extension & devices",
     "settingsModal.sections.billing": "Billing",
     "settingsModal.sections.planBilling": "Plan & Billing",
     "settingsModal.sections.productsAccess": "Products & Access",
@@ -94,6 +122,50 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.connections.checking": "Checking",
     "settingsModal.connections.available": "Available",
     "settingsModal.connections.notConfigured": "Not configured",
+    "settingsModal.channels.agentTelegram.name": "Agent Telegram",
+    "settingsModal.channels.agentTelegram.description":
+      "Connect, disconnect, and rotate the Agent Telegram channel.",
+    "settingsModal.channels.learningTutors.name": "Learning tutor channels",
+    "settingsModal.channels.learningTutors.description":
+      "Private-beta tutor channel schema is available through Learning.",
+    "settingsModal.channels.otherChannels.name": "Slack, Discord, Teams, Email",
+    "settingsModal.channels.otherChannels.description":
+      "Contracts exist downstream; self-service connect stays gated until BFF status/test routes are exposed.",
+    "settingsModal.channels.status.configured": "Configured",
+    "settingsModal.channels.status.notConfigured": "Not configured",
+    "settingsModal.channels.status.privateBeta": "Private beta",
+    "settingsModal.channels.status.operatorManaged": "Operator managed",
+    "settingsModal.channels.openAgentChannels": "Open channels",
+    "settingsModal.secrets.loading": "Loading secrets",
+    "settingsModal.secrets.count": "{{count}} stored",
+    "settingsModal.secrets.addOrRotate": "Add or rotate secret",
+    "settingsModal.secrets.addOrRotateHelper":
+      "Values are write-only after save; Settings shows metadata keys only.",
+    "settingsModal.secrets.keyPlaceholder": "OPENAI_API_KEY",
+    "settingsModal.secrets.valuePlaceholder": "Secret value",
+    "settingsModal.secrets.save": "Save secret",
+    "settingsModal.secrets.metadataOnly": "Metadata only",
+    "settingsModal.secrets.delete": "Delete",
+    "settingsModal.secrets.empty": "No secrets stored yet.",
+    "settingsModal.providers.operatorDefault.name": "Operator model routing",
+    "settingsModal.providers.operatorDefault.description":
+      "ZAKI chooses the production model route unless a controlled Agent model override is set.",
+    "settingsModal.providers.openAiCompatible.name": "OpenAI-compatible provider",
+    "settingsModal.providers.openAiCompatible.description":
+      "BYOK provider profiles require a BFF profile/test contract before self-service launch.",
+    "settingsModal.providers.openapiConnector.name": "OpenAPI connectors",
+    "settingsModal.providers.openapiConnector.description":
+      "User-managed connector credentials stay hidden until vault auth_ref support is ready.",
+    "settingsModal.providers.status.contractNeeded": "Contract needed",
+    "settingsModal.providers.status.operatorManaged": "Operator managed",
+    "settingsModal.devices.loading": "Checking",
+    "settingsModal.devices.paired": "Paired",
+    "settingsModal.devices.notPaired": "Not paired",
+    "settingsModal.devices.extension.name": "Browser extension",
+    "settingsModal.devices.extension.description":
+      "Per-user extension diagnostics are live; pairing and revocation UI remain gated.",
+    "settingsModal.devices.extension.lastCommand": "Last extension command",
+    "settingsModal.devices.extension.noCommand": "No command recorded",
     "settingsModal.plan.currentPlan": "Current plan",
     "settingsModal.plan.status": "Status",
     "settingsModal.plan.statusValues.active": "active",
@@ -201,6 +273,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     .replace("{{hours}}", String(options?.hours ?? ""))
     .replace("{{used}}", String(options?.used ?? ""))
     .replace("{{reset}}", String(options?.reset ?? ""))
+    .replace("{{count}}", String(options?.count ?? ""))
     .replace("{{class}}", String(options?.class ?? ""));
 };
 
@@ -649,6 +722,10 @@ describe("SettingsPage", () => {
     expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeInTheDocument();
     expect(screen.getByTestId("settings-account")).toBeInTheDocument();
     expect(screen.getByTestId("settings-connections")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-channels")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-secrets")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-providers")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-devices")).toBeInTheDocument();
     expect(screen.getByTestId("settings-billing")).toBeInTheDocument();
     expect(screen.getByTestId("settings-products-access")).toBeInTheDocument();
     expect(screen.getByTestId("settings-platform-usage")).toBeInTheDocument();
@@ -660,12 +737,18 @@ describe("SettingsPage", () => {
     expect(within(screen.getByTestId("settings-products-access")).getByText("ZAKI Design")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-agent-model")).getAllByText("Kimi K2.6").length).toBeGreaterThan(0);
     expect(within(screen.getByTestId("settings-agent-model")).getByText("Claude Opus 4.7")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-channels")).getByText("Agent Telegram")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-providers")).getByText("OpenAI-compatible provider")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-memory-data")).getByText("Personal brain")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-memory-data")).getByText("Dream reflection")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-memory-data")).getByText("Query expansion")).toBeInTheDocument();
 
     await waitFor(() => {
       expect(within(screen.getByTestId("settings-connections")).getByText("Available")).toBeInTheDocument();
+      expect(within(screen.getByTestId("settings-channels")).getByText("Configured")).toBeInTheDocument();
+      expect(within(screen.getByTestId("settings-secrets")).getByText("telegram_bot_token")).toBeInTheDocument();
+      expect(within(screen.getByTestId("settings-secrets")).getByText("Metadata only")).toBeInTheDocument();
+      expect(within(screen.getByTestId("settings-devices")).getAllByText("Not paired").length).toBeGreaterThan(0);
     });
   });
 });

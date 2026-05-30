@@ -16,6 +16,7 @@ describe("agent BOT BFF contract", () => {
     expect(AGENT_RUNTIME_FACADE_ROUTES).toEqual([
       { method: "get", path: "/api/agent/diagnostics/context" },
       { method: "get", path: "/api/agent/diagnostics/memory-doctor" },
+      { method: "get", path: "/api/agent/diagnostics/extension" },
       { method: "get", path: "/api/agent/tasks" },
       { method: "get", path: "/api/agent/tasks/:taskId" },
       { method: "post", path: "/api/agent/tasks/:taskId/stop" },
@@ -193,6 +194,7 @@ describe("agent BOT BFF contract", () => {
       { method: "get",    path: "/api/agent/sessions/:sessionKey/history",  upstreamSuffix: "/history", json: false },
       { method: "post",   path: "/api/agent/sessions/:sessionKey/mode",     upstreamSuffix: "/mode",    json: true  },
       { method: "post",   path: "/api/agent/sessions/:sessionKey/approve",  upstreamSuffix: "/approve", json: true  },
+      { method: "post",   path: "/api/agent/sessions/:sessionKey/cancel",   upstreamSuffix: "/cancel",  json: false },
     ]);
   });
 
@@ -269,6 +271,7 @@ describe("agent BOT BFF contract", () => {
         "/api/agent/sessions/:sessionKey/compact",
         "/api/agent/sessions/:sessionKey/mode",
         "/api/agent/sessions/:sessionKey/approve",
+        "/api/agent/sessions/:sessionKey/cancel",
       ]);
     });
 
@@ -301,6 +304,14 @@ describe("agent BOT BFF contract", () => {
       expect(modeCall).toHaveLength(4);
       expect(modeCall[1]).toBe(handlers.requireAgentContext);
       expect(modeCall[2]).toBe(handlers.agentJson1mb);
+
+      const cancelCall = app.post.mock.calls.find(
+        (args) => args[0] === "/api/agent/sessions/:sessionKey/cancel"
+      );
+      expect(cancelCall).toBeDefined();
+      expect(cancelCall).toHaveLength(3);
+      expect(cancelCall[1]).toBe(handlers.requireAgentContext);
+      expect(cancelCall[2]).not.toBe(handlers.agentJson1mb);
     });
 
     it("encodes the userId segment in upstream paths but forwards the raw session key", () => {
@@ -331,6 +342,18 @@ describe("agent BOT BFF contract", () => {
       // userId is URI-encoded so spaces don't injection-break the path.
       expect(upstream).toBe(
         "/api/v1/users/user%20with%20space/sessions/agent:zaki-bot:user:42:thread:main/approve"
+      );
+
+      const cancelCall = app.post.mock.calls.find(
+        (args) => args[0] === "/api/agent/sessions/:sessionKey/cancel"
+      );
+      expect(cancelCall).toBeDefined();
+      const cancelProxyHandler = cancelCall[cancelCall.length - 1];
+      const cancelUpstream = cancelProxyHandler.pathBuilder("user with space", {
+        params: { sessionKey: "agent:zaki-bot:user:42:thread:main" },
+      });
+      expect(cancelUpstream).toBe(
+        "/api/v1/users/user%20with%20space/sessions/agent:zaki-bot:user:42:thread:main/cancel"
       );
     });
   });

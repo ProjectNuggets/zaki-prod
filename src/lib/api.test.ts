@@ -302,6 +302,81 @@ describe("agent runtime API clients", () => {
     );
   });
 
+  it("loads per-user extension diagnostics through the Agent BFF", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeResponse(200, {
+        user_id: "42",
+        paired: true,
+        connected_at_unix: 1770000000,
+        last_command_tool: "extension_navigate",
+        last_command_result: "ok",
+      })
+    );
+
+    const { fetchAgentExtensionDiagnostics } = await import("@/lib/api");
+    const { data } = await fetchAgentExtensionDiagnostics();
+
+    expect(data.paired).toBe(true);
+    expect(data.last_command_tool).toBe("extension_navigate");
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/agent/diagnostics/extension",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("cancels active Agent turns through the session-scoped BFF route", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeResponse(200, {
+        status: "cancellation_signalled",
+        session_key: "agent:zaki-bot:user:42:thread:main",
+        was_active: true,
+      })
+    );
+
+    const { cancelAgentSession } = await import("@/lib/api");
+    const { data } = await cancelAgentSession("agent:zaki-bot:user:42:thread:main");
+
+    expect(data.was_active).toBe(true);
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/agent/sessions/agent%3Azaki-bot%3Auser%3A42%3Athread%3Amain/cancel",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("uses focused Agent cron mutation routes", async () => {
+    mockFetch
+      .mockResolvedValueOnce(makeResponse(201, { status: "created", job: { id: "cron-1" } }))
+      .mockResolvedValueOnce(makeResponse(200, { status: "updated", job: { id: "cron-1" } }))
+      .mockResolvedValueOnce(makeResponse(200, { ok: true, deleted: true }));
+
+    const { createAgentCron, updateAgentCron, deleteAgentCron } = await import("@/lib/api");
+    await createAgentCron({ expression: "0 9 * * *", prompt: "Check status" });
+    await updateAgentCron("cron:1", { paused: true });
+    await deleteAgentCron("cron:1");
+
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      "http://test.local/api/agent/cron",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ expression: "0 9 * * *", prompt: "Check status" }),
+      })
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      "http://test.local/api/agent/cron/cron%3A1",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ paused: true }),
+      })
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      3,
+      "http://test.local/api/agent/cron/cron%3A1",
+      expect.objectContaining({ method: "DELETE" })
+    );
+  });
+
   it("lists Agent tasks with allowlisted query params", async () => {
     mockFetch.mockResolvedValueOnce(makeResponse(200, { tasks: [] }));
 

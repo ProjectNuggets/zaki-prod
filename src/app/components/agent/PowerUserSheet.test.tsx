@@ -7,6 +7,7 @@ import type { NullalisApprovalRequest } from "@/app/components/chat/BotStatusRai
 
 jest.mock("@/lib/api", () => ({
   exportAgentArtifact: jest.fn(),
+  fetchAgentExtensionDiagnostics: jest.fn(),
   fetchAgentTrace: jest.fn(),
   fetchAgentDiagnostics: jest.fn(),
   fetchUsageQuota: jest.fn(),
@@ -49,6 +50,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiControls.powerUser.browser.extensionLane": "User browser extension",
     "zakiControls.powerUser.browser.toolSurface": "Extension command contract",
     "zakiControls.powerUser.browser.ready": "Ready",
+    "zakiControls.powerUser.browser.paired": "Paired",
     "zakiControls.powerUser.browser.pairingRequired": "Pairing required",
     "zakiControls.powerUser.artifacts.share": "Share",
     "zakiControls.powerUser.artifacts.revoke": "Stop sharing",
@@ -79,6 +81,9 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
   if (key === "zakiControls.powerUser.trace.events") {
     return `${String(options?.count ?? "")} events`;
   }
+  if (key === "zakiControls.powerUser.browser.lastCommand") {
+    return `${String(options?.result ?? "")} · ${String(options?.tool ?? "")}`;
+  }
   return key;
 };
 
@@ -91,6 +96,8 @@ jest.mock("react-i18next", () => ({
 const fetchUsageQuotaMock = jest.requireMock("@/lib/api").fetchUsageQuota as jest.Mock;
 const fetchAgentDiagnosticsMock = jest.requireMock("@/lib/api")
   .fetchAgentDiagnostics as jest.Mock;
+const fetchAgentExtensionDiagnosticsMock = jest.requireMock("@/lib/api")
+  .fetchAgentExtensionDiagnostics as jest.Mock;
 const fetchContextDiagnosticsMock = jest.requireMock("@/lib/api")
   .fetchContextDiagnostics as jest.Mock;
 const fetchMemoryDoctorMock = jest.requireMock("@/lib/api")
@@ -112,6 +119,16 @@ beforeEach(() => {
       upstreamReady: { ok: true, latencyMs: 24 },
       upstreamHealth: { ok: true, latencyMs: 20 },
       upstreamControlPlane: { extension_ws_enabled: true },
+    },
+  });
+  fetchAgentExtensionDiagnosticsMock.mockResolvedValue({
+    response: { ok: true },
+    data: {
+      user_id: "42",
+      paired: true,
+      connected_at_unix: 1770000000,
+      last_command_tool: "extension_navigate",
+      last_command_result: "ok",
     },
   });
   fetchContextDiagnosticsMock.mockResolvedValue({
@@ -210,10 +227,13 @@ describe("PowerUserSheet", () => {
       expect(screen.getByTestId("power-user-browser")).toBeInTheDocument();
       expect(screen.getByText("App browser")).toBeInTheDocument();
       expect(screen.getByText("User browser extension")).toBeInTheDocument();
+      expect(screen.getByText("Paired")).toBeInTheDocument();
+      expect(screen.getByText("ok · extension_navigate")).toBeInTheDocument();
       expect(screen.getByText("extension_navigate")).toBeInTheDocument();
     });
     expect(screen.getByText("extension_list_tabs")).toBeInTheDocument();
     expect(fetchAgentDiagnosticsMock).toHaveBeenCalled();
+    expect(fetchAgentExtensionDiagnosticsMock).toHaveBeenCalled();
   });
 
   it("lists session artifacts and can request a share", async () => {
