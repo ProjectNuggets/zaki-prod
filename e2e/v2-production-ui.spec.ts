@@ -131,4 +131,29 @@ test.describe("V2 production-final app surfaces", () => {
       await expect(page.getByTestId(route.gate)).toBeVisible({ timeout: 20_000 });
     });
   }
+
+  for (const route of [
+    { path: "/products/agent", target: /\/agent$/, signal: ".zaki-agent-v2" },
+    { path: "/ar/products/agent", target: /\/agent$/, signal: ".zaki-agent-v2" },
+    { path: "/zaki-bot", target: /\/agent$/, signal: ".zaki-agent-v2" },
+    { path: "/products/spaces", target: /\/spaces$/, text: "Release QA workspace" },
+    { path: "/products/learn", target: /\/learn$/, testId: "product-gate-learning" },
+    { path: "/products/hire", target: /\/hire$/, testId: "product-gate-hire" },
+    { path: "/products/design", target: /\/design$/, testId: "product-gate-design" },
+  ] as const) {
+    test(`signed-in product marketing path ${route.path} resolves to app surface`, async ({ page }) => {
+      await page.setViewportSize(RELEASE_VIEWPORTS.desktop);
+      await page.goto(route.path, { waitUntil: "domcontentloaded" });
+      await expect(page).toHaveURL(route.target, { timeout: 20_000 });
+      if ("signal" in route) {
+        await expect(page.locator(route.signal).first()).toBeVisible({ timeout: 20_000 });
+      }
+      if ("text" in route) {
+        await expect(page.getByText(route.text)).toBeVisible({ timeout: 20_000 });
+      }
+      if ("testId" in route) {
+        await expect(page.getByTestId(route.testId)).toBeVisible({ timeout: 20_000 });
+      }
+    });
+  }
 });

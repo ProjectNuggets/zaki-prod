@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import { ArrowRight, FlaskConical, LockKeyhole, Palette } from "lucide-react";
 import { useProductRegistry } from "@/queries/useProducts";
 import { getDesignHealth } from "@/lib/designApi";
@@ -135,11 +136,11 @@ export function ProductAccessGate({
                 </dd>
               </div>
             </dl>
-            <a className="v2-btn v2-btn--accent v2-btn--sm" href="/settings#settings-products">
+            <Link className="v2-btn v2-btn--accent v2-btn--sm" to="/settings#settings-products">
               <LockKeyhole className="size-3.5" aria-hidden />
               {t(`productGate.${mode}.action`, { defaultValue: copy.action })}
               <ArrowRight className="size-3.5" aria-hidden />
-            </a>
+            </Link>
           </V2PanelBody>
         </V2Panel>
       </div>

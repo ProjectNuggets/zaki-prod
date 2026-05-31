@@ -17,6 +17,9 @@ Scope: Dashboard, Agent, Chat/Spaces route visibility, Brain, Settings, and gate
 | `/learn` | Private beta | Product access gate | `product-gate-learning` |
 | `/hire` | Private beta | Product access gate | `product-gate-hire` |
 | `/design` | Waitlist | Product access gate unless registry and service health allow | `product-gate-design` |
+| `/products/agent`, `/ar/products/agent`, `/zaki-bot` | Signed-in app redirect | Agent workbench | `/agent`, `.zaki-agent-v2` |
+| `/products/spaces` | Signed-in app redirect | Chat/Spaces | `/spaces`, workspace shell |
+| `/products/learn`, `/products/hire`, `/products/design` | Signed-in app redirect | Beta/waitlist gate | `/learn`, `/hire`, `/design` gates |
 
 ## Exposure Matrix
 
@@ -62,7 +65,7 @@ npm test -- --runTestsByPath src/app/components/chat/views/ZakiDashboard.test.ts
 # PASS: 3 suites, 17 tests
 
 npm run test:e2e -- e2e/release-visibility.spec.ts e2e/v2-production-ui.spec.ts --project=chromium-desktop
-# PASS: 12 tests
+# PASS: 19 tests
 
 npm run test:e2e -- e2e/release-screens.spec.ts --project=chromium-desktop
 # PASS: 16 tests
@@ -77,6 +80,7 @@ npm run build
 - Design shell is not exposed unless product registry state is `enabled` and design health reports `ok: true` and `configured: true`.
 - User-managed channel credential values are write-only; Settings shows key metadata and vault references only.
 - Provider profile secrets and extension device tokens are not rendered.
+- Signed-in product marketing routes redirect to app surfaces so in-app product clicks cannot fall through to the website.
 
 ## Manual Audit Start
 

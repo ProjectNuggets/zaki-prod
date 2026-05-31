@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter, Navigate, useParams } from 'react-router-dom';
 import App from './app/App';
 import { ChatArea } from './app/components/ChatArea';
 import { SharedConversation } from './app/components/SharedConversation';
@@ -22,10 +22,25 @@ import {
   WebsiteStoryPageAr,
 } from './app/components/MarketingContentPages';
 import { useAuthStore } from './stores';
+import { getCanonicalAppProductRoute } from './lib/productRoutes';
 
 function HomeRoute() {
   const token = useAuthStore((state) => state.token);
   return token ? <ChatArea /> : <WebsiteHomePage />;
+}
+
+function ProductRoute({ locale = "en" }: { locale?: "en" | "ar" }) {
+  const token = useAuthStore((state) => state.token);
+  const { productId } = useParams();
+  const appRoute = getCanonicalAppProductRoute(productId);
+  if (token && appRoute) return <Navigate to={appRoute} replace />;
+  return <WebsiteProductPage locale={locale} />;
+}
+
+function LegacyZakiBotRoute({ locale = "en" }: { locale?: "en" | "ar" }) {
+  const token = useAuthStore((state) => state.token);
+  if (token) return <Navigate to="/agent" replace />;
+  return <Navigate to={locale === "ar" ? "/ar/products/agent" : "/products/agent"} replace />;
 }
 
 /**
@@ -85,11 +100,11 @@ export const router = createBrowserRouter([
       },
       {
         path: 'products/:productId',
-        element: <WebsiteProductPage />,
+        element: <ProductRoute />,
       },
       {
         path: 'zaki-bot',
-        element: <Navigate to="/products/agent" replace />,
+        element: <LegacyZakiBotRoute />,
       },
       {
         path: 'story',
@@ -145,11 +160,11 @@ export const router = createBrowserRouter([
       },
       {
         path: 'ar/products/:productId',
-        element: <WebsiteProductPage locale="ar" />,
+        element: <ProductRoute locale="ar" />,
       },
       {
         path: 'ar/zaki-bot',
-        element: <Navigate to="/ar/products/agent" replace />,
+        element: <LegacyZakiBotRoute locale="ar" />,
       },
       {
         path: 'ar/story',

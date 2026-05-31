@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { ArrowUpRight, Sparkles, X } from "lucide-react";
+import { ArrowRight, Sparkles, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 export const ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY = "zaki_bot_experimental_notice_seen";
@@ -70,15 +71,13 @@ export function ZakiExperimentalNotice({ active, className }: Props) {
             >
               {t("zakiExperimentalNotice.actions.continue")}
             </button>
-            <a
+            <Link
               className="inline-flex h-10 items-center gap-2 rounded-full px-2 text-sm font-medium text-zaki-muted transition-colors hover:text-zaki-primary dark:text-zaki-dark-muted dark:hover:text-zaki-dark-primary"
-              href="https://www.chatzaki.com/zaki-bot/"
-              target="_blank"
-              rel="noreferrer"
+              to="/agent"
             >
               <span>{t("zakiExperimentalNotice.actions.learnMore")}</span>
-              <ArrowUpRight className="size-4" />
-            </a>
+              <ArrowRight className="size-4" />
+            </Link>
           </div>
         </div>
         <button

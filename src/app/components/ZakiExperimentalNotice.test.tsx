@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom";
 import { describe, expect, it, beforeEach, jest } from "@jest/globals";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import {
   ZakiExperimentalNotice,
   ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY,
@@ -33,8 +34,16 @@ describe("ZakiExperimentalNotice", () => {
     window.sessionStorage.clear();
   });
 
+  function renderNotice(active = true) {
+    return render(
+      <MemoryRouter>
+        <ZakiExperimentalNotice active={active} />
+      </MemoryRouter>
+    );
+  }
+
   it("renders when active and not yet dismissed in the session", () => {
-    render(<ZakiExperimentalNotice active />);
+    renderNotice();
 
     expect(screen.getByText("ZAKI is powerful by design.")).toBeInTheDocument();
     expect(
@@ -44,24 +53,28 @@ describe("ZakiExperimentalNotice", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Learn more" })).toHaveAttribute(
       "href",
-      "https://www.chatzaki.com/zaki-bot/"
+      "/agent"
     );
   });
 
   it("stays hidden after dismissal for the rest of the session", () => {
-    const { rerender } = render(<ZakiExperimentalNotice active />);
+    const { rerender } = renderNotice();
 
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(window.sessionStorage.getItem(ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY)).toBe("1");
     expect(screen.queryByText("ZAKI is powerful by design.")).not.toBeInTheDocument();
 
-    rerender(<ZakiExperimentalNotice active />);
+    rerender(
+      <MemoryRouter>
+        <ZakiExperimentalNotice active />
+      </MemoryRouter>
+    );
     expect(screen.queryByText("ZAKI is powerful by design.")).not.toBeInTheDocument();
   });
 
   it("does not render when inactive", () => {
-    render(<ZakiExperimentalNotice active={false} />);
+    renderNotice(false);
 
     expect(screen.queryByText("ZAKI is powerful by design.")).not.toBeInTheDocument();
   });

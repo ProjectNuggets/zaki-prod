@@ -40,6 +40,7 @@ import type {
 } from "@/lib/api";
 import { useAuthStore } from "@/stores";
 import { cn } from "@/lib/utils";
+import { getCanonicalAppProductRoute } from "@/lib/productRoutes";
 
 interface ZakiDashboardProps {
   onSendExample: (example: string) => void;
@@ -197,12 +198,8 @@ function getProductName(t: TranslateFn, product: ProductRegistryItem) {
 }
 
 function getProductRoute(product: ProductRegistryItem) {
-  if (product.productId === "agent") return product.route || "/agent";
-  if (product.productId === "spaces") return "/spaces";
-  if (product.productId === "learning") return "/learn";
-  if (product.productId === "hire") return "/hire";
-  if (product.productId === "design") return "/design";
-  if (product.productId === "brain") return "/brain";
+  const canonicalRoute = getCanonicalAppProductRoute(product.productId);
+  if (canonicalRoute) return canonicalRoute;
   return product.route || null;
 }
 
