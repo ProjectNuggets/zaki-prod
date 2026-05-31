@@ -36,6 +36,7 @@ import {
   fetchAgentMe,
   fetchAgentSession,
   fetchAgentSessionContext,
+  fetchContextDiagnostics,
   fetchBotRuntimeStatus,
   fetchMemoryActivity,
   listAgentSessions,
@@ -100,6 +101,15 @@ jest.mock("@/lib/api", () => ({
       headers: new Headers(),
     },
     data: { session_key: "agent:zaki-bot:user:1:thread:main" },
+  })),
+  fetchContextDiagnostics: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ report: null }),
+      headers: new Headers(),
+    },
+    data: { report: null },
   })),
   fetchAgentSession: jest.fn(async () => ({
     response: {
@@ -558,6 +568,25 @@ describe("ChatArea Component", () => {
     expect(resolveContextGaugePercent(gauge)).toBe(21);
   });
 
+  it("normalizes diagnostics report context payloads for the context meter", () => {
+    const gauge = buildNullalisContextGauge({
+      active: true,
+      report: {
+        history_messages: 12,
+        used_tokens: 25_000,
+        context_window_tokens: 200_000,
+        context_window_used_pct: 12.5,
+      },
+    });
+
+    expect(gauge).toEqual({
+      tokenCount: 25_000,
+      contextMax: 200_000,
+      messageCount: 12,
+      context_pressure_percent: 12.5,
+    });
+  });
+
   it("renders Agent context pressure from the live session context endpoint", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
@@ -590,6 +619,44 @@ describe("ChatArea Component", () => {
     expect(
       zakiSessionUiState.sessions["agent:zaki-bot:user:1:thread:main"]?.contextPressurePercent
     ).toBe(7.3);
+  });
+
+  it("falls back to diagnostics context when session context is unavailable", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    (fetchAgentMe as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (fetchAgentSessionContext as jest.Mock).mockResolvedValueOnce({
+      response: { ok: false, status: 404, headers: new Headers() },
+      data: { error: "session_not_found" },
+    });
+    (fetchContextDiagnostics as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, headers: new Headers() },
+      data: {
+        report: {
+          history_messages: 12,
+          used_tokens: 25_000,
+          context_window_tokens: 200_000,
+          context_window_used_pct: 12.5,
+        },
+      },
+    });
+
+    await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(fetchContextDiagnostics).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("zaki-context-meter")).toHaveTextContent("13%");
+    });
+    expect(
+      zakiSessionUiState.sessions["agent:zaki-bot:user:1:thread:main"]?.contextPressurePercent
+    ).toBe(12.5);
   });
 
   it("renders ready state for a new chat", async () => {

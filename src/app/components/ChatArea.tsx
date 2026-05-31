@@ -20,6 +20,7 @@ import {
   fetchAgentMe,
   fetchAgentSession,
   fetchAgentSessionContext,
+  fetchContextDiagnostics,
   compactAgentSession,
   cancelAgentSession,
   deleteAgentSession,
@@ -258,21 +259,35 @@ function clampPercent(value: number) {
   return Math.min(100, Math.max(0, value));
 }
 
-function resolveRuntimeContextPressurePercent(data: Record<string, unknown> | null | undefined) {
+function contextMetricPayload(data: Record<string, unknown> | null | undefined) {
   if (!data) return null;
+  const report =
+    data.report && typeof data.report === "object" && !Array.isArray(data.report)
+      ? (data.report as Record<string, unknown>)
+      : null;
+  return report ? { ...report, ...data } : data;
+}
+
+function resolveRuntimeContextPressurePercent(data: Record<string, unknown> | null | undefined) {
+  const payload = contextMetricPayload(data);
+  if (!payload) return null;
   const explicitPressure =
-    numericValue(data.context_pressure_percent) ??
-    numericValue(data.context_window_used_pct);
+    numericValue(payload.context_pressure_percent) ??
+    numericValue(payload.context_window_used_pct);
   if (explicitPressure != null) return clampPercent(explicitPressure);
   const used =
-    numericValue(data.token_count) ??
-    numericValue(data.tokens_used) ??
-    numericValue(data.context_window_used) ??
-    numericValue(data.context_tokens);
+    numericValue(payload.token_count) ??
+    numericValue(payload.tokens_used) ??
+    numericValue(payload.context_window_used) ??
+    numericValue(payload.context_tokens) ??
+    numericValue(payload.used_tokens) ??
+    numericValue(payload.token_estimate) ??
+    numericValue(payload.total_tokens);
   const max =
-    numericValue(data.context_window_max) ??
-    numericValue(data.token_limit) ??
-    numericValue(data.context_max);
+    numericValue(payload.context_window_max) ??
+    numericValue(payload.token_limit) ??
+    numericValue(payload.context_max) ??
+    numericValue(payload.context_window_tokens);
   if (used == null || max == null || max <= 0) return null;
   return clampPercent((used / max) * 100);
 }
@@ -280,22 +295,28 @@ function resolveRuntimeContextPressurePercent(data: Record<string, unknown> | nu
 export function buildNullalisContextGauge(
   data: Record<string, unknown> | null | undefined
 ): ContextGaugeData | null {
-  if (!data) return null;
+  const payload = contextMetricPayload(data);
+  if (!payload) return null;
   const contextMax =
-    numericValue(data.context_window_max) ??
-    numericValue(data.token_limit) ??
-    numericValue(data.context_max);
-  const pressurePct = resolveRuntimeContextPressurePercent(data);
+    numericValue(payload.context_window_max) ??
+    numericValue(payload.token_limit) ??
+    numericValue(payload.context_max) ??
+    numericValue(payload.context_window_tokens);
+  const pressurePct = resolveRuntimeContextPressurePercent(payload);
   if ((contextMax == null || contextMax <= 0) && pressurePct == null) return null;
   const tokenCount =
-    numericValue(data.token_count) ??
-    numericValue(data.tokens_used) ??
-    numericValue(data.context_window_used) ??
-    numericValue(data.context_tokens) ??
+    numericValue(payload.token_count) ??
+    numericValue(payload.tokens_used) ??
+    numericValue(payload.context_window_used) ??
+    numericValue(payload.context_tokens) ??
+    numericValue(payload.used_tokens) ??
+    numericValue(payload.token_estimate) ??
+    numericValue(payload.total_tokens) ??
     null;
   const messageCount =
-    numericValue(data.message_count) ??
-    numericValue(data.history_len) ??
+    numericValue(payload.message_count) ??
+    numericValue(payload.history_len) ??
+    numericValue(payload.history_messages) ??
     null;
   return {
     tokenCount: tokenCount ?? undefined,
@@ -2682,9 +2703,6 @@ export function ChatArea() {
   const isActiveZakiSessionLive = Boolean(
     isStreaming || activeSessionUi?.live || activeSessionRecord?.live
   );
-  const isActiveSessionKnownCold = Boolean(
-    !isActiveZakiSessionLive && (activeSessionUi?.live === false || activeSessionRecord?.live === false)
-  );
   const powerUserPendingApprovals = useMemo(() => {
     const pending = activeSessionUi?.pendingApprovals ?? [];
     if (!nullalisApprovalRequest?.id) return pending;
@@ -3776,33 +3794,43 @@ export function ChatArea() {
       if (!zakiBotProvisionReady) return;
       const sessionKey = activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
       if (!sessionKey) return; // agent user ID not yet resolved
-      if (
-        isActiveSessionKnownCold &&
-        contextUnavailableSessionKeysRef.current.has(sessionKey)
-      ) {
-        return;
-      }
-      const { response, data } = await fetchAgentSessionContext(sessionKey);
-      // Don't clobber a good in-store pressure value with `null` on a
-      // 4xx/5xx or on a 200 that omitted the field. Only write when the
-      // response succeeded AND we actually have a numeric pressure.
-      if (!response.ok) {
-        const errorCode = String(
-          (data as { error?: string | null; code?: string | null } | null)?.error ||
-            (data as { error?: string | null; code?: string | null } | null)?.code ||
-            ""
-        );
-        if (isActiveSessionKnownCold && errorCode === "no_session_manager") {
-          contextUnavailableSessionKeysRef.current.add(sessionKey);
+      let payload: Record<string, unknown> | null = null;
+      if (!contextUnavailableSessionKeysRef.current.has(sessionKey)) {
+        const { response, data } = await fetchAgentSessionContext(sessionKey);
+        // Don't clobber a good in-store pressure value with `null` on a
+        // 4xx/5xx or on a 200 that omitted the field. Only write when the
+        // response succeeded AND we actually have a numeric pressure.
+        if (response.ok) {
+          contextUnavailableSessionKeysRef.current.delete(sessionKey);
+          payload = data as Record<string, unknown>;
+        } else {
+          const errorCode = String(
+            (data as { error?: string | null; code?: string | null } | null)?.error ||
+              (data as { error?: string | null; code?: string | null } | null)?.code ||
+              ""
+          );
+          if (
+            response.status === 404 ||
+            errorCode === "not_found" ||
+            errorCode === "session_not_found" ||
+            errorCode === "no_session_manager"
+          ) {
+            contextUnavailableSessionKeysRef.current.add(sessionKey);
+          }
         }
-        return;
       }
-      contextUnavailableSessionKeysRef.current.delete(sessionKey);
-      const pressurePct = resolveRuntimeContextPressurePercent(data as Record<string, unknown>);
+      if (!payload && contextUnavailableSessionKeysRef.current.has(sessionKey)) {
+        const { response, data } = await fetchContextDiagnostics();
+        if (response.ok) {
+          payload = data as Record<string, unknown>;
+        }
+      }
+      if (!payload) return;
+      const pressurePct = resolveRuntimeContextPressurePercent(payload);
       if (typeof pressurePct === "number") {
         setSessionContextPressure(sessionKey, pressurePct);
       }
-      const gauge = buildNullalisContextGauge(data as Record<string, unknown>);
+      const gauge = buildNullalisContextGauge(payload);
       if (gauge) {
         setNullalisContextGauge(gauge);
       }
@@ -3813,7 +3841,6 @@ export function ChatArea() {
     activeThreadId,
     activeZakiSessionKey,
     agentUserId,
-    isActiveSessionKnownCold,
     setSessionContextPressure,
     zakiBotProvisionReady,
   ]);
