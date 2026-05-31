@@ -519,6 +519,7 @@ export function AgentInspectorRail({
       </div>
       <V2Tabs
         fullWidth
+        columns={3}
         className="zaki-agent-inspector__tabs"
         ariaLabel="Agent panels"
         value={tab}

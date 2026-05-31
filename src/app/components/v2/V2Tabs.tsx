@@ -15,6 +15,7 @@ export type V2TabsProps<T extends string> = {
   ariaLabel: string;
   className?: string;
   fullWidth?: boolean;
+  columns?: number;
 };
 
 export function V2Tabs<T extends string>({
@@ -24,9 +25,10 @@ export function V2Tabs<T extends string>({
   ariaLabel,
   className,
   fullWidth = false,
+  columns,
 }: V2TabsProps<T>) {
   const style = fullWidth
-    ? ({ "--v2-tabs-count": options.length } as CSSProperties)
+    ? ({ "--v2-tabs-count": columns ?? options.length } as CSSProperties)
     : undefined;
   return (
     <div

@@ -26,7 +26,7 @@ describe("StreamingMessage", () => {
     expect(screen.getByText("Final reply")).toBeInTheDocument();
     expect(screen.getByText("Answer is ready")).toBeInTheDocument();
     expect(screen.getByText("ZAKI")).toBeInTheDocument();
-    expect(screen.getByText("v2 · live")).toBeInTheDocument();
+    expect(screen.queryByText("v2 · live")).not.toBeInTheDocument();
   });
 
   it("keeps the final-reply badge visible while buffered content is revealed", () => {

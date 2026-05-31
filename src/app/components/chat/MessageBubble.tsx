@@ -101,7 +101,6 @@ export function MessageBubble({
   const { t, i18n } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const messageTime = formatMessageTime(message.createdAt);
-  const agentBadge = isStreaming ? "v2 · live" : isAssistantError ? "error" : "v2 · final";
   const agentRune = isStreaming ? "▸" : isAssistantError ? "!" : "✓";
 
   // 2026-05-08 — Hoist agent-generated images out of the collapsed
@@ -171,10 +170,12 @@ export function MessageBubble({
         {botMode && !isUser ? (
           <div className="zaki-message-meta zaki-message-meta--assistant">
             <strong>ZAKI</strong>
-            <span className="sep">.</span>
-            <span className={cn("badge", isStreaming && "is-live", isAssistantError && "is-error")}>
-              {agentBadge}
-            </span>
+            {isAssistantError ? (
+              <>
+                <span className="sep">.</span>
+                <span className="badge is-error">error</span>
+              </>
+            ) : null}
             {messageTime ? (
               <>
                 <span className="sep">.</span>

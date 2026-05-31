@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
-import { Boxes, ExternalLink, FileText } from "lucide-react";
+import { Boxes, ExternalLink, FileText, Globe2 } from "lucide-react";
 import { MessageBubble, type Message } from "../index";
 import { StreamingMessage } from "../StreamingMessage";
 import { ThinkingIndicator } from "../ThinkingIndicator";
@@ -68,6 +68,31 @@ type AgentReplyEvidenceProps = {
   onOpenArtifacts?: () => void;
   onOpenSources?: () => void;
 };
+
+function extractUrl(value: string | null | undefined): string | null {
+  const match = String(value || "").match(/https?:\/\/[^\s)\]}>,"]+/i);
+  return match?.[0] ?? null;
+}
+
+function websiteLabel(value: string | null | undefined): string | null {
+  const url = extractUrl(value);
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.replace(/^www\./i, "");
+  } catch {
+    return null;
+  }
+}
+
+function isWebSource(item: { label: string; meta: string | null; summary: string }) {
+  return Boolean(
+    websiteLabel(item.label) ||
+      websiteLabel(item.summary) ||
+      /\b(web_search|web_fetch|browser|search result|website|url)\b/i.test(
+        [item.label, item.meta, item.summary].filter(Boolean).join(" ")
+      )
+  );
+}
 
 function AgentReplyEvidence({
   entries,
@@ -149,19 +174,26 @@ function AgentReplyEvidence({
       {visibleTouched.length > 0 ? (
         <div className="zaki-agent-reply-touched" data-testid="agent-reply-touched">
           <span className="zaki-agent-reply-touched__label">
-            {visibleTouched.some((item) => item.kind === "source") ? "evidence" : "files"}
+            {visibleTouched.some((item) => item.kind === "source") ? "sources" : "files"}
           </span>
           {visibleTouched.map((item) => {
             const onClick = item.kind === "artifact" ? onOpenArtifacts : onOpenSources;
+            const sourceIsWeb = item.kind === "source" && isWebSource(item);
+            const itemLabel =
+              item.kind === "source"
+                ? websiteLabel(item.label) || websiteLabel(item.summary) || item.label
+                : item.label;
             const content = (
               <>
                 {item.kind === "artifact" ? (
                   <Boxes className="size-3" aria-hidden />
+                ) : sourceIsWeb ? (
+                  <Globe2 className="size-3" aria-hidden />
                 ) : (
                   <FileText className="size-3" aria-hidden />
                 )}
-                <span>{item.label}</span>
-                <span className="meta">{item.meta}</span>
+                <span>{itemLabel}</span>
+                <span className="meta">{sourceIsWeb ? "website" : item.meta}</span>
               </>
             );
             return onClick ? (
@@ -170,7 +202,11 @@ function AgentReplyEvidence({
                 type="button"
                 className={cn(
                   "zaki-agent-reply-touched__item",
-                  item.kind === "artifact" ? "is-artifact" : "is-source"
+                  item.kind === "artifact"
+                    ? "is-artifact"
+                    : sourceIsWeb
+                      ? "is-source is-web"
+                      : "is-source"
                 )}
                 onClick={onClick}
               >
@@ -181,7 +217,11 @@ function AgentReplyEvidence({
                 key={item.id}
                 className={cn(
                   "zaki-agent-reply-touched__item",
-                  item.kind === "artifact" ? "is-artifact" : "is-source"
+                  item.kind === "artifact"
+                    ? "is-artifact"
+                    : sourceIsWeb
+                      ? "is-source is-web"
+                      : "is-source"
                 )}
               >
                 {content}

@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, jest } from "@jest/globals";
 import { AgentSessionRail } from "./AgentSessionRail";
 import type { AgentSession } from "@/lib/api";
@@ -66,7 +66,7 @@ describe("AgentSessionRail", () => {
     expect(screen.getByText("Thread 89")).toBeInTheDocument();
   });
 
-  it("filters by search and operational status", () => {
+  it("keeps the session rail focused on search without operational filter tabs", () => {
     const sessions = [
       makeSession(1, { title: "Planning thread" }),
       makeSession(2, { title: "Live browser run", live: true }),
@@ -82,11 +82,13 @@ describe("AgentSessionRail", () => {
     expect(screen.queryByText("Planning thread")).not.toBeInTheDocument();
     expect(container.querySelectorAll(".zaki-thread-item")).toHaveLength(1);
 
-    fireEvent.click(screen.getByRole("button", { name: /Reset/i }));
-    const filters = screen.getByLabelText("Thread filters");
-    fireEvent.click(within(filters).getByRole("button", { name: /^Live/i }));
+    expect(screen.queryByLabelText("Thread filters")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Live/i })).not.toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: /Reset/i }));
+
+    expect(screen.getByText("Planning thread")).toBeInTheDocument();
     expect(screen.getByText("Live browser run")).toBeInTheDocument();
-    expect(screen.queryByText("Approval blocked")).not.toBeInTheDocument();
+    expect(screen.getByText("Approval blocked")).toBeInTheDocument();
   });
 });

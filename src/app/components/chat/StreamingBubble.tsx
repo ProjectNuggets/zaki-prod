@@ -98,8 +98,6 @@ export function StreamingBubble({
         {botMode ? (
           <div className="zaki-message-meta zaki-message-meta--assistant">
             <strong>ZAKI</strong>
-            <span className="sep">.</span>
-            <span className="badge is-live">{isStreaming ? "v2 · live" : "v2 · final"}</span>
           </div>
         ) : null}
         {badgeLabel ? (

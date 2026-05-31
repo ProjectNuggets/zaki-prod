@@ -199,6 +199,17 @@ describe("ChatView", () => {
               resultSummary: "Loaded the UI handoff.",
               resultState: "done",
             },
+            {
+              id: "source-2",
+              kind: "tool",
+              intent: "context",
+              text: "Searched the web.",
+              timestamp: 3,
+              tool: "web_search",
+              outputPreview: "Relevant source: https://example.com/research",
+              resultSummary: "Relevant source: https://example.com/research",
+              resultState: "done",
+            },
           ],
         }}
         isHistoryLoading={false}
@@ -215,6 +226,15 @@ describe("ChatView", () => {
     ).toBeInTheDocument();
     expect(
       within(screen.getByTestId("agent-reply-touched")).getByText("docs/ui-handoff.md")
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("agent-reply-touched")).getByText("sources")
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("agent-reply-touched")).getByText("example.com")
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("agent-reply-touched")).getByText("website")
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /open in panel/i }));

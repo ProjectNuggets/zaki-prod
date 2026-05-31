@@ -18,21 +18,8 @@ type AgentSessionRailProps = {
   onDeleteSession: (sessionKey: string, label: string) => void;
 };
 
-type SessionFilter = "all" | "live" | "approvals";
-
 const INITIAL_SESSION_LIMIT = 72;
 const SESSION_LIMIT_STEP = 72;
-
-function sessionMatchesFilter(session: AgentSession, filter: SessionFilter) {
-  if (filter === "live") return session.live === true;
-  if (filter === "approvals") {
-    return (
-      typeof session.pending_approval_count === "number" &&
-      session.pending_approval_count > 0
-    );
-  }
-  return true;
-}
 
 export function AgentSessionRail({
   sessions,
@@ -49,28 +36,13 @@ export function AgentSessionRail({
   const { getLabel: getOverlayLabel } = useSessionTitleOverlay();
   const searchId = useId();
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<SessionFilter>("all");
   const [visibleLimit, setVisibleLimit] = useState(INITIAL_SESSION_LIMIT);
   const normalizedActiveSessionKey = activeSessionKey
     ? normalizeZakiSessionKey(activeSessionKey)
     : null;
   const trimmedQuery = query.trim().toLowerCase();
-  const liveCount = useMemo(
-    () => sessions.filter((session) => session.live === true).length,
-    [sessions]
-  );
-  const approvalCount = useMemo(
-    () =>
-      sessions.filter(
-        (session) =>
-          typeof session.pending_approval_count === "number" &&
-          session.pending_approval_count > 0
-      ).length,
-    [sessions]
-  );
   const filteredSessions = useMemo(() => {
     return sessions.filter((session) => {
-      if (!sessionMatchesFilter(session, filter)) return false;
       if (!trimmedQuery) return true;
       const sessionKey = normalizeZakiSessionKey(session.session_key);
       const label =
@@ -92,7 +64,7 @@ export function AgentSessionRail({
         .toLowerCase();
       return haystack.includes(trimmedQuery);
     });
-  }, [filter, getOverlayLabel, sessions, trimmedQuery]);
+  }, [getOverlayLabel, sessions, trimmedQuery]);
   const visibleSessions = useMemo(() => {
     const next = filteredSessions.slice(0, visibleLimit);
     if (!normalizedActiveSessionKey) return next;
@@ -110,11 +82,11 @@ export function AgentSessionRail({
     return next;
   }, [filteredSessions, normalizedActiveSessionKey, visibleLimit]);
   const hasOverflow = filteredSessions.length > visibleLimit;
-  const hasFilter = filter !== "all" || trimmedQuery.length > 0;
+  const hasFilter = trimmedQuery.length > 0;
 
   useEffect(() => {
     setVisibleLimit(INITIAL_SESSION_LIMIT);
-  }, [filter, trimmedQuery, sessions.length]);
+  }, [trimmedQuery, sessions.length]);
 
   return (
     <aside
@@ -152,30 +124,6 @@ export function AgentSessionRail({
               <X aria-hidden="true" />
             </button>
           ) : null}
-        </div>
-        <div
-          className="zaki-agent-session-rail__filters"
-          aria-label={t("agent.sessionRail.filterLabel", { defaultValue: "Thread filters" })}
-        >
-          {([
-            ["all", sessions.length],
-            ["live", liveCount],
-            ["approvals", approvalCount],
-          ] as Array<[SessionFilter, number]>).map(([option, count]) => (
-            <button
-              key={option}
-              type="button"
-              className={filter === option ? "is-active" : undefined}
-              onClick={() => setFilter(option)}
-              aria-pressed={filter === option}
-            >
-              {t(`agent.sessionRail.filters.${option}`, {
-                defaultValue:
-                  option === "all" ? "All" : option === "live" ? "Live" : "Approvals",
-              })}
-              <span>{count}</span>
-            </button>
-          ))}
         </div>
       </div>
 
@@ -223,7 +171,6 @@ export function AgentSessionRail({
                 type="button"
                 onClick={() => {
                   setQuery("");
-                  setFilter("all");
                 }}
               >
                 {t("agent.sessionRail.reset", { defaultValue: "Reset" })}

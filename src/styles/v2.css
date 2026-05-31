@@ -3234,51 +3234,6 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   color: var(--v2-accent);
 }
 
-.zaki-agent-session-rail__filters {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border: 1px solid var(--v2-hairline);
-  background: var(--v2-bg-sunken);
-}
-
-.zaki-agent-session-rail__filters button {
-  display: inline-flex;
-  min-width: 0;
-  height: 26px;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  border: 0;
-  border-right: 1px solid var(--v2-hairline);
-  background: transparent;
-  color: var(--v2-ink-3);
-  font-family: var(--v2-font-mono);
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-.zaki-agent-session-rail__filters button:last-child {
-  border-right: 0;
-}
-
-.zaki-agent-session-rail__filters button:hover,
-.zaki-agent-session-rail__filters button.is-active {
-  background: var(--v2-bg-raised);
-  color: var(--v2-ink-1);
-}
-
-.zaki-agent-session-rail__filters button.is-active {
-  box-shadow: inset 0 -1px 0 var(--v2-accent);
-}
-
-.zaki-agent-session-rail__filters button span {
-  color: var(--v2-ink-4);
-  font-size: 9px;
-  letter-spacing: 0;
-}
-
 .zaki-agent-session-rail__list {
   flex: 1 1 auto;
   min-height: 0;
@@ -3752,19 +3707,11 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-message-row--assistant::before {
-  content: "";
-  position: absolute;
-  top: 32px;
-  bottom: -16px;
-  left: 14px;
-  width: 1px;
-  background: var(--v2-hairline-faint);
-  opacity: 0.85;
+  content: none;
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-message-row--assistant.is-streaming::before {
-  background: var(--v2-accent-hairline);
-  opacity: 1;
+  content: none;
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-message-avatar {
@@ -3907,8 +3854,8 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-assistant-bubble {
-  border-left: 1px solid var(--v2-hairline);
-  padding-left: 12px;
+  border-left: 0;
+  padding-left: 0;
   color: var(--v2-ink-1);
   font-family: var(--v2-font-prose);
   font-size: 15px;
@@ -3916,7 +3863,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-message-row--assistant.is-streaming .zaki-assistant-bubble {
-  border-left-color: var(--v2-accent-hairline);
+  border-left-color: transparent;
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-message-content {
@@ -4091,6 +4038,10 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-touched__item.is-artifact {
   border-color: var(--v2-accent-hairline);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-touched__item.is-web {
+  border-color: var(--v2-hairline-strong);
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-streaming-caret {
@@ -5995,17 +5946,18 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 .zaki-agent-inspector__tabs button {
   display: flex;
   min-width: 0;
-  min-height: 32px;
+  min-height: 34px;
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  padding: 0 3px;
+  gap: 4px;
+  padding: 0 6px;
   border-right: 1px solid var(--v2-hairline-faint);
   font-size: 9px;
-  letter-spacing: 0.08em;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  letter-spacing: 0.05em;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
 }
 
 .zaki-agent-inspector__tabs {
@@ -6022,8 +5974,12 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   background: var(--v2-bg);
 }
 
-.zaki-agent-inspector__tabs button:last-child {
+.zaki-agent-inspector__tabs button:nth-child(3n) {
   border-right: 0;
+}
+
+.zaki-agent-inspector__tabs button:nth-child(-n + 3) {
+  border-bottom: 1px solid var(--v2-hairline-faint);
 }
 
 .zaki-agent-inspector__tabs button[aria-selected="true"] {
@@ -6042,6 +5998,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-agent-inspector__tabs .count {
+  flex: 0 0 auto;
   margin-left: 0;
   border: 1px solid var(--v2-hairline-strong);
   padding: 1px 4px;
