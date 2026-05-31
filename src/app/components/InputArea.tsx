@@ -950,7 +950,7 @@ export function InputArea({
       >
         {isDraggingFile ? (
           <div
-            className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-zaki-xl border-2 border-dashed border-zaki-brand bg-zaki-brand-10 backdrop-blur-sm"
+            className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-[2px] border border-dashed border-zaki-brand bg-zaki-brand-10"
             aria-hidden
           >
             <div className="flex flex-col items-center gap-1 text-sm font-medium text-zaki-brand">
@@ -986,11 +986,11 @@ export function InputArea({
           }
           isRtl={isRtl}
         />
-        <div className="zaki-agent-composer-shell rounded-zaki-xl border border-zaki-strong bg-zaki-raised font-body shadow-[0px_16px_36px_rgba(15,15,15,0.06)] overflow-visible p-0">
+        <div className="zaki-agent-composer-shell border border-zaki-strong bg-zaki-raised overflow-visible p-0">
           {showUpgradeStrip ? (
             <div
               className={cn(
-                "w-full rounded-full bg-zaki-raised text-zaki-muted text-2xs px-3 py-1.5 flex items-center gap-2 leading-[16px] translate-y-[2px]",
+                "w-full rounded-[2px] bg-zaki-raised text-zaki-muted text-2xs px-3 py-1.5 flex items-center gap-2 leading-[16px] translate-y-[2px]",
                 isRtl ? "justify-end text-right" : "justify-start text-left"
               )}
             >
@@ -998,7 +998,7 @@ export function InputArea({
                 <>
                   <button
                     type="button"
-                    className="inline-flex items-center rounded-full bg-zaki-success px-2 py-0.5 text-2xs font-semibold text-zaki-success transition-colors hover:brightness-95"
+                    className="inline-flex items-center rounded-[2px] bg-zaki-success px-2 py-0.5 text-2xs font-semibold text-zaki-success transition-colors hover:brightness-95"
                     onClick={() => {
                       if (!isPremium) {
                         void trackProductEvent({
@@ -1023,13 +1023,13 @@ export function InputArea({
                   <span className="text-zaki-secondary">
                     {activeViaAccessCode ? t("input.accessLabel") : t("input.upgradeLabel")}
                   </span>
-                  <span className="inline-flex size-4 items-center justify-center rounded-full bg-zaki-elevated text-zaki-muted">
+                  <span className="inline-flex size-4 items-center justify-center rounded-[2px] bg-zaki-elevated text-zaki-muted">
                     <Zap className="size-3" />
                   </span>
                 </>
               ) : (
                 <>
-                  <span className="inline-flex size-4 items-center justify-center rounded-full bg-zaki-elevated text-zaki-muted">
+                  <span className="inline-flex size-4 items-center justify-center rounded-[2px] bg-zaki-elevated text-zaki-muted">
                     <Zap className="size-3" />
                   </span>
                   <span className="text-zaki-secondary">
@@ -1037,7 +1037,7 @@ export function InputArea({
                   </span>
                   <button
                     type="button"
-                    className="inline-flex items-center rounded-full bg-zaki-success px-2 py-0.5 text-2xs font-semibold text-zaki-success transition-colors hover:brightness-95"
+                    className="inline-flex items-center rounded-[2px] bg-zaki-success px-2 py-0.5 text-2xs font-semibold text-zaki-success transition-colors hover:brightness-95"
                     onClick={() => {
                       if (!isPremium) {
                         void trackProductEvent({
@@ -1065,7 +1065,7 @@ export function InputArea({
           ) : null}
           <div
             className={cn(
-              "zaki-agent-composer-box w-full rounded-[16px] border border-zaki-strong bg-zaki-raised font-body px-3 py-2.5 flex flex-col gap-2 relative dark:bg-[#141210]",
+              "zaki-agent-composer-box w-full border border-zaki-strong bg-zaki-raised px-3 py-2.5 flex flex-col gap-2 relative",
               showUpgradeStrip ? "mt-2" : "mt-0"
             )}
           >
@@ -1081,13 +1081,13 @@ export function InputArea({
             {pinnedMemories.map((p) => (
               <span
                 key={p.id}
-                className="zaki-pinned-context-token inline-flex items-center gap-1 rounded-full border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[11px] text-zaki-primary"
+                className="zaki-pinned-context-token inline-flex items-center gap-1 rounded-[2px] border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[11px] text-zaki-primary"
               >
                 <span className="max-w-[160px] truncate">{p.label}</span>
                 <button
                   type="button"
                   onClick={() => unpinMemory(p.id)}
-                  className="rounded-full p-0.5 text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-primary"
+                  className="rounded-[2px] p-0.5 text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-primary"
                   aria-label={t("pinContext.unpinAria", {
                     defaultValue: "Unpin {{label}}",
                     label: p.label,
@@ -1116,7 +1116,7 @@ export function InputArea({
                     <button
                       type="button"
                       className={cn(
-                        "absolute -top-1 size-5 rounded-full bg-zaki-elevated shadow border border-zaki-strong flex items-center justify-center text-zaki-muted hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-accent",
+                        "absolute -top-1 size-5 rounded-[2px] bg-zaki-elevated border border-zaki-strong flex items-center justify-center text-zaki-muted hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-accent",
                         isRtl ? "-left-1" : "-right-1"
                       )}
                       onClick={() =>
@@ -1133,13 +1133,13 @@ export function InputArea({
                 preview.url ? null : (
                   <div
                     key={`${preview.file.name}-${index}`}
-                    className="inline-flex items-center gap-2 rounded-full border border-zaki-strong bg-zaki-elevated pl-3 pr-2 py-1 text-xs text-zaki-secondary"
+                    className="inline-flex items-center gap-2 rounded-[2px] border border-zaki-strong bg-zaki-elevated pl-3 pr-2 py-1 text-xs text-zaki-secondary"
                   >
                     <FileIcon className="size-3.5 text-zaki-muted" />
                     <span className="max-w-[200px] truncate">{preview.file.name}</span>
                     <button
                       type="button"
-                      className="size-5 rounded-full flex items-center justify-center text-zaki-muted hover:bg-zaki-sunken hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-accent"
+                      className="size-5 rounded-[2px] flex items-center justify-center text-zaki-muted hover:bg-zaki-sunken hover:text-zaki-secondary focus-visible:ring-2 focus-visible:ring-zaki-accent"
                       onClick={() =>
                         setAttachments((prev) => prev.filter((_, i) => i !== index))
                       }
@@ -1164,7 +1164,7 @@ export function InputArea({
             ref={textareaRef}
             rows={1}
             className={cn(
-              "zaki-input-field flex-1 bg-transparent font-body text-zaki-primary placeholder-zaki text-sm px-1 py-1.5 resize-none min-h-[30px] max-h-[160px] overflow-y-auto outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 zaki-scrollbar-fade",
+              "zaki-input-field flex-1 bg-transparent text-zaki-primary placeholder-zaki text-sm px-1 py-1.5 resize-none min-h-[30px] max-h-[160px] overflow-y-auto outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 zaki-scrollbar-fade",
               isRtl ? "text-right" : "text-left"
             )}
             placeholder={
@@ -1350,7 +1350,7 @@ export function InputArea({
           <div className="relative" ref={menuRef}>
             <button
               type="button"
-              className="zaki-composer-menu-trigger size-9 bg-zaki-elevated rounded-full flex items-center justify-center border border-zaki-strong hover:bg-zaki-sunken dark:hover:bg-zaki-dark-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
+              className="zaki-composer-menu-trigger size-9 bg-zaki-elevated rounded-[2px] flex items-center justify-center border border-zaki-strong hover:bg-zaki-sunken dark:hover:bg-zaki-dark-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
               onClick={() =>
                 setMenuOpen((open) => {
                   const nextOpen = isOnboardingControlsLocked ? true : !open;
@@ -1364,8 +1364,8 @@ export function InputArea({
               aria-expanded={menuOpen}
               aria-label={t("input.menu.addOptions")}
               data-onboarding-id="chat-controls-button"
-              >
-                <Plus className="size-4 text-zaki-muted" />
+            >
+              <Plus className="size-4 text-zaki-muted" />
             </button>
             {menuOpen && (
               <div
@@ -1640,7 +1640,7 @@ export function InputArea({
             }}
             disabled={!canToggleWebSearch}
             className={cn(
-              "group relative size-9 rounded-full flex items-center justify-center border transition-colors",
+              "group relative size-9 rounded-[2px] flex items-center justify-center border transition-colors",
               webSearchArmed
                 ? "bg-zaki-accent/10 border-zaki-accent/40 text-zaki-accent"
                 : "bg-zaki-elevated border-zaki-strong text-zaki-muted hover:bg-zaki-sunken dark:hover:bg-zaki-dark-hover",
@@ -1659,7 +1659,7 @@ export function InputArea({
             data-onboarding-id="chat-web-search-button"
           >
             <Search className="size-4" />
-            <span className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-full border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[10px] font-semibold text-zaki-muted opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+            <span className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-[2px] border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[10px] font-semibold text-zaki-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
               {webSearchArmed
                 ? t("input.webSearch.onPill")
                 : t("input.webSearch.offPill")}
@@ -1670,13 +1670,13 @@ export function InputArea({
             <button
               type="button"
               onClick={onToggleWebSearch}
-              className="inline-flex items-center rounded-full border border-zaki-accent/30 bg-zaki-accent/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-zaki-accent"
+              className="inline-flex items-center rounded-[2px] border border-zaki-accent/30 bg-zaki-accent/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-zaki-accent"
             >
               {t("input.webSearch.activePill")}
             </button>
           ) : null}
           {!zakiBotMode && queryModeEnabled ? (
-            <span className="inline-flex items-center rounded-full border border-zaki-accent/30 bg-zaki-accent/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-zaki-accent">
+            <span className="inline-flex items-center rounded-[2px] border border-zaki-accent/30 bg-zaki-accent/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-zaki-accent">
               {t("input.queryMode.activePill")}
             </span>
           ) : null}
@@ -1700,7 +1700,7 @@ export function InputArea({
                   }}
                   disabled={compactArmed && isCompacting}
                   className={cn(
-                    "zaki-context-text-meter group relative inline-flex size-9 items-center justify-center rounded-full border bg-zaki-elevated transition-colors focus-visible:ring-2 focus-visible:ring-offset-2",
+                    "zaki-context-text-meter group relative inline-flex size-9 items-center justify-center rounded-[2px] border bg-zaki-elevated transition-colors focus-visible:ring-2 focus-visible:ring-offset-2",
                     compactArmed
                       ? "cursor-pointer border-zaki-warning text-zaki-warning hover:bg-zaki-warning/10 focus-visible:ring-zaki-warning"
                       : "cursor-default border-zaki-strong text-zaki-muted hover:bg-zaki-sunken focus-visible:ring-zaki-accent",
@@ -1768,7 +1768,7 @@ export function InputArea({
                   <button
                     type="button"
                     onClick={cancelRecording}
-                    className="zaki-button-bounce size-11 sm:size-9 rounded-full flex items-center justify-center border border-zaki-strong bg-zaki-elevated hover:bg-zaki-sunken focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2 transition-colors"
+                    className="zaki-button-bounce size-11 sm:size-9 rounded-[2px] flex items-center justify-center border border-zaki-strong bg-zaki-elevated hover:bg-zaki-sunken focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2 transition-colors"
                     aria-label={t("input.voice.stop")}
                   >
                     <X className="size-4 text-zaki-muted" />
@@ -1780,7 +1780,7 @@ export function InputArea({
                 onClick={isRecording ? stopRecording : startRecording}
                 disabled={isTranscribing || isSending}
                 className={cn(
-                  "zaki-button-bounce size-11 sm:size-9 rounded-full flex items-center justify-center border focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2 disabled:opacity-60 transition-colors",
+                  "zaki-button-bounce size-11 sm:size-9 rounded-[2px] flex items-center justify-center border focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2 disabled:opacity-60 transition-colors",
                   isRecording
                     ? "bg-zaki-brand hover:bg-zaki-brand-hover border-zaki-brand/30"
                     : "bg-zaki-elevated hover:bg-zaki-sunken border-zaki-strong"
@@ -1788,7 +1788,7 @@ export function InputArea({
                 aria-label={isRecording ? t("input.voice.stop") : isTranscribing ? t("input.voice.listening") : t("input.voice.tapToRecord")}
               >
                 {isTranscribing ? (
-                  <span className="size-4 animate-spin rounded-full border-2 border-zaki-muted border-t-transparent" />
+                  <span className="size-4 animate-spin rounded-[2px] border-2 border-zaki-muted border-t-transparent" />
                 ) : isRecording ? (
                   <Square className="size-3.5 text-white" />
                 ) : (
@@ -1802,7 +1802,7 @@ export function InputArea({
             onClick={isStopMode ? onStop : undefined}
             disabled={isStopMode ? typeof onStop !== "function" : !canSend}
             className={cn(
-              "zaki-button-bounce size-11 sm:size-9 bg-zaki-brand hover:bg-zaki-brand-hover rounded-full flex items-center justify-center border border-zaki-brand/30 shadow-[0_2px_8px_rgba(241,2,2,0.15)] hover:shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-shadow disabled:opacity-60 disabled:shadow-none focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2",
+              "zaki-button-bounce size-11 sm:size-9 bg-zaki-brand hover:bg-zaki-brand-hover rounded-[2px] flex items-center justify-center border border-zaki-brand/30 transition-colors disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2",
               zakiBotMode && !isStopMode && "zaki-send-button--agent"
             )}
             aria-label={isStopMode ? t("input.stopAria") : t("input.sendAria")}
@@ -1839,7 +1839,7 @@ export function InputArea({
         <div className="mt-1 flex justify-center">
           <span
             className={cn(
-              "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+              "inline-flex items-center rounded-[2px] border px-2 py-0.5 text-[10px] font-semibold",
               quotaBadge.tone === "danger"
                 ? "border-zaki-strong bg-zaki-error text-zaki-error"
                 : quotaBadge.tone === "warning"

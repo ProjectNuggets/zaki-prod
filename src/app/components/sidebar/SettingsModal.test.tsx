@@ -300,6 +300,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.nav.label": "Settings sections",
     "settingsModal.nav.account": "Account",
     "settingsModal.nav.connections": "Connections",
+    "settingsModal.nav.planUsage": "Plan & usage",
     "settingsModal.nav.channels": "Channels",
     "settingsModal.nav.secrets": "Secrets",
     "settingsModal.nav.providers": "Providers",
@@ -969,6 +970,28 @@ describe("SettingsPage", () => {
     expect(screen.getByTestId("settings-memory-data")).toBeInTheDocument();
     expect(screen.getByTestId("settings-developer-access")).toBeInTheDocument();
     expect(screen.getByTestId("settings-privacy")).toBeInTheDocument();
+
+    expect(screen.getByRole("link", { name: "Plan & usage" })).toBeInTheDocument();
+    const routeOrder = [
+      "settings-account",
+      "settings-billing",
+      "settings-platform-usage",
+      "settings-products-access",
+      "settings-channels",
+      "settings-secrets",
+      "settings-providers",
+      "settings-devices",
+      "settings-memory-data",
+      "settings-developer-access",
+      "settings-connections",
+      "settings-privacy",
+    ].map((testId) => screen.getByTestId(testId));
+    for (let index = 0; index < routeOrder.length - 1; index += 1) {
+      expect(
+        routeOrder[index].compareDocumentPosition(routeOrder[index + 1]) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    }
 
     expect(within(screen.getByTestId("settings-platform-usage")).getByText("ZAKI Hire")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-products-access")).getByText("ZAKI Design")).toBeInTheDocument();

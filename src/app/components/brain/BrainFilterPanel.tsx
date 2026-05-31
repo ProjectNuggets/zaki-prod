@@ -86,7 +86,7 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
       // of Nova's video. Solid dark panel reads cleanly against the
       // #0a0a0a canvas; the graph is still visible behind everywhere
       // the panel doesn't cover.
-      className="flex w-72 shrink-0 flex-col gap-5 overflow-y-auto rounded-zaki-lg border border-white/10 bg-[#181818] p-4 text-sm text-white/85"
+      className="flex w-72 shrink-0 flex-col gap-5 overflow-y-auto rounded-[2px] border border-white/10 bg-[#181818] p-4 text-sm text-white/85"
       data-testid="brain-filter-panel"
     >
       <ScopeSection />
@@ -125,7 +125,7 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
                 key={lt}
                 type="button"
                 onClick={() => toggleLinkType(lt)}
-                className={`flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs transition ${
+                className={`flex items-center gap-1.5 rounded-[2px] border px-2 py-0.5 text-xs transition ${
                   active
                     ? "border-white/85 bg-white/10 text-white/85"
                     : "border-white/10 text-white/55 hover:border-white/40"
@@ -133,7 +133,7 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
                 data-testid={`brain-link-type-pill-${lt}`}
               >
                 <span
-                  className="size-2 rounded-full"
+                  className="size-2 rounded-[1px]"
                   style={{ backgroundColor: color }}
                   aria-hidden
                 />
@@ -160,7 +160,7 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
               key={p}
               type="button"
               onClick={() => set("colorPreset", p)}
-              className={`flex-1 rounded-zaki-md border px-2 py-1 text-xs capitalize ${
+              className={`flex-1 rounded-[2px] border px-2 py-1 text-xs capitalize ${
                 filters.colorPreset === p
                   ? "border-zaki-brand bg-zaki-brand-10 text-white/85"
                   : "border-white/10 text-white/55 hover:border-white/40"
@@ -266,10 +266,10 @@ function ScopeSection() {
       </h3>
       <div className="space-y-1.5">
         <div
-          className="flex items-center gap-2 rounded-zaki-md border border-zaki-brand/40 bg-zaki-brand-10 px-2.5 py-1.5"
+          className="flex items-center gap-2 rounded-[2px] border border-zaki-brand/40 bg-zaki-brand-10 px-2.5 py-1.5"
           data-testid="brain-scope-active"
         >
-          <span className="size-2 shrink-0 rounded-full bg-zaki-brand" aria-hidden="true" />
+          <span className="size-2 shrink-0 rounded-[1px] bg-zaki-brand" aria-hidden="true" />
           <span className="flex-1 text-sm text-white/85">
             {t("brain.scope.personal", { defaultValue: "Personal brain" })}
           </span>
@@ -283,7 +283,7 @@ function ScopeSection() {
             className="flex items-center gap-2 px-2.5 py-1 opacity-60"
             data-testid={`brain-scope-separate-${scope.id}`}
           >
-            <span className="size-2 shrink-0 rounded-full border border-white/30" aria-hidden="true" />
+            <span className="size-2 shrink-0 rounded-[1px] border border-white/30" aria-hidden="true" />
             <span className="flex-1 text-xs text-white/55">
               {t(scope.key, { defaultValue: scope.label })}
             </span>

@@ -141,7 +141,7 @@ function DiffColumn({ title, tone, items, onPick }: DiffColumnProps) {
   return (
     <div className="min-w-0">
       <div className="mb-1 flex items-center gap-1.5 text-xs text-white/55">
-        <span className={`size-1.5 rounded-full ${dot}`} aria-hidden />
+        <span className={`size-1.5 rounded-[1px] ${dot}`} aria-hidden />
         <span>
           {title} <span className="text-white/55">({items.length})</span>
         </span>

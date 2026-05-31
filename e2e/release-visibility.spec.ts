@@ -60,4 +60,34 @@ test.describe("ZAKI V1 product visibility", () => {
     await expect(page.getByText("Waitlist", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Control plane", { exact: true }).first()).toBeVisible();
   });
+
+  test("direct beta and waitlist routes render gates instead of product surfaces", async ({ page }) => {
+    const gatedRoutes = [
+      {
+        path: "/learn",
+        gate: "product-gate-learning",
+        hiddenSurface: '[data-product-id="learning"]',
+        label: "Private beta",
+      },
+      {
+        path: "/hire",
+        gate: "product-gate-hire",
+        hiddenSurface: '[data-product-id="hire"]',
+        label: "Private beta",
+      },
+      {
+        path: "/design",
+        gate: "product-gate-design",
+        hiddenSurface: '[data-product-id="design"]',
+        label: "Waitlist",
+      },
+    ] as const;
+
+    for (const route of gatedRoutes) {
+      await page.goto(route.path, { waitUntil: "domcontentloaded" });
+      await expect(page.getByTestId(route.gate)).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByTestId(route.gate).getByText(route.label).first()).toBeVisible();
+      await expect(page.locator(route.hiddenSurface)).toHaveCount(0);
+    }
+  });
 });

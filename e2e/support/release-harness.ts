@@ -534,6 +534,9 @@ export async function mockReleaseShell(page: Page, options: ReleaseShellOptions 
   await page.route("**/api/agent/brain/search**", async (route) => {
     await json(route, { results: options.emptyBrain ? [] : brainGraph.nodes });
   });
+  await page.route("**/api/agent/brain/diff**", async (route) => {
+    await json(route, { births: [], deaths: [] });
+  });
   await page.route("**/api/agent/brain/documents**", async (route) => {
     await json(route, { documents: [] });
   });
@@ -576,6 +579,183 @@ export async function mockReleaseShell(page: Page, options: ReleaseShellOptions 
       connected: !options.extensionDisconnected,
       devices: options.extensionDisconnected ? [] : [{ id: "dev-1", name: "Chrome", lastSeen: "2026-05-30T00:00:00.000Z" }],
     });
+  });
+  await page.route("**/v1/me/bot/settings", async (route) => {
+    await json(route, {
+      assistant_mode: "balanced",
+      group_activation: "mention",
+      proactive_updates: true,
+      voice_replies: false,
+      session_timeout_minutes: 30,
+      dream_enabled: true,
+      query_expansion_enabled: false,
+      selected_model: null,
+    });
+  });
+  await page.route("**/api/auth/google/status", async (route) => {
+    await json(route, { success: true, enabled: true });
+  });
+  await page.route("**/api/agent/channels", async (route) => {
+    await json(route, {
+      channels: [
+        {
+          id: "telegram",
+          label: "Telegram",
+          configured: true,
+          connected: true,
+          live: true,
+          available: true,
+          bindings_supported: true,
+          operator_managed_runtime: true,
+          required_secrets: ["telegram_bot_token"],
+          configured_secrets: ["telegram_bot_token"],
+          missing_secrets: [],
+          bindings: { count: 0, items: [] },
+        },
+        {
+          id: "slack",
+          label: "Slack",
+          configured: true,
+          live: true,
+          available: true,
+          bindings_supported: true,
+          operator_managed_runtime: true,
+          required_secrets: ["slack_bot_token", "slack_signing_secret"],
+          configured_secrets: [],
+          missing_secrets: ["slack_bot_token", "slack_signing_secret"],
+          bindings: {
+            count: 1,
+            items: [
+              { id: "bnd-slack", account_id: "main", principal_key: "U123", scope_key: "C123", thread_key: null },
+            ],
+          },
+        },
+        {
+          id: "discord",
+          label: "Discord",
+          configured: true,
+          live: true,
+          available: true,
+          bindings_supported: true,
+          operator_managed_runtime: true,
+          required_secrets: ["discord_bot_token"],
+          configured_secrets: [],
+          missing_secrets: ["discord_bot_token"],
+          bindings: { count: 0, items: [] },
+        },
+        {
+          id: "email",
+          label: "Email",
+          configured: true,
+          live: true,
+          available: true,
+          bindings_supported: true,
+          operator_managed_runtime: true,
+          required_secrets: ["email_imap_password", "email_smtp_password"],
+          configured_secrets: [],
+          missing_secrets: ["email_imap_password", "email_smtp_password"],
+          bindings: { count: 0, items: [] },
+        },
+      ],
+    });
+  });
+  await page.route("**/api/agent/channel-control", async (route) => {
+    await json(route, {
+      channels: [
+        {
+          channel: "slack",
+          label: "Slack",
+          build_enabled: true,
+          operator_configured: true,
+          user_managed: true,
+          user_connected: false,
+          status: "not_connected",
+          secret_refs: [
+            { key: "slack_bot_token", label: "Bot token", required: true, present: false },
+            { key: "slack_signing_secret", label: "Signing secret", required: true, present: false },
+          ],
+          config: {},
+          last_test: null,
+        },
+        {
+          channel: "discord",
+          label: "Discord",
+          build_enabled: true,
+          operator_configured: true,
+          user_managed: true,
+          user_connected: false,
+          status: "not_connected",
+          secret_refs: [{ key: "discord_bot_token", label: "Bot token", required: true, present: false }],
+          config: {},
+          last_test: null,
+        },
+        {
+          channel: "email",
+          label: "Email",
+          build_enabled: true,
+          operator_configured: true,
+          user_managed: true,
+          user_connected: false,
+          status: "not_connected",
+          secret_refs: [
+            { key: "email_imap_password", label: "IMAP password", required: true, present: false },
+            { key: "email_smtp_password", label: "SMTP password", required: true, present: false },
+          ],
+          config: {},
+          last_test: null,
+        },
+        {
+          channel: "whatsapp",
+          label: "WhatsApp",
+          build_enabled: true,
+          operator_configured: false,
+          user_managed: true,
+          user_connected: false,
+          status: "not_connected",
+          secret_refs: [
+            { key: "whatsapp_access_token", label: "Access token", required: true, present: false },
+            { key: "whatsapp_verify_token", label: "Verify token", required: true, present: false },
+          ],
+          config: {},
+          last_test: null,
+        },
+      ],
+    });
+  });
+  await page.route("**/api/agent/secrets", async (route) => {
+    await json(route, { keys: ["telegram_bot_token"] });
+  });
+  await page.route("**/api/agent/providers", async (route) => {
+    await json(route, { providers: [] });
+  });
+  await page.route("**/api/agent/extension/devices", async (route) => {
+    await json(route, {
+      devices: [
+        {
+          device_id: "dev-1",
+          label: "Release Chrome",
+          status: "active",
+          connection_state: options.extensionDisconnected ? "disconnected" : "connected",
+          last_seen_at_s: options.extensionDisconnected ? null : 1_780_000_000,
+        },
+      ],
+    });
+  });
+  await page.route("**/api/agent/integrations", async (route) => {
+    await json(route, {
+      integrations: [
+        {
+          kind: "composio",
+          label: "Composio",
+          configured: true,
+          user_manageable: false,
+          managed_by: "operator",
+        },
+      ],
+    });
+  });
+  await page.route("**/api/agent/memory/governance", async (route) => {
+    await json(route, { total: 12, pii: { phone: 1, email: 1, all: 2 } });
   });
 
   // --- Chat / Spaces shell -------------------------------------------------
@@ -621,8 +801,16 @@ export async function signInForRelease(page: Page, options: ReleaseShellOptions 
 export const RELEASE_ROUTES = [
   { path: "/", name: "home" },
   { path: "/agent", name: "agent" },
+  { path: "/spaces", name: "spaces" },
   { path: "/brain", name: "brain" },
   { path: "/settings", name: "settings" },
+] as const;
+
+/** Direct beta/waitlist routes must render gates in the public V1 build. */
+export const RELEASE_GATED_ROUTES = [
+  { path: "/learn", name: "learn-gate", gate: "product-gate-learning" },
+  { path: "/hire", name: "hire-gate", gate: "product-gate-hire" },
+  { path: "/design", name: "design-gate", gate: "product-gate-design" },
 ] as const;
 
 /** Required signed-in capture viewports (AGENTS.md §8). */

@@ -200,8 +200,18 @@ function getProductRoute(product: ProductRegistryItem) {
   if (product.productId === "agent") return product.route || "/agent";
   if (product.productId === "spaces") return "/spaces";
   if (product.productId === "learning") return "/learn";
+  if (product.productId === "hire") return "/hire";
+  if (product.productId === "design") return "/design";
   if (product.productId === "brain") return "/brain";
   return product.route || null;
+}
+
+function isGatedReleaseProduct(product: ProductRegistryItem) {
+  return (
+    product.productId === "learning" ||
+    product.productId === "hire" ||
+    product.productId === "design"
+  );
 }
 
 function canOpenProduct(product: ProductRegistryItem) {
@@ -614,8 +624,20 @@ export function ZakiDashboard({
             const Icon = PRODUCT_ICONS[product.productId] ?? Sparkles;
             const route = getProductRoute(product);
             const isOpenable = Boolean(route && canOpenProduct(product));
+            const isGated = isGatedReleaseProduct(product);
             const productWeekly = formatWindowLabel(t, meterProduct?.weekly);
             const productName = getProductName(t, product);
+            const actionLabel = isOpenable
+              ? t("zakiDashboard.products.open")
+              : isGated && product.productId === "design"
+                ? t("zakiDashboard.products.joinWaitlist", {
+                    defaultValue: "Join waitlist",
+                  })
+                : isGated
+                  ? t("zakiDashboard.products.requestAccess", {
+                      defaultValue: "Request access",
+                    })
+                  : t("zakiDashboard.products.notAvailable");
             return (
               <V2ProductCard
                 key={product.productId}
@@ -628,7 +650,7 @@ export function ZakiDashboard({
                   defaultValue: product.entryPoint || product.label,
                 })}
                 primary={product.productId === "agent"}
-                disabled={!isOpenable}
+                disabled={!isOpenable && !isGated}
                 testId={`zaki-product-card-${product.productId}`}
                 meta={[
                   {
@@ -652,23 +674,24 @@ export function ZakiDashboard({
                     value: product.entryPoint || route || product.productId,
                   },
                 ]}
-                actionLabel={
-                  isOpenable
-                    ? t("zakiDashboard.products.open")
-                    : t("zakiDashboard.products.notAvailable")
-                }
-                actionDisabled={!isOpenable}
+                actionLabel={actionLabel}
+                actionDisabled={!isOpenable && !isGated}
                 actionAriaLabel={
                   isOpenable
                     ? t("zakiDashboard.products.openAria", {
                         product: productName,
                       })
+                    : isGated
+                      ? t("zakiDashboard.products.openGateAria", {
+                          product: productName,
+                          defaultValue: `Open ${productName} access state`,
+                        })
                     : t("zakiDashboard.products.notAvailableAria", {
                         product: productName,
                       })
                 }
                 onAction={() => {
-                  if (route && isOpenable) navigate(route);
+                  if (route && (isOpenable || isGated)) navigate(route);
                 }}
               />
             );

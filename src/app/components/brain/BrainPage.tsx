@@ -74,7 +74,7 @@ export function BrainPage() {
   // same view. State changes write back to the URL via setSearchParams
   // with replace:true so we don't pollute history.
   const initialTab: BrainTab =
-    searchParams.get("tab") === "graph" ? "graph" : "timeline";
+    searchParams.get("tab") === "timeline" ? "timeline" : "graph";
   const initialPanel: ActivePanel = (() => {
     const p = searchParams.get("panel");
     return p === "filters" || p === "clusters" || p === "orphans" ? p : null;
@@ -116,11 +116,11 @@ export function BrainPage() {
     return () => window.clearTimeout(id);
   }, [searchQuery]);
 
-  // State -> URL sync. Writes only on graph tab to avoid noisy URLs while
-  // browsing the timeline. replace:true keeps the back button useful.
+  // State -> URL sync. Graph is the V2 default, so only timeline needs an
+  // explicit tab marker. replace:true keeps the back button useful.
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
-    if (tab === "graph") next.set("tab", "graph"); else next.delete("tab");
+    if (tab === "timeline") next.set("tab", "timeline"); else next.delete("tab");
     if (debouncedSearch) next.set("q", debouncedSearch); else next.delete("q");
     if (activePanel) next.set("panel", activePanel); else next.delete("panel");
     if (centerKey) next.set("center", centerKey); else next.delete("center");
@@ -610,11 +610,6 @@ interface PanelToggleProps {
 }
 
 function PanelToggle({ icon: Icon, label, active, onClick, shortcut }: PanelToggleProps) {
-  // V1.11 hotfix (2026-05-07) — dropped backdrop-blur. On the deep
-  // black canvas the blur created a faint translucent halo around
-  // each button that read as misalignment. Solid `bg-zaki-raised/90`
-  // matches the Obsidian-video gear button: clean dark chip, no
-  // blur shimmer.
   const tooltip = shortcut ? `${label} (${shortcut})` : label;
   return (
     <button
@@ -622,7 +617,7 @@ function PanelToggle({ icon: Icon, label, active, onClick, shortcut }: PanelTogg
       onClick={onClick}
       aria-label={tooltip}
       title={tooltip}
-      className={`pointer-events-auto flex size-9 items-center justify-center rounded-zaki-md border transition-colors ${
+      className={`pointer-events-auto flex size-9 items-center justify-center rounded-[2px] border transition-colors ${
         active
           ? "border-zaki-brand-60 bg-zaki-brand-15 text-zaki-brand"
           : "border-white/10 bg-zaki-raised/90 text-white/60 hover:border-white/20 hover:text-white"
@@ -645,26 +640,17 @@ interface FloatingOverlayProps {
 
 function FloatingOverlay({ onClose, children }: FloatingOverlayProps) {
   const { t } = useTranslation();
-  // V1.11 hotfix (2026-05-07) — overlay polish to match the Obsidian
-  // Filters panel from Nova's video (Screen Recording 2026-05-07
-  // 14:05, frames 25 + 45):
-  //   - Panel sits flush against the right edge with small inset
-  //   - Close button is INSIDE the panel's top-right corner, not
-  //     floating outside (the prior `-top-1 right-1` was negative-
-  //     positioned, looked detached and misaligned)
-  //   - Solid shadow-2xl gives the panel proper elevation against
-  //     the dark canvas without blur shimmer
   return (
-    <div className="absolute inset-x-3 bottom-3 z-20 flex max-h-[70%] flex-col rounded-zaki-lg shadow-2xl sm:inset-x-auto sm:right-3 sm:top-14 sm:max-h-[calc(100%-4.5rem)]">
+    <div className="absolute inset-x-3 bottom-3 z-20 flex max-h-[70%] flex-col sm:inset-x-auto sm:right-3 sm:top-14 sm:max-h-[calc(100%-4.5rem)]">
       <button
         type="button"
         onClick={onClose}
         aria-label={t("brain.panel.close", { defaultValue: "Close panel" })}
-        className="absolute right-2 top-2 z-30 flex size-6 items-center justify-center rounded-full bg-black/40 text-white/60 transition-colors hover:bg-black/60 hover:text-white"
+        className="absolute right-2 top-2 z-30 flex size-6 items-center justify-center rounded-[2px] bg-black/40 text-white/60 transition-colors hover:bg-black/60 hover:text-white"
       >
         <X className="size-3" />
       </button>
-      <div className="flex h-full min-h-0 overflow-hidden rounded-zaki-lg">
+      <div className="flex h-full min-h-0 overflow-hidden">
         {children}
       </div>
     </div>
@@ -751,10 +737,10 @@ function KindLegend({ nodes }: { nodes: Array<{ kind?: string }> }) {
       {visible.map((k) => (
         <span
           key={k}
-          className="inline-flex items-center gap-1.5 rounded-full border border-zaki-border bg-zaki-raised/60 px-2 py-0.5"
+          className="inline-flex items-center gap-1.5 rounded-[2px] border border-zaki-border bg-zaki-raised/60 px-2 py-0.5"
         >
           <span
-            className="size-2 rounded-full"
+            className="size-2 rounded-[1px]"
             style={{ backgroundColor: KIND_COLOR[k] ?? "#6b7280" }}
             aria-hidden="true"
           />

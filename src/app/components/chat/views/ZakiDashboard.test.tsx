@@ -75,6 +75,9 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.products.surface": "Surface",
     "zakiDashboard.products.open": "Open",
     "zakiDashboard.products.openAria": "Open {{product}}",
+    "zakiDashboard.products.requestAccess": "Request access",
+    "zakiDashboard.products.joinWaitlist": "Join waitlist",
+    "zakiDashboard.products.openGateAria": "Open {{product}} access state",
     "zakiDashboard.products.notAvailable": "Not available",
     "zakiDashboard.products.notAvailableAria": "{{product}} is not available",
     "zakiDashboard.products.names.agent": "Agent",
@@ -344,9 +347,9 @@ describe("ZakiDashboard", () => {
     expect(screen.getByTestId("zaki-product-card-brain")).toHaveTextContent("Brain");
     expect(screen.getByTestId("zaki-product-card-learning")).toHaveTextContent("Learn");
     expect(screen.getByTestId("zaki-product-card-learning")).toHaveTextContent("Private beta");
-    expect(screen.getByTestId("zaki-product-card-learning")).toHaveTextContent("Not available");
-    expect(screen.getByTestId("zaki-product-card-hire")).toHaveTextContent("Not available");
-    expect(screen.getByTestId("zaki-product-card-design")).toHaveTextContent("Not available");
+    expect(screen.getByTestId("zaki-product-card-learning")).toHaveTextContent("Request access");
+    expect(screen.getByTestId("zaki-product-card-hire")).toHaveTextContent("Request access");
+    expect(screen.getByTestId("zaki-product-card-design")).toHaveTextContent("Join waitlist");
     expect(screen.queryByText("ZAKI CLI")).not.toBeInTheDocument();
     expect(screen.getByTestId("zaki-dashboard-active-work")).toHaveTextContent("Investor brief · streaming");
 
@@ -356,6 +359,30 @@ describe("ZakiDashboard", () => {
     expect(within(memory).getByText("Learner memory")).toBeInTheDocument();
     expect(within(memory).getByText("Hire memory")).toBeInTheDocument();
     expect(within(memory).getByText("Design memory")).toBeInTheDocument();
+  });
+
+  it("routes gated dashboard cards to access states instead of disabling them", () => {
+    renderDashboard();
+
+    fireEvent.click(
+      within(screen.getByTestId("zaki-product-card-learning")).getByRole("button", {
+        name: "Open Learn access state",
+      })
+    );
+    fireEvent.click(
+      within(screen.getByTestId("zaki-product-card-hire")).getByRole("button", {
+        name: "Open Hire access state",
+      })
+    );
+    fireEvent.click(
+      within(screen.getByTestId("zaki-product-card-design")).getByRole("button", {
+        name: "Open Design access state",
+      })
+    );
+
+    expect(mockNavigate).toHaveBeenNthCalledWith(1, "/learn");
+    expect(mockNavigate).toHaveBeenNthCalledWith(2, "/hire");
+    expect(mockNavigate).toHaveBeenNthCalledWith(3, "/design");
   });
 
   it("uses the anonymous meter contract when there is no auth token", () => {

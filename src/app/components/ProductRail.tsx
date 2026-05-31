@@ -33,6 +33,7 @@ function isActiveProduct(pathname: string, itemId: ProductRailItem["id"]) {
   if (itemId === "chat") return pathname === "/spaces" || pathname.startsWith("/spaces/");
   if (itemId === "brain") return pathname === "/brain";
   if (itemId === "learn") return pathname === "/learn";
+  if (itemId === "hire") return pathname === "/hire";
   if (itemId === "design") return pathname === "/design";
   return false;
 }
@@ -55,7 +56,10 @@ export function ProductRail() {
     retry: false,
     staleTime: 15_000,
   });
-  const designEnabled = designConfigured && designHealth.data?.ok === true;
+  const designEnabled =
+    designConfigured &&
+    designHealth.data?.ok === true &&
+    designHealth.data?.configured === true;
 
   const items: ProductRailItem[] = [
     {

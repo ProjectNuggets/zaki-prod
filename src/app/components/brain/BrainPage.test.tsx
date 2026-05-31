@@ -135,21 +135,27 @@ describe("BrainPage", () => {
   it("labels the surface scope as the personal brain (kept separate from other scopes)", () => {
     mockGraph = { ...POPULATED };
     renderPage();
-    // Renders in exactly two places: the hero kicker and the status-strip
-    // value. Asserting the exact count defends the label alignment — a
-    // regression to "User memory" in either spot would drop this below 2.
-    expect(screen.getAllByText("Personal brain")).toHaveLength(2);
+    // Graph-first landing also renders the active scope inside the filters
+    // rail. Keep the count exact so a regression to "User memory" is caught.
+    expect(screen.getAllByText("Personal brain")).toHaveLength(3);
   });
 
-  it("defaults to the timeline view and switches to the graph view", () => {
+  it("defaults to the graph view and keeps timeline as a secondary tab", () => {
     mockGraph = { ...POPULATED };
     renderPage();
-    expect(screen.getByTestId("brain-timeline-slot")).toBeInTheDocument();
-    expect(screen.queryByTestId("brain-graph-slot")).not.toBeInTheDocument();
+    expect(screen.getByTestId("brain-graph-slot")).toBeInTheDocument();
+    expect(screen.queryByTestId("brain-timeline-slot")).not.toBeInTheDocument();
 
     const tabs = screen.getAllByRole("tab");
-    fireEvent.click(tabs[1]); // graph tab
-    expect(screen.getByTestId("brain-graph-slot")).toBeInTheDocument();
+    fireEvent.click(tabs[0]); // timeline tab
+    expect(screen.getByTestId("brain-timeline-slot")).toBeInTheDocument();
+  });
+
+  it("honors the explicit timeline URL state", () => {
+    mockGraph = { ...POPULATED };
+    renderPage("/brain?tab=timeline");
+    expect(screen.getByTestId("brain-timeline-slot")).toBeInTheDocument();
+    expect(screen.queryByTestId("brain-graph-slot")).not.toBeInTheDocument();
   });
 
   it("renders the filters scope block only once on the graph tab (no rail/overlay duplication)", () => {

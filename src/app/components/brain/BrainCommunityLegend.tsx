@@ -111,7 +111,7 @@ export function BrainCommunityLegend({
                 onClick={() =>
                   onSelectCommunity(isActive ? null : c.community_id)
                 }
-                className={`flex w-full items-center gap-2 rounded-zaki-md px-2 py-1 text-left text-xs transition ${
+                className={`flex w-full items-center gap-2 rounded-[2px] px-2 py-1 text-left text-xs transition ${
                   isActive
                     ? "bg-white/10 text-white/85"
                     : "text-white/85 hover:bg-white/5"
@@ -119,7 +119,7 @@ export function BrainCommunityLegend({
                 data-testid={`brain-cluster-row-${c.community_id}`}
               >
                 <span
-                  className="size-2.5 shrink-0 rounded-full"
+                  className="size-2.5 shrink-0 rounded-[1px]"
                   style={{ backgroundColor: swatch }}
                   aria-hidden
                 />

@@ -152,7 +152,7 @@ export function BrainTimelineView({ userId }: Props) {
           onChange={handleSliderChange}
           aria-label={t("brain.timeline.slider.label")}
           aria-valuetext={asOfLabel}
-          className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-zaki-border accent-zaki-brand"
+          className="h-1.5 w-full cursor-pointer appearance-none rounded-[2px] bg-zaki-border accent-zaki-brand"
         />
         <div className="mt-1 flex justify-between text-[9px] text-zaki-muted">
           <span>
@@ -168,7 +168,7 @@ export function BrainTimelineView({ userId }: Props) {
       {/* Timeline entries */}
       {grouped.map((group) => (
         <section key={group.label} className="mb-6">
-          <h3 className="sticky top-0 z-10 -mx-2 bg-zaki-base/95 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-zaki-muted backdrop-blur">
+          <h3 className="sticky top-0 z-10 -mx-2 bg-zaki-base/95 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-zaki-muted">
             {group.label}
           </h3>
           <ul className="mt-2 space-y-2">
@@ -207,14 +207,14 @@ function TimelineEntryRow({ entry, t }: RowProps) {
 
   return (
     <li
-      className={`rounded-zaki-lg bg-zaki-raised p-3 ${
+      className={`rounded-[2px] bg-zaki-raised p-3 ${
         isDeprecated ? "opacity-50" : ""
       }`}
     >
       <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-zaki-muted">
         <span>{kindLabel}</span>
         {isDeprecated && (
-          <span className="rounded-full bg-zaki-base px-1.5 py-0.5 text-zaki-muted">
+          <span className="rounded-[2px] bg-zaki-base px-1.5 py-0.5 text-zaki-muted">
             {t("brain.timeline.superseded")}
           </span>
         )}

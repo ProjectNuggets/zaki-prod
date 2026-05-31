@@ -8,9 +8,9 @@ import { AdminAccessCodesPage } from './app/components/admin/AdminAccessCodesPag
 import { HelpPage } from './app/components/HelpPage';
 import { LegalPage } from './app/components/LegalPage';
 import { BrainPage } from './app/components/brain/BrainPage';
-import { LearningPage } from './app/components/learning/LearningPage';
 import { DesignPage } from './app/components/design/DesignPage';
 import { SettingsPage } from './app/components/settings/SettingsPage';
+import { ProductAccessGate } from './app/components/ProductAccessGate';
 import { WebsiteHomePage, WebsiteProductPage, WebsiteShell } from './app/components/WebsitePage';
 import {
   WebsiteAutismGuidancePage,
@@ -201,11 +201,35 @@ export const router = createBrowserRouter([
       },
       {
         path: 'learn',
-        element: <LearningPage />,
+        element: (
+          <ProductAccessGate
+            productId="learning"
+            title="ZAKI Learn"
+            mode="private_beta"
+          />
+        ),
+      },
+      {
+        path: 'hire',
+        element: (
+          <ProductAccessGate
+            productId="hire"
+            title="ZAKI Hire"
+            mode="private_beta"
+          />
+        ),
       },
       {
         path: 'design',
-        element: <DesignPage />,
+        element: (
+          <ProductAccessGate
+            productId="design"
+            title="ZAKI Design"
+            mode="waitlist"
+          >
+            <DesignPage />
+          </ProductAccessGate>
+        ),
       },
     ],
   },

@@ -1950,6 +1950,9 @@
       "surface": "Surface",
       "open": "Open",
       "openAria": "Open {{product}}",
+      "requestAccess": "Request access",
+      "joinWaitlist": "Join waitlist",
+      "openGateAria": "Open {{product}} access state",
       "notAvailable": "Not available",
       "notAvailableAria": "{{product}} is not available",
       "names": {

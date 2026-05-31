@@ -105,7 +105,7 @@ export function BrainComposeModal({
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: "100%", opacity: 0 }}
           transition={{ type: "spring", stiffness: 320, damping: 28 }}
-          className="absolute inset-x-3 bottom-3 z-30 flex max-h-[80%] flex-col rounded-zaki-lg border border-white/10 bg-black/85 shadow-2xl backdrop-blur-xl sm:inset-x-auto sm:right-3 sm:top-14 sm:bottom-3 sm:w-[min(420px,calc(100%-1.5rem))] sm:max-h-[calc(100%-4.5rem)]"
+          className="absolute inset-x-3 bottom-3 z-30 flex max-h-[80%] flex-col border border-white/10 bg-black/85 sm:inset-x-auto sm:right-3 sm:top-14 sm:bottom-3 sm:w-[min(420px,calc(100%-1.5rem))] sm:max-h-[calc(100%-4.5rem)]"
         >
           <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
             <h3 className="text-sm font-semibold text-white">
@@ -115,7 +115,7 @@ export function BrainComposeModal({
               type="button"
               onClick={handleClose}
               aria-label={t("brain.compose.cancel")}
-              className="rounded-full p-1 text-white/40 transition-colors hover:text-white"
+              className="rounded-[2px] p-1 text-white/40 transition-colors hover:text-white"
             >
               <X className="size-3.5" />
             </button>
@@ -127,7 +127,7 @@ export function BrainComposeModal({
                 {selectedNodes.map((n) => (
                   <span
                     key={n.id}
-                    className="max-w-[14rem] truncate rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-white/70"
+                    className="max-w-[14rem] truncate rounded-[2px] bg-white/10 px-2 py-0.5 text-[11px] text-white/70"
                     title={n.summary}
                   >
                     {n.summary}
@@ -144,7 +144,7 @@ export function BrainComposeModal({
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="mt-1 w-full rounded-zaki-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-white outline-none focus:border-zaki-brand focus:ring-1 focus:ring-zaki-brand/30"
+                className="mt-1 w-full rounded-[2px] border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-white outline-none focus:border-zaki-brand focus:ring-1 focus:ring-zaki-brand/30"
               />
             </label>
 
@@ -156,7 +156,7 @@ export function BrainComposeModal({
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 rows={6}
-                className="mt-1 w-full resize-y rounded-zaki-md border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-white outline-none focus:border-zaki-brand focus:ring-1 focus:ring-zaki-brand/30"
+                className="mt-1 w-full resize-y rounded-[2px] border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-white outline-none focus:border-zaki-brand focus:ring-1 focus:ring-zaki-brand/30"
               />
             </label>
 
@@ -182,7 +182,7 @@ export function BrainComposeModal({
               type="button"
               disabled={!canSubmit}
               onClick={handleSubmit}
-              className="rounded-zaki-md bg-zaki-brand px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-zaki-brand-hover disabled:opacity-50"
+              className="rounded-[2px] border border-zaki-brand/30 bg-zaki-brand px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-zaki-brand-hover disabled:opacity-50"
             >
               {compose.isPending
                 ? t("brain.compose.submitting")

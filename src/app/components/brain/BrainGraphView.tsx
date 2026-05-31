@@ -920,7 +920,7 @@ export function BrainGraphView({
               <button
                 type="button"
                 onClick={exitLocalMode}
-                className="rounded-zaki-md border border-white/10 px-2 py-0.5 text-xs text-white/85 hover:border-zaki-brand"
+                className="rounded-[2px] border border-white/10 px-2 py-0.5 text-xs text-white/85 hover:border-zaki-brand"
                 data-testid="brain-back-to-global"
               >
                 {t("brain.graph.backToGlobal", { defaultValue: "← Back to global" })}
@@ -954,7 +954,7 @@ export function BrainGraphView({
         </div>
         <div className="flex items-center gap-2">
           {selectedIds.length > 0 && (
-            <span className="rounded-full bg-zaki-brand-10 px-2 py-0.5 text-zaki-brand">
+            <span className="rounded-[2px] bg-zaki-brand-10 px-2 py-0.5 text-zaki-brand">
               {t("brain.graph.selected", {
                 defaultValue: "{{n}} selected",
                 n: selectedIds.length,
@@ -968,7 +968,7 @@ export function BrainGraphView({
       <div className="relative">
         <div
           ref={containerRef}
-          className="size-full min-h-[640px] rounded-zaki-lg border border-white/10 bg-black/60"
+          className="size-full min-h-[640px] rounded-[2px] border border-white/10 bg-black/60"
           data-testid="brain-graph-canvas"
         />
 
@@ -1089,7 +1089,7 @@ function HoverTooltip({
   const offset = 14;
   return (
     <div
-      className="pointer-events-none absolute z-30 max-w-xs rounded-zaki-lg border border-white/10 bg-black/85 px-3 py-2 text-xs text-white shadow-lg backdrop-blur"
+      className="pointer-events-none absolute z-30 max-w-xs rounded-[2px] border border-white/10 bg-black/95 px-3 py-2 text-xs text-white"
       style={{
         left: x + offset,
         top: y + offset,
@@ -1140,19 +1140,19 @@ function DetailPanel({
 
   return (
     <div
-      className="absolute inset-x-0 bottom-0 z-20 flex max-h-[70%] flex-col rounded-t-zaki-lg border-t border-white/10 bg-black/85 backdrop-blur-xl sm:inset-x-auto sm:inset-y-0 sm:right-0 sm:max-h-none sm:w-72 sm:rounded-none sm:border-l sm:border-t-0"
+      className="absolute inset-x-0 bottom-0 z-20 flex max-h-[70%] flex-col rounded-t-[2px] border-t border-white/10 bg-black/95 sm:inset-x-auto sm:inset-y-0 sm:right-0 sm:max-h-none sm:w-72 sm:rounded-none sm:border-l sm:border-t-0"
       data-testid="brain-detail-panel"
     >
       <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
-        <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
+        <span className="rounded-[2px] bg-white/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
           {node.kind}
         </span>
         <div className="flex items-center gap-2">
           {typeof importance === "number" && (
             <div className="flex items-center gap-1" title={`importance ${(importance * 100).toFixed(0)}%`}>
-              <div className="h-1.5 w-16 overflow-hidden rounded-full bg-white/10">
+              <div className="h-1.5 w-16 overflow-hidden rounded-[2px] bg-white/10">
                 <div
-                  className="h-full rounded-full bg-zaki-brand"
+                  className="h-full rounded-[2px] bg-zaki-brand"
                   style={{ width: `${importance * 100}%` }}
                 />
               </div>
@@ -1161,7 +1161,7 @@ function DetailPanel({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-1 text-white/40 transition-colors hover:text-white"
+            className="rounded-[2px] p-1 text-white/40 transition-colors hover:text-white"
             aria-label={t("brain.graph.detail.close", { defaultValue: "Close" })}
           >
             <X className="size-3.5" />
@@ -1177,12 +1177,12 @@ function DetailPanel({
         )}
         {loading && !detail ? (
           <div className="space-y-2">
-            <div className="h-3 w-full animate-pulse rounded bg-white/10" />
-            <div className="h-3 w-4/5 animate-pulse rounded bg-white/10" />
-            <div className="h-3 w-3/5 animate-pulse rounded bg-white/10" />
+            <div className="h-3 w-full animate-pulse rounded-[2px] bg-white/10" />
+            <div className="h-3 w-4/5 animate-pulse rounded-[2px] bg-white/10" />
+            <div className="h-3 w-3/5 animate-pulse rounded-[2px] bg-white/10" />
           </div>
         ) : error && !detail ? (
-          <div className="rounded-zaki-md border border-red-500/30 bg-red-500/10 px-2.5 py-2 text-xs leading-relaxed text-red-100">
+          <div className="rounded-[2px] border border-red-500/30 bg-red-500/10 px-2.5 py-2 text-xs leading-relaxed text-red-100">
             {t("brain.graph.detail.loadFailed", {
               defaultValue: "Full memory detail failed to load. Showing graph summary only.",
             })}
@@ -1208,7 +1208,7 @@ function DetailPanel({
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">
               {t("brain.graph.detail.captured", { defaultValue: "Captured" })}
             </p>
-            <div className="rounded-zaki-md border border-white/10 bg-white/5 px-2.5 py-2">
+            <div className="rounded-[2px] border border-white/10 bg-white/5 px-2.5 py-2">
               <p className="text-[10px] text-white/50">
                 {new Date(detail.source.timestamp * 1000).toLocaleString()}
                 {detail.session_id ? (
@@ -1233,8 +1233,8 @@ function DetailPanel({
             </p>
             <div className="space-y-1.5">
               {linked.map((lm, i) => (
-                <div key={i} className="flex items-start gap-2 rounded-zaki-md bg-white/5 px-2.5 py-2">
-                  <span className="shrink-0 rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-white/70">
+                <div key={i} className="flex items-start gap-2 rounded-[2px] bg-white/5 px-2.5 py-2">
+                  <span className="shrink-0 rounded-[2px] bg-white/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-white/70">
                     {lm.link_type}
                   </span>
                   <p className="line-clamp-2 text-[11px] text-white/70">{lm.summary}</p>
@@ -1268,7 +1268,7 @@ function DetailPanel({
               />
               <li className="relative pl-5">
                 <span
-                  className="absolute left-0 top-1.5 size-2 rounded-full bg-zaki-brand ring-2 ring-zaki-brand/30"
+                  className="absolute left-0 top-1.5 size-2 rounded-[1px] bg-zaki-brand ring-2 ring-zaki-brand/30"
                   aria-hidden="true"
                 />
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-zaki-brand">
@@ -1287,7 +1287,7 @@ function DetailPanel({
               {history.map((h, i) => (
                 <li key={i} className="relative pl-5">
                   <span
-                    className="absolute left-0 top-1.5 size-2 rounded-full border border-white/30 bg-black"
+                    className="absolute left-0 top-1.5 size-2 rounded-[1px] border border-white/30 bg-black"
                     aria-hidden="true"
                   />
                   <p className="text-[10px] text-white/40">
@@ -1306,7 +1306,7 @@ function DetailPanel({
         <button
           type="button"
           onClick={() => onShowLocal(node.key ?? node.id)}
-          className="w-full rounded-zaki-md border border-zaki-brand bg-zaki-brand-10 px-3 py-1.5 text-xs font-medium text-zaki-brand transition hover:bg-zaki-brand-20"
+          className="w-full rounded-[2px] border border-zaki-brand bg-zaki-brand-10 px-3 py-1.5 text-xs font-medium text-zaki-brand transition hover:bg-zaki-brand-20"
           data-testid="brain-show-local-graph"
         >
           {t("brain.graph.detail.showLocal", { defaultValue: "Show local graph" })}
@@ -1324,7 +1324,7 @@ function DetailPanel({
         */}
         <Link
           to="/settings#settings-memory-data"
-          className="flex w-full items-center justify-center gap-1.5 rounded-zaki-md border border-white/10 px-3 py-1.5 text-xs font-medium text-white/60 transition hover:border-white/25 hover:text-white/85"
+          className="flex w-full items-center justify-center gap-1.5 rounded-[2px] border border-white/10 px-3 py-1.5 text-xs font-medium text-white/60 transition hover:border-white/25 hover:text-white/85"
           data-testid="brain-detail-manage-in-settings"
         >
           <Shield className="size-3.5" aria-hidden="true" />
@@ -1333,7 +1333,7 @@ function DetailPanel({
           })}
         </Link>
         {isDeprecated && (
-          <div className="mt-2 rounded-full bg-zaki-warning px-2 py-0.5 text-center text-[10px] font-semibold text-zaki-warning">
+          <div className="mt-2 rounded-[2px] bg-zaki-warning px-2 py-0.5 text-center text-[10px] font-semibold text-zaki-warning">
             {t("brain.graph.superseded", { defaultValue: "Superseded" })}
           </div>
         )}

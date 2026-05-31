@@ -1962,6 +1962,9 @@
       "surface": "السطح",
       "open": "فتح",
       "openAria": "فتح {{product}}",
+      "requestAccess": "طلب الوصول",
+      "joinWaitlist": "الانضمام إلى قائمة الانتظار",
+      "openGateAria": "فتح حالة وصول {{product}}",
       "notAvailable": "غير متاح",
       "notAvailableAria": "{{product}} غير متاح",
       "names": {

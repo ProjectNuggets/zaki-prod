@@ -126,12 +126,12 @@ interface CardProps {
 
 function Card({ icon, value, label, hint }: CardProps) {
   return (
-    <div className="rounded-zaki-lg border border-zaki-border bg-zaki-raised p-4">
+    <div className="rounded-[2px] border border-zaki-border bg-zaki-raised p-4">
       <div className="flex items-baseline gap-2">
-        <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-zaki-brand/10">
+        <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-[2px] bg-zaki-brand/10">
           {icon}
         </span>
-        <div className="font-display text-2xl font-bold tracking-tight text-zaki-text tabular-nums">
+        <div className="font-mono-ui text-2xl font-bold tracking-normal text-zaki-text tabular-nums">
           {value.toLocaleString()}
         </div>
       </div>

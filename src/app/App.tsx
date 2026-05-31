@@ -68,12 +68,21 @@ export default function App() {
   const scrollTargetRef = useRef<HTMLElement | null>(null);
   const { t } = useTranslation();
   const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
-  const isLearningRoute = location.pathname === "/learn";
+  const isGatedProductRoute =
+    normalizedPath === "/learn" ||
+    normalizedPath === "/hire" ||
+    normalizedPath === "/design";
+  const isLearningRoute = normalizedPath === "/learn" && !isGatedProductRoute;
   const isDashboardRoute = normalizedPath === "/";
   const isAgentRoute = normalizedPath === "/agent";
   const isBrainRoute = normalizedPath === "/brain";
   const isSettingsRoute = normalizedPath === "/settings";
-  const isWideSurfaceRoute = isDashboardRoute || isAgentRoute || isBrainRoute || isSettingsRoute;
+  const isWideSurfaceRoute =
+    isDashboardRoute ||
+    isAgentRoute ||
+    isBrainRoute ||
+    isSettingsRoute ||
+    isGatedProductRoute;
   const isPublicWebsiteRoute =
     PUBLIC_WEBSITE_PATHS.has(normalizedPath) ||
     PUBLIC_WEBSITE_PREFIXES.some((prefix) => normalizedPath.startsWith(prefix));
@@ -124,10 +133,8 @@ export default function App() {
       );
     } else if (path === '/brain') {
       store.setSidebarMode("brain");
-    } else if (path === '/learn') {
-      store.setSidebarMode("learning");
-    } else if (path === '/design') {
-      store.setSidebarMode("zaki");
+    } else if (path === '/learn' || path === '/hire' || path === '/design') {
+      store.goHome();
     } else if (path === '/spaces' && !spaceId) {
       store.goToSpaces();
     } else if (spaceId && threadId) {
