@@ -7,20 +7,23 @@ import { MessageActions } from "./MessageActions";
 import { MessageContent } from "./rendering/MessageContent";
 import { ImageBlock } from "./rendering/blocks/ImageBlock";
 import { extractGeneratedImages } from "./rendering/extractGeneratedImages";
+import { stripToolCallMarkup } from "./rendering/toolMarkup";
 import { SourceChip } from "@/app/components/ui/zaki";
 
-/**
- * Strip raw <tool_call>{...}</tool_call> markup from assistant messages.
- * The tool invocation is rendered separately in the Worklog panel.
- */
-function stripToolCallMarkup(raw: string): string {
-  if (!raw) return raw;
-  return raw
-    .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "")
-    .replace(/<tool_call>[\s\S]*$/g, "")
-    .replace(/<tool_result>[\s\S]*?<\/tool_result>/g, "")
-    .replace(/<tool_result>[\s\S]*$/g, "")
-    .trim();
+function parseLegacyApprovalInstruction(raw: string):
+  | { tool: string; id: string; risk: string; reason: string }
+  | null {
+  const text = raw.trim();
+  const match = text.match(
+    /^Approval required for tool\s+([A-Za-z0-9_.:-]+)\s+\(id=([^,]+),\s*risk=([^,]+),\s*reason=([^)]+)\)\.?\s+Use\s+\/approve\b/i
+  );
+  if (!match) return null;
+  return {
+    tool: match[1] || "tool",
+    id: match[2] || "",
+    risk: match[3] || "review",
+    reason: match[4] || "approval_required",
+  };
 }
 
 function formatMessageTime(value?: string | null): string | null {
@@ -233,6 +236,7 @@ export function MessageBubble({
         {(() => {
           const content = !isUser ? stripToolCallMarkup(message.content || "") : (message.content || "");
           if (!content) return null;
+          const legacyApproval = !isUser && botMode ? parseLegacyApprovalInstruction(content) : null;
           return (
             <div
               className={cn(
@@ -258,7 +262,15 @@ export function MessageBubble({
                   ) : null}
                 </div>
               ) : null}
-              {!isUser ? (
+              {legacyApproval ? (
+                <div className="zaki-approval-history" data-testid={`approval-history-${legacyApproval.id}`}>
+                  <span className="zaki-approval-history__kicker">Approval requested</span>
+                  <span className="zaki-approval-history__tool">{legacyApproval.tool}</span>
+                  <span className="zaki-approval-history__meta">
+                    {legacyApproval.risk} · {legacyApproval.reason.replace(/_/g, " ")}
+                  </span>
+                </div>
+              ) : !isUser ? (
                 <MessageContent content={content} role="assistant" surface="chat" />
               ) : (
                 content

@@ -11288,6 +11288,27 @@ async function agentSessionDetailHandler(req, res) {
       );
       const localSession = sessions.find((session) => session?.session_key === parsed.normalized);
       if (localSession) {
+        try {
+          const upstream = await sendBotBffUpstreamRequest({
+            method: "GET",
+            path: `/api/v1/users/${encodeURIComponent(userId)}/sessions/${sessionKey}`,
+            userId,
+            requestId,
+          });
+          const upstreamData = await upstream.json().catch(() => ({}));
+          if (upstream.ok) {
+            return res.status(200).json({
+              ...localSession,
+              ...upstreamData,
+              session_key: localSession.session_key,
+              title: localSession.title || upstreamData?.title,
+              last_active: localSession.last_active || upstreamData?.last_active,
+              ...(listWarning ? { warning: listWarning } : {}),
+            });
+          }
+        } catch {
+          // Fall through to the local thread record; detail remains best-effort.
+        }
         return res.status(200).json({
           ...localSession,
           ...(listWarning ? { warning: listWarning } : {}),
@@ -14081,11 +14102,61 @@ const makeAgentUserProxyHandler = (pathBuilder, proxyOptions = {}) => async (req
     return;
   } catch (error) {
     console.error("[Agent] Control proxy error:", error);
+    const status = Number(error?.status || 500);
+    if (status >= 400 && status < 600) {
+      return res.status(status).json({ error: error?.message || "Agent control request failed." });
+    }
     return res.status(500).json({ error: error?.message || "Agent control request failed." });
   }
 };
 
 const AGENT_RUNTIME_ID_SAFE_PATTERN = /^[a-zA-Z0-9:_.\-]+$/;
+const AGENT_EXPORT_FILENAME_SAFE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/;
+const AGENT_SHARE_CODE_SAFE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{7,127}$/;
+
+function isSafeAgentExportFilename(filename) {
+  const value = String(filename || "").trim();
+  return (
+    AGENT_EXPORT_FILENAME_SAFE_PATTERN.test(value) &&
+    !value.includes("..") &&
+    !value.startsWith(".")
+  );
+}
+
+function isSafeAgentShareCode(shareCode) {
+  return AGENT_SHARE_CODE_SAFE_PATTERN.test(String(shareCode || "").trim());
+}
+
+async function proxyNullclawPublicRequest(req, res, targetPath) {
+  const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
+  if (!nullclawBase) {
+    return res.status(500).json({ error: "NULLCLAW_BASE_URL is not configured." });
+  }
+  if (!NULLCLAW_INTERNAL_TOKEN) {
+    return res.status(500).json({ error: "NULLCLAW_INTERNAL_TOKEN is not configured." });
+  }
+
+  const upstream = await fetchWithTimeout(
+    `${nullclawBase}${targetPath}`,
+    {
+      method: "GET",
+      headers: {
+        "X-Internal-Token": NULLCLAW_INTERNAL_TOKEN,
+        "X-Request-Id": String(req.requestId || crypto.randomUUID()),
+      },
+    },
+    ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+    "Nullclaw public proxy request"
+  );
+
+  res.status(upstream.status);
+  copyResponseHeaders(upstream, res);
+  if (!upstream.body) {
+    res.end();
+    return;
+  }
+  pipeReadableToResponse(Readable.fromWeb(upstream.body), res, "Nullclaw public proxy response");
+}
 
 function appendAllowedQueryParams(path, req, allowedKeys) {
   const qs = new URLSearchParams();
@@ -15049,6 +15120,67 @@ app.delete(
     AGENT_RUNTIME_JSON_PROXY_OPTIONS
   )
 );
+
+app.get(
+  "/api/agent/exports/:filename",
+  requireAgentContext,
+  async (req, res) => {
+    try {
+      const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+      if (!authResult) return;
+      const userId = resolveCanonicalAgentUserId(authResult);
+      if (!userId) {
+        return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+      }
+      const filename = String(req.params.filename || "").trim();
+      if (!isSafeAgentExportFilename(filename)) {
+        return res.status(400).json({ error: "unsafe_filename" });
+      }
+      const targetPath = `/api/v1/users/${encodeURIComponent(userId)}/exports/${encodeURIComponent(filename)}`;
+      await proxyNullclawRequest(req, res, targetPath, {
+        userId,
+        onUpstreamResponse(upstream) {
+          if (upstream.ok && !upstream.headers.has("content-disposition")) {
+            res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+          }
+        },
+      });
+    } catch (error) {
+      console.error("[Agent] Export download proxy error:", error);
+      return res.status(503).json({ error: error?.message || "Agent export download failed." });
+    }
+  }
+);
+
+app.get("/api/agent/share/artifact/:shareCode", async (req, res) => {
+  try {
+    const shareCode = String(req.params.shareCode || "").trim();
+    if (!isSafeAgentShareCode(shareCode)) {
+      return res.status(400).json({ error: "invalid_share_code" });
+    }
+    await proxyNullclawPublicRequest(
+      req,
+      res,
+      `/api/v1/share/artifact/${encodeURIComponent(shareCode)}`
+    );
+  } catch (error) {
+    console.error("[Agent] Public artifact share proxy error:", error);
+    return res.status(503).json({ error: error?.message || "Agent artifact share failed." });
+  }
+});
+
+app.get("/api/agent/share/trace/:shareCode", async (req, res) => {
+  try {
+    const shareCode = String(req.params.shareCode || "").trim();
+    if (!isSafeAgentShareCode(shareCode)) {
+      return res.status(400).json({ error: "invalid_share_code" });
+    }
+    await proxyNullclawPublicRequest(req, res, `/api/v1/share/${encodeURIComponent(shareCode)}`);
+  } catch (error) {
+    console.error("[Agent] Public trace share proxy error:", error);
+    return res.status(503).json({ error: error?.message || "Agent trace share failed." });
+  }
+});
 
 app.get(
   "/api/agent/artifacts",

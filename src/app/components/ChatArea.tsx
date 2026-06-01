@@ -101,7 +101,7 @@ import { MemoryCaptureToast } from "./memory/MemoryCaptureToast";
 import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
 import { MemoryImportSheet } from "./onboarding/MemoryImportSheet";
 import { OnboardingTour } from "./onboarding/OnboardingTour";
-import { PowerUserSheet, type PowerUserTab } from "./agent/PowerUserSheet";
+import { AgentArtifactCanvas } from "./agent/AgentArtifactCanvas";
 import { CronManagementSheet } from "./agent/CronManagementSheet";
 import { useOnboardingProgress } from "@/queries/useOnboardingProgress";
 import { useBrainGraph } from "@/queries/useBrainGraph";
@@ -131,34 +131,28 @@ import {
   type SystemNoticePayload,
 } from "./ui/zaki/SystemNotice";
 
-const POWER_USER_EVENT_TABS: PowerUserTab[] = [
-  "controls",
-  "approvals",
-  "browser",
-  "artifacts",
-  "trace",
-  "context",
-  "memory",
-  "usage",
-];
-
 const POWER_USER_PENDING_TAB_KEY = "zaki:pendingPowerUserTab";
 const AGENT_INSPECTOR_OPEN_KEY = "zaki:agentInspectorOpen";
 const AGENT_FOCUS_MODE_KEY = "zaki:agentFocusMode";
 
-function normalizePowerUserTab(value: unknown): PowerUserTab {
-  return POWER_USER_EVENT_TABS.includes(value as PowerUserTab)
-    ? (value as PowerUserTab)
-    : "controls";
+function normalizeAgentInspectorEventTab(value: unknown): AgentInspectorTab {
+  if (value === "browser") return "browser";
+  if (value === "artifacts") return "artifacts";
+  if (value === "trace") return "trace";
+  if (value === "cron") return "cron";
+  if (value === "sources" || value === "evidence" || value === "context" || value === "memory") {
+    return "evidence";
+  }
+  return "plan";
 }
 
-function takePendingPowerUserTab(): PowerUserTab | null {
+function takePendingInspectorTab(): AgentInspectorTab | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.sessionStorage.getItem(POWER_USER_PENDING_TAB_KEY);
     if (!raw) return null;
     window.sessionStorage.removeItem(POWER_USER_PENDING_TAB_KEY);
-    return normalizePowerUserTab(raw);
+    return normalizeAgentInspectorEventTab(raw);
   } catch {
     return null;
   }
@@ -237,6 +231,11 @@ const NULLALIS_NARRATION_PHASES = new Set<NullalisNarrationPhase>([
   "error_recovery",
   "listening",
   "speaking",
+  "turn_auto_compaction",
+  "post_reply_compaction",
+  "history_maintenance_after_tools",
+  "durable_continuity_refresh",
+  "durable_continuity_refreshed",
 ]);
 
 function isNullalisNarrationPhase(value: unknown): value is NullalisNarrationPhase {
@@ -255,6 +254,16 @@ function numericValue(value: unknown) {
   return null;
 }
 
+function booleanValue(value: unknown) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return null;
+}
+
 function clampPercent(value: number) {
   return Math.min(100, Math.max(0, value));
 }
@@ -268,26 +277,44 @@ function contextMetricPayload(data: Record<string, unknown> | null | undefined) 
   return report ? { ...report, ...data } : data;
 }
 
+function hasTrustedContextWindowSignal(payload: Record<string, unknown>) {
+  return (
+    numericValue(payload.token_estimate) != null ||
+    numericValue(payload.context_window_tokens) != null ||
+    numericValue(payload.context_window_used) != null ||
+    numericValue(payload.context_window_max) != null ||
+    numericValue(payload.context_tokens) != null ||
+    numericValue(payload.used_tokens) != null ||
+    numericValue(payload.context_window_used_pct) != null ||
+    (payload.report != null && typeof payload.report === "object")
+  );
+}
+
 function resolveRuntimeContextPressurePercent(data: Record<string, unknown> | null | undefined) {
   const payload = contextMetricPayload(data);
   if (!payload) return null;
   const explicitPressure =
     numericValue(payload.context_pressure_percent) ??
     numericValue(payload.context_window_used_pct);
-  if (explicitPressure != null) return clampPercent(explicitPressure);
+  const looksLikeLegacyCumulativeContext =
+    explicitPressure != null &&
+    numericValue(payload.tokens_used) != null &&
+    numericValue(payload.token_limit) != null &&
+    !hasTrustedContextWindowSignal(payload);
+  if (explicitPressure != null && !looksLikeLegacyCumulativeContext) {
+    return clampPercent(explicitPressure);
+  }
   const used =
-    numericValue(payload.token_count) ??
-    numericValue(payload.tokens_used) ??
+    numericValue(payload.token_estimate) ??
     numericValue(payload.context_window_used) ??
     numericValue(payload.context_tokens) ??
     numericValue(payload.used_tokens) ??
-    numericValue(payload.token_estimate) ??
-    numericValue(payload.total_tokens);
+    (hasTrustedContextWindowSignal(payload) ? numericValue(payload.tokens_used) : null);
   const max =
     numericValue(payload.context_window_max) ??
-    numericValue(payload.token_limit) ??
     numericValue(payload.context_max) ??
-    numericValue(payload.context_window_tokens);
+    numericValue(payload.context_window_tokens) ??
+    (hasTrustedContextWindowSignal(payload) ? numericValue(payload.token_limit) : null);
   if (used == null || max == null || max <= 0) return null;
   return clampPercent((used / max) * 100);
 }
@@ -299,30 +326,75 @@ export function buildNullalisContextGauge(
   if (!payload) return null;
   const contextMax =
     numericValue(payload.context_window_max) ??
-    numericValue(payload.token_limit) ??
     numericValue(payload.context_max) ??
-    numericValue(payload.context_window_tokens);
+    numericValue(payload.context_window_tokens) ??
+    (hasTrustedContextWindowSignal(payload) ? numericValue(payload.token_limit) : null);
   const pressurePct = resolveRuntimeContextPressurePercent(payload);
   if ((contextMax == null || contextMax <= 0) && pressurePct == null) return null;
   const tokenCount =
-    numericValue(payload.token_count) ??
-    numericValue(payload.tokens_used) ??
+    numericValue(payload.token_estimate) ??
     numericValue(payload.context_window_used) ??
     numericValue(payload.context_tokens) ??
     numericValue(payload.used_tokens) ??
-    numericValue(payload.token_estimate) ??
-    numericValue(payload.total_tokens) ??
+    (hasTrustedContextWindowSignal(payload) ? numericValue(payload.tokens_used) : null) ??
     null;
   const messageCount =
     numericValue(payload.message_count) ??
     numericValue(payload.history_len) ??
     numericValue(payload.history_messages) ??
     null;
+  const source =
+    payload.context_source === "live_session" ||
+    payload.context_source === "diagnostics_fallback" ||
+    payload.context_source === "inactive_session" ||
+    payload.context_source === "unknown"
+      ? pressurePct == null && !hasTrustedContextWindowSignal(payload)
+        ? "unknown"
+        : payload.context_source
+      : data?.report
+        ? "diagnostics_fallback"
+        : "live_session";
+  const confidence =
+    payload.context_confidence === "exact" ||
+    payload.context_confidence === "fallback" ||
+    payload.context_confidence === "inactive" ||
+    payload.context_confidence === "unknown"
+      ? payload.context_confidence
+      : source === "live_session"
+        ? "exact"
+        : source === "diagnostics_fallback"
+          ? "fallback"
+          : source === "inactive_session"
+            ? "inactive"
+            : "unknown";
+  const lastTurn =
+    payload.last_turn && typeof payload.last_turn === "object" && !Array.isArray(payload.last_turn)
+      ? (payload.last_turn as Record<string, unknown>)
+      : null;
   return {
     tokenCount: tokenCount ?? undefined,
     contextMax: contextMax && contextMax > 0 ? contextMax : undefined,
     messageCount: messageCount ?? undefined,
     context_pressure_percent: pressurePct,
+    source,
+    confidence,
+    compactionThresholdPct:
+      numericValue(payload.compaction_threshold_pct) ?? null,
+    compactionThresholdTokens:
+      numericValue(payload.token_compaction_threshold) ??
+      numericValue(payload.compaction_threshold_tokens) ??
+      null,
+    tokenCompactionTriggered:
+      booleanValue(payload.token_compaction_triggered) ??
+      booleanValue(payload.compaction_triggered) ??
+      null,
+    lastTurn: lastTurn
+      ? {
+          autoCompactionEvents: numericValue(lastTurn.auto_compaction_events),
+          durableContinuityRefreshed: booleanValue(lastTurn.durable_continuity_refreshed),
+          memoryContextInjected: booleanValue(lastTurn.memory_context_injected),
+        }
+      : null,
   };
 }
 
@@ -336,6 +408,46 @@ export function resolveContextGaugePercent(data: ContextGaugeData | null | undef
     return clampPercent((data.tokenCount / data.contextMax) * 100);
   }
   return null;
+}
+
+function formatContextNumber(value: number) {
+  return new Intl.NumberFormat("en-US").format(Math.round(value));
+}
+
+function buildComposerContextTooltip(data: ContextGaugeData | null | undefined) {
+  if (!data) return null;
+  const source =
+    data.source === "live_session"
+      ? "Live session"
+      : data.source === "diagnostics_fallback"
+        ? "Diagnostics fallback"
+        : data.source === "inactive_session"
+          ? "Inactive session"
+          : "Unknown source";
+  const confidence =
+    data.confidence === "exact"
+      ? "exact"
+      : data.confidence === "fallback"
+        ? "fallback estimate"
+        : data.confidence === "inactive"
+          ? "inactive estimate"
+          : "unknown confidence";
+  const parts = [`${source} · ${confidence}`];
+  if (typeof data.tokenCount === "number" && typeof data.contextMax === "number") {
+    parts.push(`${formatContextNumber(data.tokenCount)} / ${formatContextNumber(data.contextMax)} tokens`);
+  }
+  if (typeof data.compactionThresholdPct === "number") {
+    parts.push(`Compacts at ${Math.round(data.compactionThresholdPct)}%`);
+  } else if (typeof data.compactionThresholdTokens === "number") {
+    parts.push(`Compacts at ${formatContextNumber(data.compactionThresholdTokens)} tokens`);
+  }
+  if (data.lastTurn?.autoCompactionEvents) {
+    parts.push(`${data.lastTurn.autoCompactionEvents} compaction event${data.lastTurn.autoCompactionEvents === 1 ? "" : "s"} last turn`);
+  }
+  if (data.lastTurn?.durableContinuityRefreshed) {
+    parts.push("Continuity memory refreshed");
+  }
+  return parts.join(". ");
 }
 
 /**
@@ -589,6 +701,7 @@ function extractVisibleAgentChunk(payload: Record<string, unknown>) {
 export function inferStreamingModeFromContext(rawValue: string): "thinking" | "researching" | "writing" {
   const normalized = String(rawValue || "").trim().toLowerCase();
   if (!normalized) return "thinking";
+  if (runtimeMaintenanceLabel(normalized)) return "thinking";
   if (
     normalized.includes("preparing final reply") ||
     normalized.includes("finalizing reply") ||
@@ -602,6 +715,10 @@ export function inferStreamingModeFromContext(rawValue: string): "thinking" | "r
     normalized.includes("gathering context") ||
     normalized.includes("retrieving memory") ||
     normalized.includes("trimming context") ||
+    normalized.includes("auto-compacting context") ||
+    normalized.includes("compacting context") ||
+    normalized.includes("refreshing continuity") ||
+    normalized.includes("updating history") ||
     normalized.includes("preparing model request") ||
     normalized.includes("reflecting on tool results")
   ) {
@@ -644,6 +761,39 @@ function normalizeProgressText(rawValue: string | null | undefined) {
   return String(rawValue || "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function runtimeMaintenanceLabel(rawValue: string | null | undefined) {
+  const normalized = normalizeProgressText(rawValue).toLowerCase();
+  const tokenKey = normalized.replace(/[-\s]+/g, "_");
+  if (
+    tokenKey.includes("turn_auto_compaction") ||
+    tokenKey.includes("auto_compacting_context") ||
+    normalized.includes("auto-compacting context")
+  ) {
+    return "Auto-compacting context";
+  }
+  if (
+    tokenKey.includes("post_reply_compaction") ||
+    normalized.includes("compacted context after reply") ||
+    normalized.includes("compacting context")
+  ) {
+    return "Compacted context after reply";
+  }
+  if (
+    tokenKey.includes("history_maintenance_after_tools") ||
+    normalized.includes("updating history")
+  ) {
+    return "Updating history";
+  }
+  if (
+    tokenKey.includes("durable_continuity_refreshed") ||
+    tokenKey.includes("durable_continuity_refresh") ||
+    normalized.includes("refreshing continuity")
+  ) {
+    return "Refreshing continuity memory";
+  }
+  return null;
 }
 
 function normalizeReasoningSummaryText(rawValue: string | null | undefined) {
@@ -1046,9 +1196,15 @@ function deriveNarrativeText(event: {
   const normalized = normalizedText.toLowerCase();
   const taskContext = extractTaskProgressContext(event);
   const toolName = normalizeProgressText(event.tool) || null;
+  const maintenanceLabel = runtimeMaintenanceLabel(
+    [normalizedText, event.phase, event.state].filter(Boolean).join(" ")
+  );
 
   if (event.source === "summary" && normalizedText) {
     return toSentenceCase(normalizedText);
+  }
+  if (maintenanceLabel) {
+    return maintenanceLabel;
   }
   if (event.terminal === "error") {
     if (taskContext.taskId) return `Task ${taskContext.taskId} failed`;
@@ -1089,6 +1245,14 @@ function deriveNarrativeText(event: {
       return "Checking context and shaping the answer";
     case "trimming context":
       return "Trimming context to keep the request focused";
+    case "auto-compacting context":
+      return "Auto-compacting context";
+    case "compacting context":
+      return "Compacted context after reply";
+    case "refreshing continuity":
+      return "Refreshing continuity memory";
+    case "updating history":
+      return "Updating history";
     case "thinking":
       return "Thinking through the request";
     case "checking context and memory":
@@ -1561,6 +1725,16 @@ function recordStringValue(data: Record<string, unknown>, ...keys: string[]): st
   return null;
 }
 
+function recordObjectValue(data: Record<string, unknown>, ...keys: string[]): Record<string, unknown> | null {
+  for (const key of keys) {
+    const value = data[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
 function normalizeAgentTaskStatus(status: unknown): NullalisTaskStatus {
   const raw = String(status || "queued").trim().toLowerCase();
   if (raw === "completed" || raw === "complete" || raw === "success") return "done";
@@ -1581,6 +1755,193 @@ function normalizeAgentTaskStatus(status: unknown): NullalisTaskStatus {
     return raw;
   }
   return "queued";
+}
+
+function normalizeTodoTaskStatus(status: unknown): NullalisTaskStatus {
+  const raw = String(status || "pending").trim().toLowerCase();
+  if (raw === "pending") return "queued";
+  return normalizeAgentTaskStatus(raw);
+}
+
+function toolPayloadSource(payload: Record<string, unknown>): Record<string, unknown> {
+  return payload.content && typeof payload.content === "object" && !Array.isArray(payload.content)
+    ? (payload.content as Record<string, unknown>)
+    : payload;
+}
+
+function toolPayloadName(payload: Record<string, unknown>): string | null {
+  const source = toolPayloadSource(payload);
+  return (
+    recordStringValue(source, "name", "toolName", "tool") ||
+    recordStringValue(payload, "name", "toolName", "tool")
+  );
+}
+
+function toolPayloadArguments(payload: Record<string, unknown>): Record<string, unknown> | null {
+  const source = toolPayloadSource(payload);
+  return (
+    recordObjectValue(source, "arguments", "args", "input") ||
+    recordObjectValue(payload, "arguments", "args", "input")
+  );
+}
+
+function todoListFromResult(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{")) return null;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function todoResultValue(payload: Record<string, unknown>): unknown {
+  const source = toolPayloadSource(payload);
+  return (
+    source.result ??
+    source.output ??
+    source.output_preview ??
+    source.outputPreview ??
+    payload.result ??
+    payload.output ??
+    payload.output_preview ??
+    payload.outputPreview
+  );
+}
+
+function todoItemDescription(item: Record<string, unknown>, fallback: string): string {
+  return (
+    recordStringValue(item, "title", "description", "label", "summary", "note") ||
+    fallback
+  );
+}
+
+function todoTaskId(listKey: string, itemId: number | string): string {
+  return `todo:${listKey}:item:${itemId}`;
+}
+
+function todoListItemsToTasks(
+  list: Record<string, unknown>,
+  now: number,
+  fallbackListKey: string
+): NullalisTaskItem[] {
+  const listId = recordStringValue(list, "list_id", "listId", "id") || fallbackListKey;
+  const items = Array.isArray(list.items) ? list.items : [];
+  return items
+    .map((item, index): NullalisTaskItem | null => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+      const record = item as Record<string, unknown>;
+      const idValue = numericValue(record.id ?? record.item_id ?? record.itemId) ?? index + 1;
+      const description = todoItemDescription(record, `Todo item ${idValue}`);
+      return {
+        taskId: todoTaskId(listId, idValue),
+        status: normalizeTodoTaskStatus(record.status ?? record.state),
+        description,
+        progressPct:
+          normalizeTodoTaskStatus(record.status ?? record.state) === "done" ? 100 : null,
+        updatedAt: now,
+      };
+    })
+    .filter((task): task is NullalisTaskItem => Boolean(task));
+}
+
+export function extractNullalisTodoTaskItemsFromToolPayload(
+  payload: Record<string, unknown>,
+  now = Date.now()
+): NullalisTaskItem[] {
+  const toolName = toolPayloadName(payload);
+  if (String(toolName || "").trim().toLowerCase() !== "todo") return [];
+
+  const args = toolPayloadArguments(payload);
+  const requestKey =
+    recordStringValue(payload, "requestId", "request_id", "tool_call_id", "toolCallId", "tool_use_id", "toolUseId", "run_id", "runId") ||
+    "active";
+  const action = args ? String(args.action || "").trim().toLowerCase() : "";
+
+  if (args && action === "create") {
+    const listKey = recordStringValue(args, "list_id", "listId", "id") || `draft:${requestKey}`;
+    const items = Array.isArray(args.items) ? args.items : [];
+    return items
+      .map((item, index): NullalisTaskItem | null => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+        const record = item as Record<string, unknown>;
+        const idValue = numericValue(record.id ?? record.item_id ?? record.itemId) ?? index + 1;
+        return {
+          taskId: todoTaskId(listKey, idValue),
+          status: "queued",
+          description: todoItemDescription(record, `Todo item ${idValue}`),
+          progressPct: null,
+          updatedAt: now,
+        };
+      })
+      .filter((task): task is NullalisTaskItem => Boolean(task));
+  }
+
+  if (args && action === "update") {
+    const itemId = numericValue(args.item_id ?? args.itemId ?? args.id);
+    if (itemId == null) return [];
+    const listKey = recordStringValue(args, "list_id", "listId") || "active";
+    const status = normalizeTodoTaskStatus(args.status ?? args.state);
+    return [
+      {
+        taskId: todoTaskId(listKey, itemId),
+        status,
+        description: recordStringValue(args, "title", "description", "note") || `Todo item ${itemId}`,
+        progressPct: status === "done" ? 100 : status === "running" ? 50 : null,
+        updatedAt: now,
+      },
+    ];
+  }
+
+  const list = todoListFromResult(todoResultValue(payload));
+  return list ? todoListItemsToTasks(list, now, requestKey) : [];
+}
+
+function todoItemIndexFromTaskId(taskId: string): string | null {
+  const match = taskId.match(/(?:^|:)item:(\d+)$/);
+  return match?.[1] ?? null;
+}
+
+function mergeTodoTaskItems(
+  current: NullalisTaskItem[],
+  incoming: NullalisTaskItem[]
+): NullalisTaskItem[] {
+  if (!incoming.length) return current;
+  const next = [...current];
+  for (const task of incoming) {
+    let index = next.findIndex((item) => item.taskId === task.taskId);
+    if (index < 0) {
+      const itemIndex = todoItemIndexFromTaskId(task.taskId);
+      if (itemIndex) {
+        const matching = next
+          .map((item, i) => ({ item, i }))
+          .filter(({ item }) => item.taskId.startsWith("todo:") && todoItemIndexFromTaskId(item.taskId) === itemIndex);
+        if (matching.length === 1 && matching[0]) index = matching[0].i;
+      }
+    }
+    if (index < 0) {
+      next.push(task);
+      continue;
+    }
+    const existing = next[index];
+    if (!existing) continue;
+    const genericDescription = /^Todo item \d+$/i.test(task.description);
+    next[index] = {
+      ...existing,
+      ...task,
+      taskId: existing.taskId,
+      description: genericDescription ? existing.description : task.description,
+      updatedAt: Math.max(existing.updatedAt, task.updatedAt),
+    };
+  }
+  return next.sort((a, b) => a.updatedAt - b.updatedAt).slice(-12);
 }
 
 function agentTaskToNullalisTaskItem(task: AgentTask): NullalisTaskItem | null {
@@ -1725,6 +2086,9 @@ function normalizeAgentArtifact(item: unknown): AgentInspectorArtifact | null {
       typeof record.version === "string" || typeof record.version === "number"
         ? record.version
         : null,
+    sessionKey: recordStringValue(record, "session_key", "sessionKey", "session_id", "sessionId"),
+    shareUrl: recordStringValue(record, "public_url", "publicUrl", "share_url", "shareUrl"),
+    createdAt: timestampMillis(record.created_at ?? record.createdAt),
     updatedAt: timestampMillis(
       record.updated_at ?? record.updatedAt ?? record.created_at ?? record.createdAt
     ),
@@ -1746,18 +2110,18 @@ export function extractNullalisApprovalRequest(
   const tool =
     stringPayloadField(payload, "tool", "tool_name", "toolName") ||
     "tool";
-  const wireId = stringPayloadField(
+  const approvalId = stringPayloadField(
     payload,
     "approval_id",
-    "approvalId",
-    "id",
-    "request_id",
-    "requestId",
-    "tool_use_id",
-    "toolUseId"
+    "approvalId"
   );
+  const numericId =
+    typeof payload.id === "number" || typeof payload.id === "string"
+      ? payload.id
+      : null;
+  const toolCallId = stringPayloadField(payload, "tool_call_id", "toolCallId", "tool_use_id", "toolUseId");
   const runId = stringPayloadField(payload, "run_id", "runId");
-  const id = wireId || (runId ? `run:${runId}:tool:${tool}` : null);
+  const id = approvalId || (runId ? `legacy-run:${runId}:tool:${tool}` : null);
   const inputPreview =
     (typeof payload.input_preview === "string" && payload.input_preview.trim()) ||
     (typeof payload.inputPreview === "string" && payload.inputPreview.trim()) ||
@@ -1776,6 +2140,9 @@ export function extractNullalisApprovalRequest(
     null;
   return {
     id: id || `approval-${now}-${Math.random().toString(36).slice(2, 8)}`,
+    approvalId,
+    numericId,
+    toolCallId,
     tool,
     reason:
       (typeof payload.reason === "string" && payload.reason.trim()) ||
@@ -1833,12 +2200,18 @@ export function extractNullalisReasoningNarrationFrame(
 function normalizeNullalisTranscriptLabel(label: string | null | undefined, phase?: string | null) {
   const raw = normalizeProgressText(label).replace(/\.+$/, "");
   const key = raw.toLowerCase();
+  const maintenanceLabel = runtimeMaintenanceLabel([raw, phase].filter(Boolean).join(" "));
+  if (maintenanceLabel) return maintenanceLabel;
   const mapped: Record<string, string> = {
     "analyzing request": "Analyzing the request",
     "gathering context": "Checking context and memory",
     "checking context and memory": "Checking context and memory",
     "retrieving memory": "Searching saved memory",
     "trimming context": "Trimming context to keep the request focused",
+    "auto-compacting context": "Auto-compacting context",
+    "compacting context": "Compacted context after reply",
+    "refreshing continuity": "Refreshing continuity memory",
+    "updating history": "Updating history",
     "thinking": "Thinking through the request",
     "thinking through the request": "Thinking through the request",
     "preparing model request": "Preparing the model request",
@@ -2578,6 +2951,7 @@ export function ChatArea() {
   const [agentCronLoading, setAgentCronLoading] = useState(false);
   const [agentCronError, setAgentCronError] = useState<string | null>(null);
   const [agentArtifactSnapshots, setAgentArtifactSnapshots] = useState<AgentInspectorArtifact[]>([]);
+  const [agentArtifactScope, setAgentArtifactScope] = useState<"session" | "recent">("session");
   const [agentArtifactsLoading, setAgentArtifactsLoading] = useState(false);
   const [agentArtifactsError, setAgentArtifactsError] = useState<string | null>(null);
   const [agentExtensionDiagnostics, setAgentExtensionDiagnostics] =
@@ -2628,10 +3002,9 @@ export function ChatArea() {
   const zakiBotProvisionPromiseRef = useRef<Promise<boolean> | null>(null);
   const [zakiBotProvisionReady, setZakiBotProvisionReady] = useState(false);
   const [sessionModePending, setSessionModePending] = useState(false);
-  const [powerUserOpen, setPowerUserOpen] = useState(false);
-  const [powerUserInitialTab, setPowerUserInitialTab] =
-    useState<PowerUserTab>("controls");
   const [agentCronOpen, setAgentCronOpen] = useState(false);
+  const [selectedAgentArtifact, setSelectedAgentArtifact] =
+    useState<AgentInspectorArtifact | null>(null);
   const previousAgentCronOpenRef = useRef(false);
   const [agentInspectorOpen, setAgentInspectorOpen] = useState(() => {
     if (typeof window === "undefined") return true;
@@ -3021,11 +3394,9 @@ export function ChatArea() {
   useEffect(() => {
     if (!isZakiBotActiveSpace || !normalizedActiveZakiSessionKey || !zakiBotProvisionReady) return;
     if (zakiSessionsLoading) return;
-    if (!isActiveZakiSessionLive) return;
     void hydrateActiveSessionDetail(normalizedActiveZakiSessionKey);
   }, [
     hydrateActiveSessionDetail,
-    isActiveZakiSessionLive,
     isZakiBotActiveSpace,
     normalizedActiveZakiSessionKey,
     zakiBotProvisionReady,
@@ -3081,10 +3452,7 @@ export function ChatArea() {
         }
       : null;
   const agentContextPercent = isZakiBotActiveSpace
-    ? resolveContextGaugePercent(nullalisContextGauge) ??
-      activeSessionUi?.contextPressurePercent ??
-      activeSessionRecord?.context_pressure_percent ??
-      null
+    ? resolveContextGaugePercent(nullalisContextGauge)
     : null;
   const agentTaskItems = useMemo(
     () => mergeNullalisTaskItems(agentTaskSnapshots, nullalisTaskItems),
@@ -3098,7 +3466,7 @@ export function ChatArea() {
   const agentHeaderTitle = activeSessionRecord?.title?.trim() || headerThreadName;
   const agentHeaderMeta = [
     activeSessionMode ?? "execute",
-    agentContextPercent != null ? `${Math.round(agentContextPercent)}% ctx` : "0% ctx",
+    agentContextPercent != null ? `${Math.round(agentContextPercent)}% ctx` : "ctx unknown",
     agentWeeklyLabel,
     isActiveZakiSessionLive ? "live" : "ready",
   ].join(" · ");
@@ -3802,7 +4170,11 @@ export function ChatArea() {
         // response succeeded AND we actually have a numeric pressure.
         if (response.ok) {
           contextUnavailableSessionKeysRef.current.delete(sessionKey);
-          payload = data as Record<string, unknown>;
+          payload = {
+            ...(data as Record<string, unknown>),
+            context_source: "live_session",
+            context_confidence: "exact",
+          };
         } else {
           const errorCode = String(
             (data as { error?: string | null; code?: string | null } | null)?.error ||
@@ -3819,10 +4191,31 @@ export function ChatArea() {
           }
         }
       }
+      if (!payload && activeSessionRecord) {
+        const recordPayload = activeSessionRecord as Record<string, unknown>;
+        const recordPressure = numericValue(recordPayload.context_pressure_percent);
+        const recordMax =
+          numericValue(recordPayload.context_window_max) ??
+          numericValue(recordPayload.context_window_tokens);
+        if (
+          (recordPressure != null || (recordMax != null && recordMax > 0)) &&
+          hasTrustedContextWindowSignal(recordPayload)
+        ) {
+          payload = {
+            ...recordPayload,
+            context_source: activeSessionRecord.live ? "live_session" : "inactive_session",
+            context_confidence: activeSessionRecord.live ? "exact" : "inactive",
+          };
+        }
+      }
       if (!payload && contextUnavailableSessionKeysRef.current.has(sessionKey)) {
         const { response, data } = await fetchContextDiagnostics();
         if (response.ok) {
-          payload = data as Record<string, unknown>;
+          payload = {
+            ...(data as Record<string, unknown>),
+            context_source: "diagnostics_fallback",
+            context_confidence: "fallback",
+          };
         }
       }
       if (!payload) return;
@@ -3840,6 +4233,7 @@ export function ChatArea() {
   }, [
     activeThreadId,
     activeZakiSessionKey,
+    activeSessionRecord,
     agentUserId,
     setSessionContextPressure,
     zakiBotProvisionReady,
@@ -3930,13 +4324,33 @@ export function ChatArea() {
           (data as { error?: string | null; reason?: string | null })?.reason ||
           "unavailable";
         setAgentArtifactSnapshots([]);
+        setAgentArtifactScope("session");
         setAgentArtifactsError(error);
       } else {
-        setAgentArtifactSnapshots(normalizeAgentArtifactsPayload(data));
+        const sessionArtifacts = normalizeAgentArtifactsPayload(data);
+        if (sessionArtifacts.length || !normalizedActiveZakiSessionKey) {
+          setAgentArtifactSnapshots(sessionArtifacts);
+          setAgentArtifactScope("session");
+        } else {
+          try {
+            const recentResult = await listAgentArtifacts({ limit: 5 });
+            if (recentResult.response.ok) {
+              setAgentArtifactSnapshots(normalizeAgentArtifactsPayload(recentResult.data));
+              setAgentArtifactScope("recent");
+            } else {
+              setAgentArtifactSnapshots([]);
+              setAgentArtifactScope("session");
+            }
+          } catch {
+            setAgentArtifactSnapshots([]);
+            setAgentArtifactScope("session");
+          }
+        }
       }
     } else {
       setAgentArtifactSnapshots([]);
       setAgentArtifactsError("network_error");
+      setAgentArtifactScope("session");
     }
     setAgentArtifactsLoading(false);
 
@@ -4494,6 +4908,37 @@ export function ChatArea() {
     [isZakiBotActiveSpace, pushNullalisTranscriptEntry]
   );
 
+  const upsertNullalisTodoTaskItems = useCallback(
+    (payload: Record<string, unknown>) => {
+      if (!isZakiBotActiveSpace) return;
+      const todoTasks = extractNullalisTodoTaskItemsFromToolPayload(payload);
+      if (!todoTasks.length) return;
+      setZakiBotProgressTerminalReason(null);
+      setStreamingIndicatorMode("thinking");
+      setNullalisTaskItems((prev) => mergeTodoTaskItems(prev, todoTasks));
+      const activeTodo =
+        todoTasks.find((task) => task.status === "running") ||
+        todoTasks.find((task) => task.status === "queued") ||
+        todoTasks[todoTasks.length - 1];
+      if (!activeTodo) return;
+      setNullalisNarrationFrame({
+        id: `zaki-runtime-todo-${activeTodo.taskId}-${activeTodo.updatedAt}`,
+        phase: "plan_step",
+        label:
+          activeTodo.status === "running"
+            ? `Working on ${activeTodo.description}`
+            : `Todo updated: ${activeTodo.description}`,
+        tool: "todo",
+        iteration: null,
+        durationMs: null,
+        stepIndex: null,
+        stepTotal: null,
+        timestamp: activeTodo.updatedAt,
+      });
+    },
+    [isZakiBotActiveSpace]
+  );
+
   const updateNullalisReasoningSummary = useCallback(
     (payload: Record<string, unknown>) => {
       if (!isZakiBotActiveSpace) return;
@@ -4719,6 +5164,7 @@ export function ChatArea() {
             }
             if (isZakiBotActiveSpace && report?.type === "toolCallInvocation") {
               upsertZakiBotToolCall({ content: report.content, type: "toolCallInvocation" });
+              upsertNullalisTodoTaskItems({ content: report.content, type: "toolCallInvocation" });
               return;
             }
             if (
@@ -4726,6 +5172,7 @@ export function ChatArea() {
               (report?.type === "toolCallResult" || report?.type === "tool_result")
             ) {
               applyZakiBotToolResult({ content: report.content, type: report?.type });
+              upsertNullalisTodoTaskItems({ content: report.content, type: report?.type });
               return;
             }
             if (report?.type === "fullTextResponse") {
@@ -4773,12 +5220,14 @@ export function ChatArea() {
           if (payload?.type === "toolCallInvocation") {
             if (isZakiBotActiveSpace) {
               upsertZakiBotToolCall(payload);
+              upsertNullalisTodoTaskItems(payload);
             }
             return;
           }
           if (payload?.type === "toolCallResult" || payload?.type === "tool_result") {
             if (isZakiBotActiveSpace) {
               applyZakiBotToolResult(payload);
+              upsertNullalisTodoTaskItems(payload);
             }
             return;
           }
@@ -4867,6 +5316,7 @@ export function ChatArea() {
     updateNullalisReasoningSummary,
     updateAssistantContent,
     updateAssistantError,
+    upsertNullalisTodoTaskItems,
     upsertZakiBotToolCall,
   ]);
 
@@ -5200,11 +5650,13 @@ export function ChatArea() {
             name: payload.name ?? payload.tool,
             tool: payload.tool ?? payload.name,
           });
+          upsertNullalisTodoTaskItems(payload);
           return {};
         }
         if (eventType === "tool_result" || payloadType === "tool_result") {
           pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("tool_result", payload));
           applyZakiBotToolResult({ ...payload, type: "tool_result" });
+          upsertNullalisTodoTaskItems(payload);
           return {};
         }
         if (eventType === "task_update" || payloadType === "task_update") {
@@ -5257,6 +5709,9 @@ export function ChatArea() {
               if (!seenSet.has(approvalRequest.id)) {
                 seenSet.add(approvalRequest.id);
                 incrementSessionApprovalCount(sessionKey, approvalRequest);
+              }
+              if (!approvalRequest.approvalId) {
+                void hydrateActiveSessionDetail(sessionKey);
               }
             }
           }
@@ -5618,6 +6073,7 @@ export function ChatArea() {
     updateAssistantSources,
     updateNullalisReasoningSummary,
     upsertNullalisTaskItem,
+    upsertNullalisTodoTaskItems,
     upsertZakiBotToolCall,
   ]);
 
@@ -5682,15 +6138,10 @@ export function ChatArea() {
     openSpacesMemoryViewer({ enabled: isMemoryPipelineEnabled, query, tab });
   }, [isMemoryPipelineEnabled]);
 
-  const openPowerUserSheet = useCallback((tab: PowerUserTab = "controls") => {
-    setAgentMobileInspectorOpen(false);
-    setPowerUserInitialTab(tab);
-    setPowerUserOpen(true);
-  }, []);
-
   const openAgentInspectorTab = useCallback((tab: AgentInspectorTab) => {
     const mobile =
       typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
       window.matchMedia("(max-width: 767px)").matches;
     setAgentFocusMode(false);
     if (mobile) {
@@ -5703,6 +6154,12 @@ export function ChatArea() {
       tab,
       id: (previous?.id ?? 0) + 1,
     }));
+  }, []);
+
+  const openAgentArtifactCanvas = useCallback((artifact: AgentInspectorArtifact) => {
+    setSelectedAgentArtifact(artifact);
+    setAgentFocusMode(false);
+    setAgentMobileInspectorOpen(false);
   }, []);
 
   const openAgentCronSheet = useCallback(() => {
@@ -6245,6 +6702,10 @@ export function ChatArea() {
     zakiBotToolCalls,
   ]);
 
+  useEffect(() => {
+    setSelectedAgentArtifact(null);
+  }, [normalizedActiveZakiSessionKey]);
+
   // Snapshot the current turn's transcript entries into localTurnSnapshots
   // when the stream ends, so past-turn timelines persist after
   // nullalisTranscriptEntries is cleared on the next turn.
@@ -6716,19 +7177,37 @@ export function ChatArea() {
         return;
       }
       try {
-        await approveAgentSession(sessionKey, {
+        const request =
+          powerUserPendingApprovals.find((approval) => approval.id === requestId) ??
+          (nullalisApprovalRequest?.id === requestId ? nullalisApprovalRequest : null);
+        const canonicalApprovalId =
+          request?.approvalId ||
+          (/^apr-\d+$/i.test(requestId) ? requestId : null);
+        const payload = {
           approved,
-          approval_id: requestId,
           tool: options?.tool ?? nullalisApprovalRequest?.tool,
           reason: approved ? undefined : options?.reason ?? "User denied from UI",
-        });
+          ...(canonicalApprovalId ? { approval_id: canonicalApprovalId } : {}),
+        };
+        const { response, data } = await approveAgentSession(sessionKey, payload);
+        if (!response.ok) {
+          const code = typeof data?.error === "string" ? data.error : `approval_${response.status}`;
+          const error = new Error(code);
+          (error as Error & { code?: string }).code = code;
+          throw error;
+        }
         decrementSessionApprovalCount(sessionKey, requestId);
         setNullalisApprovalRequest(null);
         await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
         await hydrateActiveSessionDetail(sessionKey);
       } catch (err) {
         console.error("[approval]", err);
-        toast.error(approved ? "Failed to send approval" : "Failed to send denial");
+        if ((err as Error & { code?: string })?.code === "approval_id_mismatch") {
+          await hydrateActiveSessionDetail(sessionKey);
+          toast.error("Approval changed. Review the latest approval card.");
+        } else {
+          toast.error(approved ? "Failed to send approval" : "Failed to send denial");
+        }
         throw err; // re-throw so the card stays in the loading state
       }
     },
@@ -6739,6 +7218,8 @@ export function ChatArea() {
       decrementSessionApprovalCount,
       hydrateActiveSessionDetail,
       nullalisApprovalRequest?.tool,
+      nullalisApprovalRequest,
+      powerUserPendingApprovals,
       queryClient,
       t,
     ]
@@ -6828,17 +7309,17 @@ export function ChatArea() {
   }, [activeThreadId, activeZakiSessionKey, agentUserId, nullalisApprovalRequest?.id]);
 
   useEffect(() => {
-    const handleOpenPowerUser = (event: Event) => {
+    const handleOpenInspector = (event: Event) => {
       if (!isAgentSurface) return;
       const detail = (event as CustomEvent<{ tab?: unknown } | undefined>).detail;
-      openPowerUserSheet(normalizePowerUserTab(detail?.tab));
+      openAgentInspectorTab(normalizeAgentInspectorEventTab(detail?.tab));
     };
 
-    window.addEventListener("zaki:open-power-user", handleOpenPowerUser);
+    window.addEventListener("zaki:open-power-user", handleOpenInspector);
     return () => {
-      window.removeEventListener("zaki:open-power-user", handleOpenPowerUser);
+      window.removeEventListener("zaki:open-power-user", handleOpenInspector);
     };
-  }, [isAgentSurface, openPowerUserSheet]);
+  }, [isAgentSurface, openAgentInspectorTab]);
 
   useEffect(() => {
     const handleOpenMobileInspector = () => {
@@ -6853,10 +7334,10 @@ export function ChatArea() {
 
   useEffect(() => {
     if (!isAgentSurface) return;
-    const pendingTab = takePendingPowerUserTab();
+    const pendingTab = takePendingInspectorTab();
     if (!pendingTab) return;
-    openPowerUserSheet(pendingTab);
-  }, [isAgentSurface, openPowerUserSheet]);
+    openAgentInspectorTab(pendingTab);
+  }, [isAgentSurface, openAgentInspectorTab]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -7525,7 +8006,7 @@ export function ChatArea() {
           isZakiBotActiveSpace ? () => openAgentInspectorTab("artifacts") : undefined
         }
         onOpenAgentSources={
-          isZakiBotActiveSpace ? () => openAgentInspectorTab("sources") : undefined
+          isZakiBotActiveSpace ? () => openAgentInspectorTab("evidence") : undefined
         }
         isRtl={isRtl}
       />
@@ -7545,6 +8026,7 @@ export function ChatArea() {
       cronLoading={agentCronLoading}
       cronError={agentCronError}
       artifacts={agentArtifactSnapshots}
+      artifactsScope={agentArtifactScope}
       artifactsLoading={agentArtifactsLoading}
       artifactsError={agentArtifactsError}
       extensionDiagnostics={agentExtensionDiagnostics}
@@ -7556,12 +8038,9 @@ export function ChatArea() {
       artifactCount={agentArtifactEventCount}
       contextGaugeData={nullalisContextGauge}
       usageSummary={zakiUsageSummary}
-      quotaInfo={zakiBotQuotaInfo}
       onOpenMemory={openAgentMemorySurface}
       onOpenCron={openAgentCronSheet}
-      onOpenBrowser={() => openPowerUserSheet("browser")}
-      onOpenArtifacts={() => openPowerUserSheet("artifacts")}
-      onOpenTrace={() => openPowerUserSheet("trace")}
+      onOpenArtifact={openAgentArtifactCanvas}
       tabRequest={agentInspectorTabRequest}
       onClose={
         options?.mobile
@@ -7669,7 +8148,7 @@ export function ChatArea() {
                 value:
                   agentContextPercent != null
                     ? `${Math.round(agentContextPercent)}%`
-                    : "0%",
+                    : t("agent.status.contextUnknown", { defaultValue: "Unknown" }),
               },
               {
                 id: "weekly",
@@ -7855,7 +8334,14 @@ export function ChatArea() {
                 });
               }}
             >
-              {renderContent()}
+              {isAgentSurface && selectedAgentArtifact ? (
+                <AgentArtifactCanvas
+                  artifact={selectedAgentArtifact}
+                  onClose={() => setSelectedAgentArtifact(null)}
+                />
+              ) : (
+                renderContent()
+              )}
             </div>
 
           </div>
@@ -7972,26 +8458,31 @@ export function ChatArea() {
                 }
                 onOpenZakiApprovals={
                   isZakiBotActiveSpace
-                    ? () => openPowerUserSheet("approvals")
+                    ? () => openAgentInspectorTab("plan")
                     : undefined
                 }
                 onOpenZakiBrowser={
                   isZakiBotActiveSpace
-                    ? () => openPowerUserSheet("browser")
+                    ? () => openAgentInspectorTab("browser")
                     : undefined
                 }
                 onOpenZakiArtifacts={
                   isZakiBotActiveSpace
-                    ? () => openPowerUserSheet("artifacts")
+                    ? () => openAgentInspectorTab("artifacts")
                     : undefined
                 }
                 zakiContextPressurePercent={
                   isZakiBotActiveSpace
-                    ? agentContextPercent ??
-                      activeSessionUi?.contextPressurePercent ??
-                      activeSessionRecord?.context_pressure_percent ??
-                      null
+                    ? agentContextPercent
                     : null
+                }
+                zakiCompactionThresholdPct={
+                  isZakiBotActiveSpace
+                    ? nullalisContextGauge?.compactionThresholdPct ?? null
+                    : null
+                }
+                zakiContextTooltipCopy={
+                  isZakiBotActiveSpace ? buildComposerContextTooltip(nullalisContextGauge) : null
                 }
                 quotaBadge={
                   zakiBotQuotaInfo
@@ -8113,23 +8604,6 @@ export function ChatArea() {
       />
 
       {isAgentSurface ? (
-        <PowerUserSheet
-          isOpen={powerUserOpen}
-          onClose={() => setPowerUserOpen(false)}
-          initialTab={powerUserInitialTab}
-          activeSessionKey={normalizedActiveZakiSessionKey}
-          activeMode={activeSessionMode}
-          modePending={sessionModePending}
-          onModeChange={handleSessionModeChange}
-          contextPressurePercent={agentContextPercent}
-          sandbox={sandboxState}
-          pendingApprovals={powerUserPendingApprovals}
-          onApproveRequest={handleApprovalAction}
-          artifactEventCount={agentArtifactEventCount}
-        />
-      ) : null}
-
-      {isAgentSurface ? (
         <CronManagementSheet
           isOpen={agentCronOpen}
           onClose={() => setAgentCronOpen(false)}
@@ -8155,10 +8629,7 @@ export function ChatArea() {
             // surface. Generic composer onboarding blocks the V2 command
             // center and belongs in dashboard/settings onboarding instead.
             plusMenuEligible: false,
-            compactionArmed: (() => {
-              const pct = resolveContextGaugePercent(nullalisContextGauge);
-              return pct != null && pct >= 60;
-            })(),
+            compactionArmed: false,
             // Brain panel tooltip anchors at the dashboard's brain
             // entry. Only fire when both the anchor is in the DOM
             // (showZakiHome === true) and the user has enough memories

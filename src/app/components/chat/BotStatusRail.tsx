@@ -83,7 +83,12 @@ export type NullalisNarrationPhase =
   | "plan_step"
   | "error_recovery"
   | "listening"
-  | "speaking";
+  | "speaking"
+  | "turn_auto_compaction"
+  | "post_reply_compaction"
+  | "history_maintenance_after_tools"
+  | "durable_continuity_refresh"
+  | "durable_continuity_refreshed";
 
 export type NullalisNarrationFrame = {
   id: string;
@@ -166,6 +171,9 @@ export type NullalisTaskItem = {
 
 export type NullalisApprovalRequest = {
   id: string;
+  approvalId?: string | null;
+  numericId?: number | string | null;
+  toolCallId?: string | null;
   tool: string;
   reason: string;
   riskLevel: string;

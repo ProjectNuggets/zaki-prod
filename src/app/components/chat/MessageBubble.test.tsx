@@ -70,6 +70,50 @@ describe("MessageBubble source chip", () => {
     expect(document.querySelector('[data-testid="source-chip"]')).toBeNull();
   });
 
+  it("renders persisted Agent approval instructions as operational approval rows", () => {
+    const message: Message = {
+      id: "approval-1",
+      role: "assistant",
+      content:
+        "Approval required for tool artifact_create (id=2, risk=low, reason=supervised_mutating_requires_approval). Use /approve 2 allow-once|deny",
+    };
+
+    render(
+      <MessageBubble
+        message={message}
+        botMode
+        showSourceChip={false}
+        animate={false}
+      />
+    );
+
+    expect(screen.getByTestId("approval-history-2")).toHaveTextContent("Approval requested");
+    expect(screen.getByTestId("approval-history-2")).toHaveTextContent("artifact_create");
+    expect(screen.queryByText(/Use \/approve/)).not.toBeInTheDocument();
+  });
+
+  it("does not leak malformed tool-call tag fragments in assistant replies", () => {
+    const message: Message = {
+      id: "tool-fragment-1",
+      role: "assistant",
+      content:
+        "I created the report. (ool call>) <tool_result>{\"ok\":true}</tool_result> The document is ready.",
+    };
+
+    render(
+      <MessageBubble
+        message={message}
+        botMode
+        showSourceChip={false}
+        animate={false}
+      />
+    );
+
+    expect(screen.getByText(/I created the report/)).toBeInTheDocument();
+    expect(screen.queryByText(/ool call/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/tool_result/i)).not.toBeInTheDocument();
+  });
+
   it("renders a Telegram chip when message originated from Telegram", () => {
     const message: Message = {
       id: "2",

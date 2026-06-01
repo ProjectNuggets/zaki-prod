@@ -67,6 +67,18 @@ function isRealReasoningEntry(entry: NullalisTranscriptEntry) {
   return true;
 }
 
+function isVisibleOperationalEntry(entry: NullalisTranscriptEntry) {
+  if (entry.source !== "progress") return false;
+  const normalized = normalize(entry.text || entry.phase);
+  return (
+    normalized.includes("auto-compacting context") ||
+    normalized.includes("compacted context") ||
+    normalized.includes("compacting context") ||
+    normalized.includes("refreshing continuity") ||
+    normalized.includes("updating history")
+  );
+}
+
 function toToolStatus(
   state: NullalisTranscriptEntry["resultState"] | undefined | null
 ): ToolRowStatus {
@@ -207,7 +219,7 @@ export function composeTurnTimeline(
       continue;
     }
 
-    if (!isRealReasoningEntry(entry)) continue;
+    if (!isRealReasoningEntry(entry) && !isVisibleOperationalEntry(entry)) continue;
     const text = String(entry.text).trim();
     const normText = normalize(text);
     const recent = lastExactText[lastExactText.length - 1];

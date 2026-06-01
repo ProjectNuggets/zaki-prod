@@ -123,4 +123,30 @@ describe("ContextGauge", () => {
     ).toHaveAttribute("aria-valuenow", "21");
     expect(screen.getByText("21%")).toBeInTheDocument();
   });
+
+  it("labels fallback context samples and runtime continuity metadata honestly", () => {
+    render(
+      <ContextGauge
+        data={{
+          tokenCount: 101_000,
+          contextMax: 200_000,
+          context_pressure_percent: 50.5,
+          source: "diagnostics_fallback",
+          confidence: "fallback",
+          compactionThresholdTokens: 160_000,
+          tokenCompactionTriggered: true,
+          lastTurn: {
+            autoCompactionEvents: 2,
+            durableContinuityRefreshed: true,
+            memoryContextInjected: true,
+          },
+        }}
+      />
+    );
+
+    expect(screen.getByText("diagnostics fallback")).toBeInTheDocument();
+    expect(screen.getByText("compact @ 160,000 tokens")).toBeInTheDocument();
+    expect(screen.getByText("token trigger")).toBeInTheDocument();
+    expect(screen.getByText("2 compactions")).toBeInTheDocument();
+  });
 });

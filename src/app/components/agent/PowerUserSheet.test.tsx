@@ -6,6 +6,7 @@ import { PowerUserSheet, deriveSoftLimitState } from "./PowerUserSheet";
 import type { NullalisApprovalRequest } from "@/app/components/chat/BotStatusRail";
 
 jest.mock("@/lib/api", () => ({
+  downloadAgentExportFile: jest.fn(),
   exportAgentArtifact: jest.fn(),
   fetchAgentExtensionDiagnostics: jest.fn(),
   fetchAgentTrace: jest.fn(),
@@ -15,6 +16,29 @@ jest.mock("@/lib/api", () => ({
   fetchMemoryDoctor: jest.fn(),
   listAgentArtifacts: jest.fn(),
   listAgentTraces: jest.fn(),
+  normalizeAgentArtifactShareUrl: (value: unknown) =>
+    typeof value === "string" && value.trim() ? value.trim() : null,
+  normalizeAgentExportDownloadUrl: (value: unknown) => {
+    if (typeof value !== "string" || !value.trim()) return null;
+    const raw = value.trim();
+    const rawPathish = (raw.split(/[?#]/, 1)[0] ?? "")
+      .replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "");
+    const safeFilename = (filename: string) => {
+      const decoded = decodeURIComponent(filename).trim();
+      return /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/.test(decoded)
+        ? encodeURIComponent(decoded)
+        : null;
+    };
+    const parsed = new URL(raw, "http://zaki.local");
+    const match = parsed.pathname.match(/^\/api\/v1\/users\/[^/]+\/exports\/([^/?#]+)$/);
+    if (match?.[1]) {
+      const filename = safeFilename(match[1]);
+      return filename ? `/api/agent/exports/${filename}` : null;
+    }
+    if (/^\/api\/v1\/users\/[^/]+\/exports(?:\/|$)/.test(rawPathish)) return null;
+    if (parsed.pathname.startsWith("/api/agent/exports/")) return raw;
+    return null;
+  },
   revokeAgentArtifactShare: jest.fn(),
   revokeAgentTraceShare: jest.fn(),
   shareAgentArtifact: jest.fn(),
@@ -102,12 +126,15 @@ const fetchContextDiagnosticsMock = jest.requireMock("@/lib/api")
   .fetchContextDiagnostics as jest.Mock;
 const fetchMemoryDoctorMock = jest.requireMock("@/lib/api")
   .fetchMemoryDoctor as jest.Mock;
+const downloadAgentExportFileMock = jest.requireMock("@/lib/api")
+  .downloadAgentExportFile as jest.Mock;
 const exportAgentArtifactMock = jest.requireMock("@/lib/api").exportAgentArtifact as jest.Mock;
 const fetchAgentTraceMock = jest.requireMock("@/lib/api").fetchAgentTrace as jest.Mock;
 const listAgentArtifactsMock = jest.requireMock("@/lib/api").listAgentArtifacts as jest.Mock;
 const listAgentTracesMock = jest.requireMock("@/lib/api").listAgentTraces as jest.Mock;
 const shareAgentArtifactMock = jest.requireMock("@/lib/api").shareAgentArtifact as jest.Mock;
 const shareAgentTraceMock = jest.requireMock("@/lib/api").shareAgentTrace as jest.Mock;
+const toastErrorMock = jest.requireMock("sonner").toast.error as jest.Mock;
 const toastMessageMock = jest.requireMock("sonner").toast.message as jest.Mock;
 
 beforeEach(() => {
@@ -145,7 +172,11 @@ beforeEach(() => {
   });
   exportAgentArtifactMock.mockResolvedValue({
     response: { ok: true },
-    data: { url: "https://download.local/artifact.pdf" },
+    data: { url: "/api/agent/exports/artifact.pdf" },
+  });
+  downloadAgentExportFileMock.mockResolvedValue({
+    filename: "artifact.pdf",
+    bytes: 12,
   });
   fetchAgentTraceMock.mockResolvedValue({
     response: { ok: true },
@@ -311,7 +342,6 @@ describe("PowerUserSheet", () => {
   });
 
   it("does not treat private artifact export urls as public share links", async () => {
-    const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
     listAgentArtifactsMock.mockResolvedValueOnce({
       response: { ok: true },
       data: {
@@ -346,13 +376,90 @@ describe("PowerUserSheet", () => {
     });
     await waitFor(() => {
       expect(exportAgentArtifactMock).toHaveBeenCalledWith("artifact-private", "pdf");
+      expect(downloadAgentExportFileMock).toHaveBeenCalledWith(
+        "/api/agent/exports/artifact.pdf",
+        "Private_preview.pdf"
+      );
+      expect(screen.getByTestId("power-user-artifact-download-pdf-artifact-private")).toBeInTheDocument();
     });
-    expect(openSpy).toHaveBeenCalledWith(
-      "https://download.local/artifact.pdf",
-      "_blank",
-      "noopener,noreferrer"
-    );
-    openSpy.mockRestore();
+  });
+
+  it("rewrites upstream artifact export downloads through the ZAKI BFF bridge", async () => {
+    exportAgentArtifactMock.mockResolvedValueOnce({
+      response: { ok: true },
+      data: { download_url: "/api/v1/users/42/exports/report.pdf" },
+    });
+    listAgentArtifactsMock.mockResolvedValueOnce({
+      response: { ok: true },
+      data: {
+        artifacts: [
+          {
+            id: "artifact-report",
+            title: "Research report",
+            type: "markdown",
+            version: 1,
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      render(<PowerUserSheet isOpen onClose={() => {}} initialTab="artifacts" />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Research report")).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("power-user-artifact-export-pdf-artifact-report"));
+    });
+
+    await waitFor(() => {
+      expect(downloadAgentExportFileMock).toHaveBeenCalledWith(
+        "/api/agent/exports/report.pdf",
+        "Research_report.pdf"
+      );
+      expect(screen.getByTestId("power-user-artifact-download-pdf-artifact-report")).toBeInTheDocument();
+    });
+  });
+
+  it("keeps artifact export retryable when the backend omits a download URL", async () => {
+    exportAgentArtifactMock.mockResolvedValueOnce({
+      response: { ok: true },
+      data: { ok: true },
+    });
+    listAgentArtifactsMock.mockResolvedValueOnce({
+      response: { ok: true },
+      data: {
+        artifacts: [
+          {
+            id: "artifact-no-url",
+            title: "Missing URL",
+            type: "markdown",
+            version: 1,
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      render(<PowerUserSheet isOpen onClose={() => {}} initialTab="artifacts" />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Missing URL")).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("power-user-artifact-export-pdf-artifact-no-url"));
+    });
+
+    await waitFor(() => {
+      expect(toastErrorMock).toHaveBeenCalledWith(
+        "zakiControls.powerUser.artifacts.exportFailed"
+      );
+    });
   });
 
   it("surfaces parked artifact export as an unavailable action", async () => {

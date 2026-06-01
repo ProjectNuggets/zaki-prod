@@ -4,9 +4,9 @@
  */
 
 import "@testing-library/jest-dom";
-import { describe, it, expect, beforeEach, jest } from "@jest/globals";
+import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals";
 import { act } from "react";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -19,7 +19,9 @@ import {
   extractNullalisApprovalRequest,
   extractNullalisTranscriptEntry,
   extractNullalisTaskItem,
+  extractNullalisTodoTaskItemsFromToolPayload,
   extractNullalisUsageSummary,
+  inferStreamingModeFromContext,
   inferStreamingModeFromProgress,
   buildNullalisContextGauge,
   resolveContextGaugePercent,
@@ -398,10 +400,32 @@ describe("ChatArea Component", () => {
   let zakiSessionUiState: TestZakiSessionUiState;
 
   beforeEach(() => {
+    cleanup();
     (apiRequest as jest.Mock).mockClear();
     (fetchAgentHistory as jest.Mock).mockClear();
     (fetchAgentMe as jest.Mock).mockClear();
-    (fetchAgentSession as jest.Mock).mockClear();
+    (fetchAgentSession as jest.Mock).mockReset();
+    (fetchAgentSession as jest.Mock).mockImplementation(async () => ({
+      response: {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          session_key: "agent:zaki-bot:user:1:thread:main",
+          live: true,
+          mode: "execute",
+          pending_approval_count: 0,
+          context_pressure_percent: null,
+        }),
+        headers: new Headers(),
+      },
+      data: {
+        session_key: "agent:zaki-bot:user:1:thread:main",
+        live: true,
+        mode: "execute",
+        pending_approval_count: 0,
+        context_pressure_percent: null,
+      },
+    }));
     (fetchAgentSessionContext as jest.Mock).mockClear();
     (fetchBotRuntimeStatus as jest.Mock).mockClear();
     (fetchMemoryActivity as jest.Mock).mockClear();
@@ -527,19 +551,27 @@ describe("ChatArea Component", () => {
     (useMessages as jest.Mock).mockReturnValue({ data: [], isLoading: false });
   });
 
+  afterEach(() => {
+    cleanup();
+  });
+
   it("normalizes Nullalis session context fields into the context meter model", () => {
     const gauge = buildNullalisContextGauge({
       history_len: 43,
       tokens_used: 33_771,
+      token_estimate: 33_771,
       token_limit: 460_000,
+      context_window_tokens: 460_000,
       context_pressure_percent: 7.3,
     });
 
-    expect(gauge).toEqual({
+    expect(gauge).toMatchObject({
       tokenCount: 33_771,
       contextMax: 460_000,
       messageCount: 43,
       context_pressure_percent: 7.3,
+      source: "live_session",
+      confidence: "exact",
     });
     expect(resolveContextGaugePercent(gauge)).toBe(7.3);
   });
@@ -554,18 +586,31 @@ describe("ChatArea Component", () => {
     expect(resolveContextGaugePercent(gauge)).toBe(42);
   });
 
-  it("keeps pressure-only Nullalis context samples when token max is omitted", () => {
+  it("keeps pressure-only runtime context samples when token max is omitted", () => {
     const gauge = buildNullalisContextGauge({
       history_len: 3,
       max_history: 0,
       context_pressure_percent: 21,
     });
 
-    expect(gauge).toEqual({
+    expect(gauge).toMatchObject({
       messageCount: 3,
       context_pressure_percent: 21,
+      source: "live_session",
+      confidence: "exact",
     });
     expect(resolveContextGaugePercent(gauge)).toBe(21);
+  });
+
+  it("rejects cumulative-only legacy context samples instead of showing false pressure", () => {
+    const gauge = buildNullalisContextGauge({
+      history_len: 3,
+      tokens_used: 999_999,
+      token_limit: 100_000,
+      context_pressure_percent: 100,
+    });
+
+    expect(gauge).toBeNull();
   });
 
   it("normalizes diagnostics report context payloads for the context meter", () => {
@@ -579,11 +624,47 @@ describe("ChatArea Component", () => {
       },
     });
 
-    expect(gauge).toEqual({
+    expect(gauge).toMatchObject({
       tokenCount: 25_000,
       contextMax: 200_000,
       messageCount: 12,
       context_pressure_percent: 12.5,
+      source: "diagnostics_fallback",
+      confidence: "fallback",
+    });
+  });
+
+  it("surfaces diagnostics context source, threshold, and last-turn compaction metadata", () => {
+    const gauge = buildNullalisContextGauge({
+      context_source: "diagnostics_fallback",
+      context_confidence: "fallback",
+      report: {
+        token_estimate: 101_000,
+        context_window_tokens: 200_000,
+        context_pressure_percent: 50.5,
+        token_compaction_threshold: 160_000,
+        token_compaction_triggered: true,
+        last_turn: {
+          auto_compaction_events: 2,
+          durable_continuity_refreshed: true,
+          memory_context_injected: true,
+        },
+      },
+    });
+
+    expect(gauge).toMatchObject({
+      tokenCount: 101_000,
+      contextMax: 200_000,
+      context_pressure_percent: 50.5,
+      source: "diagnostics_fallback",
+      confidence: "fallback",
+      compactionThresholdTokens: 160_000,
+      tokenCompactionTriggered: true,
+      lastTurn: {
+        autoCompactionEvents: 2,
+        durableContinuityRefreshed: true,
+        memoryContextInjected: true,
+      },
     });
   });
 
@@ -601,7 +682,9 @@ describe("ChatArea Component", () => {
       data: {
         history_len: 43,
         tokens_used: 33_771,
+        token_estimate: 33_771,
         token_limit: 460_000,
+        context_window_tokens: 460_000,
         context_pressure_percent: 7.3,
       },
     });
@@ -781,7 +864,7 @@ describe("ChatArea Component", () => {
     });
   });
 
-  it("does not hydrate live-only session detail for an inactive persisted Agent session", async () => {
+  it("hydrates the active persisted Agent session detail even when the list marks it inactive", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
@@ -815,7 +898,80 @@ describe("ChatArea Component", () => {
         threadId: "main",
       });
     });
-    expect(fetchAgentSession).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(fetchAgentSession).toHaveBeenCalledWith(
+        "agent:zaki-bot:user:1:thread:main"
+      );
+    });
+  });
+
+  it("hydrates inactive Agent session detail when a pending approval exists", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+
+    (fetchAgentMe as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (listAgentSessions as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({ sessions: [] }), headers: new Headers() },
+      data: {
+        sessions: [
+          {
+            session_key: "agent:zaki-bot:user:1:thread:main",
+            title: "Main",
+            live: false,
+            mode: "execute",
+            pending_approval_count: 1,
+            message_count: 24,
+            last_active: "2026-05-27T17:56:49.377Z",
+          },
+        ],
+      },
+    });
+    (fetchAgentSession as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({}), headers: new Headers() },
+      data: {
+        session_key: "agent:zaki-bot:user:1:thread:main",
+        live: false,
+        mode: "execute",
+        pending_approval_count: 1,
+        pending_approvals: [
+          {
+            approval_id: "apr-7",
+            id: 7,
+            tool: "artifact_create",
+            reason: "supervised_mutating_requires_approval",
+            risk_level: "low",
+            created_at: 1_779_904_000,
+            expires_at: null,
+          },
+        ],
+      },
+    });
+
+    await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(fetchAgentSession).toHaveBeenCalledWith(
+        "agent:zaki-bot:user:1:thread:main"
+      );
+    });
+    expect(
+      zakiSessionUiState.sessions["agent:zaki-bot:user:1:thread:main"].pendingApprovals
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "apr-7",
+          approvalId: "apr-7",
+          tool: "artifact_create",
+          reason: "supervised_mutating_requires_approval",
+          riskLevel: "low",
+        }),
+      ])
+    );
   });
 
   it("keeps Agent mode changes local when the selected session is not live yet", async () => {
@@ -844,10 +1000,26 @@ describe("ChatArea Component", () => {
         ],
       },
     });
+    (fetchAgentSession as jest.Mock).mockImplementation(async () => ({
+      response: { ok: true, status: 200, json: async () => ({}) },
+      data: {
+        session_key: "agent:zaki-bot:user:1:thread:main",
+        live: false,
+        mode: null,
+        pending_approval_count: 0,
+      },
+    }));
 
     await renderChatAreaAndWaitForEffects();
+    await waitFor(() => {
+      expect(fetchAgentSession).toHaveBeenCalledWith(
+        "agent:zaki-bot:user:1:thread:main"
+      );
+    });
     await waitFor(() => expect(screen.getByTestId("zaki-composer-mode")).toBeInTheDocument());
+    expect(zakiSessionUiState.sessions["agent:zaki-bot:user:1:thread:main"]?.live).toBe(false);
 
+    (setAgentSessionMode as jest.Mock).mockClear();
     fireEvent.click(screen.getByTestId("zaki-composer-mode"));
 
     expect(setAgentSessionMode).not.toHaveBeenCalled();
@@ -864,14 +1036,13 @@ describe("ChatArea Component", () => {
     expect(screen.getByText("zakiAgent.empty.kicker")).toBeInTheDocument();
   });
 
-  it("opens the canonical Agent controls sheet from the global controls event", async () => {
+  it("opens the canonical Agent inspector from the global controls event", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
 
     await renderChatAreaAndWaitForEffects();
 
-    expect(screen.queryByTestId("power-user-controls")).not.toBeInTheDocument();
     act(() => {
       window.dispatchEvent(
         new CustomEvent("zaki:open-power-user", {
@@ -881,7 +1052,10 @@ describe("ChatArea Component", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("power-user-controls")).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: /Plan/i })).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
     });
   });
 
@@ -907,7 +1081,7 @@ describe("ChatArea Component", () => {
     });
   });
 
-  it("hands off from the Agent mobile inspector to backend-backed power surfaces", async () => {
+  it("keeps backend-backed browser controls in the Agent inspector", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
@@ -919,16 +1093,13 @@ describe("ChatArea Component", () => {
     });
 
     const inspector = await screen.findByTestId("agent-mobile-inspector");
-    fireEvent.click(within(inspector).getByRole("tab", { name: /Artifacts/i }));
-    fireEvent.click(within(inspector).getByRole("button", { name: "Open artifacts manager" }));
+    fireEvent.click(within(inspector).getByRole("tab", { name: /Browser/i }));
 
-    await waitFor(() => {
-      expect(screen.getByTestId("power-user-tab-artifacts")).toHaveAttribute(
-        "aria-selected",
-        "true"
-      );
-    });
-    expect(screen.queryByTestId("agent-mobile-inspector")).not.toBeInTheDocument();
+    expect(within(inspector).getByRole("tab", { name: /Browser/i })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(screen.queryByTestId("power-user-tab-browser")).not.toBeInTheDocument();
   });
 
   it("opens a pending Agent controls tab after route handoff", async () => {
@@ -940,7 +1111,7 @@ describe("ChatArea Component", () => {
     await renderChatAreaAndWaitForEffects();
 
     await waitFor(() => {
-      expect(screen.getByTestId("power-user-tab-approvals")).toHaveAttribute(
+      expect(screen.getByRole("tab", { name: /Plan/i })).toHaveAttribute(
         "aria-selected",
         "true"
       );
@@ -970,7 +1141,7 @@ describe("ChatArea Component", () => {
       );
     });
     await waitFor(() => {
-      expect(screen.getByTestId("power-user-tab-approvals")).toHaveAttribute(
+      expect(screen.getByRole("tab", { name: /Plan/i })).toHaveAttribute(
         "aria-selected",
         "true"
       );
@@ -984,7 +1155,7 @@ describe("ChatArea Component", () => {
       );
     });
     await waitFor(() => {
-      expect(screen.getByTestId("power-user-tab-browser")).toHaveAttribute(
+      expect(screen.getByRole("tab", { name: /Browser/i })).toHaveAttribute(
         "aria-selected",
         "true"
       );
@@ -998,7 +1169,7 @@ describe("ChatArea Component", () => {
       );
     });
     await waitFor(() => {
-      expect(screen.getByTestId("power-user-tab-artifacts")).toHaveAttribute(
+      expect(screen.getByRole("tab", { name: /Artifacts/i })).toHaveAttribute(
         "aria-selected",
         "true"
       );
@@ -1155,6 +1326,98 @@ describe("ChatArea Component", () => {
     });
   });
 
+  it("maps Nullalis todo tool create/list/update payloads into Plan checklist items", () => {
+    expect(
+      extractNullalisTodoTaskItemsFromToolPayload(
+        {
+          type: "toolCallInvocation",
+          name: "todo",
+          request_id: "call-todo",
+          arguments: {
+            action: "create",
+            title: "Production closeout",
+            items: [
+              { title: "Verify approvals" },
+              { title: "Download artifact" },
+            ],
+          },
+        },
+        500
+      )
+    ).toEqual([
+      {
+        taskId: "todo:draft:call-todo:item:1",
+        status: "queued",
+        description: "Verify approvals",
+        progressPct: null,
+        updatedAt: 500,
+      },
+      {
+        taskId: "todo:draft:call-todo:item:2",
+        status: "queued",
+        description: "Download artifact",
+        progressPct: null,
+        updatedAt: 500,
+      },
+    ]);
+
+    expect(
+      extractNullalisTodoTaskItemsFromToolPayload(
+        {
+          type: "tool_result",
+          tool: "todo",
+          output: JSON.stringify({
+            id: "list-1",
+            items: [
+              { id: 1, title: "Verify approvals", status: "completed" },
+              { id: 2, title: "Download artifact", status: "in_progress" },
+            ],
+          }),
+        },
+        600
+      )
+    ).toEqual([
+      {
+        taskId: "todo:list-1:item:1",
+        status: "done",
+        description: "Verify approvals",
+        progressPct: 100,
+        updatedAt: 600,
+      },
+      {
+        taskId: "todo:list-1:item:2",
+        status: "running",
+        description: "Download artifact",
+        progressPct: null,
+        updatedAt: 600,
+      },
+    ]);
+
+    expect(
+      extractNullalisTodoTaskItemsFromToolPayload(
+        {
+          type: "toolCallInvocation",
+          tool: "todo",
+          arguments: {
+            action: "update",
+            list_id: "list-1",
+            item_id: 2,
+            status: "completed",
+          },
+        },
+        700
+      )
+    ).toEqual([
+      {
+        taskId: "todo:list-1:item:2",
+        status: "done",
+        description: "Todo item 2",
+        progressPct: 100,
+        updatedAt: 700,
+      },
+    ]);
+  });
+
   it("uses stable wire correlation for nullalis approval requests", () => {
     expect(
       extractNullalisApprovalRequest(
@@ -1167,6 +1430,8 @@ describe("ChatArea Component", () => {
       )
     ).toMatchObject({
       id: "approval-123",
+      approvalId: "approval-123",
+      numericId: null,
       tool: "write_file",
       riskLevel: "high",
     });
@@ -1174,13 +1439,18 @@ describe("ChatArea Component", () => {
     expect(
       extractNullalisApprovalRequest(
         {
+          id: 12,
           run_id: "run-789",
           tool: "browser_click",
+          tool_call_id: "call-browser",
         },
         456
       )
     ).toMatchObject({
-      id: "run:run-789:tool:browser_click",
+      id: "legacy-run:run-789:tool:browser_click",
+      approvalId: null,
+      numericId: 12,
+      toolCallId: "call-browser",
       tool: "browser_click",
     });
   });
@@ -1328,6 +1598,8 @@ describe("ChatArea Component", () => {
   });
 
   it("normalizes nullalis task, approval, and done events into worklog entries", () => {
+    expect(inferStreamingModeFromContext("turn_auto_compaction")).toBe("thinking");
+
     expect(
       extractNullalisTranscriptEntry(
         "task_update",
@@ -1367,6 +1639,32 @@ describe("ChatArea Component", () => {
       resultSummary: "Writes the launch brief.",
       command: "write docs/brief.md",
       files: ["docs/brief.md"],
+    });
+
+    expect(
+      extractNullalisTranscriptEntry(
+        "progress",
+        {
+          phase: "turn_auto_compaction",
+          state: "running",
+        },
+        556
+      )
+    ).toMatchObject({
+      text: "Auto-compacting context",
+    });
+
+    expect(
+      extractNullalisTranscriptEntry(
+        "progress",
+        {
+          phase: "history_maintenance_after_tools",
+          state: "done",
+        },
+        557
+      )
+    ).toMatchObject({
+      text: "Updating history",
     });
 
     expect(

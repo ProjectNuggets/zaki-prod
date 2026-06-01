@@ -6,15 +6,39 @@ import {
   CalendarClock,
   CheckCircle2,
   Circle,
+  Copy,
+  Download,
+  ExternalLink,
   Globe2,
+  Link2,
+  Link2Off,
   Loader2,
   PanelRightClose,
+  Share2,
   ShieldAlert,
 } from "lucide-react";
-import type { AgentExtensionDiagnosticsResponse, AgentSessionMode } from "@/lib/api";
+import {
+  downloadAgentExportFile,
+  exportAgentArtifact,
+  fetchAgentTrace,
+  listAgentTraces,
+  revokeAgentTraceShare,
+  shareAgentArtifact,
+  shareAgentTrace,
+  type AgentExtensionDiagnosticsResponse,
+  type AgentSessionMode,
+  type AgentTrace,
+} from "@/lib/api";
 import { DEFAULT_AGENT_MODEL_ID, resolveAgentModel } from "@/lib/agentModelCatalog";
 import { cn } from "@/lib/utils";
 import type { ZakiRuntimeSandbox } from "@/stores/zakiSessionUiStore";
+import {
+  getAgentArtifactExportDownloadUrl,
+  getAgentArtifactShareUrl,
+  PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS,
+  type AgentArtifactExportFormat,
+  type AgentArtifactExportState,
+} from "@/app/components/agent/agentArtifactSurface";
 import {
   V2InlineRow,
   V2Meter,
@@ -38,7 +62,7 @@ import { buildAgentInspectorPanelModel } from "./AgentInspectorPanelModel";
 export type AgentInspectorTab =
   | "plan"
   | "cron"
-  | "sources"
+  | "evidence"
   | "artifacts"
   | "browser"
   | "trace";
@@ -67,8 +91,13 @@ export type AgentInspectorArtifact = {
   title: string;
   type: string | null;
   version: string | number | null;
+  sessionKey?: string | null;
+  shareUrl?: string | null;
+  createdAt?: number | null;
   updatedAt: number | null;
 };
+
+type AgentArtifactScope = "session" | "recent";
 
 const APP_BROWSER_TOOLS = ["web_fetch", "web_search", "playwright_*"] as const;
 const EXTENSION_BROWSER_TOOLS = [
@@ -96,6 +125,7 @@ export type AgentInspectorRailProps = {
   cronLoading?: boolean;
   cronError?: string | null;
   artifacts?: AgentInspectorArtifact[];
+  artifactsScope?: AgentArtifactScope;
   artifactsLoading?: boolean;
   artifactsError?: string | null;
   extensionDiagnostics?: AgentExtensionDiagnosticsResponse | null;
@@ -107,12 +137,9 @@ export type AgentInspectorRailProps = {
   artifactCount?: number;
   contextGaugeData: ContextGaugeData | null;
   usageSummary: ZakiUsageSummary | null;
-  quotaInfo: { limit: number; remaining: number } | null;
   onOpenMemory?: () => void;
   onOpenCron?: () => void;
-  onOpenBrowser?: () => void;
-  onOpenArtifacts?: () => void;
-  onOpenTrace?: () => void;
+  onOpenArtifact?: (artifact: AgentInspectorArtifact) => void;
   tabRequest?: AgentInspectorTabRequest | null;
   onClose?: () => void;
 };
@@ -163,6 +190,14 @@ function contextPercent(data: ContextGaugeData | null): number | null {
     data.tokenCount ??
     Math.round(((data.context_pressure_percent ?? 0) / 100) * data.contextMax);
   return Math.min(100, Math.max(0, (tokenCount / data.contextMax) * 100));
+}
+
+function contextSourceLabel(data: ContextGaugeData | null): string {
+  if (!data) return "No sample";
+  if (data.source === "live_session") return "Live session";
+  if (data.source === "diagnostics_fallback") return "Diagnostics fallback";
+  if (data.source === "inactive_session") return "Inactive session";
+  return "Unknown";
 }
 
 function modeLabel(mode: AgentSessionMode | null) {
@@ -224,6 +259,16 @@ function formatCalendarStamp(timestamp?: number | null): string {
   } catch {
     return "not scheduled";
   }
+}
+
+function formatTraceTs(value?: string | number | null) {
+  if (!value) return "--";
+  const parsed =
+    typeof value === "number"
+      ? new Date(value < 10_000_000_000 ? value * 1000 : value)
+      : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "--";
+  return parsed.toLocaleString();
 }
 
 function formatDurationShort(ms?: number | null): string {
@@ -305,6 +350,50 @@ function artifactVersionLabel(artifact: AgentInspectorArtifact, index: number) {
   return `${version} · ${formatCalendarStamp(artifact.updatedAt)}`;
 }
 
+function normalizeAgentTraceList(data: { traces?: AgentTrace[]; items?: AgentTrace[] } | null | undefined) {
+  if (!data) return [];
+  if (Array.isArray(data.traces)) return data.traces;
+  if (Array.isArray(data.items)) return data.items;
+  return [];
+}
+
+function getTraceId(trace: AgentTrace): string {
+  return trace.run_id || trace.id || "";
+}
+
+function getTraceEventType(event: Record<string, unknown>, index: number): string {
+  const candidates = [event.type, event.event, event.kind, event.phase, event.name, event.tool];
+  const match = candidates.find((value) => typeof value === "string" && value.trim());
+  return typeof match === "string" ? match : `event ${index + 1}`;
+}
+
+function getTraceEventPreview(event: Record<string, unknown>): string {
+  const candidates = [
+    event.summary,
+    event.message,
+    event.text,
+    event.content,
+    event.delta,
+    event.output_preview,
+    event.outputPreview,
+    event.error,
+  ];
+  const match = candidates.find((value) => typeof value === "string" && value.trim());
+  if (typeof match !== "string") return "No preview";
+  return match.length > 220 ? `${match.slice(0, 220)}...` : match;
+}
+
+function getTraceShareUrl(trace: AgentTrace): string | null {
+  const candidates = [
+    trace.public_url,
+    (trace as Record<string, unknown>).publicUrl,
+    (trace as Record<string, unknown>).share_url,
+    (trace as Record<string, unknown>).shareUrl,
+  ];
+  const match = candidates.find((value) => typeof value === "string" && value.trim());
+  return typeof match === "string" ? match : null;
+}
+
 function PanelActionButton({
   children,
   onClick,
@@ -339,6 +428,7 @@ export function AgentInspectorRail({
   cronLoading = false,
   cronError = null,
   artifacts = [],
+  artifactsScope = "session",
   artifactsLoading = false,
   artifactsError = null,
   extensionDiagnostics = null,
@@ -350,17 +440,28 @@ export function AgentInspectorRail({
   artifactCount = 0,
   contextGaugeData,
   usageSummary,
-  quotaInfo,
   onOpenMemory,
   onOpenCron,
-  onOpenBrowser,
-  onOpenArtifacts,
-  onOpenTrace,
+  onOpenArtifact,
   tabRequest = null,
   onClose,
 }: AgentInspectorRailProps) {
   const [tab, setTab] = useState<AgentInspectorTab>("plan");
   const [manualTabSelected, setManualTabSelected] = useState(false);
+  const [artifactExportStates, setArtifactExportStates] = useState<
+    Record<string, Partial<Record<AgentArtifactExportFormat, AgentArtifactExportState>>>
+  >({});
+  const [artifactShareStates, setArtifactShareStates] = useState<
+    Record<string, { status: "idle" | "sharing" | "ready" | "failed" | "copied"; url?: string | null; error?: string | null }>
+  >({});
+  const [traces, setTraces] = useState<AgentTrace[] | null>(null);
+  const [tracesLoading, setTracesLoading] = useState(false);
+  const [tracesError, setTracesError] = useState<string | null>(null);
+  const [traceDetailById, setTraceDetailById] = useState<Record<string, AgentTrace | null>>({});
+  const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
+  const [traceDetailLoadingId, setTraceDetailLoadingId] = useState<string | null>(null);
+  const [traceDetailError, setTraceDetailError] = useState<string | null>(null);
+  const [traceBusyId, setTraceBusyId] = useState<string | null>(null);
 
   const timelineBlocks = useMemo(
     () => composeTurnTimeline(transcriptEntries),
@@ -373,8 +474,24 @@ export function AgentInspectorRail({
   const recentTrace = panelModel.trace;
   const sourceEntries = panelModel.sources;
   const artifactEntries = panelModel.artifacts;
-  const primaryBackendArtifact = artifacts[0] ?? null;
-  const artifactSourceCount = artifactCount || artifactEntries.length || artifacts.length;
+  const sortedArtifacts = useMemo(
+    () =>
+      [...artifacts].sort((a, b) => {
+        const left = typeof a.updatedAt === "number" ? a.updatedAt : 0;
+        const right = typeof b.updatedAt === "number" ? b.updatedAt : 0;
+        return right - left;
+      }),
+    [artifacts]
+  );
+  const primaryBackendArtifact = sortedArtifacts[0] ?? null;
+  const artifactIds = useMemo(
+    () => new Set(sortedArtifacts.map((artifact) => artifact.id).filter(Boolean)),
+    [sortedArtifacts]
+  );
+  const provisionalArtifactEntries = artifactEntries.filter(
+    (event) => !event.artifactId || !artifactIds.has(event.artifactId)
+  );
+  const artifactSourceCount = artifactCount || artifactEntries.length || sortedArtifacts.length;
   const browserEntries = panelModel.browser;
   const cronEntries = panelModel.cron;
   const cronSourceCount = cronJobs.length || cronEntries.length;
@@ -407,10 +524,6 @@ export function AgentInspectorRail({
       : "enabled"
     : "off";
   const defaultModel = resolveAgentModel(DEFAULT_AGENT_MODEL_ID);
-  const weeklyRemaining =
-    quotaInfo && quotaInfo.limit > 0
-      ? Math.max(0, Math.min(100, (quotaInfo.remaining / quotaInfo.limit) * 100))
-      : null;
   const browserActivity =
     browserEntries.length > 0 || /\b(browser|playwright|extension)\b/i.test(lastChannel ?? "");
   const extensionActivity = browserEntries.some(eventHasExtensionSignal);
@@ -485,7 +598,7 @@ export function AgentInspectorRail({
       return;
     }
     if (sourceEntries.length) {
-      setTab("sources");
+      setTab("evidence");
     }
   }, [
     approvalRequest,
@@ -497,6 +610,229 @@ export function AgentInspectorRail({
     sortedTasks.length,
     tabRequest,
   ]);
+
+  const setArtifactExportState = (
+    artifactId: string,
+    format: AgentArtifactExportFormat,
+    state: AgentArtifactExportState
+  ) => {
+    setArtifactExportStates((current) => ({
+      ...current,
+      [artifactId]: {
+        ...(current[artifactId] || {}),
+        [format]: state,
+      },
+    }));
+  };
+
+  const shareUrlForArtifact = (artifact: AgentInspectorArtifact) =>
+    artifactShareStates[artifact.id]?.url || artifact.shareUrl || null;
+
+  useEffect(() => {
+    if (tab !== "trace") return;
+    let active = true;
+    setTracesLoading(true);
+    setTracesError(null);
+    void listAgentTraces({ limit: 20 })
+      .then(({ response, data }) => {
+        if (!active) return;
+        if (!response.ok) {
+          setTraces(null);
+          setTracesError(
+            String((data as { error?: string | null } | null)?.error || `trace_${response.status}`)
+          );
+          return;
+        }
+        setTraces(normalizeAgentTraceList(data));
+      })
+      .catch(() => {
+        if (!active) return;
+        setTraces(null);
+        setTracesError("network_error");
+      })
+      .finally(() => {
+        if (active) setTracesLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [tab, recentTrace.length]);
+
+  const exportFilenameForArtifact = (
+    artifact: AgentInspectorArtifact,
+    format: AgentArtifactExportFormat
+  ) => {
+    const stem =
+      artifact.title
+        .trim()
+        .replace(/[^\w.-]+/g, "_")
+        .replace(/^_+|_+$/g, "") || "zaki-artifact";
+    return `${stem}.${format}`;
+  };
+
+  const handleArtifactDownload = async (
+    artifact: AgentInspectorArtifact,
+    format: AgentArtifactExportFormat,
+    url: string
+  ) => {
+    try {
+      await downloadAgentExportFile(url, exportFilenameForArtifact(artifact, format));
+    } catch {
+      setArtifactExportState(artifact.id, format, { status: "failed", url, error: "download_failed" });
+    }
+  };
+
+  const handleArtifactExport = async (
+    artifact: AgentInspectorArtifact,
+    format: AgentArtifactExportFormat
+  ) => {
+    if (!artifact.id) return;
+    setArtifactExportState(artifact.id, format, { status: "exporting" });
+    try {
+      const { response, data } = await exportAgentArtifact(artifact.id, format);
+      if (!response.ok) {
+        const code = typeof data?.error === "string" ? data.error : "export_failed";
+        setArtifactExportState(artifact.id, format, {
+          status: response.status === 501 || code === "export_not_yet_available" ? "unavailable" : "failed",
+          error: code,
+        });
+        return;
+      }
+      const url = getAgentArtifactExportDownloadUrl(data);
+      setArtifactExportState(
+        artifact.id,
+        format,
+        url ? { status: "ready", url } : { status: "failed", error: "missing_download_url" }
+      );
+      if (url) {
+        await handleArtifactDownload(artifact, format, url);
+      }
+    } catch {
+      setArtifactExportState(artifact.id, format, { status: "failed", error: "export_failed" });
+    }
+  };
+
+  const handleArtifactShare = async (artifact: AgentInspectorArtifact) => {
+    if (!artifact.id) return;
+    setArtifactShareStates((current) => ({
+      ...current,
+      [artifact.id]: { status: "sharing", url: current[artifact.id]?.url || artifact.shareUrl || null },
+    }));
+    try {
+      const { response, data } = await shareAgentArtifact(artifact.id);
+      const url = getAgentArtifactShareUrl(data);
+      if (!response.ok || !url) {
+        throw new Error(typeof data?.error === "string" ? data.error : "share_failed");
+      }
+      setArtifactShareStates((current) => ({
+        ...current,
+        [artifact.id]: { status: "ready", url },
+      }));
+    } catch (error) {
+      setArtifactShareStates((current) => ({
+        ...current,
+        [artifact.id]: {
+          status: "failed",
+          url: current[artifact.id]?.url || artifact.shareUrl || null,
+          error: error instanceof Error ? error.message : "share_failed",
+        },
+      }));
+    }
+  };
+
+  const handleCopyArtifactLink = async (artifact: AgentInspectorArtifact) => {
+    const shareUrl = shareUrlForArtifact(artifact);
+    const firstDownload = PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS
+      .map((format) => artifactExportStates[artifact.id]?.[format]?.url)
+      .find((url): url is string => typeof url === "string" && url.length > 0);
+    const value = shareUrl || firstDownload;
+    if (!artifact.id || !value || typeof navigator === "undefined" || !navigator.clipboard) {
+      setArtifactShareStates((current) => ({
+        ...current,
+        [artifact.id]: {
+          status: "failed",
+          url: value || shareUrl,
+          error: value ? "clipboard_unavailable" : "no_link_available",
+        },
+      }));
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(value);
+      setArtifactShareStates((current) => ({
+        ...current,
+        [artifact.id]: { status: "copied", url: value },
+      }));
+    } catch {
+      setArtifactShareStates((current) => ({
+        ...current,
+        [artifact.id]: { status: "failed", url: value, error: "copy_failed" },
+      }));
+    }
+  };
+
+  const mergeTrace = (traceId: string, patch: AgentTrace) => {
+    setTraces((current) =>
+      (current || []).map((trace) => (getTraceId(trace) === traceId ? { ...trace, ...patch } : trace))
+    );
+  };
+
+  const handleTraceDetails = async (trace: AgentTrace) => {
+    const traceId = getTraceId(trace);
+    if (!traceId) return;
+    if (selectedTraceId === traceId) {
+      setSelectedTraceId(null);
+      setTraceDetailError(null);
+      return;
+    }
+    setSelectedTraceId(traceId);
+    setTraceDetailError(null);
+    if (traceDetailById[traceId]) return;
+    setTraceDetailLoadingId(traceId);
+    try {
+      const { response, data } = await fetchAgentTrace(traceId);
+      if (!response.ok) {
+        throw new Error(String((data as { error?: unknown })?.error || "trace_unavailable"));
+      }
+      setTraceDetailById((current) => ({ ...current, [traceId]: data }));
+    } catch {
+      setTraceDetailError("trace_unavailable");
+    } finally {
+      setTraceDetailLoadingId(null);
+    }
+  };
+
+  const handleTraceShare = async (trace: AgentTrace) => {
+    const traceId = getTraceId(trace);
+    if (!traceId) return;
+    setTraceBusyId(`trace-share:${traceId}`);
+    try {
+      const { response, data } = await shareAgentTrace(traceId);
+      if (!response.ok) {
+        throw new Error(String((data as { error?: unknown })?.error || "share_failed"));
+      }
+      mergeTrace(traceId, data);
+    } catch {
+      setTraceDetailError("trace_share_failed");
+    } finally {
+      setTraceBusyId(null);
+    }
+  };
+
+  const handleTraceRevoke = async (trace: AgentTrace) => {
+    const traceId = getTraceId(trace);
+    if (!traceId) return;
+    setTraceBusyId(`trace-revoke:${traceId}`);
+    try {
+      const { response } = await revokeAgentTraceShare(traceId);
+      if (!response.ok) throw new Error("revoke_failed");
+      mergeTrace(traceId, { public_url: null, share_code: null });
+    } catch {
+      setTraceDetailError("trace_revoke_failed");
+    } finally {
+      setTraceBusyId(null);
+    }
+  };
 
   return (
     <aside className="zaki-agent-inspector" aria-label="Agent inspector">
@@ -527,7 +863,7 @@ export function AgentInspectorRail({
         options={[
           { id: "plan", label: "Plan", count: approvalRequest ? "!" : sortedTasks.length || undefined },
           { id: "cron", label: "Cron", count: cronSourceCount || undefined },
-          { id: "sources", label: "Sources", count: sourceEntries.length || undefined },
+          { id: "evidence", label: "Evidence", count: sourceEntries.length || undefined },
           {
             id: "artifacts",
             label: "Artifacts",
@@ -759,9 +1095,9 @@ export function AgentInspectorRail({
           </V2Panel>
         ) : null}
 
-        {tab === "sources" ? (
-          <V2Panel aria-label="Sources" className="zaki-agent-inspector__pane">
-            <V2PanelHead title="Sources" meta={lastChannel || "agent"} />
+        {tab === "evidence" ? (
+          <V2Panel aria-label="Evidence" className="zaki-agent-inspector__pane">
+            <V2PanelHead title="Evidence" meta={lastChannel || "agent"} />
             <V2Meter
               label="Context window"
               value={ctxPct}
@@ -770,20 +1106,14 @@ export function AgentInspectorRail({
                   ? `${formatTokens(contextTokenCountForDisplay)} / ${formatTokens(contextGaugeData.contextMax)} tokens`
                   : ctxPct != null
                     ? `${Math.round(ctxPct)}% pressure`
-                    : "No context sample"
+                    : "No trusted context sample"
               }
             />
-            {weeklyRemaining != null ? (
-              <V2Meter
-                label="Weekly allowance"
-                value={weeklyRemaining}
-                detail={`${quotaInfo?.remaining ?? 0} of ${quotaInfo?.limit ?? 0} preview turns`}
-              />
-            ) : null}
             <V2MetricGrid
               columns={2}
               items={[
                 { id: "memory", label: "Memory", value: "User scoped" },
+                { id: "context-source", label: "Context", value: contextSourceLabel(contextGaugeData) },
                 { id: "model", label: "Model", value: defaultModel.label },
               ]}
             />
@@ -808,7 +1138,7 @@ export function AgentInspectorRail({
               </div>
             ) : (
               <div className="v2-empty-line">
-                No sources surfaced in this turn yet.
+                No evidence surfaced in this turn yet. Web pages, files, memory hits, and context events will appear here when the runtime emits them.
               </div>
             )}
             <PanelActionButton onClick={onOpenMemory} ariaLabel="Open memory graph">
@@ -823,8 +1153,8 @@ export function AgentInspectorRail({
             <div className="zaki-agent-inspector__artifact-versions">
               {(artifactEntries.length
                 ? artifactEntries
-                : artifacts.length
-                  ? artifacts
+                : sortedArtifacts.length
+                  ? sortedArtifacts
                   : primaryArtifact
                     ? [primaryArtifact]
                     : [])
@@ -841,7 +1171,7 @@ export function AgentInspectorRail({
                       : artifactVersionLabel(event, index)}
                   </span>
                 ))}
-              {!artifactEntries.length && !artifacts.length ? (
+              {!artifactEntries.length && !sortedArtifacts.length ? (
                 <span className="version is-active">v0 · waiting</span>
               ) : null}
               <span className="diff">{artifactSourceCount || 0} records</span>
@@ -849,68 +1179,154 @@ export function AgentInspectorRail({
             <article className="zaki-agent-inspector__artifact-doc">
               <header className="zaki-agent-inspector__artifact-head">
                 <div className="tag">
-                  output · {primaryArtifact ? "captured" : primaryBackendArtifact ? "stored" : "idle"}
+                  artifacts · {sortedArtifacts.length ? (artifactsScope === "recent" ? "recent" : "session") : provisionalArtifactEntries.length ? "syncing" : "idle"}
                 </div>
                 <div className="title">
-                  {primaryArtifact?.files[0] ||
+                  {primaryBackendArtifact?.title ||
+                    primaryArtifact?.files[0] ||
                     primaryArtifact?.label ||
-                    primaryBackendArtifact?.title ||
                     "No artifact activity"}
                 </div>
                 <div className="sub">
-                  {primaryArtifact?.meta ||
-                    primaryBackendArtifact?.type ||
-                    "Documents, canvases, exports, and generated files"}
+                  {artifactsScope === "recent" && sortedArtifacts.length
+                    ? "Recent artifacts shown because this session has no ledger outputs yet"
+                    : primaryBackendArtifact?.type ||
+                      primaryArtifact?.meta ||
+                      "Documents, canvases, exports, and generated files"}
                 </div>
               </header>
-              <div className="zaki-agent-inspector__artifact-body">
-                {primaryArtifact ? (
-                  <p>{primaryArtifact.summary}</p>
-                ) : primaryBackendArtifact ? (
-                  <p>Stored artifact from the backend ledger.</p>
-                ) : (
-                  <p>Generated outputs will appear here as the agent creates them.</p>
-                )}
-              </div>
             </article>
-            {artifactsLoading && !artifacts.length ? (
+            {artifactsLoading && !sortedArtifacts.length ? (
               <div className="v2-empty-line">Loading artifact ledger...</div>
             ) : null}
             {artifactsError ? (
               <div className="v2-empty-line">Artifact ledger unavailable: {artifactsError}</div>
             ) : null}
-            {artifactEntries.length ? (
+            {sortedArtifacts.length ? (
+              <div className="zaki-agent-inspector__artifact-list" data-testid="agent-artifact-list">
+                {artifactsScope === "recent" ? (
+                  <div className="zaki-agent-inspector__artifact-scope">Recent artifacts</div>
+                ) : null}
+                {sortedArtifacts.map((artifact, index) => {
+                  const shareState = artifactShareStates[artifact.id];
+                  const shareUrl = shareUrlForArtifact(artifact);
+                  return (
+                    <article
+                      key={artifact.id}
+                      className="zaki-agent-inspector__artifact-row"
+                      data-testid="agent-artifact-row"
+                    >
+                      <div className="zaki-agent-inspector__artifact-row-head">
+                        <div className="zaki-agent-inspector__artifact-row-title" title={artifact.title}>
+                          {artifact.title}
+                        </div>
+                        <div className="zaki-agent-inspector__artifact-row-meta">
+                          <span>{artifact.type || "artifact"}</span>
+                          <span>{artifactVersionLabel(artifact, index)}</span>
+                        </div>
+                      </div>
+                      <div className="zaki-agent-inspector__artifact-actions">
+                        <button
+                          type="button"
+                          className="zaki-agent-inspector__artifact-action"
+                          onClick={() => onOpenArtifact?.(artifact)}
+                          aria-label={`Open ${artifact.title}`}
+                          disabled={!artifact.id || !onOpenArtifact}
+                        >
+                          <ExternalLink className="size-3.5" aria-hidden />
+                          Open
+                        </button>
+                        {PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS.map((format) => {
+                          const exportState = artifactExportStates[artifact.id]?.[format];
+                          const label = `Download ${format.toUpperCase()}`;
+                          if (exportState?.status === "ready" && exportState.url) {
+                            return (
+                              <button
+                                key={format}
+                                type="button"
+                                className="zaki-agent-inspector__artifact-action is-ready"
+                                onClick={() => void handleArtifactDownload(artifact, format, exportState.url || "")}
+                                data-testid={`agent-artifact-download-${format}-${artifact.id}`}
+                                aria-label={`${label} for ${artifact.title}`}
+                              >
+                                <Download className="size-3.5" aria-hidden />
+                                {label}
+                              </button>
+                            );
+                          }
+                          return (
+                            <button
+                              key={format}
+                              type="button"
+                              className="zaki-agent-inspector__artifact-action"
+                              onClick={() => void handleArtifactExport(artifact, format)}
+                              disabled={exportState?.status === "exporting"}
+                              data-testid={`agent-artifact-export-${format}-${artifact.id}`}
+                              aria-label={`${label} for ${artifact.title}`}
+                              title={exportState?.error || undefined}
+                            >
+                              <Download className="size-3.5" aria-hidden />
+                              {exportState?.status === "exporting" ? "Exporting" : label}
+                            </button>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          className="zaki-agent-inspector__artifact-action"
+                          onClick={() => void handleArtifactShare(artifact)}
+                          disabled={shareState?.status === "sharing"}
+                          aria-label={`Share ${artifact.title}`}
+                        >
+                          <Share2 className="size-3.5" aria-hidden />
+                          {shareState?.status === "sharing" ? "Sharing" : "Share"}
+                        </button>
+                        <button
+                          type="button"
+                          className="zaki-agent-inspector__artifact-action"
+                          onClick={() => void handleCopyArtifactLink(artifact)}
+                          disabled={!shareUrl && !PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS.some((format) => artifactExportStates[artifact.id]?.[format]?.url)}
+                          aria-label={`Copy link for ${artifact.title}`}
+                        >
+                          {shareUrl ? <Link2 className="size-3.5" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
+                          {shareState?.status === "copied" ? "Copied" : "Copy link"}
+                        </button>
+                      </div>
+                      {shareState?.status === "failed" ? (
+                        <div className="zaki-agent-inspector__artifact-state">Share/link action failed: {shareState.error || "retry available"}</div>
+                      ) : null}
+                      {PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS.map((format) => {
+                        const exportState = artifactExportStates[artifact.id]?.[format];
+                        if (!exportState || exportState.status === "idle" || exportState.status === "ready" || exportState.status === "exporting") return null;
+                        return (
+                          <div key={format} className="zaki-agent-inspector__artifact-state">
+                            {format.toUpperCase()} {exportState.status}: {exportState.error || "retry available"}
+                          </div>
+                        );
+                      })}
+                    </article>
+                  );
+                })}
+              </div>
+            ) : null}
+            {provisionalArtifactEntries.length ? (
               <ol className="zaki-agent-inspector__event-list">
-                {artifactEntries.map((event) => (
+                {provisionalArtifactEntries.map((event) => (
                   <li key={event.id}>
                     <Boxes className="zaki-agent-inspector__event-icon" aria-hidden />
                     <div>
                       <strong>{event.label}</strong>
                       <span>{event.summary}</span>
-                      {event.files.length ? <small>{event.files.join(", ")}</small> : event.meta ? <small>{event.meta}</small> : null}
+                      <small>{event.meta || "Syncing with artifact ledger"}</small>
                     </div>
                   </li>
                 ))}
               </ol>
             ) : null}
-            {!artifactEntries.length && artifacts.length ? (
-              <ol className="zaki-agent-inspector__event-list">
-                {artifacts.slice(0, 5).map((artifact) => (
-                  <li key={artifact.id}>
-                    <Boxes className="zaki-agent-inspector__event-icon" aria-hidden />
-                    <div>
-                      <strong>{artifact.title}</strong>
-                      <span>{artifact.type || "artifact"}</span>
-                      <small>{artifactVersionLabel(artifact, 0)}</small>
-                    </div>
-                  </li>
-                ))}
-              </ol>
+            {!sortedArtifacts.length && !provisionalArtifactEntries.length && !artifactsLoading ? (
+              <div className="v2-empty-line">
+                Generated outputs will appear here as the agent creates them.
+              </div>
             ) : null}
-            <PanelActionButton onClick={onOpenArtifacts} ariaLabel="Open artifacts manager">
-              <Boxes className="size-4" aria-hidden />
-              Open artifacts
-            </PanelActionButton>
           </V2Panel>
         ) : null}
 
@@ -981,10 +1397,6 @@ export function AgentInspectorRail({
                 Browser traces will appear here when the agent opens or controls a page.
               </div>
             )}
-            <PanelActionButton onClick={onOpenBrowser} ariaLabel="Open browser controls">
-              <Globe2 className="size-4" aria-hidden />
-              Open browser controls
-            </PanelActionButton>
           </V2Panel>
         ) : null}
 
@@ -1057,10 +1469,106 @@ export function AgentInspectorRail({
                 {isStreaming ? "Waiting for trace events." : "No trace in this turn."}
               </div>
             )}
-            <PanelActionButton onClick={onOpenTrace} ariaLabel="Open trace viewer">
-              <Activity className="size-4" aria-hidden />
-              Open trace viewer
-            </PanelActionButton>
+            <div className="zaki-agent-inspector__trace-ledger" data-testid="agent-trace-ledger">
+              <div className="zaki-agent-inspector__trace-ledger-head">
+                <span>durable traces</span>
+                <span>{tracesLoading ? "loading" : traces?.length ? `${traces.length} records` : "none"}</span>
+              </div>
+              {tracesLoading && !traces ? (
+                <div className="v2-empty-line">Loading durable traces...</div>
+              ) : null}
+              {tracesError ? (
+                <div className="v2-empty-line">Trace ledger unavailable: {tracesError}</div>
+              ) : null}
+              {traces && traces.length === 0 ? (
+                <div className="v2-empty-line">No durable trace records yet.</div>
+              ) : null}
+              {(traces || []).map((trace, index) => {
+                const traceId = getTraceId(trace);
+                const shareUrl = getTraceShareUrl(trace);
+                const detail = traceId ? traceDetailById[traceId] : null;
+                const detailEvents = Array.isArray(detail?.events) ? detail.events : [];
+                return (
+                  <article
+                    key={traceId || index}
+                    className="zaki-agent-inspector__trace-record"
+                    data-testid="agent-trace-record"
+                  >
+                    <div className="zaki-agent-inspector__trace-record-head">
+                      <div>
+                        <strong>{traceId || `trace ${index + 1}`}</strong>
+                        <span>
+                          {trace.status || "unknown"} · {formatTraceTs(trace.started_at)}
+                        </span>
+                      </div>
+                      {shareUrl ? (
+                        <a
+                          href={shareUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={`Open shared trace ${traceId}`}
+                        >
+                          <ExternalLink className="size-3.5" aria-hidden />
+                        </a>
+                      ) : null}
+                    </div>
+                    <div className="zaki-agent-inspector__trace-actions">
+                      <button
+                        type="button"
+                        onClick={() => void handleTraceDetails(trace)}
+                        disabled={!traceId || traceDetailLoadingId === traceId}
+                      >
+                        <Activity className="size-3.5" aria-hidden />
+                        {selectedTraceId === traceId ? "Hide details" : traceDetailLoadingId === traceId ? "Loading" : "Details"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleTraceShare(trace)}
+                        disabled={!traceId || traceBusyId === `trace-share:${traceId}`}
+                      >
+                        <Share2 className="size-3.5" aria-hidden />
+                        Share
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleTraceRevoke(trace)}
+                        disabled={!traceId || !shareUrl || traceBusyId === `trace-revoke:${traceId}`}
+                      >
+                        <Link2Off className="size-3.5" aria-hidden />
+                        Revoke
+                      </button>
+                    </div>
+                    {selectedTraceId === traceId ? (
+                      <div className="zaki-agent-inspector__trace-detail" data-testid="agent-trace-detail">
+                        {traceDetailLoadingId === traceId ? (
+                          <div className="v2-empty-line">Loading trace events...</div>
+                        ) : traceDetailError ? (
+                          <div className="v2-empty-line">Trace detail unavailable: {traceDetailError}</div>
+                        ) : detailEvents.length ? (
+                          <ol>
+                            {detailEvents.slice(0, 24).map((event, eventIndex) => (
+                              <li key={`${traceId}-event-${eventIndex}`}>
+                                <span>{getTraceEventType(event, eventIndex)}</span>
+                                <small>
+                                  {formatTraceTs(
+                                    (event.ts as string | number | null | undefined) ??
+                                      (event.timestamp as string | number | null | undefined) ??
+                                      (event.created_at as string | number | null | undefined)
+                                  )}
+                                </small>
+                                <p>{getTraceEventPreview(event)}</p>
+                              </li>
+                            ))}
+                          </ol>
+                        ) : (
+                          <div className="v2-empty-line">No trace events recorded.</div>
+                        )}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
           </V2Panel>
         ) : null}
       </div>

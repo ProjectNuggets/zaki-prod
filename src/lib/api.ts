@@ -2420,8 +2420,10 @@ export type AgentSession = {
   last_active?: string | number;
   message_count?: number;
   token_count?: number;
+  token_estimate?: number;
   context_window_used?: number;
   context_window_max?: number;
+  context_window_tokens?: number;
   context_pressure_percent?: number;
   live?: boolean;
   mode?: AgentSessionMode;
@@ -2434,14 +2436,21 @@ export type AgentSessionContext = {
   session_key?: string;
   token_count?: number;
   tokens_used?: number;
+  token_estimate?: number;
   context_window_used?: number;
   context_window_max?: number;
+  context_window_tokens?: number;
   token_limit?: number;
   context_window_used_pct?: number;
   context_pressure_percent?: number;
   message_count?: number;
   history_len?: number;
+  history_messages?: number;
   max_history?: number;
+  token_compaction_threshold?: number;
+  token_compaction_triggered?: boolean;
+  last_turn?: Record<string, unknown> | null;
+  report?: Record<string, unknown>;
 };
 
 export type AgentSessionMode = "plan" | "execute" | "review";
@@ -2449,10 +2458,14 @@ export type AgentSessionMode = "plan" | "execute" | "review";
 export type BotSandboxBackend = "bubblewrap" | "firejail" | "docker";
 
 export type AgentPendingApproval = {
-  id?: string;
+  approval_id?: string;
+  id?: string | number;
+  tool_call_id?: string | null;
   tool?: string;
   reason?: string;
   risk_level?: string;
+  created_at?: string | number | null;
+  expires_at?: string | number | null;
 };
 
 export type BotRuntimeStatusResponse = {
@@ -2662,7 +2675,13 @@ export async function approveAgentSession(
     method: "POST",
     body: JSON.stringify(payload),
   });
-  const data = await parseApiJson<{ ok: boolean }>(response);
+  const data = await parseApiJson<{
+    ok?: boolean;
+    status?: string;
+    message?: string;
+    error?: string;
+    hint?: string;
+  }>(response);
   return { response, data };
 }
 
@@ -2906,6 +2925,14 @@ export async function shareAgentArtifact(artifactId: string) {
     { method: "POST" }
   );
   const data = await parseApiJson<AgentArtifact>(response);
+  const shareUrl = normalizeAgentArtifactShareUrl(
+    data.share_url ?? data.shareUrl ?? data.public_url ?? data.publicUrl ?? data.url
+  );
+  if (shareUrl) {
+    data.share_url = shareUrl;
+    data.public_url = shareUrl;
+    data.url = shareUrl;
+  }
   return { response, data };
 }
 
@@ -2918,6 +2945,168 @@ export async function revokeAgentArtifactShare(artifactId: string) {
   return { response, data };
 }
 
+const AGENT_EXPORT_FILENAME_SAFE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/;
+const AGENT_SHARE_CODE_SAFE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{7,127}$/;
+
+function normalizeAgentExportFilename(value: string): string | null {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+  const filename = decoded.trim();
+  if (
+    !AGENT_EXPORT_FILENAME_SAFE_PATTERN.test(filename) ||
+    filename.includes("..") ||
+    filename.startsWith(".")
+  ) {
+    return null;
+  }
+  return encodeURIComponent(filename);
+}
+
+function normalizeAgentShareCode(value: string): string | null {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+  const shareCode = decoded.trim();
+  if (!AGENT_SHARE_CODE_SAFE_PATTERN.test(shareCode)) return null;
+  return encodeURIComponent(shareCode);
+}
+
+export function normalizeAgentExportDownloadUrl(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const raw = value.trim();
+  const rawPathish = (raw.split(/[?#]/, 1)[0] ?? "")
+    .replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "");
+  const rawLooksLikeUpstreamExport =
+    /^\/api\/v1\/users\/[^/]+\/exports(?:\/|$)/.test(rawPathish);
+  const rawLooksLikeAgentExport = /^\/api\/agent\/exports(?:\/|$)/.test(rawPathish);
+  try {
+    const parsed = new URL(raw, "http://zaki.local");
+    const match = parsed.pathname.match(/^\/api\/v1\/users\/[^/]+\/exports\/([^/?#]+)$/);
+    if (match?.[1]) {
+      const filename = normalizeAgentExportFilename(match[1]);
+      return filename ? `/api/agent/exports/${filename}` : null;
+    }
+    if (
+      rawLooksLikeUpstreamExport ||
+      (parsed.pathname.startsWith("/api/v1/users/") && parsed.pathname.includes("/exports"))
+    ) {
+      return null;
+    }
+    if (parsed.pathname.startsWith("/api/agent/exports/")) {
+      const filename = normalizeAgentExportFilename(
+        parsed.pathname.slice("/api/agent/exports/".length)
+      );
+      return filename ? `/api/agent/exports/${filename}${parsed.search || ""}` : null;
+    }
+    if (rawLooksLikeAgentExport) return null;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function filenameFromContentDisposition(value: string | null): string | null {
+  if (!value) return null;
+  const encoded = value.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) {
+    try {
+      const decoded = decodeURIComponent(encoded).trim();
+      if (decoded) return decoded;
+    } catch {
+      // Fall through to the plain filename form.
+    }
+  }
+  const plain = value.match(/filename="?([^";]+)"?/i)?.[1]?.trim();
+  return plain || null;
+}
+
+function filenameFromExportUrl(value: string): string | null {
+  try {
+    const parsed = new URL(value, "http://zaki.local");
+    const raw = parsed.pathname.split("/").pop() || "";
+    const decoded = decodeURIComponent(raw).trim();
+    return decoded || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function downloadAgentExportFile(
+  value: string,
+  fallbackFilename?: string | null
+) {
+  const normalizedUrl = normalizeAgentExportDownloadUrl(value);
+  if (!normalizedUrl) {
+    throw new Error("invalid_download_url");
+  }
+  const response = await backendAuthRequest(normalizedUrl, { method: "GET" });
+  if (!response.ok) {
+    throw new Error(`download_failed:${response.status}`);
+  }
+  const blob = await response.blob();
+  const filename =
+    filenameFromContentDisposition(response.headers.get("content-disposition")) ||
+    (fallbackFilename && fallbackFilename.trim()) ||
+    filenameFromExportUrl(normalizedUrl) ||
+    "zaki-artifact";
+
+  if (typeof window !== "undefined" && typeof document !== "undefined") {
+    const objectUrl = window.URL.createObjectURL(blob);
+    try {
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = filename;
+      anchor.rel = "noopener";
+      anchor.style.display = "none";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+    } finally {
+      const revoke = () => window.URL.revokeObjectURL(objectUrl);
+      if (typeof window.setTimeout === "function") {
+        window.setTimeout(revoke, 1000);
+      } else {
+        setTimeout(revoke, 1000);
+      }
+    }
+  }
+
+  return { response, filename, bytes: blob.size };
+}
+
+export function normalizeAgentArtifactShareUrl(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const raw = value.trim();
+  const rawPathish = (raw.split(/[?#]/, 1)[0] ?? "")
+    .replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, "");
+  try {
+    const parsed = new URL(raw, "http://zaki.local");
+    const match =
+      parsed.pathname.match(/^\/api\/v1\/share\/artifact\/([^/?#]+)$/) ||
+      parsed.pathname.match(/^\/api\/agent\/share\/artifact\/([^/?#]+)$/);
+    if (match?.[1]) {
+      const shareCode = normalizeAgentShareCode(match[1]);
+      return shareCode ? `/api/agent/share/artifact/${shareCode}${parsed.search || ""}` : null;
+    }
+    if (
+      /^\/api\/v1\/share\/artifact(?:\/|$)/.test(rawPathish) ||
+      /^\/api\/agent\/share\/artifact(?:\/|$)/.test(rawPathish)
+    ) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export async function exportAgentArtifact(artifactId: string, format: string) {
   const response = await backendAuthRequest(
     appendBrainQueryParams(`/api/agent/artifacts/${encodeURIComponent(artifactId)}/export`, {
@@ -2926,6 +3115,13 @@ export async function exportAgentArtifact(artifactId: string, format: string) {
     { method: "POST" }
   );
   const data = await parseApiJson<Record<string, unknown>>(response);
+  const downloadUrl = normalizeAgentExportDownloadUrl(
+    data.download_url ?? data.downloadUrl ?? data.url
+  );
+  if (downloadUrl) {
+    data.download_url = downloadUrl;
+    data.url = downloadUrl;
+  }
   return { response, data };
 }
 

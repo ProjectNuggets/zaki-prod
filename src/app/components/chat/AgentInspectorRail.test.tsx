@@ -1,7 +1,28 @@
 import "@testing-library/jest-dom";
-import { describe, expect, it, jest } from "@jest/globals";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { AgentInspectorRail, type AgentInspectorRailProps } from "./AgentInspectorRail";
+
+jest.mock("@/lib/api", () => ({
+  downloadAgentExportFile: jest.fn(),
+  exportAgentArtifact: jest.fn(),
+  fetchAgentTrace: jest.fn(),
+  listAgentTraces: jest.fn(),
+  normalizeAgentArtifactShareUrl: (value: unknown) =>
+    typeof value === "string" && value.trim() ? value.trim() : null,
+  normalizeAgentExportDownloadUrl: (value: unknown) =>
+    typeof value === "string" && value.trim() ? value.trim() : null,
+  revokeAgentTraceShare: jest.fn(),
+  shareAgentArtifact: jest.fn(),
+  shareAgentTrace: jest.fn(),
+}));
+
+const exportAgentArtifactMock = jest.requireMock("@/lib/api").exportAgentArtifact as jest.Mock;
+const downloadAgentExportFileMock = jest.requireMock("@/lib/api").downloadAgentExportFile as jest.Mock;
+const fetchAgentTraceMock = jest.requireMock("@/lib/api").fetchAgentTrace as jest.Mock;
+const listAgentTracesMock = jest.requireMock("@/lib/api").listAgentTraces as jest.Mock;
+const shareAgentArtifactMock = jest.requireMock("@/lib/api").shareAgentArtifact as jest.Mock;
+const shareAgentTraceMock = jest.requireMock("@/lib/api").shareAgentTrace as jest.Mock;
 
 function renderRail(overrides: Partial<AgentInspectorRailProps> = {}) {
   const props: AgentInspectorRailProps = {
@@ -15,7 +36,6 @@ function renderRail(overrides: Partial<AgentInspectorRailProps> = {}) {
     approvalRequest: null,
     contextGaugeData: null,
     usageSummary: null,
-    quotaInfo: null,
     ...overrides,
   };
 
@@ -23,6 +43,34 @@ function renderRail(overrides: Partial<AgentInspectorRailProps> = {}) {
 }
 
 describe("AgentInspectorRail", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    exportAgentArtifactMock.mockResolvedValue({
+      response: { ok: true },
+      data: { download_url: "/api/agent/exports/artifact.docx" },
+    });
+    downloadAgentExportFileMock.mockResolvedValue({
+      filename: "artifact.docx",
+      bytes: 12,
+    });
+    listAgentTracesMock.mockResolvedValue({
+      response: { ok: true },
+      data: { traces: [] },
+    });
+    fetchAgentTraceMock.mockResolvedValue({
+      response: { ok: true },
+      data: { run_id: "run-detail", events: [{ type: "tool_start", summary: "Read file" }] },
+    });
+    shareAgentArtifactMock.mockResolvedValue({
+      response: { ok: true },
+      data: { public_url: "https://share.local/artifact" },
+    });
+    shareAgentTraceMock.mockResolvedValue({
+      response: { ok: true },
+      data: { run_id: "run-1", public_url: "https://share.local/trace" },
+    });
+  });
+
   it("renders the V6 execution rail as six MECE tabs", () => {
     const onClose = jest.fn();
     renderRail({
@@ -40,7 +88,7 @@ describe("AgentInspectorRail", () => {
 
     const tablist = screen.getByRole("tablist", { name: "Agent panels" });
     expect(within(tablist).getAllByRole("tab")).toHaveLength(6);
-    for (const label of ["Plan", "Cron", "Sources", "Artifacts", "Browser", "Trace"]) {
+    for (const label of ["Plan", "Cron", "Evidence", "Artifacts", "Browser", "Trace"]) {
       expect(within(tablist).getByRole("tab", { name: new RegExp(label, "i") })).toBeInTheDocument();
     }
     expect(within(tablist).getByRole("tab", { name: /Plan/i })).toHaveAttribute(
@@ -85,7 +133,7 @@ describe("AgentInspectorRail", () => {
     expect(within(narration).getByText(/Read docs\/ui-handoff\.md/)).toBeInTheDocument();
   });
 
-  it("honors external tab requests from status strip and inline evidence links", () => {
+  it("honors external tab requests from status strip and inline evidence links", async () => {
     const { rerender } = renderRail({
       tabRequest: { tab: "trace", id: 1 },
       transcriptEntries: [
@@ -106,6 +154,7 @@ describe("AgentInspectorRail", () => {
       "aria-selected",
       "true"
     );
+    await waitFor(() => expect(listAgentTracesMock).toHaveBeenCalled());
 
     rerender(
       <AgentInspectorRail
@@ -119,18 +168,17 @@ describe("AgentInspectorRail", () => {
         approvalRequest={null}
         contextGaugeData={null}
         usageSummary={null}
-        quotaInfo={null}
-        tabRequest={{ tab: "sources", id: 2 }}
+        tabRequest={{ tab: "evidence", id: 2 }}
       />
     );
 
-    expect(screen.getByRole("tab", { name: /Sources/i })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: /Evidence/i })).toHaveAttribute(
       "aria-selected",
       "true"
     );
   });
 
-  it("surfaces memory and context evidence in the Sources tab", () => {
+  it("surfaces memory and context evidence in the Evidence tab", () => {
     const onOpenMemory = jest.fn();
     renderRail({
       onOpenMemory,
@@ -147,13 +195,9 @@ describe("AgentInspectorRail", () => {
         tokenCount: 2_000,
         contextMax: 8_000,
       },
-      quotaInfo: {
-        limit: 5,
-        remaining: 3,
-      },
     });
 
-    fireEvent.click(screen.getByRole("tab", { name: /Sources/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /Evidence/i }));
 
     expect(screen.getByText("Context window")).toBeInTheDocument();
     expect(screen.getByText("Fetched durable graph memory for this user.")).toBeInTheDocument();
@@ -161,11 +205,9 @@ describe("AgentInspectorRail", () => {
     expect(onOpenMemory).toHaveBeenCalledTimes(1);
   });
 
-  it("separates artifact activity and opens the artifact manager", () => {
-    const onOpenArtifacts = jest.fn();
+  it("separates provisional artifact activity in the right panel", () => {
     renderRail({
       artifactCount: 1,
-      onOpenArtifacts,
       transcriptEntries: [
         {
           id: "artifact-1",
@@ -180,20 +222,19 @@ describe("AgentInspectorRail", () => {
       ],
     });
 
-    expect(screen.getByText("output · captured")).toBeInTheDocument();
+    expect(screen.getByText(/artifacts ·/i)).toBeInTheDocument();
+    expect(screen.getByText(/syncing/i)).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Artifacts/i })).toHaveAttribute(
       "aria-selected",
       "true"
     );
     expect(screen.getAllByText("launch-brief.md").length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: "Open artifacts manager" }));
-    expect(onOpenArtifacts).toHaveBeenCalledTimes(1);
   });
 
-  it("renders stored artifacts from the backend ledger", () => {
-    const onOpenArtifacts = jest.fn();
+  it("opens stored artifacts through the central artifact canvas callback", async () => {
+    const onOpenArtifact = jest.fn();
     renderRail({
-      onOpenArtifacts,
+      onOpenArtifact,
       artifacts: [
         {
           id: "artifact-backend-1",
@@ -210,9 +251,54 @@ describe("AgentInspectorRail", () => {
       "true"
     );
     expect(screen.getAllByText("Stored execution report").length).toBeGreaterThan(0);
-    expect(screen.getByText("Stored artifact from the backend ledger.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Open artifacts manager" }));
-    expect(onOpenArtifacts).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByText("markdown").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Open Stored execution report" }));
+    expect(onOpenArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "artifact-backend-1" })
+    );
+  });
+
+  it("exports stored artifacts from the right panel and starts an authenticated download", async () => {
+    renderRail({
+      artifacts: [
+        {
+          id: "artifact-download-1",
+          title: "Downloadable report",
+          type: "markdown",
+          version: 2,
+          updatedAt: 1_800_000_000_000,
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByTestId("agent-artifact-export-docx-artifact-download-1"));
+
+    await waitFor(() => {
+      expect(exportAgentArtifactMock).toHaveBeenCalledWith("artifact-download-1", "docx");
+      expect(downloadAgentExportFileMock).toHaveBeenCalledWith(
+        "/api/agent/exports/artifact.docx",
+        "Downloadable_report.docx"
+      );
+      expect(screen.getByTestId("agent-artifact-download-docx-artifact-download-1")).toBeInTheDocument();
+    });
+  });
+
+  it("labels recent artifacts when the active session has no ledger output", () => {
+    renderRail({
+      artifactsScope: "recent",
+      artifacts: [
+        {
+          id: "artifact-recent-1",
+          title: "Older artifact",
+          type: "html",
+          version: 1,
+          updatedAt: 1_700_000_000_000,
+        },
+      ],
+    });
+
+    expect(screen.getByText("Recent artifacts")).toBeInTheDocument();
+    expect(screen.getByText(/this session has no ledger outputs/i)).toBeInTheDocument();
   });
 
   it("auto-routes pending approvals to the Plan panel before manual tab selection", () => {
@@ -243,9 +329,7 @@ describe("AgentInspectorRail", () => {
   });
 
   it("keeps browser control in its own panel", () => {
-    const onOpenBrowser = jest.fn();
     renderRail({
-      onOpenBrowser,
       sandbox: {
         enabled: true,
         backend: "playwright",
@@ -289,8 +373,6 @@ describe("AgentInspectorRail", () => {
     expect(screen.getByText("extension_navigate")).toBeInTheDocument();
     expect(screen.getByText("ok · extension_click")).toBeInTheDocument();
     expect(screen.getAllByText("playwright")).toHaveLength(2);
-    fireEvent.click(screen.getByRole("button", { name: "Open browser controls" }));
-    expect(onOpenBrowser).toHaveBeenCalledTimes(1);
   });
 
   it("opens the schedule manager from the Cron panel", () => {
@@ -392,7 +474,7 @@ describe("AgentInspectorRail", () => {
     expect(screen.getAllByText("subagent verifying trace rows against V6").length).toBeGreaterThan(0);
   });
 
-  it("renders trace as V6 operation rows with latency and warning count", () => {
+  it("renders trace as V6 operation rows with latency and warning count", async () => {
     renderRail({
       usageSummary: {
         usageTokens: 1200,
@@ -424,6 +506,7 @@ describe("AgentInspectorRail", () => {
     });
 
     fireEvent.click(screen.getByRole("tab", { name: /Trace/i }));
+    await waitFor(() => expect(listAgentTracesMock).toHaveBeenCalled());
 
     expect(screen.getAllByText("42ms").length).toBeGreaterThan(0);
     expect(screen.getByText(/1 warn/)).toBeInTheDocument();

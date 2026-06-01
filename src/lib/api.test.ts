@@ -45,6 +45,10 @@ function makeResponse(
     },
     json: async () => body,
     text: async () => JSON.stringify(body),
+    blob: async () =>
+      body instanceof Blob
+        ? body
+        : new Blob([typeof body === "string" ? body : JSON.stringify(body)]),
     clone: function () { return this; },
   } as unknown as Response;
 }
@@ -614,6 +618,22 @@ describe("agent runtime API clients", () => {
     );
   });
 
+  it("lists Agent artifacts with the active session key as a query parameter", async () => {
+    mockFetch.mockResolvedValueOnce(makeResponse(200, { artifacts: [] }));
+
+    const { listAgentArtifacts } = await import("@/lib/api");
+    await listAgentArtifacts({
+      limit: 12,
+      cursor: "next",
+      session_key: "agent:zaki-bot:user:42:thread:main",
+    });
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/agent/artifacts?limit=12&cursor=next&session_key=agent%3Azaki-bot%3Auser%3A42%3Athread%3Amain",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
   it("encodes artifact diff path segments", async () => {
     mockFetch.mockResolvedValueOnce(makeResponse(200, { diff: [] }));
 
@@ -624,6 +644,97 @@ describe("agent runtime API clients", () => {
       "http://test.local/api/agent/artifacts/artifact%3A1/diff/v%3A1/v.2",
       expect.objectContaining({ method: "GET" })
     );
+  });
+
+  it("normalizes Nullalis produced-file URLs through the Agent export BFF bridge", async () => {
+    const { normalizeAgentExportDownloadUrl } = await import("@/lib/api");
+
+    expect(
+      normalizeAgentExportDownloadUrl("/api/v1/users/42/exports/report.pdf")
+    ).toBe("/api/agent/exports/report.pdf");
+    expect(
+      normalizeAgentExportDownloadUrl("http://nullalis.local/api/v1/users/42/exports/research_brief.docx")
+    ).toBe("/api/agent/exports/research_brief.docx");
+    expect(normalizeAgentExportDownloadUrl("/api/agent/exports/report.pdf")).toBe(
+      "/api/agent/exports/report.pdf"
+    );
+    expect(normalizeAgentExportDownloadUrl("https://download.local/artifact.pdf")).toBeNull();
+    expect(normalizeAgentExportDownloadUrl("report.pdf")).toBeNull();
+    expect(normalizeAgentExportDownloadUrl("/api/v1/users/42/exports/../secret.pdf")).toBeNull();
+    expect(normalizeAgentExportDownloadUrl("/api/v1/users/42/exports/.hidden.pdf")).toBeNull();
+    expect(normalizeAgentExportDownloadUrl("/api/v1/users/42/exports/report.pdf/extra")).toBeNull();
+  });
+
+  it("downloads Agent exports through an authenticated BFF blob request", async () => {
+    _storeToken = "agent-token";
+    const createObjectURL = jest.fn(() => "blob:agent-export");
+    const revokeObjectURL = jest.fn();
+    Object.defineProperty(window.URL, "createObjectURL", {
+      configurable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(window.URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectURL,
+    });
+    Object.defineProperty(window, "setTimeout", {
+      configurable: true,
+      value: (callback: () => void) => {
+        callback();
+        return 1;
+      },
+    });
+    mockFetch.mockResolvedValueOnce(
+      makeResponse(200, "pdf-bytes", {
+        "content-disposition": "attachment; filename=\"report.pdf\"",
+      })
+    );
+
+    const { downloadAgentExportFile } = await import("@/lib/api");
+    const result = await downloadAgentExportFile(
+      "/api/v1/users/42/exports/report.pdf",
+      "fallback.pdf"
+    );
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/agent/exports/report.pdf",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.any(Headers),
+      })
+    );
+    const headers = (mockFetch.mock.calls[0]?.[1] as RequestInit).headers as Headers;
+    expect(headers.get("Authorization")).toBe("Bearer agent-token");
+    expect(result.filename).toBe("report.pdf");
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:agent-export");
+  });
+
+  it("normalizes Nullalis artifact share URLs through the Agent public-share BFF bridge", async () => {
+    const { normalizeAgentArtifactShareUrl, shareAgentArtifact } = await import("@/lib/api");
+
+    expect(
+      normalizeAgentArtifactShareUrl("/api/v1/share/artifact/abc12345def67890")
+    ).toBe("/api/agent/share/artifact/abc12345def67890");
+    expect(
+      normalizeAgentArtifactShareUrl("http://nullalis.local/api/v1/share/artifact/abc12345def67890")
+    ).toBe("/api/agent/share/artifact/abc12345def67890");
+    expect(
+      normalizeAgentArtifactShareUrl("/api/agent/share/artifact/abc12345def67890")
+    ).toBe("/api/agent/share/artifact/abc12345def67890");
+    expect(normalizeAgentArtifactShareUrl("/api/v1/share/artifact/../secret")).toBeNull();
+    expect(normalizeAgentArtifactShareUrl("/api/v1/share/artifact/x")).toBeNull();
+    expect(normalizeAgentArtifactShareUrl("https://example.com/share/artifact/abc12345")).toBeNull();
+
+    mockFetch.mockResolvedValueOnce(
+      makeResponse(200, {
+        id: "artifact-1",
+        share_url: "/api/v1/share/artifact/abc12345def67890",
+      })
+    );
+    const { data } = await shareAgentArtifact("artifact-1");
+    expect(data.share_url).toBe("/api/agent/share/artifact/abc12345def67890");
+    expect(data.public_url).toBe("/api/agent/share/artifact/abc12345def67890");
   });
 
   it("fetches Brain documents through the Agent BFF", async () => {

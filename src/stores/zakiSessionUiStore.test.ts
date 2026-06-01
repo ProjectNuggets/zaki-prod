@@ -51,7 +51,16 @@ describe("zakiSessionUiStore", () => {
       last_channel: "telegram",
       context_pressure_percent: 75,
       live: true,
-      pending_approvals: [{ id: "a1", tool: "send_email", reason: "ok", risk_level: "high" }],
+      pending_approvals: [{
+        approval_id: "apr-7",
+        id: 7,
+        tool_call_id: "call_abc",
+        tool: "send_email",
+        reason: "ok",
+        risk_level: "high",
+        created_at: 1770000000,
+        expires_at: null,
+      }],
     });
 
     expect(mapped.mode).toBe("plan");
@@ -59,6 +68,13 @@ describe("zakiSessionUiStore", () => {
     expect(mapped.lastChannel).toBe("telegram");
     expect(mapped.contextPressurePercent).toBe(75);
     expect(mapped.pendingApprovals).toHaveLength(1);
+    expect(mapped.pendingApprovals?.[0]).toMatchObject({
+      id: "apr-7",
+      approvalId: "apr-7",
+      numericId: 7,
+      toolCallId: "call_abc",
+      timestamp: 1770000000 * 1000,
+    });
     expect(mapped.live).toBe(true);
   });
 

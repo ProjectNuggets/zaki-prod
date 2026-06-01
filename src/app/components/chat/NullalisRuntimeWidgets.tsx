@@ -334,6 +334,16 @@ export type ContextGaugeData = {
   contextMax?: number;
   messageCount?: number;
   context_pressure_percent?: number | null;
+  source?: "live_session" | "diagnostics_fallback" | "inactive_session" | "unknown";
+  confidence?: "exact" | "fallback" | "inactive" | "unknown";
+  compactionThresholdPct?: number | null;
+  compactionThresholdTokens?: number | null;
+  tokenCompactionTriggered?: boolean | null;
+  lastTurn?: {
+    autoCompactionEvents?: number | null;
+    durableContinuityRefreshed?: boolean | null;
+    memoryContextInjected?: boolean | null;
+  } | null;
 };
 
 export function ContextGauge({
@@ -376,6 +386,26 @@ export function ContextGauge({
     tokenLabel && maxLabel
       ? `Context window ${tokenLabel} of ${maxLabel} tokens, ${pctLabel} percent used`
       : `Context pressure ${pctLabel} percent`;
+  const sourceLabel =
+    data.source === "live_session"
+      ? "live session"
+      : data.source === "diagnostics_fallback"
+        ? "diagnostics fallback"
+        : data.source === "inactive_session"
+          ? "inactive session"
+          : null;
+  const thresholdLabel =
+    typeof data.compactionThresholdPct === "number"
+      ? `compact @ ${Math.round(data.compactionThresholdPct)}%`
+      : typeof data.compactionThresholdTokens === "number"
+        ? `compact @ ${new Intl.NumberFormat("en-US").format(data.compactionThresholdTokens)} tokens`
+      : null;
+  const lastTurnBits = [
+    data.tokenCompactionTriggered ? "token trigger" : null,
+    data.lastTurn?.autoCompactionEvents ? `${data.lastTurn.autoCompactionEvents} compactions` : null,
+    data.lastTurn?.durableContinuityRefreshed ? "continuity refreshed" : null,
+    data.lastTurn?.memoryContextInjected ? "memory injected" : null,
+  ].filter((bit): bit is string => typeof bit === "string" && bit.length > 0);
 
   // 2026-05-08 — Single color, no FE-side tier buckets. Pressure is the
   // raw signal nullalis emits; the actual compaction trigger lives in
@@ -433,6 +463,15 @@ export function ContextGauge({
           {t("contextGauge.messageCount", { count: data.messageCount })}
         </div>
       )}
+      {(sourceLabel || thresholdLabel || lastTurnBits.length > 0) ? (
+        <div className={cn("mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono-ui text-[10px]", textColor)}>
+          {sourceLabel ? <span>{sourceLabel}</span> : null}
+          {thresholdLabel ? <span>{thresholdLabel}</span> : null}
+          {lastTurnBits.slice(0, 2).map((bit) => (
+            <span key={bit}>{bit}</span>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

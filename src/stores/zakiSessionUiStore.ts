@@ -25,6 +25,9 @@ export type ZakiRuntimeSandbox = {
 
 export type ZakiSessionApprovalRequest = {
   id: string;
+  approvalId?: string | null;
+  numericId?: number | string | null;
+  toolCallId?: string | null;
   tool: string;
   reason: string;
   riskLevel: string;
@@ -88,10 +91,29 @@ export function mapAgentSessionToZakiSessionUi(session: Partial<AgentSession>): 
   if (Array.isArray(session.pending_approvals)) {
     patch.pendingApprovals = session.pending_approvals
       .map((approval) => {
-        const id = String(approval?.id || "").trim();
-        if (!id) return null;
-        return {
-          id,
+        const approvalId = String(approval?.approval_id || "").trim();
+        const numericId =
+          typeof approval?.id === "number" || typeof approval?.id === "string"
+            ? approval.id
+            : null;
+        const displayId = approvalId || (numericId != null ? `legacy:${String(numericId)}` : "");
+        if (!displayId) return null;
+        const createdAtRaw =
+          typeof approval?.created_at === "number" || typeof approval?.created_at === "string"
+            ? Number(approval.created_at)
+            : null;
+        const createdAtMs =
+          createdAtRaw != null && Number.isFinite(createdAtRaw) && createdAtRaw > 0
+            ? createdAtRaw * 1000
+            : 0;
+        const mapped: ZakiSessionApprovalRequest = {
+          id: displayId,
+          approvalId: approvalId || null,
+          numericId,
+          toolCallId:
+            typeof approval?.tool_call_id === "string" && approval.tool_call_id.trim()
+              ? approval.tool_call_id.trim()
+              : null,
           tool: String(approval?.tool || "").trim(),
           reason: String(approval?.reason || "").trim(),
           riskLevel: String(approval?.risk_level || "").trim(),
@@ -99,8 +121,15 @@ export function mapAgentSessionToZakiSessionUi(session: Partial<AgentSession>): 
           // otherwise stamp now". hydrateSession resolves this — keeping
           // the mapper pure (no store reads) while still preserving the
           // original approval-creation time across re-hydrations.
-          timestamp: 0,
-        } satisfies ZakiSessionApprovalRequest;
+          timestamp: createdAtMs,
+          expiresAt:
+            typeof approval?.expires_at === "number"
+              ? new Date(approval.expires_at * 1000).toISOString()
+              : typeof approval?.expires_at === "string" && approval.expires_at.trim()
+                ? approval.expires_at
+                : null,
+        };
+        return mapped;
       })
       .filter((approval): approval is ZakiSessionApprovalRequest => approval != null);
   }

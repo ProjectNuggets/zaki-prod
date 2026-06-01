@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { SheetShell } from "@/app/components/ui/zaki";
 import {
+  downloadAgentExportFile,
   exportAgentArtifact,
   fetchAgentTrace,
   fetchAgentExtensionDiagnostics,
@@ -39,6 +40,16 @@ import {
   type MemoryDoctorResponse,
   type UsageQuotaSurface,
 } from "@/lib/api";
+import {
+  getAgentArtifactExportDownloadUrl,
+  getAgentArtifactId,
+  getAgentArtifactKind,
+  getAgentArtifactShareUrl,
+  getAgentArtifactTitle,
+  PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS,
+  type AgentArtifactExportFormat,
+  type AgentArtifactExportState,
+} from "./agentArtifactSurface";
 import type { NullalisApprovalRequest } from "@/app/components/chat/BotStatusRail";
 import {
   type ZakiRuntimeSandbox,
@@ -140,8 +151,6 @@ const EXTENSION_TOOL_NAMES = [
   "extension_list_tabs",
 ];
 
-const ARTIFACT_EXPORT_FORMATS = ["pdf", "docx", "pptx", "html", "xlsx"];
-
 const USAGE_SURFACES: Array<{ surface: UsageQuotaSurface; labelKey: string }> = [
   { surface: "app_chat", labelKey: "zakiControls.powerUser.usage.surfaces.app_chat" },
   { surface: "zaki_bot", labelKey: "zakiControls.powerUser.usage.surfaces.zaki_bot" },
@@ -192,14 +201,6 @@ function normalizeList<T>(data: { items?: T[] } & Record<string, unknown>, key: 
   return Array.isArray(data.items) ? data.items : [];
 }
 
-function getArtifactId(artifact: AgentArtifact): string {
-  return artifact.id || artifact.artifact_id || artifact.artifactId || "";
-}
-
-function getArtifactTitle(artifact: AgentArtifact): string {
-  return artifact.title || artifact.type || artifact.mime_type || getArtifactId(artifact) || "Artifact";
-}
-
 function getTraceId(trace: AgentTrace): string {
   return trace.run_id || trace.id || "";
 }
@@ -232,18 +233,6 @@ function getPublicShareUrl(item: Record<string, unknown>): string | null {
     item.publicUrl,
     item.share_url,
     item.shareUrl,
-  ];
-  const match = candidates.find((value) => typeof value === "string" && value.trim());
-  return typeof match === "string" ? match : null;
-}
-
-function getExportDownloadUrl(item: Record<string, unknown>): string | null {
-  const candidates = [
-    item.download_url,
-    item.downloadUrl,
-    item.url,
-    item.public_url,
-    item.publicUrl,
   ];
   const match = candidates.find((value) => typeof value === "string" && value.trim());
   return typeof match === "string" ? match : null;
@@ -345,6 +334,9 @@ export function PowerUserSheet({
   const [artifacts, setArtifacts] = useState<AgentArtifact[] | null>(null);
   const [artifactsLoading, setArtifactsLoading] = useState(false);
   const [artifactsError, setArtifactsError] = useState<string | null>(null);
+  const [artifactExportStates, setArtifactExportStates] = useState<
+    Record<string, Partial<Record<AgentArtifactExportFormat, AgentArtifactExportState>>>
+  >({});
   const [traces, setTraces] = useState<AgentTrace[] | null>(null);
   const [tracesLoading, setTracesLoading] = useState(false);
   const [tracesError, setTracesError] = useState<string | null>(null);
@@ -1149,10 +1141,30 @@ export function PowerUserSheet({
   const mergeArtifact = (artifactId: string, patch: AgentArtifact) => {
     setArtifacts((current) =>
       (current || []).map((artifact) =>
-        getArtifactId(artifact) === artifactId ? { ...artifact, ...patch } : artifact
+        getAgentArtifactId(artifact) === artifactId ? { ...artifact, ...patch } : artifact
       )
     );
   };
+
+  const setArtifactExportState = (
+    artifactId: string,
+    format: AgentArtifactExportFormat,
+    state: AgentArtifactExportState
+  ) => {
+    setArtifactExportStates((current) => ({
+      ...current,
+      [artifactId]: {
+        ...(current[artifactId] || {}),
+        [format]: state,
+      },
+    }));
+  };
+
+  const safeArtifactExportStem = (artifact: AgentArtifact) =>
+    (getAgentArtifactTitle(artifact)
+      .trim()
+      .replace(/[^\w.-]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "zaki-artifact");
 
   const mergeTrace = (traceId: string, patch: AgentTrace | Record<string, unknown>) => {
     setTraces((current) =>
@@ -1163,7 +1175,7 @@ export function PowerUserSheet({
   };
 
   const handleArtifactShare = async (artifact: AgentArtifact) => {
-    const artifactId = getArtifactId(artifact);
+    const artifactId = getAgentArtifactId(artifact);
     if (!artifactId) return;
     setBusyId(`artifact-share:${artifactId}`);
     try {
@@ -1180,7 +1192,7 @@ export function PowerUserSheet({
   };
 
   const handleArtifactRevoke = async (artifact: AgentArtifact) => {
-    const artifactId = getArtifactId(artifact);
+    const artifactId = getAgentArtifactId(artifact);
     if (!artifactId) return;
     setBusyId(`artifact-revoke:${artifactId}`);
     try {
@@ -1195,10 +1207,11 @@ export function PowerUserSheet({
     }
   };
 
-  const handleArtifactExport = async (artifact: AgentArtifact, format: string) => {
-    const artifactId = getArtifactId(artifact);
+  const handleArtifactExport = async (artifact: AgentArtifact, format: AgentArtifactExportFormat) => {
+    const artifactId = getAgentArtifactId(artifact);
     if (!artifactId) return;
     setBusyId(`artifact-export:${artifactId}:${format}`);
+    setArtifactExportState(artifactId, format, { status: "exporting" });
     try {
       const { response, data } = await exportAgentArtifact(artifactId, format);
       if (!response.ok) {
@@ -1213,16 +1226,28 @@ export function PowerUserSheet({
               format: format.toUpperCase(),
             })
           );
+          setArtifactExportState(artifactId, format, {
+            status: "unavailable",
+            error: code || "export_not_available",
+          });
           return;
         }
         throw new Error(String(data?.error || "export_failed"));
       }
-      const url = getExportDownloadUrl(data);
-      if (url && typeof window !== "undefined") {
-        window.open(url, "_blank", "noopener,noreferrer");
+      const url = getAgentArtifactExportDownloadUrl(data);
+      if (!url) {
+        setArtifactExportState(artifactId, format, {
+          status: "failed",
+          error: "missing_download_url",
+        });
+        toast.error(t("zakiControls.powerUser.artifacts.exportFailed"));
+        return;
       }
+      setArtifactExportState(artifactId, format, { status: "ready", url });
+      await downloadAgentExportFile(url, `${safeArtifactExportStem(artifact)}.${format}`);
       toast.success(t("zakiControls.powerUser.artifacts.exportSuccess", { format: format.toUpperCase() }));
     } catch {
+      setArtifactExportState(artifactId, format, { status: "failed", error: "export_failed" });
       toast.error(t("zakiControls.powerUser.artifacts.exportFailed"));
     } finally {
       setBusyId(null);
@@ -1426,7 +1451,7 @@ export function PowerUserSheet({
           <FileText className="size-4 text-zaki-muted" aria-hidden />
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {ARTIFACT_EXPORT_FORMATS.map((format) => (
+          {PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS.map((format) => (
             <span
               key={format}
               className="rounded-zaki-md border border-zaki-subtle bg-zaki-hover px-2 py-1 font-mono-ui text-[11px] uppercase text-zaki-secondary"
@@ -1452,9 +1477,9 @@ export function PowerUserSheet({
         </div>
       ) : null}
       {(artifacts || []).map((artifact, index) => {
-        const artifactId = getArtifactId(artifact);
-        const shareUrl = getPublicShareUrl(artifact);
-        const title = getArtifactTitle(artifact);
+        const artifactId = getAgentArtifactId(artifact);
+        const shareUrl = getAgentArtifactShareUrl(artifact);
+        const title = getAgentArtifactTitle(artifact);
         return (
           <article
             key={artifactId || index}
@@ -1467,7 +1492,7 @@ export function PowerUserSheet({
                   {title}
                 </h3>
                 <div className="mt-1 flex flex-wrap items-center gap-2 font-mono-ui text-[11px] text-zaki-muted">
-                  <span>{artifact.type || artifact.mime_type || "artifact"}</span>
+                  <span>{getAgentArtifactKind(artifact) || "artifact"}</span>
                   <span>v{formatScalar(artifact.version ?? "—")}</span>
                   <span>{formatTs(artifact.updated_at || artifact.created_at)}</span>
                 </div>
@@ -1505,19 +1530,41 @@ export function PowerUserSheet({
                 <Link2Off className="size-3.5" aria-hidden />
                 {t("zakiControls.powerUser.artifacts.revoke")}
               </button>
-              {ARTIFACT_EXPORT_FORMATS.slice(0, 3).map((format) => (
-                <button
-                  key={format}
-                  type="button"
-                  disabled={!artifactId || busyId === `artifact-export:${artifactId}:${format}`}
-                  onClick={() => void handleArtifactExport(artifact, format)}
-                  data-testid={`power-user-artifact-export-${format}-${artifactId || index}`}
-                  className="inline-flex items-center gap-1.5 rounded-zaki-md border border-zaki-subtle px-2.5 py-1.5 font-mono-ui text-[11px] font-semibold uppercase text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-primary disabled:opacity-50"
-                >
-                  <Download className="size-3.5" aria-hidden />
-                  {format}
-                </button>
-              ))}
+              {PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS.map((format) => {
+                const exportState = artifactId ? artifactExportStates[artifactId]?.[format] : null;
+                const isExporting = exportState?.status === "exporting" || busyId === `artifact-export:${artifactId}:${format}`;
+                if (exportState?.status === "ready" && exportState.url) {
+                  return (
+                    <button
+                      key={format}
+                      type="button"
+                      onClick={() => void downloadAgentExportFile(exportState.url || "", `${safeArtifactExportStem(artifact)}.${format}`).catch(() => {
+                        setArtifactExportState(artifactId, format, { status: "failed", url: exportState.url, error: "download_failed" });
+                        toast.error(t("zakiControls.powerUser.artifacts.exportFailed"));
+                      })}
+                      data-testid={`power-user-artifact-download-${format}-${artifactId || index}`}
+                      className="inline-flex items-center gap-1.5 rounded-zaki-md border border-zaki-subtle px-2.5 py-1.5 font-mono-ui text-[11px] font-semibold uppercase text-zaki-primary hover:bg-zaki-hover"
+                    >
+                      <Download className="size-3.5" aria-hidden />
+                      {format}
+                    </button>
+                  );
+                }
+                return (
+                  <button
+                    key={format}
+                    type="button"
+                    disabled={!artifactId || isExporting}
+                    onClick={() => void handleArtifactExport(artifact, format)}
+                    data-testid={`power-user-artifact-export-${format}-${artifactId || index}`}
+                    className="inline-flex items-center gap-1.5 rounded-zaki-md border border-zaki-subtle px-2.5 py-1.5 font-mono-ui text-[11px] font-semibold uppercase text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-primary disabled:opacity-50"
+                    title={exportState?.error || undefined}
+                  >
+                    <Download className="size-3.5" aria-hidden />
+                    {isExporting ? "exporting" : format}
+                  </button>
+                );
+              })}
             </div>
           </article>
         );

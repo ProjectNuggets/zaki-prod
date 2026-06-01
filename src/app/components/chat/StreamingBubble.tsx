@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { CenterLogo } from "../icons";
 import { MessageActions } from "./MessageActions";
 import { MessageContent } from "./rendering/MessageContent";
+import { stripToolCallMarkup } from "./rendering/toolMarkup";
 
 interface StreamingBubbleProps {
   content: string;
@@ -14,25 +15,6 @@ interface StreamingBubbleProps {
   onCopyMessage?: (message: { id: string; role: "assistant"; content: string }) => void;
   onRegenerateMessage?: (message: { id: string; role: "assistant"; content: string }) => void;
   onThumbsUpMessage?: (message: { id: string; role: "assistant"; content: string }) => void;
-}
-
-/**
- * Strip raw tool_call XML blocks from streaming content.
- * The agent's tool calls are rendered separately in the Worklog panel,
- * so we hide the raw <tool_call>{...}</tool_call> markup from the chat bubble.
- * Also strips incomplete/partial tool_call blocks while streaming.
- */
-function stripToolCallMarkup(raw: string): string {
-  if (!raw) return raw;
-  let cleaned = raw
-    // Complete blocks
-    .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "")
-    // Partial/streaming block at the end
-    .replace(/<tool_call>[\s\S]*$/g, "")
-    // Complete tool_result blocks (if backend echoes them)
-    .replace(/<tool_result>[\s\S]*?<\/tool_result>/g, "")
-    .replace(/<tool_result>[\s\S]*$/g, "");
-  return cleaned;
 }
 
 export function StreamingBubble({

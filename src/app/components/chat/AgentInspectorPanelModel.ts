@@ -2,6 +2,7 @@ import type { NullalisTranscriptEntry } from "./BotStatusRail";
 
 export type AgentInspectorPanelEvent = {
   id: string;
+  artifactId?: string | null;
   label: string;
   summary: string;
   meta: string | null;
@@ -111,9 +112,22 @@ function metaForEntry(entry: NullalisTranscriptEntry): string | null {
   return bits.length ? bits.join(" · ") : null;
 }
 
+function artifactIdForEntry(entry: NullalisTranscriptEntry): string | null {
+  const groupKey = valueToText(entry.groupKey);
+  const groupMatch = groupKey.match(/^artifact:(.+)$/i);
+  if (groupMatch?.[1]) return groupMatch[1].trim();
+  for (const value of [entry.inputPreview, entry.outputPreview, entry.resultSummary, entry.text]) {
+    const text = valueToText(value);
+    const match = text.match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i);
+    if (match?.[0]) return match[0];
+  }
+  return null;
+}
+
 function toPanelEvent(entry: NullalisTranscriptEntry): AgentInspectorPanelEvent {
   return {
     id: entry.id || `${entry.kind || "event"}:${entry.timestamp || 0}:${primarySummary(entry)}`,
+    artifactId: artifactIdForEntry(entry),
     label: primaryLabel(entry),
     summary: primarySummary(entry),
     meta: metaForEntry(entry),

@@ -474,8 +474,8 @@ export function InputArea({
   //
   // No FE-side buckets. No tiered colors. Single brand-teal ring.
   // The real compaction trigger is per-session
-  // (report.compaction_threshold_pct, surfaced in PowerUserSheet
-  // diagnostics) — anything else here would be the FE inventing a signal
+  // (report.compaction_threshold_pct, surfaced in Agent inspector
+  // evidence) — anything else here would be the FE inventing a signal
   // it does not own.
   //
   // P2-05: distinguish "unknown" (null — /context has not landed yet) from
