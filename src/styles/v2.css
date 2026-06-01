@@ -130,6 +130,59 @@
   --v2-grid-dot: rgba(236, 231, 223, 0.14);
 }
 
+/* Brain "Galaxy" graph token ramp (P0).
+   Stage-adaptive colors for the WebGL graph canvas — particle/node fills,
+   edge filaments, the dot grid, in-canvas overlay chrome, and the ember
+   nebula. Derived from the --v2-* ink/bg/accent scales so the graph tracks
+   the same dual-stage system as the rest of V2. The engine reads these via
+   getComputedStyle so shaders and instanced materials stay token-driven
+   (BRAND_LAW: no hardcoded hex). */
+:root,
+[data-v2-stage="light"] {
+  --g-bg: rgba(14, 13, 11, 0.88);
+  --g-bg-soft: rgba(14, 13, 11, 0.66);
+  --g-bg-fade: rgba(14, 13, 11, 0.48);
+  --g-bg-wisp: rgba(14, 13, 11, 0.3);
+  --g-edge: rgba(14, 13, 11, 0.2);
+  --g-edge-strong: rgba(14, 13, 11, 0.4);
+  --g-edge-weak: rgba(14, 13, 11, 0.14);
+  --g-bridge: rgba(14, 13, 11, 0.12);
+  --g-grid: rgba(14, 13, 11, 0.06);
+  --g-overlay: rgba(251, 249, 245, 0.92);
+  --g-overlay-stroke: rgba(14, 13, 11, 0.2);
+  --g-label: rgba(14, 13, 11, 0.46);
+  --g-cluster-bubble: rgba(14, 13, 11, 0.04);
+  --g-cluster-bubble-stroke: rgba(14, 13, 11, 0.1);
+  --g-bloom-stop: #0e0d0b;
+}
+
+.dark,
+[data-v2-stage="dark"] {
+  --g-bg: rgba(236, 231, 223, 1);
+  --g-bg-soft: rgba(236, 231, 223, 0.78);
+  --g-bg-fade: rgba(236, 231, 223, 0.62);
+  --g-bg-wisp: rgba(236, 231, 223, 0.4);
+  --g-edge: rgba(236, 231, 223, 0.18);
+  --g-edge-strong: rgba(236, 231, 223, 0.34);
+  --g-edge-weak: rgba(236, 231, 223, 0.12);
+  --g-bridge: rgba(236, 231, 223, 0.1);
+  --g-grid: rgba(236, 231, 223, 0.05);
+  --g-overlay: rgba(19, 17, 16, 0.86);
+  --g-overlay-stroke: rgba(236, 231, 223, 0.18);
+  --g-label: rgba(236, 231, 223, 0.42);
+  --g-cluster-bubble: rgba(236, 231, 223, 0.05);
+  --g-cluster-bubble-stroke: rgba(236, 231, 223, 0.08);
+  --g-bloom-stop: #ece7df;
+}
+
+/* Ember accent is stage-independent — it resolves through the stage-adaptive
+   --v2-accent* tokens, so it is declared once rather than in both blocks. */
+:root {
+  --g-ember: var(--v2-accent);
+  --g-ember-faint: var(--v2-accent-faint);
+  --g-thread: var(--v2-accent-hairline);
+}
+
 .zaki-app-v2,
 .zaki-v2-sheet,
 .zaki-v2-modal-panel {
