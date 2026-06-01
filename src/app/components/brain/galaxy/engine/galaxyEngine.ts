@@ -1,4 +1,14 @@
-import { Group, Raycaster, Vector2 } from "three";
+import {
+  BufferAttribute,
+  BufferGeometry,
+  Color,
+  Group,
+  LineBasicMaterial,
+  LineSegments,
+  Raycaster,
+  Vector2,
+} from "three";
+import { readCssColor } from "./scene";
 import { createScene } from "./scene";
 import { createSimulation, type GraphSimulation, type SimNode } from "./forces";
 import { createNodeField, type NodeField } from "./nodes";
@@ -38,6 +48,9 @@ export function createGalaxyEngine(
   let composer: BloomComposer | null = null;
   let nebula: Nebula | null = null;
   let nodeById = new Map<string, SimNode>();
+  let adjacency = new Map<string, string[]>();
+  let focusThreads: LineSegments | null = null;
+  let highlightSig = "";
   let raf = 0;
   let settled = false;
   // Seed from the canvas's current client size so the bloom composer is created
@@ -88,10 +101,18 @@ export function createGalaxyEngine(
       graphSim.sim.stop();
       graphSim = null;
     }
+    if (focusThreads) {
+      graphGroup.remove(focusThreads);
+      focusThreads.geometry.dispose();
+      (focusThreads.material as LineBasicMaterial).dispose();
+      focusThreads = null;
+    }
     disposeFx();
     graphGroup.rotation.set(0, 0, 0);
     graphGroup.scale.setScalar(1);
     nodeById = new Map();
+    adjacency = new Map();
+    highlightSig = "";
     hovered = null;
     renderer.domElement.style.cursor = "default";
   }
@@ -105,6 +126,7 @@ export function createGalaxyEngine(
     graphSim = createSimulation(model);
     graphSim.sim.alpha(INITIAL_ALPHA);
     nodeById = new Map(graphSim.nodes.map((n) => [n.id, n]));
+    adjacency = buildAdjacency(model);
     edgeLines = createEdgeLines(model, edgeSegmentsForCount(model.nodes.length));
     nodeField = createNodeField(model);
     graphGroup.add(edgeLines.lines);
@@ -116,7 +138,98 @@ export function createGalaxyEngine(
     if (options.quality.bloom) {
       composer = createBloomComposer(renderer, scene, camera, width, height);
     }
+    applyHighlight();
+    highlightSig = highlightSignature(options);
     startLoop();
+  }
+
+  // Undirected adjacency for seed-and-expand focus BFS.
+  function buildAdjacency(m: RenderModel): Map<string, string[]> {
+    const adj = new Map<string, string[]>();
+    const push = (from: string, to: string) => {
+      const list = adj.get(from);
+      if (list) list.push(to);
+      else adj.set(from, [to]);
+    };
+    for (const e of m.edges) {
+      push(e.source, e.target);
+      push(e.target, e.source);
+    }
+    return adj;
+  }
+
+  function computeNear(focusId: string, depth: number): Set<string> {
+    const near = new Set<string>([focusId]);
+    let frontier = [focusId];
+    for (let d = 0; d < depth; d++) {
+      const next: string[] = [];
+      for (const id of frontier) {
+        for (const nb of adjacency.get(id) ?? []) {
+          if (!near.has(nb)) {
+            near.add(nb);
+            next.push(nb);
+          }
+        }
+      }
+      frontier = next;
+      if (frontier.length === 0) break;
+    }
+    return near;
+  }
+
+  // Accent "threads" drawn from the focus node to its direct neighbors.
+  function buildFocusThreads(focusId: string | null): void {
+    if (focusThreads) {
+      graphGroup.remove(focusThreads);
+      focusThreads.geometry.dispose();
+      (focusThreads.material as LineBasicMaterial).dispose();
+      focusThreads = null;
+    }
+    if (!focusId) return;
+    const center = nodeById.get(focusId);
+    const neighbors = adjacency.get(focusId);
+    if (!center || !neighbors || neighbors.length === 0) return;
+
+    const positions = new Float32Array(neighbors.length * 6);
+    let w = 0;
+    for (const nb of neighbors) {
+      const node = nodeById.get(nb);
+      if (!node) continue;
+      positions[w++] = center.x ?? 0;
+      positions[w++] = center.y ?? 0;
+      positions[w++] = center.z ?? 0;
+      positions[w++] = node.x ?? 0;
+      positions[w++] = node.y ?? 0;
+      positions[w++] = node.z ?? 0;
+    }
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new BufferAttribute(positions.subarray(0, w), 3));
+    const accent = readCssColor("--g-thread", "rgba(210,68,48,0.55)");
+    const material = new LineBasicMaterial({
+      color: new Color().copy(accent.color),
+      transparent: true,
+      opacity: Math.max(0.4, accent.alpha),
+    });
+    focusThreads = new LineSegments(geometry, material);
+    focusThreads.frustumCulled = false;
+    graphGroup.add(focusThreads);
+  }
+
+  // Apply focus / time / search visual state to the node field + focus threads.
+  function applyHighlight(): void {
+    if (!nodeField) return;
+    const focusId = options.focusId ?? null;
+    const depth = Math.max(1, options.focusDepth ?? 1);
+    const nearSet = focusId ? computeNear(focusId, depth) : null;
+    const highlightSet =
+      options.highlightIds && options.highlightIds.length > 0
+        ? new Set(options.highlightIds)
+        : null;
+    const searchSet = options.searchIds ? new Set(options.searchIds) : null;
+    nodeField.setVisualState({ focusId, nearSet, highlightSet, searchSet });
+    buildFocusThreads(focusId);
+    syncPositions();
+    renderFrame();
   }
 
   function syncPositions(): void {
@@ -260,6 +373,11 @@ export function createGalaxyEngine(
       if (next.quality && qualityChanged(prevQuality, options.quality)) {
         applyQuality();
       }
+      const sig = highlightSignature(options);
+      if (sig !== highlightSig) {
+        highlightSig = sig;
+        applyHighlight();
+      }
     },
     resize(w: number, h: number) {
       if (w === 0 || h === 0) return;
@@ -288,6 +406,13 @@ export function createGalaxyEngine(
       sceneBundle.dispose();
     },
   };
+}
+
+function highlightSignature(o: GraphRendererOptions): string {
+  // searchIds: null (no active search) must be distinct from [] (search active,
+  // zero matches) — the latter should dim everything.
+  const search = o.searchIds == null ? "none" : `q[${o.searchIds.join(",")}]`;
+  return [o.focusId ?? "", o.focusDepth ?? 1, (o.highlightIds ?? []).join(","), search].join("|");
 }
 
 function qualityChanged(a: RenderQuality, b: RenderQuality): boolean {

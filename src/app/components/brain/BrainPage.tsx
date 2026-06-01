@@ -494,6 +494,7 @@ export function BrainPage() {
                 onSelectionChange={setSelectedNodeIds}
                 filters={effectiveFilters}
                 selfKey={selfKey}
+                highlightKeys={highlightKeys}
               />
             ) : (
               <BrainGraphView

@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useBrainGraph } from "@/queries";
 import type { BrainFilters } from "../BrainFilterPanel";
 import { buildRenderModel } from "./model";
@@ -12,19 +12,26 @@ export interface BrainGalaxyViewProps {
   onSelectionChange: (ids: string[]) => void;
   filters: BrainFilters;
   selfKey: string | null;
+  /** Node keys to glow (time scrubber births/affected window). */
+  highlightKeys: string[];
 }
 
 // Data + state container for the Galaxy renderer — the WebGL counterpart of
 // BrainGraphView. Fetches the same graph (shared React Query cache), builds the
-// engine render model, and owns the renderer options. Focus/local-graph, time
-// highlighting, and community filtering arrive in P3.
+// engine render model, and owns renderer options: ember focus (click), seed-and-
+// expand depth, search-as-highlight (from the filter search box), and the time-
+// scrubber glow.
 export function BrainGalaxyView({
   userId,
   selectedIds,
   onSelectionChange,
   filters,
   selfKey,
+  highlightKeys,
 }: BrainGalaxyViewProps) {
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const [focusDepth] = useState(1); // depth slider arrives with the display panel (P4)
+
   const graph = useBrainGraph(userId, {
     max_nodes: filters.maxNodes,
     exclude_orphans: filters.excludeOrphans,
@@ -42,17 +49,52 @@ export function BrainGalaxyView({
     [graph.data, filters.colorPreset, filters.semanticEdgeThreshold, selfKey],
   );
 
+  // key → render-node-id resolution (diff/scrubber emit keys; the engine keys
+  // everything by node id).
+  const keyIndex = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const n of graph.data?.nodes ?? []) {
+      map.set(n.id, n.id);
+      if (n.key) map.set(n.key, n.id);
+    }
+    return map;
+  }, [graph.data]);
+
+  const highlightIds = useMemo(
+    () => highlightKeys.map((k) => keyIndex.get(k)).filter((x): x is string => Boolean(x)),
+    [highlightKeys, keyIndex],
+  );
+
+  const searchIds = useMemo(() => {
+    const q = filters.search.trim().toLowerCase();
+    if (!q) return null;
+    return model.nodes
+      .filter((n) => n.label.toLowerCase().includes(q) || n.id.toLowerCase().includes(q))
+      .map((n) => n.id);
+  }, [filters.search, model]);
+
+  // Clear focus if the focused node is no longer in the graph (filter change,
+  // data reload, or user switch) — otherwise the ember would dim everything
+  // around a node that no longer exists.
+  useEffect(() => {
+    if (focusId && !model.nodes.some((n) => n.id === focusId)) {
+      setFocusId(null);
+    }
+  }, [model, focusId]);
+
   const handleSelect = useCallback(
     (id: string, additive: boolean) => {
-      if (!additive) {
-        onSelectionChange([id]);
+      if (additive) {
+        // shift-click → toggle compose selection
+        onSelectionChange(
+          selectedIds.includes(id)
+            ? selectedIds.filter((x) => x !== id)
+            : [...selectedIds, id],
+        );
         return;
       }
-      onSelectionChange(
-        selectedIds.includes(id)
-          ? selectedIds.filter((x) => x !== id)
-          : [...selectedIds, id],
-      );
+      // click → toggle ember focus
+      setFocusId((prev) => (prev === id ? null : id));
     },
     [onSelectionChange, selectedIds],
   );
@@ -68,10 +110,13 @@ export function BrainGalaxyView({
       view: "spatial",
       quality,
       selectedIds,
-      focusId: null,
+      focusId,
+      focusDepth,
+      highlightIds,
+      searchIds,
       onSelect: handleSelect,
     }),
-    [quality, selectedIds, handleSelect],
+    [quality, selectedIds, focusId, focusDepth, highlightIds, searchIds, handleSelect],
   );
 
   return <GalaxyRenderer model={model} options={options} className="zaki-brain-v2__galaxy" />;

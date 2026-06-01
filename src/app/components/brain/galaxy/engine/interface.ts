@@ -51,7 +51,14 @@ export interface GraphRendererOptions {
   view: BrainViewMode;
   quality: RenderQuality;
   selectedIds: readonly string[];
+  /** The ember focus node — bright accent, neighbors lit, the rest dimmed. */
   focusId: string | null;
+  /** Seed-and-expand radius (hops) around the focus node. */
+  focusDepth?: number;
+  /** Node ids to glow (time scrubber births/affected). */
+  highlightIds?: readonly string[];
+  /** Search matches; non-matches dim. null = no active search. */
+  searchIds?: readonly string[] | null;
   onHover?: (id: string | null) => void;
   onSelect?: (id: string, additive: boolean) => void;
 }
