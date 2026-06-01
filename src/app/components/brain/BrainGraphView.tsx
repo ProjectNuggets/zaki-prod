@@ -29,6 +29,7 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { Shield, X } from "lucide-react";
 import { useBrainGraph, useBrainLocalGraph, useBrainMemory } from "@/queries";
+import { edgeRelevance } from "./graphMath";
 import type {
   BrainGraphEdge,
   BrainGraphFetchOpts,
@@ -125,74 +126,9 @@ function edgeStyle(type: BrainGraphEdge["type"]) {
   }
 }
 
-// V1.11 hotfix-4 (2026-05-07) — per-edge relevance from REAL data.
-//
-// Earlier hotfix used an edge-type heuristic (typed=1.0, semantic=0.45,
-// session=0.2). That was wrong: the database only has ONE kind of edge —
-// LLM-extracted typed predicates. The "semantic / session / reference"
-// taxonomy I was using doesn't exist in memory_edges. Honest fix: use
-// the actual per-edge fields the DB already stores.
-//
-//   confidence (0..1) — extractor LLM's certainty for this triple
-//   weight     (≥0)   — vote count: how many times this exact triple
-//                       was re-asserted across conversations + community
-//                       detection's importance multiplier
-//
-// relevance = clamp01(confidence × tanh(weight / 3))
-//   - confidence carries veracity ("am I sure this is true")
-//   - tanh(weight/3) saturates around weight=3-5 so a fact attested 10
-//     times isn't 10× tighter than one attested twice — votes still
-//     count but with diminishing returns
-//
-// runLayout maps relevance → idealEdgeLength via:
-//   length = base * (1.5 - relevance)
-//   relevance 1.0 → 0.5×base (tight: high-confidence, multi-attestation)
-//   relevance 0.0 → 1.5×base (loose: weak / unconfirmed)
-//
-// Edges without confidence/weight (older session/semantic/reference
-// types if any survive in cache) fall back to 0.5 — neutral pull.
-function edgeRelevance(edge: BrainGraphEdge): number {
-  // Audit (2026-05-08) — extended to use weight for semantic edges. The
-  // prior implementation returned a constant 0.5 for everything except
-  // "typed" edges. With 99% of edges being "semantic" in real corpora,
-  // every non-typed edge produced uniform relevance → uniform layout
-  // distance. The fcose migration restored the function-form path; this
-  // extension gives it variance to actually use.
-  if (edge.type === "session") {
-    // Co-occurrence in a conversation has no per-pair similarity signal.
-    // Neutral pull is the right default.
-    return 0.5;
-  }
-  if (edge.type === "semantic") {
-    // Cosine similarity above the storage threshold (~0.72). Remap
-    // [0.7, 1.0] linearly to [0, 1] so the strongest semantic links
-    // pull tightly and the weak ones (just above threshold) pull
-    // loosely. Below 0.7 falls to 0 (rare, but defensive).
-    const w =
-      typeof edge.weight === "number" && Number.isFinite(edge.weight)
-        ? Math.max(0, Math.min(1, edge.weight))
-        : 0.5;
-    return Math.max(0, Math.min(1, (w - 0.7) / 0.3));
-  }
-  if (edge.type !== "typed") {
-    // reference / unknown — neutral pull as before.
-    return 0.5;
-  }
-  // typed edges — confidence × tanh(weight/3). Vote-style; weight is
-  // the count of corroborating extractions.
-  const conf =
-    typeof edge.confidence === "number" && Number.isFinite(edge.confidence)
-      ? Math.max(0, Math.min(1, edge.confidence))
-      : 1.0;
-  const w =
-    typeof edge.weight === "number" && Number.isFinite(edge.weight)
-      ? Math.max(0, edge.weight)
-      : 1.0;
-  // tanh saturates: weight=1 → 0.32, weight=3 → 0.76, weight=10 → 0.99.
-  const voteFactor = Math.tanh(w / 3);
-  return Math.max(0, Math.min(1, conf * voteFactor));
-}
-
+// Per-edge relevance (confidence × tanh(weight/3) etc.) now lives in
+// ./graphMath (edgeRelevance), shared with the Galaxy renderer. runLayout maps
+// relevance → idealEdgeLength via length = base * (1.5 - relevance).
 function fetchOptsFromFilters(f: BrainGraphFilters): BrainGraphFetchOpts {
   // Audit (2026-05-08) — search is now a CLIENT-SIDE highlight overlay,
   // not a server-side filter. Sending search to the backend caused the

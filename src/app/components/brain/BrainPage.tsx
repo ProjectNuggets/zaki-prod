@@ -8,6 +8,8 @@ import { SkeletonBrainPage } from "@/app/components/ui/skeleton";
 import { BrainEmptyState } from "./BrainEmptyState";
 import { BrainSemanticDegradedBanner } from "./BrainSemanticDegradedBanner";
 import { BrainGraphView } from "./BrainGraphView";
+import { BrainGalaxyView } from "./galaxy/BrainGalaxyView";
+import { useGalaxyFlag } from "./galaxy/flag";
 import { BrainTimelineView } from "./BrainTimelineView";
 import { BrainComposeModal } from "./BrainComposeModal";
 import { BrainFilterPanel, DEFAULT_FILTERS, type BrainFilters } from "./BrainFilterPanel";
@@ -193,6 +195,10 @@ export function BrainPage() {
   // the test corpus); for now it's a visible self-marker only.
   const meQuery = useBrainMe(userId);
   const selfKey = meQuery.data?.key ?? null;
+
+  // P1 — the new WebGL "Galaxy" renderer is opt-in behind a flag while it
+  // reaches parity with the cytoscape view; ?galaxy=1 or localStorage enables.
+  const galaxyEnabled = useGalaxyFlag();
 
   const selectedNodes = useMemo(
     () =>
@@ -481,17 +487,27 @@ export function BrainPage() {
             Now the graph claims the whole viewport.
           */}
           <div className="zaki-brain-v2__canvas-frame">
-            <BrainGraphView
-              userId={userId}
-              selectedIds={selectedNodeIds}
-              onSelectionChange={setSelectedNodeIds}
-              filters={effectiveFilters}
-              highlightKeys={highlightKeys}
-              selectedCommunityId={selectedCommunityId}
-              centerKey={centerKey}
-              onCenterKeyChange={setCenterKey}
-              selfKey={selfKey}
-            />
+            {galaxyEnabled ? (
+              <BrainGalaxyView
+                userId={userId}
+                selectedIds={selectedNodeIds}
+                onSelectionChange={setSelectedNodeIds}
+                filters={effectiveFilters}
+                selfKey={selfKey}
+              />
+            ) : (
+              <BrainGraphView
+                userId={userId}
+                selectedIds={selectedNodeIds}
+                onSelectionChange={setSelectedNodeIds}
+                filters={effectiveFilters}
+                highlightKeys={highlightKeys}
+                selectedCommunityId={selectedCommunityId}
+                centerKey={centerKey}
+                onCenterKeyChange={setCenterKey}
+                selfKey={selfKey}
+              />
+            )}
 
             {/* Top-right floating control cluster */}
             <div className="zaki-brain-v2__canvas-controls">

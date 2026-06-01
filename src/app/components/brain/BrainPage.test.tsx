@@ -46,6 +46,12 @@ jest.mock("@/queries", () => ({
 jest.mock("./BrainGraphView", () => ({
   BrainGraphView: () => <div data-testid="brain-graph-view" />,
 }));
+// BrainGalaxyView pulls in three.js (WebGL) which jsdom can't load; stub it so
+// the import chain stays jsdom-safe. The flag is off by default in tests, so
+// the cytoscape path renders regardless.
+jest.mock("./galaxy/BrainGalaxyView", () => ({
+  BrainGalaxyView: () => <div data-testid="brain-galaxy-view" />,
+}));
 jest.mock("./BrainTimelineView", () => ({
   BrainTimelineView: () => <div data-testid="brain-timeline-view" />,
 }));
