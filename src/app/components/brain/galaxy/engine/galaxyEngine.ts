@@ -1,50 +1,86 @@
-import { Raycaster, Vector2 } from "three";
+import { Group, Raycaster, Vector2 } from "three";
 import { createScene } from "./scene";
 import { createSimulation, type GraphSimulation, type SimNode } from "./forces";
 import { createNodeField, type NodeField } from "./nodes";
 import { createEdgeLines, type EdgeLines } from "./edges";
-import type { GraphRenderer, GraphRendererOptions, RenderModel } from "./interface";
+import { createBloomComposer, type BloomComposer } from "./bloom";
+import { createNebula, type Nebula } from "./nebula";
+import { edgeSegmentsForCount } from "./lod";
+import type { GraphRenderer, GraphRendererOptions, RenderModel, RenderQuality } from "./interface";
 
 const ALPHA_MIN = 0.02;
 const INITIAL_ALPHA = 1;
+const TWO_PI = Math.PI * 2;
+const BREATHE_PERIOD_S = 14;
 
-// WebGL implementation of the GraphRenderer contract: owns the scene, the
-// d3-force-3d simulation, the instanced node field, and edge lines; drives a
-// settle-then-idle rAF loop; and translates pointer events into hover/select
-// callbacks. Conforms to the engine-agnostic interface so a WebGPU variant can
-// replace it later without touching React.
+// WebGL implementation of GraphRenderer. Owns the scene, the d3-force-3d
+// simulation, the instanced node field + filament edges, the bloom composer,
+// and the FBM nebula. Runs a settle-then-(idle-breathe | stop) rAF loop and
+// translates pointer events into hover/select. Visual richness is gated by
+// options.quality (set by the LOD tier), so it scales down on large corpora and
+// honors prefers-reduced-motion.
 export function createGalaxyEngine(
   canvas: HTMLCanvasElement,
   initialOptions: GraphRendererOptions,
 ): GraphRenderer {
-  const bundle = createScene(canvas);
-  if (!bundle) return createNoopRenderer();
-  const { renderer, scene, camera } = bundle;
+  const sceneBundle = createScene(canvas);
+  if (!sceneBundle) return createNoopRenderer();
+  const { renderer, scene, camera } = sceneBundle;
+
+  const graphGroup = new Group();
+  scene.add(graphGroup);
 
   let options = initialOptions;
   let model: RenderModel = { nodes: [], edges: [] };
   let graphSim: GraphSimulation | null = null;
   let nodeField: NodeField | null = null;
   let edgeLines: EdgeLines | null = null;
+  let composer: BloomComposer | null = null;
+  let nebula: Nebula | null = null;
   let nodeById = new Map<string, SimNode>();
   let raf = 0;
+  let settled = false;
+  // Seed from the canvas's current client size so the bloom composer is created
+  // at the right resolution even if resize() hasn't fired yet (avoids a 1×1
+  // first frame).
+  let width = Math.max(1, canvas.clientWidth || 1);
+  let height = Math.max(1, canvas.clientHeight || 1);
+  const startTime = nowMs();
 
   const raycaster = new Raycaster();
   const pointer = new Vector2();
   let hovered: string | null = null;
+
+  function renderFrame(): void {
+    if (composer) composer.render();
+    else renderer.render(scene, camera);
+  }
+
+  function disposeFx(): void {
+    if (composer) {
+      composer.dispose();
+      composer = null;
+    }
+    if (nebula) {
+      scene.remove(nebula.mesh);
+      nebula.dispose();
+      nebula = null;
+    }
+  }
 
   function clearGraph(): void {
     if (raf) {
       cancelAnimationFrame(raf);
       raf = 0;
     }
+    settled = false;
     if (nodeField) {
-      scene.remove(nodeField.mesh);
+      graphGroup.remove(nodeField.mesh);
       nodeField.dispose();
       nodeField = null;
     }
     if (edgeLines) {
-      scene.remove(edgeLines.lines);
+      graphGroup.remove(edgeLines.lines);
       edgeLines.dispose();
       edgeLines = null;
     }
@@ -52,9 +88,10 @@ export function createGalaxyEngine(
       graphSim.sim.stop();
       graphSim = null;
     }
+    disposeFx();
+    graphGroup.rotation.set(0, 0, 0);
+    graphGroup.scale.setScalar(1);
     nodeById = new Map();
-    // Drop hover state: the rebuilt graph has different instances, so a
-    // retained id would be stale until the pointer next moves.
     hovered = null;
     renderer.domElement.style.cursor = "default";
   }
@@ -62,48 +99,93 @@ export function createGalaxyEngine(
   function rebuild(): void {
     clearGraph();
     if (model.nodes.length === 0) {
-      renderer.render(scene, camera);
+      renderFrame();
       return;
     }
     graphSim = createSimulation(model);
     graphSim.sim.alpha(INITIAL_ALPHA);
     nodeById = new Map(graphSim.nodes.map((n) => [n.id, n]));
-    edgeLines = createEdgeLines(model);
+    edgeLines = createEdgeLines(model, edgeSegmentsForCount(model.nodes.length));
     nodeField = createNodeField(model);
-    scene.add(edgeLines.lines);
-    scene.add(nodeField.mesh);
+    graphGroup.add(edgeLines.lines);
+    graphGroup.add(nodeField.mesh);
+    if (options.quality.nebula) {
+      nebula = createNebula();
+      scene.add(nebula.mesh);
+    }
+    if (options.quality.bloom) {
+      composer = createBloomComposer(renderer, scene, camera, width, height);
+    }
     startLoop();
   }
 
   function syncPositions(): void {
-    if (graphSim) {
-      nodeField?.sync(graphSim.nodes);
-      edgeLines?.sync(nodeById);
+    if (!graphSim) return;
+    nodeField?.sync(graphSim.nodes);
+    edgeLines?.sync(nodeById);
+  }
+
+  // React to a quality change without tearing down the graph/sim: add or dispose
+  // the bloom composer and nebula, and restart the idle loop if motion/nebula
+  // just turned on. Used by setOptions so the P4 display-panel toggles work and
+  // toggling never leaks a composer.
+  function applyQuality(): void {
+    if (model.nodes.length === 0) return;
+    if (options.quality.bloom && !composer) {
+      composer = createBloomComposer(renderer, scene, camera, width, height);
+    } else if (!options.quality.bloom && composer) {
+      composer.dispose();
+      composer = null;
+    }
+    if (options.quality.nebula && !nebula) {
+      nebula = createNebula();
+      scene.add(nebula.mesh);
+    } else if (!options.quality.nebula && nebula) {
+      scene.remove(nebula.mesh);
+      nebula.dispose();
+      nebula = null;
+    }
+    if (settled && raf === 0 && (options.quality.motion || options.quality.nebula)) {
+      startLoop();
+    } else {
+      renderFrame();
     }
   }
 
   function startLoop(): void {
     if (raf) cancelAnimationFrame(raf);
-    const frame = () => {
+    const loop = () => {
       if (!graphSim) {
         raf = 0;
         return;
       }
-      if (graphSim.sim.alpha() > ALPHA_MIN) {
+      const tSec = (nowMs() - startTime) / 1000;
+
+      if (!settled && graphSim.sim.alpha() > ALPHA_MIN) {
         graphSim.sim.tick();
         syncPositions();
-        renderer.render(scene, camera);
-        raf = requestAnimationFrame(frame);
-      } else {
-        // Settled: final sync + frame the graph, then idle (re-render only on
-        // resize / relayout) to keep the GPU quiet.
+      } else if (!settled) {
+        settled = true;
         syncPositions();
         fit();
-        renderer.render(scene, camera);
+      }
+
+      if (settled && options.quality.motion) {
+        const phase = Math.sin((tSec * TWO_PI) / BREATHE_PERIOD_S);
+        graphGroup.scale.setScalar(1 + 0.006 * phase);
+        graphGroup.rotation.y = 0.0032 * phase;
+      }
+      if (options.quality.nebula) nebula?.update(tSec);
+
+      renderFrame();
+
+      if (!settled || options.quality.motion || options.quality.nebula) {
+        raf = requestAnimationFrame(loop);
+      } else {
         raf = 0;
       }
     };
-    raf = requestAnimationFrame(frame);
+    raf = requestAnimationFrame(loop);
   }
 
   function fit(): void {
@@ -173,21 +255,29 @@ export function createGalaxyEngine(
       rebuild();
     },
     setOptions(next: Partial<GraphRendererOptions>) {
+      const prevQuality = options.quality;
       options = { ...options, ...next };
+      if (next.quality && qualityChanged(prevQuality, options.quality)) {
+        applyQuality();
+      }
     },
-    resize(width: number, height: number) {
-      if (width === 0 || height === 0) return;
-      renderer.setSize(width, height, false);
-      camera.aspect = width / height;
+    resize(w: number, h: number) {
+      if (w === 0 || h === 0) return;
+      width = w;
+      height = h;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      renderer.render(scene, camera);
+      composer?.setSize(w, h);
+      renderFrame();
     },
     fit() {
       fit();
-      renderer.render(scene, camera);
+      renderFrame();
     },
     relayout() {
       if (!graphSim) return;
+      settled = false;
       graphSim.sim.alpha(INITIAL_ALPHA);
       startLoop();
     },
@@ -195,9 +285,24 @@ export function createGalaxyEngine(
       renderer.domElement.removeEventListener("pointermove", onPointerMove);
       renderer.domElement.removeEventListener("click", onClick);
       clearGraph();
-      bundle.dispose();
+      sceneBundle.dispose();
     },
   };
+}
+
+function qualityChanged(a: RenderQuality, b: RenderQuality): boolean {
+  return (
+    a.bloom !== b.bloom ||
+    a.nebula !== b.nebula ||
+    a.motion !== b.motion ||
+    a.threads !== b.threads
+  );
+}
+
+function nowMs(): number {
+  return typeof performance !== "undefined" && typeof performance.now === "function"
+    ? performance.now()
+    : 0;
 }
 
 function createNoopRenderer(): GraphRenderer {

@@ -70,10 +70,3 @@ export interface GraphRenderer {
   relayout(): void;
   dispose(): void;
 }
-
-export const DEFAULT_RENDER_QUALITY: RenderQuality = {
-  bloom: true,
-  nebula: true,
-  threads: true,
-  motion: true,
-};

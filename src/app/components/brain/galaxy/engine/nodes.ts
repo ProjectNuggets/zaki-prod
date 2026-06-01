@@ -1,4 +1,11 @@
-import { Color, InstancedMesh, Matrix4, MeshBasicMaterial, SphereGeometry } from "three";
+import {
+  AdditiveBlending,
+  Color,
+  InstancedMesh,
+  Matrix4,
+  MeshBasicMaterial,
+  SphereGeometry,
+} from "three";
 import { importanceToRadius } from "../../brainColors";
 import type { RenderModel } from "./interface";
 import type { SimNode } from "./forces";
@@ -18,7 +25,15 @@ export interface NodeField {
 export function createNodeField(model: RenderModel): NodeField {
   const count = model.nodes.length;
   const geometry = new SphereGeometry(1, 12, 12);
-  const material = new MeshBasicMaterial({ transparent: true, opacity: 0.96 });
+  // Additive blending over the dark canvas so dense clusters self-brighten into
+  // hot cores (amplified by the bloom pass). depthWrite off keeps overlaps from
+  // z-fighting; additive is order-independent so that's safe.
+  const material = new MeshBasicMaterial({
+    transparent: true,
+    opacity: 0.95,
+    blending: AdditiveBlending,
+    depthWrite: false,
+  });
   const mesh = new InstancedMesh(geometry, material, Math.max(1, count));
   mesh.count = count;
   mesh.frustumCulled = false;

@@ -3,7 +3,8 @@ import { useBrainGraph } from "@/queries";
 import type { BrainFilters } from "../BrainFilterPanel";
 import { buildRenderModel } from "./model";
 import { GalaxyRenderer } from "./GalaxyRenderer";
-import { DEFAULT_RENDER_QUALITY, type GraphRendererOptions } from "./engine/interface";
+import { prefersReducedMotion, resolveQuality } from "./engine/lod";
+import { type GraphRendererOptions } from "./engine/interface";
 
 export interface BrainGalaxyViewProps {
   userId: string;
@@ -56,15 +57,21 @@ export function BrainGalaxyView({
     [onSelectionChange, selectedIds],
   );
 
+  const reducedMotion = useMemo(() => prefersReducedMotion(), []);
+  const quality = useMemo(
+    () => resolveQuality(model.nodes.length, reducedMotion),
+    [model.nodes.length, reducedMotion],
+  );
+
   const options = useMemo<GraphRendererOptions>(
     () => ({
       view: "spatial",
-      quality: DEFAULT_RENDER_QUALITY,
+      quality,
       selectedIds,
       focusId: null,
       onSelect: handleSelect,
     }),
-    [selectedIds, handleSelect],
+    [quality, selectedIds, handleSelect],
   );
 
   return <GalaxyRenderer model={model} options={options} className="zaki-brain-v2__galaxy" />;
