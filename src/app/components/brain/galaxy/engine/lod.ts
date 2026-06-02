@@ -4,17 +4,22 @@ import type { RenderQuality } from "./interface";
 // user's motion preference so the galaxy stays smooth on large corpora and
 // respects prefers-reduced-motion. The display panel (P4) can override these.
 //
-//   reduced-motion → "lite":     no bloom/nebula/motion (accessible, static)
-//   > 3000 nodes   → "balanced": bloom on, nebula + idle motion off
-//   otherwise      → "high":     full galaxy (bloom + nebula + breathe)
+//   reduced-motion → no motion
+//   > 3000 nodes   → no idle motion (heavy corpus)
+//   otherwise      → idle breathe on
+// NOTE: bloom + nebula are currently forced OFF in every tier for the bare
+// nodes+edges review; the P5 display panel restores them as user toggles.
 export function resolveQuality(nodeCount: number, reducedMotion: boolean): RenderQuality {
+  // Temporary: bloom + nebula default OFF so the bare nodes + edges are visible
+  // for review. The P4 display panel will expose these as user toggles (and
+  // pick sensible defaults from there).
   if (reducedMotion) {
     return { bloom: false, nebula: false, threads: true, motion: false };
   }
   if (nodeCount > 3000) {
-    return { bloom: true, nebula: false, threads: true, motion: false };
+    return { bloom: false, nebula: false, threads: true, motion: false };
   }
-  return { bloom: true, nebula: true, threads: true, motion: true };
+  return { bloom: false, nebula: false, threads: true, motion: true };
 }
 
 /** Bézier segments per edge — straighter (cheaper) as the graph grows. */

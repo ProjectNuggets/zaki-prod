@@ -8,20 +8,22 @@ import {
   Raycaster,
   Vector2,
 } from "three";
-import { readCssColor } from "./scene";
-import { createScene } from "./scene";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { createScene, readCssColor } from "./scene";
 import { createSimulation, type GraphSimulation, type SimNode } from "./forces";
 import { createNodeField, type NodeField } from "./nodes";
 import { createEdgeLines, type EdgeLines } from "./edges";
 import { createBloomComposer, type BloomComposer } from "./bloom";
 import { createNebula, type Nebula } from "./nebula";
 import { edgeSegmentsForCount } from "./lod";
+import { createLabelLayer, type LabelEntry, type LabelLayer } from "./labels";
 import type { GraphRenderer, GraphRendererOptions, RenderModel, RenderQuality } from "./interface";
 
 const ALPHA_MIN = 0.02;
 const INITIAL_ALPHA = 1;
 const TWO_PI = Math.PI * 2;
 const BREATHE_PERIOD_S = 14;
+const MAX_LABELS = 28;
 
 // WebGL implementation of GraphRenderer. Owns the scene, the d3-force-3d
 // simulation, the instanced node field + filament edges, the bloom composer,
@@ -40,6 +42,21 @@ export function createGalaxyEngine(
   const graphGroup = new Group();
   scene.add(graphGroup);
 
+  // Pan + zoom (Obsidian-style). Rotate off → 2.5D; a true-3D/orbit toggle
+  // comes later. No damping so the idle loop can still stop; render on change
+  // only when the animation loop isn't already running.
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableRotate = false;
+  controls.enablePan = true;
+  controls.screenSpacePanning = true;
+  controls.enableZoom = true;
+  controls.zoomToCursor = true;
+  controls.minDistance = 40;
+  controls.maxDistance = 6000;
+  controls.addEventListener("change", () => {
+    if (raf === 0) renderFrame();
+  });
+
   let options = initialOptions;
   let model: RenderModel = { nodes: [], edges: [] };
   let graphSim: GraphSimulation | null = null;
@@ -50,6 +67,11 @@ export function createGalaxyEngine(
   let nodeById = new Map<string, SimNode>();
   let adjacency = new Map<string, string[]>();
   let focusThreads: LineSegments | null = null;
+  let labelLayer: LabelLayer | null = null;
+  let labelTextById = new Map<string, string>();
+  let topImportantIds: string[] = [];
+  let currentNearSet: Set<string> | null = null;
+  let lastFocusForThreads: string | null = null;
   let highlightSig = "";
   let raf = 0;
   let settled = false;
@@ -65,6 +87,7 @@ export function createGalaxyEngine(
   let hovered: string | null = null;
 
   function renderFrame(): void {
+    if (labelLayer) labelLayer.render(chooseLabels(), camera);
     if (composer) composer.render();
     else renderer.render(scene, camera);
   }
@@ -107,6 +130,15 @@ export function createGalaxyEngine(
       (focusThreads.material as LineBasicMaterial).dispose();
       focusThreads = null;
     }
+    if (labelLayer) {
+      graphGroup.remove(labelLayer.group);
+      labelLayer.dispose();
+      labelLayer = null;
+    }
+    labelTextById = new Map();
+    topImportantIds = [];
+    currentNearSet = null;
+    lastFocusForThreads = null;
     disposeFx();
     graphGroup.rotation.set(0, 0, 0);
     graphGroup.scale.setScalar(1);
@@ -131,6 +163,13 @@ export function createGalaxyEngine(
     nodeField = createNodeField(model);
     graphGroup.add(edgeLines.lines);
     graphGroup.add(nodeField.mesh);
+    labelTextById = new Map(model.nodes.map((n) => [n.id, n.label]));
+    topImportantIds = [...model.nodes]
+      .sort((a, b) => b.importance - a.importance)
+      .slice(0, 80)
+      .map((n) => n.id);
+    labelLayer = createLabelLayer(MAX_LABELS);
+    graphGroup.add(labelLayer.group);
     if (options.quality.nebula) {
       nebula = createNebula();
       scene.add(nebula.mesh);
@@ -221,15 +260,46 @@ export function createGalaxyEngine(
     const focusId = options.focusId ?? null;
     const depth = Math.max(1, options.focusDepth ?? 1);
     const nearSet = focusId ? computeNear(focusId, depth) : null;
+    currentNearSet = nearSet;
+    // Hover-to-highlight only when nothing is focus-pinned.
+    const hoverNearSet = !focusId && hovered ? computeNear(hovered, 1) : null;
     const highlightSet =
       options.highlightIds && options.highlightIds.length > 0
         ? new Set(options.highlightIds)
         : null;
     const searchSet = options.searchIds ? new Set(options.searchIds) : null;
-    nodeField.setVisualState({ focusId, nearSet, highlightSet, searchSet });
-    buildFocusThreads(focusId);
+    nodeField.setVisualState({ focusId, nearSet, highlightSet, searchSet, hoverNearSet });
+    // Rebuild focus threads only when the focus node actually changes (not on
+    // every hover) to avoid churning the geometry.
+    if (focusId !== lastFocusForThreads) {
+      buildFocusThreads(focusId);
+      lastFocusForThreads = focusId;
+    }
     syncPositions();
     renderFrame();
+  }
+
+  function chooseLabels(): LabelEntry[] {
+    if (!labelLayer) return [];
+    const out: LabelEntry[] = [];
+    const seen = new Set<string>();
+    const add = (id: string | null | undefined) => {
+      if (!id || seen.has(id) || out.length >= MAX_LABELS) return;
+      const n = nodeById.get(id);
+      const text = labelTextById.get(id);
+      if (n && text) {
+        out.push({ id, text, x: n.x ?? 0, y: n.y ?? 0, z: n.z ?? 0 });
+        seen.add(id);
+      }
+    };
+    add(hovered);
+    add(options.focusId ?? null);
+    if (currentNearSet) for (const id of currentNearSet) add(id);
+    for (const id of topImportantIds) {
+      if (out.length >= MAX_LABELS) break;
+      add(id);
+    }
+    return out;
   }
 
   function syncPositions(): void {
@@ -325,7 +395,8 @@ export function createGalaxyEngine(
     const fovRad = (camera.fov * Math.PI) / 180;
     const dist = (maxDist * 1.3) / Math.tan(fovRad / 2) + 80;
     camera.position.set(cx, cy, cz + dist);
-    camera.lookAt(cx, cy, cz);
+    controls.target.set(cx, cy, cz);
+    controls.update();
     camera.updateProjectionMatrix();
   }
 
@@ -345,20 +416,41 @@ export function createGalaxyEngine(
     return null;
   }
 
+  let pressPos: { x: number; y: number } | null = null;
+  let draggedDuringPress = false;
+
+  const onPointerDown = (event: PointerEvent) => {
+    pressPos = { x: event.clientX, y: event.clientY };
+    draggedDuringPress = false;
+  };
+
   const onPointerMove = (event: PointerEvent) => {
+    if (event.buttons !== 0) {
+      // A button is held → panning/zooming; track movement, skip hover picking.
+      if (pressPos && Math.hypot(event.clientX - pressPos.x, event.clientY - pressPos.y) > 5) {
+        draggedDuringPress = true;
+      }
+      return;
+    }
     const id = pickAt(event.clientX, event.clientY);
     if (id !== hovered) {
       hovered = id;
       renderer.domElement.style.cursor = id ? "pointer" : "default";
       options.onHover?.(id);
+      applyHighlight(); // hover-to-highlight + hover label
     }
   };
 
   const onClick = (event: MouseEvent) => {
+    if (draggedDuringPress) {
+      draggedDuringPress = false;
+      return; // a pan/drag, not a click-select
+    }
     const id = pickAt(event.clientX, event.clientY);
     if (id) options.onSelect?.(id, event.shiftKey);
   };
 
+  renderer.domElement.addEventListener("pointerdown", onPointerDown);
   renderer.domElement.addEventListener("pointermove", onPointerMove);
   renderer.domElement.addEventListener("click", onClick);
 
@@ -387,6 +479,7 @@ export function createGalaxyEngine(
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       composer?.setSize(w, h);
+      controls.update();
       renderFrame();
     },
     fit() {
@@ -400,8 +493,10 @@ export function createGalaxyEngine(
       startLoop();
     },
     dispose() {
+      renderer.domElement.removeEventListener("pointerdown", onPointerDown);
       renderer.domElement.removeEventListener("pointermove", onPointerMove);
       renderer.domElement.removeEventListener("click", onClick);
+      controls.dispose();
       clearGraph();
       sceneBundle.dispose();
     },

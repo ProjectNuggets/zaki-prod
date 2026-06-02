@@ -19,6 +19,8 @@ export interface VisualState {
   highlightSet: Set<string> | null;
   /** Search matches; non-matches dim. null = no active search. */
   searchSet: Set<string> | null;
+  /** Hover neighborhood (incl. hovered) — dims the rest when no focus is set. */
+  hoverNearSet: Set<string> | null;
 }
 
 export interface NodeField {
@@ -83,7 +85,7 @@ export function createNodeField(model: RenderModel): NodeField {
   }
 
   function setVisualState(state: VisualState): void {
-    const { focusId, nearSet, highlightSet, searchSet } = state;
+    const { focusId, nearSet, highlightSet, searchSet, hoverNearSet } = state;
     for (let i = 0; i < count; i++) {
       const id = ids[i];
       if (id === undefined) continue;
@@ -105,6 +107,11 @@ export function createNodeField(model: RenderModel): NodeField {
           scratch.multiplyScalar(DIM_FAR);
           scale = DIM_FAR_SCALE;
         }
+      } else if (hoverNearSet && !hoverNearSet.has(id)) {
+        // Hover-to-highlight (no focus set): dim everything outside the hovered
+        // node's neighborhood.
+        scratch.multiplyScalar(DIM_FAR);
+        scale = DIM_FAR_SCALE;
       }
 
       if (highlightSet && highlightSet.has(id)) {
