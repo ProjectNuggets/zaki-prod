@@ -50,14 +50,15 @@ export function BrainInsightsStrip({ userId }: Props) {
     const sevenDaysAgo = nowSeconds - 7 * 24 * 60 * 60;
     const firstPage = timelineQuery.data?.pages?.[0]?.entries ?? [];
     const newThisWeek = firstPage.filter((e) => (e.created_at ?? 0) >= sevenDaysAgo).length;
-    // Top community by member_count. Skip any whose name matches an
-    // internal-only codename so a developer artifact never leaks onto
-    // the user's dashboard.
-    const communities = communitiesQuery.data?.communities ?? [];
-    const topCommunity = communities
+    // Top community by member_count. Skip internal codenames, and PREFER an
+    // LLM-named cluster over a larger "Cluster 19716777" fallback — the hero
+    // should never headline an unnamed cluster. Only fall back to the largest
+    // unnamed one when there are no named clusters at all.
+    const communities = (communitiesQuery.data?.communities ?? [])
       .slice()
       .filter((c) => !isInternalCodename(c.name))
-      .sort((a, b) => (b.member_count ?? 0) - (a.member_count ?? 0))[0];
+      .sort((a, b) => (b.member_count ?? 0) - (a.member_count ?? 0));
+    const topCommunity = communities.find((c) => c.name_source === "llm") ?? communities[0];
     return {
       total,
       newThisWeek,
