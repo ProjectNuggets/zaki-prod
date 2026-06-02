@@ -64,6 +64,13 @@ import {
   resolveCanonicalAgentUserId,
 } from "./agent-proxy-contract.js";
 import {
+  BRAIN_LIMITS,
+  clampFloatParam,
+  clampIntParam,
+  isValidCursor,
+  isValidMemoryKey,
+} from "./brain-params.js";
+import {
   buildAgentMeterUsageFacts,
   classifyAgentMeterAction,
   createAgentStreamMeterMetrics,
@@ -15303,8 +15310,18 @@ app.get(
   "/api/agent/brain/documents",
   requireAgentContext,
   makeAgentUserProxyHandler((userId, req) => {
-    const path = `/api/v1/users/${encodeURIComponent(userId)}/brain/documents`;
-    return appendAllowedQueryParams(path, req, ["q", "kind", "limit", "cursor"]);
+    const qs = new URLSearchParams();
+    if (req.query.q) qs.set("q", req.query.q);
+    if (req.query.kind) qs.set("kind", req.query.kind);
+    if (req.query.limit) {
+      const v = clampIntParam(req.query.limit, 1, BRAIN_LIMITS.LIMIT);
+      if (v) qs.set("limit", v);
+    }
+    if (req.query.cursor && isValidCursor(req.query.cursor)) {
+      qs.set("cursor", req.query.cursor);
+    }
+    const qstr = qs.toString();
+    return `/api/v1/users/${encodeURIComponent(userId)}/brain/documents${qstr ? `?${qstr}` : ""}`;
   }, NULLCLAW_BRAIN_JSON_PROXY_OPTIONS)
 );
 
@@ -15314,12 +15331,16 @@ app.get(
   makeAgentUserProxyHandler((userId, req) => {
     const qs = new URLSearchParams();
     if (req.query.since) qs.set("since", req.query.since);
-    if (req.query.max_nodes) qs.set("max_nodes", req.query.max_nodes);
+    if (req.query.max_nodes) {
+      const v = clampIntParam(req.query.max_nodes, 1, BRAIN_LIMITS.MAX_NODES);
+      if (v) qs.set("max_nodes", v);
+    }
     if (req.query.node_kinds) qs.set("node_kinds", req.query.node_kinds);
     if (req.query.search) qs.set("search", req.query.search);
     if (req.query.link_types) qs.set("link_types", req.query.link_types);
     if (req.query.semantic_min_weight) {
-      qs.set("semantic_min_weight", req.query.semantic_min_weight);
+      const v = clampFloatParam(req.query.semantic_min_weight, 0, 1);
+      if (v) qs.set("semantic_min_weight", v);
     }
     if (req.query.exclude_orphans !== undefined) {
       qs.set("exclude_orphans", req.query.exclude_orphans);
@@ -15336,8 +15357,14 @@ app.get(
   makeAgentUserProxyHandler((userId, req) => {
     const qs = new URLSearchParams();
     if (req.query.center_key) qs.set("center_key", req.query.center_key);
-    if (req.query.depth) qs.set("depth", req.query.depth);
-    if (req.query.max_nodes) qs.set("max_nodes", req.query.max_nodes);
+    if (req.query.depth) {
+      const v = clampIntParam(req.query.depth, 1, BRAIN_LIMITS.DEPTH);
+      if (v) qs.set("depth", v);
+    }
+    if (req.query.max_nodes) {
+      const v = clampIntParam(req.query.max_nodes, 1, BRAIN_LIMITS.MAX_NODES);
+      if (v) qs.set("max_nodes", v);
+    }
     const qstr = qs.toString();
     return `/api/v1/users/${encodeURIComponent(userId)}/brain/local-graph${qstr ? `?${qstr}` : ""}`;
   }, NULLCLAW_BRAIN_JSON_PROXY_OPTIONS)
@@ -15349,7 +15376,10 @@ app.get(
   requireAgentContext,
   makeAgentUserProxyHandler((userId, req) => {
     const qs = new URLSearchParams();
-    if (req.query.limit) qs.set("limit", req.query.limit);
+    if (req.query.limit) {
+      const v = clampIntParam(req.query.limit, 1, BRAIN_LIMITS.LIMIT);
+      if (v) qs.set("limit", v);
+    }
     const qstr = qs.toString();
     return `/api/v1/users/${encodeURIComponent(userId)}/brain/orphans${qstr ? `?${qstr}` : ""}`;
   }, NULLCLAW_BRAIN_JSON_PROXY_OPTIONS)
@@ -15362,7 +15392,10 @@ app.get(
   makeAgentUserProxyHandler((userId, req) => {
     const qs = new URLSearchParams();
     if (req.query.date) qs.set("date", req.query.date);
-    if (req.query.window_days) qs.set("window_days", req.query.window_days);
+    if (req.query.window_days) {
+      const v = clampIntParam(req.query.window_days, 1, BRAIN_LIMITS.WINDOW_DAYS);
+      if (v) qs.set("window_days", v);
+    }
     const qstr = qs.toString();
     return `/api/v1/users/${encodeURIComponent(userId)}/brain/diff${qstr ? `?${qstr}` : ""}`;
   }, NULLCLAW_BRAIN_JSON_PROXY_OPTIONS)
@@ -15395,8 +15428,13 @@ app.get(
   requireAgentContext,
   makeAgentUserProxyHandler((userId, req) => {
     const qs = new URLSearchParams();
-    if (req.query.cursor) qs.set("cursor", req.query.cursor);
-    if (req.query.limit) qs.set("limit", req.query.limit);
+    if (req.query.cursor && isValidCursor(req.query.cursor)) {
+      qs.set("cursor", req.query.cursor);
+    }
+    if (req.query.limit) {
+      const v = clampIntParam(req.query.limit, 1, BRAIN_LIMITS.LIMIT);
+      if (v) qs.set("limit", v);
+    }
     if (req.query.kind) qs.set("kind", req.query.kind);
     if (req.query.to) qs.set("to", req.query.to);
     const qstr = qs.toString();
@@ -15418,6 +15456,13 @@ app.get(
 app.get(
   "/api/agent/brain/memory/:key",
   requireAgentContext,
+  (req, res, next) => {
+    if (!isValidMemoryKey(req.params.key)) {
+      res.status(400).json({ error: "Invalid memory key.", code: "invalid_memory_key" });
+      return;
+    }
+    next();
+  },
   makeAgentUserProxyHandler(
     (userId, req) =>
       `/api/v1/users/${encodeURIComponent(userId)}/brain/memory/${encodeURIComponent(req.params.key)}`,

@@ -42,7 +42,10 @@ export const DEFAULT_FILTERS: BrainFilters = {
   excludeOrphans: true,
   linkTypes: [],
   search: "",
-  maxNodes: 50,
+  // P8 uncap — show the whole personal brain by default (the old 50 showed ~1%
+  // of a 4.6k-node corpus). WebGL handles thousands of instanced nodes; LOD +
+  // the backend safety cap (≤8000) govern the ceiling.
+  maxNodes: 2000,
   // Audit (2026-05-07) — flipped default from "mono" to "kind". Mono is
   // Obsidian-style visual restraint, but Obsidian users have manually
   // organized vaults; ZAKI users haven't organized anything. Color by
@@ -108,8 +111,8 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
         <NumberRow
           label={t("brain.filterPanel.maxNodes", { defaultValue: "Max nodes" })}
           min={50}
-          max={1000}
-          step={50}
+          max={8000}
+          step={250}
           value={filters.maxNodes}
           onChange={(v) => set("maxNodes", v)}
         />
