@@ -7,16 +7,13 @@ import { useBrainGraph, useBrainMe } from "@/queries";
 import { SkeletonBrainPage } from "@/app/components/ui/skeleton";
 import { BrainEmptyState } from "./BrainEmptyState";
 import { BrainSemanticDegradedBanner } from "./BrainSemanticDegradedBanner";
-import { BrainGraphView } from "./BrainGraphView";
 import { BrainGalaxyView, type GalaxyScope } from "./galaxy/BrainGalaxyView";
 import { BrainHome } from "./galaxy/BrainHome";
 import { BrainDisplayPanel } from "./galaxy/BrainDisplayPanel";
 import { BrainDetailPanel } from "./galaxy/BrainDetailPanel";
-import { useGalaxyFlag } from "./galaxy/flag";
 import { DEFAULT_FX } from "./galaxy/engine/lod";
 import type { GalaxyHandle } from "./galaxy/GalaxyRenderer";
 import type { BrainViewMode, RenderQuality } from "./galaxy/engine/interface";
-import { BrainTimelineView } from "./BrainTimelineView";
 import { BrainComposeModal } from "./BrainComposeModal";
 import { BrainFilterPanel, DEFAULT_FILTERS, type BrainFilters } from "./BrainFilterPanel";
 import { BrainOrphanRail } from "./BrainOrphanRail";
@@ -27,9 +24,8 @@ import { KIND_COLOR, KIND_LABEL } from "./brainColors";
 import { V2Badge, V2StatusStrip, V2Tabs } from "@/app/components/v2";
 import type { BrainGraphNode } from "@/lib/api";
 
-// "home"/"explore" are the new-brain (galaxy-flag) tabs; "graph"/"timeline" are
-// the legacy cytoscape tabs kept until the R5 cutover.
-type BrainTab = "home" | "timeline" | "graph" | "explore";
+// Two surfaces: Home (overview + timeline) and Explore (the 3D graph).
+type BrainTab = "home" | "explore";
 
 // V1.11 (2026-05-07) — Brain page UX rework. Pre-V1.11 the graph tab
 // rendered three always-visible columns (filter panel, canvas, side
@@ -77,22 +73,19 @@ export function BrainPage() {
   const { user } = useAuthStore();
   const userId = String(user?.id ?? "");
   const [searchParams, setSearchParams] = useSearchParams();
-  const galaxyEnabled = useGalaxyFlag();
 
   // Audit (2026-05-07) — URL is the single source of truth for shareable
   // brain page state. Lazy initializers seed React state from the current
   // URL on mount so a refresh / shared link / browser back lands on the
   // same view. State changes write back to the URL via setSearchParams
   // with replace:true so we don't pollute history.
+  //
+  // Two surfaces: Home (overview + timeline merged) and Explore (the graph).
+  // legacy ?tab=graph/timeline deep-links resolve to Explore/Home.
   const initialTab: BrainTab = (() => {
     const requested = searchParams.get("tab");
-    if (galaxyEnabled) {
-      // New-brain has two surfaces: Home (overview + timeline merged) and
-      // Explore (the graph). legacy ?tab=graph and galaxy deep-links → Explore.
-      if (requested === "explore" || requested === "graph") return "explore";
-      return "home";
-    }
-    return requested === "timeline" ? "timeline" : "graph";
+    if (requested === "explore" || requested === "graph") return "explore";
+    return "home";
   })();
   const initialPanel: ActivePanel = (() => {
     const p = searchParams.get("panel");
@@ -135,13 +128,11 @@ export function BrainPage() {
     return () => window.clearTimeout(id);
   }, [searchQuery]);
 
-  // State -> URL sync. The mode's default tab (Home for new-brain, Graph for
-  // legacy) is implicit; any other tab gets a marker. replace:true keeps the
-  // back button useful.
+  // State -> URL sync. Home is the default tab (implicit); Explore gets a
+  // marker. replace:true keeps the back button useful.
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
-    const defaultTab: BrainTab = galaxyEnabled ? "home" : "graph";
-    if (tab !== defaultTab) next.set("tab", tab); else next.delete("tab");
+    if (tab !== "home") next.set("tab", tab); else next.delete("tab");
     if (debouncedSearch) next.set("q", debouncedSearch); else next.delete("q");
     if (activePanel) next.set("panel", activePanel); else next.delete("panel");
     if (centerKey) next.set("center", centerKey); else next.delete("center");
@@ -158,7 +149,7 @@ export function BrainPage() {
   // exits local-graph mode, "/" focuses the search input. Skipped while
   // any input/textarea has focus so typing the letters works normally.
   useEffect(() => {
-    if (tab !== "graph" && tab !== "explore") return;
+    if (tab !== "explore") return;
     const handler = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const inEditable =
@@ -360,31 +351,16 @@ export function BrainPage() {
           value={tab}
           onChange={setTab}
           fullWidth
-          options={
-            galaxyEnabled
-              ? [
-                  { id: "home", label: t("brain.tabs.home", { defaultValue: "Home" }) },
-                  { id: "explore", label: t("brain.tabs.explore", { defaultValue: "Explore" }) },
-                ]
-              : [
-                  { id: "timeline", label: t("brain.tabs.timeline") },
-                  {
-                    id: "graph",
-                    label: t("brain.tabs.graph"),
-                    count: initialGraphQuery.data?.nodes?.length ?? 0,
-                  },
-                ]
-          }
+          options={[
+            { id: "home", label: t("brain.tabs.home", { defaultValue: "Home" }) },
+            { id: "explore", label: t("brain.tabs.explore", { defaultValue: "Explore" }) },
+          ]}
         />
       </div>
 
       {tab === "home" ? (
         <div className="zaki-brain-v2__home-slot" data-testid="brain-home-slot">
           <BrainHome userId={userId} />
-        </div>
-      ) : tab === "timeline" ? (
-        <div className="zaki-brain-v2__timeline" data-testid="brain-timeline-slot">
-          <BrainTimelineView userId={userId} />
         </div>
       ) : (
         /*
@@ -401,21 +377,19 @@ export function BrainPage() {
         */
         <div data-testid="brain-graph-slot" className="zaki-brain-v2__graph-shell">
           <aside className="zaki-brain-v2__filters-rail" aria-label={t("brain.panel.filters", { defaultValue: "Filters" })}>
-            {galaxyEnabled ? (
-              <BrainDisplayPanel
-                view={galaxyView}
-                onViewChange={setGalaxyView}
-                fx={galaxyFx}
-                onToggleFx={toggleGalaxyFx}
-                depth={galaxyDepth}
-                onDepthChange={setGalaxyDepth}
-                onFit={() => galaxyRef.current?.fit()}
-                onRelayout={() => galaxyRef.current?.relayout()}
-                scope={galaxyScope}
-                onScopeChange={changeGalaxyScope}
-              />
-            ) : null}
-            <BrainFilterPanel filters={filters} onChange={setFilters} showForces={!galaxyEnabled} />
+            <BrainDisplayPanel
+              view={galaxyView}
+              onViewChange={setGalaxyView}
+              fx={galaxyFx}
+              onToggleFx={toggleGalaxyFx}
+              depth={galaxyDepth}
+              onDepthChange={setGalaxyDepth}
+              onFit={() => galaxyRef.current?.fit()}
+              onRelayout={() => galaxyRef.current?.relayout()}
+              scope={galaxyScope}
+              onScopeChange={changeGalaxyScope}
+            />
+            <BrainFilterPanel filters={filters} onChange={setFilters} />
           </aside>
           <section className="zaki-brain-v2__graph-main">
           {/* Search bar — debounced into ?search= */}
@@ -562,36 +536,22 @@ export function BrainPage() {
             Now the graph claims the whole viewport.
           */}
           <div className="zaki-brain-v2__canvas-frame">
-            {galaxyEnabled ? (
-              <BrainGalaxyView
-                ref={galaxyRef}
-                userId={userId}
-                selectedIds={selectedNodeIds}
-                onSelectionChange={setSelectedNodeIds}
-                filters={effectiveFilters}
-                selfKey={selfKey}
-                highlightKeys={highlightKeys}
-                view={galaxyView}
-                fx={galaxyFx}
-                depth={galaxyDepth}
-                focusId={galaxyFocusId}
-                onFocusChange={handleGalaxyFocus}
-                scope={galaxyScope}
-                onScopeChange={changeGalaxyScope}
-              />
-            ) : (
-              <BrainGraphView
-                userId={userId}
-                selectedIds={selectedNodeIds}
-                onSelectionChange={setSelectedNodeIds}
-                filters={effectiveFilters}
-                highlightKeys={highlightKeys}
-                selectedCommunityId={selectedCommunityId}
-                centerKey={centerKey}
-                onCenterKeyChange={setCenterKey}
-                selfKey={selfKey}
-              />
-            )}
+            <BrainGalaxyView
+              ref={galaxyRef}
+              userId={userId}
+              selectedIds={selectedNodeIds}
+              onSelectionChange={setSelectedNodeIds}
+              filters={effectiveFilters}
+              selfKey={selfKey}
+              highlightKeys={highlightKeys}
+              view={galaxyView}
+              fx={galaxyFx}
+              depth={galaxyDepth}
+              focusId={galaxyFocusId}
+              onFocusChange={handleGalaxyFocus}
+              scope={galaxyScope}
+              onScopeChange={changeGalaxyScope}
+            />
 
             {/* Top-right floating control cluster */}
             <div className="zaki-brain-v2__canvas-controls">
@@ -635,7 +595,7 @@ export function BrainPage() {
             */}
             {activePanel === "filters" && isNarrow && (
               <FloatingOverlay onClose={() => setActivePanel(null)}>
-                <BrainFilterPanel filters={filters} onChange={setFilters} showForces={!galaxyEnabled} />
+                <BrainFilterPanel filters={filters} onChange={setFilters} />
               </FloatingOverlay>
             )}
           </div>
@@ -675,7 +635,7 @@ export function BrainPage() {
           />
           </section>
           <aside className="zaki-brain-v2__detail-rail" aria-label={t("brain.panel.detail", { defaultValue: "Memory detail" })}>
-            {galaxyEnabled && galaxyFocusId ? (
+            {galaxyFocusId ? (
               <BrainDetailPanel
                 userId={userId}
                 memoryKey={galaxyFocusKey}

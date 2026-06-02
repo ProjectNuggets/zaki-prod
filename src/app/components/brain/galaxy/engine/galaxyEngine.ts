@@ -173,6 +173,7 @@ export function createGalaxyEngine(
     adjacency = buildAdjacency(model);
     edgeLines = createEdgeLines(model, edgeSegmentsForCount(model.nodes.length));
     nodeField = createNodeField(model);
+    nodeField.setSizeScale(options.nodeScale ?? 1);
     graphGroup.add(edgeLines.lines);
     graphGroup.add(nodeField.mesh);
     labelTextById = new Map(model.nodes.map((n) => [n.id, n.label]));
@@ -181,6 +182,7 @@ export function createGalaxyEngine(
       .slice(0, 80)
       .map((n) => n.id);
     labelLayer = createLabelLayer(MAX_LABELS);
+    labelLayer.setFadeScale(options.labelFade ?? 0.6);
     graphGroup.add(labelLayer.group);
     if (options.quality.nebula) {
       nebula = createNebula();
@@ -516,6 +518,17 @@ export function createGalaxyEngine(
       if (sig !== highlightSig) {
         highlightSig = sig;
         applyHighlight();
+      }
+      // Display sliders (live, no rebuild): node size re-scales instances,
+      // text fade adjusts the label distance falloff.
+      if (next.nodeScale !== undefined && nodeField) {
+        nodeField.setSizeScale(options.nodeScale ?? 1);
+        syncPositions();
+        renderFrame();
+      }
+      if (next.labelFade !== undefined && labelLayer) {
+        labelLayer.setFadeScale(options.labelFade ?? 0.6);
+        renderFrame();
       }
     },
     resize(w: number, h: number) {

@@ -28,6 +28,8 @@ export interface NodeField {
   sync(nodes: SimNode[]): void;
   /** Recolor + rescale instances for focus / time / search state. */
   setVisualState(state: VisualState): void;
+  /** Global radius multiplier from the "Node size" slider. */
+  setSizeScale(scale: number): void;
   nodeIdAt(instanceId: number): string | undefined;
   dispose(): void;
 }
@@ -66,6 +68,7 @@ export function createNodeField(model: RenderModel): NodeField {
   const staleFlags = model.nodes.map((n) => n.stale);
   const baseRadii = model.nodes.map((n) => importanceToRadius(n.importance));
   const scaleMul = new Float32Array(count).fill(1);
+  let sizeScale = 1; // global multiplier from the "Node size" slider
   const accent = readCssColor("--g-ember", "rgba(210,68,48,1)").color;
 
   // Initial colors = base.
@@ -79,7 +82,7 @@ export function createNodeField(model: RenderModel): NodeField {
     for (let i = 0; i < count; i++) {
       const node = simNodes[i];
       if (!node) continue;
-      const r = (baseRadii[i] ?? 6) * (scaleMul[i] ?? 1);
+      const r = (baseRadii[i] ?? 6) * (scaleMul[i] ?? 1) * sizeScale;
       matrix.makeScale(r, r, r);
       matrix.setPosition(node.x ?? 0, node.y ?? 0, node.z ?? 0);
       mesh.setMatrixAt(i, matrix);
@@ -139,6 +142,9 @@ export function createNodeField(model: RenderModel): NodeField {
     mesh,
     sync,
     setVisualState,
+    setSizeScale(scale: number) {
+      sizeScale = scale > 0 ? scale : 1;
+    },
     nodeIdAt: (instanceId) => ids[instanceId],
     dispose() {
       geometry.dispose();

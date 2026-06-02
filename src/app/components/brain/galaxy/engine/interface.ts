@@ -53,6 +53,10 @@ export interface RenderQuality {
 export interface GraphRendererOptions {
   view: BrainViewMode;
   quality: RenderQuality;
+  /** Global node radius multiplier (Display → "Node size" slider). */
+  nodeScale?: number;
+  /** Label fade-distance multiplier (Display → "Text fade" slider). */
+  labelFade?: number;
   selectedIds: readonly string[];
   /** The ember focus node — bright accent, neighbors lit, the rest dimmed. */
   focusId: string | null;

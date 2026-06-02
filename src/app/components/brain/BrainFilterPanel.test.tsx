@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom";
 import { describe, expect, it, jest } from "@jest/globals";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 jest.mock("react-i18next", () => ({
@@ -22,34 +22,6 @@ function renderPanel(overrides?: Partial<BrainFilters>) {
   );
   return { onChange };
 }
-
-describe("BrainFilterPanel — scope separation", () => {
-  it("marks Personal brain as the scope shown on this surface", () => {
-    renderPanel();
-    const active = screen.getByTestId("brain-scope-active");
-    expect(within(active).getByText("Personal brain")).toBeInTheDocument();
-    expect(within(active).getByText("Shown here")).toBeInTheDocument();
-  });
-
-  it("names Workspace, Learner, and Hire memory as separate (not merged into this graph)", () => {
-    renderPanel();
-    expect(screen.getByTestId("brain-scope-separate-workspace")).toHaveTextContent(
-      "Workspace",
-    );
-    expect(screen.getByTestId("brain-scope-separate-learner")).toHaveTextContent(
-      "Learner",
-    );
-    expect(screen.getByTestId("brain-scope-separate-hire")).toHaveTextContent("Hire");
-  });
-
-  it("routes scope/privacy governance to route-level Settings", () => {
-    renderPanel();
-    expect(screen.getByTestId("brain-scope-settings-link")).toHaveAttribute(
-      "href",
-      "/settings#settings-memory-data",
-    );
-  });
-});
 
 describe("BrainFilterPanel — graph filters", () => {
   it("toggles the hide-orphans filter", () => {

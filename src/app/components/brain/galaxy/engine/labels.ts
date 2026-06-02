@@ -15,6 +15,8 @@ export interface LabelLayer {
   group: Group;
   /** Assign the (already prioritized + capped) entries to the pool and render. */
   render(entries: LabelEntry[], camera: Camera): void;
+  /** "Text fade" slider — higher = labels persist further out. */
+  setFadeScale(threshold: number): void;
   dispose(): void;
 }
 
@@ -25,6 +27,9 @@ const MAX_CHARS = 42;
 // This is what gives the Obsidian "labels appear as you zoom in" behaviour.
 const FADE_NEAR = 260;
 const FADE_FAR = 1500;
+// The "Text fade" slider is centered on this baseline → at the default the fade
+// distance is exactly FADE_FAR; higher persists labels further, lower sooner.
+const FADE_BASELINE = 0.6;
 
 interface Slot {
   mesh: Text;
@@ -40,6 +45,7 @@ export function createLabelLayer(maxLabels: number): LabelLayer {
   const fill = readCssColor("--v2-ink-1", "#ece7df").color;
   const slots: Slot[] = [];
   const worldPos = new Vector3();
+  let fadeFar = FADE_FAR;
 
   for (let i = 0; i < maxLabels; i++) {
     const mesh = new Text();
@@ -85,7 +91,8 @@ export function createLabelLayer(maxLabels: number): LabelLayer {
       // local position would give a wrong camera distance.
       slot.mesh.getWorldPosition(worldPos);
       const dist = camera.position.distanceTo(worldPos);
-      const opacity = clamp01((FADE_FAR - dist) / (FADE_FAR - FADE_NEAR));
+      const span = Math.max(1, fadeFar - FADE_NEAR);
+      const opacity = clamp01((fadeFar - dist) / span);
       slot.mesh.fillOpacity = opacity;
       slot.mesh.outlineOpacity = 0.65 * opacity;
       slot.mesh.visible = opacity > 0.02;
@@ -107,7 +114,12 @@ export function createLabelLayer(maxLabels: number): LabelLayer {
     }
   }
 
-  return { group, render, dispose };
+  function setFadeScale(threshold: number): void {
+    const t = threshold > 0 ? threshold : FADE_BASELINE;
+    fadeFar = FADE_FAR * (t / FADE_BASELINE);
+  }
+
+  return { group, render, setFadeScale, dispose };
 }
 
 function clamp01(v: number): number {

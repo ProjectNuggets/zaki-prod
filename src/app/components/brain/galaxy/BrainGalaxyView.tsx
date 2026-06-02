@@ -186,6 +186,8 @@ export const BrainGalaxyView = forwardRef<GalaxyHandle, BrainGalaxyViewProps>(
       () => ({
         view,
         quality,
+        nodeScale: filters.nodeSizeScale,
+        labelFade: filters.textFadeThreshold,
         selectedIds,
         focusId,
         focusDepth: depth,
@@ -193,7 +195,18 @@ export const BrainGalaxyView = forwardRef<GalaxyHandle, BrainGalaxyViewProps>(
         searchIds,
         onSelect: handleSelect,
       }),
-      [view, quality, selectedIds, focusId, depth, highlightIds, searchIds, handleSelect],
+      [
+        view,
+        quality,
+        filters.nodeSizeScale,
+        filters.textFadeThreshold,
+        selectedIds,
+        focusId,
+        depth,
+        highlightIds,
+        searchIds,
+        handleSelect,
+      ],
     );
 
     return (
