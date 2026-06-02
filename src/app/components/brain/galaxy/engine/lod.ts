@@ -1,12 +1,13 @@
 import type { RenderQuality } from "./interface";
 
-// Default FX the display panel initializes to — bare nodes+edges+labels with
-// gentle idle motion; bloom/nebula are opt-in (the "galaxy" look).
+// Default FX the display panel initializes to — clean nodes+edges+labels that
+// settle and HOLD STILL (readable positions; the rAF loop idles when settled).
+// Ambient motion + bloom/nebula are opt-in (the "galaxy" look).
 export const DEFAULT_FX: RenderQuality = {
   bloom: false,
   nebula: false,
   threads: true,
-  motion: true,
+  motion: false,
   labels: true,
 };
 

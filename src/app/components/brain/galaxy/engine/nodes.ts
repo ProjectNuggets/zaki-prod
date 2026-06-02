@@ -1,5 +1,4 @@
 import {
-  AdditiveBlending,
   Color,
   InstancedMesh,
   Matrix4,
@@ -33,8 +32,8 @@ export interface NodeField {
   dispose(): void;
 }
 
-const DIM_FAR = 0.16; // non-neighbors when a node is focused
-const DIM_UNMATCHED = 0.1; // non-matches during search
+const DIM_FAR = 0.35; // non-neighbors when a node is focused
+const DIM_UNMATCHED = 0.25; // non-matches during search
 const FOCUS_SCALE = 1.9;
 const GLOW_SCALE = 1.3;
 // Dimmed nodes also shrink — additive blending saturates dense clusters, so
@@ -48,13 +47,12 @@ const DIM_UNMATCHED_SCALE = 0.4;
 // rebuild) so highlighting is cheap.
 export function createNodeField(model: RenderModel): NodeField {
   const count = model.nodes.length;
-  const geometry = new SphereGeometry(1, 12, 12);
-  const material = new MeshBasicMaterial({
-    transparent: true,
-    opacity: 0.95,
-    blending: AdditiveBlending,
-    depthWrite: false,
-  });
+  const geometry = new SphereGeometry(1, 16, 16);
+  // Opaque, normal-blended, depth-tested. Additive blending summed overlapping
+  // nodes to a white haze (the "faint cloud") and made dimming invisible; solid
+  // spheres read clearly and give true depth occlusion. Bloom (opt-in) still
+  // halos bright nodes via the post pass.
+  const material = new MeshBasicMaterial();
   const mesh = new InstancedMesh(geometry, material, Math.max(1, count));
   mesh.count = count;
   mesh.frustumCulled = false;
