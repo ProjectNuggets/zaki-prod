@@ -110,6 +110,26 @@ describe("buildRenderModel", () => {
   });
 });
 
+describe("color-by dimensions", () => {
+  it("colors by status (live vs archived)", () => {
+    const g = graph({ nodes: [node("live"), node("old", { valid_to: 123 })] });
+    const model = buildRenderModel(g, { ...OPTS, colorPreset: "status" });
+    const live = model.nodes.find((n) => n.id === "live");
+    const old = model.nodes.find((n) => n.id === "old");
+    expect(live?.color).toBe("#b8b2a9"); // STATUS_COLOR.live
+    expect(old?.color).toBe("#57534e"); // STATUS_COLOR.archived
+  });
+
+  it("colors by recency (recent = accent, old = muted)", () => {
+    const g = graph({
+      nodes: [node("fresh", { created_at: Date.now() }), node("ancient", { created_at: 0 })],
+    });
+    const model = buildRenderModel(g, { ...OPTS, colorPreset: "recency" });
+    expect(model.nodes.find((n) => n.id === "fresh")?.color).toBe("#d24430"); // week → accent
+    expect(model.nodes.find((n) => n.id === "ancient")?.color).toBe("#8a857d"); // older → muted
+  });
+});
+
 describe("cluster overview (clusters-first)", () => {
   it("round-trips a cluster node id", () => {
     expect(parseClusterNodeId(clusterNodeId(42))).toBe(42);

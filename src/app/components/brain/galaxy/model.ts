@@ -2,6 +2,8 @@ import type { BrainCommunity, BrainGraphEdge, BrainGraphNode, BrainGraphResponse
 import {
   BRAND_RED,
   colorForCommunity,
+  colorForRecency,
+  colorForStatus,
   importancePercentileRanks,
   nodeColor,
   type ColorPreset,
@@ -118,25 +120,32 @@ export function buildRenderModel(
   };
 
   const ranks = importancePercentileRanks(rawNodes, (n) => n.id, importanceOf);
+  const now = Date.now();
 
   const nodes: RenderNode[] = rawNodes.map((n) => {
     const isSelf = opts.selfKey != null && (n.key === opts.selfKey || n.id === opts.selfKey);
+    const stale = n.valid_to !== null && n.valid_to !== undefined;
+    // "You" always renders in the molten accent so the anchor pops; everything
+    // else follows the active "Color by" dimension. recency/status need
+    // per-node time/validity, so they're resolved here rather than in nodeColor.
+    let color: string;
+    if (isSelf) color = BRAND_RED;
+    else if (opts.colorPreset === "recency") color = colorForRecency(n.created_at, now);
+    else if (opts.colorPreset === "status") color = colorForStatus(stale);
+    else
+      color = nodeColor(opts.colorPreset, {
+        kind: n.kind,
+        community_id: n.community_id ?? null,
+        link_type: n.link_type ?? null,
+      });
     return {
       id: n.id,
       label: n.display_label || n.summary || n.key || n.id,
       importance: ranks.get(n.id) ?? 0.3,
-      // "You" always renders in the molten accent so the anchor pops on the
-      // mono field; everything else follows the active color preset.
-      color: isSelf
-        ? BRAND_RED
-        : nodeColor(opts.colorPreset, {
-            kind: n.kind,
-            community_id: n.community_id ?? null,
-            link_type: n.link_type ?? null,
-          }),
+      color,
       kind: n.kind,
       communityId: n.community_id ?? null,
-      stale: n.valid_to !== null && n.valid_to !== undefined,
+      stale,
       isSelf,
     };
   });

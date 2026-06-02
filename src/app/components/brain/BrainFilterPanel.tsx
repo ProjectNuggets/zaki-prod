@@ -9,6 +9,16 @@ import { BRAIN_LINK_TYPES } from "@/lib/api";
 import type { ColorPreset } from "./brainColors";
 import { LINK_TYPE_COLOR } from "./brainColors";
 
+// "Color by" dimensions surfaced in the rail (link_type colors edges, not nodes,
+// so it isn't offered here). Theme leads — it's the default and most legible.
+const COLOR_BY_OPTIONS: ReadonlyArray<{ id: ColorPreset; label: string }> = [
+  { id: "community", label: "Theme" },
+  { id: "kind", label: "Kind" },
+  { id: "recency", label: "Recency" },
+  { id: "status", label: "Status" },
+  { id: "mono", label: "Mono" },
+];
+
 export interface BrainFilters {
   excludeOrphans: boolean;
   linkTypes: string[]; // empty = all
@@ -50,7 +60,9 @@ export const DEFAULT_FILTERS: BrainFilters = {
   // kind gives them organization for free — facts about you (red),
   // recent activity (teal), conversation excerpts (warm neutral). The
   // mono preset is still available as a deliberate aesthetic choice.
-  colorPreset: "mono",
+  // Default to Theme (LLM clusters) so the graph opens as labeled, colored
+  // regions — the #1 "perceive your data" lever (was mono → no color meaning).
+  colorPreset: "community",
   semanticEdgeThreshold: 0.85,
   nodeRepulsion: 8000,
   idealEdgeLength: 120,
@@ -153,21 +165,21 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
         )}
       </Section>
 
-      <Section title={t("brain.filterPanel.colors", { defaultValue: "Colors" })}>
+      <Section title={t("brain.filterPanel.colorBy", { defaultValue: "Color by" })}>
         <div className="flex flex-wrap gap-1">
-          {(["mono", "community", "link_type", "kind"] as ColorPreset[]).map((p) => (
+          {COLOR_BY_OPTIONS.map(({ id, label }) => (
             <button
-              key={p}
+              key={id}
               type="button"
-              onClick={() => set("colorPreset", p)}
-              className={`flex-1 rounded-[2px] border px-2 py-1 text-xs capitalize ${
-                filters.colorPreset === p
+              onClick={() => set("colorPreset", id)}
+              className={`flex-1 rounded-[2px] border px-2 py-1 text-xs ${
+                filters.colorPreset === id
                   ? "border-zaki-brand bg-zaki-brand-10 text-white/85"
                   : "border-white/10 text-white/55 hover:border-white/40"
               }`}
-              data-testid={`brain-color-preset-${p}`}
+              data-testid={`brain-color-preset-${id}`}
             >
-              {p === "link_type" ? "link type" : p}
+              {t(`brain.filterPanel.colorBy.${id}`, { defaultValue: label })}
             </button>
           ))}
         </div>

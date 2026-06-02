@@ -20,7 +20,18 @@ import { BrainOrphanRail } from "./BrainOrphanRail";
 import { BrainCommunityLegend } from "./BrainCommunityLegend";
 import { BrainTimeScrubber } from "./BrainTimeScrubber";
 import { BrainInsightsStrip } from "./BrainInsightsStrip";
-import { KIND_COLOR, KIND_LABEL } from "./brainColors";
+import {
+  colorForCommunity,
+  KIND_COLOR,
+  KIND_LABEL,
+  RECENCY_COLOR,
+  RECENCY_LABEL,
+  recencyBucket,
+  STATUS_COLOR,
+  STATUS_LABEL,
+  type ColorPreset,
+  type RecencyBucket,
+} from "./brainColors";
 import { V2Badge, V2StatusStrip, V2Tabs } from "@/app/components/v2";
 import type { BrainGraphNode } from "@/lib/api";
 
@@ -501,8 +512,11 @@ export function BrainPage() {
                 );
               })()}
             </div>
-            {filters.colorPreset === "kind" ? (
-              <KindLegend nodes={initialGraphQuery.data?.nodes ?? []} />
+            {filters.colorPreset !== "mono" ? (
+              <BrainColorLegend
+                colorPreset={filters.colorPreset}
+                nodes={initialGraphQuery.data?.nodes ?? []}
+              />
             ) : null}
           </div>
 
@@ -788,30 +802,88 @@ function BrainDetailSummary({
 // meaning at a glance. Order is fixed (core first because it's the
 // "you" identity layer); kinds with zero visible nodes hide so the
 // strip stays compact on narrow viewports.
-function KindLegend({ nodes }: { nodes: Array<{ kind?: string }> }) {
-  const counts: Record<string, number> = {};
-  for (const n of nodes) {
-    const k = String(n.kind || "");
-    if (!k) continue;
-    counts[k] = (counts[k] || 0) + 1;
+// Legend for the active "Color by" dimension — turns the colors into meaning.
+// Derives entries from the rendered nodes (kinds/communities present, recency
+// buckets, live/archived counts) so the swatches always match what's on screen.
+type LegendNode = {
+  kind?: string;
+  community_id?: number | null;
+  community_name?: string | null;
+  created_at?: number;
+  valid_to?: number | null;
+};
+const LEGEND_CODENAME = /\b(nullalis|null[\s_-]?alis|panther|neptune)\b/i;
+
+function legendItems(
+  colorPreset: ColorPreset,
+  nodes: LegendNode[],
+): Array<{ key: string; color: string; label: string; count: number }> {
+  if (colorPreset === "kind") {
+    const counts: Record<string, number> = {};
+    for (const n of nodes) {
+      const k = String(n.kind || "");
+      if (k) counts[k] = (counts[k] || 0) + 1;
+    }
+    return ["core", "daily", "conversation"]
+      .filter((k) => (counts[k] ?? 0) > 0)
+      .map((k) => ({ key: k, color: KIND_COLOR[k] ?? "#6b7280", label: KIND_LABEL[k] ?? k, count: counts[k]! }));
   }
-  const order = ["core", "daily", "conversation"];
-  const visible = order.filter((k) => (counts[k] ?? 0) > 0);
-  if (visible.length === 0) return null;
+  if (colorPreset === "recency") {
+    const now = Date.now();
+    const counts: Record<RecencyBucket, number> = { week: 0, month: 0, older: 0 };
+    for (const n of nodes) if (typeof n.created_at === "number") counts[recencyBucket(n.created_at, now)]++;
+    return (["week", "month", "older"] as RecencyBucket[])
+      .filter((b) => counts[b] > 0)
+      .map((b) => ({ key: b, color: RECENCY_COLOR[b], label: RECENCY_LABEL[b], count: counts[b] }));
+  }
+  if (colorPreset === "status") {
+    let live = 0;
+    let archived = 0;
+    for (const n of nodes) (n.valid_to != null ? archived++ : live++);
+    const out: Array<{ key: string; color: string; label: string; count: number }> = [];
+    if (live) out.push({ key: "live", color: STATUS_COLOR.live, label: STATUS_LABEL.live, count: live });
+    if (archived)
+      out.push({ key: "archived", color: STATUS_COLOR.archived, label: STATUS_LABEL.archived, count: archived });
+    return out;
+  }
+  if (colorPreset === "community") {
+    const map = new Map<number, { name: string; count: number }>();
+    for (const n of nodes) {
+      const c = n.community_id;
+      if (c == null) continue;
+      const cur = map.get(c) ?? { name: n.community_name || "", count: 0 };
+      cur.count++;
+      if (n.community_name) cur.name = n.community_name;
+      map.set(c, cur);
+    }
+    // The legend highlights real LLM-named themes; "Cluster 19716777" fallbacks
+    // (and internal codenames) are still colored on the canvas but skipped here.
+    const isFallback = (name: string) =>
+      !name || /^Cluster \d+$/.test(name) || LEGEND_CODENAME.test(name);
+    return [...map.entries()]
+      .filter(([, v]) => !isFallback(v.name))
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 8)
+      .map(([id, v]) => ({ key: String(id), color: colorForCommunity(id), label: v.name, count: v.count }));
+  }
+  return [];
+}
+
+function BrainColorLegend({ colorPreset, nodes }: { colorPreset: ColorPreset; nodes: LegendNode[] }) {
+  const items = legendItems(colorPreset, nodes);
+  if (items.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {visible.map((k) => (
+    <div className="flex flex-wrap items-center gap-2" data-testid="brain-color-legend">
+      {items.map((it) => (
         <span
-          key={k}
+          key={it.key}
           className="inline-flex items-center gap-1.5 rounded-[2px] border border-zaki-border bg-zaki-raised/60 px-2 py-0.5"
         >
-          <span
-            className="size-2 rounded-[1px]"
-            style={{ backgroundColor: KIND_COLOR[k] ?? "#6b7280" }}
-            aria-hidden="true"
-          />
-          <span className="text-zaki-text">{KIND_LABEL[k] ?? k}</span>
-          <span className="font-mono-ui text-zaki-muted">{counts[k]}</span>
+          <span className="size-2 rounded-[1px]" style={{ backgroundColor: it.color }} aria-hidden="true" />
+          <span className="max-w-[140px] truncate text-zaki-text" title={it.label}>
+            {it.label}
+          </span>
+          <span className="font-mono-ui text-zaki-muted">{it.count}</span>
         </span>
       ))}
     </div>
