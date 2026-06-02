@@ -2987,6 +2987,48 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   flex: 1;
 }
 
+/* Clusters-first scope breadcrumb (top of the display panel). */
+.zaki-galaxy-panel__scope {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--v2-hairline);
+}
+.zaki-galaxy-panel__scope-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--v2-ink-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zaki-galaxy-panel__scope-hint {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--v2-ink-3);
+}
+.zaki-galaxy-panel__scope-link,
+.zaki-galaxy-panel__scope-back {
+  align-self: flex-start;
+  padding: 0;
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--v2-accent);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.zaki-galaxy-panel__scope-link:hover,
+.zaki-galaxy-panel__scope-back:hover {
+  text-decoration: underline;
+}
+.zaki-galaxy-panel__scope-back {
+  color: var(--v2-ink-3);
+  margin-bottom: 2px;
+}
+
 /* Brain Galaxy memory detail — lives in the page detail-rail (not a canvas
    overlay), shown when a node is focused. */
 .zaki-galaxy-detail {

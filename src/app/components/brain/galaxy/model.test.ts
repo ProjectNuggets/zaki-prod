@@ -1,6 +1,23 @@
 import { describe, expect, it } from "@jest/globals";
-import type { BrainGraphResponse } from "@/lib/api";
-import { buildRenderModel } from "./model";
+import type { BrainCommunity, BrainGraphResponse } from "@/lib/api";
+import {
+  buildClusterOverviewModel,
+  buildRenderModel,
+  clusterNodeId,
+  filterGraphByCommunity,
+  parseClusterNodeId,
+} from "./model";
+
+function community(id: number, member_count: number, extra: Partial<BrainCommunity> = {}): BrainCommunity {
+  return {
+    community_id: id,
+    member_count,
+    generated_at: 0,
+    name: `Cluster ${id}`,
+    name_source: "fallback",
+    ...extra,
+  };
+}
 
 function graph(partial: Partial<BrainGraphResponse>): BrainGraphResponse {
   return {
@@ -90,5 +107,73 @@ describe("buildRenderModel", () => {
     const model = buildRenderModel(g, OPTS);
     expect(model.edges).toHaveLength(1);
     expect(model.edges[0]?.target).toBe("b");
+  });
+});
+
+describe("cluster overview (clusters-first)", () => {
+  it("round-trips a cluster node id", () => {
+    expect(parseClusterNodeId(clusterNodeId(42))).toBe(42);
+    expect(parseClusterNodeId("not-a-cluster")).toBeNull();
+    expect(parseClusterNodeId("cluster:NaNish")).toBeNull();
+  });
+
+  it("returns an empty model when there are no communities", () => {
+    expect(buildClusterOverviewModel(undefined)).toEqual({ nodes: [], edges: [] });
+    expect(buildClusterOverviewModel([])).toEqual({ nodes: [], edges: [] });
+  });
+
+  it("prefers LLM-named themes over larger fallback clusters", () => {
+    const model = buildClusterOverviewModel(
+      [
+        community(1, 99), // big but unnamed
+        community(2, 4, { name: "Orlando Travel", name_source: "llm" }),
+        community(3, 50), // unnamed
+      ],
+      2,
+    );
+    const labels = model.nodes.map((n) => n.label);
+    expect(labels[0]).toBe("Orlando Travel"); // named leads despite smaller count
+    expect(model.nodes).toHaveLength(2);
+    // the named one drilled-back resolves to its community id
+    expect(parseClusterNodeId(model.nodes[0]!.id)).toBe(2);
+  });
+
+  it("excludes zero-size clusters and internal codenames", () => {
+    const model = buildClusterOverviewModel([
+      community(1, 0, { name: "Empty", name_source: "llm" }),
+      community(2, 5, { name: "Nullalis internals", name_source: "llm" }),
+      community(3, 5, { name: "Travel", name_source: "llm" }),
+    ]);
+    expect(model.nodes.map((n) => n.label)).toEqual(["Travel"]);
+  });
+
+  it("sizes hubs by member count (largest shown = max importance)", () => {
+    const model = buildClusterOverviewModel([
+      community(1, 20, { name: "Big", name_source: "llm" }),
+      community(2, 5, { name: "Small", name_source: "llm" }),
+    ]);
+    const big = model.nodes.find((n) => n.label === "Big");
+    const small = model.nodes.find((n) => n.label === "Small");
+    expect(big!.importance).toBeGreaterThan(small!.importance);
+    expect(big!.importance).toBeCloseTo(1);
+  });
+});
+
+describe("filterGraphByCommunity", () => {
+  it("keeps only that community's members and their internal edges", () => {
+    const g = graph({
+      nodes: [
+        node("a", { community_id: 1 }),
+        node("b", { community_id: 1 }),
+        node("c", { community_id: 2 }),
+      ],
+      edges: [
+        { type: "session", source: "a", target: "b" }, // within community 1 → kept
+        { type: "session", source: "a", target: "c" }, // crosses → dropped
+      ] as BrainGraphResponse["edges"],
+    });
+    const filtered = filterGraphByCommunity(g, 1);
+    expect(filtered?.nodes.map((n) => n.id)).toEqual(["a", "b"]);
+    expect(filtered?.edges).toHaveLength(1);
   });
 });

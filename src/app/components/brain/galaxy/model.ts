@@ -1,7 +1,85 @@
-import type { BrainGraphEdge, BrainGraphNode, BrainGraphResponse } from "@/lib/api";
-import { BRAND_RED, importancePercentileRanks, nodeColor, type ColorPreset } from "../brainColors";
+import type { BrainCommunity, BrainGraphEdge, BrainGraphNode, BrainGraphResponse } from "@/lib/api";
+import {
+  BRAND_RED,
+  colorForCommunity,
+  importancePercentileRanks,
+  nodeColor,
+  type ColorPreset,
+} from "../brainColors";
 import { edgeRelevance } from "../graphMath";
 import type { RenderEdge, RenderModel, RenderNode } from "./engine/interface";
+
+// ── Cluster-overview ("clusters-first" default) ──────────────────────────────
+// The default Brain view is a constellation of ~12 LLM-named cluster hubs, not
+// the full corpus hairball (research: a global force-graph is eye-candy past
+// ~200 nodes; bounded/curated views drive daily return). A hub is just a
+// RenderNode the engine draws like any other — id-prefixed so a click can be
+// routed back to "drill into this cluster".
+
+export const CLUSTER_NODE_PREFIX = "cluster:";
+const CLUSTER_OVERVIEW_LIMIT = 12;
+// Internal project codenames must never surface as a user-facing cluster name
+// (mirrors BrainInsightsStrip's filter).
+const INTERNAL_CODENAME = /\b(nullalis|null[\s_-]?alis|panther|neptune)\b/i;
+
+export function clusterNodeId(communityId: number): string {
+  return `${CLUSTER_NODE_PREFIX}${communityId}`;
+}
+
+/** Returns the community id if `id` is a cluster hub node, else null. */
+export function parseClusterNodeId(id: string): number | null {
+  if (!id.startsWith(CLUSTER_NODE_PREFIX)) return null;
+  const n = Number(id.slice(CLUSTER_NODE_PREFIX.length));
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Top-N communities by size as hub super-nodes (radius ∝ √member_count). */
+export function buildClusterOverviewModel(
+  communities: readonly BrainCommunity[] | undefined,
+  limit: number = CLUSTER_OVERVIEW_LIMIT,
+): RenderModel {
+  const list = (communities ?? []).filter(
+    (c) => c.member_count > 0 && !INTERNAL_CODENAME.test(c.name),
+  );
+  if (list.length === 0) return { nodes: [], edges: [] };
+
+  // Prefer human-readable LLM-named themes ("Orlando Travel") over raw
+  // "Cluster 19716777" fallbacks — even when a fallback cluster is larger.
+  // Showing meaningless ids as the landing would defeat clusters-first; the
+  // full corpus is one tap away via "Explore everything".
+  const byCount = (a: BrainCommunity, b: BrainCommunity) => b.member_count - a.member_count;
+  const named = list.filter((c) => c.name_source === "llm").sort(byCount);
+  const unnamed = list.filter((c) => c.name_source !== "llm").sort(byCount);
+  const top = [...named, ...unnamed].slice(0, limit);
+  const maxCount = Math.max(...top.map((c) => c.member_count));
+
+  const nodes: RenderNode[] = top.map((c) => ({
+    id: clusterNodeId(c.community_id),
+    label: c.name,
+    // √-scaled so a 10× larger cluster reads as bigger without dwarfing the
+    // rest; floored at 0.5 so even small hubs stay legible + clickable.
+    importance: maxCount > 0 ? 0.5 + 0.5 * Math.sqrt(c.member_count / maxCount) : 0.7,
+    color: colorForCommunity(c.community_id),
+    kind: "cluster",
+    communityId: c.community_id,
+    stale: false,
+    isSelf: false,
+  }));
+
+  return { nodes, edges: [] };
+}
+
+/** Narrow a graph response to one community's members (client-side drill-in). */
+export function filterGraphByCommunity(
+  graph: BrainGraphResponse | undefined,
+  communityId: number,
+): BrainGraphResponse | undefined {
+  if (!graph) return graph;
+  const nodes = graph.nodes.filter((n) => (n.community_id ?? null) === communityId);
+  const ids = new Set(nodes.map((n) => n.id));
+  const edges = graph.edges.filter((e) => ids.has(e.source) && ids.has(e.target));
+  return { ...graph, nodes, edges };
+}
 
 export interface BuildModelOptions {
   colorPreset: ColorPreset;

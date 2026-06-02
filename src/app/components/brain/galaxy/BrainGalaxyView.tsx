@@ -1,10 +1,23 @@
 import { forwardRef, useCallback, useEffect, useMemo } from "react";
-import { useBrainGraph } from "@/queries";
+import { useBrainCommunities, useBrainGraph } from "@/queries";
 import type { BrainFilters } from "../BrainFilterPanel";
-import { buildRenderModel } from "./model";
+import {
+  buildClusterOverviewModel,
+  buildRenderModel,
+  filterGraphByCommunity,
+  parseClusterNodeId,
+} from "./model";
 import { GalaxyRenderer, type GalaxyHandle } from "./GalaxyRenderer";
 import { clampQuality, prefersReducedMotion } from "./engine/lod";
 import type { BrainViewMode, GraphRendererOptions, RenderQuality } from "./engine/interface";
+
+// What the canvas is scoped to. Default is "overview" (the cluster constellation
+// — clusters-first). Tapping a hub drills into "cluster"; "all" is the opt-in
+// full-corpus galaxy ("Explore everything").
+export type GalaxyScope =
+  | { kind: "overview" }
+  | { kind: "cluster"; id: number; name: string }
+  | { kind: "all" };
 
 export interface BrainGalaxyViewProps {
   userId: string;
@@ -23,6 +36,9 @@ export interface BrainGalaxyViewProps {
   focusId: string | null;
   /** Emits the focused node id (for the engine) and its memory key (for detail). */
   onFocusChange: (id: string | null, key: string | null) => void;
+  /** Clusters-first scope: overview hubs → drill into a cluster → full galaxy. */
+  scope: GalaxyScope;
+  onScopeChange: (scope: GalaxyScope) => void;
 }
 
 // WebGL renderer container — the galaxy counterpart of BrainGraphView. Owns no
@@ -31,7 +47,21 @@ export interface BrainGalaxyViewProps {
 // search/highlight, and forwards the imperative handle (fit/relayout).
 export const BrainGalaxyView = forwardRef<GalaxyHandle, BrainGalaxyViewProps>(
   function BrainGalaxyView(
-    { userId, selectedIds, onSelectionChange, filters, selfKey, highlightKeys, view, fx, depth, focusId, onFocusChange },
+    {
+      userId,
+      selectedIds,
+      onSelectionChange,
+      filters,
+      selfKey,
+      highlightKeys,
+      view,
+      fx,
+      depth,
+      focusId,
+      onFocusChange,
+      scope,
+      onScopeChange,
+    },
     ref,
   ) {
     const graph = useBrainGraph(userId, {
@@ -40,16 +70,42 @@ export const BrainGalaxyView = forwardRef<GalaxyHandle, BrainGalaxyViewProps>(
       link_types: filters.linkTypes.length > 0 ? filters.linkTypes.join(",") : undefined,
       semantic_min_weight: filters.semanticEdgeThreshold,
     });
+    const communities = useBrainCommunities(userId);
 
-    const model = useMemo(
-      () =>
-        buildRenderModel(graph.data, {
-          colorPreset: filters.colorPreset,
-          selfKey,
-          semanticEdgeThreshold: filters.semanticEdgeThreshold,
-        }),
-      [graph.data, filters.colorPreset, filters.semanticEdgeThreshold, selfKey],
+    // Scope picks the data the engine draws. Overview → cluster hubs; cluster →
+    // that community's members (client-side filter of the one graph fetch); all →
+    // the full corpus. Overview falls back to the full galaxy when no
+    // communities have been computed yet, so the canvas is never empty.
+    const overviewModel = useMemo(
+      () => buildClusterOverviewModel(communities.data?.communities),
+      [communities.data],
     );
+    // True only when hubs are actually on screen — gates click-as-drill-in.
+    const isOverview = scope.kind === "overview" && overviewModel.nodes.length > 0;
+
+    const model = useMemo(() => {
+      if (scope.kind === "overview") {
+        // Stay blank while communities load (don't flash the full hairball);
+        // if there are genuinely no clusters, fall back to the full corpus.
+        if (communities.isLoading) return { nodes: [], edges: [] };
+        if (overviewModel.nodes.length > 0) return overviewModel;
+      }
+      const source =
+        scope.kind === "cluster" ? filterGraphByCommunity(graph.data, scope.id) : graph.data;
+      return buildRenderModel(source, {
+        colorPreset: filters.colorPreset,
+        selfKey,
+        semanticEdgeThreshold: filters.semanticEdgeThreshold,
+      });
+    }, [
+      scope,
+      communities.isLoading,
+      overviewModel,
+      graph.data,
+      filters.colorPreset,
+      filters.semanticEdgeThreshold,
+      selfKey,
+    ]);
 
     const keyIndex = useMemo(() => {
       const map = new Map<string, string>();
@@ -90,6 +146,15 @@ export const BrainGalaxyView = forwardRef<GalaxyHandle, BrainGalaxyViewProps>(
 
     const handleSelect = useCallback(
       (id: string, additive: boolean) => {
+        // In the overview, a click is "drill into this cluster", not a select.
+        if (isOverview) {
+          const cid = parseClusterNodeId(id);
+          if (cid != null) {
+            const c = communities.data?.communities.find((x) => x.community_id === cid);
+            onScopeChange({ kind: "cluster", id: cid, name: c?.name ?? `Cluster ${cid}` });
+          }
+          return;
+        }
         if (additive) {
           onSelectionChange(
             selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id],
@@ -99,7 +164,16 @@ export const BrainGalaxyView = forwardRef<GalaxyHandle, BrainGalaxyViewProps>(
         const next = focusId === id ? null : id;
         onFocusChange(next, next ? (keyByNodeId.get(next) ?? next) : null);
       },
-      [onSelectionChange, selectedIds, focusId, onFocusChange, keyByNodeId],
+      [
+        isOverview,
+        communities.data,
+        onScopeChange,
+        onSelectionChange,
+        selectedIds,
+        focusId,
+        onFocusChange,
+        keyByNodeId,
+      ],
     );
 
     const reducedMotion = useMemo(() => prefersReducedMotion(), []);

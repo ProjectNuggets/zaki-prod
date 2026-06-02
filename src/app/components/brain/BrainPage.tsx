@@ -8,7 +8,7 @@ import { SkeletonBrainPage } from "@/app/components/ui/skeleton";
 import { BrainEmptyState } from "./BrainEmptyState";
 import { BrainSemanticDegradedBanner } from "./BrainSemanticDegradedBanner";
 import { BrainGraphView } from "./BrainGraphView";
-import { BrainGalaxyView } from "./galaxy/BrainGalaxyView";
+import { BrainGalaxyView, type GalaxyScope } from "./galaxy/BrainGalaxyView";
 import { BrainDisplayPanel } from "./galaxy/BrainDisplayPanel";
 import { BrainDetailPanel } from "./galaxy/BrainDetailPanel";
 import { useGalaxyFlag } from "./galaxy/flag";
@@ -225,6 +225,16 @@ export function BrainPage() {
     setGalaxyFocusKey(key);
   }, []);
   const clearGalaxyFocus = useCallback(() => handleGalaxyFocus(null, null), [handleGalaxyFocus]);
+  // Clusters-first: land on the cluster-hub overview, not the full hairball.
+  const [galaxyScope, setGalaxyScope] = useState<GalaxyScope>({ kind: "overview" });
+  const changeGalaxyScope = useCallback(
+    (scope: GalaxyScope) => {
+      setGalaxyScope(scope);
+      setGalaxyFocusId(null);
+      setGalaxyFocusKey(null);
+    },
+    [],
+  );
 
   const selectedNodes = useMemo(
     () =>
@@ -376,6 +386,8 @@ export function BrainPage() {
                 onDepthChange={setGalaxyDepth}
                 onFit={() => galaxyRef.current?.fit()}
                 onRelayout={() => galaxyRef.current?.relayout()}
+                scope={galaxyScope}
+                onScopeChange={changeGalaxyScope}
               />
             ) : null}
             <BrainFilterPanel filters={filters} onChange={setFilters} showForces={!galaxyEnabled} />
@@ -539,6 +551,8 @@ export function BrainPage() {
                 depth={galaxyDepth}
                 focusId={galaxyFocusId}
                 onFocusChange={handleGalaxyFocus}
+                scope={galaxyScope}
+                onScopeChange={changeGalaxyScope}
               />
             ) : (
               <BrainGraphView
