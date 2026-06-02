@@ -87,8 +87,8 @@ export function BrainPage() {
   const initialTab: BrainTab = (() => {
     const requested = searchParams.get("tab");
     if (galaxyEnabled) {
-      if (requested === "timeline") return "timeline";
-      // legacy ?tab=graph (and ?galaxy=1 deep links) land on Explore.
+      // New-brain has two surfaces: Home (overview + timeline merged) and
+      // Explore (the graph). legacy ?tab=graph and galaxy deep-links → Explore.
       if (requested === "explore" || requested === "graph") return "explore";
       return "home";
     }
@@ -364,7 +364,6 @@ export function BrainPage() {
             galaxyEnabled
               ? [
                   { id: "home", label: t("brain.tabs.home", { defaultValue: "Home" }) },
-                  { id: "timeline", label: t("brain.tabs.timeline") },
                   { id: "explore", label: t("brain.tabs.explore", { defaultValue: "Explore" }) },
                 ]
               : [

@@ -3,23 +3,18 @@ import type { BrainGraphNode } from "@/lib/api";
 import { useBrainCommunities, useBrainGraph } from "@/queries";
 import { colorForCommunity } from "../brainColors";
 import { BrainDetailPanel } from "./BrainDetailPanel";
+import { BrainTimelineView } from "../BrainTimelineView";
 
 // Brain Home — the search-first landing surface (replaces the graph as the
 // default view). Research: a force-graph is decorative at thousands of nodes;
 // daily value comes from a clear, observable overview. So we lead with theme
-// cards (counts + samples) and a recently-learned feed, with search as the
-// front door. The galaxy lives behind an "Explore" tab.
+// cards (counts + samples) and the timeline ("what ZAKI learned") in one
+// surface, with search as the front door. The galaxy lives behind "Explore".
 
 const INTERNAL_CODENAME = /\b(nullalis|null[\s_-]?alis|panther|neptune)\b/i;
 // Overview stays bounded (progressive disclosure) — showing all 250+ clusters
-// would just be a hairball of cards. Search reaches the rest; full faceted
-// browse arrives in BH2.
+// would just be a hairball of cards. Search reaches the rest.
 const VISIBLE_THEME_LIMIT = 24;
-
-// created_at may arrive in seconds or milliseconds depending on the source.
-function toMillis(ts: number): number {
-  return ts < 1e12 ? ts * 1000 : ts;
-}
 
 function labelOf(n: BrainGraphNode): string {
   return n.display_label || n.summary || n.key || n.id;
@@ -112,11 +107,6 @@ export function BrainHome({ userId }: BrainHomeProps) {
   const visibleCards = searching ? matchedCards : matchedCards.slice(0, VISIBLE_THEME_LIMIT);
   const hiddenCount = searching ? 0 : Math.max(0, matchedCards.length - visibleCards.length);
 
-  const recent = useMemo(
-    () => [...nodes].sort((a, b) => toMillis(b.created_at) - toMillis(a.created_at)).slice(0, 8),
-    [nodes],
-  );
-
   const loading = communities.isLoading || graph.isLoading;
 
   return (
@@ -200,30 +190,11 @@ export function BrainHome({ userId }: BrainHomeProps) {
         )}
       </section>
 
-      <section className="zaki-brain-home__section" aria-label="Recently learned">
-        <h2 className="zaki-brain-home__heading">Recently learned</h2>
-        {loading ? (
-          <p className="zaki-brain-home__muted">Loading…</p>
-        ) : recent.length === 0 ? (
-          <p className="zaki-brain-home__muted">Nothing yet.</p>
-        ) : (
-          <ul className="zaki-brain-home__feed">
-            {recent.map((n) => (
-              <li key={n.id}>
-                <button
-                  type="button"
-                  className="zaki-brain-home__feed-item"
-                  onClick={() => setOpenKey(n.key ?? n.id)}
-                >
-                  <span className="zaki-brain-home__feed-label">{labelOf(n)}</span>
-                  {n.valid_to != null && (
-                    <span className="zaki-brain-home__tag">archived</span>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+      <section className="zaki-brain-home__section" aria-label="Timeline">
+        <h2 className="zaki-brain-home__heading">Timeline</h2>
+        {/* Home and Timeline are the same idea ("what ZAKI knows / learned"),
+            so the full timeline lives here rather than in a separate tab. */}
+        <BrainTimelineView userId={userId} />
       </section>
 
       {openKey && (
