@@ -24,6 +24,7 @@ export interface EdgeLines {
 // color comes from the ink ramp — typed edges read brighter, and intensity
 // scales with relevance — kept monochrome (BRAND_LAW: accent is reserved for
 // the focus threads in P3). Additive so dense bundles glow under bloom.
+// Bow apex offset perpendicular to the chord, as a fraction of the edge length.
 const BOW = 0.18;
 
 export function createEdgeLines(model: RenderModel, segments: number): EdgeLines {
@@ -98,14 +99,14 @@ export function createEdgeLines(model: RenderModel, segments: number): EdgeLines
       b.set(t?.x ?? 0, t?.y ?? 0, t?.z ?? 0);
       dir.copy(b).sub(a);
       const len = dir.length();
-      const base0 = i * vertsPerEdge * 3;
+      const base = i * vertsPerEdge * 3;
       if (len < 1e-6) {
         // Degenerate (self-loop / coincident endpoints): collapse to a point so
         // normalize() can't emit NaN and poison the buffer.
         for (let v = 0; v < vertsPerEdge; v++) {
-          positions[base0 + v * 3] = a.x;
-          positions[base0 + v * 3 + 1] = a.y;
-          positions[base0 + v * 3 + 2] = a.z;
+          positions[base + v * 3] = a.x;
+          positions[base + v * 3 + 1] = a.y;
+          positions[base + v * 3 + 2] = a.z;
         }
         continue;
       }
@@ -116,11 +117,10 @@ export function createEdgeLines(model: RenderModel, segments: number): EdgeLines
       perp.normalize().multiplyScalar(len * BOW);
       ctrl.copy(mid).add(perp);
 
-      const base3 = i * vertsPerEdge * 3;
       for (let seg = 0; seg < segs; seg++) {
         pointAt(seg / segs, p0);
         pointAt((seg + 1) / segs, p1);
-        const o = base3 + seg * 6;
+        const o = base + seg * 6;
         positions[o] = p0.x;
         positions[o + 1] = p0.y;
         positions[o + 2] = p0.z;

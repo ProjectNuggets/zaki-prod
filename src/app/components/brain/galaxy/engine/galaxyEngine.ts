@@ -53,9 +53,10 @@ export function createGalaxyEngine(
   controls.zoomToCursor = true;
   controls.minDistance = 40;
   controls.maxDistance = 6000;
-  controls.addEventListener("change", () => {
+  const onControlsChange = () => {
     if (raf === 0) renderFrame();
-  });
+  };
+  controls.addEventListener("change", onControlsChange);
 
   let options = initialOptions;
   let model: RenderModel = { nodes: [], edges: [] };
@@ -496,6 +497,7 @@ export function createGalaxyEngine(
       renderer.domElement.removeEventListener("pointerdown", onPointerDown);
       renderer.domElement.removeEventListener("pointermove", onPointerMove);
       renderer.domElement.removeEventListener("click", onClick);
+      controls.removeEventListener("change", onControlsChange);
       controls.dispose();
       clearGraph();
       sceneBundle.dispose();

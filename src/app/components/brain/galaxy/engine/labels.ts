@@ -50,7 +50,10 @@ export function createLabelLayer(maxLabels: number): LabelLayer {
     mesh.outlineWidth = "7%";
     mesh.outlineColor = 0x000000;
     mesh.outlineOpacity = 0.65;
-    mesh.material.depthTest = false;
+    // Drawn after the graph; the scene writes no depth (additive nodes/edges +
+    // depthWrite:false), so renderOrder alone keeps labels legibly on top.
+    // (Don't touch mesh.material here: with an outline, troika's `material` is
+    // an array, so property writes silently no-op.)
     mesh.renderOrder = 10;
     mesh.visible = false;
     mesh.sync();
@@ -91,11 +94,15 @@ export function createLabelLayer(maxLabels: number): LabelLayer {
 
   function dispose(): void {
     for (const slot of slots) {
-      // troika's Text.dispose() frees geometry; also dispose the material when
-      // it's a disposable (troika's material shape varies by version — guard so
-      // a missing dispose() never crashes teardown).
-      const mat = slot.mesh.material as { dispose?: () => void } | null | undefined;
-      if (mat && typeof mat.dispose === "function") mat.dispose();
+      // troika's Text.dispose() frees geometry but not the derived material(s).
+      // With an outline, `material` is an array [outline, main]; otherwise a
+      // single material. Dispose whatever disposables are present.
+      const raw = slot.mesh.material as unknown;
+      const mats = Array.isArray(raw) ? raw : [raw];
+      for (const m of mats) {
+        const d = (m as { dispose?: () => void } | null | undefined)?.dispose;
+        if (typeof d === "function") d.call(m);
+      }
       slot.mesh.dispose();
     }
   }
