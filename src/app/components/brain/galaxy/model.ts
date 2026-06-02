@@ -1,5 +1,5 @@
 import type { BrainGraphEdge, BrainGraphNode, BrainGraphResponse } from "@/lib/api";
-import { importancePercentileRanks, nodeColor, type ColorPreset } from "../brainColors";
+import { BRAND_RED, importancePercentileRanks, nodeColor, type ColorPreset } from "../brainColors";
 import { edgeRelevance } from "../graphMath";
 import type { RenderEdge, RenderModel, RenderNode } from "./engine/interface";
 
@@ -41,20 +41,27 @@ export function buildRenderModel(
 
   const ranks = importancePercentileRanks(rawNodes, (n) => n.id, importanceOf);
 
-  const nodes: RenderNode[] = rawNodes.map((n) => ({
-    id: n.id,
-    label: n.display_label || n.summary || n.key || n.id,
-    importance: ranks.get(n.id) ?? 0.3,
-    color: nodeColor(opts.colorPreset, {
+  const nodes: RenderNode[] = rawNodes.map((n) => {
+    const isSelf = opts.selfKey != null && (n.key === opts.selfKey || n.id === opts.selfKey);
+    return {
+      id: n.id,
+      label: n.display_label || n.summary || n.key || n.id,
+      importance: ranks.get(n.id) ?? 0.3,
+      // "You" always renders in the molten accent so the anchor pops on the
+      // mono field; everything else follows the active color preset.
+      color: isSelf
+        ? BRAND_RED
+        : nodeColor(opts.colorPreset, {
+            kind: n.kind,
+            community_id: n.community_id ?? null,
+            link_type: n.link_type ?? null,
+          }),
       kind: n.kind,
-      community_id: n.community_id ?? null,
-      link_type: n.link_type ?? null,
-    }),
-    kind: n.kind,
-    communityId: n.community_id ?? null,
-    stale: n.valid_to !== null && n.valid_to !== undefined,
-    isSelf: opts.selfKey != null && (n.key === opts.selfKey || n.id === opts.selfKey),
-  }));
+      communityId: n.community_id ?? null,
+      stale: n.valid_to !== null && n.valid_to !== undefined,
+      isSelf,
+    };
+  });
 
   const present = new Set(nodes.map((n) => n.id));
   const edges: RenderEdge[] = [];

@@ -49,7 +49,7 @@ export const DEFAULT_FILTERS: BrainFilters = {
   // kind gives them organization for free — facts about you (red),
   // recent activity (teal), conversation excerpts (warm neutral). The
   // mono preset is still available as a deliberate aesthetic choice.
-  colorPreset: "kind",
+  colorPreset: "mono",
   semanticEdgeThreshold: 0.85,
   nodeRepulsion: 8000,
   idealEdgeLength: 120,
