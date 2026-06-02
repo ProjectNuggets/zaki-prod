@@ -66,9 +66,15 @@ export const DEFAULT_FILTERS: BrainFilters = {
 interface Props {
   filters: BrainFilters;
   onChange: (next: BrainFilters) => void;
+  /**
+   * The Forces sliders drive the cytoscape (cose-bilkent) layout. The galaxy
+   * renderer runs its own d3-force-3d sim and ignores them, so hide the section
+   * on that path rather than show dead controls.
+   */
+  showForces?: boolean;
 }
 
-export function BrainFilterPanel({ filters, onChange }: Props) {
+export function BrainFilterPanel({ filters, onChange, showForces = true }: Props) {
   const { t } = useTranslation();
   const set = <K extends keyof BrainFilters>(key: K, value: BrainFilters[K]) =>
     onChange({ ...filters, [key]: value });
@@ -203,40 +209,42 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
         />
       </Section>
 
-      <Section title={t("brain.filterPanel.forces", { defaultValue: "Forces" })}>
-        <SliderRow
-          label={t("brain.filterPanel.repel", { defaultValue: "Repel force" })}
-          min={1000}
-          max={20000}
-          step={500}
-          value={filters.nodeRepulsion}
-          onChange={(v) => set("nodeRepulsion", v)}
-        />
-        <SliderRow
-          label={t("brain.filterPanel.linkDistance", { defaultValue: "Link distance" })}
-          min={40}
-          max={300}
-          step={10}
-          value={filters.idealEdgeLength}
-          onChange={(v) => set("idealEdgeLength", v)}
-        />
-        <SliderRow
-          label={t("brain.filterPanel.center", { defaultValue: "Center force" })}
-          min={0}
-          max={1.5}
-          step={0.05}
-          value={filters.gravity}
-          onChange={(v) => set("gravity", v)}
-        />
-        <SliderRow
-          label={t("brain.filterPanel.linkForce", { defaultValue: "Link force" })}
-          min={0.05}
-          max={1.5}
-          step={0.05}
-          value={filters.edgeElasticity}
-          onChange={(v) => set("edgeElasticity", v)}
-        />
-      </Section>
+      {showForces && (
+        <Section title={t("brain.filterPanel.forces", { defaultValue: "Forces" })}>
+          <SliderRow
+            label={t("brain.filterPanel.repel", { defaultValue: "Repel force" })}
+            min={1000}
+            max={20000}
+            step={500}
+            value={filters.nodeRepulsion}
+            onChange={(v) => set("nodeRepulsion", v)}
+          />
+          <SliderRow
+            label={t("brain.filterPanel.linkDistance", { defaultValue: "Link distance" })}
+            min={40}
+            max={300}
+            step={10}
+            value={filters.idealEdgeLength}
+            onChange={(v) => set("idealEdgeLength", v)}
+          />
+          <SliderRow
+            label={t("brain.filterPanel.center", { defaultValue: "Center force" })}
+            min={0}
+            max={1.5}
+            step={0.05}
+            value={filters.gravity}
+            onChange={(v) => set("gravity", v)}
+          />
+          <SliderRow
+            label={t("brain.filterPanel.linkForce", { defaultValue: "Link force" })}
+            min={0.05}
+            max={1.5}
+            step={0.05}
+            value={filters.edgeElasticity}
+            onChange={(v) => set("edgeElasticity", v)}
+          />
+        </Section>
+      )}
     </aside>
   );
 }

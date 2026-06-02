@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Boxes, CircleDot, Shield, SlidersHorizontal, X } from "lucide-react";
@@ -9,7 +9,12 @@ import { BrainEmptyState } from "./BrainEmptyState";
 import { BrainSemanticDegradedBanner } from "./BrainSemanticDegradedBanner";
 import { BrainGraphView } from "./BrainGraphView";
 import { BrainGalaxyView } from "./galaxy/BrainGalaxyView";
+import { BrainDisplayPanel } from "./galaxy/BrainDisplayPanel";
+import { BrainDetailPanel } from "./galaxy/BrainDetailPanel";
 import { useGalaxyFlag } from "./galaxy/flag";
+import { DEFAULT_FX } from "./galaxy/engine/lod";
+import type { GalaxyHandle } from "./galaxy/GalaxyRenderer";
+import type { BrainViewMode, RenderQuality } from "./galaxy/engine/interface";
 import { BrainTimelineView } from "./BrainTimelineView";
 import { BrainComposeModal } from "./BrainComposeModal";
 import { BrainFilterPanel, DEFAULT_FILTERS, type BrainFilters } from "./BrainFilterPanel";
@@ -200,6 +205,27 @@ export function BrainPage() {
   // reaches parity with the cytoscape view; ?galaxy=1 or localStorage enables.
   const galaxyEnabled = useGalaxyFlag();
 
+  // Galaxy view state lives here (not inside the renderer) so its chrome uses
+  // the page's real slots: the display panel in the filters-rail, the memory
+  // detail in the detail-rail.
+  const [galaxyView, setGalaxyView] = useState<BrainViewMode>("spatial");
+  const [galaxyFx, setGalaxyFx] = useState<RenderQuality>(DEFAULT_FX);
+  const [galaxyDepth, setGalaxyDepth] = useState(1);
+  // id drives the engine ember; key drives the detail fetch. The renderer emits
+  // both (it resolves the key from the same graph it renders, link_types applied)
+  // so the detail never falls back to a stale id and 404s.
+  const [galaxyFocusId, setGalaxyFocusId] = useState<string | null>(null);
+  const [galaxyFocusKey, setGalaxyFocusKey] = useState<string | null>(null);
+  const galaxyRef = useRef<GalaxyHandle>(null);
+  const toggleGalaxyFx = useCallback((key: keyof RenderQuality) => {
+    setGalaxyFx((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+  const handleGalaxyFocus = useCallback((id: string | null, key: string | null) => {
+    setGalaxyFocusId(id);
+    setGalaxyFocusKey(key);
+  }, []);
+  const clearGalaxyFocus = useCallback(() => handleGalaxyFocus(null, null), [handleGalaxyFocus]);
+
   const selectedNodes = useMemo(
     () =>
       (initialGraphQuery.data?.nodes ?? []).filter((n) =>
@@ -340,7 +366,19 @@ export function BrainPage() {
         */
         <div data-testid="brain-graph-slot" className="zaki-brain-v2__graph-shell">
           <aside className="zaki-brain-v2__filters-rail" aria-label={t("brain.panel.filters", { defaultValue: "Filters" })}>
-            <BrainFilterPanel filters={filters} onChange={setFilters} />
+            {galaxyEnabled ? (
+              <BrainDisplayPanel
+                view={galaxyView}
+                onViewChange={setGalaxyView}
+                fx={galaxyFx}
+                onToggleFx={toggleGalaxyFx}
+                depth={galaxyDepth}
+                onDepthChange={setGalaxyDepth}
+                onFit={() => galaxyRef.current?.fit()}
+                onRelayout={() => galaxyRef.current?.relayout()}
+              />
+            ) : null}
+            <BrainFilterPanel filters={filters} onChange={setFilters} showForces={!galaxyEnabled} />
           </aside>
           <section className="zaki-brain-v2__graph-main">
           {/* Search bar — debounced into ?search= */}
@@ -489,12 +527,18 @@ export function BrainPage() {
           <div className="zaki-brain-v2__canvas-frame">
             {galaxyEnabled ? (
               <BrainGalaxyView
+                ref={galaxyRef}
                 userId={userId}
                 selectedIds={selectedNodeIds}
                 onSelectionChange={setSelectedNodeIds}
                 filters={effectiveFilters}
                 selfKey={selfKey}
                 highlightKeys={highlightKeys}
+                view={galaxyView}
+                fx={galaxyFx}
+                depth={galaxyDepth}
+                focusId={galaxyFocusId}
+                onFocusChange={handleGalaxyFocus}
               />
             ) : (
               <BrainGraphView
@@ -552,7 +596,7 @@ export function BrainPage() {
             */}
             {activePanel === "filters" && isNarrow && (
               <FloatingOverlay onClose={() => setActivePanel(null)}>
-                <BrainFilterPanel filters={filters} onChange={setFilters} />
+                <BrainFilterPanel filters={filters} onChange={setFilters} showForces={!galaxyEnabled} />
               </FloatingOverlay>
             )}
           </div>
@@ -592,7 +636,13 @@ export function BrainPage() {
           />
           </section>
           <aside className="zaki-brain-v2__detail-rail" aria-label={t("brain.panel.detail", { defaultValue: "Memory detail" })}>
-            {activePanel === "clusters" ? (
+            {galaxyEnabled && galaxyFocusId ? (
+              <BrainDetailPanel
+                userId={userId}
+                memoryKey={galaxyFocusKey}
+                onClose={clearGalaxyFocus}
+              />
+            ) : activePanel === "clusters" ? (
               <BrainCommunityLegend
                 userId={userId}
                 selectedCommunityId={selectedCommunityId}

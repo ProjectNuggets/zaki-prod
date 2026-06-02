@@ -5,6 +5,7 @@ import {
   Group,
   LineBasicMaterial,
   LineSegments,
+  MOUSE,
   Raycaster,
   Vector2,
 } from "three";
@@ -53,6 +54,11 @@ export function createGalaxyEngine(
   controls.zoomToCursor = true;
   controls.minDistance = 40;
   controls.maxDistance = 6000;
+  // Rotate is off (2.5D), so rebind LEFT to PAN — otherwise left-drag does
+  // nothing (OrbitControls' default LEFT is ROTATE, PAN is on RIGHT). Now
+  // click-and-drag moves the graph; a plain left-click still selects via the
+  // click-vs-drag guard.
+  controls.mouseButtons = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
   const onControlsChange = () => {
     if (raf === 0) renderFrame();
   };
@@ -472,6 +478,13 @@ export function createGalaxyEngine(
   };
 
   const onContextMenu = (event: MouseEvent) => {
+    // RIGHT is also a pan button, so a right-drag ends with a contextmenu but
+    // no click — swallow it and reset the guard (click never fires to reset it).
+    if (draggedDuringPress) {
+      draggedDuringPress = false;
+      event.preventDefault();
+      return;
+    }
     const id = pickAt(event.clientX, event.clientY);
     if (id) {
       event.preventDefault();

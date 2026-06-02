@@ -2855,16 +2855,28 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
 .zaki-brain-v2__filters-rail {
   display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Each rail child sizes to its content and stacks (the rail scrolls). */
+.zaki-brain-v2__filters-rail > * {
+  flex: 0 0 auto;
 }
 
 .zaki-brain-v2__filters-rail > aside,
 .zaki-brain-v2__detail-rail > section {
   width: 100%;
-  height: 100%;
   border: 0;
   border-radius: 0;
   background: var(--v2-bg);
   color: var(--v2-ink-1);
+}
+
+.zaki-brain-v2__detail-rail > section {
+  height: 100%;
 }
 
 .zaki-brain-v2__graph-main {
@@ -2909,22 +2921,17 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   color: var(--v2-ink-1);
 }
 
-/* Brain Galaxy in-canvas display panel (P5). Top-left to clear the existing
-   top-right toggle cluster; final chrome arrangement lands in P7. */
+/* Brain Galaxy display panel — lives in the page filters-rail (not a canvas
+   overlay), above BrainFilterPanel. */
 .zaki-galaxy-panel {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 6;
-  width: 196px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  margin-bottom: 12px;
   padding: 12px;
-  background: var(--g-overlay);
-  border: 1px solid var(--g-overlay-stroke);
+  background: var(--v2-bg-raised);
+  border: 1px solid var(--v2-hairline);
   border-radius: var(--v2-r-1);
-  backdrop-filter: blur(8px);
   font-family: var(--v2-font-mono);
 }
 .zaki-galaxy-panel__group {
@@ -2980,22 +2987,15 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   flex: 1;
 }
 
-/* Brain Galaxy memory detail (P6) — right-rail overlay shown on focus. */
+/* Brain Galaxy memory detail — lives in the page detail-rail (not a canvas
+   overlay), shown when a node is focused. */
 .zaki-galaxy-detail {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 340px;
-  max-width: 82%;
-  z-index: 7;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  height: 100%;
   padding: 16px 18px;
   overflow-y: auto;
-  background: var(--v2-bg);
-  border-left: 1px solid var(--v2-hairline-strong);
   font-family: var(--v2-font-mono);
 }
 .zaki-galaxy-detail__head {
