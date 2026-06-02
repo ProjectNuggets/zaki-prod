@@ -471,9 +471,18 @@ export function createGalaxyEngine(
     if (id) options.onSelect?.(id, event.shiftKey);
   };
 
+  const onContextMenu = (event: MouseEvent) => {
+    const id = pickAt(event.clientX, event.clientY);
+    if (id) {
+      event.preventDefault();
+      options.onSelect?.(id, false); // right-click focuses → opens detail
+    }
+  };
+
   renderer.domElement.addEventListener("pointerdown", onPointerDown);
   renderer.domElement.addEventListener("pointermove", onPointerMove);
   renderer.domElement.addEventListener("click", onClick);
+  renderer.domElement.addEventListener("contextmenu", onContextMenu);
 
   return {
     setModel(next: RenderModel) {
@@ -521,6 +530,7 @@ export function createGalaxyEngine(
       renderer.domElement.removeEventListener("pointerdown", onPointerDown);
       renderer.domElement.removeEventListener("pointermove", onPointerMove);
       renderer.domElement.removeEventListener("click", onClick);
+      renderer.domElement.removeEventListener("contextmenu", onContextMenu);
       controls.removeEventListener("change", onControlsChange);
       controls.dispose();
       clearGraph();

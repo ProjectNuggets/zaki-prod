@@ -4,6 +4,7 @@ import type { BrainFilters } from "../BrainFilterPanel";
 import { buildRenderModel } from "./model";
 import { GalaxyRenderer, type GalaxyHandle } from "./GalaxyRenderer";
 import { BrainDisplayPanel } from "./BrainDisplayPanel";
+import { BrainDetailPanel } from "./BrainDetailPanel";
 import { DEFAULT_FX, clampQuality, prefersReducedMotion } from "./engine/lod";
 import type { BrainViewMode, GraphRendererOptions, RenderQuality } from "./engine/interface";
 
@@ -66,6 +67,16 @@ export function BrainGalaxyView({
     () => highlightKeys.map((k) => keyIndex.get(k)).filter((x): x is string => Boolean(x)),
     [highlightKeys, keyIndex],
   );
+
+  // node id → memory key (the detail endpoint is keyed by `key`).
+  const keyByNodeId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const n of graph.data?.nodes ?? []) {
+      if (n.key) map.set(n.id, n.key);
+    }
+    return map;
+  }, [graph.data]);
+  const focusedKey = focusId ? keyByNodeId.get(focusId) ?? focusId : null;
 
   const searchIds = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
@@ -133,6 +144,7 @@ export function BrainGalaxyView({
         onFit={() => galaxyRef.current?.fit()}
         onRelayout={() => galaxyRef.current?.relayout()}
       />
+      <BrainDetailPanel userId={userId} memoryKey={focusedKey} onClose={() => setFocusId(null)} />
     </>
   );
 }
