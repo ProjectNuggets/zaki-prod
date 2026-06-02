@@ -36,6 +36,10 @@ const DIM_FAR = 0.35; // non-neighbors when a node is focused
 const DIM_UNMATCHED = 0.25; // non-matches during search
 const FOCUS_SCALE = 1.9;
 const GLOW_SCALE = 1.3;
+// Archived (valid_to set) memories recede as faint wisps so live knowledge
+// stands out — superseded facts shouldn't compete with current ones.
+const STALE_DIM = 0.5;
+const STALE_SCALE = 0.7;
 // Dimmed nodes also shrink — additive blending saturates dense clusters, so
 // color dimming alone is invisible where nodes overlap; reducing area reads.
 const DIM_FAR_SCALE = 0.5;
@@ -59,6 +63,7 @@ export function createNodeField(model: RenderModel): NodeField {
 
   const ids = model.nodes.map((n) => n.id);
   const baseColors = model.nodes.map((n) => new Color(n.color));
+  const staleFlags = model.nodes.map((n) => n.stale);
   const baseRadii = model.nodes.map((n) => importanceToRadius(n.importance));
   const scaleMul = new Float32Array(count).fill(1);
   const accent = readCssColor("--g-ember", "rgba(210,68,48,1)").color;
@@ -115,6 +120,13 @@ export function createNodeField(model: RenderModel): NodeField {
       if (highlightSet && highlightSet.has(id)) {
         scratch.lerp(accent, 0.6);
         scale = Math.max(scale, GLOW_SCALE);
+      }
+
+      // Archived memories recede (applied last so even a focused/searched stale
+      // node reads as muted vs. live knowledge).
+      if (staleFlags[i]) {
+        scratch.multiplyScalar(STALE_DIM);
+        scale *= STALE_SCALE;
       }
 
       mesh.setColorAt(i, scratch);

@@ -3029,6 +3029,24 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   margin-bottom: 2px;
 }
 
+/* Search-match count overlay on the Explore canvas. */
+.zaki-galaxy-searchcount {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  padding: 4px 12px;
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--v2-ink-1);
+  background: var(--v2-bg-raised);
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
 /* ── Brain Home — the search-first landing surface ──────────────────────── */
 .zaki-brain-v2__home-slot {
   width: 100%;

@@ -196,7 +196,21 @@ export const BrainGalaxyView = forwardRef<GalaxyHandle, BrainGalaxyViewProps>(
       [view, quality, selectedIds, focusId, depth, highlightIds, searchIds, handleSelect],
     );
 
-    return <GalaxyRenderer ref={ref} model={model} options={options} className="zaki-brain-v2__galaxy" />;
+    return (
+      <>
+        <GalaxyRenderer
+          ref={ref}
+          model={model}
+          options={options}
+          className="zaki-brain-v2__galaxy"
+        />
+        {searchIds && (
+          <div className="zaki-galaxy-searchcount" role="status">
+            {searchIds.length} {searchIds.length === 1 ? "match" : "matches"}
+          </div>
+        )}
+      </>
+    );
   },
 );
 
