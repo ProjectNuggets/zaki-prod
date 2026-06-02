@@ -25,6 +25,14 @@ jest.mock("@/stores", () => ({
   useAuthStore: () => ({ user: mockUser }),
 }));
 
+// ── galaxy flag: these tests cover the legacy cytoscape path (still reachable
+// via ?galaxy=0). The new-brain default is verified live + by model tests; pin
+// the flag off here so this suite keeps exercising the fallback. ──
+jest.mock("./galaxy/flag", () => ({
+  useGalaxyFlag: () => false,
+  readGalaxyFlag: () => false,
+}));
+
 // ── brain queries: graph + me are the only ones BrainPage calls directly ──
 type GraphResult = {
   data?: {

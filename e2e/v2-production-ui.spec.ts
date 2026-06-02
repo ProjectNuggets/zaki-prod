@@ -84,16 +84,19 @@ test.describe("V2 production-final app surfaces", () => {
     await attachViewportShot(page, testInfo, "spaces-1440x1000");
   });
 
-  test("Brain lands graph-first with filters and detail controls available", async ({ page }, testInfo) => {
+  test("Brain lands on Home (overview + timeline) with Explore graph available", async ({ page }, testInfo) => {
     await page.setViewportSize(RELEASE_VIEWPORTS.desktop);
     await page.goto("/brain", { waitUntil: "domcontentloaded" });
 
-    await expect(page.getByTestId("brain-graph-slot")).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId("brain-graph-canvas-wrap")).toBeVisible();
-    await expect(page.getByTestId("brain-search-input")).toBeVisible();
-    await expect(page.getByTestId("brain-filter-panel")).toBeVisible();
-    await expect(page.getByTestId("brain-timeline-slot")).toHaveCount(0);
-    await attachViewportShot(page, testInfo, "brain-graph-first-1440x1000");
+    // New default: the search-first Brain Home (theme overview + timeline).
+    await expect(page.getByTestId("brain-home-slot")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("brain-home")).toBeVisible();
+    await attachViewportShot(page, testInfo, "brain-home-1440x1000");
+
+    // The 3D graph moved to an opt-in Explore tab.
+    await page.getByRole("tab", { name: "Explore" }).click();
+    await expect(page.getByTestId("brain-graph-canvas-wrap")).toBeVisible({ timeout: 20_000 });
+    await attachViewportShot(page, testInfo, "brain-explore-1440x1000");
   });
 
   test("Settings exposes the final control-plane sections without secrets", async ({ page }, testInfo) => {

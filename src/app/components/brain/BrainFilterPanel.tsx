@@ -182,32 +182,37 @@ export function BrainFilterPanel({ filters, onChange, showForces = true }: Props
         </div>
       </Section>
 
-      <Section title={t("brain.filterPanel.display", { defaultValue: "Display" })}>
-        <SliderRow
-          label={t("brain.filterPanel.nodeSize", { defaultValue: "Node size" })}
-          min={0.5}
-          max={2}
-          step={0.1}
-          value={filters.nodeSizeScale}
-          onChange={(v) => set("nodeSizeScale", v)}
-        />
-        <SliderRow
-          label={t("brain.filterPanel.linkThickness", { defaultValue: "Link thickness" })}
-          min={0.5}
-          max={3}
-          step={0.1}
-          value={filters.linkThickness}
-          onChange={(v) => set("linkThickness", v)}
-        />
-        <SliderRow
-          label={t("brain.filterPanel.textFade", { defaultValue: "Text fade" })}
-          min={0.2}
-          max={1.5}
-          step={0.05}
-          value={filters.textFadeThreshold}
-          onChange={(v) => set("textFadeThreshold", v)}
-        />
-      </Section>
+      {/* Node size / Link thickness / Text fade drive the cytoscape renderer;
+          the galaxy ignores them, so hide them there too (don't show dead
+          controls). Gated by the same flag as Forces. */}
+      {showForces && (
+        <Section title={t("brain.filterPanel.display", { defaultValue: "Display" })}>
+          <SliderRow
+            label={t("brain.filterPanel.nodeSize", { defaultValue: "Node size" })}
+            min={0.5}
+            max={2}
+            step={0.1}
+            value={filters.nodeSizeScale}
+            onChange={(v) => set("nodeSizeScale", v)}
+          />
+          <SliderRow
+            label={t("brain.filterPanel.linkThickness", { defaultValue: "Link thickness" })}
+            min={0.5}
+            max={3}
+            step={0.1}
+            value={filters.linkThickness}
+            onChange={(v) => set("linkThickness", v)}
+          />
+          <SliderRow
+            label={t("brain.filterPanel.textFade", { defaultValue: "Text fade" })}
+            min={0.2}
+            max={1.5}
+            step={0.05}
+            value={filters.textFadeThreshold}
+            onChange={(v) => set("textFadeThreshold", v)}
+          />
+        </Section>
+      )}
 
       {showForces && (
         <Section title={t("brain.filterPanel.forces", { defaultValue: "Forces" })}>

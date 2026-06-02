@@ -8,19 +8,21 @@ import { useEffect, useState } from "react";
 //
 // Resolution order:
 //   1. ?galaxy=1 / ?galaxy=0 in the URL (per-visit override, shareable)
-//   2. localStorage "zaki.brain.galaxy" === "1"
-//   3. default: false
+//   2. localStorage "zaki.brain.galaxy" === "0" → explicit opt-out
+//   3. default: TRUE — the new Brain (Home + Explore) is the default surface;
+//      the legacy cytoscape page remains reachable via ?galaxy=0 until removed.
 const STORAGE_KEY = "zaki.brain.galaxy";
 
 export function readGalaxyFlag(): boolean {
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined") return true;
   try {
     const q = new URLSearchParams(window.location.search).get("galaxy");
     if (q === "1" || q === "true") return true;
     if (q === "0" || q === "false") return false;
-    return window.localStorage.getItem(STORAGE_KEY) === "1";
+    if (window.localStorage.getItem(STORAGE_KEY) === "0") return false;
+    return true;
   } catch {
-    return false;
+    return true;
   }
 }
 
