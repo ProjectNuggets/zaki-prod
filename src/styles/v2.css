@@ -2909,6 +2909,77 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   color: var(--v2-ink-1);
 }
 
+/* Brain Galaxy in-canvas display panel (P5). Top-left to clear the existing
+   top-right toggle cluster; final chrome arrangement lands in P7. */
+.zaki-galaxy-panel {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 6;
+  width: 196px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background: var(--g-overlay);
+  border: 1px solid var(--g-overlay-stroke);
+  border-radius: var(--v2-r-1);
+  backdrop-filter: blur(8px);
+  font-family: var(--v2-font-mono);
+}
+.zaki-galaxy-panel__group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.zaki-galaxy-panel__label {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--v2-ink-3);
+}
+.zaki-galaxy-panel__toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.zaki-galaxy-panel__toggle {
+  padding: 3px 8px;
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--v2-ink-3);
+  background: transparent;
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: var(--v2-r-1);
+  cursor: pointer;
+  transition:
+    color 160ms ease-out,
+    border-color 160ms ease-out,
+    background 160ms ease-out;
+}
+.zaki-galaxy-panel__toggle:hover {
+  color: var(--v2-ink-1);
+  border-color: var(--v2-ink-3);
+}
+.zaki-galaxy-panel__toggle[aria-pressed="true"] {
+  color: var(--v2-ink-on-accent);
+  background: var(--v2-accent);
+  border-color: var(--v2-accent);
+}
+.zaki-galaxy-panel__range {
+  width: 100%;
+  accent-color: var(--v2-accent);
+  cursor: pointer;
+}
+.zaki-galaxy-panel__controls {
+  display: flex;
+  gap: 6px;
+}
+.zaki-galaxy-panel__controls .v2-btn {
+  flex: 1;
+}
+
 .zaki-brain-v2__canvas-frame {
   position: relative;
   min-height: 640px;

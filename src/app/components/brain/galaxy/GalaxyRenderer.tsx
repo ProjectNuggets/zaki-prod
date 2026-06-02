@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { createGalaxyEngine } from "./engine/galaxyEngine";
 import type { GraphRenderer, GraphRendererOptions, RenderModel } from "./engine/interface";
 
@@ -8,18 +8,36 @@ export interface GalaxyRendererProps {
   className?: string;
 }
 
+/** Imperative controls surfaced to the display panel's canvas buttons. */
+export interface GalaxyHandle {
+  fit(): void;
+  relayout(): void;
+}
+
 // React wrapper that owns one GraphRenderer engine instance bound to a canvas.
 // React owns data + state; the engine owns pixels. The engine is created once
 // on mount; model/options changes are pushed imperatively (no scene teardown),
 // and a ResizeObserver keeps the drawing buffer in sync with the container.
 // Mocked in jsdom tests (no WebGL there); if WebGL is unavailable the engine
 // is a no-op and the Tactical/list fallback covers the surface.
-export function GalaxyRenderer({ model, options, className }: GalaxyRendererProps) {
+export const GalaxyRenderer = forwardRef<GalaxyHandle, GalaxyRendererProps>(function GalaxyRenderer(
+  { model, options, className },
+  ref,
+) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<GraphRenderer | null>(null);
   const optionsRef = useRef(options);
   optionsRef.current = options;
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      fit: () => engineRef.current?.fit(),
+      relayout: () => engineRef.current?.relayout(),
+    }),
+    [],
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -68,6 +86,6 @@ export function GalaxyRenderer({ model, options, className }: GalaxyRendererProp
       <canvas ref={canvasRef} style={{ display: "block", width: "100%", height: "100%" }} />
     </div>
   );
-}
+});
 
 export default GalaxyRenderer;

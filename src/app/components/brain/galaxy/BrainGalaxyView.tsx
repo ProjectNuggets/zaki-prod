@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useBrainGraph } from "@/queries";
 import type { BrainFilters } from "../BrainFilterPanel";
 import { buildRenderModel } from "./model";
-import { GalaxyRenderer } from "./GalaxyRenderer";
-import { prefersReducedMotion, resolveQuality } from "./engine/lod";
-import { type GraphRendererOptions } from "./engine/interface";
+import { GalaxyRenderer, type GalaxyHandle } from "./GalaxyRenderer";
+import { BrainDisplayPanel } from "./BrainDisplayPanel";
+import { DEFAULT_FX, clampQuality, prefersReducedMotion } from "./engine/lod";
+import type { BrainViewMode, GraphRendererOptions, RenderQuality } from "./engine/interface";
 
 export interface BrainGalaxyViewProps {
   userId: string;
@@ -17,10 +18,8 @@ export interface BrainGalaxyViewProps {
 }
 
 // Data + state container for the Galaxy renderer — the WebGL counterpart of
-// BrainGraphView. Fetches the same graph (shared React Query cache), builds the
-// engine render model, and owns renderer options: ember focus (click), seed-and-
-// expand depth, search-as-highlight (from the filter search box), and the time-
-// scrubber glow.
+// BrainGraphView. Owns view mode, FX toggles, and focus depth (the display
+// panel), plus ember focus, search-as-highlight, and the time-scrubber glow.
 export function BrainGalaxyView({
   userId,
   selectedIds,
@@ -30,7 +29,10 @@ export function BrainGalaxyView({
   highlightKeys,
 }: BrainGalaxyViewProps) {
   const [focusId, setFocusId] = useState<string | null>(null);
-  const [focusDepth] = useState(1); // depth slider arrives with the display panel (P4)
+  const [depth, setDepth] = useState(1);
+  const [view, setView] = useState<BrainViewMode>("spatial");
+  const [fx, setFx] = useState<RenderQuality>(DEFAULT_FX);
+  const galaxyRef = useRef<GalaxyHandle>(null);
 
   const graph = useBrainGraph(userId, {
     max_nodes: filters.maxNodes,
@@ -74,8 +76,7 @@ export function BrainGalaxyView({
   }, [filters.search, model]);
 
   // Clear focus if the focused node is no longer in the graph (filter change,
-  // data reload, or user switch) — otherwise the ember would dim everything
-  // around a node that no longer exists.
+  // data reload, or user switch).
   useEffect(() => {
     if (focusId && !model.nodes.some((n) => n.id === focusId)) {
       setFocusId(null);
@@ -85,15 +86,11 @@ export function BrainGalaxyView({
   const handleSelect = useCallback(
     (id: string, additive: boolean) => {
       if (additive) {
-        // shift-click → toggle compose selection
         onSelectionChange(
-          selectedIds.includes(id)
-            ? selectedIds.filter((x) => x !== id)
-            : [...selectedIds, id],
+          selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id],
         );
         return;
       }
-      // click → toggle ember focus
       setFocusId((prev) => (prev === id ? null : id));
     },
     [onSelectionChange, selectedIds],
@@ -101,25 +98,43 @@ export function BrainGalaxyView({
 
   const reducedMotion = useMemo(() => prefersReducedMotion(), []);
   const quality = useMemo(
-    () => resolveQuality(model.nodes.length, reducedMotion),
-    [model.nodes.length, reducedMotion],
+    () => clampQuality(fx, model.nodes.length, reducedMotion),
+    [fx, model.nodes.length, reducedMotion],
   );
 
   const options = useMemo<GraphRendererOptions>(
     () => ({
-      view: "spatial",
+      view,
       quality,
       selectedIds,
       focusId,
-      focusDepth,
+      focusDepth: depth,
       highlightIds,
       searchIds,
       onSelect: handleSelect,
     }),
-    [quality, selectedIds, focusId, focusDepth, highlightIds, searchIds, handleSelect],
+    [view, quality, selectedIds, focusId, depth, highlightIds, searchIds, handleSelect],
   );
 
-  return <GalaxyRenderer model={model} options={options} className="zaki-brain-v2__galaxy" />;
+  const toggleFx = useCallback((key: keyof RenderQuality) => {
+    setFx((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  return (
+    <>
+      <GalaxyRenderer ref={galaxyRef} model={model} options={options} className="zaki-brain-v2__galaxy" />
+      <BrainDisplayPanel
+        view={view}
+        onViewChange={setView}
+        fx={fx}
+        onToggleFx={toggleFx}
+        depth={depth}
+        onDepthChange={setDepth}
+        onFit={() => galaxyRef.current?.fit()}
+        onRelayout={() => galaxyRef.current?.relayout()}
+      />
+    </>
+  );
 }
 
 export default BrainGalaxyView;

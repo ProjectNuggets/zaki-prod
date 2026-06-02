@@ -1,25 +1,30 @@
 import type { RenderQuality } from "./interface";
 
-// Level-of-detail tiers. Visual richness is traded against node count + the
-// user's motion preference so the galaxy stays smooth on large corpora and
-// respects prefers-reduced-motion. The display panel (P4) can override these.
-//
-//   reduced-motion → no motion
-//   > 3000 nodes   → no idle motion (heavy corpus)
-//   otherwise      → idle breathe on
-// NOTE: bloom + nebula are currently forced OFF in every tier for the bare
-// nodes+edges review; the P5 display panel restores them as user toggles.
-export function resolveQuality(nodeCount: number, reducedMotion: boolean): RenderQuality {
-  // Temporary: bloom + nebula default OFF so the bare nodes + edges are visible
-  // for review. The P4 display panel will expose these as user toggles (and
-  // pick sensible defaults from there).
-  if (reducedMotion) {
-    return { bloom: false, nebula: false, threads: true, motion: false };
-  }
-  if (nodeCount > 3000) {
-    return { bloom: false, nebula: false, threads: true, motion: false };
-  }
-  return { bloom: false, nebula: false, threads: true, motion: true };
+// Default FX the display panel initializes to — bare nodes+edges+labels with
+// gentle idle motion; bloom/nebula are opt-in (the "galaxy" look).
+export const DEFAULT_FX: RenderQuality = {
+  bloom: false,
+  nebula: false,
+  threads: true,
+  motion: true,
+  labels: true,
+};
+
+// Clamp the user's chosen FX for performance + accessibility: nebula + idle
+// motion drop on heavy corpora, and motion respects prefers-reduced-motion.
+// Everything else is honored as the user set it.
+export function clampQuality(
+  fx: RenderQuality,
+  nodeCount: number,
+  reducedMotion: boolean,
+): RenderQuality {
+  return {
+    bloom: fx.bloom,
+    nebula: fx.nebula && nodeCount <= 3000,
+    threads: fx.threads,
+    labels: fx.labels,
+    motion: fx.motion && !reducedMotion && nodeCount <= 3000,
+  };
 }
 
 /** Bézier segments per edge — straighter (cheaper) as the graph grows. */

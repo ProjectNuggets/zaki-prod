@@ -43,8 +43,11 @@ export interface RenderModel {
 export interface RenderQuality {
   bloom: boolean;
   nebula: boolean;
+  /** Show edges ("threads" in the display panel). */
   threads: boolean;
   motion: boolean;
+  /** Show node labels. */
+  labels: boolean;
 }
 
 export interface GraphRendererOptions {

@@ -73,6 +73,7 @@ export function createGalaxyEngine(
   let topImportantIds: string[] = [];
   let currentNearSet: Set<string> | null = null;
   let lastFocusForThreads: string | null = null;
+  let lastView = initialOptions.view;
   let highlightSig = "";
   let raf = 0;
   let settled = false;
@@ -88,7 +89,7 @@ export function createGalaxyEngine(
   let hovered: string | null = null;
 
   function renderFrame(): void {
-    if (labelLayer) labelLayer.render(chooseLabels(), camera);
+    if (labelLayer && options.quality.labels) labelLayer.render(chooseLabels(), camera);
     if (composer) composer.render();
     else renderer.render(scene, camera);
   }
@@ -158,6 +159,10 @@ export function createGalaxyEngine(
     }
     graphSim = createSimulation(model);
     graphSim.sim.alpha(INITIAL_ALPHA);
+    if (options.view === "tactical") {
+      for (const n of graphSim.nodes) n.fz = 0; // flatten to a plane
+    }
+    lastView = options.view;
     nodeById = new Map(graphSim.nodes.map((n) => [n.id, n]));
     adjacency = buildAdjacency(model);
     edgeLines = createEdgeLines(model, edgeSegmentsForCount(model.nodes.length));
@@ -329,11 +334,26 @@ export function createGalaxyEngine(
       nebula.dispose();
       nebula = null;
     }
+    if (edgeLines) edgeLines.lines.visible = options.quality.threads;
+    if (labelLayer) labelLayer.group.visible = options.quality.labels;
     if (settled && raf === 0 && (options.quality.motion || options.quality.nebula)) {
       startLoop();
     } else {
       renderFrame();
     }
+  }
+
+  // Switch Spatial (3D) ↔ Tactical (flat): pin/unpin z and reheat so the layout
+  // re-settles into the new dimensionality.
+  function applyView(): void {
+    if (!graphSim) return;
+    const flat = options.view === "tactical";
+    for (const n of graphSim.nodes) {
+      n.fz = flat ? 0 : null;
+    }
+    settled = false;
+    graphSim.sim.alpha(0.5);
+    startLoop();
   }
 
   function startLoop(): void {
@@ -466,6 +486,10 @@ export function createGalaxyEngine(
       if (next.quality && qualityChanged(prevQuality, options.quality)) {
         applyQuality();
       }
+      if (options.view !== lastView) {
+        lastView = options.view;
+        applyView();
+      }
       const sig = highlightSignature(options);
       if (sig !== highlightSig) {
         highlightSig = sig;
@@ -517,7 +541,8 @@ function qualityChanged(a: RenderQuality, b: RenderQuality): boolean {
     a.bloom !== b.bloom ||
     a.nebula !== b.nebula ||
     a.motion !== b.motion ||
-    a.threads !== b.threads
+    a.threads !== b.threads ||
+    a.labels !== b.labels
   );
 }
 
