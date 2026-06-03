@@ -310,6 +310,9 @@ export function createGalaxyEngine(
         : null;
     const searchSet = options.searchIds ? new Set(options.searchIds) : null;
     nodeField.setVisualState({ focusId, nearSet, highlightSet, searchSet, hoverNearSet });
+    // Light the active node's incident edges in accent (hover or focus) — the
+    // Obsidian "connections light up" gesture.
+    edgeLines?.setHighlight(focusId ?? hovered);
     // Rebuild focus threads only when the focus node actually changes (not on
     // every hover) to avoid churning the geometry.
     if (focusId !== lastFocusForThreads) {

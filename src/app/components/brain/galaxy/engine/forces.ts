@@ -6,9 +6,9 @@ import {
   forceX,
   forceY,
   forceZ,
-  type CenterForce,
   type LinkForce,
   type ManyBodyForce,
+  type PositionForce,
   type Simulation,
 } from "d3-force-3d";
 import type { ForceConfig, RenderModel } from "./interface";
@@ -39,8 +39,14 @@ export function applyForces(sim: Simulation<SimNode>, cfg: ForceConfig): void {
       // the prior 0.12 + 0.5·relevance curve exactly).
       .strength((l) => clamp(cfg.linkStrength * (0.3 + 1.25 * l.relevance), 0.01, 2));
   }
-  const center = sim.force("center") as CenterForce<SimNode> | undefined;
-  if (center) center.strength(cfg.center);
+  // "Center force" = positional GRAVITY toward the origin (forceX/Y/Z), which
+  // actually compacts the layout. (d3 forceCenter only re-centers the centroid
+  // and barely changes the look — that's the "center does nothing" bug.) The
+  // fixed forceCenter stays as a gentle keep-on-screen recenter.
+  for (const axis of ["gx", "gy", "gz"] as const) {
+    const g = sim.force(axis) as PositionForce<SimNode> | undefined;
+    if (g) g.strength(cfg.center);
+  }
 }
 
 export interface SimNode {
@@ -106,10 +112,14 @@ export function createSimulation(
   const sim = forceSimulation<SimNode>(nodes, 3)
     .force("charge", forceManyBody<SimNode>().distanceMax(900))
     .force("link", forceLink<SimNode, SimLink>(links).id((d) => d.id))
-    .force("center", forceCenter<SimNode>(0, 0, 0))
+    .force("center", forceCenter<SimNode>(0, 0, 0).strength(0.05)) // fixed: keep framed
     .force("cx", forceX<SimNode>((n) => targetFor(n, "x")).strength(communityStrength))
     .force("cy", forceY<SimNode>((n) => targetFor(n, "y")).strength(communityStrength))
     .force("cz", forceZ<SimNode>((n) => targetFor(n, "z")).strength(communityStrength))
+    // Adjustable gravity toward origin — the real "Center force" knob.
+    .force("gx", forceX<SimNode>(0))
+    .force("gy", forceY<SimNode>(0))
+    .force("gz", forceZ<SimNode>(0))
     .stop();
 
   applyForces(sim, forces); // charge / link distance+strength / center

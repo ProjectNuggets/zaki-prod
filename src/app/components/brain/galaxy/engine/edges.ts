@@ -16,8 +16,12 @@ export interface EdgeLines {
   lines: LineSegments;
   /** Recompute curved endpoint positions from live node positions. */
   sync(nodeById: Map<string, SimNode>): void;
+  /** Light edges incident to `activeId` in accent + dim the rest. null = reset. */
+  setHighlight(activeId: string | null): void;
   dispose(): void;
 }
+
+const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 // Curved Bézier "filaments": each edge bows perpendicular to its chord, sampled
 // into `segments` straight pieces (LOD lowers this for big graphs). Per-vertex
@@ -38,26 +42,42 @@ export function createEdgeLines(model: RenderModel, segments: number): EdgeLines
 
   const base = readCssColor("--g-edge", "rgba(180,176,170,0.18)").color;
   const strong = readCssColor("--g-edge-strong", "rgba(180,176,170,0.34)").color;
+  const accent = readCssColor("--g-ember", "rgba(210,68,48,1)").color;
 
-  // Per-vertex colors are static (positions animate, colors don't) — fill once.
   const tmp = new Color();
-  edges.forEach((edge, i) => {
-    const src = edge.type === "typed" ? strong : base;
-    const intensity = 0.4 + 0.6 * Math.max(0, Math.min(1, edge.relevance));
-    tmp.copy(src).multiplyScalar(intensity);
+  function writeEdge(i: number, c: Color): void {
     const start = i * vertsPerEdge * 3;
     for (let v = 0; v < vertsPerEdge; v++) {
-      colors[start + v * 3] = tmp.r;
-      colors[start + v * 3 + 1] = tmp.g;
-      colors[start + v * 3 + 2] = tmp.b;
+      colors[start + v * 3] = c.r;
+      colors[start + v * 3 + 1] = c.g;
+      colors[start + v * 3 + 2] = c.b;
     }
-  });
+  }
+  // Color each edge: incident to the active node → accent (bright); when a node
+  // is active, the rest dim hard; otherwise the base ink ramp by type/relevance.
+  function fillColors(activeId: string | null): void {
+    for (let i = 0; i < edges.length; i++) {
+      const edge = edges[i];
+      if (!edge) continue;
+      const incident = activeId != null && (edge.source === activeId || edge.target === activeId);
+      if (incident) {
+        writeEdge(i, accent);
+        continue;
+      }
+      const src = edge.type === "typed" ? strong : base;
+      const intensity = 0.4 + 0.6 * clamp01(edge.relevance);
+      tmp.copy(src).multiplyScalar(activeId != null ? intensity * 0.18 : intensity);
+      writeEdge(i, tmp);
+    }
+  }
+  fillColors(null);
 
   const geometry = new BufferGeometry();
   const posAttr = new BufferAttribute(positions, 3);
   posAttr.setUsage(DynamicDrawUsage);
   geometry.setAttribute("position", posAttr);
-  geometry.setAttribute("color", new BufferAttribute(colors, 3));
+  const colorAttr = new BufferAttribute(colors, 3);
+  geometry.setAttribute("color", colorAttr);
 
   const material = new LineBasicMaterial({
     vertexColors: true,
@@ -135,6 +155,10 @@ export function createEdgeLines(model: RenderModel, segments: number): EdgeLines
   return {
     lines,
     sync,
+    setHighlight(activeId: string | null) {
+      fillColors(activeId);
+      colorAttr.needsUpdate = true;
+    },
     dispose() {
       geometry.dispose();
       material.dispose();
