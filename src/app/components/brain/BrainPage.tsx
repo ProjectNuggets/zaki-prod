@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Boxes, CircleDot, Shield, SlidersHorizontal, X } from "lucide-react";
+import { Shield, X } from "lucide-react";
 import { useAuthStore } from "@/stores";
 import { useBrainGraph, useBrainMe } from "@/queries";
 import { SkeletonBrainPage } from "@/app/components/ui/skeleton";
@@ -16,8 +16,6 @@ import type { GalaxyHandle } from "./galaxy/GalaxyRenderer";
 import type { BrainViewMode, RenderQuality } from "./galaxy/engine/interface";
 import { BrainComposeModal } from "./BrainComposeModal";
 import { BrainFilterPanel, DEFAULT_FILTERS, type BrainFilters } from "./BrainFilterPanel";
-import { BrainOrphanRail } from "./BrainOrphanRail";
-import { BrainCommunityLegend } from "./BrainCommunityLegend";
 import { BrainTimeScrubber } from "./BrainTimeScrubber";
 import { BrainInsightsStrip } from "./BrainInsightsStrip";
 import {
@@ -155,45 +153,24 @@ export function BrainPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, debouncedSearch, activePanel, centerKey, selectedCommunityId]);
 
-  // Keyboard shortcuts on the graph tab. Linear/Obsidian-grade affordance:
-  // f/c/o toggle the panel cluster, Esc collapses the active panel or
-  // exits local-graph mode, "/" focuses the search input. Skipped while
-  // any input/textarea has focus so typing the letters works normally.
+  // Keyboard shortcut on the Explore tab: "/" focuses search. (Hold Shift +
+  // drag to spin the 3D graph — handled in the engine.)
   useEffect(() => {
     if (tab !== "explore") return;
     const handler = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const inEditable =
         !!target?.closest?.("input, textarea, [contenteditable='true']");
-      if (event.key === "Escape") {
-        if (activePanel) {
-          event.preventDefault();
-          setActivePanel(null);
-        } else if (centerKey) {
-          event.preventDefault();
-          setCenterKey(null);
-        }
-        return;
-      }
       if (inEditable) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (event.key === "f") {
-        event.preventDefault();
-        setActivePanel((p) => (p === "filters" ? null : "filters"));
-      } else if (event.key === "c") {
-        event.preventDefault();
-        setActivePanel((p) => (p === "clusters" ? null : "clusters"));
-      } else if (event.key === "o") {
-        event.preventDefault();
-        setActivePanel((p) => (p === "orphans" ? null : "orphans"));
-      } else if (event.key === "/") {
+      if (event.key === "/") {
         event.preventDefault();
         searchInputRef.current?.focus();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [tab, activePanel, centerKey]);
+  }, [tab]);
 
   const effectiveFilters = useMemo<BrainFilters>(
     () => ({ ...filters, search: debouncedSearch }),
@@ -567,46 +544,9 @@ export function BrainPage() {
               onScopeChange={changeGalaxyScope}
             />
 
-            {/* Top-right floating control cluster */}
-            <div className="zaki-brain-v2__canvas-controls">
-              <span className="zaki-brain-v2__filters-toggle">
-                <PanelToggle
-                  icon={SlidersHorizontal}
-                  label={t("brain.panel.filters", { defaultValue: "Filters" })}
-                  shortcut="F"
-                  active={activePanel === "filters"}
-                  onClick={() =>
-                    setActivePanel(activePanel === "filters" ? null : "filters")
-                  }
-                />
-              </span>
-              <PanelToggle
-                icon={Boxes}
-                label={t("brain.panel.clusters", { defaultValue: "Clusters" })}
-                shortcut="C"
-                active={activePanel === "clusters"}
-                onClick={() =>
-                  setActivePanel(activePanel === "clusters" ? null : "clusters")
-                }
-              />
-              <PanelToggle
-                icon={CircleDot}
-                label={t("brain.panel.orphans", { defaultValue: "Loose facts" })}
-                shortcut="O"
-                active={activePanel === "orphans"}
-                onClick={() =>
-                  setActivePanel(activePanel === "orphans" ? null : "orphans")
-                }
-              />
-            </div>
-
-            {/*
-              Floating overlay panels — only one shown at a time. The filters
-              overlay renders ONLY on narrow viewports; above 900px the
-              always-visible filters rail is the single source of truth, so
-              rendering the overlay too would duplicate the SCOPE block and the
-              governance Settings deep-link (see useBrainNarrow above).
-            */}
+            {/* Mobile-only filters overlay (the rail is hidden < 900px). The
+                old top-right F/C/O cluster was removed — Clusters is now the
+                Color-by/legend, Orphans is the Hide-orphans toggle. */}
             {activePanel === "filters" && isNarrow && (
               <FloatingOverlay onClose={() => setActivePanel(null)}>
                 <BrainFilterPanel filters={filters} onChange={setFilters} />
@@ -655,14 +595,6 @@ export function BrainPage() {
                 memoryKey={galaxyFocusKey}
                 onClose={clearGalaxyFocus}
               />
-            ) : activePanel === "clusters" ? (
-              <BrainCommunityLegend
-                userId={userId}
-                selectedCommunityId={selectedCommunityId}
-                onSelectCommunity={setSelectedCommunityId}
-              />
-            ) : activePanel === "orphans" ? (
-              <BrainOrphanRail userId={userId} onPick={handlePickKey} />
             ) : (
               <BrainDetailSummary
                 nodes={selectedNodes}
@@ -677,36 +609,6 @@ export function BrainPage() {
   );
 }
 
-// V1.11 (2026-05-07) — Floating control button used inside the canvas
-// to toggle overlay panels. Inherits the canvas's pointer-events:none
-// cluster and re-enables for itself; lives in a small dark-tinted
-// chip with a red-accent active state matching the rest of the page.
-interface PanelToggleProps {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  shortcut?: string;
-}
-
-function PanelToggle({ icon: Icon, label, active, onClick, shortcut }: PanelToggleProps) {
-  const tooltip = shortcut ? `${label} (${shortcut})` : label;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={tooltip}
-      title={tooltip}
-      className={`pointer-events-auto flex size-9 items-center justify-center rounded-[2px] border transition-colors ${
-        active
-          ? "border-zaki-brand-60 bg-zaki-brand-15 text-zaki-brand"
-          : "border-white/10 bg-zaki-raised/90 text-white/60 hover:border-white/20 hover:text-white"
-      }`}
-    >
-      <Icon className="size-4" />
-    </button>
-  );
-}
 
 // V1.11 (2026-05-07) — Wraps the existing side-panel components (filter,
 // clusters, orphans) as a floating right-anchored overlay inside the

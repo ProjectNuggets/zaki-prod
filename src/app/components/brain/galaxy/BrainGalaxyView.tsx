@@ -1,5 +1,6 @@
-import { forwardRef, useCallback, useEffect, useMemo } from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useState } from "react";
 import { useBrainCommunities, useBrainGraph } from "@/queries";
+import { KIND_LABEL } from "../brainColors";
 import type { BrainFilters } from "../BrainFilterPanel";
 import {
   buildClusterOverviewModel,
@@ -18,6 +19,27 @@ export type GalaxyScope =
   | { kind: "overview" }
   | { kind: "cluster"; id: number; name: string }
   | { kind: "all" };
+
+interface NodeBrief {
+  title: string;
+  kind: string;
+  theme: string | null;
+  createdAt: number | undefined;
+  degree: number;
+  /** Set for cluster hubs (member count) instead of degree. */
+  memberCount?: number;
+}
+
+// created_at may be seconds or ms; render a coarse "x ago".
+function briefAge(ts: number): string {
+  const ms = ts < 1e12 ? ts * 1000 : ts;
+  const days = Math.floor((Date.now() - ms) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 30) return `${days}d ago`;
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}
 
 export interface BrainGalaxyViewProps {
   userId: string;
@@ -124,6 +146,49 @@ export const BrainGalaxyView = forwardRef<GalaxyHandle, BrainGalaxyViewProps>(
       return map;
     }, [graph.data]);
 
+    // Brief "executive" card shown on hover — instant, from the graph data (no
+    // fetch). Member nodes show kind/theme/age/connections; cluster hubs show
+    // the theme name + size.
+    const [hoverId, setHoverId] = useState<string | null>(null);
+    const briefById = useMemo(() => {
+      const deg = new Map<string, number>();
+      for (const e of graph.data?.edges ?? []) {
+        deg.set(e.source, (deg.get(e.source) ?? 0) + 1);
+        deg.set(e.target, (deg.get(e.target) ?? 0) + 1);
+      }
+      const map = new Map<string, NodeBrief>();
+      for (const n of graph.data?.nodes ?? []) {
+        // Only show a real LLM theme name — skip "Cluster 19716777" fallbacks.
+        const named = n.community_name && !/^Cluster \d+$/.test(n.community_name);
+        map.set(n.id, {
+          title: n.display_label || n.summary || n.key || n.id,
+          kind: KIND_LABEL[n.kind] ?? n.kind,
+          theme: named ? n.community_name! : null,
+          createdAt: n.created_at,
+          degree: deg.get(n.id) ?? 0,
+        });
+      }
+      return map;
+    }, [graph.data]);
+
+    const hoverBrief = useMemo<NodeBrief | null>(() => {
+      if (!hoverId) return null;
+      const cid = parseClusterNodeId(hoverId);
+      if (cid != null) {
+        const c = communities.data?.communities.find((x) => x.community_id === cid);
+        if (!c) return null;
+        return {
+          title: c.name,
+          kind: "Theme",
+          theme: null,
+          createdAt: undefined,
+          degree: 0,
+          memberCount: c.member_count,
+        };
+      }
+      return briefById.get(hoverId) ?? null;
+    }, [hoverId, briefById, communities.data]);
+
     const highlightIds = useMemo(
       () => highlightKeys.map((k) => keyIndex.get(k)).filter((x): x is string => Boolean(x)),
       [highlightKeys, keyIndex],
@@ -200,6 +265,7 @@ export const BrainGalaxyView = forwardRef<GalaxyHandle, BrainGalaxyViewProps>(
         highlightIds,
         searchIds,
         onSelect: handleSelect,
+        onHover: setHoverId,
       }),
       [
         view,
@@ -230,6 +296,20 @@ export const BrainGalaxyView = forwardRef<GalaxyHandle, BrainGalaxyViewProps>(
         {searchIds && (
           <div className="zaki-galaxy-searchcount" role="status">
             {searchIds.length} {searchIds.length === 1 ? "match" : "matches"}
+          </div>
+        )}
+        {hoverBrief && (
+          <div className="zaki-galaxy-brief" role="status">
+            <div className="zaki-galaxy-brief__title">{hoverBrief.title}</div>
+            <div className="zaki-galaxy-brief__meta">
+              {hoverBrief.kind}
+              {hoverBrief.theme ? ` · ${hoverBrief.theme}` : ""}
+              {hoverBrief.createdAt ? ` · ${briefAge(hoverBrief.createdAt)}` : ""}
+              {hoverBrief.memberCount != null
+                ? ` · ${hoverBrief.memberCount} memories`
+                : ` · ${hoverBrief.degree} connection${hoverBrief.degree === 1 ? "" : "s"}`}
+            </div>
+            <div className="zaki-galaxy-brief__hint">Click to open · Shift-drag to spin</div>
           </div>
         )}
       </>

@@ -47,18 +47,24 @@ export function createGalaxyEngine(
   // comes later. No damping so the idle loop can still stop; render on change
   // only when the animation loop isn't already running.
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableRotate = false;
+  // Default gesture is PAN (left-drag moves the graph; a plain left-click still
+  // selects via the click-vs-drag guard). Rotate is enabled but bound to a
+  // modifier — hold SHIFT to spin the 3D graph, release to pan again.
+  controls.enableRotate = true;
   controls.enablePan = true;
   controls.screenSpacePanning = true;
   controls.enableZoom = true;
   controls.zoomToCursor = true;
   controls.minDistance = 40;
   controls.maxDistance = 6000;
-  // Rotate is off (2.5D), so rebind LEFT to PAN — otherwise left-drag does
-  // nothing (OrbitControls' default LEFT is ROTATE, PAN is on RIGHT). Now
-  // click-and-drag moves the graph; a plain left-click still selects via the
-  // click-vs-drag guard.
   controls.mouseButtons = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
+  // Shift held → left-drag orbits (3D spin); otherwise it pans. (Shift+click
+  // without dragging still does additive select via the click-vs-drag guard.)
+  const onShiftKey = (event: KeyboardEvent) => {
+    controls.mouseButtons.LEFT = event.shiftKey ? MOUSE.ROTATE : MOUSE.PAN;
+  };
+  window.addEventListener("keydown", onShiftKey);
+  window.addEventListener("keyup", onShiftKey);
   const onControlsChange = () => {
     if (raf === 0) renderFrame();
   };
@@ -602,6 +608,8 @@ export function createGalaxyEngine(
       renderer.domElement.removeEventListener("click", onClick);
       renderer.domElement.removeEventListener("contextmenu", onContextMenu);
       controls.removeEventListener("change", onControlsChange);
+      window.removeEventListener("keydown", onShiftKey);
+      window.removeEventListener("keyup", onShiftKey);
       controls.dispose();
       clearGraph();
       sceneBundle.dispose();
