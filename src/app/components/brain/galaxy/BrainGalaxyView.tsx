@@ -209,6 +209,12 @@ export const BrainGalaxyView = forwardRef<GalaxyHandle, BrainGalaxyViewProps>(
       }
     }, [model, focusId, onFocusChange]);
 
+    // Clear a stale hover brief when the model/scope changes (the hovered node
+    // may no longer exist → avoid showing a brief for a node that's gone).
+    useEffect(() => {
+      if (hoverId && !model.nodes.some((n) => n.id === hoverId)) setHoverId(null);
+    }, [model, hoverId]);
+
     const handleSelect = useCallback(
       (id: string, additive: boolean) => {
         // In the overview, a click is "drill into this cluster", not a select.

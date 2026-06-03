@@ -7,6 +7,22 @@ export interface SceneBundle {
   dispose(): void;
 }
 
+// Detect WebGL availability once (cached) so the React layer can render a
+// fallback instead of a blank canvas on no-GPU / disabled / context-exhausted
+// environments. Probes a throwaway canvas for a webgl2 or webgl context.
+let webglCache: boolean | null = null;
+export function isWebGLAvailable(): boolean {
+  if (webglCache !== null) return webglCache;
+  if (typeof document === "undefined") return false;
+  try {
+    const c = document.createElement("canvas");
+    webglCache = !!(c.getContext("webgl2") || c.getContext("webgl"));
+  } catch {
+    webglCache = false;
+  }
+  return webglCache;
+}
+
 // Stand up the core Three.js scene bound to a canvas. Returns null when no
 // WebGL context is available (headless / unsupported) so callers can fall back.
 export function createScene(canvas: HTMLCanvasElement): SceneBundle | null {

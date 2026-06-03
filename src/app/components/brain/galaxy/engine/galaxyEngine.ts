@@ -7,6 +7,7 @@ import {
   LineSegments,
   MOUSE,
   Raycaster,
+  TOUCH,
   Vector2,
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -58,13 +59,23 @@ export function createGalaxyEngine(
   controls.minDistance = 40;
   controls.maxDistance = 6000;
   controls.mouseButtons = { LEFT: MOUSE.PAN, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
+  // Touch: one finger pans, two fingers pinch-zoom + pan. (Without this the
+  // OrbitControls default one-finger gesture is ROTATE, which would break
+  // panning on every touch device now that rotate is enabled.)
+  controls.touches = { ONE: TOUCH.PAN, TWO: TOUCH.DOLLY_PAN };
   // Shift held → left-drag orbits (3D spin); otherwise it pans. (Shift+click
   // without dragging still does additive select via the click-vs-drag guard.)
   const onShiftKey = (event: KeyboardEvent) => {
     controls.mouseButtons.LEFT = event.shiftKey ? MOUSE.ROTATE : MOUSE.PAN;
   };
+  // If the window blurs / tab hides while Shift is held, keyup never fires and
+  // LEFT would stay stuck on ROTATE — reset to PAN defensively.
+  const onWindowBlur = () => {
+    controls.mouseButtons.LEFT = MOUSE.PAN;
+  };
   window.addEventListener("keydown", onShiftKey);
   window.addEventListener("keyup", onShiftKey);
+  window.addEventListener("blur", onWindowBlur);
   const onControlsChange = () => {
     if (raf === 0) renderFrame();
   };
@@ -175,12 +186,14 @@ export function createGalaxyEngine(
       for (const n of graphSim.nodes) prevPos.set(n.id, { x: n.x ?? 0, y: n.y ?? 0, z: n.z ?? 0 });
     }
     clearGraph();
+    // Sync the force signature even on the empty path so the first post-mount
+    // setOptions (same forces) doesn't trigger a spurious reheat.
+    forcesSig = options.forces ? JSON.stringify(options.forces) : "";
     if (model.nodes.length === 0) {
       renderFrame();
       return;
     }
     graphSim = createSimulation(model, options.forces);
-    forcesSig = options.forces ? JSON.stringify(options.forces) : "";
     // Warm-start: when most nodes survive the change (cutoff / max-nodes / color
     // tweak), carry their positions so the layout MORPHS instead of restarting
     // from random, and re-settle gently. A cold rebuild (new graph / scope
@@ -599,6 +612,7 @@ export function createGalaxyEngine(
     relayout() {
       if (!graphSim) return;
       settled = false;
+      shouldFitOnSettle = true; // relayout is a full reset → re-frame the camera
       graphSim.sim.alpha(INITIAL_ALPHA);
       startLoop();
     },
@@ -610,6 +624,7 @@ export function createGalaxyEngine(
       controls.removeEventListener("change", onControlsChange);
       window.removeEventListener("keydown", onShiftKey);
       window.removeEventListener("keyup", onShiftKey);
+      window.removeEventListener("blur", onWindowBlur);
       controls.dispose();
       clearGraph();
       sceneBundle.dispose();

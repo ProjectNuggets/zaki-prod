@@ -3047,6 +3047,24 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   pointer-events: none;
 }
 
+/* WebGL-unavailable fallback (no-GPU / disabled / context-exhausted). */
+.zaki-galaxy-fallback {
+  max-width: 420px;
+  text-align: center;
+  font-family: var(--v2-font-mono);
+}
+.zaki-galaxy-fallback__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--v2-ink-1);
+}
+.zaki-galaxy-fallback__body {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--v2-ink-3);
+}
+
 /* Hover "executive brief" card on the Explore canvas (bottom-left). */
 .zaki-galaxy-brief {
   position: absolute;
