@@ -60,22 +60,25 @@ const SEARCH_DEBOUNCE_MS = 250;
 // governance Settings deep-link in the DOM/accessibility tree. This hook makes
 // the rail and overlay mutually exclusive, matching the CSS breakpoint. It is
 // test-safe: jsdom has no matchMedia, so it reports "not narrow" (overlay off).
-const BRAIN_NARROW_QUERY = "(max-width: 900px)";
-
-function useBrainNarrow() {
-  const [narrow, setNarrow] = useState(false);
+function useMediaMatch(query: string): boolean {
+  const [matches, setMatches] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
       return;
     }
-    const mql = window.matchMedia(BRAIN_NARROW_QUERY);
-    const onChange = () => setNarrow(mql.matches);
+    const mql = window.matchMedia(query);
+    const onChange = () => setMatches(mql.matches);
     onChange();
     mql.addEventListener("change", onChange);
     return () => mql.removeEventListener("change", onChange);
-  }, []);
-  return narrow;
+  }, [query]);
+  return matches;
 }
+
+// < 900px: rail hidden → use the controls overlay. ≤ 1280px: detail rail hidden
+// → show the focused memory in a drawer instead.
+const useBrainNarrow = () => useMediaMatch("(max-width: 900px)");
+const useDetailDrawer = () => useMediaMatch("(max-width: 1280px)");
 
 export function BrainPage() {
   const { t } = useTranslation();
@@ -130,6 +133,7 @@ export function BrainPage() {
   // null = canvas-only (default); set by clicking a corner icon.
   const [activePanel, setActivePanel] = useState<ActivePanel>(initialPanel);
   const isNarrow = useBrainNarrow();
+  const detailInDrawer = useDetailDrawer();
 
   // Debounce search input into filters.search
   useEffect(() => {
@@ -544,11 +548,33 @@ export function BrainPage() {
               onScopeChange={changeGalaxyScope}
             />
 
-            {/* Mobile-only filters overlay (the rail is hidden < 900px). The
-                old top-right F/C/O cluster was removed — Clusters is now the
-                Color-by/legend, Orphans is the Hide-orphans toggle. */}
+            {/* Narrow screens: the rail is hidden < 900px, so surface a single
+                "Controls" button that opens the full controls (display + filters)
+                in an overlay. (Without this, mobile has no graph controls.) */}
+            {isNarrow && activePanel !== "filters" && (
+              <button
+                type="button"
+                className="zaki-brain-v2__controls-toggle"
+                onClick={() => setActivePanel("filters")}
+                data-testid="brain-controls-toggle"
+              >
+                {t("brain.panel.controls", { defaultValue: "Controls" })}
+              </button>
+            )}
             {activePanel === "filters" && isNarrow && (
               <FloatingOverlay onClose={() => setActivePanel(null)}>
+                <BrainDisplayPanel
+                  view={galaxyView}
+                  onViewChange={setGalaxyView}
+                  fx={galaxyFx}
+                  onToggleFx={toggleGalaxyFx}
+                  depth={galaxyDepth}
+                  onDepthChange={setGalaxyDepth}
+                  onFit={() => galaxyRef.current?.fit()}
+                  onRelayout={() => galaxyRef.current?.relayout()}
+                  scope={galaxyScope}
+                  onScopeChange={changeGalaxyScope}
+                />
                 <BrainFilterPanel filters={filters} onChange={setFilters} />
               </FloatingOverlay>
             )}
@@ -589,7 +615,9 @@ export function BrainPage() {
           />
           </section>
           <aside className="zaki-brain-v2__detail-rail" aria-label={t("brain.panel.detail", { defaultValue: "Memory detail" })}>
-            {galaxyFocusId ? (
+            {/* On ≤1280 the rail is hidden and the focused memory opens in a
+                drawer instead, so only render the panel here on wide screens. */}
+            {galaxyFocusId && !detailInDrawer ? (
               <BrainDetailPanel
                 userId={userId}
                 memoryKey={galaxyFocusKey}
@@ -603,6 +631,14 @@ export function BrainPage() {
               />
             )}
           </aside>
+        </div>
+      )}
+
+      {/* ≤1280px: the detail rail is hidden, so show the focused memory in a
+          drawer (works on laptops/tablets where the rail can't fit). */}
+      {detailInDrawer && galaxyFocusId && (
+        <div className="zaki-brain-v2__detail-drawer" role="dialog" aria-label="Memory detail">
+          <BrainDetailPanel userId={userId} memoryKey={galaxyFocusKey} onClose={clearGalaxyFocus} />
         </div>
       )}
     </div>

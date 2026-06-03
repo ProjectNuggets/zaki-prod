@@ -3402,8 +3402,43 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   overflow: hidden;
   border: 1px solid var(--v2-hairline-strong);
   border-radius: 0;
-  background: var(--v2-bg-sunken);
+  /* Fixed dark field — the galaxy canvas is alpha:true, so it shows this
+     through. Keep it dark in BOTH stages (a 3D starfield needs a dark
+     backdrop; the light-stage cream washed the nodes out). */
+  background: #07070a;
   box-shadow: none;
+}
+
+/* Focused-memory drawer for ≤1280px (where the detail rail is hidden). */
+.zaki-brain-v2__detail-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 45;
+  width: min(420px, 94vw);
+  height: 100vh;
+  padding: 16px;
+  background: var(--v2-bg);
+  border-left: 1px solid var(--v2-hairline-strong);
+  box-shadow: -16px 0 40px rgba(0, 0, 0, 0.4);
+  overflow-y: auto;
+}
+
+/* Narrow-screen "Controls" button (opens the display+filters overlay). */
+.zaki-brain-v2__controls-toggle {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 6;
+  padding: 6px 14px;
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--v2-ink-1);
+  background: var(--v2-bg-raised);
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: 999px;
+  cursor: pointer;
 }
 
 .zaki-brain-v2__canvas-controls {
