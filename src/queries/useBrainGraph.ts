@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   fetchBrainGraph,
   type BrainGraphFetchOpts,
@@ -30,5 +30,8 @@ export function useBrainGraph(
     queryFn: () => fetchBrainGraph(userId, opts),
     enabled: !!userId && (queryOptions?.enabled ?? true),
     staleTime: 30_000,
+    // Keep the previous graph on screen while a param change (max_nodes /
+    // cutoff / filters) refetches — no whole-page skeleton flash.
+    placeholderData: keepPreviousData,
   });
 }

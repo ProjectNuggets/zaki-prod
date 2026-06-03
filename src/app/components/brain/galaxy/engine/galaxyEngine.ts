@@ -83,6 +83,10 @@ export function createGalaxyEngine(
   let highlightSig = "";
   let raf = 0;
   let settled = false;
+  // Auto-fit the camera when the layout settles — but only on a COLD rebuild
+  // (new graph / scope change). On a WARM rebuild (cutoff / max-nodes / color
+  // tweak where the nodes mostly survive) we keep the user's camera + positions.
+  let shouldFitOnSettle = true;
   // Seed from the canvas's current client size so the bloom composer is created
   // at the right resolution even if resize() hasn't fired yet (avoids a 1×1
   // first frame).
@@ -158,13 +162,34 @@ export function createGalaxyEngine(
   }
 
   function rebuild(): void {
+    // Snapshot the outgoing layout so a warm restart can carry positions over.
+    const prevPos = new Map<string, { x: number; y: number; z: number }>();
+    if (graphSim) {
+      for (const n of graphSim.nodes) prevPos.set(n.id, { x: n.x ?? 0, y: n.y ?? 0, z: n.z ?? 0 });
+    }
     clearGraph();
     if (model.nodes.length === 0) {
       renderFrame();
       return;
     }
     graphSim = createSimulation(model);
-    graphSim.sim.alpha(INITIAL_ALPHA);
+    // Warm-start: when most nodes survive the change (cutoff / max-nodes / color
+    // tweak), carry their positions so the layout MORPHS instead of restarting
+    // from random, and re-settle gently. A cold rebuild (new graph / scope
+    // change) starts fresh and re-fits the camera.
+    let carried = 0;
+    for (const n of graphSim.nodes) {
+      const p = prevPos.get(n.id);
+      if (p) {
+        n.x = p.x;
+        n.y = p.y;
+        n.z = p.z;
+        carried++;
+      }
+    }
+    const warm = carried > 0 && carried >= graphSim.nodes.length * 0.5;
+    shouldFitOnSettle = !warm;
+    graphSim.sim.alpha(warm ? 0.3 : INITIAL_ALPHA);
     if (options.view === "tactical") {
       for (const n of graphSim.nodes) n.fz = 0; // flatten to a plane
     }
@@ -379,7 +404,7 @@ export function createGalaxyEngine(
       } else if (!settled) {
         settled = true;
         syncPositions();
-        fit();
+        if (shouldFitOnSettle) fit(); // keep the user's camera on warm rebuilds
       }
 
       if (settled && options.quality.motion) {
