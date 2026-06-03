@@ -50,6 +50,18 @@ export interface RenderQuality {
   labels: boolean;
 }
 
+/** Live force-layout knobs (the Forces sliders), mapped to d3-force-3d. */
+export interface ForceConfig {
+  /** forceCenter strength — pull toward center (0 = loose … ~0.3 = one ball). */
+  center: number;
+  /** |forceManyBody charge| — node repulsion (20 = tight … 500 = spread). */
+  repel: number;
+  /** Base edge length — forceLink distance (40 = tight … 300 = roomy). */
+  linkDistance: number;
+  /** forceLink spring multiplier (0.02 = loose … 1.2 = tight knots). */
+  linkStrength: number;
+}
+
 export interface GraphRendererOptions {
   view: BrainViewMode;
   quality: RenderQuality;
@@ -57,6 +69,8 @@ export interface GraphRendererOptions {
   nodeScale?: number;
   /** Label fade-distance multiplier (Display → "Text fade" slider). */
   labelFade?: number;
+  /** Force-layout config (Forces sliders); applied live without a rebuild. */
+  forces?: ForceConfig;
   selectedIds: readonly string[];
   /** The ember focus node — bright accent, neighbors lit, the rest dimmed. */
   focusId: string | null;

@@ -64,10 +64,13 @@ export const DEFAULT_FILTERS: BrainFilters = {
   // regions — the #1 "perceive your data" lever (was mono → no color meaning).
   colorPreset: "community",
   semanticEdgeThreshold: 0.85,
-  nodeRepulsion: 8000,
+  // Forces — galaxy-native d3-force-3d values (see DEFAULT_FORCES). repel =
+  // |charge|, gravity = center strength, idealEdgeLength = link distance,
+  // edgeElasticity = link spring. These reproduce the prior baseline look.
+  nodeRepulsion: 140,
   idealEdgeLength: 120,
-  gravity: 0.4,
-  edgeElasticity: 0.45,
+  gravity: 0.04,
+  edgeElasticity: 0.4,
   textFadeThreshold: 0.6,
   nodeSizeScale: 1,
   linkThickness: 1,
@@ -204,6 +207,44 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
           step={0.05}
           value={filters.textFadeThreshold}
           onChange={(v) => set("textFadeThreshold", v)}
+        />
+      </Section>
+
+      {/* Forces — live d3-force-3d tuning (ranges calibrated to the Obsidian
+          reference). Changes re-settle from the current layout without a rebuild
+          or camera reset. */}
+      <Section title={t("brain.filterPanel.forces", { defaultValue: "Forces" })}>
+        <SliderRow
+          label={t("brain.filterPanel.repel", { defaultValue: "Repel force" })}
+          min={20}
+          max={500}
+          step={10}
+          value={filters.nodeRepulsion}
+          onChange={(v) => set("nodeRepulsion", v)}
+        />
+        <SliderRow
+          label={t("brain.filterPanel.linkDistance", { defaultValue: "Link distance" })}
+          min={40}
+          max={300}
+          step={10}
+          value={filters.idealEdgeLength}
+          onChange={(v) => set("idealEdgeLength", v)}
+        />
+        <SliderRow
+          label={t("brain.filterPanel.linkForce", { defaultValue: "Link force" })}
+          min={0.02}
+          max={1.2}
+          step={0.02}
+          value={filters.edgeElasticity}
+          onChange={(v) => set("edgeElasticity", v)}
+        />
+        <SliderRow
+          label={t("brain.filterPanel.center", { defaultValue: "Center force" })}
+          min={0}
+          max={0.3}
+          step={0.01}
+          value={filters.gravity}
+          onChange={(v) => set("gravity", v)}
         />
       </Section>
     </aside>

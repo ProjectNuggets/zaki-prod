@@ -11,7 +11,7 @@ import {
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { createScene, readCssColor } from "./scene";
-import { createSimulation, type GraphSimulation, type SimNode } from "./forces";
+import { applyForces, createSimulation, type GraphSimulation, type SimNode } from "./forces";
 import { createNodeField, type NodeField } from "./nodes";
 import { createEdgeLines, type EdgeLines } from "./edges";
 import { createBloomComposer, type BloomComposer } from "./bloom";
@@ -81,6 +81,7 @@ export function createGalaxyEngine(
   let lastFocusForThreads: string | null = null;
   let lastView = initialOptions.view;
   let highlightSig = "";
+  let forcesSig = "";
   let raf = 0;
   let settled = false;
   // Auto-fit the camera when the layout settles — but only on a COLD rebuild
@@ -172,7 +173,8 @@ export function createGalaxyEngine(
       renderFrame();
       return;
     }
-    graphSim = createSimulation(model);
+    graphSim = createSimulation(model, options.forces);
+    forcesSig = options.forces ? JSON.stringify(options.forces) : "";
     // Warm-start: when most nodes survive the change (cutoff / max-nodes / color
     // tweak), carry their positions so the layout MORPHS instead of restarting
     // from random, and re-settle gently. A cold rebuild (new graph / scope
@@ -554,6 +556,20 @@ export function createGalaxyEngine(
       if (next.labelFade !== undefined && labelLayer) {
         labelLayer.setFadeScale(options.labelFade ?? 0.6);
         renderFrame();
+      }
+      // Forces (live): setOptions gets the full options every call, so diff via
+      // a signature. On a real change, re-apply to the running sim and re-settle
+      // from where it is (no rebuild → positions + camera preserved).
+      if (graphSim && options.forces) {
+        const fsig = JSON.stringify(options.forces);
+        if (fsig !== forcesSig) {
+          forcesSig = fsig;
+          applyForces(graphSim.sim, options.forces);
+          settled = false;
+          shouldFitOnSettle = false;
+          graphSim.sim.alpha(0.4);
+          startLoop();
+        }
       }
     },
     resize(w: number, h: number) {

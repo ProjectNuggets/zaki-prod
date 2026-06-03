@@ -6,9 +6,42 @@ import {
   forceX,
   forceY,
   forceZ,
+  type CenterForce,
+  type LinkForce,
+  type ManyBodyForce,
   type Simulation,
 } from "d3-force-3d";
-import type { RenderModel } from "./interface";
+import type { ForceConfig, RenderModel } from "./interface";
+
+// Default force config — reproduces the prior hardcoded look exactly, and is the
+// baseline the Forces sliders center on (low center, roomy distance, moderate
+// repel + link), calibrated from the Obsidian reference.
+export const DEFAULT_FORCES: ForceConfig = {
+  center: 0.04,
+  repel: 140,
+  linkDistance: 120,
+  linkStrength: 0.4,
+};
+
+const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
+
+// Apply a ForceConfig to an existing sim's charge/link/center forces. Called on
+// build and again (live) whenever a Forces slider moves — no rebuild needed,
+// the caller just reheats the alpha so the layout re-settles from where it is.
+export function applyForces(sim: Simulation<SimNode>, cfg: ForceConfig): void {
+  const charge = sim.force("charge") as ManyBodyForce<SimNode> | undefined;
+  if (charge) charge.strength(-cfg.repel);
+  const link = sim.force("link") as LinkForce<SimNode, SimLink> | undefined;
+  if (link) {
+    link
+      .distance((l) => Math.max(20, cfg.linkDistance * (1.5 - l.relevance)))
+      // relevance-weighted, scaled by the slider (linkStrength 0.4 reproduces
+      // the prior 0.12 + 0.5·relevance curve exactly).
+      .strength((l) => clamp(cfg.linkStrength * (0.3 + 1.25 * l.relevance), 0.01, 2));
+  }
+  const center = sim.force("center") as CenterForce<SimNode> | undefined;
+  if (center) center.strength(cfg.center);
+}
 
 export interface SimNode {
   id: string;
@@ -41,7 +74,6 @@ export interface GraphSimulation {
 // tuned against real corpora once a live backend is connected (the graph can't
 // be visually verified without data). Kept as named constants so the tuning
 // pass is a one-line change per knob.
-const BASE_EDGE_LENGTH = 120; // baseline link spring length, scaled by relevance
 const COMMUNITY_RADIUS = 280; // Fibonacci-sphere radius for cluster seed points
 const COMMUNITY_PULL = 0.05; // gentle per-community centering (charge/link dominate)
 
@@ -49,7 +81,10 @@ const COMMUNITY_PULL = 0.05; // gentle per-community centering (charge/link domi
 // MEANING, not just connectivity: link distance/strength scale with the ported
 // edge relevance, and a gentle per-community pull separates LLM-named clusters
 // into distinct regions. The caller drives ticking inside its rAF loop.
-export function createSimulation(model: RenderModel): GraphSimulation {
+export function createSimulation(
+  model: RenderModel,
+  forces: ForceConfig = DEFAULT_FORCES,
+): GraphSimulation {
   const nodes: SimNode[] = model.nodes.map((n) => ({
     id: n.id,
     importance: n.importance,
@@ -69,20 +104,15 @@ export function createSimulation(model: RenderModel): GraphSimulation {
   const communityStrength = (n: SimNode): number => (n.communityId == null ? 0 : COMMUNITY_PULL);
 
   const sim = forceSimulation<SimNode>(nodes, 3)
-    .force("charge", forceManyBody<SimNode>().strength(-140).distanceMax(900))
-    .force(
-      "link",
-      forceLink<SimNode, SimLink>(links)
-        .id((d) => d.id)
-        .distance((l) => Math.max(20, BASE_EDGE_LENGTH * (1.5 - l.relevance)))
-        .strength((l) => 0.12 + 0.5 * l.relevance),
-    )
-    .force("center", forceCenter<SimNode>(0, 0, 0).strength(0.04))
+    .force("charge", forceManyBody<SimNode>().distanceMax(900))
+    .force("link", forceLink<SimNode, SimLink>(links).id((d) => d.id))
+    .force("center", forceCenter<SimNode>(0, 0, 0))
     .force("cx", forceX<SimNode>((n) => targetFor(n, "x")).strength(communityStrength))
     .force("cy", forceY<SimNode>((n) => targetFor(n, "y")).strength(communityStrength))
     .force("cz", forceZ<SimNode>((n) => targetFor(n, "z")).strength(communityStrength))
     .stop();
 
+  applyForces(sim, forces); // charge / link distance+strength / center
   return { sim, nodes, links };
 }
 
