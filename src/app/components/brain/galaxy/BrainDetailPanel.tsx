@@ -41,16 +41,18 @@ export function BrainDetailPanel({ userId, memoryKey, onClose }: BrainDetailPane
         <div className="zaki-galaxy-detail__body">
           <h3 className="zaki-galaxy-detail__title">{data.summary || data.content || data.id}</h3>
 
+          {/* Executive brief: when ZAKI learned this + how sure it is — the
+              trust signals that matter for an AI-authored memory. */}
           <div className="zaki-galaxy-detail__meta">
-            {typeof data.importance_score === "number" ? (
-              <span>score {data.importance_score.toFixed(2)}</span>
+            {(() => {
+              const learnedTs = data.source?.timestamp ?? data.created_at;
+              return learnedTs ? <span>Learned {formatAge(learnedTs)}</span> : null;
+            })()}
+            {confidenceLabel(data.confidence_score) ? (
+              <span>· {confidenceLabel(data.confidence_score)}</span>
             ) : null}
-            {typeof data.confidence_score === "number" ? (
-              <span>· conf {data.confidence_score.toFixed(2)}</span>
-            ) : null}
-            {data.created_at ? <span>· {formatAge(data.created_at)}</span> : null}
             {data.valid_to != null ? (
-              <span className="zaki-galaxy-detail__badge">archived</span>
+              <span className="zaki-galaxy-detail__badge">superseded</span>
             ) : null}
           </div>
 
@@ -63,7 +65,7 @@ export function BrainDetailPanel({ userId, memoryKey, onClose }: BrainDetailPane
 
           {data.source?.snippet ? (
             <section className="zaki-galaxy-detail__section">
-              <span className="zaki-galaxy-detail__label">Source</span>
+              <span className="zaki-galaxy-detail__label">Where this came from</span>
               <blockquote className="zaki-galaxy-detail__quote">{data.source.snippet}</blockquote>
             </section>
           ) : null}
@@ -101,6 +103,15 @@ export function BrainDetailPanel({ userId, memoryKey, onClose }: BrainDetailPane
       )}
     </aside>
   );
+}
+
+// Confidence score → plain words (an AI-memory should say how sure it is, not
+// show a raw 0–1). null when no score so the brief stays clean.
+function confidenceLabel(score: number | undefined): string | null {
+  if (typeof score !== "number") return null;
+  if (score >= 0.8) return "high confidence";
+  if (score >= 0.5) return "medium confidence";
+  return "low confidence";
 }
 
 function formatAge(ts: number): string {
