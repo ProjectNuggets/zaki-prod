@@ -88,6 +88,17 @@ export function createNodeField(model: RenderModel): NodeField {
       mesh.setMatrixAt(i, matrix);
     }
     mesh.instanceMatrix.needsUpdate = true;
+    // Invalidate the cached bounding sphere so picking raycasts recompute it
+    // against the CURRENT instance positions. Three computes it once (lazily,
+    // when null) and then caches forever — but our instances move as the sim
+    // settles and spread out. A stale sphere (computed while nodes were still
+    // clustered near the origin) fails the ray/sphere pre-check for any node
+    // that later drifts outside it, so those nodes become unpickable. This bit
+    // most in the sparse cluster-overview (12 hubs repel far apart → all but
+    // the centre-most fell outside the stale sphere → clicks did nothing).
+    // Recompute happens only on the next actual raycast (hover/click), not per
+    // frame, so the cost is bounded by pointer events.
+    mesh.boundingSphere = null;
   }
 
   function setVisualState(state: VisualState): void {

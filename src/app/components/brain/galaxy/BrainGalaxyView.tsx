@@ -203,6 +203,18 @@ export const BrainGalaxyView = forwardRef<GalaxyHandle, BrainGalaxyViewProps>(
         .map((n) => n.id);
     }, [filters.search, model]);
 
+    // Drilled into a cluster: how many of its members are actually on screen vs
+    // the community's full-corpus size. They match at this corpus size, but a
+    // large cluster can exceed the node cap — so be honest rather than implying
+    // the drill-in shows everything.
+    const clusterCount = useMemo(() => {
+      if (scope.kind !== "cluster") return null;
+      const total =
+        communities.data?.communities.find((c) => c.community_id === scope.id)?.member_count ??
+        null;
+      return { shown: model.nodes.length, total };
+    }, [scope, communities.data, model.nodes.length]);
+
     // Clear focus if the focused node leaves the graph (filter / data change).
     useEffect(() => {
       if (focusId && !model.nodes.some((n) => n.id === focusId)) {
@@ -310,11 +322,17 @@ export const BrainGalaxyView = forwardRef<GalaxyHandle, BrainGalaxyViewProps>(
           options={options}
           className="zaki-brain-v2__galaxy"
         />
-        {searchIds && (
+        {searchIds ? (
           <div className="zaki-galaxy-searchcount" role="status">
             {searchIds.length} {searchIds.length === 1 ? "match" : "matches"}
           </div>
-        )}
+        ) : clusterCount && clusterCount.total != null ? (
+          <div className="zaki-galaxy-searchcount" role="status">
+            {clusterCount.shown >= clusterCount.total
+              ? `${clusterCount.total} ${clusterCount.total === 1 ? "memory" : "memories"}`
+              : `Showing ${clusterCount.shown} of ${clusterCount.total}`}
+          </div>
+        ) : null}
         {focusId ? (
           // Selected: the full memory detail lives in the card (no separate
           // right rail → the canvas gets the room).
