@@ -4,6 +4,7 @@ import {
   formatZakiSessionFallbackLabel,
   formatZakiSessionLabel,
   isInternalProbeZakiSession,
+  isRepairableZakiSessionTitle,
   isThreadLaneZakiSessionKey,
   normalizeZakiSessionKey,
   parseZakiSessionKey,
@@ -215,5 +216,38 @@ describe("zaki session helpers", () => {
         title: "codex-live-e2e-1780103345101",
       }),
     ).toBe("New thread");
+  });
+
+  it("marks only placeholder thread titles as repairable", () => {
+    expect(
+      isRepairableZakiSessionTitle({
+        sessionKey: "agent:zaki-bot:user:7:thread:thread-42",
+        title: "Session",
+      }),
+    ).toBe(true);
+    expect(
+      isRepairableZakiSessionTitle({
+        sessionKey: "agent:zaki-bot:user:7:thread:thread-42",
+        title: null,
+      }),
+    ).toBe(true);
+    expect(
+      isRepairableZakiSessionTitle({
+        sessionKey: "agent:zaki-bot:user:7:thread:main",
+        title: "Main",
+      }),
+    ).toBe(false);
+    expect(
+      isRepairableZakiSessionTitle({
+        sessionKey: "agent:zaki-bot:user:7:thread:market-research",
+        title: "Market research",
+      }),
+    ).toBe(false);
+    expect(
+      isRepairableZakiSessionTitle({
+        sessionKey: "agent:zaki-bot:user:7:thread:r6-cap",
+        title: "r6-cap",
+      }),
+    ).toBe(false);
   });
 });

@@ -159,6 +159,27 @@ export function isInternalProbeZakiSession({
   });
 }
 
+export function isRepairableZakiSessionTitle({
+  sessionKey,
+  title,
+  createdAt,
+}: {
+  sessionKey: string;
+  title?: string | null;
+  createdAt?: string | number | null;
+}): boolean {
+  const parsed = parseZakiSessionKey(sessionKey);
+  if (parsed.lane !== "thread" || !parsed.threadId || parsed.threadId === "main") return false;
+  if (isInternalProbeZakiSession({ sessionKey, title })) return false;
+
+  const normalizedTitle = String(title || "").trim();
+  if (!normalizedTitle) {
+    const fallback = formatZakiSessionFallbackLabel(sessionKey, { createdAt });
+    return fallback === "New thread" || fallback === "Session";
+  }
+  return isPlaceholderSessionTitle(normalizedTitle);
+}
+
 function formatShortDate(input: string | number | null | undefined): string | null {
   if (input == null) return null;
   const time = parseZakiSessionTimestampMs(input);

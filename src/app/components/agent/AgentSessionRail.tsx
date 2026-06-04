@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { MessageSquare, Plus, Search, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { AgentSession } from "@/lib/api";
@@ -6,6 +6,7 @@ import { ZakiSessionList } from "@/app/components/sidebar/ZakiSessionList";
 import {
   formatZakiSessionLabel,
   isInternalProbeZakiSession,
+  isRepairableZakiSessionTitle,
   normalizeZakiSessionKey,
   parseZakiSessionKey,
   parseZakiSessionTimestampMs,
@@ -21,10 +22,12 @@ type AgentSessionRailProps = {
   onCreateSession: () => void;
   onDeleteSession: (sessionKey: string, label: string) => void;
   onRenameSession?: (sessionKey: string, label: string) => void | Promise<void>;
+  onRepairSessionTitles?: (sessions: AgentSession[]) => void | Promise<void>;
 };
 
 const INITIAL_SESSION_LIMIT = 72;
 const SESSION_LIMIT_STEP = 72;
+const TITLE_REPAIR_BATCH_SIZE = 8;
 
 function getSessionRecencyMs(session: AgentSession) {
   const value = session.last_active ?? session.created_at ?? null;
@@ -44,12 +47,15 @@ export function AgentSessionRail({
   onCreateSession,
   onDeleteSession,
   onRenameSession,
+  onRepairSessionTitles,
 }: AgentSessionRailProps) {
   const { t } = useTranslation();
   const { getLabel: getOverlayLabel } = useSessionTitleOverlay();
   const searchId = useId();
   const [query, setQuery] = useState("");
   const [visibleLimit, setVisibleLimit] = useState(INITIAL_SESSION_LIMIT);
+  const titleRepairAttemptedRef = useRef<Set<string>>(new Set());
+  const lastTitleRepairWindowRef = useRef<string | null>(null);
   const normalizedActiveSessionKey = activeSessionKey
     ? normalizeZakiSessionKey(activeSessionKey)
     : null;
@@ -143,6 +149,43 @@ export function AgentSessionRail({
   useEffect(() => {
     setVisibleLimit(INITIAL_SESSION_LIMIT);
   }, [trimmedQuery, realThreadSessions.length]);
+
+  useEffect(() => {
+    if (!onRepairSessionTitles || isLoading || trimmedQuery) return;
+    const repairWindowKey = [
+      visibleLimit,
+      realThreadSessions.length,
+      normalizedActiveSessionKey ?? "",
+    ].join(":");
+    if (lastTitleRepairWindowRef.current === repairWindowKey) return;
+
+    const repairCandidates = visibleSessions
+      .filter((session) => {
+        const sessionKey = normalizeZakiSessionKey(session.session_key);
+        if (titleRepairAttemptedRef.current.has(sessionKey)) return false;
+        return isRepairableZakiSessionTitle({
+          sessionKey,
+          title: session.title,
+          createdAt: session.created_at ?? session.last_active ?? null,
+        });
+      })
+      .slice(0, TITLE_REPAIR_BATCH_SIZE);
+    lastTitleRepairWindowRef.current = repairWindowKey;
+    if (!repairCandidates.length) return;
+
+    for (const session of repairCandidates) {
+      titleRepairAttemptedRef.current.add(normalizeZakiSessionKey(session.session_key));
+    }
+    void onRepairSessionTitles(repairCandidates);
+  }, [
+    isLoading,
+    normalizedActiveSessionKey,
+    onRepairSessionTitles,
+    realThreadSessions.length,
+    trimmedQuery,
+    visibleLimit,
+    visibleSessions,
+  ]);
 
   return (
     <aside

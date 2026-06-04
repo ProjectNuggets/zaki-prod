@@ -192,6 +192,36 @@ describe("AgentSessionRail", () => {
     expect(screen.queryByText("thread-2")).not.toBeInTheDocument();
   });
 
+  it("requests bounded title repair for visible placeholder thread sessions", async () => {
+    const onRepairSessionTitles = jest.fn(async () => undefined);
+    const sessions: AgentSession[] = [
+      makeSession(1, { title: "Session", message_count: 2 }),
+      makeSession(2, { title: "Market research", message_count: 4 }),
+      makeSession(3, { title: "thread-3", message_count: 2 }),
+    ];
+    renderRail(sessions, null, { onRepairSessionTitles });
+
+    await waitFor(() => {
+      expect(onRepairSessionTitles).toHaveBeenCalledTimes(1);
+    });
+    const repaired = onRepairSessionTitles.mock.calls[0]?.[0] as AgentSession[];
+    expect(repaired.map((session) => session.session_key)).toEqual([
+      "agent:zaki-bot:user:1:thread:thread-3",
+      "agent:zaki-bot:user:1:thread:thread-1",
+    ]);
+  });
+
+  it("does not request title repair while sessions are loading", async () => {
+    const onRepairSessionTitles = jest.fn(async () => undefined);
+    renderRail([makeSession(1, { title: "Session", message_count: 2 })], null, {
+      onRepairSessionTitles,
+      isLoading: true,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onRepairSessionTitles).not.toHaveBeenCalled();
+  });
+
   it("persists manual renames through the rail handler", async () => {
     const onRenameSession = jest.fn(async () => undefined);
     renderRail([makeSession(1, { title: "Session" })], null, { onRenameSession });

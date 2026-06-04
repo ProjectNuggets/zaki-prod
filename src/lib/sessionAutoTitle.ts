@@ -84,3 +84,41 @@ export function prepareAutoTitleExchange(
   if (isAutoTitleSkippable(cleanedUser)) return null;
   return { userMessage: cleanedUser, assistantMessage: exchange.assistantMessage };
 }
+
+function sanitizeFallbackSessionTitle(value: string): string | null {
+  const normalized = String(value || "")
+    .replace(/[`*_#[\]()>]+/g, " ")
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]")
+    .replace(/\b(?:sk-[A-Za-z0-9_-]{12,}|[A-Za-z0-9_-]{32,})\b/g, "[secret]")
+    .replace(/[\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return null;
+
+  const withoutFiller = normalized
+    .replace(/^(help me|can you|could you|please|i need you to|i want you to|i want to)\b[:,-]?\s*/i, "")
+    .trim();
+  const candidate = withoutFiller || normalized;
+  const words = candidate.split(/\s+/).slice(0, 8);
+  const title = words.join(" ").replace(/[.:,;!?-]+$/g, "").trim();
+  if (!title || title.length < 2) return null;
+  return title.length > 56 ? `${title.slice(0, 53).trim()}...` : title;
+}
+
+/**
+ * Deterministic fallback title for old Agent sessions whose first exchange
+ * predates the auto-title pipeline. This intentionally avoids an LLM call:
+ * the goal is to persist a useful rail label, not rewrite history.
+ */
+export function buildZakiSessionRepairTitle(
+  messages: Array<{ role?: string | null; content?: string | null }>,
+): string | null {
+  for (const msg of messages) {
+    if (String(msg?.role || "").toLowerCase() !== "user") continue;
+    const content = stripPinnedContextWrapper(String(msg?.content || ""));
+    if (isAutoTitleSkippable(content)) return null;
+    return sanitizeFallbackSessionTitle(content);
+  }
+  return null;
+}

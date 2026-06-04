@@ -20,6 +20,7 @@ import {
   fetchAgentMe,
   fetchAgentSession,
   fetchAgentSessionContext,
+  fetchAgentSessionHistory,
   fetchContextDiagnostics,
   compactAgentSession,
   cancelAgentSession,
@@ -41,6 +42,7 @@ import {
   type MemoryActivity,
   type MemoryCaptureResponse,
   type UsageQuotaSurface,
+  type AgentSession,
   type AgentArtifact,
   type AgentJob,
   type AgentTask,
@@ -100,7 +102,7 @@ import type { PinnedFile, Space, Message } from "@/types";
 import { useMessages } from "@/queries/useThreads";
 import { spaceKeys } from "@/queries/useSpaces";
 import { useZakiSessions, zakiSessionKeys } from "@/queries/useZakiSessions";
-import { prepareAutoTitleExchange } from "@/lib/sessionAutoTitle";
+import { buildZakiSessionRepairTitle, prepareAutoTitleExchange } from "@/lib/sessionAutoTitle";
 import { useMessageReactions } from "@/queries/useMessageReactions";
 import { MemoryCaptureToast } from "./memory/MemoryCaptureToast";
 import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
@@ -3335,6 +3337,8 @@ export function ChatArea() {
   const autoTitleSessionAttemptsRef = useRef<Record<string, number>>({});
   const autoTitleSessionFinalizedRef = useRef<Record<string, boolean>>({});
   const autoTitleSessionInFlightRef = useRef<Record<string, boolean>>({});
+  const sessionTitleRepairInFlightRef = useRef<Record<string, boolean>>({});
+  const sessionTitleRepairFinalizedRef = useRef<Record<string, boolean>>({});
 
   const measureInputMetrics = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -3676,6 +3680,56 @@ export function ChatArea() {
       }
     },
     [queryClient, t]
+  );
+
+  const repairAgentSessionTitles = useCallback(
+    async (sessionsToRepair: AgentSession[]) => {
+      let changed = false;
+      for (const session of sessionsToRepair) {
+        const normalized = normalizeZakiSessionKey(session.session_key);
+        if (sessionTitleRepairFinalizedRef.current[normalized]) continue;
+        if (sessionTitleRepairInFlightRef.current[normalized]) continue;
+
+        sessionTitleRepairInFlightRef.current[normalized] = true;
+        try {
+          const { response, data } = await fetchAgentSessionHistory(normalized);
+          if (!response.ok || !data) {
+            sessionTitleRepairFinalizedRef.current[normalized] = true;
+            continue;
+          }
+
+          const historyPayload = data as {
+            messages?: Array<{ role?: string | null; content?: string | null }>;
+            history?: Array<{ role?: string | null; content?: string | null }>;
+          };
+          const historyMessages = Array.isArray(historyPayload.messages)
+            ? historyPayload.messages
+            : Array.isArray(historyPayload.history)
+              ? historyPayload.history
+              : [];
+          const title = buildZakiSessionRepairTitle(historyMessages);
+          if (!title) {
+            sessionTitleRepairFinalizedRef.current[normalized] = true;
+            continue;
+          }
+
+          const { response: renameResponse } = await renameAgentSession(normalized, title);
+          if (renameResponse.ok) {
+            changed = true;
+            sessionTitleRepairFinalizedRef.current[normalized] = true;
+          }
+        } catch {
+          // Best-effort only. The rail still shows the safe neutral label.
+        } finally {
+          sessionTitleRepairInFlightRef.current[normalized] = false;
+        }
+      }
+
+      if (changed) {
+        await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
+      }
+    },
+    [queryClient]
   );
 
   const uploadFilesToWorkspace = useCallback(
@@ -8225,6 +8279,7 @@ export function ChatArea() {
               onCreateSession={handleCreateAgentSession}
               onDeleteSession={handleDeleteAgentSession}
               onRenameSession={handleRenameAgentSession}
+              onRepairSessionTitles={repairAgentSessionTitles}
             />
           ) : null}
 

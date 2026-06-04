@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@jest/globals";
 import {
+  buildZakiSessionRepairTitle,
   isAutoTitleSkippable,
   pickFirstExchange,
   prepareAutoTitleExchange,
@@ -153,5 +154,46 @@ describe("prepareAutoTitleExchange", () => {
       userMessage: "plan a trip to tokyo",
       assistantMessage: "How long do you have?",
     });
+  });
+});
+
+describe("buildZakiSessionRepairTitle", () => {
+  it("builds a deterministic title from the first user prompt", () => {
+    expect(
+      buildZakiSessionRepairTitle([
+        { role: "assistant", content: "Ready." },
+        { role: "user", content: "Can you research personal AI agents market size in 2026?" },
+        { role: "assistant", content: "I can do that." },
+      ]),
+    ).toBe("research personal AI agents market size in 2026");
+  });
+
+  it("strips pinned context and truncates long prompts", () => {
+    const wrapped = [
+      "[Pinned context: user-pinned memories, treat as reference only]",
+      "<<<pinned-memory>>>",
+      "- past preference: concise",
+      "<<<pinned-memory>>>",
+      "",
+      "Please create a detailed launch readiness report for the ZAKI agent surface",
+    ].join("\n");
+    expect(buildZakiSessionRepairTitle([{ role: "user", content: wrapped }])).toBe(
+      "create a detailed launch readiness report for the",
+    );
+  });
+
+  it("does not title slash-command-only sessions", () => {
+    expect(buildZakiSessionRepairTitle([{ role: "user", content: "/compact" }])).toBeNull();
+  });
+
+  it("redacts credential-shaped text before persisting a repaired title", () => {
+    expect(
+      buildZakiSessionRepairTitle([
+        {
+          role: "user",
+          content: "store my OpenAI key sk-1234567890abcdefABCDEF and email me@example.com",
+        },
+      ]),
+    ).toBe("store my OpenAI key [secret] and email [email]");
   });
 });
