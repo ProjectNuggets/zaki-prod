@@ -76,11 +76,15 @@ export function ZakiSessionList({
   }, [renamingKey]);
   const persistRename = (sessionKey: string, label: string) => {
     const normalizedSessionKey = normalizeZakiSessionKey(sessionKey);
+    const previousOverlayLabel = getOverlayLabel(normalizedSessionKey);
     setOverlayLabel(normalizedSessionKey, label);
     if (onRenameSession) {
       void Promise.resolve(onRenameSession(normalizedSessionKey, label)).catch(() => {
-        // The parent owns user-facing error handling. Keep the optimistic
-        // label so an offline/local rename still does not feel lost.
+        if (previousOverlayLabel) {
+          setOverlayLabel(normalizedSessionKey, previousOverlayLabel);
+        } else {
+          clearOverlayLabel(normalizedSessionKey);
+        }
       });
     }
   };

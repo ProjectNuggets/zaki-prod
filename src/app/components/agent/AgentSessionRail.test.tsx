@@ -180,6 +180,24 @@ describe("AgentSessionRail", () => {
     expect(screen.getByText("Market research")).toBeInTheDocument();
   });
 
+  it("rolls back optimistic session renames when persistence fails", async () => {
+    const onRenameSession = jest.fn(async () => {
+      throw new Error("rename failed");
+    });
+    renderRail([makeSession(1, { title: "Original title" })], null, { onRenameSession });
+
+    fireEvent.click(screen.getByRole("button", { name: /Rename/i }));
+    const input = screen.getByRole("textbox", { name: "Session name" });
+    fireEvent.change(input, { target: { value: "Rejected title" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(screen.getByText("Rejected title")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Original title")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Rejected title")).not.toBeInTheDocument();
+  });
+
   it("keeps the session rail focused on search without operational filter tabs", () => {
     const sessions = [
       makeSession(1, { title: "Planning thread" }),
