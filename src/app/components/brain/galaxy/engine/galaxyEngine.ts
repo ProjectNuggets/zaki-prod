@@ -321,8 +321,12 @@ export function createGalaxyEngine(
     const depth = Math.max(1, options.focusDepth ?? 1);
     const nearSet = focusId ? computeNear(focusId, depth) : null;
     currentNearSet = nearSet;
-    // Hover-to-highlight only when nothing is focus-pinned.
-    const hoverNearSet = !focusId && hovered ? computeNear(hovered, 1) : null;
+    // Hover-to-highlight only when nothing is focus-pinned AND the graph has
+    // edges to reveal. In the cluster overview the hubs have no edges, so
+    // dimming all-but-hovered just made the other hubs flicker/relabel on every
+    // mouse-move with nothing useful revealed. No edges → no hover-dim.
+    const hoverNearSet =
+      !focusId && hovered && model.edges.length > 0 ? computeNear(hovered, 1) : null;
     const highlightSet =
       options.highlightIds && options.highlightIds.length > 0
         ? new Set(options.highlightIds)

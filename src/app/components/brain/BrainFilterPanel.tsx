@@ -74,6 +74,17 @@ export const DEFAULT_FILTERS: BrainFilters = {
   nodeSizeScale: 1,
 };
 
+// Turn the raw 0.70–1.00 semantic cutoff into a word. The number is meaningless
+// to a user ("0.85"?); the word says what they'll see. Higher cutoff = stricter
+// = fewer, stronger links.
+function formatConnectionStrength(v: number): string {
+  if (v >= 0.98) return "Strongest only";
+  if (v >= 0.9) return "Strong";
+  if (v >= 0.82) return "Balanced";
+  if (v >= 0.75) return "Loose";
+  return "Show all";
+}
+
 interface Props {
   filters: BrainFilters;
   onChange: (next: BrainFilters) => void;
@@ -111,12 +122,16 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
           onChange={(v) => set("excludeOrphans", v)}
         />
         <SliderRow
-          label={t("brain.filterPanel.semanticThreshold", { defaultValue: "Similarity link cutoff" })}
+          label={t("brain.filterPanel.semanticThreshold", { defaultValue: "Connection strength" })}
           min={0.7}
           max={1}
           step={0.05}
           value={filters.semanticEdgeThreshold}
           onChange={(v) => set("semanticEdgeThreshold", v)}
+          formatValue={formatConnectionStrength}
+          hint={t("brain.filterPanel.semanticThresholdHint", {
+            defaultValue: "Lines link memories that look alike. Higher = only the strongest links.",
+          })}
         />
         <NumberRow
           label={t("brain.filterPanel.maxNodes", { defaultValue: "Max nodes" })}
@@ -318,6 +333,8 @@ function SliderRow({
   max,
   step,
   onChange,
+  formatValue,
+  hint,
 }: {
   label: string;
   value: number;
@@ -325,12 +342,16 @@ function SliderRow({
   max: number;
   step: number;
   onChange: (v: number) => void;
+  /** Render the value as a word instead of the raw number (e.g. "Balanced"). */
+  formatValue?: (v: number) => string;
+  /** One-line plain-English explanation under the slider. */
+  hint?: string;
 }) {
   return (
     <div>
       <div className="mb-1 flex justify-between text-xs">
         <span className="text-white/85">{label}</span>
-        <span className="text-white/55">{value}</span>
+        <span className="text-white/55">{formatValue ? formatValue(value) : value}</span>
       </div>
       <input
         type="range"
@@ -341,6 +362,7 @@ function SliderRow({
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full accent-zaki-brand"
       />
+      {hint ? <p className="mt-1 text-[11px] leading-snug text-white/40">{hint}</p> : null}
     </div>
   );
 }

@@ -19,7 +19,6 @@ export interface BrainDisplayPanelProps {
   /** A node is focused — only then does Focus depth do anything, so it's hidden otherwise. */
   hasFocus: boolean;
   onFit: () => void;
-  onRelayout: () => void;
   scope: GalaxyScope;
   onScopeChange: (scope: GalaxyScope) => void;
 }
@@ -36,7 +35,6 @@ export function BrainDisplayPanel({
   onDepthChange,
   hasFocus,
   onFit,
-  onRelayout,
   scope,
   onScopeChange,
 }: BrainDisplayPanelProps) {
@@ -95,10 +93,7 @@ export function BrainDisplayPanel({
 
       <div className="zaki-galaxy-panel__controls">
         <button type="button" className="v2-btn v2-btn--sm" onClick={onFit}>
-          Fit
-        </button>
-        <button type="button" className="v2-btn v2-btn--sm" onClick={onRelayout}>
-          Relayout
+          Recenter view
         </button>
       </div>
     </div>

@@ -19,7 +19,10 @@ import type { RenderEdge, RenderModel, RenderNode } from "./engine/interface";
 // routed back to "drill into this cluster".
 
 export const CLUSTER_NODE_PREFIX = "cluster:";
-const CLUSTER_OVERVIEW_LIMIT = 12;
+// How many theme hubs the clusters-first overview shows. A readability cap, not
+// a data limit — too many hubs is just a hairball-of-cards, and "Explore
+// everything" always reaches the full corpus. Named (LLM) themes fill it first.
+const CLUSTER_OVERVIEW_LIMIT = 18;
 // Internal project codenames must never surface as a user-facing cluster name
 // (mirrors BrainInsightsStrip's filter).
 const INTERNAL_CODENAME = /\b(nullalis|null[\s_-]?alis|panther|neptune)\b/i;

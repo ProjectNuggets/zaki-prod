@@ -372,7 +372,6 @@ export function BrainPage() {
               onDepthChange={setGalaxyDepth}
               hasFocus={galaxyFocusId != null}
               onFit={() => galaxyRef.current?.fit()}
-              onRelayout={() => galaxyRef.current?.relayout()}
               scope={galaxyScope}
               onScopeChange={changeGalaxyScope}
             />
@@ -561,7 +560,6 @@ export function BrainPage() {
                   onDepthChange={setGalaxyDepth}
                   hasFocus={galaxyFocusId != null}
                   onFit={() => galaxyRef.current?.fit()}
-                  onRelayout={() => galaxyRef.current?.relayout()}
                   scope={galaxyScope}
                   onScopeChange={changeGalaxyScope}
                 />
