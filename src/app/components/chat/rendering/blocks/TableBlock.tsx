@@ -3,8 +3,8 @@ import type { TableBlock as TableBlockType } from "../types";
 
 export function TableBlock({ block }: { block: TableBlockType }) {
   return (
-    <div className="rounded-[14px] border border-zaki-subtle/90 bg-[rgba(250,246,240,0.78)] dark:border-zaki-dark dark:bg-[rgba(255,255,255,0.02)]">
-      <div data-testid="message-table-mobile" className="space-y-3 p-3 sm:hidden">
+    <div className="zaki-message-table rounded-[14px] border border-zaki-subtle/90 bg-[rgba(250,246,240,0.78)] dark:border-zaki-dark dark:bg-[rgba(255,255,255,0.02)]">
+      <div data-testid="message-table-mobile" className="zaki-message-table__mobile space-y-3 p-3 sm:hidden">
         {block.rows.map((row, rowIndex) => (
           <div
             key={`mobile-row-${rowIndex}`}
@@ -27,7 +27,7 @@ export function TableBlock({ block }: { block: TableBlockType }) {
         ))}
       </div>
 
-      <div data-testid="message-table-desktop" className="hidden overflow-x-auto sm:block">
+      <div data-testid="message-table-desktop" className="zaki-message-table__desktop hidden overflow-x-auto sm:block">
         <table className="min-w-full w-max border-separate border-spacing-0 text-left rtl:text-right">
           <thead className="bg-[rgba(241,233,223,0.92)] dark:bg-[rgba(255,255,255,0.04)]">
             <tr>

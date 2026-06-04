@@ -26,16 +26,14 @@ describe("MessageBubble source chip", () => {
     expect(row).toHaveAttribute("data-streaming", "true");
   });
 
-  it("renders a Web chip by default for web-app messages", () => {
+  it("does not render per-message source chips by default", () => {
     const message: Message = {
       id: "1",
       role: "user",
       content: "hello",
     };
     render(<MessageBubble message={message} animate={false} />);
-    const chip = document.querySelector('[data-testid="source-chip"]');
-    expect(chip).not.toBeNull();
-    expect(chip?.getAttribute("data-channel")).toBe("web");
+    expect(document.querySelector('[data-testid="source-chip"]')).toBeNull();
   });
 
   it("can hide source chips on product surfaces that carry provenance elsewhere", () => {
@@ -64,7 +62,8 @@ describe("MessageBubble source chip", () => {
       />
     );
 
-    expect(screen.getByText("ZAKI")).toBeInTheDocument();
+    expect(screen.queryByText("ZAKI")).not.toBeInTheDocument();
+    expect(screen.queryByText("You")).not.toBeInTheDocument();
     expect(screen.queryByText("v2 · final")).not.toBeInTheDocument();
     expect(document.querySelector(".zaki-message-rune")).not.toBeNull();
     expect(document.querySelector('[data-testid="source-chip"]')).toBeNull();
@@ -114,7 +113,7 @@ describe("MessageBubble source chip", () => {
     expect(screen.queryByText(/tool_result/i)).not.toBeInTheDocument();
   });
 
-  it("renders a Telegram chip when message originated from Telegram", () => {
+  it("renders an explicit Telegram chip when a surface opts into source chips", () => {
     const message: Message = {
       id: "2",
       role: "user",
@@ -123,7 +122,7 @@ describe("MessageBubble source chip", () => {
       lane: "main",
       createdAt: new Date().toISOString(),
     };
-    render(<MessageBubble message={message} animate={false} />);
+    render(<MessageBubble message={message} showSourceChip animate={false} />);
     expect(screen.getByText("Telegram")).toBeInTheDocument();
     expect(screen.getByText("main")).toBeInTheDocument();
   });

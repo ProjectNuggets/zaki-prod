@@ -15,6 +15,7 @@ export type MessageBlock =
   | CodeBlock
   | ThematicBreakBlock
   | TableBlock
+  | EmailBlock
   | CalloutBlock
   | CopyPromptBlock
   | PlainTextBlock
@@ -81,6 +82,15 @@ export type TableBlock = BlockBase & {
   type: "table";
   headers: InlineNode[][];
   rows: InlineNode[][][];
+};
+
+export type EmailBlock = BlockBase & {
+  type: "email";
+  fields: Array<{
+    label: string;
+    inlines: InlineNode[];
+  }>;
+  body: MessageBlock[];
 };
 
 export type ThematicBreakBlock = BlockBase & {

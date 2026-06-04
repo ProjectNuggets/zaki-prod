@@ -86,4 +86,35 @@ describe("MessageContent", () => {
       ).length,
     ).toBeGreaterThan(0);
   });
+
+  it("renders plain email addresses as mail links", () => {
+    render(
+      <MessageContent
+        role="assistant"
+        content="Send the signed copy to alaa@example.com."
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "alaa@example.com" })).toHaveAttribute(
+      "href",
+      "mailto:alaa@example.com",
+    );
+  });
+
+  it("renders email drafts with structured fields and body", () => {
+    render(
+      <MessageContent
+        role="assistant"
+        content={"To: alaa@example.com\nSubject: Launch update\n\nHi Alaa,\n\nThe report is attached."}
+      />,
+    );
+
+    expect(screen.getByTestId("message-email-draft")).toHaveTextContent("Email draft");
+    expect(screen.getByTestId("message-email-draft")).toHaveTextContent("Subject");
+    expect(screen.getByRole("link", { name: "alaa@example.com" })).toHaveAttribute(
+      "href",
+      "mailto:alaa@example.com",
+    );
+    expect(screen.getByText("The report is attached.")).toBeInTheDocument();
+  });
 });

@@ -25,7 +25,7 @@ describe("StreamingMessage", () => {
 
     expect(screen.getByText("Final reply")).toBeInTheDocument();
     expect(screen.getByText("Answer is ready")).toBeInTheDocument();
-    expect(screen.getByText("ZAKI")).toBeInTheDocument();
+    expect(screen.queryByText("ZAKI")).not.toBeInTheDocument();
     expect(screen.queryByText("v2 · live")).not.toBeInTheDocument();
   });
 

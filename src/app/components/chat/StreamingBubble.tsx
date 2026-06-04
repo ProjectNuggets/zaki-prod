@@ -77,11 +77,6 @@ export function StreamingBubble({
       </div>
 
       <div className="zaki-message-stack w-full max-w-[780px] flex flex-col gap-2 items-start">
-        {botMode ? (
-          <div className="zaki-message-meta zaki-message-meta--assistant">
-            <strong>ZAKI</strong>
-          </div>
-        ) : null}
         {badgeLabel ? (
           <span
             className={[

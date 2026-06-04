@@ -8,6 +8,7 @@ import { ListBlock } from "./blocks/ListBlock";
 import { ParagraphBlock } from "./blocks/ParagraphBlock";
 import { QuoteBlock } from "./blocks/QuoteBlock";
 import { TableBlock } from "./blocks/TableBlock";
+import { InlineTextRenderer } from "./InlineTextRenderer";
 import type { MessageBlock } from "./types";
 
 type BlockRendererProps = { block: MessageBlock; nested?: boolean };
@@ -37,6 +38,29 @@ export const BlockRenderer = memo(
       return <hr className="border-t border-zaki-subtle/80 dark:border-zaki-dark" />;
     case "table":
       return <TableBlock block={block} />;
+    case "email":
+      return (
+        <section className="zaki-message-email" data-testid="message-email-draft" aria-label="Email draft">
+          <div className="zaki-message-email__kicker">Email draft</div>
+          <dl className="zaki-message-email__fields">
+            {block.fields.map((field, index) => (
+              <div key={`${field.label}-${index}`} className="zaki-message-email__field">
+                <dt>{field.label}</dt>
+                <dd>
+                  <InlineTextRenderer nodes={field.inlines} prose />
+                </dd>
+              </div>
+            ))}
+          </dl>
+          {block.body.length ? (
+            <div className="zaki-message-email__body">
+              {block.body.map((child) => (
+                <BlockRenderer key={child.id} block={child} nested />
+              ))}
+            </div>
+          ) : null}
+        </section>
+      );
     case "image":
       return <ImageBlock block={block} />;
     case "download_button":

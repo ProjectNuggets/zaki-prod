@@ -34,6 +34,24 @@ describe("parseMessageMarkdown", () => {
     ]);
   });
 
+  it("creates mail links for plain email addresses", () => {
+    const document = parseMessageMarkdown("Email alaa@example.com for access.");
+    const paragraph = document.blocks[0];
+    expect(paragraph).toMatchObject({ type: "paragraph" });
+    if (!paragraph || paragraph.type !== "paragraph") {
+      throw new Error("expected paragraph block");
+    }
+    expect(paragraph.inlines).toMatchObject([
+      { type: "text", text: "Email " },
+      {
+        type: "link",
+        href: "mailto:alaa@example.com",
+        children: [{ type: "text", text: "alaa@example.com" }],
+      },
+      { type: "text", text: " for access." },
+    ]);
+  });
+
   it("downgrades h1 and deep headings into the supported heading scale", () => {
     const document = parseMessageMarkdown("# Title\n\n#### Deep");
     const headings = document.blocks.filter((block) => block.type === "heading");
@@ -45,6 +63,19 @@ describe("parseMessageMarkdown", () => {
   it("keeps explicit markdown tables as table blocks", () => {
     const document = parseMessageMarkdown("| A | B |\n| --- | --- |\n| 1 | 2 |");
     expect(document.blocks.some((block) => block.type === "table")).toBe(true);
+  });
+
+  it("renders draft email headers as an email block", () => {
+    const document = parseMessageMarkdown(
+      "To: alaa@example.com\nSubject: Launch update\n\nHi Alaa,\n\nThe report is attached.",
+    );
+    const email = document.blocks[0];
+    expect(email).toMatchObject({ type: "email" });
+    if (!email || email.type !== "email") {
+      throw new Error("expected email block");
+    }
+    expect(email.fields.map((field) => field.label)).toEqual(["To", "Subject"]);
+    expect(email.body.length).toBeGreaterThan(0);
   });
 
   it("creates a provisional code block while a fenced block is still incomplete during streaming", () => {

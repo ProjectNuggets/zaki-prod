@@ -271,7 +271,7 @@ export function ChatView({
   // (sidecar-driven narration) both render through NullalisTurnTimeline.
   // Bot mode is treated as a Nullalis-compatible mode for rendering.
   const timelineMode = nullalisMode || botMode;
-  const showSourceChips = !botMode;
+  const showSourceChips = false;
   const hasTimelineArtifacts =
     timelineMode &&
     (nullalisTranscriptEntries.length > 0 ||

@@ -83,7 +83,7 @@ function trimAutolink(candidate: string) {
 }
 
 function findAutolink(remaining: string): { index: number; raw: string; href: string } | null {
-  const pattern = /(https?:\/\/[^\s<]+|mailto:[^\s<]+)/gi;
+  const pattern = /(https?:\/\/[^\s<]+|mailto:[^\s<]+|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/gi;
   let match: RegExpExecArray | null = null;
 
   while ((match = pattern.exec(remaining))) {
@@ -93,7 +93,7 @@ function findAutolink(remaining: string): { index: number; raw: string; href: st
     if (!looksLikeAutolinkBoundary(previous)) continue;
 
     const trimmed = trimAutolink(raw);
-    const href = sanitizeUrl(trimmed);
+    const href = sanitizeUrl(trimmed.includes("@") && !/^mailto:/i.test(trimmed) ? `mailto:${trimmed}` : trimmed);
     if (!href) continue;
 
     return { index, raw: trimmed, href };
@@ -347,6 +347,62 @@ function consumeTable(lines: string[], start: number, nextId: (prefix: string) =
   };
 }
 
+const EMAIL_HEADER_RE = /^\s*(to|from|cc|bcc|subject|reply-to):\s*(.*)$/i;
+
+function normalizeEmailHeaderLabel(label: string) {
+  const lowered = label.trim().toLowerCase();
+  if (lowered === "cc") return "CC";
+  if (lowered === "bcc") return "BCC";
+  if (lowered === "reply-to") return "Reply-To";
+  return lowered.charAt(0).toUpperCase() + lowered.slice(1);
+}
+
+function consumeEmailDraft(lines: string[], start: number, nextId: (prefix: string) => string): { next: number; block: MessageBlock | null } {
+  const fields: Array<{ label: string; inlines: InlineNode[]; key: string }> = [];
+  let index = start;
+
+  while (index < lines.length) {
+    const match = (lines[index] ?? "").match(EMAIL_HEADER_RE);
+    if (!match) break;
+    const key = String(match[1] || "").trim().toLowerCase();
+    const value = String(match[2] || "").trim();
+    fields.push({
+      key,
+      label: normalizeEmailHeaderLabel(key),
+      inlines: parseInline(value),
+    });
+    index += 1;
+  }
+
+  const hasRecipient = fields.some((field) => ["to", "cc", "bcc"].includes(field.key));
+  const hasSubject = fields.some((field) => field.key === "subject");
+  if (fields.length < 2 || !hasSubject || !hasRecipient) {
+    return { next: start, block: null };
+  }
+
+  if (index < lines.length && !(lines[index] ?? "").trim()) {
+    index += 1;
+  }
+
+  const bodyLines: string[] = [];
+  while (index < lines.length) {
+    const line = lines[index] ?? "";
+    if (isRule(line)) break;
+    bodyLines.push(line);
+    index += 1;
+  }
+
+  return {
+    next: index,
+    block: {
+      id: nextId("email"),
+      type: "email",
+      fields: fields.map(({ label, inlines }) => ({ label, inlines })),
+      body: parseBlocks(bodyLines, nextId),
+    },
+  };
+}
+
 function parseBlocks(lines: string[], nextId: (prefix: string) => string): MessageBlock[] {
   const blocks: MessageBlock[] = [];
   let index = 0;
@@ -369,6 +425,13 @@ function parseBlocks(lines: string[], nextId: (prefix: string) => string): Messa
     if (table.block) {
       blocks.push(table.block);
       index = table.next;
+      continue;
+    }
+
+    const email = consumeEmailDraft(lines, index, nextId);
+    if (email.block) {
+      blocks.push(email.block);
+      index = email.next;
       continue;
     }
 

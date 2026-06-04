@@ -26,20 +26,6 @@ function parseLegacyApprovalInstruction(raw: string):
   };
 }
 
-function formatMessageTime(value?: string | null): string | null {
-  if (!value) return null;
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return null;
-  try {
-    return new Intl.DateTimeFormat("en", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(date);
-  } catch {
-    return null;
-  }
-}
-
 function isImageAttachment(type?: string | null, name?: string | null) {
   const t = String(type || "").toLowerCase();
   if (t.startsWith("image/")) return true;
@@ -90,7 +76,7 @@ export function MessageBubble({
   isStreaming = false,
   animate = true,
   botMode = false,
-  showSourceChip = true,
+  showSourceChip = false,
   onCopy,
   onRegenerate,
   onThumbsUp,
@@ -103,7 +89,6 @@ export function MessageBubble({
   const memorySources = message.memorySources || [];
   const { t, i18n } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
-  const messageTime = formatMessageTime(message.createdAt);
   const agentRune = isStreaming ? "▸" : isAssistantError ? "!" : "✓";
 
   // 2026-05-08 — Hoist agent-generated images out of the collapsed
@@ -170,23 +155,6 @@ export function MessageBubble({
           isUser ? "max-w-[80%] items-end" : "w-full max-w-[780px] items-start"
         )}
       >
-        {botMode && !isUser ? (
-          <div className="zaki-message-meta zaki-message-meta--assistant">
-            <strong>ZAKI</strong>
-            {isAssistantError ? (
-              <>
-                <span className="sep">.</span>
-                <span className="badge is-error">error</span>
-              </>
-            ) : null}
-            {messageTime ? (
-              <>
-                <span className="sep">.</span>
-                <span>{messageTime}</span>
-              </>
-            ) : null}
-          </div>
-        ) : null}
         {message.attachments && message.attachments.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {message.attachments.map((attachment) => {
@@ -251,17 +219,6 @@ export function MessageBubble({
                     : "zaki-assistant-bubble w-full bg-transparent px-0 py-0 text-zaki-primary"
               )}
             >
-              {botMode && isUser ? (
-                <div className="zaki-message-meta zaki-message-meta--user">
-                  <strong>You</strong>
-                  {messageTime ? (
-                    <>
-                      <span className="sep">.</span>
-                      <span>{messageTime}</span>
-                    </>
-                  ) : null}
-                </div>
-              ) : null}
               {legacyApproval ? (
                 <div className="zaki-approval-history" data-testid={`approval-history-${legacyApproval.id}`}>
                   <span className="zaki-approval-history__kicker">Approval requested</span>
