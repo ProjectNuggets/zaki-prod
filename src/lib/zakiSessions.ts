@@ -60,6 +60,17 @@ export function isThreadLaneZakiSessionKey(key: string) {
   return parseZakiSessionKey(key).lane === "thread";
 }
 
+export function parseZakiSessionTimestampMs(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value < 10_000_000_000 ? value * 1000 : value;
+  }
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
 export function extractThreadSlugFromSessionKey(key: string) {
   const parsed = parseZakiSessionKey(key);
   if (parsed.lane === "thread") return parsed.threadId || "main";
@@ -110,10 +121,49 @@ function isPlaceholderSessionTitle(value: string): boolean {
   return lower === "session" || lower === "untitled" || looksLikeDateTitle(title);
 }
 
+function normalizedProbeCandidate(value: string | null | undefined): string {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+export function isInternalProbeZakiSession({
+  sessionKey,
+  title,
+}: {
+  sessionKey: string;
+  title?: string | null;
+}): boolean {
+  const parsed = parseZakiSessionKey(sessionKey);
+  if (parsed.lane !== "thread") return false;
+  const candidates = [
+    normalizedProbeCandidate(title),
+    normalizedProbeCandidate(parsed.threadId),
+    normalizedProbeCandidate(parsed.value),
+  ].filter(Boolean);
+
+  return candidates.some((candidate) => {
+    if (/^r\d{1,3}[-_][a-z0-9][a-z0-9_-]*$/i.test(candidate)) return true;
+    if (/^test[-_][a-z0-9][a-z0-9_-]*$/i.test(candidate)) return true;
+    if (/^(codex|zaki)[-_].*(e2e|smoke|closeout|qa|test)/i.test(candidate)) return true;
+    if (/^health check\b/i.test(candidate)) return true;
+    if (/^reply exactly[:\s]/i.test(candidate)) return true;
+    if (/^smoke test\b/i.test(candidate)) return true;
+    if (/^ui audit ping\b/i.test(candidate)) return true;
+    if (/^approval smoke\b/i.test(candidate)) return true;
+    if (/^approval reload proof\b/i.test(candidate)) return true;
+    if (/^trust audit artifact\b/i.test(candidate)) return true;
+    if (/pong_zaki/i.test(candidate)) return true;
+    return false;
+  });
+}
+
 function formatShortDate(input: string | number | null | undefined): string | null {
   if (input == null) return null;
-  const d = typeof input === "number" ? new Date(input) : new Date(String(input));
-  if (Number.isNaN(d.getTime())) return null;
+  const time = parseZakiSessionTimestampMs(input);
+  if (!time) return null;
+  const d = new Date(time);
   return d.toLocaleString(undefined, {
     month: "short",
     day: "numeric",

@@ -5,8 +5,10 @@ import type { AgentSession } from "@/lib/api";
 import { ZakiSessionList } from "@/app/components/sidebar/ZakiSessionList";
 import {
   formatZakiSessionLabel,
+  isInternalProbeZakiSession,
   normalizeZakiSessionKey,
   parseZakiSessionKey,
+  parseZakiSessionTimestampMs,
 } from "@/lib/zakiSessions";
 import { useSessionTitleOverlay } from "@/queries/useSessionTitleOverlay";
 
@@ -26,13 +28,11 @@ const SESSION_LIMIT_STEP = 72;
 
 function getSessionRecencyMs(session: AgentSession) {
   const value = session.last_active ?? session.created_at ?? null;
-  if (value == null) return 0;
-  const date =
-    typeof value === "number"
-      ? new Date(value < 10_000_000_000 ? value * 1000 : value)
-      : new Date(String(value));
-  const time = date.getTime();
-  return Number.isNaN(time) ? 0 : time;
+  return parseZakiSessionTimestampMs(value);
+}
+
+function pluralizeThread(count: number) {
+  return count === 1 ? "thread" : "threads";
 }
 
 export function AgentSessionRail({
@@ -60,6 +60,12 @@ export function AgentSessionRail({
       const normalizedKey = normalizeZakiSessionKey(session.session_key);
       const parsed = parseZakiSessionKey(normalizedKey);
       if (parsed.lane !== "thread" || !parsed.threadId) continue;
+      if (
+        normalizedKey !== normalizedActiveSessionKey &&
+        isInternalProbeZakiSession({ sessionKey: normalizedKey, title: session.title })
+      ) {
+        continue;
+      }
       const existing = byNormalizedKey.get(normalizedKey);
       if (!existing || getSessionRecencyMs(session) > getSessionRecencyMs(existing)) {
         byNormalizedKey.set(normalizedKey, { ...session, session_key: normalizedKey });
@@ -72,7 +78,7 @@ export function AgentSessionRail({
           normalizeZakiSessionKey(b.session_key)
         );
       });
-  }, [sessions]);
+  }, [normalizedActiveSessionKey, sessions]);
   const filteredSessions = useMemo(() => {
     return realThreadSessions.filter((session) => {
       if (!trimmedQuery) return true;
@@ -115,6 +121,24 @@ export function AgentSessionRail({
   }, [filteredSessions, normalizedActiveSessionKey, visibleLimit]);
   const hasOverflow = filteredSessions.length > visibleLimit;
   const hasFilter = trimmedQuery.length > 0;
+  const visibleCount = visibleSessions.length;
+  const sessionSummary = hasFilter
+    ? t("agent.sessionRail.filteredSummary", {
+        defaultValue: "{{shown}} of {{total}} matching",
+        shown: visibleCount,
+        total: filteredSessions.length,
+      })
+    : hasOverflow
+      ? t("agent.sessionRail.loadedSummary", {
+          defaultValue: "{{shown}} of {{total}} threads",
+          shown: visibleCount,
+          total: realThreadSessions.length,
+        })
+      : t("agent.sessionRail.totalSummary", {
+          defaultValue: "{{total}} {{threadLabel}}",
+          total: realThreadSessions.length,
+          threadLabel: pluralizeThread(realThreadSessions.length),
+        });
 
   useEffect(() => {
     setVisibleLimit(INITIAL_SESSION_LIMIT);
@@ -148,6 +172,21 @@ export function AgentSessionRail({
             </button>
           ) : null}
         </div>
+        {realThreadSessions.length > 0 ? (
+          <div className="zaki-agent-session-rail__summary" aria-live="polite">
+            <span>{sessionSummary}</span>
+            {hasFilter ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                }}
+              >
+                {t("agent.sessionRail.reset", { defaultValue: "Reset" })}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="zaki-agent-session-rail__list">
@@ -180,26 +219,15 @@ export function AgentSessionRail({
       </div>
 
       <div className="zaki-agent-session-rail__foot">
-        {realThreadSessions.length > 0 && (hasFilter || hasOverflow) ? (
+        {realThreadSessions.length > 0 && hasOverflow ? (
           <div className="zaki-agent-session-rail__meta">
-            {hasFilter ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setQuery("");
-                }}
-              >
-                {t("agent.sessionRail.reset", { defaultValue: "Reset" })}
-              </button>
-            ) : null}
-            {hasOverflow ? (
-              <button
-                type="button"
-                onClick={() => setVisibleLimit((limit) => limit + SESSION_LIMIT_STEP)}
-              >
-                {t("agent.sessionRail.more", { defaultValue: "More" })}
-              </button>
-            ) : null}
+            <span>{sessionSummary}</span>
+            <button
+              type="button"
+              onClick={() => setVisibleLimit((limit) => limit + SESSION_LIMIT_STEP)}
+            >
+              {t("agent.sessionRail.more", { defaultValue: "More" })}
+            </button>
           </div>
         ) : null}
         <button

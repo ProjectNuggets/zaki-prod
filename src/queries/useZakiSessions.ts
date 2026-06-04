@@ -1,21 +1,15 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listAgentSessions, type AgentSession } from "@/lib/api";
-import { normalizeZakiSessionKey } from "@/lib/zakiSessions";
+import { normalizeZakiSessionKey, parseZakiSessionTimestampMs } from "@/lib/zakiSessions";
 import { useHiddenSessions } from "@/queries/useHiddenSessions";
 
 export const zakiSessionKeys = {
   all: ["zaki-sessions"] as const,
 };
 
-/** Parse last_active which can be epoch seconds (number) or ISO string */
 function parseLastActive(value: unknown): number {
-  if (typeof value === "number") return value * 1000; // epoch seconds → ms
-  if (typeof value === "string") {
-    const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? 0 : d.getTime();
-  }
-  return 0;
+  return parseZakiSessionTimestampMs(value);
 }
 
 export function useZakiSessions(enabled = true) {

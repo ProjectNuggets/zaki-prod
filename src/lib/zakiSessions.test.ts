@@ -3,9 +3,11 @@ import {
   extractThreadSlugFromSessionKey,
   formatZakiSessionFallbackLabel,
   formatZakiSessionLabel,
+  isInternalProbeZakiSession,
   isThreadLaneZakiSessionKey,
   normalizeZakiSessionKey,
   parseZakiSessionKey,
+  parseZakiSessionTimestampMs,
 } from "./zakiSessions";
 
 describe("zaki session helpers", () => {
@@ -57,6 +59,42 @@ describe("zaki session helpers", () => {
   it("detects thread-lane sessions", () => {
     expect(isThreadLaneZakiSessionKey("agent:zaki-bot:user:7:thread:main")).toBe(true);
     expect(isThreadLaneZakiSessionKey("agent:zaki-bot:user:7:task:77")).toBe(false);
+  });
+
+  it("parses ISO, Unix-second, and Unix-millisecond session timestamps", () => {
+    expect(parseZakiSessionTimestampMs("2026-05-08T00:00:00Z")).toBe(
+      Date.parse("2026-05-08T00:00:00Z"),
+    );
+    expect(parseZakiSessionTimestampMs(1_778_400_000)).toBe(1_778_400_000_000);
+    expect(parseZakiSessionTimestampMs(1_778_400_000_000)).toBe(1_778_400_000_000);
+    expect(parseZakiSessionTimestampMs("not a date")).toBe(0);
+  });
+
+  it("identifies narrow synthetic QA/probe session signatures", () => {
+    expect(
+      isInternalProbeZakiSession({
+        sessionKey: "agent:zaki-bot:user:7:thread:r6-cap",
+        title: "r6-cap",
+      }),
+    ).toBe(true);
+    expect(
+      isInternalProbeZakiSession({
+        sessionKey: "agent:zaki-bot:user:7:thread:main",
+        title: "Reply exactly: PONG_ZAKI_AGENT_CLOSE_17799057788",
+      }),
+    ).toBe(true);
+    expect(
+      isInternalProbeZakiSession({
+        sessionKey: "agent:zaki-bot:user:7:thread:test_image_demo",
+        title: "test_image_demo",
+      }),
+    ).toBe(true);
+    expect(
+      isInternalProbeZakiSession({
+        sessionKey: "agent:zaki-bot:user:7:thread:market-research",
+        title: "Market research",
+      }),
+    ).toBe(false);
   });
 
   it("formats lane-aware fallback labels", () => {

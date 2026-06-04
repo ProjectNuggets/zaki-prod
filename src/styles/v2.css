@@ -3337,6 +3337,43 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   color: var(--v2-accent);
 }
 
+.zaki-agent-session-rail__summary {
+  display: flex;
+  min-height: 14px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.zaki-agent-session-rail__summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zaki-agent-session-rail__summary button {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.zaki-agent-session-rail__summary button:hover {
+  color: var(--v2-accent);
+}
+
 .zaki-agent-session-rail__list {
   flex: 1 1 auto;
   min-height: 0;

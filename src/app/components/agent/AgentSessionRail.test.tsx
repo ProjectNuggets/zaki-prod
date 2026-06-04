@@ -11,7 +11,8 @@ jest.mock("react-i18next", () => ({
       if (typeof options?.defaultValue === "string") {
         return options.defaultValue
           .replace("{{shown}}", String(options.shown ?? ""))
-          .replace("{{total}}", String(options.total ?? ""));
+          .replace("{{total}}", String(options.total ?? ""))
+          .replace("{{threadLabel}}", String(options.threadLabel ?? ""));
       }
       return key;
     },
@@ -58,13 +59,12 @@ describe("AgentSessionRail", () => {
     const { container } = renderRail(sessions);
 
     expect(container.querySelectorAll(".zaki-thread-item")).toHaveLength(72);
-    expect(screen.queryByText("Threads")).not.toBeInTheDocument();
-    expect(screen.queryByText(/Showing/)).not.toBeInTheDocument();
+    expect(screen.getAllByText("72 of 90 threads").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "More" }));
 
     expect(container.querySelectorAll(".zaki-thread-item")).toHaveLength(90);
-    expect(screen.queryByText(/Showing/)).not.toBeInTheDocument();
+    expect(screen.getByText("90 threads")).toBeInTheDocument();
   });
 
   it("keeps the active session visible when it falls beyond the initial cap", () => {
@@ -103,6 +103,36 @@ describe("AgentSessionRail", () => {
     expect(rows[1]).toHaveTextContent("Older");
     expect(screen.queryByText("Task should stay out")).not.toBeInTheDocument();
     expect(screen.queryByText("Cron should stay out")).not.toBeInTheDocument();
+    expect(screen.getByText("2 threads")).toBeInTheDocument();
+  });
+
+  it("hides synthetic QA/probe sessions from the production rail", () => {
+    const sessions: AgentSession[] = [
+      makeSession(1, { title: "Market research" }),
+      makeSession(2, { title: "r6-cap" }),
+      makeSession(3, { title: "Health check ping response" }),
+      makeSession(4, { title: "Reply exactly: PONG_ZAKI_AGENT_CLOSE_17799057788" }),
+      makeSession(5, { title: "Approval Reload Proof 1780319121998" }),
+      makeSession(6, { title: "test_image_demo" }),
+    ];
+    renderRail(sessions);
+
+    expect(screen.getByText("Market research")).toBeInTheDocument();
+    expect(screen.queryByText("r6-cap")).not.toBeInTheDocument();
+    expect(screen.queryByText("Health check ping response")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Reply exactly/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Approval Reload Proof/)).not.toBeInTheDocument();
+    expect(screen.queryByText("test_image_demo")).not.toBeInTheDocument();
+    expect(screen.getByText("1 thread")).toBeInTheDocument();
+  });
+
+  it("keeps a synthetic session visible when it is the active session", () => {
+    const synthetic = makeSession(2, { title: "r6-cap" });
+    renderRail([makeSession(1, { title: "Market research" }), synthetic], synthetic.session_key);
+
+    expect(screen.getByText("Market research")).toBeInTheDocument();
+    expect(screen.getByText("r6-cap")).toBeInTheDocument();
+    expect(screen.getByText("2 threads")).toBeInTheDocument();
   });
 
   it("sorts mixed Unix-second and ISO timestamps by actual recency", () => {
@@ -211,6 +241,7 @@ describe("AgentSessionRail", () => {
     });
 
     expect(screen.getByText("Approval blocked")).toBeInTheDocument();
+    expect(screen.getByText("1 of 1 matching")).toBeInTheDocument();
     expect(screen.queryByText("Planning thread")).not.toBeInTheDocument();
     expect(container.querySelectorAll(".zaki-thread-item")).toHaveLength(1);
 
