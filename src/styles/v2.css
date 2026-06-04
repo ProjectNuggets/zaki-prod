@@ -2836,7 +2836,9 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
 .zaki-brain-v2__graph-shell {
   display: grid;
-  grid-template-columns: 236px minmax(0, 1fr) 320px;
+  /* Two columns: controls rail + canvas. The selected-memory detail now lives
+     in an on-canvas card (no third rail), so the canvas gets the room. */
+  grid-template-columns: 236px minmax(0, 1fr);
   gap: 1px;
   width: min(100%, 1600px);
   min-height: calc(100dvh - 206px);
@@ -2844,20 +2846,15 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   padding: 18px;
 }
 
-.zaki-brain-v2__filters-rail,
-.zaki-brain-v2__detail-rail {
+.zaki-brain-v2__filters-rail {
   min-width: 0;
   min-height: 0;
   border: 1px solid var(--v2-hairline);
   background: var(--v2-bg);
   overflow: hidden;
-}
-
-.zaki-brain-v2__filters-rail {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-height: 0;
   overflow-y: auto;
 }
 
@@ -2866,17 +2863,12 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   flex: 0 0 auto;
 }
 
-.zaki-brain-v2__filters-rail > aside,
-.zaki-brain-v2__detail-rail > section {
+.zaki-brain-v2__filters-rail > aside {
   width: 100%;
   border: 0;
   border-radius: 0;
   background: var(--v2-bg);
   color: var(--v2-ink-1);
-}
-
-.zaki-brain-v2__detail-rail > section {
-  height: 100%;
 }
 
 .zaki-brain-v2__graph-main {
@@ -3289,8 +3281,8 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   overflow-y: auto;
 }
 
-/* Brain Galaxy memory detail — lives in the page detail-rail (not a canvas
-   overlay), shown when a node is focused. */
+/* Brain Galaxy memory detail — shown inside the on-canvas detail card
+   (.zaki-galaxy-card--detail) when a node is focused. */
 .zaki-galaxy-detail {
   display: flex;
   flex-direction: column;
@@ -3427,19 +3419,36 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   box-shadow: none;
 }
 
-/* Focused-memory drawer for ≤1280px (where the detail rail is hidden). */
-.zaki-brain-v2__detail-drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  z-index: 45;
-  width: min(420px, 94vw);
-  height: 100vh;
-  padding: 16px;
+/* Selected-memory detail card on the Explore canvas (bottom-left). Shares the
+   brief's anchor but is interactive (pointer-events) and scrolls — it replaces
+   the old right-side detail rail so the canvas gets the full width. */
+.zaki-galaxy-card {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 6;
+}
+.zaki-galaxy-card--detail {
+  display: flex;
+  flex-direction: column;
+  width: min(380px, calc(100% - 32px));
+  max-height: min(68vh, 620px);
   background: var(--v2-bg);
-  border-left: 1px solid var(--v2-hairline-strong);
-  box-shadow: -16px 0 40px rgba(0, 0, 0, 0.4);
-  overflow-y: auto;
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: var(--v2-r-2);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+/* The detail panel fills the card and owns the scroll. */
+.zaki-galaxy-card--detail > .zaki-galaxy-detail {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+
+/* Colour legend under the canvas (moved out of the counter row). */
+.zaki-brain-v2__legend-row {
+  margin-top: 10px;
 }
 
 /* Narrow-screen "Controls" button (opens the display+filters overlay). */
@@ -3488,83 +3497,6 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   text-transform: uppercase;
 }
 
-.zaki-brain-v2__detail-summary {
-  display: flex;
-  flex-direction: column;
-  min-height: 100%;
-}
-
-.zaki-brain-v2__detail-summary > header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px;
-  border-bottom: 1px solid var(--v2-hairline);
-  background: var(--v2-bg-sunken);
-}
-
-.zaki-brain-v2__detail-summary header p {
-  margin-bottom: 5px;
-  color: var(--v2-ink-3);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.zaki-brain-v2__detail-summary h2 {
-  color: var(--v2-ink-1);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.25;
-}
-
-.zaki-brain-v2__detail-summary > p {
-  padding: 14px;
-  color: var(--v2-ink-3);
-  font-family: var(--v2-font-prose);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.zaki-brain-v2__detail-summary ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.zaki-brain-v2__detail-summary li {
-  display: grid;
-  gap: 4px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--v2-hairline-faint);
-}
-
-.zaki-brain-v2__detail-summary li strong {
-  color: var(--v2-ink-1);
-  font-family: var(--v2-font-prose);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-.zaki-brain-v2__detail-summary li span {
-  color: var(--v2-ink-3);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.zaki-brain-v2 .zaki-brain-v2__detail-rail [data-testid="brain-community-legend"],
-.zaki-brain-v2 .zaki-brain-v2__detail-rail [data-testid="brain-orphan-rail"] {
-  width: 100%;
-  height: 100%;
-  border: 0;
-  border-radius: 0;
-  background: var(--v2-bg);
-}
-
 .zaki-brain-v2 :where(.rounded-full, .rounded-zaki-lg, .rounded-zaki-md, .shadow-md, .shadow-lg, .shadow-2xl) {
   border-radius: 0 !important;
   box-shadow: none !important;
@@ -3602,10 +3534,6 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 @media (max-width: 1280px) {
   .zaki-brain-v2__graph-shell {
     grid-template-columns: 220px minmax(0, 1fr);
-  }
-
-  .zaki-brain-v2__detail-rail {
-    display: none;
   }
 }
 

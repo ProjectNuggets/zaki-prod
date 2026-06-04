@@ -10,7 +10,6 @@ import { BrainSemanticDegradedBanner } from "./BrainSemanticDegradedBanner";
 import { BrainGalaxyView, type GalaxyScope } from "./galaxy/BrainGalaxyView";
 import { BrainHome } from "./galaxy/BrainHome";
 import { BrainDisplayPanel } from "./galaxy/BrainDisplayPanel";
-import { BrainDetailPanel } from "./galaxy/BrainDetailPanel";
 import { DEFAULT_FX } from "./galaxy/engine/lod";
 import type { GalaxyHandle } from "./galaxy/GalaxyRenderer";
 import type { BrainViewMode, RenderQuality } from "./galaxy/engine/interface";
@@ -30,8 +29,7 @@ import {
   type ColorPreset,
   type RecencyBucket,
 } from "./brainColors";
-import { V2Badge, V2StatusStrip, V2Tabs } from "@/app/components/v2";
-import type { BrainGraphNode } from "@/lib/api";
+import { V2StatusStrip, V2Tabs } from "@/app/components/v2";
 
 // Two surfaces: Home (overview + timeline) and Explore (the 3D graph).
 type BrainTab = "home" | "explore";
@@ -78,7 +76,6 @@ function useMediaMatch(query: string): boolean {
 // < 900px: rail hidden → use the controls overlay. ≤ 1280px: detail rail hidden
 // → show the focused memory in a drawer instead.
 const useBrainNarrow = () => useMediaMatch("(max-width: 900px)");
-const useDetailDrawer = () => useMediaMatch("(max-width: 1280px)");
 
 export function BrainPage() {
   const { t } = useTranslation();
@@ -133,7 +130,6 @@ export function BrainPage() {
   // null = canvas-only (default); set by clicking a corner icon.
   const [activePanel, setActivePanel] = useState<ActivePanel>(initialPanel);
   const isNarrow = useBrainNarrow();
-  const detailInDrawer = useDetailDrawer();
 
   // Debounce search input into filters.search
   useEffect(() => {
@@ -204,30 +200,23 @@ export function BrainPage() {
   const [galaxyView, setGalaxyView] = useState<BrainViewMode>("spatial");
   const [galaxyFx, setGalaxyFx] = useState<RenderQuality>(DEFAULT_FX);
   const [galaxyDepth, setGalaxyDepth] = useState(1);
-  // id drives the engine ember; key drives the detail fetch. The renderer emits
-  // both (it resolves the key from the same graph it renders, link_types applied)
-  // so the detail never falls back to a stale id and 404s.
+  // focusId drives the engine ember; the detail card resolves the memory key
+  // itself (from the same graph the galaxy renders, link_types applied), so the
+  // page only needs to track which node is focused.
   const [galaxyFocusId, setGalaxyFocusId] = useState<string | null>(null);
-  const [galaxyFocusKey, setGalaxyFocusKey] = useState<string | null>(null);
   const galaxyRef = useRef<GalaxyHandle>(null);
   const toggleGalaxyFx = useCallback((key: keyof RenderQuality) => {
     setGalaxyFx((prev) => ({ ...prev, [key]: !prev[key] }));
   }, []);
-  const handleGalaxyFocus = useCallback((id: string | null, key: string | null) => {
+  const handleGalaxyFocus = useCallback((id: string | null) => {
     setGalaxyFocusId(id);
-    setGalaxyFocusKey(key);
   }, []);
-  const clearGalaxyFocus = useCallback(() => handleGalaxyFocus(null, null), [handleGalaxyFocus]);
   // Clusters-first: land on the cluster-hub overview, not the full hairball.
   const [galaxyScope, setGalaxyScope] = useState<GalaxyScope>({ kind: "overview" });
-  const changeGalaxyScope = useCallback(
-    (scope: GalaxyScope) => {
-      setGalaxyScope(scope);
-      setGalaxyFocusId(null);
-      setGalaxyFocusKey(null);
-    },
-    [],
-  );
+  const changeGalaxyScope = useCallback((scope: GalaxyScope) => {
+    setGalaxyScope(scope);
+    setGalaxyFocusId(null);
+  }, []);
 
   const selectedNodes = useMemo(
     () =>
@@ -497,12 +486,6 @@ export function BrainPage() {
                 );
               })()}
             </div>
-            {filters.colorPreset !== "mono" ? (
-              <BrainColorLegend
-                colorPreset={filters.colorPreset}
-                nodes={initialGraphQuery.data?.nodes ?? []}
-              />
-            ) : null}
           </div>
 
           {/* Time scrubber row */}
@@ -617,32 +600,19 @@ export function BrainPage() {
               setSelectedNodeIds([]);
             }}
           />
-          </section>
-          <aside className="zaki-brain-v2__detail-rail" aria-label={t("brain.panel.detail", { defaultValue: "Memory detail" })}>
-            {/* On ≤1280 the rail is hidden and the focused memory opens in a
-                drawer instead, so only render the panel here on wide screens. */}
-            {galaxyFocusId && !detailInDrawer ? (
-              <BrainDetailPanel
-                userId={userId}
-                memoryKey={galaxyFocusKey}
-                onClose={clearGalaxyFocus}
-              />
-            ) : (
-              <BrainDetailSummary
-                nodes={selectedNodes}
-                centerKey={centerKey}
-                selectedCommunityId={selectedCommunityId}
-              />
-            )}
-          </aside>
-        </div>
-      )}
 
-      {/* ≤1280px: the detail rail is hidden, so show the focused memory in a
-          drawer (works on laptops/tablets where the rail can't fit). */}
-      {detailInDrawer && galaxyFocusId && (
-        <div className="zaki-brain-v2__detail-drawer" role="dialog" aria-label="Memory detail">
-          <BrainDetailPanel userId={userId} memoryKey={galaxyFocusKey} onClose={clearGalaxyFocus} />
+          {/* Colour legend sits UNDER the canvas (was above). The selected
+              memory's detail shows in the on-canvas card, so there's no right
+              rail — the canvas gets the full width. */}
+          {filters.colorPreset !== "mono" ? (
+            <div className="zaki-brain-v2__legend-row">
+              <BrainColorLegend
+                colorPreset={filters.colorPreset}
+                nodes={initialGraphQuery.data?.nodes ?? []}
+              />
+            </div>
+          ) : null}
+          </section>
         </div>
       )}
     </div>
@@ -676,65 +646,6 @@ function FloatingOverlay({ onClose, children }: FloatingOverlayProps) {
         {children}
       </div>
     </div>
-  );
-}
-
-function BrainDetailSummary({
-  nodes,
-  centerKey,
-  selectedCommunityId,
-}: {
-  nodes: BrainGraphNode[];
-  centerKey: string | null;
-  selectedCommunityId: number | null;
-}) {
-  const { t } = useTranslation();
-  const hasSelection = nodes.length > 0;
-  return (
-    <section className="zaki-brain-v2__detail-summary">
-      <header>
-        <div>
-          <p>{t("brain.detail.title", { defaultValue: "Selection" })}</p>
-          <h2>
-            {hasSelection
-              ? t("brain.detail.selectedCount", {
-                  defaultValue: "{{count}} selected",
-                  count: nodes.length,
-                })
-              : t("brain.detail.noSelection", { defaultValue: "No memory selected" })}
-          </h2>
-        </div>
-        {selectedCommunityId != null ? (
-          <V2Badge tone="accent">
-            {t("brain.detail.community", {
-              defaultValue: "Cluster {{id}}",
-              id: selectedCommunityId,
-            })}
-          </V2Badge>
-        ) : centerKey ? (
-          <V2Badge tone="accent">
-            {t("brain.detail.localGraph", { defaultValue: "Local graph" })}
-          </V2Badge>
-        ) : null}
-      </header>
-      {hasSelection ? (
-        <ul>
-          {nodes.slice(0, 6).map((node) => (
-            <li key={node.id}>
-              <strong>{node.display_label || node.summary}</strong>
-              <span>{node.kind}</span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p>
-          {t("brain.detail.emptyHelper", {
-            defaultValue:
-              "Select memories on the canvas, open clusters, or inspect loose facts without leaving the graph.",
-          })}
-        </p>
-      )}
-    </section>
   );
 }
 

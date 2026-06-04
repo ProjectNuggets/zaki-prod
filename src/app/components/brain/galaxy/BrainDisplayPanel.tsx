@@ -2,12 +2,11 @@ import { V2SegmentedControl } from "@/app/components/v2";
 import type { GalaxyScope } from "./BrainGalaxyView";
 import type { BrainViewMode, RenderQuality } from "./engine/interface";
 
+// Only the two that carry real meaning. Bloom/nebula/motion were decorative
+// gimmicks (and off by default) — removed. Labels + Edges are faithful toggles.
 const FX_TOGGLES: ReadonlyArray<{ key: keyof RenderQuality; label: string }> = [
   { key: "labels", label: "Labels" },
   { key: "threads", label: "Edges" },
-  { key: "bloom", label: "Bloom" },
-  { key: "nebula", label: "Nebula" },
-  { key: "motion", label: "Motion" },
 ];
 
 export interface BrainDisplayPanelProps {

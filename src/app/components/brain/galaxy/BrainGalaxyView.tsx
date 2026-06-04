@@ -9,6 +9,7 @@ import {
   parseClusterNodeId,
 } from "./model";
 import { GalaxyRenderer, type GalaxyHandle } from "./GalaxyRenderer";
+import { BrainDetailPanel } from "./BrainDetailPanel";
 import { clampQuality, prefersReducedMotion } from "./engine/lod";
 import type { BrainViewMode, GraphRendererOptions, RenderQuality } from "./engine/interface";
 
@@ -314,7 +315,17 @@ export const BrainGalaxyView = forwardRef<GalaxyHandle, BrainGalaxyViewProps>(
             {searchIds.length} {searchIds.length === 1 ? "match" : "matches"}
           </div>
         )}
-        {hoverBrief && (
+        {focusId ? (
+          // Selected: the full memory detail lives in the card (no separate
+          // right rail → the canvas gets the room).
+          <div className="zaki-galaxy-card zaki-galaxy-card--detail">
+            <BrainDetailPanel
+              userId={userId}
+              memoryKey={keyByNodeId.get(focusId) ?? focusId}
+              onClose={() => onFocusChange(null, null)}
+            />
+          </div>
+        ) : hoverBrief ? (
           <div className="zaki-galaxy-brief" role="status">
             <div className="zaki-galaxy-brief__title">{hoverBrief.title}</div>
             <div className="zaki-galaxy-brief__meta">
@@ -327,7 +338,7 @@ export const BrainGalaxyView = forwardRef<GalaxyHandle, BrainGalaxyViewProps>(
             </div>
             <div className="zaki-galaxy-brief__hint">Click to open · Shift-drag to spin</div>
           </div>
-        )}
+        ) : null}
       </>
     );
   },
