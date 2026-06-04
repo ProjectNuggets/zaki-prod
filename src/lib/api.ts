@@ -1813,6 +1813,14 @@ export type AgentSessionAutoTitleResponse = {
   };
 };
 
+export type AgentSessionRenameResponse = {
+  status: "updated";
+  session: {
+    key: string;
+    title: string;
+  };
+};
+
 export async function fetchUsageQuota(surface: UsageQuotaSurface = "app_chat") {
   const params = new URLSearchParams({ surface });
   const response = await backendAuthRequest(`/api/usage/quota?${params.toString()}`, {
@@ -2166,6 +2174,19 @@ export async function autoTitleAgentSession(
     },
   );
   const data = await parseApiJson<AgentSessionAutoTitleResponse>(response);
+  return { response, data };
+}
+
+export async function renameAgentSession(sessionKey: string, title: string) {
+  assertSafeSessionKey(sessionKey);
+  const response = await backendAuthRequest(
+    `/api/agent/sessions/${encodeURIComponent(sessionKey)}/title`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    },
+  );
+  const data = await parseApiJson<AgentSessionRenameResponse>(response);
   return { response, data };
 }
 

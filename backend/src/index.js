@@ -288,6 +288,7 @@ import {
 } from "./thread-auto-title.js";
 import {
   buildCanonicalZakiThreadSessionKey,
+  normalizeZakiSessionKey,
   overlayZakiAgentSessionTitles,
   parseZakiSessionKey,
 } from "./zaki-agent-sessions.js";
@@ -14983,11 +14984,71 @@ async function agentSessionAutoTitleHandler(req, res) {
   }
 }
 
+async function agentSessionRenameHandler(req, res) {
+  const sessionKey = validateSessionKeyParam(req, res);
+  if (!sessionKey) return;
+
+  try {
+    const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+    if (!authResult) return;
+    const userId = resolveCanonicalAgentUserId(authResult);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    }
+
+    const parsed = parseZakiSessionKey(sessionKey);
+    if (parsed.userId !== String(userId)) {
+      return res.status(403).json({ error: "session_not_owned" });
+    }
+    if (parsed.lane !== "thread" || !parsed.threadId) {
+      return res.status(400).json({
+        error: "Only chat thread sessions can be renamed.",
+        code: "unsupported_session_lane",
+      });
+    }
+
+    const title = String(req.body?.title || "").replace(/\s+/g, " ").trim();
+    if (!title || title.length > 120) {
+      return res.status(400).json({
+        error: "Session title must be between 1 and 120 characters.",
+        code: "invalid_title",
+      });
+    }
+
+    await touchZakiBotThread({
+      userId,
+      threadId: parsed.threadId,
+      title,
+    });
+
+    res.status(200).json({
+      status: "updated",
+      session: {
+        key: normalizeZakiSessionKey(sessionKey),
+        title,
+      },
+    });
+  } catch (error) {
+    console.error("[Agent] Session rename error:", {
+      sessionKey,
+      error: error?.message || "session rename failed",
+    });
+    res.status(500).json({ error: error?.message || "Unable to rename session." });
+  }
+}
+
 app.post(
   "/api/agent/sessions/:sessionKey/auto-title",
   requireAgentContext,
   agentJson1mb,
   agentSessionAutoTitleHandler
+);
+
+app.patch(
+  "/api/agent/sessions/:sessionKey/title",
+  requireAgentContext,
+  agentJson1mb,
+  agentSessionRenameHandler
 );
 
 app.get(

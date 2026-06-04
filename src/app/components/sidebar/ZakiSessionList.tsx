@@ -22,8 +22,27 @@ interface ZakiSessionListProps {
   onShareSession?: (sessionKey: string) => void;
   /** Permanent delete via /api/agent/sessions/:key DELETE. Optional. */
   onDeleteSession?: (sessionKey: string, label: string) => void;
+  /** Persist a user-visible rename outside the local optimistic overlay. */
+  onRenameSession?: (sessionKey: string, label: string) => void | Promise<void>;
   /** Hide generic channel/mode badges for product-specific V2 rails. */
   showRuntimeBadges?: boolean;
+  /** Hide the embedded create button when a parent rail owns that action. */
+  showCreateButton?: boolean;
+}
+
+function formatSessionStamp(value: AgentSession["last_active"]): string | null {
+  if (value == null) return null;
+  const date =
+    typeof value === "number"
+      ? new Date(value < 10_000_000_000 ? value * 1000 : value)
+      : new Date(String(value));
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 export function ZakiSessionList({
@@ -36,9 +55,15 @@ export function ZakiSessionList({
   onDownloadSession,
   onShareSession,
   onDeleteSession,
+  onRenameSession,
   showRuntimeBadges = true,
+  showCreateButton = true,
 }: ZakiSessionListProps) {
-  const { getLabel: getOverlayLabel, setLabel: setOverlayLabel } = useSessionTitleOverlay();
+  const {
+    getLabel: getOverlayLabel,
+    setLabel: setOverlayLabel,
+    clearLabel: clearOverlayLabel,
+  } = useSessionTitleOverlay();
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [confirmingDeleteKey, setConfirmingDeleteKey] = useState<string | null>(null);
@@ -49,10 +74,24 @@ export function ZakiSessionList({
       renameInputRef.current.select();
     }
   }, [renamingKey]);
-  const commitRename = (sessionKey: string, fallback: string) => {
+  const persistRename = (sessionKey: string, label: string) => {
+    const normalizedSessionKey = normalizeZakiSessionKey(sessionKey);
+    setOverlayLabel(normalizedSessionKey, label);
+    if (onRenameSession) {
+      void Promise.resolve(onRenameSession(normalizedSessionKey, label)).catch(() => {
+        // The parent owns user-facing error handling. Keep the optimistic
+        // label so an offline/local rename still does not feel lost.
+      });
+    }
+  };
+
+  const commitRename = (sessionKey: string, currentLabel: string) => {
+    const normalizedSessionKey = normalizeZakiSessionKey(sessionKey);
     const trimmed = renameDraft.trim();
-    if (trimmed && trimmed !== fallback) {
-      setOverlayLabel(sessionKey, trimmed);
+    if (!trimmed) {
+      clearOverlayLabel(normalizedSessionKey);
+    } else if (trimmed !== currentLabel) {
+      persistRename(normalizedSessionKey, trimmed);
     }
     setRenamingKey(null);
     setRenameDraft("");
@@ -62,14 +101,13 @@ export function ZakiSessionList({
    * user was already renaming a different row, commit that draft first
    * so a half-typed label isn't silently dropped (P2-A).
    */
-  const startRename = (sessionKey: string, fallback: string, currentLabel: string) => {
+  const startRename = (sessionKey: string, currentLabel: string) => {
     if (renamingKey && renamingKey !== sessionKey) {
       const trimmed = renameDraft.trim();
-      if (trimmed) setOverlayLabel(renamingKey, trimmed);
+      if (trimmed) persistRename(renamingKey, trimmed);
     }
     setRenamingKey(sessionKey);
     setRenameDraft(currentLabel);
-    void fallback;
   };
   const { t } = useTranslation();
   if (isLoading) {
@@ -104,29 +142,84 @@ export function ZakiSessionList({
     );
   }
 
+  const rows = sessions.map((session) => {
+    const normalizedSessionKey = normalizeZakiSessionKey(session.session_key);
+    const baseLabel = formatZakiSessionLabel({
+      sessionKey: normalizedSessionKey,
+      title: session.title,
+      createdAt: session.created_at ?? session.last_active ?? null,
+    });
+    const overlayLabel = getOverlayLabel(normalizedSessionKey);
+    const label = overlayLabel || baseLabel;
+    const time = formatSessionTime(session.last_active);
+    const stamp = formatSessionStamp(session.last_active);
+    const pendingApprovalCount =
+      typeof session.pending_approval_count === "number"
+        ? Math.max(0, session.pending_approval_count)
+        : 0;
+    return {
+      session,
+      normalizedSessionKey,
+      label,
+      time,
+      stamp,
+      mode: session.mode ?? null,
+      live: session.live === true,
+      lastChannel: session.last_channel ?? null,
+      pendingApprovalCount,
+    };
+  });
+  const labelCounts = rows.reduce((counts, row) => {
+    const key = row.label.toLowerCase();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+    return counts;
+  }, new Map<string, number>());
+  const displayCandidates = rows.map((row) => {
+    const duplicateKey = row.label.toLowerCase();
+    const duplicateCount = labelCounts.get(duplicateKey) ?? 0;
+    if (duplicateCount <= 1) return row.label;
+    const suffix = [
+      row.stamp || row.time || null,
+      typeof row.session.message_count === "number" && row.session.message_count > 0
+        ? `${row.session.message_count} msg`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    return `${row.label} · ${suffix || "untitled"}`;
+  });
+  const displayCounts = displayCandidates.reduce((counts, label) => {
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+    return counts;
+  }, new Map<string, number>());
+  const displayOrdinals = new Map<string, number>();
+
   return (
     <div className="flex flex-col gap-1">
-      {sessions.map((session) => {
-        const normalizedSessionKey = normalizeZakiSessionKey(session.session_key);
+      {rows.map((row, rowIndex) => {
+        const {
+          normalizedSessionKey,
+          label,
+          time,
+          mode,
+          live,
+          lastChannel,
+          pendingApprovalCount,
+        } = row;
+        const duplicateKey = label.toLowerCase();
+        const duplicateCount = labelCounts.get(duplicateKey) ?? 0;
+        const displayCandidate = displayCandidates[rowIndex] ?? label;
+        const displayDuplicateCount = displayCounts.get(displayCandidate) ?? 0;
+        const displayOrdinal = (displayOrdinals.get(displayCandidate) ?? 0) + 1;
+        displayOrdinals.set(displayCandidate, displayOrdinal);
+        const displayLabel =
+          duplicateCount > 1 && displayDuplicateCount > 1
+            ? `${displayCandidate} · ${displayOrdinal}`
+            : displayCandidate;
         const isActive =
           activeSessionKey != null &&
           normalizedSessionKey === normalizeZakiSessionKey(activeSessionKey);
-        const baseLabel = formatZakiSessionLabel({
-          sessionKey: normalizedSessionKey,
-          title: session.title,
-          createdAt: session.created_at ?? session.last_active ?? null,
-        });
-        const overlayLabel = getOverlayLabel(normalizedSessionKey);
-        const label = overlayLabel || baseLabel;
         const isRenaming = renamingKey === normalizedSessionKey;
-        const time = formatSessionTime(session.last_active);
-        const mode = session.mode ?? null;
-        const live = session.live === true;
-        const lastChannel = session.last_channel ?? null;
-        const pendingApprovalCount =
-          typeof session.pending_approval_count === "number"
-            ? Math.max(0, session.pending_approval_count)
-            : 0;
         const showMetaRow = showRuntimeBadges || pendingApprovalCount > 0;
 
         return (
@@ -160,14 +253,14 @@ export function ZakiSessionList({
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
-                        commitRename(normalizedSessionKey, baseLabel);
+                        commitRename(normalizedSessionKey, label);
                       } else if (e.key === "Escape") {
                         e.preventDefault();
                         setRenamingKey(null);
                         setRenameDraft("");
                       }
                     }}
-                    onBlur={() => commitRename(normalizedSessionKey, baseLabel)}
+                    onBlur={() => commitRename(normalizedSessionKey, label)}
                     className="w-full rounded-zaki-md border border-zaki-accent bg-zaki-raised px-2 py-1 text-sm text-zaki-primary outline-none"
                     aria-label={t("zakiControls.sessionList.renameInput", {
                       defaultValue: "Session name",
@@ -188,7 +281,9 @@ export function ZakiSessionList({
                   <MessageSquare className="size-3.5 text-zaki-muted" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-zaki-secondary truncate">{label}</div>
+                  <div className="text-sm font-medium text-zaki-secondary truncate">
+                    {displayLabel}
+                  </div>
                   {showMetaRow ? (
                     <div className="mt-0.5 flex items-center gap-1.5">
                       {showRuntimeBadges && mode ? (
@@ -262,11 +357,11 @@ export function ZakiSessionList({
                   className="rounded-full p-1 text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-primary focus-visible:ring-2 focus-visible:ring-zaki-accent"
                   onClick={(e) => {
                     e.stopPropagation();
-                    startRename(normalizedSessionKey, baseLabel, label);
+                    startRename(normalizedSessionKey, label);
                   }}
                   aria-label={t("zakiControls.sessionList.renameSessionAria", {
                     defaultValue: "Rename {{label}}",
-                    label,
+                    label: displayLabel,
                   })}
                   title={t("zakiControls.sessionList.renameSession", {
                     defaultValue: "Rename session",
@@ -281,7 +376,7 @@ export function ZakiSessionList({
                   onMouseDown={(e) => {
                     // mousedown so the click runs before the input's onBlur
                     e.preventDefault();
-                    commitRename(normalizedSessionKey, baseLabel);
+                    commitRename(normalizedSessionKey, label);
                   }}
                   aria-label={t("zakiControls.sessionList.confirmRenameAria", {
                     defaultValue: "Save name",
@@ -300,7 +395,7 @@ export function ZakiSessionList({
                   }}
                   aria-label={t("zakiControls.sessionList.shareSessionAria", {
                     defaultValue: "Share {{label}}",
-                    label,
+                    label: displayLabel,
                   })}
                   title={t("zakiControls.sessionList.shareSession", {
                     defaultValue: "Share session",
@@ -319,7 +414,7 @@ export function ZakiSessionList({
                   }}
                   aria-label={t("zakiControls.sessionList.downloadSessionAria", {
                     defaultValue: "Download {{label}}",
-                    label,
+                    label: displayLabel,
                   })}
                   title={t("zakiControls.sessionList.downloadSession", {
                     defaultValue: "Download session",
@@ -338,7 +433,7 @@ export function ZakiSessionList({
                   }}
                   aria-label={t("zakiControls.sessionList.deleteSessionAria", {
                     defaultValue: "Delete {{label}}",
-                    label,
+                    label: displayLabel,
                   })}
                   title={t("zakiControls.sessionList.deleteSession", {
                     defaultValue: "Delete session",
@@ -353,22 +448,23 @@ export function ZakiSessionList({
         );
       })}
 
-      {/* New session button */}
-      <button
-        className={cn(
-          "flex items-center gap-2 p-1.5 rounded-lg transition-colors group hover:bg-zaki-hover mt-1",
-          isRtl ? "text-right flex-row-reverse" : "text-left"
-        )}
-        onClick={onCreateSession}
-        type="button"
-      >
-        <div className="bg-zaki-brand-15 rounded-full size-5 flex items-center justify-center">
-          <Plus className="size-3 text-zaki-brand" />
-        </div>
-        <span className="text-zaki-brand text-sm font-medium">
-          {t("zakiControls.sessionList.newSession")}
-        </span>
-      </button>
+      {showCreateButton ? (
+        <button
+          className={cn(
+            "flex items-center gap-2 p-1.5 rounded-lg transition-colors group hover:bg-zaki-hover mt-1",
+            isRtl ? "text-right flex-row-reverse" : "text-left"
+          )}
+          onClick={onCreateSession}
+          type="button"
+        >
+          <div className="bg-zaki-brand-15 rounded-full size-5 flex items-center justify-center">
+            <Plus className="size-3 text-zaki-brand" />
+          </div>
+          <span className="text-zaki-brand text-sm font-medium">
+            {t("zakiControls.sessionList.newSession")}
+          </span>
+        </button>
+      ) : null}
     </div>
   );
 }

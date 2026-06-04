@@ -62,7 +62,7 @@ describe("zaki session helpers", () => {
   it("formats lane-aware fallback labels", () => {
     expect(formatZakiSessionFallbackLabel("agent:zaki-bot:user:7:thread:main")).toBe("Main");
     expect(formatZakiSessionFallbackLabel("agent:zaki-bot:user:7:thread:thread-42")).toBe(
-      "thread-42",
+      "New thread",
     );
     expect(formatZakiSessionFallbackLabel("agent:zaki-bot:user:7:task:77")).toBe("Task 77");
     expect(formatZakiSessionFallbackLabel("agent:zaki-bot:user:7:cron:nightly")).toBe(
@@ -105,6 +105,18 @@ describe("zaki session helpers", () => {
         createdAt: "2026-05-08T00:00:00Z",
       }),
     ).toBe("trip-planning");
+  });
+
+  it("keeps generated numeric thread ids neutral", () => {
+    expect(formatZakiSessionFallbackLabel("agent:zaki-bot:user:7:thread:thread-42")).toBe(
+      "New thread",
+    );
+    expect(
+      formatZakiSessionLabel({
+        sessionKey: "agent:zaki-bot:user:7:thread:thread-42",
+        title: "thread-42",
+      }),
+    ).toBe("New thread");
   });
 
   it("uses createdAt date for unknown-lane keys when no readable tail is available", () => {

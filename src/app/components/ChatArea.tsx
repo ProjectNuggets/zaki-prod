@@ -24,6 +24,7 @@ import {
   compactAgentSession,
   cancelAgentSession,
   deleteAgentSession,
+  renameAgentSession,
   fetchBotRuntimeStatus,
   fetchAgentExtensionDiagnostics,
   listAgentArtifacts,
@@ -3651,6 +3652,30 @@ export function ChatArea() {
       }
     },
     [handleCreateAgentSession, normalizedActiveZakiSessionKey, queryClient, t]
+  );
+
+  const handleRenameAgentSession = useCallback(
+    async (sessionKey: string, label: string) => {
+      const normalized = normalizeZakiSessionKey(sessionKey);
+      try {
+        const { response } = await renameAgentSession(normalized, label);
+        if (!response.ok) throw new Error(`rename ${response.status}`);
+        await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
+        toast.success(
+          t("zakiControls.sessionList.renameSuccess", {
+            defaultValue: "Session renamed.",
+          }),
+        );
+      } catch {
+        toast.error(
+          t("zakiControls.sessionList.renameError", {
+            defaultValue: "Couldn't rename the session. Try again.",
+          }),
+        );
+        throw new Error("session_rename_failed");
+      }
+    },
+    [queryClient, t]
   );
 
   const uploadFilesToWorkspace = useCallback(
@@ -8199,6 +8224,7 @@ export function ChatArea() {
               onSelectSession={selectAgentSession}
               onCreateSession={handleCreateAgentSession}
               onDeleteSession={handleDeleteAgentSession}
+              onRenameSession={handleRenameAgentSession}
             />
           ) : null}
 

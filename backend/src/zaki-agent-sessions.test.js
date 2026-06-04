@@ -2,6 +2,7 @@ import { describe, expect, it } from "@jest/globals";
 import {
   buildCanonicalZakiThreadSessionKey,
   buildDefaultZakiThreadTitle,
+  isPlaceholderZakiSessionTitle,
   isThreadLaneZakiSessionKey,
   mergeZakiAgentSessions,
   normalizeZakiAgentBackendSessions,
@@ -148,6 +149,31 @@ describe("zaki agent session helpers", () => {
     ]);
     expect(sessions[0]).toMatchObject({ title: "Personal AI market research" });
     expect(sessions[1]).toMatchObject({ title: "Backend Audit" });
+  });
+
+  it("treats generated backend labels as placeholders for local titles", () => {
+    expect(isPlaceholderZakiSessionTitle("anon-1772488359256")).toBe(true);
+    expect(isPlaceholderZakiSessionTitle("codex-live-e2e-1772488359256")).toBe(true);
+    expect(isPlaceholderZakiSessionTitle("550e8400-e29b-41d4-a716-446655440000")).toBe(true);
+    expect(isPlaceholderZakiSessionTitle("thread-42")).toBe(true);
+
+    const sessions = overlayZakiAgentSessionTitles({
+      upstreamSessions: [
+        {
+          session_key: "agent:zaki-bot:user:7:thread:anon-1772488359256",
+          title: "anon-1772488359256",
+          last_active: "2026-05-30T09:10:00Z",
+        },
+      ],
+      localThreads: [
+        {
+          session_key: "agent:zaki-bot:user:7:thread:anon-1772488359256",
+          title: "Readable research thread",
+        },
+      ],
+    });
+
+    expect(sessions[0]).toMatchObject({ title: "Readable research thread" });
   });
 
   it("keeps New chat as the default local thread title", () => {

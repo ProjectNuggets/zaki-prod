@@ -1,9 +1,8 @@
 // 2026-05-09 — Per-user session title overlay.
 //
-// The agent BFF exposes GET / DELETE / compact for sessions but does
-// not yet expose a rename endpoint. Until the backend lands a PATCH,
-// we keep user-given titles in localStorage so the right rail can show
-// "Q3 plan" instead of "thread:abc-123".
+// The agent BFF persists manual renames. This overlay remains as the
+// optimistic write target so the right rail can update immediately and
+// keep old local names if the backend is temporarily unavailable.
 //
 // Storage shape: a single JSON object keyed by sessionKey →
 //   { [sessionKey]: { label: string, updated_at: number } }
@@ -11,10 +10,8 @@
 // LocalStorage (not session) so the overlay survives tab close — the
 // user has explicitly named the session.
 //
-// Migration path: when the backend ships a session PATCH endpoint, we
-// keep this overlay as the optimistic write target and read the BE
-// title as the source of truth, with a one-way push of any unsynced
-// local entries.
+// Backend titles are the source of truth after the next successful
+// session-list refresh.
 
 import { useCallback, useEffect, useState } from "react";
 

@@ -91,12 +91,38 @@ function looksLikeDateTitle(value) {
   return false;
 }
 
+function looksLikeInternalGeneratedTitle(value) {
+  const title = normalizeTitle(value);
+  if (!title) return false;
+  if (/^thread-\d+$/i.test(title)) {
+    return true;
+  }
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(title)) {
+    return true;
+  }
+  if (/^[0-9a-hjkmnp-tv-z]{12,32}$/i.test(title) && /\d/.test(title)) {
+    return true;
+  }
+  if (/^anon-\d{8,}$/i.test(title)) {
+    return true;
+  }
+  if (/^codex-[a-z0-9_-]*\d{8,}$/i.test(title)) {
+    return true;
+  }
+  return false;
+}
+
 export function isPlaceholderZakiSessionTitle(value) {
   const title = normalizeTitle(value);
   if (!title) return true;
   if (isDefaultThreadLabel(title)) return true;
   const lower = title.toLowerCase();
-  return lower === "session" || lower === "untitled" || looksLikeDateTitle(title);
+  return (
+    lower === "session" ||
+    lower === "untitled" ||
+    looksLikeDateTitle(title) ||
+    looksLikeInternalGeneratedTitle(title)
+  );
 }
 
 export function mergeZakiAgentSessions({ upstreamSessions = [], localThreads = [] }) {

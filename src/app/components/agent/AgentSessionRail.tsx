@@ -18,6 +18,7 @@ type AgentSessionRailProps = {
   onSelectSession: (sessionKey: string) => void;
   onCreateSession: () => void;
   onDeleteSession: (sessionKey: string, label: string) => void;
+  onRenameSession?: (sessionKey: string, label: string) => void | Promise<void>;
 };
 
 const INITIAL_SESSION_LIMIT = 72;
@@ -42,6 +43,7 @@ export function AgentSessionRail({
   onSelectSession,
   onCreateSession,
   onDeleteSession,
+  onRenameSession,
 }: AgentSessionRailProps) {
   const { t } = useTranslation();
   const { getLabel: getOverlayLabel } = useSessionTitleOverlay();
@@ -169,7 +171,9 @@ export function AgentSessionRail({
             onSelectSession={onSelectSession}
             onCreateSession={onCreateSession}
             onDeleteSession={onDeleteSession}
+            onRenameSession={onRenameSession}
             showRuntimeBadges={false}
+            showCreateButton={false}
             isRtl={isRtl}
           />
         )}

@@ -73,6 +73,7 @@ export function extractThreadSlugFromSessionKey(key: string) {
  */
 function looksLikeOpaqueId(value: string): boolean {
   if (!value) return false;
+  if (/^thread-\d+$/i.test(value)) return true;
   if (value.length >= 16) return true;
   return /^[a-f0-9]{8,}$|^[A-Z0-9]{8,}$/i.test(value);
 }
@@ -92,6 +93,7 @@ function looksLikeDateTitle(value: string): boolean {
 function looksLikeInternalSessionTitle(value: string): boolean {
   const title = String(value || "").trim();
   if (!title) return false;
+  if (/^thread-\d+$/i.test(title)) return true;
   if (/^[0-9a-f]{8,}(?:-[0-9a-f]{4,})*$/i.test(title)) return true;
   if (/^[A-Z0-9]{16,}$/i.test(title)) return true;
   if (/^anon-\d{10,}(?:-[a-z0-9]+)?$/i.test(title)) return true;

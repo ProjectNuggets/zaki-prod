@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, jest } from "@jest/globals";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import type { ComponentProps } from "react";
 import { AgentSessionRail } from "./AgentSessionRail";
 import type { AgentSession } from "@/lib/api";
 
@@ -28,7 +29,11 @@ function makeSession(index: number, patch: Partial<AgentSession> = {}): AgentSes
   };
 }
 
-function renderRail(sessions: AgentSession[], activeSessionKey: string | null = null) {
+function renderRail(
+  sessions: AgentSession[],
+  activeSessionKey: string | null = null,
+  overrides: Partial<ComponentProps<typeof AgentSessionRail>> = {}
+) {
   return render(
     <AgentSessionRail
       sessions={sessions}
@@ -38,11 +43,16 @@ function renderRail(sessions: AgentSession[], activeSessionKey: string | null = 
       onSelectSession={jest.fn()}
       onCreateSession={jest.fn()}
       onDeleteSession={jest.fn()}
+      {...overrides}
     />
   );
 }
 
 describe("AgentSessionRail", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
   it("caps large session lists and expands on demand", () => {
     const sessions = Array.from({ length: 90 }, (_, index) => makeSession(index));
     const { container } = renderRail(sessions);
@@ -129,6 +139,45 @@ describe("AgentSessionRail", () => {
     expect(activeRows).toHaveLength(1);
     expect(activeRows[0]).toHaveTextContent("Canonical main");
     expect(screen.queryByText("Legacy main")).not.toBeInTheDocument();
+  });
+
+  it("disambiguates repeated visible labels without leaking session keys", () => {
+    const sessions: AgentSession[] = [
+      makeSession(1, {
+        title: "Session",
+        last_active: "2026-05-08T10:00:00Z",
+        message_count: 2,
+      }),
+      makeSession(2, {
+        title: "Session",
+        last_active: "2026-05-09T10:00:00Z",
+        message_count: 5,
+      }),
+    ];
+    renderRail(sessions);
+
+    expect(screen.getByText(/New thread · .*5 msg/)).toBeInTheDocument();
+    expect(screen.getByText(/New thread · .*2 msg/)).toBeInTheDocument();
+    expect(screen.queryByText("thread-1")).not.toBeInTheDocument();
+    expect(screen.queryByText("thread-2")).not.toBeInTheDocument();
+  });
+
+  it("persists manual renames through the rail handler", async () => {
+    const onRenameSession = jest.fn(async () => undefined);
+    renderRail([makeSession(1, { title: "Session" })], null, { onRenameSession });
+
+    fireEvent.click(screen.getByRole("button", { name: /Rename/i }));
+    const input = screen.getByRole("textbox", { name: "Session name" });
+    fireEvent.change(input, { target: { value: "Market research" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(onRenameSession).toHaveBeenCalledWith(
+        "agent:zaki-bot:user:1:thread:thread-1",
+        "Market research"
+      );
+    });
+    expect(screen.getByText("Market research")).toBeInTheDocument();
   });
 
   it("keeps the session rail focused on search without operational filter tabs", () => {

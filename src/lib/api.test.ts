@@ -748,4 +748,34 @@ describe("agent runtime API clients", () => {
       expect.objectContaining({ method: "GET" })
     );
   });
+
+  it("renames Agent sessions through the title BFF route", async () => {
+    _storeToken = "agent-token";
+    mockFetch.mockResolvedValueOnce(
+      makeResponse(200, {
+        status: "updated",
+        session: {
+          key: "agent:zaki-bot:user:42:thread:main",
+          title: "Market research",
+        },
+      })
+    );
+
+    const { renameAgentSession } = await import("@/lib/api");
+    const { data } = await renameAgentSession(
+      "agent:zaki-bot:user:42:thread:main",
+      "Market research"
+    );
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/agent/sessions/agent%3Azaki-bot%3Auser%3A42%3Athread%3Amain/title",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ title: "Market research" }),
+      })
+    );
+    const headers = (mockFetch.mock.calls[0]?.[1] as RequestInit).headers as Headers;
+    expect(headers.get("Authorization")).toBe("Bearer agent-token");
+    expect(data.session.title).toBe("Market research");
+  });
 });
