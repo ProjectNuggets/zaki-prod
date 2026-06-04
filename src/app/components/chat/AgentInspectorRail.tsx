@@ -1108,8 +1108,10 @@ export function AgentInspectorRail({
         throw new Error(String((data as { error?: unknown })?.error || "share_failed"));
       }
       mergeTrace(traceId, data);
+      toast.success("Trace share link created.");
     } catch {
       setTraceDetailError("trace_share_failed");
+      toast.error("Trace share failed.");
     } finally {
       setTraceBusyId(null);
     }
@@ -1122,9 +1124,17 @@ export function AgentInspectorRail({
     try {
       const { response } = await revokeAgentTraceShare(traceId);
       if (!response.ok) throw new Error("revoke_failed");
-      mergeTrace(traceId, { public_url: null, share_code: null });
+      mergeTrace(traceId, {
+        public_url: null,
+        publicUrl: null,
+        share_url: null,
+        shareUrl: null,
+        share_code: null,
+      });
+      toast.success("Trace share revoked.");
     } catch {
       setTraceDetailError("trace_revoke_failed");
+      toast.error("Trace revoke failed.");
     } finally {
       setTraceBusyId(null);
     }
@@ -2003,17 +2013,19 @@ export function AgentInspectorRail({
             )}
             <div className="zaki-agent-inspector__trace-ledger" data-testid="agent-trace-ledger">
               <div className="zaki-agent-inspector__trace-ledger-head">
-                <span>durable traces</span>
+                <span>runtime traces</span>
                 <span>{tracesLoading ? "loading" : traces?.length ? `${traces.length} records` : "none"}</span>
               </div>
               {tracesLoading && !traces ? (
-                <div className="v2-empty-line">Loading durable traces...</div>
+                <div className="v2-empty-line">Loading trace ledger...</div>
               ) : null}
               {tracesError ? (
                 <div className="v2-empty-line">Trace ledger unavailable: {tracesError}</div>
               ) : null}
               {traces && traces.length === 0 ? (
-                <div className="v2-empty-line">No durable trace records yet.</div>
+                <div className="v2-empty-line">
+                  No retained trace records yet. Shared trace links persist as sanitized snapshots.
+                </div>
               ) : null}
               {(traces || []).map((trace, index) => {
                 const traceId = getTraceId(trace);

@@ -28,6 +28,7 @@ const downloadAgentExportFileMock = jest.requireMock("@/lib/api").downloadAgentE
 const fetchAgentTaskMock = jest.requireMock("@/lib/api").fetchAgentTask as jest.Mock;
 const fetchAgentTraceMock = jest.requireMock("@/lib/api").fetchAgentTrace as jest.Mock;
 const listAgentTracesMock = jest.requireMock("@/lib/api").listAgentTraces as jest.Mock;
+const revokeAgentTraceShareMock = jest.requireMock("@/lib/api").revokeAgentTraceShare as jest.Mock;
 const shareAgentArtifactMock = jest.requireMock("@/lib/api").shareAgentArtifact as jest.Mock;
 const shareAgentTraceMock = jest.requireMock("@/lib/api").shareAgentTrace as jest.Mock;
 
@@ -74,7 +75,11 @@ describe("AgentInspectorRail", () => {
     });
     shareAgentTraceMock.mockResolvedValue({
       response: { ok: true },
-      data: { run_id: "run-1", public_url: "https://share.local/trace" },
+      data: { run_id: "run-1", share_url: "https://share.local/trace" },
+    });
+    revokeAgentTraceShareMock.mockResolvedValue({
+      response: { ok: true },
+      data: { ok: true },
     });
     fetchAgentTaskMock.mockResolvedValue({
       response: { ok: true },
@@ -218,6 +223,42 @@ describe("AgentInspectorRail", () => {
     expect(screen.getByText("Fetched durable graph memory for this user.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open memory graph" }));
     expect(onOpenMemory).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces web and file evidence in the Sources tab", () => {
+    renderRail({
+      transcriptEntries: [
+        {
+          id: "web-1",
+          kind: "tool",
+          tool: "web_search",
+          text: "Searched https://example.com/agent-market for the latest market data.",
+          resultSummary: "Used https://example.com/agent-market as a web source.",
+          resultState: "done",
+          timestamp: 2,
+        },
+        {
+          id: "file-1",
+          kind: "tool",
+          tool: "read_file",
+          text: "Read the UI handoff.",
+          resultSummary: "Read docs/ui-handoff.md",
+          resultState: "done",
+          files: ["docs/ui-handoff.md"],
+          timestamp: 1,
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: /Sources/i }));
+
+    expect(screen.getByText(/web source/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open source" })).toHaveAttribute(
+      "href",
+      "https://example.com/agent-market"
+    );
+    expect(screen.getByText("docs/ui-handoff.md")).toBeInTheDocument();
+    expect(screen.getByText(/\[2\] · file/i)).toBeInTheDocument();
   });
 
   it("routes browser control-plane links to canonical settings sections", () => {
@@ -588,5 +629,59 @@ describe("AgentInspectorRail", () => {
     expect(screen.getByText("1.2k")).toBeInTheDocument();
     expect(screen.getByText("WARN")).toBeInTheDocument();
     expect(screen.getByText(/memory.search/)).toBeInTheDocument();
+  });
+
+  it("loads trace details and manages durable share links from the Trace tab", async () => {
+    listAgentTracesMock.mockResolvedValueOnce({
+      response: { ok: true },
+      data: {
+        traces: [
+          {
+            run_id: "run-1",
+            status: "completed",
+            started_at: 1_800_000_000_000,
+          },
+        ],
+      },
+    });
+    fetchAgentTraceMock.mockResolvedValueOnce({
+      response: { ok: true },
+      data: {
+        run_id: "run-1",
+        events: [
+          {
+            type: "tool_call",
+            ts_ms: 1_800_000_001_000,
+            summary: "Fetched source evidence",
+          },
+        ],
+      },
+    });
+
+    renderRail();
+
+    fireEvent.click(screen.getByRole("tab", { name: /Trace/i }));
+    await waitFor(() => expect(listAgentTracesMock).toHaveBeenCalledWith({ limit: 20 }));
+    expect(screen.getByText("runtime traces")).toBeInTheDocument();
+    expect(screen.getByText("run-1")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Details/i }));
+    await waitFor(() => expect(fetchAgentTraceMock).toHaveBeenCalledWith("run-1"));
+    expect(screen.getByText("Fetched source evidence")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    await waitFor(() => expect(shareAgentTraceMock).toHaveBeenCalledWith("run-1"));
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: "Open shared trace run-1" })).toHaveAttribute(
+        "href",
+        "https://share.local/trace"
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+    await waitFor(() => expect(revokeAgentTraceShareMock).toHaveBeenCalledWith("run-1"));
+    await waitFor(() => {
+      expect(screen.queryByRole("link", { name: "Open shared trace run-1" })).not.toBeInTheDocument();
+    });
   });
 });
