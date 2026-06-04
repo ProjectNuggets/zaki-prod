@@ -3,7 +3,11 @@ import { MessageSquare, Plus, Search, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { AgentSession } from "@/lib/api";
 import { ZakiSessionList } from "@/app/components/sidebar/ZakiSessionList";
-import { formatZakiSessionLabel, normalizeZakiSessionKey } from "@/lib/zakiSessions";
+import {
+  formatZakiSessionLabel,
+  normalizeZakiSessionKey,
+  parseZakiSessionKey,
+} from "@/lib/zakiSessions";
 import { useSessionTitleOverlay } from "@/queries/useSessionTitleOverlay";
 
 type AgentSessionRailProps = {
@@ -13,13 +17,19 @@ type AgentSessionRailProps = {
   isRtl: boolean;
   onSelectSession: (sessionKey: string) => void;
   onCreateSession: () => void;
-  onDownloadSession: (sessionKey: string, label: string) => void;
-  onShareSession: (sessionKey: string) => void;
   onDeleteSession: (sessionKey: string, label: string) => void;
 };
 
 const INITIAL_SESSION_LIMIT = 72;
 const SESSION_LIMIT_STEP = 72;
+
+function getSessionRecencyMs(session: AgentSession) {
+  const value = session.last_active ?? session.created_at ?? null;
+  if (value == null) return 0;
+  const date = typeof value === "number" ? new Date(value) : new Date(String(value));
+  const time = date.getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
 
 export function AgentSessionRail({
   sessions,
@@ -28,8 +38,6 @@ export function AgentSessionRail({
   isRtl,
   onSelectSession,
   onCreateSession,
-  onDownloadSession,
-  onShareSession,
   onDeleteSession,
 }: AgentSessionRailProps) {
   const { t } = useTranslation();
@@ -41,8 +49,22 @@ export function AgentSessionRail({
     ? normalizeZakiSessionKey(activeSessionKey)
     : null;
   const trimmedQuery = query.trim().toLowerCase();
+  const realThreadSessions = useMemo(() => {
+    return sessions
+      .filter((session) => {
+        const parsed = parseZakiSessionKey(session.session_key);
+        return parsed.lane === "thread" && Boolean(parsed.threadId);
+      })
+      .sort((a, b) => {
+        const byRecency = getSessionRecencyMs(b) - getSessionRecencyMs(a);
+        if (byRecency !== 0) return byRecency;
+        return normalizeZakiSessionKey(a.session_key).localeCompare(
+          normalizeZakiSessionKey(b.session_key)
+        );
+      });
+  }, [sessions]);
   const filteredSessions = useMemo(() => {
-    return sessions.filter((session) => {
+    return realThreadSessions.filter((session) => {
       if (!trimmedQuery) return true;
       const sessionKey = normalizeZakiSessionKey(session.session_key);
       const label =
@@ -64,7 +86,7 @@ export function AgentSessionRail({
         .toLowerCase();
       return haystack.includes(trimmedQuery);
     });
-  }, [getOverlayLabel, sessions, trimmedQuery]);
+  }, [getOverlayLabel, realThreadSessions, trimmedQuery]);
   const visibleSessions = useMemo(() => {
     const next = filteredSessions.slice(0, visibleLimit);
     if (!normalizedActiveSessionKey) return next;
@@ -86,22 +108,13 @@ export function AgentSessionRail({
 
   useEffect(() => {
     setVisibleLimit(INITIAL_SESSION_LIMIT);
-  }, [trimmedQuery, sessions.length]);
+  }, [trimmedQuery, realThreadSessions.length]);
 
   return (
     <aside
       className="zaki-agent-session-rail"
       aria-label={t("agent.sessionRail.ariaLabel", { defaultValue: "Agent sessions" })}
     >
-      <div className="zaki-agent-session-rail__head">
-        <div className="min-w-0">
-          <h2>
-            {t("agent.sessionRail.title", { defaultValue: "Threads" })}
-            <span>{sessions.length}</span>
-          </h2>
-        </div>
-      </div>
-
       <div className="zaki-agent-session-rail__tools">
         <div className="zaki-agent-session-rail__search">
           <Search aria-hidden="true" />
@@ -128,7 +141,7 @@ export function AgentSessionRail({
       </div>
 
       <div className="zaki-agent-session-rail__list">
-        {sessions.length > 0 && filteredSessions.length === 0 && !isLoading ? (
+        {realThreadSessions.length > 0 && filteredSessions.length === 0 && !isLoading ? (
           <div className="zaki-agent-session-rail__empty" data-testid="agent-session-empty-filter">
             <MessageSquare aria-hidden="true" />
             <strong>
@@ -147,8 +160,6 @@ export function AgentSessionRail({
             activeSessionKey={activeSessionKey}
             onSelectSession={onSelectSession}
             onCreateSession={onCreateSession}
-            onDownloadSession={onDownloadSession}
-            onShareSession={onShareSession}
             onDeleteSession={onDeleteSession}
             showRuntimeBadges={false}
             isRtl={isRtl}
@@ -157,15 +168,8 @@ export function AgentSessionRail({
       </div>
 
       <div className="zaki-agent-session-rail__foot">
-        {sessions.length > 0 ? (
+        {realThreadSessions.length > 0 && (hasFilter || hasOverflow) ? (
           <div className="zaki-agent-session-rail__meta">
-            <span>
-              {t("agent.sessionRail.showing", {
-                defaultValue: "{{shown}} of {{total}} visible",
-                shown: Math.min(visibleSessions.length, filteredSessions.length),
-                total: filteredSessions.length,
-              })}
-            </span>
             {hasFilter ? (
               <button
                 type="button"

@@ -1533,7 +1533,10 @@ export function PowerUserSheet({
               {PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS.map((format) => {
                 const exportState = artifactId ? artifactExportStates[artifactId]?.[format] : null;
                 const isExporting = exportState?.status === "exporting" || busyId === `artifact-export:${artifactId}:${format}`;
-                if (exportState?.status === "ready" && exportState.url) {
+                if (
+                  exportState?.url &&
+                  (exportState.status === "ready" || exportState.status === "exported")
+                ) {
                   return (
                     <button
                       key={format}

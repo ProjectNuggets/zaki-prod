@@ -4,6 +4,7 @@ import {
   buildDefaultZakiThreadTitle,
   isThreadLaneZakiSessionKey,
   mergeZakiAgentSessions,
+  normalizeZakiAgentBackendSessions,
   normalizeZakiSessionKey,
   parseZakiSessionKey,
 } from "./zaki-agent-sessions.js";
@@ -85,6 +86,33 @@ describe("zaki agent session helpers", () => {
       title: "Main session",
       message_count: 4,
     });
+  });
+
+  it("normalizes backend sessions only and sorts by real recency", () => {
+    const sessions = normalizeZakiAgentBackendSessions([
+      {
+        session_key: "agent:zaki-bot:user:7:thread:older",
+        title: "Older",
+        last_active: 1_779_910_000_000,
+      },
+      {
+        session_key: "agent:zaki-bot:user:7:thread:newer",
+        title: "Newer",
+        last_active: 1_779_920_000_000,
+      },
+      {
+        session_key: "agent:zaki-bot:user:7:main",
+        title: "Legacy main",
+        last_active: "2026-05-27T10:00:00Z",
+      },
+    ]);
+
+    expect(sessions.map((session) => session.session_key)).toEqual([
+      "agent:zaki-bot:user:7:thread:newer",
+      "agent:zaki-bot:user:7:thread:older",
+      "agent:zaki-bot:user:7:thread:main",
+    ]);
+    expect(sessions).toHaveLength(3);
   });
 
   it("keeps New chat as the default local thread title", () => {

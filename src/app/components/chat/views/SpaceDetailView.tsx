@@ -109,7 +109,7 @@ export function SpaceDetailView({
         <div className="relative">
           <button
             type="button"
-            className="size-12 rounded-full bg-zaki-sunken flex items-center justify-center"
+            className="size-12 rounded-[3px] border border-zaki-subtle bg-zaki-sunken flex items-center justify-center"
             onClick={() => {
               if (!spaceDetail.fixed) {
                 setIconPickerOpen((open) => !open);
@@ -126,7 +126,7 @@ export function SpaceDetailView({
           {iconPickerOpen && !spaceDetail.fixed && (
             <div
               ref={iconPickerRef}
-              className="absolute top-14 left-0 z-30 w-[min(240px,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] rounded-zaki-xl border border-zaki-subtle bg-white p-3 text-zaki-primary shadow-[0px_18px_36px_rgba(15,15,15,0.16)]"
+              className="absolute top-14 left-0 z-30 w-[min(240px,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] rounded-[3px] border border-zaki-subtle bg-white p-3 text-zaki-primary"
             >
               <div className="text-2xs text-zaki-muted font-semibold uppercase tracking-wider mb-3">
                 {t("spaceDetailView.appearance")}
@@ -136,7 +136,7 @@ export function SpaceDetailView({
                   <button
                     key={color}
                     type="button"
-                    className="size-6 rounded-full border border-zaki-subtle hover:scale-105 transition-transform"
+                    className="size-6 rounded-[2px] border border-zaki-subtle hover:scale-105 transition-transform"
                     style={{ backgroundColor: color }}
                     onClick={() => {
                       onUpdateSpace(spaceDetail.id, { color });
@@ -167,7 +167,7 @@ export function SpaceDetailView({
         <div className="flex-1">
           <div className={`flex items-center gap-2 ${isRtl ? "justify-end" : ""}`}>
             <div className="text-lg font-semibold text-zaki-primary">{spaceDetail.title}</div>
-            <span className="text-2xs uppercase tracking-wide rounded-full bg-zaki-sunken text-zaki-secondary px-2 py-0.5">
+            <span className="text-2xs uppercase tracking-wide rounded-[2px] bg-zaki-sunken text-zaki-secondary px-2 py-0.5">
               {t("spaceDetailView.privateBadge")}
             </span>
           </div>
@@ -194,7 +194,7 @@ export function SpaceDetailView({
         />
       </div>
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        <div className="rounded-zaki-xl border border-zaki-subtle bg-white/90 p-4 md:p-5 shadow-[0px_10px_26px_rgba(15,15,15,0.06)]">
+        <div className="rounded-[3px] border border-zaki-subtle bg-white/90 p-4 md:p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
               <MetaLabel>{t("spaceDetailView.projectFiles.title")}</MetaLabel>
@@ -223,7 +223,7 @@ export function SpaceDetailView({
                   return (
                     <div
                       key={`${file.name}:${file.size}:${file.type}`}
-                      className="flex items-start justify-between gap-3 rounded-zaki-md border border-zaki-subtle bg-zaki-raised/70 px-3 py-2"
+                      className="flex items-start justify-between gap-3 rounded-[2px] border border-zaki-subtle bg-zaki-raised/70 px-3 py-2"
                     >
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium text-zaki-primary">{file.name}</div>
@@ -235,7 +235,7 @@ export function SpaceDetailView({
                           <div className="mt-1 text-2xs text-rose-700">{file.error}</div>
                         )}
                       </div>
-                      <span className={`shrink-0 rounded-full px-2 py-1 text-2xs font-semibold ${tone.chip}`}>
+                      <span className={`shrink-0 rounded-[2px] px-2 py-1 text-2xs font-semibold ${tone.chip}`}>
                         {t(tone.labelKey)}
                       </span>
                     </div>
@@ -251,7 +251,7 @@ export function SpaceDetailView({
             </div>
           )}
         </div>
-        <div className="rounded-zaki-xl border border-zaki-subtle bg-white/90 p-4 md:p-5 shadow-[0px_10px_26px_rgba(15,15,15,0.06)]">
+        <div className="rounded-[3px] border border-zaki-subtle bg-white/90 p-4 md:p-5">
           <div className="flex items-center justify-between">
             <div>
               <MetaLabel>{t("spaceDetailView.instructions.title")}</MetaLabel>
@@ -275,7 +275,7 @@ export function SpaceDetailView({
         </div>
       </div>
 
-      <div className="mt-6 rounded-zaki-xl border border-zaki bg-zaki-raised p-4 md:p-5 shadow-[0px_10px_26px_rgba(15,15,15,0.06)]">
+      <div className="mt-6 rounded-[3px] border border-zaki bg-zaki-raised p-4 md:p-5">
         <div className="flex items-center justify-between mb-4">
           <MetaLabel>{t("spaceDetailView.threads.title")}</MetaLabel>
           <div className="text-2xs text-zaki-muted">
@@ -288,7 +288,7 @@ export function SpaceDetailView({
               key={thread.id}
               role="button"
               tabIndex={0}
-              className="group flex items-center justify-between px-2 py-3 text-sm text-zaki-primary hover:bg-zaki-hover rounded-zaki-md transition-colors"
+              className="group flex items-center justify-between px-2 py-3 text-sm text-zaki-primary hover:bg-zaki-hover rounded-[2px] transition-colors"
               onClick={() => onGoToThread(spaceDetail.id, thread.id)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {

@@ -1582,7 +1582,6 @@ button.v2-status-strip__item:focus-visible {
   color: var(--v2-ink-4);
 }
 
-.zaki-app-topbar__command,
 .zaki-app-topbar__toggle,
 .zaki-app-topbar__avatar {
   display: inline-flex;
@@ -1591,30 +1590,6 @@ button.v2-status-strip__item:focus-visible {
   background: transparent;
   color: var(--v2-ink-3);
   cursor: pointer;
-}
-
-.zaki-app-topbar__command {
-  min-width: 260px;
-  height: 28px;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 0 8px;
-  background: var(--v2-bg-raised);
-  font-size: 11px;
-}
-
-.zaki-app-topbar__command span {
-  min-width: 0;
-  flex: 1;
-  text-align: left;
-}
-
-.zaki-app-topbar__command kbd {
-  border: 1px solid var(--v2-hairline);
-  padding: 1px 5px;
-  color: var(--v2-ink-3);
-  font-family: inherit;
-  font-size: 10px;
 }
 
 .zaki-app-topbar__toggle {
@@ -1641,6 +1616,64 @@ button.v2-status-strip__item:focus-visible {
   stroke-width: 1.5;
 }
 
+.zaki-app-topbar__menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.zaki-app-topbar__agent-more {
+  width: 28px;
+  justify-content: center;
+  padding: 0;
+}
+
+.zaki-app-topbar__menu {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 80;
+  width: 190px;
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg-raised);
+  box-shadow: var(--v2-elev-3);
+}
+
+.zaki-app-topbar__menu button {
+  display: flex;
+  width: 100%;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+  padding: 0 10px;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.zaki-app-topbar__menu button:last-child {
+  border-bottom: 0;
+}
+
+.zaki-app-topbar__menu button:hover,
+.zaki-app-topbar__menu button:focus-visible {
+  background: var(--v2-bg-sunken);
+  color: var(--v2-ink-1);
+  outline: none;
+}
+
+.zaki-app-topbar__menu-icon {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  color: var(--v2-ink-4);
+  stroke-width: 1.5;
+}
+
 .zaki-app-topbar__toggle.is-active {
   border-color: var(--v2-hairline-strong);
   background: var(--v2-hover);
@@ -1660,18 +1693,14 @@ button.v2-status-strip__item:focus-visible {
   font-size: 11px;
 }
 
-.zaki-app-topbar__command:hover,
 .zaki-app-topbar__toggle:hover,
 .zaki-app-topbar__avatar:hover {
   border-color: var(--v2-hairline-strong);
   color: var(--v2-ink-1);
 }
 
-body.zaki-agent-focus-active .zaki-app-topbar__command {
-  display: none;
-}
-
 body.zaki-agent-focus-active .zaki-app-topbar__agent-panel,
+body.zaki-agent-focus-active .zaki-app-topbar__menu-wrap,
 body.zaki-agent-focus-active .zaki-app-topbar__actions > .zaki-app-topbar__toggle:not(.zaki-app-topbar__agent-focus),
 body.zaki-agent-focus-active .zaki-app-topbar__avatar {
   display: none;
@@ -2458,6 +2487,14 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   overflow-wrap: anywhere;
 }
 
+.zaki-settings-v2__provider-edit {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--v2-hairline-faint);
+}
+
 .zaki-settings-v2__agent-model {
   display: grid;
   gap: 12px;
@@ -2964,6 +3001,116 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   text-transform: uppercase;
 }
 
+.zaki-brain-v2__memory-detail {
+  display: grid;
+  gap: 12px;
+  margin: 12px;
+  padding: 12px;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-sunken);
+}
+
+.zaki-brain-v2__memory-detail-head {
+  display: grid;
+  gap: 5px;
+}
+
+.zaki-brain-v2__memory-detail-head span,
+.zaki-brain-v2__linked-memories > span {
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-brain-v2__memory-detail-head strong {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.zaki-brain-v2__memory-detail p,
+.zaki-brain-v2__memory-detail blockquote {
+  margin: 0;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-prose);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.zaki-brain-v2__memory-detail blockquote {
+  border-left: 2px solid var(--v2-accent);
+  padding-left: 10px;
+}
+
+.zaki-brain-v2__memory-detail dl {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  background: var(--v2-hairline-faint);
+}
+
+.zaki-brain-v2__memory-detail dl div {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 8px;
+  padding: 7px;
+  background: var(--v2-bg);
+}
+
+.zaki-brain-v2__memory-detail dt,
+.zaki-brain-v2__memory-detail dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.zaki-brain-v2__memory-detail dt {
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.zaki-brain-v2__memory-detail dd {
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+}
+
+.zaki-brain-v2__linked-memories ul {
+  margin-top: 8px;
+  border: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-brain-v2__detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.zaki-brain-v2__detail-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  border: 1px solid var(--v2-hairline);
+  padding: 0 9px;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.zaki-brain-v2__detail-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .zaki-brain-v2 .zaki-brain-v2__detail-rail [data-testid="brain-community-legend"],
 .zaki-brain-v2 .zaki-brain-v2__detail-rail [data-testid="brain-orphan-rail"] {
   width: 100%;
@@ -3126,50 +3273,6 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   overflow: hidden;
 }
 
-.zaki-agent-session-rail__head {
-  display: flex;
-  min-height: 48px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 14px;
-  border-bottom: 1px solid var(--v2-hairline);
-}
-
-.zaki-agent-session-rail h2 {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  color: var(--v2-ink-1);
-  font-family: var(--v2-font-mono);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  line-height: 1.2;
-  text-transform: uppercase;
-}
-
-.zaki-agent-session-rail h2 span {
-  position: relative;
-  display: inline-flex;
-  min-width: 0;
-  height: auto;
-  align-items: center;
-  justify-content: center;
-  color: var(--v2-ink-4);
-  font-size: 11px;
-  font-weight: 400;
-  letter-spacing: 0.08em;
-  line-height: 1;
-}
-
-.zaki-agent-session-rail h2 span::before {
-  content: ".";
-  margin-right: 8px;
-  color: var(--v2-ink-4);
-}
-
 .zaki-agent-session-rail__tools {
   display: flex;
   flex: 0 0 auto;
@@ -3277,9 +3380,16 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-agent-session-rail__list .zaki-thread-item {
+  position: relative;
   border-left: 2px solid transparent;
   border-radius: 0 !important;
+  min-height: 48px;
   padding: 8px 12px !important;
+}
+
+.zaki-agent-session-rail__list .zaki-thread-item > button:first-child,
+.zaki-agent-session-rail__list .zaki-thread-item > div:first-child {
+  max-width: calc(100% - 58px);
 }
 
 .zaki-agent-session-rail__list .zaki-thread-item:hover {
@@ -3316,12 +3426,35 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-agent-session-rail__list .zaki-thread-item > div:last-child {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-raised);
   opacity: 0;
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .zaki-agent-session-rail__list .zaki-thread-item:hover > div:last-child,
 .zaki-agent-session-rail__list .zaki-thread-item:focus-within > div:last-child {
   opacity: 1;
+  pointer-events: auto;
+}
+
+.zaki-agent-session-rail__list .zaki-thread-item > div:last-child button {
+  border-radius: 0 !important;
+  color: var(--v2-ink-3) !important;
+  padding: 5px !important;
+}
+
+.zaki-agent-session-rail__list .zaki-thread-item > div:last-child button:hover,
+.zaki-agent-session-rail__list .zaki-thread-item > div:last-child button:focus-visible {
+  background: var(--v2-hover) !important;
+  color: var(--v2-accent) !important;
 }
 
 .zaki-agent-session-rail__list input {
@@ -3386,7 +3519,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 .zaki-agent-session-rail__new-thread {
   display: flex;
   width: 100%;
-  height: 30px;
+  height: 32px;
   min-width: 0;
   align-items: center;
   justify-content: space-between;
@@ -3424,177 +3557,12 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 .zaki-agent-session-rail__new-thread kbd {
   border: 1px solid var(--v2-hairline);
   color: var(--v2-ink-4);
-  padding: 1px 4px;
+  padding: 2px 5px;
   font-family: var(--v2-font-mono);
   font-size: 9px;
   font-weight: 400;
   letter-spacing: 0;
-}
-
-.zaki-app-v2 .zaki-agent-v2__head {
-  min-height: 57px;
-  padding: 10px 24px;
-  border-bottom: 1px solid var(--v2-hairline);
-  background: var(--v2-bg);
-}
-
-.zaki-app-v2 .zaki-agent-thread-head {
-  min-width: 0;
-}
-
-.zaki-app-v2 .zaki-agent-thread-head h1 {
-  margin: 0;
-  overflow: hidden;
-  color: var(--v2-ink-1);
-  font-family: var(--v2-font-mono);
-  font-size: 15px;
-  font-weight: 500;
-  letter-spacing: 0;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.zaki-app-v2 .zaki-agent-thread-head p {
-  margin: 4px 0 0;
-  overflow: hidden;
-  color: var(--v2-ink-3);
-  font-family: var(--v2-font-mono);
-  font-size: 10px;
-  font-weight: 400;
-  letter-spacing: 0;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-transform: lowercase;
-}
-
-.zaki-app-v2 .zaki-agent-v2 .zaki-subheader-pill,
-.zaki-app-v2 .zaki-agent-v2 .zaki-share-pill,
-.zaki-app-v2 .zaki-agent-v2 .zaki-agent-v2__sandbox {
-  border-radius: 2px;
-  border-color: var(--v2-hairline);
-  background: transparent;
-  color: var(--v2-ink-2);
-  box-shadow: none;
-  font-family: var(--v2-font-mono);
-  font-size: 10px;
-  font-weight: 400;
-  letter-spacing: 0.1em;
-  line-height: 1.2;
-  text-transform: uppercase;
-}
-
-.zaki-app-v2 .zaki-agent-v2 .zaki-subheader-pill {
-  display: inline-flex;
-  min-width: 0;
-  max-width: min(52vw, 720px);
-  align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
-}
-
-.zaki-app-v2 .zaki-agent-v2 .zaki-subheader-pill > :where(span) {
-  color: var(--v2-ink-4);
-}
-
-.zaki-app-v2 .zaki-agent-v2 .zaki-share-pill {
-  min-height: 28px;
-  padding: 0 8px;
-  background: transparent !important;
-  border-radius: 0 !important;
-}
-
-.zaki-app-v2 .zaki-agent-v2 .zaki-panel-toggle {
-  min-height: 28px;
-  border-radius: 0;
-  border-color: var(--v2-hairline);
-  background: transparent;
-  color: var(--v2-ink-2);
-  box-shadow: none;
-  font-family: var(--v2-font-mono);
-  font-size: 10px;
-  font-weight: 400;
-  letter-spacing: 0.1em;
   line-height: 1;
-  text-transform: uppercase;
-}
-
-.zaki-app-v2 .zaki-agent-v2 .zaki-panel-toggle kbd {
-  border: 1px solid var(--v2-hairline);
-  padding: 1px 5px;
-  color: var(--v2-ink-4);
-  font-family: var(--v2-font-mono);
-  font-size: 9px;
-  font-weight: 400;
-  letter-spacing: 0;
-}
-
-.zaki-app-v2 .zaki-agent-v2 .zaki-panel-toggle[aria-pressed="true"] {
-  border-color: var(--v2-hairline-strong);
-  background: var(--v2-hover);
-  color: var(--v2-ink-1);
-}
-
-.zaki-app-v2 .zaki-agent-v2 .zaki-share-pill:hover,
-.zaki-app-v2 .zaki-agent-v2 .zaki-panel-toggle:hover,
-.zaki-app-v2 .zaki-agent-v2__head button:hover {
-  border-color: var(--v2-hairline-strong);
-  background: var(--v2-hover);
-  color: var(--v2-ink-1);
-}
-
-.zaki-app-v2 .zaki-agent-v2__head button {
-  border-radius: 0 !important;
-  box-shadow: none !important;
-}
-
-.zaki-app-v2 .zaki-agent-v2__head .rounded-full {
-  border-radius: 0 !important;
-}
-
-.zaki-app-v2 .zaki-agent-v2__head button[aria-haspopup="menu"] {
-  width: 28px !important;
-  height: 28px !important;
-  border-color: var(--v2-hairline) !important;
-  background: transparent !important;
-  color: var(--v2-ink-3) !important;
-}
-
-.zaki-app-v2 .zaki-agent-v2__head button[aria-haspopup="menu"]:hover,
-.zaki-app-v2 .zaki-agent-v2__head button[aria-haspopup="menu"]:focus-visible {
-  border-color: var(--v2-hairline-strong) !important;
-  background: var(--v2-hover) !important;
-  color: var(--v2-ink-1) !important;
-}
-
-.zaki-app-v2 .zaki-agent-v2__head [role="menu"] {
-  margin-top: 6px !important;
-  border: 1px solid var(--v2-hairline-strong) !important;
-  border-radius: 0 !important;
-  background: var(--v2-bg-raised) !important;
-  box-shadow: var(--v2-elev-3) !important;
-  padding: 0 !important;
-}
-
-.zaki-app-v2 .zaki-agent-v2__head [role="menuitem"] {
-  border-radius: 0 !important;
-  border-bottom: 1px solid var(--v2-hairline-faint);
-  background: var(--v2-bg-raised) !important;
-  color: var(--v2-ink-2) !important;
-  font-family: var(--v2-font-mono) !important;
-  font-size: 11px !important;
-  letter-spacing: 0.04em;
-}
-
-.zaki-app-v2 .zaki-agent-v2__head [role="menuitem"]:last-child {
-  border-bottom: 0;
-}
-
-.zaki-app-v2 .zaki-agent-v2__head [role="menuitem"]:hover,
-.zaki-app-v2 .zaki-agent-v2__head [role="menuitem"]:focus-visible {
-  background: var(--v2-bg-sunken) !important;
-  color: var(--v2-ink-1) !important;
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-scrollbar-fade {
@@ -4521,11 +4489,15 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-input-shell {
+  position: relative;
+  z-index: 80;
   max-width: 900px;
   padding: 12px 24px 18px;
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-input-form {
+  position: relative;
+  z-index: 1;
   border-radius: 0 !important;
   box-shadow: none;
 }
@@ -4791,7 +4763,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 .zaki-app-v2 .zaki-agent-v2 .zaki-input-row .zaki-composer-menu {
   position: absolute;
   bottom: calc(100% + 8px);
-  z-index: 60;
+  z-index: 120;
   width: min(340px, calc(100vw - 32px));
   max-height: min(360px, calc(100vh - 180px));
   border: 1px solid var(--v2-hairline-strong);
@@ -4802,6 +4774,18 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   font-family: var(--v2-font-mono);
   overflow-y: auto;
   scrollbar-width: thin;
+}
+
+@media (max-width: 640px) {
+  .zaki-app-v2 .zaki-agent-v2 .zaki-input-row .zaki-composer-menu {
+    position: fixed;
+    right: 24px;
+    bottom: 90px;
+    left: 24px !important;
+    z-index: 240;
+    width: auto;
+    max-height: min(360px, calc(100vh - 160px));
+  }
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-composer-menu__head {
@@ -5227,7 +5211,6 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 .zaki-app-v2 .zaki-agent-v2--focus .zaki-agent-v2__surface > .v2-status-strip,
 .zaki-app-v2 .zaki-agent-v2--focus .zaki-agent-session-rail,
 .zaki-app-v2 .zaki-agent-v2--focus .zaki-agent-inspector,
-.zaki-app-v2 .zaki-agent-v2--focus .zaki-agent-head-actions,
 .zaki-app-v2 .zaki-agent-v2--focus .zaki-quick-reply-strip,
 .zaki-app-v2 .zaki-agent-v2--focus .zaki-pinned-context-rail {
   display: none !important;
@@ -5242,26 +5225,6 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 .zaki-app-v2 .zaki-agent-v2--focus .zaki-agent-v2__chat {
   width: min(100%, 860px);
   justify-self: center;
-}
-
-.zaki-app-v2 .zaki-agent-v2--focus .zaki-agent-v2__head {
-  min-height: 44px;
-  justify-content: center;
-  border-bottom-color: transparent;
-  padding: 8px 24px;
-}
-
-.zaki-app-v2 .zaki-agent-v2--focus .zaki-agent-thread-head {
-  text-align: center;
-}
-
-.zaki-app-v2 .zaki-agent-v2--focus .zaki-agent-thread-head h1 {
-  color: var(--v2-ink-2);
-  font-size: 13px;
-}
-
-.zaki-app-v2 .zaki-agent-v2--focus .zaki-agent-thread-head p {
-  color: var(--v2-ink-4);
 }
 
 .zaki-app-v2 .zaki-agent-v2--focus .zaki-chat-thread {
@@ -5286,34 +5249,6 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
 .zaki-agent-inspector {
   display: none;
-}
-
-.zaki-agent-inspector-peek {
-  position: absolute;
-  top: 72px;
-  right: 14px;
-  z-index: 35;
-  display: none;
-  min-height: 30px;
-  align-items: center;
-  gap: 7px;
-  border: 1px solid var(--v2-hairline-strong);
-  background: var(--v2-bg-raised);
-  color: var(--v2-ink-2);
-  padding: 0 9px;
-  font-family: var(--v2-font-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  line-height: 1;
-  text-transform: uppercase;
-  box-shadow: none;
-}
-
-.zaki-agent-inspector-peek:hover,
-.zaki-agent-inspector-peek:focus-visible {
-  border-color: var(--v2-accent);
-  color: var(--v2-accent);
-  outline: none;
 }
 
 .zaki-agent-mobile-inspector {
@@ -5467,9 +5402,6 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
     overflow-y: auto;
   }
 
-  .zaki-app-v2 .zaki-agent-v2--inspector-collapsed .zaki-agent-inspector-peek {
-    display: inline-flex;
-  }
 }
 
 @media (min-width: 1280px) and (max-width: 1420px) {
@@ -5491,18 +5423,6 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
     height: 100%;
   }
 
-  .zaki-app-v2 .zaki-agent-v2__head {
-    min-height: 48px;
-    padding: 10px 12px;
-  }
-
-  .zaki-app-v2 .zaki-agent-v2 .zaki-subheader-pill {
-    max-width: min(68vw, 520px);
-  }
-
-  .zaki-app-v2 .zaki-agent-v2 .zaki-panel-toggle {
-    display: none;
-  }
 }
 
 @media (max-width: 640px) {
@@ -5568,10 +5488,6 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   }
 
   .zaki-app-v2 .zaki-agent-v2__surface > .v2-status-strip,
-  .zaki-app-v2 .zaki-agent-v2 .zaki-agent-head-actions {
-    display: none !important;
-  }
-
   .zaki-app-v2 .zaki-agent-v2 .zaki-message-row--user {
     justify-content: flex-start;
   }
@@ -5685,6 +5601,14 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   color: var(--v2-ink-2);
   font-family: var(--v2-font-prose);
   font-size: var(--v2-text-sm);
+}
+
+.zaki-approval-card__error {
+  margin-top: 8px;
+  color: var(--v2-warn);
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-micro);
+  text-transform: uppercase;
 }
 
 .zaki-approval-card__preview {
@@ -6085,6 +6009,23 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 .zaki-agent-inspector__panel-action:disabled {
   color: var(--v2-ink-4);
   cursor: not-allowed;
+}
+
+.zaki-agent-inspector__settings-links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  padding: 10px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__settings-links .zaki-agent-inspector__panel-action {
+  width: 100%;
+  margin: 0;
+}
+
+.zaki-agent-inspector__settings-links .zaki-agent-inspector__panel-action:last-child {
+  grid-column: 1 / -1;
 }
 
 .zaki-agent-inspector__fact-grid {
@@ -6499,6 +6440,145 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   text-transform: uppercase;
 }
 
+.zaki-agent-inspector__todo-actions,
+.zaki-agent-inspector__cron-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.zaki-agent-inspector__todo-actions button,
+.zaki-agent-inspector__cron-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg);
+  padding: 0 8px;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__todo-actions button:hover,
+.zaki-agent-inspector__cron-actions button:hover {
+  border-color: var(--v2-hairline-strong);
+  color: var(--v2-ink-1);
+}
+
+.zaki-agent-inspector__todo-actions button:disabled,
+.zaki-agent-inspector__cron-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.zaki-agent-inspector__task-detail,
+.zaki-agent-inspector__jobs {
+  margin-top: 9px;
+  border: 1px solid var(--v2-hairline-faint);
+  background: var(--v2-bg-sunken);
+}
+
+.zaki-agent-inspector__task-detail dl {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  background: var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__task-detail dl div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+  padding: 7px 8px;
+  background: var(--v2-bg);
+}
+
+.zaki-agent-inspector__task-detail dt,
+.zaki-agent-inspector__task-detail dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.zaki-agent-inspector__task-detail dt,
+.zaki-agent-inspector__jobs-head {
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__task-detail dd {
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.zaki-agent-inspector__jobs {
+  margin: 10px 12px;
+}
+
+.zaki-agent-inspector__jobs-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__job-list {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__job-row {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  background: var(--v2-bg);
+}
+
+.zaki-agent-inspector__job-row strong,
+.zaki-agent-inspector__job-row span,
+.zaki-agent-inspector__job-row small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.zaki-agent-inspector__job-row strong {
+  max-width: 100%;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.zaki-agent-inspector__job-row span,
+.zaki-agent-inspector__job-row small {
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .zaki-agent-inspector__subagent {
   position: relative;
   display: flex;
@@ -6619,6 +6699,57 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   overflow-wrap: anywhere;
 }
 
+.zaki-agent-inspector__cron-form {
+  display: grid;
+  gap: 8px;
+  margin: 10px 12px;
+  padding: 10px;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-raised);
+}
+
+.zaki-agent-inspector__cron-form-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__cron-form-head button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--v2-hairline);
+  color: var(--v2-ink-3);
+}
+
+.zaki-agent-inspector__cron-input {
+  width: 100%;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg);
+  padding: 8px;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-prose);
+  font-size: 11px;
+  line-height: 1.45;
+  outline: none;
+}
+
+.zaki-agent-inspector__cron-input.is-mono {
+  font-family: var(--v2-font-mono);
+}
+
+.zaki-agent-inspector__cron-input:focus {
+  border-color: var(--v2-accent);
+}
+
 .zaki-agent-inspector__source-stack {
   display: grid;
   gap: 10px;
@@ -6678,9 +6809,47 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   text-transform: uppercase;
 }
 
+.zaki-agent-inspector__source-body a {
+  display: inline-flex;
+  margin-top: 7px;
+  border-bottom: 1px solid var(--v2-hairline-strong);
+  color: var(--v2-accent);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__evidence-context {
+  display: grid;
+  gap: 3px;
+  margin: 10px;
+  padding: 10px;
+  border: 1px solid var(--v2-hairline-faint);
+  background: var(--v2-bg-sunken);
+}
+
+.zaki-agent-inspector__evidence-context span,
+.zaki-agent-inspector__evidence-context small {
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__evidence-context strong {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
 .zaki-agent-inspector__artifact-versions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
   padding: 10px;
@@ -6691,13 +6860,17 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 .zaki-agent-inspector__artifact-versions .diff {
   display: inline-flex;
   min-height: 22px;
+  min-width: 0;
   align-items: center;
   padding: 0 7px;
   border: 1px solid var(--v2-hairline);
   color: var(--v2-ink-3);
   font-family: var(--v2-font-mono);
   font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .zaki-agent-inspector__artifact-versions .version.is-active {
@@ -6706,7 +6879,6 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-agent-inspector__artifact-versions .diff {
-  margin-left: auto;
   border-color: transparent;
 }
 
@@ -6805,8 +6977,8 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-agent-inspector__artifact-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
   padding: 10px;
 }
@@ -6826,6 +6998,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   line-height: 1.2;
   text-decoration: none;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .zaki-agent-inspector__artifact-action.is-ready {
@@ -7153,12 +7326,30 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   line-height: 1.45;
 }
 
+.zaki-agent-artifact-overlay {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  width: clamp(500px, 42vw, 680px);
+  overflow: hidden;
+  border-left: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg);
+  box-shadow: -1px 0 0 var(--v2-hairline);
+}
+
 .zaki-agent-artifact-canvas {
   display: flex;
   min-height: 100%;
   flex-direction: column;
   background: var(--v2-bg);
   color: var(--v2-ink-1);
+}
+
+.zaki-agent-artifact-overlay .zaki-agent-artifact-canvas {
+  height: 100%;
+  min-height: 0;
 }
 
 .zaki-agent-artifact-canvas__head {
@@ -7240,13 +7431,198 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   opacity: 0.45;
 }
 
+.zaki-agent-artifact-canvas__workspace {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.zaki-agent-artifact-overlay .zaki-agent-artifact-canvas__workspace {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.zaki-agent-artifact-canvas__version-strip {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: hidden;
+  border-bottom: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-sunken);
+}
+
+.zaki-agent-artifact-canvas__versions {
+  min-width: 0;
+  background: var(--v2-bg-sunken);
+}
+
+.zaki-agent-artifact-overlay .zaki-agent-artifact-canvas__body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.zaki-agent-artifact-canvas__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-agent-artifact-canvas__versions ol {
+  display: flex;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--v2-hairline-faint);
+  overflow-x: auto;
+}
+
+.zaki-agent-artifact-canvas__versions li {
+  flex: 0 0 min(180px, 44vw);
+}
+
+.zaki-agent-artifact-canvas__versions li button {
+  display: grid;
+  min-height: 54px;
+  width: 100%;
+  gap: 3px;
+  padding: 9px 12px;
+  background: var(--v2-bg);
+  text-align: left;
+}
+
+.zaki-agent-artifact-canvas__versions li button:hover {
+  background: var(--v2-bg-raised);
+}
+
+.zaki-agent-artifact-canvas__versions li button[data-selected="true"] {
+  box-shadow: inset 0 -2px 0 var(--v2-accent);
+}
+
+.zaki-agent-artifact-canvas__versions strong,
+.zaki-agent-artifact-canvas__versions span,
+.zaki-agent-artifact-canvas__versions small {
+  overflow-wrap: anywhere;
+}
+
+.zaki-agent-artifact-canvas__versions strong {
+  color: var(--v2-accent);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.zaki-agent-artifact-canvas__versions span {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.zaki-agent-artifact-canvas__versions small {
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.zaki-agent-artifact-canvas__diff {
+  min-width: 0;
+  border-top: 1px solid var(--v2-hairline-faint);
+  background: var(--v2-bg);
+}
+
+.zaki-agent-artifact-canvas__diff-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.zaki-agent-artifact-canvas__diff-controls input,
+.zaki-agent-artifact-canvas__editor textarea {
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg);
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  outline: none;
+}
+
+.zaki-agent-artifact-canvas__diff-controls input {
+  min-width: 0;
+  padding: 7px;
+}
+
+.zaki-agent-artifact-canvas__diff-controls button,
+.zaki-agent-artifact-canvas__edit,
+.zaki-agent-artifact-canvas__editor button {
+  min-height: 28px;
+  border: 1px solid var(--v2-hairline);
+  padding: 0 9px;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.zaki-agent-artifact-canvas__diff pre {
+  max-height: 180px;
+  margin: 0;
+  overflow: auto;
+  border-top: 1px solid var(--v2-hairline-faint);
+  padding: 10px 12px;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
 .zaki-agent-artifact-canvas__body {
-  width: min(100%, 920px);
-  margin: 0 auto;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
   padding: 28px 24px 80px;
   font-family: var(--v2-font-prose);
   font-size: 14px;
   line-height: 1.65;
+}
+
+.zaki-agent-artifact-canvas__edit {
+  margin-bottom: 14px;
+}
+
+.zaki-agent-artifact-canvas__editor {
+  display: grid;
+  gap: 10px;
+}
+
+.zaki-agent-artifact-canvas__editor textarea {
+  min-height: 58vh;
+  resize: vertical;
+  padding: 14px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.zaki-agent-artifact-canvas__editor div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .zaki-agent-artifact-canvas__body .zaki-message-content {
@@ -7256,6 +7632,32 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 .zaki-agent-artifact-canvas__body .zaki-message-content :where(h1, h2, h3) {
   font-family: var(--v2-font-mono);
   letter-spacing: 0;
+}
+
+@media (max-width: 1279px) {
+  .zaki-agent-artifact-overlay {
+    top: 0;
+    width: min(620px, calc(100% - 40px));
+  }
+}
+
+@media (max-width: 900px) {
+  .zaki-agent-artifact-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    width: auto;
+    border-left: 0;
+  }
+
+  .zaki-agent-artifact-canvas__version-strip {
+    max-height: 42vh;
+    overflow: auto;
+  }
+
+  .zaki-agent-artifact-canvas__versions {
+    border-bottom: 0;
+  }
 }
 
 .zaki-agent-power-sheet {

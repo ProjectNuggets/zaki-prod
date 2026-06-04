@@ -4,8 +4,11 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { AgentInspectorRail, type AgentInspectorRailProps } from "./AgentInspectorRail";
 
 jest.mock("@/lib/api", () => ({
+  createAgentCron: jest.fn(),
+  deleteAgentCron: jest.fn(),
   downloadAgentExportFile: jest.fn(),
   exportAgentArtifact: jest.fn(),
+  fetchAgentTask: jest.fn(),
   fetchAgentTrace: jest.fn(),
   listAgentTraces: jest.fn(),
   normalizeAgentArtifactShareUrl: (value: unknown) =>
@@ -15,10 +18,14 @@ jest.mock("@/lib/api", () => ({
   revokeAgentTraceShare: jest.fn(),
   shareAgentArtifact: jest.fn(),
   shareAgentTrace: jest.fn(),
+  stopAgentTask: jest.fn(),
+  updateAgentCron: jest.fn(),
 }));
 
+const createAgentCronMock = jest.requireMock("@/lib/api").createAgentCron as jest.Mock;
 const exportAgentArtifactMock = jest.requireMock("@/lib/api").exportAgentArtifact as jest.Mock;
 const downloadAgentExportFileMock = jest.requireMock("@/lib/api").downloadAgentExportFile as jest.Mock;
+const fetchAgentTaskMock = jest.requireMock("@/lib/api").fetchAgentTask as jest.Mock;
 const fetchAgentTraceMock = jest.requireMock("@/lib/api").fetchAgentTrace as jest.Mock;
 const listAgentTracesMock = jest.requireMock("@/lib/api").listAgentTraces as jest.Mock;
 const shareAgentArtifactMock = jest.requireMock("@/lib/api").shareAgentArtifact as jest.Mock;
@@ -69,6 +76,14 @@ describe("AgentInspectorRail", () => {
       response: { ok: true },
       data: { run_id: "run-1", public_url: "https://share.local/trace" },
     });
+    fetchAgentTaskMock.mockResolvedValue({
+      response: { ok: true },
+      data: { id: "task-1", session_key: "session", started_at: 1_800_000 },
+    });
+    createAgentCronMock.mockResolvedValue({
+      response: { ok: true },
+      data: { job: { id: "cron-new" } },
+    });
   });
 
   it("renders the V6 execution rail as six MECE tabs", () => {
@@ -88,7 +103,7 @@ describe("AgentInspectorRail", () => {
 
     const tablist = screen.getByRole("tablist", { name: "Agent panels" });
     expect(within(tablist).getAllByRole("tab")).toHaveLength(6);
-    for (const label of ["Plan", "Cron", "Evidence", "Artifacts", "Browser", "Trace"]) {
+    for (const label of ["Plan", "Cron", "Sources", "Artifacts", "Browser", "Trace"]) {
       expect(within(tablist).getByRole("tab", { name: new RegExp(label, "i") })).toBeInTheDocument();
     }
     expect(within(tablist).getByRole("tab", { name: /Plan/i })).toHaveAttribute(
@@ -133,7 +148,7 @@ describe("AgentInspectorRail", () => {
     expect(within(narration).getByText(/Read docs\/ui-handoff\.md/)).toBeInTheDocument();
   });
 
-  it("honors external tab requests from status strip and inline evidence links", async () => {
+  it("honors external tab requests from status strip and inline source links", async () => {
     const { rerender } = renderRail({
       tabRequest: { tab: "trace", id: 1 },
       transcriptEntries: [
@@ -172,13 +187,13 @@ describe("AgentInspectorRail", () => {
       />
     );
 
-    expect(screen.getByRole("tab", { name: /Evidence/i })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: /Sources/i })).toHaveAttribute(
       "aria-selected",
       "true"
     );
   });
 
-  it("surfaces memory and context evidence in the Evidence tab", () => {
+  it("surfaces memory and context evidence in the Sources tab", () => {
     const onOpenMemory = jest.fn();
     renderRail({
       onOpenMemory,
@@ -197,12 +212,30 @@ describe("AgentInspectorRail", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("tab", { name: /Evidence/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /Sources/i }));
 
-    expect(screen.getByText("Context window")).toBeInTheDocument();
+    expect(screen.getByText("context source")).toBeInTheDocument();
     expect(screen.getByText("Fetched durable graph memory for this user.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open memory graph" }));
     expect(onOpenMemory).toHaveBeenCalledTimes(1);
+  });
+
+  it("routes browser control-plane links to canonical settings sections", () => {
+    const onOpenSettings = jest.fn();
+    renderRail({ onOpenSettings });
+
+    fireEvent.click(screen.getByRole("tab", { name: /Browser/i }));
+
+    const links = screen.getByTestId("agent-settings-deep-links");
+    for (const label of ["Channels", "Secrets", "Providers", "Devices", "Developer"]) {
+      expect(within(links).getByRole("button", { name: new RegExp(label, "i") })).toBeInTheDocument();
+    }
+
+    fireEvent.click(within(links).getByRole("button", { name: "Open Devices settings" }));
+    fireEvent.click(within(links).getByRole("button", { name: "Open Developer Access settings" }));
+
+    expect(onOpenSettings).toHaveBeenNthCalledWith(1, "devices");
+    expect(onOpenSettings).toHaveBeenNthCalledWith(2, "developer-access");
   });
 
   it("separates provisional artifact activity in the right panel", () => {
@@ -283,6 +316,31 @@ describe("AgentInspectorRail", () => {
     });
   });
 
+  it("exposes PPTX export from the right panel when the renderer is available", async () => {
+    renderRail({
+      artifacts: [
+        {
+          id: "artifact-pptx-1",
+          title: "Slide deck",
+          type: "markdown",
+          version: 1,
+          updatedAt: 1_800_000_000_000,
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByTestId("agent-artifact-export-pptx-artifact-pptx-1"));
+
+    await waitFor(() => {
+      expect(exportAgentArtifactMock).toHaveBeenCalledWith("artifact-pptx-1", "pptx");
+      expect(downloadAgentExportFileMock).toHaveBeenCalledWith(
+        "/api/agent/exports/artifact.docx",
+        "Slide_deck.pptx"
+      );
+      expect(screen.getByTestId("agent-artifact-download-pptx-artifact-pptx-1")).toBeInTheDocument();
+    });
+  });
+
   it("labels recent artifacts when the active session has no ledger output", () => {
     renderRail({
       artifactsScope: "recent",
@@ -329,7 +387,9 @@ describe("AgentInspectorRail", () => {
   });
 
   it("keeps browser control in its own panel", () => {
+    const onOpenExtensionSettings = jest.fn();
     renderRail({
+      onOpenExtensionSettings,
       sandbox: {
         enabled: true,
         backend: "playwright",
@@ -373,12 +433,14 @@ describe("AgentInspectorRail", () => {
     expect(screen.getByText("extension_navigate")).toBeInTheDocument();
     expect(screen.getByText("ok · extension_click")).toBeInTheDocument();
     expect(screen.getAllByText("playwright")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Open Devices settings" }));
+    expect(onOpenExtensionSettings).toHaveBeenCalledTimes(1);
   });
 
-  it("opens the schedule manager from the Cron panel", () => {
-    const onOpenCron = jest.fn();
+  it("creates schedules directly from the Cron panel", async () => {
+    const onCronChanged = jest.fn();
     renderRail({
-      onOpenCron,
+      onCronChanged,
       transcriptEntries: [
         {
           id: "scheduled",
@@ -393,8 +455,21 @@ describe("AgentInspectorRail", () => {
     fireEvent.click(screen.getByRole("tab", { name: /Cron/i }));
 
     expect(screen.getByText("schedules")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Open schedule manager" }));
-    expect(onOpenCron).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Create schedule" }));
+    const form = screen.getByTestId("agent-cron-form");
+    fireEvent.change(within(form).getByPlaceholderText("What should ZAKI do on this schedule?"), {
+      target: { value: "Review launch blockers every morning." },
+    });
+    fireEvent.click(within(form).getByRole("button", { name: /Create schedule/i }));
+    await waitFor(() => {
+      expect(createAgentCronMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          expression: "0 */6 * * *",
+          prompt: "Review launch blockers every morning.",
+        })
+      );
+      expect(onCronChanged).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("renders backend task and cron ledgers as the durable source of record", () => {

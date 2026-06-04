@@ -42,6 +42,7 @@ import {
   fetchBotRuntimeStatus,
   fetchMemoryActivity,
   listAgentSessions,
+  listAgentJobs,
   provisionAgent,
   setAgentSessionMode,
 } from "@/lib/api";
@@ -239,6 +240,15 @@ jest.mock("@/lib/api", () => ({
     },
     data: { tasks: [] },
   })),
+  listAgentJobs: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ jobs: [] }),
+      headers: new Headers(),
+    },
+    data: { jobs: [] },
+  })),
   listAgentArtifacts: jest.fn(async () => ({
     response: {
       ok: true,
@@ -430,6 +440,7 @@ describe("ChatArea Component", () => {
     (fetchBotRuntimeStatus as jest.Mock).mockClear();
     (fetchMemoryActivity as jest.Mock).mockClear();
     (listAgentSessions as jest.Mock).mockClear();
+    (listAgentJobs as jest.Mock).mockClear();
     (provisionAgent as jest.Mock).mockClear();
     (setAgentSessionMode as jest.Mock).mockClear();
     (approveAgentSession as jest.Mock).mockClear();
@@ -740,6 +751,51 @@ describe("ChatArea Component", () => {
     expect(
       zakiSessionUiState.sessions["agent:zaki-bot:user:1:thread:main"]?.contextPressurePercent
     ).toBe(12.5);
+  });
+
+  it("skips the live context endpoint for inactive listed Agent sessions", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    (fetchAgentMe as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (listAgentSessions as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({ sessions: [] }), headers: new Headers() },
+      data: {
+        sessions: [
+          {
+            session_key: "agent:zaki-bot:user:1:thread:main",
+            title: "Main",
+            live: false,
+            mode: null,
+            message_count: 24,
+            last_active: "2026-05-27T17:56:49.377Z",
+          },
+        ],
+      },
+    });
+    (fetchContextDiagnostics as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, headers: new Headers() },
+      data: {
+        report: {
+          history_messages: 24,
+          used_tokens: 18_000,
+          context_window_tokens: 200_000,
+          context_window_used_pct: 9,
+        },
+      },
+    });
+
+    await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(fetchContextDiagnostics).toHaveBeenCalled();
+    });
+    expect(fetchAgentSessionContext).not.toHaveBeenCalled();
+    expect(screen.getByTestId("zaki-context-meter")).toHaveTextContent("9%");
   });
 
   it("renders ready state for a new chat", async () => {
@@ -1447,7 +1503,7 @@ describe("ChatArea Component", () => {
         456
       )
     ).toMatchObject({
-      id: "legacy-run:run-789:tool:browser_click",
+      id: "legacy:12",
       approvalId: null,
       numericId: 12,
       toolCallId: "call-browser",

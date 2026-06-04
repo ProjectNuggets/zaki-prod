@@ -19,7 +19,7 @@ function entry(overrides: Partial<NullalisTranscriptEntry>): NullalisTranscriptE
 }
 
 describe("AgentInspectorPanelModel", () => {
-  it("routes memory and read-like events to Sources", () => {
+  it("routes memory and read-like events to Evidence", () => {
     const memory = entry({
       id: "memory",
       intent: "memory",
@@ -42,7 +42,7 @@ describe("AgentInspectorPanelModel", () => {
     expect(model.sources.map((event) => event.id)).toEqual(["read-file", "memory"]);
   });
 
-  it("keeps artifacts out of Sources even when files are present", () => {
+  it("keeps artifacts out of Evidence even when files are present", () => {
     const artifact = entry({
       id: "artifact",
       kind: "tool",

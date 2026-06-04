@@ -287,7 +287,7 @@ import {
 } from "./thread-auto-title.js";
 import {
   buildCanonicalZakiThreadSessionKey,
-  mergeZakiAgentSessions,
+  normalizeZakiAgentBackendSessions,
   parseZakiSessionKey,
 } from "./zaki-agent-sessions.js";
 import {
@@ -11215,51 +11215,54 @@ async function agentSessionsListHandler(req, res) {
       return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
     }
 
-    const { sessions, upstreamWarning } = await loadMergedZakiAgentSessionsForUser(userId, requestId);
+    const { sessions } = await loadZakiAgentSessionsForUser(userId, requestId);
     res.status(200).json({
       sessions,
-      ...(upstreamWarning ? { warning: upstreamWarning } : {}),
     });
   } catch (error) {
     console.error("[Agent] Session list error:", {
       requestId,
       error: error?.message || "session list failed",
     });
+    const status = Number(error?.status || 500);
+    if (status >= 400 && status < 600) {
+      return res.status(status).json(error?.data || { error: error?.message || "session_list_error" });
+    }
     res.status(500).json({ error: error?.message || "Unable to load agent sessions." });
   }
 }
 
-async function loadMergedZakiAgentSessionsForUser(userId, requestId) {
-  const localThreads = await loadZakiBotLocalThreadSummaries(userId);
-  let upstreamSessions = [];
-  let upstreamWarning = null;
-
-  try {
-    const upstream = await sendBotBffUpstreamRequest({
-      method: "GET",
-      path: `/api/v1/users/${encodeURIComponent(userId)}/sessions`,
-      userId,
-      requestId,
-    });
-    const upstreamData = await upstream.json().catch(() => ({}));
-    if (upstream.ok) {
-      upstreamSessions = Array.isArray(upstreamData?.sessions)
-        ? upstreamData.sessions
-        : Array.isArray(upstreamData)
-        ? upstreamData
-        : [];
-    } else {
-      upstreamWarning =
-        String(upstreamData?.code || upstreamData?.error || "").trim() ||
-        `upstream_${upstream.status}`;
-    }
-  } catch (error) {
-    upstreamWarning = error?.message || "upstream_sessions_unavailable";
+async function loadZakiAgentSessionsForUser(userId, requestId) {
+  const upstream = await sendBotBffUpstreamRequest({
+    method: "GET",
+    path: `/api/v1/users/${encodeURIComponent(userId)}/sessions`,
+    userId,
+    requestId,
+  });
+  const upstreamData = await upstream.json().catch(() => ({}));
+  if (!upstream.ok) {
+    const error = new Error(
+      String(upstreamData?.message || upstreamData?.error || "").trim() ||
+        `upstream_${upstream.status}`
+    );
+    error.status = upstream.status === 401 ? 502 : upstream.status;
+    error.data =
+      upstream.status === 401
+        ? {
+            error: "Agent upstream rejected the BFF credential.",
+            code: "agent_upstream_unauthorized",
+          }
+        : upstreamData;
+    throw error;
   }
 
+  const upstreamSessions = Array.isArray(upstreamData?.sessions)
+    ? upstreamData.sessions
+    : Array.isArray(upstreamData)
+      ? upstreamData
+      : [];
   return {
-    sessions: mergeZakiAgentSessions({ upstreamSessions, localThreads }),
-    upstreamWarning,
+    sessions: normalizeZakiAgentBackendSessions(upstreamSessions),
   };
 }
 
@@ -11277,90 +11280,34 @@ async function agentSessionDetailHandler(req, res) {
     }
 
     const parsed = parseZakiSessionKey(sessionKey);
-    if (parsed.userId !== String(userId)) {
+    if (parsed.userId && parsed.userId !== String(userId)) {
       return res.status(403).json({ error: "session_not_owned" });
     }
 
-    if (parsed.lane === "thread") {
-      const { sessions, upstreamWarning: listWarning } = await loadMergedZakiAgentSessionsForUser(
-        userId,
-        requestId
-      );
-      const localSession = sessions.find((session) => session?.session_key === parsed.normalized);
-      if (localSession) {
-        try {
-          const upstream = await sendBotBffUpstreamRequest({
-            method: "GET",
-            path: `/api/v1/users/${encodeURIComponent(userId)}/sessions/${sessionKey}`,
-            userId,
-            requestId,
-          });
-          const upstreamData = await upstream.json().catch(() => ({}));
-          if (upstream.ok) {
-            return res.status(200).json({
-              ...localSession,
-              ...upstreamData,
-              session_key: localSession.session_key,
-              title: localSession.title || upstreamData?.title,
-              last_active: localSession.last_active || upstreamData?.last_active,
-              ...(listWarning ? { warning: listWarning } : {}),
-            });
-          }
-        } catch {
-          // Fall through to the local thread record; detail remains best-effort.
-        }
-        return res.status(200).json({
-          ...localSession,
-          ...(listWarning ? { warning: listWarning } : {}),
-        });
-      }
-    }
-
-    let upstreamWarning = null;
-    try {
-      const upstream = await sendBotBffUpstreamRequest({
-        method: "GET",
-        path: `/api/v1/users/${encodeURIComponent(userId)}/sessions/${sessionKey}`,
-        userId,
-        requestId,
-      });
-      const upstreamData = await upstream.json().catch(() => ({}));
-      if (upstream.ok) {
-        return res.status(200).json(upstreamData);
-      }
-      upstreamWarning =
-        String(upstreamData?.code || upstreamData?.error || "").trim() ||
-        `upstream_${upstream.status}`;
-      if (upstream.status !== 404) {
-        return res.status(upstream.status).json(upstreamData);
-      }
-    } catch (error) {
-      upstreamWarning = error?.message || "upstream_session_unavailable";
-    }
-
-    const { sessions, upstreamWarning: listWarning } = await loadMergedZakiAgentSessionsForUser(
+    const upstream = await sendBotBffUpstreamRequest({
+      method: "GET",
+      path: `/api/v1/users/${encodeURIComponent(userId)}/sessions/${sessionKey}`,
       userId,
-      requestId
-    );
-    const normalizedSessionKey = parsed.normalized;
-    const localSession = sessions.find((session) => session?.session_key === normalizedSessionKey);
-    if (localSession) {
-      return res.status(200).json({
-        ...localSession,
-        warning: upstreamWarning || listWarning || "upstream_session_unavailable",
+      requestId,
+    });
+    const upstreamData = await upstream.json().catch(() => ({}));
+    if (upstream.status === 401) {
+      return res.status(502).json({
+        error: "Agent upstream rejected the BFF credential.",
+        code: "agent_upstream_unauthorized",
       });
     }
-
-    return res.status(404).json({
-      error: "session_not_found",
-      warning: upstreamWarning || listWarning || "upstream_session_unavailable",
-    });
+    return res.status(upstream.status).json(upstreamData);
   } catch (error) {
     console.error("[Agent] Session detail error:", {
       requestId,
       sessionKey,
       error: error?.message || "session detail failed",
     });
+    const status = Number(error?.status || 500);
+    if (status >= 400 && status < 600) {
+      return res.status(status).json(error?.data || { error: error?.message || "session_error" });
+    }
     return res.status(500).json({ error: error?.message || "Unable to load agent session." });
   }
 }
@@ -13533,6 +13480,13 @@ async function sendBufferedNullclawJsonResponse(upstream, res, label = "Nullclaw
     return res.status(502).json({
       error: message,
       code,
+    });
+  }
+
+  if (upstream.status === 401) {
+    return res.status(502).json({
+      error: "Agent upstream rejected the BFF credential.",
+      code: "agent_upstream_unauthorized",
     });
   }
 

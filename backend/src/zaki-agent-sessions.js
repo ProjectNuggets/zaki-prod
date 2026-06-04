@@ -48,7 +48,9 @@ export function isThreadLaneZakiSessionKey(sessionKey) {
 }
 
 function parseTimestamp(value) {
-  if (typeof value === "number" && Number.isFinite(value)) return value * 1000;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value > 1_000_000_000_000 ? value : value * 1000;
+  }
   if (typeof value === "string") {
     const parsed = Date.parse(value);
     return Number.isNaN(parsed) ? 0 : parsed;
@@ -113,6 +115,36 @@ export function mergeZakiAgentSessions({ upstreamSessions = [], localThreads = [
   return Array.from(merged.values()).sort(
     (a, b) => parseTimestamp(b?.last_active) - parseTimestamp(a?.last_active),
   );
+}
+
+export function normalizeZakiAgentBackendSessions(upstreamSessions = []) {
+  const byKey = new Map();
+
+  for (const upstream of Array.isArray(upstreamSessions) ? upstreamSessions : []) {
+    const sessionKey = normalizeZakiSessionKey(upstream?.session_key);
+    if (!sessionKey) continue;
+    const existing = byKey.get(sessionKey);
+    const normalized = {
+      ...upstream,
+      session_key: sessionKey,
+      title: normalizeTitle(upstream?.title) || undefined,
+    };
+    if (!existing) {
+      byKey.set(sessionKey, normalized);
+      continue;
+    }
+    const existingTs = parseTimestamp(existing?.last_active ?? existing?.created_at);
+    const nextTs = parseTimestamp(normalized?.last_active ?? normalized?.created_at);
+    if (nextTs > existingTs || (normalized.live === true && existing.live !== true)) {
+      byKey.set(sessionKey, normalized);
+    }
+  }
+
+  return Array.from(byKey.values()).sort((a, b) => {
+    const bTs = parseTimestamp(b?.last_active ?? b?.created_at);
+    const aTs = parseTimestamp(a?.last_active ?? a?.created_at);
+    return bTs - aTs;
+  });
 }
 
 export function buildDefaultZakiThreadTitle(existingTitle) {

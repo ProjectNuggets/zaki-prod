@@ -81,7 +81,12 @@ function formatShortDate(input: string | number | null | undefined): string | nu
   if (input == null) return null;
   const d = typeof input === "number" ? new Date(input) : new Date(String(input));
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 export function formatZakiSessionFallbackLabel(
@@ -95,7 +100,7 @@ export function formatZakiSessionFallbackLabel(
     // Opaque ids don't help the user differentiate rows. Prefer a
     // short date stamp if we have one.
     if (looksLikeOpaqueId(parsed.threadId) && dateStamp) {
-      return `Session · ${dateStamp}`;
+      return dateStamp;
     }
     return parsed.threadId;
   }
@@ -110,7 +115,7 @@ export function formatZakiSessionFallbackLabel(
   // to the date stamp so rows are at least uniquely distinguishable.
   const tail = key.split(":").pop()?.trim();
   if (tail && tail !== "main" && !looksLikeOpaqueId(tail)) return tail;
-  if (dateStamp) return `Session · ${dateStamp}`;
+  if (dateStamp) return dateStamp;
   return "Session";
 }
 

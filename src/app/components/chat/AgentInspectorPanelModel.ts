@@ -3,6 +3,8 @@ import type { NullalisTranscriptEntry } from "./BotStatusRail";
 export type AgentInspectorPanelEvent = {
   id: string;
   artifactId?: string | null;
+  category: "web" | "file" | "memory" | "retrieval" | "browser" | "compaction" | "continuity" | "tool" | "schedule" | "artifact";
+  href?: string | null;
   label: string;
   summary: string;
   meta: string | null;
@@ -124,10 +126,41 @@ function artifactIdForEntry(entry: NullalisTranscriptEntry): string | null {
   return null;
 }
 
+function firstUrl(entry: NullalisTranscriptEntry): string | null {
+  for (const value of [entry.inputPreview, entry.outputPreview, entry.resultSummary, entry.text, ...(entry.files ?? [])]) {
+    const text = valueToText(value);
+    const match = text.match(/https?:\/\/[^\s)]+/i);
+    if (match?.[0]) return match[0].replace(/[.,;:!?\]}]+$/g, "");
+  }
+  return null;
+}
+
+function categoryForEntry(entry: NullalisTranscriptEntry): AgentInspectorPanelEvent["category"] {
+  const text = haystack(entry);
+  if (normalize(entry.phase) === "artifact_event" || text.includes("artifact")) return "artifact";
+  if (text.includes("compact") || text.includes("extraction") || text.includes("history_maintenance")) {
+    return "compaction";
+  }
+  if (text.includes("continuity") || text.includes("durable_continuity")) return "continuity";
+  if (isAgentBrowserEntry(entry)) return "browser";
+  if (isAgentCronEntry(entry)) return "schedule";
+  if (entry.intent === "memory" || text.includes("memory")) return "memory";
+  if (entry.files?.length || text.includes("read_file") || text.includes("grep") || text.includes("rg ")) {
+    return "file";
+  }
+  if (firstUrl(entry) || text.includes("web_search") || text.includes("web_fetch") || text.includes("citation")) {
+    return "web";
+  }
+  if (text.includes("retrieval") || text.includes("source") || text.includes("context")) return "retrieval";
+  return "tool";
+}
+
 function toPanelEvent(entry: NullalisTranscriptEntry): AgentInspectorPanelEvent {
   return {
     id: entry.id || `${entry.kind || "event"}:${entry.timestamp || 0}:${primarySummary(entry)}`,
     artifactId: artifactIdForEntry(entry),
+    category: categoryForEntry(entry),
+    href: firstUrl(entry),
     label: primaryLabel(entry),
     summary: primarySummary(entry),
     meta: metaForEntry(entry),

@@ -3,6 +3,7 @@ import {
   Activity,
   Brain,
   Boxes,
+  Cable,
   CalendarClock,
   CheckCircle2,
   Circle,
@@ -10,21 +11,37 @@ import {
   Download,
   ExternalLink,
   Globe2,
+  KeyRound,
   Link2,
   Link2Off,
+  LockKeyhole,
   Loader2,
+  MonitorSmartphone,
   PanelRightClose,
+  Pause,
+  Pencil,
+  Play,
+  Plus,
+  ServerCog,
   Share2,
   ShieldAlert,
+  Trash2,
+  X,
 } from "lucide-react";
+import { toast } from "sonner";
 import {
+  createAgentCron,
+  deleteAgentCron,
   downloadAgentExportFile,
   exportAgentArtifact,
   fetchAgentTrace,
+  fetchAgentTask,
   listAgentTraces,
   revokeAgentTraceShare,
   shareAgentArtifact,
   shareAgentTrace,
+  stopAgentTask,
+  updateAgentCron,
   type AgentExtensionDiagnosticsResponse,
   type AgentSessionMode,
   type AgentTrace,
@@ -33,7 +50,9 @@ import { DEFAULT_AGENT_MODEL_ID, resolveAgentModel } from "@/lib/agentModelCatal
 import { cn } from "@/lib/utils";
 import type { ZakiRuntimeSandbox } from "@/stores/zakiSessionUiStore";
 import {
+  getAgentArtifactExportAvailability,
   getAgentArtifactExportDownloadUrl,
+  getAgentArtifactExportFormatLabel,
   getAgentArtifactShareUrl,
   PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS,
   type AgentArtifactExportFormat,
@@ -41,8 +60,6 @@ import {
 } from "@/app/components/agent/agentArtifactSurface";
 import {
   V2InlineRow,
-  V2Meter,
-  V2MetricGrid,
   V2Panel,
   V2PanelHead,
   V2Tabs,
@@ -72,6 +89,13 @@ export type AgentInspectorTabRequest = {
   id: number;
 };
 
+export type AgentSettingsSection =
+  | "channels"
+  | "secrets"
+  | "providers"
+  | "devices"
+  | "developer-access";
+
 export type AgentInspectorCronJob = {
   id: string;
   name: string;
@@ -84,6 +108,17 @@ export type AgentInspectorCronJob = {
   lastRunAt: number | null;
   lastStatus: string | null;
   failureCount: number;
+};
+
+export type AgentInspectorJob = {
+  id: string;
+  title: string;
+  status: string | null;
+  schedule: string | null;
+  nextRunAt: number | null;
+  lastRunAt: number | null;
+  createdAt: number | null;
+  error?: string | null;
 };
 
 export type AgentInspectorArtifact = {
@@ -113,6 +148,44 @@ const EXTENSION_BROWSER_TOOLS = [
   "extension_list_tabs",
 ] as const;
 
+const AGENT_SETTINGS_LINKS: Array<{
+  section: AgentSettingsSection;
+  label: string;
+  ariaLabel: string;
+  icon: ReactNode;
+}> = [
+  {
+    section: "channels",
+    label: "Channels",
+    ariaLabel: "Open Channels settings",
+    icon: <Cable className="size-4" aria-hidden />,
+  },
+  {
+    section: "secrets",
+    label: "Secrets",
+    ariaLabel: "Open Secrets settings",
+    icon: <KeyRound className="size-4" aria-hidden />,
+  },
+  {
+    section: "providers",
+    label: "Providers",
+    ariaLabel: "Open Providers settings",
+    icon: <ServerCog className="size-4" aria-hidden />,
+  },
+  {
+    section: "devices",
+    label: "Devices",
+    ariaLabel: "Open Devices settings",
+    icon: <MonitorSmartphone className="size-4" aria-hidden />,
+  },
+  {
+    section: "developer-access",
+    label: "Developer",
+    ariaLabel: "Open Developer Access settings",
+    icon: <LockKeyhole className="size-4" aria-hidden />,
+  },
+];
+
 export type AgentInspectorRailProps = {
   mode: AgentSessionMode | null;
   isStreaming: boolean;
@@ -124,6 +197,9 @@ export type AgentInspectorRailProps = {
   cronJobs?: AgentInspectorCronJob[];
   cronLoading?: boolean;
   cronError?: string | null;
+  jobs?: AgentInspectorJob[];
+  jobsLoading?: boolean;
+  jobsError?: string | null;
   artifacts?: AgentInspectorArtifact[];
   artifactsScope?: AgentArtifactScope;
   artifactsLoading?: boolean;
@@ -138,7 +214,9 @@ export type AgentInspectorRailProps = {
   contextGaugeData: ContextGaugeData | null;
   usageSummary: ZakiUsageSummary | null;
   onOpenMemory?: () => void;
-  onOpenCron?: () => void;
+  onCronChanged?: () => void | Promise<void>;
+  onOpenExtensionSettings?: () => void;
+  onOpenSettings?: (section: AgentSettingsSection) => void;
   onOpenArtifact?: (artifact: AgentInspectorArtifact) => void;
   tabRequest?: AgentInspectorTabRequest | null;
   onClose?: () => void;
@@ -294,6 +372,19 @@ function eventMetaShort(event: { meta: string | null; durationMs: number | null 
   return typeof event.durationMs === "number" ? formatDurationShort(event.durationMs) : "";
 }
 
+function evidenceCategoryLabel(category: string) {
+  if (category === "web") return "web";
+  if (category === "file") return "file";
+  if (category === "memory") return "memory";
+  if (category === "retrieval") return "retrieval";
+  if (category === "compaction") return "context";
+  if (category === "continuity") return "continuity";
+  if (category === "browser") return "browser";
+  if (category === "artifact") return "artifact";
+  if (category === "schedule") return "schedule";
+  return "tool";
+}
+
 function frameMeta(frame: NullalisNarrationFrame | null) {
   if (!frame) return "session scoped";
   const bits = [
@@ -345,9 +436,75 @@ function cronJobHealthLabel(job: AgentInspectorCronJob) {
   return health;
 }
 
+function taskCanStop(status: NullalisTaskStatus) {
+  return status === "running" || status === "queued" || status === "deferred";
+}
+
+function taskDetailText(detail: Record<string, unknown> | null | undefined, ...keys: string[]) {
+  if (!detail) return null;
+  for (const key of keys) {
+    const value = detail[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+  }
+  return null;
+}
+
+function taskDetailTime(detail: Record<string, unknown> | null | undefined, ...keys: string[]) {
+  const value = detail ? keys.map((key) => detail[key]).find((candidate) => candidate != null) : null;
+  if (typeof value === "number") return formatCalendarStamp(value < 10_000_000_000 ? value * 1000 : value);
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? formatCalendarStamp(parsed) : value;
+  }
+  return null;
+}
+
+function cronActionError(data: unknown, fallback: string) {
+  if (data && typeof data === "object") {
+    const record = data as Record<string, unknown>;
+    for (const key of ["message", "error", "reason"]) {
+      const value = record[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+  }
+  return fallback;
+}
+
 function artifactVersionLabel(artifact: AgentInspectorArtifact, index: number) {
   const version = artifact.version != null ? `v${artifact.version}` : `v${index + 1}`;
-  return `${version} · ${formatCalendarStamp(artifact.updatedAt)}`;
+  const stamp = artifact.updatedAt ? formatCalendarStamp(artifact.updatedAt) : "unsynced";
+  return `${version} · ${stamp}`;
+}
+
+function isExportedState(state?: AgentArtifactExportState | null): state is AgentArtifactExportState & {
+  url: string;
+} {
+  return Boolean(
+    state?.url &&
+      (state.status === "ready" || state.status === "exported")
+  );
+}
+
+function isUnavailableExportError(responseStatus: number, code: string) {
+  return (
+    responseStatus === 400 ||
+    responseStatus === 501 ||
+    responseStatus === 502 ||
+    code === "unsupported_format" ||
+    code === "export_not_yet_available" ||
+    code === "renderer_unavailable"
+  );
+}
+
+function compactJobTitle(title: string) {
+  const normalized = title.replace(/\s+/g, " ").trim();
+  if (!normalized) return "Untitled job";
+  const scheduleCut = normalized.match(/\b(?:brief|report|task|job)\s+specification\b/i);
+  const head = scheduleCut?.index && scheduleCut.index > 12
+    ? normalized.slice(0, scheduleCut.index).trim()
+    : normalized;
+  return head.length > 92 ? `${head.slice(0, 89).trim()}...` : head;
 }
 
 function normalizeAgentTraceList(data: { traces?: AgentTrace[]; items?: AgentTrace[] } | null | undefined) {
@@ -427,6 +584,9 @@ export function AgentInspectorRail({
   cronJobs = [],
   cronLoading = false,
   cronError = null,
+  jobs = [],
+  jobsLoading = false,
+  jobsError = null,
   artifacts = [],
   artifactsScope = "session",
   artifactsLoading = false,
@@ -441,7 +601,9 @@ export function AgentInspectorRail({
   contextGaugeData,
   usageSummary,
   onOpenMemory,
-  onOpenCron,
+  onCronChanged,
+  onOpenExtensionSettings,
+  onOpenSettings,
   onOpenArtifact,
   tabRequest = null,
   onClose,
@@ -462,6 +624,20 @@ export function AgentInspectorRail({
   const [traceDetailLoadingId, setTraceDetailLoadingId] = useState<string | null>(null);
   const [traceDetailError, setTraceDetailError] = useState<string | null>(null);
   const [traceBusyId, setTraceBusyId] = useState<string | null>(null);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [taskDetailById, setTaskDetailById] = useState<Record<string, Record<string, unknown> | null>>({});
+  const [taskDetailLoadingId, setTaskDetailLoadingId] = useState<string | null>(null);
+  const [taskDetailErrorById, setTaskDetailErrorById] = useState<Record<string, string | null>>({});
+  const [confirmStopTaskId, setConfirmStopTaskId] = useState<string | null>(null);
+  const [stoppingTaskId, setStoppingTaskId] = useState<string | null>(null);
+  const [stoppedTaskIds, setStoppedTaskIds] = useState<Record<string, boolean>>({});
+  const [cronFormOpen, setCronFormOpen] = useState(false);
+  const [editingCronId, setEditingCronId] = useState<string | null>(null);
+  const [cronNameDraft, setCronNameDraft] = useState("");
+  const [cronExpressionDraft, setCronExpressionDraft] = useState("0 */6 * * *");
+  const [cronPromptDraft, setCronPromptDraft] = useState("");
+  const [cronBusyId, setCronBusyId] = useState<string | null>(null);
+  const [confirmCronDeleteId, setConfirmCronDeleteId] = useState<string | null>(null);
 
   const timelineBlocks = useMemo(
     () => composeTurnTimeline(transcriptEntries),
@@ -512,11 +688,6 @@ export function AgentInspectorRail({
     ? Math.round((weightedTaskProgress / sortedTasks.length) * 100)
     : 0;
   const ctxPct = contextPercent(contextGaugeData);
-  const contextTokenCountForDisplay =
-    contextGaugeData?.tokenCount ??
-    (ctxPct != null && contextGaugeData?.contextMax
-      ? Math.round((ctxPct / 100) * contextGaugeData.contextMax)
-      : null);
   const currentMode = mode ?? "execute";
   const sandboxLabel = sandbox?.enabled
     ? sandbox.backend
@@ -566,6 +737,147 @@ export function AgentInspectorRail({
   const handleTabChange = (nextTab: AgentInspectorTab) => {
     setManualTabSelected(true);
     setTab(nextTab);
+  };
+
+  const resetCronForm = () => {
+    setEditingCronId(null);
+    setCronNameDraft("");
+    setCronExpressionDraft("0 */6 * * *");
+    setCronPromptDraft("");
+    setConfirmCronDeleteId(null);
+  };
+
+  const handleExpandTask = async (task: NullalisTaskItem) => {
+    const nextId = expandedTaskId === task.taskId ? null : task.taskId;
+    setExpandedTaskId(nextId);
+    setConfirmStopTaskId(null);
+    if (!nextId || taskDetailById[nextId] || taskDetailLoadingId === nextId) return;
+    setTaskDetailLoadingId(nextId);
+    setTaskDetailErrorById((current) => ({ ...current, [nextId]: null }));
+    try {
+      const { response, data } = await fetchAgentTask(nextId);
+      if (!response.ok) {
+        throw new Error(cronActionError(data, `task_${response.status}`));
+      }
+      setTaskDetailById((current) => ({
+        ...current,
+        [nextId]: data && typeof data === "object" ? (data as Record<string, unknown>) : null,
+      }));
+    } catch (error) {
+      setTaskDetailErrorById((current) => ({
+        ...current,
+        [nextId]: error instanceof Error ? error.message : "task_detail_unavailable",
+      }));
+    } finally {
+      setTaskDetailLoadingId(null);
+    }
+  };
+
+  const handleStopTask = async (task: NullalisTaskItem) => {
+    setStoppingTaskId(task.taskId);
+    try {
+      const { response, data } = await stopAgentTask(task.taskId);
+      if (!response.ok || data?.error) {
+        throw new Error(data?.error || `task_stop_${response.status}`);
+      }
+      setStoppedTaskIds((current) => ({ ...current, [task.taskId]: true }));
+      setConfirmStopTaskId(null);
+      toast.success("Task stop requested.");
+      await refreshRuntimeLedger();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to stop task.");
+    } finally {
+      setStoppingTaskId(null);
+    }
+  };
+
+  const beginCronCreate = () => {
+    resetCronForm();
+    setCronFormOpen(true);
+  };
+
+  const beginCronEdit = (job: AgentInspectorCronJob) => {
+    setEditingCronId(job.id);
+    setCronNameDraft(job.name || "");
+    setCronExpressionDraft(job.schedule || "0 */6 * * *");
+    setCronPromptDraft(job.prompt || "");
+    setConfirmCronDeleteId(null);
+    setCronFormOpen(true);
+  };
+
+  const refreshRuntimeLedger = async () => {
+    if (!onCronChanged) return;
+    try {
+      await onCronChanged();
+    } catch {
+      toast.error("Action completed, but the Agent ledger refresh failed.");
+    }
+  };
+
+  const handleCronSave = async () => {
+    const expression = cronExpressionDraft.trim();
+    const prompt = cronPromptDraft.trim();
+    if (!expression || !prompt) {
+      toast.error("Schedule and prompt are required.");
+      return;
+    }
+    const busy = editingCronId ? `cron-update:${editingCronId}` : "cron-create";
+    setCronBusyId(busy);
+    try {
+      const payload = {
+        expression,
+        prompt,
+        name: cronNameDraft.trim() || null,
+        job_type: "agent",
+      };
+      const { response, data } = editingCronId
+        ? await updateAgentCron(editingCronId, payload)
+        : await createAgentCron(payload);
+      if (!response.ok) {
+        throw new Error(cronActionError(data, editingCronId ? "cron_update_failed" : "cron_create_failed"));
+      }
+      resetCronForm();
+      setCronFormOpen(false);
+      toast.success(editingCronId ? "Schedule updated." : "Schedule created.");
+      await refreshRuntimeLedger();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Schedule action failed.");
+    } finally {
+      setCronBusyId(null);
+    }
+  };
+
+  const handleCronToggle = async (job: AgentInspectorCronJob) => {
+    setCronBusyId(`cron-toggle:${job.id}`);
+    try {
+      const { response, data } = await updateAgentCron(job.id, { paused: !job.paused });
+      if (!response.ok) {
+        throw new Error(cronActionError(data, "cron_toggle_failed"));
+      }
+      toast.success(job.paused ? "Schedule resumed." : "Schedule paused.");
+      await refreshRuntimeLedger();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to update schedule.");
+    } finally {
+      setCronBusyId(null);
+    }
+  };
+
+  const handleCronDelete = async (job: AgentInspectorCronJob) => {
+    setCronBusyId(`cron-delete:${job.id}`);
+    try {
+      const { response, data } = await deleteAgentCron(job.id);
+      if (!response.ok) {
+        throw new Error(cronActionError(data, "cron_delete_failed"));
+      }
+      setConfirmCronDeleteId(null);
+      toast.success("Schedule deleted.");
+      await refreshRuntimeLedger();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to delete schedule.");
+    } finally {
+      setCronBusyId(null);
+    }
   };
 
   useEffect(() => {
@@ -677,6 +989,7 @@ export function AgentInspectorRail({
   ) => {
     try {
       await downloadAgentExportFile(url, exportFilenameForArtifact(artifact, format));
+      setArtifactExportState(artifact.id, format, { status: "exported", url });
     } catch {
       setArtifactExportState(artifact.id, format, { status: "failed", url, error: "download_failed" });
     }
@@ -687,13 +1000,23 @@ export function AgentInspectorRail({
     format: AgentArtifactExportFormat
   ) => {
     if (!artifact.id) return;
+    const availability = getAgentArtifactExportAvailability(artifact, format);
+    if (!availability.supported) {
+      setArtifactExportState(artifact.id, format, {
+        status: "unavailable",
+        error:
+          availability.reason ||
+          `${getAgentArtifactExportFormatLabel(format)} export unavailable`,
+      });
+      return;
+    }
     setArtifactExportState(artifact.id, format, { status: "exporting" });
     try {
       const { response, data } = await exportAgentArtifact(artifact.id, format);
       if (!response.ok) {
         const code = typeof data?.error === "string" ? data.error : "export_failed";
         setArtifactExportState(artifact.id, format, {
-          status: response.status === 501 || code === "export_not_yet_available" ? "unavailable" : "failed",
+          status: isUnavailableExportError(response.status, code) ? "unavailable" : "failed",
           error: code,
         });
         return;
@@ -702,7 +1025,7 @@ export function AgentInspectorRail({
       setArtifactExportState(
         artifact.id,
         format,
-        url ? { status: "ready", url } : { status: "failed", error: "missing_download_url" }
+        url ? { status: "exported", url } : { status: "failed", error: "missing_download_url" }
       );
       if (url) {
         await handleArtifactDownload(artifact, format, url);
@@ -863,7 +1186,7 @@ export function AgentInspectorRail({
         options={[
           { id: "plan", label: "Plan", count: approvalRequest ? "!" : sortedTasks.length || undefined },
           { id: "cron", label: "Cron", count: cronSourceCount || undefined },
-          { id: "evidence", label: "Evidence", count: sourceEntries.length || undefined },
+          { id: "evidence", label: "Sources", count: sourceEntries.length || undefined },
           {
             id: "artifacts",
             label: "Artifacts",
@@ -946,6 +1269,7 @@ export function AgentInspectorRail({
                 {sortedTasks.map((task) => (
                   <li
                     key={task.taskId}
+                    data-testid="agent-task-row"
                     className={cn(
                       "zaki-agent-inspector__todo",
                       `is-${taskVisualState(task.status)}`
@@ -966,7 +1290,80 @@ export function AgentInspectorRail({
                             <span>{Math.round(task.progressPct)}%</span>
                           </>
                         ) : null}
+                        {stoppedTaskIds[task.taskId] ? (
+                          <>
+                            <span className="sep">.</span>
+                            <span>stop requested</span>
+                          </>
+                        ) : null}
                       </div>
+                      <div className="zaki-agent-inspector__todo-actions">
+                        <button
+                          type="button"
+                          onClick={() => void handleExpandTask(task)}
+                          aria-expanded={expandedTaskId === task.taskId}
+                        >
+                          {expandedTaskId === task.taskId ? "Hide details" : "Details"}
+                        </button>
+                        {taskCanStop(task.status) ? (
+                          confirmStopTaskId === task.taskId ? (
+                            <>
+                              <button
+                                type="button"
+                                disabled={stoppingTaskId === task.taskId}
+                                onClick={() => void handleStopTask(task)}
+                              >
+                                {stoppingTaskId === task.taskId ? "Stopping" : "Confirm stop"}
+                              </button>
+                              <button type="button" onClick={() => setConfirmStopTaskId(null)}>
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={stoppingTaskId === task.taskId}
+                              onClick={() => setConfirmStopTaskId(task.taskId)}
+                            >
+                              Stop
+                            </button>
+                          )
+                        ) : null}
+                      </div>
+                      {expandedTaskId === task.taskId ? (
+                        <div className="zaki-agent-inspector__task-detail" data-testid="agent-task-detail">
+                          {taskDetailLoadingId === task.taskId ? (
+                            <div className="v2-empty-line">Loading task detail...</div>
+                          ) : taskDetailErrorById[task.taskId] ? (
+                            <div className="v2-empty-line">
+                              Task detail unavailable: {taskDetailErrorById[task.taskId]}
+                            </div>
+                          ) : (
+                            <dl>
+                              <div>
+                                <dt>Task</dt>
+                                <dd>{taskDetailText(taskDetailById[task.taskId], "id", "task_id", "taskId") || task.taskId}</dd>
+                              </div>
+                              <div>
+                                <dt>Session</dt>
+                                <dd>{taskDetailText(taskDetailById[task.taskId], "session_key", "sessionKey") || "session scoped"}</dd>
+                              </div>
+                              <div>
+                                <dt>Started</dt>
+                                <dd>{taskDetailTime(taskDetailById[task.taskId], "started_at", "startedAt", "created_at", "createdAt") || "not recorded"}</dd>
+                              </div>
+                              <div>
+                                <dt>Updated</dt>
+                                <dd>{taskDetailTime(taskDetailById[task.taskId], "updated_at", "updatedAt", "completed_at", "completedAt") || formatCalendarStamp(task.updatedAt)}</dd>
+                              </div>
+                              <div>
+                                <dt>Result</dt>
+                                <dd>{taskDetailText(taskDetailById[task.taskId], "error", "last_error", "result", "summary") || taskStatusLabel(task.status)}</dd>
+                              </div>
+                            </dl>
+                          )}
+                        </div>
+                      ) : null}
                       {task.status === "running" && delegatedEvent ? (
                         <div className="zaki-agent-inspector__subagent">
                           <span className="sa-branch" aria-hidden />
@@ -986,6 +1383,41 @@ export function AgentInspectorRail({
             {tasksError ? (
               <div className="v2-empty-line">Task ledger unavailable: {tasksError}</div>
             ) : null}
+            <section className="zaki-agent-inspector__jobs" data-testid="agent-job-ledger">
+              <div className="zaki-agent-inspector__jobs-head">
+                <span>run history</span>
+                <span>
+                  {jobsLoading ? "loading" : jobs.length ? `${jobs.length} jobs` : "no jobs"}
+                </span>
+              </div>
+              {jobsLoading && !jobs.length ? (
+                <div className="v2-empty-line">Loading job ledger...</div>
+              ) : null}
+              {jobsError ? (
+                <div className="v2-empty-line">Job ledger unavailable: {jobsError}</div>
+              ) : null}
+              {jobs.length ? (
+                <ol className="zaki-agent-inspector__job-list">
+                  {jobs.slice(0, 5).map((job) => (
+                    <li key={job.id} className="zaki-agent-inspector__job-row">
+                      <div>
+                        <strong title={job.title}>{compactJobTitle(job.title)}</strong>
+                        <span>
+                          {job.status || "unknown"} · {job.schedule || "foreground run"}
+                        </span>
+                      </div>
+                      <small>
+                        next {formatCalendarStamp(job.nextRunAt)} · last{" "}
+                        {formatCalendarStamp(job.lastRunAt || job.createdAt)}
+                      </small>
+                      {job.error ? <small>{job.error}</small> : null}
+                    </li>
+                  ))}
+                </ol>
+              ) : !jobsLoading && !jobsError ? (
+                <div className="v2-empty-line">Completed and scheduled Agent jobs will appear here.</div>
+              ) : null}
+            </section>
             <div className="zaki-agent-inspector__plan-foot">
               <span>
                 {isStreaming
@@ -1023,6 +1455,60 @@ export function AgentInspectorRail({
             {cronError ? (
               <div className="v2-empty-line">Schedule ledger unavailable: {cronError}</div>
             ) : null}
+            {cronFormOpen ? (
+              <div className="zaki-agent-inspector__cron-form" data-testid="agent-cron-form">
+                <div className="zaki-agent-inspector__cron-form-head">
+                  <span>{editingCronId ? "edit schedule" : "new schedule"}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCronFormOpen(false);
+                      resetCronForm();
+                    }}
+                    aria-label="Close schedule form"
+                  >
+                    <X className="size-3.5" aria-hidden />
+                  </button>
+                </div>
+                <input
+                  className="zaki-agent-inspector__cron-input"
+                  value={cronNameDraft}
+                  placeholder="Name, optional"
+                  onChange={(event) => setCronNameDraft(event.target.value)}
+                />
+                <input
+                  className="zaki-agent-inspector__cron-input is-mono"
+                  value={cronExpressionDraft}
+                  placeholder="0 */6 * * *"
+                  onChange={(event) => setCronExpressionDraft(event.target.value)}
+                />
+                <textarea
+                  className="zaki-agent-inspector__cron-input"
+                  value={cronPromptDraft}
+                  rows={3}
+                  placeholder="What should ZAKI do on this schedule?"
+                  onChange={(event) => setCronPromptDraft(event.target.value)}
+                />
+                <div className="zaki-agent-inspector__cron-actions">
+                  <button
+                    type="button"
+                    onClick={() => void handleCronSave()}
+                    disabled={cronBusyId === "cron-create" || cronBusyId === `cron-update:${editingCronId}`}
+                  >
+                    {cronBusyId ? "Saving" : editingCronId ? "Update schedule" : "Create schedule"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCronFormOpen(false);
+                      resetCronForm();
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : null}
             {cronJobs.length ? (
               <ol className="zaki-agent-inspector__cron-list">
                 {cronJobs.map((job) => {
@@ -1053,6 +1539,45 @@ export function AgentInspectorRail({
                         <div className="zaki-agent-inspector__cron-sched">
                           next {formatCalendarStamp(job.nextRunAt)} · last{" "}
                           {formatCalendarStamp(job.lastRunAt)}
+                        </div>
+                        <div className="zaki-agent-inspector__cron-actions">
+                          {confirmCronDeleteId === job.id ? (
+                            <>
+                              <button
+                                type="button"
+                                disabled={cronBusyId === `cron-delete:${job.id}`}
+                                onClick={() => void handleCronDelete(job)}
+                              >
+                                {cronBusyId === `cron-delete:${job.id}` ? "Deleting" : "Confirm delete"}
+                              </button>
+                              <button type="button" onClick={() => setConfirmCronDeleteId(null)}>
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button type="button" onClick={() => beginCronEdit(job)}>
+                                <Pencil className="size-3.5" aria-hidden />
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                disabled={cronBusyId === `cron-toggle:${job.id}`}
+                                onClick={() => void handleCronToggle(job)}
+                              >
+                                {job.paused ? (
+                                  <Play className="size-3.5" aria-hidden />
+                                ) : (
+                                  <Pause className="size-3.5" aria-hidden />
+                                )}
+                                {job.paused ? "Resume" : "Pause"}
+                              </button>
+                              <button type="button" onClick={() => setConfirmCronDeleteId(job.id)}>
+                                <Trash2 className="size-3.5" aria-hidden />
+                                Delete
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </li>
@@ -1088,35 +1613,20 @@ export function AgentInspectorRail({
                 No linked cron jobs or autonomous follow-ups in this session.
               </div>
             ) : null}
-            <PanelActionButton onClick={onOpenCron} ariaLabel="Open schedule manager">
-              <CalendarClock className="size-4" aria-hidden />
+            <PanelActionButton onClick={beginCronCreate} ariaLabel="Create schedule">
+              <Plus className="size-4" aria-hidden />
               New schedule
+            </PanelActionButton>
+            <PanelActionButton onClick={() => void refreshRuntimeLedger()} ariaLabel="Refresh schedules">
+              <CalendarClock className="size-4" aria-hidden />
+              Refresh ledger
             </PanelActionButton>
           </V2Panel>
         ) : null}
 
         {tab === "evidence" ? (
-          <V2Panel aria-label="Evidence" className="zaki-agent-inspector__pane">
-            <V2PanelHead title="Evidence" meta={lastChannel || "agent"} />
-            <V2Meter
-              label="Context window"
-              value={ctxPct}
-              detail={
-                contextGaugeData?.contextMax
-                  ? `${formatTokens(contextTokenCountForDisplay)} / ${formatTokens(contextGaugeData.contextMax)} tokens`
-                  : ctxPct != null
-                    ? `${Math.round(ctxPct)}% pressure`
-                    : "No trusted context sample"
-              }
-            />
-            <V2MetricGrid
-              columns={2}
-              items={[
-                { id: "memory", label: "Memory", value: "User scoped" },
-                { id: "context-source", label: "Context", value: contextSourceLabel(contextGaugeData) },
-                { id: "model", label: "Model", value: defaultModel.label },
-              ]}
-            />
+          <V2Panel aria-label="Sources" className="zaki-agent-inspector__pane">
+            <V2PanelHead title="Sources" meta={sourceEntries.length ? "runtime audit trail" : lastChannel || "agent"} />
             {sourceEntries.length ? (
               <div className="zaki-agent-inspector__source-stack">
                 {sourceEntries.map((event, index) => (
@@ -1124,7 +1634,7 @@ export function AgentInspectorRail({
                     <div className="zaki-agent-inspector__source-head">
                       <span className="name">{event.files[0] || event.label}</span>
                       <span className="meta">
-                        [{index + 1}] · {event.meta || formatClock(event.timestamp)}
+                        [{index + 1}] · {evidenceCategoryLabel(event.category)} · {event.meta || formatClock(event.timestamp)}
                       </span>
                     </div>
                     <div className="zaki-agent-inspector__source-body">
@@ -1132,15 +1642,31 @@ export function AgentInspectorRail({
                       {event.files.length > 1 ? (
                         <small>{event.files.slice(1).join(", ")}</small>
                       ) : null}
+                      {event.href ? (
+                        <a href={event.href} target="_blank" rel="noreferrer">
+                          Open source
+                        </a>
+                      ) : null}
                     </div>
                   </article>
                 ))}
               </div>
             ) : (
               <div className="v2-empty-line">
-                No evidence surfaced in this turn yet. Web pages, files, memory hits, and context events will appear here when the runtime emits them.
+                No sources surfaced in this turn yet. Web pages, files, memory hits, and context events will appear here when the runtime emits them.
               </div>
             )}
+            <div className="zaki-agent-inspector__evidence-context">
+              <span>context source</span>
+              <strong>{contextSourceLabel(contextGaugeData)}</strong>
+              <small>
+                {ctxPct != null
+                  ? `${Math.round(ctxPct)}% pressure${
+                      contextGaugeData?.confidence ? ` · ${contextGaugeData.confidence}` : ""
+                    }`
+                  : "No trusted context sample"}
+              </small>
+            </div>
             <PanelActionButton onClick={onOpenMemory} ariaLabel="Open memory graph">
               <Brain className="size-4" aria-hidden />
               Open memory graph
@@ -1237,36 +1763,72 @@ export function AgentInspectorRail({
                           Open
                         </button>
                         {PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS.map((format) => {
+                          const availability = getAgentArtifactExportAvailability(artifact, format);
                           const exportState = artifactExportStates[artifact.id]?.[format];
-                          const label = `Download ${format.toUpperCase()}`;
-                          if (exportState?.status === "ready" && exportState.url) {
+                          const formatLabel = getAgentArtifactExportFormatLabel(format);
+                          const label = `Download ${formatLabel}`;
+                          const unavailableReason =
+                            availability.reason || exportState?.error || `${formatLabel} export unavailable`;
+                          const exported = isExportedState(exportState);
+                          if (exported) {
                             return (
                               <button
                                 key={format}
                                 type="button"
                                 className="zaki-agent-inspector__artifact-action is-ready"
-                                onClick={() => void handleArtifactDownload(artifact, format, exportState.url || "")}
+                                onClick={() => void handleArtifactDownload(artifact, format, exportState.url)}
                                 data-testid={`agent-artifact-download-${format}-${artifact.id}`}
                                 aria-label={`${label} for ${artifact.title}`}
                               >
                                 <Download className="size-3.5" aria-hidden />
-                                {label}
+                                {formatLabel}
                               </button>
                             );
                           }
+                          if (!availability.supported) {
+                            return (
+                              <button
+                                key={format}
+                                type="button"
+                                className="zaki-agent-inspector__artifact-action is-unavailable"
+                                disabled
+                                data-testid={`agent-artifact-export-${format}-${artifact.id}`}
+                                aria-label={`${formatLabel} export unavailable for ${artifact.title}`}
+                                title={unavailableReason}
+                              >
+                                <Download className="size-3.5" aria-hidden />
+                                {formatLabel} unavailable
+                              </button>
+                            );
+                          }
+                          const failedWithUrl = exportState?.status === "failed" && exportState.url;
+                          const actionText =
+                            exportState?.status === "exporting"
+                              ? "Exporting"
+                              : exportState?.status === "failed"
+                                ? failedWithUrl
+                                  ? `Retry ${formatLabel} download`
+                                  : `Retry ${formatLabel} export`
+                                : exportState?.status === "unavailable"
+                                  ? `${formatLabel} unavailable`
+                                  : label;
                           return (
                             <button
                               key={format}
                               type="button"
                               className="zaki-agent-inspector__artifact-action"
-                              onClick={() => void handleArtifactExport(artifact, format)}
-                              disabled={exportState?.status === "exporting"}
+                              onClick={() =>
+                                failedWithUrl
+                                  ? void handleArtifactDownload(artifact, format, exportState.url || "")
+                                  : void handleArtifactExport(artifact, format)
+                              }
+                              disabled={exportState?.status === "exporting" || exportState?.status === "unavailable"}
                               data-testid={`agent-artifact-export-${format}-${artifact.id}`}
-                              aria-label={`${label} for ${artifact.title}`}
+                              aria-label={`${actionText} for ${artifact.title}`}
                               title={exportState?.error || undefined}
                             >
                               <Download className="size-3.5" aria-hidden />
-                              {exportState?.status === "exporting" ? "Exporting" : label}
+                              {actionText}
                             </button>
                           );
                         })}
@@ -1288,7 +1850,7 @@ export function AgentInspectorRail({
                           aria-label={`Copy link for ${artifact.title}`}
                         >
                           {shareUrl ? <Link2 className="size-3.5" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
-                          {shareState?.status === "copied" ? "Copied" : "Copy link"}
+                          {shareState?.status === "copied" ? "Copied" : "Copy"}
                         </button>
                       </div>
                       {shareState?.status === "failed" ? (
@@ -1296,10 +1858,16 @@ export function AgentInspectorRail({
                       ) : null}
                       {PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS.map((format) => {
                         const exportState = artifactExportStates[artifact.id]?.[format];
-                        if (!exportState || exportState.status === "idle" || exportState.status === "ready" || exportState.status === "exporting") return null;
+                        if (
+                          !exportState ||
+                          exportState.status === "idle" ||
+                          exportState.status === "ready" ||
+                          exportState.status === "exported" ||
+                          exportState.status === "exporting"
+                        ) return null;
                         return (
                           <div key={format} className="zaki-agent-inspector__artifact-state">
-                            {format.toUpperCase()} {exportState.status}: {exportState.error || "retry available"}
+                            {getAgentArtifactExportFormatLabel(format)} {exportState.status}: {exportState.error || "retry available"}
                           </div>
                         );
                       })}
@@ -1397,6 +1965,35 @@ export function AgentInspectorRail({
                 Browser traces will appear here when the agent opens or controls a page.
               </div>
             )}
+            {extensionDiagnosticsError ? (
+              <div className="v2-empty-line">
+                Extension diagnostics unavailable: {extensionDiagnosticsError}
+              </div>
+            ) : null}
+            {onOpenSettings || onOpenExtensionSettings ? (
+              <div
+                className="zaki-agent-inspector__settings-links"
+                data-testid="agent-settings-deep-links"
+                aria-label="Agent settings deep links"
+              >
+                {AGENT_SETTINGS_LINKS.map((link) => (
+                  <PanelActionButton
+                    key={link.section}
+                    onClick={
+                      onOpenSettings
+                        ? () => onOpenSettings(link.section)
+                        : link.section === "devices"
+                          ? onOpenExtensionSettings
+                          : undefined
+                    }
+                    ariaLabel={link.ariaLabel}
+                  >
+                    {link.icon}
+                    {link.label}
+                  </PanelActionButton>
+                ))}
+              </div>
+            ) : null}
           </V2Panel>
         ) : null}
 

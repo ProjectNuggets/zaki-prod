@@ -11,7 +11,6 @@ import {
   apiRequest,
   deleteAgentSession,
   fetchAgentHistory,
-  updateProfile,
 } from "@/lib/api";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { useAuthStore, useUIStore, useSpacesStore, useNavigationStore } from "@/stores";
@@ -29,12 +28,7 @@ import {
   resolveEffectiveEntitlement,
 } from "@/lib/entitlements";
 import { useTranslation } from "react-i18next";
-import { ZakiSettingsSheet } from "./agent/ZakiSettingsSheet";
 import { SessionManagementSheet } from "./agent/SessionManagementSheet";
-import { CronManagementSheet } from "./agent/CronManagementSheet";
-import { SecretsVaultSheet } from "./agent/SecretsVaultSheet";
-import { DiagnosticsSheet } from "./agent/DiagnosticsSheet";
-import { SettingsModal } from "./sidebar/SettingsModal";
 import { SidebarModeSwitch } from "./sidebar/SidebarModeSwitch";
 import { ZakiSessionList } from "./sidebar/ZakiSessionList";
 import { SpaceSettingsSheet } from "./sidebar/SpaceSettingsSheet";
@@ -64,8 +58,11 @@ type SidebarProps = {
 };
 
 type AgentControlTab =
+  | "plan"
   | "controls"
   | "approvals"
+  | "cron"
+  | "evidence"
   | "browser"
   | "artifacts"
   | "trace"
@@ -147,8 +144,8 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
     },
   } as const;
   // Get state from stores
-  const { user, logout, setUser } = useAuthStore();
-  const { themePreference, resolvedTheme, setThemePreference, sidebarCollapsed: collapsed, setSidebarCollapsed } = useUIStore();
+  const { user, logout } = useAuthStore();
+  const { resolvedTheme, setThemePreference, sidebarCollapsed: collapsed, setSidebarCollapsed } = useUIStore();
   const effectiveCollapsed = !contextOnly && collapsed;
   const { setSpaces: setGlobalSpaces } = useSpacesStore();
   const {
@@ -187,12 +184,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
   const [expandedSpace, setExpandedSpace] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState("new-space");
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
-  const [zakiSettingsOpen, setZakiSettingsOpen] = useState(false);
   const [zakiSessionsOpen, setZakiSessionsOpen] = useState(false);
-  const [zakiCronOpen, setZakiCronOpen] = useState(false);
-  const [zakiSecretsOpen, setZakiSecretsOpen] = useState(false);
-  const [zakiDiagnosticsOpen, setZakiDiagnosticsOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memorySearchQuery, setMemorySearchQuery] = useState("");
   const [memoryInitialTab, setMemoryInitialTab] = useState<
@@ -243,7 +235,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
   } = useSpaces(!!user);
   const [spacesError, setSpacesError] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [profileSaving, setProfileSaving] = useState(false);
   const isDark = resolvedTheme() === "dark";
   const [spaceSearchQuery, setSpaceSearchQuery] = useState("");
   const [removingDocumentKey, setRemovingDocumentKey] = useState<string | null>(null);
@@ -273,6 +264,15 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
     [location.pathname, navigate]
   );
 
+  const openSettingsSection = useCallback(
+    (sectionId?: string) => {
+      const hash = sectionId ? `#${sectionId}` : "";
+      navigate(`/settings${hash}`);
+      window.dispatchEvent(new Event("zaki:onboarding-settings-opened"));
+    },
+    [navigate]
+  );
+
   useEffect(() => {
     const handleOpenMemory = (event: Event) => {
       if (!user?.username) return;
@@ -293,8 +293,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
     const handleOpenSettings = () => {
       if (!user?.username) return;
       setProfileMenuOpen(false);
-      navigate("/settings");
-      window.dispatchEvent(new Event("zaki:onboarding-settings-opened"));
+      openSettingsSection();
     };
     const handleCloseMemory = () => {
       setMemoryOpen(false);
@@ -317,7 +316,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
       window.removeEventListener("zaki:open-settings", handleOpenSettings);
       window.removeEventListener("zaki:memory-conflicts-count", handleConflictCount);
     };
-  }, [navigate, user?.username]);
+  }, [openSettingsSection, user?.username]);
 
   useEffect(() => {
     if (!profileMenuOpen || !user?.username) return;
@@ -560,30 +559,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
     setGlobalSpaces(spaces);
   }, [spaces, setGlobalSpaces]);
 
-  const saveDisplayName = useCallback(async (): Promise<boolean> => {
-    if (!user?.username) return false;
-    setProfileSaving(true);
-    try {
-      const nextName = displayName.trim();
-      const { response, data } = await updateProfile(nextName);
-      if (!response.ok || data?.error) {
-        toast.error(data?.error || t("sidebar.profile.saveError"));
-        return false;
-      }
-      setUser({
-        ...user,
-        fullName: nextName || null,
-      });
-      toast.success(t("sidebar.profile.saveSuccess"));
-      return true;
-    } catch (error) {
-      toast.error(t("sidebar.profile.saveError"));
-      return false;
-    } finally {
-      setProfileSaving(false);
-    }
-  }, [displayName, setUser, t, user]);
-
   useEffect(() => {
     window.dispatchEvent(
       new CustomEvent("zaki:spaces-data", {
@@ -636,11 +611,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
 
   useEffect(() => {
     const anyModalOpen =
-      zakiSettingsOpen ||
       zakiSessionsOpen ||
-      zakiCronOpen ||
-      zakiSecretsOpen ||
-      zakiDiagnosticsOpen ||
       memoryOpen ||
       spaceSettingsOpen ||
       Boolean(confirmDelete);
@@ -664,29 +635,13 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
         setMemoryOpen(false);
         return;
       }
-      if (zakiDiagnosticsOpen) {
-        setZakiDiagnosticsOpen(false);
-        return;
-      }
-      if (zakiSecretsOpen) {
-        setZakiSecretsOpen(false);
-        return;
-      }
-      if (zakiCronOpen) {
-        setZakiCronOpen(false);
-        return;
-      }
       if (zakiSessionsOpen) {
         setZakiSessionsOpen(false);
-        return;
-      }
-      if (zakiSettingsOpen) {
-        setZakiSettingsOpen(false);
       }
     };
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
-  }, [confirmDelete, memoryOpen, spaceSettingsOpen, zakiSettingsOpen, zakiSessionsOpen, zakiCronOpen, zakiSecretsOpen, zakiDiagnosticsOpen]);
+  }, [confirmDelete, memoryOpen, spaceSettingsOpen, zakiSessionsOpen]);
 
   useEffect(() => {
     if (!spaceSettingsTarget) return;
@@ -1487,18 +1442,18 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
             requestAgentControls(totalPendingApprovals > 0 ? "approvals" : "controls");
           }}
           controlBadgeCount={totalPendingApprovals}
-          onOpenSettings={() => setZakiSettingsOpen(true)}
+          onOpenSettings={() => openSettingsSection()}
           onOpenSessions={() => setZakiSessionsOpen(true)}
-          onOpenCron={() => setZakiCronOpen(true)}
-          onOpenSecrets={() => setZakiSecretsOpen(true)}
-          onOpenDiagnostics={() => setZakiDiagnosticsOpen(true)}
+          onOpenCron={() => requestAgentControls("cron")}
+          onOpenSecrets={() => openSettingsSection("settings-secrets")}
+          onOpenDiagnostics={() => openSettingsSection("settings-developer-access")}
         />
       ) : sidebarMode === "zaki" ? (
         <div className="zaki-sidebar-v2-action-row" aria-label={t("sidebar.context.agentActions", { defaultValue: "Agent actions" })}>
           <button type="button" onClick={() => setZakiSessionsOpen(true)}>
             {t("zakiControls.sidebarMenu.sessions")}
           </button>
-          <button type="button" onClick={() => setZakiSettingsOpen(true)}>
+          <button type="button" onClick={() => openSettingsSection()}>
             {t("zakiControls.sidebarMenu.settings")}
           </button>
         </div>
@@ -1749,7 +1704,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
                       className="size-7 rounded-md p-0 flex items-center justify-center opacity-100 transition hover:bg-zaki-hover focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2 md:opacity-0 md:group-hover:opacity-100"
                       onClick={(event) => {
                         event.stopPropagation();
-                        setZakiSettingsOpen(true);
+                        openSettingsSection();
                       }}
                       aria-label={`${space.title} settings`}
                     >
@@ -2382,30 +2337,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
       )}
         </>
       )}
-      <SettingsModal
-        isOpen={settingsModalOpen}
-        onClose={() => setSettingsModalOpen(false)}
-        displayName={displayName}
-        email={user?.username || ""}
-        onDisplayNameChange={setDisplayName}
-        themePreference={themePreference}
-        onThemeChange={(value: "light" | "dark" | "system") =>
-          setThemePreference(value as "light" | "dark" | "system")
-        }
-        onSave={async () => {
-          await saveDisplayName();
-        }}
-        onAccountDeleted={() => {
-          setSettingsModalOpen(false);
-          setProfileMenuOpen(false);
-          logout();
-        }}
-        saving={profileSaving}
-      />
-      <ZakiSettingsSheet
-        isOpen={zakiSettingsOpen}
-        onClose={() => setZakiSettingsOpen(false)}
-      />
       <SessionManagementSheet
         isOpen={zakiSessionsOpen}
         onClose={() => setZakiSessionsOpen(false)}
@@ -2416,18 +2347,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
           goToThread(ZAKI_BOT_SPACE_ID, threadSlug, { zakiSessionKey: sessionKey });
           setZakiSessionsOpen(false);
         }}
-      />
-      <CronManagementSheet
-        isOpen={zakiCronOpen}
-        onClose={() => setZakiCronOpen(false)}
-      />
-      <SecretsVaultSheet
-        isOpen={zakiSecretsOpen}
-        onClose={() => setZakiSecretsOpen(false)}
-      />
-      <DiagnosticsSheet
-        isOpen={zakiDiagnosticsOpen}
-        onClose={() => setZakiDiagnosticsOpen(false)}
       />
       <SpaceSettingsSheet
         isOpen={spaceSettingsOpen}

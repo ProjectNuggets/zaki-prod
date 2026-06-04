@@ -93,13 +93,11 @@ describe("zaki session helpers", () => {
 
   it("falls back to a date stamp when the threadId looks opaque and createdAt is provided", () => {
     const opaque = "agent:zaki-bot:user:7:thread:01H92ZJVFCAFR5RV";
-    // 2026-05-08 in any locale will at least include "May" or the
-    // localized month name. We just assert "Session ·" prefix to keep
-    // the test locale-resilient.
     const out = formatZakiSessionFallbackLabel(opaque, {
       createdAt: "2026-05-08T00:00:00Z",
     });
-    expect(out.startsWith("Session ·")).toBe(true);
+    expect(out).not.toMatch(/^Session/);
+    expect(out.length).toBeGreaterThan(0);
   });
 
   it("returns the readable threadId when it isn't an opaque id", () => {
@@ -114,7 +112,8 @@ describe("zaki session helpers", () => {
     const out = formatZakiSessionFallbackLabel("agent:zaki-bot:user:7:abcdef0123456789", {
       createdAt: "2026-05-08T00:00:00Z",
     });
-    expect(out.startsWith("Session ·")).toBe(true);
+    expect(out).not.toMatch(/^Session/);
+    expect(out.length).toBeGreaterThan(0);
   });
 
   it("uses readable tail when key tail is short and human-meaningful", () => {
@@ -133,6 +132,16 @@ describe("zaki session helpers", () => {
       title: null,
       createdAt: "2026-05-08T00:00:00Z",
     });
-    expect(out.startsWith("Session ·")).toBe(true);
+    expect(out).not.toMatch(/^Session/);
+    expect(out.length).toBeGreaterThan(0);
+  });
+
+  it("ignores placeholder backend titles when deriving a user-facing label", () => {
+    const out = formatZakiSessionLabel({
+      sessionKey: "agent:zaki-bot:user:7:thread:01H92ZJVFCAFR5RV",
+      title: "Session",
+      createdAt: "2026-05-08T00:00:00Z",
+    });
+    expect(out).not.toBe("Session");
   });
 });

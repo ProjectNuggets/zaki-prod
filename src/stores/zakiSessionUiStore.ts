@@ -76,15 +76,9 @@ export function mapAgentSessionToZakiSessionUi(session: Partial<AgentSession>): 
         : null,
     live: typeof session.live === "boolean" ? session.live : null,
   };
-  // Only include fields when the source response actually returns them.
-  // The session list response (every 30s tick) historically omitted
-  // context_pressure_percent and pending_approvals for non-live sessions,
-  // so spreading default values here was wiping live state that other
-  // endpoints had already written. Authoritative sources own each field;
-  // let the list ticks be additive only.
-  if (typeof session.context_pressure_percent === "number") {
-    patch.contextPressurePercent = session.context_pressure_percent;
-  }
+  // Session list/detail hydration owns posture and approval cards, not context
+  // pressure. `/api/agent/sessions/:key/context` is the only store writer for
+  // exact pressure so cumulative token totals cannot masquerade as live context.
   if (typeof session.pending_approval_count === "number") {
     patch.approvalCount = Math.max(0, session.pending_approval_count);
   }

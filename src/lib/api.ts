@@ -88,6 +88,10 @@ export function getBackendBase() {
   if (envBase && envBase.trim()) {
     return envBase.replace(/\/+$/, "");
   }
+  const legacyBase = getConfiguredLegacyApiBase();
+  if (legacyBase && legacyBase.trim()) {
+    return legacyBase.replace(/\/+$/, "");
+  }
   if (typeof window !== "undefined") {
     return window.location.origin;
   }

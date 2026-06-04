@@ -47,7 +47,7 @@ export function MessageActions({
         <button
           type="button"
           className={cn(
-            "inline-flex size-7 items-center justify-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-1",
+            "inline-flex size-7 items-center justify-center rounded-[3px] transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-1",
             ttsActive
               ? "bg-zaki-brand-10 text-zaki-brand"
               : "hover:bg-zaki-elevated hover:text-zaki-secondary"
@@ -82,7 +82,7 @@ export function MessageActions({
       ) : null}
       <button
         type="button"
-        className="inline-flex size-7 items-center justify-center rounded-full hover:bg-zaki-elevated hover:text-zaki-secondary transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-1"
+        className="inline-flex size-7 items-center justify-center rounded-[3px] hover:bg-zaki-elevated hover:text-zaki-secondary transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-1"
         title="Copy"
         aria-label="Copy message"
         onClick={onCopy}
@@ -91,7 +91,7 @@ export function MessageActions({
       </button>
       <button
         type="button"
-        className="inline-flex size-7 items-center justify-center rounded-full hover:bg-zaki-elevated hover:text-zaki-secondary transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-1"
+        className="inline-flex size-7 items-center justify-center rounded-[3px] hover:bg-zaki-elevated hover:text-zaki-secondary transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-1"
         title="Regenerate response"
         aria-label="Regenerate response"
         onClick={onRegenerate}
@@ -102,7 +102,7 @@ export function MessageActions({
         type="button"
         aria-pressed={reaction === "up"}
         className={cn(
-          "inline-flex size-7 items-center justify-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-1",
+          "inline-flex size-7 items-center justify-center rounded-[3px] transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-1",
           reaction === "up"
             ? "bg-zaki-accent/15 text-zaki-accent"
             : "hover:bg-zaki-elevated hover:text-zaki-secondary",
@@ -117,7 +117,7 @@ export function MessageActions({
         type="button"
         aria-pressed={reaction === "down"}
         className={cn(
-          "inline-flex size-7 items-center justify-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-1",
+          "inline-flex size-7 items-center justify-center rounded-[3px] transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-1",
           reaction === "down"
             ? "bg-zaki-brand/15 text-zaki-brand"
             : "hover:bg-zaki-elevated hover:text-zaki-secondary",

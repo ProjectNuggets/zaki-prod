@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Boxes, CircleDot, Shield, SlidersHorizontal, X } from "lucide-react";
+import { Boxes, CircleDot, Copy, ExternalLink, Shield, SlidersHorizontal, X } from "lucide-react";
 import { useAuthStore } from "@/stores";
 import { useBrainGraph, useBrainMe } from "@/queries";
 import { SkeletonBrainPage } from "@/app/components/ui/skeleton";
@@ -17,7 +17,7 @@ import { BrainTimeScrubber } from "./BrainTimeScrubber";
 import { BrainInsightsStrip } from "./BrainInsightsStrip";
 import { KIND_COLOR, KIND_LABEL } from "./brainColors";
 import { V2Badge, V2StatusStrip, V2Tabs } from "@/app/components/v2";
-import type { BrainGraphNode } from "@/lib/api";
+import { fetchBrainMemory, type BrainGraphNode, type BrainMemoryDetail } from "@/lib/api";
 
 type BrainTab = "timeline" | "graph";
 
@@ -585,9 +585,11 @@ export function BrainPage() {
               <BrainOrphanRail userId={userId} onPick={handlePickKey} />
             ) : (
               <BrainDetailSummary
+                userId={userId}
                 nodes={selectedNodes}
                 centerKey={centerKey}
                 selectedCommunityId={selectedCommunityId}
+                onOpenMemorySettings={() => navigate("/settings#settings-memory-data")}
               />
             )}
           </aside>
@@ -657,17 +659,79 @@ function FloatingOverlay({ onClose, children }: FloatingOverlayProps) {
   );
 }
 
+function formatBrainTimestamp(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const millis = value < 10_000_000_000 ? value * 1000 : value;
+    return new Date(millis).toLocaleString();
+  }
+  if (typeof value === "string" && value.trim()) {
+    const numeric = Number(value);
+    const date = Number.isFinite(numeric)
+      ? new Date(numeric < 10_000_000_000 ? numeric * 1000 : numeric)
+      : new Date(value);
+    return Number.isNaN(date.getTime()) ? "unknown" : date.toLocaleString();
+  }
+  return "unknown";
+}
+
 function BrainDetailSummary({
+  userId,
   nodes,
   centerKey,
   selectedCommunityId,
+  onOpenMemorySettings,
 }: {
+  userId: string;
   nodes: BrainGraphNode[];
   centerKey: string | null;
   selectedCommunityId: number | null;
+  onOpenMemorySettings: () => void;
 }) {
   const { t } = useTranslation();
   const hasSelection = nodes.length > 0;
+  const activeNode = nodes[0] ?? null;
+  const activeKey = activeNode?.id || centerKey || null;
+  const [detail, setDetail] = useState<BrainMemoryDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!userId || !activeKey) {
+      setDetail(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    let active = true;
+    setLoading(true);
+    setError(null);
+    void fetchBrainMemory(userId, activeKey)
+      .then((memory) => {
+        if (active) setDetail(memory);
+      })
+      .catch((cause) => {
+        if (!active) return;
+        setDetail(null);
+        setError(cause instanceof Error ? cause.message : "memory_detail_unavailable");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [activeKey, userId]);
+
+  const copyMemoryKey = async () => {
+    const key = detail?.key || activeKey;
+    if (!key || typeof navigator === "undefined" || !navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(key);
+    } catch {
+      // Clipboard access can be denied by the browser; the Brain detail panel should stay stable.
+    }
+  };
+
   return (
     <section className="zaki-brain-v2__detail-summary">
       <header>
@@ -696,14 +760,89 @@ function BrainDetailSummary({
         ) : null}
       </header>
       {hasSelection ? (
-        <ul>
-          {nodes.slice(0, 6).map((node) => (
-            <li key={node.id}>
-              <strong>{node.display_label || node.summary}</strong>
-              <span>{node.kind}</span>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul>
+            {nodes.slice(0, 6).map((node) => (
+              <li key={node.id}>
+                <strong>{node.display_label || node.summary}</strong>
+                <span>{node.kind}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="zaki-brain-v2__memory-detail" data-testid="brain-memory-detail">
+            {loading ? (
+              <p>{t("brain.detail.loading", { defaultValue: "Loading memory provenance..." })}</p>
+            ) : error ? (
+              <p>{t("brain.detail.error", { defaultValue: "Memory detail unavailable" })}: {error}</p>
+            ) : detail ? (
+              <>
+                <div className="zaki-brain-v2__memory-detail-head">
+                  <span>{detail.kind}</span>
+                  <strong>{detail.summary || detail.content || detail.id}</strong>
+                </div>
+                {detail.content && detail.content !== detail.summary ? (
+                  <p>{detail.content}</p>
+                ) : null}
+                <dl>
+                  <div>
+                    <dt>{t("brain.detail.key", { defaultValue: "Key" })}</dt>
+                    <dd>{detail.key || detail.id}</dd>
+                  </div>
+                  <div>
+                    <dt>{t("brain.detail.session", { defaultValue: "Session" })}</dt>
+                    <dd>{detail.session_id || "not recorded"}</dd>
+                  </div>
+                  <div>
+                    <dt>{t("brain.detail.created", { defaultValue: "Created" })}</dt>
+                    <dd>{formatBrainTimestamp(detail.created_at)}</dd>
+                  </div>
+                  <div>
+                    <dt>{t("brain.detail.confidence", { defaultValue: "Confidence" })}</dt>
+                    <dd>
+                      {typeof detail.confidence_score === "number"
+                        ? `${Math.round(detail.confidence_score * 100)}%`
+                        : "not scored"}
+                    </dd>
+                  </div>
+                </dl>
+                {detail.source?.snippet ? (
+                  <blockquote>{detail.source.snippet}</blockquote>
+                ) : null}
+                {detail.linked_memories?.length ? (
+                  <div className="zaki-brain-v2__linked-memories">
+                    <span>{t("brain.detail.linked", { defaultValue: "Linked memories" })}</span>
+                    <ul>
+                      {detail.linked_memories.slice(0, 5).map((memory, index) => (
+                        <li key={`${memory.id || memory.summary}-${index}`}>
+                          <strong>{memory.link_type}</strong>
+                          <small>{memory.summary}</small>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                <div className="zaki-brain-v2__detail-actions">
+                  <button type="button" onClick={() => void copyMemoryKey()}>
+                    <Copy className="size-3.5" aria-hidden />
+                    {t("brain.detail.copyKey", { defaultValue: "Copy key" })}
+                  </button>
+                  {detail.session_id ? (
+                    <button type="button" disabled>
+                      <ExternalLink className="size-3.5" aria-hidden />
+                      {t("brain.detail.openSession", { defaultValue: "Open session" })}
+                    </button>
+                  ) : null}
+                  <button type="button" onClick={onOpenMemorySettings}>
+                    <Shield className="size-3.5" aria-hidden />
+                    {t("brain.detail.memorySettings", { defaultValue: "Memory settings" })}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p>{t("brain.detail.pickOne", { defaultValue: "Select a memory to inspect provenance." })}</p>
+            )}
+          </div>
+        </>
       ) : (
         <p>
           {t("brain.detail.emptyHelper", {

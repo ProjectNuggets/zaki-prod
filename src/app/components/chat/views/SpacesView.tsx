@@ -151,10 +151,10 @@ export function SpacesView({
   const renderHeader = () => (
     <div className="mb-8">
       <div className="flex flex-wrap items-center gap-3 mb-2">
-        <div className="size-9 rounded-full bg-zaki-brand/10 flex items-center justify-center text-zaki-brand">
+        <div className="size-9 border border-zaki-brand/30 bg-zaki-brand/10 flex items-center justify-center text-zaki-brand">
           <Folder className="size-4" />
         </div>
-        <h1 className="font-display font-bold text-zaki-primary text-2xl tracking-tight">
+        <h1 className="font-mono-ui font-semibold text-zaki-primary text-xl tracking-normal uppercase">
           {t("spacesView.title")}
         </h1>
       </div>
@@ -166,7 +166,7 @@ export function SpacesView({
 
   const renderToolbar = () => (
     <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5">
-      <div className="flex-1 flex items-center gap-2 rounded-full bg-zaki-hover px-4 py-2 text-sm text-zaki-secondary">
+      <div className="flex-1 flex items-center gap-2 border border-zaki bg-zaki-hover px-3 py-2 text-sm text-zaki-secondary">
         <Search className="size-4 text-zaki-muted" />
         <input
           className={cn(
@@ -181,7 +181,7 @@ export function SpacesView({
       </div>
       <button
         type="button"
-        className="inline-flex items-center gap-1.5 rounded-full bg-zaki-hover px-3 py-1.5 text-xs font-medium text-zaki-secondary hover:text-zaki-primary hover:bg-zaki-active transition-colors"
+        className="inline-flex min-h-9 items-center gap-1.5 border border-zaki bg-zaki-hover px-3 py-1.5 font-mono-ui text-[11px] font-medium uppercase text-zaki-secondary hover:text-zaki-primary hover:bg-zaki-active transition-colors"
         onClick={() => setSortOrder((prev) => (prev === "recent" ? "alpha" : "recent"))}
         aria-label={t("spacesView.sortToggleAria")}
       >
@@ -206,22 +206,23 @@ export function SpacesView({
               type="button"
               onClick={() => openTemplate(template)}
               className={cn(
-                "group rounded-zaki-xl border border-zaki bg-zaki-raised p-4 text-left transition-all duration-200",
-                "hover:-translate-y-0.5 hover:shadow-zaki-md hover:border-zaki-strong",
+                "group border border-zaki bg-zaki-raised p-4 text-left transition-colors duration-200",
+                "hover:border-zaki-strong hover:bg-zaki-hover",
                 "dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)] dark:hover:bg-[#1a1714]",
                 isRtl && "text-right"
               )}
             >
               <div
-                className="inline-flex size-9 items-center justify-center rounded-full mb-3"
+                className="inline-flex size-9 items-center justify-center border mb-3"
                 style={{
                   backgroundColor: `${template.color}1a`,
                   color: template.color,
+                  borderColor: `${template.color}66`,
                 }}
               >
                 <Icon className="size-4" />
               </div>
-              <div className="font-display font-semibold text-sm text-zaki-primary mb-1">
+              <div className="font-mono-ui font-semibold text-xs uppercase text-zaki-primary mb-1">
                 {template.label}
               </div>
               <div className="text-xs text-zaki-secondary leading-relaxed">
@@ -235,16 +236,19 @@ export function SpacesView({
   );
 
   const renderExplainer = () => (
-    <div className="rounded-zaki-xl border border-zaki bg-zaki-raised p-5 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+    <div className="border border-zaki bg-zaki-raised p-5 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
       <div className="mb-4">
         <MetaLabel>What makes a Space</MetaLabel>
       </div>
+      <p className="mb-4 border-l border-zaki-brand/40 pl-3 font-mono-ui text-[11px] uppercase leading-relaxed text-zaki-secondary">
+        Chat spaces keep workspace context for focused threads. ZAKI Agent Brain remains the personal graph memory for autonomous work.
+      </p>
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="flex flex-col gap-2">
-          <div className="inline-flex size-8 items-center justify-center rounded-full bg-zaki-brand/10 text-zaki-brand">
+          <div className="inline-flex size-8 items-center justify-center border border-zaki-brand/30 bg-zaki-brand/10 text-zaki-brand">
             <Sparkles className="size-4" />
           </div>
-          <div className="font-display font-semibold text-sm text-zaki-primary">
+          <div className="font-mono-ui font-semibold text-xs uppercase text-zaki-primary">
             Master prompt
           </div>
           <p className="text-xs text-zaki-secondary leading-relaxed">
@@ -252,10 +256,10 @@ export function SpacesView({
           </p>
         </div>
         <div className="flex flex-col gap-2">
-          <div className="inline-flex size-8 items-center justify-center rounded-full bg-zaki-accent/15 text-zaki-accent">
+          <div className="inline-flex size-8 items-center justify-center border border-zaki-accent/30 bg-zaki-accent/15 text-zaki-accent">
             <FileText className="size-4" />
           </div>
-          <div className="font-display font-semibold text-sm text-zaki-primary">
+          <div className="font-mono-ui font-semibold text-xs uppercase text-zaki-primary">
             Documents
           </div>
           <p className="text-xs text-zaki-secondary leading-relaxed">
@@ -264,12 +268,12 @@ export function SpacesView({
         </div>
         <div className="flex flex-col gap-2">
           <div
-            className="inline-flex size-8 items-center justify-center rounded-full"
-            style={{ backgroundColor: "rgba(217, 119, 6, 0.15)", color: "#d97706" }}
+            className="inline-flex size-8 items-center justify-center border"
+            style={{ backgroundColor: "rgba(217, 119, 6, 0.15)", borderColor: "rgba(217, 119, 6, 0.45)", color: "#d97706" }}
           >
             <MessageSquareText className="size-4" />
           </div>
-          <div className="font-display font-semibold text-sm text-zaki-primary">
+          <div className="font-mono-ui font-semibold text-xs uppercase text-zaki-primary">
             Threads
           </div>
           <p className="text-xs text-zaki-secondary leading-relaxed">
@@ -283,7 +287,7 @@ export function SpacesView({
   if (isLoading) {
     return (
       <div
-        className="px-4 sm:px-6 md:px-10 py-8 md:py-10 max-w-6xl mx-auto w-full font-body"
+        className="px-4 sm:px-6 md:px-10 py-8 md:py-10 max-w-6xl mx-auto w-full"
         dir={isRtl ? "rtl" : "ltr"}
       >
         {renderHeader()}
@@ -296,7 +300,7 @@ export function SpacesView({
   const renderSpaceCard = (space: Space) => (
     <div
       key={space.id}
-      className="group relative rounded-zaki-xl border border-zaki bg-zaki-raised p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-zaki-md hover:border-zaki-strong cursor-pointer dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)] dark:hover:bg-[#1a1714]"
+      className="group relative border border-zaki bg-zaki-raised p-4 transition-colors duration-200 hover:border-zaki-strong hover:bg-zaki-hover cursor-pointer dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)] dark:hover:bg-[#1a1714]"
       role="button"
       tabIndex={0}
       aria-label={t("spacesView.startChatAria")}
@@ -309,7 +313,7 @@ export function SpacesView({
       }}
     >
       <div className="flex items-start justify-between gap-2 mb-3">
-        <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-zaki-brand/10 text-zaki-brand">
+        <span className="inline-flex size-9 shrink-0 items-center justify-center border border-zaki-brand/30 bg-zaki-brand/10 text-zaki-brand">
           <Folder className="size-4" />
         </span>
         <div
@@ -320,7 +324,7 @@ export function SpacesView({
         >
           <button
             type="button"
-            className="size-7 rounded-full flex items-center justify-center text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover transition-colors"
+            className="size-7 border border-transparent flex items-center justify-center text-zaki-muted hover:text-zaki-primary hover:border-zaki hover:bg-zaki-hover transition-colors"
             onClick={(event) => {
               event.stopPropagation();
               window.dispatchEvent(
@@ -334,7 +338,7 @@ export function SpacesView({
           {!space.fixed && (
             <button
               type="button"
-              className="size-7 rounded-full flex items-center justify-center text-zaki-muted hover:text-zaki-brand hover:bg-zaki-brand/10 transition-colors"
+              className="size-7 border border-transparent flex items-center justify-center text-zaki-muted hover:text-zaki-brand hover:border-zaki-brand/30 hover:bg-zaki-brand/10 transition-colors"
               onClick={(event) => {
                 event.stopPropagation();
                 window.dispatchEvent(
@@ -351,14 +355,14 @@ export function SpacesView({
         </div>
       </div>
 
-      <div className="font-display font-semibold text-sm text-zaki-primary truncate mb-1">
+      <div className="font-mono-ui font-semibold text-xs uppercase text-zaki-primary truncate mb-1">
         {space.title}
       </div>
 
       {editingId === space.id ? (
         <textarea
           className={cn(
-            "zaki-space-desc-input w-full rounded-zaki-md bg-zaki-hover border-0 px-2 py-1.5 text-xs text-zaki-secondary outline-none focus:outline-none focus:ring-0",
+            "zaki-space-desc-input w-full bg-zaki-hover border border-zaki px-2 py-1.5 text-xs text-zaki-secondary outline-none focus:outline-none focus:ring-0",
             isRtl ? "text-right" : "text-left"
           )}
           rows={2}
@@ -397,7 +401,7 @@ export function SpacesView({
       )}
 
       <div className="mt-3 pt-3 border-t border-zaki flex items-center gap-2">
-        <span className="inline-flex items-center rounded-full bg-zaki-hover text-zaki-secondary text-xs font-medium px-2 py-0.5">
+        <span className="inline-flex items-center border border-zaki bg-zaki-hover text-zaki-secondary font-mono-ui text-[10px] font-medium uppercase px-2 py-0.5">
           {t("spacesView.chatsCount", { count: space.threads?.length ?? 0 })}
         </span>
       </div>
@@ -409,14 +413,14 @@ export function SpacesView({
       type="button"
       onClick={onCreateSpace}
       className={cn(
-        "rounded-zaki-xl border border-dashed border-zaki-brand/30 bg-transparent p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-zaki-brand hover:bg-zaki-brand/5 zaki-pressable flex flex-col items-start",
+        "border border-dashed border-zaki-brand/30 bg-transparent p-4 transition-colors duration-200 hover:border-zaki-brand hover:bg-zaki-brand/5 zaki-pressable flex flex-col items-start",
         isRtl ? "text-right items-end" : "text-left"
       )}
     >
-      <span className="size-9 rounded-full bg-zaki-brand/10 text-zaki-brand flex items-center justify-center mb-3">
+      <span className="size-9 border border-zaki-brand/30 bg-zaki-brand/10 text-zaki-brand flex items-center justify-center mb-3">
         <Plus className="size-4" />
       </span>
-      <div className="font-display font-semibold text-sm text-zaki-primary mb-1">
+      <div className="font-mono-ui font-semibold text-xs uppercase text-zaki-primary mb-1">
         {t("spacesView.createCta")}
       </div>
       <div className="text-xs text-zaki-secondary leading-relaxed">
@@ -427,7 +431,7 @@ export function SpacesView({
 
   return (
     <div
-      className="px-4 sm:px-6 md:px-10 py-8 md:py-10 max-w-6xl mx-auto w-full font-body"
+      className="px-4 sm:px-6 md:px-10 py-8 md:py-10 max-w-6xl mx-auto w-full"
       dir={isRtl ? "rtl" : "ltr"}
     >
       {renderHeader()}

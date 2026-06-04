@@ -66,7 +66,7 @@ describe("zakiSessionUiStore", () => {
     expect(mapped.mode).toBe("plan");
     expect(mapped.approvalCount).toBe(1);
     expect(mapped.lastChannel).toBe("telegram");
-    expect(mapped.contextPressurePercent).toBe(75);
+    expect("contextPressurePercent" in mapped).toBe(false);
     expect(mapped.pendingApprovals).toHaveLength(1);
     expect(mapped.pendingApprovals?.[0]).toMatchObject({
       id: "apr-7",

@@ -43,6 +43,15 @@ function LegacyZakiBotRoute({ locale = "en" }: { locale?: "en" | "ar" }) {
   return <Navigate to={locale === "ar" ? "/ar/products/agent" : "/products/agent"} replace />;
 }
 
+function InternalOperatorRoute() {
+  const token = useAuthStore((state) => state.token);
+  const user = useAuthStore((state) => state.user);
+  const email = String(user?.username || "").trim().toLowerCase();
+  if (!token) return <Navigate to="/" replace />;
+  if (email !== "as@novanuggets.com") return <Navigate to="/" replace />;
+  return <AdminAccessCodesPage />;
+}
+
 /**
  * Route structure:
  * /                        → Home/ZAKI landing
@@ -204,7 +213,11 @@ export const router = createBrowserRouter([
       },
       {
         path: 'internal/admin-access-codes',
-        element: <AdminAccessCodesPage />,
+        element: <InternalOperatorRoute />,
+      },
+      {
+        path: 'internal/operator',
+        element: <InternalOperatorRoute />,
       },
       {
         path: 'brain',

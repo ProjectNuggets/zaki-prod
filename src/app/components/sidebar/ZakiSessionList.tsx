@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { Plus, MessageSquare, Loader2, Download, Share2, Pencil, Trash2, Check } from "lucide-react";
+import { Plus, MessageSquare, Loader2, Download, Share2, Pencil, Trash2, Check, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { formatSessionTime } from "@/lib/zakiBot";
 import { formatZakiSessionLabel, normalizeZakiSessionKey } from "@/lib/zakiSessions";
 import type { AgentSession } from "@/lib/api";
 import { useSessionTitleOverlay } from "@/queries/useSessionTitleOverlay";
-import { InlineConfirm } from "@/app/components/ui/zaki";
 
 interface ZakiSessionListProps {
   sessions: AgentSession[];
@@ -128,6 +127,7 @@ export function ZakiSessionList({
           typeof session.pending_approval_count === "number"
             ? Math.max(0, session.pending_approval_count)
             : 0;
+        const showMetaRow = showRuntimeBadges || pendingApprovalCount > 0;
 
         return (
           <div
@@ -189,50 +189,71 @@ export function ZakiSessionList({
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-zaki-secondary truncate">{label}</div>
-                  <div className="mt-0.5 flex items-center gap-1.5">
-                    {showRuntimeBadges && mode ? (
-                      <span className="inline-flex items-center rounded-full bg-zaki-raised px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zaki-muted">
-                        {mode}
-                      </span>
-                    ) : null}
-                    <span
-                      aria-label={live ? "live" : "idle"}
-                      className={`size-2 rounded-full ${live ? "bg-green-500" : "bg-zaki-muted/40"}`}
-                    />
-                    {showRuntimeBadges && lastChannel ? (
-                      <span className="inline-flex items-center rounded-full bg-zaki-raised px-1.5 py-0.5 text-[10px] text-zaki-muted">
-                        {lastChannel}
-                      </span>
-                    ) : null}
-                    {pendingApprovalCount > 0 ? (
-                      <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-[#f10202] px-1 text-[10px] font-bold text-white">
-                        {pendingApprovalCount}
-                      </span>
-                    ) : null}
-                    {time ? (
-                      <span className="text-2xs text-zaki-muted">{time}</span>
-                    ) : null}
-                  </div>
+                  {showMetaRow ? (
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      {showRuntimeBadges && mode ? (
+                        <span className="inline-flex items-center rounded-full bg-zaki-raised px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zaki-muted">
+                          {mode}
+                        </span>
+                      ) : null}
+                      {showRuntimeBadges ? (
+                        <span
+                          aria-label={live ? "live" : "idle"}
+                          className={`size-2 rounded-full ${live ? "bg-green-500" : "bg-zaki-muted/40"}`}
+                        />
+                      ) : null}
+                      {showRuntimeBadges && lastChannel ? (
+                        <span className="inline-flex items-center rounded-full bg-zaki-raised px-1.5 py-0.5 text-[10px] text-zaki-muted">
+                          {lastChannel}
+                        </span>
+                      ) : null}
+                      {pendingApprovalCount > 0 ? (
+                        <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-[#f10202] px-1 text-[10px] font-bold text-white">
+                          {pendingApprovalCount}
+                        </span>
+                      ) : null}
+                      {showRuntimeBadges && time ? (
+                        <span className="text-2xs text-zaki-muted">{time}</span>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </button>
             )}
             {confirmingDeleteKey === normalizedSessionKey && onDeleteSession ? (
-              <InlineConfirm
-                label={t("zakiControls.sessionList.deleteConfirm", {
-                  defaultValue: "Delete \"{{label}}\"? This can't be undone.",
-                  label,
+              <div
+                className="zaki-session-delete-confirm flex shrink-0 items-center gap-0.5"
+                role="alertdialog"
+                aria-label={t("zakiControls.sessionList.deleteConfirmCompact", {
+                  defaultValue: "Confirm delete",
                 })}
-                confirmLabel={t("zakiControls.sessionList.deleteConfirmAction", {
-                  defaultValue: "Delete",
-                })}
-                cancelLabel={t("common.cancel", { defaultValue: "Cancel" })}
-                onConfirm={() => {
-                  setConfirmingDeleteKey(null);
-                  onDeleteSession(normalizedSessionKey, label);
-                }}
-                onCancel={() => setConfirmingDeleteKey(null)}
-                className="shrink-0"
-              />
+              >
+                <button
+                  type="button"
+                  className="rounded-full p-1 text-zaki-muted transition-colors hover:bg-zaki-hover hover:text-zaki-primary focus-visible:ring-2 focus-visible:ring-zaki-accent"
+                  onClick={() => setConfirmingDeleteKey(null)}
+                  aria-label={t("common.cancel", { defaultValue: "Cancel" })}
+                  title={t("common.cancel", { defaultValue: "Cancel" })}
+                >
+                  <X className="size-3.5" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full p-1 text-zaki-brand transition-colors hover:bg-zaki-brand/10 focus-visible:ring-2 focus-visible:ring-zaki-brand"
+                  onClick={() => {
+                    setConfirmingDeleteKey(null);
+                    onDeleteSession(normalizedSessionKey, label);
+                  }}
+                  aria-label={t("zakiControls.sessionList.deleteConfirmAction", {
+                    defaultValue: "Delete",
+                  })}
+                  title={t("zakiControls.sessionList.deleteConfirmAction", {
+                    defaultValue: "Delete",
+                  })}
+                >
+                  <Check className="size-3.5" aria-hidden />
+                </button>
+              </div>
             ) : (
             <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 [@media(pointer:coarse)]:opacity-60">
               {!isRenaming ? (

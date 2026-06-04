@@ -2,7 +2,7 @@ import { BackgroundPattern } from "./BackgroundPattern";
 import { InputArea, type InputAreaHandle, type InputAreaSendOptions } from "./InputArea";
 import { AgentSessionRail } from "@/app/components/agent/AgentSessionRail";
 import { SandboxBadge } from "@/app/components/agent/SandboxBadge";
-import { Share2, MoreVertical, Download, Brain, ChevronDown, PanelRightOpen } from "lucide-react";
+import { Share2, MoreVertical, Download, Brain, ChevronDown } from "lucide-react";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
@@ -28,6 +28,7 @@ import {
   fetchAgentExtensionDiagnostics,
   listAgentArtifacts,
   listAgentCron,
+  listAgentJobs,
   listAgentTasks,
   setAgentSessionMode,
   approveAgentSession,
@@ -40,6 +41,7 @@ import {
   type MemoryCaptureResponse,
   type UsageQuotaSurface,
   type AgentArtifact,
+  type AgentJob,
   type AgentTask,
   type AgentExtensionDiagnosticsResponse,
 } from "@/lib/api";
@@ -66,6 +68,8 @@ import {
   AgentInspectorRail,
   type AgentInspectorArtifact,
   type AgentInspectorCronJob,
+  type AgentInspectorJob,
+  type AgentSettingsSection,
   type AgentInspectorTab,
   type AgentInspectorTabRequest,
 } from "./chat/AgentInspectorRail";
@@ -102,7 +106,6 @@ import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
 import { MemoryImportSheet } from "./onboarding/MemoryImportSheet";
 import { OnboardingTour } from "./onboarding/OnboardingTour";
 import { AgentArtifactCanvas } from "./agent/AgentArtifactCanvas";
-import { CronManagementSheet } from "./agent/CronManagementSheet";
 import { useOnboardingProgress } from "@/queries/useOnboardingProgress";
 import { useBrainGraph } from "@/queries/useBrainGraph";
 import {
@@ -495,17 +498,6 @@ function formatAcceptedTypeHint(types: Record<string, string[]>) {
   )
     .slice(0, 8)
     .join(", ");
-}
-
-function safeAgentSessionFilename(name: string | null | undefined, fallback: string) {
-  const cleaned = (name || fallback || "agent-session")
-    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, "")
-    .replace(/[\\/:*?"<>|]/g, "_")
-    .replace(/\s+/g, "_")
-    .replace(/^\.+/, "")
-    .slice(0, 80)
-    .trim();
-  return cleaned || fallback || "agent-session";
 }
 
 function splitFilesByAcceptedTypes(
@@ -2055,6 +2047,42 @@ function normalizeAgentCronJob(item: unknown, index: number): AgentInspectorCron
   };
 }
 
+function normalizeAgentJobsPayload(data: unknown): AgentInspectorJob[] {
+  const container = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  const rawJobs = Array.isArray(data)
+    ? data
+    : Array.isArray(container.jobs)
+      ? container.jobs
+      : Array.isArray(container.items)
+        ? container.items
+        : [];
+  return rawJobs
+    .map((item, index) => normalizeAgentJob(item, index))
+    .filter((job): job is AgentInspectorJob => Boolean(job));
+}
+
+function normalizeAgentJob(item: unknown, index: number): AgentInspectorJob | null {
+  if (!item || typeof item !== "object") return null;
+  const record = item as AgentJob & Record<string, unknown>;
+  const id =
+    recordStringValue(record, "id", "job_id", "jobId", "run_id", "runId") ||
+    `job-${index}`;
+  const title =
+    recordStringValue(record, "title", "label", "name", "prompt", "command") ||
+    recordStringValue(record, "status", "state") ||
+    id;
+  return {
+    id,
+    title,
+    status: recordStringValue(record, "status", "state"),
+    schedule: recordStringValue(record, "schedule", "expression", "cron", "rrule", "job_type", "jobType"),
+    nextRunAt: timestampMillis(record.next_run_at ?? record.nextRunAt ?? record.next_run_secs ?? record.nextRunSecs),
+    lastRunAt: timestampMillis(record.last_run_at ?? record.lastRunAt ?? record.completed_at ?? record.completedAt),
+    createdAt: timestampMillis(record.created_at ?? record.createdAt),
+    error: recordStringValue(record, "error", "last_error", "lastError"),
+  };
+}
+
 function normalizeAgentArtifactsPayload(data: unknown): AgentInspectorArtifact[] {
   const container = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
   const rawArtifacts = Array.isArray(data)
@@ -2076,21 +2104,32 @@ function normalizeAgentArtifact(item: unknown): AgentInspectorArtifact | null {
   if (!id) return null;
   const title =
     recordStringValue(record, "title", "name", "label") ||
-    recordStringValue(record, "type", "mime_type", "mimeType") ||
+    recordStringValue(record, "type", "kind", "mime_type", "mimeType") ||
     id;
   return {
     id,
     title,
-    type: recordStringValue(record, "type", "mime_type", "mimeType"),
+    type: recordStringValue(record, "type", "kind", "mime_type", "mimeType"),
     version:
       typeof record.version === "string" || typeof record.version === "number"
         ? record.version
+        : typeof record.latest_version === "string" || typeof record.latest_version === "number"
+          ? record.latest_version
+          : typeof record.latestVersion === "string" || typeof record.latestVersion === "number"
+            ? record.latestVersion
         : null,
     sessionKey: recordStringValue(record, "session_key", "sessionKey", "session_id", "sessionId"),
     shareUrl: recordStringValue(record, "public_url", "publicUrl", "share_url", "shareUrl"),
-    createdAt: timestampMillis(record.created_at ?? record.createdAt),
+    createdAt: timestampMillis(record.created_at ?? record.createdAt ?? record.created_at_ms ?? record.createdAtMs),
     updatedAt: timestampMillis(
-      record.updated_at ?? record.updatedAt ?? record.created_at ?? record.createdAt
+      record.updated_at ??
+        record.updatedAt ??
+        record.updated_at_ms ??
+        record.updatedAtMs ??
+        record.created_at ??
+        record.createdAt ??
+        record.created_at_ms ??
+        record.createdAtMs
     ),
   };
 }
@@ -2121,7 +2160,10 @@ export function extractNullalisApprovalRequest(
       : null;
   const toolCallId = stringPayloadField(payload, "tool_call_id", "toolCallId", "tool_use_id", "toolUseId");
   const runId = stringPayloadField(payload, "run_id", "runId");
-  const id = approvalId || (runId ? `legacy-run:${runId}:tool:${tool}` : null);
+  const id =
+    approvalId ||
+    (numericId != null ? `legacy:${String(numericId)}` : null) ||
+    (runId ? `legacy-run:${runId}:tool:${tool}` : null);
   const inputPreview =
     (typeof payload.input_preview === "string" && payload.input_preview.trim()) ||
     (typeof payload.inputPreview === "string" && payload.inputPreview.trim()) ||
@@ -2137,6 +2179,12 @@ export function extractNullalisApprovalRequest(
   const expiresAt =
     (typeof payload.expires_at === "string" && payload.expires_at.trim()) ||
     (typeof payload.expiresAt === "string" && payload.expiresAt.trim()) ||
+    (typeof payload.expires_at === "number" && Number.isFinite(payload.expires_at)
+      ? new Date(payload.expires_at * 1000).toISOString()
+      : null) ||
+    (typeof payload.expiresAt === "number" && Number.isFinite(payload.expiresAt)
+      ? new Date(payload.expiresAt * 1000).toISOString()
+      : null) ||
     null;
   return {
     id: id || `approval-${now}-${Math.random().toString(36).slice(2, 8)}`,
@@ -2950,6 +2998,9 @@ export function ChatArea() {
   const [agentCronJobs, setAgentCronJobs] = useState<AgentInspectorCronJob[]>([]);
   const [agentCronLoading, setAgentCronLoading] = useState(false);
   const [agentCronError, setAgentCronError] = useState<string | null>(null);
+  const [agentJobs, setAgentJobs] = useState<AgentInspectorJob[]>([]);
+  const [agentJobsLoading, setAgentJobsLoading] = useState(false);
+  const [agentJobsError, setAgentJobsError] = useState<string | null>(null);
   const [agentArtifactSnapshots, setAgentArtifactSnapshots] = useState<AgentInspectorArtifact[]>([]);
   const [agentArtifactScope, setAgentArtifactScope] = useState<"session" | "recent">("session");
   const [agentArtifactsLoading, setAgentArtifactsLoading] = useState(false);
@@ -3002,10 +3053,8 @@ export function ChatArea() {
   const zakiBotProvisionPromiseRef = useRef<Promise<boolean> | null>(null);
   const [zakiBotProvisionReady, setZakiBotProvisionReady] = useState(false);
   const [sessionModePending, setSessionModePending] = useState(false);
-  const [agentCronOpen, setAgentCronOpen] = useState(false);
   const [selectedAgentArtifact, setSelectedAgentArtifact] =
     useState<AgentInspectorArtifact | null>(null);
-  const previousAgentCronOpenRef = useRef(false);
   const [agentInspectorOpen, setAgentInspectorOpen] = useState(() => {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem(AGENT_INSPECTOR_OPEN_KEY) !== "false";
@@ -3463,13 +3512,6 @@ export function ChatArea() {
     : freeDailyQuota?.unlimited
       ? "unlimited"
       : "metering";
-  const agentHeaderTitle = activeSessionRecord?.title?.trim() || headerThreadName;
-  const agentHeaderMeta = [
-    activeSessionMode ?? "execute",
-    agentContextPercent != null ? `${Math.round(agentContextPercent)}% ctx` : "ctx unknown",
-    agentWeeklyLabel,
-    isActiveZakiSessionLive ? "live" : "ready",
-  ].join(" · ");
   const isZakiBotSendLocked = Boolean(
     zakiBotQuotaInfo && zakiBotQuotaInfo.remaining <= 0
   );
@@ -3583,63 +3625,6 @@ export function ChatArea() {
     navigate(`/agent?thread=${encodeURIComponent(nextThreadId)}`);
     toast.success(t("zakiControls.sessionList.newSessionCreated", { defaultValue: "New session started" }));
   }, [goToThread, navigate, t]);
-
-  const handleDownloadAgentSession = useCallback(
-    async (sessionKey: string, label: string) => {
-      const normalized = normalizeZakiSessionKey(sessionKey);
-      const threadSlug = extractThreadSlugFromSessionKey(normalized);
-      if (!threadSlug) return;
-      try {
-        const { data } = await fetchAgentHistory(
-          ZAKI_BOT_SPACE_ID,
-          threadSlug,
-          "merged",
-        );
-        const payload = {
-          spaceId: ZAKI_BOT_SPACE_ID,
-          threadId: threadSlug,
-          sessionKey: normalized,
-          exportedAt: new Date().toISOString(),
-          history: data?.history ?? [],
-        };
-        const blob = new Blob([JSON.stringify(payload, null, 2)], {
-          type: "application/json",
-        });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `${safeAgentSessionFilename(label, threadSlug)}.json`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        URL.revokeObjectURL(url);
-        toast.success(
-          t("zakiControls.sessionList.downloadSuccess", {
-            defaultValue: "Session downloaded.",
-          }),
-        );
-      } catch {
-        toast.error(
-          t("zakiControls.sessionList.downloadError", {
-            defaultValue: "Couldn't download the session. Try again.",
-          }),
-        );
-      }
-    },
-    [t]
-  );
-
-  const handleShareAgentSession = useCallback(
-    (sessionKey: string) => {
-      selectAgentSession(sessionKey);
-      window.dispatchEvent(
-        new CustomEvent("zaki:open-share", {
-          detail: { sessionKey: normalizeZakiSessionKey(sessionKey) },
-        }),
-      );
-    },
-    [selectAgentSession]
-  );
 
   const handleDeleteAgentSession = useCallback(
     async (sessionKey: string, label: string) => {
@@ -4160,9 +4145,14 @@ export function ChatArea() {
   const refreshContextGauge = useCallback(async () => {
     try {
       if (!zakiBotProvisionReady) return;
+      if (isZakiBotRouteActive && zakiSessionsLoading) return;
       const sessionKey = activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
       if (!sessionKey) return; // agent user ID not yet resolved
       let payload: Record<string, unknown> | null = null;
+      const shouldSkipLiveContextFetch = activeSessionRecord?.live === false;
+      if (shouldSkipLiveContextFetch) {
+        contextUnavailableSessionKeysRef.current.add(sessionKey);
+      }
       if (!contextUnavailableSessionKeysRef.current.has(sessionKey)) {
         const { response, data } = await fetchAgentSessionContext(sessionKey);
         // Don't clobber a good in-store pressure value with `null` on a
@@ -4191,23 +4181,6 @@ export function ChatArea() {
           }
         }
       }
-      if (!payload && activeSessionRecord) {
-        const recordPayload = activeSessionRecord as Record<string, unknown>;
-        const recordPressure = numericValue(recordPayload.context_pressure_percent);
-        const recordMax =
-          numericValue(recordPayload.context_window_max) ??
-          numericValue(recordPayload.context_window_tokens);
-        if (
-          (recordPressure != null || (recordMax != null && recordMax > 0)) &&
-          hasTrustedContextWindowSignal(recordPayload)
-        ) {
-          payload = {
-            ...recordPayload,
-            context_source: activeSessionRecord.live ? "live_session" : "inactive_session",
-            context_confidence: activeSessionRecord.live ? "exact" : "inactive",
-          };
-        }
-      }
       if (!payload && contextUnavailableSessionKeysRef.current.has(sessionKey)) {
         const { response, data } = await fetchContextDiagnostics();
         if (response.ok) {
@@ -4233,10 +4206,11 @@ export function ChatArea() {
   }, [
     activeThreadId,
     activeZakiSessionKey,
-    activeSessionRecord,
     agentUserId,
+    isZakiBotRouteActive,
     setSessionContextPressure,
     zakiBotProvisionReady,
+    zakiSessionsLoading,
   ]);
 
   const refreshAgentRuntimePanelData = useCallback(async () => {
@@ -4246,14 +4220,17 @@ export function ChatArea() {
     setAgentTasksError(null);
     setAgentCronLoading(true);
     setAgentCronError(null);
+    setAgentJobsLoading(true);
+    setAgentJobsError(null);
     setAgentArtifactsLoading(true);
     setAgentArtifactsError(null);
     setAgentExtensionDiagnosticsLoading(true);
     setAgentExtensionDiagnosticsError(null);
 
-    const [taskResult, cronResult, artifactResult, extensionResult] = await Promise.allSettled([
+    const [taskResult, cronResult, jobResult, artifactResult, extensionResult] = await Promise.allSettled([
       listAgentTasks({ limit: 24 }),
       listAgentCron(),
+      listAgentJobs({ limit: 12 }),
       listAgentArtifacts({
         limit: 12,
         session_key: normalizedActiveZakiSessionKey || undefined,
@@ -4315,6 +4292,24 @@ export function ChatArea() {
       setAgentCronError("network_error");
     }
     setAgentCronLoading(false);
+
+    if (jobResult.status === "fulfilled") {
+      const { response, data } = jobResult.value;
+      if (!response.ok) {
+        const error =
+          (data as { error?: string | null; reason?: string | null })?.error ||
+          (data as { error?: string | null; reason?: string | null })?.reason ||
+          "unavailable";
+        setAgentJobs([]);
+        setAgentJobsError(error);
+      } else {
+        setAgentJobs(normalizeAgentJobsPayload(data));
+      }
+    } else {
+      setAgentJobs([]);
+      setAgentJobsError("network_error");
+    }
+    setAgentJobsLoading(false);
 
     if (artifactResult.status === "fulfilled") {
       const { response, data } = artifactResult.value;
@@ -4381,6 +4376,9 @@ export function ChatArea() {
       setAgentCronJobs([]);
       setAgentCronError(null);
       setAgentCronLoading(false);
+      setAgentJobs([]);
+      setAgentJobsError(null);
+      setAgentJobsLoading(false);
       setAgentArtifactSnapshots([]);
       setAgentArtifactsError(null);
       setAgentArtifactsLoading(false);
@@ -4391,13 +4389,6 @@ export function ChatArea() {
     }
     void refreshAgentRuntimePanelData();
   }, [isAgentSurface, refreshAgentRuntimePanelData]);
-
-  useEffect(() => {
-    const wasOpen = previousAgentCronOpenRef.current;
-    previousAgentCronOpenRef.current = agentCronOpen;
-    if (!isAgentSurface || !wasOpen || agentCronOpen) return;
-    void refreshAgentRuntimePanelData();
-  }, [agentCronOpen, isAgentSurface, refreshAgentRuntimePanelData]);
 
   // 2026-05-08 — Programmatic compact. Replaces the old "/compact" text
   // hack the pre-flight banner used to send. Direct API call against
@@ -6162,15 +6153,35 @@ export function ChatArea() {
     setAgentMobileInspectorOpen(false);
   }, []);
 
-  const openAgentCronSheet = useCallback(() => {
-    setAgentMobileInspectorOpen(false);
-    setAgentCronOpen(true);
-  }, []);
-
   const openAgentMemorySurface = useCallback(() => {
     setAgentMobileInspectorOpen(false);
     navigate("/brain");
   }, [navigate]);
+
+  useEffect(() => {
+    if (!isAgentSurface) return;
+    const handleAgentShare = () => handleShare();
+    const handleAgentReviewMemories = () => openAgentMemorySurface();
+    const handleAgentExport = () => handleExport();
+    window.addEventListener("zaki:agent-share", handleAgentShare);
+    window.addEventListener("zaki:agent-review-memories", handleAgentReviewMemories);
+    window.addEventListener("zaki:agent-export", handleAgentExport);
+    return () => {
+      window.removeEventListener("zaki:agent-share", handleAgentShare);
+      window.removeEventListener("zaki:agent-review-memories", handleAgentReviewMemories);
+      window.removeEventListener("zaki:agent-export", handleAgentExport);
+    };
+  }, [handleExport, handleShare, isAgentSurface, openAgentMemorySurface]);
+
+  const openAgentSettingsSection = useCallback((section: AgentSettingsSection) => {
+    setAgentMobileInspectorOpen(false);
+    setAgentInspectorOpen(false);
+    navigate(`/settings#settings-${section}`);
+  }, [navigate]);
+
+  const openAgentExtensionSettings = useCallback(() => {
+    openAgentSettingsSection("devices");
+  }, [openAgentSettingsSection]);
 
   const maybeShowSessionSummaryCue = useCallback(
     async (threadId?: string | null) => {
@@ -8025,6 +8036,9 @@ export function ChatArea() {
       cronJobs={agentCronJobs}
       cronLoading={agentCronLoading}
       cronError={agentCronError}
+      jobs={agentJobs}
+      jobsLoading={agentJobsLoading}
+      jobsError={agentJobsError}
       artifacts={agentArtifactSnapshots}
       artifactsScope={agentArtifactScope}
       artifactsLoading={agentArtifactsLoading}
@@ -8039,7 +8053,9 @@ export function ChatArea() {
       contextGaugeData={nullalisContextGauge}
       usageSummary={zakiUsageSummary}
       onOpenMemory={openAgentMemorySurface}
-      onOpenCron={openAgentCronSheet}
+      onCronChanged={refreshAgentRuntimePanelData}
+      onOpenExtensionSettings={openAgentExtensionSettings}
+      onOpenSettings={openAgentSettingsSection}
       onOpenArtifact={openAgentArtifactCanvas}
       tabRequest={agentInspectorTabRequest}
       onClose={
@@ -8182,8 +8198,6 @@ export function ChatArea() {
               isRtl={isRtl}
               onSelectSession={selectAgentSession}
               onCreateSession={handleCreateAgentSession}
-              onDownloadSession={handleDownloadAgentSession}
-              onShareSession={handleShareAgentSession}
               onDeleteSession={handleDeleteAgentSession}
             />
           ) : null}
@@ -8195,38 +8209,24 @@ export function ChatArea() {
             )}
           >
           {/* Header / Breadcrumb */}
-          {!showZakiHome && !showSpacesView ? (
+          {!isAgentSurface && !showZakiHome && !showSpacesView ? (
             <div
-              className={cn(
-                "px-6 py-4 flex items-center gap-2",
-                isAgentSurface && "zaki-agent-v2__head"
-              )}
+              className="px-6 py-4 flex items-center gap-2"
               dir="ltr"
             >
-              {isAgentSurface ? (
-                <div
-                  className="zaki-agent-thread-head"
-                  dir={isRtl ? "rtl" : "ltr"}
-                  title={`${agentHeaderTitle} · ${agentHeaderMeta}`}
-                >
-                  <h1>{agentHeaderTitle}</h1>
-                  <p>{agentHeaderMeta}</p>
-                </div>
-              ) : (
-                <span
-                  className="zaki-subheader-pill"
-                  dir={isRtl ? "rtl" : "ltr"}
-                  title={`${headerSpaceName} / ${headerThreadName}`}
-                >
-                  {headerSpaceName}
-                  <span className="text-zaki-muted">/</span>
-                  {headerThreadName}
-                </span>
-              )}
+              <span
+                className="zaki-subheader-pill"
+                dir={isRtl ? "rtl" : "ltr"}
+                title={`${headerSpaceName} / ${headerThreadName}`}
+              >
+                {headerSpaceName}
+                <span className="text-zaki-muted">/</span>
+                {headerThreadName}
+              </span>
               <SandboxBadge
                 active={isZakiBotActiveSpace}
                 sandbox={sandboxState}
-                className={cn("ml-2", isAgentSurface && "zaki-agent-v2__sandbox")}
+                className="ml-2"
               />
               <div
                 className="zaki-agent-head-actions relative z-30 ml-auto flex items-center gap-2"
@@ -8298,9 +8298,9 @@ export function ChatArea() {
                 )}
               </div>
             </div>
-              ) : (
+              ) : !isAgentSurface ? (
                 <div className="h-[64px]" aria-hidden="true" />
-              )}
+              ) : null}
 
           {/* C5: System notices — rendered here so they appear on ALL views
               (home, spaces, chat, brain) regardless of which view is active */}
@@ -8334,17 +8334,24 @@ export function ChatArea() {
                 });
               }}
             >
-              {isAgentSurface && selectedAgentArtifact ? (
-                <AgentArtifactCanvas
-                  artifact={selectedAgentArtifact}
-                  onClose={() => setSelectedAgentArtifact(null)}
-                />
-              ) : (
-                renderContent()
-              )}
+              {renderContent()}
             </div>
 
           </div>
+
+          {isAgentSurface && selectedAgentArtifact ? (
+            <aside
+              className="zaki-agent-artifact-overlay"
+              aria-label={t("agent.artifactCanvas.ariaLabel", {
+                defaultValue: "Artifact canvas",
+              })}
+            >
+              <AgentArtifactCanvas
+                artifact={selectedAgentArtifact}
+                onClose={() => setSelectedAgentArtifact(null)}
+              />
+            </aside>
+          ) : null}
 
           {showScrollToBottom && !showZakiHome && !showSpacesView && !showSpaceDetail && (
             <div
@@ -8367,19 +8374,6 @@ export function ChatArea() {
               </button>
             </div>
           )}
-
-          {isAgentSurface && !agentInspectorOpen && !agentFocusMode ? (
-            <button
-              type="button"
-              className="zaki-agent-inspector-peek"
-              onClick={() => setAgentInspectorOpen(true)}
-              aria-label={t("agent.panel.showAria", { defaultValue: "Show agent panel" })}
-              title={t("agent.panel.showTitle", { defaultValue: "Show panel" })}
-            >
-              <PanelRightOpen className="size-4" aria-hidden />
-              <span>{t("agent.panel.show", { defaultValue: "Panel" })}</span>
-            </button>
-          ) : null}
 
           {/* Input Area */}
           {!showAbout && !showSpacesView && !showSpaceDetail && !(showZakiHome && sidebarMode === "zaki") && (
@@ -8602,13 +8596,6 @@ export function ChatArea() {
         threadTitle={headerThreadName}
         messages={messages}
       />
-
-      {isAgentSurface ? (
-        <CronManagementSheet
-          isOpen={agentCronOpen}
-          onClose={() => setAgentCronOpen(false)}
-        />
-      ) : null}
 
       <MemoryImportSheet
         isOpen={memoryImportOpen}

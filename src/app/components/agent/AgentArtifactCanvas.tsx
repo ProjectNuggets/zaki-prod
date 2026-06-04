@@ -5,14 +5,20 @@ import {
   downloadAgentExportFile,
   exportAgentArtifact,
   fetchAgentArtifact,
+  fetchAgentArtifactDiff,
+  fetchAgentArtifactHistory,
   shareAgentArtifact,
+  updateAgentArtifact,
   type AgentArtifact,
 } from "@/lib/api";
 import {
+  getAgentArtifactExportAvailability,
   getAgentArtifactExportDownloadUrl,
+  getAgentArtifactExportFormatLabel,
   getAgentArtifactKind,
   getAgentArtifactShareUrl,
   getAgentArtifactTitle,
+  getAgentArtifactVersion,
   PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS,
   type AgentArtifactExportFormat,
   type AgentArtifactExportState,
@@ -49,6 +55,90 @@ function artifactPreviewText(source: AgentArtifact | AgentInspectorArtifact | nu
   return null;
 }
 
+function artifactCanEdit(kind: string | null | undefined, preview: string | null) {
+  if (!preview) return false;
+  return /\b(markdown|text|md|plain|html|json)\b/i.test(String(kind || ""));
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function artifactError(source: unknown, fallback: string) {
+  const record = asRecord(source);
+  const error = record?.error ?? record?.message ?? record?.reason;
+  return typeof error === "string" && error.trim() ? error.trim() : fallback;
+}
+
+function normalizeArtifactDetailPayload(data: unknown): AgentArtifact {
+  const record = asRecord(data) ?? {};
+  const nestedData = asRecord(record.data) ?? {};
+  const wrapped =
+    asRecord(record.artifact) ??
+    asRecord(record.item) ??
+    asRecord(nestedData.artifact) ??
+    asRecord(nestedData.item);
+  const detail: Record<string, unknown> = {
+    ...(Object.keys(nestedData).length ? nestedData : {}),
+    ...(wrapped ?? record),
+  };
+  for (const source of [nestedData, record]) {
+    for (const [key, value] of Object.entries(source)) {
+      if (key === "data" || key === "artifact" || key === "item") continue;
+      if (value !== undefined) detail[key] = value;
+    }
+  }
+  return detail as AgentArtifact;
+}
+
+function normalizeArtifactHistoryPayload(data: unknown): AgentArtifact[] {
+  const record = asRecord(data);
+  const nestedData = asRecord(record?.data);
+  const containers = [record, nestedData].filter(Boolean) as Array<Record<string, unknown>>;
+  let raw: unknown[] = Array.isArray(data) ? data : [];
+  for (const key of ["versions", "history", "items", "artifacts"]) {
+    if (raw.length) break;
+    const match = containers
+      .map((container) => container[key])
+      .find((value): value is unknown[] => Array.isArray(value));
+    raw = match || [];
+  }
+  return raw.filter((item): item is AgentArtifact => Boolean(asRecord(item)));
+}
+
+function versionValue(version: AgentArtifact | AgentInspectorArtifact | null) {
+  if (!version) return null;
+  const record = version as Record<string, unknown>;
+  const raw =
+    getAgentArtifactVersion(version as AgentArtifact) ??
+    record.version_id ??
+    record.versionId ??
+    record.revision ??
+    record.revision_id ??
+    record.revisionId;
+  if (typeof raw === "string" || typeof raw === "number") return String(raw);
+  return null;
+}
+
+function formatArtifactStamp(value: unknown) {
+  const numeric = typeof value === "number" ? value : null;
+  const date =
+    numeric != null
+      ? new Date(numeric < 10_000_000_000 ? numeric * 1000 : numeric)
+      : typeof value === "string"
+        ? new Date(value)
+        : null;
+  if (!date || Number.isNaN(date.getTime())) return "unknown";
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function safeExportFilename(artifact: AgentInspectorArtifact, format: AgentArtifactExportFormat) {
   const stem =
     artifact.title
@@ -71,6 +161,17 @@ export function AgentArtifactCanvas({
   const [exportStates, setExportStates] = useState<
     Partial<Record<AgentArtifactExportFormat, AgentArtifactExportState>>
   >({});
+  const [history, setHistory] = useState<AgentArtifact[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [selectedFromVersion, setSelectedFromVersion] = useState<string | null>(null);
+  const [selectedToVersion, setSelectedToVersion] = useState<string | null>(null);
+  const [diffText, setDiffText] = useState<string | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [diffError, setDiffError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(artifact.shareUrl || null);
   const [shareState, setShareState] = useState<"idle" | "sharing" | "copied" | "failed">("idle");
 
@@ -79,24 +180,59 @@ export function AgentArtifactCanvas({
     setDetail(null);
     setError(null);
     setLoading(true);
+    setHistoryLoading(true);
     setExportStates({});
+    setHistory([]);
+    setHistoryError(null);
+    setSelectedFromVersion(null);
+    setSelectedToVersion(null);
+    setDiffText(null);
+    setDiffError(null);
+    setEditing(false);
+    setEditDraft("");
     setShareUrl(artifact.shareUrl || null);
     setShareState("idle");
-    void fetchAgentArtifact(artifact.id)
-      .then(({ response, data }) => {
+    void Promise.allSettled([fetchAgentArtifact(artifact.id), fetchAgentArtifactHistory(artifact.id)])
+      .then((results) => {
         if (!active) return;
-        if (!response.ok) {
-          throw new Error(String((data as { error?: unknown })?.error || `artifact_${response.status}`));
+        const detailResult = results[0];
+        if (detailResult.status === "fulfilled") {
+          const { response, data } = detailResult.value;
+          if (!response.ok) {
+            throw new Error(artifactError(data, `artifact_${response.status}`));
+          }
+          const nextDetail = normalizeArtifactDetailPayload(data);
+          setDetail(nextDetail);
+          setShareUrl(getAgentArtifactShareUrl(nextDetail) || artifact.shareUrl || null);
+        } else {
+          throw detailResult.reason;
         }
-        setDetail(data);
-        setShareUrl(getAgentArtifactShareUrl(data) || artifact.shareUrl || null);
+        const historyResult = results[1];
+        if (historyResult.status === "fulfilled") {
+          const { response, data } = historyResult.value;
+          if (response.ok) {
+            const versions = normalizeArtifactHistoryPayload(data);
+            setHistory(versions);
+            const newest = versions[0] || null;
+            const oldest = versions[versions.length - 1] || null;
+            setSelectedFromVersion(versionValue(oldest));
+            setSelectedToVersion(versionValue(newest));
+          } else {
+            setHistoryError(artifactError(data, `history_${response.status}`));
+          }
+        } else {
+          setHistoryError("history_unavailable");
+        }
       })
       .catch((cause) => {
         if (!active) return;
         setError(cause instanceof Error ? cause.message : "artifact_unavailable");
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+          setHistoryLoading(false);
+        }
       });
     return () => {
       active = false;
@@ -106,6 +242,7 @@ export function AgentArtifactCanvas({
   const title = getAgentArtifactTitle((detail || artifact) as AgentArtifact);
   const kind = getAgentArtifactKind((detail || artifact) as AgentArtifact) || artifact.type || "artifact";
   const preview = useMemo(() => artifactPreviewText(detail || artifact), [detail, artifact]);
+  const editable = artifactCanEdit(kind, preview);
 
   const setExportState = (format: AgentArtifactExportFormat, state: AgentArtifactExportState) => {
     setExportStates((current) => ({ ...current, [format]: state }));
@@ -114,6 +251,7 @@ export function AgentArtifactCanvas({
   const handleDownload = async (format: AgentArtifactExportFormat, url: string) => {
     try {
       await downloadAgentExportFile(url, safeExportFilename(artifact, format));
+      setExportState(format, { status: "exported", url });
     } catch {
       setExportState(format, { status: "failed", url, error: "download_failed" });
       toast.error("Download failed. Try exporting again.");
@@ -121,16 +259,34 @@ export function AgentArtifactCanvas({
   };
 
   const handleExport = async (format: AgentArtifactExportFormat) => {
+    const availability = getAgentArtifactExportAvailability((detail || artifact) as AgentArtifact, format);
+    const label = getAgentArtifactExportFormatLabel(format);
+    if (!availability.supported) {
+      setExportState(format, {
+        status: "unavailable",
+        error: availability.reason || `${label} export unavailable`,
+      });
+      toast.message(availability.reason || `${label} export is unavailable.`);
+      return;
+    }
     setExportState(format, { status: "exporting" });
     try {
       const { response, data } = await exportAgentArtifact(artifact.id, format);
       if (!response.ok) {
         const code = typeof data?.error === "string" ? data.error : "export_failed";
         setExportState(format, {
-          status: response.status === 501 || code === "export_not_yet_available" ? "unavailable" : "failed",
+          status:
+            response.status === 400 ||
+            response.status === 501 ||
+            response.status === 502 ||
+            code === "unsupported_format" ||
+            code === "export_not_yet_available" ||
+            code === "renderer_unavailable"
+              ? "unavailable"
+              : "failed",
           error: code,
         });
-        toast.error(`${format.toUpperCase()} export is unavailable.`);
+        toast.error(`${label} export is unavailable.`);
         return;
       }
       const url = getAgentArtifactExportDownloadUrl(data);
@@ -143,7 +299,7 @@ export function AgentArtifactCanvas({
       await handleDownload(format, url);
     } catch {
       setExportState(format, { status: "failed", error: "export_failed" });
-      toast.error(`${format.toUpperCase()} export failed.`);
+      toast.error(`${label} export failed.`);
     }
   };
 
@@ -161,6 +317,72 @@ export function AgentArtifactCanvas({
     } catch {
       setShareState("failed");
       toast.error("Could not create artifact share link.");
+    }
+  };
+
+  const handleLoadDiff = async () => {
+    if (!selectedFromVersion || !selectedToVersion) {
+      setDiffError("Select two versions to compare.");
+      return;
+    }
+    setDiffLoading(true);
+    setDiffError(null);
+    setDiffText(null);
+    try {
+      const { response, data } = await fetchAgentArtifactDiff(
+        artifact.id,
+        selectedFromVersion,
+        selectedToVersion
+      );
+      if (!response.ok) {
+        throw new Error(artifactError(data, "diff_unavailable"));
+      }
+      const text =
+        typeof data.diff === "string"
+          ? data.diff
+          : typeof data.patch === "string"
+            ? data.patch
+            : JSON.stringify(data, null, 2);
+      setDiffText(text);
+    } catch (error) {
+      setDiffError(error instanceof Error ? error.message : "diff_unavailable");
+    } finally {
+      setDiffLoading(false);
+    }
+  };
+
+  const handleStartEdit = () => {
+    if (!editable || !preview) return;
+    setEditDraft(preview);
+    setEditing(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editable) return;
+    setSavingEdit(true);
+    try {
+      const { response, data } = await updateAgentArtifact(artifact.id, {
+        content: editDraft,
+      });
+      if (!response.ok) {
+        throw new Error(artifactError(data, "artifact_update_failed"));
+      }
+      const nextDetail = normalizeArtifactDetailPayload(data);
+      setDetail((current) => ({
+        ...((current || artifact) as AgentArtifact),
+        ...nextDetail,
+        content: artifactPreviewText(nextDetail) || editDraft,
+      }));
+      setEditing(false);
+      toast.success("Artifact updated.");
+      const historyResult = await fetchAgentArtifactHistory(artifact.id);
+      if (historyResult.response.ok) {
+        setHistory(normalizeArtifactHistoryPayload(historyResult.data));
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update artifact.");
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -198,7 +420,10 @@ export function AgentArtifactCanvas({
         <div className="zaki-agent-artifact-canvas__actions">
           {PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS.map((format) => {
             const state = exportStates[format];
-            const ready = state?.status === "ready" && state.url;
+            const label = getAgentArtifactExportFormatLabel(format);
+            const availability = getAgentArtifactExportAvailability((detail || artifact) as AgentArtifact, format);
+            const ready =
+              (state?.status === "ready" || state?.status === "exported") && state.url;
             return (
               <button
                 key={format}
@@ -206,11 +431,21 @@ export function AgentArtifactCanvas({
                 onClick={() =>
                   ready ? void handleDownload(format, state.url || "") : void handleExport(format)
                 }
-                disabled={state?.status === "exporting" || state?.status === "unavailable"}
-                title={state?.error || undefined}
+                disabled={
+                  state?.status === "exporting" ||
+                  state?.status === "unavailable" ||
+                  !availability.supported
+                }
+                title={state?.error || availability.reason || undefined}
               >
                 <Download className="size-3.5" aria-hidden />
-                {state?.status === "exporting" ? "Exporting" : ready ? format.toUpperCase() : `Export ${format.toUpperCase()}`}
+                {state?.status === "exporting"
+                  ? "Exporting"
+                  : !availability.supported
+                    ? `${label} unavailable`
+                    : ready
+                      ? label
+                      : `Export ${label}`}
               </button>
             );
           })}
@@ -234,18 +469,108 @@ export function AgentArtifactCanvas({
           </button>
         </div>
       </header>
-      <div className="zaki-agent-artifact-canvas__body">
-        {loading ? (
-          <div className="v2-empty-line">Loading artifact...</div>
-        ) : error ? (
-          <div className="v2-empty-line">Artifact preview unavailable: {error}</div>
-        ) : preview ? (
-          <MessageContent content={preview} role="assistant" surface="shared" />
-        ) : (
-          <div className="v2-empty-line">
-            Preview is unavailable for this artifact. Export and share remain available.
-          </div>
-        )}
+      <div className="zaki-agent-artifact-canvas__workspace">
+        <div className="zaki-agent-artifact-canvas__version-strip" data-testid="agent-artifact-history">
+          <section className="zaki-agent-artifact-canvas__versions" aria-label="Artifact versions">
+            <div className="zaki-agent-artifact-canvas__section-head">
+              <span>versions</span>
+              <small>{historyLoading ? "loading" : history.length ? `${history.length} records` : "none"}</small>
+            </div>
+            {historyError ? <div className="v2-empty-line">History unavailable: {historyError}</div> : null}
+            {history.length ? (
+              <ol>
+                {history.map((version, index) => {
+                  const value = versionValue(version);
+                  const displayValue = value || String(index + 1);
+                  const isSelected = Boolean(
+                    value && (value === selectedFromVersion || value === selectedToVersion)
+                  );
+                  return (
+                    <li key={`${displayValue}-${index}`}>
+                      <button
+                        type="button"
+                        disabled={!value}
+                        aria-pressed={isSelected}
+                        data-selected={isSelected ? "true" : undefined}
+                        title={value ? undefined : "This version cannot be compared because the backend did not return a version id."}
+                        onClick={() => {
+                          if (!value) return;
+                          setSelectedFromVersion(selectedFromVersion || value);
+                          setSelectedToVersion(value);
+                        }}
+                      >
+                        <strong>v{displayValue}</strong>
+                        <span>{getAgentArtifactTitle(version)}</span>
+                        <small>{formatArtifactStamp(version.updated_at ?? version.created_at)}</small>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+            ) : !historyLoading && !historyError ? (
+              <div className="v2-empty-line">No version history reported yet.</div>
+            ) : null}
+          </section>
+          <section className="zaki-agent-artifact-canvas__diff" data-testid="agent-artifact-diff" aria-label="Compare artifact versions">
+            <div className="zaki-agent-artifact-canvas__section-head">
+              <span>compare</span>
+              <small>{selectedFromVersion && selectedToVersion ? `v${selectedFromVersion} -> v${selectedToVersion}` : "select versions"}</small>
+            </div>
+            <div className="zaki-agent-artifact-canvas__diff-controls">
+              <input
+                value={selectedFromVersion || ""}
+                placeholder="from"
+                onChange={(event) => setSelectedFromVersion(event.target.value)}
+              />
+              <input
+                value={selectedToVersion || ""}
+                placeholder="to"
+                onChange={(event) => setSelectedToVersion(event.target.value)}
+              />
+              <button type="button" onClick={() => void handleLoadDiff()} disabled={diffLoading}>
+                {diffLoading ? "Loading" : "Diff"}
+              </button>
+            </div>
+            {diffError ? <div className="v2-empty-line">Diff unavailable: {diffError}</div> : null}
+            {diffText ? <pre>{diffText}</pre> : null}
+          </section>
+        </div>
+        <div className="zaki-agent-artifact-canvas__body">
+          {loading ? (
+            <div className="v2-empty-line">Loading artifact...</div>
+          ) : error ? (
+            <div className="v2-empty-line">Artifact preview unavailable: {error}</div>
+          ) : editing ? (
+            <div className="zaki-agent-artifact-canvas__editor" data-testid="agent-artifact-editor">
+              <textarea value={editDraft} onChange={(event) => setEditDraft(event.target.value)} />
+              <div>
+                <button type="button" disabled={savingEdit} onClick={() => void handleSaveEdit()}>
+                  {savingEdit ? "Saving" : "Save artifact"}
+                </button>
+                <button type="button" onClick={() => setEditing(false)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : preview ? (
+            <>
+              {editable ? (
+                <button
+                  type="button"
+                  className="zaki-agent-artifact-canvas__edit"
+                  onClick={handleStartEdit}
+                >
+                  Edit text artifact
+                </button>
+              ) : null}
+              <MessageContent content={preview} role="assistant" surface="shared" />
+            </>
+          ) : (
+            <div className="v2-empty-line">
+              Preview is unavailable for this artifact. Export and share remain available.
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );

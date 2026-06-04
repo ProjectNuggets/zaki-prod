@@ -1,5 +1,5 @@
-import { Focus, PanelRight, Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Brain, Download, Focus, MoreVertical, PanelRight, Share2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore, useUIStore } from "@/stores";
@@ -32,6 +32,8 @@ export function AppTopbar() {
   const { resolvedTheme, setThemePreference } = useUIStore();
   const [agentPanelOpen, setAgentPanelOpen] = useState(true);
   const [agentFocusMode, setAgentFocusMode] = useState(false);
+  const [agentMenuOpen, setAgentMenuOpen] = useState(false);
+  const agentMenuRef = useRef<HTMLDivElement | null>(null);
   const stage = resolvedTheme() === "dark" ? "dark" : "light";
   const isAgentRoute = (location.pathname.replace(/\/+$/, "") || "/") === "/agent";
   const displayName =
@@ -59,6 +61,27 @@ export function AppTopbar() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isAgentRoute) {
+      setAgentMenuOpen(false);
+      return;
+    }
+    const handleClickOutside = (event: MouseEvent) => {
+      if (agentMenuRef.current && !agentMenuRef.current.contains(event.target as Node)) {
+        setAgentMenuOpen(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAgentMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isAgentRoute]);
+
   return (
     <header className="zaki-app-topbar hidden md:flex">
       <nav
@@ -78,16 +101,6 @@ export function AppTopbar() {
         </span>
       </nav>
       <div className="zaki-app-topbar__actions">
-        <button
-          type="button"
-          className="zaki-app-topbar__command"
-          onClick={() => window.dispatchEvent(new Event("zaki:open-command-palette"))}
-          aria-label={t("appTopbar.commandAria", { defaultValue: "Open command palette" })}
-        >
-          <Search className="size-3.5" aria-hidden="true" />
-          <span>{t("appTopbar.command", { defaultValue: "Search, run, jump" })}</span>
-          <kbd>⌘K</kbd>
-        </button>
         {isAgentRoute ? (
           <>
             <button
@@ -124,14 +137,66 @@ export function AppTopbar() {
               <span>{t("appTopbar.agent.panel", { defaultValue: "Panel" })}</span>
               <kbd>⌘.</kbd>
             </button>
+            <button
+              type="button"
+              className="zaki-app-topbar__toggle zaki-app-topbar__agent-share"
+              onClick={() => window.dispatchEvent(new CustomEvent("zaki:agent-share"))}
+              aria-label={t("appTopbar.agent.shareAria", { defaultValue: "Share conversation" })}
+              data-testid="agent-share-toggle"
+            >
+              <Share2 className="zaki-app-topbar__toggle-icon" aria-hidden="true" />
+              <span>{t("appTopbar.agent.share", { defaultValue: "Share" })}</span>
+            </button>
+            <div className="zaki-app-topbar__menu-wrap" ref={agentMenuRef}>
+              <button
+                type="button"
+                className={`zaki-app-topbar__toggle zaki-app-topbar__agent-more ${agentMenuOpen ? "is-active" : ""}`}
+                onClick={() => setAgentMenuOpen((open) => !open)}
+                aria-haspopup="menu"
+                aria-expanded={agentMenuOpen}
+                aria-label={t("appTopbar.agent.moreAria", { defaultValue: "More agent actions" })}
+                data-testid="agent-more-toggle"
+              >
+                <MoreVertical className="zaki-app-topbar__toggle-icon" aria-hidden="true" />
+              </button>
+              {agentMenuOpen ? (
+                <div className="zaki-app-topbar__menu" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAgentMenuOpen(false);
+                      window.dispatchEvent(new CustomEvent("zaki:agent-review-memories"));
+                    }}
+                  >
+                    <Brain className="zaki-app-topbar__menu-icon" aria-hidden="true" />
+                    <span>{t("appTopbar.agent.reviewMemories", { defaultValue: "Review memories" })}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAgentMenuOpen(false);
+                      window.dispatchEvent(new CustomEvent("zaki:agent-export"));
+                    }}
+                  >
+                    <Download className="zaki-app-topbar__menu-icon" aria-hidden="true" />
+                    <span>{t("appTopbar.agent.exportJson", { defaultValue: "Export JSON" })}</span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </>
         ) : null}
         <button
           type="button"
           className="zaki-app-topbar__toggle"
           onClick={() => setThemePreference(stage === "dark" ? "light" : "dark")}
+          aria-label={t("appTopbar.themeAria", {
+            defaultValue: stage === "dark" ? "Switch to light mode" : "Switch to dark mode",
+          })}
         >
-          {t("appTopbar.stage", { defaultValue: "Stage" })} · {stage.toUpperCase()}
+          {stage.toUpperCase()}
         </button>
         <button
           type="button"

@@ -52,6 +52,7 @@ import {
   revokeAgentExtensionDevice,
   testAgentChannelControl,
   testAgentProviderProfile,
+  updateAgentProviderProfile,
   updateBotSettings,
   updateProfile,
   type AgentChannelBindingPayload,
@@ -494,6 +495,10 @@ export function SettingsPage() {
   const [providerDraft, setProviderDraft] =
     useState<AgentProviderProfilePayload>(DEFAULT_PROVIDER_DRAFT);
   const [providerModelText, setProviderModelText] = useState("");
+  const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
+  const [providerEditDraft, setProviderEditDraft] =
+    useState<AgentProviderProfilePayload>(DEFAULT_PROVIDER_DRAFT);
+  const [providerEditModelText, setProviderEditModelText] = useState("");
   const [integrations, setIntegrations] = useState<
     NonNullable<AgentIntegrationsResponse["integrations"]>
   >([]);
@@ -1175,6 +1180,72 @@ export function SettingsPage() {
           ? error.message
           : t("settingsModal.providers.errors.create", {
               defaultValue: "Unable to save provider profile.",
+            })
+      );
+    } finally {
+      setProviderAction(null);
+    }
+  };
+
+  const beginEditProviderProfile = (profile: AgentProviderProfile) => {
+    setEditingProviderId(profile.id);
+    setProviderEditDraft({
+      label: profile.label || "",
+      provider_kind: profile.provider_kind || "openai_compatible",
+      base_url: profile.base_url || "",
+      auth_style: (profile.auth_style as AgentProviderProfilePayload["auth_style"]) || "bearer",
+      api_key: "",
+      model_allowlist: profile.model_allowlist || [],
+      default_model: profile.default_model || null,
+      policy_state:
+        profile.policy_state === "disabled" || profile.policy_state === "active"
+          ? profile.policy_state
+          : "active",
+    });
+    setProviderEditModelText((profile.model_allowlist || []).join(", "));
+  };
+
+  const handleUpdateProviderProfile = async (profileId: string) => {
+    if (!providersAvailable) return;
+    const modelAllowlist = normalizeProviderModels(providerEditModelText);
+    const payload: AgentProviderProfilePayload = {
+      ...providerEditDraft,
+      label: String(providerEditDraft.label || "").trim(),
+      base_url: String(providerEditDraft.base_url || "").trim(),
+      api_key: String(providerEditDraft.api_key || "").trim() || undefined,
+      model_allowlist: modelAllowlist,
+      default_model:
+        String(providerEditDraft.default_model || "").trim() || modelAllowlist[0] || null,
+    };
+    if (!payload.base_url) {
+      toast.error(
+        t("settingsModal.providers.errors.requiredBaseUrl", {
+          defaultValue: "Base URL is required.",
+        })
+      );
+      return;
+    }
+    setProviderAction(`${profileId}:update`);
+    try {
+      const { response, data } = await updateAgentProviderProfile(profileId, payload);
+      if (!response.ok || data?.error) {
+        throw new Error(data?.message || data?.error || "provider_update_failed");
+      }
+      setEditingProviderId(null);
+      setProviderEditDraft(DEFAULT_PROVIDER_DRAFT);
+      setProviderEditModelText("");
+      await loadProviderProfiles();
+      toast.success(
+        t("settingsModal.providers.success.updated", {
+          defaultValue: "Provider profile updated.",
+        })
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("settingsModal.providers.errors.update", {
+              defaultValue: "Unable to update provider profile.",
             })
       );
     } finally {
@@ -2025,9 +2096,9 @@ export function SettingsPage() {
                             </V2Badge>
                           ) : null}
                           {config.id === "telegram" ? (
-                            <V2Button size="sm" onClick={() => navigate("/agent?settings=channels")}>
-                              {t("settingsModal.channels.openAgentChannels", {
-                                defaultValue: "Open channels",
+                            <V2Button size="sm" onClick={() => navigate("/settings#settings-secrets")}>
+                              {t("settingsModal.channels.openCredentials", {
+                                defaultValue: "Manage credentials",
                               })}
                             </V2Button>
                           ) : null}
@@ -2587,7 +2658,120 @@ export function SettingsPage() {
                           </dd>
                         </div>
                       </dl>
+                      {editingProviderId === profile.id ? (
+                        <div className="zaki-settings-v2__provider-edit" data-testid={`settings-provider-edit-${profile.id}`}>
+                          <div className="grid gap-2 md:grid-cols-2">
+                            <input
+                              className="v2-input"
+                              value={providerEditDraft.label || ""}
+                              placeholder={t("settingsModal.providers.fields.label", {
+                                defaultValue: "Label",
+                              })}
+                              onChange={(event) =>
+                                setProviderEditDraft((current) => ({
+                                  ...current,
+                                  label: event.target.value,
+                                }))
+                              }
+                            />
+                            <input
+                              className="v2-input"
+                              value={providerEditDraft.base_url || ""}
+                              placeholder={t("settingsModal.providers.fields.baseUrl", {
+                                defaultValue: "https://api.example.com/v1",
+                              })}
+                              onChange={(event) =>
+                                setProviderEditDraft((current) => ({
+                                  ...current,
+                                  base_url: event.target.value,
+                                }))
+                              }
+                            />
+                            <input
+                              className="v2-input"
+                              type="password"
+                              value={providerEditDraft.api_key || ""}
+                              placeholder={t("settingsModal.providers.fields.rotateApiKey", {
+                                defaultValue: "New API key, optional",
+                              })}
+                              onChange={(event) =>
+                                setProviderEditDraft((current) => ({
+                                  ...current,
+                                  api_key: event.target.value,
+                                }))
+                              }
+                            />
+                            <input
+                              className="v2-input"
+                              value={providerEditModelText}
+                              placeholder={t("settingsModal.providers.fields.models", {
+                                defaultValue: "model-a, model-b",
+                              })}
+                              onChange={(event) => setProviderEditModelText(event.target.value)}
+                            />
+                            <input
+                              className="v2-input"
+                              value={String(providerEditDraft.default_model || "")}
+                              placeholder={t("settingsModal.providers.fields.defaultModel", {
+                                defaultValue: "Default model",
+                              })}
+                              onChange={(event) =>
+                                setProviderEditDraft((current) => ({
+                                  ...current,
+                                  default_model: event.target.value,
+                                }))
+                              }
+                            />
+                            <select
+                              className="v2-input"
+                              value={providerEditDraft.policy_state || "active"}
+                              onChange={(event) =>
+                                setProviderEditDraft((current) => ({
+                                  ...current,
+                                  policy_state: event.target.value as "active" | "disabled",
+                                }))
+                              }
+                            >
+                              <option value="active">Active</option>
+                              <option value="disabled">Disabled</option>
+                            </select>
+                          </div>
+                          <div className="zaki-settings-v2__actions">
+                            <V2Button
+                              size="sm"
+                              variant="accent"
+                              disabled={
+                                !providersAvailable || providerAction === `${profile.id}:update`
+                              }
+                              onClick={() => void handleUpdateProviderProfile(profile.id)}
+                            >
+                              {providerAction === `${profile.id}:update`
+                                ? t("app.legal.saving")
+                                : t("settingsModal.providers.actions.update", {
+                                    defaultValue: "Update provider",
+                                  })}
+                            </V2Button>
+                            <V2Button
+                              size="sm"
+                              onClick={() => {
+                                setEditingProviderId(null);
+                                setProviderEditDraft(DEFAULT_PROVIDER_DRAFT);
+                                setProviderEditModelText("");
+                              }}
+                            >
+                              {t("app.legal.cancel", { defaultValue: "Cancel" })}
+                            </V2Button>
+                          </div>
+                        </div>
+                      ) : null}
                       <div className="zaki-settings-v2__actions">
+                        <V2Button
+                          size="sm"
+                          disabled={!providersAvailable}
+                          onClick={() => beginEditProviderProfile(profile)}
+                        >
+                          {t("settingsModal.providers.actions.edit", { defaultValue: "Edit" })}
+                        </V2Button>
                         <V2Button
                           size="sm"
                           disabled={!providersAvailable || providerAction === `${profile.id}:test`}
@@ -2698,7 +2882,8 @@ export function SettingsPage() {
                   defaultValue: "Browser extension",
                 })}
                 description={t("settingsModal.devices.extension.description", {
-                  defaultValue: "Per-user extension diagnostics are live; pairing and revocation UI remain gated.",
+                  defaultValue:
+                    "Pair a user-scoped browser device when ZAKI needs to act in logged-in tabs. Public web automation can still use the in-app browser without this.",
                 })}
               >
                 <V2Badge tone={extensionDiagnostics?.paired ? "success" : "default"}>
@@ -2723,10 +2908,10 @@ export function SettingsPage() {
                 </span>
               </V2SettingsRow>
               <V2SettingsRow
-                name={t("settingsModal.devices.pairDevice", { defaultValue: "Register device" })}
+                name={t("settingsModal.devices.pairDevice", { defaultValue: "Pair extension device" })}
                 description={t("settingsModal.devices.pairDeviceHelper", {
                   defaultValue:
-                    "Create a user-scoped browser extension device record. Runtime token enforcement stays in the extension bridge.",
+                    "Install the ZAKI browser extension, then create a device record here. Revoke the device if the browser is lost or no longer trusted.",
                 })}
               >
                 <div className="grid min-w-[260px] gap-2">
@@ -2747,7 +2932,7 @@ export function SettingsPage() {
                     {extensionDeviceAction === "pair"
                       ? t("app.legal.saving")
                       : t("settingsModal.devices.actions.register", {
-                          defaultValue: "Register",
+                          defaultValue: "Pair device",
                         })}
                   </V2Button>
                 </div>
@@ -2785,6 +2970,10 @@ export function SettingsPage() {
                         </div>
                       </header>
                       <dl>
+                        <div>
+                          <dt>{t("settingsModal.devices.fields.deviceId", { defaultValue: "Device ID" })}</dt>
+                          <dd>{deviceId || "pending"}</dd>
+                        </div>
                         <div>
                           <dt>{t("settingsModal.devices.fields.lastSeen", { defaultValue: "Last seen" })}</dt>
                           <dd>{lastSeen || "never"}</dd>

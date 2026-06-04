@@ -106,11 +106,13 @@ export function ApprovalRequiredCard({
   const { t } = useTranslation();
   const [submitting, setSubmitting] = useState<"approve" | "modify" | "deny" | null>(null);
   const [decided, setDecided] = useState<"approved" | "modified" | "denied" | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     setSubmitting(null);
     setDecided(null);
+    setActionError(null);
     setNow(Date.now());
   }, [request?.id]);
 
@@ -120,29 +122,59 @@ export function ApprovalRequiredCard({
     return () => window.clearInterval(timer);
   }, [request, decided]);
 
+  const expiresAtMs = useMemo(() => {
+    if (!request?.expiresAt) return null;
+    const parsed = Date.parse(request.expiresAt);
+    return Number.isNaN(parsed) ? null : parsed;
+  }, [request?.expiresAt]);
+
   const secondsRemaining = useMemo(() => {
+    if (expiresAtMs != null) {
+      return Math.max(0, Math.ceil((expiresAtMs - now) / 1000));
+    }
     if (!request?.timestamp) return APPROVAL_DECISION_WINDOW_SECONDS;
     const elapsed = Math.max(0, Math.floor((now - request.timestamp) / 1000));
     return Math.max(0, APPROVAL_DECISION_WINDOW_SECONDS - elapsed);
-  }, [now, request?.timestamp]);
+  }, [expiresAtMs, now, request?.timestamp]);
+
+  const isExpired = expiresAtMs != null && now >= expiresAtMs;
 
   const handleAction = useCallback(
     async (action: "approve" | "modify" | "deny") => {
       if (!request || submitting || decided) return;
+      if (isExpired) {
+        setActionError(
+          t("zakiControls.approval.expiredMessage", {
+            defaultValue: "Approval expired. Refresh the session to load the latest card.",
+          })
+        );
+        return;
+      }
       const cb =
         action === "approve" ? onApprove : action === "modify" ? onModify : onDeny;
       if (!cb) return;
+      setActionError(null);
       setSubmitting(action);
       try {
         await cb(request.id, request);
         setDecided(
           action === "approve" ? "approved" : action === "modify" ? "modified" : "denied"
         );
-      } catch {
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "";
+        setActionError(
+          code === "approval_id_mismatch"
+            ? t("zakiControls.approval.changedMessage", {
+                defaultValue: "Approval changed. Review the latest approval card.",
+              })
+            : t("zakiControls.approval.resolveFailed", {
+                defaultValue: "Approval could not be resolved. Try again.",
+              })
+        );
         setSubmitting(null);
       }
     },
-    [request, submitting, decided, onApprove, onModify, onDeny]
+    [request, submitting, decided, isExpired, t, onApprove, onModify, onDeny]
   );
 
   if (!request) return null;
@@ -218,7 +250,11 @@ export function ApprovalRequiredCard({
       : null,
   ].filter((row): row is { label: string; value: string } => row != null && row.value.trim().length > 0);
   const timerLabel =
-    secondsRemaining > 0
+    isExpired
+      ? t("zakiControls.approval.expired", {
+          defaultValue: "Approval expired",
+        })
+      : secondsRemaining > 0
       ? t("zakiControls.approval.timer", {
           defaultValue: "{{seconds}}s to decide",
           seconds: secondsRemaining,
@@ -258,6 +294,11 @@ export function ApprovalRequiredCard({
           >
             {request.reason || t("zakiControls.approval.defaultReason")}
           </div>
+          {actionError ? (
+            <div role="status" className="zaki-approval-card__error">
+              {actionError}
+            </div>
+          ) : null}
           {previewRows.length ? (
             <dl className="zaki-approval-card__preview" aria-label={t("zakiControls.approval.previewAria", { defaultValue: "Approval preview" })}>
               {previewRows.map((row) => (
@@ -276,7 +317,7 @@ export function ApprovalRequiredCard({
           <div className="zaki-approval-card__actions">
             <button
               type="button"
-              disabled={!!submitting || !onApprove}
+              disabled={isExpired || !!submitting || !onApprove}
               onClick={() => handleAction("approve")}
               aria-label={approveLabel}
               className={cn("zaki-approval-card__button is-primary", submitting === "approve" && "is-loading")}
@@ -291,7 +332,7 @@ export function ApprovalRequiredCard({
             </button>
             <button
               type="button"
-              disabled={!!submitting || !onModify}
+              disabled={isExpired || !!submitting || !onModify}
               onClick={() => handleAction("modify")}
               aria-label={modifyLabel}
               className={cn("zaki-approval-card__button", submitting === "modify" && "is-loading")}
@@ -309,7 +350,7 @@ export function ApprovalRequiredCard({
             </button>
             <button
               type="button"
-              disabled={!!submitting || !onDeny}
+              disabled={isExpired || !!submitting || !onDeny}
               onClick={() => handleAction("deny")}
               aria-label={denyLabel}
               className={cn("zaki-approval-card__button is-danger", submitting === "deny" && "is-loading")}
