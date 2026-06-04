@@ -43,7 +43,6 @@ export interface BrainFilters {
   // display
   textFadeThreshold: number; // 0..1 zoom
   nodeSizeScale: number; // multiplier
-  linkThickness: number; // multiplier
 }
 
 export const DEFAULT_FILTERS: BrainFilters = {
@@ -73,7 +72,6 @@ export const DEFAULT_FILTERS: BrainFilters = {
   edgeElasticity: 0.4,
   textFadeThreshold: 0.6,
   nodeSizeScale: 1,
-  linkThickness: 1,
 };
 
 interface Props {

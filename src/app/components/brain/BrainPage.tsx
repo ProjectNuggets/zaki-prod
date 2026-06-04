@@ -100,14 +100,7 @@ export function BrainPage() {
     const p = searchParams.get("panel");
     return p === "filters" || p === "clusters" || p === "orphans" ? p : null;
   })();
-  const initialCenter = searchParams.get("center");
   const initialQ = searchParams.get("q") ?? "";
-  const initialCommunity = (() => {
-    const v = searchParams.get("community");
-    if (!v) return null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  })();
 
   const [tab, setTab] = useState<BrainTab>(initialTab);
   const [degradedDismissed, setDegradedDismissed] = useState(false);
@@ -123,9 +116,7 @@ export function BrainPage() {
 
   // V1.7 graph state
   const [filters, setFilters] = useState<BrainFilters>(DEFAULT_FILTERS);
-  const [centerKey, setCenterKey] = useState<string | null>(initialCenter);
   const [highlightKeys, setHighlightKeys] = useState<string[]>([]);
-  const [selectedCommunityId, setSelectedCommunityId] = useState<number | null>(initialCommunity);
   // V1.11 — floating-overlay panel toggle (Obsidian Graph View pattern).
   // null = canvas-only (default); set by clicking a corner icon.
   const [activePanel, setActivePanel] = useState<ActivePanel>(initialPanel);
@@ -144,14 +135,11 @@ export function BrainPage() {
     if (tab !== "home") next.set("tab", tab); else next.delete("tab");
     if (debouncedSearch) next.set("q", debouncedSearch); else next.delete("q");
     if (activePanel) next.set("panel", activePanel); else next.delete("panel");
-    if (centerKey) next.set("center", centerKey); else next.delete("center");
-    if (selectedCommunityId != null) next.set("community", String(selectedCommunityId));
-    else next.delete("community");
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, debouncedSearch, activePanel, centerKey, selectedCommunityId]);
+  }, [tab, debouncedSearch, activePanel]);
 
   // Keyboard shortcut on the Explore tab: "/" focuses search. (Hold Shift +
   // drag to spin the 3D graph — handled in the engine.)
@@ -243,9 +231,22 @@ export function BrainPage() {
     return <BrainEmptyState onMigrate={() => navigate("/")} />;
   }
 
+  // Memory key → node id. The galaxy focuses by node id, but the time scrubber
+  // (and timeline) hand us memory keys. Built from the page's graph fetch.
+  const nodeIdByKey = new Map<string, string>();
+  for (const n of initialGraphQuery.data?.nodes ?? []) {
+    nodeIdByKey.set(n.id, n.id);
+    if (n.key) nodeIdByKey.set(n.key, n.id);
+  }
+
+  // Clicking a memory in the time scrubber takes you to it: open the full galaxy
+  // (so the node is actually on screen) and focus it — that seeds the ember and
+  // opens the detail card. (Previously this only mutated the URL: a dead click.)
   const handlePickKey = (key: string) => {
-    setCenterKey(key);
-    setSelectedCommunityId(null);
+    const id = nodeIdByKey.get(key) ?? key;
+    setTab("explore");
+    setGalaxyScope({ kind: "all" });
+    setGalaxyFocusId(id);
   };
 
   return (
@@ -369,6 +370,7 @@ export function BrainPage() {
               onToggleFx={toggleGalaxyFx}
               depth={galaxyDepth}
               onDepthChange={setGalaxyDepth}
+              hasFocus={galaxyFocusId != null}
               onFit={() => galaxyRef.current?.fit()}
               onRelayout={() => galaxyRef.current?.relayout()}
               scope={galaxyScope}
@@ -557,6 +559,7 @@ export function BrainPage() {
                   onToggleFx={toggleGalaxyFx}
                   depth={galaxyDepth}
                   onDepthChange={setGalaxyDepth}
+                  hasFocus={galaxyFocusId != null}
                   onFit={() => galaxyRef.current?.fit()}
                   onRelayout={() => galaxyRef.current?.relayout()}
                   scope={galaxyScope}

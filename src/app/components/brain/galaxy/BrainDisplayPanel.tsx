@@ -16,6 +16,8 @@ export interface BrainDisplayPanelProps {
   onToggleFx: (key: keyof RenderQuality) => void;
   depth: number;
   onDepthChange: (depth: number) => void;
+  /** A node is focused — only then does Focus depth do anything, so it's hidden otherwise. */
+  hasFocus: boolean;
   onFit: () => void;
   onRelayout: () => void;
   scope: GalaxyScope;
@@ -32,6 +34,7 @@ export function BrainDisplayPanel({
   onToggleFx,
   depth,
   onDepthChange,
+  hasFocus,
   onFit,
   onRelayout,
   scope,
@@ -49,8 +52,8 @@ export function BrainDisplayPanel({
           onChange={onViewChange}
           fullWidth
           options={[
-            { id: "spatial", label: "Spatial" },
-            { id: "tactical", label: "Tactical" },
+            { id: "spatial", label: "3D" },
+            { id: "tactical", label: "Flat" },
           ]}
         />
       </div>
@@ -72,7 +75,7 @@ export function BrainDisplayPanel({
         </div>
       </div>
 
-      {scope.kind !== "overview" && (
+      {hasFocus && (
         <div className="zaki-galaxy-panel__group">
           <label className="zaki-galaxy-panel__label" htmlFor="brain-focus-depth">
             Focus depth · {depth}
