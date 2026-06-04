@@ -77,7 +77,7 @@ export const DEFAULT_FILTERS: BrainFilters = {
 // Turn the raw 0.70–1.00 semantic cutoff into a word. The number is meaningless
 // to a user ("0.85"?); the word says what they'll see. Higher cutoff = stricter
 // = fewer, stronger links.
-function formatConnectionStrength(v: number): string {
+export function formatConnectionStrength(v: number): string {
   if (v >= 0.98) return "Strongest only";
   if (v >= 0.9) return "Strong";
   if (v >= 0.82) return "Balanced";

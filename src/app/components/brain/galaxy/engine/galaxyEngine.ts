@@ -18,6 +18,7 @@ import { createEdgeLines, type EdgeLines } from "./edges";
 import { createBloomComposer, type BloomComposer } from "./bloom";
 import { createNebula, type Nebula } from "./nebula";
 import { edgeSegmentsForCount } from "./lod";
+import { buildAdjacency, computeNear, computeFitView, screenToNdc } from "./spatial";
 import { createLabelLayer, type LabelEntry, type LabelLayer } from "./labels";
 import type { GraphRenderer, GraphRendererOptions, RenderModel, RenderQuality } from "./interface";
 
@@ -122,6 +123,21 @@ export function createGalaxyEngine(
     else renderer.render(scene, camera);
   }
 
+  // Troika finishes glyph tessellation asynchronously and one slot at a time.
+  // Repainting on EACH completion makes labels pop in one-by-one (flicker), so
+  // coalesce all completions in a frame into a single repaint on the next one.
+  // When the labels are stable the follow-up render triggers no new sync, so
+  // nothing reschedules and we go idle again.
+  let labelRepaintQueued = false;
+  function scheduleLabelRepaint(): void {
+    if (labelRepaintQueued) return;
+    labelRepaintQueued = true;
+    requestAnimationFrame(() => {
+      labelRepaintQueued = false;
+      renderFrame();
+    });
+  }
+
   function disposeFx(): void {
     if (composer) {
       composer.dispose();
@@ -216,7 +232,7 @@ export function createGalaxyEngine(
     }
     lastView = options.view;
     nodeById = new Map(graphSim.nodes.map((n) => [n.id, n]));
-    adjacency = buildAdjacency(model);
+    adjacency = buildAdjacency(model.edges);
     edgeLines = createEdgeLines(model, edgeSegmentsForCount(model.nodes.length));
     nodeField = createNodeField(model);
     nodeField.setSizeScale(options.nodeScale ?? 1);
@@ -227,7 +243,7 @@ export function createGalaxyEngine(
       .sort((a, b) => b.importance - a.importance)
       .slice(0, 80)
       .map((n) => n.id);
-    labelLayer = createLabelLayer(MAX_LABELS, renderFrame);
+    labelLayer = createLabelLayer(MAX_LABELS, scheduleLabelRepaint);
     labelLayer.setFadeScale(options.labelFade ?? 0.6);
     graphGroup.add(labelLayer.group);
     if (options.quality.nebula) {
@@ -240,40 +256,6 @@ export function createGalaxyEngine(
     applyHighlight();
     highlightSig = highlightSignature(options);
     startLoop();
-  }
-
-  // Undirected adjacency for seed-and-expand focus BFS.
-  function buildAdjacency(m: RenderModel): Map<string, string[]> {
-    const adj = new Map<string, string[]>();
-    const push = (from: string, to: string) => {
-      const list = adj.get(from);
-      if (list) list.push(to);
-      else adj.set(from, [to]);
-    };
-    for (const e of m.edges) {
-      push(e.source, e.target);
-      push(e.target, e.source);
-    }
-    return adj;
-  }
-
-  function computeNear(focusId: string, depth: number): Set<string> {
-    const near = new Set<string>([focusId]);
-    let frontier = [focusId];
-    for (let d = 0; d < depth; d++) {
-      const next: string[] = [];
-      for (const id of frontier) {
-        for (const nb of adjacency.get(id) ?? []) {
-          if (!near.has(nb)) {
-            near.add(nb);
-            next.push(nb);
-          }
-        }
-      }
-      frontier = next;
-      if (frontier.length === 0) break;
-    }
-    return near;
   }
 
   // Accent "threads" drawn from the focus node to its direct neighbors.
@@ -319,14 +301,14 @@ export function createGalaxyEngine(
     if (!nodeField) return;
     const focusId = options.focusId ?? null;
     const depth = Math.max(1, options.focusDepth ?? 1);
-    const nearSet = focusId ? computeNear(focusId, depth) : null;
+    const nearSet = focusId ? computeNear(adjacency, focusId, depth) : null;
     currentNearSet = nearSet;
     // Hover-to-highlight only when nothing is focus-pinned AND the graph has
     // edges to reveal. In the cluster overview the hubs have no edges, so
     // dimming all-but-hovered just made the other hubs flicker/relabel on every
     // mouse-move with nothing useful revealed. No edges → no hover-dim.
     const hoverNearSet =
-      !focusId && hovered && model.edges.length > 0 ? computeNear(hovered, 1) : null;
+      !focusId && hovered && model.edges.length > 0 ? computeNear(adjacency, hovered, 1) : null;
     const highlightSet =
       options.highlightIds && options.highlightIds.length > 0
         ? new Set(options.highlightIds)
@@ -455,29 +437,10 @@ export function createGalaxyEngine(
 
   function fit(): void {
     if (!graphSim || graphSim.nodes.length === 0) return;
-    const nodes = graphSim.nodes;
-    let cx = 0;
-    let cy = 0;
-    let cz = 0;
-    for (const n of nodes) {
-      cx += n.x ?? 0;
-      cy += n.y ?? 0;
-      cz += n.z ?? 0;
-    }
-    cx /= nodes.length;
-    cy /= nodes.length;
-    cz /= nodes.length;
-    let maxDist = 1;
-    for (const n of nodes) {
-      const dx = (n.x ?? 0) - cx;
-      const dy = (n.y ?? 0) - cy;
-      const dz = (n.z ?? 0) - cz;
-      maxDist = Math.max(maxDist, Math.hypot(dx, dy, dz));
-    }
-    const fovRad = (camera.fov * Math.PI) / 180;
-    const dist = (maxDist * 1.3) / Math.tan(fovRad / 2) + 80;
-    camera.position.set(cx, cy, cz + dist);
-    controls.target.set(cx, cy, cz);
+    const view = computeFitView(graphSim.nodes, camera.fov);
+    if (!view) return;
+    camera.position.set(view.cx, view.cy, view.cz + view.distance);
+    controls.target.set(view.cx, view.cy, view.cz);
     controls.update();
     camera.updateProjectionMatrix();
   }
@@ -487,8 +450,9 @@ export function createGalaxyEngine(
     if (!nodeField) return null;
     const rect = renderer.domElement.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return null;
-    pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-    pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    const ndc = screenToNdc(clientX, clientY, rect);
+    pointer.x = ndc.x;
+    pointer.y = ndc.y;
     raycaster.setFromCamera(pointer, camera);
     const hits = raycaster.intersectObject(nodeField.mesh, false);
     const hit = hits[0];

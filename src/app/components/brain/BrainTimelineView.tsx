@@ -167,7 +167,10 @@ export function BrainTimelineView({ userId }: Props) {
 
       {/* Timeline entries */}
       {grouped.map((group) => (
-        <section key={group.label} className="mb-6">
+        // Key by the group's first entry id, not the date label: out-of-order
+        // timestamps across pages can produce two non-contiguous groups with the
+        // same date label, which collided as duplicate React keys.
+        <section key={group.entries[0]?.id ?? group.label} className="mb-6">
           <h3 className="sticky top-0 z-10 -mx-2 bg-zaki-base/95 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-zaki-muted">
             {group.label}
           </h3>

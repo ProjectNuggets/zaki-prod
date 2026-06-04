@@ -10,7 +10,12 @@ jest.mock("react-i18next", () => ({
   }),
 }));
 
-import { BrainFilterPanel, DEFAULT_FILTERS, type BrainFilters } from "./BrainFilterPanel";
+import {
+  BrainFilterPanel,
+  DEFAULT_FILTERS,
+  formatConnectionStrength,
+  type BrainFilters,
+} from "./BrainFilterPanel";
 
 function renderPanel(overrides?: Partial<BrainFilters>) {
   const onChange = jest.fn();
@@ -47,5 +52,25 @@ describe("BrainFilterPanel — graph filters", () => {
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({ colorPreset: "community" }),
     );
+  });
+});
+
+describe("formatConnectionStrength", () => {
+  it("turns the raw semantic cutoff into plain words across the range", () => {
+    expect(formatConnectionStrength(0.7)).toBe("Show all");
+    expect(formatConnectionStrength(0.75)).toBe("Loose");
+    expect(formatConnectionStrength(0.85)).toBe("Balanced");
+    expect(formatConnectionStrength(0.9)).toBe("Strong");
+    expect(formatConnectionStrength(1)).toBe("Strongest only");
+  });
+
+  it("is monotonic — higher cutoff never reads as weaker", () => {
+    const order = ["Show all", "Loose", "Balanced", "Strong", "Strongest only"];
+    let lastRank = -1;
+    for (let v = 0.7; v <= 1.0001; v += 0.05) {
+      const rank = order.indexOf(formatConnectionStrength(Number(v.toFixed(2))));
+      expect(rank).toBeGreaterThanOrEqual(lastRank);
+      lastRank = rank;
+    }
   });
 });

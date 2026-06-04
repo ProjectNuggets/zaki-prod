@@ -167,6 +167,16 @@ describe("cluster overview (clusters-first)", () => {
     expect(model.nodes.map((n) => n.label)).toEqual(["Travel"]);
   });
 
+  it("caps the default overview at 18 hubs (readability, named-first)", () => {
+    const many = Array.from({ length: 30 }, (_, i) =>
+      community(i + 1, 30 - i, { name: `Theme ${i + 1}`, name_source: "llm" }),
+    );
+    const model = buildClusterOverviewModel(many);
+    expect(model.nodes).toHaveLength(18);
+    // largest-first: the biggest theme leads
+    expect(model.nodes[0]!.label).toBe("Theme 1");
+  });
+
   it("sizes hubs by member count (largest shown = max importance)", () => {
     const model = buildClusterOverviewModel([
       community(1, 20, { name: "Big", name_source: "llm" }),
