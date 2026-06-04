@@ -336,7 +336,7 @@ export function BrainPage() {
           </div>
         )}
 
-        <BrainInsightsStrip userId={userId} />
+        <BrainInsightsStrip userId={userId} total={totalNodes} />
 
         <V2Tabs
           ariaLabel={t("brain.tabs.ariaLabel", { defaultValue: "Brain views" })}
@@ -352,7 +352,11 @@ export function BrainPage() {
 
       {tab === "home" ? (
         <div className="zaki-brain-v2__home-slot" data-testid="brain-home-slot">
-          <BrainHome userId={userId} />
+          <BrainHome
+            userId={userId}
+            graph={initialGraphQuery.data}
+            graphLoading={initialGraphQuery.isLoading}
+          />
         </div>
       ) : (
         /*

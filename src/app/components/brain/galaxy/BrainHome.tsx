@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import type { BrainGraphNode } from "@/lib/api";
-import { useBrainCommunities, useBrainGraph } from "@/queries";
+import type { BrainGraphNode, BrainGraphResponse } from "@/lib/api";
+import { useBrainCommunities } from "@/queries";
 import { colorForCommunity } from "../brainColors";
 import { BrainDetailPanel } from "./BrainDetailPanel";
 import { BrainTimelineView } from "../BrainTimelineView";
@@ -32,20 +32,19 @@ interface ThemeCard {
 
 export interface BrainHomeProps {
   userId: string;
+  /** The page's single graph query result — shared, so Home doesn't refetch. */
+  graph: BrainGraphResponse | undefined;
+  graphLoading: boolean;
 }
 
-export function BrainHome({ userId }: BrainHomeProps) {
+export function BrainHome({ userId, graph, graphLoading }: BrainHomeProps) {
   const communities = useBrainCommunities(userId);
-  // NOTE: distinct params from the page probe + insights strip, so this is its
-  // own fetch (not deduped). Fine at this corpus size; R3 will consolidate the
-  // brain graph fetches into one shared query.
-  const graph = useBrainGraph(userId, { max_nodes: 2000, exclude_orphans: false });
 
   const [query, setQuery] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
 
-  const nodes = useMemo(() => graph.data?.nodes ?? [], [graph.data]);
+  const nodes = useMemo(() => graph?.nodes ?? [], [graph]);
 
   // Members grouped by community, sorted by importance so samples are the most
   // representative memories of each theme.
@@ -107,7 +106,7 @@ export function BrainHome({ userId }: BrainHomeProps) {
   const visibleCards = searching ? matchedCards : matchedCards.slice(0, VISIBLE_THEME_LIMIT);
   const hiddenCount = searching ? 0 : Math.max(0, matchedCards.length - visibleCards.length);
 
-  const loading = communities.isLoading || graph.isLoading;
+  const loading = communities.isLoading || graphLoading;
 
   return (
     <div className="zaki-brain-home" data-testid="brain-home">

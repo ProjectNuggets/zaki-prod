@@ -247,7 +247,17 @@ export const BrainGalaxyView = forwardRef<GalaxyHandle, BrainGalaxyViewProps>(
       ],
     );
 
-    const reducedMotion = useMemo(() => prefersReducedMotion(), []);
+    // Reactive prefers-reduced-motion — re-clamps if the OS setting changes
+    // mid-session (not just read once at mount).
+    const [reducedMotion, setReducedMotion] = useState(prefersReducedMotion);
+    useEffect(() => {
+      if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+      const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+      const onChange = () => setReducedMotion(mql.matches);
+      onChange();
+      mql.addEventListener("change", onChange);
+      return () => mql.removeEventListener("change", onChange);
+    }, []);
     const quality = useMemo(
       () => clampQuality(fx, model.nodes.length, reducedMotion),
       [fx, model.nodes.length, reducedMotion],
