@@ -227,7 +227,7 @@ export function createGalaxyEngine(
       .sort((a, b) => b.importance - a.importance)
       .slice(0, 80)
       .map((n) => n.id);
-    labelLayer = createLabelLayer(MAX_LABELS);
+    labelLayer = createLabelLayer(MAX_LABELS, renderFrame);
     labelLayer.setFadeScale(options.labelFade ?? 0.6);
     graphGroup.add(labelLayer.group);
     if (options.quality.nebula) {

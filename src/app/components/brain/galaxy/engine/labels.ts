@@ -40,7 +40,13 @@ interface Slot {
 // to the highest-priority nodes (hover / focus / neighbors / hubs); re-tessellation
 // (sync) only happens when a slot's text actually changes, so per-frame cost is
 // just position + billboard + opacity.
-export function createLabelLayer(maxLabels: number): LabelLayer {
+// onSync fires when a troika Text finishes its (async) re-tessellation. The
+// engine only renders on demand (hover/controls change, not every frame), so
+// without this the slot's NEW position is painted immediately but its NEW text
+// geometry lands a tick later with no repaint scheduled — leaving the slot's
+// PREVIOUS text (typically the top hub, "Flight Assistance Interaction") sitting
+// at the hovered node. The callback schedules that missing repaint.
+export function createLabelLayer(maxLabels: number, onSync?: () => void): LabelLayer {
   const group = new Group();
   const fill = readCssColor("--v2-ink-1", "#ece7df").color;
   const slots: Slot[] = [];
@@ -84,7 +90,9 @@ export function createLabelLayer(maxLabels: number): LabelLayer {
         slot.text = entry.text;
         slot.mesh.text =
           entry.text.length > MAX_CHARS ? `${entry.text.slice(0, MAX_CHARS - 1)}…` : entry.text;
-        slot.mesh.sync();
+        // Repaint when the async tessellation completes (text matches by then,
+        // so the follow-up render() triggers no further sync → no loop).
+        slot.mesh.sync(onSync);
       }
 
       // World position — labels live under the (breathing) graphGroup, so the
