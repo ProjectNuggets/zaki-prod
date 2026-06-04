@@ -26,7 +26,10 @@ const SESSION_LIMIT_STEP = 72;
 function getSessionRecencyMs(session: AgentSession) {
   const value = session.last_active ?? session.created_at ?? null;
   if (value == null) return 0;
-  const date = typeof value === "number" ? new Date(value) : new Date(String(value));
+  const date =
+    typeof value === "number"
+      ? new Date(value < 10_000_000_000 ? value * 1000 : value)
+      : new Date(String(value));
   const time = date.getTime();
   return Number.isNaN(time) ? 0 : time;
 }
@@ -50,12 +53,17 @@ export function AgentSessionRail({
     : null;
   const trimmedQuery = query.trim().toLowerCase();
   const realThreadSessions = useMemo(() => {
-    return sessions
-      .filter((session) => {
-        const parsed = parseZakiSessionKey(session.session_key);
-        return parsed.lane === "thread" && Boolean(parsed.threadId);
-      })
-      .sort((a, b) => {
+    const byNormalizedKey = new Map<string, AgentSession>();
+    for (const session of sessions) {
+      const normalizedKey = normalizeZakiSessionKey(session.session_key);
+      const parsed = parseZakiSessionKey(normalizedKey);
+      if (parsed.lane !== "thread" || !parsed.threadId) continue;
+      const existing = byNormalizedKey.get(normalizedKey);
+      if (!existing || getSessionRecencyMs(session) > getSessionRecencyMs(existing)) {
+        byNormalizedKey.set(normalizedKey, { ...session, session_key: normalizedKey });
+      }
+    }
+    return [...byNormalizedKey.values()].sort((a, b) => {
         const byRecency = getSessionRecencyMs(b) - getSessionRecencyMs(a);
         if (byRecency !== 0) return byRecency;
         return normalizeZakiSessionKey(a.session_key).localeCompare(

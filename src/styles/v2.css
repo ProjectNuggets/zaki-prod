@@ -3397,8 +3397,16 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-agent-session-rail__list .zaki-nav-active {
+  border: 0 !important;
+  border-left: 2px solid var(--v2-accent) !important;
   border-left-color: var(--v2-accent);
   background: var(--v2-bg-raised) !important;
+  box-shadow: none !important;
+}
+
+.zaki-agent-session-rail__list .zaki-nav-active::before {
+  content: none !important;
+  display: none !important;
 }
 
 .zaki-agent-session-rail__list .zaki-thread-item :where(.text-zaki-secondary, .text-zaki-primary) {

@@ -151,4 +151,19 @@ describe("zaki session helpers", () => {
     });
     expect(out).toBe("New thread");
   });
+
+  it("ignores internal generated ids when deriving a user-facing title", () => {
+    expect(
+      formatZakiSessionLabel({
+        sessionKey: "agent:zaki-bot:user:7:thread:anon-1780260474283-eyovaz",
+        title: "anon-1780260474283-eyovaz",
+      }),
+    ).toBe("New thread");
+    expect(
+      formatZakiSessionLabel({
+        sessionKey: "agent:zaki-bot:user:7:thread:codex-live-e2e-1780103345101",
+        title: "codex-live-e2e-1780103345101",
+      }),
+    ).toBe("New thread");
+  });
 });

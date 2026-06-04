@@ -89,10 +89,21 @@ function looksLikeDateTitle(value: string): boolean {
   return /^(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{1,2}(?:,\s*)?(?:\d{4})?(?:,\s*)?(?:\d{1,2}:\d{2}\s*(?:am|pm)?)?$/i.test(title);
 }
 
+function looksLikeInternalSessionTitle(value: string): boolean {
+  const title = String(value || "").trim();
+  if (!title) return false;
+  if (/^[0-9a-f]{8,}(?:-[0-9a-f]{4,})*$/i.test(title)) return true;
+  if (/^[A-Z0-9]{16,}$/i.test(title)) return true;
+  if (/^anon-\d{10,}(?:-[a-z0-9]+)?$/i.test(title)) return true;
+  if (/^codex-[a-z0-9-]*\d{10,}$/i.test(title)) return true;
+  return false;
+}
+
 function isPlaceholderSessionTitle(value: string): boolean {
   const title = String(value || "").trim();
   if (!title) return true;
   if (isDefaultThreadLabel(title)) return true;
+  if (looksLikeInternalSessionTitle(title)) return true;
   const lower = title.toLowerCase();
   return lower === "session" || lower === "untitled" || looksLikeDateTitle(title);
 }

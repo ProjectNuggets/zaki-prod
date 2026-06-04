@@ -95,6 +95,42 @@ describe("AgentSessionRail", () => {
     expect(screen.queryByText("Cron should stay out")).not.toBeInTheDocument();
   });
 
+  it("sorts mixed Unix-second and ISO timestamps by actual recency", () => {
+    const sessions: AgentSession[] = [
+      makeSession(1, { title: "ISO older", last_active: "2026-05-08T10:00:00Z" }),
+      makeSession(2, { title: "Unix newer", last_active: 1_778_400_000 }),
+    ];
+    const { container } = renderRail(sessions);
+    const rows = container.querySelectorAll(".zaki-thread-item");
+
+    expect(rows[0]).toHaveTextContent("Unix newer");
+    expect(rows[1]).toHaveTextContent("ISO older");
+  });
+
+  it("dedupes canonical-equivalent sessions and keeps the newest record", () => {
+    const sessions: AgentSession[] = [
+      {
+        session_key: "agent:zaki-bot:user:1:main",
+        title: "Legacy main",
+        last_active: "2026-05-08T10:00:00Z",
+      },
+      {
+        session_key: "agent:zaki-bot:user:1:thread:main",
+        title: "Canonical main",
+        last_active: "2026-05-09T10:00:00Z",
+      },
+      makeSession(2, { title: "Project brief", last_active: "2026-05-07T10:00:00Z" }),
+    ];
+    const { container } = renderRail(sessions, "agent:zaki-bot:user:1:main");
+    const rows = container.querySelectorAll(".zaki-thread-item");
+    const activeRows = container.querySelectorAll(".zaki-nav-active");
+
+    expect(rows).toHaveLength(2);
+    expect(activeRows).toHaveLength(1);
+    expect(activeRows[0]).toHaveTextContent("Canonical main");
+    expect(screen.queryByText("Legacy main")).not.toBeInTheDocument();
+  });
+
   it("keeps the session rail focused on search without operational filter tabs", () => {
     const sessions = [
       makeSession(1, { title: "Planning thread" }),
