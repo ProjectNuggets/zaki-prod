@@ -191,9 +191,10 @@ describe("buildZakiSessionRepairTitle", () => {
       buildZakiSessionRepairTitle([
         {
           role: "user",
-          content: "store my OpenAI key sk-1234567890abcdefABCDEF and email me@example.com",
+          content:
+            "store my OpenAI key sk-1234567890abcdefABCDEF, phone +49 30 1234 5678, and email me@example.com",
         },
       ]),
-    ).toBe("store my OpenAI key [secret] and email [email]");
+    ).toBe("store my OpenAI key [secret], phone [phone], and");
   });
 });

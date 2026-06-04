@@ -91,6 +91,7 @@ function sanitizeFallbackSessionTitle(value: string): string | null {
     .replace(/https?:\/\/\S+/gi, " ")
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]")
     .replace(/\b(?:sk-[A-Za-z0-9_-]{12,}|[A-Za-z0-9_-]{32,})\b/g, "[secret]")
+    .replace(/(?:\+?\d[\s().-]*){8,}\d/g, "[phone]")
     .replace(/[\r\n]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
