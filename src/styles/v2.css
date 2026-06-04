@@ -6847,41 +6847,6 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   text-transform: uppercase;
 }
 
-.zaki-agent-inspector__artifact-versions {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px;
-  padding: 10px;
-  border-bottom: 1px solid var(--v2-hairline-faint);
-}
-
-.zaki-agent-inspector__artifact-versions .version,
-.zaki-agent-inspector__artifact-versions .diff {
-  display: inline-flex;
-  min-height: 22px;
-  min-width: 0;
-  align-items: center;
-  padding: 0 7px;
-  border: 1px solid var(--v2-hairline);
-  color: var(--v2-ink-3);
-  font-family: var(--v2-font-mono);
-  font-size: 10px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.zaki-agent-inspector__artifact-versions .version.is-active {
-  border-color: var(--v2-accent);
-  color: var(--v2-accent);
-}
-
-.zaki-agent-inspector__artifact-versions .diff {
-  border-color: transparent;
-}
-
 .zaki-agent-inspector__artifact-doc {
   margin: 10px;
   border: 1px solid var(--v2-hairline);
@@ -7096,7 +7061,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
 .zaki-agent-inspector__trace-now {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1px;
   border-bottom: 1px solid var(--v2-hairline-faint);
   background: var(--v2-hairline-faint);

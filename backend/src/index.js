@@ -281,13 +281,14 @@ import {
 } from "./platform-meter.js";
 import { resolveBillingPlanTransition } from "./billing-plan-transitions.js";
 import {
+  buildFallbackTitleFromUserMessage,
   createThreadAutoTitleHandler,
   generateThreadTitleFromExchange,
   isDefaultThreadLabel,
 } from "./thread-auto-title.js";
 import {
   buildCanonicalZakiThreadSessionKey,
-  normalizeZakiAgentBackendSessions,
+  overlayZakiAgentSessionTitles,
   parseZakiSessionKey,
 } from "./zaki-agent-sessions.js";
 import {
@@ -11148,7 +11149,7 @@ async function loadZakiBotLocalThreadSummaries(userId) {
   const safeUserId = Number(userId);
   if (!Number.isFinite(safeUserId) || safeUserId <= 0) return [];
 
-  const [threadRows, messageRows] = await Promise.all([
+  const [threadRows, messageRows, firstUserRows] = await Promise.all([
     dbAll(
       `SELECT thread_id, title, created_at, last_active_at
        FROM zaki_bot_threads
@@ -11165,14 +11166,42 @@ async function loadZakiBotLocalThreadSummaries(userId) {
        GROUP BY thread_id`,
       [safeUserId, ZAKI_BOT_SPACE_ID]
     ),
+    dbAll(
+      `SELECT messages.thread_id, messages.content
+       FROM zaki_bot_messages messages
+       INNER JOIN (
+         SELECT thread_id, MIN(id) AS first_id
+         FROM zaki_bot_messages
+         WHERE user_id = $1 AND space_id = $2 AND role = 'user'
+         GROUP BY thread_id
+       ) first_messages
+         ON first_messages.thread_id = messages.thread_id
+        AND first_messages.first_id = messages.id
+       WHERE messages.user_id = $1
+         AND messages.space_id = $2
+         AND messages.role = 'user'`,
+      [safeUserId, ZAKI_BOT_SPACE_ID]
+    ),
   ]);
+
+  const firstUserByThread = new Map();
+  for (const row of firstUserRows) {
+    const threadId = String(row.thread_id || ZAKI_BOT_THREAD_ID).trim() || ZAKI_BOT_THREAD_ID;
+    firstUserByThread.set(threadId, String(row.content || ""));
+  }
+
+  const titleForThread = (title, threadId) => {
+    const normalized = normalizeZakiBotThreadTitle(title, threadId);
+    if (!isDefaultThreadLabel(normalized)) return normalized;
+    return buildFallbackTitleFromUserMessage(firstUserByThread.get(threadId)) || normalized;
+  };
 
   const byThread = new Map();
   for (const row of messageRows) {
     const threadId = String(row.thread_id || ZAKI_BOT_THREAD_ID).trim() || ZAKI_BOT_THREAD_ID;
     byThread.set(threadId, {
       threadId,
-      title: normalizeZakiBotThreadTitle(null, threadId),
+      title: titleForThread(null, threadId),
       created_at: row.created_at,
       last_active: row.last_active_at,
       message_count: Number(row.message_count || 0),
@@ -11185,7 +11214,7 @@ async function loadZakiBotLocalThreadSummaries(userId) {
     byThread.set(threadId, {
       ...existing,
       threadId,
-      title: normalizeZakiBotThreadTitle(row.title, threadId),
+      title: titleForThread(row.title, threadId),
       created_at: row.created_at || existing.created_at || null,
       last_active: row.last_active_at || existing.last_active || null,
       message_count: Number(existing.message_count || 0),
@@ -11261,8 +11290,18 @@ async function loadZakiAgentSessionsForUser(userId, requestId) {
     : Array.isArray(upstreamData)
       ? upstreamData
       : [];
+  let localThreads = [];
+  try {
+    localThreads = await loadZakiBotLocalThreadSummaries(userId);
+  } catch (error) {
+    console.warn("[Agent] Local session title overlay failed:", {
+      requestId,
+      userId,
+      error: error?.message || "local session title overlay failed",
+    });
+  }
   return {
-    sessions: normalizeZakiAgentBackendSessions(upstreamSessions),
+    sessions: overlayZakiAgentSessionTitles({ upstreamSessions, localThreads }),
   };
 }
 

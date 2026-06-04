@@ -77,6 +77,26 @@ function looksLikeOpaqueId(value: string): boolean {
   return /^[a-f0-9]{8,}$|^[A-Z0-9]{8,}$/i.test(value);
 }
 
+function looksLikeDateTitle(value: string): boolean {
+  const title = String(value || "").trim();
+  if (!title) return false;
+  if (/^\d{4}-\d{1,2}-\d{1,2}(?:[ t]\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?z?)?$/i.test(title)) {
+    return true;
+  }
+  if (/^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(?:,\s*)?(?:\d{1,2}:\d{2}\s*(?:am|pm)?)?$/i.test(title)) {
+    return true;
+  }
+  return /^(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{1,2}(?:,\s*)?(?:\d{4})?(?:,\s*)?(?:\d{1,2}:\d{2}\s*(?:am|pm)?)?$/i.test(title);
+}
+
+function isPlaceholderSessionTitle(value: string): boolean {
+  const title = String(value || "").trim();
+  if (!title) return true;
+  if (isDefaultThreadLabel(title)) return true;
+  const lower = title.toLowerCase();
+  return lower === "session" || lower === "untitled" || looksLikeDateTitle(title);
+}
+
 function formatShortDate(input: string | number | null | undefined): string | null {
   if (input == null) return null;
   const d = typeof input === "number" ? new Date(input) : new Date(String(input));
@@ -97,11 +117,10 @@ export function formatZakiSessionFallbackLabel(
   const dateStamp = formatShortDate(opts?.createdAt);
   if (parsed.lane === "thread") {
     if (!parsed.threadId || parsed.threadId === "main") return "Main";
-    // Opaque ids don't help the user differentiate rows. Prefer a
-    // short date stamp if we have one.
-    if (looksLikeOpaqueId(parsed.threadId) && dateStamp) {
-      return dateStamp;
-    }
+    // Opaque ids and date stamps are internal implementation detail.
+    // The backend overlays first-interaction titles for real sessions;
+    // until that arrives, show a neutral new-thread state.
+    if (looksLikeOpaqueId(parsed.threadId)) return "New thread";
     return parsed.threadId;
   }
   if (parsed.lane === "task") {
@@ -129,7 +148,7 @@ export function formatZakiSessionLabel({
   createdAt?: string | number | null;
 }) {
   const normalizedTitle = String(title || "").trim();
-  if (normalizedTitle && !isDefaultThreadLabel(normalizedTitle)) {
+  if (normalizedTitle && !isPlaceholderSessionTitle(normalizedTitle)) {
     return normalizedTitle;
   }
   if (normalizedTitle === DEFAULT_THREAD_LABEL) {

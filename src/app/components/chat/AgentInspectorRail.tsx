@@ -46,7 +46,6 @@ import {
   type AgentSessionMode,
   type AgentTrace,
 } from "@/lib/api";
-import { DEFAULT_AGENT_MODEL_ID, resolveAgentModel } from "@/lib/agentModelCatalog";
 import { cn } from "@/lib/utils";
 import type { ZakiRuntimeSandbox } from "@/stores/zakiSessionUiStore";
 import {
@@ -247,17 +246,6 @@ function formatTokens(value?: number | null): string {
   return `${(value / 1_000_000).toFixed(1)}m`;
 }
 
-function formatCost(value?: number | null): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "$0.00";
-  const digits = value > 0 && value < 0.01 ? 3 : 2;
-  return `$${value.toFixed(digits)}`;
-}
-
-function formatWeight(value?: number | null): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "0.0";
-  return value.toFixed(value > 0 && value < 0.1 ? 2 : 1);
-}
-
 function contextPercent(data: ContextGaugeData | null): number | null {
   if (!data) return null;
   if (typeof data.context_pressure_percent === "number") {
@@ -276,12 +264,6 @@ function contextSourceLabel(data: ContextGaugeData | null): string {
   if (data.source === "diagnostics_fallback") return "Diagnostics fallback";
   if (data.source === "inactive_session") return "Inactive session";
   return "Unknown";
-}
-
-function modeLabel(mode: AgentSessionMode | null) {
-  if (mode === "plan") return "Plan";
-  if (mode === "review") return "Review";
-  return "Execute";
 }
 
 function isCompleteTask(status: NullalisTaskStatus) {
@@ -471,12 +453,6 @@ function cronActionError(data: unknown, fallback: string) {
   return fallback;
 }
 
-function artifactVersionLabel(artifact: AgentInspectorArtifact, index: number) {
-  const version = artifact.version != null ? `v${artifact.version}` : `v${index + 1}`;
-  const stamp = artifact.updatedAt ? formatCalendarStamp(artifact.updatedAt) : "unsynced";
-  return `${version} · ${stamp}`;
-}
-
 function isExportedState(state?: AgentArtifactExportState | null): state is AgentArtifactExportState & {
   url: string;
 } {
@@ -574,7 +550,6 @@ function PanelActionButton({
 }
 
 export function AgentInspectorRail({
-  mode,
   isStreaming,
   lastChannel = null,
   sandbox,
@@ -688,13 +663,11 @@ export function AgentInspectorRail({
     ? Math.round((weightedTaskProgress / sortedTasks.length) * 100)
     : 0;
   const ctxPct = contextPercent(contextGaugeData);
-  const currentMode = mode ?? "execute";
   const sandboxLabel = sandbox?.enabled
     ? sandbox.backend
       ? sandbox.backend
       : "enabled"
     : "off";
-  const defaultModel = resolveAgentModel(DEFAULT_AGENT_MODEL_ID);
   const browserActivity =
     browserEntries.length > 0 || /\b(browser|playwright|extension)\b/i.test(lastChannel ?? "");
   const extensionActivity = browserEntries.some(eventHasExtensionSignal);
@@ -1676,32 +1649,6 @@ export function AgentInspectorRail({
 
         {tab === "artifacts" ? (
           <V2Panel aria-label="Artifacts" className="zaki-agent-inspector__pane">
-            <div className="zaki-agent-inspector__artifact-versions">
-              {(artifactEntries.length
-                ? artifactEntries
-                : sortedArtifacts.length
-                  ? sortedArtifacts
-                  : primaryArtifact
-                    ? [primaryArtifact]
-                    : [])
-                .slice(0, 3)
-                .map((event, index) => (
-                  <span
-                    key={event.id}
-                    className={cn("version", index === 0 && "is-active")}
-                  >
-                    {"timestamp" in event
-                      ? `v${artifactEntries.length - index || 1} · ${
-                          index === 0 && isStreaming ? "live" : formatClock(event.timestamp)
-                        }`
-                      : artifactVersionLabel(event, index)}
-                  </span>
-                ))}
-              {!artifactEntries.length && !sortedArtifacts.length ? (
-                <span className="version is-active">v0 · waiting</span>
-              ) : null}
-              <span className="diff">{artifactSourceCount || 0} records</span>
-            </div>
             <article className="zaki-agent-inspector__artifact-doc">
               <header className="zaki-agent-inspector__artifact-head">
                 <div className="tag">
@@ -1733,7 +1680,7 @@ export function AgentInspectorRail({
                 {artifactsScope === "recent" ? (
                   <div className="zaki-agent-inspector__artifact-scope">Recent artifacts</div>
                 ) : null}
-                {sortedArtifacts.map((artifact, index) => {
+                {sortedArtifacts.map((artifact) => {
                   const shareState = artifactShareStates[artifact.id];
                   const shareUrl = shareUrlForArtifact(artifact);
                   return (
@@ -1748,7 +1695,7 @@ export function AgentInspectorRail({
                         </div>
                         <div className="zaki-agent-inspector__artifact-row-meta">
                           <span>{artifact.type || "artifact"}</span>
-                          <span>{artifactVersionLabel(artifact, index)}</span>
+                          <span>{formatCalendarStamp(artifact.updatedAt)}</span>
                         </div>
                       </div>
                       <div className="zaki-agent-inspector__artifact-actions">
@@ -2014,10 +1961,6 @@ export function AgentInspectorRail({
                 <div className="label">tokens</div>
                 <div className="value">{formatTokens(usageSummary?.usageTokens)}</div>
               </div>
-              <div className="cell">
-                <div className="label">model</div>
-                <div className="value">{defaultModel.id}<span className="unit"> · {modeLabel(currentMode)}</span></div>
-              </div>
             </div>
             {narrationFrame ? (
               <V2InlineRow
@@ -2029,20 +1972,12 @@ export function AgentInspectorRail({
             ) : null}
             <dl className="zaki-agent-inspector__fact-grid">
               <div>
-                <dt>Cost</dt>
-                <dd>{formatCost(usageSummary?.costUsd)}</dd>
-              </div>
-              <div>
-                <dt>Turn weight</dt>
-                <dd>{formatWeight(usageSummary?.turnWeight)}</dd>
-              </div>
-              <div>
-                <dt>Session</dt>
-                <dd>{formatWeight(usageSummary?.sessionWeight)}</dd>
-              </div>
-              <div>
                 <dt>Blocks</dt>
                 <dd>{timelineBlocks.length}</dd>
+              </div>
+              <div>
+                <dt>Events</dt>
+                <dd>{recentTrace.length}</dd>
               </div>
             </dl>
             {recentTrace.length ? (

@@ -76,6 +76,29 @@ function normalizeTitle(value) {
   return title || "";
 }
 
+function looksLikeDateTitle(value) {
+  const title = normalizeTitle(value);
+  if (!title) return false;
+  if (/^\d{4}-\d{1,2}-\d{1,2}(?:[ t]\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?z?)?$/i.test(title)) {
+    return true;
+  }
+  if (/^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(?:,\s*)?(?:\d{1,2}:\d{2}\s*(?:am|pm)?)?$/i.test(title)) {
+    return true;
+  }
+  if (/^(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{1,2}(?:,\s*)?(?:\d{4})?(?:,\s*)?(?:\d{1,2}:\d{2}\s*(?:am|pm)?)?$/i.test(title)) {
+    return true;
+  }
+  return false;
+}
+
+export function isPlaceholderZakiSessionTitle(value) {
+  const title = normalizeTitle(value);
+  if (!title) return true;
+  if (isDefaultThreadLabel(title)) return true;
+  const lower = title.toLowerCase();
+  return lower === "session" || lower === "untitled" || looksLikeDateTitle(title);
+}
+
 export function mergeZakiAgentSessions({ upstreamSessions = [], localThreads = [] }) {
   const merged = new Map();
 
@@ -115,6 +138,31 @@ export function mergeZakiAgentSessions({ upstreamSessions = [], localThreads = [
   return Array.from(merged.values()).sort(
     (a, b) => parseTimestamp(b?.last_active) - parseTimestamp(a?.last_active),
   );
+}
+
+export function overlayZakiAgentSessionTitles({ upstreamSessions = [], localThreads = [] }) {
+  const normalized = normalizeZakiAgentBackendSessions(upstreamSessions);
+  const localTitles = new Map();
+
+  for (const local of Array.isArray(localThreads) ? localThreads : []) {
+    const sessionKey = normalizeZakiSessionKey(local?.session_key);
+    if (!sessionKey) continue;
+    const parsed = parseZakiSessionKey(sessionKey);
+    const localTitle = normalizeTitle(local?.title);
+    if (parsed.lane === "thread" && localTitle && !isPlaceholderZakiSessionTitle(localTitle)) {
+      localTitles.set(sessionKey, localTitle);
+    }
+  }
+
+  return normalized.map((session) => {
+    const sessionKey = normalizeZakiSessionKey(session?.session_key);
+    const localTitle = localTitles.get(sessionKey);
+    if (!localTitle || !isPlaceholderZakiSessionTitle(session?.title)) return session;
+    return {
+      ...session,
+      title: localTitle,
+    };
+  });
 }
 
 export function normalizeZakiAgentBackendSessions(upstreamSessions = []) {

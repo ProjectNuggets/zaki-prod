@@ -91,13 +91,12 @@ describe("zaki session helpers", () => {
     ).toBe("Task 77");
   });
 
-  it("falls back to a date stamp when the threadId looks opaque and createdAt is provided", () => {
+  it("does not expose date stamps for opaque thread ids", () => {
     const opaque = "agent:zaki-bot:user:7:thread:01H92ZJVFCAFR5RV";
     const out = formatZakiSessionFallbackLabel(opaque, {
       createdAt: "2026-05-08T00:00:00Z",
     });
-    expect(out).not.toMatch(/^Session/);
-    expect(out.length).toBeGreaterThan(0);
+    expect(out).toBe("New thread");
   });
 
   it("returns the readable threadId when it isn't an opaque id", () => {
@@ -126,14 +125,13 @@ describe("zaki session helpers", () => {
     );
   });
 
-  it("threads createdAt through formatZakiSessionLabel", () => {
+  it("keeps opaque untitled thread labels neutral", () => {
     const out = formatZakiSessionLabel({
       sessionKey: "agent:zaki-bot:user:7:thread:01H92ZJVFCAFR5RV",
       title: null,
       createdAt: "2026-05-08T00:00:00Z",
     });
-    expect(out).not.toMatch(/^Session/);
-    expect(out.length).toBeGreaterThan(0);
+    expect(out).toBe("New thread");
   });
 
   it("ignores placeholder backend titles when deriving a user-facing label", () => {
@@ -143,5 +141,14 @@ describe("zaki session helpers", () => {
       createdAt: "2026-05-08T00:00:00Z",
     });
     expect(out).not.toBe("Session");
+  });
+
+  it("ignores date-like backend titles for opaque sessions", () => {
+    const out = formatZakiSessionLabel({
+      sessionKey: "agent:zaki-bot:user:7:thread:01H92ZJVFCAFR5RV",
+      title: "May 30, 9:10 AM",
+      createdAt: "2026-05-08T00:00:00Z",
+    });
+    expect(out).toBe("New thread");
   });
 });

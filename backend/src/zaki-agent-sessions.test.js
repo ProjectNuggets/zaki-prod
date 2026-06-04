@@ -6,6 +6,7 @@ import {
   mergeZakiAgentSessions,
   normalizeZakiAgentBackendSessions,
   normalizeZakiSessionKey,
+  overlayZakiAgentSessionTitles,
   parseZakiSessionKey,
 } from "./zaki-agent-sessions.js";
 
@@ -113,6 +114,40 @@ describe("zaki agent session helpers", () => {
       "agent:zaki-bot:user:7:thread:main",
     ]);
     expect(sessions).toHaveLength(3);
+  });
+
+  it("overlays generated local titles without adding local-only sessions", () => {
+    const sessions = overlayZakiAgentSessionTitles({
+      upstreamSessions: [
+        {
+          session_key: "agent:zaki-bot:user:7:thread:01H92ZJVFCAFR5RV",
+          title: "May 30, 9:10 AM",
+          last_active: "2026-05-30T09:10:00Z",
+        },
+        {
+          session_key: "agent:zaki-bot:user:7:thread:server-audit",
+          title: "Backend Audit",
+          last_active: "2026-05-29T09:10:00Z",
+        },
+      ],
+      localThreads: [
+        {
+          session_key: "agent:zaki-bot:user:7:thread:01H92ZJVFCAFR5RV",
+          title: "Personal AI market research",
+        },
+        {
+          session_key: "agent:zaki-bot:user:7:thread:local-only",
+          title: "Should not appear",
+        },
+      ],
+    });
+
+    expect(sessions.map((session) => session.session_key)).toEqual([
+      "agent:zaki-bot:user:7:thread:01H92ZJVFCAFR5RV",
+      "agent:zaki-bot:user:7:thread:server-audit",
+    ]);
+    expect(sessions[0]).toMatchObject({ title: "Personal AI market research" });
+    expect(sessions[1]).toMatchObject({ title: "Backend Audit" });
   });
 
   it("keeps New chat as the default local thread title", () => {
