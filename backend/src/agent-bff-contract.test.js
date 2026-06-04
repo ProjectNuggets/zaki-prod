@@ -11,6 +11,8 @@ import {
   BOT_CHAT_STREAM_SESSION_KEY_CONTRACT,
   buildBotProvisionPayload,
   getAgentLaunchChannel,
+  normalizeAgentArtifactExportPayload,
+  normalizeAgentExportDownloadUrl,
   normalizeTelegramDisconnectErrorPayload,
   normalizeAgentControlChannelId,
   normalizeAgentLaunchChannelId,
@@ -47,6 +49,48 @@ describe("agent BOT BFF contract", () => {
       { method: "post", path: "/api/agent/artifacts/:artifactId/export" },
       { method: "get", path: "/api/agent/brain/documents" },
     ]);
+  });
+
+  it("normalizes produced-file download URLs through the Agent export bridge", () => {
+    expect(
+      normalizeAgentExportDownloadUrl("/api/v1/users/42/exports/report.pdf")
+    ).toBe("/api/agent/exports/report.pdf");
+    expect(
+      normalizeAgentExportDownloadUrl(
+        "http://nullalis.local/api/v1/users/42/exports/research_brief.docx"
+      )
+    ).toBe("/api/agent/exports/research_brief.docx");
+    expect(normalizeAgentExportDownloadUrl("/api/agent/exports/report.pdf")).toBe(
+      "/api/agent/exports/report.pdf"
+    );
+    expect(normalizeAgentExportDownloadUrl("https://download.local/report.pdf")).toBeNull();
+    expect(normalizeAgentExportDownloadUrl("/api/v1/users/42/exports/../secret.pdf")).toBeNull();
+    expect(normalizeAgentExportDownloadUrl("/api/v1/users/42/exports/.hidden.pdf")).toBeNull();
+    expect(normalizeAgentExportDownloadUrl("/api/v1/users/42/exports/report.pdf/extra")).toBeNull();
+  });
+
+  it("normalizes artifact export payloads without leaking raw upstream paths", () => {
+    expect(
+      normalizeAgentArtifactExportPayload({
+        ok: true,
+        download_url: "/api/v1/users/42/exports/report.pdf",
+      })
+    ).toEqual({
+      ok: true,
+      download_url: "/api/agent/exports/report.pdf",
+      url: "/api/agent/exports/report.pdf",
+    });
+    expect(
+      normalizeAgentArtifactExportPayload({
+        ok: true,
+        download_url: "https://download.local/report.pdf",
+        url: "/api/v1/users/42/exports/.hidden.pdf",
+      })
+    ).toEqual({
+      ok: true,
+      download_url: null,
+      url: null,
+    });
   });
 
   it("defines the launch channel control-plane surface", () => {

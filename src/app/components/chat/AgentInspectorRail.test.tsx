@@ -108,7 +108,7 @@ describe("AgentInspectorRail", () => {
 
     const tablist = screen.getByRole("tablist", { name: "Agent panels" });
     expect(within(tablist).getAllByRole("tab")).toHaveLength(6);
-    for (const label of ["Plan", "Cron", "Sources", "Artifacts", "Browser", "Trace"]) {
+    for (const label of ["Plan", "Cron", "Evidence", "Artifacts", "Browser", "Trace"]) {
       expect(within(tablist).getByRole("tab", { name: new RegExp(label, "i") })).toBeInTheDocument();
     }
     expect(within(tablist).getByRole("tab", { name: /Plan/i })).toHaveAttribute(
@@ -192,13 +192,13 @@ describe("AgentInspectorRail", () => {
       />
     );
 
-    expect(screen.getByRole("tab", { name: /Sources/i })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: /Evidence/i })).toHaveAttribute(
       "aria-selected",
       "true"
     );
   });
 
-  it("surfaces memory and context evidence in the Sources tab", () => {
+  it("surfaces memory and context evidence in the Evidence tab", () => {
     const onOpenMemory = jest.fn();
     renderRail({
       onOpenMemory,
@@ -217,7 +217,7 @@ describe("AgentInspectorRail", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("tab", { name: /Sources/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /Evidence/i }));
 
     expect(screen.getByText("context source")).toBeInTheDocument();
     expect(screen.getByText("Fetched durable graph memory for this user.")).toBeInTheDocument();
@@ -225,7 +225,7 @@ describe("AgentInspectorRail", () => {
     expect(onOpenMemory).toHaveBeenCalledTimes(1);
   });
 
-  it("surfaces web and file evidence in the Sources tab", () => {
+  it("surfaces web and file evidence in the Evidence tab", () => {
     renderRail({
       transcriptEntries: [
         {
@@ -250,7 +250,7 @@ describe("AgentInspectorRail", () => {
       ],
     });
 
-    fireEvent.click(screen.getByRole("tab", { name: /Sources/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /Evidence/i }));
 
     expect(screen.getByText(/web source/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open source" })).toHaveAttribute(

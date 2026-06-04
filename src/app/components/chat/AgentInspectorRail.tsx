@@ -1169,7 +1169,7 @@ export function AgentInspectorRail({
         options={[
           { id: "plan", label: "Plan", count: approvalRequest ? "!" : sortedTasks.length || undefined },
           { id: "cron", label: "Cron", count: cronSourceCount || undefined },
-          { id: "evidence", label: "Sources", count: sourceEntries.length || undefined },
+          { id: "evidence", label: "Evidence", count: sourceEntries.length || undefined },
           {
             id: "artifacts",
             label: "Artifacts",
@@ -1608,8 +1608,8 @@ export function AgentInspectorRail({
         ) : null}
 
         {tab === "evidence" ? (
-          <V2Panel aria-label="Sources" className="zaki-agent-inspector__pane">
-            <V2PanelHead title="Sources" meta={sourceEntries.length ? "runtime audit trail" : lastChannel || "agent"} />
+          <V2Panel aria-label="Evidence" className="zaki-agent-inspector__pane">
+            <V2PanelHead title="Evidence" meta={sourceEntries.length ? "runtime audit trail" : lastChannel || "agent"} />
             {sourceEntries.length ? (
               <div className="zaki-agent-inspector__source-stack">
                 {sourceEntries.map((event, index) => (

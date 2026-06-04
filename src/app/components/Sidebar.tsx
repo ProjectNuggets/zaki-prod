@@ -10,7 +10,6 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   apiRequest,
   deleteAgentSession,
-  fetchAgentHistory,
 } from "@/lib/api";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { useAuthStore, useUIStore, useSpacesStore, useNavigationStore } from "@/stores";
@@ -71,24 +70,6 @@ type AgentControlTab =
   | "usage";
 
 const PENDING_AGENT_CONTROLS_TAB_KEY = "zaki:pendingPowerUserTab";
-
-/**
- * Build a safe filename for the session-download flow. Strips path
- * separators, control chars, RTL-override codepoints, leading dots,
- * and caps length so a long or hostile session label can't produce a
- * confusing download name on disk.
- */
-function safeDownloadFilename(name: string | null | undefined, fallback: string): string {
-  const cleaned = (name || fallback || "session")
-    // eslint-disable-next-line no-control-regex
-    .replace(/[ ---​-‏‪-‮⁦-⁩]/g, "")
-    .replace(/[\\/:*?"<>|]/g, "_")
-    .replace(/\s+/g, "_")
-    .replace(/^\.+/, "")
-    .slice(0, 80)
-    .trim();
-  return cleaned || fallback || "session";
-}
 
 type LearningSubnavEntry = {
   view: string;
@@ -1473,59 +1454,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
               const threadSlug = extractThreadSlugFromSessionKey(sessionKey);
               if (!threadSlug) return;
               goToThread(ZAKI_BOT_SPACE_ID, threadSlug, { zakiSessionKey: sessionKey });
-            }}
-            onDownloadSession={async (sessionKey, label) => {
-              const threadSlug = extractThreadSlugFromSessionKey(sessionKey);
-              if (!threadSlug) return;
-              try {
-                const { data } = await fetchAgentHistory(
-                  ZAKI_BOT_SPACE_ID,
-                  threadSlug,
-                  "merged",
-                );
-                const payload = {
-                  spaceId: ZAKI_BOT_SPACE_ID,
-                  threadId: threadSlug,
-                  sessionKey,
-                  exportedAt: new Date().toISOString(),
-                  history: data?.history ?? [],
-                };
-                const blob = new Blob([JSON.stringify(payload, null, 2)], {
-                  type: "application/json",
-                });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement("a");
-                link.href = url;
-                link.download = `${safeDownloadFilename(label, threadSlug)}.json`;
-                document.body.appendChild(link);
-                link.click();
-                link.remove();
-                URL.revokeObjectURL(url);
-                toast.success(
-                  t("zakiControls.sessionList.downloadSuccess", {
-                    defaultValue: "Session downloaded.",
-                  }),
-                );
-              } catch {
-                toast.error(
-                  t("zakiControls.sessionList.downloadError", {
-                    defaultValue: "Couldn't download the session. Try again.",
-                  }),
-                );
-              }
-            }}
-            onShareSession={(sessionKey) => {
-              const threadSlug = extractThreadSlugFromSessionKey(sessionKey);
-              if (!threadSlug) return;
-              // Activate the session first so ChatArea has the messages
-              // loaded. The detail.sessionKey lets the listener queue
-              // the open until the right session has actually hydrated,
-              // avoiding a race where the modal opens against the
-              // previous thread's state.
-              goToThread(ZAKI_BOT_SPACE_ID, threadSlug, { zakiSessionKey: sessionKey });
-              window.dispatchEvent(
-                new CustomEvent("zaki:open-share", { detail: { sessionKey } }),
-              );
             }}
             onDeleteSession={async (sessionKey, _label) => {
               // Confirmation surfaces inline in ZakiSessionList via the

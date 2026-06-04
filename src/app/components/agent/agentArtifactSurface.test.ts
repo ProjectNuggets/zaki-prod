@@ -17,7 +17,7 @@ describe("agentArtifactSurface", () => {
     expect(getAgentArtifactExportFormatLabel("pptx")).toBe("PPTX");
   });
 
-  it("does not guess per-artifact format support from titles or kinds", () => {
+  it("does not infer document export support from titles", () => {
     expect(
       getAgentArtifactExportAvailability(
         { id: "a1", title: "PDF board report", type: "markdown" },
@@ -27,6 +27,15 @@ describe("agentArtifactSurface", () => {
     expect(
       getAgentArtifactExportAvailability(
         { id: "a1", title: "Board report", type: "markdown" },
+        "xlsx"
+      )
+    ).toEqual({
+      supported: false,
+      reason: "XLSX export is available for spreadsheet or tabular artifacts.",
+    });
+    expect(
+      getAgentArtifactExportAvailability(
+        { id: "a1", title: "Board report", type: "spreadsheet" },
         "xlsx"
       )
     ).toEqual({ supported: true });

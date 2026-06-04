@@ -181,6 +181,18 @@ export function getAgentArtifactExportAvailability(
     };
   }
 
+  if (format === "xlsx") {
+    const kind = (getAgentArtifactKind(artifact) || "").toLowerCase();
+    const looksTabular =
+      /\b(spreadsheet|worksheet|workbook|xlsx|xls|csv|table|tabular|dataframe)\b/.test(kind);
+    if (!looksTabular) {
+      return {
+        supported: false,
+        reason: explicitReason || "XLSX export is available for spreadsheet or tabular artifacts.",
+      };
+    }
+  }
+
   return { supported: true };
 }
 

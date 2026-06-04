@@ -69,6 +69,67 @@ export const AGENT_RUNTIME_FACADE_ROUTES = Object.freeze([
   { method: "get", path: "/api/agent/brain/documents" },
 ]);
 
+const AGENT_EXPORT_FILENAME_SAFE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/;
+
+function normalizeAgentExportFilename(value) {
+  let decoded;
+  try {
+    decoded = decodeURIComponent(String(value || ""));
+  } catch {
+    return null;
+  }
+  const filename = decoded.trim();
+  if (
+    !AGENT_EXPORT_FILENAME_SAFE_PATTERN.test(filename) ||
+    filename.includes("..") ||
+    filename.startsWith(".")
+  ) {
+    return null;
+  }
+  return encodeURIComponent(filename);
+}
+
+export function normalizeAgentExportDownloadUrl(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const raw = value.trim();
+  try {
+    const parsed = new URL(raw, "http://zaki.local");
+    const upstream = parsed.pathname.match(/^\/api\/v1\/users\/[^/]+\/exports\/([^/?#]+)$/);
+    if (upstream?.[1]) {
+      const filename = normalizeAgentExportFilename(upstream[1]);
+      return filename ? `/api/agent/exports/${filename}` : null;
+    }
+    const bff = parsed.pathname.match(/^\/api\/agent\/exports\/([^/?#]+)$/);
+    if (bff?.[1]) {
+      const filename = normalizeAgentExportFilename(bff[1]);
+      return filename ? `/api/agent/exports/${filename}${parsed.search || ""}` : null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export function normalizeAgentArtifactExportPayload(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+  const next = { ...payload };
+  const downloadUrl = normalizeAgentExportDownloadUrl(
+    next.download_url ?? next.downloadUrl ?? next.url
+  );
+  if (downloadUrl) {
+    next.download_url = downloadUrl;
+    next.url = downloadUrl;
+    if ("downloadUrl" in next) next.downloadUrl = downloadUrl;
+    return next;
+  }
+  for (const key of ["download_url", "downloadUrl", "url"]) {
+    if (typeof next[key] === "string" && next[key].trim()) {
+      next[key] = null;
+    }
+  }
+  return next;
+}
+
 export const AGENT_LAUNCH_CHANNELS = Object.freeze([
   Object.freeze({
     id: "telegram",

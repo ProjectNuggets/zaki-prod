@@ -170,6 +170,7 @@ import {
   AGENT_LAUNCH_CHANNELS,
   getAgentLaunchChannel,
   buildBotProvisionPayload,
+  normalizeAgentArtifactExportPayload,
   normalizeTelegramDisconnectErrorPayload,
   normalizeAgentControlChannelId,
   normalizeAgentLaunchChannelId,
@@ -13501,11 +13502,17 @@ async function callNullclawJsonBestEffort(args) {
   }
 }
 
-async function sendBufferedNullclawJsonResponse(upstream, res, label = "Nullclaw proxy response") {
+async function sendBufferedNullclawJsonResponse(
+  upstream,
+  res,
+  label = "Nullclaw proxy response",
+  transformJson = null
+) {
   let text = "";
+  let data;
   try {
     text = await readResponseTextWithLimit(upstream, NULLCLAW_JSON_PROXY_MAX_BYTES);
-    parseRequiredJson(text, label);
+    data = parseRequiredJson(text, label);
   } catch (error) {
     const code = getErrorCode(error) || "upstream_invalid_json";
     const upstreamMismatch = isUpstreamContentLengthMismatch(error);
@@ -13528,6 +13535,22 @@ async function sendBufferedNullclawJsonResponse(upstream, res, label = "Nullclaw
       error: "Agent upstream rejected the BFF credential.",
       code: "agent_upstream_unauthorized",
     });
+  }
+
+  if (typeof transformJson === "function") {
+    try {
+      data = await transformJson(data, { upstream });
+      text = JSON.stringify(data);
+    } catch (error) {
+      console.error(`[${label}] JSON transform error:`, {
+        message: error?.message || String(error),
+        upstreamStatus: upstream?.status,
+      });
+      return res.status(502).json({
+        error: error?.message || `${label} transform failed.`,
+        code: "upstream_transform_failed",
+      });
+    }
   }
 
   res.status(upstream.status);
@@ -13604,7 +13627,8 @@ async function proxyNullclawRequest(req, res, targetPath, options = {}) {
     return sendBufferedNullclawJsonResponse(
       upstream,
       res,
-      options.label || "Nullclaw proxy response"
+      options.label || "Nullclaw proxy response",
+      options.transformJson || null
     );
   }
 
@@ -15322,7 +15346,10 @@ app.post(
       const path = `/api/v1/users/${encodeURIComponent(userId)}/artifacts/${encodeURIComponent(req.params.artifactId)}/export`;
       return appendAllowedQueryParams(path, req, ["format"]);
     },
-    AGENT_RUNTIME_JSON_PROXY_OPTIONS
+    {
+      ...AGENT_RUNTIME_JSON_PROXY_OPTIONS,
+      transformJson: normalizeAgentArtifactExportPayload,
+    }
   )
 );
 
