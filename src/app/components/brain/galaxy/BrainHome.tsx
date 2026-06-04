@@ -40,7 +40,6 @@ export interface BrainHomeProps {
 export function BrainHome({ userId, graph, graphLoading }: BrainHomeProps) {
   const communities = useBrainCommunities(userId);
 
-  const [query, setQuery] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
 
@@ -91,36 +90,18 @@ export function BrainHome({ userId, graph, graphLoading }: BrainHomeProps) {
     return [...named, ...unnamed];
   }, [communities.data, membersByCommunity]);
 
-  const matchedCards = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return cards;
-    return cards.filter(
-      (c) =>
-        c.title.toLowerCase().includes(q) ||
-        c.sample.some((s) => s.toLowerCase().includes(q)),
-    );
-  }, [cards, query]);
-
-  // Cap the default overview; searching reaches the full set.
-  const searching = query.trim().length > 0;
-  const visibleCards = searching ? matchedCards : matchedCards.slice(0, VISIBLE_THEME_LIMIT);
-  const hiddenCount = searching ? 0 : Math.max(0, matchedCards.length - visibleCards.length);
+  // Bounded overview (progressive disclosure). The galaxy's "Explore everything"
+  // reaches the rest. (A search box used to live here, but it only matched the
+  // loaded theme titles — not the full memory corpus — so it was removed rather
+  // than imply a coverage it didn't have. Real full-text search is a backend
+  // job for later.)
+  const visibleCards = cards.slice(0, VISIBLE_THEME_LIMIT);
+  const hiddenCount = Math.max(0, cards.length - visibleCards.length);
 
   const loading = communities.isLoading || graphLoading;
 
   return (
     <div className="zaki-brain-home" data-testid="brain-home">
-      <div className="zaki-brain-home__search">
-        <input
-          type="search"
-          className="zaki-brain-home__search-input"
-          placeholder="Search your memories and themes…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Search memories and themes"
-        />
-      </div>
-
       <section className="zaki-brain-home__section" aria-label="Themes">
         <h2 className="zaki-brain-home__heading">
           Themes
@@ -129,9 +110,7 @@ export function BrainHome({ userId, graph, graphLoading }: BrainHomeProps) {
         {loading ? (
           <p className="zaki-brain-home__muted">Loading your themes…</p>
         ) : visibleCards.length === 0 ? (
-          <p className="zaki-brain-home__muted">
-            {query ? "No themes match your search." : "No themes yet."}
-          </p>
+          <p className="zaki-brain-home__muted">No themes yet.</p>
         ) : (
           <div className="zaki-brain-home__cards">
             {visibleCards.map((card) => {
@@ -184,7 +163,7 @@ export function BrainHome({ userId, graph, graphLoading }: BrainHomeProps) {
         )}
         {hiddenCount > 0 && (
           <p className="zaki-brain-home__muted">
-            + {hiddenCount} more {hiddenCount === 1 ? "theme" : "themes"} — search to find them.
+            + {hiddenCount} more {hiddenCount === 1 ? "theme" : "themes"} — open Explore to see them all.
           </p>
         )}
       </section>

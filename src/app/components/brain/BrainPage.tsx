@@ -168,9 +168,15 @@ export function BrainPage() {
   const navigate = useNavigate();
   // Initial probe to detect empty corpus + degraded state. Uses the same
   // filter args the graph view will use so the cache is warm.
+  // MUST mirror BrainGalaxyView's useBrainGraph args EXACTLY (including
+  // link_types) so the React Query keys match → one shared fetch. If they
+  // diverge, the page makes a second, unfiltered fetch and the "Showing N of M"
+  // counter + legend (read off this query) disagree with what the canvas draws.
   const initialGraphQuery = useBrainGraph(userId, {
     max_nodes: effectiveFilters.maxNodes,
     exclude_orphans: effectiveFilters.excludeOrphans,
+    link_types:
+      effectiveFilters.linkTypes.length > 0 ? effectiveFilters.linkTypes.join(",") : undefined,
     semantic_min_weight: effectiveFilters.semanticEdgeThreshold,
   });
 
