@@ -808,6 +808,60 @@ describe("ChatArea Component", () => {
     ).toBe(7.3);
   });
 
+  it("keeps the trusted live context sample visible while a same-session turn is running", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+    const streamResponsePromise = new Promise<never>(() => {});
+    (fetchAgentSessionContext as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, headers: new Headers() },
+      data: {
+        status: "live",
+        active: true,
+        live: true,
+        token_estimate: 67_285,
+        context_window_tokens: 262_144,
+        pressure_percent: 25,
+        context_pressure_percent: 25,
+      },
+    });
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/agent/chat/stream") {
+        return streamResponsePromise;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+        headers: new Headers(),
+      };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("zaki-context-meter")).toHaveTextContent("25%");
+    });
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "continue this task" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    await waitFor(() => {
+      expect(
+        (apiRequest as jest.Mock).mock.calls.some(
+          ([path]) => path === "/api/agent/chat/stream"
+        )
+      ).toBe(true);
+    });
+    expect(
+      zakiSessionUiState.sessions["agent:zaki-bot:user:1:thread:main"]?.contextPressurePercent
+    ).toBe(25);
+    expect(screen.getByTestId("zaki-context-meter")).toHaveTextContent("25%");
+  });
+
   it("does not fall back to diagnostics context when session context is unavailable", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";

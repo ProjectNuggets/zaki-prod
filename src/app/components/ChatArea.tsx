@@ -6685,8 +6685,11 @@ export function ChatArea() {
       navigate(`/agent?thread=${encodeURIComponent(threadId)}`);
     }
     if (turnSessionKey) {
-      setSessionContextPressure(turnSessionKey, null);
-      setNullalisContextGauge(null);
+      const normalizedTurnSessionKey = normalizeZakiSessionKey(turnSessionKey);
+      if (activeContextSessionKeyRef.current !== normalizedTurnSessionKey) {
+        setSessionContextPressure(turnSessionKey, null);
+        setNullalisContextGauge(null);
+      }
     }
 
     if (authUserId && !activationProgress.firstMessageSent) {
