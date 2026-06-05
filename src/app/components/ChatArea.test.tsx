@@ -581,10 +581,98 @@ describe("ChatArea Component", () => {
       contextMax: 460_000,
       messageCount: 43,
       context_pressure_percent: 7.3,
-      source: "live_session",
-      confidence: "exact",
+      pressurePercent: 7.3,
     });
     expect(resolveContextGaugePercent(gauge)).toBe(7.3);
+  });
+
+  it("does not build a context meter from legacy cumulative token totals", () => {
+    const gauge = buildNullalisContextGauge({
+      tokens_used: 999_999,
+      token_limit: 100_000,
+      context_pressure_percent: 100,
+    });
+
+    expect(gauge).toBeNull();
+  });
+
+  it("does not trust active/live flags as proof that legacy token totals are context-window totals", () => {
+    const gauge = buildNullalisContextGauge({
+      active: true,
+      live: true,
+      tokens_used: 999_999,
+      token_limit: 100_000,
+      context_pressure_percent: 100,
+    });
+
+    expect(gauge).toBeNull();
+  });
+
+  it("lets a canonical report override legacy top-level token totals", () => {
+    const gauge = buildNullalisContextGauge({
+      tokens_used: 999_999,
+      token_limit: 100_000,
+      context_pressure_percent: 100,
+      report: {
+        history_len: 3,
+        token_estimate: 6_000,
+        context_window_tokens: 120_000,
+        context_pressure_percent: 5,
+      },
+    });
+
+    expect(gauge).toMatchObject({
+      tokenCount: 6_000,
+      contextMax: 120_000,
+      messageCount: 3,
+      context_pressure_percent: 5,
+      pressurePercent: 5,
+    });
+  });
+
+  it("uses canonical pressure_percent and backend compaction metadata", () => {
+    const gauge = buildNullalisContextGauge({
+      status: "live",
+      sampled_at_ms: 1770000000000,
+      model: "openai/gpt-5.2",
+      token_estimate: 6_400,
+      context_window_tokens: 128_000,
+      pressure_percent: 5,
+      remaining_tokens: 121_600,
+      context_window_source: "model_capability",
+      token_compaction_recommended: false,
+      compaction: {
+        nudge_percent: 50,
+        pass_a_percent: 70,
+        pass_c_percent: 90,
+        recommended: false,
+      },
+    });
+
+    expect(gauge).toMatchObject({
+      tokenCount: 6_400,
+      contextMax: 128_000,
+      context_pressure_percent: 5,
+      pressurePercent: 5,
+      model: "openai/gpt-5.2",
+      remainingTokens: 121_600,
+      contextWindowSource: "model_capability",
+      compaction: {
+        nudgePercent: 50,
+        passAPercent: 70,
+        passCPercent: 90,
+        recommended: false,
+      },
+    });
+  });
+
+  it("does not build a context meter from inactive/unavailable context payloads", () => {
+    expect(
+      buildNullalisContextGauge({
+        active: false,
+        reason: "session_manager_unavailable",
+      })
+    ).toBeNull();
   });
 
   it("prefers backend context_pressure_percent over a recomputed token ratio", () => {
@@ -607,8 +695,7 @@ describe("ChatArea Component", () => {
     expect(gauge).toMatchObject({
       messageCount: 3,
       context_pressure_percent: 21,
-      source: "live_session",
-      confidence: "exact",
+      pressurePercent: 21,
     });
     expect(resolveContextGaugePercent(gauge)).toBe(21);
   });
@@ -624,7 +711,7 @@ describe("ChatArea Component", () => {
     expect(gauge).toBeNull();
   });
 
-  it("normalizes diagnostics report context payloads for the context meter", () => {
+  it("normalizes nested canonical report context payloads for the context meter", () => {
     const gauge = buildNullalisContextGauge({
       active: true,
       report: {
@@ -640,12 +727,11 @@ describe("ChatArea Component", () => {
       contextMax: 200_000,
       messageCount: 12,
       context_pressure_percent: 12.5,
-      source: "diagnostics_fallback",
-      confidence: "fallback",
+      pressurePercent: 12.5,
     });
   });
 
-  it("surfaces diagnostics context source, threshold, and last-turn compaction metadata", () => {
+  it("surfaces canonical nested context pressure and ignores legacy fallback labels", () => {
     const gauge = buildNullalisContextGauge({
       context_source: "diagnostics_fallback",
       context_confidence: "fallback",
@@ -667,15 +753,7 @@ describe("ChatArea Component", () => {
       tokenCount: 101_000,
       contextMax: 200_000,
       context_pressure_percent: 50.5,
-      source: "diagnostics_fallback",
-      confidence: "fallback",
-      compactionThresholdTokens: 160_000,
-      tokenCompactionTriggered: true,
-      lastTurn: {
-        autoCompactionEvents: 2,
-        durableContinuityRefreshed: true,
-        memoryContextInjected: true,
-      },
+      pressurePercent: 50.5,
     });
   });
 
@@ -688,7 +766,7 @@ describe("ChatArea Component", () => {
       response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
       data: { userId: "1" },
     });
-    (fetchAgentSessionContext as jest.Mock).mockResolvedValueOnce({
+    (fetchAgentSessionContext as jest.Mock).mockResolvedValue({
       response: { ok: true, status: 200, headers: new Headers() },
       data: {
         history_len: 43,
@@ -715,7 +793,7 @@ describe("ChatArea Component", () => {
     ).toBe(7.3);
   });
 
-  it("falls back to diagnostics context when session context is unavailable", async () => {
+  it("does not fall back to diagnostics context when session context is unavailable", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
@@ -724,9 +802,9 @@ describe("ChatArea Component", () => {
       response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
       data: { userId: "1" },
     });
-    (fetchAgentSessionContext as jest.Mock).mockResolvedValueOnce({
+    (fetchAgentSessionContext as jest.Mock).mockResolvedValue({
       response: { ok: false, status: 404, headers: new Headers() },
-      data: { error: "session_not_found" },
+      data: { active: false, live: false, code: "session_manager_unavailable" },
     });
     (fetchContextDiagnostics as jest.Mock).mockResolvedValueOnce({
       response: { ok: true, status: 200, headers: new Headers() },
@@ -743,17 +821,16 @@ describe("ChatArea Component", () => {
     await renderChatAreaAndWaitForEffects();
 
     await waitFor(() => {
-      expect(fetchContextDiagnostics).toHaveBeenCalled();
+      expect(fetchAgentSessionContext).toHaveBeenCalled();
     });
-    await waitFor(() => {
-      expect(screen.getByTestId("zaki-context-meter")).toHaveTextContent("13%");
-    });
+    expect(fetchContextDiagnostics).not.toHaveBeenCalled();
+    expect(screen.getByTestId("zaki-context-meter")).toHaveTextContent("--");
     expect(
       zakiSessionUiState.sessions["agent:zaki-bot:user:1:thread:main"]?.contextPressurePercent
-    ).toBe(12.5);
+    ).toBeNull();
   });
 
-  it("skips the live context endpoint for inactive listed Agent sessions", async () => {
+  it("still uses the live context endpoint for inactive listed Agent sessions", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
@@ -777,25 +854,24 @@ describe("ChatArea Component", () => {
         ],
       },
     });
-    (fetchContextDiagnostics as jest.Mock).mockResolvedValueOnce({
+    (fetchAgentSessionContext as jest.Mock).mockResolvedValue({
       response: { ok: true, status: 200, headers: new Headers() },
       data: {
-        report: {
-          history_messages: 24,
-          used_tokens: 18_000,
-          context_window_tokens: 200_000,
-          context_window_used_pct: 9,
-        },
+        active: false,
+        live: false,
+        code: "no_active_session",
       },
     });
 
     await renderChatAreaAndWaitForEffects();
 
     await waitFor(() => {
-      expect(fetchContextDiagnostics).toHaveBeenCalled();
+      expect(fetchAgentSessionContext).toHaveBeenCalledWith(
+        "agent:zaki-bot:user:1:thread:main"
+      );
     });
-    expect(fetchAgentSessionContext).not.toHaveBeenCalled();
-    expect(screen.getByTestId("zaki-context-meter")).toHaveTextContent("9%");
+    expect(fetchContextDiagnostics).not.toHaveBeenCalled();
+    expect(screen.getByTestId("zaki-context-meter")).toHaveTextContent("--");
   });
 
   it("renders ready state for a new chat", async () => {

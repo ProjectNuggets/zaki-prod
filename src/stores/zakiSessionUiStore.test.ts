@@ -44,7 +44,7 @@ describe("zakiSessionUiStore", () => {
     expect(session?.contextPressurePercent).toBe(92);
   });
 
-  it("maps backend session truth into UI state", () => {
+  it("maps backend session posture into UI state without owning context pressure", () => {
     const mapped = mapAgentSessionToZakiSessionUi({
       mode: "plan",
       pending_approval_count: 1,

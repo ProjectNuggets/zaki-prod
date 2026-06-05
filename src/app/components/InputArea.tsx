@@ -193,11 +193,8 @@ export function InputArea({
   onZakiModeChange?: (mode: AgentSessionMode) => void | Promise<void>;
   zakiModePending?: boolean;
   zakiContextPressurePercent?: number | null;
-  /** Backend-reported compaction trigger threshold (from agent
-   *  diagnostics report.compaction_threshold_pct). When provided, the
-   *  pre-flight banner fires 10pp BELOW this value so the user has a
-   *  chance to /compact before the agent fires compaction itself. When
-   *  null, falls back to a conservative 70% FE default. */
+  /** Backend-reported compaction nudge threshold from the session context
+   *  report. When null, falls back to a conservative 70% FE default. */
   zakiCompactionThresholdPct?: number | null;
   zakiContextTooltipCopy?: string | null;
   /** Kept for parent API compatibility; Agent controls now live in the inspector/power sheet. */
@@ -463,20 +460,19 @@ export function InputArea({
   // 2026-05-08 — Compaction meter mirrors token pressure 1:1.
   //
   // Source of truth chain:
-  //   nullalis runtime emits compaction.auto pressure=NN% in its logs and
-  //   exposes the same percent via /api/v1/users/{u}/sessions/{k}/context
+  //   nullalis exposes the active session report via
+  //   /api/v1/users/{u}/sessions/{k}/context
   //     ↓ (proxied unchanged by Express BFF backend/src/index.js:10200)
-  //   /api/agent/sessions/{k}/context → context_pressure_percent
+  //   /api/agent/sessions/{k}/context → context_pressure_percent +
+  //   compaction.nudge_percent
   //     ↓
   //   ChatArea.refreshContextGauge → setContextPressure → store
   //     ↓
   //   InputArea reads activeSessionUi.contextPressurePercent
   //
   // No FE-side buckets. No tiered colors. Single brand-teal ring.
-  // The real compaction trigger is per-session
-  // (report.compaction_threshold_pct, surfaced in Agent inspector
-  // evidence) — anything else here would be the FE inventing a signal
-  // it does not own.
+  // Backend policy owns compaction thresholds and nudge points; anything
+  // else here would be the FE inventing a signal it does not own.
   //
   // P2-05: distinguish "unknown" (null — /context has not landed yet) from
   // "known-empty" (0 — backend says zero pressure). Unknown renders an
@@ -491,23 +487,18 @@ export function InputArea({
   // Table-stakes #10 (2026-05-08, refined per WR-05 review) —
   // High-pressure pre-flight nudge.
   //
-  // The agent's actual compaction trigger lives in
-  // report.compaction_threshold_pct (per-session, dynamic). When that
-  // value is plumbed to InputArea (zakiCompactionThresholdPct), we lead
-  // it by 10pp so the user has a chance to /compact BEFORE the agent
-  // fires compaction. Without backend-reported threshold, fall back to
-  // a conservative 70% — clearly labeled as the FE default.
+  // The backend owns the nudge point. Without backend-reported policy,
+  // fall back to a conservative 70% — clearly labeled as the FE default.
   //
   // Hysteresis: once the banner shows, it stays open until pressure
   // drops 5pp below the show line. Otherwise the user types one
   // character that nudges pressure up to the show line, the banner
   // appears, the next character drops below, the banner hides — flicker.
   const COMPACT_FALLBACK_SHOW_AT = 70;
-  const COMPACT_LEAD_PP = 10;
   const COMPACT_HYSTERESIS_PP = 5;
   const compactShowLine =
     typeof zakiCompactionThresholdPct === "number" && zakiCompactionThresholdPct > 0
-      ? Math.max(0, zakiCompactionThresholdPct - COMPACT_LEAD_PP)
+      ? Math.max(0, Math.min(100, zakiCompactionThresholdPct))
       : COMPACT_FALLBACK_SHOW_AT;
   const compactHideLine = Math.max(0, compactShowLine - COMPACT_HYSTERESIS_PP);
   const compactArmedRef = useRef(false);

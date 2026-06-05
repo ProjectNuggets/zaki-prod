@@ -78,7 +78,7 @@ export function mapAgentSessionToZakiSessionUi(session: Partial<AgentSession>): 
   };
   // Session list/detail hydration owns posture and approval cards, not context
   // pressure. `/api/agent/sessions/:key/context` is the only store writer for
-  // exact pressure so cumulative token totals cannot masquerade as live context.
+  // exact pressure, so stale summaries cannot masquerade as live context.
   if (typeof session.pending_approval_count === "number") {
     patch.approvalCount = Math.max(0, session.pending_approval_count);
   }

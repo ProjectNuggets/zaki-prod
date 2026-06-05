@@ -22,6 +22,7 @@ import {
   exportAgentArtifact,
   fetchAgentTrace,
   fetchAgentExtensionDiagnostics,
+  fetchAgentSessionContext,
   fetchContextDiagnostics,
   fetchAgentDiagnostics,
   fetchMemoryDoctor,
@@ -365,13 +366,30 @@ export function PowerUserSheet({
     setContextDiagError(null);
     void (async () => {
       try {
-        const { response, data } = await fetchContextDiagnostics();
+        const { response, data } = activeSessionKey
+          ? await fetchAgentSessionContext(activeSessionKey)
+          : await fetchContextDiagnostics();
         if (!active) return;
         if (!response.ok) {
-          setContextDiagError(data?.error || data?.reason || "unavailable");
+          setContextDiagError(
+            data?.error ||
+              (data as { code?: string | null } | null)?.code ||
+              data?.reason ||
+              "unavailable"
+          );
           setContextDiag(null);
         } else {
-          setContextDiag(data);
+          if (activeSessionKey) {
+            setContextDiag({
+              active: true,
+              runtime: true,
+              report:
+                ((data as { report?: ContextDiagnosticsResponse["report"] | null })?.report ??
+                  (data as ContextDiagnosticsResponse["report"] | null)),
+            });
+          } else {
+            setContextDiag(data as ContextDiagnosticsResponse);
+          }
         }
       } catch {
         if (!active) return;
@@ -384,7 +402,7 @@ export function PowerUserSheet({
     return () => {
       active = false;
     };
-  }, [isOpen, tab]);
+  }, [activeSessionKey, isOpen, tab]);
 
   useEffect(() => {
     if (!isOpen || tab !== "memory") return;
@@ -669,9 +687,9 @@ export function PowerUserSheet({
     const modeButtons: AgentSessionMode[] = ["plan", "execute", "review"];
     const modeValue = activeMode ?? "execute";
     // 2026-05-08 — Pressure renders as a plain percent; FE no longer
-    // colors it by tier. The real compaction trigger is per-session
-    // (report.compaction_threshold_pct, surfaced in the diagnostics tab),
-    // not anything this control panel can derive locally.
+    // colors it by tier. The real compaction policy is per-session
+    // metadata in the context report, not anything this control panel can
+    // derive locally.
     const contextTone = "text-zaki-secondary";
     const sandboxLabel =
       sandbox?.enabled === true
@@ -806,13 +824,21 @@ export function PowerUserSheet({
     const report = contextDiag?.report ?? null;
     const legacy = contextSnapshot ?? null;
     const pressurePct =
-      report?.context_pressure_percent ?? legacy?.usagePct ?? null;
+      report?.pressure_percent ?? report?.context_pressure_percent ?? legacy?.usagePct ?? null;
     const usedTokens = report?.token_estimate ?? legacy?.usedTokens ?? null;
     const totalTokens =
       report?.context_window_tokens ?? legacy?.totalTokens ?? null;
+    const remainingTokens = report?.remaining_tokens ?? null;
+    const windowSource = report?.context_window_source ?? null;
     const history = report?.history_messages ?? legacy?.turnsInContext ?? null;
-    const compactionTriggered = report?.token_compaction_triggered;
-    const compactionThreshold = report?.token_compaction_threshold ?? null;
+    const compactionRecommended =
+      report?.compaction?.recommended ??
+      report?.token_compaction_recommended ??
+      report?.token_compaction_triggered;
+    const compactionThreshold =
+      report?.token_compaction_recommended_threshold ??
+      report?.token_compaction_threshold ??
+      null;
     const historyTrim = report?.history_trim_limit_messages ?? null;
     const tools = report?.tools ?? null;
     const roles = report?.roles ?? null;
@@ -826,12 +852,28 @@ export function PowerUserSheet({
           </div>
           <div className="flex items-center justify-between">
             <span className="text-zaki-secondary">
+              {t("zakiControls.powerUser.context.windowSource", {
+                defaultValue: "Window source",
+              })}
+            </span>
+            <span className="font-mono-ui text-xs">{windowSource || "—"}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-zaki-secondary">
               {t("zakiControls.powerUser.context.windowPressure")}
             </span>
             <span className="font-mono-ui">
               {formatPct(pressurePct)} · {formatCount(usedTokens)} /{" "}
               {formatCount(totalTokens)}
             </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-zaki-secondary">
+              {t("zakiControls.powerUser.context.remainingTokens", {
+                defaultValue: "Remaining tokens",
+              })}
+            </span>
+            <span className="font-mono-ui">{formatCount(remainingTokens)}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-zaki-secondary">
@@ -853,12 +895,16 @@ export function PowerUserSheet({
             <span
               className={cn(
                 "font-mono-ui",
-                compactionTriggered === true && "text-amber-500"
+                compactionRecommended === true && "text-amber-500"
               )}
             >
-              {compactionTriggered === true
-                ? t("zakiControls.powerUser.context.compactionTriggered")
-                : t("zakiControls.powerUser.context.compactionNone")}
+              {compactionRecommended === true
+                ? t("zakiControls.powerUser.context.compactionRecommended", {
+                    defaultValue: "recommended",
+                  })
+                : t("zakiControls.powerUser.context.compactionNormal", {
+                    defaultValue: "normal",
+                  })}
               {compactionThreshold != null
                 ? t("zakiControls.powerUser.context.compactionThresholdSuffix", {
                     count: Number(compactionThreshold),
@@ -891,6 +937,12 @@ export function PowerUserSheet({
         ) : null}
 
         {renderNestedSection(t("zakiControls.powerUser.context.sections.memory"), report?.memory)}
+        {renderNestedSection(
+          t("zakiControls.powerUser.context.sections.compaction", {
+            defaultValue: "Compaction policy",
+          }),
+          report?.compaction
+        )}
         {renderNestedSection(t("zakiControls.powerUser.context.sections.prompt"), report?.prompt)}
         {renderNestedSection(t("zakiControls.powerUser.context.sections.retrieval"), report?.retrieval)}
         {renderNestedSection(t("zakiControls.powerUser.context.sections.continuity"), report?.continuity)}

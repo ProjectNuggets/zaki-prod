@@ -2457,25 +2457,68 @@ export type AgentSession = {
   pending_approvals?: AgentPendingApproval[];
 };
 
-export type AgentSessionContext = {
+export type AgentContextCompaction = {
+  nudge_percent?: number | null;
+  pass_a_percent?: number | null;
+  pass_c_percent?: number | null;
+  recommended?: boolean | null;
+};
+
+export type AgentContextReport = {
+  status?: "live" | string;
   session_key?: string;
+  active?: boolean;
+  live?: boolean;
+  sampled_at_ms?: number;
+  model?: string | null;
+  model_provider?: string | null;
+  context_window_source?: "override" | "model_capability" | "default" | "unknown" | string;
   token_count?: number;
   tokens_used?: number;
   token_estimate?: number;
+  used_tokens?: number | null;
   context_window_used?: number;
   context_window_max?: number;
   context_window_tokens?: number;
+  total_tokens?: number | null;
+  remaining_tokens?: number;
   token_limit?: number;
   context_window_used_pct?: number;
+  pressure_percent?: number;
   context_pressure_percent?: number;
   message_count?: number;
   history_len?: number;
   history_messages?: number;
   max_history?: number;
-  token_compaction_threshold?: number;
-  token_compaction_triggered?: boolean;
+  history_trim_limit_messages?: number | null;
+  history_trimmed?: number | null;
+  token_compaction_threshold?: number | null;
+  compaction_threshold_pct?: number | null;
+  token_compaction_recommended_threshold?: number | null;
+  token_auto_compaction_pass_a_threshold?: number | null;
+  token_auto_compaction_pass_c_threshold?: number | null;
+  token_compaction_recommended?: boolean | null;
+  token_compaction_triggered?: boolean | null;
+  compaction_triggered?: boolean | null;
+  compaction?: AgentContextCompaction | null;
+  tools?: number | null;
+  tools_loaded?: number | null;
+  roles?: Record<string, number> | null;
+  memory?: Record<string, unknown> | null;
+  prompt?: Record<string, unknown> | null;
+  retrieval?: Record<string, unknown> | null;
+  continuity?: Record<string, unknown> | null;
+  cache?: Record<string, unknown> | null;
+  buckets?: Record<string, unknown> | null;
+  runtime?: Record<string, unknown> | null;
   last_turn?: Record<string, unknown> | null;
-  report?: Record<string, unknown>;
+  error?: string | null;
+  code?: string | null;
+  reason?: string | null;
+};
+
+export type AgentSessionContext = AgentContextReport & {
+  report?: AgentContextReport | null;
 };
 
 export type AgentSessionMode = "plan" | "execute" | "review";
@@ -2534,33 +2577,7 @@ export type ContextDiagnosticsResponse = {
   runtime?: boolean;
   reason?: string | null;
   error?: string | null;
-  report?: {
-    model?: string | null;
-    context_pressure_percent?: number | null;
-    context_window_used_pct?: number | null;
-    token_estimate?: number | null;
-    used_tokens?: number | null;
-    context_window_tokens?: number | null;
-    total_tokens?: number | null;
-    history_messages?: number | null;
-    history_trim_limit_messages?: number | null;
-    history_trimmed?: number | null;
-    token_compaction_triggered?: boolean | null;
-    compaction_triggered?: boolean | null;
-    token_compaction_threshold?: number | null;
-    compaction_threshold_pct?: number | null;
-    tools?: number | null;
-    tools_loaded?: number | null;
-    roles?: Record<string, number> | null;
-    memory?: Record<string, unknown> | null;
-    prompt?: Record<string, unknown> | null;
-    retrieval?: Record<string, unknown> | null;
-    continuity?: Record<string, unknown> | null;
-    cache?: Record<string, unknown> | null;
-    buckets?: Record<string, unknown> | null;
-    runtime?: Record<string, unknown> | null;
-    last_turn?: Record<string, unknown> | null;
-  } | null;
+  report?: AgentContextReport | null;
 };
 
 export type MemoryDoctorResponse = {

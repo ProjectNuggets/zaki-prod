@@ -21,7 +21,6 @@ import {
   fetchAgentSession,
   fetchAgentSessionContext,
   fetchAgentSessionHistory,
-  fetchContextDiagnostics,
   compactAgentSession,
   cancelAgentSession,
   deleteAgentSession,
@@ -48,6 +47,12 @@ import {
   type AgentTask,
   type AgentExtensionDiagnosticsResponse,
 } from "@/lib/api";
+import {
+  buildAgentContextGauge,
+  contextUnavailableCode,
+  isContextUnavailableCode,
+  resolveContextGaugePercent,
+} from "@/lib/agentContext";
 import { DEFAULT_THREAD_LABEL, isDefaultThreadLabel } from "@/lib/threadTitles";
 import { createAnonymousThreadId } from "@/lib/anonymousSpaces";
 import { openSpacesMemoryViewer, type MemoryViewerTab } from "@/lib/spacesMemory";
@@ -136,6 +141,9 @@ import {
   type SystemNoticeKind,
   type SystemNoticePayload,
 } from "./ui/zaki/SystemNotice";
+
+export const buildNullalisContextGauge = buildAgentContextGauge;
+export { resolveContextGaugePercent };
 
 const POWER_USER_PENDING_TAB_KEY = "zaki:pendingPowerUserTab";
 const AGENT_INSPECTOR_OPEN_KEY = "zaki:agentInspectorOpen";
@@ -258,202 +266,6 @@ function numericValue(value: unknown) {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
-}
-
-function booleanValue(value: unknown) {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    if (normalized === "true") return true;
-    if (normalized === "false") return false;
-  }
-  return null;
-}
-
-function clampPercent(value: number) {
-  return Math.min(100, Math.max(0, value));
-}
-
-function contextMetricPayload(data: Record<string, unknown> | null | undefined) {
-  if (!data) return null;
-  const report =
-    data.report && typeof data.report === "object" && !Array.isArray(data.report)
-      ? (data.report as Record<string, unknown>)
-      : null;
-  return report ? { ...report, ...data } : data;
-}
-
-function hasTrustedContextWindowSignal(payload: Record<string, unknown>) {
-  return (
-    numericValue(payload.token_estimate) != null ||
-    numericValue(payload.context_window_tokens) != null ||
-    numericValue(payload.context_window_used) != null ||
-    numericValue(payload.context_window_max) != null ||
-    numericValue(payload.context_tokens) != null ||
-    numericValue(payload.used_tokens) != null ||
-    numericValue(payload.context_window_used_pct) != null ||
-    (payload.report != null && typeof payload.report === "object")
-  );
-}
-
-function resolveRuntimeContextPressurePercent(data: Record<string, unknown> | null | undefined) {
-  const payload = contextMetricPayload(data);
-  if (!payload) return null;
-  const explicitPressure =
-    numericValue(payload.context_pressure_percent) ??
-    numericValue(payload.context_window_used_pct);
-  const looksLikeLegacyCumulativeContext =
-    explicitPressure != null &&
-    numericValue(payload.tokens_used) != null &&
-    numericValue(payload.token_limit) != null &&
-    !hasTrustedContextWindowSignal(payload);
-  if (explicitPressure != null && !looksLikeLegacyCumulativeContext) {
-    return clampPercent(explicitPressure);
-  }
-  const used =
-    numericValue(payload.token_estimate) ??
-    numericValue(payload.context_window_used) ??
-    numericValue(payload.context_tokens) ??
-    numericValue(payload.used_tokens) ??
-    (hasTrustedContextWindowSignal(payload) ? numericValue(payload.tokens_used) : null);
-  const max =
-    numericValue(payload.context_window_max) ??
-    numericValue(payload.context_max) ??
-    numericValue(payload.context_window_tokens) ??
-    (hasTrustedContextWindowSignal(payload) ? numericValue(payload.token_limit) : null);
-  if (used == null || max == null || max <= 0) return null;
-  return clampPercent((used / max) * 100);
-}
-
-export function buildNullalisContextGauge(
-  data: Record<string, unknown> | null | undefined
-): ContextGaugeData | null {
-  const payload = contextMetricPayload(data);
-  if (!payload) return null;
-  const contextMax =
-    numericValue(payload.context_window_max) ??
-    numericValue(payload.context_max) ??
-    numericValue(payload.context_window_tokens) ??
-    (hasTrustedContextWindowSignal(payload) ? numericValue(payload.token_limit) : null);
-  const pressurePct = resolveRuntimeContextPressurePercent(payload);
-  if ((contextMax == null || contextMax <= 0) && pressurePct == null) return null;
-  const tokenCount =
-    numericValue(payload.token_estimate) ??
-    numericValue(payload.context_window_used) ??
-    numericValue(payload.context_tokens) ??
-    numericValue(payload.used_tokens) ??
-    (hasTrustedContextWindowSignal(payload) ? numericValue(payload.tokens_used) : null) ??
-    null;
-  const messageCount =
-    numericValue(payload.message_count) ??
-    numericValue(payload.history_len) ??
-    numericValue(payload.history_messages) ??
-    null;
-  const source =
-    payload.context_source === "live_session" ||
-    payload.context_source === "diagnostics_fallback" ||
-    payload.context_source === "inactive_session" ||
-    payload.context_source === "unknown"
-      ? pressurePct == null && !hasTrustedContextWindowSignal(payload)
-        ? "unknown"
-        : payload.context_source
-      : data?.report
-        ? "diagnostics_fallback"
-        : "live_session";
-  const confidence =
-    payload.context_confidence === "exact" ||
-    payload.context_confidence === "fallback" ||
-    payload.context_confidence === "inactive" ||
-    payload.context_confidence === "unknown"
-      ? payload.context_confidence
-      : source === "live_session"
-        ? "exact"
-        : source === "diagnostics_fallback"
-          ? "fallback"
-          : source === "inactive_session"
-            ? "inactive"
-            : "unknown";
-  const lastTurn =
-    payload.last_turn && typeof payload.last_turn === "object" && !Array.isArray(payload.last_turn)
-      ? (payload.last_turn as Record<string, unknown>)
-      : null;
-  return {
-    tokenCount: tokenCount ?? undefined,
-    contextMax: contextMax && contextMax > 0 ? contextMax : undefined,
-    messageCount: messageCount ?? undefined,
-    context_pressure_percent: pressurePct,
-    source,
-    confidence,
-    compactionThresholdPct:
-      numericValue(payload.compaction_threshold_pct) ?? null,
-    compactionThresholdTokens:
-      numericValue(payload.token_compaction_threshold) ??
-      numericValue(payload.compaction_threshold_tokens) ??
-      null,
-    tokenCompactionTriggered:
-      booleanValue(payload.token_compaction_triggered) ??
-      booleanValue(payload.compaction_triggered) ??
-      null,
-    lastTurn: lastTurn
-      ? {
-          autoCompactionEvents: numericValue(lastTurn.auto_compaction_events),
-          durableContinuityRefreshed: booleanValue(lastTurn.durable_continuity_refreshed),
-          memoryContextInjected: booleanValue(lastTurn.memory_context_injected),
-        }
-      : null,
-  };
-}
-
-export function resolveContextGaugePercent(data: ContextGaugeData | null | undefined) {
-  if (!data) return null;
-  if (typeof data.context_pressure_percent === "number") {
-    return clampPercent(data.context_pressure_percent);
-  }
-  if (!data.contextMax || data.contextMax <= 0) return null;
-  if (typeof data.tokenCount === "number") {
-    return clampPercent((data.tokenCount / data.contextMax) * 100);
-  }
-  return null;
-}
-
-function formatContextNumber(value: number) {
-  return new Intl.NumberFormat("en-US").format(Math.round(value));
-}
-
-function buildComposerContextTooltip(data: ContextGaugeData | null | undefined) {
-  if (!data) return null;
-  const source =
-    data.source === "live_session"
-      ? "Live session"
-      : data.source === "diagnostics_fallback"
-        ? "Diagnostics fallback"
-        : data.source === "inactive_session"
-          ? "Inactive session"
-          : "Unknown source";
-  const confidence =
-    data.confidence === "exact"
-      ? "exact"
-      : data.confidence === "fallback"
-        ? "fallback estimate"
-        : data.confidence === "inactive"
-          ? "inactive estimate"
-          : "unknown confidence";
-  const parts = [`${source} · ${confidence}`];
-  if (typeof data.tokenCount === "number" && typeof data.contextMax === "number") {
-    parts.push(`${formatContextNumber(data.tokenCount)} / ${formatContextNumber(data.contextMax)} tokens`);
-  }
-  if (typeof data.compactionThresholdPct === "number") {
-    parts.push(`Compacts at ${Math.round(data.compactionThresholdPct)}%`);
-  } else if (typeof data.compactionThresholdTokens === "number") {
-    parts.push(`Compacts at ${formatContextNumber(data.compactionThresholdTokens)} tokens`);
-  }
-  if (data.lastTurn?.autoCompactionEvents) {
-    parts.push(`${data.lastTurn.autoCompactionEvents} compaction event${data.lastTurn.autoCompactionEvents === 1 ? "" : "s"} last turn`);
-  }
-  if (data.lastTurn?.durableContinuityRefreshed) {
-    parts.push("Continuity memory refreshed");
-  }
-  return parts.join(". ");
 }
 
 /**
@@ -3105,7 +2917,19 @@ export function ChatArea() {
       [normalizedActiveZakiSessionKey]
     )
   );
-  const contextUnavailableSessionKeysRef = useRef<Set<string>>(new Set());
+  const activeContextSessionKeyRef = useRef<string | null>(
+    isZakiBotRouteActive ? normalizedActiveZakiSessionKey : null
+  );
+  const activeContextGenerationRef = useRef(0);
+  useEffect(() => {
+    const nextKey = isZakiBotRouteActive ? normalizedActiveZakiSessionKey : null;
+    const previousKey = activeContextSessionKeyRef.current;
+    activeContextSessionKeyRef.current = nextKey;
+    activeContextGenerationRef.current += 1;
+    if (previousKey && previousKey !== nextKey) {
+      setNullalisContextGauge(null);
+    }
+  }, [isZakiBotRouteActive, normalizedActiveZakiSessionKey]);
   const ensureZakiSessionUi = useZakiSessionUiStore((state) => state.ensureSession);
   const hydrateSessionUi = useZakiSessionUiStore((state) => state.hydrateSession);
   const setZakiSessionModeUi = useZakiSessionUiStore((state) => state.setMode);
@@ -3506,7 +3330,12 @@ export function ChatArea() {
         }
       : null;
   const agentContextPercent = isZakiBotActiveSpace
-    ? resolveContextGaugePercent(nullalisContextGauge)
+    ? resolveContextGaugePercent(nullalisContextGauge) ??
+      activeSessionUi?.contextPressurePercent ??
+      null
+    : null;
+  const agentCompactionNudgePercent = isZakiBotActiveSpace
+    ? nullalisContextGauge?.compaction?.nudgePercent ?? null
     : null;
   const agentTaskItems = useMemo(
     () => mergeNullalisTaskItems(agentTaskSnapshots, nullalisTaskItems),
@@ -4223,61 +4052,40 @@ export function ChatArea() {
 
   const refreshContextGauge = useCallback(async () => {
     try {
+      if (!isZakiBotRouteActive) return;
       if (!zakiBotProvisionReady) return;
-      if (isZakiBotRouteActive && zakiSessionsLoading) return;
       const sessionKey = activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
       if (!sessionKey) return; // agent user ID not yet resolved
-      let payload: Record<string, unknown> | null = null;
-      const shouldSkipLiveContextFetch = activeSessionRecord?.live === false;
-      if (shouldSkipLiveContextFetch) {
-        contextUnavailableSessionKeysRef.current.add(sessionKey);
+      const requestedSessionKey = normalizeZakiSessionKey(sessionKey);
+      const refreshGeneration = activeContextGenerationRef.current;
+      const { response, data } = await fetchAgentSessionContext(sessionKey);
+      if (activeContextGenerationRef.current !== refreshGeneration) {
+        return;
       }
-      if (!contextUnavailableSessionKeysRef.current.has(sessionKey)) {
-        const { response, data } = await fetchAgentSessionContext(sessionKey);
-        // Don't clobber a good in-store pressure value with `null` on a
-        // 4xx/5xx or on a 200 that omitted the field. Only write when the
-        // response succeeded AND we actually have a numeric pressure.
-        if (response.ok) {
-          contextUnavailableSessionKeysRef.current.delete(sessionKey);
-          payload = {
-            ...(data as Record<string, unknown>),
-            context_source: "live_session",
-            context_confidence: "exact",
-          };
-        } else {
-          const errorCode = String(
-            (data as { error?: string | null; code?: string | null } | null)?.error ||
-              (data as { error?: string | null; code?: string | null } | null)?.code ||
-              ""
-          );
-          if (
-            response.status === 404 ||
-            errorCode === "not_found" ||
-            errorCode === "session_not_found" ||
-            errorCode === "no_session_manager"
-          ) {
-            contextUnavailableSessionKeysRef.current.add(sessionKey);
-          }
+      if (
+        activeContextSessionKeyRef.current &&
+        activeContextSessionKeyRef.current !== requestedSessionKey
+      ) {
+        return;
+      }
+      // `/context` is the only trustworthy source for the composer meter.
+      // If the backend says no live session manager/session exists, clear
+      // any prior value so stale pressure cannot look current.
+      if (!response.ok) {
+        if (isContextUnavailableCode(contextUnavailableCode(data as Record<string, unknown> | null))) {
+          setSessionContextPressure(sessionKey, null);
+          setNullalisContextGauge(null);
         }
+        return;
       }
-      if (!payload && contextUnavailableSessionKeysRef.current.has(sessionKey)) {
-        const { response, data } = await fetchContextDiagnostics();
-        if (response.ok) {
-          payload = {
-            ...(data as Record<string, unknown>),
-            context_source: "diagnostics_fallback",
-            context_confidence: "fallback",
-          };
-        }
-      }
-      if (!payload) return;
-      const pressurePct = resolveRuntimeContextPressurePercent(payload);
+      const gauge = buildNullalisContextGauge(data as Record<string, unknown>);
+      const pressurePct = resolveContextGaugePercent(gauge);
       if (typeof pressurePct === "number") {
         setSessionContextPressure(sessionKey, pressurePct);
-      }
-      const gauge = buildNullalisContextGauge(payload);
-      if (gauge) {
         setNullalisContextGauge(gauge);
+      } else {
+        setSessionContextPressure(sessionKey, null);
+        setNullalisContextGauge(null);
       }
     } catch {
       // non-critical — gauge just won't update
@@ -4289,7 +4097,6 @@ export function ChatArea() {
     isZakiBotRouteActive,
     setSessionContextPressure,
     zakiBotProvisionReady,
-    zakiSessionsLoading,
   ]);
 
   const refreshAgentRuntimePanelData = useCallback(async () => {
@@ -5580,18 +5387,6 @@ export function ChatArea() {
           }
           if (typeof payload.duration_ms === "number") {
             setTurnDurationMs(payload.duration_ms);
-          }
-          // Extract inline context data if nullalis sends it with done.
-          // Accept both runtime names (`context_tokens/context_max`) and
-          // session-context names (`tokens_used/token_limit`) so the meter
-          // mirrors the actual backend pressure signal.
-          const contextGauge = buildNullalisContextGauge(payload);
-          const contextPressure = resolveRuntimeContextPressurePercent(payload);
-          if (contextPressure != null && activeZakiSessionKey) {
-            setSessionContextPressure(activeZakiSessionKey, contextPressure);
-          }
-          if (contextGauge) {
-            setNullalisContextGauge(contextGauge);
           }
           pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("done", payload));
           setNullalisNarrationFrame(null);
@@ -6884,6 +6679,13 @@ export function ChatArea() {
 
     if (!threadId) return;
 
+    const turnSessionKey =
+      isZakiBotTarget && agentUserId ? buildAgentSessionKey(threadId, agentUserId) : null;
+    if (turnSessionKey) {
+      setSessionContextPressure(turnSessionKey, null);
+      setNullalisContextGauge(null);
+    }
+
     if (authUserId && !activationProgress.firstMessageSent) {
       const nextProgress = markFirstMessageSent(authUserId);
       setActivationProgress(nextProgress);
@@ -7132,6 +6934,7 @@ export function ChatArea() {
     navigate,
     primarySpace?.id,
     queryClient,
+    setSessionContextPressure,
     streamChatMessage,
     maybeAutoTitleThread,
     updateAssistantError,
@@ -8243,7 +8046,7 @@ export function ChatArea() {
                 value:
                   agentContextPercent != null
                     ? `${Math.round(agentContextPercent)}%`
-                    : t("agent.status.contextUnknown", { defaultValue: "Unknown" }),
+                    : "--",
               },
               {
                 id: "weekly",
@@ -8551,14 +8354,7 @@ export function ChatArea() {
                     ? agentContextPercent
                     : null
                 }
-                zakiCompactionThresholdPct={
-                  isZakiBotActiveSpace
-                    ? nullalisContextGauge?.compactionThresholdPct ?? null
-                    : null
-                }
-                zakiContextTooltipCopy={
-                  isZakiBotActiveSpace ? buildComposerContextTooltip(nullalisContextGauge) : null
-                }
+                zakiCompactionThresholdPct={agentCompactionNudgePercent}
                 quotaBadge={
                   zakiBotQuotaInfo
                     ? {

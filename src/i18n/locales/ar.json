@@ -1093,6 +1093,8 @@
         "compaction": "الضغط",
         "compactionTriggered": "تم",
         "compactionNone": "لا شيء",
+        "compactionRecommended": "موصى به",
+        "compactionNormal": "طبيعي",
         "compactionThresholdSuffix": " · >= {{count}} رمز",
         "toolsLoaded": "الأدوات المحملة",
         "roleBreakdown": "تفصيل الأدوار",

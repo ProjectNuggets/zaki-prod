@@ -9,6 +9,7 @@ jest.mock("@/lib/api", () => ({
   downloadAgentExportFile: jest.fn(),
   exportAgentArtifact: jest.fn(),
   fetchAgentExtensionDiagnostics: jest.fn(),
+  fetchAgentSessionContext: jest.fn(),
   fetchAgentTrace: jest.fn(),
   fetchAgentDiagnostics: jest.fn(),
   fetchUsageQuota: jest.fn(),
@@ -60,6 +61,11 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiControls.powerUser.memory.noActiveSession":
       "Start a conversation to see memory diagnostics.",
     "zakiControls.powerUser.context.sections.memory": "Memory",
+    "zakiControls.powerUser.context.sections.compaction": "Compaction policy",
+    "zakiControls.powerUser.context.windowSource": "Window source",
+    "zakiControls.powerUser.context.remainingTokens": "Remaining tokens",
+    "zakiControls.powerUser.context.compactionRecommended": "recommended",
+    "zakiControls.powerUser.context.compactionNormal": "normal",
     "zakiControls.powerUser.tabs.controls": "Controls",
     "zakiControls.powerUser.tabs.approvals": "Approvals",
     "zakiControls.powerUser.tabs.browser": "Browser",
@@ -122,6 +128,8 @@ const fetchAgentDiagnosticsMock = jest.requireMock("@/lib/api")
   .fetchAgentDiagnostics as jest.Mock;
 const fetchAgentExtensionDiagnosticsMock = jest.requireMock("@/lib/api")
   .fetchAgentExtensionDiagnostics as jest.Mock;
+const fetchAgentSessionContextMock = jest.requireMock("@/lib/api")
+  .fetchAgentSessionContext as jest.Mock;
 const fetchContextDiagnosticsMock = jest.requireMock("@/lib/api")
   .fetchContextDiagnostics as jest.Mock;
 const fetchMemoryDoctorMock = jest.requireMock("@/lib/api")
@@ -161,6 +169,20 @@ beforeEach(() => {
   fetchContextDiagnosticsMock.mockResolvedValue({
     response: { ok: true },
     data: { active: false, reason: "no_active_session" },
+  });
+  fetchAgentSessionContextMock.mockResolvedValue({
+    response: { ok: true },
+    data: {
+      active: true,
+      report: {
+        model: "moonshot/kimi-k2.6",
+        history_messages: 0,
+        token_estimate: 0,
+        context_window_tokens: 262144,
+        pressure_percent: 0,
+        context_pressure_percent: 0,
+      },
+    },
   });
   fetchMemoryDoctorMock.mockResolvedValue({
     response: { ok: true },
@@ -673,6 +695,55 @@ describe("PowerUserSheet", () => {
     expect(screen.getByText(/10%/)).toBeInTheDocument();
     expect(
       screen.getByTestId("power-user-context-section-memory")
+    ).toBeInTheDocument();
+  });
+
+  it("loads context diagnostics from the active session context endpoint when a session key is available", async () => {
+    fetchAgentSessionContextMock.mockResolvedValueOnce({
+      response: { ok: true },
+      data: {
+        active: true,
+        session_key: "agent:zaki-bot:user:42:thread:main",
+        status: "live",
+        model: "openai/gpt-5.2",
+        token_estimate: 6400,
+        context_window_tokens: 128000,
+        pressure_percent: 5,
+        context_pressure_percent: 5,
+        remaining_tokens: 121600,
+        context_window_source: "model_capability",
+        token_compaction_recommended: false,
+        compaction: {
+          nudge_percent: 50,
+          pass_a_percent: 70,
+          pass_c_percent: 90,
+          recommended: false,
+        },
+      },
+    });
+
+    await act(async () => {
+      render(
+        <PowerUserSheet
+          isOpen
+          onClose={() => {}}
+          initialTab="context"
+          activeSessionKey="agent:zaki-bot:user:42:thread:main"
+        />
+      );
+    });
+
+    await waitFor(() => {
+      expect(fetchAgentSessionContextMock).toHaveBeenCalledWith(
+        "agent:zaki-bot:user:42:thread:main"
+      );
+      expect(screen.getByText("openai/gpt-5.2")).toBeInTheDocument();
+    });
+    expect(fetchContextDiagnosticsMock).not.toHaveBeenCalled();
+    expect(screen.getByText(/5%/)).toBeInTheDocument();
+    expect(screen.getByText("model_capability")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("power-user-context-section-compaction-policy")
     ).toBeInTheDocument();
   });
 

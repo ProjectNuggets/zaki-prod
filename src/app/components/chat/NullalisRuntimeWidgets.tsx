@@ -385,6 +385,20 @@ export type ContextGaugeData = {
     durableContinuityRefreshed?: boolean | null;
     memoryContextInjected?: boolean | null;
   } | null;
+  pressurePercent?: number | null;
+  sampledAtMs?: number | null;
+  status?: string | null;
+  reason?: string | null;
+  model?: string | null;
+  modelProvider?: string | null;
+  contextWindowSource?: string | null;
+  remainingTokens?: number | null;
+  compaction?: {
+    nudgePercent?: number | null;
+    passAPercent?: number | null;
+    passCPercent?: number | null;
+    recommended?: boolean | null;
+  } | null;
 };
 
 export function ContextGauge({
@@ -401,8 +415,10 @@ export function ContextGauge({
   // canonical context-pressure signal; token counts are supporting detail.
   const hasContextMax = typeof data.contextMax === "number" && data.contextMax > 0;
   const pct =
-    typeof data.context_pressure_percent === "number"
-      ? Math.min(100, Math.max(0, data.context_pressure_percent))
+    typeof data.pressurePercent === "number"
+      ? Math.min(100, Math.max(0, data.pressurePercent))
+      : typeof data.context_pressure_percent === "number"
+        ? Math.min(100, Math.max(0, data.context_pressure_percent))
       : hasContextMax
         ? Math.min(
             100,
@@ -449,9 +465,9 @@ export function ContextGauge({
   ].filter((bit): bit is string => typeof bit === "string" && bit.length > 0);
 
   // 2026-05-08 — Single color, no FE-side tier buckets. Pressure is the
-  // raw signal nullalis emits; the actual compaction trigger lives in
-  // backend report.compaction_threshold_pct (per-session, dynamic), not
-  // in any constant defined here. Mirror only — no FE opinion.
+  // raw signal nullalis emits; compaction policy lives in the backend
+  // report metadata, not in any constant defined here. Mirror only — no
+  // FE opinion.
   const barColor = "bg-zaki-accent";
   const textColor = "text-zaki-muted dark:text-zaki-dark-muted";
 

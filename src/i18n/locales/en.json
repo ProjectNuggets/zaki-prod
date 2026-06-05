@@ -1093,6 +1093,8 @@
         "compaction": "Compaction",
         "compactionTriggered": "triggered",
         "compactionNone": "none",
+        "compactionRecommended": "recommended",
+        "compactionNormal": "normal",
         "compactionThresholdSuffix": " · >= {{count}} tok",
         "toolsLoaded": "Tools loaded",
         "roleBreakdown": "Role breakdown",
