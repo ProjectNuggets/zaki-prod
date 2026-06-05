@@ -49,8 +49,6 @@ import {
 } from "@/lib/api";
 import {
   buildAgentContextGauge,
-  contextUnavailableCode,
-  isContextUnavailableCode,
   resolveContextGaugePercent,
 } from "@/lib/agentContext";
 import { DEFAULT_THREAD_LABEL, isDefaultThreadLabel } from "@/lib/threadTitles";
@@ -3330,9 +3328,7 @@ export function ChatArea() {
         }
       : null;
   const agentContextPercent = isZakiBotActiveSpace
-    ? resolveContextGaugePercent(nullalisContextGauge) ??
-      activeSessionUi?.contextPressurePercent ??
-      null
+    ? resolveContextGaugePercent(nullalisContextGauge) ?? null
     : null;
   const agentCompactionNudgePercent = isZakiBotActiveSpace
     ? nullalisContextGauge?.compaction?.nudgePercent ?? null
@@ -4051,12 +4047,13 @@ export function ChatArea() {
   }, []);
 
   const refreshContextGauge = useCallback(async () => {
+    let requestedSessionKey: string | null = null;
     try {
       if (!isZakiBotRouteActive) return;
       if (!zakiBotProvisionReady) return;
       const sessionKey = activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
       if (!sessionKey) return; // agent user ID not yet resolved
-      const requestedSessionKey = normalizeZakiSessionKey(sessionKey);
+      requestedSessionKey = normalizeZakiSessionKey(sessionKey);
       const refreshGeneration = activeContextGenerationRef.current;
       const { response, data } = await fetchAgentSessionContext(sessionKey);
       if (activeContextGenerationRef.current !== refreshGeneration) {
@@ -4072,10 +4069,8 @@ export function ChatArea() {
       // If the backend says no live session manager/session exists, clear
       // any prior value so stale pressure cannot look current.
       if (!response.ok) {
-        if (isContextUnavailableCode(contextUnavailableCode(data as Record<string, unknown> | null))) {
-          setSessionContextPressure(sessionKey, null);
-          setNullalisContextGauge(null);
-        }
+        setSessionContextPressure(sessionKey, null);
+        setNullalisContextGauge(null);
         return;
       }
       const gauge = buildNullalisContextGauge(data as Record<string, unknown>);
@@ -4088,7 +4083,10 @@ export function ChatArea() {
         setNullalisContextGauge(null);
       }
     } catch {
-      // non-critical — gauge just won't update
+      if (requestedSessionKey) {
+        setSessionContextPressure(requestedSessionKey, null);
+      }
+      setNullalisContextGauge(null);
     }
   }, [
     activeThreadId,
@@ -6640,6 +6638,7 @@ export function ChatArea() {
     }
     // For ZAKI bot without an activeThreadId, generate a new thread slug.
     // The nullalis backend creates the session on first message.
+    const generatedZakiThread = isZakiBotTarget && !activeThreadId;
     let threadId = activeThreadId || (isZakiBotTarget ? `thread-${Date.now()}` : null);
     if (!threadId) {
       try {
@@ -6681,6 +6680,10 @@ export function ChatArea() {
 
     const turnSessionKey =
       isZakiBotTarget && agentUserId ? buildAgentSessionKey(threadId, agentUserId) : null;
+    if (generatedZakiThread) {
+      goToThread(ZAKI_BOT_SPACE_ID, threadId, { zakiSessionKey: turnSessionKey });
+      navigate(`/agent?thread=${encodeURIComponent(threadId)}`);
+    }
     if (turnSessionKey) {
       setSessionContextPressure(turnSessionKey, null);
       setNullalisContextGauge(null);
@@ -6928,6 +6931,7 @@ export function ChatArea() {
     clearZakiBotProgressVisuals,
     ensureZakiBotProvisioned,
     finalizeZakiBotProgress,
+    goToThread,
     hydrateActiveSessionDetail,
     isRtl,
     isStreaming,

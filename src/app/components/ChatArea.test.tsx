@@ -355,7 +355,11 @@ type NavState = {
   goHome: () => void;
   goToSpaces: () => void;
   goToSpace: (spaceId: string) => void;
-  goToThread: (spaceId: string, threadId: string) => void;
+  goToThread: (
+    spaceId: string,
+    threadId: string,
+    options?: { zakiSessionKey?: string | null }
+  ) => void;
   clearThread: () => void;
   setZakiSessionKey: (sessionKey: string | null) => void;
 };
@@ -457,7 +461,18 @@ describe("ChatArea Component", () => {
       goHome: jest.fn(),
       goToSpaces: jest.fn(),
       goToSpace: jest.fn(),
-      goToThread: jest.fn(),
+      goToThread: jest.fn(
+        (
+          spaceId: string,
+          threadId: string,
+          options?: { zakiSessionKey?: string | null }
+        ) => {
+          navState.view = "chat";
+          navState.spaceId = spaceId;
+          navState.threadId = threadId;
+          navState.zakiSessionKey = options?.zakiSessionKey ?? null;
+        }
+      ),
       clearThread: jest.fn(),
       setZakiSessionKey: jest.fn((sessionKey: string | null) => {
         navState.zakiSessionKey = sessionKey;
@@ -872,6 +887,70 @@ describe("ChatArea Component", () => {
     });
     expect(fetchContextDiagnostics).not.toHaveBeenCalled();
     expect(screen.getByTestId("zaki-context-meter")).toHaveTextContent("--");
+  });
+
+  it("routes first Agent prompt from ZAKI home to the generated live session key", async () => {
+    const nowSpy = jest.spyOn(Date, "now").mockReturnValue(1779626993472);
+    navState.view = "home";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = null;
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+    (fetchAgentSessionContext as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, headers: new Headers() },
+      data: {
+        token_estimate: 67_285,
+        context_window_tokens: 262_144,
+        pressure_percent: 25,
+      },
+    });
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/agent/chat/stream") {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: async () => ({ type: "done", message: "done" }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+        headers: new Headers(),
+      };
+    });
+
+    try {
+      await renderChatAreaAndWaitForEffects();
+
+      fireEvent.change(screen.getByRole("combobox"), {
+        target: { value: "show me the current context pressure" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+      const generatedThreadId = "thread-1779626993472";
+      const generatedSessionKey =
+        "agent:zaki-bot:user:1:thread:thread-1779626993472";
+      await waitFor(() => {
+        expect(navState.goToThread).toHaveBeenCalledWith("zaki-bot", generatedThreadId, {
+          zakiSessionKey: generatedSessionKey,
+        });
+      });
+      await waitFor(() => {
+        expect(apiRequest).toHaveBeenCalledWith(
+          "/api/agent/chat/stream",
+          expect.objectContaining({
+            body: expect.stringContaining(`"threadId":"${generatedThreadId}"`),
+          })
+        );
+      });
+      await waitFor(() => {
+        expect(fetchAgentSession).toHaveBeenCalledWith(generatedSessionKey);
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it("renders ready state for a new chat", async () => {
