@@ -43,8 +43,20 @@ jest.mock("@/queries", () => ({
 }));
 
 // ── heavy / query-driven children stubbed; BrainFilterPanel stays real ──
-jest.mock("./BrainGraphView", () => ({
-  BrainGraphView: () => <div data-testid="brain-graph-view" />,
+// BrainGalaxyView pulls in three.js (WebGL) which jsdom can't load; stub it as
+// a forwardRef so the Explore tab's ref wiring stays valid.
+jest.mock("./galaxy/BrainGalaxyView", () => {
+  const react = require("react");
+  return {
+    BrainGalaxyView: react.forwardRef(() =>
+      react.createElement("div", { "data-testid": "brain-galaxy-view" }),
+    ),
+  };
+});
+// BrainHome fans out to several brain queries; stub it (the Home surface has its
+// own model tests). Keeps the BrainPage suite focused on page structure.
+jest.mock("./galaxy/BrainHome", () => ({
+  BrainHome: () => <div data-testid="brain-home" />,
 }));
 jest.mock("./BrainTimelineView", () => ({
   BrainTimelineView: () => <div data-testid="brain-timeline-view" />,
@@ -117,7 +129,7 @@ describe("BrainPage", () => {
   it("surfaces a load-failure state on query error", () => {
     mockGraph = { data: undefined, isLoading: false, isError: true };
     renderPage();
-    expect(screen.queryByTestId("brain-timeline-slot")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("brain-home-slot")).not.toBeInTheDocument();
     expect(screen.queryByTestId("brain-graph-slot")).not.toBeInTheDocument();
     expect(screen.getByText("brain.error.loadFailed")).toBeInTheDocument();
   });
@@ -132,40 +144,30 @@ describe("BrainPage", () => {
     expect(screen.getByTestId("brain-empty-state")).toBeInTheDocument();
   });
 
-  it("labels the surface scope as the personal brain (kept separate from other scopes)", () => {
+  it("labels the surface scope as the personal brain", () => {
     mockGraph = { ...POPULATED };
     renderPage();
-    // Graph-first landing also renders the active scope inside the filters
-    // rail. Keep the count exact so a regression to "User memory" is caught.
-    expect(screen.getAllByText("Personal brain")).toHaveLength(3);
+    // The status strip names the active scope. (The scope-separation block was
+    // removed from the filters rail.)
+    expect(screen.getAllByText("Personal brain").length).toBeGreaterThan(0);
   });
 
-  it("defaults to the graph view and keeps timeline as a secondary tab", () => {
+  it("defaults to Home (overview + timeline), with Explore as the second tab", () => {
     mockGraph = { ...POPULATED };
     renderPage();
-    expect(screen.getByTestId("brain-graph-slot")).toBeInTheDocument();
-    expect(screen.queryByTestId("brain-timeline-slot")).not.toBeInTheDocument();
+    expect(screen.getByTestId("brain-home-slot")).toBeInTheDocument();
+    expect(screen.queryByTestId("brain-graph-slot")).not.toBeInTheDocument();
 
     const tabs = screen.getAllByRole("tab");
-    fireEvent.click(tabs[0]); // timeline tab
-    expect(screen.getByTestId("brain-timeline-slot")).toBeInTheDocument();
+    fireEvent.click(tabs[1]); // Explore tab → the 3D graph shell
+    expect(screen.getByTestId("brain-graph-slot")).toBeInTheDocument();
   });
 
-  it("honors the explicit timeline URL state", () => {
+  it("honors the explicit Explore URL state", () => {
     mockGraph = { ...POPULATED };
-    renderPage("/brain?tab=timeline");
-    expect(screen.getByTestId("brain-timeline-slot")).toBeInTheDocument();
-    expect(screen.queryByTestId("brain-graph-slot")).not.toBeInTheDocument();
-  });
-
-  it("renders the filters scope block only once on the graph tab (no rail/overlay duplication)", () => {
-    mockGraph = { ...POPULATED };
-    // tab=graph + panel=filters would, before the fix, render BrainFilterPanel
-    // in both the always-on rail and the floating overlay on a desktop
-    // viewport — duplicating the scope block and its Settings deep-link.
-    renderPage("/brain?tab=graph&panel=filters");
-    expect(screen.getAllByTestId("brain-scope-settings-link")).toHaveLength(1);
-    expect(screen.getAllByTestId("brain-scope-active")).toHaveLength(1);
+    renderPage("/brain?tab=explore");
+    expect(screen.getByTestId("brain-graph-slot")).toBeInTheDocument();
+    expect(screen.queryByTestId("brain-home-slot")).not.toBeInTheDocument();
   });
 
   it("exposes an honest account-level governance deep-link to Settings (Settings-link ready)", () => {

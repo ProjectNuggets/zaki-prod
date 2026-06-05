@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom";
 import { describe, expect, it, jest } from "@jest/globals";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 jest.mock("react-i18next", () => ({
@@ -10,7 +10,12 @@ jest.mock("react-i18next", () => ({
   }),
 }));
 
-import { BrainFilterPanel, DEFAULT_FILTERS, type BrainFilters } from "./BrainFilterPanel";
+import {
+  BrainFilterPanel,
+  DEFAULT_FILTERS,
+  formatConnectionStrength,
+  type BrainFilters,
+} from "./BrainFilterPanel";
 
 function renderPanel(overrides?: Partial<BrainFilters>) {
   const onChange = jest.fn();
@@ -22,34 +27,6 @@ function renderPanel(overrides?: Partial<BrainFilters>) {
   );
   return { onChange };
 }
-
-describe("BrainFilterPanel — scope separation", () => {
-  it("marks Personal brain as the scope shown on this surface", () => {
-    renderPanel();
-    const active = screen.getByTestId("brain-scope-active");
-    expect(within(active).getByText("Personal brain")).toBeInTheDocument();
-    expect(within(active).getByText("Shown here")).toBeInTheDocument();
-  });
-
-  it("names Workspace, Learner, and Hire memory as separate (not merged into this graph)", () => {
-    renderPanel();
-    expect(screen.getByTestId("brain-scope-separate-workspace")).toHaveTextContent(
-      "Workspace",
-    );
-    expect(screen.getByTestId("brain-scope-separate-learner")).toHaveTextContent(
-      "Learner",
-    );
-    expect(screen.getByTestId("brain-scope-separate-hire")).toHaveTextContent("Hire");
-  });
-
-  it("routes scope/privacy governance to route-level Settings", () => {
-    renderPanel();
-    expect(screen.getByTestId("brain-scope-settings-link")).toHaveAttribute(
-      "href",
-      "/settings#settings-memory-data",
-    );
-  });
-});
 
 describe("BrainFilterPanel — graph filters", () => {
   it("toggles the hide-orphans filter", () => {
@@ -75,5 +52,25 @@ describe("BrainFilterPanel — graph filters", () => {
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({ colorPreset: "community" }),
     );
+  });
+});
+
+describe("formatConnectionStrength", () => {
+  it("turns the raw semantic cutoff into plain words across the range", () => {
+    expect(formatConnectionStrength(0.7)).toBe("Show all");
+    expect(formatConnectionStrength(0.75)).toBe("Loose");
+    expect(formatConnectionStrength(0.85)).toBe("Balanced");
+    expect(formatConnectionStrength(0.9)).toBe("Strong");
+    expect(formatConnectionStrength(1)).toBe("Strongest only");
+  });
+
+  it("is monotonic — higher cutoff never reads as weaker", () => {
+    const order = ["Show all", "Loose", "Balanced", "Strong", "Strongest only"];
+    let lastRank = -1;
+    for (let v = 0.7; v <= 1.0001; v += 0.05) {
+      const rank = order.indexOf(formatConnectionStrength(Number(v.toFixed(2))));
+      expect(rank).toBeGreaterThanOrEqual(lastRank);
+      lastRank = rank;
+    }
   });
 });

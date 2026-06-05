@@ -130,6 +130,59 @@
   --v2-grid-dot: rgba(236, 231, 223, 0.14);
 }
 
+/* Brain "Galaxy" graph token ramp (P0).
+   Stage-adaptive colors for the WebGL graph canvas — particle/node fills,
+   edge filaments, the dot grid, in-canvas overlay chrome, and the ember
+   nebula. Derived from the --v2-* ink/bg/accent scales so the graph tracks
+   the same dual-stage system as the rest of V2. The engine reads these via
+   getComputedStyle so shaders and instanced materials stay token-driven
+   (BRAND_LAW: no hardcoded hex). */
+:root,
+[data-v2-stage="light"] {
+  --g-bg: rgba(14, 13, 11, 0.88);
+  --g-bg-soft: rgba(14, 13, 11, 0.66);
+  --g-bg-fade: rgba(14, 13, 11, 0.48);
+  --g-bg-wisp: rgba(14, 13, 11, 0.3);
+  --g-edge: rgba(14, 13, 11, 0.2);
+  --g-edge-strong: rgba(14, 13, 11, 0.4);
+  --g-edge-weak: rgba(14, 13, 11, 0.14);
+  --g-bridge: rgba(14, 13, 11, 0.12);
+  --g-grid: rgba(14, 13, 11, 0.06);
+  --g-overlay: rgba(251, 249, 245, 0.92);
+  --g-overlay-stroke: rgba(14, 13, 11, 0.2);
+  --g-label: rgba(14, 13, 11, 0.46);
+  --g-cluster-bubble: rgba(14, 13, 11, 0.04);
+  --g-cluster-bubble-stroke: rgba(14, 13, 11, 0.1);
+  --g-bloom-stop: #0e0d0b;
+}
+
+.dark,
+[data-v2-stage="dark"] {
+  --g-bg: rgba(236, 231, 223, 1);
+  --g-bg-soft: rgba(236, 231, 223, 0.78);
+  --g-bg-fade: rgba(236, 231, 223, 0.62);
+  --g-bg-wisp: rgba(236, 231, 223, 0.4);
+  --g-edge: rgba(236, 231, 223, 0.18);
+  --g-edge-strong: rgba(236, 231, 223, 0.34);
+  --g-edge-weak: rgba(236, 231, 223, 0.12);
+  --g-bridge: rgba(236, 231, 223, 0.1);
+  --g-grid: rgba(236, 231, 223, 0.05);
+  --g-overlay: rgba(19, 17, 16, 0.86);
+  --g-overlay-stroke: rgba(236, 231, 223, 0.18);
+  --g-label: rgba(236, 231, 223, 0.42);
+  --g-cluster-bubble: rgba(236, 231, 223, 0.05);
+  --g-cluster-bubble-stroke: rgba(236, 231, 223, 0.08);
+  --g-bloom-stop: #ece7df;
+}
+
+/* Ember accent is stage-independent — it resolves through the stage-adaptive
+   --v2-accent* tokens, so it is declared once rather than in both blocks. */
+:root {
+  --g-ember: var(--v2-accent);
+  --g-ember-faint: var(--v2-accent-faint);
+  --g-thread: var(--v2-accent-hairline);
+}
+
 .zaki-app-v2,
 .zaki-v2-sheet,
 .zaki-v2-modal-panel {
@@ -2820,7 +2873,9 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
 .zaki-brain-v2__graph-shell {
   display: grid;
-  grid-template-columns: 236px minmax(0, 1fr) 320px;
+  /* Two columns: controls rail + canvas. The selected-memory detail now lives
+     in an on-canvas card (no third rail), so the canvas gets the room. */
+  grid-template-columns: 236px minmax(0, 1fr);
   gap: 1px;
   width: min(100%, 1600px);
   min-height: calc(100dvh - 206px);
@@ -2828,23 +2883,25 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   padding: 18px;
 }
 
-.zaki-brain-v2__filters-rail,
-.zaki-brain-v2__detail-rail {
+.zaki-brain-v2__filters-rail {
   min-width: 0;
   min-height: 0;
   border: 1px solid var(--v2-hairline);
   background: var(--v2-bg);
   overflow: hidden;
-}
-
-.zaki-brain-v2__filters-rail {
   display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
 }
 
-.zaki-brain-v2__filters-rail > aside,
-.zaki-brain-v2__detail-rail > section {
+/* Each rail child sizes to its content and stacks (the rail scrolls). */
+.zaki-brain-v2__filters-rail > * {
+  flex: 0 0 auto;
+}
+
+.zaki-brain-v2__filters-rail > aside {
   width: 100%;
-  height: 100%;
   border: 0;
   border-radius: 0;
   background: var(--v2-bg);
@@ -2893,6 +2950,498 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   color: var(--v2-ink-1);
 }
 
+/* Brain Galaxy display panel — lives in the page filters-rail (not a canvas
+   overlay), above BrainFilterPanel. */
+.zaki-galaxy-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px;
+  background: var(--v2-bg-raised);
+  border: 1px solid var(--v2-hairline);
+  border-radius: var(--v2-r-1);
+  font-family: var(--v2-font-mono);
+}
+.zaki-galaxy-panel__group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.zaki-galaxy-panel__label {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--v2-ink-3);
+}
+.zaki-galaxy-panel__toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.zaki-galaxy-panel__toggle {
+  padding: 3px 8px;
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--v2-ink-3);
+  background: transparent;
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: var(--v2-r-1);
+  cursor: pointer;
+  transition:
+    color 160ms ease-out,
+    border-color 160ms ease-out,
+    background 160ms ease-out;
+}
+.zaki-galaxy-panel__toggle:hover {
+  color: var(--v2-ink-1);
+  border-color: var(--v2-ink-3);
+}
+.zaki-galaxy-panel__toggle[aria-pressed="true"] {
+  color: var(--v2-ink-on-accent);
+  background: var(--v2-accent);
+  border-color: var(--v2-accent);
+}
+.zaki-galaxy-panel__range {
+  width: 100%;
+  accent-color: var(--v2-accent);
+  cursor: pointer;
+}
+.zaki-galaxy-panel__controls {
+  display: flex;
+  gap: 6px;
+}
+.zaki-galaxy-panel__controls .v2-btn {
+  flex: 1;
+}
+
+/* Clusters-first scope breadcrumb (top of the display panel). */
+.zaki-galaxy-panel__scope {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--v2-hairline);
+}
+.zaki-galaxy-panel__scope-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--v2-ink-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zaki-galaxy-panel__scope-hint {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--v2-ink-3);
+}
+.zaki-galaxy-panel__scope-link,
+.zaki-galaxy-panel__scope-back {
+  align-self: flex-start;
+  padding: 0;
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--v2-accent);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.zaki-galaxy-panel__scope-link:hover,
+.zaki-galaxy-panel__scope-back:hover {
+  text-decoration: underline;
+}
+.zaki-galaxy-panel__scope-back {
+  color: var(--v2-ink-3);
+  margin-bottom: 2px;
+}
+
+/* Search-match count overlay on the Explore canvas. */
+.zaki-galaxy-searchcount {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  padding: 4px 12px;
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--v2-ink-1);
+  background: var(--v2-bg-raised);
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+/* WebGL-unavailable fallback (no-GPU / disabled / context-exhausted). */
+.zaki-galaxy-fallback {
+  max-width: 420px;
+  text-align: center;
+  font-family: var(--v2-font-mono);
+}
+.zaki-galaxy-fallback__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--v2-ink-1);
+}
+.zaki-galaxy-fallback__body {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--v2-ink-3);
+}
+
+/* Hover "executive brief" card on the Explore canvas (bottom-left). */
+.zaki-galaxy-brief {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 5;
+  max-width: 340px;
+  padding: 10px 14px;
+  font-family: var(--v2-font-mono);
+  color: var(--v2-ink-1);
+  background: var(--v2-bg-raised);
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: var(--v2-r-2);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+.zaki-galaxy-brief__title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.zaki-galaxy-brief__meta {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--v2-ink-3);
+}
+.zaki-galaxy-brief__hint {
+  margin-top: 6px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--v2-ink-4, var(--v2-ink-3));
+}
+
+/* ── Brain Home — the search-first landing surface ──────────────────────── */
+.zaki-brain-v2__home-slot {
+  width: 100%;
+  margin: 0 auto;
+  max-width: 1100px;
+  padding: 0 16px 48px;
+}
+.zaki-brain-home {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+.zaki-brain-home__search-input {
+  width: 100%;
+  padding: 12px 16px;
+  font-family: var(--v2-font-mono);
+  font-size: 14px;
+  color: var(--v2-ink-1);
+  background: var(--v2-bg-raised);
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: var(--v2-r-2);
+  outline: none;
+}
+.zaki-brain-home__search-input:focus {
+  border-color: var(--v2-accent);
+}
+.zaki-brain-home__section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.zaki-brain-home__heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+}
+.zaki-brain-home__count {
+  padding: 1px 7px;
+  font-size: 10px;
+  color: var(--v2-ink-2);
+  background: var(--v2-bg-raised);
+  border: 1px solid var(--v2-hairline);
+  border-radius: 999px;
+}
+.zaki-brain-home__muted {
+  font-size: 13px;
+  color: var(--v2-ink-3);
+}
+.zaki-brain-home__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+.zaki-brain-home__card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  background: var(--v2-bg-raised);
+  border: 1px solid var(--v2-hairline);
+  border-radius: var(--v2-r-2);
+  transition: border-color 160ms ease-out;
+}
+.zaki-brain-home__card:hover,
+.zaki-brain-home__card.is-expanded {
+  border-color: var(--v2-ink-3);
+}
+.zaki-brain-home__card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.zaki-brain-home__swatch {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.zaki-brain-home__card-title {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--v2-ink-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zaki-brain-home__card-count {
+  flex: 0 0 auto;
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  color: var(--v2-ink-3);
+}
+.zaki-brain-home__tag {
+  padding: 0 5px;
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--v2-ink-3);
+  background: var(--v2-bg);
+  border: 1px solid var(--v2-hairline);
+  border-radius: 3px;
+}
+.zaki-brain-home__sample {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--v2-ink-3);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.zaki-brain-home__members {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.zaki-brain-home__member,
+.zaki-brain-home__feed-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--v2-ink-2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--v2-r-1);
+  cursor: pointer;
+  text-align: left;
+}
+.zaki-brain-home__member:hover,
+.zaki-brain-home__feed-item:hover {
+  color: var(--v2-ink-1);
+  background: var(--v2-bg);
+}
+.zaki-brain-home__feed {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.zaki-brain-home__feed-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zaki-brain-home__drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 40;
+  width: min(420px, 92vw);
+  height: 100vh;
+  padding: 16px;
+  background: var(--v2-bg);
+  border-left: 1px solid var(--v2-hairline-strong);
+  box-shadow: -16px 0 40px rgba(0, 0, 0, 0.4);
+  overflow-y: auto;
+}
+
+/* Brain Galaxy memory detail — shown inside the on-canvas detail card
+   (.zaki-galaxy-card--detail) when a node is focused. */
+.zaki-galaxy-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+  padding: 16px 18px;
+  overflow-y: auto;
+  font-family: var(--v2-font-mono);
+}
+.zaki-galaxy-detail__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.zaki-galaxy-detail__tag {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--v2-ink-3);
+}
+.zaki-galaxy-detail__close {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: var(--v2-r-1);
+  background: transparent;
+  color: var(--v2-ink-3);
+  font-size: 11px;
+  cursor: pointer;
+}
+.zaki-galaxy-detail__close:hover {
+  color: var(--v2-ink-1);
+  border-color: var(--v2-ink-2);
+}
+.zaki-galaxy-detail__muted {
+  font-size: 12px;
+  color: var(--v2-ink-3);
+}
+.zaki-galaxy-detail__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.zaki-galaxy-detail__title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--v2-ink-1);
+}
+.zaki-galaxy-detail__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--v2-ink-3);
+}
+.zaki-galaxy-detail__badge {
+  padding: 1px 6px;
+  border: 1px solid var(--v2-accent-hairline);
+  color: var(--v2-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.zaki-galaxy-detail__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.zaki-galaxy-detail__label {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--v2-ink-3);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--v2-hairline);
+}
+.zaki-galaxy-detail__prose {
+  margin: 0;
+  font-family: var(--v2-font-prose);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--v2-ink-1);
+}
+.zaki-galaxy-detail__quote {
+  margin: 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--v2-hairline-strong);
+  font-family: var(--v2-font-prose);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--v2-ink-2);
+}
+.zaki-galaxy-detail__chain,
+.zaki-galaxy-detail__links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.zaki-galaxy-detail__chain li,
+.zaki-galaxy-detail__links li {
+  font-family: var(--v2-font-prose);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--v2-ink-2);
+}
+.zaki-galaxy-detail__when,
+.zaki-galaxy-detail__rel {
+  display: inline-block;
+  margin-right: 6px;
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--v2-ink-3);
+}
+.zaki-galaxy-detail__rel {
+  color: var(--v2-accent);
+}
+
 .zaki-brain-v2__canvas-frame {
   position: relative;
   min-height: 640px;
@@ -2900,8 +3449,60 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   overflow: hidden;
   border: 1px solid var(--v2-hairline-strong);
   border-radius: 0;
-  background: var(--v2-bg-sunken);
+  /* Fixed dark field — the galaxy canvas is alpha:true, so it shows this
+     through. Keep it dark in BOTH stages (a 3D starfield needs a dark
+     backdrop; the light-stage cream washed the nodes out). */
+  background: #07070a;
   box-shadow: none;
+}
+
+/* Selected-memory detail card on the Explore canvas (bottom-left). Shares the
+   brief's anchor but is interactive (pointer-events) and scrolls — it replaces
+   the old right-side detail rail so the canvas gets the full width. */
+.zaki-galaxy-card {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 6;
+}
+.zaki-galaxy-card--detail {
+  display: flex;
+  flex-direction: column;
+  width: min(380px, calc(100% - 32px));
+  max-height: min(68vh, 620px);
+  background: var(--v2-bg);
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: var(--v2-r-2);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+/* The detail panel fills the card and owns the scroll. */
+.zaki-galaxy-card--detail > .zaki-galaxy-detail {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+
+/* Colour legend under the canvas (moved out of the counter row). */
+.zaki-brain-v2__legend-row {
+  margin-top: 10px;
+}
+
+/* Narrow-screen "Controls" button (opens the display+filters overlay). */
+.zaki-brain-v2__controls-toggle {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 6;
+  padding: 6px 14px;
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--v2-ink-1);
+  background: var(--v2-bg-raised);
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: 999px;
+  cursor: pointer;
 }
 
 .zaki-brain-v2__canvas-controls {
@@ -2931,193 +3532,6 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-}
-
-.zaki-brain-v2__detail-summary {
-  display: flex;
-  flex-direction: column;
-  min-height: 100%;
-}
-
-.zaki-brain-v2__detail-summary > header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px;
-  border-bottom: 1px solid var(--v2-hairline);
-  background: var(--v2-bg-sunken);
-}
-
-.zaki-brain-v2__detail-summary header p {
-  margin-bottom: 5px;
-  color: var(--v2-ink-3);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.zaki-brain-v2__detail-summary h2 {
-  color: var(--v2-ink-1);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.25;
-}
-
-.zaki-brain-v2__detail-summary > p {
-  padding: 14px;
-  color: var(--v2-ink-3);
-  font-family: var(--v2-font-prose);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.zaki-brain-v2__detail-summary ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.zaki-brain-v2__detail-summary li {
-  display: grid;
-  gap: 4px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--v2-hairline-faint);
-}
-
-.zaki-brain-v2__detail-summary li strong {
-  color: var(--v2-ink-1);
-  font-family: var(--v2-font-prose);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-.zaki-brain-v2__detail-summary li span {
-  color: var(--v2-ink-3);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.zaki-brain-v2__memory-detail {
-  display: grid;
-  gap: 12px;
-  margin: 12px;
-  padding: 12px;
-  border: 1px solid var(--v2-hairline);
-  background: var(--v2-bg-sunken);
-}
-
-.zaki-brain-v2__memory-detail-head {
-  display: grid;
-  gap: 5px;
-}
-
-.zaki-brain-v2__memory-detail-head span,
-.zaki-brain-v2__linked-memories > span {
-  color: var(--v2-ink-4);
-  font-family: var(--v2-font-mono);
-  font-size: 9px;
-  line-height: 1.35;
-  text-transform: uppercase;
-}
-
-.zaki-brain-v2__memory-detail-head strong {
-  color: var(--v2-ink-1);
-  font-family: var(--v2-font-mono);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-
-.zaki-brain-v2__memory-detail p,
-.zaki-brain-v2__memory-detail blockquote {
-  margin: 0;
-  color: var(--v2-ink-2);
-  font-family: var(--v2-font-prose);
-  font-size: 12px;
-  line-height: 1.55;
-  overflow-wrap: anywhere;
-}
-
-.zaki-brain-v2__memory-detail blockquote {
-  border-left: 2px solid var(--v2-accent);
-  padding-left: 10px;
-}
-
-.zaki-brain-v2__memory-detail dl {
-  display: grid;
-  gap: 1px;
-  margin: 0;
-  background: var(--v2-hairline-faint);
-}
-
-.zaki-brain-v2__memory-detail dl div {
-  display: grid;
-  grid-template-columns: 76px minmax(0, 1fr);
-  gap: 8px;
-  padding: 7px;
-  background: var(--v2-bg);
-}
-
-.zaki-brain-v2__memory-detail dt,
-.zaki-brain-v2__memory-detail dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.zaki-brain-v2__memory-detail dt {
-  color: var(--v2-ink-4);
-  font-family: var(--v2-font-mono);
-  font-size: 9px;
-  text-transform: uppercase;
-}
-
-.zaki-brain-v2__memory-detail dd {
-  color: var(--v2-ink-2);
-  font-family: var(--v2-font-mono);
-  font-size: 10px;
-}
-
-.zaki-brain-v2__linked-memories ul {
-  margin-top: 8px;
-  border: 1px solid var(--v2-hairline-faint);
-}
-
-.zaki-brain-v2__detail-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.zaki-brain-v2__detail-actions button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 28px;
-  border: 1px solid var(--v2-hairline);
-  padding: 0 9px;
-  color: var(--v2-ink-2);
-  font-family: var(--v2-font-mono);
-  font-size: 9px;
-  text-transform: uppercase;
-}
-
-.zaki-brain-v2__detail-actions button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.zaki-brain-v2 .zaki-brain-v2__detail-rail [data-testid="brain-community-legend"],
-.zaki-brain-v2 .zaki-brain-v2__detail-rail [data-testid="brain-orphan-rail"] {
-  width: 100%;
-  height: 100%;
-  border: 0;
-  border-radius: 0;
-  background: var(--v2-bg);
 }
 
 .zaki-brain-v2 :where(.rounded-full, .rounded-zaki-lg, .rounded-zaki-md, .shadow-md, .shadow-lg, .shadow-2xl) {
@@ -3157,10 +3571,6 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 @media (max-width: 1280px) {
   .zaki-brain-v2__graph-shell {
     grid-template-columns: 220px minmax(0, 1fr);
-  }
-
-  .zaki-brain-v2__detail-rail {
-    display: none;
   }
 }
 

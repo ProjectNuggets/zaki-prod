@@ -97,6 +97,10 @@ export function BrainTimeScrubber({ userId, onHighlightKeys, onPick }: Props) {
           <button
             type="button"
             onClick={() => setAnimating((v) => !v)}
+            aria-pressed={animating}
+            title={t("brain.scrubber.animateHint", {
+              defaultValue: "Replay the last 30 days — memories light up on the graph as they're added or archived.",
+            })}
             className={`rounded-zaki-md border px-2 py-0.5 text-xs transition ${
               animating
                 ? "border-zaki-brand bg-zaki-brand-10 text-zaki-brand"
@@ -125,6 +129,21 @@ export function BrainTimeScrubber({ userId, onHighlightKeys, onPick }: Props) {
           onPick={onPick}
         />
       </div>
+
+      {/* Empty-state caption — without this, a day with no births/deaths shows
+          two bare "—" columns and reads as broken rather than "nothing changed
+          here". Animate cycles the date, so this also explains the quiet days. */}
+      {!diffQuery.isLoading && births.length === 0 && deaths.length === 0 ? (
+        <p className="px-0.5 text-xs text-white/45">
+          {animating
+            ? t("brain.scrubber.emptyAnimating", {
+                defaultValue: "No memories changed on this day — keep watching as the window rewinds.",
+              })
+            : t("brain.scrubber.empty", {
+                defaultValue: "No memories added or archived around this date. Try Animate to scan the last 30 days.",
+              })}
+        </p>
+      ) : null}
     </section>
   );
 }

@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate, useParams } from 'react-router-dom';
 import App from './app/App';
 import { ChatArea } from './app/components/ChatArea';
@@ -7,7 +8,7 @@ import { BillingSuccessPage } from './app/components/BillingSuccessPage';
 import { AdminAccessCodesPage } from './app/components/admin/AdminAccessCodesPage';
 import { HelpPage } from './app/components/HelpPage';
 import { LegalPage } from './app/components/LegalPage';
-import { BrainPage } from './app/components/brain/BrainPage';
+import { SkeletonBrainPage } from './app/components/ui/skeleton';
 import { DesignPage } from './app/components/design/DesignPage';
 import { SettingsPage } from './app/components/settings/SettingsPage';
 import { ProductAccessGate } from './app/components/ProductAccessGate';
@@ -23,6 +24,13 @@ import {
 } from './app/components/MarketingContentPages';
 import { useAuthStore } from './stores';
 import { getCanonicalAppProductRoute } from './lib/productRoutes';
+
+// Brain is the first lazy-loaded route: its WebGL "Galaxy" renderer (three +
+// d3-force-3d) is heavy and only needed on /brain, so it is code-split into
+// its own chunk and loaded on demand behind a Suspense fallback.
+const BrainPage = lazy(() =>
+  import('./app/components/brain/BrainPage').then((m) => ({ default: m.BrainPage })),
+);
 
 function HomeRoute() {
   const token = useAuthStore((state) => state.token);
@@ -221,7 +229,11 @@ export const router = createBrowserRouter([
       },
       {
         path: 'brain',
-        element: <BrainPage />,
+        element: (
+          <Suspense fallback={<SkeletonBrainPage />}>
+            <BrainPage />
+          </Suspense>
+        ),
       },
       {
         path: 'settings',

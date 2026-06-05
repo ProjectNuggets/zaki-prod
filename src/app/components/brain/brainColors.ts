@@ -13,19 +13,26 @@
 // matching Obsidian's restraint. Users who want colors can switch
 // preset; all existing color logic preserved unchanged.
 
-// Canonical brand red. Mirror of CSS `--zaki-brand` so JS contexts that
-// can't resolve CSS vars (cytoscape style configs, canvas renderers)
-// have a single source of truth instead of inlined hex.
-export const BRAND_RED = "#f10202";
+// Canonical molten accent — mirror of V2 `--v2-accent`. Single source of truth
+// for JS contexts (cytoscape configs, WebGL materials) that can't read CSS vars.
+// BRAND_LAW: one accent; reserved for focus / self / the strongest signal.
+export const BRAND_RED = "#d24430";
 
-export type ColorPreset = "mono" | "community" | "link_type" | "kind";
+// "Color by" dimensions. theme = LLM cluster, kind = memory category,
+// recency = how recently learned, status = live vs archived, mono = uniform.
+// (link_type colors edges, not nodes — kept in the union for that path.)
+export type ColorPreset =
+  | "mono"
+  | "community"
+  | "link_type"
+  | "kind"
+  | "recency"
+  | "status";
 
-// V1.11 monochrome canvas — muted gray for all nodes; emphasis comes
-// from border styles (selected/highlighted/center) defined in
-// BrainGraphView.tsx cytoscape stylesheet. Picked to read on a dark
-// canvas (#0a0a0a background) without competing with the red brand
-// accent on selected/center nodes.
-export const MONO_NODE = "#6b7280";
+// P7 brand migration — default node fill is a clean light warm ink (the V2
+// ink-2 ramp), Obsidian-style: a calm monochrome field where the molten accent
+// (focus / self) pops. Additive blending lifts dense clusters into bright cores.
+export const MONO_NODE = "#b8b2a9";
 
 // 12-color qualitative palette (D3 Tableau, color-blind-friendly)
 export const COMMUNITY_PALETTE: readonly string[] = [
@@ -43,14 +50,15 @@ export const COMMUNITY_PALETTE: readonly string[] = [
   "#d37295",
 ];
 
+// P7 brand migration — accent + status + ink ramp only (no purple/pink/blue).
 export const LINK_TYPE_COLOR: Record<string, string> = {
-  preference: "#f10202",
-  attribute: "#3b82f6",
-  supersession: "#a78bfa",
-  relationship: "#10b981",
-  usage: "#f59e0b",
-  synthesis: "#ec4899",
-  episode: "#6b7280",
+  preference: "#d24430", // accent
+  relationship: "#21916f", // success
+  usage: "#c28d2c", // warn
+  attribute: "#b8b2a9", // ink-2
+  supersession: "#807a72", // ink-3
+  synthesis: "#9c968e", // ink-4 (warm)
+  episode: "#565049", // ink-4
 };
 
 // Audit (2026-05-07) — brand-coherent palette + user-language semantics.
@@ -60,10 +68,12 @@ export const LINK_TYPE_COLOR: Record<string, string> = {
 // Replaces a stock-Tailwind palette (#22c55e green / #6b7280 gray) that
 // didn't read as a coherent system. Each color now appears elsewhere
 // in the brand, so legend chips reuse the same tokens visually.
+// P7 brand migration — accent for identity ("core"), warm status/ink for the
+// rest (no teal). `core` = facts about you, daily = recent, conversation = chat.
 export const KIND_COLOR: Record<string, string> = {
-  core: "#f10202",
-  daily: "#219171",
-  conversation: "#B09472",
+  core: "#d24430", // accent (identity)
+  daily: "#c28d2c", // warn / amber (recent activity)
+  conversation: "#9c968e", // warm ink (chat excerpts)
 };
 
 // User-facing labels for kinds. The internal vocabulary (core / daily /
@@ -75,11 +85,49 @@ export const KIND_LABEL: Record<string, string> = {
   conversation: "Conversations",
 };
 
+// Recency — "hot = newly learned" fading to a muted neutral for older memories.
+export type RecencyBucket = "week" | "month" | "older";
+export const RECENCY_COLOR: Record<RecencyBucket, string> = {
+  week: "#d24430", // accent — learned this week
+  month: "#c28d2c", // warn — this month
+  older: "#8a857d", // muted ink — older
+};
+export const RECENCY_LABEL: Record<RecencyBucket, string> = {
+  week: "This week",
+  month: "This month",
+  older: "Older",
+};
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+
+// created_at may be seconds or milliseconds depending on source.
+function toMillis(ts: number): number {
+  return ts < 1e12 ? ts * 1000 : ts;
+}
+export function recencyBucket(createdAt: number, nowMs: number): RecencyBucket {
+  const age = nowMs - toMillis(createdAt);
+  if (age <= WEEK_MS) return "week";
+  if (age <= MONTH_MS) return "month";
+  return "older";
+}
+export function colorForRecency(createdAt: number, nowMs: number): string {
+  return RECENCY_COLOR[recencyBucket(createdAt, nowMs)];
+}
+
+// Status — live knowledge vs superseded/archived (valid_to set).
+export const STATUS_COLOR = { live: "#b8b2a9", archived: "#57534e" } as const;
+export const STATUS_LABEL = { live: "Live", archived: "Archived" } as const;
+export function colorForStatus(stale: boolean): string {
+  return stale ? STATUS_COLOR.archived : STATUS_COLOR.live;
+}
+
+// P7 brand migration — ink ramp + accent (no blue/brown/purple). The galaxy
+// engine draws edges from the --g-edge tokens; this is the cytoscape path.
 export const EDGE_COLOR: Record<string, string> = {
-  semantic: "#7b9fd4",
-  reference: "#a89070",
-  session: "#7a7a8a",
-  typed: "#c084fc",
+  typed: "#d24430", // accent (explicit predicate)
+  semantic: "#807a72", // ink-3
+  reference: "#565049", // ink-4
+  session: "#565049", // ink-4
 };
 
 const FALLBACK_NODE = "#6b7280";

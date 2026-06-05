@@ -1,25 +1,38 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Boxes, CircleDot, Copy, ExternalLink, Shield, SlidersHorizontal, X } from "lucide-react";
+import { Shield, X } from "lucide-react";
 import { useAuthStore } from "@/stores";
 import { useBrainGraph, useBrainMe } from "@/queries";
 import { SkeletonBrainPage } from "@/app/components/ui/skeleton";
 import { BrainEmptyState } from "./BrainEmptyState";
 import { BrainSemanticDegradedBanner } from "./BrainSemanticDegradedBanner";
-import { BrainGraphView } from "./BrainGraphView";
-import { BrainTimelineView } from "./BrainTimelineView";
+import { BrainGalaxyView, type GalaxyScope } from "./galaxy/BrainGalaxyView";
+import { BrainHome } from "./galaxy/BrainHome";
+import { BrainDisplayPanel } from "./galaxy/BrainDisplayPanel";
+import { DEFAULT_FX } from "./galaxy/engine/lod";
+import type { GalaxyHandle } from "./galaxy/GalaxyRenderer";
+import type { BrainViewMode, RenderQuality } from "./galaxy/engine/interface";
 import { BrainComposeModal } from "./BrainComposeModal";
 import { BrainFilterPanel, DEFAULT_FILTERS, type BrainFilters } from "./BrainFilterPanel";
-import { BrainOrphanRail } from "./BrainOrphanRail";
-import { BrainCommunityLegend } from "./BrainCommunityLegend";
 import { BrainTimeScrubber } from "./BrainTimeScrubber";
 import { BrainInsightsStrip } from "./BrainInsightsStrip";
-import { KIND_COLOR, KIND_LABEL } from "./brainColors";
-import { V2Badge, V2StatusStrip, V2Tabs } from "@/app/components/v2";
-import { fetchBrainMemory, type BrainGraphNode, type BrainMemoryDetail } from "@/lib/api";
+import {
+  colorForCommunity,
+  KIND_COLOR,
+  KIND_LABEL,
+  RECENCY_COLOR,
+  RECENCY_LABEL,
+  recencyBucket,
+  STATUS_COLOR,
+  STATUS_LABEL,
+  type ColorPreset,
+  type RecencyBucket,
+} from "./brainColors";
+import { V2StatusStrip, V2Tabs } from "@/app/components/v2";
 
-type BrainTab = "timeline" | "graph";
+// Two surfaces: Home (overview + timeline) and Explore (the 3D graph).
+type BrainTab = "home" | "explore";
 
 // V1.11 (2026-05-07) — Brain page UX rework. Pre-V1.11 the graph tab
 // rendered three always-visible columns (filter panel, canvas, side
@@ -45,22 +58,24 @@ const SEARCH_DEBOUNCE_MS = 250;
 // governance Settings deep-link in the DOM/accessibility tree. This hook makes
 // the rail and overlay mutually exclusive, matching the CSS breakpoint. It is
 // test-safe: jsdom has no matchMedia, so it reports "not narrow" (overlay off).
-const BRAIN_NARROW_QUERY = "(max-width: 900px)";
-
-function useBrainNarrow() {
-  const [narrow, setNarrow] = useState(false);
+function useMediaMatch(query: string): boolean {
+  const [matches, setMatches] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
       return;
     }
-    const mql = window.matchMedia(BRAIN_NARROW_QUERY);
-    const onChange = () => setNarrow(mql.matches);
+    const mql = window.matchMedia(query);
+    const onChange = () => setMatches(mql.matches);
     onChange();
     mql.addEventListener("change", onChange);
     return () => mql.removeEventListener("change", onChange);
-  }, []);
-  return narrow;
+  }, [query]);
+  return matches;
 }
+
+// < 900px: rail hidden → use the controls overlay. ≤ 1280px: detail rail hidden
+// → show the focused memory in a drawer instead.
+const useBrainNarrow = () => useMediaMatch("(max-width: 900px)");
 
 export function BrainPage() {
   const { t } = useTranslation();
@@ -73,20 +88,19 @@ export function BrainPage() {
   // URL on mount so a refresh / shared link / browser back lands on the
   // same view. State changes write back to the URL via setSearchParams
   // with replace:true so we don't pollute history.
-  const initialTab: BrainTab =
-    searchParams.get("tab") === "timeline" ? "timeline" : "graph";
+  //
+  // Two surfaces: Home (overview + timeline merged) and Explore (the graph).
+  // legacy ?tab=graph/timeline deep-links resolve to Explore/Home.
+  const initialTab: BrainTab = (() => {
+    const requested = searchParams.get("tab");
+    if (requested === "explore" || requested === "graph") return "explore";
+    return "home";
+  })();
   const initialPanel: ActivePanel = (() => {
     const p = searchParams.get("panel");
     return p === "filters" || p === "clusters" || p === "orphans" ? p : null;
   })();
-  const initialCenter = searchParams.get("center");
   const initialQ = searchParams.get("q") ?? "";
-  const initialCommunity = (() => {
-    const v = searchParams.get("community");
-    if (!v) return null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  })();
 
   const [tab, setTab] = useState<BrainTab>(initialTab);
   const [degradedDismissed, setDegradedDismissed] = useState(false);
@@ -102,9 +116,7 @@ export function BrainPage() {
 
   // V1.7 graph state
   const [filters, setFilters] = useState<BrainFilters>(DEFAULT_FILTERS);
-  const [centerKey, setCenterKey] = useState<string | null>(initialCenter);
   const [highlightKeys, setHighlightKeys] = useState<string[]>([]);
-  const [selectedCommunityId, setSelectedCommunityId] = useState<number | null>(initialCommunity);
   // V1.11 — floating-overlay panel toggle (Obsidian Graph View pattern).
   // null = canvas-only (default); set by clicking a corner icon.
   const [activePanel, setActivePanel] = useState<ActivePanel>(initialPanel);
@@ -116,61 +128,37 @@ export function BrainPage() {
     return () => window.clearTimeout(id);
   }, [searchQuery]);
 
-  // State -> URL sync. Graph is the V2 default, so only timeline needs an
-  // explicit tab marker. replace:true keeps the back button useful.
+  // State -> URL sync. Home is the default tab (implicit); Explore gets a
+  // marker. replace:true keeps the back button useful.
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
-    if (tab === "timeline") next.set("tab", "timeline"); else next.delete("tab");
+    if (tab !== "home") next.set("tab", tab); else next.delete("tab");
     if (debouncedSearch) next.set("q", debouncedSearch); else next.delete("q");
     if (activePanel) next.set("panel", activePanel); else next.delete("panel");
-    if (centerKey) next.set("center", centerKey); else next.delete("center");
-    if (selectedCommunityId != null) next.set("community", String(selectedCommunityId));
-    else next.delete("community");
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, debouncedSearch, activePanel, centerKey, selectedCommunityId]);
+  }, [tab, debouncedSearch, activePanel]);
 
-  // Keyboard shortcuts on the graph tab. Linear/Obsidian-grade affordance:
-  // f/c/o toggle the panel cluster, Esc collapses the active panel or
-  // exits local-graph mode, "/" focuses the search input. Skipped while
-  // any input/textarea has focus so typing the letters works normally.
+  // Keyboard shortcut on the Explore tab: "/" focuses search. (Hold Shift +
+  // drag to spin the 3D graph — handled in the engine.)
   useEffect(() => {
-    if (tab !== "graph") return;
+    if (tab !== "explore") return;
     const handler = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const inEditable =
         !!target?.closest?.("input, textarea, [contenteditable='true']");
-      if (event.key === "Escape") {
-        if (activePanel) {
-          event.preventDefault();
-          setActivePanel(null);
-        } else if (centerKey) {
-          event.preventDefault();
-          setCenterKey(null);
-        }
-        return;
-      }
       if (inEditable) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (event.key === "f") {
-        event.preventDefault();
-        setActivePanel((p) => (p === "filters" ? null : "filters"));
-      } else if (event.key === "c") {
-        event.preventDefault();
-        setActivePanel((p) => (p === "clusters" ? null : "clusters"));
-      } else if (event.key === "o") {
-        event.preventDefault();
-        setActivePanel((p) => (p === "orphans" ? null : "orphans"));
-      } else if (event.key === "/") {
+      if (event.key === "/") {
         event.preventDefault();
         searchInputRef.current?.focus();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [tab, activePanel, centerKey]);
+  }, [tab]);
 
   const effectiveFilters = useMemo<BrainFilters>(
     () => ({ ...filters, search: debouncedSearch }),
@@ -180,9 +168,15 @@ export function BrainPage() {
   const navigate = useNavigate();
   // Initial probe to detect empty corpus + degraded state. Uses the same
   // filter args the graph view will use so the cache is warm.
+  // MUST mirror BrainGalaxyView's useBrainGraph args EXACTLY (including
+  // link_types) so the React Query keys match → one shared fetch. If they
+  // diverge, the page makes a second, unfiltered fetch and the "Showing N of M"
+  // counter + legend (read off this query) disagree with what the canvas draws.
   const initialGraphQuery = useBrainGraph(userId, {
     max_nodes: effectiveFilters.maxNodes,
     exclude_orphans: effectiveFilters.excludeOrphans,
+    link_types:
+      effectiveFilters.linkTypes.length > 0 ? effectiveFilters.linkTypes.join(",") : undefined,
     semantic_min_weight: effectiveFilters.semanticEdgeThreshold,
   });
 
@@ -193,6 +187,30 @@ export function BrainPage() {
   // the test corpus); for now it's a visible self-marker only.
   const meQuery = useBrainMe(userId);
   const selfKey = meQuery.data?.key ?? null;
+
+  // Galaxy view state lives here (not inside the renderer) so its chrome uses
+  // the page's real slots: the display panel in the filters-rail, the memory
+  // detail in the detail-rail.
+  const [galaxyView, setGalaxyView] = useState<BrainViewMode>("spatial");
+  const [galaxyFx, setGalaxyFx] = useState<RenderQuality>(DEFAULT_FX);
+  const [galaxyDepth, setGalaxyDepth] = useState(1);
+  // focusId drives the engine ember; the detail card resolves the memory key
+  // itself (from the same graph the galaxy renders, link_types applied), so the
+  // page only needs to track which node is focused.
+  const [galaxyFocusId, setGalaxyFocusId] = useState<string | null>(null);
+  const galaxyRef = useRef<GalaxyHandle>(null);
+  const toggleGalaxyFx = useCallback((key: keyof RenderQuality) => {
+    setGalaxyFx((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+  const handleGalaxyFocus = useCallback((id: string | null) => {
+    setGalaxyFocusId(id);
+  }, []);
+  // Clusters-first: land on the cluster-hub overview, not the full hairball.
+  const [galaxyScope, setGalaxyScope] = useState<GalaxyScope>({ kind: "overview" });
+  const changeGalaxyScope = useCallback((scope: GalaxyScope) => {
+    setGalaxyScope(scope);
+    setGalaxyFocusId(null);
+  }, []);
 
   const selectedNodes = useMemo(
     () =>
@@ -219,9 +237,22 @@ export function BrainPage() {
     return <BrainEmptyState onMigrate={() => navigate("/")} />;
   }
 
+  // Memory key → node id. The galaxy focuses by node id, but the time scrubber
+  // (and timeline) hand us memory keys. Built from the page's graph fetch.
+  const nodeIdByKey = new Map<string, string>();
+  for (const n of initialGraphQuery.data?.nodes ?? []) {
+    nodeIdByKey.set(n.id, n.id);
+    if (n.key) nodeIdByKey.set(n.key, n.id);
+  }
+
+  // Clicking a memory in the time scrubber takes you to it: open the full galaxy
+  // (so the node is actually on screen) and focus it — that seeds the ember and
+  // opens the detail card. (Previously this only mutated the URL: a dead click.)
   const handlePickKey = (key: string) => {
-    setCenterKey(key);
-    setSelectedCommunityId(null);
+    const id = nodeIdByKey.get(key) ?? key;
+    setTab("explore");
+    setGalaxyScope({ kind: "all" });
+    setGalaxyFocusId(id);
   };
 
   return (
@@ -301,7 +332,7 @@ export function BrainPage() {
           </div>
         )}
 
-        <BrainInsightsStrip userId={userId} />
+        <BrainInsightsStrip userId={userId} total={totalNodes} />
 
         <V2Tabs
           ariaLabel={t("brain.tabs.ariaLabel", { defaultValue: "Brain views" })}
@@ -309,15 +340,19 @@ export function BrainPage() {
           onChange={setTab}
           fullWidth
           options={[
-            { id: "timeline", label: t("brain.tabs.timeline") },
-            { id: "graph", label: t("brain.tabs.graph"), count: initialGraphQuery.data?.nodes?.length ?? 0 },
+            { id: "home", label: t("brain.tabs.home", { defaultValue: "Home" }) },
+            { id: "explore", label: t("brain.tabs.explore", { defaultValue: "Explore" }) },
           ]}
         />
       </div>
 
-      {tab === "timeline" ? (
-        <div className="zaki-brain-v2__timeline" data-testid="brain-timeline-slot">
-          <BrainTimelineView userId={userId} />
+      {tab === "home" ? (
+        <div className="zaki-brain-v2__home-slot" data-testid="brain-home-slot">
+          <BrainHome
+            userId={userId}
+            graph={initialGraphQuery.data}
+            graphLoading={initialGraphQuery.isLoading}
+          />
         </div>
       ) : (
         /*
@@ -334,6 +369,18 @@ export function BrainPage() {
         */
         <div data-testid="brain-graph-slot" className="zaki-brain-v2__graph-shell">
           <aside className="zaki-brain-v2__filters-rail" aria-label={t("brain.panel.filters", { defaultValue: "Filters" })}>
+            <BrainDisplayPanel
+              view={galaxyView}
+              onViewChange={setGalaxyView}
+              fx={galaxyFx}
+              onToggleFx={toggleGalaxyFx}
+              depth={galaxyDepth}
+              onDepthChange={setGalaxyDepth}
+              hasFocus={galaxyFocusId != null}
+              onFit={() => galaxyRef.current?.fit()}
+              scope={galaxyScope}
+              onScopeChange={changeGalaxyScope}
+            />
             <BrainFilterPanel filters={filters} onChange={setFilters} />
           </aside>
           <section className="zaki-brain-v2__graph-main">
@@ -446,9 +493,6 @@ export function BrainPage() {
                 );
               })()}
             </div>
-            {filters.colorPreset === "kind" ? (
-              <KindLegend nodes={initialGraphQuery.data?.nodes ?? []} />
-            ) : null}
           </div>
 
           {/* Time scrubber row */}
@@ -481,60 +525,50 @@ export function BrainPage() {
             Now the graph claims the whole viewport.
           */}
           <div className="zaki-brain-v2__canvas-frame">
-            <BrainGraphView
+            <BrainGalaxyView
+              ref={galaxyRef}
               userId={userId}
               selectedIds={selectedNodeIds}
               onSelectionChange={setSelectedNodeIds}
               filters={effectiveFilters}
-              highlightKeys={highlightKeys}
-              selectedCommunityId={selectedCommunityId}
-              centerKey={centerKey}
-              onCenterKeyChange={setCenterKey}
               selfKey={selfKey}
+              highlightKeys={highlightKeys}
+              view={galaxyView}
+              fx={galaxyFx}
+              depth={galaxyDepth}
+              focusId={galaxyFocusId}
+              onFocusChange={handleGalaxyFocus}
+              scope={galaxyScope}
+              onScopeChange={changeGalaxyScope}
             />
 
-            {/* Top-right floating control cluster */}
-            <div className="zaki-brain-v2__canvas-controls">
-              <span className="zaki-brain-v2__filters-toggle">
-                <PanelToggle
-                  icon={SlidersHorizontal}
-                  label={t("brain.panel.filters", { defaultValue: "Filters" })}
-                  shortcut="F"
-                  active={activePanel === "filters"}
-                  onClick={() =>
-                    setActivePanel(activePanel === "filters" ? null : "filters")
-                  }
-                />
-              </span>
-              <PanelToggle
-                icon={Boxes}
-                label={t("brain.panel.clusters", { defaultValue: "Clusters" })}
-                shortcut="C"
-                active={activePanel === "clusters"}
-                onClick={() =>
-                  setActivePanel(activePanel === "clusters" ? null : "clusters")
-                }
-              />
-              <PanelToggle
-                icon={CircleDot}
-                label={t("brain.panel.orphans", { defaultValue: "Loose facts" })}
-                shortcut="O"
-                active={activePanel === "orphans"}
-                onClick={() =>
-                  setActivePanel(activePanel === "orphans" ? null : "orphans")
-                }
-              />
-            </div>
-
-            {/*
-              Floating overlay panels — only one shown at a time. The filters
-              overlay renders ONLY on narrow viewports; above 900px the
-              always-visible filters rail is the single source of truth, so
-              rendering the overlay too would duplicate the SCOPE block and the
-              governance Settings deep-link (see useBrainNarrow above).
-            */}
+            {/* Narrow screens: the rail is hidden < 900px, so surface a single
+                "Controls" button that opens the full controls (display + filters)
+                in an overlay. (Without this, mobile has no graph controls.) */}
+            {isNarrow && activePanel !== "filters" && (
+              <button
+                type="button"
+                className="zaki-brain-v2__controls-toggle"
+                onClick={() => setActivePanel("filters")}
+                data-testid="brain-controls-toggle"
+              >
+                {t("brain.panel.controls", { defaultValue: "Controls" })}
+              </button>
+            )}
             {activePanel === "filters" && isNarrow && (
               <FloatingOverlay onClose={() => setActivePanel(null)}>
+                <BrainDisplayPanel
+                  view={galaxyView}
+                  onViewChange={setGalaxyView}
+                  fx={galaxyFx}
+                  onToggleFx={toggleGalaxyFx}
+                  depth={galaxyDepth}
+                  onDepthChange={setGalaxyDepth}
+                  hasFocus={galaxyFocusId != null}
+                  onFit={() => galaxyRef.current?.fit()}
+                  scope={galaxyScope}
+                  onScopeChange={changeGalaxyScope}
+                />
                 <BrainFilterPanel filters={filters} onChange={setFilters} />
               </FloatingOverlay>
             )}
@@ -573,62 +607,25 @@ export function BrainPage() {
               setSelectedNodeIds([]);
             }}
           />
+
+          {/* Colour legend sits UNDER the canvas (was above). The selected
+              memory's detail shows in the on-canvas card, so there's no right
+              rail — the canvas gets the full width. */}
+          {filters.colorPreset !== "mono" ? (
+            <div className="zaki-brain-v2__legend-row">
+              <BrainColorLegend
+                colorPreset={filters.colorPreset}
+                nodes={initialGraphQuery.data?.nodes ?? []}
+              />
+            </div>
+          ) : null}
           </section>
-          <aside className="zaki-brain-v2__detail-rail" aria-label={t("brain.panel.detail", { defaultValue: "Memory detail" })}>
-            {activePanel === "clusters" ? (
-              <BrainCommunityLegend
-                userId={userId}
-                selectedCommunityId={selectedCommunityId}
-                onSelectCommunity={setSelectedCommunityId}
-              />
-            ) : activePanel === "orphans" ? (
-              <BrainOrphanRail userId={userId} onPick={handlePickKey} />
-            ) : (
-              <BrainDetailSummary
-                userId={userId}
-                nodes={selectedNodes}
-                centerKey={centerKey}
-                selectedCommunityId={selectedCommunityId}
-                onOpenMemorySettings={() => navigate("/settings#settings-memory-data")}
-              />
-            )}
-          </aside>
         </div>
       )}
     </div>
   );
 }
 
-// V1.11 (2026-05-07) — Floating control button used inside the canvas
-// to toggle overlay panels. Inherits the canvas's pointer-events:none
-// cluster and re-enables for itself; lives in a small dark-tinted
-// chip with a red-accent active state matching the rest of the page.
-interface PanelToggleProps {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  shortcut?: string;
-}
-
-function PanelToggle({ icon: Icon, label, active, onClick, shortcut }: PanelToggleProps) {
-  const tooltip = shortcut ? `${label} (${shortcut})` : label;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={tooltip}
-      title={tooltip}
-      className={`pointer-events-auto flex size-9 items-center justify-center rounded-[2px] border transition-colors ${
-        active
-          ? "border-zaki-brand-60 bg-zaki-brand-15 text-zaki-brand"
-          : "border-white/10 bg-zaki-raised/90 text-white/60 hover:border-white/20 hover:text-white"
-      }`}
-    >
-      <Icon className="size-4" />
-    </button>
-  );
-}
 
 // V1.11 (2026-05-07) — Wraps the existing side-panel components (filter,
 // clusters, orphans) as a floating right-anchored overlay inside the
@@ -659,232 +656,94 @@ function FloatingOverlay({ onClose, children }: FloatingOverlayProps) {
   );
 }
 
-function formatBrainTimestamp(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    const millis = value < 10_000_000_000 ? value * 1000 : value;
-    return new Date(millis).toLocaleString();
-  }
-  if (typeof value === "string" && value.trim()) {
-    const numeric = Number(value);
-    const date = Number.isFinite(numeric)
-      ? new Date(numeric < 10_000_000_000 ? numeric * 1000 : numeric)
-      : new Date(value);
-    return Number.isNaN(date.getTime()) ? "unknown" : date.toLocaleString();
-  }
-  return "unknown";
-}
-
-function BrainDetailSummary({
-  userId,
-  nodes,
-  centerKey,
-  selectedCommunityId,
-  onOpenMemorySettings,
-}: {
-  userId: string;
-  nodes: BrainGraphNode[];
-  centerKey: string | null;
-  selectedCommunityId: number | null;
-  onOpenMemorySettings: () => void;
-}) {
-  const { t } = useTranslation();
-  const hasSelection = nodes.length > 0;
-  const activeNode = nodes[0] ?? null;
-  const activeKey = activeNode?.id || centerKey || null;
-  const [detail, setDetail] = useState<BrainMemoryDetail | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!userId || !activeKey) {
-      setDetail(null);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-    let active = true;
-    setLoading(true);
-    setError(null);
-    void fetchBrainMemory(userId, activeKey)
-      .then((memory) => {
-        if (active) setDetail(memory);
-      })
-      .catch((cause) => {
-        if (!active) return;
-        setDetail(null);
-        setError(cause instanceof Error ? cause.message : "memory_detail_unavailable");
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [activeKey, userId]);
-
-  const copyMemoryKey = async () => {
-    const key = detail?.key || activeKey;
-    if (!key || typeof navigator === "undefined" || !navigator.clipboard) return;
-    try {
-      await navigator.clipboard.writeText(key);
-    } catch {
-      // Clipboard access can be denied by the browser; the Brain detail panel should stay stable.
-    }
-  };
-
-  return (
-    <section className="zaki-brain-v2__detail-summary">
-      <header>
-        <div>
-          <p>{t("brain.detail.title", { defaultValue: "Selection" })}</p>
-          <h2>
-            {hasSelection
-              ? t("brain.detail.selectedCount", {
-                  defaultValue: "{{count}} selected",
-                  count: nodes.length,
-                })
-              : t("brain.detail.noSelection", { defaultValue: "No memory selected" })}
-          </h2>
-        </div>
-        {selectedCommunityId != null ? (
-          <V2Badge tone="accent">
-            {t("brain.detail.community", {
-              defaultValue: "Cluster {{id}}",
-              id: selectedCommunityId,
-            })}
-          </V2Badge>
-        ) : centerKey ? (
-          <V2Badge tone="accent">
-            {t("brain.detail.localGraph", { defaultValue: "Local graph" })}
-          </V2Badge>
-        ) : null}
-      </header>
-      {hasSelection ? (
-        <>
-          <ul>
-            {nodes.slice(0, 6).map((node) => (
-              <li key={node.id}>
-                <strong>{node.display_label || node.summary}</strong>
-                <span>{node.kind}</span>
-              </li>
-            ))}
-          </ul>
-          <div className="zaki-brain-v2__memory-detail" data-testid="brain-memory-detail">
-            {loading ? (
-              <p>{t("brain.detail.loading", { defaultValue: "Loading memory provenance..." })}</p>
-            ) : error ? (
-              <p>{t("brain.detail.error", { defaultValue: "Memory detail unavailable" })}: {error}</p>
-            ) : detail ? (
-              <>
-                <div className="zaki-brain-v2__memory-detail-head">
-                  <span>{detail.kind}</span>
-                  <strong>{detail.summary || detail.content || detail.id}</strong>
-                </div>
-                {detail.content && detail.content !== detail.summary ? (
-                  <p>{detail.content}</p>
-                ) : null}
-                <dl>
-                  <div>
-                    <dt>{t("brain.detail.key", { defaultValue: "Key" })}</dt>
-                    <dd>{detail.key || detail.id}</dd>
-                  </div>
-                  <div>
-                    <dt>{t("brain.detail.session", { defaultValue: "Session" })}</dt>
-                    <dd>{detail.session_id || "not recorded"}</dd>
-                  </div>
-                  <div>
-                    <dt>{t("brain.detail.created", { defaultValue: "Created" })}</dt>
-                    <dd>{formatBrainTimestamp(detail.created_at)}</dd>
-                  </div>
-                  <div>
-                    <dt>{t("brain.detail.confidence", { defaultValue: "Confidence" })}</dt>
-                    <dd>
-                      {typeof detail.confidence_score === "number"
-                        ? `${Math.round(detail.confidence_score * 100)}%`
-                        : "not scored"}
-                    </dd>
-                  </div>
-                </dl>
-                {detail.source?.snippet ? (
-                  <blockquote>{detail.source.snippet}</blockquote>
-                ) : null}
-                {detail.linked_memories?.length ? (
-                  <div className="zaki-brain-v2__linked-memories">
-                    <span>{t("brain.detail.linked", { defaultValue: "Linked memories" })}</span>
-                    <ul>
-                      {detail.linked_memories.slice(0, 5).map((memory, index) => (
-                        <li key={`${memory.id || memory.summary}-${index}`}>
-                          <strong>{memory.link_type}</strong>
-                          <small>{memory.summary}</small>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                <div className="zaki-brain-v2__detail-actions">
-                  <button type="button" onClick={() => void copyMemoryKey()}>
-                    <Copy className="size-3.5" aria-hidden />
-                    {t("brain.detail.copyKey", { defaultValue: "Copy key" })}
-                  </button>
-                  {detail.session_id ? (
-                    <button type="button" disabled>
-                      <ExternalLink className="size-3.5" aria-hidden />
-                      {t("brain.detail.openSession", { defaultValue: "Open session" })}
-                    </button>
-                  ) : null}
-                  <button type="button" onClick={onOpenMemorySettings}>
-                    <Shield className="size-3.5" aria-hidden />
-                    {t("brain.detail.memorySettings", { defaultValue: "Memory settings" })}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <p>{t("brain.detail.pickOne", { defaultValue: "Select a memory to inspect provenance." })}</p>
-            )}
-          </div>
-        </>
-      ) : (
-        <p>
-          {t("brain.detail.emptyHelper", {
-            defaultValue:
-              "Select memories on the canvas, open clusters, or inspect loose facts without leaving the graph.",
-          })}
-        </p>
-      )}
-    </section>
-  );
-}
-
 // Audit (2026-05-07) — Kind legend chips. Translates internal node-kind
 // vocabulary (core / daily / conversation) into life categories. The
 // color dot mirrors what the canvas paints, so users connect color to
 // meaning at a glance. Order is fixed (core first because it's the
 // "you" identity layer); kinds with zero visible nodes hide so the
 // strip stays compact on narrow viewports.
-function KindLegend({ nodes }: { nodes: Array<{ kind?: string }> }) {
-  const counts: Record<string, number> = {};
-  for (const n of nodes) {
-    const k = String(n.kind || "");
-    if (!k) continue;
-    counts[k] = (counts[k] || 0) + 1;
+// Legend for the active "Color by" dimension — turns the colors into meaning.
+// Derives entries from the rendered nodes (kinds/communities present, recency
+// buckets, live/archived counts) so the swatches always match what's on screen.
+type LegendNode = {
+  kind?: string;
+  community_id?: number | null;
+  community_name?: string | null;
+  created_at?: number;
+  valid_to?: number | null;
+};
+const LEGEND_CODENAME = /\b(nullalis|null[\s_-]?alis|panther|neptune)\b/i;
+
+function legendItems(
+  colorPreset: ColorPreset,
+  nodes: LegendNode[],
+): Array<{ key: string; color: string; label: string; count: number }> {
+  if (colorPreset === "kind") {
+    const counts: Record<string, number> = {};
+    for (const n of nodes) {
+      const k = String(n.kind || "");
+      if (k) counts[k] = (counts[k] || 0) + 1;
+    }
+    return ["core", "daily", "conversation"]
+      .filter((k) => (counts[k] ?? 0) > 0)
+      .map((k) => ({ key: k, color: KIND_COLOR[k] ?? "#6b7280", label: KIND_LABEL[k] ?? k, count: counts[k]! }));
   }
-  const order = ["core", "daily", "conversation"];
-  const visible = order.filter((k) => (counts[k] ?? 0) > 0);
-  if (visible.length === 0) return null;
+  if (colorPreset === "recency") {
+    const now = Date.now();
+    const counts: Record<RecencyBucket, number> = { week: 0, month: 0, older: 0 };
+    for (const n of nodes) if (typeof n.created_at === "number") counts[recencyBucket(n.created_at, now)]++;
+    return (["week", "month", "older"] as RecencyBucket[])
+      .filter((b) => counts[b] > 0)
+      .map((b) => ({ key: b, color: RECENCY_COLOR[b], label: RECENCY_LABEL[b], count: counts[b] }));
+  }
+  if (colorPreset === "status") {
+    let live = 0;
+    let archived = 0;
+    for (const n of nodes) (n.valid_to != null ? archived++ : live++);
+    const out: Array<{ key: string; color: string; label: string; count: number }> = [];
+    if (live) out.push({ key: "live", color: STATUS_COLOR.live, label: STATUS_LABEL.live, count: live });
+    if (archived)
+      out.push({ key: "archived", color: STATUS_COLOR.archived, label: STATUS_LABEL.archived, count: archived });
+    return out;
+  }
+  if (colorPreset === "community") {
+    const map = new Map<number, { name: string; count: number }>();
+    for (const n of nodes) {
+      const c = n.community_id;
+      if (c == null) continue;
+      const cur = map.get(c) ?? { name: n.community_name || "", count: 0 };
+      cur.count++;
+      if (n.community_name) cur.name = n.community_name;
+      map.set(c, cur);
+    }
+    // The legend highlights real LLM-named themes; "Cluster 19716777" fallbacks
+    // (and internal codenames) are still colored on the canvas but skipped here.
+    const isFallback = (name: string) =>
+      !name || /^Cluster \d+$/.test(name) || LEGEND_CODENAME.test(name);
+    return [...map.entries()]
+      .filter(([, v]) => !isFallback(v.name))
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 8)
+      .map(([id, v]) => ({ key: String(id), color: colorForCommunity(id), label: v.name, count: v.count }));
+  }
+  return [];
+}
+
+function BrainColorLegend({ colorPreset, nodes }: { colorPreset: ColorPreset; nodes: LegendNode[] }) {
+  const items = legendItems(colorPreset, nodes);
+  if (items.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {visible.map((k) => (
+    <div className="flex flex-wrap items-center gap-2" data-testid="brain-color-legend">
+      {items.map((it) => (
         <span
-          key={k}
+          key={it.key}
           className="inline-flex items-center gap-1.5 rounded-[2px] border border-zaki-border bg-zaki-raised/60 px-2 py-0.5"
         >
-          <span
-            className="size-2 rounded-[1px]"
-            style={{ backgroundColor: KIND_COLOR[k] ?? "#6b7280" }}
-            aria-hidden="true"
-          />
-          <span className="text-zaki-text">{KIND_LABEL[k] ?? k}</span>
-          <span className="font-mono-ui text-zaki-muted">{counts[k]}</span>
+          <span className="size-2 rounded-[1px]" style={{ backgroundColor: it.color }} aria-hidden="true" />
+          <span className="max-w-[140px] truncate text-zaki-text" title={it.label}>
+            {it.label}
+          </span>
+          <span className="font-mono-ui text-zaki-muted">{it.count}</span>
         </span>
       ))}
     </div>

@@ -5,11 +5,19 @@
 // instance reads the same state to recompute layout / styles.
 
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
-import { ArrowUpRight } from "lucide-react";
 import { BRAIN_LINK_TYPES } from "@/lib/api";
 import type { ColorPreset } from "./brainColors";
 import { LINK_TYPE_COLOR } from "./brainColors";
+
+// "Color by" dimensions surfaced in the rail (link_type colors edges, not nodes,
+// so it isn't offered here). Theme leads — it's the default and most legible.
+const COLOR_BY_OPTIONS: ReadonlyArray<{ id: ColorPreset; label: string }> = [
+  { id: "community", label: "Theme" },
+  { id: "kind", label: "Kind" },
+  { id: "recency", label: "Recency" },
+  { id: "status", label: "Status" },
+  { id: "mono", label: "Mono" },
+];
 
 export interface BrainFilters {
   excludeOrphans: boolean;
@@ -35,30 +43,47 @@ export interface BrainFilters {
   // display
   textFadeThreshold: number; // 0..1 zoom
   nodeSizeScale: number; // multiplier
-  linkThickness: number; // multiplier
 }
 
 export const DEFAULT_FILTERS: BrainFilters = {
   excludeOrphans: true,
   linkTypes: [],
   search: "",
-  maxNodes: 50,
+  // P8 uncap — show the whole personal brain by default (the old 50 showed ~1%
+  // of a 4.6k-node corpus). WebGL handles thousands of instanced nodes; LOD +
+  // the backend safety cap (≤8000) govern the ceiling.
+  maxNodes: 2000,
   // Audit (2026-05-07) — flipped default from "mono" to "kind". Mono is
   // Obsidian-style visual restraint, but Obsidian users have manually
   // organized vaults; ZAKI users haven't organized anything. Color by
   // kind gives them organization for free — facts about you (red),
   // recent activity (teal), conversation excerpts (warm neutral). The
   // mono preset is still available as a deliberate aesthetic choice.
-  colorPreset: "kind",
+  // Default to Theme (LLM clusters) so the graph opens as labeled, colored
+  // regions — the #1 "perceive your data" lever (was mono → no color meaning).
+  colorPreset: "community",
   semanticEdgeThreshold: 0.85,
-  nodeRepulsion: 8000,
+  // Forces — galaxy-native d3-force-3d values (see DEFAULT_FORCES). repel =
+  // |charge|, gravity = center strength, idealEdgeLength = link distance,
+  // edgeElasticity = link spring. These reproduce the prior baseline look.
+  nodeRepulsion: 140,
   idealEdgeLength: 120,
-  gravity: 0.4,
-  edgeElasticity: 0.45,
+  gravity: 0.04,
+  edgeElasticity: 0.4,
   textFadeThreshold: 0.6,
   nodeSizeScale: 1,
-  linkThickness: 1,
 };
+
+// Turn the raw 0.70–1.00 semantic cutoff into a word. The number is meaningless
+// to a user ("0.85"?); the word says what they'll see. Higher cutoff = stricter
+// = fewer, stronger links.
+export function formatConnectionStrength(v: number): string {
+  if (v >= 0.98) return "Strongest only";
+  if (v >= 0.9) return "Strong";
+  if (v >= 0.82) return "Balanced";
+  if (v >= 0.75) return "Loose";
+  return "Show all";
+}
 
 interface Props {
   filters: BrainFilters;
@@ -89,7 +114,6 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
       className="flex w-72 shrink-0 flex-col gap-5 overflow-y-auto rounded-[2px] border border-white/10 bg-[#181818] p-4 text-sm text-white/85"
       data-testid="brain-filter-panel"
     >
-      <ScopeSection />
 
       <Section title={t("brain.filterPanel.filters", { defaultValue: "Filters" })}>
         <ToggleRow
@@ -98,18 +122,22 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
           onChange={(v) => set("excludeOrphans", v)}
         />
         <SliderRow
-          label={t("brain.filterPanel.semanticThreshold", { defaultValue: "Similarity link cutoff" })}
+          label={t("brain.filterPanel.semanticThreshold", { defaultValue: "Connection strength" })}
           min={0.7}
           max={1}
           step={0.05}
           value={filters.semanticEdgeThreshold}
           onChange={(v) => set("semanticEdgeThreshold", v)}
+          formatValue={formatConnectionStrength}
+          hint={t("brain.filterPanel.semanticThresholdHint", {
+            defaultValue: "Lines link memories that look alike. Higher = only the strongest links.",
+          })}
         />
         <NumberRow
           label={t("brain.filterPanel.maxNodes", { defaultValue: "Max nodes" })}
           min={50}
-          max={1000}
-          step={50}
+          max={8000}
+          step={250}
           value={filters.maxNodes}
           onChange={(v) => set("maxNodes", v)}
         />
@@ -153,26 +181,29 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
         )}
       </Section>
 
-      <Section title={t("brain.filterPanel.colors", { defaultValue: "Colors" })}>
+      <Section title={t("brain.filterPanel.colorBy", { defaultValue: "Color by" })}>
         <div className="flex flex-wrap gap-1">
-          {(["mono", "community", "link_type", "kind"] as ColorPreset[]).map((p) => (
+          {COLOR_BY_OPTIONS.map(({ id, label }) => (
             <button
-              key={p}
+              key={id}
               type="button"
-              onClick={() => set("colorPreset", p)}
-              className={`flex-1 rounded-[2px] border px-2 py-1 text-xs capitalize ${
-                filters.colorPreset === p
+              onClick={() => set("colorPreset", id)}
+              className={`flex-1 rounded-[2px] border px-2 py-1 text-xs ${
+                filters.colorPreset === id
                   ? "border-zaki-brand bg-zaki-brand-10 text-white/85"
                   : "border-white/10 text-white/55 hover:border-white/40"
               }`}
-              data-testid={`brain-color-preset-${p}`}
+              data-testid={`brain-color-preset-${id}`}
             >
-              {p === "link_type" ? "link type" : p}
+              {t(`brain.filterPanel.colorBy.${id}`, { defaultValue: label })}
             </button>
           ))}
         </div>
       </Section>
 
+      {/* Display — node size + text fade are wired live into the galaxy engine.
+          (Link thickness was dropped: WebGL basic lines ignore width — it would
+          need fat-line geometry.) */}
       <Section title={t("brain.filterPanel.display", { defaultValue: "Display" })}>
         <SliderRow
           label={t("brain.filterPanel.nodeSize", { defaultValue: "Node size" })}
@@ -181,14 +212,6 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
           step={0.1}
           value={filters.nodeSizeScale}
           onChange={(v) => set("nodeSizeScale", v)}
-        />
-        <SliderRow
-          label={t("brain.filterPanel.linkThickness", { defaultValue: "Link thickness" })}
-          min={0.5}
-          max={3}
-          step={0.1}
-          value={filters.linkThickness}
-          onChange={(v) => set("linkThickness", v)}
         />
         <SliderRow
           label={t("brain.filterPanel.textFade", { defaultValue: "Text fade" })}
@@ -200,12 +223,15 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
         />
       </Section>
 
+      {/* Forces — live d3-force-3d tuning (ranges calibrated to the Obsidian
+          reference). Changes re-settle from the current layout without a rebuild
+          or camera reset. */}
       <Section title={t("brain.filterPanel.forces", { defaultValue: "Forces" })}>
         <SliderRow
           label={t("brain.filterPanel.repel", { defaultValue: "Repel force" })}
-          min={1000}
-          max={20000}
-          step={500}
+          min={20}
+          max={500}
+          step={10}
           value={filters.nodeRepulsion}
           onChange={(v) => set("nodeRepulsion", v)}
         />
@@ -218,96 +244,23 @@ export function BrainFilterPanel({ filters, onChange }: Props) {
           onChange={(v) => set("idealEdgeLength", v)}
         />
         <SliderRow
-          label={t("brain.filterPanel.center", { defaultValue: "Center force" })}
-          min={0}
-          max={1.5}
-          step={0.05}
-          value={filters.gravity}
-          onChange={(v) => set("gravity", v)}
-        />
-        <SliderRow
           label={t("brain.filterPanel.linkForce", { defaultValue: "Link force" })}
-          min={0.05}
-          max={1.5}
-          step={0.05}
+          min={0.02}
+          max={1.2}
+          step={0.02}
           value={filters.edgeElasticity}
           onChange={(v) => set("edgeElasticity", v)}
         />
+        <SliderRow
+          label={t("brain.filterPanel.center", { defaultValue: "Center force" })}
+          min={0}
+          max={0.3}
+          step={0.01}
+          value={filters.gravity}
+          onChange={(v) => set("gravity", v)}
+        />
       </Section>
     </aside>
-  );
-}
-
-// Brain V2 closeout (2026-05-30) — SCOPE block.
-//
-// The V2 mockup ("V2 Brain v2.html") opens the filters rail with a SCOPE
-// section listing Personal Brain / Workspace / Learner / Session as
-// toggleable rows. In this build the brain graph endpoint
-// (/api/agent/brain/graph) is PERSONAL-scoped only — there is no
-// authenticated scope filter parameter, and Workspace / Learner / Hire
-// memory are owned by separate product surfaces with their own data flow
-// (AGENTS.md: "keep Agent, Learning, Hire, and Workspace memories
-// separate"). Per the backend-truth rules we do NOT render fake scope
-// toggles that imply a unified graph. Instead this is an honest scope
-// indicator: Personal Brain is what this surface shows; the other scopes
-// are named as separate, with governance routed to route-level Settings.
-const SEPARATE_SCOPES = [
-  { id: "workspace", key: "brain.scope.workspace", label: "Workspace" },
-  { id: "learner", key: "brain.scope.learner", label: "Learner" },
-  { id: "hire", key: "brain.scope.hire", label: "Hire" },
-] as const;
-
-function ScopeSection() {
-  const { t } = useTranslation();
-  return (
-    <div data-testid="brain-scope-section">
-      <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-white/55">
-        {t("brain.scope.title", { defaultValue: "Scope" })}
-      </h3>
-      <div className="space-y-1.5">
-        <div
-          className="flex items-center gap-2 rounded-[2px] border border-zaki-brand/40 bg-zaki-brand-10 px-2.5 py-1.5"
-          data-testid="brain-scope-active"
-        >
-          <span className="size-2 shrink-0 rounded-[1px] bg-zaki-brand" aria-hidden="true" />
-          <span className="flex-1 text-sm text-white/85">
-            {t("brain.scope.personal", { defaultValue: "Personal brain" })}
-          </span>
-          <span className="text-[10px] uppercase tracking-wider text-zaki-brand">
-            {t("brain.scope.shownHere", { defaultValue: "Shown here" })}
-          </span>
-        </div>
-        {SEPARATE_SCOPES.map((scope) => (
-          <div
-            key={scope.id}
-            className="flex items-center gap-2 px-2.5 py-1 opacity-60"
-            data-testid={`brain-scope-separate-${scope.id}`}
-          >
-            <span className="size-2 shrink-0 rounded-[1px] border border-white/30" aria-hidden="true" />
-            <span className="flex-1 text-xs text-white/55">
-              {t(scope.key, { defaultValue: scope.label })}
-            </span>
-            <span className="text-[10px] uppercase tracking-wider text-white/35">
-              {t("brain.scope.separate", { defaultValue: "Separate" })}
-            </span>
-          </div>
-        ))}
-      </div>
-      <p className="mt-2 text-[11px] leading-relaxed text-white/45">
-        {t("brain.scope.note", {
-          defaultValue:
-            "Workspace, Learner, and Hire memory are kept separate and live in their own surfaces.",
-        })}
-      </p>
-      <Link
-        to="/settings#settings-memory-data"
-        className="mt-2 inline-flex items-center gap-1 text-xs text-white/60 underline-offset-2 transition hover:text-white hover:underline"
-        data-testid="brain-scope-settings-link"
-      >
-        {t("brain.scope.manageLink", { defaultValue: "Memory scopes & privacy" })}
-        <ArrowUpRight className="size-3" aria-hidden="true" />
-      </Link>
-    </div>
   );
 }
 
@@ -380,6 +333,8 @@ function SliderRow({
   max,
   step,
   onChange,
+  formatValue,
+  hint,
 }: {
   label: string;
   value: number;
@@ -387,12 +342,16 @@ function SliderRow({
   max: number;
   step: number;
   onChange: (v: number) => void;
+  /** Render the value as a word instead of the raw number (e.g. "Balanced"). */
+  formatValue?: (v: number) => string;
+  /** One-line plain-English explanation under the slider. */
+  hint?: string;
 }) {
   return (
     <div>
       <div className="mb-1 flex justify-between text-xs">
         <span className="text-white/85">{label}</span>
-        <span className="text-white/55">{value}</span>
+        <span className="text-white/55">{formatValue ? formatValue(value) : value}</span>
       </div>
       <input
         type="range"
@@ -403,6 +362,7 @@ function SliderRow({
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full accent-zaki-brand"
       />
+      {hint ? <p className="mt-1 text-[11px] leading-snug text-white/40">{hint}</p> : null}
     </div>
   );
 }
