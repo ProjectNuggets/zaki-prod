@@ -296,8 +296,8 @@ import {
 } from "./thread-auto-title.js";
 import {
   buildCanonicalZakiThreadSessionKey,
+  mergeZakiAgentSessions,
   normalizeZakiSessionKey,
-  overlayZakiAgentSessionTitles,
   parseZakiSessionKey,
 } from "./zaki-agent-sessions.js";
 import {
@@ -11310,7 +11310,7 @@ async function loadZakiAgentSessionsForUser(userId, requestId) {
     });
   }
   return {
-    sessions: overlayZakiAgentSessionTitles({ upstreamSessions, localThreads }),
+    sessions: mergeZakiAgentSessions({ upstreamSessions, localThreads }),
   };
 }
 
