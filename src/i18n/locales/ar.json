@@ -915,7 +915,7 @@
       "approvingState": "جارٍ الموافقة...",
       "modifyingState": "جارٍ التحضير...",
       "denyingState": "جارٍ الرفض...",
-      "decidedApproved": "تمت الموافقة",
+      "decidedApproved": "تمت الموافقة. زكي يتابع التنفيذ...",
       "decidedModified": "تم طلب تعديل",
       "decidedDenied": "تم الرفض",
       "timer": "{{seconds}} ثانية لاتخاذ القرار",

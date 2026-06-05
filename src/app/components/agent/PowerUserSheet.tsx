@@ -380,13 +380,38 @@ export function PowerUserSheet({
           setContextDiag(null);
         } else {
           if (activeSessionKey) {
-            setContextDiag({
-              active: true,
-              runtime: true,
-              report:
-                ((data as { report?: ContextDiagnosticsResponse["report"] | null })?.report ??
-                  (data as ContextDiagnosticsResponse["report"] | null)),
-            });
+            const sessionContext = data as
+              | (ContextDiagnosticsResponse & {
+                  live?: boolean | null;
+                  code?: string | null;
+                  reason?: string | null;
+                  report?: ContextDiagnosticsResponse["report"] | null;
+                })
+              | null;
+            if (
+              sessionContext?.active === false ||
+              sessionContext?.live === false ||
+              sessionContext?.code === "session_manager_unavailable" ||
+              sessionContext?.code === "no_active_session"
+            ) {
+              setContextDiag({
+                active: false,
+                runtime: false,
+                reason:
+                  sessionContext?.code ||
+                  sessionContext?.reason ||
+                  "context_unavailable",
+                report: null,
+              } as ContextDiagnosticsResponse);
+            } else {
+              setContextDiag({
+                active: true,
+                runtime: true,
+                report:
+                  sessionContext?.report ??
+                  (sessionContext as ContextDiagnosticsResponse["report"] | null),
+              });
+            }
           } else {
             setContextDiag(data as ContextDiagnosticsResponse);
           }
@@ -824,7 +849,7 @@ export function PowerUserSheet({
     const report = contextDiag?.report ?? null;
     const legacy = contextSnapshot ?? null;
     const pressurePct =
-      report?.pressure_percent ?? report?.context_pressure_percent ?? legacy?.usagePct ?? null;
+      report?.pressure_percent ?? report?.context_pressure_percent ?? null;
     const usedTokens = report?.token_estimate ?? legacy?.usedTokens ?? null;
     const totalTokens =
       report?.context_window_tokens ?? legacy?.totalTokens ?? null;
@@ -863,7 +888,7 @@ export function PowerUserSheet({
               {t("zakiControls.powerUser.context.windowPressure")}
             </span>
             <span className="font-mono-ui">
-              {formatPct(pressurePct)} · {formatCount(usedTokens)} /{" "}
+              {pressurePct == null ? "--" : formatPct(pressurePct)} · {formatCount(usedTokens)} /{" "}
               {formatCount(totalTokens)}
             </span>
           </div>

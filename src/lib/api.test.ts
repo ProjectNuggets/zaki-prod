@@ -572,6 +572,58 @@ describe("agent runtime API clients", () => {
     );
   });
 
+  it("appends approval continuations through the Agent history append facade", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeResponse(201, {
+        ok: true,
+        status: "inserted",
+        message: { id: "bot-1-assistant", role: "assistant" },
+      })
+    );
+
+    const { appendAgentHistoryMessage } = await import("@/lib/api");
+    const { data } = await appendAgentHistoryMessage({
+      spaceId: "zaki-bot",
+      threadId: "main",
+      sessionKey: "agent:zaki-bot:user:42:thread:main",
+      role: "assistant",
+      content: "Approved continuation",
+    });
+
+    expect(data.status).toBe("inserted");
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/agent/history/append",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          spaceId: "zaki-bot",
+          threadId: "main",
+          sessionKey: "agent:zaki-bot:user:42:thread:main",
+          role: "assistant",
+          content: "Approved continuation",
+        }),
+      })
+    );
+  });
+
+  it("loads trace events through the JSON BFF route", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeResponse(200, {
+        run_id: "run:1",
+        events: [{ type: "tool_result", summary: "Shell approved" }],
+      })
+    );
+
+    const { fetchAgentTraceEvents } = await import("@/lib/api");
+    const { data } = await fetchAgentTraceEvents("run:1");
+
+    expect(data.events?.[0]?.summary).toBe("Shell approved");
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/agent/traces/run%3A1/events",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
   it("uses focused Agent cron mutation routes", async () => {
     mockFetch
       .mockResolvedValueOnce(makeResponse(201, { status: "created", job: { id: "cron-1" } }))

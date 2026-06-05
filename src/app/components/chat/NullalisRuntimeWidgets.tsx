@@ -155,13 +155,17 @@ export function ApprovalRequiredCard({
       if (!cb) return;
       setActionError(null);
       setSubmitting(action);
+      if (action === "approve") {
+        setDecided("approved");
+      }
       try {
         await cb(request.id, request);
-        setDecided(
-          action === "approve" ? "approved" : action === "modify" ? "modified" : "denied"
-        );
+        if (action !== "approve") {
+          setDecided(action === "modify" ? "modified" : "denied");
+        }
       } catch (error) {
         const code = error instanceof Error ? error.message : "";
+        setDecided(null);
         setActionError(
           code === "approval_id_mismatch"
             ? t("zakiControls.approval.changedMessage", {
@@ -197,7 +201,9 @@ export function ApprovalRequiredCard({
           <span>
             {request.tool} .{" "}
             {isApproved
-              ? t("zakiControls.approval.decidedApproved")
+              ? t("zakiControls.approval.decidedApproved", {
+                  defaultValue: "Approved. ZAKI is continuing...",
+                })
               : isModified
                 ? t("zakiControls.approval.decidedModified", {
                     defaultValue: "Revision requested",
@@ -411,36 +417,30 @@ export function ContextGauge({
   const { t } = useTranslation();
   if (!data) return null;
 
-  // Prefer the backend pressure field when present. It is the runtime's
-  // canonical context-pressure signal; token counts are supporting detail.
+  // Backend pressure is the only pressure signal. Token counts are supporting
+  // detail and must never be converted into a frontend percentage.
   const hasContextMax = typeof data.contextMax === "number" && data.contextMax > 0;
   const pct =
     typeof data.pressurePercent === "number"
       ? Math.min(100, Math.max(0, data.pressurePercent))
       : typeof data.context_pressure_percent === "number"
         ? Math.min(100, Math.max(0, data.context_pressure_percent))
-      : hasContextMax
-        ? Math.min(
-            100,
-            Math.max(
-              0,
-              ((data.tokenCount ?? 0) / data.contextMax!) * 100
-            )
-          )
         : null;
-  if (pct == null) return null;
+  const pctKnown = typeof pct === "number";
   const tokenCount =
-    hasContextMax && data.contextMax
+    pctKnown && hasContextMax && data.contextMax
       ? data.tokenCount ?? Math.round((pct / 100) * data.contextMax)
       : null;
-  const pctLabel = pct.toFixed(0);
+  const pctLabel = pctKnown ? pct.toFixed(0) : "--";
   const tokenLabel = tokenCount != null ? new Intl.NumberFormat("en-US").format(tokenCount) : null;
   const maxLabel =
     hasContextMax && data.contextMax
       ? new Intl.NumberFormat("en-US").format(data.contextMax)
       : null;
   const ariaLabel =
-    tokenLabel && maxLabel
+    !pctKnown
+      ? "Context pressure unknown"
+      : tokenLabel && maxLabel
       ? `Context window ${tokenLabel} of ${maxLabel} tokens, ${pctLabel} percent used`
       : `Context pressure ${pctLabel} percent`;
   const sourceLabel =
@@ -479,17 +479,17 @@ export function ContextGauge({
         <div
           role="progressbar"
           aria-label={ariaLabel}
-          aria-valuenow={Math.round(pct)}
+          aria-valuenow={pctKnown ? Math.round(pct) : undefined}
           aria-valuemin={0}
           aria-valuemax={100}
           className={cn("h-1 w-12 rounded-full", trackColor)}
         >
           <div
             className={cn("h-full rounded-full transition-all", barColor)}
-            style={{ width: `${pct}%` }}
+            style={{ width: pctKnown ? `${pct}%` : "0%" }}
           />
         </div>
-        <span className={textColor}>{pctLabel}%</span>
+        <span className={textColor}>{pctKnown ? `${pctLabel}%` : pctLabel}</span>
       </div>
     );
   }
@@ -499,20 +499,20 @@ export function ContextGauge({
       <div className="flex items-center justify-between gap-2 mb-0.5">
         <span className="text-zaki-muted dark:text-zaki-dark-muted">{t("contextGauge.label")}</span>
         <span className={cn("font-mono-ui", textColor)}>
-          {tokenLabel && maxLabel ? `${tokenLabel} / ${maxLabel} (${pctLabel}%)` : `${pctLabel}%`}
+          {pctKnown && tokenLabel && maxLabel ? `${tokenLabel} / ${maxLabel} (${pctLabel}%)` : pctKnown ? `${pctLabel}%` : pctLabel}
         </span>
       </div>
       <div
         role="progressbar"
         aria-label={ariaLabel}
-        aria-valuenow={Math.round(pct)}
+        aria-valuenow={pctKnown ? Math.round(pct) : undefined}
         aria-valuemin={0}
         aria-valuemax={100}
         className={cn("h-1.5 w-full rounded-full", trackColor)}
       >
         <div
           className={cn("h-full rounded-full transition-all", barColor)}
-          style={{ width: `${pct}%` }}
+          style={{ width: pctKnown ? `${pct}%` : "0%" }}
         />
       </div>
       {typeof data.messageCount === "number" && (

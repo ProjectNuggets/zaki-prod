@@ -915,7 +915,7 @@
       "approvingState": "Approving...",
       "modifyingState": "Preparing...",
       "denyingState": "Denying...",
-      "decidedApproved": "Approved",
+      "decidedApproved": "Approved. ZAKI is continuing...",
       "decidedModified": "Revision requested",
       "decidedDenied": "Denied",
       "timer": "{{seconds}}s to decide",

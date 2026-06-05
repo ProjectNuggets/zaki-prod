@@ -30,6 +30,7 @@ import { useNavigationStore, useAuthStore, useZakiSessionUiStore } from "@/store
 import { useMessages } from "@/queries/useThreads";
 import {
   apiRequest,
+  appendAgentHistoryMessage,
   approveAgentSession,
   cancelAgentSession,
   fetchAgentExtensionDiagnostics,
@@ -170,6 +171,15 @@ jest.mock("@/lib/api", () => ({
       headers: new Headers(),
     },
     data: { ok: true },
+  })),
+  appendAgentHistoryMessage: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 201,
+      json: async () => ({ ok: true, status: "inserted" }),
+      headers: new Headers(),
+    },
+    data: { ok: true, status: "inserted" },
   })),
   cancelAgentSession: jest.fn(async () => ({
     response: {
@@ -448,6 +458,7 @@ describe("ChatArea Component", () => {
     (provisionAgent as jest.Mock).mockClear();
     (setAgentSessionMode as jest.Mock).mockClear();
     (approveAgentSession as jest.Mock).mockClear();
+    (appendAgentHistoryMessage as jest.Mock).mockClear();
     (cancelAgentSession as jest.Mock).mockClear();
     (fetchAgentExtensionDiagnostics as jest.Mock).mockClear();
     (fetchAgentDiagnostics as jest.Mock).mockClear();
@@ -601,6 +612,23 @@ describe("ChatArea Component", () => {
     expect(resolveContextGaugePercent(gauge)).toBe(7.3);
   });
 
+  it("does not derive pressure from token counts when backend pressure is absent", () => {
+    const gauge = buildNullalisContextGauge({
+      history_len: 43,
+      token_estimate: 33_771,
+      context_window_tokens: 460_000,
+    });
+
+    expect(gauge).toMatchObject({
+      tokenCount: 33_771,
+      contextMax: 460_000,
+      messageCount: 43,
+      context_pressure_percent: null,
+      pressurePercent: null,
+    });
+    expect(resolveContextGaugePercent(gauge)).toBeNull();
+  });
+
   it("does not build a context meter from legacy cumulative token totals", () => {
     const gauge = buildNullalisContextGauge({
       tokens_used: 999_999,
@@ -726,7 +754,7 @@ describe("ChatArea Component", () => {
     expect(gauge).toBeNull();
   });
 
-  it("normalizes nested canonical report context payloads for the context meter", () => {
+  it("keeps nested token metadata but does not treat context_window_used_pct as pressure", () => {
     const gauge = buildNullalisContextGauge({
       active: true,
       report: {
@@ -741,9 +769,10 @@ describe("ChatArea Component", () => {
       tokenCount: 25_000,
       contextMax: 200_000,
       messageCount: 12,
-      context_pressure_percent: 12.5,
-      pressurePercent: 12.5,
+      context_pressure_percent: null,
+      pressurePercent: null,
     });
+    expect(resolveContextGaugePercent(gauge)).toBeNull();
   });
 
   it("surfaces canonical nested context pressure and ignores legacy fallback labels", () => {
@@ -844,6 +873,10 @@ describe("ChatArea Component", () => {
     await waitFor(() => {
       expect(screen.getByTestId("zaki-context-meter")).toHaveTextContent("25%");
     });
+    await waitFor(() => {
+      expect(fetchAgentHistory).toHaveBeenCalledWith("zaki-bot", "main", "merged");
+    });
+    (fetchAgentHistory as jest.Mock).mockClear();
     fireEvent.change(screen.getByRole("combobox"), {
       target: { value: "continue this task" },
     });
@@ -856,6 +889,8 @@ describe("ChatArea Component", () => {
         )
       ).toBe(true);
     });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fetchAgentHistory).not.toHaveBeenCalled();
     expect(
       zakiSessionUiState.sessions["agent:zaki-bot:user:1:thread:main"]?.contextPressurePercent
     ).toBe(25);
@@ -1237,6 +1272,178 @@ describe("ChatArea Component", () => {
         }),
       ])
     );
+  });
+
+  it("appends the synchronous approval continuation into the active Agent chat", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    navState.zakiSessionKey = "agent:zaki-bot:user:1:thread:main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    let approvalPending = true;
+
+    (fetchAgentMe as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (fetchAgentHistory as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ history: [] }) },
+      data: { history: [] },
+    });
+    (fetchAgentSession as jest.Mock).mockImplementation(async () => ({
+      response: { ok: true, status: 200, json: async () => ({}), headers: new Headers() },
+      data: approvalPending
+        ? {
+            session_key: "agent:zaki-bot:user:1:thread:main",
+            live: true,
+            mode: "execute",
+            pending_approval_count: 1,
+            pending_approvals: [
+              {
+                approval_id: "approval-shell-1",
+                id: 91,
+                tool: "shell",
+                reason: "supervised_mutating_requires_approval",
+                risk_level: "high",
+                command: "pwd",
+                created_at: 1_779_904_000,
+              },
+            ],
+          }
+        : {
+            session_key: "agent:zaki-bot:user:1:thread:main",
+            live: true,
+            mode: "execute",
+            pending_approval_count: 0,
+            pending_approvals: [],
+          },
+    }));
+    (approveAgentSession as jest.Mock).mockImplementation(async () => {
+      approvalPending = false;
+      return {
+        response: { ok: true, status: 200, json: async () => ({}), headers: new Headers() },
+        data: {
+          status: "approved",
+          message: "Shell completed and I am continuing with the result.",
+        },
+      };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(screen.getByText("zakiControls.approval.approveBtn")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText("zakiControls.approval.approveBtn"));
+
+    await waitFor(() => {
+      expect(approveAgentSession).toHaveBeenCalledWith(
+        "agent:zaki-bot:user:1:thread:main",
+        expect.objectContaining({
+          approved: true,
+          tool: "shell",
+          approval_id: "approval-shell-1",
+        })
+      );
+    });
+    await waitFor(() => {
+      expect(appendAgentHistoryMessage).toHaveBeenCalledWith({
+        spaceId: "zaki-bot",
+        threadId: "main",
+        sessionKey: "agent:zaki-bot:user:1:thread:main",
+        role: "assistant",
+        content: "Shell completed and I am continuing with the result.",
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Shell completed and I am continuing with the result.")).toBeInTheDocument();
+    });
+  });
+
+  it("reconciles merged history when approval succeeds without an inline continuation", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    navState.zakiSessionKey = "agent:zaki-bot:user:1:thread:main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    let approvalPending = true;
+
+    (fetchAgentMe as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (fetchAgentHistory as jest.Mock).mockImplementation(async () => {
+      return {
+        response: { ok: true, status: 200, json: async () => ({ history: [] }) },
+        data: !approvalPending
+          ? {
+              history: [
+                {
+                  id: "nullalis-continuation-1",
+                  role: "assistant",
+                  content: "Recovered from merged history after approval.",
+                },
+              ],
+            }
+          : { history: [] },
+      };
+    });
+    (fetchAgentSession as jest.Mock).mockImplementation(async () => ({
+      response: { ok: true, status: 200, json: async () => ({}), headers: new Headers() },
+      data: approvalPending
+        ? {
+            session_key: "agent:zaki-bot:user:1:thread:main",
+            live: true,
+            mode: "execute",
+            pending_approval_count: 1,
+            pending_approvals: [
+              {
+                approval_id: "approval-shell-2",
+                tool: "shell",
+                reason: "supervised_mutating_requires_approval",
+                risk_level: "high",
+              },
+            ],
+          }
+        : {
+            session_key: "agent:zaki-bot:user:1:thread:main",
+            live: true,
+            mode: "execute",
+            pending_approval_count: 0,
+            pending_approvals: [],
+          },
+    }));
+    (approveAgentSession as jest.Mock).mockImplementation(async () => {
+      approvalPending = false;
+      return {
+        response: { ok: true, status: 200, json: async () => ({}), headers: new Headers() },
+        data: { status: "approved", message: "" },
+      };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(screen.getByText("zakiControls.approval.approveBtn")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText("zakiControls.approval.approveBtn"));
+
+    await waitFor(() => {
+      expect(approveAgentSession).toHaveBeenCalledWith(
+        "agent:zaki-bot:user:1:thread:main",
+        expect.objectContaining({
+          approved: true,
+          approval_id: "approval-shell-2",
+        })
+      );
+    });
+    await waitFor(() => {
+      expect(fetchAgentHistory).toHaveBeenCalledWith("zaki-bot", "main", "merged");
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Recovered from merged history after approval.")).toBeInTheDocument();
+    });
+    expect(appendAgentHistoryMessage).not.toHaveBeenCalled();
   });
 
   it("keeps Agent mode changes local when the selected session is not live yet", async () => {

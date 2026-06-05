@@ -17,6 +17,7 @@ import {
   captureMemory,
   fetchMemoryActivity,
   fetchAgentHistory,
+  appendAgentHistoryMessage,
   fetchAgentMe,
   fetchAgentSession,
   fetchAgentSessionContext,
@@ -49,6 +50,8 @@ import {
 } from "@/lib/api";
 import {
   buildAgentContextGauge,
+  contextUnavailableCode,
+  isContextUnavailableCode,
   resolveContextGaugePercent,
 } from "@/lib/agentContext";
 import { DEFAULT_THREAD_LABEL, isDefaultThreadLabel } from "@/lib/threadTitles";
@@ -281,6 +284,37 @@ function buildAgentSessionKey(threadSlug: string, agentUserId: string | null) {
   const safeUser = String(agentUserId || "").trim();
   if (!safeUser) return null; // not yet resolved
   return buildCanonicalZakiThreadSessionKey(safeUser, safeThread);
+}
+
+function normalizeMessageContentKey(content: string) {
+  return String(content || "").replace(/\s+/g, " ").trim();
+}
+
+function agentMessageDedupeKey(message: Pick<Message, "role" | "content">) {
+  return `${message.role}:${normalizeMessageContentKey(message.content)}`;
+}
+
+function mergeAgentThreadMessages(
+  existing: Message[],
+  incoming: Message[]
+): { messages: Message[]; changed: boolean } {
+  if (!incoming.length) return { messages: existing, changed: false };
+  const seen = new Set(
+    existing
+      .filter((message) => normalizeMessageContentKey(message.content))
+      .map(agentMessageDedupeKey)
+  );
+  const next = [...existing];
+  let changed = false;
+  for (const message of incoming) {
+    if (!normalizeMessageContentKey(message.content)) continue;
+    const key = agentMessageDedupeKey(message);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    next.push(message);
+    changed = true;
+  }
+  return { messages: changed ? next : existing, changed };
 }
 
 function isAbortError(error: unknown) {
@@ -1749,6 +1783,14 @@ function mergeTodoTaskItems(
   return next.sort((a, b) => a.updatedAt - b.updatedAt).slice(-12);
 }
 
+function isTerminalAgentTaskStatus(status: NullalisTaskStatus) {
+  return status === "done" || status === "succeeded" || status === "failed" || status === "cancelled";
+}
+
+function activeAgentTaskItems(tasks: NullalisTaskItem[]): NullalisTaskItem[] {
+  return tasks.filter((task) => !isTerminalAgentTaskStatus(task.status));
+}
+
 function agentTaskToNullalisTaskItem(task: AgentTask): NullalisTaskItem | null {
   const record = task as Record<string, unknown>;
   const taskId =
@@ -2824,6 +2866,7 @@ export function ChatArea() {
   const [agentExtensionDiagnosticsError, setAgentExtensionDiagnosticsError] = useState<string | null>(null);
   const [nullalisApprovalRequest, setNullalisApprovalRequest] =
     useState<NullalisApprovalRequest | null>(null);
+  const [approvalContinuationPendingId, setApprovalContinuationPendingId] = useState<string | null>(null);
   const [agentArtifactEventCount, setAgentArtifactEventCount] = useState(0);
   const [nullalisContextGauge, setNullalisContextGauge] =
     useState<ContextGaugeData | null>(null);
@@ -2864,6 +2907,7 @@ export function ChatArea() {
   const zakiBotProcessClearTimerRef = useRef<number | null>(null);
   const zakiBotProvisionedRef = useRef(false);
   const zakiBotProvisionPromiseRef = useRef<Promise<boolean> | null>(null);
+  const lastAgentHistoryReconcileThreadRef = useRef<string | null>(null);
   const [zakiBotProvisionReady, setZakiBotProvisionReady] = useState(false);
   const [sessionModePending, setSessionModePending] = useState(false);
   const [selectedAgentArtifact, setSelectedAgentArtifact] =
@@ -3337,6 +3381,10 @@ export function ChatArea() {
     () => mergeNullalisTaskItems(agentTaskSnapshots, nullalisTaskItems),
     [agentTaskSnapshots, nullalisTaskItems]
   );
+  const agentCurrentTaskItems = useMemo(
+    () => activeAgentTaskItems(agentTaskItems),
+    [agentTaskItems]
+  );
   const agentWeeklyLabel = zakiBotQuotaInfo
     ? `${zakiBotQuotaInfo.remaining}/${zakiBotQuotaInfo.limit}`
     : freeDailyQuota?.unlimited
@@ -3773,6 +3821,91 @@ export function ChatArea() {
     return content;
   };
 
+  const mapAgentHistoryEntries = useCallback(
+    (entries: Array<Record<string, unknown>> | undefined): Message[] =>
+      (entries || [])
+        .map((entry, index) => {
+          const role = String(entry.role) === "assistant" ? "assistant" as const : "user" as const;
+          const content = String(entry.content || "");
+          const turnEvents = Array.isArray((entry as { events?: unknown }).events)
+            ? ((entry as { events?: unknown }).events as Array<{
+                eventType?: string;
+                payload?: Record<string, unknown>;
+                ts?: number;
+              }>)
+                .filter((event) => typeof event?.eventType === "string")
+                .map((event) => ({
+                  eventType: String(event.eventType),
+                  payload: (event.payload ?? {}) as Record<string, unknown>,
+                  ts: typeof event.ts === "number" ? event.ts : undefined,
+                }))
+            : undefined;
+          return {
+            id: String(entry.id || `bot-history-${index}`),
+            role,
+            content: role === "user" ? stripMemoryContext(content) : content,
+            turnEvents,
+          };
+        })
+        .filter((message) => normalizeMessageContentKey(message.content)),
+    []
+  );
+
+  const reconcileAgentThreadHistory = useCallback(
+    async (threadId: string, mode: "merged" | "app" = "merged") => {
+      if (!threadId) return false;
+      lastAgentHistoryReconcileThreadRef.current = threadId;
+      const { response, data } = await fetchAgentHistory(ZAKI_BOT_SPACE_ID, threadId, mode);
+      if (!response.ok) return false;
+      const history = mapAgentHistoryEntries(
+        Array.isArray(data.history) ? (data.history as Array<Record<string, unknown>>) : []
+      );
+      let changed = false;
+      setMessagesByThread((prev) => {
+        const merged = mergeAgentThreadMessages(prev[threadId] ?? [], history);
+        changed = merged.changed;
+        return changed ? { ...prev, [threadId]: merged.messages } : prev;
+      });
+      historyLoadedRef.current[threadId] = true;
+      return changed;
+    },
+    [mapAgentHistoryEntries]
+  );
+
+  const appendAgentAssistantContinuation = useCallback(
+    async (threadId: string, sessionKey: string, content: string) => {
+      const trimmed = content.trim();
+      if (!threadId || !trimmed) return false;
+      const optimisticMessage: Message = {
+        id: `approval-continuation-${Date.now()}`,
+        role: "assistant",
+        content: trimmed,
+      };
+      let changed = false;
+      setMessagesByThread((prev) => {
+        const merged = mergeAgentThreadMessages(prev[threadId] ?? [], [optimisticMessage]);
+        changed = merged.changed;
+        return changed ? { ...prev, [threadId]: merged.messages } : prev;
+      });
+      historyLoadedRef.current[threadId] = true;
+      try {
+        await appendAgentHistoryMessage({
+          spaceId: ZAKI_BOT_SPACE_ID,
+          threadId,
+          sessionKey,
+          role: "assistant",
+          content: trimmed,
+        });
+      } catch {
+        // The upstream Nullalis history still contains the continuation; local
+        // persistence is best-effort and reconciled below.
+      }
+      await reconcileAgentThreadHistory(threadId, "merged");
+      return changed;
+    },
+    [reconcileAgentThreadHistory]
+  );
+
   const { data: historyData, isLoading: isHistoryLoading } = useMessages(
     isZakiBotActiveSpace || isAnonymousSpacesActive ? null : activeWorkspaceSlug,
     isZakiBotActiveSpace || isAnonymousSpacesActive ? null : activeThreadId
@@ -4041,6 +4174,7 @@ export function ChatArea() {
       setNullalisTranscriptEntries([]);
       setNullalisTaskItems([]);
       setNullalisApprovalRequest(null);
+      setApprovalContinuationPendingId(null);
       setAgentArtifactEventCount(0);
       setZakiUsageSummary(null);
     }
@@ -4065,33 +4199,45 @@ export function ChatArea() {
       ) {
         return;
       }
-      // `/context` is the only trustworthy source for the composer meter.
-      // If the backend says no live session manager/session exists, clear
-      // any prior value so stale pressure cannot look current.
-      if (!response.ok) {
+      const unavailableCode = contextUnavailableCode(data as Record<string, unknown> | null);
+      if (isContextUnavailableCode(unavailableCode)) {
         setSessionContextPressure(sessionKey, null);
         setNullalisContextGauge(null);
         return;
       }
+      // `/context` is the only trustworthy source for the composer meter.
+      // If the backend says no live session manager/session exists, clear
+      // any prior value so stale pressure cannot look current.
+      if (!response.ok) {
+        if (!isActiveZakiSessionLive) {
+          setSessionContextPressure(sessionKey, null);
+          setNullalisContextGauge(null);
+        }
+        return;
+      }
       const gauge = buildNullalisContextGauge(data as Record<string, unknown>);
       const pressurePct = resolveContextGaugePercent(gauge);
-      if (typeof pressurePct === "number") {
-        setSessionContextPressure(sessionKey, pressurePct);
+      if (gauge) {
         setNullalisContextGauge(gauge);
-      } else {
-        setSessionContextPressure(sessionKey, null);
+      } else if (!isActiveZakiSessionLive) {
         setNullalisContextGauge(null);
       }
-    } catch {
-      if (requestedSessionKey) {
-        setSessionContextPressure(requestedSessionKey, null);
+      if (typeof pressurePct === "number") {
+        setSessionContextPressure(sessionKey, pressurePct);
+      } else {
+        setSessionContextPressure(sessionKey, null);
       }
-      setNullalisContextGauge(null);
+    } catch {
+      if (requestedSessionKey && !isActiveZakiSessionLive) {
+        setSessionContextPressure(requestedSessionKey, null);
+        setNullalisContextGauge(null);
+      }
     }
   }, [
     activeThreadId,
     activeZakiSessionKey,
     agentUserId,
+    isActiveZakiSessionLive,
     isZakiBotRouteActive,
     setSessionContextPressure,
     zakiBotProvisionReady,
@@ -7089,6 +7235,22 @@ export function ChatArea() {
           reason: approved ? undefined : options?.reason ?? "User denied from UI",
           ...(canonicalApprovalId ? { approval_id: canonicalApprovalId } : {}),
         };
+        if (approved) {
+          setApprovalContinuationPendingId(requestId);
+          const now = Date.now();
+          setNullalisNarrationFrame({
+            id: `zaki-runtime-approval-continuing-${now}`,
+            phase: "thinking",
+            label: "Approved. ZAKI is continuing...",
+            tool: request?.tool ?? options?.tool ?? nullalisApprovalRequest?.tool ?? null,
+            iteration: null,
+            durationMs: null,
+            stepIndex: null,
+            stepTotal: null,
+            timestamp: now,
+          });
+          setStreamingIndicatorMode("writing");
+        }
         const { response, data } = await approveAgentSession(sessionKey, payload);
         if (!response.ok) {
           const code = typeof data?.error === "string" ? data.error : `approval_${response.status}`;
@@ -7096,11 +7258,23 @@ export function ChatArea() {
           (error as Error & { code?: string }).code = code;
           throw error;
         }
+        if (approved) {
+          const continuation = typeof data?.message === "string" ? data.message.trim() : "";
+          if (continuation) {
+            await appendAgentAssistantContinuation(activeThreadId || "main", sessionKey, continuation);
+          } else {
+            await reconcileAgentThreadHistory(activeThreadId || "main", "merged");
+          }
+        }
         decrementSessionApprovalCount(sessionKey, requestId);
         setNullalisApprovalRequest(null);
+        setApprovalContinuationPendingId(null);
         await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
         await hydrateActiveSessionDetail(sessionKey);
+        await refreshAgentRuntimePanelData();
+        void refreshContextGauge();
       } catch (err) {
+        setApprovalContinuationPendingId(null);
         console.error("[approval]", err);
         if ((err as Error & { code?: string })?.code === "approval_id_mismatch") {
           await hydrateActiveSessionDetail(sessionKey);
@@ -7115,12 +7289,16 @@ export function ChatArea() {
       activeThreadId,
       activeZakiSessionKey,
       agentUserId,
+      appendAgentAssistantContinuation,
       decrementSessionApprovalCount,
       hydrateActiveSessionDetail,
       nullalisApprovalRequest?.tool,
       nullalisApprovalRequest,
       powerUserPendingApprovals,
       queryClient,
+      reconcileAgentThreadHistory,
+      refreshAgentRuntimePanelData,
+      refreshContextGauge,
       t,
     ]
   );
@@ -7475,47 +7653,39 @@ export function ChatArea() {
       setIsBotHistoryLoading(false);
       return;
     }
+    const shouldReconcileLoadedThread =
+      !isStreaming && lastAgentHistoryReconcileThreadRef.current !== activeThreadId;
     if (historyLoadedRef.current[activeThreadId]) {
       setIsBotHistoryLoading(false);
+      if (shouldReconcileLoadedThread) {
+        void reconcileAgentThreadHistory(activeThreadId, "merged");
+      }
       return;
     }
     if (messagesByThread[activeThreadId]?.length) {
       historyLoadedRef.current[activeThreadId] = true;
       setIsBotHistoryLoading(false);
+      if (shouldReconcileLoadedThread) {
+        void reconcileAgentThreadHistory(activeThreadId, "merged");
+      }
       return;
     }
 
     let cancelled = false;
     setIsBotHistoryLoading(true);
 
-    void fetchAgentHistory(ZAKI_BOT_SPACE_ID, activeThreadId, "app")
+    void fetchAgentHistory(ZAKI_BOT_SPACE_ID, activeThreadId, "merged")
       .then(({ response, data }) => {
         if (cancelled || !response.ok) return;
-        const history = Array.isArray(data.history)
-          ? data.history.map((entry: Record<string, unknown>, index: number) => ({
-              id: String(entry.id || `bot-history-${index}`),
-              role: String(entry.role) === "assistant" ? "assistant" as const : "user" as const,
-              content: String(entry.content || ""),
-              turnEvents: Array.isArray((entry as { events?: unknown }).events)
-                ? ((entry as { events?: unknown }).events as Array<{
-                    eventType?: string;
-                    payload?: Record<string, unknown>;
-                    ts?: number;
-                  }>)
-                    .filter((e) => typeof e?.eventType === "string")
-                    .map((e) => ({
-                      eventType: String(e.eventType),
-                      payload: (e.payload ?? {}) as Record<string, unknown>,
-                      ts: typeof e.ts === "number" ? e.ts : undefined,
-                    }))
-                : undefined,
-            }))
-          : [];
+        const history = mapAgentHistoryEntries(
+          Array.isArray(data.history) ? (data.history as Array<Record<string, unknown>>) : []
+        );
         setMessagesByThread((prev) => ({
           ...prev,
           [activeThreadId]: history,
         }));
         historyLoadedRef.current[activeThreadId] = true;
+        lastAgentHistoryReconcileThreadRef.current = activeThreadId;
       })
       .catch(() => {
         // Ensure loading clears on error
@@ -7527,7 +7697,15 @@ export function ChatArea() {
     return () => {
       cancelled = true;
     };
-  }, [activeThreadId, isAuthReady, isZakiBotActiveSpace, messagesByThread]);
+  }, [
+    activeThreadId,
+    isAuthReady,
+    isStreaming,
+    isZakiBotActiveSpace,
+    mapAgentHistoryEntries,
+    messagesByThread,
+    reconcileAgentThreadHistory,
+  ]);
 
   // First message transition effect
   useEffect(() => {
@@ -7882,7 +8060,7 @@ export function ChatArea() {
         nullalisMode={isZakiBotActiveSpace}
         nullalisNarrationFrame={isZakiBotActiveSpace ? nullalisNarrationFrame : null}
         nullalisTranscriptEntries={isZakiBotActiveSpace ? nullalisTranscriptEntries : []}
-        nullalisTaskItems={isZakiBotActiveSpace ? agentTaskItems : []}
+        nullalisTaskItems={isZakiBotActiveSpace ? agentCurrentTaskItems : []}
         nullalisApprovalRequest={isZakiBotActiveSpace ? nullalisApprovalRequest : null}
         contextGaugeData={isZakiBotActiveSpace ? nullalisContextGauge : null}
         zakiUsageSummary={isZakiBotActiveSpace ? zakiUsageSummary : null}
@@ -7938,6 +8116,7 @@ export function ChatArea() {
       transcriptEntries={nullalisTranscriptEntries}
       narrationFrame={nullalisNarrationFrame}
       approvalRequest={nullalisApprovalRequest}
+      approvalContinuationPending={Boolean(approvalContinuationPendingId)}
       artifactCount={agentArtifactEventCount}
       contextGaugeData={nullalisContextGauge}
       usageSummary={zakiUsageSummary}
@@ -8283,7 +8462,7 @@ export function ChatArea() {
                   state has one owner. Surfaces directly above the
                   composer where the user's attention is. */}
               {isZakiBotActiveSpace && nullalisApprovalRequest ? (
-                <div className="px-1 pb-2">
+                <div className="zaki-approval-card-slot">
                   <ApprovalRequiredCard
                     request={nullalisApprovalRequest}
                     onApprove={handleApprovalAction ? (id) => handleApprovalAction(id, true) : undefined}

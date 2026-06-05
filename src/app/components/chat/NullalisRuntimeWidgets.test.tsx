@@ -16,7 +16,7 @@ const translations: Record<string, string> = {
   "zakiControls.approval.approveBtn": "Approve",
   "zakiControls.approval.modifyBtn": "Modify",
   "zakiControls.approval.denyBtn": "Deny",
-  "zakiControls.approval.decidedApproved": "Approved",
+  "zakiControls.approval.decidedApproved": "Approved. ZAKI is continuing...",
   "zakiControls.approval.decidedModified": "Revision requested",
   "zakiControls.approval.decidedDenied": "Denied",
   "zakiControls.approval.timer": "{{seconds}}s to decide",
@@ -83,6 +83,27 @@ describe("ApprovalRequiredCard", () => {
     });
     expect(screen.getByText(/Revision requested/)).toBeInTheDocument();
   });
+
+  it("keeps an approved card visible as a continuation state while the backend resumes", async () => {
+    let resolveApproval: (() => void) | null = null;
+    const onApprove = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveApproval = resolve;
+        })
+    );
+
+    render(<ApprovalRequiredCard request={request} onApprove={onApprove} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve extension_click action" }));
+
+    expect(onApprove).toHaveBeenCalledWith("approval-1", request);
+    expect(screen.getByText(/Approved\. ZAKI is continuing/)).toBeInTheDocument();
+
+    await act(async () => {
+      resolveApproval?.();
+    });
+  });
 });
 
 describe("ContextGauge", () => {
@@ -122,6 +143,25 @@ describe("ContextGauge", () => {
       })
     ).toHaveAttribute("aria-valuenow", "21");
     expect(screen.getByText("21%")).toBeInTheDocument();
+  });
+
+  it("renders unknown instead of deriving pressure from token counts", () => {
+    render(
+      <ContextGauge
+        data={{
+          tokenCount: 10_000,
+          contextMax: 100_000,
+          messageCount: 12,
+        }}
+      />
+    );
+
+    expect(
+      screen.getByRole("progressbar", {
+        name: "Context pressure unknown",
+      })
+    ).not.toHaveAttribute("aria-valuenow");
+    expect(screen.getByText("--")).toBeInTheDocument();
   });
 
   it("labels fallback context samples and runtime continuity metadata honestly", () => {

@@ -15115,6 +15115,117 @@ const AGENT_RUNTIME_JSON_PROXY_OPTIONS = {
   label: "Nullclaw Agent runtime proxy response",
 };
 
+async function agentHistoryAppendHandler(req, res) {
+  if (!ZAKI_AGENT_BACKEND_ENABLED) {
+    return res.status(404).json({ error: "ZAKI agent backend is disabled." });
+  }
+
+  try {
+    const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+    if (!authResult) return;
+    const userId = resolveCanonicalAgentUserId(authResult);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    }
+
+    const role = typeof req.body?.role === "string" ? req.body.role.trim().toLowerCase() : "";
+    if (role !== "assistant") {
+      return res.status(400).json({ error: "Only assistant continuations can be appended.", code: "invalid_role" });
+    }
+
+    const content = typeof req.body?.content === "string" ? req.body.content.trim() : "";
+    if (!content) {
+      return res.status(400).json({ error: "Message content is required.", code: "empty_content" });
+    }
+    if (content.length > 200_000) {
+      return res.status(413).json({ error: "Message content is too large.", code: "content_too_large" });
+    }
+
+    const spaceId =
+      typeof req.body?.spaceId === "string" && req.body.spaceId.trim()
+        ? req.body.spaceId.trim()
+        : ZAKI_BOT_SPACE_ID;
+    if (spaceId !== ZAKI_BOT_SPACE_ID) {
+      return res.status(400).json({ error: "Only ZAKI Agent history can be appended here.", code: "unsupported_space" });
+    }
+
+    let threadId = String(req.body?.threadId || "").trim();
+    const rawSessionKey = typeof req.body?.sessionKey === "string" ? req.body.sessionKey.trim() : "";
+    if (!rawSessionKey) {
+      return res.status(400).json({ error: "Session key is required.", code: "missing_session_key" });
+    }
+    const sessionKey = normalizeZakiSessionKey(rawSessionKey);
+    if (!sessionKey || !SESSION_KEY_SAFE_PATTERN.test(sessionKey)) {
+      return res.status(400).json({ error: "Invalid session key.", code: "invalid_session_key" });
+    }
+    const parsed = parseZakiSessionKey(sessionKey);
+    if (parsed.userId && parsed.userId !== String(userId)) {
+      return res.status(403).json({ error: "Session is not owned by this user.", code: "session_not_owned" });
+    }
+    if (parsed.lane !== "thread" || !parsed.threadId) {
+      return res.status(400).json({ error: "Unsupported session lane.", code: "unsupported_session_lane" });
+    }
+    if (threadId && threadId !== parsed.threadId) {
+      return res.status(400).json({ error: "Thread does not match session.", code: "thread_session_mismatch" });
+    }
+    threadId = parsed.threadId;
+
+    if (!threadId || threadId.length > 160 || /[\x00-\x1f\x7f/?#%]/u.test(threadId)) {
+      return res.status(400).json({ error: "invalid_thread_id" });
+    }
+
+    await touchZakiBotThreadBestEffort({
+      userId,
+      spaceId,
+      threadId,
+    });
+
+    const duplicate = await dbGet(
+      `SELECT id, role, content, created_at
+       FROM zaki_bot_messages
+       WHERE user_id = $1 AND space_id = $2 AND thread_id = $3 AND role = 'assistant' AND content = $4
+       ORDER BY id DESC
+       LIMIT 1`,
+      [userId, spaceId, threadId, content]
+    );
+    if (duplicate) {
+      return res.status(200).json({
+        ok: true,
+        status: "duplicate",
+        message: {
+          id: `bot-${duplicate.id}-assistant`,
+          role: "assistant",
+          content: duplicate.content || "",
+          createdAt: duplicate.created_at || null,
+        },
+      });
+    }
+
+    const inserted = await dbGet(
+      `INSERT INTO zaki_bot_messages (user_id, space_id, thread_id, role, content)
+       VALUES ($1, $2, $3, 'assistant', $4)
+       RETURNING id, role, content, created_at`,
+      [userId, spaceId, threadId, content]
+    );
+
+    return res.status(201).json({
+      ok: true,
+      status: "inserted",
+      message: {
+        id: `bot-${inserted?.id || Date.now()}-assistant`,
+        role: "assistant",
+        content: inserted?.content || content,
+        createdAt: inserted?.created_at || null,
+      },
+    });
+  } catch (error) {
+    console.error("[Agent] History append failed:", {
+      error: error?.message || "history append failed",
+    });
+    return res.status(500).json({ error: error?.message || "Unable to append Agent history." });
+  }
+}
+
 app.get(
   "/api/agent/diagnostics/extension",
   requireAgentContext,
@@ -15164,6 +15275,13 @@ app.get(
   }, AGENT_RUNTIME_JSON_PROXY_OPTIONS)
 );
 
+app.post(
+  "/api/agent/history/append",
+  requireAgentContext,
+  agentJson1mb,
+  agentHistoryAppendHandler
+);
+
 app.get(
   "/api/agent/traces",
   requireAgentContext,
@@ -15181,6 +15299,23 @@ app.get(
     (userId, req) =>
       `/api/v1/users/${encodeURIComponent(userId)}/traces/${encodeURIComponent(req.params.runId)}`,
     AGENT_RUNTIME_JSON_PROXY_OPTIONS
+  )
+);
+
+app.get(
+  "/api/agent/traces/:runId/events",
+  requireAgentContext,
+  makeAgentRuntimeProxyHandler(
+    ["runId"],
+    (userId, req) =>
+      `/api/v1/users/${encodeURIComponent(userId)}/traces/${encodeURIComponent(req.params.runId)}`,
+    {
+      ...AGENT_RUNTIME_JSON_PROXY_OPTIONS,
+      transformJson: (data) => ({
+        run_id: data?.run_id || data?.id || null,
+        events: Array.isArray(data?.events) ? data.events : [],
+      }),
+    }
   )
 );
 

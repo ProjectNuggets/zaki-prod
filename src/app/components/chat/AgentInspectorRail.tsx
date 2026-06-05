@@ -209,6 +209,7 @@ export type AgentInspectorRailProps = {
   transcriptEntries: NullalisTranscriptEntry[];
   narrationFrame: NullalisNarrationFrame | null;
   approvalRequest: NullalisApprovalRequest | null;
+  approvalContinuationPending?: boolean;
   artifactCount?: number;
   contextGaugeData: ContextGaugeData | null;
   usageSummary: ZakiUsageSummary | null;
@@ -248,14 +249,13 @@ function formatTokens(value?: number | null): string {
 
 function contextPercent(data: ContextGaugeData | null): number | null {
   if (!data) return null;
+  if (typeof data.pressurePercent === "number") {
+    return Math.min(100, Math.max(0, data.pressurePercent));
+  }
   if (typeof data.context_pressure_percent === "number") {
     return Math.min(100, Math.max(0, data.context_pressure_percent));
   }
-  if (!data.contextMax || data.contextMax <= 0) return null;
-  const tokenCount =
-    data.tokenCount ??
-    Math.round(((data.context_pressure_percent ?? 0) / 100) * data.contextMax);
-  return Math.min(100, Math.max(0, (tokenCount / data.contextMax) * 100));
+  return null;
 }
 
 function contextSourceLabel(data: ContextGaugeData | null): string {
@@ -572,6 +572,7 @@ export function AgentInspectorRail({
   transcriptEntries,
   narrationFrame,
   approvalRequest,
+  approvalContinuationPending = false,
   artifactCount = 0,
   contextGaugeData,
   usageSummary,
@@ -650,17 +651,26 @@ export function AgentInspectorRail({
     () => [...tasks].sort((a, b) => a.updatedAt - b.updatedAt),
     [tasks]
   );
-  const completedTaskCount = sortedTasks.filter((task) => isCompleteTask(task.status)).length;
-  const runningTask = sortedTasks.find((task) => task.status === "running") ?? null;
-  const weightedTaskProgress = sortedTasks.reduce((total, task) => {
+  const currentTasks = useMemo(
+    () => sortedTasks.filter((task) => !isCompleteTask(task.status)),
+    [sortedTasks]
+  );
+  const taskHistory = useMemo(
+    () => sortedTasks.filter((task) => isCompleteTask(task.status)).slice(-5).reverse(),
+    [sortedTasks]
+  );
+  const completedTaskCount = currentTasks.filter((task) => isCompleteTask(task.status)).length;
+  const runningTask = currentTasks.find((task) => task.status === "running") ?? null;
+  const hasActiveRun = isStreaming || approvalContinuationPending || Boolean(approvalRequest) || currentTasks.length > 0;
+  const weightedTaskProgress = currentTasks.reduce((total, task) => {
     if (isCompleteTask(task.status)) return total + 1;
     if (task.status === "running" && typeof task.progressPct === "number") {
       return total + Math.max(0, Math.min(100, task.progressPct)) / 100;
     }
     return total;
   }, 0);
-  const planPercent = sortedTasks.length
-    ? Math.round((weightedTaskProgress / sortedTasks.length) * 100)
+  const planPercent = currentTasks.length
+    ? Math.round((weightedTaskProgress / currentTasks.length) * 100)
     : 0;
   const ctxPct = contextPercent(contextGaugeData);
   const sandboxLabel = sandbox?.enabled
@@ -701,11 +711,14 @@ export function AgentInspectorRail({
   const latestLatency =
     recentTrace.find((event) => typeof event.durationMs === "number")?.durationMs ?? null;
   const primaryArtifact = artifactEntries[0] ?? null;
-  const latestPlanSignal =
-    narrationFrame?.label ||
-    runningTask?.description ||
-    recentTrace[0]?.summary ||
-    (isStreaming ? "Waiting for the next runtime event." : "No active run.");
+  const latestPlanSignal = !hasActiveRun
+    ? "No active run."
+    : approvalContinuationPending
+      ? "Approved. ZAKI is continuing..."
+      : narrationFrame?.label ||
+        runningTask?.description ||
+        recentTrace[0]?.summary ||
+        "Waiting for the next runtime event.";
   const narrationLog = recentTrace.slice(0, 4);
   const handleTabChange = (nextTab: AgentInspectorTab) => {
     setManualTabSelected(true);
@@ -866,7 +879,7 @@ export function AgentInspectorRail({
       setTab("plan");
       return;
     }
-    if (sortedTasks.length) {
+    if (currentTasks.length) {
       setTab("plan");
       return;
     }
@@ -892,7 +905,7 @@ export function AgentInspectorRail({
     cronSourceCount,
     manualTabSelected,
     sourceEntries.length,
-    sortedTasks.length,
+    currentTasks.length,
     tabRequest,
   ]);
 
@@ -1167,7 +1180,7 @@ export function AgentInspectorRail({
         value={tab}
         onChange={handleTabChange}
         options={[
-          { id: "plan", label: "Plan", count: approvalRequest ? "!" : sortedTasks.length || undefined },
+          { id: "plan", label: "Plan", count: approvalRequest ? "!" : currentTasks.length || undefined },
           { id: "cron", label: "Cron", count: cronSourceCount || undefined },
           { id: "evidence", label: "Evidence", count: sourceEntries.length || undefined },
           {
@@ -1196,14 +1209,14 @@ export function AgentInspectorRail({
                       <span className="fill" style={{ width: `${planPercent}%` }} />
                     </span>
                     <span className="num">
-                      {completedTaskCount} / {sortedTasks.length || 0}
+                      {completedTaskCount} / {currentTasks.length || 0}
                     </span>
                   </span>
                   <span className="sep">.</span>
                   <span>
                     {runningTask
                       ? `${Math.round(runningTask.progressPct ?? planPercent)}% live`
-                      : isStreaming
+                      : hasActiveRun
                         ? "forming"
                         : "idle"}
                   </span>
@@ -1219,21 +1232,27 @@ export function AgentInspectorRail({
               />
             ) : null}
             <section
-              className={cn("zaki-agent-inspector__narration", isStreaming && "is-live")}
-              aria-live={isStreaming ? "polite" : undefined}
+              className={cn("zaki-agent-inspector__narration", hasActiveRun && "is-live")}
+              aria-live={hasActiveRun ? "polite" : undefined}
               data-testid="agent-narration-box"
             >
               <div className="zaki-agent-inspector__narration-head">
                 <span>narration</span>
-                <span>{frameMeta(narrationFrame)}</span>
+                <span>{hasActiveRun ? frameMeta(narrationFrame) : "idle"}</span>
               </div>
-              <strong>{approvalRequest ? `Waiting on ${approvalRequest.tool}` : latestPlanSignal}</strong>
+              <strong>
+                {approvalRequest && !approvalContinuationPending
+                  ? `Waiting on ${approvalRequest.tool}`
+                  : latestPlanSignal}
+              </strong>
               <small>
-                {approvalRequest
+                {approvalRequest && !approvalContinuationPending
                   ? approvalRequest.reason || "Approval required before this run continues."
-                  : isStreaming
-                    ? "Live operational trail from the agent runtime."
-                    : "Latest operational trail for this session."}
+                  : approvalContinuationPending
+                    ? "The approval was accepted. ZAKI is executing the approved action and continuation."
+                    : hasActiveRun
+                      ? "Live operational trail from the agent runtime."
+                      : "Latest operational trail for this session."}
               </small>
               {narrationLog.length ? (
                 <ol className="zaki-agent-inspector__narration-log">
@@ -1247,9 +1266,9 @@ export function AgentInspectorRail({
                 </ol>
               ) : null}
             </section>
-            {sortedTasks.length ? (
+            {currentTasks.length ? (
               <ol className="zaki-agent-inspector__plan-list">
-                {sortedTasks.map((task) => (
+                {currentTasks.map((task) => (
                   <li
                     key={task.taskId}
                     data-testid="agent-task-row"
@@ -1360,11 +1379,30 @@ export function AgentInspectorRail({
                 ))}
               </ol>
             ) : null}
-            {tasksLoading && !sortedTasks.length ? (
+            {tasksLoading && !currentTasks.length ? (
               <div className="v2-empty-line">Loading task ledger...</div>
             ) : null}
             {tasksError ? (
               <div className="v2-empty-line">Task ledger unavailable: {tasksError}</div>
+            ) : null}
+            {!currentTasks.length && taskHistory.length ? (
+              <section className="zaki-agent-inspector__jobs" data-testid="agent-task-history">
+                <div className="zaki-agent-inspector__jobs-head">
+                  <span>task history</span>
+                  <span>{taskHistory.length} done</span>
+                </div>
+                <ol className="zaki-agent-inspector__job-list">
+                  {taskHistory.map((task) => (
+                    <li key={task.taskId} className="zaki-agent-inspector__job-row">
+                      <div>
+                        <strong title={task.description}>{compactJobTitle(task.description || task.taskId)}</strong>
+                        <span>{taskStatusLabel(task.status)}</span>
+                      </div>
+                      <small>{formatCalendarStamp(task.updatedAt)}</small>
+                    </li>
+                  ))}
+                </ol>
+              </section>
             ) : null}
             <section className="zaki-agent-inspector__jobs" data-testid="agent-job-ledger">
               <div className="zaki-agent-inspector__jobs-head">
@@ -1403,9 +1441,9 @@ export function AgentInspectorRail({
             </section>
             <div className="zaki-agent-inspector__plan-foot">
               <span>
-                {isStreaming
+                {hasActiveRun
                   ? "Live plan updates are attached to this run."
-                  : "Backend task ledger and live run events are scoped to this session."}
+                  : "No active plan. Completed backend tasks are shown as history only."}
               </span>
             </div>
           </V2Panel>
@@ -1647,7 +1685,9 @@ export function AgentInspectorRail({
                   ? `${Math.round(ctxPct)}% pressure${
                       contextGaugeData?.confidence ? ` · ${contextGaugeData.confidence}` : ""
                     }`
-                  : "No trusted context sample"}
+                  : contextGaugeData
+                    ? "-- pressure"
+                    : "No trusted context sample"}
               </small>
             </div>
             <PanelActionButton onClick={onOpenMemory} ariaLabel="Open memory graph">

@@ -220,6 +220,7 @@ describe("AgentInspectorRail", () => {
     fireEvent.click(screen.getByRole("tab", { name: /Evidence/i }));
 
     expect(screen.getByText("context source")).toBeInTheDocument();
+    expect(screen.getByText("-- pressure")).toBeInTheDocument();
     expect(screen.getByText("Fetched durable graph memory for this user.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open memory graph" }));
     expect(onOpenMemory).toHaveBeenCalledTimes(1);
@@ -584,10 +585,46 @@ describe("AgentInspectorRail", () => {
     });
 
     expect(screen.getByText("current plan")).toBeInTheDocument();
-    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+    expect(screen.getByText("0 / 1")).toBeInTheDocument();
     expect(screen.getAllByText("Polish the right rail").length).toBeGreaterThan(0);
     expect(screen.getByText("subagent")).toBeInTheDocument();
     expect(screen.getAllByText("subagent verifying trace rows against V6").length).toBeGreaterThan(0);
+  });
+
+  it("does not count completed historical tasks as the current plan", () => {
+    renderRail({
+      tasks: [
+        {
+          taskId: "task-done-1",
+          status: "done",
+          description: "Old completed task",
+          updatedAt: 1,
+        },
+      ],
+    });
+
+    expect(screen.getByText("0 / 0")).toBeInTheDocument();
+    expect(screen.getByText("No active run.")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-task-history")).toBeInTheDocument();
+    expect(screen.getByText("Old completed task")).toBeInTheDocument();
+    expect(screen.getByText("No active plan. Completed backend tasks are shown as history only.")).toBeInTheDocument();
+  });
+
+  it("shows approval continuation as an active run without requiring session.live", () => {
+    renderRail({
+      approvalContinuationPending: true,
+      approvalRequest: {
+        id: "approval-1",
+        tool: "shell",
+        reason: "supervised_mutating_requires_approval",
+        riskLevel: "high",
+        timestamp: 1,
+      },
+    });
+
+    expect(screen.getAllByText("Approved. ZAKI is continuing...").length).toBeGreaterThan(0);
+    expect(screen.getByText(/executing the approved action and continuation/i)).toBeInTheDocument();
+    expect(screen.getByText("forming")).toBeInTheDocument();
   });
 
   it("renders trace as V6 operation rows with latency and warning count", async () => {

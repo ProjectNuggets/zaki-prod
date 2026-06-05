@@ -487,22 +487,22 @@ export function InputArea({
   // Table-stakes #10 (2026-05-08, refined per WR-05 review) —
   // High-pressure pre-flight nudge.
   //
-  // The backend owns the nudge point. Without backend-reported policy,
-  // fall back to a conservative 70% — clearly labeled as the FE default.
+  // The backend owns the nudge point. Without backend-reported policy, the
+  // meter stays informational and does not invent a compaction trigger.
   //
   // Hysteresis: once the banner shows, it stays open until pressure
   // drops 5pp below the show line. Otherwise the user types one
   // character that nudges pressure up to the show line, the banner
   // appears, the next character drops below, the banner hides — flicker.
-  const COMPACT_FALLBACK_SHOW_AT = 70;
   const COMPACT_HYSTERESIS_PP = 5;
   const compactShowLine =
     typeof zakiCompactionThresholdPct === "number" && zakiCompactionThresholdPct > 0
       ? Math.max(0, Math.min(100, zakiCompactionThresholdPct))
-      : COMPACT_FALLBACK_SHOW_AT;
-  const compactHideLine = Math.max(0, compactShowLine - COMPACT_HYSTERESIS_PP);
+      : null;
+  const compactHideLine =
+    compactShowLine != null ? Math.max(0, compactShowLine - COMPACT_HYSTERESIS_PP) : null;
   const compactArmedRef = useRef(false);
-  if (hasZakiContextValue) {
+  if (hasZakiContextValue && compactShowLine != null && compactHideLine != null) {
     if (zakiContextValue >= compactShowLine) compactArmedRef.current = true;
     else if (zakiContextValue < compactHideLine) compactArmedRef.current = false;
   } else {
@@ -512,7 +512,7 @@ export function InputArea({
   // becomes the compact trigger. No separate rail. Hysteresis keeps
   // the meter from flickering between actionable/inert states.
   const compactArmed =
-    zakiBotMode && !isSending && hasZakiContextValue && compactArmedRef.current;
+    zakiBotMode && !isSending && hasZakiContextValue && compactShowLine != null && compactArmedRef.current;
 
   // ── Voice recording (STT) ──────────────────────────────────────────
   const [isRecording, setIsRecording] = useState(false);

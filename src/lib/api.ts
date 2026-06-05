@@ -2386,6 +2386,32 @@ export async function fetchAgentHistory(
   return { response, data };
 }
 
+export async function appendAgentHistoryMessage(payload: {
+  spaceId?: string;
+  threadId: string;
+  sessionKey: string;
+  role: "assistant";
+  content: string;
+}) {
+  const response = await backendAuthRequest("/api/agent/history/append", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = await parseApiJson<{
+    ok?: boolean;
+    status?: "inserted" | "duplicate" | "skipped";
+    message?: {
+      id?: string;
+      role?: "assistant";
+      content?: string;
+      createdAt?: string | null;
+    };
+    error?: string;
+    code?: string;
+  }>(response);
+  return { response, data };
+}
+
 export async function fetchAgentDiagnostics() {
   const response = await backendAuthRequest("/api/agent/diagnostics", { method: "GET" });
   const data = await parseApiJson<{
@@ -2464,11 +2490,46 @@ export type AgentContextCompaction = {
   recommended?: boolean | null;
 };
 
+export type AgentContextEstimator = {
+  name?: string | null;
+  version?: number | null;
+  method?: string | null;
+  chars_per_token?: number | null;
+  includes?: string[] | null;
+};
+
+export type AgentContextProviderUsage = {
+  available?: boolean | null;
+  prompt_tokens?: number | null;
+  completion_tokens?: number | null;
+  reasoning_tokens?: number | null;
+  total_tokens?: number | null;
+  cached_prompt_tokens?: number | null;
+  cache_hit_percent?: number | null;
+};
+
+export type AgentContextLastTurnDelta = {
+  bytes?: number | null;
+  token_estimate?: number | null;
+  pressure_points?: number | null;
+  tool_mode?: "native_tool_calls" | "xml_fallback" | "mixed" | "no_tools" | string | null;
+};
+
+export type AgentContextContributor = {
+  index?: number | null;
+  role?: string | null;
+  source?: string | null;
+  bytes?: number | null;
+  token_estimate?: number | null;
+};
+
 export type AgentContextReport = {
   status?: "live" | string;
   session_key?: string;
   active?: boolean;
   live?: boolean;
+  code?: string | null;
+  reason?: string | null;
   sampled_at_ms?: number;
   model?: string | null;
   model_provider?: string | null;
@@ -2482,10 +2543,23 @@ export type AgentContextReport = {
   context_window_tokens?: number;
   total_tokens?: number | null;
   remaining_tokens?: number;
+  usable_input_budget_tokens?: number;
+  budget_pressure_percent?: number;
+  token_total_reserve?: number | null;
+  context_bytes?: {
+    content?: number | null;
+    reasoning?: number | null;
+    total?: number | null;
+  } | null;
   token_limit?: number;
   context_window_used_pct?: number;
   pressure_percent?: number;
   context_pressure_percent?: number;
+  estimator?: AgentContextEstimator | null;
+  provider_usage_last_turn?: AgentContextProviderUsage | null;
+  cache?: Record<string, unknown> | null;
+  last_turn_delta?: AgentContextLastTurnDelta | null;
+  top_context_contributors?: AgentContextContributor[] | null;
   message_count?: number;
   history_len?: number;
   history_messages?: number;
@@ -2508,13 +2582,10 @@ export type AgentContextReport = {
   prompt?: Record<string, unknown> | null;
   retrieval?: Record<string, unknown> | null;
   continuity?: Record<string, unknown> | null;
-  cache?: Record<string, unknown> | null;
   buckets?: Record<string, unknown> | null;
   runtime?: Record<string, unknown> | null;
   last_turn?: Record<string, unknown> | null;
   error?: string | null;
-  code?: string | null;
-  reason?: string | null;
 };
 
 export type AgentSessionContext = AgentContextReport & {
@@ -2873,6 +2944,17 @@ export async function fetchAgentTrace(runId: string) {
     method: "GET",
   });
   const data = await parseApiJson<AgentTrace>(response);
+  return { response, data };
+}
+
+export async function fetchAgentTraceEvents(runId: string) {
+  const response = await backendAuthRequest(
+    `/api/agent/traces/${encodeURIComponent(runId)}/events`,
+    { method: "GET" }
+  );
+  const data = await parseApiJson<{ run_id?: string; id?: string; events?: unknown[]; error?: string }>(
+    response
+  );
   return { response, data };
 }
 

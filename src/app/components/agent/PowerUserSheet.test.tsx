@@ -747,6 +747,40 @@ describe("PowerUserSheet", () => {
     ).toBeInTheDocument();
   });
 
+  it("preserves unavailable active-session context envelopes as inactive", async () => {
+    fetchAgentSessionContextMock.mockResolvedValueOnce({
+      response: { ok: true },
+      data: {
+        active: false,
+        live: false,
+        code: "session_manager_unavailable",
+        reason: "Live session manager is not available.",
+      },
+    });
+
+    await act(async () => {
+      render(
+        <PowerUserSheet
+          isOpen
+          onClose={() => {}}
+          initialTab="context"
+          activeSessionKey="agent:zaki-bot:user:42:thread:main"
+        />
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("power-user-context")).toHaveAttribute(
+        "data-state",
+        "inactive"
+      );
+    });
+    expect(fetchContextDiagnosticsMock).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/No context diagnostics available \(session_manager_unavailable\)/i)
+    ).toBeInTheDocument();
+  });
+
   it("renders memory report text when backend returns it", async () => {
     fetchMemoryDoctorMock.mockResolvedValueOnce({
       response: { ok: true },

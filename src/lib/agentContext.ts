@@ -63,7 +63,6 @@ function contextMetricPayload(data: ContextPayload | null | undefined) {
 
 function hasTrustedContextWindowSignal(payload: ContextPayload) {
   return (
-    numericValue(payload.pressure_percent) != null ||
     numericValue(payload.token_estimate) != null ||
     numericValue(payload.context_window_tokens) != null ||
     numericValue(payload.context_window_used) != null ||
@@ -72,6 +71,9 @@ function hasTrustedContextWindowSignal(payload: ContextPayload) {
     numericValue(payload.used_tokens) != null ||
     numericValue(payload.remaining_tokens) != null ||
     numericValue(payload.sampled_at_ms) != null ||
+    objectValue(payload.estimator) != null ||
+    objectValue(payload.compaction) != null ||
+    objectValue(payload.provider_usage_last_turn) != null ||
     stringValue(payload.context_window_source) != null ||
     objectValue(payload.report) != null
   );
@@ -114,8 +116,7 @@ export function resolveRuntimeContextPressurePercent(
 
   const explicitPressure =
     numericValue(payload.pressure_percent) ??
-    numericValue(payload.context_pressure_percent) ??
-    numericValue(payload.context_window_used_pct);
+    numericValue(payload.context_pressure_percent);
   const looksLikeLegacyCumulativeContext =
     explicitPressure != null &&
     numericValue(payload.tokens_used) != null &&
@@ -124,20 +125,7 @@ export function resolveRuntimeContextPressurePercent(
   if (explicitPressure != null && !looksLikeLegacyCumulativeContext) {
     return clampPercent(explicitPressure);
   }
-
-  const used =
-    numericValue(payload.token_estimate) ??
-    numericValue(payload.context_window_used) ??
-    numericValue(payload.context_tokens) ??
-    numericValue(payload.used_tokens) ??
-    (hasTrustedContextWindowSignal(payload) ? numericValue(payload.tokens_used) : null);
-  const max =
-    numericValue(payload.context_window_max) ??
-    numericValue(payload.context_max) ??
-    numericValue(payload.context_window_tokens) ??
-    (hasTrustedContextWindowSignal(payload) ? numericValue(payload.token_limit) : null);
-  if (used == null || max == null || max <= 0) return null;
-  return clampPercent((used / max) * 100);
+  return null;
 }
 
 function normalizeCompaction(payload: ContextPayload): AgentContextCompaction | null {
@@ -231,10 +219,6 @@ export function resolveContextGaugePercent(
   }
   if (typeof data.context_pressure_percent === "number") {
     return clampPercent(data.context_pressure_percent);
-  }
-  if (!data.contextMax || data.contextMax <= 0) return null;
-  if (typeof data.tokenCount === "number") {
-    return clampPercent((data.tokenCount / data.contextMax) * 100);
   }
   return null;
 }

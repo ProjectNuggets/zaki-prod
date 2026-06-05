@@ -5092,6 +5092,12 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   padding: 12px 24px 18px;
 }
 
+.zaki-app-v2 .zaki-agent-v2 .zaki-approval-card-slot {
+  width: min(100%, 900px);
+  margin: 0 auto 8px;
+  padding: 0 24px;
+}
+
 .zaki-app-v2 .zaki-agent-v2 .zaki-input-form {
   position: relative;
   z-index: 1;
@@ -6125,8 +6131,8 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-approval-card {
-  max-width: min(100%, 760px);
-  margin: 8px 4px 0;
+  width: 100%;
+  margin: 0;
   border: 1px solid var(--v2-warn);
   border-radius: 0;
   background: var(--v2-warn-faint);
@@ -6353,8 +6359,9 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
     gap: 3px;
   }
 
-  .zaki-approval-card {
-    margin: 6px 0 0;
+  .zaki-app-v2 .zaki-agent-v2 .zaki-approval-card-slot {
+    padding: 0 14px;
+    margin-bottom: 6px;
   }
 
   .zaki-approval-card__layout {
