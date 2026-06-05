@@ -382,6 +382,10 @@ export type ContextGaugeData = {
   messageCount?: number;
   source?: "live_session" | "diagnostics_fallback" | "inactive_session" | "unknown";
   confidence?: "exact" | "fallback" | "inactive" | "unknown";
+  pressureTokenSource?: string | null;
+  localTokenEstimate?: number | null;
+  providerPromptTokens?: number | null;
+  providerCachedPromptTokens?: number | null;
   compactionThresholdPct?: number | null;
   compactionThresholdTokens?: number | null;
   tokenCompactionTriggered?: boolean | null;

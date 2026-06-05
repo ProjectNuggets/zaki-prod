@@ -2559,6 +2559,15 @@ export type AgentContextReport = {
   context_window_used_pct?: number;
   pressure_percent?: number;
   context_pressure_percent?: number;
+  pressure_token_source?:
+    | "provider_last_usage"
+    | "provider_preflight"
+    | "local_estimate"
+    | string
+    | null;
+  local_token_estimate?: number | null;
+  provider_prompt_tokens?: number | null;
+  provider_cached_prompt_tokens?: number | null;
   estimator?: AgentContextEstimator | null;
   provider_usage_last_turn?: AgentContextProviderUsage | null;
   cache?: Record<string, unknown> | null;

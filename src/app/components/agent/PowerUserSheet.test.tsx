@@ -710,6 +710,15 @@ describe("PowerUserSheet", () => {
         context_window_tokens: 128000,
         pressure_percent: 5,
         context_pressure_percent: 5,
+        pressure_token_source: "provider_last_usage",
+        local_token_estimate: 5900,
+        provider_prompt_tokens: 6400,
+        provider_cached_prompt_tokens: 5100,
+        provider_usage_last_turn: {
+          prompt_tokens: 6400,
+          cached_prompt_tokens: 5100,
+          cache_hit_percent: 80,
+        },
         remaining_tokens: 121600,
         context_window_source: "model_capability",
         token_compaction_recommended: false,
@@ -742,6 +751,12 @@ describe("PowerUserSheet", () => {
     expect(fetchContextDiagnosticsMock).not.toHaveBeenCalled();
     expect(screen.getByText(/5%/)).toBeInTheDocument();
     expect(screen.getByText("model_capability")).toBeInTheDocument();
+    expect(screen.getByTestId("power-user-context-pressure-source")).toHaveTextContent(
+      "provider_last_usage"
+    );
+    expect(screen.getByText("6,400")).toBeInTheDocument();
+    expect(screen.getByText("5,100 (80%)")).toBeInTheDocument();
+    expect(screen.getByText("5,900")).toBeInTheDocument();
     expect(
       screen.getByTestId("power-user-context-section-compaction-policy")
     ).toBeInTheDocument();

@@ -10,6 +10,10 @@ export type AgentContextGauge = {
   contextMax?: number;
   messageCount?: number;
   pressurePercent?: number | null;
+  pressureTokenSource?: string | null;
+  localTokenEstimate?: number | null;
+  providerPromptTokens?: number | null;
+  providerCachedPromptTokens?: number | null;
   sampledAtMs?: number | null;
   status?: string | null;
   reason?: string | null;
@@ -191,12 +195,27 @@ export function buildAgentContextGauge(
     numericValue(payload.history_messages) ??
     null;
   const compaction = normalizeCompaction(payload);
+  const providerUsage = objectValue(payload.provider_usage_last_turn);
 
   return {
     tokenCount: tokenCount ?? undefined,
     contextMax: contextMax && contextMax > 0 ? contextMax : undefined,
     messageCount: messageCount ?? undefined,
     pressurePercent: pressurePct,
+    pressureTokenSource:
+      stringValue(payload.pressure_token_source) ?? stringValue(payload.pressureTokenSource),
+    localTokenEstimate:
+      numericValue(payload.local_token_estimate) ?? numericValue(payload.localTokenEstimate),
+    providerPromptTokens:
+      numericValue(payload.provider_prompt_tokens) ??
+      numericValue(payload.providerPromptTokens) ??
+      numericValue(providerUsage?.prompt_tokens) ??
+      numericValue(providerUsage?.promptTokens),
+    providerCachedPromptTokens:
+      numericValue(payload.provider_cached_prompt_tokens) ??
+      numericValue(payload.providerCachedPromptTokens) ??
+      numericValue(providerUsage?.cached_prompt_tokens) ??
+      numericValue(providerUsage?.cachedPromptTokens),
     sampledAtMs: numericValue(payload.sampled_at_ms),
     status: stringValue(payload.status),
     reason: stringValue(payload.reason),

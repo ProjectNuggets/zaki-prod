@@ -861,6 +861,22 @@ export function PowerUserSheet({
       gauge?.contextMax ?? report?.context_window_tokens ?? legacy?.totalTokens ?? null;
     const remainingTokens = gauge?.remainingTokens ?? report?.remaining_tokens ?? null;
     const windowSource = gauge?.contextWindowSource ?? report?.context_window_source ?? null;
+    const pressureTokenSource =
+      gauge?.pressureTokenSource ?? report?.pressure_token_source ?? null;
+    const localTokenEstimate =
+      gauge?.localTokenEstimate ?? report?.local_token_estimate ?? null;
+    const providerPromptTokens =
+      gauge?.providerPromptTokens ??
+      report?.provider_prompt_tokens ??
+      report?.provider_usage_last_turn?.prompt_tokens ??
+      null;
+    const providerCachedPromptTokens =
+      gauge?.providerCachedPromptTokens ??
+      report?.provider_cached_prompt_tokens ??
+      report?.provider_usage_last_turn?.cached_prompt_tokens ??
+      null;
+    const providerCacheHitPercent =
+      report?.provider_usage_last_turn?.cache_hit_percent ?? null;
     const history = gauge?.messageCount ?? report?.history_messages ?? legacy?.turnsInContext ?? null;
     const compactionRecommended =
       report?.compaction?.recommended ??
@@ -897,6 +913,45 @@ export function PowerUserSheet({
               {pressurePct == null ? "--" : formatPct(pressurePct)} · {formatCount(usedTokens)} /{" "}
               {formatCount(totalTokens)}
             </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-zaki-secondary">
+              {t("zakiControls.powerUser.context.pressureSource", {
+                defaultValue: "Pressure source",
+              })}
+            </span>
+            <span className="font-mono-ui text-xs" data-testid="power-user-context-pressure-source">
+              {pressureTokenSource || "—"}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-zaki-secondary">
+              {t("zakiControls.powerUser.context.providerPromptTokens", {
+                defaultValue: "Provider prompt tokens",
+              })}
+            </span>
+            <span className="font-mono-ui">{formatCount(providerPromptTokens)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-zaki-secondary">
+              {t("zakiControls.powerUser.context.providerCachedTokens", {
+                defaultValue: "Provider cached tokens",
+              })}
+            </span>
+            <span className="font-mono-ui">
+              {formatCount(providerCachedPromptTokens)}
+              {providerCacheHitPercent != null
+                ? ` (${formatPct(providerCacheHitPercent)})`
+                : ""}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-zaki-secondary">
+              {t("zakiControls.powerUser.context.localEstimate", {
+                defaultValue: "Local estimate",
+              })}
+            </span>
+            <span className="font-mono-ui">{formatCount(localTokenEstimate)}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-zaki-secondary">
