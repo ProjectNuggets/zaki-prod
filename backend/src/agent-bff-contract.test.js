@@ -323,7 +323,6 @@ describe("agent BOT BFF contract", () => {
   it("defines the agent session BFF proxy surface (matches src/lib/api.ts)", () => {
     expect(AGENT_SESSION_BFF_ROUTES).toEqual([
       { method: "get",    path: "/api/agent/sessions/:sessionKey",          upstreamSuffix: "",         json: false },
-      { method: "delete", path: "/api/agent/sessions/:sessionKey",          upstreamSuffix: "",         json: false },
       { method: "post",   path: "/api/agent/sessions/:sessionKey/compact",  upstreamSuffix: "/compact", json: false },
       { method: "get",    path: "/api/agent/sessions/:sessionKey/context",  upstreamSuffix: "/context", json: false },
       { method: "get",    path: "/api/agent/sessions/:sessionKey/export",   upstreamSuffix: "/export",  json: false },
@@ -400,9 +399,7 @@ describe("agent BOT BFF contract", () => {
         "/api/agent/sessions/:sessionKey/export",
         "/api/agent/sessions/:sessionKey/history",
       ]);
-      expect(verbCalls("delete")).toEqual([
-        "/api/agent/sessions/:sessionKey",
-      ]);
+      expect(verbCalls("delete")).toEqual([]);
       expect(verbCalls("post")).toEqual([
         "/api/agent/sessions/:sessionKey/compact",
         "/api/agent/sessions/:sessionKey/mode",

@@ -10,6 +10,7 @@ import { useSessionTitleOverlay } from "@/queries/useSessionTitleOverlay";
 interface ZakiSessionListProps {
   sessions: AgentSession[];
   isLoading: boolean;
+  isError?: boolean;
   activeSessionKey: string | null;
   onSelectSession: (sessionKey: string) => void;
   onCreateSession: () => void;
@@ -28,6 +29,7 @@ interface ZakiSessionListProps {
   showRuntimeBadges?: boolean;
   /** Hide the embedded create button when a parent rail owns that action. */
   showCreateButton?: boolean;
+  onRetry?: () => void;
 }
 
 function formatSessionStamp(value: AgentSession["last_active"]): string | null {
@@ -48,6 +50,7 @@ function formatSessionStamp(value: AgentSession["last_active"]): string | null {
 export function ZakiSessionList({
   sessions,
   isLoading,
+  isError = false,
   activeSessionKey,
   onSelectSession,
   onCreateSession,
@@ -58,6 +61,7 @@ export function ZakiSessionList({
   onRenameSession,
   showRuntimeBadges = true,
   showCreateButton = true,
+  onRetry,
 }: ZakiSessionListProps) {
   const {
     getLabel: getOverlayLabel,
@@ -118,6 +122,35 @@ export function ZakiSessionList({
     return (
       <div className="flex items-center justify-center py-8">
         <Loader2 className="size-5 text-zaki-muted animate-spin" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+        <div className="w-12 h-12 rounded-2xl bg-zaki-hover flex items-center justify-center mb-3">
+          <MessageSquare className="w-6 h-6 text-zaki-muted" />
+        </div>
+        <p className="text-sm text-zaki-primary font-medium mb-1">
+          {t("zakiControls.sessionList.unavailableTitle", {
+            defaultValue: "Sessions unavailable",
+          })}
+        </p>
+        <p className="text-xs text-zaki-secondary mb-4">
+          {t("zakiControls.sessionList.unavailableHelper", {
+            defaultValue: "ZAKI could not reach the Agent session store. Try again.",
+          })}
+        </p>
+        {onRetry ? (
+          <button
+            onClick={onRetry}
+            className="flex items-center gap-2 px-3 py-2 border border-zaki-subtle bg-zaki-surface text-zaki-primary text-sm font-medium rounded-zaki-lg hover:bg-zaki-hover transition-colors"
+            type="button"
+          >
+            {t("common.retry", { defaultValue: "Retry" })}
+          </button>
+        ) : null}
       </div>
     );
   }

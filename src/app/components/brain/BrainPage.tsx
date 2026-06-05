@@ -222,18 +222,14 @@ export function BrainPage() {
 
   if (!userId || initialGraphQuery.isLoading) return <SkeletonBrainPage />;
 
-  if (initialGraphQuery.isError) {
-    return (
-      <div className="px-6 py-16 text-center text-sm text-zaki-muted">
-        {t("brain.error.loadFailed")}
-      </div>
-    );
-  }
+  const brainUnavailable = initialGraphQuery.isError;
+  const totalNodes = brainUnavailable
+    ? 0
+    : initialGraphQuery.data?.total_nodes_in_corpus ?? 0;
+  const semanticDegraded =
+    brainUnavailable || (initialGraphQuery.data?.semantic_degraded ?? false);
 
-  const totalNodes = initialGraphQuery.data?.total_nodes_in_corpus ?? 0;
-  const semanticDegraded = initialGraphQuery.data?.semantic_degraded ?? false;
-
-  if (totalNodes === 0) {
+  if (!brainUnavailable && totalNodes === 0) {
     return <BrainEmptyState onMigrate={() => navigate("/")} />;
   }
 
@@ -280,20 +276,24 @@ export function BrainPage() {
           {
             id: "nodes",
             label: t("brain.status.memories", { defaultValue: "Memories" }),
-            value: totalNodes.toLocaleString(),
-            tone: "accent",
+            value: brainUnavailable ? "--" : totalNodes.toLocaleString(),
+            tone: brainUnavailable ? "warn" : "accent",
           },
           {
             id: "view",
             label: t("brain.status.view", { defaultValue: "View" }),
-            value: tab,
+            value: brainUnavailable
+              ? t("brain.status.unavailable", { defaultValue: "Unavailable" })
+              : tab,
           },
           {
             id: "health",
-            label: semanticDegraded
+            label: brainUnavailable
+              ? t("brain.status.memoryUnavailable", { defaultValue: "Memory unavailable" })
+              : semanticDegraded
               ? t("brain.status.semanticDegraded", { defaultValue: "Semantic degraded" })
               : t("brain.status.semanticReady", { defaultValue: "Semantic ready" }),
-            tone: semanticDegraded ? "warn" : "success",
+            tone: brainUnavailable || semanticDegraded ? "warn" : "success",
           },
         ]}
       />
@@ -326,27 +326,33 @@ export function BrainPage() {
           </div>
         </header>
 
-        {semanticDegraded && !degradedDismissed && (
+        {brainUnavailable ? (
+          <BrainUnavailableState />
+        ) : null}
+
+        {!brainUnavailable && semanticDegraded && !degradedDismissed && (
           <div className="zaki-brain-v2__banner">
             <BrainSemanticDegradedBanner onDismiss={() => setDegradedDismissed(true)} />
           </div>
         )}
 
-        <BrainInsightsStrip userId={userId} total={totalNodes} />
+        {!brainUnavailable ? <BrainInsightsStrip userId={userId} total={totalNodes} /> : null}
 
-        <V2Tabs
-          ariaLabel={t("brain.tabs.ariaLabel", { defaultValue: "Brain views" })}
-          value={tab}
-          onChange={setTab}
-          fullWidth
-          options={[
-            { id: "home", label: t("brain.tabs.home", { defaultValue: "Home" }) },
-            { id: "explore", label: t("brain.tabs.explore", { defaultValue: "Explore" }) },
-          ]}
-        />
+        {!brainUnavailable ? (
+          <V2Tabs
+            ariaLabel={t("brain.tabs.ariaLabel", { defaultValue: "Brain views" })}
+            value={tab}
+            onChange={setTab}
+            fullWidth
+            options={[
+              { id: "home", label: t("brain.tabs.home", { defaultValue: "Home" }) },
+              { id: "explore", label: t("brain.tabs.explore", { defaultValue: "Explore" }) },
+            ]}
+          />
+        ) : null}
       </div>
 
-      {tab === "home" ? (
+      {brainUnavailable ? null : tab === "home" ? (
         <div className="zaki-brain-v2__home-slot" data-testid="brain-home-slot">
           <BrainHome
             userId={userId}
@@ -626,6 +632,37 @@ export function BrainPage() {
   );
 }
 
+function BrainUnavailableState() {
+  const { t } = useTranslation();
+  return (
+    <section className="zaki-brain-v2__unavailable" data-testid="brain-unavailable-state">
+      <div>
+        <p>{t("brain.unavailable.eyebrow", { defaultValue: "Memory layer unavailable" })}</p>
+        <h2>
+          {t("brain.unavailable.title", {
+            defaultValue: "Brain is waiting for the memory state manager",
+          })}
+        </h2>
+      </div>
+      <p>
+        {t("brain.unavailable.body", {
+          defaultValue:
+            "ZAKI is running, but the Brain graph cannot read the active memory store in the current runtime. The route is healthy; the backend memory layer is degraded.",
+        })}
+      </p>
+      <Link
+        to="/settings#settings-memory-data"
+        className="zaki-brain-v2__governance-link"
+        data-testid="brain-unavailable-settings-link"
+      >
+        <Shield className="size-3.5" aria-hidden="true" />
+        {t("brain.governance.manageLink", {
+          defaultValue: "Memory & privacy in Settings",
+        })}
+      </Link>
+    </section>
+  );
+}
 
 // V1.11 (2026-05-07) — Wraps the existing side-panel components (filter,
 // clusters, orphans) as a floating right-anchored overlay inside the

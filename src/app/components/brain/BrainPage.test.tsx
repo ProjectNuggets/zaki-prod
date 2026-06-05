@@ -126,12 +126,20 @@ describe("BrainPage", () => {
     expect(screen.getByTestId("skeleton-brain-page")).toBeInTheDocument();
   });
 
-  it("surfaces a load-failure state on query error", () => {
+  it("keeps the V2 Brain shell mounted when the backend memory layer is unavailable", () => {
     mockGraph = { data: undefined, isLoading: false, isError: true };
     renderPage();
+    expect(screen.getAllByText("Personal brain").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("brain-manage-memory-link")).toHaveAttribute(
+      "href",
+      "/settings#settings-memory-data",
+    );
+    expect(screen.getByTestId("brain-unavailable-state")).toBeInTheDocument();
+    expect(screen.getByText("Memory layer unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Memory unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Unavailable")).toBeInTheDocument();
     expect(screen.queryByTestId("brain-home-slot")).not.toBeInTheDocument();
     expect(screen.queryByTestId("brain-graph-slot")).not.toBeInTheDocument();
-    expect(screen.getByText("brain.error.loadFailed")).toBeInTheDocument();
   });
 
   it("renders the empty state when the corpus has zero memories", () => {

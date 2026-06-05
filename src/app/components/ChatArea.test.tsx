@@ -30,15 +30,14 @@ import { useNavigationStore, useAuthStore, useZakiSessionUiStore } from "@/store
 import { useMessages } from "@/queries/useThreads";
 import {
   apiRequest,
-  appendAgentHistoryMessage,
   approveAgentSession,
   cancelAgentSession,
   fetchAgentExtensionDiagnostics,
   fetchAgentDiagnostics,
-  fetchAgentHistory,
   fetchAgentMe,
   fetchAgentSession,
   fetchAgentSessionContext,
+  fetchAgentSessionHistory,
   fetchContextDiagnostics,
   fetchBotRuntimeStatus,
   fetchMemoryActivity,
@@ -71,6 +70,15 @@ jest.mock("@/lib/api", () => ({
       json: async () => ({ history: [] }),
     },
     data: { history: [] },
+  })),
+  fetchAgentSessionHistory: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ messages: [] }),
+      headers: new Headers(),
+    },
+    data: { messages: [] },
   })),
   fetchAgentMe: jest.fn(async () => ({
     response: {
@@ -426,7 +434,16 @@ describe("ChatArea Component", () => {
   beforeEach(() => {
     cleanup();
     (apiRequest as jest.Mock).mockClear();
-    (fetchAgentHistory as jest.Mock).mockClear();
+    (fetchAgentSessionHistory as jest.Mock).mockReset();
+    (fetchAgentSessionHistory as jest.Mock).mockImplementation(async () => ({
+      response: {
+        ok: true,
+        status: 200,
+        json: async () => ({ messages: [] }),
+        headers: new Headers(),
+      },
+      data: { messages: [] },
+    }));
     (fetchAgentMe as jest.Mock).mockClear();
     (fetchAgentSession as jest.Mock).mockReset();
     (fetchAgentSession as jest.Mock).mockImplementation(async () => ({
@@ -458,7 +475,6 @@ describe("ChatArea Component", () => {
     (provisionAgent as jest.Mock).mockClear();
     (setAgentSessionMode as jest.Mock).mockClear();
     (approveAgentSession as jest.Mock).mockClear();
-    (appendAgentHistoryMessage as jest.Mock).mockClear();
     (cancelAgentSession as jest.Mock).mockClear();
     (fetchAgentExtensionDiagnostics as jest.Mock).mockClear();
     (fetchAgentDiagnostics as jest.Mock).mockClear();
@@ -606,7 +622,6 @@ describe("ChatArea Component", () => {
       tokenCount: 33_771,
       contextMax: 460_000,
       messageCount: 43,
-      context_pressure_percent: 7.3,
       pressurePercent: 7.3,
     });
     expect(resolveContextGaugePercent(gauge)).toBe(7.3);
@@ -623,7 +638,6 @@ describe("ChatArea Component", () => {
       tokenCount: 33_771,
       contextMax: 460_000,
       messageCount: 43,
-      context_pressure_percent: null,
       pressurePercent: null,
     });
     expect(resolveContextGaugePercent(gauge)).toBeNull();
@@ -668,7 +682,6 @@ describe("ChatArea Component", () => {
       tokenCount: 6_000,
       contextMax: 120_000,
       messageCount: 3,
-      context_pressure_percent: 5,
       pressurePercent: 5,
     });
   });
@@ -695,7 +708,6 @@ describe("ChatArea Component", () => {
     expect(gauge).toMatchObject({
       tokenCount: 6_400,
       contextMax: 128_000,
-      context_pressure_percent: 5,
       pressurePercent: 5,
       model: "openai/gpt-5.2",
       remainingTokens: 121_600,
@@ -737,7 +749,6 @@ describe("ChatArea Component", () => {
 
     expect(gauge).toMatchObject({
       messageCount: 3,
-      context_pressure_percent: 21,
       pressurePercent: 21,
     });
     expect(resolveContextGaugePercent(gauge)).toBe(21);
@@ -769,7 +780,6 @@ describe("ChatArea Component", () => {
       tokenCount: 25_000,
       contextMax: 200_000,
       messageCount: 12,
-      context_pressure_percent: null,
       pressurePercent: null,
     });
     expect(resolveContextGaugePercent(gauge)).toBeNull();
@@ -796,7 +806,6 @@ describe("ChatArea Component", () => {
     expect(gauge).toMatchObject({
       tokenCount: 101_000,
       contextMax: 200_000,
-      context_pressure_percent: 50.5,
       pressurePercent: 50.5,
     });
   });
@@ -874,9 +883,9 @@ describe("ChatArea Component", () => {
       expect(screen.getByTestId("zaki-context-meter")).toHaveTextContent("25%");
     });
     await waitFor(() => {
-      expect(fetchAgentHistory).toHaveBeenCalledWith("zaki-bot", "main", "merged");
+      expect(fetchAgentSessionHistory).toHaveBeenCalledWith("agent:zaki-bot:user:1:thread:main");
     });
-    (fetchAgentHistory as jest.Mock).mockClear();
+    (fetchAgentSessionHistory as jest.Mock).mockClear();
     fireEvent.change(screen.getByRole("combobox"), {
       target: { value: "continue this task" },
     });
@@ -890,7 +899,7 @@ describe("ChatArea Component", () => {
       ).toBe(true);
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(fetchAgentHistory).not.toHaveBeenCalled();
+    expect(fetchAgentSessionHistory).not.toHaveBeenCalled();
     expect(
       zakiSessionUiState.sessions["agent:zaki-bot:user:1:thread:main"]?.contextPressurePercent
     ).toBe(25);
@@ -1142,7 +1151,7 @@ describe("ChatArea Component", () => {
     const view = await renderChatAreaAndWaitForEffects();
 
     expect(provisionAgent).not.toHaveBeenCalled();
-    expect(fetchAgentHistory).not.toHaveBeenCalled();
+    expect(fetchAgentSessionHistory).not.toHaveBeenCalled();
 
     authState = {
       user: { username: "nova@test.com" },
@@ -1286,10 +1295,12 @@ describe("ChatArea Component", () => {
       response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
       data: { userId: "1" },
     });
-    (fetchAgentHistory as jest.Mock).mockResolvedValue({
-      response: { ok: true, status: 200, json: async () => ({ history: [] }) },
-      data: { history: [] },
-    });
+    (fetchAgentSessionHistory as jest.Mock)
+      .mockResolvedValueOnce({
+        response: { ok: true, status: 200, json: async () => ({ messages: [] }) },
+        data: { messages: [] },
+      })
+      .mockRejectedValueOnce(new Error("history_unavailable"));
     (fetchAgentSession as jest.Mock).mockImplementation(async () => ({
       response: { ok: true, status: 200, json: async () => ({}), headers: new Headers() },
       data: approvalPending
@@ -1334,6 +1345,7 @@ describe("ChatArea Component", () => {
     await waitFor(() => {
       expect(screen.getByText("zakiControls.approval.approveBtn")).toBeInTheDocument();
     });
+    const sessionFetchCountBeforeApproval = (fetchAgentSession as jest.Mock).mock.calls.length;
     fireEvent.click(screen.getByText("zakiControls.approval.approveBtn"));
 
     await waitFor(() => {
@@ -1347,16 +1359,15 @@ describe("ChatArea Component", () => {
       );
     });
     await waitFor(() => {
-      expect(appendAgentHistoryMessage).toHaveBeenCalledWith({
-        spaceId: "zaki-bot",
-        threadId: "main",
-        sessionKey: "agent:zaki-bot:user:1:thread:main",
-        role: "assistant",
-        content: "Shell completed and I am continuing with the result.",
-      });
+      expect(fetchAgentSessionHistory).toHaveBeenCalledWith("agent:zaki-bot:user:1:thread:main");
     });
     await waitFor(() => {
       expect(screen.getByText("Shell completed and I am continuing with the result.")).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect((fetchAgentSession as jest.Mock).mock.calls.length).toBeGreaterThan(
+        sessionFetchCountBeforeApproval
+      );
     });
   });
 
@@ -1372,12 +1383,12 @@ describe("ChatArea Component", () => {
       response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
       data: { userId: "1" },
     });
-    (fetchAgentHistory as jest.Mock).mockImplementation(async () => {
+    (fetchAgentSessionHistory as jest.Mock).mockImplementation(async () => {
       return {
-        response: { ok: true, status: 200, json: async () => ({ history: [] }) },
+        response: { ok: true, status: 200, json: async () => ({ messages: [] }) },
         data: !approvalPending
           ? {
-              history: [
+              messages: [
                 {
                   id: "nullalis-continuation-1",
                   role: "assistant",
@@ -1385,7 +1396,7 @@ describe("ChatArea Component", () => {
                 },
               ],
             }
-          : { history: [] },
+          : { messages: [] },
       };
     });
     (fetchAgentSession as jest.Mock).mockImplementation(async () => ({
@@ -1438,12 +1449,11 @@ describe("ChatArea Component", () => {
       );
     });
     await waitFor(() => {
-      expect(fetchAgentHistory).toHaveBeenCalledWith("zaki-bot", "main", "merged");
+      expect(fetchAgentSessionHistory).toHaveBeenCalledWith("agent:zaki-bot:user:1:thread:main");
     });
     await waitFor(() => {
       expect(screen.getByText("Recovered from merged history after approval.")).toBeInTheDocument();
     });
-    expect(appendAgentHistoryMessage).not.toHaveBeenCalled();
   });
 
   it("keeps Agent mode changes local when the selected session is not live yet", async () => {

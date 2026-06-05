@@ -289,14 +289,13 @@ import {
 } from "./platform-meter.js";
 import { resolveBillingPlanTransition } from "./billing-plan-transitions.js";
 import {
-  buildFallbackTitleFromUserMessage,
   createThreadAutoTitleHandler,
   generateThreadTitleFromExchange,
   isDefaultThreadLabel,
 } from "./thread-auto-title.js";
 import {
   buildCanonicalZakiThreadSessionKey,
-  mergeZakiAgentSessions,
+  listPublicZakiAgentSessions,
   normalizeZakiSessionKey,
   parseZakiSessionKey,
 } from "./zaki-agent-sessions.js";
@@ -10892,23 +10891,6 @@ const agentChatStreamHandler = async (req, res) => {
     upstreamPayload.session_key = sessionKey.sessionKey;
     delete upstreamPayload.user_id;
 
-    const isZakiBotSpace = rawSpaceId.toLowerCase() === ZAKI_BOT_SPACE_ID;
-    const resolvedSpaceId = rawSpaceId || ZAKI_BOT_SPACE_ID;
-    const resolvedThreadId = rawThreadId || ZAKI_BOT_THREAD_ID;
-
-    if (isZakiBotSpace) {
-      await touchZakiBotThreadBestEffort({
-        userId,
-        spaceId: resolvedSpaceId,
-        threadId: resolvedThreadId,
-      });
-      await dbQuery(
-        `INSERT INTO zaki_bot_messages (user_id, space_id, thread_id, role, content)
-         VALUES ($1, $2, $3, 'user', $4)`,
-        [userId, resolvedSpaceId, resolvedThreadId, originalMessage]
-      );
-    }
-
     const upstream = await requestNullclawChatStream({
       baseUrl: nullclawBase,
       internalToken: NULLCLAW_INTERNAL_TOKEN,
@@ -10985,40 +10967,10 @@ const agentChatStreamHandler = async (req, res) => {
     const reader = upstream.body.getReader();
     const decoder = new TextDecoder("utf-8");
     let buffer = "";
-    let assistantAccumulated = "";
     const streamMetrics = createAgentStreamMeterMetrics();
 
     const processSseBlock = async (block) => {
       updateAgentStreamMeterMetrics(streamMetrics, block);
-      if (!isZakiBotSpace) return;
-      const normalized = String(block || "").replace(/\r/g, "");
-      const lines = normalized.split("\n");
-      const dataLines = [];
-      let eventType = "";
-
-      for (const rawLine of lines) {
-        const line = rawLine.trimEnd();
-        if (!line || line.startsWith(":")) continue;
-        if (line.startsWith("event:")) {
-          eventType = line.slice(6).trim();
-          continue;
-        }
-        if (line.startsWith("data:")) {
-          dataLines.push(line.slice(5).trimStart());
-        }
-      }
-
-      if (dataLines.length === 0) return;
-      const payloadText = dataLines.join("\n").trim();
-      if (!payloadText || payloadText === "[DONE]") return;
-
-      try {
-        const payload = JSON.parse(payloadText);
-        const chunk = extractAgentTokenChunk(eventType, payload);
-        if (chunk) assistantAccumulated += chunk;
-      } catch {
-        // Ignore parse failures for persistence, still stream to client.
-      }
     };
 
     while (true) {
@@ -11041,19 +10993,6 @@ const agentChatStreamHandler = async (req, res) => {
     const trailing = buffer.trim();
     if (trailing) {
       await processSseBlock(trailing);
-    }
-
-    if (isZakiBotSpace && assistantAccumulated.trim()) {
-      await touchZakiBotThreadBestEffort({
-        userId,
-        spaceId: resolvedSpaceId,
-        threadId: resolvedThreadId,
-      });
-      await dbQuery(
-        `INSERT INTO zaki_bot_messages (user_id, space_id, thread_id, role, content)
-         VALUES ($1, $2, $3, 'assistant', $4)`,
-        [userId, resolvedSpaceId, resolvedThreadId, assistantAccumulated.trim()]
-      );
     }
 
     const streamStatus = upstream.ok && !streamMetrics.sawError ? "success" : "failed";
@@ -11158,85 +11097,28 @@ async function loadZakiBotLocalThreadSummaries(userId) {
   const safeUserId = Number(userId);
   if (!Number.isFinite(safeUserId) || safeUserId <= 0) return [];
 
-  const [threadRows, messageRows, firstUserRows] = await Promise.all([
-    dbAll(
-      `SELECT thread_id, title, created_at, last_active_at
-       FROM zaki_bot_threads
-       WHERE user_id = $1 AND space_id = $2`,
-      [safeUserId, ZAKI_BOT_SPACE_ID]
-    ),
-    dbAll(
-      `SELECT thread_id,
-              MIN(created_at) AS created_at,
-              MAX(created_at) AS last_active_at,
-              COUNT(*)::int AS message_count
-       FROM zaki_bot_messages
-       WHERE user_id = $1 AND space_id = $2
-       GROUP BY thread_id`,
-      [safeUserId, ZAKI_BOT_SPACE_ID]
-    ),
-    dbAll(
-      `SELECT messages.thread_id, messages.content
-       FROM zaki_bot_messages messages
-       INNER JOIN (
-         SELECT thread_id, MIN(id) AS first_id
-         FROM zaki_bot_messages
-         WHERE user_id = $1 AND space_id = $2 AND role = 'user'
-         GROUP BY thread_id
-       ) first_messages
-         ON first_messages.thread_id = messages.thread_id
-        AND first_messages.first_id = messages.id
-       WHERE messages.user_id = $1
-         AND messages.space_id = $2
-         AND messages.role = 'user'`,
-      [safeUserId, ZAKI_BOT_SPACE_ID]
-    ),
-  ]);
-
-  const firstUserByThread = new Map();
-  for (const row of firstUserRows) {
-    const threadId = String(row.thread_id || ZAKI_BOT_THREAD_ID).trim() || ZAKI_BOT_THREAD_ID;
-    firstUserByThread.set(threadId, String(row.content || ""));
-  }
+  const threadRows = await dbAll(
+    `SELECT thread_id, title, created_at, last_active_at
+     FROM zaki_bot_threads
+     WHERE user_id = $1 AND space_id = $2`,
+    [safeUserId, ZAKI_BOT_SPACE_ID]
+  );
 
   const titleForThread = (title, threadId) => {
     const normalized = normalizeZakiBotThreadTitle(title, threadId);
-    if (!isDefaultThreadLabel(normalized)) return normalized;
-    return buildFallbackTitleFromUserMessage(firstUserByThread.get(threadId)) || normalized;
+    return isDefaultThreadLabel(normalized) ? "" : normalized;
   };
 
-  const byThread = new Map();
-  for (const row of messageRows) {
+  return threadRows.map((row) => {
     const threadId = String(row.thread_id || ZAKI_BOT_THREAD_ID).trim() || ZAKI_BOT_THREAD_ID;
-    byThread.set(threadId, {
-      threadId,
-      title: titleForThread(null, threadId),
-      created_at: row.created_at,
-      last_active: row.last_active_at,
-      message_count: Number(row.message_count || 0),
-    });
-  }
-
-  for (const row of threadRows) {
-    const threadId = String(row.thread_id || ZAKI_BOT_THREAD_ID).trim() || ZAKI_BOT_THREAD_ID;
-    const existing = byThread.get(threadId) || {};
-    byThread.set(threadId, {
-      ...existing,
-      threadId,
+    return {
+      session_key: buildCanonicalZakiThreadSessionKey(String(safeUserId), threadId),
       title: titleForThread(row.title, threadId),
-      created_at: row.created_at || existing.created_at || null,
-      last_active: row.last_active_at || existing.last_active || null,
-      message_count: Number(existing.message_count || 0),
-    });
-  }
-
-  return Array.from(byThread.values()).map((entry) => ({
-    session_key: buildCanonicalZakiThreadSessionKey(String(safeUserId), entry.threadId),
-    title: entry.title,
-    created_at: toIsoOrNull(entry.created_at),
-    last_active: toIsoOrNull(entry.last_active),
-    message_count: entry.message_count,
-  }));
+      created_at: toIsoOrNull(row.created_at),
+      last_active: toIsoOrNull(row.last_active_at),
+      message_count: 0,
+    };
+  });
 }
 
 async function agentSessionsListHandler(req, res) {
@@ -11310,8 +11192,188 @@ async function loadZakiAgentSessionsForUser(userId, requestId) {
     });
   }
   return {
-    sessions: mergeZakiAgentSessions({ upstreamSessions, localThreads }),
+    sessions: listPublicZakiAgentSessions({ upstreamSessions, localThreads }),
   };
+}
+
+async function deleteZakiBotLocalProjection({ userId, sessionKey }) {
+  const parsed = parseZakiSessionKey(sessionKey);
+  if (parsed.userId && parsed.userId !== String(userId)) {
+    return { skipped: true, reason: "session_not_owned", threadsDeleted: 0, messagesDeleted: 0 };
+  }
+  if (parsed.lane !== "thread" || !parsed.threadId) {
+    return { skipped: true, reason: "unsupported_session_lane", threadsDeleted: 0, messagesDeleted: 0 };
+  }
+
+  const result = await withDbTransaction(async (client) => {
+    const messages = await client.query(
+      `DELETE FROM zaki_bot_messages
+       WHERE user_id = $1 AND space_id = $2 AND thread_id = $3`,
+      [userId, ZAKI_BOT_SPACE_ID, parsed.threadId]
+    );
+    const threads = await client.query(
+      `DELETE FROM zaki_bot_threads
+       WHERE user_id = $1 AND space_id = $2 AND thread_id = $3`,
+      [userId, ZAKI_BOT_SPACE_ID, parsed.threadId]
+    );
+    return {
+      messagesDeleted: Number(messages.rowCount || 0),
+      threadsDeleted: Number(threads.rowCount || 0),
+    };
+  });
+
+  return {
+    skipped: false,
+    reason: null,
+    ...result,
+  };
+}
+
+async function agentSessionDeleteHandler(req, res) {
+  const sessionKey = validateSessionKeyParam(req, res);
+  if (!sessionKey) return;
+
+  const requestId = String(req.requestId || crypto.randomUUID());
+  try {
+    const authResult = req.agentAuthResult || (await requireAuthUser(req, res));
+    if (!authResult) return;
+    const userId = resolveCanonicalAgentUserId(authResult);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    }
+
+    const parsed = parseZakiSessionKey(sessionKey);
+    if (!parsed.userId || parsed.lane === "unknown") {
+      return res.status(400).json({ error: "invalid_session_key", code: "invalid_session_key" });
+    }
+    if (parsed.userId && parsed.userId !== String(userId)) {
+      return res.status(403).json({ error: "session_not_owned", code: "session_not_owned" });
+    }
+
+    let upstream;
+    let upstreamData = {};
+    try {
+      upstream = await sendBotBffUpstreamRequest({
+        method: "DELETE",
+        path: `/api/v1/users/${encodeURIComponent(userId)}/sessions/${sessionKey}`,
+        userId,
+        requestId,
+      });
+      upstreamData = await upstream.json().catch(() => ({}));
+    } catch (error) {
+      console.error("[Agent] Session delete upstream unavailable:", {
+        requestId,
+        sessionKey,
+        error: error?.message || "delete upstream unavailable",
+      });
+      return res.status(503).json({
+        ok: false,
+        status: "unavailable",
+        session_key: sessionKey,
+        canonical: {
+          status: "unavailable",
+          error: error?.message || "Agent session backend is unavailable.",
+        },
+        projection: { status: "preserved" },
+        error: "Agent session backend is unavailable. The local projection was preserved.",
+        code: "agent_session_delete_unavailable",
+      });
+    }
+
+    if (upstream.status === 401) {
+      return res.status(502).json({
+        ok: false,
+        status: "failed",
+        session_key: sessionKey,
+        canonical: { status: "unauthorized" },
+        projection: { status: "preserved" },
+        error: "Agent upstream rejected the BFF credential.",
+        code: "agent_upstream_unauthorized",
+      });
+    }
+
+    if (upstream.status === 409) {
+      return res.status(409).json({
+        ok: false,
+        status: "in_use",
+        session_key: sessionKey,
+        canonical: {
+          status: "in_use",
+          error: upstreamData?.error || upstreamData?.message || "session_in_use",
+        },
+        projection: { status: "preserved" },
+        error: upstreamData?.error || upstreamData?.message || "Session is currently in use.",
+        code: upstreamData?.code || "session_in_use",
+      });
+    }
+
+    if (!upstream.ok && upstream.status !== 404) {
+      return res.status(upstream.status >= 400 && upstream.status < 600 ? upstream.status : 502).json({
+        ok: false,
+        status: "failed",
+        session_key: sessionKey,
+        canonical: {
+          status: "failed",
+          http_status: upstream.status,
+          error: upstreamData?.error || upstreamData?.message || `upstream_${upstream.status}`,
+        },
+        projection: { status: "preserved" },
+        error: upstreamData?.error || upstreamData?.message || "Unable to delete Agent session.",
+        code: upstreamData?.code || "agent_session_delete_failed",
+      });
+    }
+
+    const projection = await deleteZakiBotLocalProjection({ userId, sessionKey });
+    const projectionDeleted = (projection.threadsDeleted || 0) + (projection.messagesDeleted || 0) > 0;
+    const canonicalDeleted = upstream.ok;
+    const canonicalNotFound = upstream.status === 404;
+
+    if (canonicalNotFound && !projectionDeleted) {
+      return res.status(404).json({
+        ok: false,
+        status: "not_found",
+        session_key: sessionKey,
+        canonical: { status: "not_found" },
+        projection: {
+          status: projection.skipped ? "skipped" : "not_found",
+          reason: projection.reason || undefined,
+          threads_deleted: projection.threadsDeleted || 0,
+          messages_deleted: projection.messagesDeleted || 0,
+        },
+        error: "Session was not found.",
+        code: "session_not_found",
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      status: "deleted",
+      session_key: sessionKey,
+      canonical: {
+        status: canonicalDeleted ? "deleted" : "not_found",
+        http_status: upstream.status,
+      },
+      projection: {
+        status: projectionDeleted ? "deleted" : projection.skipped ? "skipped" : "not_found",
+        reason: projection.reason || undefined,
+        threads_deleted: projection.threadsDeleted || 0,
+        messages_deleted: projection.messagesDeleted || 0,
+      },
+    });
+  } catch (error) {
+    console.error("[Agent] Session delete error:", {
+      requestId,
+      sessionKey,
+      error: error?.message || "session delete failed",
+    });
+    return res.status(500).json({
+      ok: false,
+      status: "failed",
+      session_key: sessionKey,
+      error: error?.message || "Unable to delete Agent session.",
+      code: "agent_session_delete_failed",
+    });
+  }
 }
 
 async function agentSessionDetailHandler(req, res) {
@@ -11379,6 +11441,7 @@ app.get("/api/agent/history", requireAgentContext, async (req, res) => {
     .trim()
     .toLowerCase();
   const historyMode = requestedMode === "app" ? "app" : AGENT_HISTORY_MODE_DEFAULT;
+  const operatorEmail = authResult.email || authResult.zakiUser?.email || "";
 
   const loadAppHistory = async () => {
     const rows = await dbAll(
@@ -11398,6 +11461,18 @@ app.get("/api/agent/history", requireAgentContext, async (req, res) => {
 
   try {
     if (historyMode === "app") {
+      const admin = await resolveAdminAuthContext(operatorEmail);
+      if (!admin?.isSuperAdmin) {
+        return res.status(403).json({
+          history: [],
+          historyMode: "app",
+          source: "operator_only",
+          spaceId,
+          threadId,
+          error: "App-local Agent history is operator-only.",
+          code: "operator_only",
+        });
+      }
       const history = await loadAppHistory();
       res.json({
         history,
@@ -11411,14 +11486,15 @@ app.get("/api/agent/history", requireAgentContext, async (req, res) => {
 
     const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
     if (!nullclawBase || !NULLCLAW_INTERNAL_TOKEN) {
-      const fallbackHistory = await loadAppHistory();
-      res.json({
-        history: fallbackHistory,
+      res.status(503).json({
+        history: [],
         historyMode: "merged",
-        source: "zaki_bot_messages_fallback",
+        source: "nullclaw_unavailable",
         spaceId,
         threadId,
-        warning: "nullclaw_unavailable",
+        error: "Agent history is unavailable because the Agent backend is not configured.",
+        code: "agent_history_unavailable",
+        retryable: true,
       });
       return;
     }
@@ -11436,15 +11512,19 @@ app.get("/api/agent/history", requireAgentContext, async (req, res) => {
     const upstreamData = await upstreamResponse.json().catch(() => ({}));
 
     if (!upstreamResponse.ok) {
-      const fallbackHistory = await loadAppHistory();
-      res.json({
-        history: fallbackHistory,
+      res.status(upstreamResponse.status >= 400 && upstreamResponse.status < 600 ? upstreamResponse.status : 502).json({
+        history: [],
         historyMode: "merged",
-        source: "zaki_bot_messages_fallback",
+        source: "nullclaw_unavailable",
         spaceId,
         threadId,
-        warning:
-          String(upstreamData?.code || upstreamData?.error || "").trim() || "upstream_history_unavailable",
+        error:
+          String(upstreamData?.error || upstreamData?.message || "").trim() ||
+          "Agent history is unavailable.",
+        code:
+          String(upstreamData?.code || "").trim() ||
+          "agent_history_unavailable",
+        retryable: upstreamResponse.status >= 500,
       });
       return;
     }
@@ -11476,7 +11556,16 @@ app.get("/api/agent/history", requireAgentContext, async (req, res) => {
     });
   } catch (error) {
     console.error("[Agent] History error:", error);
-    res.status(500).json({ error: "Failed to load ZAKI BOT history." });
+    res.status(500).json({
+      history: [],
+      historyMode: "merged",
+      source: "nullclaw_unavailable",
+      spaceId,
+      threadId,
+      error: "Failed to load ZAKI Agent history.",
+      code: "agent_history_unavailable",
+      retryable: true,
+    });
   }
 });
 
@@ -15092,6 +15181,11 @@ app.get(
   requireAgentContext,
   agentSessionDetailHandler
 );
+app.delete(
+  "/api/agent/sessions/:sessionKey",
+  requireAgentContext,
+  agentSessionDeleteHandler
+);
 
 // Session-proxy routes are wired declaratively from AGENT_SESSION_BFF_ROUTES so
 // the contract listing the frontend depends on stays in lockstep with what's
@@ -15126,6 +15220,15 @@ async function agentHistoryAppendHandler(req, res) {
     const userId = resolveCanonicalAgentUserId(authResult);
     if (!userId) {
       return res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    }
+    const admin = await resolveAdminAuthContext(authResult.email || authResult.zakiUser?.email || "");
+    if (!admin?.isSuperAdmin) {
+      return res.status(403).json({
+        ok: false,
+        status: "operator_only",
+        error: "App-local Agent history append is operator-only.",
+        code: "operator_only",
+      });
     }
 
     const role = typeof req.body?.role === "string" ? req.body.role.trim().toLowerCase() : "";

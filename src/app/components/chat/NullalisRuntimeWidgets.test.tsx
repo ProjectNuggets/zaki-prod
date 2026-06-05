@@ -113,7 +113,7 @@ describe("ContextGauge", () => {
         data={{
           tokenCount: 10_000,
           contextMax: 100_000,
-          context_pressure_percent: 42,
+          pressurePercent: 42,
           messageCount: 12,
         }}
       />
@@ -131,7 +131,7 @@ describe("ContextGauge", () => {
     render(
       <ContextGauge
         data={{
-          context_pressure_percent: 21,
+          pressurePercent: 21,
           messageCount: 3,
         }}
       />
@@ -170,7 +170,7 @@ describe("ContextGauge", () => {
         data={{
           tokenCount: 101_000,
           contextMax: 200_000,
-          context_pressure_percent: 50.5,
+          pressurePercent: 50.5,
           source: "diagnostics_fallback",
           confidence: "fallback",
           compactionThresholdTokens: 160_000,

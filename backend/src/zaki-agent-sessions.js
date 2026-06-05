@@ -58,19 +58,6 @@ function parseTimestamp(value) {
   return 0;
 }
 
-function chooseLastActive(...values) {
-  let chosen = null;
-  let chosenTs = 0;
-  for (const value of values) {
-    const ts = parseTimestamp(value);
-    if (ts > chosenTs) {
-      chosen = value ?? null;
-      chosenTs = ts;
-    }
-  }
-  return chosen;
-}
-
 function normalizeTitle(value) {
   const title = String(value || "").trim();
   return title || "";
@@ -125,47 +112,6 @@ export function isPlaceholderZakiSessionTitle(value) {
   );
 }
 
-export function mergeZakiAgentSessions({ upstreamSessions = [], localThreads = [] }) {
-  const merged = new Map();
-
-  for (const upstream of Array.isArray(upstreamSessions) ? upstreamSessions : []) {
-    const sessionKey = normalizeZakiSessionKey(upstream?.session_key);
-    if (!sessionKey) continue;
-    merged.set(sessionKey, {
-      ...upstream,
-      session_key: sessionKey,
-      title: normalizeTitle(upstream?.title) || undefined,
-    });
-  }
-
-  for (const local of Array.isArray(localThreads) ? localThreads : []) {
-    const sessionKey = normalizeZakiSessionKey(local?.session_key);
-    if (!sessionKey) continue;
-    const parsed = parseZakiSessionKey(sessionKey);
-    const existing = merged.get(sessionKey) || null;
-    const localTitle = normalizeTitle(local?.title);
-    const shouldUseLocalTitle =
-      parsed.lane === "thread" && localTitle && !isDefaultThreadLabel(localTitle);
-
-    merged.set(sessionKey, {
-      ...existing,
-      session_key: sessionKey,
-      title: shouldUseLocalTitle
-        ? localTitle
-        : normalizeTitle(existing?.title) || localTitle || undefined,
-      created_at: local?.created_at ?? existing?.created_at,
-      last_active: chooseLastActive(local?.last_active, existing?.last_active),
-      message_count: Math.max(local?.message_count ?? 0, existing?.message_count ?? 0),
-      token_count: existing?.token_count ?? undefined,
-      live: existing?.live === true,
-    });
-  }
-
-  return Array.from(merged.values()).sort(
-    (a, b) => parseTimestamp(b?.last_active) - parseTimestamp(a?.last_active),
-  );
-}
-
 export function overlayZakiAgentSessionTitles({ upstreamSessions = [], localThreads = [] }) {
   const normalized = normalizeZakiAgentBackendSessions(upstreamSessions);
   const localTitles = new Map();
@@ -189,6 +135,65 @@ export function overlayZakiAgentSessionTitles({ upstreamSessions = [], localThre
       title: localTitle,
     };
   });
+}
+
+function normalizedProbeCandidate(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+export function isInternalProbeZakiAgentSession({ sessionKey, title }) {
+  const parsed = parseZakiSessionKey(sessionKey);
+  if (parsed.lane !== "thread") return false;
+  const titleCandidate = normalizedProbeCandidate(title);
+  const idCandidates = [
+    normalizedProbeCandidate(parsed.threadId),
+    normalizedProbeCandidate(parsed.value),
+  ].filter(Boolean);
+
+  if (
+    idCandidates.some((candidate) => {
+      if (/(^|[-_])(bench|smoke|test)([-_]|$)/i.test(candidate)) return true;
+      if (/^(mcp|dtaas|bench|test|smoke)[-_]/i.test(candidate)) return true;
+      return false;
+    })
+  ) {
+    return true;
+  }
+
+  return [titleCandidate, ...idCandidates].filter(Boolean).some((candidate) => {
+    if (/^bench[-_]/i.test(candidate)) return true;
+    if (/^r\d{1,3}[-_][a-z0-9][a-z0-9_-]*$/i.test(candidate)) return true;
+    if (/^test[-_][a-z0-9][a-z0-9_-]*$/i.test(candidate)) return true;
+    if (/^(codex|zaki)[-_].*(e2e|smoke|closeout|qa|test)/i.test(candidate)) return true;
+    if (/^k\d+[-_].*smoke/i.test(candidate)) return true;
+    if (/^health check\b/i.test(candidate)) return true;
+    if (/^reply exactly[:\s]/i.test(candidate)) return true;
+    if (/^smoke test\b/i.test(candidate)) return true;
+    if (/^ui audit ping\b/i.test(candidate)) return true;
+    if (/^approval smoke\b/i.test(candidate)) return true;
+    if (/^approval reload proof\b/i.test(candidate)) return true;
+    if (/^trust audit artifact\b/i.test(candidate)) return true;
+    if (/pong_zaki/i.test(candidate)) return true;
+    return false;
+  });
+}
+
+export function listPublicZakiAgentSessions({ upstreamSessions = [], localThreads = [] }) {
+  return overlayZakiAgentSessionTitles({ upstreamSessions, localThreads })
+    .filter((session) => {
+      const sessionKey = normalizeZakiSessionKey(session?.session_key);
+      const parsed = parseZakiSessionKey(sessionKey);
+      if (parsed.lane !== "thread" || !parsed.threadId) return false;
+      return !isInternalProbeZakiAgentSession({ sessionKey, title: session?.title });
+    })
+    .sort((a, b) => {
+      const bTs = parseTimestamp(b?.last_active ?? b?.created_at);
+      const aTs = parseTimestamp(a?.last_active ?? a?.created_at);
+      return bTs - aTs;
+    });
 }
 
 export function normalizeZakiAgentBackendSessions(upstreamSessions = []) {

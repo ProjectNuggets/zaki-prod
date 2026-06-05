@@ -11,7 +11,6 @@
 //                   handler so `req.body` is parsed for forwarding.
 export const AGENT_SESSION_BFF_ROUTES = Object.freeze([
   { method: "get",    path: "/api/agent/sessions/:sessionKey",          upstreamSuffix: "",         json: false },
-  { method: "delete", path: "/api/agent/sessions/:sessionKey",          upstreamSuffix: "",         json: false },
   { method: "post",   path: "/api/agent/sessions/:sessionKey/compact",  upstreamSuffix: "/compact", json: false },
   { method: "get",    path: "/api/agent/sessions/:sessionKey/context",  upstreamSuffix: "/context", json: false },
   { method: "get",    path: "/api/agent/sessions/:sessionKey/export",   upstreamSuffix: "/export",  json: false },

@@ -380,7 +380,6 @@ export type ContextGaugeData = {
   tokenCount?: number;
   contextMax?: number;
   messageCount?: number;
-  context_pressure_percent?: number | null;
   source?: "live_session" | "diagnostics_fallback" | "inactive_session" | "unknown";
   confidence?: "exact" | "fallback" | "inactive" | "unknown";
   compactionThresholdPct?: number | null;
@@ -423,13 +422,11 @@ export function ContextGauge({
   const pct =
     typeof data.pressurePercent === "number"
       ? Math.min(100, Math.max(0, data.pressurePercent))
-      : typeof data.context_pressure_percent === "number"
-        ? Math.min(100, Math.max(0, data.context_pressure_percent))
-        : null;
+      : null;
   const pctKnown = typeof pct === "number";
   const tokenCount =
-    pctKnown && hasContextMax && data.contextMax
-      ? data.tokenCount ?? Math.round((pct / 100) * data.contextMax)
+    pctKnown && typeof data.tokenCount === "number" && Number.isFinite(data.tokenCount)
+      ? data.tokenCount
       : null;
   const pctLabel = pctKnown ? pct.toFixed(0) : "--";
   const tokenLabel = tokenCount != null ? new Intl.NumberFormat("en-US").format(tokenCount) : null;

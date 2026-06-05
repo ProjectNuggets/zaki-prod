@@ -16,8 +16,6 @@ import {
   buildApiUrl,
   captureMemory,
   fetchMemoryActivity,
-  fetchAgentHistory,
-  appendAgentHistoryMessage,
   fetchAgentMe,
   fetchAgentSession,
   fetchAgentSessionContext,
@@ -2940,7 +2938,12 @@ export function ChatArea() {
   const normalizedActiveZakiSessionKey = activeZakiSessionKey
     ? normalizeZakiSessionKey(activeZakiSessionKey)
     : null;
-  const { data: zakiSessions = [], isLoading: zakiSessionsLoading } =
+  const {
+    data: zakiSessions = [],
+    isLoading: zakiSessionsLoading,
+    isError: zakiSessionsError,
+    refetch: refetchZakiSessions,
+  } =
     useZakiSessions(isZakiBotRouteActive);
   const activeSessionRecord = useMemo(
     () =>
@@ -3510,6 +3513,14 @@ export function ChatArea() {
       try {
         const { response } = await deleteAgentSession(normalized);
         if (!response.ok) throw new Error(`delete ${response.status}`);
+        queryClient.setQueryData(zakiSessionKeys.all, (previous: unknown) =>
+          Array.isArray(previous)
+            ? previous.filter(
+                (session) =>
+                  normalizeZakiSessionKey(String(session?.session_key || "")) !== normalized,
+              )
+            : previous,
+        );
         await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
         if (normalizedActiveZakiSessionKey === normalized) {
           handleCreateAgentSession();
@@ -3851,14 +3862,36 @@ export function ChatArea() {
     []
   );
 
+  const resolveAgentSessionKeyForThread = useCallback(
+    (threadId: string) => {
+      const safeThreadId = String(threadId || "").trim();
+      if (!safeThreadId) return null;
+      if (
+        normalizedActiveZakiSessionKey &&
+        extractThreadSlugFromSessionKey(normalizedActiveZakiSessionKey) === safeThreadId
+      ) {
+        return normalizedActiveZakiSessionKey;
+      }
+      return buildAgentSessionKey(safeThreadId, agentUserId);
+    },
+    [agentUserId, normalizedActiveZakiSessionKey]
+  );
+
   const reconcileAgentThreadHistory = useCallback(
-    async (threadId: string, mode: "merged" | "app" = "merged") => {
+    async (threadId: string, _mode: "merged" | "app" = "merged") => {
       if (!threadId) return false;
+      const sessionKey = resolveAgentSessionKeyForThread(threadId);
+      if (!sessionKey) return false;
       lastAgentHistoryReconcileThreadRef.current = threadId;
-      const { response, data } = await fetchAgentHistory(ZAKI_BOT_SPACE_ID, threadId, mode);
+      const { response, data } = await fetchAgentSessionHistory(sessionKey);
       if (!response.ok) return false;
+      const rawHistory = Array.isArray(data.messages)
+        ? data.messages
+        : Array.isArray((data as { history?: unknown }).history)
+          ? ((data as { history?: Array<Record<string, unknown>> }).history ?? [])
+          : [];
       const history = mapAgentHistoryEntries(
-        Array.isArray(data.history) ? (data.history as Array<Record<string, unknown>>) : []
+        rawHistory as Array<Record<string, unknown>>
       );
       let changed = false;
       setMessagesByThread((prev) => {
@@ -3869,11 +3902,11 @@ export function ChatArea() {
       historyLoadedRef.current[threadId] = true;
       return changed;
     },
-    [mapAgentHistoryEntries]
+    [mapAgentHistoryEntries, resolveAgentSessionKeyForThread]
   );
 
   const appendAgentAssistantContinuation = useCallback(
-    async (threadId: string, sessionKey: string, content: string) => {
+    async (threadId: string, content: string) => {
       const trimmed = content.trim();
       if (!threadId || !trimmed) return false;
       const optimisticMessage: Message = {
@@ -3889,18 +3922,12 @@ export function ChatArea() {
       });
       historyLoadedRef.current[threadId] = true;
       try {
-        await appendAgentHistoryMessage({
-          spaceId: ZAKI_BOT_SPACE_ID,
-          threadId,
-          sessionKey,
-          role: "assistant",
-          content: trimmed,
-        });
+        await reconcileAgentThreadHistory(threadId, "merged");
       } catch {
-        // The upstream Nullalis history still contains the continuation; local
-        // persistence is best-effort and reconciled below.
+        // The approval route already returned the continuation. A failed
+        // history refresh should not turn a resolved approval back into a
+        // retryable card.
       }
-      await reconcileAgentThreadHistory(threadId, "merged");
       return changed;
     },
     [reconcileAgentThreadHistory]
@@ -7260,10 +7287,24 @@ export function ChatArea() {
         }
         if (approved) {
           const continuation = typeof data?.message === "string" ? data.message.trim() : "";
+          let continuationSynced = false;
           if (continuation) {
-            await appendAgentAssistantContinuation(activeThreadId || "main", sessionKey, continuation);
+            continuationSynced = await appendAgentAssistantContinuation(
+              activeThreadId || "main",
+              continuation
+            );
           } else {
-            await reconcileAgentThreadHistory(activeThreadId || "main", "merged");
+            try {
+              continuationSynced = await reconcileAgentThreadHistory(
+                activeThreadId || "main",
+                "merged"
+              );
+            } catch {
+              continuationSynced = false;
+            }
+          }
+          if (!continuationSynced && !continuation) {
+            toast.info("Approval sent. ZAKI is continuing; refresh if the latest response does not appear.");
           }
         }
         decrementSessionApprovalCount(sessionKey, requestId);
@@ -7674,18 +7715,9 @@ export function ChatArea() {
     let cancelled = false;
     setIsBotHistoryLoading(true);
 
-    void fetchAgentHistory(ZAKI_BOT_SPACE_ID, activeThreadId, "merged")
-      .then(({ response, data }) => {
-        if (cancelled || !response.ok) return;
-        const history = mapAgentHistoryEntries(
-          Array.isArray(data.history) ? (data.history as Array<Record<string, unknown>>) : []
-        );
-        setMessagesByThread((prev) => ({
-          ...prev,
-          [activeThreadId]: history,
-        }));
-        historyLoadedRef.current[activeThreadId] = true;
-        lastAgentHistoryReconcileThreadRef.current = activeThreadId;
+    void reconcileAgentThreadHistory(activeThreadId, "merged")
+      .then((changed) => {
+        if (cancelled || !changed) return;
       })
       .catch(() => {
         // Ensure loading clears on error
@@ -7702,7 +7734,6 @@ export function ChatArea() {
     isAuthReady,
     isStreaming,
     isZakiBotActiveSpace,
-    mapAgentHistoryEntries,
     messagesByThread,
     reconcileAgentThreadHistory,
   ]);
@@ -8062,7 +8093,6 @@ export function ChatArea() {
         nullalisTranscriptEntries={isZakiBotActiveSpace ? nullalisTranscriptEntries : []}
         nullalisTaskItems={isZakiBotActiveSpace ? agentCurrentTaskItems : []}
         nullalisApprovalRequest={isZakiBotActiveSpace ? nullalisApprovalRequest : null}
-        contextGaugeData={isZakiBotActiveSpace ? nullalisContextGauge : null}
         zakiUsageSummary={isZakiBotActiveSpace ? zakiUsageSummary : null}
         botMode={isZakiBotActiveSpace}
         firstMessageTransition={firstMessageTransition}
@@ -8262,6 +8292,7 @@ export function ChatArea() {
             <AgentSessionRail
               sessions={zakiThreadSessions}
               isLoading={zakiSessionsLoading}
+              isError={zakiSessionsError}
               activeSessionKey={normalizedActiveZakiSessionKey}
               isRtl={isRtl}
               onSelectSession={selectAgentSession}
@@ -8269,6 +8300,9 @@ export function ChatArea() {
               onDeleteSession={handleDeleteAgentSession}
               onRenameSession={handleRenameAgentSession}
               onRepairSessionTitles={repairAgentSessionTitles}
+              onRetrySessions={() => {
+                void refetchZakiSessions();
+              }}
             />
           ) : null}
 

@@ -2382,10 +2382,14 @@ export async function fetchAgentHistory(
     source?: string;
     warning?: string;
     error?: string | null;
+    code?: string | null;
+    retryable?: boolean;
   }>(response);
   return { response, data };
 }
 
+// Operator/debug facade only. Normal Agent chat recovery uses Nullalis merged
+// history and approval continuations; do not call this from user-facing flows.
 export async function appendAgentHistoryMessage(payload: {
   spaceId?: string;
   threadId: string;
@@ -2632,6 +2636,26 @@ export type AgentSessionCancelResponse = {
   message?: string | null;
 };
 
+export type AgentSessionDeleteResponse = {
+  ok?: boolean;
+  status?: "deleted" | "not_found" | "in_use" | "unavailable" | "failed" | string;
+  session_key?: string;
+  canonical?: {
+    status?: "deleted" | "not_found" | "in_use" | "unavailable" | "failed" | string;
+    http_status?: number;
+    error?: string;
+  };
+  projection?: {
+    status?: "deleted" | "not_found" | "preserved" | "skipped" | string;
+    reason?: string;
+    threads_deleted?: number;
+    messages_deleted?: number;
+  };
+  error?: string | null;
+  message?: string | null;
+  code?: string | null;
+};
+
 export type AgentExtensionDiagnosticsResponse = {
   user_id?: string;
   paired?: boolean;
@@ -2688,7 +2712,7 @@ export async function deleteAgentSession(sessionKey: string) {
   const response = await backendAuthRequest(`/api/agent/sessions/${encoded}`, {
     method: "DELETE",
   });
-  const data = await parseApiJson<{ ok: boolean }>(response);
+  const data = await parseApiJson<AgentSessionDeleteResponse>(response);
   return { response, data };
 }
 

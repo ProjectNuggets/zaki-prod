@@ -16,6 +16,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import {
+  buildAgentContextGauge,
+  resolveContextGaugePercent,
+} from "@/lib/agentContext";
 import { SheetShell } from "@/app/components/ui/zaki";
 import {
   downloadAgentExportFile,
@@ -795,7 +799,7 @@ export function PowerUserSheet({
               {t("zakiControls.powerUser.controls.contextTitle")}
             </div>
             <div className={cn("zaki-agent-power-metric__value", contextTone)}>
-              {typeof contextPressurePercent === "number" ? `${Math.round(contextPressurePercent)}%` : "—"}
+              {typeof contextPressurePercent === "number" ? `${Math.round(contextPressurePercent)}%` : "--"}
             </div>
             <div className="zaki-agent-power-metric__meta">
               {t("zakiControls.context.normal")}
@@ -848,14 +852,16 @@ export function PowerUserSheet({
     }
     const report = contextDiag?.report ?? null;
     const legacy = contextSnapshot ?? null;
-    const pressurePct =
-      report?.pressure_percent ?? report?.context_pressure_percent ?? null;
-    const usedTokens = report?.token_estimate ?? legacy?.usedTokens ?? null;
+    const gauge = buildAgentContextGauge(
+      contextDiag ? (contextDiag as unknown as Record<string, unknown>) : null
+    );
+    const pressurePct = resolveContextGaugePercent(gauge);
+    const usedTokens = gauge?.tokenCount ?? report?.token_estimate ?? legacy?.usedTokens ?? null;
     const totalTokens =
-      report?.context_window_tokens ?? legacy?.totalTokens ?? null;
-    const remainingTokens = report?.remaining_tokens ?? null;
-    const windowSource = report?.context_window_source ?? null;
-    const history = report?.history_messages ?? legacy?.turnsInContext ?? null;
+      gauge?.contextMax ?? report?.context_window_tokens ?? legacy?.totalTokens ?? null;
+    const remainingTokens = gauge?.remainingTokens ?? report?.remaining_tokens ?? null;
+    const windowSource = gauge?.contextWindowSource ?? report?.context_window_source ?? null;
+    const history = gauge?.messageCount ?? report?.history_messages ?? legacy?.turnsInContext ?? null;
     const compactionRecommended =
       report?.compaction?.recommended ??
       report?.token_compaction_recommended ??

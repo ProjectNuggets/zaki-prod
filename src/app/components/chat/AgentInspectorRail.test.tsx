@@ -600,6 +600,18 @@ describe("AgentInspectorRail", () => {
           description: "Old completed task",
           updatedAt: 1,
         },
+        {
+          taskId: "task-failed-1",
+          status: "failed",
+          description: "Old failed task",
+          updatedAt: 2,
+        },
+        {
+          taskId: "task-cancelled-1",
+          status: "cancelled",
+          description: "Old cancelled task",
+          updatedAt: 3,
+        },
       ],
     });
 
@@ -607,7 +619,9 @@ describe("AgentInspectorRail", () => {
     expect(screen.getByText("No active run.")).toBeInTheDocument();
     expect(screen.getByTestId("agent-task-history")).toBeInTheDocument();
     expect(screen.getByText("Old completed task")).toBeInTheDocument();
-    expect(screen.getByText("No active plan. Completed backend tasks are shown as history only.")).toBeInTheDocument();
+    expect(screen.getByText("Old failed task")).toBeInTheDocument();
+    expect(screen.getByText("Old cancelled task")).toBeInTheDocument();
+    expect(screen.getByText("No active plan. Finished backend tasks are shown as history only.")).toBeInTheDocument();
   });
 
   it("shows approval continuation as an active run without requiring session.live", () => {

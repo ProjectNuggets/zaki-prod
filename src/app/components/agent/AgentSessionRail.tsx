@@ -16,6 +16,7 @@ import { useSessionTitleOverlay } from "@/queries/useSessionTitleOverlay";
 type AgentSessionRailProps = {
   sessions: AgentSession[];
   isLoading: boolean;
+  isError?: boolean;
   activeSessionKey: string | null;
   isRtl: boolean;
   onSelectSession: (sessionKey: string) => void;
@@ -23,6 +24,7 @@ type AgentSessionRailProps = {
   onDeleteSession: (sessionKey: string, label: string) => void;
   onRenameSession?: (sessionKey: string, label: string) => void | Promise<void>;
   onRepairSessionTitles?: (sessions: AgentSession[]) => void | Promise<void>;
+  onRetrySessions?: () => void;
 };
 
 const INITIAL_SESSION_LIMIT = 72;
@@ -41,6 +43,7 @@ function pluralizeThread(count: number) {
 export function AgentSessionRail({
   sessions,
   isLoading,
+  isError = false,
   activeSessionKey,
   isRtl,
   onSelectSession,
@@ -48,6 +51,7 @@ export function AgentSessionRail({
   onDeleteSession,
   onRenameSession,
   onRepairSessionTitles,
+  onRetrySessions,
 }: AgentSessionRailProps) {
   const { t } = useTranslation();
   const { getLabel: getOverlayLabel } = useSessionTitleOverlay();
@@ -249,11 +253,13 @@ export function AgentSessionRail({
           <ZakiSessionList
             sessions={visibleSessions}
             isLoading={isLoading}
+            isError={isError}
             activeSessionKey={activeSessionKey}
             onSelectSession={onSelectSession}
             onCreateSession={onCreateSession}
             onDeleteSession={onDeleteSession}
             onRenameSession={onRenameSession}
+            onRetry={onRetrySessions}
             showRuntimeBadges={false}
             showCreateButton={false}
             isRtl={isRtl}

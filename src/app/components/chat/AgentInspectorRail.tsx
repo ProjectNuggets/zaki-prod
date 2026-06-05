@@ -63,6 +63,7 @@ import {
   V2PanelHead,
   V2Tabs,
 } from "@/app/components/v2";
+import { resolveContextGaugePercent } from "@/lib/agentContext";
 import type {
   NullalisApprovalRequest,
   NullalisNarrationFrame,
@@ -248,14 +249,7 @@ function formatTokens(value?: number | null): string {
 }
 
 function contextPercent(data: ContextGaugeData | null): number | null {
-  if (!data) return null;
-  if (typeof data.pressurePercent === "number") {
-    return Math.min(100, Math.max(0, data.pressurePercent));
-  }
-  if (typeof data.context_pressure_percent === "number") {
-    return Math.min(100, Math.max(0, data.context_pressure_percent));
-  }
-  return null;
+  return resolveContextGaugePercent(data);
 }
 
 function contextSourceLabel(data: ContextGaugeData | null): string {
@@ -268,6 +262,10 @@ function contextSourceLabel(data: ContextGaugeData | null): string {
 
 function isCompleteTask(status: NullalisTaskStatus) {
   return status === "done" || status === "succeeded";
+}
+
+function isTerminalTask(status: NullalisTaskStatus) {
+  return isCompleteTask(status) || status === "failed" || status === "cancelled";
 }
 
 function taskVisualState(status: NullalisTaskStatus) {
@@ -652,11 +650,11 @@ export function AgentInspectorRail({
     [tasks]
   );
   const currentTasks = useMemo(
-    () => sortedTasks.filter((task) => !isCompleteTask(task.status)),
+    () => sortedTasks.filter((task) => !isTerminalTask(task.status)),
     [sortedTasks]
   );
   const taskHistory = useMemo(
-    () => sortedTasks.filter((task) => isCompleteTask(task.status)).slice(-5).reverse(),
+    () => sortedTasks.filter((task) => isTerminalTask(task.status)).slice(-5).reverse(),
     [sortedTasks]
   );
   const completedTaskCount = currentTasks.filter((task) => isCompleteTask(task.status)).length;
@@ -1443,7 +1441,7 @@ export function AgentInspectorRail({
               <span>
                 {hasActiveRun
                   ? "Live plan updates are attached to this run."
-                  : "No active plan. Completed backend tasks are shown as history only."}
+                  : "No active plan. Finished backend tasks are shown as history only."}
               </span>
             </div>
           </V2Panel>

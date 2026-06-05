@@ -572,7 +572,7 @@ describe("agent runtime API clients", () => {
     );
   });
 
-  it("appends approval continuations through the Agent history append facade", async () => {
+  it("keeps the operator-only Agent history append facade typed", async () => {
     mockFetch.mockResolvedValueOnce(
       makeResponse(201, {
         ok: true,

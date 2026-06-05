@@ -27,7 +27,6 @@ import {
   resolveEffectiveEntitlement,
 } from "@/lib/entitlements";
 import { useTranslation } from "react-i18next";
-import { SessionManagementSheet } from "./agent/SessionManagementSheet";
 import { SidebarModeSwitch } from "./sidebar/SidebarModeSwitch";
 import { ZakiSessionList } from "./sidebar/ZakiSessionList";
 import { SpaceSettingsSheet } from "./sidebar/SpaceSettingsSheet";
@@ -144,9 +143,12 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
     setSidebarMode,
   } = useNavigation();
   const { sidebarMode, zakiSessionKey: storedZakiSessionKey } = useNavigationStore();
-  const { data: zakiSessions = [], isLoading: zakiSessionsLoading } = useZakiSessions(
-    Boolean(user) && sidebarMode === "zaki"
-  );
+  const {
+    data: zakiSessions = [],
+    isLoading: zakiSessionsLoading,
+    isError: zakiSessionsError,
+    refetch: refetchZakiSessions,
+  } = useZakiSessions(Boolean(user) && sidebarMode === "zaki");
   const activeSessionKey =
     isZakiBotSpaceId(activeSpaceId) && (activeZakiSessionKey || storedZakiSessionKey)
       ? normalizeZakiSessionKey(activeZakiSessionKey || storedZakiSessionKey || "")
@@ -165,7 +167,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
   const [expandedSpace, setExpandedSpace] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState("new-space");
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [zakiSessionsOpen, setZakiSessionsOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memorySearchQuery, setMemorySearchQuery] = useState("");
   const [memoryInitialTab, setMemoryInitialTab] = useState<
@@ -592,7 +593,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
 
   useEffect(() => {
     const anyModalOpen =
-      zakiSessionsOpen ||
       memoryOpen ||
       spaceSettingsOpen ||
       Boolean(confirmDelete);
@@ -616,13 +616,10 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
         setMemoryOpen(false);
         return;
       }
-      if (zakiSessionsOpen) {
-        setZakiSessionsOpen(false);
-      }
     };
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
-  }, [confirmDelete, memoryOpen, spaceSettingsOpen, zakiSessionsOpen]);
+  }, [confirmDelete, memoryOpen, spaceSettingsOpen]);
 
   useEffect(() => {
     if (!spaceSettingsTarget) return;
@@ -1424,16 +1421,12 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
           }}
           controlBadgeCount={totalPendingApprovals}
           onOpenSettings={() => openSettingsSection()}
-          onOpenSessions={() => setZakiSessionsOpen(true)}
           onOpenCron={() => requestAgentControls("cron")}
           onOpenSecrets={() => openSettingsSection("settings-secrets")}
           onOpenDiagnostics={() => openSettingsSection("settings-developer-access")}
         />
       ) : sidebarMode === "zaki" ? (
         <div className="zaki-sidebar-v2-action-row" aria-label={t("sidebar.context.agentActions", { defaultValue: "Agent actions" })}>
-          <button type="button" onClick={() => setZakiSessionsOpen(true)}>
-            {t("zakiControls.sidebarMenu.sessions")}
-          </button>
           <button type="button" onClick={() => openSettingsSection()}>
             {t("zakiControls.sidebarMenu.settings")}
           </button>
@@ -1449,6 +1442,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
           <ZakiSessionList
             sessions={zakiThreadSessions}
             isLoading={zakiSessionsLoading}
+            isError={zakiSessionsError}
             activeSessionKey={activeSessionKey}
             onSelectSession={(sessionKey) => {
               const threadSlug = extractThreadSlugFromSessionKey(sessionKey);
@@ -1463,6 +1457,16 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
               try {
                 const { response } = await deleteAgentSession(sessionKey);
                 if (!response.ok) throw new Error(`delete ${response.status}`);
+                const normalizedDeletedKey = normalizeZakiSessionKey(sessionKey);
+                queryClient.setQueryData(zakiSessionKeys.all, (previous: unknown) =>
+                  Array.isArray(previous)
+                    ? previous.filter(
+                        (session) =>
+                          normalizeZakiSessionKey(String(session?.session_key || "")) !==
+                          normalizedDeletedKey,
+                      )
+                    : previous,
+                );
                 await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
                 if (activeSessionKey === sessionKey) {
                   // Active session got nuked. Bounce to the ZAKI home so the
@@ -1494,6 +1498,9 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
               window.dispatchEvent(new Event("zaki:clear-thread"));
               window.dispatchEvent(new Event("zaki:close-mobile-sidebar"));
               toast.success("New session started");
+            }}
+            onRetry={() => {
+              void refetchZakiSessions();
             }}
             isRtl={!!isRtl}
           />
@@ -2265,17 +2272,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
       )}
         </>
       )}
-      <SessionManagementSheet
-        isOpen={zakiSessionsOpen}
-        onClose={() => setZakiSessionsOpen(false)}
-        activeSessionKey={activeSessionKey}
-        onSwitchSession={(sessionKey) => {
-          const threadSlug = extractThreadSlugFromSessionKey(sessionKey);
-          if (!threadSlug) return;
-          goToThread(ZAKI_BOT_SPACE_ID, threadSlug, { zakiSessionKey: sessionKey });
-          setZakiSessionsOpen(false);
-        }}
-      />
       <SpaceSettingsSheet
         isOpen={spaceSettingsOpen}
         space={spaceSettingsTarget}

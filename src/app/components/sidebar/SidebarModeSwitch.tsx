@@ -1,4 +1,4 @@
-import { Folder, Settings, MessageSquareText, Clock3, KeyRound, Activity, SlidersHorizontal, Brain, GraduationCap } from "lucide-react";
+import { Folder, Settings, Clock3, KeyRound, Activity, SlidersHorizontal, Brain, GraduationCap } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -23,7 +23,6 @@ interface SidebarModeSwitchProps {
   onOpenControls: () => void;
   controlBadgeCount?: number;
   onOpenSettings: () => void;
-  onOpenSessions: () => void;
   onOpenCron: () => void;
   onOpenSecrets: () => void;
   onOpenDiagnostics: () => void;
@@ -37,7 +36,6 @@ export function SidebarModeSwitch({
   onOpenControls,
   controlBadgeCount = 0,
   onOpenSettings,
-  onOpenSessions,
   onOpenCron,
   onOpenSecrets,
   onOpenDiagnostics,
@@ -121,10 +119,6 @@ export function SidebarModeSwitch({
             <DropdownMenuItem onClick={onOpenSettings}>
               <Settings className="size-3.5" />
               <span>{t("zakiControls.sidebarMenu.settings")}</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onOpenSessions}>
-              <MessageSquareText className="size-3.5" />
-              <span>{t("zakiControls.sidebarMenu.sessions")}</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onOpenCron}>

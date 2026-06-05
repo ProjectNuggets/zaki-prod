@@ -463,8 +463,8 @@ export function InputArea({
   //   nullalis exposes the active session report via
   //   /api/v1/users/{u}/sessions/{k}/context
   //     ↓ (proxied unchanged by Express BFF backend/src/index.js:10200)
-  //   /api/agent/sessions/{k}/context → context_pressure_percent +
-  //   compaction.nudge_percent
+  //   /api/agent/sessions/{k}/context → backend pressure +
+  //   backend compaction policy
   //     ↓
   //   ChatArea.refreshContextGauge → setContextPressure → store
   //     ↓

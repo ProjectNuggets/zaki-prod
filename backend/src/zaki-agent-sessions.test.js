@@ -2,9 +2,10 @@ import { describe, expect, it } from "@jest/globals";
 import {
   buildCanonicalZakiThreadSessionKey,
   buildDefaultZakiThreadTitle,
+  isInternalProbeZakiAgentSession,
   isPlaceholderZakiSessionTitle,
   isThreadLaneZakiSessionKey,
-  mergeZakiAgentSessions,
+  listPublicZakiAgentSessions,
   normalizeZakiAgentBackendSessions,
   normalizeZakiSessionKey,
   overlayZakiAgentSessionTitles,
@@ -42,8 +43,8 @@ describe("zaki agent session helpers", () => {
     expect(isThreadLaneZakiSessionKey("agent:zaki-bot:user:7:task:77")).toBe(false);
   });
 
-  it("merges local thread summaries over upstream thread sessions", () => {
-    const sessions = mergeZakiAgentSessions({
+  it("lists public canonical thread sessions with local title overlays only", () => {
+    const sessions = listPublicZakiAgentSessions({
       upstreamSessions: [
         {
           session_key: "agent:zaki-bot:user:7:thread:thread-42",
@@ -57,6 +58,12 @@ describe("zaki agent session helpers", () => {
           title: "Task 77",
           message_count: 1,
           last_active: "2026-04-27T08:00:00Z",
+        },
+        {
+          session_key: "agent:zaki-bot:user:7:thread:bench-b4_agentic_file_read-1776986713",
+          title: "Session",
+          message_count: 90,
+          last_active: "2026-04-29T08:00:00Z",
         },
       ],
       localThreads: [
@@ -75,18 +82,12 @@ describe("zaki agent session helpers", () => {
       ],
     });
 
+    expect(sessions).toHaveLength(1);
     expect(sessions[0]).toMatchObject({
       session_key: "agent:zaki-bot:user:7:thread:thread-42",
       title: "Travel budget",
-      message_count: 9,
+      message_count: 3,
       live: true,
-    });
-    expect(sessions.find((session) => session.session_key.endsWith(":task:77"))).toMatchObject({
-      title: "Task 77",
-    });
-    expect(sessions.find((session) => session.session_key.endsWith(":thread:main"))).toMatchObject({
-      title: "Main session",
-      message_count: 4,
     });
   });
 
@@ -174,6 +175,39 @@ describe("zaki agent session helpers", () => {
     });
 
     expect(sessions[0]).toMatchObject({ title: "Readable research thread" });
+  });
+
+  it("detects internal probe sessions before they reach the public rail", () => {
+    expect(
+      isInternalProbeZakiAgentSession({
+        sessionKey: "agent:zaki-bot:user:7:thread:bench-b13_ledger_math-1776678582",
+        title: "Session",
+      }),
+    ).toBe(true);
+    expect(
+      isInternalProbeZakiAgentSession({
+        sessionKey: "agent:zaki-bot:user:7:thread:k26-smoke-1778186569",
+        title: "How are you habib",
+      }),
+    ).toBe(true);
+    expect(
+      isInternalProbeZakiAgentSession({
+        sessionKey: "agent:zaki-bot:user:7:thread:mcp-smoke-test",
+        title: "Session",
+      }),
+    ).toBe(true);
+    expect(
+      isInternalProbeZakiAgentSession({
+        sessionKey: "agent:zaki-bot:user:7:thread:dtaas-bench-scale",
+        title: "Session",
+      }),
+    ).toBe(true);
+    expect(
+      isInternalProbeZakiAgentSession({
+        sessionKey: "agent:zaki-bot:user:7:thread:market-research",
+        title: "Personal AI market research",
+      }),
+    ).toBe(false);
   });
 
   it("keeps New chat as the default local thread title", () => {

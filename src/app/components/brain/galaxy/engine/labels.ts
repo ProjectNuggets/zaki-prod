@@ -48,7 +48,8 @@ interface Slot {
 // at the hovered node. The callback schedules that missing repaint.
 export function createLabelLayer(maxLabels: number, onSync?: () => void): LabelLayer {
   const group = new Group();
-  const fill = readCssColor("--v2-ink-1", "#ece7df").color;
+  const fill = readCssColor("--g-label-canvas", "#f6efe6").color;
+  const outline = readCssColor("--g-label-halo", "rgba(0,0,0,0.92)");
   const slots: Slot[] = [];
   const worldPos = new Vector3();
   let fadeFar = FADE_FAR;
@@ -59,9 +60,9 @@ export function createLabelLayer(maxLabels: number, onSync?: () => void): LabelL
     mesh.color = fill.getHex();
     mesh.anchorX = "center";
     mesh.anchorY = "bottom";
-    mesh.outlineWidth = "7%";
-    mesh.outlineColor = 0x000000;
-    mesh.outlineOpacity = 0.65;
+    mesh.outlineWidth = "12%";
+    mesh.outlineColor = outline.color.getHex();
+    mesh.outlineOpacity = outline.alpha;
     // Drawn after the graph; the scene writes no depth (additive nodes/edges +
     // depthWrite:false), so renderOrder alone keeps labels legibly on top.
     // (Don't touch mesh.material here: with an outline, troika's `material` is
@@ -101,9 +102,11 @@ export function createLabelLayer(maxLabels: number, onSync?: () => void): LabelL
       const dist = camera.position.distanceTo(worldPos);
       const span = Math.max(1, fadeFar - FADE_NEAR);
       const opacity = clamp01((fadeFar - dist) / span);
-      slot.mesh.fillOpacity = opacity;
-      slot.mesh.outlineOpacity = 0.65 * opacity;
-      slot.mesh.visible = opacity > 0.02;
+      const visible = opacity > 0.02;
+      const labelOpacity = visible ? Math.max(0.48, opacity) : 0;
+      slot.mesh.fillOpacity = labelOpacity;
+      slot.mesh.outlineOpacity = outline.alpha * labelOpacity;
+      slot.mesh.visible = visible;
     }
   }
 

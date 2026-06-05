@@ -9,7 +9,6 @@ export type AgentContextGauge = {
   tokenCount?: number;
   contextMax?: number;
   messageCount?: number;
-  context_pressure_percent?: number | null;
   pressurePercent?: number | null;
   sampledAtMs?: number | null;
   status?: string | null;
@@ -197,7 +196,6 @@ export function buildAgentContextGauge(
     tokenCount: tokenCount ?? undefined,
     contextMax: contextMax && contextMax > 0 ? contextMax : undefined,
     messageCount: messageCount ?? undefined,
-    context_pressure_percent: pressurePct,
     pressurePercent: pressurePct,
     sampledAtMs: numericValue(payload.sampled_at_ms),
     status: stringValue(payload.status),
@@ -216,9 +214,6 @@ export function resolveContextGaugePercent(
   if (!data) return null;
   if (typeof data.pressurePercent === "number") {
     return clampPercent(data.pressurePercent);
-  }
-  if (typeof data.context_pressure_percent === "number") {
-    return clampPercent(data.context_pressure_percent);
   }
   return null;
 }

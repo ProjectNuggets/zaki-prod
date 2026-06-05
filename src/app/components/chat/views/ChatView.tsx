@@ -13,11 +13,7 @@ import type {
   BotReplyStart,
   ZakiUsageSummary,
 } from "../BotStatusRail";
-import {
-  ContextGauge,
-  TaskChecklist,
-} from "../NullalisRuntimeWidgets";
-import type { ContextGaugeData } from "../NullalisRuntimeWidgets";
+import { TaskChecklist } from "../NullalisRuntimeWidgets";
 import {
   NullalisTurnTimeline,
   type TimelineRevealPhase,
@@ -41,7 +37,6 @@ interface ChatViewProps {
   nullalisTranscriptEntries?: NullalisTranscriptEntry[];
   nullalisTaskItems?: NullalisTaskItem[];
   nullalisApprovalRequest?: NullalisApprovalRequest | null;
-  contextGaugeData?: ContextGaugeData | null;
   zakiUsageSummary?: ZakiUsageSummary | null;
   botMode?: boolean;
   firstMessageTransition: boolean;
@@ -250,7 +245,6 @@ export function ChatView({
   nullalisTranscriptEntries = [],
   nullalisTaskItems = [],
   nullalisApprovalRequest = null,
-  contextGaugeData = null,
   zakiUsageSummary = null,
   botMode = false,
   firstMessageTransition,
@@ -334,9 +328,6 @@ export function ChatView({
         firstMessageTransition && "zaki-chat-enter"
       )}
     >
-      {/* C4: ContextGauge is rendered persistently whenever data is available,
-          independent of timelineMode or nullalisMode */}
-      {contextGaugeData ? <ContextGauge data={contextGaugeData} /> : null}
       {messages.length === 0 && botMode && !isStreaming ? (
         <section className="zaki-agent-empty-v2" aria-labelledby="zaki-agent-empty-title">
           <div className="zaki-agent-empty-v2__kicker">
