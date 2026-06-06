@@ -447,7 +447,7 @@ describe("agent BOT BFF contract", () => {
       expect(cancelCall[2]).not.toBe(handlers.agentJson1mb);
     });
 
-    it("encodes the userId segment in upstream paths but forwards the raw session key", () => {
+    it("encodes the userId segment in upstream paths but forwards the decoded session key", () => {
       const app = buildApp();
       const { proxyHandlersBySuffix, ...handlers } = buildHandlers();
 
@@ -487,6 +487,19 @@ describe("agent BOT BFF contract", () => {
       });
       expect(cancelUpstream).toBe(
         "/api/v1/users/user%20with%20space/sessions/agent:zaki-bot:user:42:thread:main/cancel"
+      );
+
+      const contextCall = app.get.mock.calls.find(
+        (args) => args[0] === "/api/agent/sessions/:sessionKey/context"
+      );
+      expect(contextCall).toBeDefined();
+      const contextProxyHandler = contextCall[contextCall.length - 1];
+      const contextUpstream = contextProxyHandler.pathBuilder("user with space", {
+        // Express decodes `/agent%3Azaki.../context` before this builder runs.
+        params: { sessionKey: "agent:zaki-bot:user:42:thread:main" },
+      });
+      expect(contextUpstream).toBe(
+        "/api/v1/users/user%20with%20space/sessions/agent:zaki-bot:user:42:thread:main/context"
       );
     });
   });

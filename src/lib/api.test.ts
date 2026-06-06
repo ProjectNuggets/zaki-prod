@@ -572,6 +572,25 @@ describe("agent runtime API clients", () => {
     );
   });
 
+  it("loads Agent context through the encoded session-scoped BFF route", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeResponse(200, {
+        active: true,
+        live: true,
+        context_pressure_percent: 21,
+      })
+    );
+
+    const { fetchAgentSessionContext } = await import("@/lib/api");
+    const { data } = await fetchAgentSessionContext("agent:zaki-bot:user:42:thread:main");
+
+    expect(data.context_pressure_percent).toBe(21);
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/agent/sessions/agent%3Azaki-bot%3Auser%3A42%3Athread%3Amain/context",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
   it("keeps the operator-only Agent history append facade typed", async () => {
     mockFetch.mockResolvedValueOnce(
       makeResponse(201, {

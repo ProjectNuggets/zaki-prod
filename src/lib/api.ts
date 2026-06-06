@@ -2456,8 +2456,9 @@ export async function fetchAgentDiagnostics() {
 // ---------------------------------------------------------------------------
 // Agent Session CRUD (Phase 3.5)
 // ---------------------------------------------------------------------------
-// Session keys contain colons (agent:zaki-bot:user:42:thread:main) — do NOT
-// encodeURIComponent them because nullalis matches raw path segments.
+// Session keys contain colons (agent:zaki-bot:user:42:thread:main). Encode them
+// in BFF URLs; Express decodes the route param before proxying the canonical
+// session key to Nullalis.
 // Client-side validation mirrors the backend SESSION_KEY_SAFE_PATTERN.
 
 const SESSION_KEY_RE = /^[a-zA-Z0-9:_.\-]+$/;
