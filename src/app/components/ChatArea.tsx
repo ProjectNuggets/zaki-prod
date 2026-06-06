@@ -5567,6 +5567,16 @@ export function ChatArea() {
         if (isZakiAgentSpace) {
           finalizeZakiBotProgress("done");
         }
+        // Tear down the browser view-feed when the turn ends (contract §4).
+        // Bounds per-session frame retention: at most the in-flight turn's
+        // latest frame is held; the close button remains a manual early-clear.
+        {
+          const sessionKey =
+            activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
+          if (sessionKey) {
+            setSessionBrowserFrame(sessionKey, null);
+          }
+        }
         const finalChunk =
           isZakiAgentSpace
             ? (typeof payload.message === "string" && payload.message) ||

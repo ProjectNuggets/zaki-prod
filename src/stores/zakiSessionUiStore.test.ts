@@ -107,6 +107,30 @@ describe("zakiSessionUiStore", () => {
     expect(session?.mode).toBe("execute");
   });
 
+  it("setBrowserFrame stores the frame then clears it on turn-end (null)", () => {
+    const store = useZakiSessionUiStore.getState();
+    const key = "agent:zaki-bot:user:1:thread:main";
+    const frame = {
+      sessionId: "session-1",
+      frame: "QUJD",
+      url: "https://example.com",
+      title: "Example",
+      runId: "run-1",
+      timestamp: 1700000000000,
+    };
+
+    store.setBrowserFrame(key, frame);
+    expect(
+      useZakiSessionUiStore.getState().sessions[key]?.browserFrame
+    ).toEqual(frame);
+
+    // Turn-end clear (mirrors the readPayloadChunk done-branch path).
+    store.setBrowserFrame(key, null);
+    expect(
+      useZakiSessionUiStore.getState().sessions[key]?.browserFrame
+    ).toBeNull();
+  });
+
   it("hydrateSession preserves approval timestamps across re-hydration", () => {
     const store = useZakiSessionUiStore.getState();
     // First hydration creates the approval

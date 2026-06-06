@@ -38,6 +38,15 @@ describe("BrowserViewFeedPanel", () => {
     expect(screen.getByText(/waiting for the agent to browse/i)).toBeInTheDocument();
   });
 
+  it("shows the empty state when frame.frame is an empty string (no broken img)", () => {
+    render(
+      <BrowserViewFeedPanel frame={makeFrame({ frame: "" })} onClose={jest.fn()} />
+    );
+
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.getByText(/waiting for the agent to browse/i)).toBeInTheDocument();
+  });
+
   it("calls onClose when the close button is clicked", () => {
     const onClose = jest.fn();
     render(<BrowserViewFeedPanel frame={makeFrame()} onClose={onClose} />);

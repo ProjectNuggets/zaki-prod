@@ -48,7 +48,7 @@ export function BrowserViewFeedPanel({
         </button>
       </V2PanelHead>
 
-      {frame ? (
+      {frame && frame.frame?.trim() ? (
         <div className="zaki-browser-view__body">
           <h3 className="zaki-browser-view__title" title={title}>
             {title}
