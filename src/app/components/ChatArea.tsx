@@ -113,6 +113,7 @@ import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
 import { MemoryImportSheet } from "./onboarding/MemoryImportSheet";
 import { OnboardingTour } from "./onboarding/OnboardingTour";
 import { AgentArtifactCanvas } from "./agent/AgentArtifactCanvas";
+import { BrowserViewFeedPanel } from "./chat/BrowserViewFeedPanel";
 import { useOnboardingProgress } from "@/queries/useOnboardingProgress";
 import { useBrainGraph } from "@/queries/useBrainGraph";
 import {
@@ -2985,6 +2986,7 @@ export function ChatArea() {
     (state) => state.decrementApprovalCount
   );
   const setSessionContextPressure = useZakiSessionUiStore((state) => state.setContextPressure);
+  const setSessionBrowserFrame = useZakiSessionUiStore((state) => state.setBrowserFrame);
   const setZakiSandboxState = useZakiSessionUiStore((state) => state.setSandbox);
   const sandboxState = useZakiSessionUiStore((s) => s.sandbox);
   const activeSessionMode =
@@ -5769,6 +5771,21 @@ export function ChatArea() {
           updateNullalisReasoningSummary(payload);
           return {};
         }
+        if (eventType === "browser_frame" || payloadType === "browser_frame") {
+          const sessionKey =
+            activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
+          if (sessionKey && typeof payload.frame === "string" && (payload.frame as string).length > 0) {
+            setSessionBrowserFrame(sessionKey, {
+              sessionId: String(payload.session_id ?? ""),
+              frame: String(payload.frame ?? ""),
+              url: String(payload.url ?? ""),
+              title: String(payload.title ?? ""),
+              runId: typeof payload.run_id === "string" ? payload.run_id : undefined,
+              timestamp: Date.now(),
+            });
+          }
+          return {};
+        }
         if (
           eventType === "status" ||
           payloadType === "statusResponse" ||
@@ -8453,6 +8470,25 @@ export function ChatArea() {
               <AgentArtifactCanvas
                 artifact={selectedAgentArtifact}
                 onClose={() => setSelectedAgentArtifact(null)}
+              />
+            </aside>
+          ) : null}
+
+          {isAgentSurface && activeSessionUi?.browserFrame ? (
+            <aside
+              className="zaki-agent-browser-view"
+              aria-label="Browser view"
+            >
+              <BrowserViewFeedPanel
+                frame={activeSessionUi.browserFrame}
+                onClose={() => {
+                  const sessionKey =
+                    activeZakiSessionKey ||
+                    buildAgentSessionKey(activeThreadId || "main", agentUserId);
+                  if (sessionKey) {
+                    setSessionBrowserFrame(sessionKey, null);
+                  }
+                }}
               />
             </aside>
           ) : null}

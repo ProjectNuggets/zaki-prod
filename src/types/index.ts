@@ -78,3 +78,20 @@ export interface User {
   fullName?: string | null;
   role?: string;
 }
+
+/**
+ * A single browser screenshot frame emitted by the agent runtime on the
+ * per-turn SSE stream (`event: browser_frame`). Watch-only — the user can
+ * see what the agent is browsing but cannot send input back.
+ *
+ * `frame` is RAW base64-encoded PNG data (NOT a data: URL). Render with the
+ * `data:image/png;base64,` prefix.
+ */
+export interface BrowserFrame {
+  sessionId: string;
+  frame: string; // raw base64 PNG
+  url: string;
+  title: string;
+  runId?: string;
+  timestamp: number;
+}

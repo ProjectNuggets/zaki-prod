@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { AgentSession, AgentSessionMode, BotSandboxBackend } from "@/lib/api";
 import { normalizeZakiSessionKey } from "@/lib/zakiSessions";
+import type { BrowserFrame } from "@/types";
 
 // 2026-05-08 — Removed FE-side pressure buckets (CONTEXT_PRESSURE_WARNING /
 // CONTEXT_PRESSURE_NEAR_LIMIT and getContextPressureState).
@@ -46,6 +47,7 @@ export type ZakiSessionUi = {
   lastChannel: string | null;
   contextPressurePercent: number | null;
   live: boolean | null;
+  browserFrame: BrowserFrame | null;
 };
 
 type ZakiSessionUiState = {
@@ -60,6 +62,7 @@ type ZakiSessionUiStore = ZakiSessionUiState & {
   incrementApprovalCount: (sessionKey: string, approval?: ZakiSessionApprovalRequest | null) => void;
   decrementApprovalCount: (sessionKey: string, approvalId?: string | null) => void;
   setContextPressure: (sessionKey: string, contextPressurePercent: number | null) => void;
+  setBrowserFrame: (sessionKey: string, frame: BrowserFrame | null) => void;
   setSandbox: (sandbox: ZakiRuntimeSandbox | null) => void;
 };
 
@@ -138,6 +141,7 @@ function createDefaultSessionUi(overrides?: Partial<ZakiSessionUi>): ZakiSession
     lastChannel: null,
     contextPressurePercent: null,
     live: null,
+    browserFrame: null,
     ...overrides,
   };
 }
@@ -290,6 +294,20 @@ export const useZakiSessionUiStore = create<ZakiSessionUiStore>()((set, get) => 
         [normalized]: createDefaultSessionUi({
           ...state.sessions[normalized],
           contextPressurePercent,
+        }),
+      },
+    }));
+  },
+
+  setBrowserFrame: (sessionKey, frame) => {
+    const normalized = normalizeSessionKey(sessionKey);
+    if (!normalized) return;
+    set((state) => ({
+      sessions: {
+        ...state.sessions,
+        [normalized]: createDefaultSessionUi({
+          ...state.sessions[normalized],
+          browserFrame: frame,
         }),
       },
     }));

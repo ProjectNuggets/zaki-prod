@@ -7961,6 +7961,119 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   min-height: 0;
 }
 
+/* Browser view-feed — watch-only screenshot stream from the agent runtime.
+   Mirrors the artifact overlay docking + chrome. */
+.zaki-agent-browser-view {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  width: clamp(420px, 38vw, 620px);
+  overflow: hidden;
+  border-left: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg);
+  box-shadow: -1px 0 0 var(--v2-hairline);
+}
+
+.zaki-agent-browser-view .zaki-browser-view {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.zaki-browser-view .v2-panel-head {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.zaki-browser-view__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--v2-ink-3);
+  cursor: pointer;
+}
+
+.zaki-browser-view__close:hover {
+  background: var(--v2-hairline);
+  color: var(--v2-ink-1);
+}
+
+.zaki-browser-view__body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  overflow: auto;
+}
+
+.zaki-browser-view__title {
+  margin: 0;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.zaki-browser-view__frame {
+  margin: 0;
+  border: 1px solid var(--v2-hairline);
+  border-radius: 8px;
+  background: var(--v2-bg-2, var(--v2-bg));
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+}
+
+.zaki-browser-view__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.zaki-browser-view__empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px 18px;
+  color: var(--v2-ink-3);
+  text-align: center;
+}
+
+.zaki-browser-view__empty p {
+  margin: 0;
+  font-size: 13px;
+}
+
+@media (max-width: 1279px) {
+  .zaki-agent-browser-view {
+    width: min(560px, calc(100% - 40px));
+  }
+}
+
+@media (max-width: 900px) {
+  .zaki-agent-browser-view {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    width: auto;
+    border-left: 0;
+  }
+}
+
 .zaki-agent-artifact-canvas__head {
   position: sticky;
   top: 0;
