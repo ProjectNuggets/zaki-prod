@@ -1,4 +1,17 @@
-import { Copy, Download, ExternalLink, FileText, Link2, Share2, X } from "lucide-react";
+import {
+  Copy,
+  Download,
+  ExternalLink,
+  Eye,
+  FileText,
+  History,
+  Link2,
+  Link2Off,
+  Pencil,
+  Share2,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -7,6 +20,7 @@ import {
   fetchAgentArtifact,
   fetchAgentArtifactDiff,
   fetchAgentArtifactHistory,
+  revokeAgentArtifactShare,
   shareAgentArtifact,
   updateAgentArtifact,
   type AgentArtifact,
@@ -58,6 +72,65 @@ function artifactPreviewText(source: AgentArtifact | AgentInspectorArtifact | nu
 function artifactCanEdit(kind: string | null | undefined, preview: string | null) {
   if (!preview) return false;
   return /\b(markdown|text|md|plain|html|json)\b/i.test(String(kind || ""));
+}
+
+function normalizeArtifactKind(value: string | null | undefined) {
+  return String(value || "artifact").trim().toLowerCase();
+}
+
+function renderableArtifactContent(kind: string, content: string) {
+  if (kind === "json" || kind.includes("/json")) {
+    try {
+      return JSON.stringify(JSON.parse(content), null, 2);
+    } catch {
+      return content;
+    }
+  }
+  return content;
+}
+
+function isFramedArtifact(kind: string) {
+  return kind === "html" || kind.includes("html") || kind === "svg" || kind.includes("svg");
+}
+
+function isCodeArtifact(kind: string) {
+  return kind === "json" || kind.includes("/json") || kind === "code" || kind.includes("code");
+}
+
+function artifactFrameSource(kind: string, content: string) {
+  if (kind === "svg" || kind.includes("svg")) {
+    return `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;min-height:100%;display:grid;place-items:center;background:#fff;color:#111;font-family:system-ui,sans-serif}svg{max-width:100%;height:auto}</style></head><body>${content}</body></html>`;
+  }
+  return content;
+}
+
+function renderArtifactPreviewContent({
+  kind,
+  title,
+  content,
+  frameTestId,
+}: {
+  kind: string;
+  title: string;
+  content: string;
+  frameTestId?: string;
+}) {
+  const renderableContent = renderableArtifactContent(kind, content);
+  if (isFramedArtifact(kind)) {
+    return (
+      <iframe
+        title={`${title} preview`}
+        sandbox=""
+        srcDoc={artifactFrameSource(kind, renderableContent)}
+        className="zaki-agent-artifact-canvas__frame"
+        data-testid={frameTestId}
+      />
+    );
+  }
+  if (isCodeArtifact(kind)) {
+    return <pre className="zaki-agent-artifact-canvas__code">{renderableContent}</pre>;
+  }
+  return <MessageContent content={content} role="assistant" surface="shared" />;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -139,6 +212,19 @@ function formatArtifactStamp(value: unknown) {
   });
 }
 
+function artifactWordCount(value: string | null) {
+  if (!value) return 0;
+  const words = value.trim().match(/\S+/g);
+  return words?.length ?? 0;
+}
+
+function versionOptionLabel(version: AgentArtifact, index: number) {
+  const value = versionValue(version) || String(index + 1);
+  const stamp = formatArtifactStamp(version.updated_at ?? version.created_at);
+  const title = getAgentArtifactTitle(version);
+  return `v${value} - ${title} - ${stamp}`;
+}
+
 function safeExportFilename(artifact: AgentInspectorArtifact, format: AgentArtifactExportFormat) {
   const stem =
     artifact.title
@@ -148,12 +234,55 @@ function safeExportFilename(artifact: AgentInspectorArtifact, format: AgentArtif
   return `${stem}.${format}`;
 }
 
+function truncateArtifactExcerpt(value: string | null, maxLength = 1200) {
+  const text = String(value || "").trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength).trimEnd()}\n...`;
+}
+
+function buildAgentRevisionDraft({
+  artifactId,
+  title,
+  kind,
+  version,
+  excerpt,
+}: {
+  artifactId: string;
+  title: string;
+  kind: string;
+  version: string | number | null;
+  excerpt: string | null;
+}) {
+  const lines = [
+    "Revise the existing artifact below and update the same artifact, not a new one.",
+    "",
+    `Artifact id: ${artifactId}`,
+    `Title: ${title}`,
+    `Kind: ${kind}`,
+    `Current version: ${version != null ? `v${version}` : "latest"}`,
+    "",
+    "Use artifact_get if you need the full current body. Then call artifact_update with a complete replacement content body and a one-line change_summary.",
+    "Make the revision share-ready: clear opening answer, useful headings, concise sections, tables where helpful, explicit assumptions when context is sparse, and no placeholders, lorem ipsum, or meta commentary.",
+    "",
+    "Requested change: polish it into a sharper, more impressive, ready-to-share version.",
+  ];
+  const trimmedExcerpt = truncateArtifactExcerpt(excerpt);
+  if (trimmedExcerpt) {
+    lines.push("", "Visible excerpt:", trimmedExcerpt);
+  }
+  return lines.join("\n");
+}
+
+type ArtifactCanvasMode = "preview" | "edit" | "history";
+
 export function AgentArtifactCanvas({
   artifact,
   onClose,
+  onRequestAgentEdit,
 }: {
   artifact: AgentInspectorArtifact;
   onClose: () => void;
+  onRequestAgentEdit?: (draft: string) => void;
 }) {
   const [detail, setDetail] = useState<AgentArtifact | null>(null);
   const [loading, setLoading] = useState(false);
@@ -169,11 +298,12 @@ export function AgentArtifactCanvas({
   const [diffText, setDiffText] = useState<string | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
   const [diffError, setDiffError] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
+  const [mode, setMode] = useState<ArtifactCanvasMode>("preview");
   const [editDraft, setEditDraft] = useState("");
+  const [editSummary, setEditSummary] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(artifact.shareUrl || null);
-  const [shareState, setShareState] = useState<"idle" | "sharing" | "copied" | "failed">("idle");
+  const [shareState, setShareState] = useState<"idle" | "sharing" | "revoking" | "copied" | "failed">("idle");
 
   useEffect(() => {
     let active = true;
@@ -188,8 +318,9 @@ export function AgentArtifactCanvas({
     setSelectedToVersion(null);
     setDiffText(null);
     setDiffError(null);
-    setEditing(false);
+    setMode("preview");
     setEditDraft("");
+    setEditSummary("");
     setShareUrl(artifact.shareUrl || null);
     setShareState("idle");
     void Promise.allSettled([fetchAgentArtifact(artifact.id), fetchAgentArtifactHistory(artifact.id)])
@@ -241,8 +372,29 @@ export function AgentArtifactCanvas({
 
   const title = getAgentArtifactTitle((detail || artifact) as AgentArtifact);
   const kind = getAgentArtifactKind((detail || artifact) as AgentArtifact) || artifact.type || "artifact";
+  const normalizedKind = normalizeArtifactKind(kind);
   const preview = useMemo(() => artifactPreviewText(detail || artifact), [detail, artifact]);
   const editable = artifactCanEdit(kind, preview);
+  const wordCount = artifactWordCount(preview);
+  const editWordCount = artifactWordCount(editDraft);
+  const currentVersion = getAgentArtifactVersion((detail || artifact) as AgentArtifact) ?? artifact.version ?? null;
+  const editing = mode === "edit";
+  const hasUnsavedEdit = mode === "edit" && preview != null && editDraft !== preview;
+  const exportedCount = PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS.filter((format) => {
+    const state = exportStates[format];
+    return (state?.status === "ready" || state?.status === "exported") && state.url;
+  }).length;
+
+  const handleClose = () => {
+    if (
+      hasUnsavedEdit &&
+      typeof window !== "undefined" &&
+      !window.confirm("Discard unsaved artifact edits?")
+    ) {
+      return;
+    }
+    onClose();
+  };
 
   const setExportState = (format: AgentArtifactExportFormat, state: AgentArtifactExportState) => {
     setExportStates((current) => ({ ...current, [format]: state }));
@@ -255,6 +407,23 @@ export function AgentArtifactCanvas({
     } catch {
       setExportState(format, { status: "failed", url, error: "download_failed" });
       toast.error("Download failed. Try exporting again.");
+    }
+  };
+
+  const handleRevokeShare = async () => {
+    if (!shareUrl) return;
+    setShareState("revoking");
+    try {
+      const { response, data } = await revokeAgentArtifactShare(artifact.id);
+      if (!response.ok) {
+        throw new Error(String(data?.error || "revoke_failed"));
+      }
+      setShareUrl(null);
+      setShareState("idle");
+      toast.success("Artifact share link revoked.");
+    } catch {
+      setShareState("failed");
+      toast.error("Could not revoke artifact share link.");
     }
   };
 
@@ -354,7 +523,53 @@ export function AgentArtifactCanvas({
   const handleStartEdit = () => {
     if (!editable || !preview) return;
     setEditDraft(preview);
-    setEditing(true);
+    setEditSummary("");
+    setMode("edit");
+  };
+
+  const handleRequestAgentEdit = () => {
+    if (!onRequestAgentEdit) return;
+    onRequestAgentEdit(
+      buildAgentRevisionDraft({
+        artifactId: artifact.id,
+        title,
+        kind: normalizedKind,
+        version: currentVersion,
+        excerpt: preview,
+      })
+    );
+  };
+
+  const handleCancelEdit = () => {
+    if (
+      hasUnsavedEdit &&
+      typeof window !== "undefined" &&
+      !window.confirm("Discard unsaved artifact edits?")
+    ) {
+      return;
+    }
+    setMode("preview");
+    setEditDraft("");
+    setEditSummary("");
+  };
+
+  const handleModeChange = (nextMode: ArtifactCanvasMode) => {
+    if (nextMode === "edit") {
+      handleStartEdit();
+      return;
+    }
+    if (
+      hasUnsavedEdit &&
+      typeof window !== "undefined" &&
+      !window.confirm("Discard unsaved artifact edits?")
+    ) {
+      return;
+    }
+    if (mode === "edit") {
+      setEditDraft("");
+      setEditSummary("");
+    }
+    setMode(nextMode);
   };
 
   const handleSaveEdit = async () => {
@@ -363,6 +578,7 @@ export function AgentArtifactCanvas({
     try {
       const { response, data } = await updateAgentArtifact(artifact.id, {
         content: editDraft,
+        change_summary: editSummary.trim() || "Canvas edit from ZAKI",
       });
       if (!response.ok) {
         throw new Error(artifactError(data, "artifact_update_failed"));
@@ -373,11 +589,17 @@ export function AgentArtifactCanvas({
         ...nextDetail,
         content: artifactPreviewText(nextDetail) || editDraft,
       }));
-      setEditing(false);
+      setMode("preview");
+      setEditSummary("");
       toast.success("Artifact updated.");
       const historyResult = await fetchAgentArtifactHistory(artifact.id);
       if (historyResult.response.ok) {
-        setHistory(normalizeArtifactHistoryPayload(historyResult.data));
+        const versions = normalizeArtifactHistoryPayload(historyResult.data);
+        setHistory(versions);
+        const newest = versions[0] || null;
+        const previous = versions[1] || versions[versions.length - 1] || null;
+        setSelectedFromVersion(versionValue(previous));
+        setSelectedToVersion(versionValue(newest));
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not update artifact.");
@@ -415,61 +637,133 @@ export function AgentArtifactCanvas({
             {kind}
           </span>
           <h2>{title}</h2>
-          <small>{artifact.version != null ? `v${artifact.version}` : "current"} · readable canvas</small>
+          <small>
+            {currentVersion != null ? `v${currentVersion}` : "current"} · {wordCount ? `${wordCount} words` : "readable canvas"}
+            {exportedCount ? ` · ${exportedCount} exports ready` : ""}
+          </small>
         </div>
         <div className="zaki-agent-artifact-canvas__actions">
-          {PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS.map((format) => {
-            const state = exportStates[format];
-            const label = getAgentArtifactExportFormatLabel(format);
-            const availability = getAgentArtifactExportAvailability((detail || artifact) as AgentArtifact, format);
-            const ready =
-              (state?.status === "ready" || state?.status === "exported") && state.url;
-            return (
-              <button
-                key={format}
-                type="button"
-                onClick={() =>
-                  ready ? void handleDownload(format, state.url || "") : void handleExport(format)
-                }
-                disabled={
-                  state?.status === "exporting" ||
-                  state?.status === "unavailable" ||
-                  !availability.supported
-                }
-                title={state?.error || availability.reason || undefined}
-              >
-                <Download className="size-3.5" aria-hidden />
-                {state?.status === "exporting"
-                  ? "Exporting"
-                  : !availability.supported
-                    ? `${label} unavailable`
-                    : ready
-                      ? label
-                      : `Export ${label}`}
-              </button>
-            );
-          })}
-          <button type="button" onClick={() => void handleShare()} disabled={shareState === "sharing"}>
-            <Share2 className="size-3.5" aria-hidden />
-            {shareState === "sharing" ? "Sharing" : "Share"}
+          <button
+            type="button"
+            aria-pressed={mode === "preview"}
+            onClick={() => handleModeChange("preview")}
+          >
+            <Eye className="size-3.5" aria-hidden />
+            Preview
           </button>
-          <button type="button" onClick={() => void handleCopy()} disabled={!shareUrl && !Object.values(exportStates).some((state) => state?.url)}>
-            {shareUrl ? <Link2 className="size-3.5" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
-            {shareState === "copied" ? "Copied" : "Copy link"}
+          <button
+            type="button"
+            aria-pressed={mode === "edit"}
+            disabled={!editable}
+            title={editable ? undefined : "This artifact kind is not text-editable in the canvas."}
+            onClick={handleStartEdit}
+          >
+            <Pencil className="size-3.5" aria-hidden />
+            Edit
           </button>
-          {shareUrl ? (
-            <a href={shareUrl} target="_blank" rel="noreferrer" aria-label="Open shared artifact">
-              <ExternalLink className="size-3.5" aria-hidden />
-              Open share
-            </a>
+          <button
+            type="button"
+            aria-pressed={mode === "history"}
+            onClick={() => handleModeChange("history")}
+          >
+            <History className="size-3.5" aria-hidden />
+            Versions
+          </button>
+          {onRequestAgentEdit ? (
+            <button
+              type="button"
+              onClick={handleRequestAgentEdit}
+              title="Draft an agent revision request in the composer."
+            >
+              <Sparkles className="size-3.5" aria-hidden />
+              Ask ZAKI
+            </button>
           ) : null}
-          <button type="button" onClick={onClose} aria-label="Close artifact canvas">
+          <button type="button" onClick={handleClose} aria-label="Close artifact canvas">
             <X className="size-3.5" aria-hidden />
             Close
           </button>
         </div>
       </header>
-      <div className="zaki-agent-artifact-canvas__workspace">
+
+      <div className="zaki-agent-artifact-canvas__delivery" aria-label="Artifact delivery">
+        <section className="zaki-agent-artifact-canvas__delivery-card">
+          <div className="zaki-agent-artifact-canvas__section-head">
+            <span>share</span>
+            <small>{shareUrl ? "public page ready" : "private"}</small>
+          </div>
+          <div className="zaki-agent-artifact-canvas__delivery-status" data-ready={shareUrl ? "true" : undefined}>
+            <strong>{shareUrl ? "Ready to send" : "Create a public link"}</strong>
+            <small>{shareUrl ? "Opens as a polished artifact page." : "Default lifetime is seven days."}</small>
+          </div>
+          <div className="zaki-agent-artifact-canvas__delivery-actions">
+            <button type="button" onClick={() => void handleShare()} disabled={shareState === "sharing"}>
+              <Share2 className="size-3.5" aria-hidden />
+              {shareState === "sharing" ? "Sharing" : shareUrl ? "Refresh share" : "Share"}
+            </button>
+            {shareUrl ? (
+              <button type="button" onClick={() => void handleRevokeShare()} disabled={shareState === "revoking"}>
+                <Link2Off className="size-3.5" aria-hidden />
+                {shareState === "revoking" ? "Stopping" : "Stop sharing"}
+              </button>
+            ) : null}
+            <button type="button" onClick={() => void handleCopy()} disabled={!shareUrl && !Object.values(exportStates).some((state) => state?.url)}>
+              {shareUrl ? <Link2 className="size-3.5" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
+              {shareState === "copied" ? "Copied" : "Copy link"}
+            </button>
+            {shareUrl ? (
+              <a href={shareUrl} target="_blank" rel="noreferrer" aria-label="Open shared artifact">
+                <ExternalLink className="size-3.5" aria-hidden />
+                Open shared artifact
+              </a>
+            ) : null}
+          </div>
+        </section>
+
+        <section className="zaki-agent-artifact-canvas__delivery-card">
+          <div className="zaki-agent-artifact-canvas__section-head">
+            <span>export</span>
+            <small>{exportedCount ? `${exportedCount} ready` : "render on demand"}</small>
+          </div>
+          <div className="zaki-agent-artifact-canvas__export-grid">
+            {PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS.map((format) => {
+              const state = exportStates[format];
+              const label = getAgentArtifactExportFormatLabel(format);
+              const availability = getAgentArtifactExportAvailability((detail || artifact) as AgentArtifact, format);
+              const ready =
+                (state?.status === "ready" || state?.status === "exported") && state.url;
+              return (
+                <button
+                  key={format}
+                  type="button"
+                  onClick={() =>
+                    ready ? void handleDownload(format, state.url || "") : void handleExport(format)
+                  }
+                  disabled={
+                    state?.status === "exporting" ||
+                    state?.status === "unavailable" ||
+                    !availability.supported
+                  }
+                  title={state?.error || availability.reason || undefined}
+                  data-state={state?.status || (availability.supported ? "idle" : "unavailable")}
+                >
+                  <Download className="size-3.5" aria-hidden />
+                  {state?.status === "exporting"
+                    ? "Exporting"
+                    : !availability.supported
+                      ? `${label} unavailable`
+                      : ready
+                        ? `Download ${label}`
+                        : `Export ${label}`}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+
+      <div className="zaki-agent-artifact-canvas__workspace" data-mode={mode}>
+        {mode === "history" ? (
         <div className="zaki-agent-artifact-canvas__version-strip" data-testid="agent-artifact-history">
           <section className="zaki-agent-artifact-canvas__versions" aria-label="Artifact versions">
             <div className="zaki-agent-artifact-canvas__section-head">
@@ -517,16 +811,36 @@ export function AgentArtifactCanvas({
               <small>{selectedFromVersion && selectedToVersion ? `v${selectedFromVersion} -> v${selectedToVersion}` : "select versions"}</small>
             </div>
             <div className="zaki-agent-artifact-canvas__diff-controls">
-              <input
+              <select
+                aria-label="Compare from version"
                 value={selectedFromVersion || ""}
-                placeholder="from"
                 onChange={(event) => setSelectedFromVersion(event.target.value)}
-              />
-              <input
+              >
+                <option value="">From version</option>
+                {history.map((version, index) => {
+                  const value = versionValue(version);
+                  return value ? (
+                    <option key={`from-${value}`} value={value}>
+                      {versionOptionLabel(version, index)}
+                    </option>
+                  ) : null;
+                })}
+              </select>
+              <select
+                aria-label="Compare to version"
                 value={selectedToVersion || ""}
-                placeholder="to"
                 onChange={(event) => setSelectedToVersion(event.target.value)}
-              />
+              >
+                <option value="">To version</option>
+                {history.map((version, index) => {
+                  const value = versionValue(version);
+                  return value ? (
+                    <option key={`to-${value}`} value={value}>
+                      {versionOptionLabel(version, index)}
+                    </option>
+                  ) : null;
+                })}
+              </select>
               <button type="button" onClick={() => void handleLoadDiff()} disabled={diffLoading}>
                 {diffLoading ? "Loading" : "Diff"}
               </button>
@@ -535,35 +849,122 @@ export function AgentArtifactCanvas({
             {diffText ? <pre>{diffText}</pre> : null}
           </section>
         </div>
+        ) : null}
         <div className="zaki-agent-artifact-canvas__body">
           {loading ? (
             <div className="v2-empty-line">Loading artifact...</div>
           ) : error ? (
             <div className="v2-empty-line">Artifact preview unavailable: {error}</div>
+          ) : mode === "history" ? (
+            <div className="zaki-agent-artifact-canvas__history-focus" data-testid="agent-artifact-history-mode">
+              <History className="size-5" aria-hidden />
+              <strong>Version workspace</strong>
+              <span>
+                Select two versions above to inspect the diff, then return to Preview or Edit when you are ready to work on the current artifact.
+              </span>
+            </div>
           ) : editing ? (
             <div className="zaki-agent-artifact-canvas__editor" data-testid="agent-artifact-editor">
-              <textarea value={editDraft} onChange={(event) => setEditDraft(event.target.value)} />
-              <div>
-                <button type="button" disabled={savingEdit} onClick={() => void handleSaveEdit()}>
-                  {savingEdit ? "Saving" : "Save artifact"}
-                </button>
-                <button type="button" onClick={() => setEditing(false)}>
-                  Cancel
-                </button>
-              </div>
+              <section className="zaki-agent-artifact-canvas__editor-form" aria-label="Edit artifact source">
+                <div className="zaki-agent-artifact-canvas__editor-kicker">
+                  <span>source</span>
+                  <small>{hasUnsavedEdit ? "unsaved draft" : "current version"}</small>
+                </div>
+                <label>
+                  <span>Artifact content</span>
+                  <textarea
+                    aria-label="Artifact content"
+                    value={editDraft}
+                    onChange={(event) => setEditDraft(event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>Change summary</span>
+                  <input
+                    aria-label="Change summary"
+                    value={editSummary}
+                    placeholder="What changed in this version?"
+                    onChange={(event) => setEditSummary(event.target.value)}
+                  />
+                </label>
+                <div className="zaki-agent-artifact-canvas__editor-actions">
+                  <button
+                    type="button"
+                    disabled={savingEdit || !editDraft.trim() || !hasUnsavedEdit}
+                    onClick={() => void handleSaveEdit()}
+                  >
+                    {savingEdit ? "Saving" : "Save version"}
+                  </button>
+                  <button type="button" onClick={handleCancelEdit}>
+                    Cancel
+                  </button>
+                  {onRequestAgentEdit ? (
+                    <button type="button" onClick={handleRequestAgentEdit}>
+                      <Sparkles className="size-3.5" aria-hidden />
+                      Ask ZAKI to revise
+                    </button>
+                  ) : null}
+                </div>
+              </section>
+              <section
+                className="zaki-agent-artifact-canvas__editor-preview"
+                aria-label="Edited artifact live preview"
+                data-testid="agent-artifact-edit-preview"
+              >
+                <div className="zaki-agent-artifact-canvas__editor-kicker">
+                  <span>live preview</span>
+                  <small>
+                    {editWordCount ? `${editWordCount} words` : "empty"} · {normalizedKind}
+                  </small>
+                </div>
+                <article className="zaki-agent-artifact-canvas__paper" data-kind={normalizedKind}>
+                  {editDraft.trim() ? (
+                    renderArtifactPreviewContent({
+                      kind: normalizedKind,
+                      title,
+                      content: editDraft,
+                      frameTestId: "agent-artifact-edit-frame-preview",
+                    })
+                  ) : (
+                    <div className="v2-empty-line">
+                      Start typing to preview the next artifact version.
+                    </div>
+                  )}
+                </article>
+              </section>
             </div>
           ) : preview ? (
             <>
               {editable ? (
-                <button
-                  type="button"
-                  className="zaki-agent-artifact-canvas__edit"
-                  onClick={handleStartEdit}
-                >
-                  Edit text artifact
-                </button>
+                <div className="zaki-agent-artifact-canvas__work-actions">
+                  <button
+                    type="button"
+                    className="zaki-agent-artifact-canvas__edit"
+                    onClick={handleStartEdit}
+                  >
+                    <Pencil className="size-3.5" aria-hidden />
+                    Edit source
+                  </button>
+                  {onRequestAgentEdit ? (
+                    <button
+                      type="button"
+                      className="zaki-agent-artifact-canvas__edit"
+                      onClick={handleRequestAgentEdit}
+                    >
+                      <Sparkles className="size-3.5" aria-hidden />
+                      Ask ZAKI to revise
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
-              <MessageContent content={preview} role="assistant" surface="shared" />
+              <article className="zaki-agent-artifact-canvas__paper" data-kind={normalizedKind}>
+                {renderArtifactPreviewContent({
+                  kind: normalizedKind,
+                  title,
+                  content: preview,
+                  frameTestId: "agent-artifact-frame-preview",
+                })}
+              </article>
             </>
           ) : (
             <div className="v2-empty-line">

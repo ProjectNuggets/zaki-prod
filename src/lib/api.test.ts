@@ -786,13 +786,16 @@ describe("agent runtime API clients", () => {
 
     expect(
       normalizeAgentArtifactShareUrl("/api/v1/share/artifact/abc12345def67890")
-    ).toBe("/api/agent/share/artifact/abc12345def67890");
+    ).toBe("/artifact/abc12345def67890");
     expect(
       normalizeAgentArtifactShareUrl("http://nullalis.local/api/v1/share/artifact/abc12345def67890")
-    ).toBe("/api/agent/share/artifact/abc12345def67890");
+    ).toBe("/artifact/abc12345def67890");
     expect(
       normalizeAgentArtifactShareUrl("/api/agent/share/artifact/abc12345def67890")
-    ).toBe("/api/agent/share/artifact/abc12345def67890");
+    ).toBe("/artifact/abc12345def67890");
+    expect(normalizeAgentArtifactShareUrl("/artifact/abc12345def67890")).toBe(
+      "/artifact/abc12345def67890"
+    );
     expect(normalizeAgentArtifactShareUrl("/api/v1/share/artifact/../secret")).toBeNull();
     expect(normalizeAgentArtifactShareUrl("/api/v1/share/artifact/x")).toBeNull();
     expect(normalizeAgentArtifactShareUrl("https://example.com/share/artifact/abc12345")).toBeNull();
@@ -804,8 +807,8 @@ describe("agent runtime API clients", () => {
       })
     );
     const { data } = await shareAgentArtifact("artifact-1");
-    expect(data.share_url).toBe("/api/agent/share/artifact/abc12345def67890");
-    expect(data.public_url).toBe("/api/agent/share/artifact/abc12345def67890");
+    expect(data.share_url).toBe("/artifact/abc12345def67890");
+    expect(data.public_url).toBe("/artifact/abc12345def67890");
   });
 
   it("fetches Brain documents through the Agent BFF", async () => {

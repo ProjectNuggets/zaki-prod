@@ -5517,6 +5517,20 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   box-shadow: inset 2px 0 0 var(--v2-accent);
 }
 
+.zaki-app-v2 .zaki-agent-v2 .zaki-input-row .zaki-composer-menu__item--artifact {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--v2-accent) 8%, transparent),
+      transparent 38%
+    ),
+    var(--v2-bg-raised);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-input-row .zaki-composer-menu__item--artifact .zaki-composer-menu__icon {
+  color: var(--v2-accent) !important;
+}
+
 .zaki-app-v2 .zaki-agent-v2 .zaki-input-row .zaki-composer-menu__item:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -7620,6 +7634,22 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   text-transform: uppercase;
 }
 
+.zaki-agent-inspector__artifact-row-meta span {
+  min-width: 0;
+  border: 1px solid var(--v2-hairline-faint);
+  padding: 2px 5px;
+  background: var(--v2-bg-sunken);
+}
+
+.zaki-agent-inspector__artifact-row-meta span[data-state="shared"] {
+  border-color: color-mix(in srgb, var(--v2-accent) 45%, var(--v2-hairline));
+  color: var(--v2-accent);
+}
+
+.zaki-agent-inspector__artifact-row-meta span[data-state="private"] {
+  color: var(--v2-ink-4);
+}
+
 .zaki-agent-inspector__artifact-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -8109,6 +8139,285 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   }
 }
 
+.zaki-shared-artifact {
+  min-height: 100dvh;
+  padding: 22px clamp(16px, 4vw, 56px) 56px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--v2-hairline-faint) 64%, transparent) 1px, transparent 1px),
+    linear-gradient(180deg, color-mix(in srgb, var(--v2-hairline-faint) 64%, transparent) 1px, transparent 1px),
+    var(--v2-bg);
+  background-size: 32px 32px;
+  color: var(--v2-ink-1);
+}
+
+.zaki-shared-artifact__masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+.zaki-shared-artifact__brand {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-decoration: none;
+}
+
+.zaki-shared-artifact__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.zaki-shared-artifact__actions button,
+.zaki-shared-artifact__actions a,
+.zaki-shared-artifact__home {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid var(--v2-hairline);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--v2-bg-raised) 82%, transparent);
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.2;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.zaki-shared-artifact__actions button:hover,
+.zaki-shared-artifact__actions a:hover,
+.zaki-shared-artifact__home:hover {
+  border-color: var(--v2-accent);
+  color: var(--v2-ink-1);
+}
+
+.zaki-shared-artifact__actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.zaki-shared-artifact__hero {
+  max-width: 1120px;
+  margin: clamp(42px, 9vh, 92px) auto 24px;
+}
+
+.zaki-shared-artifact__eyebrow,
+.zaki-shared-artifact__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-shared-artifact__hero h1 {
+  max-width: 900px;
+  margin: 12px 0 16px;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-prose);
+  font-size: clamp(34px, 6vw, 72px);
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 0.96;
+  overflow-wrap: anywhere;
+}
+
+.zaki-shared-artifact__meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.zaki-shared-artifact__document {
+  max-width: 1120px;
+  min-height: 42vh;
+  margin: 0 auto;
+  padding: clamp(22px, 4vw, 54px);
+  border: 1px solid var(--v2-hairline);
+  border-radius: 8px;
+  background: var(--v2-bg-raised);
+  box-shadow: 0 1px 0 var(--v2-hairline-faint);
+}
+
+.zaki-shared-artifact__document[data-kind*="html"],
+.zaki-shared-artifact__document[data-kind*="svg"] {
+  padding: 8px;
+  background: #fff;
+}
+
+.zaki-shared-artifact__document .zaki-message-content {
+  max-width: 860px;
+  margin: 0 auto;
+  font-family: var(--v2-font-prose);
+  font-size: clamp(15px, 1.3vw, 18px);
+  line-height: 1.72;
+}
+
+.zaki-shared-artifact__frame {
+  display: block;
+  width: 100%;
+  min-height: 72vh;
+  border: 0;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.zaki-shared-artifact__code {
+  max-width: 920px;
+  margin: 0 auto;
+  overflow: auto;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  line-height: 1.58;
+  white-space: pre-wrap;
+}
+
+.zaki-shared-artifact__loading,
+.zaki-shared-artifact__empty {
+  display: grid;
+  min-height: calc(100dvh - 120px);
+  place-items: center;
+  align-content: center;
+  gap: 14px;
+  color: var(--v2-ink-3);
+  text-align: center;
+}
+
+.zaki-shared-artifact__empty {
+  max-width: 460px;
+  margin: 0 auto;
+}
+
+.zaki-shared-artifact__empty h1 {
+  margin: 0;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-prose);
+  font-size: 28px;
+  letter-spacing: 0;
+}
+
+.zaki-shared-artifact__empty p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.zaki-shared-artifact__spinner {
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--v2-hairline);
+  border-top-color: var(--v2-accent);
+  border-radius: 999px;
+  animation: zaki-spin 0.8s linear infinite;
+}
+
+@keyframes zaki-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 720px) {
+  .zaki-shared-artifact {
+    padding: 16px 12px 32px;
+  }
+
+  .zaki-shared-artifact__masthead {
+    align-items: flex-start;
+  }
+
+  .zaki-shared-artifact__actions {
+    max-width: 220px;
+  }
+
+  .zaki-shared-artifact__document {
+    padding: 18px 14px;
+  }
+}
+
+@media print {
+  body {
+    background: #fff !important;
+  }
+
+  .zaki-shared-artifact {
+    min-height: auto;
+    padding: 0;
+    background: #fff;
+    color: #111;
+  }
+
+  .zaki-shared-artifact__masthead {
+    display: none;
+  }
+
+  .zaki-shared-artifact__hero {
+    max-width: none;
+    margin: 0 0 18mm;
+    break-after: avoid;
+  }
+
+  .zaki-shared-artifact__eyebrow,
+  .zaki-shared-artifact__meta {
+    color: #555;
+    font-size: 8pt;
+  }
+
+  .zaki-shared-artifact__hero h1 {
+    max-width: none;
+    color: #111;
+    font-size: 28pt;
+    line-height: 1.05;
+  }
+
+  .zaki-shared-artifact__document {
+    max-width: none;
+    min-height: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: #fff;
+    box-shadow: none;
+  }
+
+  .zaki-shared-artifact__document .zaki-message-content {
+    max-width: none;
+    color: #111;
+    font-size: 11pt;
+    line-height: 1.5;
+  }
+
+  .zaki-shared-artifact__frame {
+    min-height: 220mm;
+    border: 0;
+  }
+
+  .zaki-shared-artifact__code {
+    max-width: none;
+    color: #111;
+    font-size: 9pt;
+    white-space: pre-wrap;
+  }
+}
+
 .zaki-agent-artifact-canvas__head {
   position: sticky;
   top: 0;
@@ -8183,9 +8492,108 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   color: var(--v2-ink-1);
 }
 
+.zaki-agent-artifact-canvas__actions button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--v2-accent) 58%, var(--v2-hairline));
+  background: color-mix(in srgb, var(--v2-accent) 12%, transparent);
+  color: var(--v2-ink-1);
+}
+
 .zaki-agent-artifact-canvas__actions button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.zaki-agent-artifact-canvas__delivery {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.35fr);
+  gap: 1px;
+  border-bottom: 1px solid var(--v2-hairline);
+  background: var(--v2-hairline-faint);
+}
+
+.zaki-agent-artifact-canvas__delivery-card {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  background: var(--v2-bg-sunken);
+}
+
+.zaki-agent-artifact-canvas__delivery-status {
+  display: grid;
+  gap: 4px;
+  padding: 11px 12px 0;
+}
+
+.zaki-agent-artifact-canvas__delivery-status strong {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.zaki-agent-artifact-canvas__delivery-status small {
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.zaki-agent-artifact-canvas__delivery-status[data-ready="true"] strong {
+  color: var(--v2-accent);
+}
+
+.zaki-agent-artifact-canvas__delivery-actions,
+.zaki-agent-artifact-canvas__export-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 11px 12px 12px;
+}
+
+.zaki-agent-artifact-canvas__export-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.zaki-agent-artifact-canvas__delivery-actions button,
+.zaki-agent-artifact-canvas__delivery-actions a,
+.zaki-agent-artifact-canvas__export-grid button {
+  display: inline-flex;
+  min-height: 30px;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid var(--v2-hairline);
+  border-radius: 6px;
+  background: var(--v2-bg);
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  line-height: 1.2;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.zaki-agent-artifact-canvas__delivery-actions button:not(:disabled):hover,
+.zaki-agent-artifact-canvas__delivery-actions a:hover,
+.zaki-agent-artifact-canvas__export-grid button:not(:disabled):hover {
+  border-color: var(--v2-accent);
+  color: var(--v2-ink-1);
+}
+
+.zaki-agent-artifact-canvas__delivery-actions button:disabled,
+.zaki-agent-artifact-canvas__export-grid button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.zaki-agent-artifact-canvas__export-grid button[data-state="ready"],
+.zaki-agent-artifact-canvas__export-grid button[data-state="exported"] {
+  border-color: color-mix(in srgb, var(--v2-accent) 52%, var(--v2-hairline));
+  color: var(--v2-ink-1);
 }
 
 .zaki-agent-artifact-canvas__workspace {
@@ -8308,8 +8716,9 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   padding: 10px 12px;
 }
 
-.zaki-agent-artifact-canvas__diff-controls input,
-.zaki-agent-artifact-canvas__editor textarea {
+.zaki-agent-artifact-canvas__diff-controls select,
+.zaki-agent-artifact-canvas__editor textarea,
+.zaki-agent-artifact-canvas__editor input {
   border: 1px solid var(--v2-hairline);
   background: var(--v2-bg);
   color: var(--v2-ink-1);
@@ -8318,7 +8727,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   outline: none;
 }
 
-.zaki-agent-artifact-canvas__diff-controls input {
+.zaki-agent-artifact-canvas__diff-controls select {
   min-width: 0;
   padding: 7px;
 }
@@ -8326,7 +8735,11 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 .zaki-agent-artifact-canvas__diff-controls button,
 .zaki-agent-artifact-canvas__edit,
 .zaki-agent-artifact-canvas__editor button {
+  display: inline-flex;
   min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border: 1px solid var(--v2-hairline);
   padding: 0 9px;
   color: var(--v2-ink-2);
@@ -8359,27 +8772,154 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   line-height: 1.65;
 }
 
-.zaki-agent-artifact-canvas__edit {
+.zaki-agent-artifact-canvas__history-focus {
+  display: grid;
+  min-height: 34vh;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  max-width: 420px;
+  margin: 0 auto;
+  color: var(--v2-ink-4);
+  text-align: center;
+}
+
+.zaki-agent-artifact-canvas__history-focus strong {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-agent-artifact-canvas__history-focus span {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.zaki-agent-artifact-canvas__work-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-bottom: 14px;
+}
+
+.zaki-agent-artifact-canvas__paper {
+  max-width: 880px;
+  min-height: 44vh;
+  margin: 0 auto;
+  padding: clamp(20px, 3vw, 42px);
+  border: 1px solid var(--v2-hairline);
+  border-radius: 8px;
+  background: var(--v2-bg-raised);
+}
+
+.zaki-agent-artifact-canvas__paper[data-kind*="html"],
+.zaki-agent-artifact-canvas__paper[data-kind*="svg"] {
+  max-width: min(1040px, 100%);
+  padding: 8px;
+  background: #fff;
+}
+
+.zaki-agent-artifact-canvas__frame {
+  display: block;
+  width: 100%;
+  min-height: 56vh;
+  border: 0;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.zaki-agent-artifact-canvas__code {
+  min-height: 44vh;
+  margin: 0;
+  overflow: auto;
+  padding: 14px;
+  border-radius: 6px;
+  background: var(--v2-bg);
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
 }
 
 .zaki-agent-artifact-canvas__editor {
   display: grid;
+  grid-template-columns: minmax(300px, 0.9fr) minmax(0, 1.1fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.zaki-agent-artifact-canvas__editor-form,
+.zaki-agent-artifact-canvas__editor-preview {
+  display: grid;
+  min-width: 0;
   gap: 10px;
 }
 
+.zaki-agent-artifact-canvas__editor-kicker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 26px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-agent-artifact-canvas__editor-kicker small {
+  color: var(--v2-ink-3);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.zaki-agent-artifact-canvas__editor label {
+  display: grid;
+  gap: 6px;
+}
+
+.zaki-agent-artifact-canvas__editor label span {
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
 .zaki-agent-artifact-canvas__editor textarea {
-  min-height: 58vh;
+  min-height: 54vh;
   resize: vertical;
   padding: 14px;
   font-size: 12px;
   line-height: 1.55;
 }
 
-.zaki-agent-artifact-canvas__editor div {
+.zaki-agent-artifact-canvas__editor input {
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.zaki-agent-artifact-canvas__editor-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.zaki-agent-artifact-canvas__editor-preview .zaki-agent-artifact-canvas__paper {
+  max-width: none;
+  min-height: 54vh;
+  margin: 0;
+}
+
+.zaki-agent-artifact-canvas__editor-preview .zaki-agent-artifact-canvas__frame,
+.zaki-agent-artifact-canvas__editor-preview .zaki-agent-artifact-canvas__code {
+  min-height: 54vh;
 }
 
 .zaki-agent-artifact-canvas__body .zaki-message-content {
@@ -8407,6 +8947,14 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
     border-left: 0;
   }
 
+  .zaki-agent-artifact-canvas__delivery {
+    grid-template-columns: 1fr;
+  }
+
+  .zaki-agent-artifact-canvas__export-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .zaki-agent-artifact-canvas__version-strip {
     max-height: 42vh;
     overflow: auto;
@@ -8414,6 +8962,17 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
   .zaki-agent-artifact-canvas__versions {
     border-bottom: 0;
+  }
+
+  .zaki-agent-artifact-canvas__editor {
+    grid-template-columns: 1fr;
+  }
+
+  .zaki-agent-artifact-canvas__editor textarea,
+  .zaki-agent-artifact-canvas__editor-preview .zaki-agent-artifact-canvas__paper,
+  .zaki-agent-artifact-canvas__editor-preview .zaki-agent-artifact-canvas__frame,
+  .zaki-agent-artifact-canvas__editor-preview .zaki-agent-artifact-canvas__code {
+    min-height: 36vh;
   }
 }
 

@@ -560,6 +560,17 @@
       "uploadFile": "رفع ملف",
       "scheduleFollowUp": "جدولة متابعة",
       "pinContext": "تثبيت ذاكرة",
+      "artifacts": {
+        "section": "المخرجات",
+        "document": "مستند",
+        "documentMeta": "موجز قرار وتقرير",
+        "deck": "عرض شرائح",
+        "deckMeta": "عرض بسرد واضح",
+        "sheet": "جدول بيانات",
+        "sheetMeta": "نموذج XLSX منسق",
+        "page": "صفحة HTML",
+        "pageMeta": "صفحة ويب قابلة للمشاركة"
+      },
       "pinnedRailLabel": "المثبتة",
       "modeHint": "وضع {{mode}}",
       "modeGroupAria": "وضع الوكيل",
@@ -1065,7 +1076,7 @@
         "revokeFailed": "تعذر إلغاء مشاركة المخرج",
         "exportSuccess": "تم طلب تصدير {{format}}",
         "exportFailed": "تعذر تصدير المخرج",
-        "exportNotAvailable": "تصدير {{format}} غير متاح بعد — الميزة قيد الإعداد ريثما يتم ربط جسر produce_document.",
+        "exportNotAvailable": "تصدير {{format}} غير متاح لهذا المخرج أو للمحوّل الآن.",
         "footer": "تحدّث أحداث المخرجات هذه اللوحة أثناء التشغيل. السجل والفروقات متاحة عبر واجهة مخرجات الوكيل."
       },
       "trace": {

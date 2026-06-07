@@ -2,16 +2,20 @@ import {
   ArrowUp,
   CalendarClock,
   Check,
+  Code2,
   File as FileIcon,
   FileText,
   Mic,
   Paperclip,
   Pin,
   Plus,
+  Presentation,
   Search,
   Square,
+  Table2,
   X,
   Zap,
+  type LucideIcon,
 } from "lucide-react";
 import { ScheduleFollowUpDialog } from "@/app/components/agent/ScheduleFollowUpDialog";
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type MutableRefObject } from "react";
@@ -124,6 +128,134 @@ const ZAKI_REASONING_LABELS: Record<ZakiTurnReasoningEffort, string> = {
   medium: "mid",
   high: "high",
 };
+
+type ZakiArtifactPreset = {
+  id: "document" | "deck" | "sheet" | "page";
+  labelKey: string;
+  labelDefault: string;
+  metaKey: string;
+  metaDefault: string;
+  Icon: LucideIcon;
+  prompt: string;
+};
+
+const ZAKI_ARTIFACT_PRESETS: ZakiArtifactPreset[] = [
+  {
+    id: "document",
+    labelKey: "input.zaki.artifacts.document",
+    labelDefault: "Document",
+    metaKey: "input.zaki.artifacts.documentMeta",
+    metaDefault: "Decision brief + report",
+    Icon: FileText,
+    prompt: [
+      "Create a polished, share-ready document artifact.",
+      "",
+      "Deliverable:",
+      "- Format: DOCX/PDF-ready markdown artifact",
+      "- Use when: brief, report, proposal, memo, plan, or client-ready write-up",
+      "- If any context is missing, infer sensible assumptions and label them. Do not leave bracket placeholders in the artifact.",
+      "",
+      "Blueprint:",
+      "1. Specific title",
+      "2. One-page brief that answers the ask directly",
+      "3. What matters: 3-6 bullets with implications",
+      "4. Options, plan, or analysis with tables where comparison helps",
+      "5. Recommendation and next steps",
+      "6. Risks and assumptions",
+      "",
+      "Quality bar:",
+      "- Write the final artifact, not notes about the artifact.",
+      "- Use concrete names, dates, numbers, owners, or assumptions where available.",
+      "- Make it ready to export, share, and send without another cleanup pass.",
+    ].join("\n"),
+  },
+  {
+    id: "deck",
+    labelKey: "input.zaki.artifacts.deck",
+    labelDefault: "Slide deck",
+    metaKey: "input.zaki.artifacts.deckMeta",
+    metaDefault: "Narrative deck",
+    Icon: Presentation,
+    prompt: [
+      "Create a polished, share-ready presentation artifact.",
+      "",
+      "Deliverable:",
+      "- Format: PPTX-ready slide deck artifact",
+      "- Use when: decision deck, pitch, briefing, update, strategy narrative, or launch plan",
+      "- If context is sparse, choose a practical executive audience and label assumptions. Do not leave bracket placeholders in the artifact.",
+      "",
+      "Narrative arc:",
+      "1. Title slide with the decision or thesis",
+      "2. Current gap or opportunity",
+      "3. Evidence or constraints",
+      "4. Options or plan",
+      "5. Recommendation",
+      "6. Next steps and owner/date",
+      "",
+      "Slide rules:",
+      "- One idea per slide, 3-5 bullets max.",
+      "- Include speaker intent for each slide, but keep slide body concise.",
+      "- Suggest charts/tables only when they materially improve the deck.",
+      "- Make it ready to export and present without another cleanup pass.",
+    ].join("\n"),
+  },
+  {
+    id: "sheet",
+    labelKey: "input.zaki.artifacts.sheet",
+    labelDefault: "Spreadsheet",
+    metaKey: "input.zaki.artifacts.sheetMeta",
+    metaDefault: "Styled XLSX model",
+    Icon: Table2,
+    prompt: [
+      "Create a polished, share-ready spreadsheet artifact.",
+      "",
+      "Deliverable:",
+      "- Format: XLSX-ready spreadsheet artifact with export-ready CSV content",
+      "- Use when: model, tracker, comparison matrix, budget, plan, forecast, or analysis table",
+      "- If context is sparse, infer useful columns and label assumptions. Do not leave bracket placeholders in the artifact.",
+      "",
+      "Workbook blueprint:",
+      "1. Summary of what the sheet tracks",
+      "2. Export-ready CSV with clear headers",
+      "3. Columns for owner/status/priority/date/risk when relevant",
+      "4. Numeric units and summary rows when useful",
+      "5. Notes explaining formulas or assumptions",
+      "",
+      "Quality bar:",
+      "- Keep labels clear enough for a user to operate the sheet immediately.",
+      "- Avoid unsafe formulas from untrusted input; prefer values plus explanatory columns.",
+      "- Make it ready to export, share, and use without another cleanup pass.",
+    ].join("\n"),
+  },
+  {
+    id: "page",
+    labelKey: "input.zaki.artifacts.page",
+    labelDefault: "HTML page",
+    metaKey: "input.zaki.artifacts.pageMeta",
+    metaDefault: "Shareable web page",
+    Icon: Code2,
+    prompt: [
+      "Create a polished, share-ready HTML artifact.",
+      "",
+      "Deliverable:",
+      "- Format: self-contained HTML artifact with semantic HTML and embedded CSS",
+      "- Use when: public one-pager, landing page, interactive explainer, brief, or shareable microsite",
+      "- If context is sparse, infer a concrete audience and label assumptions. Do not leave bracket placeholders in the artifact.",
+      "",
+      "Page blueprint:",
+      "1. Complete <!doctype html> document",
+      "2. First viewport states the subject and value immediately",
+      "3. Strong content hierarchy with real copy, not filler",
+      "4. Responsive layout for mobile and desktop",
+      "5. No external scripts; external assets only if necessary and HTTPS",
+      "",
+      "Quality bar:",
+      "- Make typography, spacing, and tables/cards feel intentional.",
+      "- Ensure text does not overlap or overflow.",
+      "- Make it ready to share as a public artifact link without another cleanup pass.",
+    ].join("\n"),
+  },
+];
 
 function nextCycleValue<T extends string>(values: readonly T[], value: T): T {
   const index = values.indexOf(value);
@@ -721,33 +853,69 @@ export function InputArea({
     ]
   );
 
+  const setComposerDraft = useCallback(
+    (value: string) => {
+      const next = String(value ?? "");
+      setInputValue(next);
+      if (draftStorageKey && typeof window !== "undefined") {
+        try {
+          if (next) {
+            window.sessionStorage.setItem(draftStorageKey, next);
+          } else {
+            window.sessionStorage.removeItem(draftStorageKey);
+          }
+        } catch {
+          /* ignore quota / disabled storage */
+        }
+      }
+      if (typeof window !== "undefined") {
+        window.requestAnimationFrame(() => {
+          const textarea = textareaRef.current;
+          if (!textarea) return;
+          textarea.focus();
+          textarea.setSelectionRange(next.length, next.length);
+          textarea.style.height = "auto";
+          textarea.style.height = `${textarea.scrollHeight}px`;
+        });
+      }
+    },
+    [draftStorageKey]
+  );
+
+  const handleArtifactPresetSelect = useCallback(
+    (preset: ZakiArtifactPreset) => {
+      setComposerDraft(preset.prompt);
+      setSlashOpen(false);
+      setMentionState({ open: false, filter: "", startPos: -1 });
+      if (!isOnboardingControlsLocked) {
+        setMenuOpen(false);
+      }
+      if (
+        zakiBotMode &&
+        effectiveZakiMode !== "execute" &&
+        onZakiModeChange &&
+        !zakiModePending
+      ) {
+        void onZakiModeChange("execute");
+      }
+    },
+    [
+      effectiveZakiMode,
+      isOnboardingControlsLocked,
+      onZakiModeChange,
+      setComposerDraft,
+      zakiBotMode,
+      zakiModePending,
+    ]
+  );
+
   useImperativeHandle(
     composerHandleRef,
     () => ({
       submitWith: (text: string) => submitMessage(text),
-      setDraft: (text: string) => {
-        const next = String(text ?? "");
-        setInputValue(next);
-        if (draftStorageKey && typeof window !== "undefined") {
-          try {
-            if (next) {
-              window.sessionStorage.setItem(draftStorageKey, next);
-            } else {
-              window.sessionStorage.removeItem(draftStorageKey);
-            }
-          } catch {
-            /* ignore quota / disabled storage */
-          }
-        }
-        if (typeof window !== "undefined") {
-          window.requestAnimationFrame(() => {
-            textareaRef.current?.focus();
-            textareaRef.current?.setSelectionRange(next.length, next.length);
-          });
-        }
-      },
+      setDraft: setComposerDraft,
     }),
-    [submitMessage, composerHandleRef, draftStorageKey]
+    [submitMessage, composerHandleRef, setComposerDraft]
   );
 
   // 2026-05-08 — Draft persistence side-effects.
@@ -1397,6 +1565,32 @@ export function InputArea({
                         </span>
                       </span>
                     </button>
+                    <div className="zaki-composer-menu__section" role="presentation">
+                      {t("input.zaki.artifacts.section", { defaultValue: "Artifacts" })}
+                    </div>
+                    {ZAKI_ARTIFACT_PRESETS.map((preset) => {
+                      const Icon = preset.Icon;
+                      return (
+                        <button
+                          key={preset.id}
+                          className="zaki-composer-menu__item zaki-composer-menu__item--artifact"
+                          type="button"
+                          role="menuitem"
+                          onClick={() => handleArtifactPresetSelect(preset)}
+                          data-testid={`zaki-artifact-preset-${preset.id}`}
+                        >
+                          <Icon className="zaki-composer-menu__icon" aria-hidden />
+                          <span className="zaki-composer-menu__copy">
+                            <span className="zaki-composer-menu__label">
+                              {t(preset.labelKey, { defaultValue: preset.labelDefault })}
+                            </span>
+                            <span className="zaki-composer-menu__meta">
+                              {t(preset.metaKey, { defaultValue: preset.metaDefault })}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
                     <button
                       className="zaki-composer-menu__item"
                       type="button"

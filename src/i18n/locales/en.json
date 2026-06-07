@@ -560,6 +560,17 @@
       "uploadFile": "Upload file",
       "scheduleFollowUp": "Schedule a follow-up",
       "pinContext": "Pin a memory",
+      "artifacts": {
+        "section": "Artifacts",
+        "document": "Document",
+        "documentMeta": "Decision brief + report",
+        "deck": "Slide deck",
+        "deckMeta": "Narrative deck",
+        "sheet": "Spreadsheet",
+        "sheetMeta": "Styled XLSX model",
+        "page": "HTML page",
+        "pageMeta": "Shareable web page"
+      },
       "pinnedRailLabel": "Pinned",
       "modeHint": "{{mode}} mode",
       "modeGroupAria": "Agent mode",
@@ -1065,7 +1076,7 @@
         "revokeFailed": "Failed to revoke artifact share",
         "exportSuccess": "{{format}} export requested",
         "exportFailed": "Failed to export artifact",
-        "exportNotAvailable": "{{format}} export isn't available yet — feature parked while the produce_document bridge is wired up.",
+        "exportNotAvailable": "{{format}} export is unavailable for this artifact or renderer right now.",
         "footer": "Artifact events refresh this panel while a run is active. History and diffs stay available through the Agent artifact API."
       },
       "trace": {

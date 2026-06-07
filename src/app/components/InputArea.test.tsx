@@ -257,6 +257,41 @@ describe("InputArea primary action button", () => {
     expect(screen.getAllByText("pinContext.title").length).toBeGreaterThan(0);
   });
 
+  it("drafts a polished artifact request from the ZAKI plus menu", () => {
+    const onSend = jest.fn();
+    const onZakiModeChange = jest.fn();
+
+    render(
+      <InputArea
+        onSend={onSend}
+        attachments={[]}
+        setAttachments={jest.fn()}
+        zakiBotMode
+        zakiMode="plan"
+        onZakiModeChange={onZakiModeChange}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "input.menu.addOptions" }));
+    expect(screen.getByTestId("zaki-artifact-preset-document")).toBeInTheDocument();
+    expect(screen.getByTestId("zaki-artifact-preset-deck")).toBeInTheDocument();
+    expect(screen.getByTestId("zaki-artifact-preset-sheet")).toBeInTheDocument();
+    expect(screen.getByTestId("zaki-artifact-preset-page")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("zaki-artifact-preset-deck"));
+
+    const composer = screen.getByRole("combobox") as HTMLTextAreaElement;
+    expect(composer.value).toContain("Create a polished, share-ready presentation artifact.");
+    expect(composer.value).toContain("Format: PPTX-ready slide deck artifact");
+    expect(composer.value).toContain("Narrative arc:");
+    expect(composer.value).toContain("Title slide with the decision or thesis");
+    expect(composer.value).toContain("Do not leave bracket placeholders in the artifact.");
+    expect(composer.value).toContain("Make it ready to export and present without another cleanup pass.");
+    expect(onZakiModeChange).toHaveBeenCalledWith("execute");
+    expect(onSend).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("zaki-composer-menu")).not.toBeInTheDocument();
+  });
+
   it("sends ZAKI turn options with the message payload", () => {
     const onSend = jest.fn();
 

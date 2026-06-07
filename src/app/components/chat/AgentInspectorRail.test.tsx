@@ -15,6 +15,7 @@ jest.mock("@/lib/api", () => ({
     typeof value === "string" && value.trim() ? value.trim() : null,
   normalizeAgentExportDownloadUrl: (value: unknown) =>
     typeof value === "string" && value.trim() ? value.trim() : null,
+  revokeAgentArtifactShare: jest.fn(),
   revokeAgentTraceShare: jest.fn(),
   shareAgentArtifact: jest.fn(),
   shareAgentTrace: jest.fn(),
@@ -28,6 +29,7 @@ const downloadAgentExportFileMock = jest.requireMock("@/lib/api").downloadAgentE
 const fetchAgentTaskMock = jest.requireMock("@/lib/api").fetchAgentTask as jest.Mock;
 const fetchAgentTraceMock = jest.requireMock("@/lib/api").fetchAgentTrace as jest.Mock;
 const listAgentTracesMock = jest.requireMock("@/lib/api").listAgentTraces as jest.Mock;
+const revokeAgentArtifactShareMock = jest.requireMock("@/lib/api").revokeAgentArtifactShare as jest.Mock;
 const revokeAgentTraceShareMock = jest.requireMock("@/lib/api").revokeAgentTraceShare as jest.Mock;
 const shareAgentArtifactMock = jest.requireMock("@/lib/api").shareAgentArtifact as jest.Mock;
 const shareAgentTraceMock = jest.requireMock("@/lib/api").shareAgentTrace as jest.Mock;
@@ -72,6 +74,10 @@ describe("AgentInspectorRail", () => {
     shareAgentArtifactMock.mockResolvedValue({
       response: { ok: true },
       data: { public_url: "https://share.local/artifact" },
+    });
+    revokeAgentArtifactShareMock.mockResolvedValue({
+      response: { ok: true },
+      data: { ok: true },
     });
     shareAgentTraceMock.mockResolvedValue({
       response: { ok: true },
@@ -355,6 +361,42 @@ describe("AgentInspectorRail", () => {
         "Downloadable_report.docx"
       );
       expect(screen.getByTestId("agent-artifact-download-docx-artifact-download-1")).toBeInTheDocument();
+    });
+  });
+
+  it("manages public artifact share links from the right panel", async () => {
+    renderRail({
+      artifacts: [
+        {
+          id: "artifact-share-1",
+          title: "Sharable report",
+          type: "markdown",
+          version: 5,
+          updatedAt: 1_800_000_000_000,
+        },
+      ],
+    });
+
+    expect(screen.getByText("v5")).toBeInTheDocument();
+    expect(screen.getByText("private")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Share Sharable report" }));
+
+    await waitFor(() => {
+      expect(shareAgentArtifactMock).toHaveBeenCalledWith("artifact-share-1");
+      expect(screen.getByRole("link", { name: "Open public share for Sharable report" })).toHaveAttribute(
+        "href",
+        "https://share.local/artifact"
+      );
+      expect(screen.getByText("shared")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop sharing Sharable report" }));
+
+    await waitFor(() => {
+      expect(revokeAgentArtifactShareMock).toHaveBeenCalledWith("artifact-share-1");
+      expect(screen.queryByRole("link", { name: "Open public share for Sharable report" })).not.toBeInTheDocument();
+      expect(screen.getByText("private")).toBeInTheDocument();
     });
   });
 

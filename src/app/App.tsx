@@ -49,7 +49,7 @@ const PUBLIC_WEBSITE_PATHS = new Set([
   "/ar/compliance",
 ]);
 
-const PUBLIC_WEBSITE_PREFIXES = ["/products/", "/how-to/", "/ar/products/"];
+const PUBLIC_WEBSITE_PREFIXES = ["/products/", "/how-to/", "/ar/products/", "/artifact/"];
 
 function getInitialLegalPolicyVersion() {
   if (typeof window !== "undefined") {

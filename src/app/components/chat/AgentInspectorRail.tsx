@@ -37,6 +37,7 @@ import {
   fetchAgentTrace,
   fetchAgentTask,
   listAgentTraces,
+  revokeAgentArtifactShare,
   revokeAgentTraceShare,
   shareAgentArtifact,
   shareAgentTrace,
@@ -588,7 +589,7 @@ export function AgentInspectorRail({
     Record<string, Partial<Record<AgentArtifactExportFormat, AgentArtifactExportState>>>
   >({});
   const [artifactShareStates, setArtifactShareStates] = useState<
-    Record<string, { status: "idle" | "sharing" | "ready" | "failed" | "copied"; url?: string | null; error?: string | null }>
+    Record<string, { status: "idle" | "sharing" | "ready" | "revoking" | "failed" | "copied"; url?: string | null; error?: string | null }>
   >({});
   const [traces, setTraces] = useState<AgentTrace[] | null>(null);
   const [tracesLoading, setTracesLoading] = useState(false);
@@ -921,8 +922,11 @@ export function AgentInspectorRail({
     }));
   };
 
-  const shareUrlForArtifact = (artifact: AgentInspectorArtifact) =>
-    artifactShareStates[artifact.id]?.url || artifact.shareUrl || null;
+  const shareUrlForArtifact = (artifact: AgentInspectorArtifact) => {
+    const state = artifactShareStates[artifact.id];
+    if (state) return state.url || null;
+    return artifact.shareUrl || null;
+  };
 
   useEffect(() => {
     if (tab !== "trace") return;
@@ -1047,6 +1051,37 @@ export function AgentInspectorRail({
     }
   };
 
+  const handleArtifactShareRevoke = async (artifact: AgentInspectorArtifact) => {
+    if (!artifact.id) return;
+    const currentUrl = shareUrlForArtifact(artifact);
+    if (!currentUrl) return;
+    setArtifactShareStates((current) => ({
+      ...current,
+      [artifact.id]: { status: "revoking", url: currentUrl },
+    }));
+    try {
+      const { response, data } = await revokeAgentArtifactShare(artifact.id);
+      if (!response.ok || data?.error) {
+        throw new Error(data?.error || `revoke_${response.status}`);
+      }
+      setArtifactShareStates((current) => ({
+        ...current,
+        [artifact.id]: { status: "idle", url: null },
+      }));
+      toast.success("Artifact share link revoked.");
+    } catch (error) {
+      setArtifactShareStates((current) => ({
+        ...current,
+        [artifact.id]: {
+          status: "failed",
+          url: currentUrl,
+          error: error instanceof Error ? error.message : "revoke_failed",
+        },
+      }));
+      toast.error("Could not revoke artifact share link.");
+    }
+  };
+
   const handleCopyArtifactLink = async (artifact: AgentInspectorArtifact) => {
     const shareUrl = shareUrlForArtifact(artifact);
     const firstDownload = PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS
@@ -1068,7 +1103,10 @@ export function AgentInspectorRail({
       await navigator.clipboard.writeText(value);
       setArtifactShareStates((current) => ({
         ...current,
-        [artifact.id]: { status: "copied", url: value },
+        [artifact.id]: {
+          status: "copied",
+          url: shareUrl || current[artifact.id]?.url || artifact.shareUrl || null,
+        },
       }));
     } catch {
       setArtifactShareStates((current) => ({
@@ -1743,6 +1781,10 @@ export function AgentInspectorRail({
                         </div>
                         <div className="zaki-agent-inspector__artifact-row-meta">
                           <span>{artifact.type || "artifact"}</span>
+                          <span>{artifact.version != null ? `v${artifact.version}` : "current"}</span>
+                          <span data-state={shareUrl ? "shared" : "private"}>
+                            {shareUrl ? "shared" : "private"}
+                          </span>
                           <span>{formatCalendarStamp(artifact.updatedAt)}</span>
                         </div>
                       </div>
@@ -1835,8 +1877,32 @@ export function AgentInspectorRail({
                           aria-label={`Share ${artifact.title}`}
                         >
                           <Share2 className="size-3.5" aria-hidden />
-                          {shareState?.status === "sharing" ? "Sharing" : "Share"}
+                          {shareState?.status === "sharing" ? "Sharing" : shareUrl ? "Refresh share" : "Share"}
                         </button>
+                        {shareUrl ? (
+                          <>
+                            <a
+                              className="zaki-agent-inspector__artifact-action is-ready"
+                              href={shareUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              aria-label={`Open public share for ${artifact.title}`}
+                            >
+                              <ExternalLink className="size-3.5" aria-hidden />
+                              Public
+                            </a>
+                            <button
+                              type="button"
+                              className="zaki-agent-inspector__artifact-action"
+                              onClick={() => void handleArtifactShareRevoke(artifact)}
+                              disabled={shareState?.status === "revoking"}
+                              aria-label={`Stop sharing ${artifact.title}`}
+                            >
+                              <Link2Off className="size-3.5" aria-hidden />
+                              {shareState?.status === "revoking" ? "Stopping" : "Stop"}
+                            </button>
+                          </>
+                        ) : null}
                         <button
                           type="button"
                           className="zaki-agent-inspector__artifact-action"

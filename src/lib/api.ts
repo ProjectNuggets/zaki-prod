@@ -3248,14 +3248,16 @@ export function normalizeAgentArtifactShareUrl(value: unknown): string | null {
     const parsed = new URL(raw, "http://zaki.local");
     const match =
       parsed.pathname.match(/^\/api\/v1\/share\/artifact\/([^/?#]+)$/) ||
-      parsed.pathname.match(/^\/api\/agent\/share\/artifact\/([^/?#]+)$/);
+      parsed.pathname.match(/^\/api\/agent\/share\/artifact\/([^/?#]+)$/) ||
+      parsed.pathname.match(/^\/artifact\/([^/?#]+)$/);
     if (match?.[1]) {
       const shareCode = normalizeAgentShareCode(match[1]);
-      return shareCode ? `/api/agent/share/artifact/${shareCode}${parsed.search || ""}` : null;
+      return shareCode ? `/artifact/${shareCode}${parsed.search || ""}` : null;
     }
     if (
       /^\/api\/v1\/share\/artifact(?:\/|$)/.test(rawPathish) ||
-      /^\/api\/agent\/share\/artifact(?:\/|$)/.test(rawPathish)
+      /^\/api\/agent\/share\/artifact(?:\/|$)/.test(rawPathish) ||
+      /^\/artifact(?:\/|$)/.test(rawPathish)
     ) {
       return null;
     }

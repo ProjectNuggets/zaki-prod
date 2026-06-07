@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate, useParams } from 'react-router-dom';
 import App from './app/App';
 import { ChatArea } from './app/components/ChatArea';
+import { SharedArtifact } from './app/components/SharedArtifact';
 import { SharedConversation } from './app/components/SharedConversation';
 import { PricingPage } from './app/components/PricingPage';
 import { BillingSuccessPage } from './app/components/BillingSuccessPage';
@@ -69,6 +70,7 @@ function InternalOperatorRoute() {
  * /spaces/:spaceId/threads/:threadId → Thread/chat view
  * /reset?token=...         → Password reset entry (shows reset form in LoginScreen)
  * /share/:token            → Public shared conversation view
+ * /artifact/:shareCode     → Public shared Agent artifact view
  */
 
 export const router = createBrowserRouter([
@@ -103,6 +105,10 @@ export const router = createBrowserRouter([
       {
         path: 'reset',
         element: <ChatArea />,
+      },
+      {
+        path: 'artifact/:shareCode',
+        element: <SharedArtifact />,
       },
       {
         path: 'pricing',

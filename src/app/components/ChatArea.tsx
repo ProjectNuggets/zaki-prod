@@ -6225,6 +6225,15 @@ export function ChatArea() {
     setAgentMobileInspectorOpen(false);
   }, []);
 
+  const handleAgentArtifactRevisionRequest = useCallback((draft: string) => {
+    composerHandleRef.current?.setDraft(draft);
+    toast.info(
+      t("agent.artifactCanvas.revisionDrafted", {
+        defaultValue: "Revision request drafted in the composer.",
+      })
+    );
+  }, [t]);
+
   const openAgentMemorySurface = useCallback(() => {
     setAgentMobileInspectorOpen(false);
     navigate("/brain");
@@ -8480,6 +8489,7 @@ export function ChatArea() {
               <AgentArtifactCanvas
                 artifact={selectedAgentArtifact}
                 onClose={() => setSelectedAgentArtifact(null)}
+                onRequestAgentEdit={handleAgentArtifactRevisionRequest}
               />
             </aside>
           ) : null}
