@@ -71,7 +71,10 @@ import {
   ApprovalRequiredCard,
   type ContextGaugeData,
 } from "./chat";
-import { normalizeAssistantDisplayText } from "./chat/rendering/agentReplyPresentation";
+import {
+  isInternalAgentReplyContent,
+  normalizeAssistantDisplayText,
+} from "./chat/rendering/agentReplyPresentation";
 import {
   AgentInspectorRail,
   type AgentInspectorArtifact,
@@ -5167,6 +5170,9 @@ export function ChatArea() {
 
       signal?.addEventListener("abort", handleAbort, { once: true });
 
+      const isInternalStreamText = (text: string, streaming = true) =>
+        isInternalAgentReplyContent(text, { streaming });
+
       ws.onmessage = (event) => {
         if (signal?.aborted) {
           return;
@@ -5237,13 +5243,17 @@ export function ChatArea() {
               return;
             }
             if (report?.type === "fullTextResponse") {
-              accumulated = String(report.content || "");
+              const text = String(report.content || "");
+              if (isInternalStreamText(text, false)) return;
+              accumulated = text;
               updateAssistantContent(threadSlug, assistantId, accumulated);
               if (accumulated) hasAnswer = true;
               return;
             }
             if (report?.type === "textResponseChunk") {
-              accumulated += String(report.content || "");
+              const text = String(report.content || "");
+              if (isInternalStreamText(text, true)) return;
+              accumulated += text;
               updateAssistantContent(threadSlug, assistantId, accumulated);
               if (accumulated) hasAnswer = true;
               return;
@@ -5330,6 +5340,7 @@ export function ChatArea() {
             (typeof payload.error === "string" && payload.error) ||
             "";
           if (rawChunk) {
+            if (isInternalStreamText(rawChunk, payload.type !== "fullTextResponse")) return;
             if (
               payload.type === "textResponse" ||
               payload.type === "fullTextResponse"
@@ -5952,6 +5963,9 @@ export function ChatArea() {
         return { content: "" };
       }
       if (result.chunk) {
+        if (isZakiAgentSpace && isInternalAgentReplyContent(result.chunk, { streaming: false })) {
+          return { content: "" };
+        }
         const normalized = normalizeAssistantFormatting(message, result.chunk);
         updateAssistantContent(
           threadSlug,
@@ -6004,6 +6018,14 @@ export function ChatArea() {
       });
     };
 
+    const appendAgentDisplayChunk = (chunk: string) => {
+      if (!chunk) return;
+      if (isZakiAgentSpace && isInternalAgentReplyContent(chunk, { streaming: true })) {
+        return;
+      }
+      appendChunk(chunk);
+    };
+
     const processRawData = async (raw: string) => {
       const value = raw.trim();
       if (!value || value === "[DONE]") {
@@ -6020,7 +6042,7 @@ export function ChatArea() {
       try {
         payload = JSON.parse(value) as Record<string, unknown>;
       } catch {
-        appendChunk(raw);
+        appendAgentDisplayChunk(raw);
         return;
       }
 
@@ -6032,7 +6054,7 @@ export function ChatArea() {
           return;
         }
       if (result.chunk) {
-        appendChunk(result.chunk);
+        appendAgentDisplayChunk(result.chunk);
       }
       if (result.done) {
         sawTerminalEvent = true;
@@ -6069,7 +6091,7 @@ export function ChatArea() {
           const payload = JSON.parse(payloadText) as Record<string, unknown>;
           const result = readPayloadChunk(payload, eventType);
           if (result.chunk) {
-            appendChunk(result.chunk);
+            appendAgentDisplayChunk(result.chunk);
           }
           if (result.done) {
             sawTerminalEvent = true;
