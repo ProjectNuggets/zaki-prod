@@ -209,9 +209,6 @@ describe("HirePage", () => {
 
   it.each([
     ["degraded", "ZAKI Hire is degraded."],
-    ["maintenance", "ZAKI Hire is in maintenance."],
-    ["read_only", "ZAKI Hire is read-only."],
-    ["private_beta", "ZAKI Hire private beta is closed."],
   ])("renders %s product state and blocks expensive actions", async (status, message) => {
     (hireApi.getHireReadiness as jest.Mock).mockResolvedValueOnce({
       available: status === "degraded",
@@ -227,8 +224,7 @@ describe("HirePage", () => {
 
     renderHirePage();
 
-    const expected = status === "read_only" ? "read-only" : status === "private_beta" ? "private beta" : status;
-    expect((await screen.findAllByText(expected)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(status)).length).toBeGreaterThan(0);
     expect(screen.getByText(message)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /run scan/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /generate package/i })).toBeDisabled();

@@ -252,7 +252,15 @@ export const router = createBrowserRouter([
       },
       {
         path: 'hire',
-        element: <HirePage />,
+        element: (
+          <ProductAccessGate
+            productId="hire"
+            title="ZAKI Hire"
+            mode="private_beta"
+          >
+            <HirePage />
+          </ProductAccessGate>
+        ),
       },
       {
         path: 'design',

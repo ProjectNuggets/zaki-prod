@@ -2463,7 +2463,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   align-items: center;
   padding: 2px 8px;
   border: 1px solid var(--v2-hairline-strong);
-  border-radius: var(--v2-radius);
+  border-radius: var(--v2-r-1);
   background: var(--v2-bg-sunken);
   color: var(--v2-ink-3);
   font-family: var(--v2-font-mono);

@@ -147,7 +147,6 @@ export const hireKeys = {
   status: ["hire", "status"] as const,
   leads: ["hire", "leads"] as const,
   profile: ["hire", "profile"] as const,
-  quota: ["hire", "quota"] as const,
 };
 
 function assertHireApiPath(path: string) {

@@ -177,15 +177,12 @@ export type HireProductState =
   | "operational"
   | "disabled"
   | "degraded"
-  | "maintenance"
-  | "read_only"
-  | "private_beta"
   | "unavailable";
 
 export function hireProductState(readiness: HireReadiness | undefined, loading = false, error?: unknown): HireProductState {
   if (loading && !readiness) return "loading";
   const status = String(readiness?.status || "").trim().toLowerCase();
-  if (["maintenance", "read_only", "private_beta", "degraded", "disabled"].includes(status)) {
+  if (["degraded", "disabled"].includes(status)) {
     return status as HireProductState;
   }
   if (["not_configured", "activating"].includes(status)) return "disabled";
@@ -201,7 +198,7 @@ export function hireReady(readiness: HireReadiness | undefined) {
 export function readinessTone(readiness: HireReadiness | undefined, loading = false, error?: unknown) {
   const state = hireProductState(readiness, loading, error);
   if (state === "operational") return "zaki-hire-status-success";
-  if (["disabled", "maintenance", "read_only", "private_beta"].includes(state)) {
+  if (state === "disabled") {
     return "zaki-hire-status-warn";
   }
   if (state === "degraded" || state === "unavailable") return "zaki-hire-status-danger";
@@ -212,8 +209,6 @@ export function readinessLabel(readiness: HireReadiness | undefined, loading: bo
   const state = hireProductState(readiness, loading);
   if (state === "loading") return "loading";
   if (state === "operational") return "operational";
-  if (state === "read_only") return "read-only";
-  if (state === "private_beta") return "private beta";
   return state;
 }
 
