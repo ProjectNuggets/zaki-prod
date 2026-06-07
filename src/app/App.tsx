@@ -72,7 +72,10 @@ export default function App() {
     normalizedPath === "/learn" ||
     normalizedPath === "/hire" ||
     normalizedPath === "/design";
-  const isWorkspaceRoute = normalizedPath === "/learn" || normalizedPath === "/hire";
+  // Only /hire uses the workspace shell. /learn intentionally uses the normal
+  // shell on current main (the pre-Hire-merge behavior — its e2e depends on it);
+  // the Hire merge erroneously pulled the branch's older /learn-workspace design.
+  const isWorkspaceRoute = normalizedPath === "/hire";
   const isDashboardRoute = normalizedPath === "/";
   const isAgentRoute = normalizedPath === "/agent";
   const isBrainRoute = normalizedPath === "/brain";
