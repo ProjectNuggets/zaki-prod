@@ -72,6 +72,7 @@ describe("ChatView", () => {
 
     expect(screen.getByText("Reading backend contract")).toBeInTheDocument();
     expect(screen.getAllByText("agent_bff").length).toBeGreaterThan(0);
+    expect(screen.getByRole("status")).toHaveTextContent("thinking: Reading backend contract");
   });
 
   it("hides source chips for bot mode messages because provenance lives in the Agent panel", () => {
@@ -162,6 +163,40 @@ describe("ChatView", () => {
     expect(screen.getByText(longReasoning)).toBeInTheDocument();
     expect(screen.getByText("Analyzing request...")).toBeInTheDocument();
     expect(screen.getByText(/1 step/)).toBeInTheDocument();
+  });
+
+  it("keeps collapsed Agent tool rows display-safe while Trace can retain raw payload detail", () => {
+    render(
+      <ChatView
+        messages={[
+          { id: "user-1", role: "user", content: "Click the send button." },
+          { id: "assistant-1", role: "assistant", content: "" },
+        ]}
+        isHistoryLoading={false}
+        isStreaming
+        botMode
+        nullalisMode
+        nullalisTranscriptEntries={[
+          {
+            id: "tool-1",
+            kind: "tool",
+            text: "Extension click completed.",
+            timestamp: Date.now(),
+            tool: "extension_click",
+            inputPreview: '{"eventType":"tool_start","tool":"extension_click","selector":"#send"}',
+            outputPreview: '{"type":"tool_result","tool":"extension_click","success":true}',
+            resultState: "done",
+            source: "tool",
+          },
+        ]}
+        firstMessageTransition={false}
+      />
+    );
+
+    expect(screen.getByText("Ran extension_click")).toBeInTheDocument();
+    expect(screen.queryByText(/selector/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/tool_result/)).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("thinking:");
   });
 
   it("renders artifact and source evidence under agent replies with wired panel actions", () => {

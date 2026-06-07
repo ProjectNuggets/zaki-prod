@@ -21,7 +21,8 @@ export type MessageBlock =
   | PlainTextBlock
   | ImageBlock
   | DownloadButtonBlock
-  | SavedLocallyBlock;
+  | SavedLocallyBlock
+  | RuntimePayloadSuppressedBlock;
 
 export type ImageBlock = BlockBase & {
   type: "image";
@@ -80,6 +81,7 @@ export type CodeBlock = BlockBase & {
 
 export type TableBlock = BlockBase & {
   type: "table";
+  caption?: string | null;
   headers: InlineNode[][];
   rows: InlineNode[][][];
 };
@@ -91,6 +93,13 @@ export type EmailBlock = BlockBase & {
     inlines: InlineNode[];
   }>;
   body: MessageBlock[];
+  attachments?: string[];
+};
+
+export type RuntimePayloadSuppressedBlock = BlockBase & {
+  type: "runtime_payload_suppressed";
+  title: string;
+  text: string;
 };
 
 export type ThematicBreakBlock = BlockBase & {

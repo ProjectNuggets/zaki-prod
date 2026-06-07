@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { CenterLogo } from "../icons";
 import { MessageActions } from "./MessageActions";
 import { MessageContent } from "./rendering/MessageContent";
+import { normalizeAssistantDisplayText } from "./rendering/agentReplyPresentation";
 import { stripToolCallMarkup } from "./rendering/toolMarkup";
 
 interface StreamingBubbleProps {
@@ -48,6 +49,10 @@ export function StreamingBubble({
   }, [content.length]);
 
   const agentRune = isStreaming ? "▸" : "✓";
+  const actionText = normalizeAssistantDisplayText(content, {
+    agentReply: botMode,
+    streaming: isStreaming,
+  });
 
   return (
     <div
@@ -105,7 +110,8 @@ export function StreamingBubble({
           <MessageContent
             content={displayedContent}
             role="assistant"
-            surface="chat"
+            surface={botMode ? "bot" : "chat"}
+            agentReply={botMode}
             streaming={isStreaming}
             streamingVariant={
               streamingModeVariant === "final_reply_reveal"
@@ -121,17 +127,17 @@ export function StreamingBubble({
             <MessageActions
               onCopy={
                 onCopyMessage
-                  ? () => onCopyMessage({ id: "streaming", role: "assistant", content })
+                  ? () => onCopyMessage({ id: "streaming", role: "assistant", content: actionText })
                   : undefined
               }
               onRegenerate={
                 onRegenerateMessage
-                  ? () => onRegenerateMessage({ id: "streaming", role: "assistant", content })
+                  ? () => onRegenerateMessage({ id: "streaming", role: "assistant", content: actionText })
                   : undefined
               }
               onThumbsUp={
                 onThumbsUpMessage
-                  ? () => onThumbsUpMessage({ id: "streaming", role: "assistant", content })
+                  ? () => onThumbsUpMessage({ id: "streaming", role: "assistant", content: actionText })
                   : undefined
               }
             />

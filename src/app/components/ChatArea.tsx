@@ -71,6 +71,7 @@ import {
   ApprovalRequiredCard,
   type ContextGaugeData,
 } from "./chat";
+import { normalizeAssistantDisplayText } from "./chat/rendering/agentReplyPresentation";
 import {
   AgentInspectorRail,
   type AgentInspectorArtifact,
@@ -3422,14 +3423,20 @@ export function ChatArea() {
   ]);
 
   const handleCopyMessage = useCallback(async (message: Message) => {
-    if (!message.content) return;
+    const content =
+      message.role === "assistant"
+        ? normalizeAssistantDisplayText(message.content, {
+            agentReply: isZakiBotActiveSpace,
+          })
+        : String(message.content || "");
+    if (!content.trim()) return;
     try {
-      await navigator.clipboard.writeText(message.content);
+      await navigator.clipboard.writeText(content);
       toast.success(chatCopy.copied);
     } catch {
       toast.error(chatCopy.copyFailed);
     }
-  }, [chatCopy.copied, chatCopy.copyFailed]);
+  }, [chatCopy.copied, chatCopy.copyFailed, isZakiBotActiveSpace]);
 
   const updateScrollIndicator = useCallback(() => {
     const el = scrollRef.current;
@@ -4119,9 +4126,13 @@ export function ChatArea() {
       if (autoTitleSessionFinalizedRef.current[sessionKey]) return;
       if (autoTitleSessionInFlightRef.current[sessionKey]) return;
 
+      const assistantMessage = normalizeAssistantDisplayText(
+        exchange?.assistantMessage ?? "",
+        { agentReply: true }
+      );
       const cleaned = prepareAutoTitleExchange([
         { role: "user", content: exchange?.userMessage ?? "" },
-        { role: "assistant", content: exchange?.assistantMessage ?? "" },
+        { role: "assistant", content: assistantMessage },
       ]);
       if (!cleaned) return;
 

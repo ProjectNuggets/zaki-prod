@@ -46,6 +46,22 @@ describe("StreamingMessage", () => {
     expect(container.textContent).toContain("Final reply");
   });
 
+  it("does not leak runtime JSON while an Agent reply is streaming", () => {
+    render(
+      <StreamingMessage
+        content={'{"type":"tool_result","tool":"shell","output_preview":"raw terminal output"}'}
+        isStreaming
+        botMode
+        streamingModeVariant="final_reply_reveal"
+        streamingBadgeLabel="Final reply"
+      />
+    );
+
+    expect(screen.getByTestId("agent-runtime-suppressed")).toHaveTextContent("No final reply");
+    expect(screen.queryByText(/tool_result/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/raw terminal output/i)).not.toBeInTheDocument();
+  });
+
   it("preserves generic thinking mode for non-bot streaming", () => {
     render(
       <StreamingMessage

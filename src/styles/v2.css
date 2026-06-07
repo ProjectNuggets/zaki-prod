@@ -4434,6 +4434,23 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   box-shadow: none;
 }
 
+.zaki-app-v2 .zaki-agent-v2 .zaki-message-table__caption {
+  border-bottom: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-raised);
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  padding: 9px 10px;
+  text-transform: uppercase;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-message-table__desktop:focus-visible {
+  outline: 1px solid var(--v2-accent);
+  outline-offset: -1px;
+}
+
 .zaki-app-v2 .zaki-agent-v2 .zaki-message-table table {
   width: max-content;
   min-width: 100%;
@@ -4479,6 +4496,10 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-message-email__kicker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   border-bottom: 1px solid var(--v2-hairline);
   background: var(--v2-bg-raised);
   color: var(--v2-ink-3);
@@ -4488,6 +4509,34 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   line-height: 1;
   padding: 9px 10px;
   text-transform: uppercase;
+}
+
+.zaki-message-email__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.zaki-message-email__actions button {
+  display: inline-flex;
+  height: 20px;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--v2-hairline);
+  background: transparent;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  padding: 0 6px;
+  text-transform: uppercase;
+}
+
+.zaki-message-email__actions button:hover,
+.zaki-message-email__actions button:focus-visible {
+  border-color: var(--v2-accent);
+  color: var(--v2-accent);
 }
 
 .zaki-message-email__fields {
@@ -4526,6 +4575,58 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   display: grid;
   gap: 10px;
   padding: 12px 14px;
+}
+
+.zaki-message-email__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  border-top: 1px solid var(--v2-hairline);
+  padding: 8px 10px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.zaki-message-email__attachments code {
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-sunken);
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  letter-spacing: 0;
+  padding: 2px 5px;
+  text-transform: none;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-runtime-suppressed {
+  display: grid;
+  gap: 5px;
+  max-width: min(100%, 560px);
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-sunken);
+  padding: 9px 10px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-runtime-suppressed span {
+  color: var(--v2-ink-2);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-runtime-suppressed p {
+  margin: 0;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-prose);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-approval-history {

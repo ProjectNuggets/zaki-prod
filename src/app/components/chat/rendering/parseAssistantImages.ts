@@ -1,5 +1,10 @@
 import { parseMessageMarkdown } from "./parseMessageMarkdown";
-import type { MessageBlock } from "./types";
+import {
+  segmentAgentReplyContent,
+  type AgentEmailDraftSegment,
+  type AgentTableSegment,
+} from "./agentReplyPresentation";
+import type { InlineNode, MessageBlock } from "./types";
 
 // SVG intentionally excluded — can carry inline script.
 const IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif)(?:\?[^\s]*)?$/i;
@@ -152,10 +157,14 @@ function classifyLines(content: string): PreBlock[] {
 
 export function parseAssistantContent(
   content: string,
-  options?: { streaming?: boolean },
+  options?: { streaming?: boolean; agentReply?: boolean },
 ): MessageBlock[] {
   const text = String(content || "");
   if (!text.trim()) return [];
+
+  if (options?.agentReply) {
+    return parseAgentReplyContent(text, options);
+  }
 
   const pre = classifyLines(text);
   const blocks: MessageBlock[] = [];
@@ -180,6 +189,96 @@ export function parseAssistantContent(
     } else if (item.kind === "saved") {
       blocks.push({ id: nextId("saved"), type: "saved_locally" });
     }
+  }
+
+  return blocks;
+}
+
+function textInline(text: string): InlineNode[] {
+  return text ? [{ type: "text", text }] : [];
+}
+
+function emailSegmentToBlock(
+  segment: AgentEmailDraftSegment,
+  nextId: (prefix: string) => string,
+): MessageBlock {
+  return {
+    id: nextId("email"),
+    type: "email",
+    fields: segment.fields.map((field) => ({
+      label: field.label,
+      inlines: textInline(field.value),
+    })),
+    body: parseMessageMarkdown(segment.body).blocks,
+    attachments: segment.attachments,
+  };
+}
+
+function tableSegmentToBlock(
+  segment: AgentTableSegment,
+  nextId: (prefix: string) => string,
+): MessageBlock {
+  return {
+    id: nextId("table"),
+    type: "table",
+    caption: segment.caption,
+    headers: segment.headers.map((header) => textInline(header)),
+    rows: segment.rows.map((row) => segment.headers.map((_, index) => textInline(row[index] || ""))),
+  };
+}
+
+function parseAgentReplyContent(
+  content: string,
+  options?: { streaming?: boolean },
+): MessageBlock[] {
+  const segments = segmentAgentReplyContent(content, options);
+  const blocks: MessageBlock[] = [];
+  let counter = 0;
+  let suppressedRuntime = false;
+  const nextId = (prefix: string) => `${prefix}-${counter++}`;
+
+  for (const segment of segments) {
+    if (segment.kind === "suppressed_runtime") {
+      suppressedRuntime = true;
+      continue;
+    }
+    if (segment.kind === "email") {
+      blocks.push(emailSegmentToBlock(segment, nextId));
+      continue;
+    }
+    if (segment.kind === "table") {
+      blocks.push(tableSegmentToBlock(segment, nextId));
+      continue;
+    }
+    const pre = classifyLines(segment.text);
+    for (const item of pre) {
+      if (item.kind === "markdown") {
+        const doc = parseMessageMarkdown(item.text, options);
+        for (const block of doc.blocks) {
+          blocks.push({ ...block, id: nextId(block.type) });
+        }
+      } else if (item.kind === "image") {
+        blocks.push({
+          id: nextId("img"),
+          type: "image",
+          url: item.url,
+          alt: item.alt,
+        });
+      } else if (item.kind === "download") {
+        blocks.push({ id: nextId("dl"), type: "download_button", url: item.url });
+      } else if (item.kind === "saved") {
+        blocks.push({ id: nextId("saved"), type: "saved_locally" });
+      }
+    }
+  }
+
+  if (blocks.length === 0 && suppressedRuntime) {
+    blocks.push({
+      id: nextId("suppressed"),
+      type: "runtime_payload_suppressed",
+      title: "No final reply",
+      text: "The run produced internal tool output only.",
+    });
   }
 
   return blocks;

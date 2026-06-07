@@ -17,6 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 import { TextShimmer } from "./TextShimmer";
 import { ToolResultBody } from "./ToolResultBody";
+import { displaySafeRuntimePreview } from "../rendering/agentReplyPresentation";
 
 export type ToolRowStatus = "running" | "done" | "failed" | "queued" | "blocked";
 
@@ -127,14 +128,17 @@ function formatMs(ms: number) {
 }
 
 function primaryTarget(props: CompactToolRowProps): string | null {
-  if (props.label && props.label.trim().length > 0) return props.label;
+  const label = displaySafeRuntimePreview(props.label);
+  if (label) return label;
   if (props.files && props.files.length > 0) {
     const head = props.files[0]!;
     const more = props.files.length - 1;
     return more > 0 ? `${head} +${more}` : head;
   }
-  if (props.command) return props.command;
-  if (props.inputPreview) return props.inputPreview;
+  const command = displaySafeRuntimePreview(props.command);
+  if (command) return command;
+  const inputPreview = displaySafeRuntimePreview(props.inputPreview);
+  if (inputPreview) return inputPreview;
   return null;
 }
 

@@ -18,6 +18,7 @@ import {
   type ContextGroupChild,
 } from "./blocks/ContextToolGroup";
 import { TextShimmer } from "./blocks/TextShimmer";
+import { displaySafeRuntimePreview } from "./rendering/agentReplyPresentation";
 
 const DEDUP_WINDOW_MS = 450;
 
@@ -460,9 +461,10 @@ export function NullalisTurnTimeline({
   // Reveal phase: collapse trail into "Worked for Ns ›" details.
   const shouldCollapse = revealPhase === "revealing" || revealPhase === "done";
   const framePhase = formatFramePhase(frame?.phase) || (isStreaming ? "thinking" : "done");
-  const frameLabel =
+  const rawFrameLabel =
     frame?.label ||
     (stats.stepCount > 0 ? `${stats.stepCount} runtime step${stats.stepCount === 1 ? "" : "s"}` : "Working");
+  const frameLabel = displaySafeRuntimePreview(rawFrameLabel) || "Working";
   const state = frameState({ frame, isStreaming, revealPhase });
   const statsLabel = [
     `${stats.stepCount} step${stats.stepCount === 1 ? "" : "s"}`,
@@ -474,7 +476,7 @@ export function NullalisTurnTimeline({
     .join(" · ");
 
   if (showThinkingOnly) {
-    const liveLabel = frame?.label || "Thinking";
+    const liveLabel = displaySafeRuntimePreview(frame?.label) || "Thinking";
     const liveMeta = [
       framePhase,
       frame?.tool || "runtime",
@@ -486,9 +488,11 @@ export function NullalisTurnTimeline({
     return (
       <section
         className="zaki-agent-timeline zaki-agent-timeline--thinking zaki-agent-lane zaki-process-enter max-w-[92%] py-1 text-zaki-primary dark:text-zaki-dark-primary"
-        aria-live="polite"
         dir="auto"
       >
+        <span className="sr-only" role="status" aria-live="polite" data-testid="agent-live-status">
+          {`${framePhase}: ${liveLabel}`}
+        </span>
         <div className="zaki-agent-lane__gutter" aria-hidden>
           <div className="zaki-agent-lane__rune z-rune" data-state="thinking">
             <span className="glyph">◌</span>
@@ -573,11 +577,13 @@ export function NullalisTurnTimeline({
   return (
     <section
       className="zaki-agent-timeline zaki-agent-timeline--live zaki-agent-lane zaki-process-enter max-w-[92%] text-zaki-primary dark:text-zaki-dark-primary"
-      aria-live="polite"
       aria-busy={isStreaming || undefined}
       aria-label={isStreaming ? "Agent working" : "Agent finished"}
       dir="auto"
     >
+      <span className="sr-only" role="status" aria-live="polite" data-testid="agent-live-status">
+        {`${framePhase}: ${frameLabel}`}
+      </span>
       <div className="zaki-agent-lane__gutter" aria-hidden>
         <div className="zaki-agent-lane__rune z-rune" data-state={state}>
           <span className="glyph">{frameGlyph(state)}</span>

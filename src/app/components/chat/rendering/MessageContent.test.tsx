@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom";
-import { describe, expect, it } from "@jest/globals";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, jest } from "@jest/globals";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MessageContent } from "./MessageContent";
 
 describe("MessageContent", () => {
@@ -66,6 +66,8 @@ describe("MessageContent", () => {
     expect(screen.getAllByText("Plan").length).toBeGreaterThan(1);
     expect(screen.getAllByText("$13 / month").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Best for ongoing work").length).toBeGreaterThan(0);
+    expect(container.querySelector("th")?.getAttribute("scope")).toBe("col");
+    expect(desktopTable).toHaveAttribute("tabindex", "0");
   });
 
   it("preserves links, inline code, and long prose in table cells", () => {
@@ -116,5 +118,65 @@ describe("MessageContent", () => {
       "mailto:alaa@example.com",
     );
     expect(screen.getByText("The report is attached.")).toBeInTheDocument();
+  });
+
+  it("renders Agent email JSON with copy actions and attachments", () => {
+    const writeText = jest.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+
+    render(
+      <MessageContent
+        role="assistant"
+        surface="bot"
+        agentReply
+        content={JSON.stringify({
+          type: "email_draft",
+          to: "alaa@example.com",
+          subject: "Launch update",
+          body: "Hi Alaa,\n\nThe report is attached.",
+          attachments: ["launch.pdf"],
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId("message-email-draft")).toHaveTextContent("launch.pdf");
+    fireEvent.click(screen.getByRole("button", { name: "Copy email draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy email body" }));
+
+    expect(writeText).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining("Subject: Launch update"),
+    );
+    expect(writeText).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("The report is attached."),
+    );
+  });
+
+  it("renders Agent table JSON with caption and semantic table headers", () => {
+    const { container } = render(
+      <MessageContent
+        role="assistant"
+        surface="bot"
+        agentReply
+        content={JSON.stringify({
+          type: "table",
+          caption: "Plan options",
+          columns: ["Plan", "Price"],
+          rows: [
+            ["Personal", "$13"],
+            ["Student", "$8"],
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId("message-table-caption")).toHaveTextContent("Plan options");
+    expect(screen.getByTestId("message-table-desktop")).toHaveAttribute("tabindex", "0");
+    expect(container.querySelector("caption")).toHaveTextContent("Plan options");
+    expect(container.querySelector("th")).toHaveAttribute("scope", "col");
   });
 });

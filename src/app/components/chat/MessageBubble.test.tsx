@@ -113,6 +113,27 @@ describe("MessageBubble source chip", () => {
     expect(screen.queryByText(/tool_result/i)).not.toBeInTheDocument();
   });
 
+  it("suppresses standalone runtime JSON in persisted Agent replies", () => {
+    const message: Message = {
+      id: "json-leak-1",
+      role: "assistant",
+      content: '{"type":"tool_result","tool":"shell","output_preview":"raw terminal output"}',
+    };
+
+    render(
+      <MessageBubble
+        message={message}
+        botMode
+        showSourceChip={false}
+        animate={false}
+      />
+    );
+
+    expect(screen.getByTestId("agent-runtime-suppressed")).toHaveTextContent("No final reply");
+    expect(screen.queryByText(/tool_result/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/raw terminal output/i)).not.toBeInTheDocument();
+  });
+
   it("renders an explicit Telegram chip when a surface opts into source chips", () => {
     const message: Message = {
       id: "2",

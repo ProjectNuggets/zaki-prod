@@ -2,13 +2,19 @@ import { InlineTextRenderer } from "../InlineTextRenderer";
 import type { TableBlock as TableBlockType } from "../types";
 
 export function TableBlock({ block }: { block: TableBlockType }) {
+  const tableLabel = block.caption || "Agent reply table";
   return (
-    <div className="zaki-message-table rounded-[14px] border border-zaki-subtle/90 bg-[rgba(250,246,240,0.78)] dark:border-zaki-dark dark:bg-[rgba(255,255,255,0.02)]">
+    <div className="zaki-message-table rounded-[8px] border border-zaki-subtle/90 bg-[rgba(250,246,240,0.78)] dark:border-zaki-dark dark:bg-[rgba(255,255,255,0.02)]">
+      {block.caption ? (
+        <div className="zaki-message-table__caption" data-testid="message-table-caption">
+          {block.caption}
+        </div>
+      ) : null}
       <div data-testid="message-table-mobile" className="zaki-message-table__mobile space-y-3 p-3 sm:hidden">
         {block.rows.map((row, rowIndex) => (
           <div
             key={`mobile-row-${rowIndex}`}
-            className="overflow-hidden rounded-[12px] border border-zaki-subtle/80 bg-white/70 dark:border-zaki-dark dark:bg-[rgba(255,255,255,0.03)]"
+            className="overflow-hidden rounded-[6px] border border-zaki-subtle/80 bg-white/70 dark:border-zaki-dark dark:bg-[rgba(255,255,255,0.03)]"
           >
             {row.map((cell, cellIndex) => (
               <div
@@ -27,13 +33,20 @@ export function TableBlock({ block }: { block: TableBlockType }) {
         ))}
       </div>
 
-      <div data-testid="message-table-desktop" className="zaki-message-table__desktop hidden overflow-x-auto sm:block">
+      <div
+        data-testid="message-table-desktop"
+        className="zaki-message-table__desktop hidden overflow-x-auto sm:block"
+        tabIndex={0}
+        aria-label={tableLabel}
+      >
         <table className="min-w-full w-max border-separate border-spacing-0 text-left rtl:text-right">
+          {block.caption ? <caption className="sr-only">{block.caption}</caption> : null}
           <thead className="bg-[rgba(241,233,223,0.92)] dark:bg-[rgba(255,255,255,0.04)]">
             <tr>
               {block.headers.map((cell, index) => (
                 <th
                   key={`head-${index}`}
+                  scope="col"
                   className="min-w-[10rem] border-b border-zaki-subtle/80 px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:border-zaki-dark dark:text-zaki-dark-muted"
                 >
                   <InlineTextRenderer nodes={cell} prose />

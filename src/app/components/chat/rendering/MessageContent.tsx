@@ -12,6 +12,7 @@ export type MessageContentProps = {
   role: "assistant" | "user";
   surface?: "chat" | "shared" | "bot";
   preserveUserFormatting?: boolean;
+  agentReply?: boolean;
 };
 
 export function MessageContent({
@@ -21,6 +22,7 @@ export function MessageContent({
   role,
   surface = "chat",
   preserveUserFormatting = false,
+  agentReply = false,
 }: MessageContentProps) {
   const isAssistant = role === "assistant";
   const shouldRenderStructured = isAssistant || preserveUserFormatting;
@@ -33,7 +35,10 @@ export function MessageContent({
       return { blocks: [] as MessageBlock[] };
     }
     const parsedBlocks = isAssistant
-      ? parseAssistantContent(parseSource, { streaming: streaming && isAssistant })
+      ? parseAssistantContent(parseSource, {
+          streaming: streaming && isAssistant,
+          agentReply: agentReply || surface === "bot",
+        })
       : parseMessageMarkdown(parseSource, {
           streaming: streaming && isAssistant,
         }).blocks;
@@ -53,7 +58,7 @@ export function MessageContent({
     });
     blockCacheRef.current = next;
     return { blocks: stableBlocks };
-  }, [parseSource, shouldRenderStructured, streaming, isAssistant]);
+  }, [parseSource, shouldRenderStructured, streaming, isAssistant, agentReply, surface]);
 
   if (!shouldRenderStructured) {
     return (

@@ -7,6 +7,7 @@ import { MessageActions } from "./MessageActions";
 import { MessageContent } from "./rendering/MessageContent";
 import { ImageBlock } from "./rendering/blocks/ImageBlock";
 import { extractGeneratedImages } from "./rendering/extractGeneratedImages";
+import { normalizeAssistantDisplayText } from "./rendering/agentReplyPresentation";
 import { stripToolCallMarkup } from "./rendering/toolMarkup";
 import { SourceChip } from "@/app/components/ui/zaki";
 
@@ -228,7 +229,12 @@ export function MessageBubble({
                   </span>
                 </div>
               ) : !isUser ? (
-                <MessageContent content={content} role="assistant" surface="chat" />
+                <MessageContent
+                  content={content}
+                  role="assistant"
+                  surface={botMode ? "bot" : "chat"}
+                  agentReply={botMode}
+                />
               ) : (
                 content
               )}
@@ -248,7 +254,7 @@ export function MessageBubble({
             <MessageActions
               visible={false}
               messageId={message.id}
-              messageText={stripToolCallMarkup(message.content || "")}
+              messageText={normalizeAssistantDisplayText(message.content || "", { agentReply: botMode })}
               onCopy={onCopy ? () => onCopy(message) : undefined}
               onRegenerate={onRegenerate ? () => onRegenerate(message) : undefined}
               onThumbsUp={onThumbsUp ? () => onThumbsUp(message) : undefined}
