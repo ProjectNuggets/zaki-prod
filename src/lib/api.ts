@@ -2469,6 +2469,12 @@ function assertSafeSessionKey(key: string): void {
   }
 }
 
+function assertSafeAgentPathSegment(value: string, label: string): void {
+  if (!value || value.length > 256 || /[\x00-\x1f\x7f/]/u.test(value)) {
+    throw new Error(`Invalid ${label}: ${value.slice(0, 40)}`);
+  }
+}
+
 export type AgentSession = {
   session_key: string;
   title?: string;
@@ -2518,6 +2524,21 @@ export type AgentContextLastTurnDelta = {
   token_estimate?: number | null;
   pressure_points?: number | null;
   tool_mode?: "native_tool_calls" | "xml_fallback" | "mixed" | "no_tools" | string | null;
+};
+
+export type AgentContextLastTurn = {
+  native_tool_call_count?: number | null;
+  xml_fallback_call_count?: number | null;
+  native_transcript_rendered?: boolean | null;
+  bounded_result_count?: number | null;
+  tool_mode?: "native_tool_calls" | "xml_fallback" | "mixed" | "no_tools" | string | null;
+  [key: string]: unknown;
+};
+
+export type AgentContextPromptShape = {
+  available?: boolean | null;
+  tool_surface?: string | null;
+  [key: string]: unknown;
 };
 
 export type AgentContextContributor = {
@@ -2574,6 +2595,7 @@ export type AgentContextReport = {
   cache?: Record<string, unknown> | null;
   last_turn_delta?: AgentContextLastTurnDelta | null;
   top_context_contributors?: AgentContextContributor[] | null;
+  prompt_shape?: AgentContextPromptShape | null;
   message_count?: number;
   history_len?: number;
   history_messages?: number;
@@ -2598,12 +2620,87 @@ export type AgentContextReport = {
   continuity?: Record<string, unknown> | null;
   buckets?: Record<string, unknown> | null;
   runtime?: Record<string, unknown> | null;
-  last_turn?: Record<string, unknown> | null;
+  last_turn?: AgentContextLastTurn | null;
   error?: string | null;
 };
 
 export type AgentSessionContext = AgentContextReport & {
   report?: AgentContextReport | null;
+};
+
+export type AgentTodoStatus = "pending" | "in_progress" | "completed" | "blocked";
+
+export type AgentTodoItem = {
+  id: number;
+  title: string;
+  status: AgentTodoStatus | string;
+  depends_on?: number[];
+  note?: string | null;
+};
+
+export type AgentTodoList = {
+  list_id: string;
+  title: string;
+  items: AgentTodoItem[];
+  status?: string | null;
+  created_at?: string | number | null;
+  updated_at?: string | number | null;
+};
+
+export type AgentSessionTodosResponse = {
+  session_key?: string;
+  current_list_id?: string | null;
+  lists: AgentTodoList[];
+  error?: string | null;
+  message?: string | null;
+};
+
+export type AgentSessionTodoUpdatePayload = {
+  status: AgentTodoStatus;
+  note?: string;
+};
+
+export type AgentSessionTodoUpdateResponse = {
+  session_key?: string;
+  current_list_id?: string | null;
+  list?: AgentTodoList;
+  error?: string | null;
+  message?: string | null;
+};
+
+export type AgentTaskPlanStep = {
+  index: number;
+  id?: string;
+  title?: string;
+  description?: string;
+  status?: "pending" | "running" | "done" | "failed" | string;
+  expected_tool?: string | null;
+  actual_tool?: string | null;
+  result_summary?: string | null;
+  error_summary?: string | null;
+};
+
+export type AgentTaskPlan = {
+  schema?: "nullalis.task_plan.v1" | string;
+  plan_id?: string;
+  session_key?: string;
+  run_id?: string;
+  summary?: string;
+  current_step?: number;
+  status?: "active" | "completed" | "failed" | "abandoned" | string;
+  created_at_ms?: number;
+  updated_at_ms?: number;
+  revision?: number;
+  supersedes_plan_id?: string | null;
+  steps?: AgentTaskPlanStep[];
+};
+
+export type AgentSessionPlanResponse = {
+  session_key?: string;
+  active: boolean;
+  plan: AgentTaskPlan | null;
+  error?: string | null;
+  message?: string | null;
 };
 
 export type AgentSessionMode = "plan" | "execute" | "review";
@@ -2745,6 +2842,52 @@ export async function fetchAgentSessionContext(sessionKey: string) {
     method: "GET",
   });
   const data = await parseApiJson<AgentSessionContext>(response);
+  return { response, data };
+}
+
+export async function fetchAgentSessionTodos(sessionKey: string) {
+  assertSafeSessionKey(sessionKey);
+  const encoded = encodeURIComponent(sessionKey);
+  const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/todos`, {
+    method: "GET",
+  });
+  const data = await parseApiJson<AgentSessionTodosResponse>(response);
+  return { response, data };
+}
+
+export async function updateAgentSessionTodoItem(
+  sessionKey: string,
+  listId: string,
+  itemId: number | string,
+  payload: AgentSessionTodoUpdatePayload
+) {
+  assertSafeSessionKey(sessionKey);
+  assertSafeAgentPathSegment(listId, "todo list id");
+  const normalizedItemId =
+    typeof itemId === "number" && Number.isInteger(itemId) ? String(itemId) : String(itemId || "");
+  if (!/^[1-9][0-9]*$/u.test(normalizedItemId)) {
+    throw new Error(`Invalid todo item id: ${normalizedItemId.slice(0, 40)}`);
+  }
+  const encoded = encodeURIComponent(sessionKey);
+  const encodedListId = encodeURIComponent(listId);
+  const response = await backendAuthRequest(
+    `/api/agent/sessions/${encoded}/todos/${encodedListId}/items/${normalizedItemId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }
+  );
+  const data = await parseApiJson<AgentSessionTodoUpdateResponse>(response);
+  return { response, data };
+}
+
+export async function fetchAgentSessionPlan(sessionKey: string) {
+  assertSafeSessionKey(sessionKey);
+  const encoded = encodeURIComponent(sessionKey);
+  const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/plan`, {
+    method: "GET",
+  });
+  const data = await parseApiJson<AgentSessionPlanResponse>(response);
   return { response, data };
 }
 

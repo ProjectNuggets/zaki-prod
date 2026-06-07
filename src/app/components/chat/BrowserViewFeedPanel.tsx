@@ -9,6 +9,7 @@ export type BrowserViewFeedPanelProps = {
   /** Closes the view-feed (clears the active frame). */
   onClose: () => void;
   className?: string;
+  embedded?: boolean;
 };
 
 /**
@@ -24,15 +25,13 @@ export function BrowserViewFeedPanel({
   frame,
   onClose,
   className,
+  embedded = false,
 }: BrowserViewFeedPanelProps) {
   const title = frame?.title?.trim() || "Browser";
   const url = frame?.url?.trim() || "";
 
-  return (
-    <V2Panel
-      aria-label="Browser view"
-      className={cn("zaki-browser-view", className)}
-    >
+  const content = (
+    <>
       <V2PanelHead>
         <span>
           <Monitor className="size-4" aria-hidden />
@@ -77,6 +76,23 @@ export function BrowserViewFeedPanel({
           <p>Waiting for the agent to browse…</p>
         </div>
       )}
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <section
+        aria-label="Browser view"
+        className={cn("zaki-browser-view", "zaki-browser-view--embedded", className)}
+      >
+        {content}
+      </section>
+    );
+  }
+
+  return (
+    <V2Panel aria-label="Browser view" className={cn("zaki-browser-view", className)}>
+      {content}
     </V2Panel>
   );
 }

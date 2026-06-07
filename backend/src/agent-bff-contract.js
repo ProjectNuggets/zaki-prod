@@ -13,6 +13,9 @@ export const AGENT_SESSION_BFF_ROUTES = Object.freeze([
   { method: "get",    path: "/api/agent/sessions/:sessionKey",          upstreamSuffix: "",         json: false },
   { method: "post",   path: "/api/agent/sessions/:sessionKey/compact",  upstreamSuffix: "/compact", json: false },
   { method: "get",    path: "/api/agent/sessions/:sessionKey/context",  upstreamSuffix: "/context", json: false },
+  { method: "get",    path: "/api/agent/sessions/:sessionKey/todos",    upstreamSuffix: "/todos",   json: false },
+  { method: "patch",  path: "/api/agent/sessions/:sessionKey/todos/:listId/items/:itemId", upstreamSuffix: "/todos/:listId/items/:itemId", json: true },
+  { method: "get",    path: "/api/agent/sessions/:sessionKey/plan",     upstreamSuffix: "/plan",    json: false },
   { method: "get",    path: "/api/agent/sessions/:sessionKey/export",   upstreamSuffix: "/export",  json: false },
   { method: "get",    path: "/api/agent/sessions/:sessionKey/history",  upstreamSuffix: "/history", json: false },
   { method: "post",   path: "/api/agent/sessions/:sessionKey/mode",     upstreamSuffix: "/mode",    json: true  },
@@ -398,8 +401,12 @@ export function registerAgentSessionBffRoutes(app, handlers) {
   const { requireAgentContext, agentJson1mb, makeSessionProxyHandler } = handlers;
   for (const route of AGENT_SESSION_BFF_ROUTES) {
     const proxyHandler = makeSessionProxyHandler(
-      (userId, req) =>
-        `/api/v1/users/${encodeURIComponent(userId)}/sessions/${req.params.sessionKey}${route.upstreamSuffix}`
+      (userId, req) => {
+        const suffix = route.upstreamSuffix.replace(/:([A-Za-z0-9_]+)/g, (_, name) =>
+          encodeURIComponent(String(req.params?.[name] ?? ""))
+        );
+        return `/api/v1/users/${encodeURIComponent(userId)}/sessions/${encodeURIComponent(req.params.sessionKey)}${suffix}`;
+      }
     );
     const middlewares = [requireAgentContext];
     if (route.json) middlewares.push(agentJson1mb);

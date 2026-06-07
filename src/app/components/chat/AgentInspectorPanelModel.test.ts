@@ -70,7 +70,7 @@ describe("AgentInspectorPanelModel", () => {
     const browser = entry({
       id: "browser",
       kind: "tool",
-      tool: "browser.open",
+      tool: "browser_navigate",
       text: "Opened the checkout page.",
     });
     const pageCopy = entry({
@@ -80,6 +80,15 @@ describe("AgentInspectorPanelModel", () => {
     });
 
     expect(isAgentBrowserEntry(browser)).toBe(true);
+    for (const tool of [
+      "browser_new_session",
+      "browser_navigate",
+      "browser_snapshot",
+      "browser_exec",
+      "browser_close_session",
+    ]) {
+      expect(isAgentBrowserEntry(entry({ kind: "tool", tool }))).toBe(true);
+    }
     expect(isAgentBrowserEntry(pageCopy)).toBe(false);
   });
 

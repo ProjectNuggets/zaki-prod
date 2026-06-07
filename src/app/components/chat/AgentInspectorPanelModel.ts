@@ -193,8 +193,11 @@ export function isAgentBrowserEntry(entry: NullalisTranscriptEntry): boolean {
     "page.goto",
     "browser.open",
     "browser_click",
+    "browser_new_session",
     "browser_navigate",
     "browser_snapshot",
+    "browser_exec",
+    "browser_close_session",
     "browser_take_screenshot",
   ]);
 }

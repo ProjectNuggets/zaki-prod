@@ -325,6 +325,9 @@ describe("agent BOT BFF contract", () => {
       { method: "get",    path: "/api/agent/sessions/:sessionKey",          upstreamSuffix: "",         json: false },
       { method: "post",   path: "/api/agent/sessions/:sessionKey/compact",  upstreamSuffix: "/compact", json: false },
       { method: "get",    path: "/api/agent/sessions/:sessionKey/context",  upstreamSuffix: "/context", json: false },
+      { method: "get",    path: "/api/agent/sessions/:sessionKey/todos",    upstreamSuffix: "/todos",   json: false },
+      { method: "patch",  path: "/api/agent/sessions/:sessionKey/todos/:listId/items/:itemId", upstreamSuffix: "/todos/:listId/items/:itemId", json: true },
+      { method: "get",    path: "/api/agent/sessions/:sessionKey/plan",     upstreamSuffix: "/plan",    json: false },
       { method: "get",    path: "/api/agent/sessions/:sessionKey/export",   upstreamSuffix: "/export",  json: false },
       { method: "get",    path: "/api/agent/sessions/:sessionKey/history",  upstreamSuffix: "/history", json: false },
       { method: "post",   path: "/api/agent/sessions/:sessionKey/mode",     upstreamSuffix: "/mode",    json: true  },
@@ -359,6 +362,7 @@ describe("agent BOT BFF contract", () => {
       return {
         get: jest.fn(),
         post: jest.fn(),
+        patch: jest.fn(),
         delete: jest.fn(),
       };
     }
@@ -396,10 +400,15 @@ describe("agent BOT BFF contract", () => {
       expect(verbCalls("get")).toEqual([
         "/api/agent/sessions/:sessionKey",
         "/api/agent/sessions/:sessionKey/context",
+        "/api/agent/sessions/:sessionKey/todos",
+        "/api/agent/sessions/:sessionKey/plan",
         "/api/agent/sessions/:sessionKey/export",
         "/api/agent/sessions/:sessionKey/history",
       ]);
       expect(verbCalls("delete")).toEqual([]);
+      expect(verbCalls("patch")).toEqual([
+        "/api/agent/sessions/:sessionKey/todos/:listId/items/:itemId",
+      ]);
       expect(verbCalls("post")).toEqual([
         "/api/agent/sessions/:sessionKey/compact",
         "/api/agent/sessions/:sessionKey/mode",
@@ -445,9 +454,17 @@ describe("agent BOT BFF contract", () => {
       expect(cancelCall).toHaveLength(3);
       expect(cancelCall[1]).toBe(handlers.requireAgentContext);
       expect(cancelCall[2]).not.toBe(handlers.agentJson1mb);
+
+      const todoUpdateCall = app.patch.mock.calls.find(
+        (args) => args[0] === "/api/agent/sessions/:sessionKey/todos/:listId/items/:itemId"
+      );
+      expect(todoUpdateCall).toBeDefined();
+      expect(todoUpdateCall).toHaveLength(4);
+      expect(todoUpdateCall[1]).toBe(handlers.requireAgentContext);
+      expect(todoUpdateCall[2]).toBe(handlers.agentJson1mb);
     });
 
-    it("encodes the userId segment in upstream paths but forwards the decoded session key", () => {
+    it("encodes user, session, and nested todo segments in upstream paths", () => {
       const app = buildApp();
       const { proxyHandlersBySuffix, ...handlers } = buildHandlers();
 
@@ -466,15 +483,15 @@ describe("agent BOT BFF contract", () => {
         params: { sessionKey: "agent:zaki-bot:user:42:thread:main" },
       });
       expect(modeUpstream).toBe(
-        "/api/v1/users/user%20with%20space/sessions/agent:zaki-bot:user:42:thread:main/mode"
+        "/api/v1/users/user%20with%20space/sessions/agent%3Azaki-bot%3Auser%3A42%3Athread%3Amain/mode"
       );
       const proxyHandler = approveCall[approveCall.length - 1];
       const upstream = proxyHandler.pathBuilder("user with space", {
         params: { sessionKey: "agent:zaki-bot:user:42:thread:main" },
       });
-      // userId is URI-encoded so spaces don't injection-break the path.
+      // Path segments are URI-encoded after Express decodes route params.
       expect(upstream).toBe(
-        "/api/v1/users/user%20with%20space/sessions/agent:zaki-bot:user:42:thread:main/approve"
+        "/api/v1/users/user%20with%20space/sessions/agent%3Azaki-bot%3Auser%3A42%3Athread%3Amain/approve"
       );
 
       const cancelCall = app.post.mock.calls.find(
@@ -486,7 +503,7 @@ describe("agent BOT BFF contract", () => {
         params: { sessionKey: "agent:zaki-bot:user:42:thread:main" },
       });
       expect(cancelUpstream).toBe(
-        "/api/v1/users/user%20with%20space/sessions/agent:zaki-bot:user:42:thread:main/cancel"
+        "/api/v1/users/user%20with%20space/sessions/agent%3Azaki-bot%3Auser%3A42%3Athread%3Amain/cancel"
       );
 
       const contextCall = app.get.mock.calls.find(
@@ -499,7 +516,23 @@ describe("agent BOT BFF contract", () => {
         params: { sessionKey: "agent:zaki-bot:user:42:thread:main" },
       });
       expect(contextUpstream).toBe(
-        "/api/v1/users/user%20with%20space/sessions/agent:zaki-bot:user:42:thread:main/context"
+        "/api/v1/users/user%20with%20space/sessions/agent%3Azaki-bot%3Auser%3A42%3Athread%3Amain/context"
+      );
+
+      const todoUpdateCall = app.patch.mock.calls.find(
+        (args) => args[0] === "/api/agent/sessions/:sessionKey/todos/:listId/items/:itemId"
+      );
+      expect(todoUpdateCall).toBeDefined();
+      const todoUpdateProxyHandler = todoUpdateCall[todoUpdateCall.length - 1];
+      const todoUpdateUpstream = todoUpdateProxyHandler.pathBuilder("user with space", {
+        params: {
+          sessionKey: "agent:zaki-bot:user:42:thread:main",
+          listId: "list a",
+          itemId: "2",
+        },
+      });
+      expect(todoUpdateUpstream).toBe(
+        "/api/v1/users/user%20with%20space/sessions/agent%3Azaki-bot%3Auser%3A42%3Athread%3Amain/todos/list%20a/items/2"
       );
     });
   });
