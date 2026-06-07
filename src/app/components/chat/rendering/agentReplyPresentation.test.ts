@@ -1,5 +1,8 @@
 import { describe, expect, it } from "@jest/globals";
-import { normalizeAssistantDisplayText } from "./agentReplyPresentation";
+import {
+  isInternalAgentReplyContent,
+  normalizeAssistantDisplayText,
+} from "./agentReplyPresentation";
 import { parseAssistantContent } from "./parseAssistantImages";
 
 describe("Agent reply presentation", () => {
@@ -59,6 +62,58 @@ describe("Agent reply presentation", () => {
 
     expect(runtimeArray[0]).toMatchObject({ type: "runtime_payload_suppressed" });
     expect(toolResultKey[0]).toMatchObject({ type: "runtime_payload_suppressed" });
+  });
+
+  it("suppresses compact gateway tool preview JSON from Agent replies", () => {
+    const content = JSON.stringify({
+      tool: "web_search",
+      status: "ok",
+      partial: false,
+      original_bytes: 2024,
+      shown_bytes: 2024,
+      result_hash: "ec1462c0aa4d1909",
+      content_preview: "Results for: personal AI agents market 2025 2026",
+    });
+    const blocks = parseAssistantContent(content, { agentReply: true });
+    const display = normalizeAssistantDisplayText(content, { agentReply: true });
+
+    expect(blocks[0]).toMatchObject({ type: "runtime_payload_suppressed" });
+    expect(display).toBe("");
+    expect(isInternalAgentReplyContent(content)).toBe(true);
+  });
+
+  it("removes embedded compact gateway JSON while preserving the final answer", () => {
+    const content = [
+      "I now have enough market data.",
+      JSON.stringify({
+        tool: "artifact_create",
+        status: "error",
+        partial: false,
+        original_bytes: 47,
+        shown_bytes: 47,
+        result_hash: "73d8519bda4904f7",
+        content_preview: "Approval required. Use /approve allow-once|deny",
+      }),
+      "Done — your report is live in the side panel.",
+    ].join("\n\n");
+    const display = normalizeAssistantDisplayText(content, { agentReply: true });
+
+    expect(display).toContain("I now have enough market data.");
+    expect(display).toContain("Done — your report is live in the side panel.");
+    expect(display).not.toContain("artifact_create");
+    expect(display).not.toContain("content_preview");
+    expect(display).not.toContain("/approve");
+  });
+
+  it("suppresses approved tool execution observations", () => {
+    const observation =
+      "[Approved tool execution: id=1 tool=artifact_create status=succeeded] Output: Created artifact 'Personal AI Agent Market Report' (id=abc, kind=markdown, version=1, url=/api/v1/users/1/artifacts/abc)\nContinue your reasoning based on this tool result. Produce the next step for the user.";
+    const content = `${observation}\n\nDone — your report is live in the side panel.`;
+    const display = normalizeAssistantDisplayText(content, { agentReply: true });
+
+    expect(normalizeAssistantDisplayText(observation, { agentReply: true })).toBe("");
+    expect(isInternalAgentReplyContent(observation)).toBe(true);
+    expect(display).toBe("Done — your report is live in the side panel.");
   });
 
   it("preserves generic JSON arrays instead of turning them into tables", () => {

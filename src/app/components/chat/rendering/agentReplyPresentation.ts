@@ -53,7 +53,14 @@ const RUNTIME_TYPE_VALUES = new Set([
 ]);
 
 const RUNTIME_KEY_RE =
-  /(?:eventType|tool_result|tool_calls|toolCalls|tool_use_id|toolUseId|tool_call_id|toolCallId|approval_id|approvalId|input_preview|inputPreview|output_preview|outputPreview|observation|arguments|payload|run_id|runId)/i;
+  /(?:eventType|tool_result|tool_calls|toolCalls|tool_use_id|toolUseId|tool_call_id|toolCallId|approval_id|approvalId|input_preview|inputPreview|output_preview|outputPreview|content_preview|contentPreview|observation|arguments|payload|run_id|runId|original_bytes|originalBytes|shown_bytes|shownBytes|result_hash|resultHash)/i;
+
+const APPROVED_TOOL_EXECUTION_RE =
+  /(^|\n)\s*\[Approved tool execution:[^\]]+\]\s*Output:[\s\S]*?Continue your reasoning based on this tool result\.\s*Produce the next step for the user\.?/gi;
+const APPROVED_TOOL_EXECUTION_TAIL_RE =
+  /(^|\n)\s*\[Approved tool execution:[\s\S]*$/i;
+const APPROVAL_INSTRUCTION_RE =
+  /(^|\n)\s*Approval required\.\s*Use\s+\/approve\b[^\n]*/gi;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -240,6 +247,24 @@ function runtimeScore(value: unknown): number {
   if (normalizedKeys.has("toolcalls") || normalizedKeys.has("toolcall") || normalizedKeys.has("toolcallid")) score += 2;
   if (normalizedKeys.has("tooluseid") || normalizedKeys.has("approvalid")) score += 2;
   if (normalizedKeys.has("inputpreview") || normalizedKeys.has("outputpreview")) score += 1;
+  if (normalizedKeys.has("contentpreview") && (normalizedKeys.has("tool") || normalizedKeys.has("status"))) score += 2;
+  if (
+    normalizedKeys.has("tool") &&
+    normalizedKeys.has("status") &&
+    (normalizedKeys.has("contentpreview") ||
+      normalizedKeys.has("originalbytes") ||
+      normalizedKeys.has("shownbytes") ||
+      normalizedKeys.has("resulthash"))
+  ) {
+    score += 3;
+  }
+  if (
+    normalizedKeys.has("partial") &&
+    normalizedKeys.has("tool") &&
+    (normalizedKeys.has("contentpreview") || normalizedKeys.has("resulthash"))
+  ) {
+    score += 1;
+  }
   if (normalizedKeys.has("observation")) score += 2;
   if (normalizedKeys.has("arguments") && (normalizedKeys.has("tool") || normalizedKeys.has("name"))) score += 2;
   if (normalizedKeys.has("payload")) score += runtimeScore(value.payload) >= 3 ? 2 : 1;
@@ -326,6 +351,31 @@ function findJsonCandidates(text: string): JsonCandidate[] {
 function flushMarkdown(segments: AgentReplySegment[], text: string) {
   const cleaned = text.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
   if (cleaned) segments.push({ kind: "markdown", text: cleaned });
+}
+
+function stripInternalControlMessages(
+  text: string,
+  options?: { streaming?: boolean }
+): { text: string; suppressed: boolean } {
+  let suppressed = false;
+  let cleaned = text.replace(APPROVED_TOOL_EXECUTION_RE, (_match, prefix: string) => {
+    suppressed = true;
+    return prefix || "";
+  });
+  cleaned = cleaned.replace(APPROVAL_INSTRUCTION_RE, (_match, prefix: string) => {
+    suppressed = true;
+    return prefix || "";
+  });
+
+  if (options?.streaming) {
+    const match = APPROVED_TOOL_EXECUTION_TAIL_RE.exec(cleaned);
+    if (match && typeof match.index === "number") {
+      suppressed = true;
+      cleaned = cleaned.slice(0, match.index);
+    }
+  }
+
+  return { text: cleaned, suppressed };
 }
 
 function classifyJsonValue(value: unknown): AgentReplySegment | null {
@@ -451,11 +501,17 @@ export function segmentAgentReplyContent(
 ): AgentReplySegment[] {
   const stripped = stripToolCallMarkup(String(content || ""));
   if (!stripped.trim()) return [];
+  const controlMessages = stripInternalControlMessages(stripped, options);
+  if (!controlMessages.text.trim()) {
+    return controlMessages.suppressed ? [{ kind: "suppressed_runtime" }] : [];
+  }
   const runtimeTail = options?.streaming
-    ? stripStreamingRuntimeTail(stripped)
-    : { text: stripped, suppressed: false };
+    ? stripStreamingRuntimeTail(controlMessages.text)
+    : { text: controlMessages.text, suppressed: false };
   const segments = segmentClosedFences(runtimeTail.text);
-  if (runtimeTail.suppressed) segments.push({ kind: "suppressed_runtime" });
+  if (controlMessages.suppressed || runtimeTail.suppressed) {
+    segments.push({ kind: "suppressed_runtime" });
+  }
   return segments;
 }
 
@@ -491,6 +547,14 @@ export function normalizeAssistantDisplayText(
     .filter((part) => part.trim().length > 0)
     .join("\n\n")
     .trim();
+}
+
+export function isInternalAgentReplyContent(
+  content: string,
+  options?: { streaming?: boolean }
+): boolean {
+  const segments = segmentAgentReplyContent(content, options);
+  return segments.length > 0 && segments.every((segment) => segment.kind === "suppressed_runtime");
 }
 
 export function displaySafeRuntimePreview(value: string | null | undefined): string | null {

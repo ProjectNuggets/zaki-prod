@@ -134,6 +134,35 @@ describe("MessageBubble source chip", () => {
     expect(screen.queryByText(/raw terminal output/i)).not.toBeInTheDocument();
   });
 
+  it("hides gateway tool previews and approval observations in Agent replies", () => {
+    const message: Message = {
+      id: "gateway-json-leak-1",
+      role: "assistant",
+      content: [
+        "I now have enough market data.",
+        '{"tool":"web_search","status":"ok","partial":false,"original_bytes":2024,"shown_bytes":2024,"result_hash":"ec1462c0aa4d1909","content_preview":"Results for personal AI agents market"}',
+        "[Approved tool execution: id=1 tool=artifact_create status=succeeded] Output: Created artifact 'Personal AI Agent Market Report' (id=abc, kind=markdown, version=1, url=/api/v1/users/1/artifacts/abc)\nContinue your reasoning based on this tool result. Produce the next step for the user.",
+        "Done — your report is live in the side panel.",
+      ].join("\n\n"),
+    };
+
+    render(
+      <MessageBubble
+        message={message}
+        botMode
+        showSourceChip={false}
+        animate={false}
+      />
+    );
+
+    expect(screen.getByText("I now have enough market data.")).toBeInTheDocument();
+    expect(screen.getByText("Done — your report is live in the side panel.")).toBeInTheDocument();
+    expect(screen.queryByText(/web_search/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/content_preview/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Approved tool execution/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Continue your reasoning/i)).not.toBeInTheDocument();
+  });
+
   it("renders an explicit Telegram chip when a surface opts into source chips", () => {
     const message: Message = {
       id: "2",
