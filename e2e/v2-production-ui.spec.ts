@@ -56,7 +56,7 @@ test.describe("V2 production-final app surfaces", () => {
     await openInspectorIfNeeded(page);
     const inspector = page.locator(".zaki-agent-inspector").first();
     await expect(inspector).toBeVisible();
-    for (const label of ["Plan", "Cron", "Sources", "Artifacts", "Browser", "Trace"]) {
+    for (const label of ["Plan", "Cron", "Evidence", "Artifacts", "Browser", "Trace"]) {
       await expect(inspector.getByRole("tab", { name: new RegExp(label, "i") })).toBeVisible();
     }
     await expect(page.getByTestId("agent-narration-box")).toBeVisible();

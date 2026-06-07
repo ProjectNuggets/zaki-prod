@@ -752,6 +752,37 @@ async function mockLearning(page: Page) {
   };
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// REAL-NEEDS-DECISION (do not silently "fix" by weakening these tests).
+//
+// Every test below navigates to `/learn?view=…` and expects the full ZAKI Learn
+// workspace (LearningPage) to mount. On current main it never does: commit
+// 0fbf51b ("feat: close v2 production UI gate") deliberately replaced the
+// `/learn` route element `<LearningPage />` with a childless
+// `<ProductAccessGate productId="learning" mode="private_beta" />` (see
+// src/routes.tsx). So `/learn` now ALWAYS renders the "Private beta access" gate
+// and LearningPage is mounted nowhere in the app.
+//
+// This is intentional V1 product strategy, not a stray bug:
+//   • AGENTS.md §2 lists Learn under "Private beta or gated".
+//   • e2e/v2-production-ui.spec.ts:131 ("direct /learn route stays gated") and
+//     e2e/release-visibility.spec.ts:64 BOTH assert `/learn` renders
+//     `product-gate-learning` — they pass today and encode the gate contract.
+//   • ProductAccessGate has no "access granted → render children" path for
+//     `learning` (only `design` has one), so there is no test-settable signal
+//     (entitlement / localStorage / registry flag) that would mount LearningPage
+//     through the gate.
+//
+// Honestly reconciling this requires a PRODUCT/ARCHITECTURE decision, not a
+// test edit:
+//   (a) keep `/learn` gated for V1 → these parity tests should target a
+//       not-yet-existing beta-access entry point (and ProductAccessGate needs a
+//       learning children/grant path), or
+//   (b) expose LearningPage behind the gate when beta access is granted (new
+//       grant mechanism) and have these tests grant it.
+// Un-gating `/learn` outright is rejected: it violates AGENTS.md and breaks the
+// two gate-contract specs above. Left failing on purpose pending that decision.
+// ───────────────────────────────────────────────────────────────────────────
 test.describe("ZAKI Learn parity wiring", () => {
   test.beforeEach(async ({ page }) => {
     await mockAppShell(page);

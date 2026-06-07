@@ -127,11 +127,11 @@ async function mockAuthAndPricing(page: Page) {
   });
 
   await page.route("**/api/billing/checkout", async (route) => {
-    state.tier = "student";
+    state.tier = "agent";
     state.status = "active";
     await json(route, {
       success: true,
-      url: "/pricing/success?billing=success&plan=student&interval=monthly",
+      url: "/pricing/success?billing=success&plan=agent&interval=monthly",
     });
   });
 
@@ -153,7 +153,14 @@ test("user can sign in on pricing route and complete provider-selected checkout"
     window.localStorage.setItem("zaki:onboarding:v1:user@example.com", "done");
   });
 
-  await page.goto("/pricing?auth=signup&plan=student&interval=monthly&source=website_pricing");
+  // V1 commercial flow: a plan intent carried in the URL (plan + autostart)
+  // survives the in-pricing sign-in, then PricingPage auto-starts checkout. The
+  // legacy intermediate "Choose how you want to work with ZAKI" plan-picker and
+  // multi-provider modal are gone — Stripe is the only valid checkout provider
+  // for the new Agent/Learn/Complete catalog, so a single provider auto-starts.
+  await page.goto(
+    "/pricing?auth=signup&plan=agent&interval=monthly&autostart=1&source=website_pricing"
+  );
 
   await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();
   await page.getByRole("tab", { name: "Sign in" }).click();
@@ -163,13 +170,9 @@ test("user can sign in on pricing route and complete provider-selected checkout"
   await page.getByPlaceholder("Password").fill("Password123");
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.getByRole("heading", { name: "Choose how you want to work with ZAKI" })).toBeVisible();
-  await page.getByRole("button", { name: "Choose Personal" }).click();
-
-  await expect(page.getByText("Choose payment provider")).toBeVisible();
-  await page.getByRole("button", { name: /Stripe/ }).click();
-
+  // Sign-in success keeps the pricing intent (no bounce to "/"), and the
+  // autostart effect drives the Stripe checkout to the success surface.
   await expect(page).toHaveURL(/\/pricing\/success\?/);
-  await expect(page.getByText("Plan: Student")).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Congrats Paid User!/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /You’re set, Paid User/ })).toBeVisible();
+  await expect(page.getByText("Plan: ZAKI Agent")).toBeVisible();
 });

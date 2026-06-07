@@ -105,6 +105,18 @@ async function mockAppShell(page: Page) {
     });
   });
 
+  // Bare workspace-detail endpoint: unmocked it 401s and triggers the logout
+  // redirect (src/lib/api.ts), bouncing the thread view to the dashboard.
+  await page.route("**/workspace/*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        workspace: { id: 1, slug: "zaky", name: "ZAKI", description: "E2E Workspace" },
+      }),
+    });
+  });
+
   await page.route("**/workspace/*/thread/*/chats", async (route) => {
     await route.fulfill({
       status: 200,
@@ -225,6 +237,66 @@ async function mockAppShell(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ success: true }),
+    });
+  });
+
+  // The evolved Agent/Brain/commercial chrome now fetches these backend-auth
+  // endpoints from the chat workspace. They must be mocked: an unmocked 401 on a
+  // backend-auth route triggers logout + `window.location.href = "/"` (see
+  // src/lib/api.ts), which hard-navigates away from the thread and unmounts the
+  // memory toast before this spec can assert on it.
+  await page.route("**/api/products/registry", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        contractVersion: "e2e.v1",
+        products: [
+          {
+            productId: "spaces",
+            label: "ZAKI Chat",
+            productKind: "product",
+            state: "enabled",
+            lifecycle: "current",
+            route: "/spaces",
+            memoryScope: "workspace",
+          },
+          {
+            productId: "agent",
+            label: "ZAKI Agent",
+            productKind: "product",
+            state: "enabled",
+            lifecycle: "current",
+            route: "/agent",
+            memoryScope: "agent",
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.route("**/api/meter/status*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, products: {} }),
+    });
+  });
+
+  await page.route("**/api/agent/sessions*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ sessions: [] }),
+    });
+  });
+
+  await page.route("**/api/agent/brain/graph*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ nodes: [], edges: [] }),
     });
   });
 }
