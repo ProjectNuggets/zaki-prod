@@ -164,6 +164,44 @@ import {
   upsertDesignProjectProvisioning,
 } from "./design-project-store.js";
 import {
+  buildHireConfigErrorPayload,
+  buildHireDisabledPayload,
+  buildHireRouteUnavailablePayload,
+  classifyHireAutomationConsentRequirement,
+  isHireUserFacingPath,
+  isHireEnabled,
+  mapHireUpstreamFailure,
+  resolveCanonicalHireUserId,
+  sanitizeHireClientPayload,
+  sanitizeHireHealthPayload,
+  sanitizeHireOperatorPayload,
+  sanitizeHireUpstreamPayload,
+  shouldConsumeHireIngressQuota,
+} from "./hire-bff-contract.js";
+import {
+  buildHireAutomationAuditUnavailablePayload,
+  buildHireAutomationConsentRequiredPayload,
+  recordHireAutomationAuditEvent,
+  resolveHireAutomationConsent,
+} from "./hire-automation-consent.js";
+import { recordHireUsageEvent } from "./hire-usage-events.js";
+import {
+  HIRE_METERING_CONTRACT_VERSION,
+  buildHireMeterForwardHeaders,
+  buildHireMeterGrant,
+  buildHireMeterUnavailablePayload,
+  recordHireMeterReceipt,
+} from "./hire-metering-contract.js";
+import {
+  fetchHireDeploymentReadiness,
+  fetchHireOperatorProviderHealth,
+  fetchHireOperatorProviderSmoke,
+  fetchHireOperatorReadiness,
+  fetchHirePath,
+  fetchHireProxyPath,
+  getHireBase,
+} from "./hire-client.js";
+import {
   completeLearningStudyTask,
   createLearningStudyTask,
   createLearningStudyPlan,
@@ -202,6 +240,7 @@ import {
   APP_CHAT_SURFACE,
   DEFAULT_ANONYMOUS_SPACES_DAILY_PROMPT_BUCKET,
   DEFAULT_ANONYMOUS_SPACES_DAILY_PROMPT_LIMIT,
+  HIRE_SURFACE,
   LEARNING_SURFACE,
   ZAKI_BOT_SURFACE,
   buildDailyLimitExceededPayload,
@@ -253,6 +292,10 @@ import {
 } from "./learning-retention.js";
 import { buildLearningDisasterRecoveryStatus } from "./learning-disaster-recovery.js";
 import { buildLearningDeploymentReadinessStatus } from "./learning-deployment-readiness.js";
+import {
+  buildHireDeploymentReadinessStatus,
+  buildHireUserReadinessStatus,
+} from "./hire-deployment-readiness.js";
 import {
   normalizeLearningOperatorTestResult,
   redactLearningOperatorPayload,
@@ -510,6 +553,30 @@ const LEARNING_ENGINE_STREAM_TIMEOUT_MS = Math.max(
   Number(process.env.LEARNING_ENGINE_STREAM_TIMEOUT_MS || 300_000)
 );
 const ZAKI_LEARNING_MAX_REQUEST_BYTES = resolveLearningMaxRequestBytes(process.env);
+const HIRE_ENGINE_BASE_URL = (
+  process.env.HIRE_ENGINE_BASE_URL ||
+  process.env.ZAKI_HIRE_ENGINE_BASE_URL ||
+  ""
+).trim().replace(/\/+$/, "");
+const HIRE_ENGINE_INTERNAL_TOKEN = (
+  process.env.HIRE_ENGINE_INTERNAL_TOKEN ||
+  process.env.ZAKI_HIRE_ENGINE_INTERNAL_TOKEN ||
+  ""
+).trim();
+const ZAKI_HIRE_ENABLED = isHireEnabled(process.env.ZAKI_HIRE_ENABLED);
+const HIRE_ENGINE_REQUEST_TIMEOUT_MS = Math.max(
+  1_000,
+  Number(process.env.HIRE_ENGINE_REQUEST_TIMEOUT_MS || 30_000)
+);
+const HIRE_ENGINE_STREAM_TIMEOUT_MS = Math.max(
+  5_000,
+  Number(process.env.HIRE_ENGINE_STREAM_TIMEOUT_MS || 300_000)
+);
+const HIRE_METER_GRANT_SIGNING_KEY = (
+  process.env.ZAKI_METER_GRANT_SIGNING_SECRET ||
+  process.env.ZAKI_HIRE_METER_SIGNING_KEY ||
+  ""
+).trim();
 const ZAKI_PUBLIC_URL = (process.env.ZAKI_PUBLIC_URL || "").trim();
 const ZAKI_APP_URL = (process.env.ZAKI_APP_URL || "").trim();
 const ZAKI_EMAIL_LOGO_URL = (process.env.ZAKI_EMAIL_LOGO_URL || "").trim();
@@ -643,6 +710,7 @@ const ANONYMOUS_SPACES_QUOTA_CONFIG = {
     : DEFAULT_ANONYMOUS_SPACES_DAILY_PROMPT_LIMIT,
 };
 const LEARNING_QUOTA_CONFIG = getSurfaceQuotaConfig(process.env, LEARNING_SURFACE);
+const HIRE_QUOTA_CONFIG = getSurfaceQuotaConfig(process.env, HIRE_SURFACE);
 const ZAKI_BOT_QUOTA_CONFIG = getSurfaceQuotaConfig(process.env, ZAKI_BOT_SURFACE);
 const AGENT_HISTORY_MODE_DEFAULT = "merged";
 const ZAKI_BOT_SPACE_ID = "zaki-bot";
@@ -715,6 +783,7 @@ const billingAlertDispatcher = createBillingAlertDispatcher({
 let runtimeRateLimitSettings = {
   appChatDailyPromptLimit: APP_CHAT_QUOTA_CONFIG.limit,
   learningDailyPromptLimit: LEARNING_QUOTA_CONFIG.limit,
+  hireWeeklyPromptLimit: HIRE_QUOTA_CONFIG.limit,
   zakiBotDailyPromptLimit: ZAKI_BOT_QUOTA_CONFIG.limit,
   agentPerMinuteLimit: DEFAULT_AGENT_ROUTE_LIMIT_PER_MINUTE,
 };
@@ -2129,7 +2198,19 @@ app.use(
       return callback(new Error("Origin not allowed"));
     },
     credentials: true,
-    exposedHeaders: ["X-Request-Id", "X-Zaki-Agent-Base", "X-Zaki-Mode", "X-Zaki-Web-Search", "X-Zaki-Session-Upgrade"],
+    exposedHeaders: [
+      "X-Request-Id",
+      "X-Zaki-Agent-Base",
+      "X-Zaki-Mode",
+      "X-Zaki-Web-Search",
+      "X-Zaki-Session-Upgrade",
+      "X-Zaki-Quota-Limit",
+      "X-Zaki-Quota-Remaining",
+      "X-Zaki-Quota-Reset-At",
+      "X-Zaki-Quota-Surface",
+      "X-Zaki-Quota-Bucket",
+      "X-Zaki-Quota-Period",
+    ],
   })
 );
 
@@ -2911,6 +2992,30 @@ function copyResponseHeaders(upstream, res) {
   });
 }
 
+function copyHireResponseHeaders(upstream, res) {
+  upstream.headers.forEach((value, key) => {
+    const lower = key.toLowerCase();
+    if (
+      [
+        "connection",
+        "transfer-encoding",
+        "content-encoding",
+        "content-length",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "set-cookie",
+        "te",
+        "trailers",
+        "upgrade",
+      ].includes(lower)
+    ) {
+      return;
+    }
+    res.setHeader(key, value);
+  });
+}
+
 function sanitizeAgentUpstreamPayload(payload) {
   if (payload == null) return null;
   if (typeof payload === "string") {
@@ -3127,6 +3232,7 @@ const AdminRateLimitsUpdateSchema = z
   .object({
     appChatDailyPromptLimit: z.coerce.number().int().min(1).max(10000).optional(),
     learningDailyPromptLimit: z.coerce.number().int().min(1).max(10000).optional(),
+    hireWeeklyPromptLimit: z.coerce.number().int().min(1).max(10000).optional(),
     zakiBotDailyPromptLimit: z.coerce.number().int().min(1).max(10000).optional(),
     agentPerMinuteLimit: z.coerce.number().int().min(1).max(10000).optional(),
   })
@@ -3158,6 +3264,7 @@ const ProductEventSchema = z.object({
     "website_pricing",
     "website_product_agent",
     "website_product_learn",
+    "website_product_hire",
     "website_product_complete",
     "website_product_spaces",
     "chat_input",
@@ -3167,7 +3274,7 @@ const ProductEventSchema = z.object({
   ]),
   language: z.enum(["en", "ar"]).optional(),
   viewport: z.enum(["mobile", "tablet", "desktop"]).optional(),
-  plan: z.enum(["free", "student", "personal", "agent", "learn", "complete"]).nullable().optional(),
+  plan: z.enum(["free", "student", "personal", "agent", "learn", "hire", "complete"]).nullable().optional(),
   interval: z.enum(["monthly", "yearly"]).nullable().optional(),
   timestamp: z.string().max(120).optional(),
 });
@@ -3842,6 +3949,10 @@ function sanitizeRuntimeRateLimitSettings(raw = null) {
       source.learningDailyPromptLimit,
       LEARNING_QUOTA_CONFIG.limit
     ),
+    hireWeeklyPromptLimit: normalizeRateLimitValue(
+      source.hireWeeklyPromptLimit,
+      HIRE_QUOTA_CONFIG.limit
+    ),
     zakiBotDailyPromptLimit: normalizeRateLimitValue(
       source.zakiBotDailyPromptLimit,
       ZAKI_BOT_QUOTA_CONFIG.limit
@@ -3861,6 +3972,9 @@ function buildRateLimitSettingsResponse(settings = runtimeRateLimitSettings) {
     learningDailyPromptLimit: settings.learningDailyPromptLimit,
     learningDailyPromptBucket: LEARNING_QUOTA_CONFIG.bucket,
     learningPromptPeriod: LEARNING_QUOTA_CONFIG.period || "week",
+    hireWeeklyPromptLimit: settings.hireWeeklyPromptLimit,
+    hirePromptBucket: HIRE_QUOTA_CONFIG.bucket,
+    hirePromptPeriod: HIRE_QUOTA_CONFIG.period || "week",
     zakiBotDailyPromptLimit: settings.zakiBotDailyPromptLimit,
     zakiBotDailyPromptBucket: ZAKI_BOT_QUOTA_CONFIG.bucket,
     zakiBotPromptPeriod: ZAKI_BOT_QUOTA_CONFIG.period || "week",
@@ -3914,6 +4028,14 @@ function resolveSurfaceQuotaConfig(surface = APP_CHAT_SURFACE) {
       period: LEARNING_QUOTA_CONFIG.period || "week",
     };
   }
+  if (normalizedSurface === HIRE_SURFACE) {
+    return {
+      surface: HIRE_SURFACE,
+      bucket: HIRE_QUOTA_CONFIG.bucket,
+      limit: runtimeRateLimitSettings.hireWeeklyPromptLimit,
+      period: HIRE_QUOTA_CONFIG.period || "week",
+    };
+  }
   if (normalizedSurface === ZAKI_BOT_SURFACE) {
     return {
       surface: ZAKI_BOT_SURFACE,
@@ -3942,6 +4064,8 @@ function buildUserQuotaContext(zakiUser, { surface = APP_CHAT_SURFACE } = {}) {
     unlimited = Boolean(effective?.products?.agent?.access);
   } else if (!unlimited && normalizedSurface === LEARNING_SURFACE) {
     unlimited = Boolean(effective?.products?.learn?.access);
+  } else if (!unlimited && normalizedSurface === HIRE_SURFACE) {
+    unlimited = Boolean(effective?.products?.hire?.access);
   } else if (!unlimited) {
     unlimited =
       Boolean(effective?.products?.spaces?.uncapped) ||
@@ -7604,6 +7728,7 @@ const CheckoutSchema = z.object({
           "website_pricing",
           "website_product_agent",
           "website_product_learn",
+          "website_product_hire",
           "website_product_complete",
           "website_product_spaces",
           "chat_input",
@@ -7904,6 +8029,9 @@ app.patch("/api/admin/rate-limits", express.json({ limit: "50kb" }), async (req,
     }
     if (validation.data.learningDailyPromptLimit !== undefined) {
       patch.learningDailyPromptLimit = validation.data.learningDailyPromptLimit;
+    }
+    if (validation.data.hireWeeklyPromptLimit !== undefined) {
+      patch.hireWeeklyPromptLimit = validation.data.hireWeeklyPromptLimit;
     }
     if (validation.data.zakiBotDailyPromptLimit !== undefined) {
       patch.zakiBotDailyPromptLimit = validation.data.zakiBotDailyPromptLimit;
@@ -11854,6 +11982,411 @@ function assertLearningRouteEnabled(req, res) {
     return false;
   }
   return true;
+}
+
+async function requireHireContext(req, res, next) {
+  const existingUserId = String(req.hireUserId || "").trim();
+  if (existingUserId) {
+    next();
+    return;
+  }
+
+  const authResult = await requireAuthUser(req, res);
+  if (!authResult) return;
+
+  const userId = resolveCanonicalHireUserId(authResult);
+  if (!userId) {
+    res.status(400).json({ error: "Invalid user.", code: "invalid_user_id" });
+    return;
+  }
+
+  req.hireAuthResult = authResult;
+  req.hireUserId = userId;
+  next();
+}
+
+function assertHireRouteEnabled(req, res) {
+  const requestId = getOrCreateRequestId(req);
+  if (!ZAKI_HIRE_ENABLED) {
+    res.status(404).json(buildHireDisabledPayload(requestId));
+    return false;
+  }
+  if (!getHireBase(HIRE_ENGINE_BASE_URL)) {
+    res
+      .status(500)
+      .json(buildHireConfigErrorPayload("HIRE_ENGINE_BASE_URL is not configured.", requestId));
+    return false;
+  }
+  if (!HIRE_ENGINE_INTERNAL_TOKEN) {
+    res
+      .status(500)
+      .json(buildHireConfigErrorPayload("HIRE_ENGINE_INTERNAL_TOKEN is not configured.", requestId));
+    return false;
+  }
+  return true;
+}
+
+function hireClientOptions(req, label) {
+  return {
+    baseUrl: HIRE_ENGINE_BASE_URL,
+    internalToken: HIRE_ENGINE_INTERNAL_TOKEN,
+    userId: String(req.hireUserId || ""),
+    requestId: getOrCreateRequestId(req),
+    fetchWithTimeout,
+    timeoutMs: HIRE_ENGINE_REQUEST_TIMEOUT_MS,
+    label,
+    extraHeaders: buildHireMeterForwardHeaders(req.hireMeterGrant),
+  };
+}
+
+function setHireMeterGrantHeaders(res, grant) {
+  if (!grant?.grantId) return;
+  res.setHeader("X-Zaki-Meter-Contract", HIRE_METERING_CONTRACT_VERSION);
+  res.setHeader("X-Zaki-Meter-Grant-Id", grant.grantId);
+  res.setHeader("X-Zaki-Meter-Action", grant.action || "");
+  if (grant.expiresAt) {
+    res.setHeader("X-Zaki-Meter-Grant-Expires-At", grant.expiresAt);
+  }
+}
+
+function hireForwardQueryString(req, blockedKeys = []) {
+  const blocked = new Set(blockedKeys.map((key) => String(key).toLowerCase()));
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(req.query || {})) {
+    if (blocked.has(String(key).toLowerCase())) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item !== undefined && item !== null) qs.append(key, String(item));
+      }
+    } else if (value !== undefined && value !== null) {
+      qs.set(key, String(value));
+    }
+  }
+  const qstr = qs.toString();
+  return qstr ? `?${qstr}` : "";
+}
+
+function normalizeHireProxyPath(req) {
+  const raw = String(req.originalUrl || req.path || req.url || "").split("?")[0].split("#")[0];
+  const pathValue = raw.startsWith("/") ? raw : `/${raw}`;
+  return pathValue.startsWith("/api/hire")
+    ? pathValue.slice("/api/hire".length) || "/"
+    : pathValue;
+}
+
+function hireTargetPathFromRequest(req) {
+  const hirePath = normalizeHireProxyPath(req);
+  if (hirePath === "/internal" || hirePath.startsWith("/internal/")) {
+    throw new Error("invalid_hire_path");
+  }
+  const targetPath = hirePath === "/" ? "/api/v1" : `/api/v1${hirePath}`;
+  return `${targetPath}${hireForwardQueryString(req)}`;
+}
+
+function shouldProxyHireRawBody(req) {
+  const method = String(req.method || "").trim().toUpperCase();
+  if (["GET", "HEAD"].includes(method)) return false;
+  const contentType = String(req.headers?.["content-type"] || "").toLowerCase();
+  return (
+    contentType.includes("multipart/form-data") ||
+    contentType.includes("application/octet-stream")
+  );
+}
+
+function enforceHireProxyPolicy(req, res, next) {
+  if (isHireUserFacingPath(req)) {
+    next();
+    return;
+  }
+  res.status(404).json(buildHireRouteUnavailablePayload(getOrCreateRequestId(req)));
+}
+
+function enforceHireRouteEnabled(req, res, next) {
+  if (!assertHireRouteEnabled(req, res)) return;
+  next();
+}
+
+async function enforceHireAutomationConsentAudit(req, res, next) {
+  const requirement = classifyHireAutomationConsentRequirement(req);
+  if (!requirement) {
+    next();
+    return;
+  }
+
+  const requestId = getOrCreateRequestId(req);
+  const consent = resolveHireAutomationConsent(req, requirement);
+  if (!consent.accepted) {
+    try {
+      await recordHireAutomationAuditEvent({
+        dbQuery,
+        zakiUser: req.hireAuthResult?.zakiUser,
+        requirement,
+        status: "blocked_consent_missing",
+        requestId,
+        consentSource: consent.source,
+        reason: consent.reason,
+      });
+    } catch (auditError) {
+      logStructured("warn", "hire.automation.audit_blocked_persist_failed", {
+        requestId,
+        action: requirement.action,
+        route: requirement.routeTemplate,
+        message: auditError?.message || String(auditError),
+      });
+    }
+    res.status(428).json(buildHireAutomationConsentRequiredPayload({ requestId, requirement }));
+    return;
+  }
+
+  try {
+    await recordHireAutomationAuditEvent({
+      dbQuery,
+      zakiUser: req.hireAuthResult?.zakiUser,
+      requirement,
+      status: "consented",
+      requestId,
+      consentSource: consent.source,
+    });
+  } catch (auditError) {
+    logStructured("error", "hire.automation.audit_persist_failed", {
+      requestId,
+      action: requirement.action,
+      route: requirement.routeTemplate,
+      message: auditError?.message || String(auditError),
+    });
+    res.status(503).json(buildHireAutomationAuditUnavailablePayload(requestId));
+    return;
+  }
+
+  next();
+}
+
+async function enforceHirePromptQuotaForIngress(req, res, next) {
+  if (!shouldConsumeHireIngressQuota(req)) {
+    next();
+    return;
+  }
+  if (!assertHireRouteEnabled(req, res)) return;
+  const requestId = getOrCreateRequestId(req);
+  req.requestId = requestId;
+  try {
+    const quotaDecision = await enforcePromptQuotaForIngress({
+      zakiUser: req.hireAuthResult?.zakiUser,
+      res,
+      surface: HIRE_SURFACE,
+      consumePromptQuotaForUser,
+      setPromptQuotaHeaders,
+    });
+    if (!quotaDecision.allowed) {
+      res.status(quotaDecision.status).json(quotaDecision.payload);
+      return;
+    }
+    const meterGrant = buildHireMeterGrant({
+      req,
+      quotaDecision,
+      signingKey: HIRE_METER_GRANT_SIGNING_KEY,
+      productState: "enabled",
+    });
+    if (!meterGrant) {
+      throw new Error("hire_meter_grant_not_applicable");
+    }
+    req.hireMeterGrant = meterGrant;
+    req.hireQuotaDecision = quotaDecision;
+    req.hireMeterReceiptStartedAt = Date.now();
+    setHireMeterGrantHeaders(res, meterGrant);
+    try {
+      await recordHireUsageEvent({
+        req,
+        quotaDecision,
+        requestId,
+        dbQuery,
+        logStructured,
+      });
+    } catch (usageError) {
+      logStructured("error", "hire.usage.record_failed", {
+        requestId,
+        route: String(req.originalUrl || req.path || "").split("?")[0].split("#")[0],
+        method: req.method,
+        message: usageError?.message || String(usageError),
+      });
+    }
+    req.hireQuotaChecked = true;
+    next();
+  } catch (error) {
+    console.error("[Hire] Quota check error:", {
+      requestId,
+      route: req.originalUrl,
+      method: req.method,
+      error: error?.message || "Hire quota check failed.",
+    });
+    res.status(503).json({
+      ...buildHireMeterUnavailablePayload(requestId),
+    });
+  }
+}
+
+async function maybeRecordHireMeterReceipt({
+  req,
+  upstreamStatus,
+  finalStatus,
+  responsePayload = null,
+  upstreamHeaders = null,
+} = {}) {
+  if (!req?.hireMeterGrant || req.hireMeterReceiptRecorded) return;
+  req.hireMeterReceiptRecorded = true;
+  try {
+    await recordHireMeterReceipt({
+      req,
+      grant: req.hireMeterGrant,
+      quotaDecision: req.hireQuotaDecision,
+      upstreamStatus,
+      finalStatus,
+      responsePayload,
+      upstreamHeaders,
+      durationMs: Date.now() - Number(req.hireMeterReceiptStartedAt || Date.now()),
+      dbQuery,
+      logStructured,
+    });
+  } catch (receiptError) {
+    logStructured("error", "hire.meter.receipt_failed", {
+      requestId: getOrCreateRequestId(req),
+      grantId: req.hireMeterGrant?.grantId || null,
+      action: req.hireMeterGrant?.action || null,
+      message: receiptError?.message || String(receiptError),
+    });
+  }
+}
+
+async function pipeHireResponse(req, res, upstream) {
+  const requestId = getOrCreateRequestId(req);
+  if (!upstream.ok) {
+    const mapped = mapHireUpstreamFailure(upstream.status, requestId);
+    if (mapped) {
+      await maybeRecordHireMeterReceipt({
+        req,
+        upstreamStatus: upstream.status,
+        upstreamHeaders: upstream.headers,
+      });
+      res.status(mapped.status).json(mapped.body);
+      return;
+    }
+  }
+
+  const contentType = String(upstream.headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("application/json")) {
+    try {
+      const raw = await upstream.text();
+      const payload = raw ? JSON.parse(raw) : null;
+      const sanitizedPayload =
+        normalizeHireProxyPath(req) === "/health"
+          ? sanitizeHireHealthPayload(payload)
+          : sanitizeHireUpstreamPayload(payload);
+      await maybeRecordHireMeterReceipt({
+        req,
+        upstreamStatus: upstream.status,
+        responsePayload: payload,
+        upstreamHeaders: upstream.headers,
+      });
+      res.status(upstream.status).json(sanitizedPayload);
+      return;
+    } catch (error) {
+      await maybeRecordHireMeterReceipt({
+        req,
+        upstreamStatus: upstream.status,
+        finalStatus: 502,
+        upstreamHeaders: upstream.headers,
+      });
+      console.warn("[Hire] JSON response sanitizer failed:", {
+        requestId,
+        status: upstream.status,
+        error: error?.message || "Unable to sanitize Hire JSON response.",
+      });
+      res.status(502).json({
+        code: "hire_invalid_upstream_json",
+        error: "Hire upstream returned invalid JSON.",
+        message: "Hire is temporarily unavailable.",
+        retryable: true,
+        requestId,
+      });
+      return;
+    }
+  }
+
+  await maybeRecordHireMeterReceipt({
+    req,
+    upstreamStatus: upstream.status,
+    upstreamHeaders: upstream.headers,
+  });
+  res.status(upstream.status);
+  copyHireResponseHeaders(upstream, res);
+  if (!upstream.body) {
+    res.end();
+    return;
+  }
+  pipeReadableToResponse(Readable.fromWeb(upstream.body), res, "Hire upstream response");
+}
+
+async function proxyHireRequest(req, res, targetPath, {
+  method = req.method,
+  body = undefined,
+  label = "Hire upstream request",
+  timeoutMs = HIRE_ENGINE_REQUEST_TIMEOUT_MS,
+} = {}) {
+  if (!assertHireRouteEnabled(req, res)) return;
+  const verb = String(method || req.method || "GET").toUpperCase();
+  try {
+    const upstream = shouldProxyHireRawBody(req) && body === undefined
+      ? await fetchHireProxyPath({
+          ...hireClientOptions(req, label),
+          path: targetPath,
+          req,
+          method: verb,
+          timeoutMs,
+        })
+      : await fetchHirePath({
+          ...hireClientOptions(req, label),
+          path: targetPath,
+          method: verb,
+          body: ["GET", "HEAD"].includes(verb)
+            ? undefined
+            : body === undefined
+              ? sanitizeHireClientPayload(req.body || {})
+              : body,
+          timeoutMs,
+        });
+    await pipeHireResponse(req, res, upstream);
+  } catch (error) {
+    const requestId = getOrCreateRequestId(req);
+    if (
+      error?.message === "HIRE_ENGINE_BASE_URL is not configured." ||
+      error?.message === "HIRE_ENGINE_INTERNAL_TOKEN is not configured."
+    ) {
+      res.status(500).json(buildHireConfigErrorPayload(error.message, requestId));
+      return;
+    }
+    if (error?.message === "invalid_hire_path") {
+      res.status(400).json({
+        code: "invalid_hire_path",
+        error: "Invalid Hire path.",
+        message: "The requested Hire path is invalid.",
+        requestId,
+      });
+      return;
+    }
+    console.error("[Hire] Upstream proxy error:", {
+      requestId,
+      route: req.originalUrl,
+      method: verb,
+      error: error?.message || "Hire request failed.",
+    });
+    res.status(503).json({
+      code: "hire_unavailable",
+      error: "Hire is unavailable.",
+      message: "Hire is temporarily unavailable.",
+      retryable: true,
+      requestId,
+    });
+  }
 }
 
 function learningClientOptions(req, label) {
@@ -17475,6 +18008,360 @@ registerLearningJsonProxyRoute(
       `/api/v1/tutorbot/${encodeURIComponent(req.params.agentId)}/history`
     ),
   { label: "Learning tutor agent history request" }
+);
+
+// =============================================================================
+// HIRE ENGINE BFF
+// =============================================================================
+
+app.get("/api/internal/hire/status", async (req, res) => {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+
+    res.status(200).json({
+      success: true,
+      hire: {
+        enabled: ZAKI_HIRE_ENABLED,
+        configured: Boolean(getHireBase(HIRE_ENGINE_BASE_URL) && HIRE_ENGINE_INTERNAL_TOKEN),
+        baseUrlConfigured: Boolean(getHireBase(HIRE_ENGINE_BASE_URL)),
+        internalTokenConfigured: Boolean(HIRE_ENGINE_INTERNAL_TOKEN),
+        requestTimeoutMs: HIRE_ENGINE_REQUEST_TIMEOUT_MS,
+        streamTimeoutMs: HIRE_ENGINE_STREAM_TIMEOUT_MS,
+        requestId: getOrCreateRequestId(req),
+      },
+    });
+  } catch (error) {
+    console.error("[Hire] Internal status error:", error);
+    res.status(500).json({ error: error?.message || "Hire status failed." });
+  }
+});
+
+async function handleHireOperatorHandshake(req, res, {
+  fetcher,
+  payloadKey,
+  label,
+  timeoutMs = Math.min(HIRE_ENGINE_REQUEST_TIMEOUT_MS, 10_000),
+}) {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+
+    const requestId = getOrCreateRequestId(req);
+    const userId = resolveCanonicalHireUserId(authResult);
+    const configured = Boolean(getHireBase(HIRE_ENGINE_BASE_URL) && HIRE_ENGINE_INTERNAL_TOKEN);
+    const basePayload = {
+      success: true,
+      enabled: ZAKI_HIRE_ENABLED,
+      configured,
+      baseUrlConfigured: Boolean(getHireBase(HIRE_ENGINE_BASE_URL)),
+      internalTokenConfigured: Boolean(HIRE_ENGINE_INTERNAL_TOKEN),
+      requestTimeoutMs: HIRE_ENGINE_REQUEST_TIMEOUT_MS,
+      requestId,
+    };
+
+    if (!ZAKI_HIRE_ENABLED || !configured || !userId) {
+      return res.status(200).json({
+        ...basePayload,
+        ok: false,
+        code: !ZAKI_HIRE_ENABLED
+          ? "zaki_hire_disabled"
+          : !configured
+            ? "zaki_hire_bff_config"
+            : "zaki_hire_user_id",
+        [payloadKey]: null,
+      });
+    }
+
+    const upstream = await fetcher({
+      baseUrl: HIRE_ENGINE_BASE_URL,
+      internalToken: HIRE_ENGINE_INTERNAL_TOKEN,
+      userId,
+      requestId,
+      fetchWithTimeout,
+      timeoutMs,
+      label,
+    });
+    const payload = await upstream.json().catch(() => null);
+    const sanitized = sanitizeHireOperatorPayload(payload || {});
+
+    if (!upstream.ok) {
+      const mapped = mapHireUpstreamFailure(upstream.status, requestId);
+      return res.status(200).json({
+        ...basePayload,
+        ok: false,
+        upstreamStatus: upstream.status,
+        upstreamError: {
+          status: upstream.status,
+          message: mapped?.body?.message || `${label} failed.`,
+        },
+        [payloadKey]: sanitized,
+      });
+    }
+
+    return res.status(200).json({
+      ...basePayload,
+      ok: Boolean(sanitized?.ok ?? sanitized?.ready ?? upstream.ok),
+      upstreamStatus: upstream.status,
+      [payloadKey]: sanitized,
+    });
+  } catch (error) {
+    console.error("[Hire] Operator handshake error:", {
+      requestId: getOrCreateRequestId(req),
+      label,
+      error: error?.message || "Unable to load Hire operator handshake.",
+    });
+    res.status(503).json({
+      code: "hire_unavailable",
+      error: "Hire is unavailable.",
+      message: "Hire operator handshake could not be checked.",
+      retryable: true,
+      requestId: getOrCreateRequestId(req),
+    });
+  }
+}
+
+app.get("/api/internal/hire/deployment-readiness", async (req, res) => {
+  try {
+    const authResult = await requireSuperAdminUser(req, res);
+    if (!authResult) return;
+
+    const requestId = getOrCreateRequestId(req);
+    const userId = resolveCanonicalHireUserId(authResult);
+    const configured = Boolean(getHireBase(HIRE_ENGINE_BASE_URL) && HIRE_ENGINE_INTERNAL_TOKEN);
+    const buildZakiReadiness = (engineReadiness) =>
+      buildHireDeploymentReadinessStatus({
+        hireEnabled: ZAKI_HIRE_ENABLED,
+        hireConfigured: configured,
+        engineReadiness,
+      });
+    const basePayload = {
+      success: true,
+      enabled: ZAKI_HIRE_ENABLED,
+      configured,
+      baseUrlConfigured: Boolean(getHireBase(HIRE_ENGINE_BASE_URL)),
+      internalTokenConfigured: Boolean(HIRE_ENGINE_INTERNAL_TOKEN),
+      requestTimeoutMs: HIRE_ENGINE_REQUEST_TIMEOUT_MS,
+      requestId,
+    };
+
+    if (!ZAKI_HIRE_ENABLED || !configured || !userId) {
+      return res.status(200).json({
+        ...basePayload,
+        ok: false,
+        deploymentReadiness: buildZakiReadiness({
+          ready: false,
+          status: "not_ready",
+          blocking: [
+            !ZAKI_HIRE_ENABLED
+              ? "zaki_hire_disabled"
+              : !configured
+                ? "zaki_hire_bff_config"
+                : "zaki_hire_user_id",
+          ],
+          degraded: [],
+        }),
+      });
+    }
+
+    const upstream = await fetchHireDeploymentReadiness({
+      baseUrl: HIRE_ENGINE_BASE_URL,
+      internalToken: HIRE_ENGINE_INTERNAL_TOKEN,
+      userId,
+      requestId,
+      fetchWithTimeout,
+      timeoutMs: Math.min(HIRE_ENGINE_REQUEST_TIMEOUT_MS, 10_000),
+    });
+    const payload = await upstream.json().catch(() => null);
+    const sanitized = sanitizeHireUpstreamPayload(payload || {});
+    if (!upstream.ok) {
+      const mapped = mapHireUpstreamFailure(upstream.status, requestId);
+      const deploymentReadiness = buildZakiReadiness({
+        ready: false,
+        status: "not_ready",
+        blocking: ["hire_engine_upstream"],
+        degraded: [],
+      });
+      return res.status(200).json({
+        ...basePayload,
+        ok: false,
+        upstreamStatus: upstream.status,
+        deploymentReadiness,
+        upstreamError: {
+          status: upstream.status,
+          message: mapped?.body?.message || "Hire engine readiness request failed.",
+        },
+      });
+    }
+
+    const deploymentReadiness = buildZakiReadiness(sanitized);
+    return res.status(200).json({
+      ...basePayload,
+      ok: Boolean(deploymentReadiness?.ready),
+      upstreamStatus: upstream.status,
+      deploymentReadiness,
+      upstreamDeploymentReadiness: sanitized,
+    });
+  } catch (error) {
+    console.error("[Hire] Deployment readiness error:", {
+      requestId: getOrCreateRequestId(req),
+      error: error?.message || "Unable to load Hire deployment readiness.",
+    });
+    res.status(503).json({
+      code: "hire_unavailable",
+      error: "Hire is unavailable.",
+      message: "Hire deployment readiness could not be checked.",
+      retryable: true,
+      requestId: getOrCreateRequestId(req),
+    });
+  }
+});
+
+app.get("/api/internal/hire/operator/readiness", async (req, res) => {
+  await handleHireOperatorHandshake(req, res, {
+    fetcher: fetchHireOperatorReadiness,
+    payloadKey: "operatorReadiness",
+    label: "Hire operator readiness request",
+  });
+});
+
+app.get("/api/internal/hire/operator/provider-health", async (req, res) => {
+  await handleHireOperatorHandshake(req, res, {
+    fetcher: fetchHireOperatorProviderHealth,
+    payloadKey: "providerHealth",
+    label: "Hire operator provider health request",
+  });
+});
+
+app.post("/api/internal/hire/operator/provider-smoke", async (req, res) => {
+  await handleHireOperatorHandshake(req, res, {
+    fetcher: fetchHireOperatorProviderSmoke,
+    payloadKey: "providerSmoke",
+    label: "Hire operator provider smoke request",
+    timeoutMs: Math.min(HIRE_ENGINE_STREAM_TIMEOUT_MS, 45_000),
+  });
+});
+
+app.get("/api/hire/readiness", requireHireContext, async (req, res) => {
+  const requestId = getOrCreateRequestId(req);
+  const configured = Boolean(getHireBase(HIRE_ENGINE_BASE_URL) && HIRE_ENGINE_INTERNAL_TOKEN);
+  const base = {
+    hireEnabled: ZAKI_HIRE_ENABLED,
+    hireConfigured: configured,
+    requestId,
+  };
+
+  if (!ZAKI_HIRE_ENABLED || !configured) {
+    return res.status(200).json(buildHireUserReadinessStatus(base));
+  }
+
+  try {
+    const options = hireClientOptions(req, "Hire user readiness request");
+    const [healthResult, statusResult, readinessResult] = await Promise.allSettled([
+      fetchHirePath({
+        ...options,
+        path: "/health",
+        label: "Hire user readiness health probe",
+        timeoutMs: Math.min(HIRE_ENGINE_REQUEST_TIMEOUT_MS, 5_000),
+      }),
+      fetchHirePath({
+        ...options,
+        path: "/api/v1/status",
+        label: "Hire user readiness task status probe",
+        timeoutMs: Math.min(HIRE_ENGINE_REQUEST_TIMEOUT_MS, 5_000),
+      }),
+      fetchHireDeploymentReadiness({
+        ...options,
+        label: "Hire user readiness deployment probe",
+        timeoutMs: Math.min(HIRE_ENGINE_REQUEST_TIMEOUT_MS, 10_000),
+      }),
+    ]);
+
+    let engineHealth = null;
+    let engineStatus = null;
+    let deploymentReadiness = null;
+    let error = null;
+
+    if (healthResult.status === "fulfilled" && healthResult.value.ok) {
+      engineHealth = sanitizeHireUpstreamPayload(await healthResult.value.json().catch(() => ({})));
+    } else {
+      error = "hire_engine_health_unavailable";
+    }
+
+    if (statusResult.status === "fulfilled" && statusResult.value.ok) {
+      engineStatus = sanitizeHireUpstreamPayload(await statusResult.value.json().catch(() => ({})));
+    }
+
+    if (readinessResult.status === "fulfilled" && readinessResult.value.ok) {
+      deploymentReadiness = sanitizeHireUpstreamPayload(await readinessResult.value.json().catch(() => ({})));
+    } else {
+      deploymentReadiness = {
+        ready: false,
+        status: "not_ready",
+        blocking: ["hire_engine_readiness_unavailable"],
+        degraded: [],
+      };
+    }
+
+    return res.status(200).json(buildHireUserReadinessStatus({
+      ...base,
+      engineHealth,
+      engineStatus,
+      deploymentReadiness,
+      error,
+    }));
+  } catch (error) {
+    console.error("[Hire] User readiness error:", {
+      requestId,
+      error: error?.message || "Unable to load Hire readiness.",
+    });
+    return res.status(200).json(buildHireUserReadinessStatus({
+      ...base,
+      error: "hire_unavailable",
+    }));
+  }
+});
+
+app.get("/api/hire/health", requireHireContext, async (req, res) => {
+  await proxyHireRequest(req, res, "/health", {
+    method: "GET",
+    label: "Hire health probe",
+    timeoutMs: Math.min(HIRE_ENGINE_REQUEST_TIMEOUT_MS, 5_000),
+  });
+});
+
+app.get("/api/hire/status", requireHireContext, async (req, res) => {
+  await proxyHireRequest(req, res, `/api/v1/status${hireForwardQueryString(req)}`, {
+    method: "GET",
+    label: "Hire status request",
+  });
+});
+
+app.all(
+  "/api/hire/:hirePath(*)",
+  requireHireContext,
+  enforceHireRouteEnabled,
+  enforceHireProxyPolicy,
+  enforceHireAutomationConsentAudit,
+  enforceHirePromptQuotaForIngress,
+  async (req, res) => {
+    let targetPath;
+    try {
+      targetPath = hireTargetPathFromRequest(req);
+    } catch (error) {
+      res.status(400).json({
+        code: "invalid_hire_path",
+        error: "Invalid Hire path.",
+        message: "The requested Hire path is invalid.",
+        requestId: getOrCreateRequestId(req),
+      });
+      return;
+    }
+    await proxyHireRequest(req, res, targetPath, {
+      label: `Hire ${req.method} proxy request`,
+      timeoutMs: HIRE_ENGINE_STREAM_TIMEOUT_MS,
+    });
+  }
 );
 
 // =============================================================================

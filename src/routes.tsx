@@ -12,6 +12,7 @@ import { SkeletonBrainPage } from './app/components/ui/skeleton';
 import { DesignPage } from './app/components/design/DesignPage';
 import { SettingsPage } from './app/components/settings/SettingsPage';
 import { ProductAccessGate } from './app/components/ProductAccessGate';
+import { HirePage } from './app/components/hire/HirePage';
 import { WebsiteHomePage, WebsiteProductPage, WebsiteShell } from './app/components/WebsitePage';
 import {
   WebsiteAutismGuidancePage,
@@ -251,13 +252,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'hire',
-        element: (
-          <ProductAccessGate
-            productId="hire"
-            title="ZAKI Hire"
-            mode="private_beta"
-          />
-        ),
+        element: <HirePage />,
       },
       {
         path: 'design',

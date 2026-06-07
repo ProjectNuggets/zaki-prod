@@ -1,5 +1,6 @@
 import {
   APP_CHAT_SURFACE,
+  HIRE_SURFACE,
   LEARNING_SURFACE,
   ZAKI_BOT_SURFACE,
 } from "./daily-quota.js";
@@ -29,6 +30,12 @@ export const PLATFORM_USAGE_PRODUCT_SURFACES = Object.freeze([
     surface: LEARNING_SURFACE,
     label: "ZAKI Learn",
     memoryScope: MEMORY_SCOPE_IDS.LEARNER_MEMORY,
+  }),
+  Object.freeze({
+    productId: ZAKI_PRODUCT_IDS.HIRE,
+    surface: HIRE_SURFACE,
+    label: "ZAKI Hire",
+    memoryScope: MEMORY_SCOPE_IDS.HIRE_MEMORY,
   }),
 ]);
 

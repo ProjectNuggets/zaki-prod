@@ -26,6 +26,7 @@ describe("platform policy", () => {
     expect(normalizePlatformPlanId("spaces_free")).toBe("free");
     expect(normalizePlatformPlanId("agent")).toBe("personal");
     expect(normalizePlatformPlanId("learn")).toBe("personal");
+    expect(normalizePlatformPlanId("hire")).toBe("personal");
     expect(normalizePlatformPlanId("access_code")).toBe("personal");
     expect(normalizePlatformPlanId("complete")).toBe("pro");
     expect(normalizePlatformPlanId("pro_max")).toBe("pro_max");
@@ -98,7 +99,7 @@ describe("platform policy", () => {
       expect.objectContaining({ memoryScope: MEMORY_SCOPE_IDS.HIRE_MEMORY, lifecycle: "future" })
     );
     expect(catalog.find((product) => product.id === ZAKI_PRODUCT_IDS.DESIGN)).toEqual(
-      expect.objectContaining({ memoryScope: MEMORY_SCOPE_IDS.DESIGN_MEMORY, lifecycle: "future" })
+      expect.objectContaining({ memoryScope: MEMORY_SCOPE_IDS.DESIGN_MEMORY, lifecycle: "current" })
     );
     expect(catalog.find((product) => product.id === ZAKI_PRODUCT_IDS.CLI)).toEqual(
       expect.objectContaining({ lifecycle: "future" })

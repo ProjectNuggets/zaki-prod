@@ -428,6 +428,68 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_usage_events (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      product_id TEXT NOT NULL,
+      surface TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      usage_unit_type TEXT NOT NULL DEFAULT 'request',
+      usage_units NUMERIC(12, 4) NOT NULL DEFAULT 1,
+      plan_id TEXT,
+      entitlement TEXT,
+      quota_bucket TEXT,
+      quota_period TEXT,
+      quota_limit INT,
+      quota_used INT,
+      quota_remaining INT,
+      request_id TEXT,
+      source_route TEXT,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_usage_events_created_at
+    ON zaki_usage_events (created_at DESC);
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_usage_events_user_product
+    ON zaki_usage_events (user_id, product_id, created_at DESC);
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_usage_events_surface_event
+    ON zaki_usage_events (surface, event_type, created_at DESC);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_hire_audit_events (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      action TEXT NOT NULL,
+      status TEXT NOT NULL,
+      request_id TEXT,
+      lead_id TEXT,
+      source_route TEXT,
+      details_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_hire_audit_events_user_created
+    ON zaki_hire_audit_events (user_id, created_at DESC, id DESC);
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_hire_audit_events_action_created
+    ON zaki_hire_audit_events (action, created_at DESC);
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS website_feedback_posts (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       body TEXT NOT NULL,

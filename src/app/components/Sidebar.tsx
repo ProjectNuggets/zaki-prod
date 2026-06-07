@@ -2,7 +2,7 @@ import {
   LogoArabicRed, SideBarIcon, SearchIcon, AddIcon, 
   ChevronDownIcon, CenterLogo
 } from "./icons";
-import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain, ShieldCheck, Bot, Library, LayoutGrid, MessageSquare, PenLine, Database, type LucideIcon } from "lucide-react";
+import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain, ShieldCheck, Bot, Library, LayoutGrid, MessageSquare, PenLine, Database, Activity, Upload, User, Clock3, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -101,12 +101,28 @@ function normalizeLearningView(value: string | null) {
   return LEARNING_VIEW_ALIASES[normalized] || normalized || "chat";
 }
 
+const HIRE_SUBNAV: LearningSubnavEntry[] = [
+  { view: "dashboard", label: "Dashboard", icon: Activity },
+  { view: "pipeline", label: "Pipeline", icon: Briefcase },
+  { view: "profile", label: "Profile", icon: User },
+  { view: "import", label: "Import", icon: Upload },
+  { view: "activity", label: "Activity", icon: Clock3 },
+];
+
+function normalizeHireView(value: string | null) {
+  const normalized = String(value || "dashboard").trim().toLowerCase();
+  return HIRE_SUBNAV.some((item) => item.view === normalized) ? normalized : "dashboard";
+}
+
 export function Sidebar({ chrome = "full" }: SidebarProps) {
   const { t, i18n } = useTranslation();
   const contextOnly = chrome === "context";
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
   const location = useLocation();
   const activeLearningView = normalizeLearningView(
+    new URLSearchParams(location.search).get("view")
+  );
+  const activeHireView = normalizeHireView(
     new URLSearchParams(location.search).get("view")
   );
   const fileStatusTone = {
@@ -1298,6 +1314,22 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
             >
               <GraduationCap className="size-4 text-zaki-muted" />
             </button>
+            <button
+              className={cn(
+                "size-9 rounded-zaki-md transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
+                sidebarMode === "hire" ? "bg-zaki-hover" : "hover:bg-zaki-hover"
+              )}
+              onClick={() => {
+                setSidebarMode("hire");
+                navigate("/hire");
+              }}
+              onMouseUp={blurButtonOnPointerClick}
+              type="button"
+              title={t("sidebar.hire")}
+              aria-label={t("sidebar.hire")}
+            >
+              <Briefcase className="size-4 text-zaki-muted" />
+            </button>
           </div>
 
           <div className="mt-auto flex flex-col items-center gap-3 pt-4">
@@ -1565,6 +1597,44 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
               <Settings className="size-4" />
               <span>{t("sidebar.profile.settings")}</span>
             </button>
+          </div>
+        ) : sidebarMode === "hire" ? (
+          <div className="flex flex-col gap-1">
+            {HIRE_SUBNAV.map((item) => {
+              const Icon = item.icon;
+              const active = activeHireView === item.view;
+              return (
+                <button
+                  key={item.view}
+                  type="button"
+                  onClick={() => {
+                    navigate(`/hire?view=${item.view}`);
+                    window.dispatchEvent(new Event("zaki:close-mobile-sidebar"));
+                  }}
+                  className={cn(
+                    "relative flex w-full items-center gap-2 rounded-lg p-1.5 text-sm font-medium transition-colors",
+                    isRtl ? "flex-row-reverse text-right" : "text-left",
+                    active
+                      ? "bg-zaki-hover text-zaki-primary"
+                      : "text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-primary"
+                  )}
+                  aria-current={active ? "page" : undefined}
+                >
+                  {active && (
+                    <div
+                      className={cn(
+                        "absolute top-1/2 h-[60%] w-[3px] -translate-y-1/2 rounded-r-sm bg-zaki-brand",
+                        isRtl ? "right-0 rounded-l-sm rounded-r-none" : "left-0"
+                      )}
+                    />
+                  )}
+                  <span className="flex size-5 items-center justify-center">
+                    <Icon className="size-4 text-zaki-muted" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                </button>
+              );
+            })}
           </div>
         ) : (
           <>

@@ -96,6 +96,7 @@ Current implementation uses scattered and partially incompatible quota concepts:
 - Spaces daily quotas.
 - Agent weekly quotas.
 - Learning weekly quotas and learning-specific counters.
+- Hire weekly route-level quota plus central route-level `zaki_usage_events`.
 - Commercial plan ids that map to product bundles rather than platform tiers.
 
 Migration requirements:
@@ -103,7 +104,8 @@ Migration requirements:
 - Introduce a neutral plan id set: `free`, `personal`, `pro`, `pro_max`.
 - Keep legacy plan aliases temporarily for migration and support.
 - Add a central product catalog.
-- Add a central usage ledger before removing old counters.
+- Expand the central usage ledger from route-level Hire events to all product
+  cost dimensions before removing old counters.
 - Build dashboard/settings from central usage summaries.
 - Delete or freeze obsolete counters only after parity tests pass.
 

@@ -1297,7 +1297,7 @@ function assertBrainGraphResponse(data: BrainGraphResponse): BrainGraphResponse 
   return data;
 }
 
-export type UsageQuotaSurface = "app_chat" | "zaki_bot" | "learning";
+export type UsageQuotaSurface = "app_chat" | "zaki_bot" | "learning" | "hire";
 export type PlatformUsageProductId =
   | "spaces"
   | "agent"

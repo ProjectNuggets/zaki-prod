@@ -1,4 +1,5 @@
 export const APP_CHAT_SURFACE = "app_chat";
+export const HIRE_SURFACE = "hire";
 export const LEARNING_SURFACE = "learning";
 export const ZAKI_BOT_SURFACE = "zaki_bot";
 
@@ -8,6 +9,8 @@ export const DEFAULT_ANONYMOUS_SPACES_DAILY_PROMPT_LIMIT = 10;
 export const DEFAULT_ANONYMOUS_SPACES_DAILY_PROMPT_BUCKET = "anonymous_spaces";
 export const DEFAULT_LEARNING_DAILY_PROMPT_LIMIT = 10;
 export const DEFAULT_LEARNING_DAILY_PROMPT_BUCKET = LEARNING_SURFACE;
+export const DEFAULT_HIRE_WEEKLY_PROMPT_LIMIT = 10;
+export const DEFAULT_HIRE_WEEKLY_PROMPT_BUCKET = "hire_weekly";
 export const DEFAULT_ZAKI_BOT_DAILY_PROMPT_LIMIT = 10;
 export const DEFAULT_ZAKI_BOT_DAILY_PROMPT_BUCKET = ZAKI_BOT_SURFACE;
 export const DEFAULT_LEARNING_WEEKLY_PROMPT_LIMIT = 10;
@@ -43,6 +46,7 @@ export function resolveQuotaSurface(input) {
   const normalized = String(input || "").trim().toLowerCase();
   if (normalized === ZAKI_BOT_SURFACE) return ZAKI_BOT_SURFACE;
   if (normalized === LEARNING_SURFACE) return LEARNING_SURFACE;
+  if (normalized === HIRE_SURFACE) return HIRE_SURFACE;
   return APP_CHAT_SURFACE;
 }
 
@@ -76,6 +80,22 @@ export function getSurfaceQuotaConfig(env = process.env, surface = APP_CHAT_SURF
         env?.ZAKI_BOT_WEEKLY_PROMPT_LIMIT ||
           env?.ZAKI_BOT_DAILY_PROMPT_LIMIT,
         DEFAULT_ZAKI_BOT_WEEKLY_PROMPT_LIMIT
+      ),
+      period: "week",
+    };
+  }
+  if (normalizedSurface === HIRE_SURFACE) {
+    return {
+      surface: HIRE_SURFACE,
+      bucket: parseBucket(
+        env?.ZAKI_HIRE_WEEKLY_PROMPT_BUCKET ||
+          env?.ZAKI_HIRE_DAILY_PROMPT_BUCKET,
+        DEFAULT_HIRE_WEEKLY_PROMPT_BUCKET
+      ),
+      limit: parsePositiveInteger(
+        env?.ZAKI_HIRE_WEEKLY_PROMPT_LIMIT ||
+          env?.ZAKI_HIRE_DAILY_PROMPT_LIMIT,
+        DEFAULT_HIRE_WEEKLY_PROMPT_LIMIT
       ),
       period: "week",
     };
@@ -165,6 +185,22 @@ export function buildDailyLimitExceededPayload({
         : "You reached today's free experimental limit. Free usage resets daily and may vary with traffic and prompt complexity.",
       code: weekly ? "weekly_limit_reached" : "daily_limit_reached",
       surface: ZAKI_BOT_SURFACE,
+      limit,
+      remaining: 0,
+      resetAt,
+      period,
+    };
+  }
+  if (normalizedSurface === HIRE_SURFACE) {
+    return {
+      error: weekly
+        ? "You reached this week's ZAKI Hire preview limit. Free preview usage resets weekly."
+        : "You reached today's ZAKI Hire preview limit. Free usage resets daily.",
+      message: weekly
+        ? "You reached this week's ZAKI Hire preview limit. Free preview usage resets weekly."
+        : "You reached today's ZAKI Hire preview limit. Free usage resets daily.",
+      code: weekly ? "weekly_limit_reached" : "daily_limit_reached",
+      surface: HIRE_SURFACE,
       limit,
       remaining: 0,
       resetAt,

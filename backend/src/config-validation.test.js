@@ -207,4 +207,94 @@ describe("runtime config validation", () => {
       expect.arrayContaining([expect.objectContaining({ key: "ZAKI_LEARNING_ENABLED" })])
     );
   });
+
+  it("requires hire engine base and token when hire is enabled", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_HIRE_ENABLED: "true",
+        HIRE_ENGINE_BASE_URL: "",
+        HIRE_ENGINE_INTERNAL_TOKEN: "",
+      })
+    );
+
+    expect(report.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "HIRE_ENGINE_BASE_URL" }),
+        expect.objectContaining({ key: "HIRE_ENGINE_INTERNAL_TOKEN" }),
+      ])
+    );
+  });
+
+  it("accepts hire engine config when enabled", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_HIRE_ENABLED: "true",
+        HIRE_ENGINE_BASE_URL: "http://hire:8002",
+        HIRE_ENGINE_INTERNAL_TOKEN: "secret",
+      })
+    );
+
+    expect(report.errors.find((e) => e.key === "HIRE_ENGINE_BASE_URL")).toBeUndefined();
+    expect(report.errors.find((e) => e.key === "HIRE_ENGINE_INTERNAL_TOKEN")).toBeUndefined();
+  });
+
+  it("requires a central meter signing key in production when hire is enabled", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        NODE_ENV: "production",
+        ZAKI_ALLOWED_ORIGINS: "https://app.chatzaki.com",
+        ZAKI_PUBLIC_URL: "https://api.chatzaki.com",
+        ZAKI_APP_URL: "https://app.chatzaki.com",
+        ZAKI_LEGAL_POLICY_VERSION: "1.0",
+        ZAKI_EMAIL_MODE: "resend",
+        RESEND_API_KEY: "re_test",
+        RESEND_FROM: "no-reply@chatzaki.com",
+        ZAKI_JWT_SIGNING_KEY: "a".repeat(64),
+        ZAKI_HIRE_ENABLED: "true",
+        HIRE_ENGINE_BASE_URL: "http://hire:8002",
+        HIRE_ENGINE_INTERNAL_TOKEN: "internal-token",
+      })
+    );
+
+    expect(report.errors).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: "ZAKI_METER_GRANT_SIGNING_SECRET" })])
+    );
+  });
+
+  it("accepts production hire config with a central meter signing key", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        NODE_ENV: "production",
+        ZAKI_ALLOWED_ORIGINS: "https://app.chatzaki.com",
+        ZAKI_PUBLIC_URL: "https://api.chatzaki.com",
+        ZAKI_APP_URL: "https://app.chatzaki.com",
+        ZAKI_LEGAL_POLICY_VERSION: "1.0",
+        ZAKI_EMAIL_MODE: "resend",
+        RESEND_API_KEY: "re_test",
+        RESEND_FROM: "no-reply@chatzaki.com",
+        ZAKI_JWT_SIGNING_KEY: "a".repeat(64),
+        ZAKI_HIRE_ENABLED: "true",
+        HIRE_ENGINE_BASE_URL: "http://hire:8002",
+        HIRE_ENGINE_INTERNAL_TOKEN: "internal-token",
+        ZAKI_METER_GRANT_SIGNING_SECRET: "hire-meter-signing-key-production-2026",
+      })
+    );
+
+    expect(report.errors.find((e) => e.key === "ZAKI_METER_GRANT_SIGNING_SECRET")).toBeUndefined();
+  });
+
+  it("warns when hire config is present but disabled", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_HIRE_ENABLED: "false",
+        HIRE_ENGINE_BASE_URL: "http://hire:8002",
+        HIRE_ENGINE_INTERNAL_TOKEN: "secret",
+      })
+    );
+
+    expect(report.errors.find((e) => e.key === "HIRE_ENGINE_BASE_URL")).toBeUndefined();
+    expect(report.warnings).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: "ZAKI_HIRE_ENABLED" })])
+    );
+  });
 });

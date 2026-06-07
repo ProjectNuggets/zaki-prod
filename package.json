@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "type": "module",
   "author": "Nova Nuggets",
-  "license": "MIT",
+  "license": "UNLICENSED",
   "repository": {
     "type": "git",
     "url": "https://github.com/novanuggets/zaki"
@@ -31,6 +31,14 @@
     "smoke:agent-multiuser": "node scripts/multiuser-agent-smoke.mjs",
     "smoke:agent-isolation": "node scripts/multiuser-agent-isolation.mjs",
     "smoke:learning-isolation": "node scripts/multiuser-learning-isolation.mjs",
+    "smoke:hire-readiness": "node scripts/smoke-hire-readiness.mjs",
+    "smoke:hire-provider": "node scripts/smoke-hire-provider.mjs",
+    "smoke:hire-isolation": "node scripts/multiuser-hire-isolation.mjs",
+    "smoke:hire-browser": "node scripts/smoke-hire-browser.mjs",
+    "smoke:hire-value": "node scripts/smoke-hire-value-e2e.mjs",
+    "dev:hire:local": "node scripts/dev-hire-local.mjs",
+    "dev:hire:local:restart": "node scripts/dev-hire-local.mjs --restart",
+    "dev:hire:local:check": "node scripts/dev-hire-local.mjs --check-only",
     "stress:agent-multiuser": "node scripts/multiuser-agent-stress.mjs",
     "smoke:agent-suite": "node scripts/multiuser-agent-run-all.mjs",
     "smoke:memory-session": "node scripts/smoke-memory-session.mjs",

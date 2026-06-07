@@ -63,6 +63,12 @@ export function validateRuntimeConfig(env = process.env) {
   const designEnabled = isTruthyBoolean(env.ZAKI_DESIGN_ENABLED);
   const designBaseUrl = normalize(env.DESIGN_ENGINE_BASE_URL);
   const designInternalToken = normalize(env.DESIGN_ENGINE_INTERNAL_TOKEN || env.ZAKI_DESIGN_INTERNAL_TOKEN);
+  const hireEnabled = isTruthyBoolean(env.ZAKI_HIRE_ENABLED);
+  const hireBaseUrl = normalize(env.HIRE_ENGINE_BASE_URL || env.ZAKI_HIRE_ENGINE_BASE_URL);
+  const hireInternalToken = normalize(env.HIRE_ENGINE_INTERNAL_TOKEN || env.ZAKI_HIRE_ENGINE_INTERNAL_TOKEN);
+  const hireMeterSigningKey = normalize(
+    env.ZAKI_METER_GRANT_SIGNING_SECRET || env.ZAKI_HIRE_METER_SIGNING_KEY
+  );
   const nullalisDevUserId = normalize(env.NULLALIS_DEV_USER_ID || env.NULLCLAW_DEV_USER_ID);
   const googleClientId = normalize(env.GOOGLE_CLIENT_ID);
   const googleClientSecret = normalize(env.GOOGLE_CLIENT_SECRET);
@@ -228,6 +234,42 @@ export function validateRuntimeConfig(env = process.env) {
       warnings,
       "ZAKI_DESIGN_ENABLED",
       "Design engine config is present, but ZAKI_DESIGN_ENABLED is not true."
+    );
+  }
+
+  if (hireEnabled) {
+    if (!hireBaseUrl) {
+      pushIssue(
+        errors,
+        "HIRE_ENGINE_BASE_URL",
+        "HIRE_ENGINE_BASE_URL is required when ZAKI_HIRE_ENABLED=true."
+      );
+    } else if (!hasHttpUrl(hireBaseUrl)) {
+      pushIssue(
+        errors,
+        "HIRE_ENGINE_BASE_URL",
+        "HIRE_ENGINE_BASE_URL must start with http:// or https://."
+      );
+    }
+    if (!hireInternalToken) {
+      pushIssue(
+        errors,
+        "HIRE_ENGINE_INTERNAL_TOKEN",
+        "HIRE_ENGINE_INTERNAL_TOKEN is required when ZAKI_HIRE_ENABLED=true."
+      );
+    }
+    if (isProduction && hireMeterSigningKey.length < 32) {
+      pushIssue(
+        errors,
+        "ZAKI_METER_GRANT_SIGNING_SECRET",
+        "ZAKI_METER_GRANT_SIGNING_SECRET must be set to a dedicated 32+ character central meter secret in production when Hire is enabled."
+      );
+    }
+  } else if (hireBaseUrl || hireInternalToken) {
+    pushIssue(
+      warnings,
+      "ZAKI_HIRE_ENABLED",
+      "Hire engine config is present, but ZAKI_HIRE_ENABLED is not true."
     );
   }
 

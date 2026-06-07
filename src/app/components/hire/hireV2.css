@@ -1,0 +1,360 @@
+.zaki-hire-v2 {
+  --v2-font-mono: var(--zaki-font-mono);
+  --v2-font-prose: var(--zaki-font-body);
+  --v2-text-micro: 10px;
+  --v2-text-2xs: 11px;
+  --v2-text-xs: 12px;
+  --v2-text-sm: 13px;
+  --v2-text-md: 15px;
+  --v2-text-lg: 18px;
+  --v2-text-xl: 22px;
+  --v2-accent: #D24430;
+  --v2-accent-hover: #B83A28;
+  --v2-accent-faint: rgba(210, 68, 48, 0.12);
+  --v2-success: #21916F;
+  --v2-success-faint: rgba(33, 145, 111, 0.12);
+  --v2-warn: #C28D2C;
+  --v2-warn-faint: rgba(194, 141, 44, 0.12);
+  --v2-danger: #D24430;
+  --v2-danger-faint: rgba(210, 68, 48, 0.12);
+  --v2-bg: #F4F1EC;
+  --v2-bg-raised: #FBF9F5;
+  --v2-bg-sunken: #ECE7DF;
+  --v2-bg-inverse: #0E0D0B;
+  --v2-ink-1: #0E0D0B;
+  --v2-ink-2: #3D3A35;
+  --v2-ink-3: #6B6660;
+  --v2-ink-4: #9C968E;
+  --v2-ink-on-accent: #FBF9F5;
+  --v2-hairline: rgba(14, 13, 11, 0.10);
+  --v2-hairline-strong: rgba(14, 13, 11, 0.20);
+  --v2-hairline-faint: rgba(14, 13, 11, 0.06);
+  --v2-hover: rgba(14, 13, 11, 0.04);
+  --v2-active: rgba(14, 13, 11, 0.08);
+  --v2-selected: rgba(210, 68, 48, 0.08);
+  --v2-r-1: 2px;
+  --v2-r-2: 4px;
+  --v2-elev-1: inset 0 0 0 1px var(--v2-hairline);
+  --v2-elev-2: inset 0 0 0 1px var(--v2-hairline-strong);
+  --v2-elev-press: inset 0 1px 0 var(--v2-hairline-strong);
+  --v2-dur-trans: 160ms;
+  --v2-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  background:
+    linear-gradient(to right, var(--v2-hairline-faint) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--v2-hairline-faint) 1px, transparent 1px),
+    var(--v2-bg);
+  background-size: 32px 32px;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+.dark .zaki-hire-v2 {
+  --v2-bg: #0A0908;
+  --v2-bg-raised: #131110;
+  --v2-bg-sunken: #050403;
+  --v2-bg-inverse: #ECE7DF;
+  --v2-ink-1: #ECE7DF;
+  --v2-ink-2: #B8B2A9;
+  --v2-ink-3: #807A72;
+  --v2-ink-4: #565049;
+  --v2-ink-on-accent: #0A0908;
+  --v2-hairline: rgba(236, 231, 223, 0.10);
+  --v2-hairline-strong: rgba(236, 231, 223, 0.22);
+  --v2-hairline-faint: rgba(236, 231, 223, 0.05);
+  --v2-hover: rgba(236, 231, 223, 0.04);
+  --v2-active: rgba(236, 231, 223, 0.08);
+  --v2-selected: rgba(210, 68, 48, 0.16);
+}
+
+.zaki-hire-v2 ::selection {
+  background: var(--v2-accent);
+  color: var(--v2-ink-on-accent);
+}
+
+.zaki-hire-panel {
+  background: var(--v2-bg-raised);
+  border: 1px solid var(--v2-hairline);
+  border-radius: var(--v2-r-2);
+  box-shadow: var(--v2-elev-1);
+}
+
+.zaki-hire-panel-strong {
+  background: var(--v2-bg-raised);
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: var(--v2-r-2);
+  box-shadow: var(--v2-elev-2);
+}
+
+.zaki-hire-sunken {
+  background: var(--v2-bg-sunken);
+  border: 1px solid var(--v2-hairline);
+  border-radius: var(--v2-r-2);
+}
+
+.zaki-hire-rule {
+  border-color: var(--v2-hairline);
+}
+
+.zaki-hire-rule-strong {
+  border-color: var(--v2-hairline-strong);
+}
+
+.zaki-hire-title {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-xl);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.zaki-hire-subtitle {
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-prose);
+  font-size: var(--v2-text-sm);
+  line-height: 1.55;
+}
+
+.zaki-hire-label {
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-2xs);
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.zaki-hire-label-strong {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-2xs);
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.zaki-hire-text {
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-prose);
+  font-size: var(--v2-text-sm);
+  line-height: 1.55;
+}
+
+.zaki-hire-muted {
+  color: var(--v2-ink-3);
+}
+
+.zaki-hire-num {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.zaki-hire-control,
+.zaki-hire-input,
+.zaki-hire-select {
+  background: var(--v2-bg-raised);
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: var(--v2-r-2);
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-xs);
+  outline: none;
+  transition: border-color var(--v2-dur-trans) var(--v2-ease-out), background var(--v2-dur-trans) var(--v2-ease-out);
+}
+
+.zaki-hire-input:focus,
+.zaki-hire-select:focus,
+.zaki-hire-control:focus-visible {
+  border-color: var(--v2-accent);
+  outline: 1px solid var(--v2-accent);
+  outline-offset: 1px;
+}
+
+.zaki-hire-input::placeholder {
+  color: var(--v2-ink-4);
+}
+
+.zaki-hire-button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: var(--v2-r-2);
+  color: var(--v2-ink-2);
+  display: inline-flex;
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-xs);
+  font-weight: 500;
+  gap: 8px;
+  height: 32px;
+  justify-content: center;
+  letter-spacing: 0;
+  padding: 0 12px;
+  transition: background var(--v2-dur-trans) var(--v2-ease-out), border-color var(--v2-dur-trans) var(--v2-ease-out), color var(--v2-dur-trans) var(--v2-ease-out);
+}
+
+.zaki-hire-button:hover:not(:disabled) {
+  background: var(--v2-hover);
+  border-color: var(--v2-ink-3);
+  color: var(--v2-ink-1);
+}
+
+.zaki-hire-button:active:not(:disabled) {
+  box-shadow: var(--v2-elev-press);
+}
+
+.zaki-hire-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.zaki-hire-button-primary {
+  background: var(--v2-accent);
+  border-color: var(--v2-accent);
+  color: var(--v2-ink-on-accent);
+}
+
+.zaki-hire-button-primary:hover:not(:disabled) {
+  background: var(--v2-accent-hover);
+  border-color: var(--v2-accent-hover);
+  color: var(--v2-ink-on-accent);
+}
+
+.zaki-hire-icon-button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: var(--v2-r-2);
+  color: var(--v2-ink-2);
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
+}
+
+.zaki-hire-icon-button:hover {
+  background: var(--v2-hover);
+  color: var(--v2-ink-1);
+}
+
+.zaki-hire-status {
+  align-items: center;
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: var(--v2-r-2);
+  display: inline-flex;
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-2xs);
+  font-weight: 500;
+  gap: 6px;
+  height: 26px;
+  letter-spacing: 0;
+  padding: 0 8px;
+}
+
+.zaki-hire-status-dot {
+  background: currentColor;
+  content: "";
+  display: inline-block;
+  height: 6px;
+  width: 6px;
+}
+
+.zaki-hire-status-success {
+  background: var(--v2-success-faint);
+  border-color: rgba(33, 145, 111, 0.28);
+  color: var(--v2-success);
+}
+
+.zaki-hire-status-warn {
+  background: var(--v2-warn-faint);
+  border-color: rgba(194, 141, 44, 0.30);
+  color: var(--v2-warn);
+}
+
+.zaki-hire-status-danger {
+  background: var(--v2-danger-faint);
+  border-color: rgba(210, 68, 48, 0.30);
+  color: var(--v2-danger);
+}
+
+.zaki-hire-status-muted {
+  background: var(--v2-bg-sunken);
+  border-color: var(--v2-hairline);
+  color: var(--v2-ink-3);
+}
+
+.zaki-hire-row-button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--v2-r-2);
+  color: var(--v2-ink-2);
+  transition: background var(--v2-dur-trans) var(--v2-ease-out), border-color var(--v2-dur-trans) var(--v2-ease-out);
+}
+
+.zaki-hire-row-button:hover {
+  background: var(--v2-hover);
+  border-color: var(--v2-hairline);
+}
+
+.zaki-hire-row-button.is-active {
+  background: var(--v2-selected);
+  border-color: var(--v2-accent);
+}
+
+.zaki-hire-nav-button {
+  background: transparent;
+  border: 1px solid var(--v2-hairline);
+  border-radius: var(--v2-r-2);
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+}
+
+.zaki-hire-nav-button.is-active {
+  background: var(--v2-bg-raised);
+  border-color: var(--v2-accent);
+  color: var(--v2-ink-1);
+}
+
+.zaki-hire-empty {
+  background: var(--v2-bg-sunken);
+  border: 1px dashed var(--v2-hairline-strong);
+  border-radius: var(--v2-r-2);
+  text-align: center;
+}
+
+.zaki-hire-link {
+  color: var(--v2-ink-2);
+  text-decoration: underline;
+  text-decoration-color: var(--v2-hairline-strong);
+  text-underline-offset: 3px;
+}
+
+.zaki-hire-link:hover {
+  color: var(--v2-ink-1);
+}
+
+.zaki-hire-score-high {
+  color: var(--v2-success);
+}
+
+.zaki-hire-score-mid {
+  color: var(--v2-warn);
+}
+
+.zaki-hire-score-low {
+  color: var(--v2-ink-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zaki-hire-v2 *,
+  .zaki-hire-v2 *::before,
+  .zaki-hire-v2 *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

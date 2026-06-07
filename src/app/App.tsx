@@ -72,7 +72,7 @@ export default function App() {
     normalizedPath === "/learn" ||
     normalizedPath === "/hire" ||
     normalizedPath === "/design";
-  const isLearningRoute = normalizedPath === "/learn" && !isGatedProductRoute;
+  const isWorkspaceRoute = normalizedPath === "/learn" || normalizedPath === "/hire";
   const isDashboardRoute = normalizedPath === "/";
   const isAgentRoute = normalizedPath === "/agent";
   const isBrainRoute = normalizedPath === "/brain";
@@ -133,7 +133,9 @@ export default function App() {
       );
     } else if (path === '/brain') {
       store.setSidebarMode("brain");
-    } else if (path === '/learn' || path === '/hire' || path === '/design') {
+    } else if (path === '/hire') {
+      store.setSidebarMode("hire");
+    } else if (path === '/learn' || path === '/design') {
       store.goHome();
     } else if (path === '/spaces' && !spaceId) {
       store.goToSpaces();
@@ -375,8 +377,9 @@ export default function App() {
         
         <main id="main-content" role="main" className="flex min-w-0 flex-1 flex-col overflow-hidden border-l-0 zaki-shell-surface">
           <AppTopbar />
-          <div className={isLearningRoute ? "zaki-main-shell zaki-main-shell--workspace" : "zaki-main-shell"}>
-            <div className={isLearningRoute ? "zaki-main-panel zaki-main-panel--workspace" : "zaki-main-panel"}>
+          <div className={isWorkspaceRoute ? "zaki-main-shell zaki-main-shell--workspace" : "zaki-main-shell"}>
+            <div className={isWorkspaceRoute ? "zaki-main-panel zaki-main-panel--workspace" : "zaki-main-panel"}>
+
               <div className="zaki-main-inner">
                 <ErrorBoundary>
                   <Outlet />

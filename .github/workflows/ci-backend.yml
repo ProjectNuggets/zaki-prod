@@ -33,6 +33,8 @@ jobs:
         run: |
           node --check backend/src/memory/telemetry.js
           node --check scripts/smoke-v01.mjs
+          node --check scripts/smoke-hire-readiness.mjs
+          node --check scripts/multiuser-hire-isolation.mjs
           node --check scripts/load-memory.mjs
           node --check scripts/backup-restore-drill.mjs
 
@@ -103,6 +105,94 @@ jobs:
             cat /tmp/admin-access-codes.json
             exit 1
           fi
+
+  hire-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve Hire smoke config
+        id: hire-smoke-config
+        env:
+          HIRE_SMOKE_BASE_URL: ${{ secrets.HIRE_SMOKE_BASE_URL }}
+          SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL }}
+          HIRE_SMOKE_ADMIN_EMAIL: ${{ secrets.HIRE_SMOKE_ADMIN_EMAIL }}
+          HIRE_SMOKE_ADMIN_PASSWORD: ${{ secrets.HIRE_SMOKE_ADMIN_PASSWORD }}
+          SMOKE_ADMIN_EMAIL: ${{ secrets.SMOKE_ADMIN_EMAIL }}
+          SMOKE_ADMIN_PASSWORD: ${{ secrets.SMOKE_ADMIN_PASSWORD }}
+          SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+          HIRE_SMOKE_USER_A_EMAIL: ${{ secrets.HIRE_SMOKE_USER_A_EMAIL }}
+          HIRE_SMOKE_USER_A_PASSWORD: ${{ secrets.HIRE_SMOKE_USER_A_PASSWORD }}
+          HIRE_SMOKE_USER_B_EMAIL: ${{ secrets.HIRE_SMOKE_USER_B_EMAIL }}
+          HIRE_SMOKE_USER_B_PASSWORD: ${{ secrets.HIRE_SMOKE_USER_B_PASSWORD }}
+        run: |
+          set -euo pipefail
+          base_url="${HIRE_SMOKE_BASE_URL:-${SMOKE_BASE_URL:-}}"
+          admin_email="${HIRE_SMOKE_ADMIN_EMAIL:-${SMOKE_ADMIN_EMAIL:-${SMOKE_EMAIL:-}}}"
+          admin_password="${HIRE_SMOKE_ADMIN_PASSWORD:-${SMOKE_ADMIN_PASSWORD:-${SMOKE_PASSWORD:-}}}"
+          if [ -n "${base_url}" ] && [ -n "${admin_email}" ] && [ -n "${admin_password}" ]; then
+            echo "readiness_enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "readiness_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping Hire readiness smoke: HIRE_SMOKE_BASE_URL / HIRE_SMOKE_ADMIN_EMAIL / HIRE_SMOKE_ADMIN_PASSWORD not fully configured."
+          fi
+
+          if [ -n "${base_url}" ] && \
+             [ -n "${HIRE_SMOKE_USER_A_EMAIL}" ] && [ -n "${HIRE_SMOKE_USER_A_PASSWORD}" ] && \
+             [ -n "${HIRE_SMOKE_USER_B_EMAIL}" ] && [ -n "${HIRE_SMOKE_USER_B_PASSWORD}" ]; then
+            echo "isolation_enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "isolation_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping Hire isolation smoke: HIRE_SMOKE_USER_A_* / HIRE_SMOKE_USER_B_* not fully configured."
+          fi
+
+      - uses: actions/checkout@v4
+        if: ${{ steps.hire-smoke-config.outputs.readiness_enabled == 'true' || steps.hire-smoke-config.outputs.isolation_enabled == 'true' }}
+      - uses: actions/setup-node@v4
+        if: ${{ steps.hire-smoke-config.outputs.readiness_enabled == 'true' || steps.hire-smoke-config.outputs.isolation_enabled == 'true' }}
+        with:
+          node-version: 20
+
+      - name: ZAKI Hire readiness smoke
+        if: ${{ steps.hire-smoke-config.outputs.readiness_enabled == 'true' }}
+        env:
+          HIRE_SMOKE_BASE_URL: ${{ secrets.HIRE_SMOKE_BASE_URL }}
+          SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL }}
+          HIRE_SMOKE_ADMIN_EMAIL: ${{ secrets.HIRE_SMOKE_ADMIN_EMAIL }}
+          HIRE_SMOKE_ADMIN_PASSWORD: ${{ secrets.HIRE_SMOKE_ADMIN_PASSWORD }}
+          SMOKE_ADMIN_EMAIL: ${{ secrets.SMOKE_ADMIN_EMAIL }}
+          SMOKE_ADMIN_PASSWORD: ${{ secrets.SMOKE_ADMIN_PASSWORD }}
+          SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+          HIRE_SMOKE_USER_EMAIL: ${{ secrets.HIRE_SMOKE_USER_EMAIL }}
+          HIRE_SMOKE_USER_PASSWORD: ${{ secrets.HIRE_SMOKE_USER_PASSWORD }}
+          SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
+          SMOKE_USER_PASSWORD: ${{ secrets.SMOKE_USER_PASSWORD }}
+        run: |
+          set -euo pipefail
+          export SMOKE_BASE_URL="${HIRE_SMOKE_BASE_URL:-${SMOKE_BASE_URL:-}}"
+          export SMOKE_ADMIN_EMAIL="${HIRE_SMOKE_ADMIN_EMAIL:-${SMOKE_ADMIN_EMAIL:-${SMOKE_EMAIL:-}}}"
+          export SMOKE_ADMIN_PASSWORD="${HIRE_SMOKE_ADMIN_PASSWORD:-${SMOKE_ADMIN_PASSWORD:-${SMOKE_PASSWORD:-}}}"
+          export SMOKE_USER_EMAIL="${HIRE_SMOKE_USER_EMAIL:-${SMOKE_USER_EMAIL:-${SMOKE_ADMIN_EMAIL}}}"
+          export SMOKE_USER_PASSWORD="${HIRE_SMOKE_USER_PASSWORD:-${SMOKE_USER_PASSWORD:-${SMOKE_ADMIN_PASSWORD}}}"
+          node scripts/smoke-hire-readiness.mjs
+
+      - name: ZAKI Hire two-user isolation smoke
+        if: ${{ steps.hire-smoke-config.outputs.isolation_enabled == 'true' }}
+        env:
+          HIRE_SMOKE_BASE_URL: ${{ secrets.HIRE_SMOKE_BASE_URL }}
+          SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL }}
+          HIRE_SMOKE_USER_A_EMAIL: ${{ secrets.HIRE_SMOKE_USER_A_EMAIL }}
+          HIRE_SMOKE_USER_A_PASSWORD: ${{ secrets.HIRE_SMOKE_USER_A_PASSWORD }}
+          HIRE_SMOKE_USER_B_EMAIL: ${{ secrets.HIRE_SMOKE_USER_B_EMAIL }}
+          HIRE_SMOKE_USER_B_PASSWORD: ${{ secrets.HIRE_SMOKE_USER_B_PASSWORD }}
+        run: |
+          set -euo pipefail
+          export ZAKI_BASE_URL="${HIRE_SMOKE_BASE_URL:-${SMOKE_BASE_URL:-}}"
+          export HIRE_USER_A_EMAIL="${HIRE_SMOKE_USER_A_EMAIL}"
+          export HIRE_USER_A_PASSWORD="${HIRE_SMOKE_USER_A_PASSWORD}"
+          export HIRE_USER_B_EMAIL="${HIRE_SMOKE_USER_B_EMAIL}"
+          export HIRE_USER_B_PASSWORD="${HIRE_SMOKE_USER_B_PASSWORD}"
+          node scripts/multiuser-hire-isolation.mjs
 
   memory-load:
     runs-on: ubuntu-latest
