@@ -91,3 +91,39 @@ export function V2SettingsRow({
     </div>
   );
 }
+
+/**
+ * A settings row whose action is intentionally not wired because no real
+ * backend/BFF route exists yet (or it is operator-managed). It renders the
+ * label, optional description, a badge, and a human-readable reason, and is
+ * marked disabled for assistive tech. This is the canonical way to keep
+ * /settings truthful instead of inventing UI from the mockup.
+ */
+export function GatedRow({
+  name,
+  description,
+  reason,
+  badge,
+}: {
+  name: ReactNode;
+  description?: ReactNode;
+  reason: ReactNode;
+  badge?: string;
+}) {
+  return (
+    <div
+      className="v2-settings-row v2-settings-row--gated"
+      data-gated="true"
+      aria-disabled="true"
+    >
+      <div className="v2-settings-row__label">
+        <div>{name}</div>
+        {description != null ? <p>{description}</p> : null}
+      </div>
+      <div className="v2-settings-row__control v2-settings-row__control--gated">
+        <span className="v2-settings-gated__badge">{badge ?? "Gated"}</span>
+        <span className="v2-settings-gated__reason">{reason}</span>
+      </div>
+    </div>
+  );
+}

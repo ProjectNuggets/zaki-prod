@@ -28,6 +28,14 @@ jest.mock("@/lib/api", () => ({
       selected_model: null,
     },
   })),
+  fetchMemoryPreferences: jest.fn(async () => ({
+    response: { ok: true },
+    data: { policy: "balanced", source: "stored", updatedAt: null },
+  })),
+  updateMemoryPreferences: jest.fn(async (policy) => ({
+    response: { ok: true },
+    data: { policy, source: "stored", updatedAt: null },
+  })),
   fetchGoogleOAuthStatus: jest.fn(async () => ({
     response: { ok: true },
     data: { enabled: true },

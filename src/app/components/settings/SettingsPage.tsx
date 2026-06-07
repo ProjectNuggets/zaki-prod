@@ -43,6 +43,7 @@ import {
   fetchAgentProviderProfiles,
   fetchBotSettings,
   fetchGoogleOAuthStatus,
+  fetchMemoryPreferences,
   forgetAgentMemory,
   upsertAgentChannelBinding,
   listAgentSecrets,
@@ -54,6 +55,7 @@ import {
   testAgentProviderProfile,
   updateAgentProviderProfile,
   updateBotSettings,
+  updateMemoryPreferences,
   updateProfile,
   type AgentChannelBindingPayload,
   type AgentChannelControlId,
@@ -69,6 +71,7 @@ import {
   type AgentProviderProfilePayload,
   type BotSettingsPatch,
   type BotSettingsProfile,
+  type MemoryPolicy,
   type MeterStatusProduct,
   type MeterWindowSnapshot,
   type PlatformUsageProductId,
@@ -89,6 +92,7 @@ import { useAuthStore, useUIStore } from "@/stores";
 import { TypeToConfirmDialog } from "@/app/components/ui/zaki";
 import { V2Badge, V2Button, V2StatusStrip, V2UsageGauge } from "@/app/components/v2";
 import {
+  GatedRow,
   V2SettingsBlock,
   V2SettingsNav,
   V2SettingsRow,
@@ -272,6 +276,17 @@ function normalizeProviderModels(value: string) {
     .map((entry) => entry.trim())
     .filter(Boolean);
 }
+
+// Memory capture policy is bound to the real BFF route GET|PATCH
+// /api/memory/preferences (api.ts: fetchMemoryPreferences / updateMemoryPreferences).
+const MEMORY_CAPTURE_POLICIES: MemoryPolicy[] = [
+  "balanced",
+  "ask_before_saving",
+  "save_less",
+  "save_more",
+];
+
+const DEFAULT_MEMORY_CAPTURE_POLICY: MemoryPolicy = "balanced";
 
 function formatUsageCount(value?: number | null) {
   if (value == null || Number.isNaN(value)) return "—";
@@ -518,6 +533,12 @@ export function SettingsPage() {
     );
   const [agentSettingsLoading, setAgentSettingsLoading] = useState(true);
   const [agentSettingsSaving, setAgentSettingsSaving] = useState(false);
+  const [capturePolicy, setCapturePolicy] = useState<MemoryPolicy>(
+    DEFAULT_MEMORY_CAPTURE_POLICY
+  );
+  const [capturePolicyLoading, setCapturePolicyLoading] = useState(true);
+  const [capturePolicyAvailable, setCapturePolicyAvailable] = useState(true);
+  const [capturePolicySaving, setCapturePolicySaving] = useState(false);
 
   const { data: entitlementsResult } = useEntitlements();
   const { data: billingConfigResult } = useBillingConfig();
@@ -858,6 +879,61 @@ export function SettingsPage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    setCapturePolicyLoading(true);
+    fetchMemoryPreferences()
+      .then(({ response, data }) => {
+        if (!active) return;
+        if (!response.ok || !data?.policy) {
+          setCapturePolicyAvailable(false);
+          setCapturePolicy(DEFAULT_MEMORY_CAPTURE_POLICY);
+          return;
+        }
+        setCapturePolicyAvailable(true);
+        setCapturePolicy(data.policy);
+      })
+      .catch(() => {
+        if (!active) return;
+        setCapturePolicyAvailable(false);
+        setCapturePolicy(DEFAULT_MEMORY_CAPTURE_POLICY);
+      })
+      .finally(() => {
+        if (active) setCapturePolicyLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleCapturePolicyChange = async (nextPolicy: MemoryPolicy) => {
+    if (capturePolicySaving || nextPolicy === capturePolicy) return;
+    const previousPolicy = capturePolicy;
+    setCapturePolicy(nextPolicy);
+    setCapturePolicySaving(true);
+    try {
+      const { response, data } = await updateMemoryPreferences(nextPolicy);
+      if (!response.ok) {
+        throw new Error("memory_preferences_update_failed");
+      }
+      setCapturePolicy(data?.policy ?? nextPolicy);
+      toast.success(
+        t("settingsModal.memoryData.capturePolicy.saved", {
+          defaultValue: "Memory capture policy updated.",
+        })
+      );
+    } catch {
+      setCapturePolicy(previousPolicy);
+      toast.error(
+        t("settingsModal.memoryData.capturePolicy.error", {
+          defaultValue: "Could not update memory capture policy.",
+        })
+      );
+    } finally {
+      setCapturePolicySaving(false);
+    }
+  };
 
   const currentPlanLabel = activeViaAccessCode
     ? t("sidebar.profile.planBadge.codeActive", { defaultValue: "Access code" })
@@ -3012,6 +3088,50 @@ export function SettingsPage() {
                   })}
                 </p>
               ) : null}
+              {capturePolicyAvailable ? (
+                <V2SettingsRow
+                  name={t("settingsModal.memoryData.capturePolicy.name", {
+                    defaultValue: "Memory capture",
+                  })}
+                  description={t("settingsModal.memoryData.capturePolicy.helper", {
+                    defaultValue:
+                      "Control how aggressively ZAKI saves new memories from your conversations.",
+                  })}
+                >
+                  <select
+                    className="v2-input"
+                    aria-label={t("settingsModal.memoryData.capturePolicy.name", {
+                      defaultValue: "Memory capture",
+                    })}
+                    value={capturePolicy}
+                    disabled={capturePolicyLoading || capturePolicySaving}
+                    onChange={(event) => {
+                      void handleCapturePolicyChange(event.target.value as MemoryPolicy);
+                    }}
+                  >
+                    {MEMORY_CAPTURE_POLICIES.map((policy) => (
+                      <option key={policy} value={policy}>
+                        {t(`settingsModal.memoryData.capturePolicy.options.${policy}`, {
+                          defaultValue: policy,
+                        })}
+                      </option>
+                    ))}
+                  </select>
+                </V2SettingsRow>
+              ) : (
+                <GatedRow
+                  name={t("settingsModal.memoryData.capturePolicy.name", {
+                    defaultValue: "Memory capture",
+                  })}
+                  description={t("settingsModal.memoryData.capturePolicy.helper", {
+                    defaultValue:
+                      "Control how aggressively ZAKI saves new memories from your conversations.",
+                  })}
+                  reason={t("settingsModal.memoryData.capturePolicy.unavailable", {
+                    defaultValue: "Memory preferences are not available in this environment.",
+                  })}
+                />
+              )}
               <div className="zaki-settings-v2__memory-list">
                 {memoryScopeRows.map((row) => (
                   <div key={row.scope}>
