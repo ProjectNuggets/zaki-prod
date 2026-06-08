@@ -69,6 +69,25 @@ describe("MessageBubble source chip", () => {
     expect(document.querySelector('[data-testid="source-chip"]')).toBeNull();
   });
 
+  it("renders a quiet timestamp footer with full time metadata", () => {
+    const message: Message = {
+      id: "timestamp-1",
+      role: "assistant",
+      content: "Done.",
+      createdAt: "2026-05-27T09:30:00.000Z",
+    };
+
+    render(<MessageBubble message={message} botMode showSourceChip={false} animate={false} />);
+
+    const timestamp = screen.getByTestId("message-timestamp");
+    expect(timestamp).toHaveAttribute("dateTime", "2026-05-27T09:30:00.000Z");
+    expect(timestamp).toHaveAttribute("title", expect.stringContaining("2026"));
+    expect(timestamp).toHaveAttribute("aria-label", expect.stringContaining("Message sent"));
+    expect(timestamp.textContent?.trim()).toBeTruthy();
+    expect(timestamp).not.toHaveTextContent(/just now/i);
+    expect(timestamp).toHaveTextContent(/\d{1,2}:\d{2}/);
+  });
+
   it("renders persisted Agent approval instructions as operational approval rows", () => {
     const message: Message = {
       id: "approval-1",

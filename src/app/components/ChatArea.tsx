@@ -24,6 +24,7 @@ import {
   cancelAgentSession,
   deleteAgentSession,
   renameAgentSession,
+  fetchAgentArtifact,
   fetchBotRuntimeStatus,
   fetchAgentExtensionDiagnostics,
   listAgentArtifacts,
@@ -1165,6 +1166,8 @@ function buildTranscriptEntryFromStatusEvent(event: BotStatusEvent): ZakiTranscr
 }
 
 function buildTranscriptEntriesFromToolCall(toolCall: BotToolCall): ZakiTranscriptSeed[] {
+  const status = toolCall.status || (toolCall.result ? (toolCall.result.ok ? "ok" : "fail") : "pending");
+  const transcriptState = status === "ok" ? "done" : status === "fail" ? "error" : "active";
   const activeState: ZakiTranscriptSeed = {
     id: `${toolCall.id}:start`,
     kind: "tool",
@@ -1172,31 +1175,38 @@ function buildTranscriptEntriesFromToolCall(toolCall: BotToolCall): ZakiTranscri
     timestamp: toolCall.startedAt || toolCall.timestamp,
     meta: buildTranscriptMeta({
       phase: "tool",
-      state: toolCall.result ? (toolCall.result.ok ? "done" : "error") : "active",
+      state: transcriptState,
       durationMs: toolCall.durationMs,
     }),
-    state: toolCall.result ? (toolCall.result.ok ? "done" : "error") : "active",
+    state: transcriptState,
   };
 
   if (!toolCall.result) return [activeState];
 
+  const resultState = status === "ok" ? "done" : status === "fail" ? "error" : "active";
+  const resultText =
+    status === "blocked"
+      ? `Approval required for ${toolCall.name}`
+      : status === "ok"
+        ? `Finished ${toolCall.name}`
+        : `${toolCall.name} failed`;
   return [
     activeState,
     {
       id: `${toolCall.id}:result`,
       kind: "tool",
-      text: toolCall.result.ok ? `Finished ${toolCall.name}` : `${toolCall.name} failed`,
+      text: resultText,
       timestamp: toolCall.finishedAt || toolCall.timestamp,
       meta: buildTranscriptMeta({
         phase: "tool",
-        state: toolCall.result.ok ? "done" : "error",
+        state: resultState,
         durationMs:
           toolCall.durationMs ??
           (typeof toolCall.finishedAt === "number"
             ? Math.max(0, toolCall.finishedAt - toolCall.startedAt)
             : null),
       }),
-      state: toolCall.result.ok ? "done" : "error",
+      state: resultState,
     },
   ];
 }
@@ -1335,7 +1345,7 @@ export function buildZakiProcessSnapshot(input: BuildZakiProcessSnapshotInput): 
   const latestStatusMeta = buildLatestStatusMeta(latestStatusEvent);
   const latestRunningTool = [...input.toolCalls]
     .reverse()
-    .find((toolCall) => !toolCall.result) ?? null;
+    .find((toolCall) => !toolCall.result && toolCall.status !== "blocked") ?? null;
   const latestResolvedTool = input.toolCalls[input.toolCalls.length - 1] ?? null;
   const latestToolName =
     latestRunningTool?.name ||
@@ -1479,7 +1489,45 @@ function extractToolResultPayload(payload: Record<string, unknown>) {
     source.output ??
     undefined;
   const durationMs = numericValue(source.duration_ms ?? source.durationMs);
-  return { requestId, name, ok, error, result, durationMs };
+  const approvalRequired = isApprovalCheckpointToolResult(source, ok, error, result);
+  return { requestId, name, ok, error, result, durationMs, approvalRequired };
+}
+
+function textContainsApprovalCheckpoint(value: unknown) {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return false;
+  return (
+    normalized.includes("approval required") ||
+    normalized.includes("allow-once|deny") ||
+    normalized.includes("supervised_mutating_requires_approval") ||
+    normalized.includes("approval_already_pending") ||
+    normalized.includes("pending tool approval")
+  );
+}
+
+function isApprovalCheckpointToolResult(
+  source: Record<string, unknown>,
+  ok: boolean,
+  error: string | undefined,
+  result: unknown
+) {
+  if (ok) return false;
+  if (source.approval_required === true || source.approvalRequired === true) return true;
+  const sourceText =
+    typeof source.source === "string" ? source.source.trim().toLowerCase() : "";
+  if (sourceText === "approval_required") return true;
+  return [
+    error,
+    result,
+    source.reason,
+    source.result_summary,
+    source.resultSummary,
+    source.output_preview,
+    source.outputPreview,
+    source.output,
+    source.message,
+  ].some(textContainsApprovalCheckpoint);
 }
 
 export function extractNullalisNarrationFrame(
@@ -1557,6 +1605,21 @@ function timestampMillis(value: unknown, fallback: number | null = null): number
     if (Number.isFinite(parsed)) return parsed;
   }
   return fallback;
+}
+
+function messageRecordCreatedAtIso(record: Record<string, unknown>): string | null {
+  const createdAtMs = timestampMillis(
+    record.createdAt ??
+      record.created_at ??
+      record.createdAtMs ??
+      record.created_at_ms ??
+      record.timestamp ??
+      record.ts,
+    null
+  );
+  if (createdAtMs == null) return null;
+  const parsed = new Date(createdAtMs);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
 function recordStringValue(data: Record<string, unknown>, ...keys: string[]): string | null {
@@ -1990,6 +2053,13 @@ function normalizeAgentArtifact(item: unknown): AgentInspectorArtifact | null {
         record.createdAtMs
     ),
   };
+}
+
+function extractArtifactEventId(payload: Record<string, unknown>) {
+  return (
+    recordStringValue(payload, "artifact_id", "artifactId", "id") ||
+    null
+  );
 }
 
 function stringPayloadField(payload: Record<string, unknown>, ...keys: string[]): string | null {
@@ -2478,7 +2548,12 @@ export function extractNullalisTranscriptEntry(
     const outputTruncated =
       payload.output_truncated === true || payload.outputTruncated === true;
     const exitCode = numericValue(payload.exit_code ?? payload.exitCode);
-    const text = toolResult.ok ? `${tool} completed${duration}` : `${tool} failed`;
+    const isApprovalRequired = toolResult.approvalRequired;
+    const text = isApprovalRequired
+      ? `Approval required for ${tool}`
+      : toolResult.ok
+        ? `${tool} completed${duration}`
+        : `${tool} failed`;
     const intent = inferNullalisIntent({ text, tool, files, command });
     return {
       id: nullalisEntryId("tool-result", now),
@@ -2499,16 +2574,16 @@ export function extractNullalisTranscriptEntry(
       tool,
       toolUseId,
       durationMs: toolResult.durationMs,
-      status: toolResult.ok ? "done" : "failed",
+      status: isApprovalRequired ? "blocked" : toolResult.ok ? "done" : "failed",
       files,
       command,
       outputPreview,
       outputTruncated,
       resultSummary,
       exitCode,
-      resultState: toolResult.ok ? "done" : "failed",
+      resultState: isApprovalRequired ? "blocked" : toolResult.ok ? "done" : "failed",
       groupKey: toolUseId ? `tool-use:${toolUseId}` : `tool:${tool}`,
-      source: "tool",
+      source: isApprovalRequired ? "approval" : "tool",
     };
   }
 
@@ -3867,6 +3942,7 @@ export function ChatArea() {
             id: String(entry.id || `bot-history-${index}`),
             role,
             content: role === "user" ? stripMemoryContext(content) : content,
+            createdAt: messageRecordCreatedAtIso(entry),
             turnEvents,
           };
         })
@@ -3925,6 +4001,7 @@ export function ChatArea() {
         id: `approval-continuation-${Date.now()}`,
         role: "assistant",
         content: trimmed,
+        createdAt: new Date().toISOString(),
       };
       let changed = false;
       setMessagesByThread((prev) => {
@@ -3967,6 +4044,7 @@ export function ChatArea() {
       updated[assistantIndex] = {
         ...existingMsg,
         content: newContent,
+        createdAt: existingMsg.createdAt || new Date().toISOString(),
         error: false,
         errorCode: null,
       };
@@ -3988,6 +4066,7 @@ export function ChatArea() {
           content: existingMsg.content?.trim()
             ? `${existingMsg.content.trim()}\n\n${newContent}`
             : newContent,
+          createdAt: existingMsg.createdAt || new Date().toISOString(),
           error: true,
           errorCode: errorCode ?? null,
         };
@@ -4441,6 +4520,41 @@ export function ChatArea() {
     setAgentExtensionDiagnosticsLoading(false);
   }, [isAgentSurface, normalizedActiveZakiSessionKey, zakiBotProvisionReady]);
 
+  const handleAgentArtifactEvent = useCallback(
+    async (payload: Record<string, unknown>) => {
+      if (!isAgentSurface || !zakiBotProvisionReady) return;
+      setAgentArtifactEventCount((count) => count + 1);
+      void refreshAgentRuntimePanelData();
+
+      const artifactId = extractArtifactEventId(payload);
+      if (!artifactId) return;
+
+      try {
+        const { response, data } = await fetchAgentArtifact(artifactId);
+        if (!response.ok) return;
+        const artifact =
+          normalizeAgentArtifact(data) ||
+          normalizeAgentArtifact((data as { artifact?: unknown })?.artifact) ||
+          normalizeAgentArtifactsPayload(data)[0] ||
+          null;
+        if (!artifact) return;
+        setAgentArtifactSnapshots((prev) => [
+          artifact,
+          ...prev.filter((item) => item.id !== artifact.id),
+        ]);
+        setAgentArtifactScope("session");
+        if (isZakiBotActiveSpace) {
+          setSelectedAgentArtifact(artifact);
+          setAgentFocusMode(false);
+          setAgentMobileInspectorOpen(false);
+        }
+      } catch {
+        // Best-effort UI hydration; the list refresh above still runs.
+      }
+    },
+    [isAgentSurface, isZakiBotActiveSpace, refreshAgentRuntimePanelData, zakiBotProvisionReady]
+  );
+
   useEffect(() => {
     if (!isAgentSurface) {
       setAgentTaskSnapshots([]);
@@ -4618,6 +4732,10 @@ export function ChatArea() {
               ...existingCall,
               name,
               arguments: args,
+              status: "pending",
+              result: undefined,
+              finishedAt: undefined,
+              durationMs: undefined,
             };
             return next;
           }
@@ -4632,6 +4750,7 @@ export function ChatArea() {
             arguments: args,
             timestamp: now,
             startedAt: now,
+            status: "pending",
           },
         ];
       });
@@ -4642,8 +4761,9 @@ export function ChatArea() {
   const applyZakiBotToolResult = useCallback(
     (payload: Record<string, unknown>) => {
       if (!isZakiBotActiveSpace) return;
-      const { requestId, name, ok, error, result, durationMs: explicitDurationMs } =
+      const { requestId, name, ok, error, result, durationMs: explicitDurationMs, approvalRequired } =
         extractToolResultPayload(payload);
+      const status = approvalRequired ? "blocked" : ok ? "ok" : "fail";
       setZakiBotProgressTerminalReason(null);
       setZakiBotToolCalls((prev) => {
         if (!prev.length) {
@@ -4660,6 +4780,7 @@ export function ChatArea() {
               startedAt,
               finishedAt: now,
               durationMs: explicitDurationMs ?? 0,
+              status,
               result: { ok, error, result },
             },
           ];
@@ -4697,7 +4818,68 @@ export function ChatArea() {
           ...(name ? { name } : {}),
           finishedAt,
           durationMs,
+          status,
           result: { ok, error, result },
+        };
+        return next;
+      });
+    },
+    [isZakiBotActiveSpace]
+  );
+
+  const markZakiBotToolApprovalRequired = useCallback(
+    (payload: Record<string, unknown>) => {
+      if (!isZakiBotActiveSpace) return;
+      const approval = extractNullalisApprovalRequest(payload);
+      const now = Date.now();
+      const requestId =
+        approval.toolCallId ||
+        (typeof payload.tool_use_id === "string" && payload.tool_use_id) ||
+        (typeof payload.toolUseId === "string" && payload.toolUseId) ||
+        null;
+      const reason = approval.effectPreview || approval.reason || "Approval required";
+      setZakiBotToolCalls((prev) => {
+        const next = [...prev];
+        let targetIndex = -1;
+        if (requestId) {
+          targetIndex = next.findIndex(
+            (call) => call.requestId === requestId || call.id === requestId
+          );
+        }
+        if (targetIndex < 0 && approval.tool) {
+          const normalizedName = approval.tool.trim().toLowerCase();
+          targetIndex = [...next]
+            .reverse()
+            .findIndex((call) => String(call.name || "").trim().toLowerCase() === normalizedName);
+          if (targetIndex >= 0) targetIndex = next.length - 1 - targetIndex;
+        }
+        if (targetIndex < 0) {
+          const startedAt = now;
+          return [
+            ...next,
+            {
+              id: requestId || `tool-${now}-${Math.random().toString(36).slice(2, 8)}`,
+              requestId: requestId || undefined,
+              name: approval.tool || "tool",
+              arguments: {},
+              timestamp: startedAt,
+              startedAt,
+              finishedAt: now,
+              durationMs: 0,
+              status: "blocked",
+              result: { ok: false, error: reason, result: reason },
+            },
+          ];
+        }
+        const existingCall = next[targetIndex];
+        if (!existingCall) return prev;
+        next[targetIndex] = {
+          ...existingCall,
+          requestId: existingCall.requestId || requestId || undefined,
+          finishedAt: now,
+          durationMs: Math.max(0, now - existingCall.startedAt),
+          status: "blocked",
+          result: { ok: false, error: reason, result: reason },
         };
         return next;
       });
@@ -4766,6 +4948,7 @@ export function ChatArea() {
             startedAt,
             ...(typeof finishedAt === "number" ? { finishedAt } : {}),
             ...(typeof computedDurationMs === "number" ? { durationMs: computedDurationMs } : {}),
+            status: isTerminal ? (isFailure ? "fail" : "ok") : existing.status || "pending",
             ...(isTerminal
               ? {
                   result: {
@@ -4791,6 +4974,7 @@ export function ChatArea() {
             startedAt,
             ...(typeof finishedAt === "number" ? { finishedAt } : {}),
             ...(durationMs != null ? { durationMs } : {}),
+            status: isTerminal ? (isFailure ? "fail" : "ok") : "pending",
             ...(isTerminal
               ? {
                   result: {
@@ -4901,6 +5085,53 @@ export function ChatArea() {
       });
     },
     [isZakiBotActiveSpace]
+  );
+
+  const handleNullalisApprovalRequired = useCallback(
+    (payload: Record<string, unknown>) => {
+      if (!isZakiBotActiveSpace) return;
+      const approvalRequest = extractNullalisApprovalRequest(payload);
+      setNullalisApprovalRequest(approvalRequest);
+      markZakiBotToolApprovalRequired(payload);
+      if (approvalRequest?.id) {
+        const sessionKey =
+          activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
+        if (sessionKey) {
+          const seenSet =
+            approvalSeenBySessionRef.current[sessionKey] ||
+            (approvalSeenBySessionRef.current[sessionKey] = new Set<string>());
+          if (!seenSet.has(approvalRequest.id)) {
+            seenSet.add(approvalRequest.id);
+            incrementSessionApprovalCount(sessionKey, approvalRequest);
+          }
+          if (!approvalRequest.approvalId) {
+            void hydrateActiveSessionDetail(sessionKey);
+          }
+        }
+      }
+      pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("approval_required", payload));
+      setNullalisNarrationFrame({
+        id: `zaki-runtime-approval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        phase: "waiting",
+        label: "Waiting for tool approval...",
+        tool: typeof payload.tool === "string" ? payload.tool : null,
+        iteration: null,
+        durationMs: null,
+        stepIndex: null,
+        stepTotal: null,
+        timestamp: Date.now(),
+      });
+    },
+    [
+      activeThreadId,
+      activeZakiSessionKey,
+      agentUserId,
+      hydrateActiveSessionDetail,
+      incrementSessionApprovalCount,
+      isZakiBotActiveSpace,
+      markZakiBotToolApprovalRequired,
+      pushNullalisTranscriptEntry,
+    ]
   );
 
   const pushNullalisNarrationFrame = useCallback(
@@ -5229,6 +5460,15 @@ export function ChatArea() {
               markZakiBotReplyStart(reportPayload);
               return;
             }
+            if (isZakiBotActiveSpace && report?.type === "approval_required") {
+              handleNullalisApprovalRequired(reportPayload);
+              return;
+            }
+            if (isZakiBotActiveSpace && report?.type === "artifact_event") {
+              pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("artifact_event", reportPayload));
+              void handleAgentArtifactEvent(reportPayload);
+              return;
+            }
             if (isZakiBotActiveSpace && report?.type === "toolCallInvocation") {
               upsertZakiBotToolCall({ content: report.content, type: "toolCallInvocation" });
               upsertNullalisTodoTaskItems({ content: report.content, type: "toolCallInvocation" });
@@ -5238,6 +5478,7 @@ export function ChatArea() {
               isZakiBotActiveSpace &&
               (report?.type === "toolCallResult" || report?.type === "tool_result")
             ) {
+              pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("tool_result", reportPayload));
               applyZakiBotToolResult({ content: report.content, type: report?.type });
               upsertNullalisTodoTaskItems({ content: report.content, type: report?.type });
               return;
@@ -5287,6 +5528,19 @@ export function ChatArea() {
             }
             return;
           }
+          if (payload?.type === "approval_required") {
+            if (isZakiBotActiveSpace) {
+              handleNullalisApprovalRequired(payload);
+            }
+            return;
+          }
+          if (payload?.type === "artifact_event") {
+            if (isZakiBotActiveSpace) {
+              pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("artifact_event", payload));
+              void handleAgentArtifactEvent(payload);
+            }
+            return;
+          }
 
           if (payload?.type === "toolCallInvocation") {
             if (isZakiBotActiveSpace) {
@@ -5297,6 +5551,7 @@ export function ChatArea() {
           }
           if (payload?.type === "toolCallResult" || payload?.type === "tool_result") {
             if (isZakiBotActiveSpace) {
+              pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("tool_result", payload));
               applyZakiBotToolResult(payload);
               upsertNullalisTodoTaskItems(payload);
             }
@@ -5382,8 +5637,11 @@ export function ChatArea() {
   }, [
     applyZakiBotToolResult,
     finalizeZakiBotProgress,
+    handleAgentArtifactEvent,
+    handleNullalisApprovalRequired,
     isZakiBotActiveSpace,
     pushZakiBotProgressEvent,
+    pushNullalisTranscriptEntry,
     markZakiBotReplyStart,
     updateNullalisReasoningSummary,
     updateAssistantContent,
@@ -5758,8 +6016,8 @@ export function ChatArea() {
           return {};
         }
         if (eventType === "artifact_event" || payloadType === "artifact_event") {
-          setAgentArtifactEventCount((count) => count + 1);
           pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("artifact_event", payload));
+          void handleAgentArtifactEvent(payload);
           return {};
         }
         if (eventType === "audio_reply" || payloadType === "audio_reply") {
@@ -5767,36 +6025,7 @@ export function ChatArea() {
           return {};
         }
         if (eventType === "approval_required" || payloadType === "approval_required") {
-          const approvalRequest = extractNullalisApprovalRequest(payload);
-          setNullalisApprovalRequest(approvalRequest);
-          if (approvalRequest?.id) {
-            const sessionKey =
-              activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
-            if (sessionKey) {
-              const seenSet =
-                approvalSeenBySessionRef.current[sessionKey] ||
-                (approvalSeenBySessionRef.current[sessionKey] = new Set<string>());
-              if (!seenSet.has(approvalRequest.id)) {
-                seenSet.add(approvalRequest.id);
-                incrementSessionApprovalCount(sessionKey, approvalRequest);
-              }
-              if (!approvalRequest.approvalId) {
-                void hydrateActiveSessionDetail(sessionKey);
-              }
-            }
-          }
-          pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("approval_required", payload));
-          setNullalisNarrationFrame({
-            id: `zaki-runtime-approval-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            phase: "waiting",
-            label: "Waiting for tool approval...",
-            tool: typeof payload.tool === "string" ? payload.tool : null,
-            iteration: null,
-            durationMs: null,
-            stepIndex: null,
-            stepTotal: null,
-            timestamp: Date.now(),
-          });
+          handleNullalisApprovalRequired(payload);
           return {};
         }
         if (eventType === "reasoning_summary" || payloadType === "reasoning_summary") {
@@ -5868,6 +6097,7 @@ export function ChatArea() {
       }
       if (payload?.type === "toolCallResult" || payload?.type === "tool_result") {
         if (isZakiAgentSpace) {
+          pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("tool_result", payload));
           applyZakiBotToolResult(payload);
         }
         return {};
@@ -6154,6 +6384,8 @@ export function ChatArea() {
     applyZakiBotToolResult,
     authUserId,
     finalizeZakiBotProgress,
+    handleAgentArtifactEvent,
+    handleNullalisApprovalRequired,
     isRtl,
     isZakiBotActiveSpace,
     isMemoryPipelineEnabled,
@@ -6967,6 +7199,8 @@ export function ChatArea() {
       type: file.type,
       url: URL.createObjectURL(file),
     }));
+    const userCreatedAt = new Date().toISOString();
+    const assistantCreatedAt = new Date().toISOString();
     const userMessageId = `user-${Date.now()}`;
     const assistantMessageId = `assistant-${Date.now()}`;
     currentTurnAssistantIdRef.current = assistantMessageId;
@@ -6979,12 +7213,14 @@ export function ChatArea() {
             id: userMessageId,
             role: "user" as const,
             content: trimmed,
+            createdAt: userCreatedAt,
             attachments: attachmentsForMessage,
           },
           {
             id: assistantMessageId,
             role: "assistant" as const,
             content: "",
+            createdAt: assistantCreatedAt,
           },
         ],
       }));
@@ -7749,6 +7985,9 @@ export function ChatArea() {
     const cleaned = historyData.map((entry) => ({
       ...entry,
       content: entry.role === "user" ? stripMemoryContext(entry.content ?? "") : (entry.content ?? ""),
+      createdAt:
+        entry.createdAt ||
+        messageRecordCreatedAtIso(entry as unknown as Record<string, unknown>),
     }));
 
     setMessagesByThread((prev) => ({

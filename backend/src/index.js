@@ -355,6 +355,7 @@ import {
   cleanupExpiredSessions,
 } from "./zaki-auth.js";
 import { buildRefreshCookie } from "./zaki-session-cookie.js";
+import { sweepExpiredHolds } from "./unit-ledger.js";
 import {
   buildClearedGoogleOAuthNonceCookie,
   buildGoogleOAuthRedirectUri,
@@ -19244,6 +19245,18 @@ server.listen(PORT, () => {
       );
     }, SESSION_CLEANUP_INTERVAL_MS);
   }, 30_000);
+
+  // Unit-ledger expiry sweeper: release orphaned reserved holds past expires_at (fail-closed
+  // companion to reserve→settle). Run 45s after startup, then every 2 minutes.
+  const LEDGER_SWEEP_INTERVAL_MS = 2 * 60 * 1000;
+  const runLedgerSweep = () =>
+    sweepExpiredHolds()
+      .then((n) => { if (n > 0) console.log(`[UnitLedger] swept ${n} expired hold(s)`); })
+      .catch((err) => console.warn("[UnitLedger] sweep failed:", err?.message));
+  setTimeout(() => {
+    runLedgerSweep();
+    setInterval(runLedgerSweep, LEDGER_SWEEP_INTERVAL_MS);
+  }, 45_000);
 
   if (runtimeLearningRetentionPolicy.enabled) {
     const LEARNING_RETENTION_CLEANUP_INTERVAL_MS =

@@ -49,6 +49,9 @@ export interface Message {
   memorySources?: MemorySource[];
   error?: boolean;
   errorCode?: string | null;
+  channel?: string | null;
+  lane?: string | null;
+  createdAt?: string | null;
   turnEvents?: PersistedTurnEvent[];
 }
 
