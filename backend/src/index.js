@@ -9393,6 +9393,45 @@ app.post(
   removeWorkspaceDocumentsHandler
 );
 
+// Re-provision a TYP user when a stored nova_user_id is stale/invalid (engine switched, TYP user
+// deleted, etc.). Finds the user by email/username on the current engine, else creates one, then
+// persists the corrected id on the ZAKI user. The TYP password is unused — ZAKI owns auth.
+async function ensureValidNovaUserIdForUser(zakiUser, email) {
+  // Provision with a stable, sanitized handle (`u<zakiUserId>`) — valid under TYP's username regex
+  // and decoupled from the email (raw emails with '+', uppercase, or a leading digit are rejected).
+  const handle = `u${Number(zakiUser?.id)}`;
+  // Existing users may have been provisioned with their email as the username — match either.
+  let id = (await fetchNovaUserIdByUsername(handle)) || (await fetchNovaUserIdByUsername(email));
+  if (!id) {
+    try {
+      const createResponse = await novaAdminRequest("/v1/admin/users/new", {
+        method: "POST",
+        body: JSON.stringify({
+          username: handle,
+          password: crypto.randomBytes(18).toString("hex"),
+          role: "default",
+        }),
+      });
+      const payload = await createResponse.json().catch(() => ({}));
+      if (createResponse.ok && payload?.user?.id) {
+        id = payload.user.id;
+      } else if (String(payload?.error || "").toLowerCase().includes("exists")) {
+        id = await fetchNovaUserIdByUsername(handle);
+      }
+    } catch (_e) {
+      /* fall through to null */
+    }
+  }
+  if (id && zakiUser?.id && Number(id) !== Number(zakiUser.nova_user_id || 0)) {
+    await dbQuery(
+      `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
+      [Number(id), new Date().toISOString(), zakiUser.id]
+    );
+    zakiUser.nova_user_id = Number(id);
+  }
+  return id ? Number(id) : null;
+}
+
 const createWorkspaceHandler = async (req, res) => {
   try {
     const authResult = await requireAuthUser(req, res);
@@ -9404,8 +9443,11 @@ const createWorkspaceHandler = async (req, res) => {
       return;
     }
 
-    const novaUserId = await resolveNovaUserIdForZakiUser(zakiUser, email);
-
+    let novaUserId = await resolveNovaUserIdForZakiUser(zakiUser, email);
+    if (!novaUserId) {
+      // No stored/derivable id — provision one on the current engine before failing.
+      novaUserId = await ensureValidNovaUserIdForUser(zakiUser, email);
+    }
     if (!novaUserId) {
       res.status(400).json({
         error: "NOVA.TYP user not found. Please log out and log back in.",
@@ -9433,19 +9475,39 @@ const createWorkspaceHandler = async (req, res) => {
     }
 
     const workspaceSlug = createData.workspace.slug;
-    const assignResponse = await novaAdminRequest(
-      `/v1/admin/workspaces/${workspaceSlug}/manage-users`,
-      {
+    const assignMembership = (uid) =>
+      novaAdminRequest(`/v1/admin/workspaces/${workspaceSlug}/manage-users`, {
         method: "POST",
-        body: JSON.stringify({ userIds: [Number(novaUserId)], reset: false }),
-      }
-    );
-    const assignData = await assignResponse.json().catch(() => ({}));
-    if (!assignResponse.ok || assignData?.success === false) {
-      res.status(400).json({
-        error: assignData?.error || "Workspace created, but user not assigned.",
+        body: JSON.stringify({ userIds: [Number(uid)], reset: false }),
       });
-      return;
+    let assignResponse = await assignMembership(novaUserId);
+    let assignData = await assignResponse.json().catch(() => ({}));
+    if (!assignResponse.ok || assignData?.success === false) {
+      // Most common cause: a stale nova_user_id (engine switched / TYP user gone) →
+      // "No valid user IDs provided." Re-provision the TYP user and retry once.
+      const validId = await ensureValidNovaUserIdForUser(zakiUser, email);
+      if (validId && Number(validId) !== Number(novaUserId)) {
+        novaUserId = Number(validId);
+        assignResponse = await assignMembership(novaUserId);
+        assignData = await assignResponse.json().catch(() => ({}));
+      }
+      if (!assignResponse.ok || assignData?.success === false) {
+        res.status(400).json({
+          error: assignData?.error || "Workspace created, but user not assigned.",
+        });
+        return;
+      }
+    }
+
+    // Seed an initial thread for the user so the new space is immediately visible (ZAKI lists
+    // spaces by thread ownership; a thread-less space would otherwise not appear). Non-fatal.
+    try {
+      await novaAdminRequest(`/v1/workspace/${workspaceSlug}/thread/new`, {
+        method: "POST",
+        body: JSON.stringify({ userId: Number(novaUserId), name: "New chat" }),
+      });
+    } catch (_e) {
+      /* visibility seed is best-effort */
     }
 
     // Ensure recreated workspace is visible even if it had been locally hidden before.
