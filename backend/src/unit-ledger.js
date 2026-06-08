@@ -21,8 +21,10 @@
 // NOTE on precision: unit columns are DOUBLE PRECISION; running sums can drift over many requests.
 // Acceptable for weighted units; revisit integer micro-units if it ever backs direct $ accounting.
 
-import { withDbTransaction } from "./db.js";
+import { withDbTransaction, dbAll } from "./db.js";
 import { computeRemaining, planFunding, computeSettleRefund } from "./unit-wallet.js";
+
+const TERMINAL_STATES = new Set(["settled", "released", "expired"]);
 
 export const UNIT_LEDGER_DDL = `
 CREATE TABLE IF NOT EXISTS zaki_unit_wallets (
@@ -172,6 +174,7 @@ export async function settleHold(
   { holdId, settleIdempotencyKey, settledUnits, finalState = "settled", provider = null, providerModel = null, providerCostUsdMicros = null, providerInputTokens = null, providerOutputTokens = null },
   client
 ) {
+  if (!TERMINAL_STATES.has(finalState)) return { ok: false, reason: "invalid_final_state" };
   if (finalState === "settled" && !Number.isFinite(Number(settledUnits))) {
     return { ok: false, reason: "invalid_settled_units" };
   }
@@ -184,7 +187,8 @@ export async function settleHold(
     const funding = parseFunding(hold.funding_json);
     const refund = computeSettleRefund({
       reservedUnits: Number(hold.reserved_units),
-      settledUnits: finalState === "released" ? 0 : Number(settledUnits),
+      // only 'settled' consumes units; 'released'/'expired' are full refunds
+      settledUnits: finalState === "settled" ? Number(settledUnits) : 0,
       funding,
     });
 
@@ -198,7 +202,7 @@ export async function settleHold(
       [hold.user_id, refund.refundRecurring, refund.refundTopup]
     );
 
-    const state = finalState === "released" ? "released" : "settled";
+    const state = finalState; // 'settled' | 'released' | 'expired'
     const upd = await c.query(
       `UPDATE zaki_meter_holds
          SET state = $2, settled_units = $3, settle_idempotency_key = $4,
@@ -216,4 +220,31 @@ export async function settleHold(
 /** Release a hold (op never ran or fully failed) — full refund. */
 export async function releaseHold({ holdId, settleIdempotencyKey }, client) {
   return settleHold({ holdId, settleIdempotencyKey, settledUnits: 0, finalState: "released" }, client);
+}
+
+/**
+ * Expiry sweeper (the required fail-closed companion): releases `reserved` holds past expires_at
+ * with a FULL refund and state='expired', so an orphaned reservation (settle never called) can't
+ * leak the user's units forever. Each hold is settled in its own transaction (idempotent), so the
+ * sweep is safe to run concurrently / on a schedule. Returns the count actually released.
+ */
+export async function sweepExpiredHolds({ limit = 500 } = {}) {
+  const due = await dbAll(
+    `SELECT id FROM zaki_meter_holds
+      WHERE state = 'reserved' AND expires_at < NOW()
+      ORDER BY expires_at ASC
+      LIMIT $1`,
+    [limit]
+  );
+  let released = 0;
+  for (const row of due) {
+    const res = await settleHold({
+      holdId: row.id,
+      settleIdempotencyKey: `sweep:${row.id}`,
+      settledUnits: 0,
+      finalState: "expired",
+    });
+    if (res.ok && !res.idempotent) released += 1;
+  }
+  return released;
 }
