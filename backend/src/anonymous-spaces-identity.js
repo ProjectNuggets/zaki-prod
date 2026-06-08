@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { cookieDomainAttr } from "./zaki-session-cookie.js";
 
 export const ANONYMOUS_SPACES_COOKIE_NAME = "zaki_anon";
 export const ANONYMOUS_METER_COOKIE_NAME = "zaki_meter_anon";
@@ -61,7 +62,7 @@ export function buildAnonymousSpacesCookie(id, secret, nowMs = Date.now()) {
   const payload = `${base64Url(id)}.${issuedAt}.${signAnonymousId(id, issuedAt, secret)}`;
   const expires = new Date(nowMs + ANONYMOUS_SPACES_COOKIE_TTL_MS);
   const secure = isProduction() ? "Secure; " : "";
-  const domain = isProduction() ? "Domain=.chatzaki.com; " : "";
+  const domain = cookieDomainAttr();
   return `${ANONYMOUS_SPACES_COOKIE_NAME}=${encodeURIComponent(payload)}; HttpOnly; ${secure}SameSite=Lax; ${domain}Path=/api/anonymous; Expires=${expires.toUTCString()}`;
 }
 
@@ -70,7 +71,7 @@ export function buildAnonymousMeterCookie(id, secret, nowMs = Date.now()) {
   const payload = `${base64Url(id)}.${issuedAt}.${signAnonymousId(id, issuedAt, secret)}`;
   const expires = new Date(nowMs + ANONYMOUS_SPACES_COOKIE_TTL_MS);
   const secure = isProduction() ? "Secure; " : "";
-  const domain = isProduction() ? "Domain=.chatzaki.com; " : "";
+  const domain = cookieDomainAttr();
   return `${ANONYMOUS_METER_COOKIE_NAME}=${encodeURIComponent(payload)}; HttpOnly; ${secure}SameSite=Lax; ${domain}Path=/api; Expires=${expires.toUTCString()}`;
 }
 
