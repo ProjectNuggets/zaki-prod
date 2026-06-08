@@ -1220,6 +1220,16 @@ export async function initDb() {
   await pool.query(`
     ALTER TABLE zaki_sessions DROP COLUMN IF EXISTS typ_session_token;
   `);
+
+  // --- SaaS V1 unit ledger (H-02): wallets + reserve→settle holds ---
+  // Dynamic import avoids a static circular dependency (unit-ledger.js imports db.js).
+  try {
+    const { UNIT_LEDGER_DDL } = await import("./unit-ledger.js");
+    await pool.query(UNIT_LEDGER_DDL);
+    console.log("[DB] Unit ledger tables ready (zaki_unit_wallets, zaki_meter_holds)");
+  } catch (err) {
+    console.warn("[DB] Unit ledger table creation failed:", err.message);
+  }
 }
 
 export function getDb() {
