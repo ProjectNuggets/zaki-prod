@@ -355,8 +355,9 @@ import {
   cleanupExpiredSessions,
 } from "./zaki-auth.js";
 import { buildRefreshCookie } from "./zaki-session-cookie.js";
-import { sweepExpiredHolds } from "./unit-ledger.js";
+import { sweepExpiredHolds, reserveUnits, settleHold, ensureWallet } from "./unit-ledger.js";
 import { buildMeterDemoRouter } from "./meter-demo-router.js";
+import { actualChatUnits } from "./chat-meter.js";
 import {
   buildClearedGoogleOAuthNonceCookie,
   buildGoogleOAuthRedirectUri,
@@ -10117,34 +10118,53 @@ async function requireSpacesMeterGrantForChat({
     res.status(result.status).json(buildSpacesMeterDenialPayload(result, requestId));
     return result;
   }
-  const result = await issueMeterGrantForIdentity({
-    identity,
-    product: "spaces",
-    action,
-    estimatedUnits: estimateSpacesChatMeterUnits(message, action),
-    requestId,
-    idempotencyKey: readSpacesIdempotencyKey(req, action),
-    metadata: {
-      surface: "spaces",
-      route: String(req.originalUrl || req.url || "").split("?")[0],
-      method: req.method,
-      workspaceSlug: req.params?.slug || null,
-      threadSlug: req.params?.threadSlug || null,
-      anonymous,
-      source: anonymous ? "spaces_anonymous_chat" : "spaces_authenticated_chat",
-    },
-  });
-  if (!result.allowed) {
-    res
-      .status(result.status || 403)
-      .json(buildSpacesMeterDenialPayload(result, requestId));
-    return { ...result, action };
+  // Anonymous chat is limited by the anonymous daily counter (consumeAnonymousDailyPromptQuota),
+  // not the unit wallet (anonymous identities have no wallet). Allow through here.
+  if (anonymous || identity.type !== "user" || !identity.userId) {
+    return { allowed: true, action };
   }
-  req.spacesMeterGrant = result.grant;
-  req.spacesMeterAction = result.grant?.action || normalizeMeterAction(action);
-  req.spacesMeterIssuedAtMs = Date.now();
-  setSpacesMeterHeaders(res, result.grant, result.meter);
-  return { ...result, action };
+  const zakiUser = identity.zakiUser;
+  // Founder / unlimited bypass — same determination as the prompt-quota path; never debit.
+  if (buildUserQuotaContext(zakiUser, { surface: APP_CHAT_SURFACE }).unlimited) {
+    req.spacesChatUnmetered = true;
+    return { allowed: true, action };
+  }
+  const normalizedAction = normalizeMeterAction(action);
+  const estimatedUnits = estimateSpacesChatMeterUnits(message, action);
+  const idempotencyKey = readSpacesIdempotencyKey(req, action);
+  const grantId = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+  const reserveArgs = {
+    userId: identity.userId, grantId, productId: "spaces", action: normalizedAction,
+    reservedUnits: estimatedUnits, reserveIdempotencyKey: idempotencyKey, expiresAt,
+  };
+  try {
+    let reserved = await reserveUnits(reserveArgs);
+    if (!reserved.ok && reserved.reason === "no_wallet") {
+      await ensureWallet({ userId: identity.userId, planId: zakiUser?.plan_tier || "free" });
+      reserved = await reserveUnits(reserveArgs);
+    }
+    if (!reserved.ok) {
+      const result = {
+        allowed: false, status: 429, error: "insufficient_units",
+        message: "You're out of usage for now — it refreshes on your weekly cycle.",
+        remaining: reserved.remaining,
+      };
+      res.status(429).json(buildSpacesMeterDenialPayload(result, requestId));
+      return { ...result, action };
+    }
+    // Hold to settle at the terminal path (null on an idempotent retry — already charged).
+    req.spacesChatHold = reserved.idempotent ? null : reserved.hold;
+    req.spacesChatKey = idempotencyKey;
+    req.spacesChatAction = normalizedAction;
+    req.spacesChatMessageChars = String(message || "").length;
+    return { allowed: true, action };
+  } catch (err) {
+    // Fail-OPEN for the core product: a metering DB blip must not break chat. Not charged; logged.
+    console.error(`[Spaces] wallet reserve failed (allowing chat unmetered) req=${requestId}: ${err?.message}`);
+    req.spacesChatUnmetered = true;
+    return { allowed: true, action };
+  }
 }
 
 function buildSpacesMeterUsageFacts({
@@ -10175,42 +10195,34 @@ function buildSpacesMeterUsageFacts({
   return facts;
 }
 
+// Settle the chat turn against the user's unit wallet (wallet = source of truth). Idempotent and
+// safe across the handler's multiple terminal paths. No-op when there's no hold (anonymous, founder
+// bypass, fail-open, or an idempotent retry). Extra legacy params from call sites are ignored.
 async function recordSpacesMeterReceiptBestEffort(req, {
-  grant = req.spacesMeterGrant,
-  action = req.spacesMeterAction || grant?.action,
   status = "success",
-  durationMs = 0,
   message = "",
   outputText = "",
   streamMetrics = null,
-  idempotencySuffix = "receipt",
-  model = "spaces-chat",
 } = {}) {
-  if (!grant?.grantId) return null;
+  const hold = req.spacesChatHold;
+  if (!hold?.id) return null;
+  req.spacesChatHold = null; // prevent double-settle across terminal paths (settleHold is also idempotent)
   try {
-    const normalizedAction = normalizeMeterAction(action || grant.action);
-    return await recordMeterReceiptForGrant({
-      grant,
-      product: "spaces",
-      action: normalizedAction,
-      status,
-      rawUsageFacts: buildSpacesMeterUsageFacts({
-        action: normalizedAction,
-        message,
-        outputText,
-        streamMetrics,
-        status,
-        durationMs,
-        model,
-      }),
-      idempotencyKey: `${grant.idempotencyKey || getOrCreateRequestId(req)}:${idempotencySuffix}`.slice(0, 180),
+    const sawError = status !== "success" || Boolean(streamMetrics?.sawError);
+    const inputChars = Number(req.spacesChatMessageChars ?? String(message || "").length);
+    const outputChars = streamMetrics
+      ? Number(streamMetrics.assistantOutputChars || 0)
+      : String(outputText || "").length;
+    const settledUnits = sawError ? 0 : actualChatUnits({ inputChars, outputChars, action: req.spacesChatAction });
+    return await settleHold({
+      holdId: hold.id,
+      settleIdempotencyKey: `${req.spacesChatKey}:settle`,
+      settledUnits,
+      finalState: sawError ? "released" : "settled",
+      providerModel: "spaces-chat",
     });
-  } catch (error) {
-    console.warn("[Spaces] Meter receipt failed:", {
-      requestId: getOrCreateRequestId(req),
-      action,
-      error: error?.message || "Spaces meter receipt failed.",
-    });
+  } catch (err) {
+    console.error(`[Spaces] wallet settle failed (sweeper will reconcile) hold=${hold.id}: ${err?.message}`);
     return null;
   }
 }
@@ -10393,16 +10405,8 @@ const streamChatHandler = async (req, res) => {
       return;
     }
 
-    const streamQuotaDecision = await enforcePromptQuotaForIngress({
-      zakiUser,
-      res,
-      surface: APP_CHAT_SURFACE,
-      consumePromptQuotaForUser,
-      setPromptQuotaHeaders,
-    });
-    if (!streamQuotaDecision.allowed) {
-      return res.status(streamQuotaDecision.status).json(streamQuotaDecision.payload);
-    }
+    // Legacy app_chat daily counter RETIRED — the unit wallet (reserved above) is the source of
+    // truth for authenticated chat. (requireSpacesMeterGrantForChat already returned 429 if out of units.)
 
     if (isIdentityProbePrompt(originalMessage)) {
       const reply = buildIdentityProbeReply(originalMessage);
