@@ -357,7 +357,7 @@ import {
 import { buildRefreshCookie } from "./zaki-session-cookie.js";
 import { sweepExpiredHolds, reserveUnits, settleHold, ensureWallet } from "./unit-ledger.js";
 import { buildMeterDemoRouter } from "./meter-demo-router.js";
-import { actualChatUnits } from "./chat-meter.js";
+import { actualChatUnits, estimateChatUnits, deterministicGrantId } from "./chat-meter.js";
 import {
   buildClearedGoogleOAuthNonceCookie,
   buildGoogleOAuthRedirectUri,
@@ -10130,9 +10130,9 @@ async function requireSpacesMeterGrantForChat({
     return { allowed: true, action };
   }
   const normalizedAction = normalizeMeterAction(action);
-  const estimatedUnits = estimateSpacesChatMeterUnits(message, action);
   const idempotencyKey = readSpacesIdempotencyKey(req, action);
-  const grantId = crypto.randomUUID();
+  const estimatedUnits = estimateChatUnits({ inputChars: String(message || "").length, action });
+  const grantId = deterministicGrantId(idempotencyKey);
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
   const reserveArgs = {
     userId: identity.userId, grantId, productId: "spaces", action: normalizedAction,
@@ -10661,9 +10661,10 @@ ${originalMessage}`;
         model: "typ-chat",
       });
     } else {
-      pipeReadableToResponse(nodeStream, res, "Chat stream");
+      // Awaitable pipe so we settle on the ACTUAL outcome (success/failed/cancelled), not before it runs.
+      const pipeResult = await pipeReadableToResponseWithCompletion(nodeStream, res, "Chat stream");
       await recordSpacesMeterReceiptBestEffort(req, {
-        status: upstreamResponse.ok ? "success" : "failed",
+        status: upstreamResponse.ok && pipeResult.status === "success" ? "success" : "failed",
         durationMs: Date.now() - meterStartedAtMs,
         message: originalMessage,
         model: "typ-chat",

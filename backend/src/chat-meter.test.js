@@ -1,5 +1,17 @@
 import { describe, expect, it } from "@jest/globals";
-import { estimateChatUnits, actualChatUnits, baseUnitsForAction } from "./chat-meter.js";
+import { estimateChatUnits, actualChatUnits, baseUnitsForAction, deterministicGrantId } from "./chat-meter.js";
+
+describe("chat-meter: deterministicGrantId (idempotency fix)", () => {
+  it("is stable for the same key (a retry collides → charged once)", () => {
+    expect(deterministicGrantId("req:ws:thread:turn")).toBe(deterministicGrantId("req:ws:thread:turn"));
+  });
+  it("differs for different keys (distinct turns get distinct grants)", () => {
+    expect(deterministicGrantId("k1")).not.toBe(deterministicGrantId("k2"));
+  });
+  it("is a valid UUID shape for the Postgres uuid column", () => {
+    expect(deterministicGrantId("anything")).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  });
+});
 
 describe("chat-meter: baseUnitsForAction", () => {
   it("matches the legacy per-action base units", () => {

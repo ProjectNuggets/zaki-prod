@@ -4,6 +4,15 @@
 // — at which point settle switches to true tokens via the ledger's providerCost fields.
 //
 // Base units mirror the legacy estimateSpacesChatMeterUnits so V1 calibration is unchanged.
+import crypto from "node:crypto";
+
+// Deterministic UUID from a string. Used to derive a stable grant_id from the idempotency key so a
+// client retry (same Idempotency-Key) collides on the ledger's UNIQUE(grant_id, reserve_key) and is
+// charged ONCE. A random grant_id would defeat the idempotency key and double-charge.
+export function deterministicGrantId(key) {
+  const h = crypto.createHash("sha256").update(String(key || "")).digest("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
 
 function baseUnitsForAction(action) {
   const a = String(action || "");
