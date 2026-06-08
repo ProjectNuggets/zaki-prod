@@ -356,6 +356,7 @@ import {
 } from "./zaki-auth.js";
 import { buildRefreshCookie } from "./zaki-session-cookie.js";
 import { sweepExpiredHolds } from "./unit-ledger.js";
+import { buildMeterDemoRouter } from "./meter-demo-router.js";
 import {
   buildClearedGoogleOAuthNonceCookie,
   buildGoogleOAuthRedirectUri,
@@ -16344,6 +16345,27 @@ app.post(
     (userId) => `/api/v1/users/${encodeURIComponent(userId)}/brain/compose`,
     NULLCLAW_BRAIN_JSON_PROXY_OPTIONS
   )
+);
+
+// =============================================================================
+// METER GATE — demo endpoint (H-02). Gated by ZAKI_METER_DEMO_ENABLED (staging only).
+// Proves the reserve→settle wallet loop over a real authenticated request. Only ever debits the
+// caller's own wallet. The orchestration (runMeteredOperation) is proven by meter-gate.pg.integration.
+// =============================================================================
+const ZAKI_METER_DEMO_ENABLED =
+  String(process.env.ZAKI_METER_DEMO_ENABLED || "").toLowerCase().trim() === "true";
+
+// Single code path: the same router proven by meter-gate.pg.integration.test.js, with a resolveUser
+// adapter that unwraps requireAuthUser ({ zakiUser }) — which sends its own 401 (router guards headersSent).
+app.use(
+  buildMeterDemoRouter({
+    enabled: ZAKI_METER_DEMO_ENABLED,
+    resolveUser: async (req, res) => {
+      const authResult = await requireAuthUser(req, res);
+      if (!authResult?.zakiUser) return null;
+      return { userId: authResult.zakiUser.id, planId: authResult.zakiUser.plan_tier || "free" };
+    },
+  })
 );
 
 // =============================================================================

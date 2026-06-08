@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Real-Postgres integration test for the unit ledger: spins an ephemeral pgvector container,
-# runs unit-ledger.pg.integration.test.js against it, and tears down. Proves FOR UPDATE
+# runs pg.integration.test.js against it, and tears down. Proves FOR UPDATE
 # concurrency (no over-grant / no double-debit) + the expiry sweeper.
 set -euo pipefail
 NAME="ledger-pg-it-$$"
@@ -25,4 +25,4 @@ echo "== extensions ready =="
 
 export LEDGER_TEST_DATABASE_URL="postgres://postgres:test@localhost:${PORT}/ledgertest"
 node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config jest.config.mjs \
-  --runInBand unit-ledger.pg.integration
+  --runInBand pg.integration
