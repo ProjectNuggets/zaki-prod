@@ -3,15 +3,20 @@
  *
  * Contract:
  *   - Single crossing point for every ZAKI backend → TYP network call.
- *   - Uses NOVA_TYP_API_KEY (admin credentials) for every request.
- *   - Never forwards a user session token to TYP.
+ *   - Admin reads (workspace lists, provisioning) use NOVA_TYP_API_KEY.
+ *   - CHAT to TYP's internal multi-user route requires a per-user TYP *session JWT*
+ *     (stock AnythingLLM `validatedRequest` rejects the admin key there). ZAKI-native
+ *     users hold no TYP JWT, so we MINT one via TYP Simple-SSO: issue a temporary auth
+ *     token with the admin key, exchange it for a session JWT, cache it per user.
+ *     See docs/saas-v1/FINDING-chat-upstream-auth.md (decision: Option A).
  *   - Swapping or deprecating TYP = change only this file.
- *   - No side effects. Pure named exports. requestTypChatStream accepts an
- *     injected fetchWithTimeout for timeout control (same pattern as agent-client.js).
+ *   - No side effects beyond an in-process session-token cache. requestTypChatStream
+ *     accepts an injected fetchWithTimeout (same pattern as agent-client.js).
  *
  * Security (T-04-01):
- *   NOVA_TYP_API_KEY is read exclusively from process.env; it is never logged
- *   or returned to callers. assertTypConfig() throws early if env vars are absent.
+ *   NOVA_TYP_API_KEY and minted session JWTs are read/derived from process.env config;
+ *   they are never logged or returned to callers. assertTypConfig() throws if env absent.
+ *   Requires SIMPLE_SSO_ENABLED on the TYP instance.
  */
 
 function getTypApiBase() {
@@ -27,6 +32,80 @@ function assertTypConfig() {
   if (!base) throw new Error("NOVA_TYP_BASE_URL is not configured.");
   if (!key) throw new Error("NOVA_TYP_API_KEY is not configured.");
   return { base, key };
+}
+
+// ── Per-user TYP session-JWT minting (Simple-SSO) ─────────────────────────────
+// TYP session JWTs are short-lived; we cache per nova_user_id and refresh before expiry.
+const _typSessionCache = new Map(); // novaUserId -> { token: string, expMs: number }
+const _TYP_SESSION_REFRESH_MARGIN_MS = 60_000; // re-mint 60s before the JWT's exp
+
+/** Decode a JWT's `exp` (seconds) without verifying the signature. Returns ms epoch or null. */
+function _jwtExpMs(jwt) {
+  try {
+    const seg = String(jwt).split(".")[1];
+    if (!seg) return null;
+    const json = Buffer.from(seg.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+    const exp = JSON.parse(json)?.exp;
+    return Number.isFinite(exp) ? exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mint a fresh TYP session JWT for a user via Simple-SSO (admin issue → exchange).
+ * @param {number} novaUserId
+ * @returns {Promise<string>} session JWT
+ * @throws if SSO is disabled, the user is unknown, or exchange fails.
+ */
+export async function mintTypUserSession(novaUserId) {
+  const { base, key } = assertTypConfig();
+  const id = Number(novaUserId);
+  if (!Number.isFinite(id) || id <= 0) throw new Error("mintTypUserSession: invalid novaUserId");
+
+  const issueRes = await fetch(`${base}/v1/users/${id}/issue-auth-token`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${key}` },
+  });
+  const issueData = await issueRes.json().catch(() => ({}));
+  if (!issueRes.ok || !issueData?.token) {
+    throw new Error(`TYP issue-auth-token failed (${issueRes.status}): ${issueData?.error || "no token"}`);
+  }
+
+  const exchRes = await fetch(
+    `${base}/request-token/sso/simple?token=${encodeURIComponent(issueData.token)}`,
+    { method: "GET" }
+  );
+  const exchData = await exchRes.json().catch(() => ({}));
+  if (!exchRes.ok || !exchData?.valid || !exchData?.token) {
+    throw new Error(`TYP SSO exchange failed (${exchRes.status}): ${exchData?.message || "no session token"}`);
+  }
+  return String(exchData.token);
+}
+
+/**
+ * Get a cached (or freshly minted) TYP session JWT for a user.
+ * @param {number} novaUserId
+ * @param {{ forceRefresh?: boolean }} [opts]
+ * @returns {Promise<string>}
+ */
+export async function getTypUserSessionToken(novaUserId, { forceRefresh = false } = {}) {
+  const id = Number(novaUserId);
+  const now = Date.now();
+  const cached = _typSessionCache.get(id);
+  if (!forceRefresh && cached && cached.expMs - _TYP_SESSION_REFRESH_MARGIN_MS > now) {
+    return cached.token;
+  }
+  const token = await mintTypUserSession(id);
+  // Fall back to a conservative 10-min TTL if the JWT has no decodable exp.
+  const expMs = _jwtExpMs(token) ?? now + 10 * 60_000;
+  _typSessionCache.set(id, { token, expMs });
+  return token;
+}
+
+/** Test seam: clear the session cache. */
+export function _clearTypSessionCache() {
+  _typSessionCache.clear();
 }
 
 /**
@@ -93,25 +172,29 @@ export async function fetchTypWorkspaceSlugs(novaUserId) {
 }
 
 /**
- * Forward a chat stream request to TYP using admin credentials.
- * Replaces: the Authorization: authHeader forwarding in streamChatHandler.
- * Returns the raw fetch Response for streaming.
+ * Forward a chat stream request to TYP's internal route.
+ * Auth: pass a per-user TYP session JWT (from getTypUserSessionToken) as `authToken` —
+ * the internal `/api/workspace/.../stream-chat` route requires it in multi-user mode.
+ * If `authToken` is omitted, falls back to the admin key (only valid on TYP's /api/v1
+ * developer routes — kept for anonymous/dev-API callers).
  *
  * @param {string} targetUrl — full TYP stream URL already constructed by caller
  * @param {object} upstreamPayload — JSON body
  * @param {Function} fetchWithTimeout — injected by caller (same pattern as agent-client.js)
  * @param {number} timeoutMs
+ * @param {string} [authToken] — per-user TYP session JWT; defaults to the admin key
  * @returns {Promise<Response>}
  */
-export async function requestTypChatStream(targetUrl, upstreamPayload, fetchWithTimeout, timeoutMs) {
+export async function requestTypChatStream(targetUrl, upstreamPayload, fetchWithTimeout, timeoutMs, authToken) {
   const { key } = assertTypConfig();
+  const bearer = authToken || key;
   return fetchWithTimeout(
     targetUrl,
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${key}`,
+        "Authorization": `Bearer ${bearer}`,
       },
       body: JSON.stringify(upstreamPayload),
     },

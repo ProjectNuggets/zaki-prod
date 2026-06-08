@@ -3,7 +3,17 @@ import {
   fetchTypWorkspaces,
   fetchTypWorkspaceSlugs,
   requestTypChatStream,
+  mintTypUserSession,
+  getTypUserSessionToken,
+  _clearTypSessionCache,
 } from "./typ-client.js";
+
+// Build a fake JWT whose payload carries the given exp (seconds since epoch).
+function fakeJwt(expSeconds) {
+  const b64u = (obj) =>
+    Buffer.from(JSON.stringify(obj)).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `${b64u({ alg: "HS256", typ: "JWT" })}.${b64u({ p: "enc", exp: expSeconds })}.sig`;
+}
 
 // Save and restore env vars around each test
 let originalTypBaseUrl;
@@ -138,6 +148,106 @@ describe("requestTypChatStream", () => {
     expect(options.headers["Authorization"]).toBe("Bearer test-admin-key");
     expect(timeoutMs).toBe(30000);
     expect(label).toBeDefined();
+  });
+});
+
+// Per-user TYP session minting (Simple-SSO) + chat auth-token forwarding
+describe("mintTypUserSession", () => {
+  beforeEach(() => _clearTypSessionCache());
+
+  test("issues a temp token with the admin key, exchanges it, returns the session JWT", async () => {
+    const jwt = fakeJwt(Math.floor(Date.now() / 1000) + 3600);
+    const fetchSpy = jest.spyOn(global, "fetch").mockImplementation(async (url) => {
+      if (String(url).includes("/issue-auth-token")) {
+        return { ok: true, status: 200, json: async () => ({ token: "temp-123", loginPath: "/sso/simple?token=temp-123" }) };
+      }
+      if (String(url).includes("/request-token/sso/simple")) {
+        return { ok: true, status: 200, json: async () => ({ valid: true, token: jwt, user: { id: 42 } }) };
+      }
+      throw new Error(`unexpected url ${url}`);
+    });
+
+    const token = await mintTypUserSession(42);
+    expect(token).toBe(jwt);
+
+    const issueCall = fetchSpy.mock.calls.find((c) => String(c[0]).includes("/issue-auth-token"));
+    expect(issueCall[0]).toBe("https://typ.example.com/api/v1/users/42/issue-auth-token");
+    expect(issueCall[1].headers.Authorization).toBe("Bearer test-admin-key");
+    const exchCall = fetchSpy.mock.calls.find((c) => String(c[0]).includes("/request-token/sso/simple"));
+    expect(exchCall[0]).toContain("token=temp-123");
+  });
+
+  test("throws when SSO issue fails", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue({ ok: false, status: 401, json: async () => ({ error: "Instance is not in Multi-User mode." }) });
+    await expect(mintTypUserSession(42)).rejects.toThrow(/issue-auth-token failed/);
+  });
+
+  test("throws when the exchange is invalid", async () => {
+    jest.spyOn(global, "fetch").mockImplementation(async (url) => {
+      if (String(url).includes("/issue-auth-token")) return { ok: true, status: 200, json: async () => ({ token: "temp-123" }) };
+      return { ok: false, status: 401, json: async () => ({ valid: false, message: "expired" }) };
+    });
+    await expect(mintTypUserSession(42)).rejects.toThrow(/SSO exchange failed/);
+  });
+
+  test("rejects an invalid novaUserId without any network call", async () => {
+    const fetchSpy = jest.spyOn(global, "fetch");
+    await expect(mintTypUserSession(0)).rejects.toThrow(/invalid novaUserId/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("getTypUserSessionToken (cache)", () => {
+  beforeEach(() => _clearTypSessionCache());
+
+  function mockSso(jwt) {
+    return jest.spyOn(global, "fetch").mockImplementation(async (url) => {
+      if (String(url).includes("/issue-auth-token")) return { ok: true, status: 200, json: async () => ({ token: "temp-x" }) };
+      return { ok: true, status: 200, json: async () => ({ valid: true, token: jwt, user: { id: 7 } }) };
+    });
+  }
+
+  test("mints once then serves the cached token for a valid (unexpired) JWT", async () => {
+    const jwt = fakeJwt(Math.floor(Date.now() / 1000) + 3600);
+    const fetchSpy = mockSso(jwt);
+    const a = await getTypUserSessionToken(7);
+    const b = await getTypUserSessionToken(7);
+    expect(a).toBe(jwt);
+    expect(b).toBe(jwt);
+    // 2 fetches total (issue+exchange) for the FIRST call only
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  test("forceRefresh re-mints even when cached", async () => {
+    const jwt = fakeJwt(Math.floor(Date.now() / 1000) + 3600);
+    const fetchSpy = mockSso(jwt);
+    await getTypUserSessionToken(7);
+    await getTypUserSessionToken(7, { forceRefresh: true });
+    expect(fetchSpy).toHaveBeenCalledTimes(4); // two mints
+  });
+
+  test("re-mints when the cached JWT is within the refresh margin", async () => {
+    const nearlyExpired = fakeJwt(Math.floor(Date.now() / 1000) + 5); // < 60s margin
+    const fetchSpy = mockSso(nearlyExpired);
+    await getTypUserSessionToken(7);
+    await getTypUserSessionToken(7);
+    expect(fetchSpy).toHaveBeenCalledTimes(4); // not served from cache
+  });
+});
+
+describe("requestTypChatStream auth token", () => {
+  test("uses the provided per-user session token instead of the admin key", async () => {
+    const fetchWithTimeout = jest.fn().mockResolvedValue({ ok: true, status: 200 });
+    await requestTypChatStream("https://typ.example.com/api/workspace/s/thread/t/stream-chat", { message: "hi" }, fetchWithTimeout, 1000, "user-session-jwt");
+    const [, options] = fetchWithTimeout.mock.calls[0];
+    expect(options.headers["Authorization"]).toBe("Bearer user-session-jwt");
+  });
+
+  test("falls back to the admin key when no session token is given", async () => {
+    const fetchWithTimeout = jest.fn().mockResolvedValue({ ok: true, status: 200 });
+    await requestTypChatStream("https://typ.example.com/api/workspace/s/thread/t/stream-chat", { message: "hi" }, fetchWithTimeout, 1000);
+    const [, options] = fetchWithTimeout.mock.calls[0];
+    expect(options.headers["Authorization"]).toBe("Bearer test-admin-key");
   });
 });
 

@@ -346,6 +346,7 @@ import {
   fetchTypWorkspaces,
   fetchTypWorkspaceSlugs,
   requestTypChatStream,
+  getTypUserSessionToken,
 } from "./typ-client.js";
 import { buildAuthRouter } from "./auth-endpoints.js";
 import {
@@ -10588,12 +10589,37 @@ ${originalMessage}`;
     });
 
     const upstreamPayload = buildStreamUpstreamPayload(requestPayload, enrichedMessage);
-    const upstreamResponse = await requestTypChatStream(
+    // Auth to TYP's internal chat route requires a per-user TYP session JWT (the admin key is
+    // rejected there in multi-user mode). Mint/cache one for this user; on a 401 (expired/rotated
+    // session) force a re-mint and retry exactly once. See typ-client.js + FINDING-chat-upstream-auth.md.
+    let typSessionToken = null;
+    try {
+      typSessionToken = await getTypUserSessionToken(zakiUser.nova_user_id);
+    } catch (sessErr) {
+      console.error("[Chat] TYP session mint failed:", sessErr?.message);
+    }
+    let upstreamResponse = await requestTypChatStream(
       targetUrl,
       upstreamPayload,
       fetchWithTimeout,
-      ZAKI_STREAM_UPSTREAM_TIMEOUT_MS
+      ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+      typSessionToken
     );
+    if (upstreamResponse.status === 401 && typSessionToken) {
+      console.warn("[Chat] TYP 401 with cached session — re-minting and retrying once");
+      try {
+        typSessionToken = await getTypUserSessionToken(zakiUser.nova_user_id, { forceRefresh: true });
+        upstreamResponse = await requestTypChatStream(
+          targetUrl,
+          upstreamPayload,
+          fetchWithTimeout,
+          ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+          typSessionToken
+        );
+      } catch (retryErr) {
+        console.error("[Chat] TYP session re-mint failed:", retryErr?.message);
+      }
+    }
 
     console.log("[Chat] Upstream response", {
       ...chatLogContext,
