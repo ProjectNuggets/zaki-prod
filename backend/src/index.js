@@ -9462,9 +9462,13 @@ const createWorkspaceHandler = async (req, res) => {
     }
     const localMetadataPayload = buildLocalWorkspaceMetadataPayload(req.body || {});
 
+    // Pin chatMode:"chat" at creation. v1.13 defaults new workspaces to chatMode:"automatic", under
+    // which the model emits tool-call/harmony tokens that the headless path does NOT execute → they
+    // leak into a normal chat as raw text. ZAKI routes agent/web-search turns explicitly (dev-API
+    // @agent), so a space must never sit in automatic mode. The create endpoint accepts chatMode.
     const createResponse = await novaAdminRequest("/v1/workspace/new", {
       method: "POST",
-      body: JSON.stringify({ name: String(name).trim() }),
+      body: JSON.stringify({ name: String(name).trim(), chatMode: "chat" }),
     });
     const createData = await createResponse.json().catch(() => ({}));
     if (!createResponse.ok || !createData?.workspace) {
@@ -10672,6 +10676,16 @@ ${originalMessage}`;
     // the prefix still triggers the agent (and so the agent never sees a memory envelope in front).
     if (isAgentTurn && !/^@agent\b/i.test(String(upstreamPayload.message || "").trim())) {
       upstreamPayload.message = `@agent ${String(upstreamPayload.message || "").trim()}`.trim();
+    }
+    // Defense in depth against the v1.13 automatic-mode leak: a normal (non-agent) chat must run in
+    // "chat" (or the user-selected "query") mode, never "automatic" (raw tool-call tokens leak on the
+    // headless path). The frontend sends an explicit mode and new spaces are pinned to chat at create,
+    // but force a safe mode here so a mode-less or "automatic" payload can never leak into a user chat.
+    if (!isAgentTurn) {
+      const requestedMode = String(upstreamPayload.mode || "").trim().toLowerCase();
+      if (requestedMode !== "chat" && requestedMode !== "query") {
+        upstreamPayload.mode = "chat";
+      }
     }
     // Auth to TYP's internal chat route requires a per-user TYP session JWT (the admin key is
     // rejected there in multi-user mode). Mint/cache one for this user; on a 401 (expired/rotated
