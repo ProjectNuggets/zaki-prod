@@ -4,6 +4,7 @@ import { FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CenterLogo } from "../icons";
 import { MessageActions } from "./MessageActions";
+import { MessageTimestamp } from "./MessageTimestamp";
 import { MessageContent } from "./rendering/MessageContent";
 import { ImageBlock } from "./rendering/blocks/ImageBlock";
 import { extractGeneratedImages } from "./rendering/extractGeneratedImages";
@@ -241,6 +242,11 @@ export function MessageBubble({
             </div>
           );
         })()}
+        <MessageTimestamp
+          value={message.createdAt}
+          role={message.role}
+          locale={i18n.language}
+        />
         {showSourceChip ? (
           <SourceChip
             channel={message.channel || "web"}

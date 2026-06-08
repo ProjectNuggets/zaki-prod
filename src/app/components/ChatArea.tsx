@@ -1607,6 +1607,21 @@ function timestampMillis(value: unknown, fallback: number | null = null): number
   return fallback;
 }
 
+function messageRecordCreatedAtIso(record: Record<string, unknown>): string | null {
+  const createdAtMs = timestampMillis(
+    record.createdAt ??
+      record.created_at ??
+      record.createdAtMs ??
+      record.created_at_ms ??
+      record.timestamp ??
+      record.ts,
+    null
+  );
+  if (createdAtMs == null) return null;
+  const parsed = new Date(createdAtMs);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 function recordStringValue(data: Record<string, unknown>, ...keys: string[]): string | null {
   for (const key of keys) {
     const value = data[key];
@@ -3927,6 +3942,7 @@ export function ChatArea() {
             id: String(entry.id || `bot-history-${index}`),
             role,
             content: role === "user" ? stripMemoryContext(content) : content,
+            createdAt: messageRecordCreatedAtIso(entry),
             turnEvents,
           };
         })
@@ -3985,6 +4001,7 @@ export function ChatArea() {
         id: `approval-continuation-${Date.now()}`,
         role: "assistant",
         content: trimmed,
+        createdAt: new Date().toISOString(),
       };
       let changed = false;
       setMessagesByThread((prev) => {
@@ -4027,6 +4044,7 @@ export function ChatArea() {
       updated[assistantIndex] = {
         ...existingMsg,
         content: newContent,
+        createdAt: existingMsg.createdAt || new Date().toISOString(),
         error: false,
         errorCode: null,
       };
@@ -4048,6 +4066,7 @@ export function ChatArea() {
           content: existingMsg.content?.trim()
             ? `${existingMsg.content.trim()}\n\n${newContent}`
             : newContent,
+          createdAt: existingMsg.createdAt || new Date().toISOString(),
           error: true,
           errorCode: errorCode ?? null,
         };
@@ -7180,6 +7199,8 @@ export function ChatArea() {
       type: file.type,
       url: URL.createObjectURL(file),
     }));
+    const userCreatedAt = new Date().toISOString();
+    const assistantCreatedAt = new Date().toISOString();
     const userMessageId = `user-${Date.now()}`;
     const assistantMessageId = `assistant-${Date.now()}`;
     currentTurnAssistantIdRef.current = assistantMessageId;
@@ -7192,12 +7213,14 @@ export function ChatArea() {
             id: userMessageId,
             role: "user" as const,
             content: trimmed,
+            createdAt: userCreatedAt,
             attachments: attachmentsForMessage,
           },
           {
             id: assistantMessageId,
             role: "assistant" as const,
             content: "",
+            createdAt: assistantCreatedAt,
           },
         ],
       }));
@@ -7962,6 +7985,9 @@ export function ChatArea() {
     const cleaned = historyData.map((entry) => ({
       ...entry,
       content: entry.role === "user" ? stripMemoryContext(entry.content ?? "") : (entry.content ?? ""),
+      createdAt:
+        entry.createdAt ||
+        messageRecordCreatedAtIso(entry as unknown as Record<string, unknown>),
     }));
 
     setMessagesByThread((prev) => ({

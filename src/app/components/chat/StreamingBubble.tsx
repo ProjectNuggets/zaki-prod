@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CenterLogo } from "../icons";
 import { MessageActions } from "./MessageActions";
+import { MessageTimestamp } from "./MessageTimestamp";
 import { MessageContent } from "./rendering/MessageContent";
 import { normalizeAssistantDisplayText } from "./rendering/agentReplyPresentation";
 import { stripToolCallMarkup } from "./rendering/toolMarkup";
@@ -12,6 +13,8 @@ interface StreamingBubbleProps {
   helperText?: string;
   streamingModeVariant?: "thinking" | "final_reply_reveal";
   botMode?: boolean;
+  createdAt?: string | number | null;
+  locale?: string;
   showActions?: boolean;
   onCopyMessage?: (message: { id: string; role: "assistant"; content: string }) => void;
   onRegenerateMessage?: (message: { id: string; role: "assistant"; content: string }) => void;
@@ -25,6 +28,8 @@ export function StreamingBubble({
   helperText,
   streamingModeVariant = "thinking",
   botMode = false,
+  createdAt = null,
+  locale,
   showActions = false,
   onCopyMessage,
   onRegenerateMessage,
@@ -120,6 +125,7 @@ export function StreamingBubble({
             }
           />
         </div>
+        <MessageTimestamp value={createdAt} role="assistant" locale={locale} />
         {showActions && (
           <div className="text-zaki-disabled">
             {/** Use same actions component styling via MessageActions */}

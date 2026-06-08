@@ -12,6 +12,8 @@ interface StreamingMessageProps {
   streamingHelperText?: string;
   streamingModeVariant?: "thinking" | "final_reply_reveal";
   botMode?: boolean;
+  createdAt?: string | number | null;
+  locale?: string;
   onCopyMessage?: (message: Message) => void;
   onRegenerateMessage?: (message: Message) => void;
   onThumbsUpMessage?: (message: Message) => void;
@@ -27,6 +29,8 @@ export function StreamingMessage({
   streamingHelperText,
   streamingModeVariant = "thinking",
   botMode = false,
+  createdAt = null,
+  locale,
   onCopyMessage,
   onRegenerateMessage,
   onThumbsUpMessage,
@@ -45,6 +49,8 @@ export function StreamingMessage({
             helperText={streamingHelperText}
             streamingModeVariant={streamingModeVariant}
             botMode={botMode}
+            createdAt={createdAt}
+            locale={locale}
           />
         ) : botMode ? (
           <div className="hidden" aria-hidden />
@@ -62,12 +68,16 @@ export function StreamingMessage({
           helperText={streamingModeVariant === "final_reply_reveal" ? streamingHelperText : undefined}
           streamingModeVariant={streamingModeVariant}
           botMode={botMode}
+          createdAt={createdAt}
+          locale={locale}
         />
       ) : (
         <StreamingBubble
           content={content}
           isStreaming={false}
           botMode={botMode}
+          createdAt={createdAt}
+          locale={locale}
           showActions
           onCopyMessage={onCopyMessage}
           onRegenerateMessage={onRegenerateMessage}

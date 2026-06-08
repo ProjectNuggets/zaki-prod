@@ -260,7 +260,7 @@ export function ChatView({
   onOpenAgentSources,
   isRtl = false,
 }: ChatViewProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   // Unified timeline surface: Nullalis (native reasoning) or bot mode
   // (sidecar-driven narration) both render through NullalisTurnTimeline.
   // Bot mode is treated as a Nullalis-compatible mode for rendering.
@@ -388,6 +388,8 @@ export function ChatView({
                   streamingHelperText={streamingHelperText}
                   streamingModeVariant={streamingModeVariant}
                   botMode={botMode}
+                  createdAt={msg.createdAt}
+                  locale={i18n.language}
                 />
                 {botMode ? (
                   <AgentReplyEvidence
