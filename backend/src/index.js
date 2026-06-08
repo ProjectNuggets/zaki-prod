@@ -10050,6 +10050,9 @@ function shouldSkipChatMemoryContext(requestPayload = {}, message = "") {
 
   if (!ZAKI_SYNC_MEMORY_INJECTION_ENABLED) return true;
   if (webSearchEnabled) return true;
+  // Agent/web-search turn: the message MUST stay @agent-prefixed for the engine's agent to trigger,
+  // so never prepend a memory envelope in front of it.
+  if (/^@agent\b/i.test(normalizedMessage)) return true;
   if (mode === "query") return true;
   if (isIdentityProbePrompt(normalizedMessage)) return true;
   if (normalizedMessage.length > 500) return true;
@@ -10096,7 +10099,11 @@ function classifySpacesChatMeterAction(message = "", requestPayload = {}) {
   if (isComparisonPrompt(message)) {
     return "spaces_chat_synthetic";
   }
-  if (requestPayload?.webSearchEnabled === true || requestPayload?.webSearch === true) {
+  if (
+    requestPayload?.webSearchEnabled === true ||
+    requestPayload?.webSearch === true ||
+    /^@agent\b/i.test(String(message || "").trim())
+  ) {
     return "spaces_chat_search";
   }
   const mode = String(requestPayload?.mode || "").trim().toLowerCase();
@@ -10640,10 +10647,19 @@ ${originalMessage}`;
       console.log("[Memory] Skipping context injection for query/web-search or long prompt");
     }
 
-    // Forward to NOVA.TYP with enriched message + original payload fields
-    const targetUrl = `${apiBase}/workspace/${slug}/thread/${threadSlug}/stream-chat`;
-    
-    console.log(`[Chat] Forwarding to NOVA: ${targetUrl}`);
+    // Agent / web-search turns (the frontend prepends "@agent" when the web-search toggle is armed)
+    // must run on the DEV API stream-chat (EphemeralAgentHandler runs the agent INLINE over HTTP, with
+    // the admin key). The internal route only opens a websocket invocation, so the agent never streams
+    // back. Normal chat stays on the internal route (per-user TYP session JWT + memory injection).
+    const isAgentTurn =
+      /^@agent\b/i.test(String(originalMessage || "").trim()) ||
+      requestPayload?.webSearchEnabled === true ||
+      requestPayload?.webSearch === true;
+    const targetUrl = isAgentTurn
+      ? `${apiBase}/v1/workspace/${slug}/thread/${threadSlug}/stream-chat`
+      : `${apiBase}/workspace/${slug}/thread/${threadSlug}/stream-chat`;
+
+    console.log(`[Chat] Forwarding to NOVA: ${targetUrl}${isAgentTurn ? " (agent/web-search)" : ""}`);
     console.log("[Chat] Dispatch", {
       ...chatLogContext,
       memoryInjected,
@@ -10651,14 +10667,23 @@ ${originalMessage}`;
     });
 
     const upstreamPayload = buildStreamUpstreamPayload(requestPayload, enrichedMessage);
+    // The dev-API ephemeral agent only triggers when the message starts with "@agent". The frontend
+    // prepends it when the toggle is armed; ensure it here too so a webSearchEnabled request without
+    // the prefix still triggers the agent (and so the agent never sees a memory envelope in front).
+    if (isAgentTurn && !/^@agent\b/i.test(String(upstreamPayload.message || "").trim())) {
+      upstreamPayload.message = `@agent ${String(upstreamPayload.message || "").trim()}`.trim();
+    }
     // Auth to TYP's internal chat route requires a per-user TYP session JWT (the admin key is
     // rejected there in multi-user mode). Mint/cache one for this user; on a 401 (expired/rotated
     // session) force a re-mint and retry exactly once. See typ-client.js + FINDING-chat-upstream-auth.md.
+    // Agent turns use the DEV API with the admin key (no per-user session JWT); normal chat mints one.
     let typSessionToken = null;
-    try {
-      typSessionToken = await getTypUserSessionToken(zakiUser.nova_user_id);
-    } catch (sessErr) {
-      console.error("[Chat] TYP session mint failed:", sessErr?.message);
+    if (!isAgentTurn) {
+      try {
+        typSessionToken = await getTypUserSessionToken(zakiUser.nova_user_id);
+      } catch (sessErr) {
+        console.error("[Chat] TYP session mint failed:", sessErr?.message);
+      }
     }
     let upstreamResponse = await requestTypChatStream(
       targetUrl,
