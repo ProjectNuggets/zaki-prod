@@ -9,7 +9,7 @@ const RUN = process.env.LEDGER_TEST_DATABASE_URL;
 const d = RUN ? describe : describe.skip;
 
 d("unit-ledger — real Postgres concurrency, idempotency, sweeper", () => {
-  let dbQuery, dbGet, dbAll, reserveUnits, settleHold, sweepExpiredHolds;
+  let dbQuery, dbGet, dbAll, reserveUnits, settleHold, sweepExpiredHolds, ensureWallet;
   let userId;
   const future = new Date(Date.now() + 3600_000).toISOString();
   const past = new Date(Date.now() - 3600_000).toISOString();
@@ -21,7 +21,7 @@ d("unit-ledger — real Postgres concurrency, idempotency, sweeper", () => {
     const db = await import("./db.js");
     const ledger = await import("./unit-ledger.js");
     ({ dbQuery, dbGet, dbAll } = db);
-    ({ reserveUnits, settleHold, sweepExpiredHolds } = ledger);
+    ({ reserveUnits, settleHold, sweepExpiredHolds, ensureWallet } = ledger);
     await db.initDb();
     const u = await dbGet(
       `INSERT INTO zaki_users (email, password_hash, created_at, updated_at)
@@ -90,6 +90,31 @@ d("unit-ledger — real Postgres concurrency, idempotency, sweeper", () => {
     expect(Number((await getWallet()).weekly_used_units)).toBe(0); // fully refunded
     const hold = await dbGet(`SELECT state FROM zaki_meter_holds WHERE id = $1`, [r.hold.id]);
     expect(hold.state).toBe("expired");
+  });
+
+  it("FULL metering loop: provision → reserve → settle → drain → deny (the H-02 proof)", async () => {
+    await dbQuery(`DELETE FROM zaki_meter_holds WHERE user_id = $1`, [userId]);
+    await dbQuery(`DELETE FROM zaki_unit_wallets WHERE user_id = $1`, [userId]);
+
+    // 1) Provision from the 'personal' plan → weekly 500, burst (5h) 100.
+    await ensureWallet({ userId, planId: "personal", env: {} });
+    const w0 = await getWallet();
+    expect(Number(w0.weekly_allowance_units)).toBe(500);
+    expect(Number(w0.burst_allowance_units)).toBe(100);
+
+    // 2) Reserve 30, settle the real cost (12) → wallet shows 12 used (18 refunded).
+    const r1 = await reserve({ grantId: "55555555-5555-5555-5555-555555555555", units: 30, key: "loop1" });
+    expect(Number((await getWallet()).weekly_used_units)).toBe(30);
+    await settleHold({ holdId: r1.hold.id, settleIdempotencyKey: "loop1:receipt", settledUnits: 12 });
+    expect(Number((await getWallet()).weekly_used_units)).toBe(12);
+
+    // 3) Drain the burst window: 12 (settled) + 88 (reserved) = 100 = the 5h cap.
+    const r2 = await reserve({ grantId: "66666666-6666-6666-6666-666666666666", units: 88, key: "loop2" });
+    expect(r2.ok).toBe(true);
+
+    // 4) Next request is DENIED by the burst gate (even though weekly has 400 left).
+    const r3 = await reserve({ grantId: "77777777-7777-7777-7777-777777777777", units: 1, key: "loop3" });
+    expect(r3).toMatchObject({ ok: false, reason: "insufficient_units" });
   });
 
   it("CHECK constraints prevent a wallet going negative", async () => {

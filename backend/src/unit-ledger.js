@@ -21,10 +21,38 @@
 // NOTE on precision: unit columns are DOUBLE PRECISION; running sums can drift over many requests.
 // Acceptable for weighted units; revisit integer micro-units if it ever backs direct $ accounting.
 
-import { withDbTransaction, dbAll } from "./db.js";
+import { withDbTransaction, dbAll, dbGet } from "./db.js";
 import { computeRemaining, planFunding, computeSettleRefund } from "./unit-wallet.js";
+import { buildPlatformPlanPolicy, normalizePlatformPlanId } from "./platform-policy.js";
 
 const TERMINAL_STATES = new Set(["settled", "released", "expired"]);
+
+/**
+ * Provision (or re-sync) a user's wallet from their plan (minimal H-03 slice). Allowances come from
+ * the platform plan policy (env-overridable). Idempotent: on a plan change it updates the allowances
+ * but PRESERVES weekly_used_units and topup_units (so an upgrade adds headroom without wiping usage).
+ * @returns {Promise<object>} the wallet row
+ */
+export async function ensureWallet({ userId, planId, env = process.env }, client) {
+  const plan = normalizePlatformPlanId(planId);
+  const policy = buildPlatformPlanPolicy({ env });
+  const p = policy.plans[plan] || policy.plans.free;
+  const q = `
+    INSERT INTO zaki_unit_wallets
+      (user_id, plan_id, weekly_allowance_units, burst_allowance_units, burst_window_hours)
+    VALUES ($1, $2, $3, $4, $5)
+    ON CONFLICT (user_id) DO UPDATE SET
+      plan_id = EXCLUDED.plan_id,
+      weekly_allowance_units = EXCLUDED.weekly_allowance_units,
+      burst_allowance_units = EXCLUDED.burst_allowance_units,
+      burst_window_hours = EXCLUDED.burst_window_hours,
+      version = zaki_unit_wallets.version + 1,
+      updated_at = NOW()
+    RETURNING *`;
+  const params = [userId, plan, p.weeklyAllowanceUnits ?? 0, p.rollingAllowanceUnits ?? 0, policy.burstWindowHours];
+  if (client) return (await client.query(q, params)).rows[0];
+  return dbGet(q, params);
+}
 
 export const UNIT_LEDGER_DDL = `
 CREATE TABLE IF NOT EXISTS zaki_unit_wallets (

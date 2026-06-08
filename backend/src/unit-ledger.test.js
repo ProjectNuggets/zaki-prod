@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
-import { reserveUnits, settleHold, releaseHold } from "./unit-ledger.js";
+import { reserveUnits, settleHold, releaseHold, ensureWallet } from "./unit-ledger.js";
 
 // Fake pg client: routes queries by SQL shape, records calls, returns canned rows.
 // NOTE: a fake cannot prove real FOR UPDATE / concurrency semantics — those need a real Postgres
@@ -24,6 +24,9 @@ function makeClient(canned = {}) {
       }
       if (/SUM\(CASE WHEN state = 'reserved'/.test(text)) {
         return { rows: [{ used: canned.burstUsed ?? 0 }] };
+      }
+      if (/INSERT INTO zaki_unit_wallets/.test(text)) {
+        return { rows: [{ user_id: params[0], plan_id: params[1], weekly_allowance_units: params[2], burst_allowance_units: params[3] }] };
       }
       if (/UPDATE zaki_unit_wallets/.test(text)) return { rows: [], rowCount: 1 };
       if (/INSERT INTO zaki_meter_holds/.test(text)) {
@@ -106,6 +109,30 @@ describe("unit-ledger: reserveUnits", () => {
     const { client } = makeClient({ wallet: null });
     const r = await reserveUnits({ ...baseReserve, reservedUnits: 1 }, client);
     expect(r).toMatchObject({ ok: false, reason: "no_wallet" });
+  });
+});
+
+describe("unit-ledger: ensureWallet (provisioning)", () => {
+  it("provisions allowances from the plan (personal → weekly 500 / burst 100)", async () => {
+    const { client, calls } = makeClient({});
+    const w = await ensureWallet({ userId: 7, planId: "personal", env: {} }, client);
+    const ins = calls.find((c) => /INSERT INTO zaki_unit_wallets/.test(c.text));
+    expect(ins.params).toEqual([7, "personal", 500, 100, 5]); // [userId, plan, weekly, burst, windowHours]
+    expect(w).toMatchObject({ weekly_allowance_units: 500 });
+  });
+
+  it("normalizes legacy/unknown plans (bogus → free defaults)", async () => {
+    const { client, calls } = makeClient({});
+    await ensureWallet({ userId: 7, planId: "bogus", env: {} }, client);
+    const ins = calls.find((c) => /INSERT INTO zaki_unit_wallets/.test(c.text));
+    expect(ins.params).toEqual([7, "free", 100, 20, 5]);
+  });
+
+  it("maps a paid tier (pro → weekly 1500 / burst 300)", async () => {
+    const { client, calls } = makeClient({});
+    await ensureWallet({ userId: 9, planId: "pro", env: {} }, client);
+    const ins = calls.find((c) => /INSERT INTO zaki_unit_wallets/.test(c.text));
+    expect(ins.params).toEqual([9, "pro", 1500, 300, 5]);
   });
 });
 
