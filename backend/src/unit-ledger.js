@@ -1,27 +1,40 @@
 // DB-backed reserve→settle unit ledger (H-02, DATA-MODEL.md).
-// Wraps the pure wallet math (unit-wallet.js) in transactions that lock the wallet row
-// (SELECT ... FOR UPDATE) so concurrent reservations cannot over-grant (the real TOCTOU fix),
-// and are idempotent (UNIQUE(grant_id, reserve_idempotency_key) + terminal-state no-op on settle).
+// Wraps the pure wallet math (unit-wallet.js) in a transaction that locks the wallet row
+// (SELECT ... FOR UPDATE) so ALL of a user's reserves serialize — closing TOCTOU for the weekly,
+// top-up AND burst dimensions. Idempotency is decided UNDER the lock and the DB UNIQUE constraint
+// is the final arbiter (insert-first; debit only if we created the row → a conflict never debits).
 //
 // Bucket accounting:
 //   - reserve: weekly_used_units += fromRecurring ; topup_units -= fromTopup
-//   - settle : refund (reserved - settled) — topup-first — weekly_used -= refundRecurring ; topup_units += refundTopup
-// Burst is NOT stored; it is recomputed from the rolling-window holds/receipts and passed in as burstUsedUnits.
+//   - settle : refund (reserved - settled), top-up-first → weekly_used -= refundRecurring ; topup_units += refundTopup
+//
+// SIMPLIFICATION vs DATA-MODEL.md (deliberate, documented): funding_json stores a 2-key
+// {fromRecurring, fromTopup} split, not the doc's 3-key {weekly,burst,topup}. This is sound because
+// burst is NOT a stored counter — it is recomputed each reserve from the rolling-window holds, so
+// "recurring" only ever debits weekly_used. If burst ever becomes a separately-debited stored bucket,
+// widen funding_json to 3 keys so refunds route correctly.
+//
+// COMPANION REQUIRED (H-02 follow-up): an expiry SWEEPER that releases `reserved` holds past
+// expires_at (idx_zaki_meter_holds_expiry_sweep) — until it exists, an orphaned reserve (settle never
+// called) stays debited (correct fail-closed direction, but units are stuck for the user).
+//
+// NOTE on precision: unit columns are DOUBLE PRECISION; running sums can drift over many requests.
+// Acceptable for weighted units; revisit integer micro-units if it ever backs direct $ accounting.
 
-import { withDbTransaction, dbQuery } from "./db.js";
+import { withDbTransaction } from "./db.js";
 import { computeRemaining, planFunding, computeSettleRefund } from "./unit-wallet.js";
 
 export const UNIT_LEDGER_DDL = `
 CREATE TABLE IF NOT EXISTS zaki_unit_wallets (
   user_id BIGINT PRIMARY KEY REFERENCES zaki_users(id) ON DELETE CASCADE,
   plan_id TEXT NOT NULL DEFAULT 'free',
-  weekly_allowance_units DOUBLE PRECISION NOT NULL DEFAULT 0,
-  weekly_used_units DOUBLE PRECISION NOT NULL DEFAULT 0,
+  weekly_allowance_units DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (weekly_allowance_units >= 0),
+  weekly_used_units DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (weekly_used_units >= 0),
   weekly_anchor_at TIMESTAMPTZ,
   weekly_reset_at TIMESTAMPTZ,
-  burst_allowance_units DOUBLE PRECISION NOT NULL DEFAULT 0,
+  burst_allowance_units DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (burst_allowance_units >= 0),
   burst_window_hours INT NOT NULL DEFAULT 5,
-  topup_units DOUBLE PRECISION NOT NULL DEFAULT 0,
+  topup_units DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (topup_units >= 0),
   version BIGINT NOT NULL DEFAULT 0,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -54,11 +67,9 @@ CREATE INDEX IF NOT EXISTS idx_zaki_meter_holds_active_user
   ON zaki_meter_holds (user_id, state, reserved_at DESC) WHERE state = 'reserved';
 CREATE INDEX IF NOT EXISTS idx_zaki_meter_holds_expiry_sweep
   ON zaki_meter_holds (state, expires_at) WHERE state = 'reserved';
+CREATE INDEX IF NOT EXISTS idx_zaki_meter_holds_burst_window
+  ON zaki_meter_holds (user_id, reserved_at DESC);
 `;
-
-export async function initUnitLedgerSchema() {
-  await dbQuery(UNIT_LEDGER_DDL);
-}
 
 function parseFunding(funding) {
   const f = typeof funding === "string" ? JSON.parse(funding || "{}") : funding || {};
@@ -66,31 +77,44 @@ function parseFunding(funding) {
 }
 
 /**
- * Reserve units for an op. Atomic + idempotent. Debits the wallet.
+ * Reserve units for an op. Atomic + idempotent + fail-closed. Debits the wallet only on success.
  * @returns {Promise<{ok:boolean, hold?:object, funding?:object, remaining?:number, idempotent?:boolean, reason?:string, shortfall?:number}>}
  */
 export async function reserveUnits(
-  { userId, grantId, productId, action, reservedUnits, reserveIdempotencyKey, burstUsedUnits = 0, expiresAt },
+  { userId, grantId, productId, action, reservedUnits, reserveIdempotencyKey, expiresAt },
   client
 ) {
   const run = async (c) => {
-    // Idempotency: a hold already exists for this (grant, key) → return it, no second debit.
+    // 1) Lock the wallet FIRST → all of this user's reserves serialize here (TOCTOU close for every bucket).
+    const w = await c.query(`SELECT * FROM zaki_unit_wallets WHERE user_id = $1 FOR UPDATE`, [userId]);
+    const wallet = w.rows[0];
+    if (!wallet) return { ok: false, reason: "no_wallet" };
+
+    // 2) Idempotency UNDER the lock: a concurrent retry (same user/grant) is blocked above, so a
+    //    committed prior hold is visible now. Return it without re-debiting.
     const existing = await c.query(
       `SELECT * FROM zaki_meter_holds WHERE grant_id = $1 AND reserve_idempotency_key = $2`,
       [grantId, reserveIdempotencyKey]
     );
     if (existing.rows[0]) return { ok: true, idempotent: true, hold: existing.rows[0] };
 
-    // Lock the wallet row so concurrent reserves serialize (closes TOCTOU).
-    const w = await c.query(`SELECT * FROM zaki_unit_wallets WHERE user_id = $1 FOR UPDATE`, [userId]);
-    const wallet = w.rows[0];
-    if (!wallet) return { ok: false, reason: "no_wallet" };
+    // 3) Recompute burst usage INSIDE the lock (rolling window) → TOCTOU-safe 5h gate.
+    const windowHours = Number(wallet.burst_window_hours) || 5;
+    const burstRow = await c.query(
+      `SELECT COALESCE(SUM(CASE WHEN state = 'reserved' THEN reserved_units
+                                WHEN state = 'settled'  THEN COALESCE(settled_units, 0)
+                                ELSE 0 END), 0) AS used
+         FROM zaki_meter_holds
+        WHERE user_id = $1 AND reserved_at > NOW() - ($2 * INTERVAL '1 hour')`,
+      [userId, windowHours]
+    );
+    const burstUsedUnits = Number(burstRow.rows[0]?.used) || 0;
 
     const rem = computeRemaining({
       weeklyAllowanceUnits: Number(wallet.weekly_allowance_units),
       weeklyUsedUnits: Number(wallet.weekly_used_units),
       burstAllowanceUnits: Number(wallet.burst_allowance_units),
-      burstUsedUnits: Number(burstUsedUnits),
+      burstUsedUnits,
       topupUnits: Number(wallet.topup_units),
     });
     const funding = planFunding(reservedUnits, {
@@ -101,17 +125,7 @@ export async function reserveUnits(
       return { ok: false, reason: "insufficient_units", shortfall: funding.shortfall, remaining: rem.remaining };
     }
 
-    // Debit: recurring draws from the weekly bucket (within the burst gate); top-up drains separately.
-    await c.query(
-      `UPDATE zaki_unit_wallets
-         SET weekly_used_units = weekly_used_units + $2,
-             topup_units = topup_units - $3,
-             version = version + 1,
-             updated_at = NOW()
-       WHERE user_id = $1`,
-      [userId, funding.fromRecurring, funding.fromTopup]
-    );
-
+    // 4) Insert the hold FIRST (DB UNIQUE is the idempotency arbiter). Debit ONLY if we created the row.
     const ins = await c.query(
       `INSERT INTO zaki_meter_holds
          (grant_id, tenant_id, user_id, product_id, action, state, reserved_units, funding_json, reserve_idempotency_key, expires_at)
@@ -124,25 +138,48 @@ export async function reserveUnits(
         reserveIdempotencyKey, expiresAt,
       ]
     );
+    if (ins.rows.length === 0) {
+      // Not expected (we hold the lock and checked existing), but if a conflict occurs we did NOT
+      // create the row → must NOT debit. Return the existing hold as an idempotent hit.
+      const again = await c.query(
+        `SELECT * FROM zaki_meter_holds WHERE grant_id = $1 AND reserve_idempotency_key = $2`,
+        [grantId, reserveIdempotencyKey]
+      );
+      return { ok: true, idempotent: true, hold: again.rows[0] ?? null };
+    }
+
+    // 5) Debit the wallet — same tx as the insert → atomic.
+    await c.query(
+      `UPDATE zaki_unit_wallets
+         SET weekly_used_units = weekly_used_units + $2,
+             topup_units = topup_units - $3,
+             version = version + 1,
+             updated_at = NOW()
+       WHERE user_id = $1`,
+      [userId, funding.fromRecurring, funding.fromTopup]
+    );
     return { ok: true, hold: ins.rows[0], funding, remaining: rem.remaining - funding.funded };
   };
   return client ? run(client) : withDbTransaction(run);
 }
 
 /**
- * Settle (or release) a reserved hold. Idempotent (no-op if already terminal). Refunds topup-first.
- * settledUnits is capped at reserved by the pure math. settledUnits=0 + finalState 'released' = full refund.
+ * Settle (or release) a reserved hold. Idempotent (no-op if already terminal). Refunds top-up-first.
+ * For finalState='settled', settledUnits must be a finite number. settledUnits=0 + 'released' = full refund.
  * @returns {Promise<{ok:boolean, hold?:object, refund?:object, idempotent?:boolean, reason?:string}>}
  */
 export async function settleHold(
   { holdId, settleIdempotencyKey, settledUnits, finalState = "settled", provider = null, providerModel = null, providerCostUsdMicros = null, providerInputTokens = null, providerOutputTokens = null },
   client
 ) {
+  if (finalState === "settled" && !Number.isFinite(Number(settledUnits))) {
+    return { ok: false, reason: "invalid_settled_units" };
+  }
   const run = async (c) => {
     const h = await c.query(`SELECT * FROM zaki_meter_holds WHERE id = $1 FOR UPDATE`, [holdId]);
     const hold = h.rows[0];
     if (!hold) return { ok: false, reason: "no_hold" };
-    if (hold.state !== "reserved") return { ok: true, idempotent: true, hold }; // already terminal — no double-settle
+    if (hold.state !== "reserved") return { ok: true, idempotent: true, hold }; // terminal → no double-settle
 
     const funding = parseFunding(hold.funding_json);
     const refund = computeSettleRefund({
@@ -151,7 +188,6 @@ export async function settleHold(
       funding,
     });
 
-    // Refund unused units to the wallet (topup-first via the pure math).
     await c.query(
       `UPDATE zaki_unit_wallets
          SET weekly_used_units = GREATEST(0, weekly_used_units - $2),
