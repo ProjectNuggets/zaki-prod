@@ -4,12 +4,15 @@ type ToolResult = {
   error?: string;
 };
 
+export type BotToolCallStatus = "pending" | "blocked" | "ok" | "fail";
+
 export type BotToolCall = {
   id: string;
   requestId?: string;
   name: string;
   arguments: Record<string, unknown>;
   result?: ToolResult;
+  status?: BotToolCallStatus;
   timestamp: number;
   startedAt: number;
   finishedAt?: number;
@@ -21,11 +24,11 @@ interface BotToolCallBlockProps {
 }
 
 export function BotToolCallBlock({ toolCall }: BotToolCallBlockProps) {
-  const status = toolCall.result
+  const status: BotToolCallStatus = toolCall.status || (toolCall.result
     ? toolCall.result.ok
       ? "ok"
       : "fail"
-    : "pending";
+    : "pending");
 
   const durationMs =
     typeof toolCall.durationMs === "number"
@@ -51,7 +54,9 @@ export function BotToolCallBlock({ toolCall }: BotToolCallBlockProps) {
       ? "bg-zaki-accent"
       : status === "fail"
         ? "bg-zaki-brand"
-        : "bg-amber-500 animate-pulse";
+        : status === "blocked"
+          ? "bg-amber-500"
+          : "bg-amber-500 animate-pulse";
 
   return (
     <details
@@ -84,7 +89,7 @@ export function BotToolCallBlock({ toolCall }: BotToolCallBlockProps) {
                 : "ml-auto rounded-[2px] bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
           }
         >
-          {status === "ok" ? "OK" : status === "fail" ? "FAIL" : "RUNNING"}
+          {status === "ok" ? "OK" : status === "fail" ? "FAIL" : status === "blocked" ? "APPROVAL" : "RUNNING"}
         </span>
       </summary>
       <div className="mt-2 space-y-2 rounded-[2px] border border-zaki bg-zaki-elevated p-2 dark:border-[rgba(240,236,230,0.08)] dark:bg-[#1a1714]">

@@ -1074,7 +1074,14 @@ describe("ChatArea Component", () => {
     navState.threadId = "thread-1";
 
     (useMessages as jest.Mock).mockReturnValue({
-      data: [{ id: "m1", role: "assistant", content: "Hello from history" }],
+      data: [
+        {
+          id: "m1",
+          role: "assistant",
+          content: "Hello from history",
+          created_at: "2026-05-27T09:30:00.000Z",
+        },
+      ],
       isLoading: false,
     });
 
@@ -1083,6 +1090,11 @@ describe("ChatArea Component", () => {
     await waitFor(() => {
       expect(screen.getByText("Hello from history")).toBeInTheDocument();
     });
+    expect(screen.getByTestId("message-timestamp")).toHaveAttribute(
+      "dateTime",
+      "2026-05-27T09:30:00.000Z"
+    );
+    expect(screen.getByTestId("message-timestamp")).not.toHaveTextContent(/just now/i);
   });
 
   it("strips versioned injected memory envelope from user history messages", async () => {
@@ -1743,6 +1755,44 @@ describe("ChatArea Component", () => {
     expect(snapshot.transcriptEntries).toHaveLength(0);
   });
 
+  it("does not treat approval-blocked tools as active work", () => {
+    const snapshot = buildZakiProcessSnapshot({
+      statusEvents: [
+        {
+          id: "status-1",
+          text: "Waiting for approval",
+          timestamp: Date.now() - 900,
+          phase: "waiting",
+        },
+      ],
+      reasoningSummary: null,
+      replyStart: null,
+      toolCalls: [
+        {
+          id: "tool-1",
+          requestId: "call_artifact",
+          name: "artifact_create",
+          arguments: {},
+          timestamp: Date.now() - 900,
+          startedAt: Date.now() - 900,
+          finishedAt: Date.now() - 800,
+          durationMs: 100,
+          status: "blocked",
+          result: {
+            ok: false,
+            error: "Approval required",
+            result: "Approval required",
+          },
+        },
+      ],
+      latestAssistantMessageContent: "",
+      progressTerminalReason: null,
+    });
+
+    expect(snapshot.currentActionText).toBe("Waiting for approval");
+    expect(snapshot.latestToolName).toBe("artifact_create");
+  });
+
   it("turns reply_start into a final-reply transition state", () => {
     const snapshot = buildZakiProcessSnapshot({
       statusEvents: [],
@@ -2076,6 +2126,31 @@ describe("ChatArea Component", () => {
       outputPreview: "edited src/app/components/ChatArea.tsx",
       resultSummary: "completed",
       groupKey: "tool-use:call_1",
+    });
+  });
+
+  it("renders legacy approval checkpoints as blocked instead of failed tool results", () => {
+    expect(
+      extractNullalisTranscriptEntry(
+        "tool_result",
+        {
+          tool: "artifact_create",
+          tool_use_id: "call_artifact",
+          success: false,
+          output_preview: "Approval required. Use /approve allow-once|deny",
+          result_summary: "supervised_mutating_requires_approval",
+        },
+        334
+      )
+    ).toMatchObject({
+      kind: "tool",
+      text: "Approval required for artifact_create",
+      tool: "artifact_create",
+      toolUseId: "call_artifact",
+      status: "blocked",
+      resultState: "blocked",
+      source: "approval",
+      groupKey: "tool-use:call_artifact",
     });
   });
 
