@@ -4682,6 +4682,12 @@ async function syncStripeSubscriptionState({ email, zakiUser }) {
        WHERE id = $2`,
       [customerId, zakiUser.id]
     );
+    // Best-effort: re-sync the unit wallet allowance to the downgraded plan.
+    try {
+      await ensureWallet({ userId: zakiUser.id, planId: "free" });
+    } catch (e) {
+      console.error(`[Billing] ensureWallet (reconcile->free) failed user=${zakiUser.id}: ${e?.message}`);
+    }
     return {
       updated: true,
       customerId,
@@ -4746,6 +4752,13 @@ async function syncStripeSubscriptionState({ email, zakiUser }) {
       zakiUser.id,
     ]
   );
+
+  // Best-effort: re-sync the unit wallet allowance to the reconciled plan.
+  try {
+    await ensureWallet({ userId: zakiUser.id, planId: tier });
+  } catch (e) {
+    console.error(`[Billing] ensureWallet (reconcile) failed user=${zakiUser.id}: ${e?.message}`);
+  }
 
   return {
     updated: true,

@@ -1,3 +1,5 @@
+import { ensureWallet } from "./unit-ledger.js";
+
 function toIsoFromUnixSeconds(value) {
   const seconds = Number(value || 0);
   if (!Number.isFinite(seconds) || seconds <= 0) return null;
@@ -263,6 +265,18 @@ export function createStripeWebhookHandler({
                 user.id,
               ]
             );
+
+            // Best-effort: re-sync the unit wallet allowance to the new plan.
+            // markWebhookEventProcessed already marked this event up front, so a
+            // throw here would make Stripe's retry a skipped duplicate and lose
+            // the re-provision — keep it non-fatal.
+            try {
+              await ensureWallet({ userId: user.id, planId: tierToStore });
+            } catch (e) {
+              console.error(
+                `[Billing] ensureWallet after ${event.type} failed (non-fatal) user=${user.id}: ${e?.message}`
+              );
+            }
 
             if (
               event.type === "customer.subscription.deleted" ||
