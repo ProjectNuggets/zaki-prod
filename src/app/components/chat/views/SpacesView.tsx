@@ -32,6 +32,7 @@ type SpaceTemplate = {
   label: string;
   description: string;
   icon: typeof Compass;
+  color: string;
   spaceName: string;
   spaceDescription: string;
   instructions: string;
@@ -43,6 +44,7 @@ const TEMPLATES: SpaceTemplate[] = [
     label: "Research",
     description: "Synthesize sources. Find the signal.",
     icon: Compass,
+    color: "var(--zaki-template-research)",
     spaceName: "Research",
     spaceDescription: "A space for deep dives and investigations.",
     instructions:
@@ -53,6 +55,7 @@ const TEMPLATES: SpaceTemplate[] = [
     label: "Writing",
     description: "Draft, edit, and refine. Keep your voice.",
     icon: Pencil,
+    color: "var(--zaki-template-writing)",
     spaceName: "Writing",
     spaceDescription: "A space for drafts, edits, and finished pieces.",
     instructions:
@@ -63,6 +66,7 @@ const TEMPLATES: SpaceTemplate[] = [
     label: "Client brief",
     description: "Prep deliverables. Stay on brief.",
     icon: Briefcase,
+    color: "var(--zaki-template-client)",
     spaceName: "Client brief",
     spaceDescription: "A space for one client engagement.",
     instructions:
@@ -73,6 +77,7 @@ const TEMPLATES: SpaceTemplate[] = [
     label: "Code project",
     description: "Review code. Ship faster.",
     icon: Code2,
+    color: "var(--zaki-template-code)",
     spaceName: "Code project",
     spaceDescription: "A space for one codebase or shipping effort.",
     instructions:
@@ -83,6 +88,7 @@ const TEMPLATES: SpaceTemplate[] = [
     label: "Study",
     description: "Learn and retain. With a tutor.",
     icon: GraduationCap,
+    color: "var(--zaki-template-study)",
     spaceName: "Study",
     spaceDescription: "A space to learn one subject deeply.",
     instructions:
@@ -205,7 +211,14 @@ export function SpacesView({
                 isRtl && "text-right"
               )}
             >
-              <div className="mb-3 inline-flex size-9 items-center justify-center border border-zaki-accent/30 bg-zaki-accent/15 text-zaki-accent">
+              <div
+                className="mb-3 inline-flex size-9 items-center justify-center border"
+                style={{
+                  color: template.color,
+                  backgroundColor: `color-mix(in srgb, ${template.color} 12%, transparent)`,
+                  borderColor: `color-mix(in srgb, ${template.color} 45%, transparent)`,
+                }}
+              >
                 <Icon className="size-4" />
               </div>
               <div className="font-mono-ui font-semibold text-xs uppercase text-zaki-primary mb-1">

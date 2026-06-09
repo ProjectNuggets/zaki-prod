@@ -64,6 +64,15 @@
   --zaki-space-swatch-plum: #745974;
   --zaki-space-swatch-sand: #79715f;
   --zaki-space-swatch-default: var(--v2-ink-3, #6b6660);
+
+  /* Template category colors — vibrant rainbow, an intentional product accent
+   * on the Spaces landing tiles (kept distinct from the one-ember chrome rule
+   * because color-coded templates aid recognition and the team likes them). */
+  --zaki-template-research: #219171;
+  --zaki-template-writing: #d97706;
+  --zaki-template-client: #2563eb;
+  --zaki-template-code: #7c3aed;
+  --zaki-template-study: #16a34a;
 }
 
 .dark .zaki-app-v2 {
