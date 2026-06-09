@@ -4,6 +4,7 @@
 @import './tokens.css';
 @import './v2.css';
 @import './enhancements.css';
+@import './spaces-classic.css';
 
 /* =============================================================================
    ACCESSIBILITY - Focus States (Teal accent for differentiation)
@@ -245,7 +246,8 @@ select:focus:not(:focus-visible) {
 }
 
 :root {
-  --zaki-shell-surface: #fdf6ee;
+  /* V2: shell chrome matches the paper/canvas stage (was warm V1 cream #fdf6ee). */
+  --zaki-shell-surface: var(--v2-bg, #f4f1ec);
   --zaki-pattern-start: #eadbc8;
   --zaki-pattern-mid: #c9b295;
   --zaki-pattern-end: #e5d3bd;
@@ -265,7 +267,7 @@ select:focus:not(:focus-visible) {
   --zaki-pattern-end: #3a2f25;
   --zaki-pattern-glow-1: rgba(90, 74, 58, 0.45);
   --zaki-pattern-glow-2: rgba(120, 95, 70, 0.18);
-  --zaki-shell-surface: #0c0a09;
+  --zaki-shell-surface: var(--v2-bg, #0a0908);
   --zaki-bg: #0c0a09;
   --zaki-panel: #0c0a09;
   --zaki-panel-border: rgba(255, 255, 255, 0.08);

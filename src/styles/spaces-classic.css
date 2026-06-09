@@ -1,0 +1,138 @@
+/* spaces-classic.css
+ *
+ * "Spaces Classic inside the V2 app shell": the Chat/Spaces spoke keeps a
+ * softer, calmer V1 product character (visible patterned background, rounded
+ * message bubbles, template/explainer landing) layered on V2 discipline
+ * (tokens, single ember accent, hairlines, neutral surfaces).
+ *
+ * This file is the SINGLE source of truth for:
+ *   1. the Spaces-scoped background-pattern retune (.zaki-spaces-classic), and
+ *   2. the curated per-space swatch palette (app-wide tokens, so the sidebar
+ *      identity dots and the picker swatches share one family).
+ *
+ * It is allowlisted in src/test/spacesTokenDiscipline.test.ts — palette/pattern
+ * literals are permitted HERE only; component code must use the tokens.
+ *
+ * The `.zaki-spaces-classic` class is applied from ChatArea to the Chat/Spaces
+ * surface container (gated on `!isZakiBotActiveSpace`, so the Agent surface and
+ * the Agent dashboard are excluded).
+ */
+
+/* ───────────────────────── Background pattern retune ─────────────────────────
+ * Keep the V1 pattern as Spaces' differentiator, but neutralize the warm brown
+ * to a low-chroma V2 neutral and PUSH CONTRAST UP so it reads clearly (per
+ * product direction) — especially on the dark stage where it was nearly
+ * invisible. The pattern <g> is fixed at opacity 0.18, so clarity comes from
+ * brighter, system-aligned stroke values + a touch more glow.
+ *
+ * Light: neutral greys a step darker than the #F4F1EC paper, plus a soft light
+ * bloom. Dark: the V2 dark ink ramp (#B8B2A9 → #807A72 → #565049) so the lines
+ * sit above the #0A0908 canvas and are legible without fighting overlaid text.
+ */
+.zaki-spaces-classic {
+  --zaki-pattern-start: #cbc4b7;
+  --zaki-pattern-mid: #aaa294;
+  --zaki-pattern-end: #c2bbae;
+  --zaki-pattern-glow-1: rgba(255, 253, 248, 0.42);
+  --zaki-pattern-glow-2: rgba(150, 146, 136, 0.14);
+}
+
+.dark .zaki-spaces-classic {
+  --zaki-pattern-start: #b8b2a9; /* --v2-ink-2 (dark) */
+  --zaki-pattern-mid: #807a72;   /* --v2-ink-3 (dark) */
+  --zaki-pattern-end: #565049;   /* --v2-ink-4 (dark) */
+  --zaki-pattern-glow-1: rgba(184, 178, 169, 0.12);
+  --zaki-pattern-glow-2: rgba(128, 122, 114, 0.07);
+}
+
+/* ─────────────────────── Curated per-space swatch palette ───────────────────
+ * Replaces the old rainbow (teal/orange/blue/purple/green). A muted, desatu-
+ * rated family that reads as ONE coherent set on the V2 stage — distinct enough
+ * to color-code workspaces, quiet enough not to compete with the ember accent.
+ * Defined on the app shell (NOT the spaces-classic container) so the left
+ * Sidebar — which renders outside that container — resolves the same tokens.
+ * Dark values are lifted for legibility on #0A0908; light values are deepened
+ * for contrast on #F4F1EC. `ember` reuses the one accent for an "important"
+ * space; `default` is a neutral ink for un-colored spaces.
+ */
+.zaki-app-v2 {
+  --zaki-space-swatch-ember: var(--v2-accent);
+  --zaki-space-swatch-slate: #586477;
+  --zaki-space-swatch-moss: #5a6852;
+  --zaki-space-swatch-clay: #95513e;
+  --zaki-space-swatch-indigo: #515d8a;
+  --zaki-space-swatch-plum: #745974;
+  --zaki-space-swatch-sand: #79715f;
+  --zaki-space-swatch-default: var(--v2-ink-3, #6b6660);
+
+  /* Template category colors — vibrant rainbow, an intentional product accent
+   * on the Spaces landing tiles (kept distinct from the one-ember chrome rule
+   * because color-coded templates aid recognition and the team likes them). */
+  --zaki-template-research: #219171;
+  --zaki-template-writing: #d97706;
+  --zaki-template-client: #2563eb;
+  --zaki-template-code: #7c3aed;
+  --zaki-template-study: #16a34a;
+}
+
+.dark .zaki-app-v2 {
+  --zaki-space-swatch-slate: #6b7687;
+  --zaki-space-swatch-moss: #6c7a63;
+  --zaki-space-swatch-clay: #a8624e;
+  --zaki-space-swatch-indigo: #6470a0;
+  --zaki-space-swatch-plum: #8a6f8a;
+  --zaki-space-swatch-sand: #8a8270;
+  --zaki-space-swatch-default: var(--v2-ink-3, #807a72);
+}
+
+/* ─────────────────────── Spaces Classic buttons ────────────────────────────
+ * Flat ember, soft-rounded (matches the message-bubble radius), sentence case.
+ * No gradient, glow, or full-pill — the V1 .zaki-btn-primary look is dated.
+ * Defined globally (not under .zaki-spaces-classic) because the create/settings
+ * modals render via a portal on document.body, outside that container. Ember is
+ * stage-independent; the secondary variant adapts via the .dark root class.
+ * var() values carry hex fallbacks so they resolve even outside the V2 stage.
+ */
+.zaki-spaces-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+  font-size: var(--v2-text-sm, 13px);
+  font-weight: 600;
+  padding: 9px 16px;
+  border-radius: var(--v2-r-3, 8px);
+  border: 1px solid transparent;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.zaki-spaces-btn--primary {
+  background: var(--v2-accent, #d24430);
+  border-color: var(--v2-accent, #d24430);
+  color: #fff;
+}
+.zaki-spaces-btn--primary:hover {
+  background: var(--v2-accent-hover, #b83a28);
+  border-color: var(--v2-accent-hover, #b83a28);
+}
+.zaki-spaces-btn--primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.zaki-spaces-btn--secondary {
+  background: transparent;
+  color: var(--v2-ink-1, #0e0d0b);
+  border-color: var(--v2-hairline-strong, rgba(14, 13, 11, 0.2));
+}
+.zaki-spaces-btn--secondary:hover {
+  background: var(--v2-hover, rgba(14, 13, 11, 0.04));
+}
+.dark .zaki-spaces-btn--secondary {
+  color: var(--v2-ink-1, #ece7df);
+  border-color: var(--v2-hairline-strong, rgba(236, 231, 223, 0.22));
+}
+.dark .zaki-spaces-btn--secondary:hover {
+  background: var(--v2-hover, rgba(236, 231, 223, 0.06));
+}

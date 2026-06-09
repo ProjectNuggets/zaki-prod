@@ -489,6 +489,7 @@
     "readAloudError": "تعذّر تشغيل الصوت. حاول مرة أخرى."
   },
   "chat": {
+    "streamingStatus": "زاكي يرد…",
     "thinking": "جاري التفكير",
     "researching": "جارٍ البحث",
     "thinkingPhrases": [
@@ -1254,6 +1255,11 @@
       "cancel": "إلغاء",
       "create": "إنشاء مساحة"
     }
+  },
+  "editInstructionsModal": {
+    "title": "تعديل التعليمات",
+    "closeAria": "إغلاق تعديل التعليمات",
+    "placeholder": "حدّد النبرة والدور والقواعد لهذه المساحة…"
   },
   "spaceDetailView": {
     "backToSpaces": "كل المساحات",

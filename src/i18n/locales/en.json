@@ -489,6 +489,7 @@
     "readAloudError": "Couldn't read aloud. Try again."
   },
   "chat": {
+    "streamingStatus": "ZAKI is replying…",
     "thinking": "Thinking",
     "researching": "Researching",
     "thinkingPhrases": [
@@ -1251,6 +1252,11 @@
       "cancel": "Cancel",
       "create": "Create space"
     }
+  },
+  "editInstructionsModal": {
+    "title": "Edit instructions",
+    "closeAria": "Close instructions edit",
+    "placeholder": "Set the tone, role, and rules for this space…"
   },
   "spaceDetailView": {
     "backToSpaces": "All spaces",

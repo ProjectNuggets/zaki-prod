@@ -39,7 +39,7 @@ export function MessageActions({
 
   return (
     <div
-      className={`mt-1 flex items-center gap-1 text-zaki-muted transition-opacity focus-within:opacity-100 ${
+      className={`mt-1 flex items-center gap-1 text-zaki-muted transition-opacity focus-within:opacity-100 [@media(hover:none)]:!opacity-100 ${
         visible ? "" : "opacity-0 group-hover:opacity-100"
       }`}
     >

@@ -44,7 +44,7 @@ const TEMPLATES: SpaceTemplate[] = [
     label: "Research",
     description: "Synthesize sources. Find the signal.",
     icon: Compass,
-    color: "#219171",
+    color: "var(--zaki-template-research)",
     spaceName: "Research",
     spaceDescription: "A space for deep dives and investigations.",
     instructions:
@@ -55,7 +55,7 @@ const TEMPLATES: SpaceTemplate[] = [
     label: "Writing",
     description: "Draft, edit, and refine. Keep your voice.",
     icon: Pencil,
-    color: "#d97706",
+    color: "var(--zaki-template-writing)",
     spaceName: "Writing",
     spaceDescription: "A space for drafts, edits, and finished pieces.",
     instructions:
@@ -66,7 +66,7 @@ const TEMPLATES: SpaceTemplate[] = [
     label: "Client brief",
     description: "Prep deliverables. Stay on brief.",
     icon: Briefcase,
-    color: "#2563eb",
+    color: "var(--zaki-template-client)",
     spaceName: "Client brief",
     spaceDescription: "A space for one client engagement.",
     instructions:
@@ -77,7 +77,7 @@ const TEMPLATES: SpaceTemplate[] = [
     label: "Code project",
     description: "Review code. Ship faster.",
     icon: Code2,
-    color: "#7c3aed",
+    color: "var(--zaki-template-code)",
     spaceName: "Code project",
     spaceDescription: "A space for one codebase or shipping effort.",
     instructions:
@@ -88,7 +88,7 @@ const TEMPLATES: SpaceTemplate[] = [
     label: "Study",
     description: "Learn and retain. With a tutor.",
     icon: GraduationCap,
-    color: "#16a34a",
+    color: "var(--zaki-template-study)",
     spaceName: "Study",
     spaceDescription: "A space to learn one subject deeply.",
     instructions:
@@ -206,18 +206,17 @@ export function SpacesView({
               type="button"
               onClick={() => openTemplate(template)}
               className={cn(
-                "group border border-zaki bg-zaki-raised p-4 text-left transition-colors duration-200",
+                "group flex h-full flex-col border border-zaki bg-zaki-raised p-4 text-left transition-colors duration-200",
                 "hover:border-zaki-strong hover:bg-zaki-hover",
-                "dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)] dark:hover:bg-[#1a1714]",
                 isRtl && "text-right"
               )}
             >
               <div
-                className="inline-flex size-9 items-center justify-center border mb-3"
+                className="mb-3 inline-flex size-9 items-center justify-center border"
                 style={{
-                  backgroundColor: `${template.color}1a`,
                   color: template.color,
-                  borderColor: `${template.color}66`,
+                  backgroundColor: `color-mix(in srgb, ${template.color} 12%, transparent)`,
+                  borderColor: `color-mix(in srgb, ${template.color} 45%, transparent)`,
                 }}
               >
                 <Icon className="size-4" />
@@ -225,7 +224,7 @@ export function SpacesView({
               <div className="font-mono-ui font-semibold text-xs uppercase text-zaki-primary mb-1">
                 {template.label}
               </div>
-              <div className="text-xs text-zaki-secondary leading-relaxed">
+              <div className="text-xs text-zaki-secondary leading-relaxed line-clamp-2 min-h-[2.5rem]">
                 {template.description}
               </div>
             </button>
@@ -236,12 +235,12 @@ export function SpacesView({
   );
 
   const renderExplainer = () => (
-    <div className="border border-zaki bg-zaki-raised p-5 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+    <div className="border border-zaki bg-zaki-raised p-5">
       <div className="mb-4">
         <MetaLabel>What makes a Space</MetaLabel>
       </div>
       <p className="mb-4 border-l border-zaki-brand/40 pl-3 font-mono-ui text-[11px] uppercase leading-relaxed text-zaki-secondary">
-        Chat spaces keep workspace context for focused threads. ZAKI Agent Brain remains the personal graph memory for autonomous work.
+        A space keeps its instructions, files, and threads together for one project.
       </p>
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="flex flex-col gap-2">
@@ -267,10 +266,7 @@ export function SpacesView({
           </p>
         </div>
         <div className="flex flex-col gap-2">
-          <div
-            className="inline-flex size-8 items-center justify-center border"
-            style={{ backgroundColor: "rgba(217, 119, 6, 0.15)", borderColor: "rgba(217, 119, 6, 0.45)", color: "#d97706" }}
-          >
+          <div className="inline-flex size-8 items-center justify-center border border-zaki-accent/30 bg-zaki-accent/15 text-zaki-accent">
             <MessageSquareText className="size-4" />
           </div>
           <div className="font-mono-ui font-semibold text-xs uppercase text-zaki-primary">
@@ -287,7 +283,7 @@ export function SpacesView({
   if (isLoading) {
     return (
       <div
-        className="px-4 sm:px-6 md:px-10 py-8 md:py-10 max-w-6xl mx-auto w-full"
+        className="px-4 sm:px-6 md:px-10 py-8 md:py-10 max-w-[1600px] mx-auto w-full"
         dir={isRtl ? "rtl" : "ltr"}
       >
         {renderHeader()}
@@ -300,7 +296,7 @@ export function SpacesView({
   const renderSpaceCard = (space: Space) => (
     <div
       key={space.id}
-      className="group relative border border-zaki bg-zaki-raised p-4 transition-colors duration-200 hover:border-zaki-strong hover:bg-zaki-hover cursor-pointer dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)] dark:hover:bg-[#1a1714]"
+      className="group relative border border-zaki bg-zaki-raised p-4 transition-colors duration-200 hover:border-zaki-strong hover:bg-zaki-hover cursor-pointer"
       role="button"
       tabIndex={0}
       aria-label={t("spacesView.startChatAria")}
@@ -318,7 +314,7 @@ export function SpacesView({
         </span>
         <div
           className={cn(
-            "flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity",
+            "flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:!opacity-100 transition-opacity",
             isRtl && "flex-row-reverse"
           )}
         >
@@ -431,7 +427,7 @@ export function SpacesView({
 
   return (
     <div
-      className="px-4 sm:px-6 md:px-10 py-8 md:py-10 max-w-6xl mx-auto w-full"
+      className="px-4 sm:px-6 md:px-10 py-8 md:py-10 max-w-[1600px] mx-auto w-full"
       dir={isRtl ? "rtl" : "ltr"}
     >
       {renderHeader()}

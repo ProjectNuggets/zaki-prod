@@ -8299,7 +8299,11 @@ export function ChatArea() {
       <div
         className={cn(
           "relative h-full rounded-none border-0 bg-transparent overflow-hidden flex flex-col",
-          isAgentSurface && "zaki-agent-v2__surface"
+          isAgentSurface && "zaki-agent-v2__surface",
+          // Spaces Classic scope: Chat/Spaces surfaces only (excludes the Agent
+          // surface AND the Agent dashboard, which is !isAgentSurface but is a
+          // bot space). Hosts the retuned background pattern + Spaces styling.
+          !isZakiBotActiveSpace && "zaki-spaces-classic"
         )}
       >
         {/* Background */}
@@ -8606,13 +8610,9 @@ export function ChatArea() {
                 onStop={handleStopStreaming}
                 queryModeEnabled={queryModeEnabled}
                 onToggleQueryMode={() => setQueryModeEnabled((prev) => !prev)}
-                webSearchArmed={webSearchArmed}
-                onToggleWebSearch={() => setWebSearchArmed((prev) => !prev)}
-                // 2026-05-08 — Hide on the ZAKI landing/home view per
-                // Nova: the upsell pill bolted above the textarea was
-                // visual noise on the splash. Keep it only in real
-                // workspace chats where the slot is otherwise empty.
-                showUpgradeStrip={!isZakiBotActiveSpace && !showZakiHome}
+                // Upgrade/plan affordance belongs to the Dashboard, not the
+                // chat composer — the bar above the input was visual noise.
+                showUpgradeStrip={false}
                 sendLocked={isZakiBotSendLocked}
                 zakiBotMode={isZakiBotActiveSpace}
                 threadKey={
