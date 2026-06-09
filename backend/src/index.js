@@ -356,7 +356,7 @@ import {
   cleanupExpiredSessions,
 } from "./zaki-auth.js";
 import { buildRefreshCookie } from "./zaki-session-cookie.js";
-import { sweepExpiredHolds, reserveUnits, settleHold, ensureWallet } from "./unit-ledger.js";
+import { sweepExpiredHolds, reserveUnits, settleHold, ensureWallet, readWallet } from "./unit-ledger.js";
 import { buildMeterDemoRouter } from "./meter-demo-router.js";
 import { actualChatUnits, estimateChatUnits, deterministicGrantId } from "./chat-meter.js";
 import {
@@ -6563,12 +6563,21 @@ function findRegistryProduct(registry, productId) {
 }
 
 async function readMeterSnapshotForRequest(identity, platform, policy) {
+  // For an authenticated ZAKI user, source the DISPLAY weekly window from the real unit wallet (the
+  // ENFORCEMENT ledger the spaces chat gate debits) instead of the receipts ledger — spaces chat
+  // never writes a receipt, so the receipts-based weekly would always read used:0/remaining:limit.
+  // Anonymous identities (and users without a wallet) → wallet stays null → receipts path unchanged.
+  const wallet =
+    identity?.type === "user" && identity?.userId != null
+      ? await readWallet(identity.userId)
+      : null;
   return readMeterSnapshotForIdentity({
     dbGet,
     dbAll,
     identity,
     platform,
     policy,
+    wallet,
   });
 }
 

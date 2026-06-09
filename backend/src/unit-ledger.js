@@ -54,6 +54,18 @@ export async function ensureWallet({ userId, planId, env = process.env }, client
   return dbGet(q, params);
 }
 
+/**
+ * Read-only fetch of a user's wallet row. No lock, no mutation — safe for the DISPLAY path
+ * (GET /api/meter/status sources the weekly window from this). Returns null if the user has no
+ * wallet yet (anonymous identities and not-yet-provisioned users → caller falls back to receipts).
+ * @returns {Promise<object|null>} the zaki_unit_wallets row, or null.
+ */
+export async function readWallet(userId) {
+  const id = Number(userId);
+  if (!Number.isSafeInteger(id) || id <= 0) return null;
+  return (await dbGet(`SELECT * FROM zaki_unit_wallets WHERE user_id = $1`, [id])) || null;
+}
+
 export const UNIT_LEDGER_DDL = `
 CREATE TABLE IF NOT EXISTS zaki_unit_wallets (
   user_id BIGINT PRIMARY KEY REFERENCES zaki_users(id) ON DELETE CASCADE,

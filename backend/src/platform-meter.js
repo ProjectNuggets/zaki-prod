@@ -114,6 +114,49 @@ function buildWeeklyWindowFromAnchor({
   };
 }
 
+/**
+ * Map a real `zaki_unit_wallets` row (the ENFORCEMENT ledger the spaces chat gate debits via
+ * reserveUnits/settleHold) into the DISPLAY `weekly` window shape the frontend reads from
+ * /api/meter/status. This is the source of truth for an authenticated ZAKI user, because spaces
+ * chat NEVER writes a `zaki_meter_receipts` row — the receipts-based window would always read
+ * used:0 / remaining:limit even when the user is out of chat credits.
+ *
+ * Remaining mirrors how the gate funds a reservation (unit-wallet.js computeRemaining/planFunding):
+ * weekly recurring first, then persistent top-up on top. So weekly-window remaining =
+ * max(0, allowance - used) + topup. Burst (the rolling 5h dimension) is intentionally NOT folded in
+ * here — it is the separate `rolling` window.
+ *
+ * pendingFirstUse mirrors the receipts path: true until the wallet is anchored (weekly_reset_at IS
+ * NULL, i.e. the lazy anchored reset in applyWeeklyResetLocked has not yet run for this user).
+ * @returns {object} a weekly window with the SAME field names as buildWeeklyWindowFromAnchor.
+ */
+export function walletToWeeklyWindow(wallet = {}) {
+  const allowance = Math.max(0, Number(wallet?.weekly_allowance_units) || 0);
+  const used = Math.max(0, Number(wallet?.weekly_used_units) || 0);
+  const topup = Math.max(0, Number(wallet?.topup_units) || 0);
+  const weeklyRemaining = Math.max(0, allowance - used);
+  const anchorAtIso = toIsoOrNull(wallet?.weekly_anchor_at);
+  const resetAtIso = toIsoOrNull(wallet?.weekly_reset_at);
+  const pendingFirstUse = wallet?.weekly_reset_at == null;
+  return {
+    period: WEEKLY_PERIOD,
+    resetPolicy: WEEKLY_RESET_POLICY,
+    rollover: false,
+    anchorType: "first_metered_use",
+    anchorAt: anchorAtIso,
+    entitlementStartedAt: null,
+    planMeterGroup: resolvePlanMeterGroup(wallet?.plan_id),
+    pendingFirstUse,
+    unusedUnitsExpireAt: resetAtIso,
+    used: roundUnits(used),
+    receipts: 0,
+    limit: allowance,
+    remaining: roundUnits(weeklyRemaining + topup),
+    startedAt: pendingFirstUse ? null : anchorAtIso,
+    resetAt: resetAtIso,
+  };
+}
+
 async function readFirstMeteredUseAnchor({
   dbGet,
   identity,
@@ -225,8 +268,15 @@ export async function readMeterSnapshotForIdentity({
   dbAll,
   identity,
   platform,
+  wallet = null,
   nowDate = new Date(),
 } = {}) {
+  // An authenticated ZAKI user with a real unit wallet: the wallet (the ENFORCEMENT ledger the
+  // spaces chat gate debits) is the source of truth for the DISPLAY weekly window. Spaces chat
+  // never writes a receipt, so the receipts-based weekly would always read used:0 / remaining:limit.
+  // Anonymous identities and the agent/learning/design surfaces have no wallet here and keep the
+  // existing receipts-based path unchanged.
+  const useWalletWeekly = identity?.type === "user" && wallet != null;
   const now = toDate(nowDate);
   const rollingHours = Math.max(1, Number(platform?.usage?.burstWindowHours || 5));
   const rollingStartedAt = new Date(now.getTime() - rollingHours * MS_PER_HOUR);
@@ -258,14 +308,15 @@ export async function readMeterSnapshotForIdentity({
     startedAtIso: rollingStartedAtIso,
     endedAtIso: nowIso,
   });
-  const weeklyUsage = weeklyWindow.pendingFirstUse
-    ? { weightedUnits: 0, receipts: 0 }
-    : await readMeterWindow({
-        dbGet,
-        identity,
-        startedAtIso: weeklyWindow.queryStartedAt,
-        endedAtIso: weeklyWindow.queryEndedAt,
-      });
+  const weeklyUsage =
+    useWalletWeekly || weeklyWindow.pendingFirstUse
+      ? { weightedUnits: 0, receipts: 0 }
+      : await readMeterWindow({
+          dbGet,
+          identity,
+          startedAtIso: weeklyWindow.queryStartedAt,
+          endedAtIso: weeklyWindow.queryEndedAt,
+        });
   const rollingProducts = await readMeterProductWindow({
     dbAll,
     identity,
@@ -285,6 +336,26 @@ export async function readMeterSnapshotForIdentity({
     ...Object.keys(weeklyProducts),
   ]);
 
+  // Receipts-based weekly window (the legitimate path for anonymous identities and the
+  // agent/learning/design surfaces). Same SHAPE as the wallet-sourced window below.
+  const receiptsWeekly = {
+    period: weeklyWindow.period,
+    resetPolicy: weeklyWindow.resetPolicy,
+    rollover: false,
+    anchorType: weeklyWindow.anchorType,
+    anchorAt: weeklyWindow.anchorAt,
+    entitlementStartedAt: weeklyWindow.entitlementStartedAt,
+    planMeterGroup: weeklyWindow.planMeterGroup,
+    pendingFirstUse: weeklyWindow.pendingFirstUse,
+    unusedUnitsExpireAt: weeklyWindow.unusedUnitsExpireAt,
+    used: weeklyUsage.weightedUnits,
+    receipts: weeklyUsage.receipts,
+    limit: weeklyLimit,
+    remaining: remainingUnits(weeklyLimit, weeklyUsage.weightedUnits),
+    startedAt: weeklyWindow.startedAt,
+    resetAt: weeklyWindow.resetAt,
+  };
+
   return {
     plan: {
       id: platform?.plan?.id || PLATFORM_PLAN_IDS.FREE,
@@ -299,23 +370,7 @@ export async function readMeterSnapshotForIdentity({
       startedAt: rollingStartedAtIso,
       resetAt: nowIso,
     },
-    weekly: {
-      period: weeklyWindow.period,
-      resetPolicy: weeklyWindow.resetPolicy,
-      rollover: false,
-      anchorType: weeklyWindow.anchorType,
-      anchorAt: weeklyWindow.anchorAt,
-      entitlementStartedAt: weeklyWindow.entitlementStartedAt,
-      planMeterGroup: weeklyWindow.planMeterGroup,
-      pendingFirstUse: weeklyWindow.pendingFirstUse,
-      unusedUnitsExpireAt: weeklyWindow.unusedUnitsExpireAt,
-      used: weeklyUsage.weightedUnits,
-      receipts: weeklyUsage.receipts,
-      limit: weeklyLimit,
-      remaining: remainingUnits(weeklyLimit, weeklyUsage.weightedUnits),
-      startedAt: weeklyWindow.startedAt,
-      resetAt: weeklyWindow.resetAt,
-    },
+    weekly: useWalletWeekly ? walletToWeeklyWindow(wallet) : receiptsWeekly,
     products: Object.fromEntries(
       [...productIds].map((productId) => [
         productId,
