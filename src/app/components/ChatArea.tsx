@@ -108,7 +108,7 @@ import { ShareModal } from "./ShareModal";
 import { toast } from "sonner";
 import type { PinnedFile, Space, Message } from "@/types";
 import { useMessages } from "@/queries/useThreads";
-import { spaceKeys } from "@/queries/useSpaces";
+import { spaceKeys, useSpaces } from "@/queries/useSpaces";
 import { useZakiSessions, zakiSessionKeys } from "@/queries/useZakiSessions";
 import { buildZakiSessionRepairTitle, prepareAutoTitleExchange } from "@/lib/sessionAutoTitle";
 import { useMessageReactions } from "@/queries/useMessageReactions";
@@ -3143,6 +3143,14 @@ export function ChatArea() {
 
   // Spaces state
   const [spacesList, setSpacesList] = useState<Space[]>([]);
+  // Read-only view of the shared spaces query (the sidebar owns the fetch and
+  // syncs spacesList via events) so the main SpacesView can render loading and
+  // error states instead of a misleading empty grid. React Query dedupes.
+  const {
+    isLoading: spacesQueryLoading,
+    isError: spacesQueryError,
+    refetch: refetchSpaces,
+  } = useSpaces(!!authUser); // match the sidebar's enabled signal exactly
   const [editSpaceId, setEditSpaceId] = useState<string | null>(null);
   const [fileUploadSpaceId, setFileUploadSpaceId] = useState<string | null>(null);
   const [acceptedWorkspaceTypes, setAcceptedWorkspaceTypes] = useState<Record<string, string[]>>(
@@ -8028,6 +8036,9 @@ export function ChatArea() {
       return (
         <SpacesView
           spacesList={spacesList}
+          isLoading={spacesQueryLoading && spacesList.length === 0}
+          error={spacesQueryError && spacesList.length === 0}
+          onRetry={() => void refetchSpaces()}
           onCreateSpace={() => setCreateSpaceOpen(true)}
           onViewSpace={(id) => {
             if (!authUserId) {

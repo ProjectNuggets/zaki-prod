@@ -1208,6 +1208,11 @@
   },
   "spacesView": {
     "title": "Spaces",
+    "error": {
+      "title": "Couldn't load your spaces",
+      "body": "Check your connection and try again.",
+      "retry": "Retry"
+    },
     "searchPlaceholder": "Search spaces...",
     "searchAria": "Search spaces",
     "sortToggleAria": "Toggle sort order",
