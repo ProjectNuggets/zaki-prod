@@ -68,8 +68,10 @@ jobs:
           push: true
           tags: ${{ steps.image.outputs.tags }}
           platforms: linux/amd64
-          build-args: |
-            VITE_ZAKI_BACKEND_URL=https://api.chatzaki.com
+          # No build-time backend URL. The SPA resolves BACKEND_URL at RUNTIME (docker-entrypoint.d/
+          # 40-zaki-env.sh writes /env.js from the container env), so this one image serves every
+          # environment. The per-env backend URL is set in the zaki-web Helm values (zaki-infra).
+          # Web promotion is now a tag bump like zaki-api — no per-env rebuild.
 
       - name: Publish summary
         run: |
