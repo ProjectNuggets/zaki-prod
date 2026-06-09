@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { ModalShell } from "@/app/components/ui/ModalShell";
 
 interface EditInstructionsModalProps {
@@ -15,6 +16,7 @@ export function EditInstructionsModal({
   onClose,
   onSave,
 }: EditInstructionsModalProps) {
+  const { t } = useTranslation();
   const [value, setValue] = useState(initialValue);
 
   // Sync initial value when modal opens
@@ -30,20 +32,20 @@ export function EditInstructionsModal({
     <ModalShell
       isOpen={isOpen}
       onClose={onClose}
-      ariaLabel="Edit instructions"
+      ariaLabel={t("editInstructionsModal.title")}
       className="w-full max-w-[460px] overflow-hidden"
       containerClassName="items-start overflow-y-auto py-6 sm:items-center sm:py-4"
     >
       <div className="max-h-[calc(100vh-3rem)] overflow-y-auto px-5 py-5 sm:px-6">
         <div className="flex items-center justify-between gap-3">
           <div className="text-lg font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-            Edit instructions
+            {t("editInstructionsModal.title")}
           </div>
           <button
             type="button"
             className="zaki-icon-btn size-9"
             onClick={onClose}
-            aria-label="Close instructions edit"
+            aria-label={t("editInstructionsModal.closeAria")}
           >
             <X className="size-4" />
           </button>
@@ -54,6 +56,7 @@ export function EditInstructionsModal({
             rows={4}
             value={value}
             onChange={(event) => setValue(event.target.value)}
+            placeholder={t("editInstructionsModal.placeholder")}
           />
         </div>
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
@@ -62,7 +65,7 @@ export function EditInstructionsModal({
             className="zaki-spaces-btn zaki-spaces-btn--secondary w-full sm:w-auto"
             onClick={onClose}
           >
-            Cancel
+            {t("settingsModal.footer.cancel")}
           </button>
           <button
             type="button"
@@ -72,7 +75,7 @@ export function EditInstructionsModal({
               onClose();
             }}
           >
-            Save
+            {t("settingsModal.footer.saveChanges")}
           </button>
         </div>
       </div>

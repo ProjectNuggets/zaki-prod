@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Brain, FileText, MessageSquareQuote } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import {
@@ -155,51 +154,6 @@ export function SpaceSettingsSheet({
                   </span>
                 </div>
               </button>
-            </div>
-          </section>
-
-          <section className="space-y-3">
-            <SectionHeader title={t("sidebar.contextSummaryTitle")} />
-            <div className="grid gap-3">
-              <div className={cn("flex items-start gap-3 rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3", isRtl && "flex-row-reverse text-right")}>
-                <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-zaki-sunken text-zaki-brand">
-                  <Brain className="size-4" />
-                </span>
-                <div>
-                  <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-                    {t("sidebar.contextSummaryMemoryLabel")}
-                  </div>
-                  <div className="mt-1 text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">
-                    {t("sidebar.contextSummaryMemoryBody")}
-                  </div>
-                </div>
-              </div>
-              <div className={cn("flex items-start gap-3 rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3", isRtl && "flex-row-reverse text-right")}>
-                <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-zaki-sunken text-zaki-brand">
-                  <FileText className="size-4" />
-                </span>
-                <div>
-                  <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-                    {t("sidebar.contextSummarySpaceLabel")}
-                  </div>
-                  <div className="mt-1 text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">
-                    {t("sidebar.contextSummarySpaceBody")}
-                  </div>
-                </div>
-              </div>
-              <div className={cn("flex items-start gap-3 rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3", isRtl && "flex-row-reverse text-right")}>
-                <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-zaki-sunken text-zaki-brand">
-                  <MessageSquareQuote className="size-4" />
-                </span>
-                <div>
-                  <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-                    {t("sidebar.contextSummaryThreadLabel")}
-                  </div>
-                  <div className="mt-1 text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">
-                    {t("sidebar.contextSummaryThreadBody")}
-                  </div>
-                </div>
-              </div>
             </div>
           </section>
 

@@ -1255,6 +1255,11 @@
       "create": "إنشاء مساحة"
     }
   },
+  "editInstructionsModal": {
+    "title": "تعديل التعليمات",
+    "closeAria": "إغلاق تعديل التعليمات",
+    "placeholder": "حدّد النبرة والدور والقواعد لهذه المساحة…"
+  },
   "spaceDetailView": {
     "backToSpaces": "كل المساحات",
     "appearance": "المظهر",
