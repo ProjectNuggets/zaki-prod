@@ -340,7 +340,7 @@ export function ZakiSessionList({
                         </span>
                       ) : null}
                       {pendingApprovalCount > 0 ? (
-                        <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-[#f10202] px-1 text-[10px] font-bold text-white">
+                        <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-zaki-brand px-1 text-[10px] font-bold text-white">
                           {pendingApprovalCount}
                         </span>
                       ) : null}

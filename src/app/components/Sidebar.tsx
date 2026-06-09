@@ -28,6 +28,7 @@ import {
 } from "@/lib/entitlements";
 import { useTranslation } from "react-i18next";
 import { SidebarModeSwitch } from "./sidebar/SidebarModeSwitch";
+import { DEFAULT_SPACE_SWATCH } from "./chat/spaceSwatches";
 import { ZakiSessionList } from "./sidebar/ZakiSessionList";
 import { SpaceSettingsSheet } from "./sidebar/SpaceSettingsSheet";
 import { DEFAULT_THREAD_LABEL, isDefaultThreadLabel } from "@/lib/threadTitles";
@@ -1661,7 +1662,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
               className="flex items-center gap-2 px-3 py-2 bg-zaki-brand text-white text-sm font-medium rounded-zaki-xl hover:bg-zaki-brand-hover transition-colors"
               type="button"
             >
-              <AddIcon color="#FFFFFF" />
+              <AddIcon color="currentColor" />
               {t("sidebar.actions.createSpace")}
             </button>
           </div>
@@ -1833,7 +1834,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
                     data-onboarding-space-id={space.id}
                   >
                     <div className="bg-zaki-elevated rounded-full size-5 flex items-center justify-center">
-                      <AddIcon color="#88735A" />
+                      <AddIcon color="var(--v2-ink-3)" />
                     </div>
                     <span className="text-zaki-muted text-sm font-medium">{t("sidebar.actions.newChat")}</span>
                   </button>
@@ -1861,7 +1862,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
                     <div className="size-5 flex items-center justify-center">
                       {(() => {
                         const Icon = spaceIconMap[space.icon ?? "folder"] ?? Folder;
-                        return <Icon className="size-4" style={{ color: space.color ?? "#88735A" }} />;
+                        return <Icon className="size-4" style={{ color: space.color ?? DEFAULT_SPACE_SWATCH }} />;
                       })()}
                     </div>
                     {editingItem?.type === "space" && editingItem.id === space.id ? (
@@ -2033,7 +2034,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
                     data-onboarding-space-id={space.id}
                   >
                     <div className="bg-zaki-elevated rounded-full size-5 flex items-center justify-center">
-                      <AddIcon color="#88735A" />
+                      <AddIcon color="var(--v2-ink-3)" />
                     </div>
                     <span className="text-zaki-muted text-sm font-medium">{t("sidebar.actions.newChat")}</span>
                   </button>
@@ -2089,7 +2090,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
         {profileMenuOpen && (
 		          <div
 		            className={cn(
-		              "absolute bottom-14 w-[240px] rounded-zaki-lg border border-zaki-subtle bg-white dark:bg-[#141210] dark:border-[#2a2018] shadow-[0px_14px_30px_rgba(15,15,15,0.12)] dark:shadow-[0px_18px_42px_rgba(0,0,0,0.45)] p-1 z-20",
+		              "absolute bottom-14 w-[240px] rounded-zaki-lg border border-zaki-subtle bg-zaki-raised p-1 z-20",
 		              isRtl ? "left-0" : "right-0"
 		            )}
 	            role="menu"
@@ -2119,7 +2120,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
 	            </div>
 	            <div className="h-px bg-zaki-sunken my-1" />
 	            <Link
-	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1a1714]")}
+	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary hover:bg-zaki-hover")}
 	              to="/pricing?source=settings"
 		              onClick={() => {
 		                if (!isPremium) {
@@ -2144,7 +2145,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
                   : t("sidebar.profile.upgradePlan")}
 		            </Link>
 		            <button
-	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1a1714]")}
+	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary hover:bg-zaki-hover")}
 	              type="button"
 		              onClick={() => setThemePreference(isDark ? "light" : "dark")}
 		            >
@@ -2155,7 +2156,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
 		              </span>
 		            </button>
 	            <button
-	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1a1714]")}
+	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary hover:bg-zaki-hover")}
 	              type="button"
               onClick={() => {
                 setProfileMenuOpen(false);
@@ -2177,7 +2178,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
                   )}
                 </button>
                 <button
-                  className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1a1714]")}
+                  className={cn(profileMenuItemBase, "text-sm text-zaki-primary hover:bg-zaki-hover")}
                   type="button"
                   onClick={() => {
                     setProfileMenuOpen(false);
@@ -2189,7 +2190,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
                   {t("zakiControls.common.controls")}
                 </button>
 	            <button
-	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1a1714]")}
+	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary hover:bg-zaki-hover")}
               type="button"
               onClick={() => {
                 setProfileMenuOpen(false);
@@ -2202,7 +2203,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
 	              {t("sidebar.profile.settings")}
 		            </button>
 	            <button
-	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1a1714]")}
+	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary hover:bg-zaki-hover")}
 	              type="button"
               onClick={() => {
                 setProfileMenuOpen(false);
@@ -2213,7 +2214,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
 	              {t("sidebar.profile.language")}
 		            </button>
 	            <button
-	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1a1714]")}
+	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary hover:bg-zaki-hover")}
 	              type="button"
               onClick={() => {
                 setProfileMenuOpen(false);
@@ -2238,7 +2239,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
 	              {t("sidebar.profile.howToUse")}
 	            </button>
 	            <button
-	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary dark:text-[#efe6d9] hover:bg-zaki-hover dark:hover:bg-[#1a1714]")}
+	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary hover:bg-zaki-hover")}
 	              type="button"
 		              onClick={() => {
 		                setProfileMenuOpen(false);
@@ -2250,7 +2251,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
 	            </button>
 	            <div className="h-px bg-zaki-sunken my-1" />
 	            <button
-	              className={cn(profileMenuItemBase, "text-sm text-zaki-brand dark:text-[#ffb6a4] hover:bg-zaki-error dark:hover:bg-[rgba(241,2,2,0.18)]")}
+	              className={cn(profileMenuItemBase, "text-sm text-zaki-brand hover:bg-zaki-error")}
 	              type="button"
 		              onClick={() => {
 		                setProfileMenuOpen(false);
@@ -2330,7 +2331,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
                 <span className="block text-lg leading-none">×</span>
               </button>
             </div>
-            <div className="max-h-[75vh] overflow-y-auto px-6 py-6 bg-zaki-base/60 dark:bg-[#0c0a09]">
+            <div className="max-h-[75vh] overflow-y-auto px-6 py-6 bg-zaki-base/60">
               <MemoryViewer
                 userId={user.username}
                 initialSearchQuery={memorySearchQuery}
