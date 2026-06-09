@@ -39,8 +39,8 @@ export async function ensureWallet({ userId, planId, env = process.env }, client
   const p = policy.plans[plan] || policy.plans.free;
   const q = `
     INSERT INTO zaki_unit_wallets
-      (user_id, plan_id, weekly_allowance_units, burst_allowance_units, burst_window_hours)
-    VALUES ($1, $2, $3, $4, $5)
+      (user_id, plan_id, weekly_allowance_units, burst_allowance_units, burst_window_hours, weekly_anchor_at, weekly_reset_at)
+    VALUES ($1, $2, $3, $4, $5, NOW(), NOW() + INTERVAL '7 days')
     ON CONFLICT (user_id) DO UPDATE SET
       plan_id = EXCLUDED.plan_id,
       weekly_allowance_units = EXCLUDED.weekly_allowance_units,
@@ -107,6 +107,26 @@ function parseFunding(funding) {
 }
 
 /**
+ * Lazy anchored weekly reset, applied UNDER the wallet's FOR UPDATE lock (called from reserveUnits).
+ * No cron: the reset is realized the next time the user reserves. Two cases, both serialized by the lock:
+ *   - init  (weekly_reset_at IS NULL): seed the anchor + next reset boundary. NEVER touch weekly_used_units,
+ *            so a wallet that already has usage (e.g. a free user at the cap) is NOT silently refilled.
+ *   - reset (NOW() >= weekly_reset_at): zero weekly_used_units and roll the anchor forward by whole 7-day
+ *            periods (CEIL(...) handles multi-week gaps so the next boundary stays in the future, no drift).
+ * The WHERE clause re-checks the gate so it's a no-op if a concurrent winner already reset; on 0 rows we
+ * return the original wallet unchanged. Idempotent and safe to call on every reserve.
+ * @returns {Promise<object>} the (possibly) updated wallet row
+ */
+export async function applyWeeklyResetLocked(c, wallet) {
+  if (wallet.weekly_reset_at == null) {
+    const r = await c.query(`UPDATE zaki_unit_wallets SET weekly_anchor_at = NOW(), weekly_reset_at = NOW() + INTERVAL '7 days', updated_at = NOW() WHERE user_id = $1 AND weekly_reset_at IS NULL RETURNING *`, [wallet.user_id]);
+    return r.rows[0] || wallet;
+  }
+  const r = await c.query(`UPDATE zaki_unit_wallets SET weekly_used_units = 0, weekly_anchor_at = NOW(), weekly_reset_at = weekly_reset_at + (CEIL(EXTRACT(EPOCH FROM (NOW() - weekly_reset_at)) / 604800.0)::int * INTERVAL '7 days'), updated_at = NOW() WHERE user_id = $1 AND weekly_reset_at IS NOT NULL AND NOW() >= weekly_reset_at RETURNING *`, [wallet.user_id]);
+  return r.rows[0] || wallet;
+}
+
+/**
  * Reserve units for an op. Atomic + idempotent + fail-closed. Debits the wallet only on success.
  * @returns {Promise<{ok:boolean, hold?:object, funding?:object, remaining?:number, idempotent?:boolean, reason?:string, shortfall?:number}>}
  */
@@ -117,8 +137,10 @@ export async function reserveUnits(
   const run = async (c) => {
     // 1) Lock the wallet FIRST → all of this user's reserves serialize here (TOCTOU close for every bucket).
     const w = await c.query(`SELECT * FROM zaki_unit_wallets WHERE user_id = $1 FOR UPDATE`, [userId]);
-    const wallet = w.rows[0];
+    let wallet = w.rows[0];
     if (!wallet) return { ok: false, reason: "no_wallet" };
+    // 1b) Lazy anchored weekly reset, still under the lock (init anchors / roll the period / no-op).
+    wallet = await applyWeeklyResetLocked(c, wallet);
 
     // 2) Idempotency UNDER the lock: a concurrent retry (same user/grant) is blocked above, so a
     //    committed prior hold is visible now. Return it without re-debiting.

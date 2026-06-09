@@ -28,6 +28,10 @@ function makeClient(canned = {}) {
       if (/INSERT INTO zaki_unit_wallets/.test(text)) {
         return { rows: [{ user_id: params[0], plan_id: params[1], weekly_allowance_units: params[2], burst_allowance_units: params[3] }] };
       }
+      // Lazy weekly-reset UPDATE (applyWeeklyResetLocked): not due here → no-op (0 rows → helper keeps the wallet).
+      if (/UPDATE zaki_unit_wallets SET (weekly_used_units = 0|weekly_anchor_at = NOW\(\), weekly_reset_at)/.test(text)) {
+        return { rows: [], rowCount: 0 };
+      }
       if (/UPDATE zaki_unit_wallets/.test(text)) return { rows: [], rowCount: 1 };
       if (/INSERT INTO zaki_meter_holds/.test(text)) {
         return { rows: canned.insertConflict ? [] : [{ id: "hold-new", state: "reserved" }] };
@@ -42,7 +46,8 @@ function makeClient(canned = {}) {
   return {
     client,
     calls,
-    walletUpdate: () => calls.find((c) => /UPDATE zaki_unit_wallets/.test(c.text)),
+    // The debit/refund update (NOT the lazy weekly-reset UPDATE, which sets weekly_used_units = 0 / seeds anchors).
+    walletUpdate: () => calls.find((c) => /UPDATE zaki_unit_wallets\s+SET weekly_used_units = (weekly_used_units \+|GREATEST)/.test(c.text)),
     walletLock: () => calls.find((c) => /zaki_unit_wallets WHERE user_id = \$1 FOR UPDATE/.test(c.text)),
   };
 }
@@ -50,6 +55,8 @@ function makeClient(canned = {}) {
 const WALLET = {
   user_id: 42, plan_id: "personal",
   weekly_allowance_units: 100, weekly_used_units: 90,
+  // Anchored + not yet due → the lazy weekly reset is a clean no-op for these reserve tests.
+  weekly_reset_at: "2099-01-01T00:00:00Z", weekly_anchor_at: "2026-06-09T00:00:00Z",
   burst_allowance_units: 1000, burst_window_hours: 5, topup_units: 5,
 };
 const baseReserve = {
