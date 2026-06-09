@@ -17,6 +17,10 @@
       <link rel="apple-touch-icon" href="/favicon.svg" />
       <meta name="apple-mobile-web-app-title" content="ZAKI" />
       <meta name="application-name" content="ZAKI" />
+      <!-- Runtime config: classic (non-module) script runs before the deferred module bundle below,
+           so window.__ZAKI_ENV__ is set before any app code reads the backend URL. Written per-env at
+           container start by docker-entrypoint.d/40-zaki-env.sh from the BACKEND_URL env. -->
+      <script src="/env.js"></script>
     </head>
 
     <body>

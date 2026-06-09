@@ -15,6 +15,15 @@ function readProcessEnv(name: string): string | undefined {
   return normalizeEnvValue(env?.[name]);
 }
 
+// Runtime config injected at container start (public/env.js, overwritten by the nginx entrypoint from
+// the BACKEND_URL container env). Highest priority so ONE built image serves any environment without
+// baking the backend URL at build time — see docker-entrypoint.d/40-zaki-env.sh.
+function readRuntimeEnv(name: string): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  const env = (window as typeof window & { __ZAKI_ENV__?: ProcessEnv }).__ZAKI_ENV__;
+  return normalizeEnvValue(env?.[name]);
+}
+
 export function isDevRuntime(): boolean {
   if (typeof __APP_DEV__ !== "undefined") {
     return __APP_DEV__;
@@ -30,6 +39,9 @@ export function isProdRuntime(): boolean {
 }
 
 export function getConfiguredApiBase(): string | undefined {
+  // Runtime first: a per-environment BACKEND_URL injected at container start beats any build-time bake.
+  const runtime = readRuntimeEnv("BACKEND_URL");
+  if (runtime) return runtime.replace(/\/+$/, "");
   if (typeof __VITE_ZAKI_BACKEND_URL__ !== "undefined") {
     return normalizeEnvValue(__VITE_ZAKI_BACKEND_URL__)?.replace(/\/+$/, "");
   }
