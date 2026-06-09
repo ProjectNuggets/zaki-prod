@@ -206,7 +206,7 @@ export function SpacesView({
               type="button"
               onClick={() => openTemplate(template)}
               className={cn(
-                "group border border-zaki bg-zaki-raised p-4 text-left transition-colors duration-200",
+                "group flex h-full flex-col border border-zaki bg-zaki-raised p-4 text-left transition-colors duration-200",
                 "hover:border-zaki-strong hover:bg-zaki-hover",
                 isRtl && "text-right"
               )}
@@ -224,7 +224,7 @@ export function SpacesView({
               <div className="font-mono-ui font-semibold text-xs uppercase text-zaki-primary mb-1">
                 {template.label}
               </div>
-              <div className="text-xs text-zaki-secondary leading-relaxed">
+              <div className="text-xs text-zaki-secondary leading-relaxed line-clamp-2 min-h-[2.5rem]">
                 {template.description}
               </div>
             </button>
