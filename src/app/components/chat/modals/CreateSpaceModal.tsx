@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Info, X } from "lucide-react";
+import { X } from "lucide-react";
 import { ModalShell } from "@/app/components/ui/ModalShell";
 import { useTranslation } from "react-i18next";
 import type { PinnedFile } from "@/types";
@@ -122,45 +122,6 @@ export function CreateSpaceModal({
               placeholder={t("createSpaceModal.placeholders.instructions")}
             />
           </label>
-          <div className="rounded-zaki-lg border border-zaki bg-zaki-sunken px-3.5 py-3">
-            <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-muted">
-              <Info className="size-3.5 text-zaki-brand" />
-              {t("createSpaceModal.scopeNotes.sectionLabel")}
-            </div>
-            <div className="space-y-2.5">
-              <div
-                data-onboarding-id="create-space-scope-space-note"
-                className="rounded-zaki-md border border-zaki bg-zaki-raised px-3 py-2.5 text-xs leading-5 text-zaki-secondary"
-              >
-                <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-muted">
-                  {t("createSpaceModal.scopeNotes.spaceWideLabel")}
-                </span>
-                <span className="mt-1 block">
-                  {t("createSpaceModal.scopeNotes.spaceWideBody")}
-                </span>
-              </div>
-              <div className="text-xs text-zaki-muted">
-                {t("createSpaceModal.fields.pinnedDocuments")}
-                <div
-                  data-onboarding-id="create-space-documents-placeholder"
-                  className="mt-2 rounded-zaki-md border border-dashed border-zaki-strong bg-zaki-sunken px-3 py-2 text-sm text-zaki-secondary"
-                >
-                  {t("createSpaceModal.fields.uploadDocuments")}
-                </div>
-              </div>
-              <div
-                data-onboarding-id="create-space-scope-thread-note"
-                className="rounded-zaki-md border border-zaki bg-zaki-raised px-3 py-2.5 text-xs leading-5 text-zaki-secondary"
-              >
-                <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-muted">
-                  {t("createSpaceModal.scopeNotes.threadSpecificLabel")}
-                </span>
-                <span className="mt-1 block">
-                  {t("createSpaceModal.scopeNotes.threadSpecificBody")}
-                </span>
-              </div>
-            </div>
-          </div>
         </div>
         <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
           <button

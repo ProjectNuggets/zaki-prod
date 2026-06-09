@@ -227,7 +227,7 @@ export function SpacesView({
         <MetaLabel>What makes a Space</MetaLabel>
       </div>
       <p className="mb-4 border-l border-zaki-brand/40 pl-3 font-mono-ui text-[11px] uppercase leading-relaxed text-zaki-secondary">
-        Chat spaces keep workspace context for focused threads. ZAKI Agent Brain remains the personal graph memory for autonomous work.
+        A space keeps its instructions, files, and threads together for one project.
       </p>
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="flex flex-col gap-2">
