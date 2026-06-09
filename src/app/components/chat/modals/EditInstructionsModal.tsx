@@ -59,14 +59,14 @@ export function EditInstructionsModal({
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
           <button
             type="button"
-            className="zaki-btn zaki-btn-secondary w-full sm:w-auto"
+            className="zaki-spaces-btn zaki-spaces-btn--secondary w-full sm:w-auto"
             onClick={onClose}
           >
             Cancel
           </button>
           <button
             type="button"
-            className="zaki-btn zaki-btn-primary w-full sm:w-auto"
+            className="zaki-spaces-btn zaki-spaces-btn--primary w-full sm:w-auto"
             onClick={() => {
               onSave(value);
               onClose();

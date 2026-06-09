@@ -76,12 +76,12 @@ export function SpaceSettingsSheet({
         side={isRtl ? "left" : "right"}
         footer={
           <div className={cn("flex flex-wrap items-center gap-2", isRtl ? "justify-start" : "justify-end")}>
-            <button type="button" className="zaki-btn zaki-btn-secondary" onClick={onClose}>
+            <button type="button" className="zaki-spaces-btn zaki-spaces-btn--secondary" onClick={onClose}>
               {t("settingsModal.footer.cancel")}
             </button>
             <button
               type="button"
-              className="zaki-btn bg-zaki-accent text-white transition-colors hover:bg-zaki-accent-hover"
+              className="zaki-spaces-btn zaki-spaces-btn--primary"
               onClick={onSave}
             >
               {t("settingsModal.footer.saveChanges")}

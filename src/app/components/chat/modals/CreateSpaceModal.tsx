@@ -126,14 +126,14 @@ export function CreateSpaceModal({
         <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
           <button
             type="button"
-            className="zaki-btn zaki-btn-secondary w-full sm:w-auto"
+            className="zaki-spaces-btn zaki-spaces-btn--secondary w-full sm:w-auto"
             onClick={onClose}
           >
             {t("createSpaceModal.actions.cancel")}
           </button>
           <button
             type="button"
-            className="zaki-btn zaki-btn-primary zaki-pressable w-full sm:w-auto"
+            className="zaki-spaces-btn zaki-spaces-btn--primary zaki-pressable w-full sm:w-auto"
             onClick={handleCreate}
             disabled={spaceName.trim().length === 0}
             data-onboarding-id="create-space-submit"

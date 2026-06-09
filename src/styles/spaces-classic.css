@@ -75,3 +75,55 @@
   --zaki-space-swatch-sand: #8a8270;
   --zaki-space-swatch-default: var(--v2-ink-3, #807a72);
 }
+
+/* ─────────────────────── Spaces Classic buttons ────────────────────────────
+ * Flat ember, soft-rounded (matches the message-bubble radius), sentence case.
+ * No gradient, glow, or full-pill — the V1 .zaki-btn-primary look is dated.
+ * Defined globally (not under .zaki-spaces-classic) because the create/settings
+ * modals render via a portal on document.body, outside that container. Ember is
+ * stage-independent; the secondary variant adapts via the .dark root class.
+ * var() values carry hex fallbacks so they resolve even outside the V2 stage.
+ */
+.zaki-spaces-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+  font-size: var(--v2-text-sm, 13px);
+  font-weight: 600;
+  padding: 9px 16px;
+  border-radius: var(--v2-r-3, 8px);
+  border: 1px solid transparent;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.zaki-spaces-btn--primary {
+  background: var(--v2-accent, #d24430);
+  border-color: var(--v2-accent, #d24430);
+  color: #fff;
+}
+.zaki-spaces-btn--primary:hover {
+  background: var(--v2-accent-hover, #b83a28);
+  border-color: var(--v2-accent-hover, #b83a28);
+}
+.zaki-spaces-btn--primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.zaki-spaces-btn--secondary {
+  background: transparent;
+  color: var(--v2-ink-1, #0e0d0b);
+  border-color: var(--v2-hairline-strong, rgba(14, 13, 11, 0.2));
+}
+.zaki-spaces-btn--secondary:hover {
+  background: var(--v2-hover, rgba(14, 13, 11, 0.04));
+}
+.dark .zaki-spaces-btn--secondary {
+  color: var(--v2-ink-1, #ece7df);
+  border-color: var(--v2-hairline-strong, rgba(236, 231, 223, 0.22));
+}
+.dark .zaki-spaces-btn--secondary:hover {
+  background: var(--v2-hover, rgba(236, 231, 223, 0.06));
+}

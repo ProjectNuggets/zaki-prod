@@ -27,7 +27,7 @@ export const ReadyState = forwardRef<
           <div className="text-[11px] uppercase tracking-[0.2em] text-zaki-muted">
             {t("empty.ctaHelper")}
           </div>
-          <button className="zaki-btn bg-zaki-accent text-white" onClick={onStartChat}>
+          <button className="zaki-spaces-btn zaki-spaces-btn--primary" onClick={onStartChat}>
             {t("empty.cta")}
           </button>
         </div>
