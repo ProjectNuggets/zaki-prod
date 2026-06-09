@@ -24,6 +24,14 @@ function readRuntimeEnv(name: string): string | undefined {
   return normalizeEnvValue(env?.[name]);
 }
 
+// Sentry/GlitchTip config injected at runtime (same env.js mechanism as BACKEND_URL). Empty → SDK no-op.
+export function getSentryConfig(): { dsn?: string; environment?: string } {
+  return {
+    dsn: readRuntimeEnv("SENTRY_DSN"),
+    environment: readRuntimeEnv("SENTRY_ENVIRONMENT"),
+  };
+}
+
 export function isDevRuntime(): boolean {
   if (typeof __APP_DEV__ !== "undefined") {
     return __APP_DEV__;

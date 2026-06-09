@@ -7,9 +7,11 @@ set -eu
 
 ENV_JS="/usr/share/nginx/html/env.js"
 BACKEND_URL="${BACKEND_URL:-}"
+SENTRY_DSN="${SENTRY_DSN:-}"
+SENTRY_ENVIRONMENT="${SENTRY_ENVIRONMENT:-}"
 
 cat > "$ENV_JS" <<EOF
-window.__ZAKI_ENV__ = { BACKEND_URL: "${BACKEND_URL}" };
+window.__ZAKI_ENV__ = { BACKEND_URL: "${BACKEND_URL}", SENTRY_DSN: "${SENTRY_DSN}", SENTRY_ENVIRONMENT: "${SENTRY_ENVIRONMENT}" };
 EOF
 
-echo "[zaki-env] wrote ${ENV_JS} (BACKEND_URL=${BACKEND_URL:-<empty>})"
+echo "[zaki-env] wrote ${ENV_JS} (BACKEND_URL=${BACKEND_URL:-<empty>}, SENTRY_DSN=${SENTRY_DSN:+set})"
