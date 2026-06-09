@@ -52,6 +52,38 @@ import {
 type SidebarSpace = Omit<Space, 'threads'> & { threads: Thread[] };
 const APP_VERSION = "1.5.69";
 
+// Thread pinning persists client-side (no backend field yet) so pins survive a
+// reload. Stored as a JSON array of thread ids in localStorage.
+const PINNED_THREADS_KEY = "zaki:pinned-threads";
+function readPinnedThreadIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(PINNED_THREADS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return Array.isArray(parsed) ? new Set(parsed.map(String)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+function writePinnedThreadIds(ids: Set<string>): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(PINNED_THREADS_KEY, JSON.stringify([...ids]));
+  } catch {
+    // best-effort persistence only
+  }
+}
+function applyPersistedThreadPins(spaces: SidebarSpace[]): SidebarSpace[] {
+  const pinned = readPinnedThreadIds();
+  if (pinned.size === 0) return spaces;
+  return spaces.map((space) => ({
+    ...space,
+    threads: (space.threads ?? []).map((thread) =>
+      pinned.has(thread.id) ? { ...thread, pinned: true } : thread
+    ),
+  }));
+}
+
 type SidebarProps = {
   chrome?: "full" | "context";
 };
@@ -487,7 +519,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
     if (!spacesData) {
       return;
     }
-    setSpaces(spacesData as SidebarSpace[]);
+    setSpaces(applyPersistedThreadPins(spacesData as SidebarSpace[]));
     setSpacesError("");
     if (stored === "none") {
       setExpandedSpace(null);
@@ -750,6 +782,15 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
   };
 
   const togglePinned = (type: "space" | "thread", id: string) => {
+    // Thread pins persist client-side; derive the next state from the stored
+    // set so localStorage and UI stay in sync.
+    const willPin = type === "thread" ? !readPinnedThreadIds().has(id) : false;
+    if (type === "thread") {
+      const pinned = readPinnedThreadIds();
+      if (willPin) pinned.add(id);
+      else pinned.delete(id);
+      writePinnedThreadIds(pinned);
+    }
     setSpaces((prev) =>
       prev.map((space) => {
         if (type === "space" && space.id === id) {
@@ -759,7 +800,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
           return {
             ...space,
             threads: space.threads.map((thread) =>
-              thread.id === id ? { ...thread, pinned: !thread.pinned } : thread
+              thread.id === id ? { ...thread, pinned: willPin } : thread
             ),
           };
         }
