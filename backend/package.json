@@ -4,8 +4,8 @@
   "type": "module",
   "version": "0.1.0",
   "scripts": {
-    "dev": "node --watch src/index.js",
-    "start": "node src/index.js",
+    "dev": "node --watch --import ./src/instrument.mjs src/index.js",
+    "start": "node --import ./src/instrument.mjs src/index.js",
     "lint": "node --check src/index.js && node --check src/db.js && node --check src/agent-bff-contract.js && node --check src/agent-client.js && node --check src/agent-cron-facade.js && node --check src/agent-metering.js && node --check src/anonymous-spaces-identity.js && node --check src/billing-plan-transitions.js && node --check src/bot-bff.js && node --check src/config-validation.js && node --check src/effective-entitlements.js && node --check src/google-oauth-user.js && node --check src/hire-bff-contract.js && node --check src/hire-client.js && node --check src/hire-automation-consent.js && node --check src/hire-deployment-readiness.js && node --check src/hire-metering-contract.js && node --check src/hire-usage-events.js && node --check src/usage-events.js && node --check src/learning-disaster-recovery.js && node --check src/learning-governance-audit.js && node --check src/learning-observability.js && node --check src/learning-quota.js && node --check src/learning-retention.js && node --check src/health-readiness.js && node --check src/platform-entitlement-context.js && node --check src/platform-policy.js && node --check src/platform-usage-summary.js && node --check src/memory/operations.js && node --check src/memory/routes.js && node --check src/memory-extraction.js && node --check scripts/create-access-code.js",
     "config:check": "node scripts/validate-runtime-config.js",
     "migrate:sqlite": "node scripts/migrate-sqlite-to-postgres.js",
@@ -19,6 +19,7 @@
     "test:watch": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config jest.config.mjs --watch"
   },
   "dependencies": {
+    "@sentry/node": "^8.55.2",
     "bcryptjs": "2.4.3",
     "cors": "2.8.5",
     "dotenv": "16.4.5",

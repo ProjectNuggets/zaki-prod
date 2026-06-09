@@ -17,4 +17,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 EXPOSE 8787
 
-CMD ["node", "src/index.js"]
+# --import preloads Sentry/GlitchTip instrumentation before app modules load (ESM auto-instrumentation).
+CMD ["node", "--import", "./src/instrument.mjs", "src/index.js"]

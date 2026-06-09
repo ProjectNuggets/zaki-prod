@@ -1,4 +1,5 @@
 import express from "express";
+import * as Sentry from "@sentry/node"; // init happens in instrument.mjs (preloaded via --import)
 import cors from "cors";
 import dotenv from "dotenv";
 import fs from "node:fs";
@@ -18806,6 +18807,15 @@ app.delete("/api/share/:token", async (req, res) => {
   }
 });
 
+// Token-gated route to prove the Sentry/GlitchTip pipeline end-to-end (only fires with SENTRY_TEST_TOKEN).
+// MUST be before the catch-all proxy below, or app.all("*") shadows it.
+app.get("/api/debug/sentry-test", (req, res) => {
+  if (!process.env.SENTRY_TEST_TOKEN || req.query.token !== process.env.SENTRY_TEST_TOKEN) {
+    return res.status(404).end();
+  }
+  throw new Error(`ZAKI Sentry test error (${String(req.query.tag || "manual").slice(0, 64)})`);
+});
+
 // =============================================================================
 // CATCH-ALL PROXY
 // =============================================================================
@@ -18853,6 +18863,11 @@ app.all("*", async (req, res) => {
     res.status(500).json({ error: error?.message || "Proxy error." });
   }
 });
+
+// Sentry/GlitchTip error capture — registered AFTER all routes, BEFORE the HTTP server. No-op without DSN.
+if ((process.env.SENTRY_DSN || "").trim()) {
+  Sentry.setupExpressErrorHandler(app);
+}
 
 const server = http.createServer(app);
 const agentProxyWss = new WebSocketServer({ noServer: true });
