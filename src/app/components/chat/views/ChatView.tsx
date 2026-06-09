@@ -328,6 +328,11 @@ export function ChatView({
         firstMessageTransition && "zaki-chat-enter"
       )}
     >
+      {!botMode ? (
+        <span className="sr-only" role="status" aria-live="polite">
+          {isStreaming ? t("chat.streamingStatus", { defaultValue: "ZAKI is replying…" }) : ""}
+        </span>
+      ) : null}
       {messages.length === 0 && botMode && !isStreaming ? (
         <section className="zaki-agent-empty-v2" aria-labelledby="zaki-agent-empty-title">
           <div className="zaki-agent-empty-v2__kicker">

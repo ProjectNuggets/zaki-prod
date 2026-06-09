@@ -489,6 +489,7 @@
     "readAloudError": "تعذّر تشغيل الصوت. حاول مرة أخرى."
   },
   "chat": {
+    "streamingStatus": "زاكي يرد…",
     "thinking": "جاري التفكير",
     "researching": "جارٍ البحث",
     "thinkingPhrases": [

@@ -314,7 +314,7 @@ export function SpacesView({
         </span>
         <div
           className={cn(
-            "flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity",
+            "flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:!opacity-100 transition-opacity",
             isRtl && "flex-row-reverse"
           )}
         >

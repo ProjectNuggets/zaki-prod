@@ -489,6 +489,7 @@
     "readAloudError": "Couldn't read aloud. Try again."
   },
   "chat": {
+    "streamingStatus": "ZAKI is replying…",
     "thinking": "Thinking",
     "researching": "Researching",
     "thinkingPhrases": [
