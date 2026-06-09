@@ -1,5 +1,38 @@
 import { describe, expect, it } from "@jest/globals";
+import { readFileSync } from "node:fs";
 import { estimateChatUnits, actualChatUnits, baseUnitsForAction, deterministicGrantId } from "./chat-meter.js";
+
+describe("chat-meter: fail-open emits a billing alert (visible, not silent)", () => {
+  // index.js is the non-exporting server entrypoint, so the fail-open catch is
+  // verified by source introspection (same pattern as learning-bff-contract.test.js).
+  const source = readFileSync(new URL("./index.js", import.meta.url), "utf8");
+  const fnStart = source.indexOf("async function requireSpacesMeterGrantForChat(");
+  const catchStart = source.indexOf("} catch (err) {", fnStart);
+  const fnEnd = source.indexOf("\n}", catchStart);
+  const catchBlock = source.slice(catchStart, fnEnd);
+
+  it("locates the fail-open catch block", () => {
+    expect(fnStart).toBeGreaterThan(-1);
+    expect(catchStart).toBeGreaterThan(fnStart);
+    expect(catchBlock).toContain("req.spacesChatUnmetered = true;");
+  });
+
+  it("emits a high-severity metering fail-open alert before returning allowed", () => {
+    expect(catchBlock).toMatch(/emitBillingAlert\(/);
+    expect(catchBlock).toContain('id: "spaces.meter.fail_open"');
+    expect(catchBlock).toContain('provider: "metering"');
+    expect(catchBlock).toContain('severity: "high"');
+    // fire-and-forget: alert must not block the fail-open response
+    expect(catchBlock).toMatch(/void\s+emitBillingAlert\(/);
+    // ordering: alert is emitted after marking unmetered and before returning allowed
+    const unmeteredAt = catchBlock.indexOf("req.spacesChatUnmetered = true;");
+    const alertAt = catchBlock.indexOf("emitBillingAlert(");
+    const returnAt = catchBlock.indexOf("return { allowed: true, action };");
+    expect(unmeteredAt).toBeGreaterThan(-1);
+    expect(alertAt).toBeGreaterThan(unmeteredAt);
+    expect(returnAt).toBeGreaterThan(alertAt);
+  });
+});
 
 describe("chat-meter: deterministicGrantId (idempotency fix)", () => {
   it("is stable for the same key (a retry collides → charged once)", () => {

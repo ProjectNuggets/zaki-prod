@@ -10250,6 +10250,7 @@ async function requireSpacesMeterGrantForChat({
     // Fail-OPEN for the core product: a metering DB blip must not break chat. Not charged; logged.
     console.error(`[Spaces] wallet reserve failed (allowing chat unmetered) req=${requestId}: ${err?.message}`);
     req.spacesChatUnmetered = true;
+    void emitBillingAlert({ provider: "metering", id: "spaces.meter.fail_open", severity: "high", message: "Spaces chat metering failed; serving unmetered (fail-open).", details: { requestId, error: err?.message } });
     return { allowed: true, action };
   }
 }
