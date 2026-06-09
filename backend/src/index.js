@@ -187,6 +187,7 @@ import {
   resolveHireAutomationConsent,
 } from "./hire-automation-consent.js";
 import { recordHireUsageEvent } from "./hire-usage-events.js";
+import { recordUsageEvent } from "./usage-events.js";
 import {
   HIRE_METERING_CONTRACT_VERSION,
   buildHireMeterForwardHeaders,
@@ -10339,13 +10340,46 @@ async function recordSpacesMeterReceiptBestEffort(req, {
       ? Number(streamMetrics.assistantOutputChars || 0)
       : String(outputText || "").length;
     const settledUnits = sawError ? 0 : actualChatUnits({ inputChars, outputChars, action: req.spacesChatAction });
-    return await settleHold({
+    const settleResult = await settleHold({
       holdId: hold.id,
       settleIdempotencyKey: `${req.spacesChatKey}:settle`,
       settledUnits,
       finalState: sawError ? "released" : "settled",
       providerModel: "spaces-chat",
     });
+    // First-class per-feature usage (mirrors HIRE). Emit ONLY on a successful settle (finalState
+    // "settled" → !sawError). Fire-and-forget + failsafe: a usage-event failure must NEVER break or
+    // delay the chat response or the settle — wrapped/swallowed below.
+    if (!sawError && settleResult?.ok) {
+      try {
+        await recordUsageEvent({
+          dbQuery,
+          logStructured,
+          event: {
+            userId: hold.user_id,
+            productId: "spaces",
+            surface: "spaces",
+            eventType: req.spacesChatAction || "spaces_chat_turn",
+            usageUnitType: "request",
+            usageUnits: settledUnits,
+            requestId: req.requestId || null,
+            sourceRoute: "/api/spaces/:spaceId/stream-chat",
+            metadata: {
+              action: req.spacesChatAction || "spaces_chat_turn",
+              inputChars,
+              outputChars,
+            },
+          },
+        });
+      } catch (usageError) {
+        logStructured("error", "spaces.usage.record_failed", {
+          requestId: req.requestId || null,
+          holdId: hold.id,
+          message: usageError?.message || String(usageError),
+        });
+      }
+    }
+    return settleResult;
   } catch (err) {
     console.error(`[Spaces] wallet settle failed (sweeper will reconcile) hold=${hold.id}: ${err?.message}`);
     return null;
