@@ -11,6 +11,7 @@ import nodemailer from "nodemailer";
 import { WebSocketServer, WebSocket as UpstreamWebSocket } from "ws";
 import { z } from "zod";
 import { initDb, dbAll, dbGet, dbQuery, withDbTransaction } from "./db.js";
+import { getUsageMetrics } from "./platform-metrics.js";
 import {
   resolveLegalPolicyVersion,
   buildLoginSchema,
@@ -3764,6 +3765,21 @@ app.get("/api/admin/telemetry/billing", async (req, res) => {
     configured: getBillingConfigStatus(),
     telemetry: billingHealth.getSnapshot(),
   });
+});
+
+// Product usage telemetry: DAU/WAU/MAU, daily series, per-spoke usage, signups — derived read-only from
+// existing tables (no new instrumentation). meter-derived active users are cross-checked against
+// session-derived ones so undercounting is visible. Admin-gated like the other telemetry endpoints.
+app.get("/api/admin/telemetry/usage", async (req, res) => {
+  const authResult = await requireAdminUser(req, res);
+  if (!authResult) return;
+  try {
+    const metrics = await getUsageMetrics(dbAll, { windowDays: req.query.windowDays });
+    res.json({ success: true, metrics });
+  } catch (error) {
+    console.error("[admin] usage telemetry failed:", error?.message || error);
+    res.status(500).json({ success: false, error: "usage_metrics_failed" });
+  }
 });
 
 await initDb();
