@@ -45,7 +45,7 @@ function QuickStartGrid({
         <button
           key={`${item.title}-${index}`}
           type="button"
-          className="rounded-zaki-2xl border border-zaki bg-zaki-raised p-5 text-left shadow-zaki-md hover:bg-zaki-hover transition-colors dark:border-[#2a2018] dark:!bg-[#0c0a09] dark:shadow-zaki-lg dark:hover:bg-[#1a1714]"
+          className="rounded-zaki-2xl border border-zaki bg-zaki-raised p-5 text-left shadow-zaki-md hover:bg-zaki-hover transition-colors dark:shadow-zaki-lg"
           onClick={() => onSendExample(item.title)}
         >
           <div className="rtl:text-right rtl:flex rtl:justify-end">
@@ -77,7 +77,7 @@ function MissionCard({
   getSlideAriaLabel: (index: number) => string;
 }) {
   return (
-    <div className="rounded-zaki-2xl border border-zaki bg-zaki-raised p-5 shadow-zaki-lg mb-8 dark:border-[#2a2018] dark:!bg-[#0c0a09] dark:shadow-zaki-xl">
+    <div className="rounded-zaki-2xl border border-zaki bg-zaki-raised p-5 shadow-zaki-lg mb-8 dark:shadow-zaki-xl">
       <div className="flex items-center justify-between mb-4">
         <MetaLabel icon={icon}>{label}</MetaLabel>
       </div>
@@ -122,7 +122,7 @@ function CapabilitiesCard({
   limitationsLabel: string;
 }) {
   return (
-    <div className="mt-2 border-t border-zaki-subtle/80 pt-5 dark:border-[#2a2018]">
+    <div className="mt-2 border-t border-zaki-subtle/80 pt-5">
       <div className="grid gap-6 md:grid-cols-2">
         <div className="rtl:text-right">
           <div className="min-h-[20px] flex items-center">
@@ -186,10 +186,10 @@ function MemoryPopover({
 }) {
   const stageIcons = [Brain, CalendarClock, AlertTriangle, CheckCircle2];
   const stageClasses = [
-    "border-[#dbe6f5] bg-[#f3f7fd] text-[#3f5f8a] dark:border-[#2d3f56] dark:bg-[#162130] dark:text-[#b9cde9]",
-    "border-[#e8e1cd] bg-[#f9f5e8] text-[#846f3b] dark:border-[#4d442f] dark:bg-[#221d14] dark:text-[#d8c79d]",
-    "border-[#ecd7d1] bg-[#fbf1ee] text-[#8d5144] dark:border-[#503228] dark:bg-[#251714] dark:text-[#e4b9af]",
-    "border-[#d8e9dd] bg-[#eff8f2] text-[#3e7853] dark:border-[#2c4634] dark:bg-[#15231a] dark:text-[#abd4ba]",
+    "border-zaki bg-zaki-sunken text-zaki-secondary",
+    "border-zaki bg-zaki-sunken text-zaki-secondary",
+    "border-zaki bg-zaki-sunken text-zaki-secondary",
+    "border-zaki bg-zaki-sunken text-zaki-secondary",
   ];
 
   return (
@@ -199,8 +199,8 @@ function MemoryPopover({
       style={panelStyle}
       className="fixed z-[120]"
     >
-      <div className="overflow-y-auto rounded-[22px] border border-[#e7ddd2] dark:border-[#2e241d] bg-[linear-gradient(160deg,#fffcf8_0%,#fff7ef_100%)] dark:bg-[linear-gradient(160deg,#13100d_0%,#1a1410_100%)] shadow-[0px_26px_60px_rgba(13,11,10,0.24)]">
-        <div className="border-b border-[#eadfce] dark:border-[#2e241d] px-6 py-5">
+      <div className="overflow-y-auto rounded-zaki-2xl border border-zaki bg-zaki-raised">
+        <div className="border-b border-zaki px-6 py-5">
           <div className={cn("flex items-start justify-between gap-3", isRtl && "flex-row-reverse text-right")}>
             <div className={cn(isRtl && "text-right")}>
               <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zaki-muted dark:text-zaki-dark-muted">
@@ -212,7 +212,7 @@ function MemoryPopover({
             </div>
             <button
               type="button"
-              className="size-8 rounded-full border border-[#e2d7ca] dark:border-[#413227] bg-white/85 dark:bg-[#181210] text-zaki-muted dark:text-zaki-dark-muted hover:bg-[#f5eee7] dark:hover:bg-[#241a14] transition-colors"
+              className="size-8 rounded-full border border-zaki bg-zaki-raised text-zaki-muted hover:bg-zaki-hover transition-colors"
               onClick={onClose}
               aria-label={closeLabel}
             >
@@ -223,7 +223,7 @@ function MemoryPopover({
         <div className="grid gap-6 p-6 lg:grid-cols-[1.32fr_0.68fr]">
           <section className={cn(isRtl && "text-right")}>
             <div className={cn("flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-zaki-muted dark:text-zaki-dark-muted", isRtl && "flex-row-reverse justify-end")}>
-              <Sparkles className="size-3.5 text-zaki-brand dark:text-[#ffb38f]" />
+              <Sparkles className="size-3.5 text-zaki-brand" />
               {label}
             </div>
             <div className="mt-3">
@@ -236,7 +236,7 @@ function MemoryPopover({
                     className={cn(
                       "py-3",
                       index < cards.length - 1
-                        ? "border-b border-[#eadfce] dark:border-[#2e241d]"
+                        ? "border-b border-zaki"
                         : ""
                     )}
                   >
@@ -259,7 +259,7 @@ function MemoryPopover({
             </div>
           </section>
 
-          <section className="rounded-2xl border border-[#e7ddd2] dark:border-[#2e241d] bg-white/70 dark:bg-[#17120f]/85 px-4 py-4">
+          <section className="rounded-zaki-2xl border border-zaki bg-zaki-sunken px-4 py-4">
             <div className={cn("text-[11px] font-semibold uppercase tracking-[0.18em] text-zaki-muted dark:text-zaki-dark-muted", isRtl && "text-right")}>
               {latestLabel}
             </div>
@@ -270,7 +270,7 @@ function MemoryPopover({
                   className={cn(
                     "py-3",
                     index < news.length - 1
-                      ? "border-b border-[#eadfce] dark:border-[#2e241d]"
+                      ? "border-b border-zaki"
                       : "",
                     isRtl && "text-right"
                   )}
@@ -495,7 +495,7 @@ export function ZakiHomeView({
             <div className="relative">
               <button
                 type="button"
-                className="inline-flex items-center gap-1.5 rounded-full border border-zaki-subtle dark:border-[#3a2d22] bg-white/85 dark:bg-[#15100f] px-3 py-1.5 text-xs font-semibold text-zaki-brand dark:text-[#ffb38f] hover:bg-zaki-hover dark:hover:bg-[#1d1512] transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-full border border-zaki-subtle bg-zaki-raised px-3 py-1.5 text-xs font-semibold text-zaki-brand hover:bg-zaki-hover transition-colors"
                 onClick={() => setMemoryPanelOpen((open) => !open)}
                 ref={memoryButtonRef}
               >

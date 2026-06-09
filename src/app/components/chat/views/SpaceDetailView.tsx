@@ -4,6 +4,7 @@ import { InputArea } from "../../InputArea";
 import { useTranslation } from "react-i18next";
 import type { PinnedFileStatus, Space } from "@/types";
 import { MetaLabel, EmptyState } from "@/app/components/ui/zaki";
+import { SPACE_SWATCHES, DEFAULT_SPACE_SWATCH } from "../spaceSwatches";
 
 interface SpaceDetailViewProps {
   spaceDetail: Space;
@@ -32,7 +33,7 @@ const iconOptions = [
   { id: "file", icon: FileText },
 ];
 
-const colorOptions = ["#E24A3B", "#F57C1F", "#F2B705", "#20A559", "#2F7EEA", "#7B4BE4", "#FF6FB1"];
+const colorOptions = SPACE_SWATCHES;
 
 const fileStatusTone: Record<PinnedFileStatus, { chip: string; labelKey: string; dot: string }> = {
   embedded: {
@@ -120,7 +121,7 @@ export function SpaceDetailView({
           >
             {(() => {
               const Icon = iconOptions.find((option) => option.id === (spaceDetail.icon ?? "folder"))?.icon ?? Folder;
-              return <Icon className="size-5" style={{ color: spaceDetail.color ?? "#88735A" }} />;
+              return <Icon className="size-5" style={{ color: spaceDetail.color ?? DEFAULT_SPACE_SWATCH }} />;
             })()}
           </button>
           {iconPickerOpen && !spaceDetail.fixed && (
