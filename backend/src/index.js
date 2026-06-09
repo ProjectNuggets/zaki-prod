@@ -2973,23 +2973,34 @@ function buildProxyHeaders(req) {
   return headers;
 }
 
+// Headers we must NOT copy from an upstream (engine) response onto the client response.
+// Beyond hop-by-hop headers, this strips the upstream's CORS headers: AnythingLLM responds with
+// `Access-Control-Allow-Origin: *`, and copying it would OVERWRITE the BFF's own cors() middleware
+// value. A browser rejects a wildcard ACAO when the request is `credentials: 'include'` — which is
+// exactly why the chat stream failed in the browser ("Failed to fetch") while node/in-pod calls
+// (no CORS enforcement) succeeded. Let the BFF's cors() own all Access-Control-* headers.
+const UPSTREAM_HEADER_BLOCKLIST = new Set([
+  "connection",
+  "transfer-encoding",
+  "content-encoding",
+  "content-length",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailers",
+  "upgrade",
+  "access-control-allow-origin",
+  "access-control-allow-credentials",
+  "access-control-allow-methods",
+  "access-control-allow-headers",
+  "access-control-expose-headers",
+  "access-control-max-age",
+]);
+
 function copyResponseHeaders(upstream, res) {
   upstream.headers.forEach((value, key) => {
-    const lower = key.toLowerCase();
-    if (
-      [
-        "connection",
-        "transfer-encoding",
-        "content-encoding",
-        "content-length",
-        "keep-alive",
-        "proxy-authenticate",
-        "proxy-authorization",
-        "te",
-        "trailers",
-        "upgrade",
-      ].includes(lower)
-    ) {
+    if (UPSTREAM_HEADER_BLOCKLIST.has(key.toLowerCase())) {
       return;
     }
     res.setHeader(key, value);
