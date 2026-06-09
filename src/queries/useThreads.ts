@@ -16,6 +16,32 @@ interface MessageResponse {
   content: string;
   chatId?: number;
   attachments?: { name: string; type: string; url: string }[];
+  createdAt?: string | number | null;
+  created_at?: string | number | null;
+  createdAtMs?: string | number | null;
+  created_at_ms?: string | number | null;
+  timestamp?: string | number | null;
+  ts?: string | number | null;
+}
+
+function normalizeMessageCreatedAt(msg: MessageResponse): string | null {
+  const raw =
+    msg.createdAt ??
+    msg.created_at ??
+    msg.createdAtMs ??
+    msg.created_at_ms ??
+    msg.timestamp ??
+    msg.ts;
+  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+    const ms = raw < 10_000_000_000 ? raw * 1000 : raw;
+    const parsed = new Date(ms);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    const parsed = Date.parse(raw);
+    if (Number.isFinite(parsed)) return new Date(parsed).toISOString();
+  }
+  return null;
 }
 
 // Fetchers
@@ -39,6 +65,7 @@ async function fetchMessages(
     content: msg.content ?? "",
     attachments: msg.attachments,
     chatId: msg.chatId,
+    createdAt: normalizeMessageCreatedAt(msg),
   }));
 }
 
