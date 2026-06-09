@@ -80,6 +80,26 @@ jest.mock("@/lib/api", () => ({
     },
     data: { messages: [] },
   })),
+  fetchAgentSessionTodos: jest.fn(async () => ({
+    response: { ok: true, status: 200, json: async () => ({ lists: [] }), headers: new Headers() },
+    data: { lists: [] },
+  })),
+  fetchAgentSessionPlan: jest.fn(async () => ({
+    response: { ok: true, status: 200, json: async () => ({}), headers: new Headers() },
+    data: {},
+  })),
+  fetchAgentTrace: jest.fn(async () => ({
+    response: { ok: true, status: 200, json: async () => ({}), headers: new Headers() },
+    data: {},
+  })),
+  fetchAgentTask: jest.fn(async () => ({
+    response: { ok: true, status: 200, json: async () => ({}), headers: new Headers() },
+    data: {},
+  })),
+  updateAgentSessionTodoItem: jest.fn(async () => ({
+    response: { ok: true, status: 200, json: async () => ({}), headers: new Headers() },
+    data: {},
+  })),
   fetchAgentMe: jest.fn(async () => ({
     response: {
       ok: true,
