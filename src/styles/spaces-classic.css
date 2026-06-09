@@ -1,0 +1,32 @@
+/* spaces-classic.css
+ *
+ * "Spaces Classic inside the V2 app shell": the Chat/Spaces spoke keeps a
+ * softer, calmer V1 product character (visible patterned background, rounded
+ * message bubbles, template/explainer landing) layered on V2 discipline
+ * (tokens, single ember accent, hairlines, neutral surfaces).
+ *
+ * This file is the SINGLE source of truth for:
+ *   1. the Spaces-scoped background-pattern retune (.zaki-spaces-classic), and
+ *   2. the curated per-space swatch palette (app-wide tokens, so the sidebar
+ *      identity dots and the picker swatches share one family).
+ *
+ * It is allowlisted in src/test/spacesTokenDiscipline.test.ts — palette/pattern
+ * literals are permitted HERE only; component code must use the tokens.
+ *
+ * The `.zaki-spaces-classic` class is applied from ChatArea to the Chat/Spaces
+ * surface container (gated on `!isZakiBotActiveSpace`, so the Agent surface and
+ * the Agent dashboard are excluded).
+ */
+
+/* ── Slice 0: scaffold (no-op). Pattern retune lands in Slice 1, Task 1.5. ── */
+.zaki-spaces-classic {
+}
+
+.dark .zaki-spaces-classic {
+}
+
+/* ── Curated per-space swatch palette (Slice 1, Task 1.2). ──
+ * Defined app-wide intentionally so both the main content and the left Sidebar
+ * (which renders OUTSIDE the .zaki-spaces-classic container) resolve the same
+ * tokens. Values are filled and tuned against the dark stage in Task 1.2.
+ */

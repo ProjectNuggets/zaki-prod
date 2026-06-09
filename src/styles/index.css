@@ -4,6 +4,7 @@
 @import './tokens.css';
 @import './v2.css';
 @import './enhancements.css';
+@import './spaces-classic.css';
 
 /* =============================================================================
    ACCESSIBILITY - Focus States (Teal accent for differentiation)

@@ -8299,7 +8299,11 @@ export function ChatArea() {
       <div
         className={cn(
           "relative h-full rounded-none border-0 bg-transparent overflow-hidden flex flex-col",
-          isAgentSurface && "zaki-agent-v2__surface"
+          isAgentSurface && "zaki-agent-v2__surface",
+          // Spaces Classic scope: Chat/Spaces surfaces only (excludes the Agent
+          // surface AND the Agent dashboard, which is !isAgentSurface but is a
+          // bot space). Hosts the retuned background pattern + Spaces styling.
+          !isZakiBotActiveSpace && "zaki-spaces-classic"
         )}
       >
         {/* Background */}
