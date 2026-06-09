@@ -13,7 +13,6 @@ import {
   MessageSquareText,
   FileText,
   Sparkles,
-  AlertTriangle,
 } from "lucide-react";
 import { SkeletonSpaceGrid } from "../../ui/skeleton";
 import { useMemo, useState } from "react";
@@ -24,10 +23,8 @@ import { MetaLabel } from "@/app/components/ui/zaki";
 interface SpacesViewProps {
   spacesList: Space[];
   isLoading?: boolean;
-  error?: boolean;
   onCreateSpace: () => void;
   onViewSpace: (id: string) => void;
-  onRetry?: () => void;
 }
 
 type SpaceTemplate = {
@@ -102,10 +99,8 @@ const TEMPLATES: SpaceTemplate[] = [
 export function SpacesView({
   spacesList,
   isLoading = false,
-  error = false,
   onCreateSpace,
   onViewSpace,
-  onRetry,
 }: SpacesViewProps) {
   const { t, i18n } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
@@ -294,38 +289,6 @@ export function SpacesView({
         {renderHeader()}
         {renderToolbar()}
         <SkeletonSpaceGrid />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div
-        className="px-4 sm:px-6 md:px-10 py-8 md:py-10 max-w-6xl mx-auto w-full"
-        dir={isRtl ? "rtl" : "ltr"}
-      >
-        {renderHeader()}
-        <div
-          role="alert"
-          className="mt-6 flex flex-col items-center justify-center gap-4 border border-zaki bg-zaki-raised px-6 py-12 text-center"
-        >
-          <span className="inline-flex size-10 items-center justify-center border border-zaki-strong text-zaki-muted">
-            <AlertTriangle className="size-5" />
-          </span>
-          <div>
-            <div className="font-mono-ui text-sm font-semibold uppercase tracking-wide text-zaki-primary">
-              {t("spacesView.error.title", { defaultValue: "Couldn't load your spaces" })}
-            </div>
-            <p className="mt-1 text-sm text-zaki-secondary">
-              {t("spacesView.error.body", { defaultValue: "Check your connection and try again." })}
-            </p>
-          </div>
-          {onRetry ? (
-            <button type="button" className="zaki-spaces-btn zaki-spaces-btn--secondary" onClick={onRetry}>
-              {t("spacesView.error.retry", { defaultValue: "Retry" })}
-            </button>
-          ) : null}
-        </div>
       </div>
     );
   }
