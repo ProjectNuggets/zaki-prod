@@ -287,6 +287,13 @@ Work file-by-file using the spec's line-referenced inventory (spec §6 Axis 1). 
 
 ---
 
+## Slice 0 findings (resolved 2026-06-09)
+
+- **SpaceDetailView is DEAD code.** `ChatArea.tsx:2830` hardcodes `const showSpaceDetail = false;`, so the main-content space-detail view never renders; all render gates referencing it are permanently off. Space management is handled by the sidebar (`SpaceSettingsSheet`) — which aligns with the canonical-sidebar / no-duplicated-nav decision. **Scope adjustment:** `SpaceDetailView.tsx` gets **token cleanup only** (Slice 1, hygiene + swatch consistency) and stays in the guard list; its **a11y/mobile/state work (Slices 2–4) is SKIPPED**. The live space-management surface for a11y/visual work is `sidebar/SpaceSettingsSheet.tsx` (already in scope).
+- **Thread pinning is LOCAL-ONLY.** `Sidebar.tsx:751-761` `togglePinned` mutates local state with no API call; no `/pin` endpoint exists. Slice 4.5(a): make honest — prefer client-side persistence (localStorage) so pins survive reload without assuming backend support; verify the thread `/update` PATCH can't take `pinned` first.
+- **Baseline captured** (inline): dark desktop SpacesView (list+templates+explainer), light desktop ReadyState+composer (pattern very visible/warm), dark mobile SpacesView (responsive single-column, pattern faint). No console errors; `/spaces` is anonymous-reachable.
+- **Extra observations for Slice 4:** composer shows an "Upgrade!" affordance and a "Share" button — review against meter-in-Dashboard + wiring honesty (Share reportedly only copies URL).
+
 ## Self-Review (against spec)
 
 - **Spec coverage:** §6 Axis 1 → Slice 1 (guard + Tasks 1.2-1.5). Axis 2 → Slice 2. Axis 3 → Slice 3. Axis 4 states → Slice 4.1-4.4; wiring → 4.5. Pattern retune (clearer) → 1.5. Swatch decision → 1.2-1.3. Scope mechanism → 0.3. Meter-in-Dashboard → honored in 4.3 (notice only). Fonts unchanged (no task touches fonts). Agent no-regress → 1.4 Step 3, 1.5 Step 3. Open questions → 0.2.
