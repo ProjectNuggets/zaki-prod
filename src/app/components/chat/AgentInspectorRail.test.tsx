@@ -8,6 +8,8 @@ jest.mock("@/lib/api", () => ({
   deleteAgentCron: jest.fn(),
   downloadAgentExportFile: jest.fn(),
   exportAgentArtifact: jest.fn(),
+  fetchAgentSessionPlan: jest.fn(),
+  fetchAgentSessionTodos: jest.fn(),
   fetchAgentTask: jest.fn(),
   fetchAgentTrace: jest.fn(),
   listAgentTraces: jest.fn(),
@@ -20,12 +22,15 @@ jest.mock("@/lib/api", () => ({
   shareAgentArtifact: jest.fn(),
   shareAgentTrace: jest.fn(),
   stopAgentTask: jest.fn(),
+  updateAgentSessionTodoItem: jest.fn(),
   updateAgentCron: jest.fn(),
 }));
 
 const createAgentCronMock = jest.requireMock("@/lib/api").createAgentCron as jest.Mock;
 const exportAgentArtifactMock = jest.requireMock("@/lib/api").exportAgentArtifact as jest.Mock;
 const downloadAgentExportFileMock = jest.requireMock("@/lib/api").downloadAgentExportFile as jest.Mock;
+const fetchAgentSessionPlanMock = jest.requireMock("@/lib/api").fetchAgentSessionPlan as jest.Mock;
+const fetchAgentSessionTodosMock = jest.requireMock("@/lib/api").fetchAgentSessionTodos as jest.Mock;
 const fetchAgentTaskMock = jest.requireMock("@/lib/api").fetchAgentTask as jest.Mock;
 const fetchAgentTraceMock = jest.requireMock("@/lib/api").fetchAgentTrace as jest.Mock;
 const listAgentTracesMock = jest.requireMock("@/lib/api").listAgentTraces as jest.Mock;
@@ -33,6 +38,7 @@ const revokeAgentArtifactShareMock = jest.requireMock("@/lib/api").revokeAgentAr
 const revokeAgentTraceShareMock = jest.requireMock("@/lib/api").revokeAgentTraceShare as jest.Mock;
 const shareAgentArtifactMock = jest.requireMock("@/lib/api").shareAgentArtifact as jest.Mock;
 const shareAgentTraceMock = jest.requireMock("@/lib/api").shareAgentTrace as jest.Mock;
+const updateAgentSessionTodoItemMock = jest.requireMock("@/lib/api").updateAgentSessionTodoItem as jest.Mock;
 
 function renderRail(overrides: Partial<AgentInspectorRailProps> = {}) {
   const props: AgentInspectorRailProps = {
@@ -90,6 +96,18 @@ describe("AgentInspectorRail", () => {
     fetchAgentTaskMock.mockResolvedValue({
       response: { ok: true },
       data: { id: "task-1", session_key: "session", started_at: 1_800_000 },
+    });
+    fetchAgentSessionTodosMock.mockResolvedValue({
+      response: { ok: true },
+      data: { session_key: "session", current_list_id: null, lists: [] },
+    });
+    fetchAgentSessionPlanMock.mockResolvedValue({
+      response: { ok: true },
+      data: { session_key: "session", active: false, plan: null },
+    });
+    updateAgentSessionTodoItemMock.mockResolvedValue({
+      response: { ok: true },
+      data: { session_key: "session", current_list_id: null, list: null },
     });
     createAgentCronMock.mockResolvedValue({
       response: { ok: true },
@@ -157,6 +175,81 @@ describe("AgentInspectorRail", () => {
     expect(within(narration).getByText(/tool start/i)).toBeInTheDocument();
     expect(within(narration).getAllByText(/read_file/).length).toBeGreaterThan(0);
     expect(within(narration).getByText(/Read docs\/ui-handoff\.md/)).toBeInTheDocument();
+  });
+
+  it("renders checklist, run plan, and compact trace diagnostics in the Plan tab", async () => {
+    fetchAgentSessionTodosMock.mockResolvedValueOnce({
+      response: { ok: true },
+      data: {
+        session_key: "agent:zaki-bot:user:42:thread:main",
+        current_list_id: "list-a",
+        lists: [
+          {
+            list_id: "list-a",
+            title: "Work panel",
+            items: [
+              { id: 1, title: "Wire todo endpoint", status: "completed" },
+              { id: 2, title: "Render checklist", status: "in_progress" },
+            ],
+          },
+        ],
+      },
+    });
+    fetchAgentSessionPlanMock.mockResolvedValueOnce({
+      response: { ok: true },
+      data: {
+        session_key: "agent:zaki-bot:user:42:thread:main",
+        active: true,
+        plan: {
+          schema: "nullalis.task_plan.v1",
+          plan_id: "plan-1",
+          run_id: "run-1",
+          summary: "Ship the right rail work panel",
+          status: "active",
+          current_step: 0,
+          revision: 2,
+          steps: [
+            {
+              index: 0,
+              id: "step-1",
+              title: "Render run plan",
+              description: "Render run plan",
+              status: "running",
+              expected_tool: "browser_navigate",
+              actual_tool: "browser_snapshot",
+              result_summary: "Snapshot loaded",
+            },
+          ],
+        },
+      },
+    });
+
+    renderRail({
+      sessionKey: "agent:zaki-bot:user:42:thread:main",
+      contextReport: {
+        last_turn_delta: { tool_mode: "native_tool_calls" },
+        last_turn: {
+          native_tool_call_count: 3,
+          xml_fallback_call_count: 1,
+          bounded_result_count: 2,
+        },
+        provider_prompt_tokens: 1234,
+        provider_cached_prompt_tokens: 456,
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Wire todo endpoint")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("agent-work-checklist")).toHaveTextContent("1/2 done");
+    expect(screen.getByText("Render checklist")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-run-plan")).toHaveTextContent("Ship the right rail work panel");
+    expect(screen.getByTestId("agent-run-plan")).toHaveTextContent("browser_navigate");
+    expect(screen.getByTestId("agent-run-plan")).toHaveTextContent("browser_snapshot");
+    expect(screen.getByTestId("agent-work-trace-strip")).toHaveTextContent("native_tool_calls");
+    expect(screen.getByTestId("agent-work-trace-strip")).toHaveTextContent("3 / 1");
+    expect(screen.getByTestId("agent-work-trace-strip")).toHaveTextContent("2");
   });
 
   it("honors external tab requests from status strip and inline source links", async () => {
@@ -509,16 +602,60 @@ describe("AgentInspectorRail", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: /Browser/i }));
 
-    expect(screen.getByText("Browser activity detected")).toBeInTheDocument();
+    expect(screen.getByText("Agent browser active")).toBeInTheDocument();
     expect(screen.getByTestId("agent-browser-lanes")).toBeInTheDocument();
-    expect(screen.getByText("app browser")).toBeInTheDocument();
+    expect(screen.getByText("agent-browser/K8s")).toBeInTheDocument();
     expect(screen.getByText("user browser extension")).toBeInTheDocument();
-    expect(screen.getByText("web_fetch")).toBeInTheDocument();
+    expect(screen.getByText("browser_new_session")).toBeInTheDocument();
     expect(screen.getByText("extension_navigate")).toBeInTheDocument();
     expect(screen.getByText("ok · extension_click")).toBeInTheDocument();
-    expect(screen.getAllByText("playwright")).toHaveLength(2);
+    expect(screen.getAllByText("playwright").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Open Devices settings" }));
     expect(onOpenExtensionSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders live browser frames in the Browser tab and respects manual tab selection", async () => {
+    const frame = {
+      sessionId: "browser-session",
+      frame: "iVBORw0KGgo=",
+      url: "https://example.com",
+      title: "Example",
+      timestamp: 1_800_000,
+    };
+    const { rerender } = renderRail({
+      browserFrame: frame,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /Browser/i })).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
+    });
+    expect(screen.getByText("Example")).toBeInTheDocument();
+    expect(screen.getByText("https://example.com")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: /Evidence/i }));
+    rerender(
+      <AgentInspectorRail
+        mode="execute"
+        isStreaming={false}
+        lastChannel={null}
+        sandbox={null}
+        tasks={[]}
+        transcriptEntries={[]}
+        narrationFrame={null}
+        approvalRequest={null}
+        contextGaugeData={null}
+        usageSummary={null}
+        browserFrame={{ ...frame, title: "Example refreshed" }}
+      />
+    );
+
+    expect(screen.getByRole("tab", { name: /Evidence/i })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
   });
 
   it("creates schedules directly from the Cron panel", async () => {
@@ -626,7 +763,7 @@ describe("AgentInspectorRail", () => {
       ],
     });
 
-    expect(screen.getByText("current plan")).toBeInTheDocument();
+    expect(screen.getByText("work")).toBeInTheDocument();
     expect(screen.getByText("0 / 1")).toBeInTheDocument();
     expect(screen.getAllByText("Polish the right rail").length).toBeGreaterThan(0);
     expect(screen.getByText("subagent")).toBeInTheDocument();

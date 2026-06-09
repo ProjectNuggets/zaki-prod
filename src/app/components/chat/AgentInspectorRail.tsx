@@ -34,6 +34,8 @@ import {
   deleteAgentCron,
   downloadAgentExportFile,
   exportAgentArtifact,
+  fetchAgentSessionPlan,
+  fetchAgentSessionTodos,
   fetchAgentTrace,
   fetchAgentTask,
   listAgentTraces,
@@ -42,12 +44,21 @@ import {
   shareAgentArtifact,
   shareAgentTrace,
   stopAgentTask,
+  updateAgentSessionTodoItem,
   updateAgentCron,
+  type AgentContextReport,
   type AgentExtensionDiagnosticsResponse,
   type AgentSessionMode,
+  type AgentSessionPlanResponse,
+  type AgentSessionTodosResponse,
+  type AgentTaskPlanStep,
+  type AgentTodoItem,
+  type AgentTodoList,
+  type AgentTodoStatus,
   type AgentTrace,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import type { BrowserFrame } from "@/types";
 import type { ZakiRuntimeSandbox } from "@/stores/zakiSessionUiStore";
 import {
   getAgentArtifactExportAvailability,
@@ -65,6 +76,7 @@ import {
   V2Tabs,
 } from "@/app/components/v2";
 import { resolveContextGaugePercent } from "@/lib/agentContext";
+import { BrowserViewFeedPanel } from "./BrowserViewFeedPanel";
 import type {
   NullalisApprovalRequest,
   NullalisNarrationFrame,
@@ -135,7 +147,13 @@ export type AgentInspectorArtifact = {
 
 type AgentArtifactScope = "session" | "recent";
 
-const APP_BROWSER_TOOLS = ["web_fetch", "web_search", "playwright_*"] as const;
+const APP_BROWSER_TOOLS = [
+  "browser_new_session",
+  "browser_navigate",
+  "browser_snapshot",
+  "browser_exec",
+  "browser_close_session",
+] as const;
 const EXTENSION_BROWSER_TOOLS = [
   "extension_navigate",
   "extension_click",
@@ -188,6 +206,7 @@ const AGENT_SETTINGS_LINKS: Array<{
 ];
 
 export type AgentInspectorRailProps = {
+  sessionKey?: string | null;
   mode: AgentSessionMode | null;
   isStreaming: boolean;
   lastChannel?: string | null;
@@ -214,12 +233,15 @@ export type AgentInspectorRailProps = {
   approvalContinuationPending?: boolean;
   artifactCount?: number;
   contextGaugeData: ContextGaugeData | null;
+  contextReport?: AgentContextReport | null;
   usageSummary: ZakiUsageSummary | null;
+  browserFrame?: BrowserFrame | null;
   onOpenMemory?: () => void;
   onCronChanged?: () => void | Promise<void>;
   onOpenExtensionSettings?: () => void;
   onOpenSettings?: (section: AgentSettingsSection) => void;
   onOpenArtifact?: (artifact: AgentInspectorArtifact) => void;
+  onCloseBrowserFrame?: () => void;
   tabRequest?: AgentInspectorTabRequest | null;
   onClose?: () => void;
 };
@@ -274,6 +296,52 @@ function taskVisualState(status: NullalisTaskStatus) {
   if (status === "running") return "live";
   if (status === "failed" || status === "blocked" || status === "cancelled") return "blocked";
   return "queued";
+}
+
+function todoVisualState(status?: string | null) {
+  if (status === "completed" || status === "done" || status === "succeeded") return "done";
+  if (status === "in_progress" || status === "running") return "live";
+  if (status === "blocked" || status === "failed" || status === "cancelled") return "blocked";
+  return "queued";
+}
+
+function todoStatusIcon(status?: string | null) {
+  const visualState = todoVisualState(status);
+  if (visualState === "done") {
+    return <CheckCircle2 className="zaki-agent-inspector__status-icon is-done" aria-hidden />;
+  }
+  if (visualState === "live") {
+    return <Loader2 className="zaki-agent-inspector__status-icon is-running" aria-hidden />;
+  }
+  if (visualState === "blocked") {
+    return <ShieldAlert className="zaki-agent-inspector__status-icon is-alert" aria-hidden />;
+  }
+  return <Circle className="zaki-agent-inspector__status-icon" aria-hidden />;
+}
+
+function nextTodoStatus(status?: string | null): AgentTodoStatus {
+  if (status === "pending") return "in_progress";
+  if (status === "in_progress") return "completed";
+  if (status === "completed") return "pending";
+  if (status === "blocked") return "in_progress";
+  return "in_progress";
+}
+
+function todoActionLabel(status?: string | null) {
+  if (status === "pending") return "Start";
+  if (status === "in_progress") return "Complete";
+  if (status === "completed") return "Reopen";
+  if (status === "blocked") return "Resume";
+  return "Update";
+}
+
+function currentPlanStep(plan?: AgentSessionPlanResponse["plan"] | null): AgentTaskPlanStep | null {
+  if (!plan?.steps?.length) return null;
+  const index =
+    typeof plan.current_step === "number" && Number.isFinite(plan.current_step)
+      ? Math.max(0, Math.min(plan.steps.length - 1, Math.trunc(plan.current_step)))
+      : plan.steps.findIndex((step) => step.status === "running");
+  return plan.steps[index >= 0 ? index : 0] ?? null;
 }
 
 function traceLevel(event: { state: NullalisTranscriptEntry["resultState"]; meta: string | null }) {
@@ -395,7 +463,7 @@ function eventHasAppBrowserSignal(event: {
   files: string[];
 }) {
   if (eventHasExtensionSignal(event)) return false;
-  return /\b(browser|playwright|web_fetch|web_search|page\.|screenshot|navigate)\b/i.test(
+  return /\b(browser_(?:new_session|navigate|snapshot|exec|close_session)|browser|web_fetch|web_search)\b/i.test(
     eventText(event)
   );
 }
@@ -549,6 +617,7 @@ function PanelActionButton({
 }
 
 export function AgentInspectorRail({
+  sessionKey = null,
   isStreaming,
   lastChannel = null,
   sandbox,
@@ -574,12 +643,15 @@ export function AgentInspectorRail({
   approvalContinuationPending = false,
   artifactCount = 0,
   contextGaugeData,
+  contextReport = null,
   usageSummary,
+  browserFrame = null,
   onOpenMemory,
   onCronChanged,
   onOpenExtensionSettings,
   onOpenSettings,
   onOpenArtifact,
+  onCloseBrowserFrame,
   tabRequest = null,
   onClose,
 }: AgentInspectorRailProps) {
@@ -606,6 +678,13 @@ export function AgentInspectorRail({
   const [confirmStopTaskId, setConfirmStopTaskId] = useState<string | null>(null);
   const [stoppingTaskId, setStoppingTaskId] = useState<string | null>(null);
   const [stoppedTaskIds, setStoppedTaskIds] = useState<Record<string, boolean>>({});
+  const [todosData, setTodosData] = useState<AgentSessionTodosResponse | null>(null);
+  const [todosLoading, setTodosLoading] = useState(false);
+  const [todosError, setTodosError] = useState<string | null>(null);
+  const [todoBusyKey, setTodoBusyKey] = useState<string | null>(null);
+  const [planData, setPlanData] = useState<AgentSessionPlanResponse | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
   const [cronFormOpen, setCronFormOpen] = useState(false);
   const [editingCronId, setEditingCronId] = useState<string | null>(null);
   const [cronNameDraft, setCronNameDraft] = useState("");
@@ -672,13 +751,16 @@ export function AgentInspectorRail({
     ? Math.round((weightedTaskProgress / currentTasks.length) * 100)
     : 0;
   const ctxPct = contextPercent(contextGaugeData);
+  const hasBrowserFrame = Boolean(browserFrame?.frame?.trim());
   const sandboxLabel = sandbox?.enabled
     ? sandbox.backend
       ? sandbox.backend
       : "enabled"
     : "off";
   const browserActivity =
-    browserEntries.length > 0 || /\b(browser|playwright|extension)\b/i.test(lastChannel ?? "");
+    hasBrowserFrame ||
+    browserEntries.length > 0 ||
+    /\b(browser|extension)\b/i.test(lastChannel ?? "");
   const extensionActivity = browserEntries.some(eventHasExtensionSignal);
   const extensionPaired = Boolean(extensionDiagnostics?.paired);
   const extensionLaneActive = extensionActivity || extensionPaired;
@@ -696,8 +778,9 @@ export function AgentInspectorRail({
           ? "activity detected"
         : "not paired";
   const appBrowserActivity =
+    hasBrowserFrame ||
     browserEntries.some(eventHasAppBrowserSignal) ||
-    /\b(browser|playwright|web_fetch|web_search)\b/i.test(lastChannel ?? "");
+    /\b(browser|web_fetch|web_search)\b/i.test(lastChannel ?? "");
   const delegatedEvent = cronEntries.find((event) =>
     /\b(subagent|spawned|background|worker)\b/i.test(`${event.label} ${event.summary}`)
   );
@@ -719,6 +802,49 @@ export function AgentInspectorRail({
         recentTrace[0]?.summary ||
         "Waiting for the next runtime event.";
   const narrationLog = recentTrace.slice(0, 4);
+  const activeTodoList = useMemo(() => {
+    const lists = todosData?.lists ?? [];
+    if (!lists.length) return null;
+    const currentId = todosData?.current_list_id;
+    return lists.find((list) => list.list_id === currentId) ?? lists[0] ?? null;
+  }, [todosData]);
+  const activeTodoItems = activeTodoList?.items ?? [];
+  const completedTodoCount = activeTodoItems.filter(
+    (item) => todoVisualState(item.status) === "done"
+  ).length;
+  const otherTodoLists = useMemo(
+    () =>
+      (todosData?.lists ?? []).filter(
+        (list) => !activeTodoList || list.list_id !== activeTodoList.list_id
+      ),
+    [activeTodoList, todosData]
+  );
+  const activePlan = planData?.active ? planData.plan : null;
+  const activePlanStep = currentPlanStep(activePlan);
+  const recentFailure = recentTrace.find((event) => traceLevel(event) === "warn") ?? null;
+  const nativeToolCount = contextReport?.last_turn?.native_tool_call_count ?? null;
+  const xmlToolCount = contextReport?.last_turn?.xml_fallback_call_count ?? null;
+  const boundedResultCount = contextReport?.last_turn?.bounded_result_count ?? null;
+  const promptTokens =
+    contextReport?.provider_prompt_tokens ??
+    contextReport?.provider_usage_last_turn?.prompt_tokens ??
+    null;
+  const cachedPromptTokens =
+    contextReport?.provider_cached_prompt_tokens ??
+    contextReport?.provider_usage_last_turn?.cached_prompt_tokens ??
+    null;
+  const toolMode =
+    contextReport?.last_turn_delta?.tool_mode ??
+    contextReport?.last_turn?.tool_mode ??
+    contextReport?.prompt_shape?.tool_surface ??
+    "unknown";
+  const workStatusText = activePlan
+    ? activePlan.status || "active plan"
+    : runningTask
+      ? `${Math.round(runningTask.progressPct ?? planPercent)}% live`
+      : hasActiveRun
+        ? "forming"
+        : "idle";
   const handleTabChange = (nextTab: AgentInspectorTab) => {
     setManualTabSelected(true);
     setTab(nextTab);
@@ -773,6 +899,46 @@ export function AgentInspectorRail({
       toast.error(error instanceof Error ? error.message : "Unable to stop task.");
     } finally {
       setStoppingTaskId(null);
+    }
+  };
+
+  const handleTodoStatusUpdate = async (list: AgentTodoList, item: AgentTodoItem) => {
+    if (!sessionKey) return;
+    const nextStatus = nextTodoStatus(item.status);
+    const busyKey = `${list.list_id}:${item.id}`;
+    setTodoBusyKey(busyKey);
+    try {
+      const { response, data } = await updateAgentSessionTodoItem(
+        sessionKey,
+        list.list_id,
+        item.id,
+        { status: nextStatus }
+      );
+      if (!response.ok || data?.error || !data?.list) {
+        throw new Error(data?.error || `todo_update_${response.status}`);
+      }
+      setTodosData((current) => {
+        const replacement = data.list as AgentTodoList;
+        const existing = current?.lists ?? [];
+        const nextLists = existing.length
+          ? existing.map((candidate) =>
+              candidate.list_id === replacement.list_id ? replacement : candidate
+            )
+          : [replacement];
+        if (!nextLists.some((candidate) => candidate.list_id === replacement.list_id)) {
+          nextLists.unshift(replacement);
+        }
+        return {
+          session_key: data.session_key || current?.session_key || sessionKey,
+          current_list_id: data.current_list_id ?? current?.current_list_id ?? replacement.list_id,
+          lists: nextLists,
+        };
+      });
+      toast.success("Checklist updated.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Checklist update failed.");
+    } finally {
+      setTodoBusyKey(null);
     }
   };
 
@@ -878,6 +1044,10 @@ export function AgentInspectorRail({
       setTab("plan");
       return;
     }
+    if (hasBrowserFrame) {
+      setTab("browser");
+      return;
+    }
     if (currentTasks.length) {
       setTab("plan");
       return;
@@ -902,11 +1072,67 @@ export function AgentInspectorRail({
     artifactSourceCount,
     browserActivity,
     cronSourceCount,
+    hasBrowserFrame,
     manualTabSelected,
     sourceEntries.length,
     currentTasks.length,
     tabRequest,
   ]);
+
+  useEffect(() => {
+    if (!sessionKey) {
+      setTodosData(null);
+      setTodosError(null);
+      setTodosLoading(false);
+      setPlanData(null);
+      setPlanError(null);
+      setPlanLoading(false);
+      return;
+    }
+    let active = true;
+    setTodosLoading(true);
+    setTodosError(null);
+    setPlanLoading(true);
+    setPlanError(null);
+
+    void Promise.allSettled([
+      fetchAgentSessionTodos(sessionKey),
+      fetchAgentSessionPlan(sessionKey),
+    ]).then(([todosResult, planResult]) => {
+      if (!active) return;
+      if (todosResult.status === "fulfilled") {
+        const { response, data } = todosResult.value;
+        if (response.ok) {
+          setTodosData(data);
+        } else {
+          setTodosData(null);
+          setTodosError(data?.error || `todos_${response.status}`);
+        }
+      } else {
+        setTodosData(null);
+        setTodosError("todos_unavailable");
+      }
+
+      if (planResult.status === "fulfilled") {
+        const { response, data } = planResult.value;
+        if (response.ok) {
+          setPlanData(data);
+        } else {
+          setPlanData(null);
+          setPlanError(data?.error || `plan_${response.status}`);
+        }
+      } else {
+        setPlanData(null);
+        setPlanError("plan_unavailable");
+      }
+      setTodosLoading(false);
+      setPlanLoading(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [sessionKey, isStreaming]);
 
   const setArtifactExportState = (
     artifactId: string,
@@ -1238,27 +1464,192 @@ export function AgentInspectorRail({
           <V2Panel aria-label="Plan" className="zaki-agent-inspector__pane">
             <div className="zaki-agent-inspector__plan-head">
               <div>
-                <div className="zaki-agent-inspector__plan-title">current plan</div>
+                <div className="zaki-agent-inspector__plan-title">work</div>
                 <div className="zaki-agent-inspector__plan-meta">
                   <span className="zaki-agent-inspector__plan-progress">
                     <span className="bar" aria-hidden>
-                      <span className="fill" style={{ width: `${planPercent}%` }} />
+                      <span
+                        className="fill"
+                        style={{
+                          width: `${
+                            activeTodoItems.length
+                              ? Math.round((completedTodoCount / activeTodoItems.length) * 100)
+                              : planPercent
+                          }%`,
+                        }}
+                      />
                     </span>
                     <span className="num">
-                      {completedTaskCount} / {currentTasks.length || 0}
+                      {activeTodoItems.length
+                        ? `${completedTodoCount} / ${activeTodoItems.length}`
+                        : `${completedTaskCount} / ${currentTasks.length || 0}`}
                     </span>
                   </span>
                   <span className="sep">.</span>
-                  <span>
-                    {runningTask
-                      ? `${Math.round(runningTask.progressPct ?? planPercent)}% live`
-                      : hasActiveRun
-                        ? "forming"
-                        : "idle"}
-                  </span>
+                  <span>{workStatusText}</span>
                 </div>
               </div>
             </div>
+            <section className="zaki-agent-inspector__jobs" data-testid="agent-work-checklist">
+              <div className="zaki-agent-inspector__jobs-head">
+                <span>checklist</span>
+                <span>
+                  {todosLoading
+                    ? "loading"
+                    : activeTodoItems.length
+                      ? `${completedTodoCount}/${activeTodoItems.length} done`
+                      : "none"}
+                </span>
+              </div>
+              {todosError ? (
+                <div className="v2-empty-line">Checklist unavailable: {todosError}</div>
+              ) : null}
+              {todosLoading && !activeTodoList ? (
+                <div className="v2-empty-line">Loading checklist...</div>
+              ) : null}
+              {activeTodoList ? (
+                <>
+                  <ol className="zaki-agent-inspector__plan-list">
+                    {activeTodoItems.map((item) => {
+                      const busyKey = `${activeTodoList.list_id}:${item.id}`;
+                      return (
+                        <li
+                          key={`${activeTodoList.list_id}:${item.id}`}
+                          className={cn(
+                            "zaki-agent-inspector__todo",
+                            `is-${todoVisualState(item.status)}`
+                          )}
+                        >
+                          <div className="zaki-agent-inspector__todo-mark" aria-hidden>
+                            {todoStatusIcon(item.status)}
+                          </div>
+                          <div className="zaki-agent-inspector__todo-body">
+                            <div className="zaki-agent-inspector__todo-text">
+                              {item.title || `Item ${item.id}`}
+                            </div>
+                            <div className="zaki-agent-inspector__todo-meta">
+                              <span>{String(item.status || "pending").replace(/_/g, " ")}</span>
+                              {item.depends_on?.length ? (
+                                <>
+                                  <span className="sep">.</span>
+                                  <span>depends on {item.depends_on.join(", ")}</span>
+                                </>
+                              ) : null}
+                              {item.note ? (
+                                <>
+                                  <span className="sep">.</span>
+                                  <span>{item.note}</span>
+                                </>
+                              ) : null}
+                            </div>
+                            <div className="zaki-agent-inspector__todo-actions">
+                              <button
+                                type="button"
+                                disabled={todoBusyKey === busyKey}
+                                onClick={() => void handleTodoStatusUpdate(activeTodoList, item)}
+                              >
+                                {todoBusyKey === busyKey ? "Updating" : todoActionLabel(item.status)}
+                              </button>
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                  {otherTodoLists.length ? (
+                    <div className="v2-empty-line">
+                      {otherTodoLists.length} older checklist{otherTodoLists.length === 1 ? "" : "s"} retained.
+                    </div>
+                  ) : null}
+                </>
+              ) : !todosLoading && !todosError ? (
+                <div className="v2-empty-line">No durable checklist exists for this session yet.</div>
+              ) : null}
+            </section>
+            <section className="zaki-agent-inspector__jobs" data-testid="agent-run-plan">
+              <div className="zaki-agent-inspector__jobs-head">
+                <span>run plan</span>
+                <span>
+                  {planLoading
+                    ? "loading"
+                    : activePlan
+                      ? `${activePlan.status || "active"} · rev ${activePlan.revision ?? 1}`
+                      : "inactive"}
+                </span>
+              </div>
+              {planError ? (
+                <div className="v2-empty-line">Run plan unavailable: {planError}</div>
+              ) : null}
+              {planLoading && !activePlan ? (
+                <div className="v2-empty-line">Loading active plan...</div>
+              ) : null}
+              {activePlan ? (
+                <div className="zaki-agent-inspector__task-detail">
+                  <dl>
+                    <div>
+                      <dt>Summary</dt>
+                      <dd>{activePlan.summary || activePlan.plan_id || "active plan"}</dd>
+                    </div>
+                    <div>
+                      <dt>Current step</dt>
+                      <dd>{activePlanStep?.title || activePlanStep?.description || "not recorded"}</dd>
+                    </div>
+                    <div>
+                      <dt>Status</dt>
+                      <dd>{activePlanStep?.status || activePlan.status || "active"}</dd>
+                    </div>
+                    <div>
+                      <dt>Expected tool</dt>
+                      <dd>{activePlanStep?.expected_tool || "not specified"}</dd>
+                    </div>
+                    <div>
+                      <dt>Actual tool</dt>
+                      <dd>{activePlanStep?.actual_tool || "not recorded"}</dd>
+                    </div>
+                    <div>
+                      <dt>Result</dt>
+                      <dd>{activePlanStep?.result_summary || activePlanStep?.error_summary || "pending"}</dd>
+                    </div>
+                  </dl>
+                </div>
+              ) : !planLoading && !planError ? (
+                <div className="v2-empty-line">No active task plan for this run.</div>
+              ) : null}
+            </section>
+            <section className="zaki-agent-inspector__jobs" data-testid="agent-work-trace-strip">
+              <div className="zaki-agent-inspector__jobs-head">
+                <span>trace</span>
+                <span>{toolMode}</span>
+              </div>
+              <dl className="zaki-agent-inspector__fact-grid">
+                <div>
+                  <dt>Native/XML</dt>
+                  <dd>
+                    {nativeToolCount ?? "--"} / {xmlToolCount ?? "--"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Bounded results</dt>
+                  <dd>{boundedResultCount ?? "--"}</dd>
+                </div>
+                <div>
+                  <dt>Prompt</dt>
+                  <dd>{formatTokens(promptTokens)}</dd>
+                </div>
+                <div>
+                  <dt>Cache</dt>
+                  <dd>{formatTokens(cachedPromptTokens)}</dd>
+                </div>
+              </dl>
+              {recentFailure ? (
+                <V2InlineRow
+                  tone="warn"
+                  icon={<ShieldAlert className="size-4" aria-hidden />}
+                  title={recentFailure.label}
+                  meta={recentFailure.meta || recentFailure.summary}
+                />
+              ) : null}
+            </section>
             {approvalRequest ? (
               <V2InlineRow
                 tone="warn"
@@ -1962,19 +2353,24 @@ export function AgentInspectorRail({
         {tab === "browser" ? (
           <V2Panel aria-label="Browser" className="zaki-agent-inspector__pane">
             <V2PanelHead title="Browser" meta={sandboxLabel} />
+            <BrowserViewFeedPanel
+              frame={browserFrame}
+              embedded
+              onClose={() => onCloseBrowserFrame?.()}
+            />
             <V2InlineRow
               tone={browserActivity || sandbox?.enabled ? "accent" : "default"}
               icon={<Globe2 className="size-4" aria-hidden />}
-              title={browserActivity ? "Browser activity detected" : "Dual browser lanes ready"}
-              meta="App browser plus user-browser extension"
+              title={browserActivity ? "Agent browser active" : "Browser lanes ready"}
+              meta="agent-browser/K8s plus user-browser extension"
             />
             <div className="zaki-agent-inspector__browser-lanes" data-testid="agent-browser-lanes">
               <article className={cn("zaki-agent-inspector__browser-lane", appBrowserActivity && "is-active")}>
-                <div className="lane-kicker">app browser</div>
+                <div className="lane-kicker">agent-browser/K8s</div>
                 <div className="lane-title">
-                  {appBrowserActivity ? "public-web automation active" : "public-web automation"}
+                  {appBrowserActivity ? "watch-only browser active" : "watch-only browser"}
                 </div>
-                <p>Public pages, screenshots, search, and Playwright control without user-login cookies.</p>
+                <p>Frame-per-action runtime view for pages ZAKI opens inside the isolated agent browser.</p>
                 <div className="lane-tools" aria-label="App browser tools">
                   {APP_BROWSER_TOOLS.map((tool) => (
                     <span key={tool}>{tool}</span>

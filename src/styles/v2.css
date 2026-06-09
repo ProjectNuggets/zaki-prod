@@ -8230,6 +8230,16 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   flex-direction: column;
 }
 
+.zaki-browser-view--embedded {
+  display: flex;
+  min-height: 240px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--v2-hairline);
+  border-radius: 6px;
+  background: var(--v2-bg-sunken);
+}
+
 .zaki-browser-view .v2-panel-head {
   align-items: center;
   justify-content: space-between;
@@ -8260,6 +8270,14 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   gap: 12px;
   padding: 16px 18px;
   overflow: auto;
+}
+
+.zaki-browser-view--embedded .zaki-browser-view__body {
+  padding: 12px;
+}
+
+.zaki-browser-view--embedded .zaki-browser-view__empty {
+  min-height: 180px;
 }
 
 .zaki-browser-view__title {

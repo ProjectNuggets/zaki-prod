@@ -656,6 +656,83 @@ describe("agent runtime API clients", () => {
     );
   });
 
+  it("loads Agent todos through the encoded session-scoped BFF route", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeResponse(200, {
+        session_key: "agent:zaki-bot:user:42:thread:main",
+        current_list_id: "list-a",
+        lists: [
+          {
+            list_id: "list-a",
+            title: "Work",
+            items: [{ id: 1, title: "Wire API", status: "pending" }],
+          },
+        ],
+      })
+    );
+
+    const { fetchAgentSessionTodos } = await import("@/lib/api");
+    const { data } = await fetchAgentSessionTodos("agent:zaki-bot:user:42:thread:main");
+
+    expect(data.current_list_id).toBe("list-a");
+    expect(data.lists[0].items[0].title).toBe("Wire API");
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/agent/sessions/agent%3Azaki-bot%3Auser%3A42%3Athread%3Amain/todos",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
+  it("updates Agent todo items through encoded session and list routes", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeResponse(200, {
+        session_key: "agent:zaki-bot:user:42:thread:main",
+        current_list_id: "list a",
+        list: {
+          list_id: "list a",
+          title: "Work",
+          items: [{ id: 2, title: "Render rail", status: "completed" }],
+        },
+      })
+    );
+
+    const { updateAgentSessionTodoItem } = await import("@/lib/api");
+    const { data } = await updateAgentSessionTodoItem(
+      "agent:zaki-bot:user:42:thread:main",
+      "list a",
+      2,
+      { status: "completed", note: "verified" }
+    );
+
+    expect(data.list?.items[0].status).toBe("completed");
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/agent/sessions/agent%3Azaki-bot%3Auser%3A42%3Athread%3Amain/todos/list%20a/items/2",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ status: "completed", note: "verified" }),
+      })
+    );
+  });
+
+  it("loads Agent active plans through the encoded session-scoped BFF route", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeResponse(200, {
+        session_key: "agent:zaki-bot:user:42:thread:main",
+        active: false,
+        plan: null,
+      })
+    );
+
+    const { fetchAgentSessionPlan } = await import("@/lib/api");
+    const { data } = await fetchAgentSessionPlan("agent:zaki-bot:user:42:thread:main");
+
+    expect(data.active).toBe(false);
+    expect(data.plan).toBeNull();
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/agent/sessions/agent%3Azaki-bot%3Auser%3A42%3Athread%3Amain/plan",
+      expect.objectContaining({ method: "GET" })
+    );
+  });
+
   it("keeps the operator-only Agent history append facade typed", async () => {
     mockFetch.mockResolvedValueOnce(
       makeResponse(201, {

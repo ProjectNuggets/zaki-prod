@@ -46,6 +46,7 @@ import {
   type AgentJob,
   type AgentTask,
   type AgentExtensionDiagnosticsResponse,
+  type AgentSessionContext,
 } from "@/lib/api";
 import {
   buildAgentContextGauge,
@@ -118,7 +119,6 @@ import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
 import { MemoryImportSheet } from "./onboarding/MemoryImportSheet";
 import { OnboardingTour } from "./onboarding/OnboardingTour";
 import { AgentArtifactCanvas } from "./agent/AgentArtifactCanvas";
-import { BrowserViewFeedPanel } from "./chat/BrowserViewFeedPanel";
 import { useOnboardingProgress } from "@/queries/useOnboardingProgress";
 import { useBrainGraph } from "@/queries/useBrainGraph";
 import {
@@ -2948,6 +2948,8 @@ export function ChatArea() {
   const [agentArtifactEventCount, setAgentArtifactEventCount] = useState(0);
   const [nullalisContextGauge, setNullalisContextGauge] =
     useState<ContextGaugeData | null>(null);
+  const [nullalisContextReport, setNullalisContextReport] =
+    useState<AgentSessionContext | null>(null);
   const [zakiUsageSummary, setZakiUsageSummary] = useState<ZakiUsageSummary | null>(null);
   const [freeDailyQuota, setFreeDailyQuota] = useState<{
     unlimited: boolean;
@@ -3053,6 +3055,7 @@ export function ChatArea() {
     activeContextGenerationRef.current += 1;
     if (previousKey && previousKey !== nextKey) {
       setNullalisContextGauge(null);
+      setNullalisContextReport(null);
     }
   }, [isZakiBotRouteActive, normalizedActiveZakiSessionKey]);
   const ensureZakiSessionUi = useZakiSessionUiStore((state) => state.ensureSession);
@@ -4325,6 +4328,7 @@ export function ChatArea() {
       if (isContextUnavailableCode(unavailableCode)) {
         setSessionContextPressure(sessionKey, null);
         setNullalisContextGauge(null);
+        setNullalisContextReport(null);
         return;
       }
       // `/context` is the only trustworthy source for the composer meter.
@@ -4334,15 +4338,18 @@ export function ChatArea() {
         if (!isActiveZakiSessionLive) {
           setSessionContextPressure(sessionKey, null);
           setNullalisContextGauge(null);
+          setNullalisContextReport(null);
         }
         return;
       }
       const gauge = buildNullalisContextGauge(data as Record<string, unknown>);
       const pressurePct = resolveContextGaugePercent(gauge);
+      setNullalisContextReport(data as AgentSessionContext);
       if (gauge) {
         setNullalisContextGauge(gauge);
       } else if (!isActiveZakiSessionLive) {
         setNullalisContextGauge(null);
+        setNullalisContextReport(null);
       }
       if (typeof pressurePct === "number") {
         setSessionContextPressure(sessionKey, pressurePct);
@@ -4353,6 +4360,7 @@ export function ChatArea() {
       if (requestedSessionKey && !isActiveZakiSessionLive) {
         setSessionContextPressure(requestedSessionKey, null);
         setNullalisContextGauge(null);
+        setNullalisContextReport(null);
       }
     }
   }, [
@@ -8431,6 +8439,7 @@ export function ChatArea() {
 
   const renderAgentInspectorRail = (options?: { mobile?: boolean }) => isAgentSurface ? (
     <AgentInspectorRail
+      sessionKey={normalizedActiveZakiSessionKey}
       mode={activeSessionMode ?? "execute"}
       isStreaming={isStreaming}
       lastChannel={activeSessionUi?.lastChannel ?? activeSessionRecord?.last_channel ?? null}
@@ -8457,12 +8466,22 @@ export function ChatArea() {
       approvalContinuationPending={Boolean(approvalContinuationPendingId)}
       artifactCount={agentArtifactEventCount}
       contextGaugeData={nullalisContextGauge}
+      contextReport={nullalisContextReport}
       usageSummary={zakiUsageSummary}
+      browserFrame={activeSessionUi?.browserFrame ?? null}
       onOpenMemory={openAgentMemorySurface}
       onCronChanged={refreshAgentRuntimePanelData}
       onOpenExtensionSettings={openAgentExtensionSettings}
       onOpenSettings={openAgentSettingsSection}
       onOpenArtifact={openAgentArtifactCanvas}
+      onCloseBrowserFrame={() => {
+        const sessionKey =
+          activeZakiSessionKey ||
+          buildAgentSessionKey(activeThreadId || "main", agentUserId);
+        if (sessionKey) {
+          setSessionBrowserFrame(sessionKey, null);
+        }
+      }}
       tabRequest={agentInspectorTabRequest}
       onClose={
         options?.mobile
@@ -8766,25 +8785,6 @@ export function ChatArea() {
                 artifact={selectedAgentArtifact}
                 onClose={() => setSelectedAgentArtifact(null)}
                 onRequestAgentEdit={handleAgentArtifactRevisionRequest}
-              />
-            </aside>
-          ) : null}
-
-          {isAgentSurface && activeSessionUi?.browserFrame ? (
-            <aside
-              className="zaki-agent-browser-view"
-              aria-label="Browser view"
-            >
-              <BrowserViewFeedPanel
-                frame={activeSessionUi.browserFrame}
-                onClose={() => {
-                  const sessionKey =
-                    activeZakiSessionKey ||
-                    buildAgentSessionKey(activeThreadId || "main", agentUserId);
-                  if (sessionKey) {
-                    setSessionBrowserFrame(sessionKey, null);
-                  }
-                }}
               />
             </aside>
           ) : null}
