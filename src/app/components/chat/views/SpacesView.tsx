@@ -283,7 +283,7 @@ export function SpacesView({
   if (isLoading) {
     return (
       <div
-        className="px-4 sm:px-6 md:px-10 py-8 md:py-10 max-w-6xl mx-auto w-full"
+        className="px-4 sm:px-6 md:px-10 py-8 md:py-10 max-w-[1600px] mx-auto w-full"
         dir={isRtl ? "rtl" : "ltr"}
       >
         {renderHeader()}
@@ -427,7 +427,7 @@ export function SpacesView({
 
   return (
     <div
-      className="px-4 sm:px-6 md:px-10 py-8 md:py-10 max-w-6xl mx-auto w-full"
+      className="px-4 sm:px-6 md:px-10 py-8 md:py-10 max-w-[1600px] mx-auto w-full"
       dir={isRtl ? "rtl" : "ltr"}
     >
       {renderHeader()}

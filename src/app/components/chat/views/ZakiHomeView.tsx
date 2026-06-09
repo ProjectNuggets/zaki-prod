@@ -471,7 +471,7 @@ export function ZakiHomeView({
     return () => window.clearInterval(interval);
   }, [zakiMissionSlides.length, reducedMotion, missionPaused]);
   return (
-    <div className="px-4 sm:px-6 md:px-10 py-10 md:py-12 min-h-full flex flex-col max-w-6xl mx-auto w-full">
+    <div className="px-4 sm:px-6 md:px-10 py-10 md:py-12 min-h-full flex flex-col max-w-[1600px] mx-auto w-full">
       <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-10">
         <div className="flex-1 max-w-3xl">
           <div className="text-sm md:text-base font-semibold text-zaki-secondary tracking-[0.16em] uppercase">
