@@ -236,6 +236,7 @@ export default function App() {
         } else {
           // 401 from /api/auth/refresh — no valid session
           if (isMounted) logout();
+          if (typeof window !== "undefined" && window.location.pathname === "/" && !new URLSearchParams(window.location.search).has("auth")) { window.location.replace("/?auth=login"); }
         }
       } catch {
         if (isMounted) logout();

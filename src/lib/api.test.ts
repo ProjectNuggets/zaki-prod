@@ -235,6 +235,71 @@ describe("apiRequest — 401 retry", () => {
 });
 
 // --------------------------------------------------------------------------
+// 401 logout redirects to /?auth=login (LoginScreen), not the marketing site
+// --------------------------------------------------------------------------
+
+// On a session-dead 401 the dead-session branches must (a) log the user out and
+// (b) navigate to the LoginScreen at "/?auth=login" — NOT bare "/", which renders
+// the marketing homepage with no login. jest-environment-jsdom locks window and
+// window.location (non-configurable getters) and blocks real navigation, so the
+// assigned href can't be observed at runtime. We therefore assert the logout
+// behaviour at runtime and the exact redirect target via the module source — the
+// source guard fails on bare "/" and passes only on "/?auth=login".
+describe("session-dead 401 redirect target", () => {
+  it("apiRequest: retry-also-401 logs the dead session out", async () => {
+    _storeToken = "expired-token";
+    mockFetch
+      .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
+      .mockResolvedValueOnce(makeResponse(200, { token: "new-token" }))
+      .mockResolvedValueOnce(makeResponse(401, { error: "Still unauthorized" }));
+
+    const { apiRequest } = await import("@/lib/api");
+    await apiRequest("/api/protected", { method: "GET" });
+
+    expect(mockLogout).toHaveBeenCalled();
+  });
+
+  it("apiRequest: refresh-failed logs the dead session out", async () => {
+    _storeToken = "expired-token";
+    mockFetch
+      .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
+      .mockResolvedValueOnce(makeResponse(401, { error: "Refresh also failed" }));
+
+    const { apiRequest } = await import("@/lib/api");
+    await apiRequest("/api/protected", { method: "GET" });
+
+    expect(mockLogout).toHaveBeenCalled();
+  });
+
+  it("backendAuthRequest: refresh-failed logs the dead session out", async () => {
+    _storeToken = "expired-token";
+    mockFetch
+      .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
+      .mockResolvedValueOnce(makeResponse(401, { error: "Refresh also failed" }));
+
+    const { backendAuthRequest } = await import("@/lib/api");
+    await backendAuthRequest("/api/profile", { method: "GET" });
+
+    expect(mockLogout).toHaveBeenCalled();
+  });
+
+  it("every dead-session logout branch redirects to /?auth=login, never bare /", () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const fs = require("fs") as typeof import("fs");
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const path = require("path") as typeof import("path");
+    const source = fs.readFileSync(path.join(__dirname, "api.ts"), "utf8");
+
+    // The login redirect must be the auth-gated path that renders LoginScreen.
+    const loginRedirects = source.match(/window\.location\.href\s*=\s*"\/\?auth=login";/g) ?? [];
+    expect(loginRedirects.length).toBe(3);
+
+    // No dead-session logout branch may navigate to the bare marketing homepage.
+    expect(source).not.toMatch(/window\.location\.href\s*=\s*"\/";/);
+  });
+});
+
+// --------------------------------------------------------------------------
 // apiRequest — credentials: include
 // --------------------------------------------------------------------------
 

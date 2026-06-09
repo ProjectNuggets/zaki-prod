@@ -191,14 +191,14 @@ export async function apiRequest(
       // WR-01: if the retry also returns 401, the token is invalid — log out.
       if (retryResponse.status === 401 && typeof window !== "undefined") {
         useAuthStore.getState().logout();
-        window.location.href = "/";
+        window.location.href = "/?auth=login";
       }
       return retryResponse;
     }
     // Refresh failed — redirect to login
     if (typeof window !== "undefined") {
       useAuthStore.getState().logout();
-      window.location.href = "/";
+      window.location.href = "/?auth=login";
     }
   }
 
@@ -254,7 +254,7 @@ export async function backendAuthRequest(
     }
     if (typeof window !== "undefined") {
       useAuthStore.getState().logout();
-      window.location.href = "/";
+      window.location.href = "/?auth=login";
     }
   }
   return response;
