@@ -10,7 +10,6 @@ import {
   Pin,
   Plus,
   Presentation,
-  Search,
   Square,
   Table2,
   X,
@@ -278,8 +277,6 @@ export function InputArea({
   onStop,
   queryModeEnabled = false,
   onToggleQueryMode,
-  webSearchArmed = false,
-  onToggleWebSearch,
   showUpgradeStrip = true,
   sendLocked = false,
   zakiBotMode = false,
@@ -312,8 +309,6 @@ export function InputArea({
   onStop?: () => void;
   queryModeEnabled?: boolean;
   onToggleQueryMode?: () => void;
-  webSearchArmed?: boolean;
-  onToggleWebSearch?: () => void;
   showUpgradeStrip?: boolean;
   sendLocked?: boolean;
   zakiBotMode?: boolean;
@@ -412,7 +407,6 @@ export function InputArea({
   const isPremium = effectiveEntitlement.premium;
   const activeViaAccessCode = effectiveEntitlement.source === "access_code";
   const canToggleQueryMode = typeof onToggleQueryMode === "function";
-  const canToggleWebSearch = typeof onToggleWebSearch === "function";
   const slashFilter = useMemo(() => detectSlash(inputValue).filter, [inputValue]);
   const filteredSlashCommands = useMemo<SlashCommand[]>(
     () => getDisplayOrder({ filter: slashFilter, showAliases, isOperator: false }).flat,
@@ -1037,9 +1031,6 @@ export function InputArea({
       if (isOnboardingControlsLocked) return;
       if (event.key === "Escape") {
         setMenuOpen(false);
-        if (webSearchArmed && canToggleWebSearch) {
-          onToggleWebSearch?.();
-        }
       }
     };
 
@@ -1049,7 +1040,7 @@ export function InputArea({
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [isOnboardingControlsLocked, canToggleWebSearch, onToggleWebSearch, webSearchArmed]);
+  }, [isOnboardingControlsLocked]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -1145,7 +1136,7 @@ export function InputArea({
           }
           isRtl={isRtl}
         />
-        <div className="zaki-agent-composer-shell border border-zaki-strong bg-zaki-raised overflow-visible p-0">
+        <div className={cn("zaki-agent-composer-shell border border-zaki-strong bg-zaki-raised overflow-visible p-0", !zakiBotMode && "rounded-zaki-xl")}>
           {showUpgradeStrip ? (
             <div
               className={cn(
@@ -1224,8 +1215,8 @@ export function InputArea({
           ) : null}
           <div
             className={cn(
-              "zaki-agent-composer-box w-full border border-zaki-strong bg-zaki-raised px-3 py-2.5 flex flex-col gap-2 relative",
-              showUpgradeStrip ? "mt-2" : "mt-0"
+              "zaki-agent-composer-box w-full border border-zaki-strong bg-zaki-raised px-3 py-2.5 flex flex-col gap-2 relative mt-0",
+              !zakiBotMode && "rounded-zaki-xl"
             )}
           >
         {zakiBotMode && pinnedMemories.length > 0 && (
@@ -1510,18 +1501,24 @@ export function InputArea({
             <button
               type="button"
               className="zaki-composer-menu-trigger size-9 bg-zaki-elevated rounded-[2px] flex items-center justify-center border border-zaki-strong hover:bg-zaki-sunken dark:hover:bg-zaki-dark-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
-              onClick={() =>
+              onClick={() => {
+                // Chat (Spaces): + goes straight to the file picker. The menu
+                // is kept for Agent and for the onboarding walkthrough.
+                if (!zakiBotMode && !isOnboardingControlsLocked) {
+                  handleOpenZakiAttachmentPicker();
+                  return;
+                }
                 setMenuOpen((open) => {
                   const nextOpen = isOnboardingControlsLocked ? true : !open;
                   if (nextOpen) {
                     window.dispatchEvent(new CustomEvent("zaki:onboarding-chat-controls-opened"));
                   }
                   return nextOpen;
-                })
-              }
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              aria-label={t("input.menu.addOptions")}
+                });
+              }}
+              aria-haspopup={zakiBotMode ? "menu" : undefined}
+              aria-expanded={zakiBotMode ? menuOpen : undefined}
+              aria-label={zakiBotMode ? t("input.menu.addOptions") : t("input.menu.uploadFile")}
               data-onboarding-id="chat-controls-button"
             >
               <Plus className="size-4 text-zaki-muted" />
@@ -1818,46 +1815,28 @@ export function InputArea({
           ) : null}
           {!zakiBotMode ? (
             <button
-            type="button"
-            onClick={() => {
-              window.dispatchEvent(new CustomEvent("zaki:onboarding-web-search-clicked"));
-              onToggleWebSearch?.();
-            }}
-            disabled={!canToggleWebSearch}
-            className={cn(
-              "group relative size-9 rounded-[2px] flex items-center justify-center border transition-colors",
-              webSearchArmed
-                ? "bg-zaki-accent/10 border-zaki-accent/40 text-zaki-accent"
-                : "bg-zaki-elevated border-zaki-strong text-zaki-muted hover:bg-zaki-sunken dark:hover:bg-zaki-dark-hover",
-              !canToggleWebSearch && "opacity-60 cursor-not-allowed"
-            )}
-            aria-label={
-              webSearchArmed
-                ? t("input.webSearch.disableAriaLabel")
-                : t("input.webSearch.enableAriaLabel")
-            }
-            title={
-              webSearchArmed
-                ? t("input.webSearch.disableTitle")
-                : t("input.webSearch.enableTitle")
-            }
-            data-onboarding-id="chat-web-search-button"
-          >
-            <Search className="size-4" />
-            <span className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-[2px] border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[10px] font-semibold text-zaki-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-              {webSearchArmed
-                ? t("input.webSearch.onPill")
-                : t("input.webSearch.offPill")}
-            </span>
-            </button>
-          ) : null}
-          {!zakiBotMode && webSearchArmed ? (
-            <button
               type="button"
-              onClick={onToggleWebSearch}
-              className="inline-flex items-center rounded-[2px] border border-zaki-accent/30 bg-zaki-accent/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-zaki-accent"
+              onClick={handleToggleQueryMode}
+              disabled={!canToggleQueryMode}
+              className={cn(
+                "group relative size-9 rounded-zaki-md flex items-center justify-center border transition-colors",
+                queryModeEnabled
+                  ? "bg-zaki-accent/10 border-zaki-accent/40 text-zaki-accent"
+                  : "bg-zaki-elevated border-zaki-strong text-zaki-muted hover:bg-zaki-sunken dark:hover:bg-zaki-dark-hover",
+                !canToggleQueryMode && "opacity-60 cursor-not-allowed"
+              )}
+              aria-pressed={queryModeEnabled}
+              aria-label={t("input.queryMode.label")}
+              title={t("input.queryMode.meta", {
+                defaultValue: "Search inside workspace files",
+              })}
             >
-              {t("input.webSearch.activePill")}
+              <FileText className="size-4" />
+              <span className="pointer-events-none absolute -top-2 left-1/2 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-[2px] border border-zaki-strong bg-zaki-elevated px-2 py-0.5 text-[10px] font-semibold text-zaki-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                {queryModeEnabled
+                  ? t("input.queryMode.onBadge")
+                  : t("input.queryMode.label")}
+              </span>
             </button>
           ) : null}
           {!zakiBotMode && queryModeEnabled ? (
