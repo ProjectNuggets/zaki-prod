@@ -39,6 +39,9 @@ describe("unit-ledger: applyWeeklyResetLocked", () => {
     const sql = update().text;
     expect(sql).toMatch(/weekly_used_units\s*=\s*0/);
     expect(sql).toMatch(/NOW\(\)\s*>=\s*weekly_reset_at/);
+    // Strict-future guarantee: roll forward FLOOR(gap/7d)+1 whole weeks so the new boundary is always
+    // > NOW(), even on an exact-week gap (prevents a double-reset / free-unit grant at the boundary).
+    expect(sql).toMatch(/FLOOR\(.*604800.*\)\s*\+\s*1/);
     expect(update().params).toEqual([42]);
     expect(out).toBe(reset);
   });

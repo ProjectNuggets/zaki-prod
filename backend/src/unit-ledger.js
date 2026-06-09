@@ -112,7 +112,8 @@ function parseFunding(funding) {
  *   - init  (weekly_reset_at IS NULL): seed the anchor + next reset boundary. NEVER touch weekly_used_units,
  *            so a wallet that already has usage (e.g. a free user at the cap) is NOT silently refilled.
  *   - reset (NOW() >= weekly_reset_at): zero weekly_used_units and roll the anchor forward by whole 7-day
- *            periods (CEIL(...) handles multi-week gaps so the next boundary stays in the future, no drift).
+ *            periods. FLOOR(gap/7d)+1 guarantees the new boundary is STRICTLY in the future (now, now+7d],
+ *            even when the elapsed gap is an exact integer number of weeks (no double-reset at the boundary).
  * The WHERE clause re-checks the gate so it's a no-op if a concurrent winner already reset; on 0 rows we
  * return the original wallet unchanged. Idempotent and safe to call on every reserve.
  * @returns {Promise<object>} the (possibly) updated wallet row
@@ -122,7 +123,7 @@ export async function applyWeeklyResetLocked(c, wallet) {
     const r = await c.query(`UPDATE zaki_unit_wallets SET weekly_anchor_at = NOW(), weekly_reset_at = NOW() + INTERVAL '7 days', updated_at = NOW() WHERE user_id = $1 AND weekly_reset_at IS NULL RETURNING *`, [wallet.user_id]);
     return r.rows[0] || wallet;
   }
-  const r = await c.query(`UPDATE zaki_unit_wallets SET weekly_used_units = 0, weekly_anchor_at = NOW(), weekly_reset_at = weekly_reset_at + (CEIL(EXTRACT(EPOCH FROM (NOW() - weekly_reset_at)) / 604800.0)::int * INTERVAL '7 days'), updated_at = NOW() WHERE user_id = $1 AND weekly_reset_at IS NOT NULL AND NOW() >= weekly_reset_at RETURNING *`, [wallet.user_id]);
+  const r = await c.query(`UPDATE zaki_unit_wallets SET weekly_used_units = 0, weekly_anchor_at = NOW(), weekly_reset_at = weekly_reset_at + ((FLOOR(EXTRACT(EPOCH FROM (NOW() - weekly_reset_at)) / 604800.0) + 1)::int * INTERVAL '7 days'), updated_at = NOW() WHERE user_id = $1 AND weekly_reset_at IS NOT NULL AND NOW() >= weekly_reset_at RETURNING *`, [wallet.user_id]);
   return r.rows[0] || wallet;
 }
 
