@@ -27,7 +27,7 @@ export function CodeBlock({ block }: { block: CodeBlockType | CopyPromptBlock })
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-[14px] border border-zaki-subtle/90 bg-[rgba(248,243,236,0.9)] dark:border-zaki-dark dark:bg-[rgba(18,14,11,0.9)]",
+        "overflow-hidden rounded-[14px] border border-zaki-subtle/90 bg-zaki-sunken dark:border-zaki-dark",
         "zaki-codeblock",
         block.provisional && "ring-1 ring-zaki-brand/20",
       )}

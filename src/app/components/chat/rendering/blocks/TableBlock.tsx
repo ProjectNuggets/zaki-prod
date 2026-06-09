@@ -4,7 +4,7 @@ import type { TableBlock as TableBlockType } from "../types";
 export function TableBlock({ block }: { block: TableBlockType }) {
   const tableLabel = block.caption || "Agent reply table";
   return (
-    <div className="zaki-message-table rounded-[8px] border border-zaki-subtle/90 bg-[rgba(250,246,240,0.78)] dark:border-zaki-dark dark:bg-[rgba(255,255,255,0.02)]">
+    <div className="zaki-message-table rounded-[8px] border border-zaki-subtle/90 bg-zaki-sunken dark:border-zaki-dark">
       {block.caption ? (
         <div className="zaki-message-table__caption" data-testid="message-table-caption">
           {block.caption}
@@ -14,7 +14,7 @@ export function TableBlock({ block }: { block: TableBlockType }) {
         {block.rows.map((row, rowIndex) => (
           <div
             key={`mobile-row-${rowIndex}`}
-            className="overflow-hidden rounded-[6px] border border-zaki-subtle/80 bg-white/70 dark:border-zaki-dark dark:bg-[rgba(255,255,255,0.03)]"
+            className="overflow-hidden rounded-[6px] border border-zaki-subtle/80 bg-zaki-raised dark:border-zaki-dark"
           >
             {row.map((cell, cellIndex) => (
               <div
@@ -41,7 +41,7 @@ export function TableBlock({ block }: { block: TableBlockType }) {
       >
         <table className="min-w-full w-max border-separate border-spacing-0 text-left rtl:text-right">
           {block.caption ? <caption className="sr-only">{block.caption}</caption> : null}
-          <thead className="bg-[rgba(241,233,223,0.92)] dark:bg-[rgba(255,255,255,0.04)]">
+          <thead className="bg-zaki-sunken">
             <tr>
               {block.headers.map((cell, index) => (
                 <th
@@ -58,7 +58,7 @@ export function TableBlock({ block }: { block: TableBlockType }) {
             {block.rows.map((row, rowIndex) => (
               <tr
                 key={`row-${rowIndex}`}
-                className="even:bg-[rgba(255,255,255,0.45)] dark:even:bg-[rgba(255,255,255,0.015)]"
+                className="even:bg-zaki-raised"
               >
                 {row.map((cell, cellIndex) => (
                   <td

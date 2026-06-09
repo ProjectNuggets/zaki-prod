@@ -34,7 +34,7 @@ export function InlineTextRenderer({
                 key={key}
                 dir="ltr"
                 className={cn(
-                  "rounded-[8px] border border-zaki-subtle/80 bg-[rgba(243,237,229,0.9)] px-1.5 py-0.5 font-mono text-[0.84em] text-[#7d4938] dark:border-zaki-dark dark:bg-[#1f1a15] dark:text-[#d8baa3]",
+                  "rounded-[8px] border border-zaki-subtle/80 bg-zaki-sunken px-1.5 py-0.5 font-mono text-[0.84em] text-zaki-primary dark:border-zaki-dark",
                   prose && "whitespace-pre-wrap",
                 )}
               >

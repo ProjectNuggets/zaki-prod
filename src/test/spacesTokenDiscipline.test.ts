@@ -17,7 +17,7 @@ const FILES = [
   "app/components/chat/views/SpacesView.tsx",
   "app/components/chat/views/SpaceDetailView.tsx",
   "app/components/chat/views/ZakiHomeView.tsx",
-  "app/components/chat/views/EmptyState.tsx",
+  "app/components/chat/EmptyState.tsx",
   "app/components/chat/views/ReadyState.tsx",
   "app/components/chat/modals/CreateSpaceModal.tsx",
   "app/components/chat/modals/EditInstructionsModal.tsx",

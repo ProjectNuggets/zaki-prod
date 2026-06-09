@@ -169,7 +169,7 @@ export const BlockRenderer = memo(
       );
     case "callout":
       return (
-        <div className="rounded-[14px] border border-zaki-subtle bg-[rgba(247,241,233,0.7)] px-4 py-3 dark:border-zaki-dark dark:bg-[rgba(255,255,255,0.03)]">
+        <div className="rounded-[14px] border border-zaki-subtle bg-zaki-sunken px-4 py-3 dark:border-zaki-dark">
           {block.title ? (
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:text-zaki-dark-muted">
               {block.title}
