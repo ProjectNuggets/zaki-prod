@@ -1226,6 +1226,11 @@ export async function initDb() {
   try {
     const { UNIT_LEDGER_DDL } = await import("./unit-ledger.js");
     await pool.query(UNIT_LEDGER_DDL);
+    await pool.query(`
+      ALTER TABLE IF EXISTS zaki_unit_wallets
+        ADD COLUMN IF NOT EXISTS weekly_anchor_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS weekly_reset_at TIMESTAMPTZ;
+    `);
     console.log("[DB] Unit ledger tables ready (zaki_unit_wallets, zaki_meter_holds)");
   } catch (err) {
     console.warn("[DB] Unit ledger table creation failed:", err.message);
