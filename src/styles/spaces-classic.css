@@ -18,15 +18,60 @@
  * the Agent dashboard are excluded).
  */
 
-/* ── Slice 0: scaffold (no-op). Pattern retune lands in Slice 1, Task 1.5. ── */
+/* ───────────────────────── Background pattern retune ─────────────────────────
+ * Keep the V1 pattern as Spaces' differentiator, but neutralize the warm brown
+ * to a low-chroma V2 neutral and PUSH CONTRAST UP so it reads clearly (per
+ * product direction) — especially on the dark stage where it was nearly
+ * invisible. The pattern <g> is fixed at opacity 0.18, so clarity comes from
+ * brighter, system-aligned stroke values + a touch more glow.
+ *
+ * Light: neutral greys a step darker than the #F4F1EC paper, plus a soft light
+ * bloom. Dark: the V2 dark ink ramp (#B8B2A9 → #807A72 → #565049) so the lines
+ * sit above the #0A0908 canvas and are legible without fighting overlaid text.
+ */
 .zaki-spaces-classic {
+  --zaki-pattern-start: #cbc4b7;
+  --zaki-pattern-mid: #aaa294;
+  --zaki-pattern-end: #c2bbae;
+  --zaki-pattern-glow-1: rgba(255, 253, 248, 0.42);
+  --zaki-pattern-glow-2: rgba(150, 146, 136, 0.14);
 }
 
 .dark .zaki-spaces-classic {
+  --zaki-pattern-start: #b8b2a9; /* --v2-ink-2 (dark) */
+  --zaki-pattern-mid: #807a72;   /* --v2-ink-3 (dark) */
+  --zaki-pattern-end: #565049;   /* --v2-ink-4 (dark) */
+  --zaki-pattern-glow-1: rgba(184, 178, 169, 0.12);
+  --zaki-pattern-glow-2: rgba(128, 122, 114, 0.07);
 }
 
-/* ── Curated per-space swatch palette (Slice 1, Task 1.2). ──
- * Defined app-wide intentionally so both the main content and the left Sidebar
- * (which renders OUTSIDE the .zaki-spaces-classic container) resolve the same
- * tokens. Values are filled and tuned against the dark stage in Task 1.2.
+/* ─────────────────────── Curated per-space swatch palette ───────────────────
+ * Replaces the old rainbow (teal/orange/blue/purple/green). A muted, desatu-
+ * rated family that reads as ONE coherent set on the V2 stage — distinct enough
+ * to color-code workspaces, quiet enough not to compete with the ember accent.
+ * Defined on the app shell (NOT the spaces-classic container) so the left
+ * Sidebar — which renders outside that container — resolves the same tokens.
+ * Dark values are lifted for legibility on #0A0908; light values are deepened
+ * for contrast on #F4F1EC. `ember` reuses the one accent for an "important"
+ * space; `default` is a neutral ink for un-colored spaces.
  */
+.zaki-app-v2 {
+  --zaki-space-swatch-ember: var(--v2-accent);
+  --zaki-space-swatch-slate: #586477;
+  --zaki-space-swatch-moss: #5a6852;
+  --zaki-space-swatch-clay: #95513e;
+  --zaki-space-swatch-indigo: #515d8a;
+  --zaki-space-swatch-plum: #745974;
+  --zaki-space-swatch-sand: #79715f;
+  --zaki-space-swatch-default: var(--v2-ink-3, #6b6660);
+}
+
+.dark .zaki-app-v2 {
+  --zaki-space-swatch-slate: #6b7687;
+  --zaki-space-swatch-moss: #6c7a63;
+  --zaki-space-swatch-clay: #a8624e;
+  --zaki-space-swatch-indigo: #6470a0;
+  --zaki-space-swatch-plum: #8a6f8a;
+  --zaki-space-swatch-sand: #8a8270;
+  --zaki-space-swatch-default: var(--v2-ink-3, #807a72);
+}
