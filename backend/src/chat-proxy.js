@@ -11,6 +11,44 @@ const ZAKI_IDENTITY_GUARDRAIL = [
   "- If asked about your model or company, answer at the product level as ZAKI and avoid naming a provider or model unless explicitly supplied in the user's visible product context.",
 ].join("\n");
 
+export const MEMORY_CONTEXT_ENVELOPE_OPEN = "[[ZAKI_MEMORY_CONTEXT_V2]]";
+export const MEMORY_CONTEXT_ENVELOPE_CLOSE = "[[/ZAKI_MEMORY_CONTEXT_V2]]";
+
+// Builds the versioned, two-section memory envelope the frontend strips from display.
+// Section 1 (core): always-on identity background — shape tone, do not recite.
+// Section 2 (context): query-relevant recall — use only if directly relevant.
+// Each section is emitted only when its value is non-empty. Returns "" when both are empty.
+export function composeMemoryEnvelope({ core, context } = {}) {
+  const trimmedCore = String(core || "").trim();
+  const trimmedContext = String(context || "").trim();
+  if (!trimmedCore && !trimmedContext) return "";
+
+  const sections = [];
+  if (trimmedCore) {
+    sections.push(
+      [
+        "About this person (background they provided; may be outdated and is user-editable).",
+        "Let it shape tone and assumptions. Do NOT restate or reference these unless directly relevant. Defer to the conversation.",
+        trimmedCore,
+      ].join("\n")
+    );
+  }
+  if (trimmedContext) {
+    sections.push(
+      [
+        "Possibly relevant memories — use ONLY if directly relevant to the request; ignore otherwise; do not quote verbatim.",
+        trimmedContext,
+      ].join("\n")
+    );
+  }
+
+  return [
+    MEMORY_CONTEXT_ENVELOPE_OPEN,
+    sections.join("\n\n"),
+    MEMORY_CONTEXT_ENVELOPE_CLOSE,
+  ].join("\n");
+}
+
 export function extractStreamMessage(body) {
   if (!isPlainObject(body)) return "";
   return String(body.message || "").trim();

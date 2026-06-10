@@ -37,6 +37,7 @@ import { summarizeConversation } from "./memory/session-summary.js";
 import { createSessionEndHandler } from "./memory/session-end-route.js";
 import {
   buildStreamUpstreamPayload,
+  composeMemoryEnvelope,
   extractStreamMessage,
   getRequestedResponseFormat,
 } from "./chat-proxy.js";
@@ -9839,8 +9840,8 @@ app.get("/api/verify", verifyHandler);
 // Chat Integration with Memory
 // =============================================================================
 
-const MEMORY_CONTEXT_ENVELOPE_OPEN = "[[ZAKI_MEMORY_CONTEXT_V2]]";
-const MEMORY_CONTEXT_ENVELOPE_CLOSE = "[[/ZAKI_MEMORY_CONTEXT_V2]]";
+// MEMORY_CONTEXT_ENVELOPE_OPEN / _CLOSE now live in ./chat-proxy.js, co-located with
+// composeMemoryEnvelope (the only consumer of the markers).
 const ZAKI_IDENTITY_ENVELOPE_OPEN = "[[ZAKI_IDENTITY_RULES_V1]]";
 const ZAKI_IDENTITY_ENVELOPE_CLOSE = "[[/ZAKI_IDENTITY_RULES_V1]]";
 
@@ -10697,13 +10698,14 @@ const streamChatHandler = async (req, res) => {
         );
         console.log(`[Memory] Context build finished in ${Date.now() - contextStartedAt}ms`);
 
-        if (memoryResult.context) {
-          // Versioned envelope keeps context injection parseable and easy to strip client-side.
-          enrichedMessage = `${MEMORY_CONTEXT_ENVELOPE_OPEN}
-Use ONLY if directly relevant to the user's request. Ignore if not relevant. Do not quote verbatim. Do not hallucinate details beyond this memory.
-${memoryResult.context}
-${MEMORY_CONTEXT_ENVELOPE_CLOSE}
-${originalMessage}`;
+        // Versioned envelope keeps the injected memory parseable and easy to strip
+        // client-side. Two framed sections: always-on identity core + relevant recall.
+        const memoryEnvelope = composeMemoryEnvelope({
+          core: memoryResult.core,
+          context: memoryResult.context,
+        });
+        if (memoryEnvelope) {
+          enrichedMessage = `${memoryEnvelope}\n${originalMessage}`;
           memoryInjected = true;
           memorySources = (memoryResult.sources || []).map((source) => ({
             id: source.id,
