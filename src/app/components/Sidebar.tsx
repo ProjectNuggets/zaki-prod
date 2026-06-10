@@ -4,6 +4,7 @@ import {
 } from "./icons";
 import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain, ShieldCheck, Bot, Library, LayoutGrid, MessageSquare, PenLine, Database, Activity, Upload, User, Clock3, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MEMORY_PANEL_REFRESH_EVENTS } from "@/lib/memoryEvents";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -352,11 +353,12 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
 
   useEffect(() => {
     const bump = () => setMemoryRefreshKey((k) => k + 1);
-    window.addEventListener("zaki:memory-conflicts-count", bump);
-    window.addEventListener("zaki:memory-changed", bump);
+    // Only refetch on a REAL memory mutation (MEMORY_PANEL_REFRESH_EVENTS).
+    // Must NOT include "zaki:memory-conflicts-count": the panel emits that itself
+    // during its own load, which would loop -> refetch forever (flashing drawer).
+    MEMORY_PANEL_REFRESH_EVENTS.forEach((evt) => window.addEventListener(evt, bump));
     return () => {
-      window.removeEventListener("zaki:memory-conflicts-count", bump);
-      window.removeEventListener("zaki:memory-changed", bump);
+      MEMORY_PANEL_REFRESH_EVENTS.forEach((evt) => window.removeEventListener(evt, bump));
     };
   }, []);
 

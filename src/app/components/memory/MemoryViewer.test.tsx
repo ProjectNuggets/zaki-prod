@@ -1,7 +1,9 @@
 import "@testing-library/jest-dom";
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useEffect, useState } from "react";
 import { MemoryViewer } from "./MemoryViewer";
+import { MEMORY_PANEL_REFRESH_EVENTS } from "@/lib/memoryEvents";
 import {
   apiRequest,
   fetchMemoryActivity,
@@ -320,6 +322,47 @@ describe("MemoryViewer", () => {
     await waitFor(() => expect(spy).toHaveBeenCalled());
     const before = spy.mock.calls.length;
     rerender(<MemoryViewer userId="u@x.co" variant="panel" refreshKey={1} />);
+    await waitFor(() => expect(spy.mock.calls.length).toBeGreaterThan(before));
+  });
+});
+
+describe("MemoryViewer panel refresh wiring (anti-flicker regression)", () => {
+  function RefreshHarness() {
+    const [refreshKey, setRefreshKey] = useState(0);
+    useEffect(() => {
+      const bump = () => setRefreshKey((k) => k + 1);
+      MEMORY_PANEL_REFRESH_EVENTS.forEach((evt) => window.addEventListener(evt, bump));
+      return () => {
+        MEMORY_PANEL_REFRESH_EVENTS.forEach((evt) => window.removeEventListener(evt, bump));
+      };
+    }, []);
+    return <MemoryViewer userId="u@x.co" variant="panel" refreshKey={refreshKey} />;
+  }
+
+  // Regression: the panel emits "zaki:memory-conflicts-count" during its own load.
+  // If that event drove a refetch (old bug), it looped -> the drawer flashed forever.
+  it("does NOT refetch when the panel's own conflicts-count event fires (no loop)", async () => {
+    const spy = fetchMemoryActivity as jest.Mock;
+    render(<RefreshHarness />);
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    const before = spy.mock.calls.length;
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("zaki:memory-conflicts-count", { detail: { count: 1 } })
+      );
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(spy.mock.calls.length).toBe(before);
+  });
+
+  it("DOES refetch on a real zaki:memory-changed event", async () => {
+    const spy = fetchMemoryActivity as jest.Mock;
+    render(<RefreshHarness />);
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    const before = spy.mock.calls.length;
+    act(() => {
+      window.dispatchEvent(new Event("zaki:memory-changed"));
+    });
     await waitFor(() => expect(spy.mock.calls.length).toBeGreaterThan(before));
   });
 });
