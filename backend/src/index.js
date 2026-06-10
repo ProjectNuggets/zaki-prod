@@ -11445,7 +11445,10 @@ const agentChatStreamHandler = async (req, res) => {
         clearAgentStreamDiagnostic(userId);
       }
       await recordAgentWalletSettleBestEffort(req, {
-        status: upstream.ok && pipeResult.status === "success" ? "success" : pipeResult.status,
+        // A client CANCEL settles the accrued work (cancel is not free — else it's an abuse
+        // vector); only a real upstream failure releases. No done-frame cost on the non-SSE
+        // path, so a cancelled turn settles the flat estimate.
+        status: upstream.ok && (pipeResult.status === "success" || pipeResult.status === "cancelled") ? "success" : "failed",
         message: originalMessage,
         payload: normalizedPayload,
       });

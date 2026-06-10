@@ -429,6 +429,8 @@ export async function settleAgentChatUnits({
     const settleResult = await settleHold({
       holdId: hold.id,
       settleIdempotencyKey: `${idempotencyKey}:settle`,
+      // Passed uncapped: the ledger's computeSettleRefund clamps settledUnits to reserved_units
+      // (Math.min). costOverflow above flags the calibration signal; do NOT clamp here.
       settledUnits: sawError ? 0 : units,
       finalState: sawError ? "released" : "settled",
       provider: AGENT_PROVIDER,
