@@ -219,10 +219,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memorySearchQuery, setMemorySearchQuery] = useState("");
-  const [memoryInitialTab, setMemoryInitialTab] = useState<
-    "memories" | "pending" | "conflicts"
-  >("memories");
-  const [memoryConflictCount, setMemoryConflictCount] = useState(0);
+  const [memoryInitialTab, setMemoryInitialTab] = useState<"memories">("memories");
   const [memoryRefreshKey, setMemoryRefreshKey] = useState(0);
   const { data: entitlementsResult } = useEntitlements();
   const entitlements = entitlementsResult?.data ?? null;
@@ -311,15 +308,11 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
       if (!user?.username) return;
       const detail = (event as CustomEvent<{
         query?: string;
-        tab?: "memories" | "pending" | "conflicts";
+        tab?: string;
       }>).detail;
       const nextQuery = String(detail?.query || "").trim();
-      const nextTab =
-        detail?.tab === "pending" || detail?.tab === "conflicts" || detail?.tab === "memories"
-          ? detail.tab
-          : "memories";
       setMemorySearchQuery(nextQuery);
-      setMemoryInitialTab(nextTab);
+      setMemoryInitialTab("memories");
       setMemoryOpen(true);
       window.dispatchEvent(new Event("zaki:onboarding-memory-opened"));
     };
@@ -333,53 +326,24 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
       setMemorySearchQuery("");
       setMemoryInitialTab("memories");
     };
-    const handleConflictCount = (event: Event) => {
-      const detail = (event as CustomEvent<{ count?: number }>).detail;
-      if (typeof detail?.count === "number") {
-        setMemoryConflictCount(detail.count);
-      }
-    };
     window.addEventListener("zaki:open-memory", handleOpenMemory);
     window.addEventListener("zaki:close-memory", handleCloseMemory);
     window.addEventListener("zaki:open-settings", handleOpenSettings);
-    window.addEventListener("zaki:memory-conflicts-count", handleConflictCount);
     return () => {
       window.removeEventListener("zaki:open-memory", handleOpenMemory);
       window.removeEventListener("zaki:close-memory", handleCloseMemory);
       window.removeEventListener("zaki:open-settings", handleOpenSettings);
-      window.removeEventListener("zaki:memory-conflicts-count", handleConflictCount);
     };
   }, [openSettingsSection, user?.username]);
 
   useEffect(() => {
     const bump = () => setMemoryRefreshKey((k) => k + 1);
     // Only refetch on a REAL memory mutation (MEMORY_PANEL_REFRESH_EVENTS).
-    // Must NOT include "zaki:memory-conflicts-count": the panel emits that itself
-    // during its own load, which would loop -> refetch forever (flashing drawer).
     MEMORY_PANEL_REFRESH_EVENTS.forEach((evt) => window.addEventListener(evt, bump));
     return () => {
       MEMORY_PANEL_REFRESH_EVENTS.forEach((evt) => window.removeEventListener(evt, bump));
     };
   }, []);
-
-  useEffect(() => {
-    if (!profileMenuOpen || !user?.username) return;
-    let active = true;
-    apiRequest("/api/memory/status")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!active || !data) return;
-        const count = Math.max(0, Number(data.conflicts || 0));
-        setMemoryConflictCount(count);
-      })
-      .catch(() => {
-        if (!active) return;
-        setMemoryConflictCount(0);
-      });
-    return () => {
-      active = false;
-    };
-  }, [profileMenuOpen, user?.username]);
 
   // Focus trap retained for confirmDelete lifecycle (handled via primitives)
   useFocusTrap<HTMLDivElement>(!!confirmDelete);
@@ -2222,14 +2186,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
 	            >
 		              <Brain className="size-4 text-zaki-muted" />
 		              {t("sidebar.profile.memory")}
-		              {memoryConflictCount > 0 && (
-		                <span className={cn(
-                      "inline-flex min-w-[18px] items-center justify-center rounded-full bg-zaki-brand px-1.5 py-0.5 text-[10px] font-semibold text-white",
-                      isRtl ? "mr-auto" : "ml-auto"
-                    )}>
-                      {memoryConflictCount}
-                    </span>
-                  )}
                 </button>
                 <button
                   className={cn(profileMenuItemBase, "text-sm text-zaki-primary hover:bg-zaki-hover")}

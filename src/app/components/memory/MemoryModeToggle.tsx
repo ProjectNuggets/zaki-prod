@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Brain, CheckCircle2, Power, ShieldAlert, ShieldMinus, ShieldPlus, Sparkles } from "lucide-react";
+import { Brain, CheckCircle2, Power, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import {
@@ -20,18 +20,6 @@ const policyMeta: Record<MemoryPolicy, MemoryPolicyMeta> = {
     icon: Sparkles,
     activeClass: "border-zaki-accent bg-zaki-accent-10 text-zaki-accent",
   },
-  ask_before_saving: {
-    icon: ShieldAlert,
-    activeClass: "border-zaki-brand bg-zaki-brand-10 text-zaki-brand",
-  },
-  save_less: {
-    icon: ShieldMinus,
-    activeClass: "border-[#8d6929] bg-[#faf3e1] text-[#8d6929]",
-  },
-  save_more: {
-    icon: ShieldPlus,
-    activeClass: "border-zaki-success bg-zaki-success/10 text-zaki-success",
-  },
   off: {
     icon: Power,
     activeClass: "border-zaki-strong bg-zaki-subtle text-zaki-secondary",
@@ -41,8 +29,9 @@ const policyMeta: Record<MemoryPolicy, MemoryPolicyMeta> = {
 function readLegacyMemoryMode(): MemoryPolicy | null {
   if (typeof window === "undefined") return null;
   const saved = window.localStorage.getItem(LEGACY_MEMORY_MODE_KEY);
-  if (saved === "autosave") return "balanced";
-  if (saved === "manual") return "ask_before_saving";
+  // Both legacy "autosave" and "manual" map to memory being ON ("balanced");
+  // capture is now binary on/off with no granular modes.
+  if (saved === "autosave" || saved === "manual") return "balanced";
   return null;
 }
 
@@ -64,13 +53,7 @@ export function MemoryModeToggle({
 }: MemoryModeToggleProps) {
   const { t } = useTranslation();
 
-  const options: MemoryPolicy[] = [
-    "balanced",
-    "ask_before_saving",
-    "save_less",
-    "save_more",
-    "off",
-  ];
+  const options: MemoryPolicy[] = ["balanced", "off"];
 
   return (
     <div className="rounded-zaki-lg border border-zaki-subtle bg-white p-4">

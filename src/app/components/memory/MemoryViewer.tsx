@@ -27,7 +27,7 @@ import { toast } from "sonner";
 import { apiRequest, patchMemory } from "@/lib/api";
 import { SkeletonMemoryViewer } from "../ui/skeleton";
 import { useMemoryPolicy } from "./MemoryModeToggle";
-import { EmptyState, InlineConfirm, SourceChip, type MemoryRole } from "@/app/components/ui/zaki";
+import { EmptyState, InlineConfirm, type MemoryRole } from "@/app/components/ui/zaki";
 
 type MemoryMetadata = {
   conflictKey?: string;
@@ -57,30 +57,10 @@ interface MemoryRecord {
   metadata?: MemoryMetadata | null;
 }
 
-interface MemoryConflictRecord {
-  id: string;
-  new_content: string;
-  new_type: string;
-  new_confidence_score?: number;
-  conflicting_content?: string | null;
-  conflicting_type?: string | null;
-  status?: string;
-  created_at?: string;
-}
-
-interface PendingMemoryRecord {
-  id: string;
-  content: string;
-  type: string;
-  confidence_score?: number;
-  created_at?: string;
-  source_thread_id?: string | null;
-}
-
 interface MemoryViewerProps {
   userId: string;
   initialSearchQuery?: string | null;
-  initialTab?: "memories" | "pending" | "conflicts";
+  initialTab?: string;
   refreshKey?: number;
 }
 
@@ -202,21 +182,6 @@ function formatDateLabel(value: string, locale?: string) {
   });
 }
 
-function formatTimeLabel(value: string, locale?: string) {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "";
-  return parsed.toLocaleTimeString(locale, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function shortId(id?: string | null) {
-  if (!id) return null;
-  if (id.length <= 10) return id;
-  return `${id.slice(0, 6)}...${id.slice(-4)}`;
-}
-
 function mergeMemoriesById(
   current: MemoryRecord[],
   incoming: MemoryRecord[]
@@ -243,10 +208,8 @@ function getTypeStyle(type: string) {
   };
 }
 
-function panelViewForTab(
-  tab?: "memories" | "pending" | "conflicts"
-): "facts" | "timeline" | "review" {
-  return tab === "pending" || tab === "conflicts" ? "review" : "facts";
+function panelViewForTab(tab?: string): "facts" | "timeline" {
+  return tab === "timeline" ? "timeline" : "facts";
 }
 
 export function MemoryViewer({
@@ -259,20 +222,14 @@ export function MemoryViewer({
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMoreMemories, setHasMoreMemories] = useState(false);
   const [loadingMoreMemories, setLoadingMoreMemories] = useState(false);
-  const [conflicts, setConflicts] = useState<MemoryConflictRecord[]>([]);
-  const [pendingMemories, setPendingMemories] = useState<PendingMemoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pendingLoading, setPendingLoading] = useState(false);
-  const [conflictsLoading, setConflictsLoading] = useState(false);
-  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
-  const [resolvingConflictId, setResolvingConflictId] = useState<string | null>(null);
   const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const [editType, setEditType] = useState("context");
   const [editStatus, setEditStatus] = useState<"active" | "outdated">("active");
   const [savingMemoryId, setSavingMemoryId] = useState<string | null>(null);
   const [pendingDeleteMemoryId, setPendingDeleteMemoryId] = useState<string | null>(null);
-  const [panelView, setPanelView] = useState<"facts" | "timeline" | "review">(
+  const [panelView, setPanelView] = useState<"facts" | "timeline">(
     panelViewForTab(initialTab)
   );
   const [searchQuery, setSearchQuery] = useState(String(initialSearchQuery || "").trim());
@@ -287,34 +244,6 @@ export function MemoryViewer({
     loading: memoryPolicyLoading,
     saving: memoryPolicySaving,
   } = useMemoryPolicy();
-
-  const fetchPendingMemories = async (showErrors = true) => {
-    setPendingLoading(true);
-    try {
-      const response = await apiRequest("/api/memory/confirmations");
-      if (!response.ok) {
-        throw new Error(t("memoryViewer.errors.fetchPending"));
-      }
-      const data = (await response.json()) as {
-        confirmations?: PendingMemoryRecord[];
-        pending?: PendingMemoryRecord[];
-      };
-      const pending = Array.isArray(data.confirmations)
-        ? data.confirmations
-        : Array.isArray(data.pending)
-        ? data.pending
-        : [];
-      setPendingMemories(pending);
-    } catch (err) {
-      if (showErrors) {
-        const message =
-          err instanceof Error ? err.message : t("memoryViewer.errors.loadPending");
-        toast.error(message);
-      }
-    } finally {
-      setPendingLoading(false);
-    }
-  };
 
   const fetchMemories = async ({
     append = false,
@@ -380,42 +309,8 @@ export function MemoryViewer({
     await fetchMemories({ append: true, cursor: nextCursor });
   };
 
-  const fetchConflicts = async (showErrors = true) => {
-    setConflictsLoading(true);
-    try {
-      const response = await apiRequest("/api/memory/conflicts");
-      if (!response.ok) {
-        throw new Error(t("memoryViewer.errors.fetchConflicts"));
-      }
-      const data = (await response.json()) as {
-        conflicts?: MemoryConflictRecord[];
-        count?: number;
-      };
-      const nextConflicts = Array.isArray(data.conflicts) ? data.conflicts : [];
-      setConflicts(nextConflicts);
-      const totalCount =
-        typeof data.count === "number" ? data.count : nextConflicts.length;
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(
-          new CustomEvent("zaki:memory-conflicts-count", {
-            detail: { count: totalCount },
-          })
-        );
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : t("memoryViewer.errors.loadConflicts");
-      if (showErrors) {
-        toast.error(message);
-      }
-    } finally {
-      setConflictsLoading(false);
-    }
-  };
-
   useEffect(() => {
     void fetchMemories();
-    void fetchPendingMemories(false);
-    void fetchConflicts(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, refreshKey]);
 
@@ -432,90 +327,10 @@ export function MemoryViewer({
   }, [initialTab]);
 
   useEffect(() => {
-    // Fetches are driven off the active view:
-    // Facts -> dossier (memories), Timeline -> memories list, Review -> pending + conflicts.
-    if (panelView === "facts" || panelView === "timeline") {
-      void fetchMemories();
-      return;
-    }
-    if (panelView === "review") {
-      void fetchPendingMemories();
-      void fetchConflicts();
-    }
+    // Both Facts (dossier) and Timeline (list) render from the memories list.
+    void fetchMemories();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelView, userId]);
-
-  const confirmPendingMemory = async (confirmationId: string) => {
-    setPendingActionId(confirmationId);
-    try {
-      const response = await apiRequest(`/api/memory/confirmations/${confirmationId}/confirm`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        throw new Error(t("memoryViewer.errors.confirmMemory"));
-      }
-      setPendingMemories((prev) => prev.filter((memory) => memory.id !== confirmationId));
-      await fetchMemories();
-      toast.success(t("memoryViewer.toasts.memoryStored"));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : t("memoryViewer.errors.confirmMemory");
-      toast.error(message);
-    } finally {
-      setPendingActionId(null);
-    }
-  };
-
-  const rejectPendingMemory = async (confirmationId: string) => {
-    setPendingActionId(confirmationId);
-    try {
-      const response = await apiRequest(`/api/memory/confirmations/${confirmationId}/reject`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        throw new Error(t("memoryViewer.errors.rejectMemory"));
-      }
-      setPendingMemories((prev) => prev.filter((memory) => memory.id !== confirmationId));
-      toast.success(t("memoryViewer.toasts.memorySkipped"));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : t("memoryViewer.errors.rejectMemory");
-      toast.error(message);
-    } finally {
-      setPendingActionId(null);
-    }
-  };
-
-  const resolveConflict = async (conflictId: string, action: "keep_existing" | "use_new") => {
-    setResolvingConflictId(conflictId);
-    try {
-      const response = await apiRequest(`/api/memory/conflicts/${conflictId}/resolve`, {
-        method: "POST",
-        body: JSON.stringify({ action }),
-      });
-      if (!response.ok) {
-        throw new Error(t("memoryViewer.errors.resolveConflict"));
-      }
-      const next = conflicts.filter((conflict) => conflict.id !== conflictId);
-      setConflicts(next);
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(
-          new CustomEvent("zaki:memory-conflicts-count", {
-            detail: { count: next.length },
-          })
-        );
-      }
-      await fetchMemories();
-      toast.success(
-        action === "use_new"
-          ? t("memoryViewer.toasts.incomingMemorySaved")
-          : t("memoryViewer.toasts.existingMemoryKept")
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : t("memoryViewer.errors.resolveConflict");
-      toast.error(message);
-    } finally {
-      setResolvingConflictId(null);
-    }
-  };
 
   const deleteMemory = async (memoryId: string) => {
     setPendingDeleteMemoryId(null);
@@ -700,225 +515,6 @@ export function MemoryViewer({
       },
     ];
   }, [memories, t]);
-
-  const pendingListContent = (
-    <div className="space-y-3">
-      {pendingLoading ? (
-        <div className="rounded-zaki-md border border-zaki bg-zaki-raised px-4 py-3 text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
-          {t("memoryViewer.pending.loading")}
-        </div>
-      ) : pendingMemories.length === 0 ? (
-        <EmptyState
-          icon={<Sparkles className="size-5" />}
-          title={t("memoryViewer.pending.emptyTitle")}
-          helper={t("memoryViewer.pending.emptyBody")}
-        />
-      ) : (
-        pendingMemories.map((memory) => {
-          const typeStyle = getTypeStyle(memory.type);
-          const Icon = typeStyle.icon;
-          const confidence =
-            typeof memory.confidence_score === "number"
-              ? Math.round(memory.confidence_score * 100)
-              : null;
-          const isProcessing = pendingActionId === memory.id;
-          return (
-            <article
-              key={memory.id}
-              className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-4 shadow-zaki-md transition-all hover:shadow-zaki-lg hover:-translate-y-0.5 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
-            >
-              <div className={cn("flex items-start gap-3", isRtl && "flex-row-reverse")}>
-                <div className={cn("size-9 rounded-full flex items-center justify-center", typeStyle.iconClass)}>
-                  <Icon className="size-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className={cn("flex flex-wrap items-center gap-2", isRtl && "justify-end")}>
-                    <span
-                      className={cn(
-                        "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]",
-                        typeStyle.chipClass
-                      )}
-                    >
-                      {t(`memory.types.${memory.type}`, { defaultValue: typeStyle.label })}
-                    </span>
-                    <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 text-amber-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
-                      {t("memoryViewer.pending.reviewRequired")}
-                    </span>
-                    {confidence !== null && (
-                      <span className="inline-flex items-center rounded-full bg-zaki-hover px-2 py-0.5 text-[10px] font-medium text-zaki-secondary">
-                        {t("memoryViewer.pending.confidence", { value: confidence })}
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-2 text-sm text-zaki-primary leading-relaxed">
-                    {memory.content}
-                  </p>
-                  <div className={cn("mt-3 text-2xs text-zaki-muted", isRtl && "text-right")}>
-                    {memory.created_at
-                      ? t("memoryViewer.pending.queuedAt", {
-                          date: formatDateLabel(memory.created_at, locale),
-                          time: formatTimeLabel(memory.created_at, locale),
-                        })
-                      : t("memoryViewer.pending.queuedRecent")}
-                  </div>
-                  {memory.source_thread_id ? (
-                    <div className={cn("mt-2 flex flex-wrap items-center gap-3 text-2xs text-zaki-muted", isRtl && "justify-end")}>
-                      <SourceChip
-                        lane={`thread:${shortId(memory.source_thread_id)}`}
-                        at={memory.created_at ?? null}
-                        locale={locale}
-                      />
-                    </div>
-                  ) : null}
-                  <div className={cn("mt-3 flex items-center gap-2", isRtl && "flex-row-reverse")}>
-                    <button
-                      type="button"
-                      className="inline-flex items-center rounded-full bg-zaki-brand text-white px-4 py-1.5 text-xs font-semibold shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-zaki-brand-hover disabled:opacity-60 disabled:translate-y-0"
-                      disabled={isProcessing}
-                      onClick={() => void confirmPendingMemory(memory.id)}
-                    >
-                      {isProcessing
-                        ? t("memoryViewer.pending.saving")
-                        : t("memory.remember")}
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex items-center rounded-full text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover px-4 py-1.5 text-xs font-medium transition-colors disabled:opacity-60"
-                      disabled={isProcessing}
-                      onClick={() => void rejectPendingMemory(memory.id)}
-                    >
-                      {t("memory.skip")}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </article>
-          );
-        })
-      )}
-    </div>
-  );
-
-  const conflictsListContent = (
-    <div className="space-y-3">
-      {conflictsLoading ? (
-        <div className="rounded-zaki-md border border-zaki bg-zaki-raised px-4 py-3 text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
-          {t("memoryViewer.conflicts.loading")}
-        </div>
-      ) : conflicts.length === 0 ? (
-        <EmptyState
-          icon={<Sparkles className="size-5" />}
-          title={t("memoryViewer.conflicts.emptyTitle")}
-          helper={t("memoryViewer.conflicts.emptyBody")}
-        />
-      ) : (
-        conflicts.map((conflict) => {
-          const isResolving = resolvingConflictId === conflict.id;
-          const confidence =
-            typeof conflict.new_confidence_score === "number"
-              ? Math.round(conflict.new_confidence_score * 100)
-              : null;
-
-          return (
-            <div
-              key={conflict.id}
-              className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-4 shadow-zaki-md transition-all hover:shadow-zaki-lg hover:-translate-y-0.5 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
-            >
-              <div className={cn("flex items-start justify-between gap-3", isRtl && "flex-row-reverse")}>
-                <div className={cn("flex items-start gap-2", isRtl && "flex-row-reverse")}>
-                  <span className="mt-0.5 inline-flex size-7 items-center justify-center rounded-full bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
-                    <AlertTriangle className="size-4" />
-                  </span>
-                  <div>
-                    <div className="font-display text-sm font-semibold text-zaki-primary">
-                      {t("memoryViewer.conflicts.cardTitle")}
-                    </div>
-                    <div className="mt-1 text-2xs text-zaki-muted">
-                      {conflict.created_at
-                        ? t("memoryViewer.conflicts.detectedAt", {
-                            date: formatDateLabel(conflict.created_at, locale),
-                            time: formatTimeLabel(conflict.created_at, locale),
-                          })
-                        : t("memoryViewer.conflicts.detectedRecent")}
-                    </div>
-                  </div>
-                </div>
-                <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 text-amber-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
-                  {t("memory.pending")}
-                </span>
-              </div>
-
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <div className="rounded-zaki-md border border-zaki bg-zaki-hover px-3 py-3 dark:border-[rgba(240,236,230,0.08)]">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zaki-muted">
-                    {t("memoryViewer.conflicts.currentMemory")}
-                  </div>
-                  <p className="mt-1.5 text-sm text-zaki-primary leading-relaxed">
-                    {conflict.conflicting_content || t("memoryViewer.conflicts.notAvailable")}
-                  </p>
-                  <div className="mt-2 text-2xs text-zaki-muted uppercase tracking-[0.12em]">
-                    {t("memoryViewer.conflicts.typeLabel")}:{" "}
-                    {conflict.conflicting_type
-                      ? t(`memory.types.${conflict.conflicting_type}`, {
-                          defaultValue: conflict.conflicting_type,
-                        })
-                      : t("memoryViewer.conflicts.unknown")}
-                  </div>
-                </div>
-
-                <div className="rounded-zaki-md border border-amber-200 bg-amber-50/60 px-3 py-3 dark:border-amber-900/40 dark:bg-amber-950/20">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-800 dark:text-amber-300">
-                    {t("memoryViewer.conflicts.incomingMemory")}
-                  </div>
-                  <p className="mt-1.5 text-sm text-zaki-primary leading-relaxed">
-                    {conflict.new_content}
-                  </p>
-                  <div className="mt-2 flex items-center gap-2 text-2xs text-amber-800/80 uppercase tracking-[0.12em] dark:text-amber-300/80">
-                    <span>
-                      {t("memoryViewer.conflicts.typeLabel")}:{" "}
-                      {conflict.new_type
-                        ? t(`memory.types.${conflict.new_type}`, {
-                            defaultValue: conflict.new_type,
-                          })
-                        : t("memoryViewer.conflicts.unknown")}
-                    </span>
-                    {confidence !== null && (
-                      <span>| {t("memoryViewer.conflicts.confidence", { value: confidence })}</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <p className="mt-3 text-2xs text-zaki-secondary">
-                {t("memoryViewer.conflicts.help")}
-              </p>
-
-              <div className={cn("mt-4 flex items-center gap-2", isRtl && "flex-row-reverse")}>
-                <button
-                  type="button"
-                  className="inline-flex items-center rounded-full text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover px-4 py-1.5 text-xs font-medium transition-colors disabled:opacity-60"
-                  disabled={isResolving}
-                  onClick={() => void resolveConflict(conflict.id, "keep_existing")}
-                >
-                  {t("memoryViewer.conflicts.keepExisting")}
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex items-center rounded-full bg-zaki-brand text-white px-4 py-1.5 text-xs font-semibold shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-zaki-brand-hover disabled:opacity-60 disabled:translate-y-0"
-                  disabled={isResolving}
-                  onClick={() => void resolveConflict(conflict.id, "use_new")}
-                >
-                  {isResolving
-                    ? t("memoryViewer.conflicts.applying")
-                    : t("memoryViewer.conflicts.useNew")}
-                </button>
-              </div>
-            </div>
-          );
-        })
-      )}
-    </div>
-  );
 
   const memoriesListContent = (
     <>
@@ -1205,8 +801,6 @@ export function MemoryViewer({
             onClick={() => {
               toast.info(t("memoryViewer.toasts.refreshing"));
               void fetchMemories();
-              void fetchPendingMemories(false);
-              void fetchConflicts();
             }}
             className="inline-flex items-center gap-2 text-sm text-zaki-secondary hover:text-zaki-primary transition-colors"
           >
@@ -1288,8 +882,6 @@ export function MemoryViewer({
     </div>
   );
 
-  const reviewCount = pendingMemories.length + conflicts.length;
-
   if (loading) {
     return <SkeletonMemoryViewer />;
   }
@@ -1310,7 +902,6 @@ export function MemoryViewer({
               type="button"
               onClick={() => {
                 void fetchMemories();
-                void fetchPendingMemories(false);
               }}
               className="mt-4 inline-flex items-center rounded-full bg-zaki-brand text-white px-4 py-1.5 text-xs font-semibold shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-zaki-brand-hover"
             >
@@ -1432,60 +1023,10 @@ export function MemoryViewer({
                 {t("memoryViewer.panel.tabs.timeline", { defaultValue: "Timeline" })}
               </button>
             </div>
-
-            {reviewCount > 0 && (
-              <button
-                type="button"
-                aria-pressed={panelView === "review"}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand",
-                  panelView === "review"
-                    ? "border-zaki-brand bg-zaki-brand text-white"
-                    : "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300"
-                )}
-                onClick={() => setPanelView("review")}
-              >
-                <AlertTriangle className="size-3.5" />
-                {t("memoryViewer.panel.review", {
-                  defaultValue: "Review {{count}}",
-                  count: reviewCount,
-                })}
-              </button>
-            )}
           </div>
 
           <div key={panelView}>
-            {panelView === "facts" ? (
-              dossierGroupsGrid()
-            ) : panelView === "timeline" ? (
-              memoriesListContent
-            ) : (
-              <div className="space-y-5">
-                <button
-                  type="button"
-                  className={cn(
-                    "inline-flex items-center gap-1.5 text-sm text-zaki-secondary hover:text-zaki-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand rounded-full px-1",
-                    isRtl && "flex-row-reverse"
-                  )}
-                  onClick={() => setPanelView("facts")}
-                >
-                  <RefreshCw className="size-3.5" />
-                  {t("memoryViewer.panel.backToFacts", { defaultValue: "Back to Facts" })}
-                </button>
-                <div className="space-y-3">
-                  <h4 className="font-display text-sm font-semibold text-zaki-primary">
-                    {t("memoryViewer.tabs.pending", { count: pendingMemories.length })}
-                  </h4>
-                  {pendingListContent}
-                </div>
-                <div className="space-y-3">
-                  <h4 className="font-display text-sm font-semibold text-zaki-primary">
-                    {t("memoryViewer.tabs.conflicts", { count: conflicts.length })}
-                  </h4>
-                  {conflictsListContent}
-                </div>
-              </div>
-            )}
+            {panelView === "facts" ? dossierGroupsGrid() : memoriesListContent}
           </div>
     </div>
   );

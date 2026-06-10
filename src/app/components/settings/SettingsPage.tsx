@@ -279,13 +279,7 @@ function normalizeProviderModels(value: string) {
 
 // Memory capture policy is bound to the real BFF route GET|PATCH
 // /api/memory/preferences (api.ts: fetchMemoryPreferences / updateMemoryPreferences).
-const MEMORY_CAPTURE_POLICIES: MemoryPolicy[] = [
-  "balanced",
-  "ask_before_saving",
-  "save_less",
-  "save_more",
-  "off",
-];
+const MEMORY_CAPTURE_POLICIES: MemoryPolicy[] = ["balanced", "off"];
 
 const DEFAULT_MEMORY_CAPTURE_POLICY: MemoryPolicy = "balanced";
 

@@ -1,17 +1,15 @@
 import { Brain, Undo2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-type MemoryToastTone = "saved" | "review" | "conflict";
+type MemoryToastTone = "saved";
 
 interface MemoryCaptureToastProps {
   position: { left: number; width: number; bottom: number };
-  tone: MemoryToastTone;
+  tone?: MemoryToastTone;
   savedCount: number;
-  reviewCount: number;
-  conflictCount: number;
+  supersededCount?: number;
   onUndo?: () => void;
   onOpenMemory?: () => void;
-  onReview?: () => void;
   onDismiss: () => void;
   processing?: boolean;
   undoError?: string | null;
@@ -20,13 +18,10 @@ interface MemoryCaptureToastProps {
 
 export function MemoryCaptureToast({
   position,
-  tone,
   savedCount,
-  reviewCount,
-  conflictCount,
+  supersededCount = 0,
   onUndo,
   onOpenMemory,
-  onReview,
   onDismiss,
   processing = false,
   undoError = null,
@@ -35,24 +30,18 @@ export function MemoryCaptureToast({
   const { t } = useTranslation();
 
   const title =
-    tone === "saved"
-      ? savedCount > 1
-        ? t("memory.savedMultiple", { count: savedCount })
-        : t("memory.savedSingle")
-      : tone === "conflict"
-        ? t("memory.conflictNotice", { count: conflictCount })
-        : t("memory.reviewNotice", { count: reviewCount });
+    savedCount > 1
+      ? t("memory.savedMultiple", { count: savedCount })
+      : supersededCount > 0 && savedCount === 0
+        ? t("memory.updatedSingle", { defaultValue: "Memory updated" })
+        : t("memory.savedSingle");
 
   const helper =
     undoError && partialUndoCount > 0
       ? t("memory.undoPartialError", { count: partialUndoCount })
       : undoError
         ? undoError
-        : tone === "conflict"
-          ? t("memory.reviewConflictsHelper", { count: conflictCount })
-          : tone === "review"
-            ? t("memory.reviewPendingHelper", { count: reviewCount })
-            : t("memory.savedHelper");
+        : t("memory.savedHelper");
 
   return (
     <div
@@ -80,7 +69,7 @@ export function MemoryCaptureToast({
           </p>
         </div>
         <div className="mt-2 flex items-center gap-3 text-[11px]">
-          {tone === "saved" && savedCount > 0 && onUndo ? (
+          {savedCount > 0 && onUndo ? (
             <button
               type="button"
               className="inline-flex items-center gap-1 font-medium text-zaki-brand hover:underline disabled:opacity-50"
@@ -91,7 +80,7 @@ export function MemoryCaptureToast({
               {undoError ? t("memory.undoRetry") : t("memory.undo")}
             </button>
           ) : null}
-          {tone === "saved" && onOpenMemory ? (
+          {onOpenMemory ? (
             <button
               type="button"
               className="font-medium text-zaki-brand hover:underline disabled:pointer-events-none disabled:opacity-50"
@@ -101,26 +90,14 @@ export function MemoryCaptureToast({
               {t("memory.open")}
             </button>
           ) : null}
-          {(tone === "review" || tone === "conflict") && onReview ? (
-            <button
-              type="button"
-              className="font-medium text-zaki-brand hover:underline disabled:pointer-events-none disabled:opacity-50"
-              onClick={onReview}
-              disabled={processing}
-            >
-              {t("memory.review")}
-            </button>
-          ) : null}
-          {tone === "review" || tone === "conflict" ? (
-            <button
-              type="button"
-              className="font-medium text-zaki-muted hover:text-zaki-primary hover:underline disabled:pointer-events-none disabled:opacity-40"
-              onClick={onDismiss}
-              disabled={processing}
-            >
-              {tone === "conflict" ? t("memory.later") : t("memory.dismiss")}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="font-medium text-zaki-muted hover:text-zaki-primary hover:underline disabled:pointer-events-none disabled:opacity-40"
+            onClick={onDismiss}
+            disabled={processing}
+          >
+            {t("memory.dismiss")}
+          </button>
         </div>
       </div>
     </div>

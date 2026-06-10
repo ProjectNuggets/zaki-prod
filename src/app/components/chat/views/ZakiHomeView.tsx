@@ -14,7 +14,6 @@ import {
 import { CenterLogo, LogoArabicRed } from "../../icons";
 import { useAuthStore } from "@/stores";
 import type { Space } from "@/types";
-import { apiRequest } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { MetaLabel } from "@/app/components/ui/zaki";
 
@@ -325,7 +324,6 @@ export function ZakiHomeView({
   const [zakiMenuOpen, setZakiMenuOpen] = useState(false);
   const [activeSlide, setActiveSlide] = useState(0);
   const [memoryPanelOpen, setMemoryPanelOpen] = useState(false);
-  const [conflictCount, setConflictCount] = useState(0);
   const [missionPaused, setMissionPaused] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
@@ -444,31 +442,6 @@ export function ZakiHomeView({
   }, [zakiMenuOpen]);
 
   useEffect(() => {
-    if (!user?.username) return;
-    apiRequest("/api/memory/status")
-      .then((res) => res.ok ? res.json() : null)
-      .then((data) => {
-        if (data?.conflicts !== undefined) {
-          setConflictCount(Math.max(0, Number(data.conflicts || 0)));
-        }
-      })
-      .catch(() => null);
-  }, [user?.username]);
-
-  useEffect(() => {
-    const handleConflictCount = (event: Event) => {
-      const detail = (event as CustomEvent<{ count?: number }>).detail;
-      if (typeof detail?.count === "number") {
-        setConflictCount(detail.count);
-      }
-    };
-    window.addEventListener("zaki:memory-conflicts-count", handleConflictCount);
-    return () => {
-      window.removeEventListener("zaki:memory-conflicts-count", handleConflictCount);
-    };
-  }, []);
-
-  useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
     const handler = () => setReducedMotion(media.matches);
@@ -501,11 +474,6 @@ export function ZakiHomeView({
             {t("home.heroSubtext")}
           </div>
           <div className="mt-5 flex flex-wrap items-center gap-2 relative">
-            {conflictCount > 0 ? (
-              <div className="inline-flex items-center rounded-full border border-zaki-subtle bg-white/80 px-3 py-1 text-xs text-zaki-secondary">
-                {t("home.conflictsBadge", { count: conflictCount })}
-              </div>
-            ) : null}
             <div className="relative">
               <button
                 type="button"

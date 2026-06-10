@@ -1,6 +1,6 @@
 import { useUIStore } from "@/stores";
 
-export type MemoryViewerTab = "memories" | "pending" | "conflicts";
+export type MemoryViewerTab = "memories";
 
 type OpenSpacesMemoryViewerOptions = {
   enabled: boolean;

@@ -9,39 +9,27 @@ export type MemoryCaptureResponse = {
     type: string;
     state: "saved_reversible";
     undoUntil: string;
-  }>;
-  review: Array<{
-    id: string;
-    content: string;
-    type: string;
-    state: "needs_review";
-    reason: string;
+    superseded?: boolean;
   }>;
   duplicates: Array<{
     content: string;
     type: string;
   }>;
-  conflicts: Array<{
-    id: string;
+  superseded: Array<{
+    memoryId: string;
     content: string;
     type: string;
-    conflictingContent?: string;
   }>;
   skipped: Array<{
     content: string;
     type: string;
     reason: string;
-    stage?: "extraction" | "quality_filter" | "policy" | "duplicate_guard";
+    stage?: "extraction" | "quality_filter" | "policy" | "store" | "duplicate_guard";
     detail?: string;
   }>;
 };
 
-export type MemoryPolicy =
-  | "balanced"
-  | "ask_before_saving"
-  | "save_less"
-  | "save_more"
-  | "off";
+export type MemoryPolicy = "balanced" | "off";
 
 export type MemoryPreferencesResponse = {
   policy: MemoryPolicy;
@@ -57,7 +45,7 @@ export type MemoryPatch = {
 
 export type MemoryActivity = {
   id: string;
-  kind: "saved" | "review" | "conflict" | "edited" | "outdated";
+  kind: "saved" | "superseded" | "edited" | "outdated";
   content: string;
   type: string;
   threadId?: string | null;
