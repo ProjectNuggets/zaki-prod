@@ -200,6 +200,10 @@ export function createAgentStreamMeterMetrics() {
     events: 0,
     sawError: false,
     toolCalls: 0,
+    usageTokens: null,
+    inputTokens: null,
+    outputTokens: null,
+    costUsd: null,
   };
 }
 
@@ -249,6 +253,10 @@ export function readAgentSseMeterBlock(block = "") {
   }
 }
 
+function finiteMeterNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 export function updateAgentStreamMeterMetrics(metrics, block = "") {
   const target = metrics || createAgentStreamMeterMetrics();
   const parsed = readAgentSseMeterBlock(block);
@@ -258,5 +266,37 @@ export function updateAgentStreamMeterMetrics(metrics, block = "") {
   }
   if (parsed.sawError) target.sawError = true;
   if (parsed.toolCall) target.toolCalls += 1;
+
+  const isDoneFrame =
+    lowerText(parsed.eventType) === "done" ||
+    lowerText(parsed.payload?.type || parsed.payload?.event) === "done";
+  if (isDoneFrame && isPlainObject(parsed.payload)) {
+    const usageTokens = finiteMeterNumber(parsed.payload.usage_tokens);
+    const inputTokens = finiteMeterNumber(parsed.payload.input_tokens);
+    const outputTokens = finiteMeterNumber(parsed.payload.output_tokens);
+    const costUsd = finiteMeterNumber(parsed.payload.cost_usd);
+    if (usageTokens !== null) target.usageTokens = usageTokens;
+    if (inputTokens !== null) target.inputTokens = inputTokens;
+    if (outputTokens !== null) target.outputTokens = outputTokens;
+    if (costUsd !== null) target.costUsd = costUsd;
+  }
   return target;
+}
+
+export const DEFAULT_UNIT_COST_USD = 0.00075;
+
+export function computeAgentSettleUnits({
+  costUsd = null,
+  message = "",
+  action = "agent_turn",
+  payload = {},
+  env = process.env,
+} = {}) {
+  const unitCost =
+    Number(env?.ZAKI_UNIT_COST_USD) > 0 ? Number(env.ZAKI_UNIT_COST_USD) : DEFAULT_UNIT_COST_USD;
+  const cost = costUsd === null || costUsd === undefined ? NaN : Number(costUsd);
+  if (Number.isFinite(cost) && cost >= 0) {
+    return { units: Math.round((cost / unitCost) * 10_000) / 10_000, costSource: "real" };
+  }
+  return { units: estimateAgentMeterUnits(message, action, payload), costSource: "estimate" };
 }
