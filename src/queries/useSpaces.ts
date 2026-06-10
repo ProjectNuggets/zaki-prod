@@ -1,7 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/api";
 import type { PinnedFile, Space, Thread } from "@/types";
-import { DEFAULT_THREAD_LABEL, isDefaultThreadLabel } from "@/lib/threadTitles";
+import {
+  DEFAULT_THREAD_LABEL,
+  isDefaultThreadLabel,
+  stripThreadDisplayName,
+} from "@/lib/threadTitles";
 import {
   createZakiBotSpace,
   createZakiBotThread,
@@ -43,8 +47,12 @@ function normalizeWorkspaceIcon(icon?: string) {
 }
 
 function normalizeThreadLabel(label?: string) {
-  const trimmed = String(label || "").trim();
-  return isDefaultThreadLabel(trimmed) ? DEFAULT_THREAD_LABEL : trimmed;
+  // Strip the [[ZAKI_MEMORY_CONTEXT_V2]] guardrail/memory envelope that the
+  // engine can leak into an auto-generated thread title (robust to a
+  // truncated, leading-only marker too) BEFORE the default-label check, so a
+  // title that was nothing but envelope text falls back to "New chat".
+  const cleaned = stripThreadDisplayName(label);
+  return isDefaultThreadLabel(cleaned) ? DEFAULT_THREAD_LABEL : cleaned;
 }
 
 // Fetchers

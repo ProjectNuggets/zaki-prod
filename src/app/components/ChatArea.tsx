@@ -54,7 +54,11 @@ import {
   isContextUnavailableCode,
   resolveContextGaugePercent,
 } from "@/lib/agentContext";
-import { DEFAULT_THREAD_LABEL, isDefaultThreadLabel } from "@/lib/threadTitles";
+import {
+  DEFAULT_THREAD_LABEL,
+  isDefaultThreadLabel,
+  stripThreadDisplayName,
+} from "@/lib/threadTitles";
 import { createAnonymousThreadId } from "@/lib/anonymousSpaces";
 import { openSpacesMemoryViewer, type MemoryViewerTab } from "@/lib/spacesMemory";
 import { trackProductEvent } from "@/lib/productTelemetry";
@@ -4248,7 +4252,14 @@ export function ChatArea() {
             return;
           }
           autoTitleFinalizedRef.current[autoTitleKey] = true;
-          applyThreadLabelUpdate(spaceId, threadId, data.thread.name);
+          // The engine can title a thread from the enriched (envelope-wrapped)
+          // first message, so sanitize before applying — never leak the marker.
+          const cleanedName = stripThreadDisplayName(data.thread.name);
+          applyThreadLabelUpdate(
+            spaceId,
+            threadId,
+            isDefaultThreadLabel(cleanedName) ? DEFAULT_THREAD_LABEL : cleanedName
+          );
           await queryClient.invalidateQueries({ queryKey: spaceKeys.all });
           return;
         }
@@ -7259,7 +7270,7 @@ export function ChatArea() {
           thread?: { slug?: string; id?: string; name?: string; label?: string };
         };
         threadId = data.thread?.slug ?? data.thread?.id ?? `thread-${Date.now()}`;
-        const threadName = data.thread?.name ?? data.thread?.label;
+        const threadName = stripThreadDisplayName(data.thread?.name ?? data.thread?.label);
         const label = isDefaultThreadLabel(threadName)
           ? DEFAULT_THREAD_LABEL
           : threadName || DEFAULT_THREAD_LABEL;
