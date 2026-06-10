@@ -85,7 +85,7 @@ Conflict key:
 - ALWAYS output conflict_key as a canonical English slug (lowercase, no spaces).
 - For preferences: "preference:coffee", "preference:spicy-food", "preference:black"
 - For constraints: "constraint:peanuts"
-- For identity: "identity:name", "identity:location", "identity:occupation"
+- For identity: "identity:name", "identity:location", "identity:occupation", "identity:language"
 - ONLY use conflict_key "identity:name" when the user explicitly states their name (e.g., "my name is", "call me", "I go by").
 - Do NOT treat states/conditions/emotions (e.g., "I'm sick", "I'm tired", "I'm happy") as names.
 Polarity:

@@ -924,4 +924,79 @@ describe("memory context retrieval behavior", () => {
 
     expect(result).toEqual({ context: "", sources: [], core: "" });
   });
+
+  it("extractConflictKey distinguishes spoken languages for identity:language dedup (English)", async () => {
+    const { findDuplicateMemory } = await loadOperations();
+
+    // Both rows carry the identity:language conflict key (domain "identity").
+    // The actual spoken-language VALUE ("arabic" vs "spanish") is derived from
+    // content by extractConflictKey via the new "i speak ..." pattern. Without
+    // that pattern both values collapse to the key suffix and the two distinct
+    // languages would be wrongly treated as duplicates.
+    dbGetMock.mockResolvedValue(null); // no exact content-hash match
+    dbAllMock.mockResolvedValue([
+      {
+        id: "mem-lang-en",
+        content: "I speak Arabic",
+        type: "fact",
+        metadata: { conflictKey: "identity:language" },
+      },
+    ]);
+
+    const duplicate = await findDuplicateMemory({
+      userId: "user@example.com",
+      content: "I speak Spanish",
+      conflictKey: "identity:language",
+    });
+
+    // Different spoken languages must NOT be deduped.
+    expect(duplicate).toBeNull();
+  });
+
+  it("extractConflictKey treats the same spoken language as an identity:language duplicate (English)", async () => {
+    const { findDuplicateMemory } = await loadOperations();
+
+    dbGetMock.mockResolvedValue(null);
+    dbAllMock.mockResolvedValue([
+      {
+        id: "mem-lang-en",
+        content: "I speak Arabic",
+        type: "fact",
+        metadata: { conflictKey: "identity:language" },
+      },
+    ]);
+
+    const duplicate = await findDuplicateMemory({
+      userId: "user@example.com",
+      content: "i speak arabic",
+      conflictKey: "identity:language",
+    });
+
+    // Same spoken language (case-insensitive) is a duplicate.
+    expect(duplicate).toEqual(
+      expect.objectContaining({ id: "mem-lang-en" })
+    );
+  });
+
+  it("extractConflictKey distinguishes spoken languages for identity:language dedup (Arabic)", async () => {
+    const { findDuplicateMemory } = await loadOperations();
+
+    dbGetMock.mockResolvedValue(null);
+    dbAllMock.mockResolvedValue([
+      {
+        id: "mem-lang-ar",
+        content: "أتحدث العربية",
+        type: "fact",
+        metadata: { conflictKey: "identity:language" },
+      },
+    ]);
+
+    const duplicate = await findDuplicateMemory({
+      userId: "user@example.com",
+      content: "أتحدث الإنجليزية",
+      conflictKey: "identity:language",
+    });
+
+    expect(duplicate).toBeNull();
+  });
 });
