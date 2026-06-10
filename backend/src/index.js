@@ -10749,6 +10749,7 @@ const streamChatHandler = async (req, res) => {
         guardrail: true,
         core: "",
         context: memoryContext,
+        nowISO: new Date().toISOString().slice(0, 10),
       })}\n\n${enrichedMessage}`;
     } else if (memoryContext) {
       // Query mode: preserve the existing memory-envelope behavior unchanged (no guardrail).

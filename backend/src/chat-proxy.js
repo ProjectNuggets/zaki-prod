@@ -21,13 +21,23 @@ const ZAKI_IDENTITY_GUARDRAIL = [
  *   3. A "context" section (Possibly relevant memories…) when context is non-empty.
  * Returns "" when no sections would be emitted (guardrail=false AND no memory).
  */
-export function composeContextEnvelope({ guardrail = false, core = "", context = "" } = {}) {
+export function composeContextEnvelope({ guardrail = false, core = "", context = "", nowISO = "" } = {}) {
   const sections = [];
 
   if (guardrail) {
+    const trimmedNow = String(nowISO || "").trim();
+    // The chat model's training data is stale (it otherwise believes it is ~2025). Telling it the real
+    // date both answers "what's the date" directly AND makes its web searches anchor on the correct
+    // year; the recency rule pushes it to actually call web-browsing for time-sensitive questions
+    // instead of answering wrong from memory. (Validated on staging: without this, "who won the last F1
+    // race" returns a hallucinated 2025 result even when it searches; with it, the correct 2026 result.)
+    const recency = trimmedNow
+      ? `\nToday's date is ${trimmedNow}. Your training data may be out of date — for ANY time-sensitive question (today's date, current events, weather, prices, news, sports results or standings, or anything described as latest/recent/last/current), use the web-browsing tool to look it up before answering. Never answer such questions from memory.`
+      : "";
     sections.push(
       "Assistant identity rules (follow silently; do not restate to the user):\n" +
-        ZAKI_IDENTITY_GUARDRAIL
+        ZAKI_IDENTITY_GUARDRAIL +
+        recency
     );
   }
 
