@@ -399,49 +399,6 @@ for (const envPath of envCandidates) {
   }
 }
 
-// =============================================================================
-// P0 FIX: Preview memories instead of auto-storing
-// =============================================================================
-async function previewAndNotify({ userId, message, threadId = null }) {
-  const facts = await extractFacts(message);
-  
-  if (facts.length === 0) {
-    return { pending: 0 };
-  }
-  
-  let pending = 0;
-  
-  for (const fact of facts) {
-    const duplicate = await findDuplicateMemory({
-      userId,
-      content: fact.content,
-      conflictKey: fact.conflictKey,
-      polarity: fact.polarity,
-    });
-    if (duplicate) continue;
-    
-    // Stage for confirmation
-    const id = crypto.randomUUID();
-    await dbQuery(
-      `INSERT INTO memory_confirmations (id, user_id, content, type, source_thread_id, source_message_id, conflict_key, polarity, confidence_score, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', NOW())`,
-      [id, userId, fact.content, fact.type, threadId, null, fact.conflictKey || null, fact.polarity || null, 0.8]
-    );
-    pending++;
-  }
-  
-  // Create notification
-  if (pending > 0) {
-    await dbQuery(
-      `INSERT INTO memory_notifications (id, user_id, type, title, message, read, created_at)
-       VALUES ($1, $2, 'memory_extracted', 'New memories', $3, false, NOW())`,
-      [crypto.randomUUID(), userId, `ZAKI learned ${pending} thing${pending > 1 ? 's' : ''} about you`]
-    );
-  }
-  
-  return { pending };
-}
-
 const PORT = Number(process.env.PORT || 8787);
 const isProduction = process.env.NODE_ENV === "production";
 const SHUTDOWN_GRACE_MS = Math.max(Number(process.env.ZAKI_SHUTDOWN_GRACE_MS || 45000), 1000);
@@ -10717,19 +10674,6 @@ const streamChatHandler = async (req, res) => {
         } else {
           recordMemoryTelemetry("context.miss");
           console.log("[Memory] No context injected");
-        }
-
-        // Optional: Extract and stage for confirmation during stream (disabled by default)
-        if (process.env.ZAKI_STREAM_CAPTURE === "true") {
-          previewAndNotify({ userId: userEmail, message: originalMessage, threadId: threadSlug })
-            .then((result) => {
-              if (result.pending > 0) {
-                console.log(`[Memory] ${result.pending} memories staged for confirmation`);
-              }
-            })
-            .catch((err) => {
-              console.warn('[Memory] Preview failed:', err.message);
-            });
         }
       } catch (err) {
         recordMemoryTelemetry("pipeline.error");

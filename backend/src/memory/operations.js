@@ -797,12 +797,7 @@ function createActivityTimestamp(value) {
   return parsed.toISOString();
 }
 
-function normalizeMemoryActivityRows({
-  memories = [],
-  confirmations = [],
-  conflicts = [],
-  limit = 8,
-}) {
+function normalizeMemoryActivityRows({ memories = [], limit = 8 }) {
   const activity = [];
 
   for (const memory of memories) {
@@ -832,30 +827,6 @@ function normalizeMemoryActivityRows({
     });
   }
 
-  for (const confirmation of confirmations) {
-    activity.push({
-      id: confirmation.id,
-      kind: "review",
-      content: String(confirmation?.content || "").trim(),
-      type: String(confirmation?.type || "").trim() || "context",
-      threadId: confirmation?.threadId || confirmation?.source_thread_id || null,
-      source: confirmation?.source || null,
-      occurredAt: createActivityTimestamp(confirmation?.created_at),
-    });
-  }
-
-  for (const conflict of conflicts) {
-    activity.push({
-      id: conflict.id,
-      kind: "conflict",
-      content: String(conflict?.new_content || "").trim(),
-      type: String(conflict?.new_type || "").trim() || "context",
-      threadId: conflict?.threadId || conflict?.source_thread_id || null,
-      source: conflict?.source || null,
-      occurredAt: createActivityTimestamp(conflict?.created_at),
-    });
-  }
-
   return activity
     .filter((item) => item.content && item.occurredAt)
     .sort((a, b) => {
@@ -872,39 +843,16 @@ export async function getMemoryActivity(userId, limit = 8) {
   const boundedLimit = Math.max(1, Math.min(50, Number(limit) || 8));
   const fetchLimit = Math.max(boundedLimit * 4, 16);
 
-  const [memories, confirmations, conflicts] = await Promise.all([
-    dbAll(
-      `SELECT id, content, type, status, metadata, created_at, updated_at, source_thread_id as "threadId"
-       FROM memories
-       WHERE user_id = $1
-       ORDER BY GREATEST(created_at, updated_at) DESC, id DESC
-       LIMIT $2`,
-      [normalizedUserId, fetchLimit]
-    ),
-    dbAll(
-      `SELECT id, content, type, source_thread_id as "threadId", created_at
-       FROM memory_confirmations
-       WHERE user_id = $1 AND status = 'pending'
-       ORDER BY created_at DESC, id DESC
-       LIMIT $2`,
-      [normalizedUserId, fetchLimit]
-    ),
-    dbAll(
-      `SELECT id, new_content, new_type, source_thread_id as "threadId", created_at
-       FROM memory_conflicts
-       WHERE user_id = $1 AND status = 'pending'
-       ORDER BY created_at DESC, id DESC
-       LIMIT $2`,
-      [normalizedUserId, fetchLimit]
-    ),
-  ]);
+  const memories = await dbAll(
+    `SELECT id, content, type, status, metadata, created_at, updated_at, source_thread_id as "threadId"
+     FROM memories
+     WHERE user_id = $1
+     ORDER BY GREATEST(created_at, updated_at) DESC, id DESC
+     LIMIT $2`,
+    [normalizedUserId, fetchLimit]
+  );
 
-  return normalizeMemoryActivityRows({
-    memories,
-    confirmations,
-    conflicts,
-    limit: boundedLimit,
-  });
+  return normalizeMemoryActivityRows({ memories, limit: boundedLimit });
 }
 
 const sessionDeltaInjectionCache = new Map();
@@ -1499,6 +1447,7 @@ export async function getMemories(userId, { limit = 100, cursor = null } = {}) {
         `SELECT id, content, type, status, content_hash, metadata, created_at, updated_at, importance_score as importance, source_thread_id as "threadId"
          FROM memories
          WHERE user_id = $1
+           AND COALESCE(status, 'active') = 'active'
            AND (
              created_at < $2::timestamptz
              OR (created_at = $2::timestamptz AND id < $3)
@@ -1511,6 +1460,7 @@ export async function getMemories(userId, { limit = 100, cursor = null } = {}) {
         `SELECT id, content, type, status, content_hash, metadata, created_at, updated_at, importance_score as importance, source_thread_id as "threadId"
          FROM memories
          WHERE user_id = $1
+           AND COALESCE(status, 'active') = 'active'
          ORDER BY created_at DESC, id DESC
          LIMIT $2`,
         [normalizedUserId, fetchLimit]
