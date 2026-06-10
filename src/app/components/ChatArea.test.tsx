@@ -2340,4 +2340,209 @@ describe("ChatArea Component", () => {
       status: "done",
     });
   });
+
+  // --- Normal Spaces always-agent narration + generated-file chip (BUG 1/2) ---
+  // Builds a streaming Response whose body yields the exact SSE bytes the BFF
+  // relays for a normal `mode:"chat"` turn: agentThought status lines + text
+  // chunks + a fileDownload event + the finalize frame.
+  function makeSseStreamResponse(blocks: string[]) {
+    const encoder = new TextEncoder();
+    // jsdom does not provide ReadableStream; use Node's web-streams impl so the
+    // `response.body.getReader()` consumer in ChatArea behaves like a browser.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ReadableStream: NodeReadableStream } = require("stream/web");
+    const stream = new NodeReadableStream({
+      start(controller: { enqueue: (c: Uint8Array) => void; close: () => void }) {
+        for (const block of blocks) {
+          controller.enqueue(encoder.encode(block));
+        }
+        controller.close();
+      },
+    });
+    return {
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": "text/event-stream" }),
+      body: stream,
+    } as unknown as Response;
+  }
+
+  // A stream that stays OPEN so the assistant message is rendered through the
+  // `isStreaming === true` branch of ChatView. Returns the Response plus a
+  // controller to push more SSE blocks and to close the stream.
+  function makeOpenSseStreamResponse() {
+    const encoder = new TextEncoder();
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ReadableStream: NodeReadableStream } = require("stream/web");
+    let ctrl: { enqueue: (c: Uint8Array) => void; close: () => void } | null = null;
+    const stream = new NodeReadableStream({
+      start(controller: { enqueue: (c: Uint8Array) => void; close: () => void }) {
+        ctrl = controller;
+      },
+    });
+    return {
+      response: {
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "text/event-stream" }),
+        body: stream,
+      } as unknown as Response,
+      push: (block: string) => ctrl?.enqueue(encoder.encode(block)),
+      close: () => ctrl?.close(),
+    };
+  }
+
+  it("shows the narration disclosure + file chip WHILE the turn is still streaming", async () => {
+    navState.view = "chat";
+    navState.spaceId = "space-1";
+    navState.threadId = "thread-1";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+
+    const open = makeOpenSseStreamResponse();
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/stream-chat")) {
+        return open.response;
+      }
+      return { ok: true, status: 200, json: async () => ({}), headers: new Headers() };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "weather?" } });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    // Mid-stream: emit a tool-fire thought + a generated file, but DO NOT close.
+    await act(async () => {
+      open.push(
+        'data: {"type":"agentThought","thought":"@agent is executing `web-browsing` tool {}"}\n\n'
+      );
+      open.push(
+        'data: {"type":"fileDownload","fileDownload":{"filename":"live.csv","storageFilename":"text-2.csv","fileSize":5}}\n\n'
+      );
+      await Promise.resolve();
+    });
+
+    // The disclosure is open ("Working…") and the step + chip are visible while
+    // isStreaming is still true.
+    await waitFor(() => expect(screen.getByText(/Searching the web/i)).toBeInTheDocument());
+    expect(screen.getByText("live.csv")).toBeInTheDocument();
+
+    // Finish the turn — the collected steps + chip persist.
+    await act(async () => {
+      open.push('data: {"type":"textResponseChunk","textResponse":"sunny"}\n\n');
+      open.push('data: {"type":"finalizeResponseStream"}\n\n');
+      open.close();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(screen.getByText("sunny")).toBeInTheDocument());
+    expect(screen.getByText("live.csv")).toBeInTheDocument();
+  });
+
+  it("renders agent narration steps + a generated-file chip for a normal Spaces turn", async () => {
+    navState.view = "chat";
+    navState.spaceId = "space-1";
+    navState.threadId = "thread-1";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+
+    const sseBlocks = [
+      ': zaki-stream-open\n\n',
+      'data: {"type":"agentThought","thought":"@agent is executing `web-browsing` tool {\\"q\\":\\"weather\\"}"}\n\n',
+      'data: {"type":"textResponseChunk","textResponse":"The weather "}\n\n',
+      'data: {"type":"agentThought","thought":"@agent: Successfully created text file \\"report.txt\\""}\n\n',
+      'data: {"type":"textResponseChunk","textResponse":"is sunny."}\n\n',
+      'data: {"type":"fileDownload","fileDownload":{"filename":"report.txt","storageFilename":"text-1.txt","fileSize":2048}}\n\n',
+      'data: {"type":"finalizeResponseStream"}\n\n',
+    ];
+
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/stream-chat")) {
+        return makeSseStreamResponse(sseBlocks);
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+        headers: new Headers(),
+      };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "what is the weather" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    // The answer text streams in.
+    await waitFor(() => {
+      expect(screen.getByText(/is sunny\./)).toBeInTheDocument();
+    });
+
+    // BUG 1: the narration disclosure surfaces the auto-decided tool steps.
+    await waitFor(() => {
+      expect(screen.getByText(/Searching the web/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Creating a file/i)).toBeInTheDocument();
+
+    // BUG 2: the generated file is surfaced as a download chip and persists.
+    expect(screen.getByText("report.txt")).toBeInTheDocument();
+  });
+
+  it("handles agentThought events framed with an SSE event: line", async () => {
+    navState.view = "chat";
+    navState.spaceId = "space-1";
+    navState.threadId = "thread-1";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+
+    const sseBlocks = [
+      'event: agentThought\ndata: {"type":"agentThought","thought":"Using DuckDuckGo to search for \\"x\\""}\n\n',
+      'data: {"type":"textResponseChunk","textResponse":"done."}\n\n',
+      'data: {"type":"finalizeResponseStream"}\n\n',
+    ];
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/stream-chat")) {
+        return makeSseStreamResponse(sseBlocks);
+      }
+      return { ok: true, status: 200, json: async () => ({}), headers: new Headers() };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "hi" } });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    await waitFor(() => expect(screen.getByText(/done\./)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Searching the web/i)).toBeInTheDocument());
+  });
+
+  it("accumulates agentThought steps when events are split across network chunks", async () => {
+    navState.view = "chat";
+    navState.spaceId = "space-1";
+    navState.threadId = "thread-1";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+
+    // One logical SSE stream, chopped at arbitrary byte boundaries (mid-event,
+    // mid-JSON) — exactly how a real network delivers bytes.
+    const full =
+      'data: {"type":"agentThought","thought":"@agent is executing `web-browsing` tool {}"}\n\n' +
+      'data: {"type":"textResponseChunk","textResponse":"answer"}\n\n' +
+      'data: {"type":"fileDownload","fileDownload":{"filename":"out.csv","storageFilename":"text-9.csv","fileSize":10}}\n\n' +
+      'data: {"type":"finalizeResponseStream"}\n\n';
+    const mid = Math.floor(full.length / 3);
+    const chunks = [full.slice(0, 20), full.slice(20, mid), full.slice(mid, mid + 40), full.slice(mid + 40)];
+
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/stream-chat")) {
+        return makeSseStreamResponse(chunks);
+      }
+      return { ok: true, status: 200, json: async () => ({}), headers: new Headers() };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "go" } });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    await waitFor(() => expect(screen.getByText("answer")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Searching the web/i)).toBeInTheDocument());
+    expect(screen.getByText("out.csv")).toBeInTheDocument();
+  });
 });
