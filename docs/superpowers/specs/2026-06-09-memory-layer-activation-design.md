@@ -3,7 +3,7 @@
 **Date:** 2026-06-09
 **Branch:** `memory-layer-activation` (recommend a dedicated impl branch — see §9)
 **Author:** Nova / Mohammad (with Claude)
-**Status:** Draft for review (rev 3 — deterministic core + semantic recall + research-grounded guardrails)
+**Status:** Approved (rev 4 — added user on/off default-on; dropped backfill)
 
 ## 1. Scope (locked)
 
@@ -31,6 +31,7 @@
 - **Query recall = semantic, not bounded by an identity cap** — similarity ranking *is* the relevance filter (your steer). Keep top-k (≤6) + a similarity floor so off-topic memories never enter context.
 - **Identity core = deterministic lexical** — reuse the existing extraction/selection/render machinery (§4B). No LLM, no embeddings, predictable, debuggable, default-on, **reports only high-confidence facts**.
 - **Injection channel = the existing envelope** `[[ZAKI_MEMORY_CONTEXT_V2]]…[[/]]` (`index.js:9838/10665`): rides inside the message payload to AnythingLLM but is **stripped client-side** so the user never sees it (`ChatArea.tsx:3890`) — neither a visible user turn nor the system prompt. (Its stripper already handles a legacy `[About this person…]` block — we're reviving that concept cleanly.)
+- **User control:** memory is **ON by default**; a per-user setting (extending the existing policy preference) can turn it **off**, which disables capture and *both* injection tiers (§4D).
 
 ## 4. Design
 
@@ -70,10 +71,15 @@ No frontend change needed — the existing stripper removes the whole envelope f
 - Enable `ZAKI_ENABLE_SESSION_SUMMARIZATION=true` (frontend + handler already wired, `ChatArea.tsx:7938`).
 - **Remove the `session_end` injection exclusion** (`operations.js:2250` and fallback `:2266`) so summarized memories are retrievable; dedup prevents redundancy.
 
-### D. One-time embedding backfill
-**New:** `backend/scripts/backfill-memory-embeddings.mjs` + `npm run memory:backfill`. Batched pass over `memories WHERE embedding IS NULL`, writing `embedding` + stamping `embedding_provider='novatyp'`. Idempotent/resumable.
-**Bonus:** add `embedding_provider` to the `storeMemory` INSERT (`operations.js:1245`) — only the UPDATE stamps it today (`:1391`).
-**Light recency touch (no decay math):** fire-and-forget `last_accessed_at`/`access_count` bump when memories are injected — keeps core + recency tiebreaker fresh.
+### D. User-facing memory on/off (default ON)
+Memory is **on by default**; the user can turn it off (also an ADR-003 "disable state" requirement). **Reuse the existing preference system — no new table, no new endpoint:**
+- **Add an `"off"` policy** to `normalizeMemoryPolicy` (`policy.js:13`); `zaki_memory_preferences.policy` already stores free TEXT (default `'balanced'` = on).
+- **Gate capture:** `processChatMemoryCapture` / `resolveMemoryCapturePolicy` (`operations.js:1178`) short-circuit when policy is `off`.
+- **Gate injection:** the chat handler skips both tiers (core + recall) when the user's policy is `off`, checked alongside `shouldSkipChatMemoryContext` (`index.js:10663`).
+- **UI:** add an "Off" option to `MemoryModeToggle` (`MemoryModeToggle.tsx:64` — already a clean mode list with `disabled` support) + copy; reuse `/api/memory/preferences` GET/POST.
+- **Minor one-liners (kept, optional):** stamp `embedding_provider` on the `storeMemory` INSERT (`operations.js:1245`); fire-and-forget `last_accessed_at` bump on injection so the existing recency ordering actually works.
+
+> **Backfill dropped** (per decision): semantic recall covers memories that have embeddings; new memories embed on write, and pre-existing un-embedded memories still surface via the lexical half of the hybrid retrieval — graceful, no one-time pass needed.
 
 ### E. UI — light: surface + finish
 - **E1.** Make *"What ZAKI currently knows"* (`MemoryViewer.tsx:789`) discoverable beyond the buried modal (improve the home affordance, `en.json:355-358`). No new screen.
@@ -108,23 +114,28 @@ Flag-gated for instant rollback (no code deploy):
 - `ZAKI_CHAT_MEMORY_IDENTITY_CORE_ENABLED` (default true) — B
 - `ZAKI_ENABLE_SESSION_SUMMARIZATION` (default false; flip to enable) — C
 
-Order: D (backfill) → A (semantic) → B (core) → C (summaries) → E (UI) → F throughout. F gates A and B.
+Per-user on/off (D) is a **preference** (`policy = "off"`), not an env flag — default is `balanced` (on).
+
+Order: A (semantic) → B (core) → C (summaries) → D (on/off control) → E (UI) → F throughout. F gates A and B.
 
 ## 7. Testing
-- **Unit (Jest, ESM)** beside `memory/*.test.js`: vector merge/dedup + similarity floor; fail-open on embedding error; introspection preserved; `buildIdentityCore` selection (high-confidence floor, caps, ordering, empty-user); access-tracking UPDATE fired.
+- **Unit (Jest, ESM)** beside `memory/*.test.js`: vector merge/dedup + similarity floor; fail-open on embedding error; introspection preserved; `buildIdentityCore` selection (high-confidence floor, caps, ordering, empty-user); `policy="off"` skips capture AND both injection tiers; `normalizeMemoryPolicy` accepts `off`; access-tracking UPDATE fired.
 - **Integration:** summaries recallable when enabled; envelope contains both labeled sections with correct framing (`routes.integration.test.js`, `chat-proxy.test.js`).
 - **UI:** `MemoryViewer.test.tsx` for E2/E3.
 - **Eval (F):** headline proof + over-weighting check.
 - **Cleanup:** delete dead dup `backend/src/memory/ops_fixed.js`.
 
 ## 8. Files touched
-- `backend/src/memory/operations.js` — A (vector + sim floor), B (`buildIdentityCore`), C (filters), D (access bump + INSERT provider); two-section return from `buildChatMemoryContext`
-- `backend/src/index.js` — A/B env wiring; build core + compose the two-section envelope (`:10663`)
+- `backend/src/memory/operations.js` — A (vector + sim floor), B (`buildIdentityCore`), C (filters), D (capture gate on `off` + access bump + INSERT provider); two-section return from `buildChatMemoryContext`
+- `backend/src/memory/policy.js` — D (`normalizeMemoryPolicy` accepts `"off"`)
+- `backend/src/memory/capture.js` — D (skip capture when `off`)
+- `backend/src/index.js` — A/B env wiring; build core + compose the two-section envelope (`:10663`); skip injection when user policy is `off`
 - `backend/src/memory-extraction.js` — optional `identity:language` pattern
-- `backend/scripts/backfill-memory-embeddings.mjs`, `backend/scripts/memory-eval.mjs`, `backend/test-fixtures/memory-eval-cases.json` (new)
-- `backend/package.json` — `memory:backfill`, `memory:eval`
+- `backend/scripts/memory-eval.mjs`, `backend/test-fixtures/memory-eval-cases.json` (new)
+- `backend/package.json` — `memory:eval`
 - `backend/.env.example` — document new flags
 - `src/app/components/memory/MemoryViewer.tsx` (+ `.test.tsx`) — E1/E2/E3
+- `src/app/components/memory/MemoryModeToggle.tsx` — D ("Off" option + copy)
 - remove `backend/src/memory/ops_fixed.js`
 - **No frontend change for injection** — existing envelope stripper already hides it.
 
