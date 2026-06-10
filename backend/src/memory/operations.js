@@ -2394,9 +2394,7 @@ export async function buildChatMemoryContext({
   });
 
   const sources = dedupeMemoryRows(
-    (base.sources || [])
-      .map((memory) => normalizeMemoryRowForUse(memory))
-      .filter((memory) => getMemoryMetadata(memory)?.source !== "session_end")
+    (base.sources || []).map((memory) => normalizeMemoryRowForUse(memory))
   );
 
   if (sources.length < fallbackFloor) {
@@ -2410,9 +2408,7 @@ export async function buildChatMemoryContext({
          LIMIT 12`,
         [normalizeUserId(userId)]
       )
-    )
-      .map((memory) => normalizeMemoryRowForUse(memory))
-      .filter((memory) => getMemoryMetadata(memory)?.source !== "session_end");
+    ).map((memory) => normalizeMemoryRowForUse(memory));
 
     const seenIds = new Set(sources.map((memory) => String(memory?.id || "")));
     for (const memory of fallbackRows) {

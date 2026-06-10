@@ -583,7 +583,7 @@ describe("memory context retrieval behavior", () => {
     expect(result.context).toContain("Plans to travel to Riyadh");
   });
 
-  it("buildChatMemoryContext groups selected memories into stable buckets and omits session-end entries", async () => {
+  it("buildChatMemoryContext groups selected memories into stable buckets and recalls session-end entries", async () => {
     const { buildChatMemoryContext, setStorageSupportProbeForTests } = await loadOperations();
     setStorageSupportProbeForTests(async () => true);
 
@@ -642,12 +642,44 @@ describe("memory context retrieval behavior", () => {
     expect(result.context).toContain("From Damascus");
     expect(result.context).toContain("Prefers concise");
     expect(result.context).toContain("Preparing Lausanne Summit note");
-    expect(result.context).not.toContain("Last time:");
+    // Session-summary memories are now recalled like any other memory (the
+    // exclusion that previously dropped source === "session_end" was removed).
+    expect(result.context).toContain("Last time:");
     expect(result.sources.map((source) => source.id)).toEqual([
       "m-from",
       "m-pref",
       "m-active",
+      "m-delta",
     ]);
+  });
+
+  it("buildChatMemoryContext recalls session-summary memories that match the query", async () => {
+    const { buildChatMemoryContext, setStorageSupportProbeForTests } = await loadOperations();
+    setStorageSupportProbeForTests(async () => true);
+
+    dbAllMock.mockResolvedValue([
+      {
+        id: "m-summary",
+        content: "Wrapped up the Lausanne Summit deck and shipped the recap.",
+        type: "goal",
+        metadata: { source: "session_end" },
+        retrieval_score: 0.95,
+        importance_score: 0.9,
+        confidence_score: 0.85,
+      },
+    ]);
+    dbGetMock.mockResolvedValue(null);
+    global.fetch = jest.fn();
+
+    const result = await buildChatMemoryContext({
+      userId: "user@example.com",
+      query: "Remind me where I left off on the Lausanne Summit deck",
+      maxChars: 500,
+      currentThreadId: "thread-new",
+      limit: 6,
+    });
+
+    expect(result.sources.map((source) => source.id)).toContain("m-summary");
   });
 
   it("buildChatMemoryContext supports introspection summary mode with stable filtered sources", async () => {
@@ -721,11 +753,12 @@ describe("memory context retrieval behavior", () => {
     expect(result.context).toContain("Profile:");
     expect(result.context).toContain("Preferences:");
     expect(result.context).toContain("Active:");
-    expect(result.context).not.toContain("Last time:");
+    // Session-summary memories are now recalled in introspection summaries too.
+    expect(result.context).toContain("Last time:");
     expect(result.sources.map((source) => source.id)).toEqual(
       expect.arrayContaining(["m-from", "m-pref", "m-active"])
     );
-    expect(result.sources.map((source) => source.id)).not.toContain("m-session");
+    expect(result.sources.map((source) => source.id)).toContain("m-session");
     expect(result.sources.length).toBeGreaterThanOrEqual(3);
   });
 
