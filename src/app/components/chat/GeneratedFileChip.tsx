@@ -1,14 +1,16 @@
-import { Download, FileText } from "lucide-react";
-import { buildApiUrl } from "@/lib/api";
+import { useState } from "react";
+import { Download, FileText, Loader2 } from "lucide-react";
+import { backendAuthRequest } from "@/lib/api";
 
 /**
  * A small download chip for a file the engine agent generated during a normal
- * Spaces chat turn (surfaced from a `fileDownload` SSE event). It links to the
- * same-origin BFF download endpoint and triggers a browser download with the
- * original filename.
+ * Spaces chat turn (surfaced from a `fileDownload` SSE event).
  *
- * Credentials (cookies) are sent automatically for same-origin GET navigations,
- * so a plain credentialed anchor is sufficient.
+ * The BFF download route authenticates with a Bearer token (Authorization
+ * header) and is cross-origin from the SPA on staging/prod — so a plain anchor
+ * navigation cannot authenticate. We download via an authed fetch
+ * (`backendAuthRequest` adds the Bearer token, credentials, and 401 refresh),
+ * then trigger a browser download from the resulting blob.
  */
 
 export interface GeneratedFile {
@@ -36,25 +38,56 @@ function formatFileSize(bytes: number | null): string | null {
 }
 
 export function GeneratedFileChip({ spaceId, file }: GeneratedFileChipProps) {
-  const href = buildApiUrl(
-    `/api/spaces/${encodeURIComponent(spaceId)}/files/${encodeURIComponent(
-      file.storageFilename
-    )}`
-  );
+  const [downloading, setDownloading] = useState(false);
+  const [failed, setFailed] = useState(false);
   const sizeLabel = formatFileSize(file.fileSize);
 
+  const handleDownload = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    setFailed(false);
+    try {
+      const res = await backendAuthRequest(
+        `/api/spaces/${encodeURIComponent(spaceId)}/files/${encodeURIComponent(file.storageFilename)}`
+      );
+      if (!res.ok) throw new Error(`download failed: ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = file.filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setFailed(true);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
-    <a
-      href={href}
-      download={file.filename}
-      className="inline-flex max-w-[80%] items-center gap-2 rounded-[2px] border border-zaki bg-zaki-raised px-3 py-2 text-xs text-zaki-secondary transition-colors hover:bg-zaki-elevated dark:border-[rgba(240,236,230,0.08)] dark:bg-[#141210] dark:hover:bg-[#1a1714]"
+    <button
+      type="button"
+      onClick={handleDownload}
+      disabled={downloading}
+      title={failed ? "Download failed — click to retry" : `Download ${file.filename}`}
+      className="inline-flex max-w-[80%] items-center gap-2 rounded-[2px] border border-zaki bg-zaki-raised px-3 py-2 text-xs text-zaki-secondary transition-colors hover:bg-zaki-elevated disabled:opacity-60 dark:border-[rgba(240,236,230,0.08)] dark:bg-[#141210] dark:hover:bg-[#1a1714]"
     >
       <FileText className="size-4 shrink-0 text-zaki-muted" aria-hidden />
       <span className="truncate font-medium text-zaki-primary">{file.filename}</span>
       {sizeLabel ? (
         <span className="shrink-0 font-mono-ui text-[10px] text-zaki-muted">{sizeLabel}</span>
       ) : null}
-      <Download className="size-3.5 shrink-0 text-zaki-muted" aria-hidden />
-    </a>
+      {downloading ? (
+        <Loader2 className="size-3.5 shrink-0 animate-spin text-zaki-muted" aria-hidden />
+      ) : (
+        <Download
+          className={`size-3.5 shrink-0 ${failed ? "text-red-500" : "text-zaki-muted"}`}
+          aria-hidden
+        />
+      )}
+    </button>
   );
 }
