@@ -329,6 +329,12 @@ export async function patchMemory(memoryId: string, patch: MemoryPatch) {
   return { response, data };
 }
 
+export async function deleteMemory(memoryId: string) {
+  return apiRequest(`/api/memory/${encodeURIComponent(memoryId)}`, {
+    method: "DELETE",
+  });
+}
+
 export async function fetchMemoryActivity(limit = 8) {
   const params = new URLSearchParams();
   params.set("limit", String(limit));
