@@ -37,6 +37,7 @@ import { summarizeConversation } from "./memory/session-summary.js";
 import { createSessionEndHandler } from "./memory/session-end-route.js";
 import {
   buildStreamUpstreamPayload,
+  composeContextEnvelope,
   extractStreamMessage,
   getRequestedResponseFormat,
 } from "./chat-proxy.js";
@@ -10090,8 +10091,6 @@ function buildIntrospectionReply(mode, sources = [], message = "") {
 
 function shouldSkipChatMemoryContext(requestPayload = {}, message = "") {
   const mode = String(requestPayload?.mode || "").trim().toLowerCase();
-  const webSearchEnabled =
-    requestPayload?.webSearchEnabled === true || requestPayload?.webSearch === true;
   const normalizedMessage = String(message || "").trim();
   const lower = normalizedMessage.toLowerCase();
   const strongPersonalSignals = [
@@ -10110,10 +10109,8 @@ function shouldSkipChatMemoryContext(requestPayload = {}, message = "") {
   ];
 
   if (!ZAKI_SYNC_MEMORY_INJECTION_ENABLED) return true;
-  if (webSearchEnabled) return true;
-  // Agent/web-search turn: the message MUST stay @agent-prefixed for the engine's agent to trigger,
-  // so never prepend a memory envelope in front of it.
-  if (/^@agent\b/i.test(normalizedMessage)) return true;
+  // Query mode keeps its existing behavior (internal route, no memory/guardrail envelope).
+  // Every other (Auto/agent) turn is eligible for memory injection.
   if (mode === "query") return true;
   if (isIdentityProbePrompt(normalizedMessage)) return true;
   if (normalizedMessage.length > 500) return true;
@@ -10658,6 +10655,10 @@ const streamChatHandler = async (req, res) => {
     const { slug, threadSlug } = req.params;
 
     const disableResponseEnvelope = requestPayload?.disableResponseEnvelope === true;
+    // Single Auto mode: every non-"query" turn routes through the agent path. Only an explicit
+    // mode:"query" stays on the internal (per-user JWT) route with its existing behavior.
+    const isQueryMode = String(requestPayload?.mode || "").trim().toLowerCase() === "query";
+    const isAgentTurn = !isQueryMode;
     let enrichedMessage = isIdentityProbePrompt(originalMessage)
       ? applyIdentityGuardrails(originalMessage)
       : disableResponseEnvelope
@@ -10675,6 +10676,7 @@ const streamChatHandler = async (req, res) => {
       requestedFormat: requestedFormat || "plain",
       disableResponseEnvelope,
       skipMemoryContext,
+      isAgentTurn,
       mode:
         typeof requestPayload?.mode === "string" && requestPayload.mode.trim()
           ? requestPayload.mode.trim()
@@ -10683,7 +10685,9 @@ const streamChatHandler = async (req, res) => {
         requestPayload?.webSearchEnabled === true || requestPayload?.webSearch === true,
     };
 
-    // Inject memory context if we have a user and this is not a query/web-search style request.
+    // Fetch memory context when we have a user and this turn is eligible (not query/long-prompt/etc).
+    // The fetched context string is folded into the message envelope below.
+    let memoryContext = "";
     if (userEmail && !skipMemoryContext) {
       try {
         const contextStartedAt = Date.now();
@@ -10702,12 +10706,7 @@ const streamChatHandler = async (req, res) => {
         console.log(`[Memory] Context build finished in ${Date.now() - contextStartedAt}ms`);
 
         if (memoryResult.context) {
-          // Versioned envelope keeps context injection parseable and easy to strip client-side.
-          enrichedMessage = `${MEMORY_CONTEXT_ENVELOPE_OPEN}
-Use ONLY if directly relevant to the user's request. Ignore if not relevant. Do not quote verbatim. Do not hallucinate details beyond this memory.
-${memoryResult.context}
-${MEMORY_CONTEXT_ENVELOPE_CLOSE}
-${originalMessage}`;
+          memoryContext = memoryResult.context;
           memoryInjected = true;
           memorySources = (memoryResult.sources || []).map((source) => ({
             id: source.id,
@@ -10739,22 +10738,37 @@ ${originalMessage}`;
         // Continue without memory
       }
     } else if (skipMemoryContext) {
-      console.log("[Memory] Skipping context injection for query/web-search or long prompt");
+      console.log("[Memory] Skipping context injection for query mode or long prompt");
     }
 
-    // Agent / web-search turns (the frontend prepends "@agent" when the web-search toggle is armed)
-    // must run on the DEV API stream-chat (EphemeralAgentHandler runs the agent INLINE over HTTP, with
-    // the admin key). The internal route only opens a websocket invocation, so the agent never streams
-    // back. Normal chat stays on the internal route (per-user TYP session JWT + memory injection).
-    const isAgentTurn =
-      /^@agent\b/i.test(String(originalMessage || "").trim()) ||
-      requestPayload?.webSearchEnabled === true ||
-      requestPayload?.webSearch === true;
+    if (isAgentTurn) {
+      // Single Auto mode runs on the dev-API agent path, which DROPS promptPrefix — so the ZAKI
+      // identity guardrail (and any memory context) must ride INSIDE the message envelope. Always
+      // wrap with guardrail:true so the model never leaks a third-party identity, even with no memory.
+      // The frontend strips the [[ZAKI_MEMORY_CONTEXT_V2]] envelope before display.
+      enrichedMessage = `${composeContextEnvelope({
+        guardrail: true,
+        core: "",
+        context: memoryContext,
+      })}\n\n${originalMessage}`;
+    } else if (memoryContext) {
+      // Query mode: preserve the existing memory-envelope behavior unchanged (no guardrail).
+      enrichedMessage = `${MEMORY_CONTEXT_ENVELOPE_OPEN}
+Use ONLY if directly relevant to the user's request. Ignore if not relevant. Do not quote verbatim. Do not hallucinate details beyond this memory.
+${memoryContext}
+${MEMORY_CONTEXT_ENVELOPE_CLOSE}
+${originalMessage}`;
+    }
+
+    // Agent (Auto) turns run on the DEV API stream-chat (EphemeralAgentHandler runs the agent INLINE
+    // over HTTP with the admin key, and mode:"automatic" lets Qwen3 auto-decide tools). The internal
+    // route only opens a websocket invocation, so the agent never streams back. Query turns stay on the
+    // internal route (per-user TYP session JWT + existing behavior).
     const targetUrl = isAgentTurn
       ? `${apiBase}/v1/workspace/${slug}/thread/${threadSlug}/stream-chat`
       : `${apiBase}/workspace/${slug}/thread/${threadSlug}/stream-chat`;
 
-    console.log(`[Chat] Forwarding to NOVA: ${targetUrl}${isAgentTurn ? " (agent/web-search)" : ""}`);
+    console.log(`[Chat] Forwarding to NOVA: ${targetUrl}${isAgentTurn ? " (agent/auto)" : ""}`);
     console.log("[Chat] Dispatch", {
       ...chatLogContext,
       memoryInjected,
@@ -10762,17 +10776,16 @@ ${originalMessage}`;
     });
 
     const upstreamPayload = buildStreamUpstreamPayload(requestPayload, enrichedMessage);
-    // The dev-API ephemeral agent only triggers when the message starts with "@agent". The frontend
-    // prepends it when the toggle is armed; ensure it here too so a webSearchEnabled request without
-    // the prefix still triggers the agent (and so the agent never sees a memory envelope in front).
-    if (isAgentTurn && !/^@agent\b/i.test(String(upstreamPayload.message || "").trim())) {
-      upstreamPayload.message = `@agent ${String(upstreamPayload.message || "").trim()}`.trim();
-    }
-    // Defense in depth against the v1.13 automatic-mode leak: a normal (non-agent) chat must run in
-    // "chat" (or the user-selected "query") mode, never "automatic" (raw tool-call tokens leak on the
-    // headless path). The frontend sends an explicit mode and new spaces are pinned to chat at create,
-    // but force a safe mode here so a mode-less or "automatic" payload can never leak into a user chat.
-    if (!isAgentTurn) {
+    if (isAgentTurn) {
+      // Per-request mode:"automatic" triggers the dev-API ephemeral agent (Qwen3 auto-decides tools)
+      // WITHOUT an "@agent" prefix — which is required so the memory/guardrail envelope can sit at the
+      // front of the message (an "@agent" prefix would have to come first and block the envelope).
+      upstreamPayload.mode = "automatic";
+    } else {
+      // Defense in depth against the v1.13 automatic-mode leak: the internal (query) path must run in
+      // "chat" (or the user-selected "query") mode, never "automatic" (raw tool-call tokens leak on the
+      // headless path). The frontend sends an explicit mode and new spaces are pinned to chat at create,
+      // but force a safe mode here so a mode-less or "automatic" payload can never leak into a user chat.
       const requestedMode = String(upstreamPayload.mode || "").trim().toLowerCase();
       if (requestedMode !== "chat" && requestedMode !== "query") {
         upstreamPayload.mode = "chat";
