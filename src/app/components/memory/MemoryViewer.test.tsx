@@ -181,6 +181,60 @@ describe("MemoryViewer", () => {
     expect(screen.getByText("Recent changes")).toBeInTheDocument();
   });
 
+  it("does not render the orphan 'Raw records' header", async () => {
+    render(<MemoryViewer userId="tester@example.com" initialTab="memories" />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("No memories yet").length).toBeGreaterThan(0);
+    });
+
+    expect(screen.queryByText("memoryViewer.raw.title")).not.toBeInTheDocument();
+    expect(screen.queryByText("memoryViewer.raw.body")).not.toBeInTheDocument();
+  });
+
+  it("renders a source chip on a pending item with a source thread", async () => {
+    (apiRequest as jest.Mock).mockImplementation((path: string) => {
+      if (String(path).startsWith("/api/memory/list")) {
+        return Promise.resolve(
+          jsonResponse({ memories: [], nextCursor: null, hasMore: false })
+        );
+      }
+      if (path === "/api/memory/confirmations") {
+        return Promise.resolve(
+          jsonResponse({
+            confirmations: [
+              {
+                id: "pending-1",
+                content: "Considering a move to Riyadh",
+                type: "context",
+                confidence_score: 0.82,
+                created_at: "2026-03-23T10:00:00.000Z",
+                source_thread_id: "abc-1234-5678-xyz",
+              },
+            ],
+          })
+        );
+      }
+      if (path === "/api/memory/conflicts") {
+        return Promise.resolve(jsonResponse({ conflicts: [] }));
+      }
+      if (String(path).startsWith("/api/memory/activity")) {
+        return Promise.resolve(jsonResponse({ activities: [] }));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+
+    render(<MemoryViewer userId="tester@example.com" initialTab="pending" />);
+
+    await waitFor(() => {
+      const chips = document.querySelectorAll('[data-testid="source-chip"]');
+      expect(chips.length).toBeGreaterThanOrEqual(1);
+    });
+
+    const chip = document.querySelector('[data-testid="source-chip"]');
+    expect(chip?.getAttribute("data-lane")).toContain("thread:");
+  });
+
   it("shows a provenance chip (channel + lane) on every saved memory", async () => {
     (apiRequest as jest.Mock).mockImplementation((path: string) => {
       if (String(path).startsWith("/api/memory/list")) {

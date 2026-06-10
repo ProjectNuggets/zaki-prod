@@ -193,7 +193,19 @@
       "dreamReflection": "Dream reflection",
       "dreamReflectionHelper": "Run the nightly 3 AM memory reflection job for this user.",
       "queryExpansion": "Query expansion",
-      "queryExpansionHelper": "Expand short or vague memory searches with AI. Improves recall and costs more."
+      "queryExpansionHelper": "Expand short or vague memory searches with AI. Improves recall and costs more.",
+      "capturePolicy": {
+        "name": "Memory capture",
+        "helper": "Control how aggressively ZAKI saves new memories from your conversations.",
+        "unavailable": "Memory preferences are not available in this environment.",
+        "options": {
+          "balanced": "Balanced",
+          "ask_before_saving": "Ask before saving",
+          "save_less": "Save less",
+          "save_more": "Save more",
+          "off": "Off (pause memory)"
+        }
+      }
     },
     "privacy": {
       "preparingExport": "Preparing export...",

@@ -74,6 +74,7 @@ interface PendingMemoryRecord {
   type: string;
   confidence_score?: number;
   created_at?: string;
+  source_thread_id?: string | null;
 }
 
 interface MemoryViewerProps {
@@ -931,22 +932,6 @@ export function MemoryViewer({
         })}
       </div>
 
-      <div className="rounded-zaki-xl border border-zaki bg-zaki-raised px-4 py-4 shadow-zaki-md dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
-        <div className="flex items-start gap-3">
-          <div className="size-9 rounded-full bg-zaki-brand/10 flex items-center justify-center text-zaki-brand">
-            <BookOpen className="size-4" />
-          </div>
-          <div>
-            <h4 className="font-display text-sm font-semibold text-zaki-primary">
-              {t("memoryViewer.raw.title")}
-            </h4>
-            <p className="mt-1 text-xs text-zaki-secondary">
-              {t("memoryViewer.raw.body")}
-            </p>
-          </div>
-        </div>
-      </div>
-
       <div className={cn("flex items-center gap-6 border-b border-zaki dark:border-[rgba(240,236,230,0.08)]", isRtl && "flex-row-reverse")}>
         <button
           type="button"
@@ -1054,6 +1039,15 @@ export function MemoryViewer({
                             })
                           : t("memoryViewer.pending.queuedRecent")}
                       </div>
+                      {memory.source_thread_id ? (
+                        <div className={cn("mt-2 flex flex-wrap items-center gap-3 text-2xs text-zaki-muted", isRtl && "justify-end")}>
+                          <SourceChip
+                            lane={`thread:${shortId(memory.source_thread_id)}`}
+                            at={memory.created_at ?? null}
+                            locale={locale}
+                          />
+                        </div>
+                      ) : null}
                       <div className={cn("mt-3 flex items-center gap-2", isRtl && "flex-row-reverse")}>
                         <button
                           type="button"

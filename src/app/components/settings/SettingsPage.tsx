@@ -284,6 +284,7 @@ const MEMORY_CAPTURE_POLICIES: MemoryPolicy[] = [
   "ask_before_saving",
   "save_less",
   "save_more",
+  "off",
 ];
 
 const DEFAULT_MEMORY_CAPTURE_POLICY: MemoryPolicy = "balanced";
