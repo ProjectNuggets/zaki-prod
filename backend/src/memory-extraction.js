@@ -61,6 +61,7 @@ First classify the message as one of:
 - instruction: The user is instructing the assistant (summarize/translate/write/etc).
 - roleplay: The user is asking you to roleplay or act as someone else.
 
+Questions and interrogatives are NEVER user_statement — classify them as instruction and return no memories (e.g., "Do I have any travel plans?", "What do I like?", "Where do I live?", "Am I free tomorrow?").
 Only extract memories if classification is user_statement. Otherwise return empty memories.
 
 Extraction quality rules:
@@ -608,6 +609,16 @@ function classifyWithHeuristics(message) {
   ];
   if (quotePatterns.some((r) => r.test(text))) return "quote";
 
+  // Questions are not self-statements — never extract memories from them.
+  // Guarded BEFORE firstPersonSignals so "do I have ..." / "where do I live?"
+  // (which contain first-person verbs) are classified as instruction, not statement.
+  const interrogativePatterns = [
+    /[?؟]\s*$/, // ends with a question mark (Latin or Arabic)
+    /\b(?:do|does|did|can|could|should|would|will|may|might)\s+(?:i|we|you)\b/i, // "do I", "can I", "will you"
+    /(?:^|\s)(?:هل|ألا|أليس)\b/, // Arabic yes/no interrogatives
+  ];
+  if (interrogativePatterns.some((r) => r.test(text))) return "instruction";
+
   const firstPersonSignals = [
     /\bi\s+(?:like|love|enjoy|prefer|hate|dislike|want|need|have|feel|live|work|study|am|was)\b/i,
     /\bcall me\b/i,
@@ -1041,8 +1052,11 @@ async function extractWithPatterns(message, { skipTranslation = false, simpleOnl
     });
   }
 
+  // Note: the bare "i have X" branch was removed — it false-positived on
+  // ordinary phrasing ("I have a meeting", "I have travel plans") and labeled it
+  // a health detail. Real health statements still match the explicit verbs below.
   const healthMatch = message.match(
-    /(?:i\s+(?:have|am\s+dealing\s+with|suffer\s+from|was\s+diagnosed\s+with)|أعاني\s+من|تم\s+تشخيصي\s+بـ?)\s+([^.,!?]+)/i
+    /(?:i\s+(?:am\s+dealing\s+with|suffer\s+from|was\s+diagnosed\s+with)|أعاني\s+من|تم\s+تشخيصي\s+بـ?)\s+([^.,!?]+)/i
   );
   if (healthMatch) {
     const value = cleanStructuredValue(healthMatch[1] || "");

@@ -422,6 +422,23 @@ describe("memory extraction", () => {
     );
   });
 
+  it("does not extract memories from interrogative questions", async () => {
+    // The reported bug: "do I have any travel plans?" was stored as a memory.
+    expect(await extractFacts("do I have any travel plans?")).toEqual([]);
+    // Guard also blocks questions that contain extractable patterns.
+    expect(await extractFacts("do I like coffee?")).toEqual([]);
+    expect(await extractFacts("where do I live?")).toEqual([]);
+    // Arabic interrogative.
+    expect(await extractFacts("هل لدي أي خطط سفر؟")).toEqual([]);
+  });
+
+  it("does not treat ordinary 'I have <noun>' as a health detail", async () => {
+    const result = await extractFacts("I have a meeting tomorrow.");
+    expect(
+      result.some((item) => /^Health detail:/i.test(String(item?.content || "")))
+    ).toBe(false);
+  });
+
   it("sanitizes mocked extracted memories defensively", () => {
     const result = sanitizeExtractedMemories([
       {

@@ -35,6 +35,7 @@ import {
 import { extractFacts } from "./memory-extraction.js";
 import { summarizeConversation } from "./memory/session-summary.js";
 import { createSessionEndHandler } from "./memory/session-end-route.js";
+import { shouldSkipChatMemoryContext } from "./memory/injection-gate.js";
 import {
   buildStreamUpstreamPayload,
   composeMemoryEnvelope,
@@ -653,10 +654,6 @@ const ZAKI_CHAT_MEMORY_CONTEXT_TIMEOUT_MS = Math.max(
 );
 // NOTE: ZAKI_CHAT_MEMORY_IDENTITY_CORE_ENABLED is read directly inside
 // memory/operations.js (isIdentityCoreEnabled); no constant needed here.
-const ZAKI_SYNC_MEMORY_INJECTION_ENABLED =
-  String(process.env.ZAKI_SYNC_MEMORY_INJECTION_ENABLED || "true")
-    .toLowerCase()
-    .trim() !== "false";
 const ZAKI_STREAM_UPSTREAM_TIMEOUT_MS = Math.max(
   5_000,
   Number(process.env.ZAKI_STREAM_UPSTREAM_TIMEOUT_MS || 300_000)
@@ -1147,7 +1144,6 @@ function isSseLikeResponse(response) {
 function classifyPromptCategory(message = "", requestPayload = {}) {
   if (isIdentityProbePrompt(message)) return "identity";
   if (isComparisonPrompt(message)) return "comparison";
-  if (getIntrospectionMode(message)) return "introspection";
   if (shouldSkipChatMemoryContext(requestPayload, message)) return "generic_or_query";
   return "personal_chat";
 }
@@ -9912,174 +9908,6 @@ ${normalizedMessage}`;
   }
 }
 
-function matchesBoundaryPattern(text = "", phrasePattern) {
-  return new RegExp(`(?:^|[\\s:;,.!?؟،-])(?:${phrasePattern})(?:[\\s:;,.!?؟،-]|$)`, "i").test(
-    String(text || "")
-  );
-}
-
-function getIntrospectionMode(message = "") {
-  const text = String(message || "").trim();
-  if (!text) return null;
-  if (
-    /\bwhat do you know about me\b/i.test(text) ||
-    /\bwhat do you remember about me\b/i.test(text) ||
-    matchesBoundaryPattern(text, "شو بتعرف عني|ماذا تعرف عني|شو بتتذكر عني|شو بتعرفي عني")
-  ) {
-    return "summary";
-  }
-  if (
-    /\bwhere do i live\b/i.test(text) ||
-    matchesBoundaryPattern(text, "وين بعيش|وين ساكن|وين ساكنة")
-  ) {
-    return "location";
-  }
-  if (
-    /\bwhere am i from\b/i.test(text) ||
-    matchesBoundaryPattern(text, "من وين أنا|من وين انا|من أين أنا|من اين انا")
-  ) {
-    return "origin";
-  }
-  return null;
-}
-
-function normalizeDisplayMemoryValue(value = "") {
-  return String(value || "")
-    .replace(/\s+/g, " ")
-    .replace(/\bRyadh\b/gi, "Riyadh")
-    .replace(/\bto\s*$/i, "")
-    .trim();
-}
-
-function translateMemoryValueToArabic(value = "") {
-  let next = normalizeDisplayMemoryValue(value);
-  if (!next) return "";
-  const replacements = [
-    [/\btravel\b/gi, "السفر"],
-    [/\bconcise replies\b/gi, "الردود المختصرة"],
-    [/\bHamburg\b/g, "هامبورغ"],
-    [/\bDamascus\b/g, "دمشق"],
-    [/\bRiyadh\b/g, "الرياض"],
-    [/\bAlgeria\b/g, "الجزائر"],
-    [/\bCairo\b/g, "القاهرة"],
-    [/\bDubai\b/g, "دبي"],
-  ];
-  for (const [pattern, replacement] of replacements) {
-    next = next.replace(pattern, replacement);
-  }
-  return next.trim();
-}
-
-function formatKnownMemory(content = "", prefersArabic = false) {
-  const text = String(content || "").trim();
-  if (!text) return "";
-  if (/^Lives in\s+(.+)$/i.test(text)) {
-    const place = prefersArabic
-      ? translateMemoryValueToArabic(text.replace(/^Lives in\s+/i, ""))
-      : normalizeDisplayMemoryValue(text.replace(/^Lives in\s+/i, ""));
-    return prefersArabic ? `تعيش في ${place}` : `You live in ${place}`;
-  }
-  if (/^From\s+(.+)$/i.test(text)) {
-    const place = prefersArabic
-      ? translateMemoryValueToArabic(text.replace(/^From\s+/i, ""))
-      : normalizeDisplayMemoryValue(text.replace(/^From\s+/i, ""));
-    return prefersArabic ? `أنت من ${place}` : `You're from ${place}`;
-  }
-  if (/^Likes\s+(.+)$/i.test(text)) {
-    const value = prefersArabic
-      ? translateMemoryValueToArabic(text.replace(/^Likes\s+/i, ""))
-      : normalizeDisplayMemoryValue(text.replace(/^Likes\s+/i, ""));
-    return prefersArabic ? `تحب ${value}` : `You like ${value}`;
-  }
-  if (/^Prefers\s+(.+)$/i.test(text)) {
-    const value = prefersArabic
-      ? translateMemoryValueToArabic(text.replace(/^Prefers\s+/i, ""))
-      : normalizeDisplayMemoryValue(text.replace(/^Prefers\s+/i, ""));
-    return prefersArabic ? `تفضّل ${value}` : `You prefer ${value}`;
-  }
-  if (/^Plans to travel to\s+(.+)$/i.test(text)) {
-    const place = prefersArabic
-      ? translateMemoryValueToArabic(text.replace(/^Plans to travel to\s+/i, ""))
-      : normalizeDisplayMemoryValue(text.replace(/^Plans to travel to\s+/i, ""));
-    return prefersArabic ? `تخطط للسفر إلى ${place}` : `You're planning to travel to ${place}`;
-  }
-  return prefersArabic ? translateMemoryValueToArabic(text) : normalizeDisplayMemoryValue(text);
-}
-
-function buildIntrospectionReply(mode, sources = [], message = "") {
-  const prefersArabic = /[\u0600-\u06FF]/u.test(String(message || ""));
-  const normalized = sources
-    .map((source) => formatKnownMemory(source?.content, prefersArabic))
-    .filter(Boolean)
-    .filter((value, index, values) => values.indexOf(value) === index);
-
-  if (mode === "location") {
-    const location = normalized[0];
-    if (location) {
-      return prefersArabic ? `المعلومة الحالية عندي: ${location}.` : `What I know right now: ${location}.`;
-    }
-    return prefersArabic ? "لا أملك معلومة مؤكدة عن مكان سكنك الحالي بعد." : "I don't have a confirmed memory for where you live yet.";
-  }
-
-  if (mode === "origin") {
-    const origin = normalized[0];
-    if (origin) {
-      return prefersArabic ? `المعلومة الحالية عندي: ${origin}.` : `What I know right now: ${origin}.`;
-    }
-    return prefersArabic ? "لا أملك معلومة مؤكدة عن مكان أصلك بعد." : "I don't have a confirmed memory for where you're from yet.";
-  }
-
-  if (normalized.length === 0) {
-    return prefersArabic
-      ? "حالياً ما عندي ذكريات مؤكدة عنك. احكِ لي عن نفسك وسأحتفظ بما يفيد."
-      : "I don't have any confirmed memories about you yet. Tell me about yourself and I'll keep the useful parts.";
-  }
-
-  const lines = normalized.slice(0, 4).map((item) => `- ${item}`);
-  if (prefersArabic) {
-    return `هذا ما أتذكره عنك الآن:\n${lines.join("\n")}\nإذا شيء غير دقيق، صححه لي مباشرة.`;
-  }
-  return `Here's what I know about you right now:\n${lines.join("\n")}\nIf any of this is wrong, correct me directly.`;
-}
-
-function shouldSkipChatMemoryContext(requestPayload = {}, message = "") {
-  const mode = String(requestPayload?.mode || "").trim().toLowerCase();
-  const webSearchEnabled =
-    requestPayload?.webSearchEnabled === true || requestPayload?.webSearch === true;
-  const normalizedMessage = String(message || "").trim();
-  const lower = normalizedMessage.toLowerCase();
-  const strongPersonalSignals = [
-    /\babout me\b/,
-    /\bknow about me\b/,
-    /\bremember\b/,
-    /\bremind me\b/,
-    /\bmy preferences?\b/,
-    /\bmy memory\b/,
-    /\bgiven what you know about me\b/,
-    /\bbased on what you know about me\b/,
-    /\bwhere do i live\b/,
-    /\bwhere am i from\b/,
-    /\bwho am i\b/,
-    /(?:^|\s)(تذكر|ذكّرني|عنّي|عنى|شو بتعرف عني|ماذا تعرف عني|وين بعيش|من وين أنا|من وين انا)(?:\s|$)/,
-  ];
-
-  if (!ZAKI_SYNC_MEMORY_INJECTION_ENABLED) return true;
-  if (webSearchEnabled) return true;
-  // Agent/web-search turn: the message MUST stay @agent-prefixed for the engine's agent to trigger,
-  // so never prepend a memory envelope in front of it.
-  if (/^@agent\b/i.test(normalizedMessage)) return true;
-  if (mode === "query") return true;
-  if (isIdentityProbePrompt(normalizedMessage)) return true;
-  if (normalizedMessage.length > 500) return true;
-  if (
-    !strongPersonalSignals.some(
-      (pattern) => pattern.test(lower) || pattern.test(normalizedMessage)
-    )
-  ) {
-    return true;
-  }
-  return false;
-}
 
 function buildAuthenticatedSpacesMeterIdentity(zakiUser) {
   if (!zakiUser?.id) return null;
@@ -10108,7 +9936,7 @@ function buildAnonymousSpacesMeterIdentity(req, res) {
 }
 
 function classifySpacesChatMeterAction(message = "", requestPayload = {}) {
-  if (isIdentityProbePrompt(message) || getIntrospectionMode(message)) {
+  if (isIdentityProbePrompt(message)) {
     return "memory_read";
   }
   if (isComparisonPrompt(message)) {
@@ -10553,61 +10381,10 @@ const streamChatHandler = async (req, res) => {
       return;
     }
 
-    const introspectionMode = getIntrospectionMode(originalMessage);
-    if (userEmail && introspectionMode) {
-      try {
-        const memoryResult = await withTimeout(
-          buildChatMemoryContext({
-            userId: userEmail,
-            query: originalMessage,
-            maxChars: 600,
-            currentThreadId: req.params.threadSlug,
-            limit: introspectionMode === "summary" ? 4 : 1,
-            mode:
-              introspectionMode === "summary"
-                ? "introspection_summary"
-                : "introspection_fact",
-          }),
-          ZAKI_CHAT_MEMORY_CONTEXT_TIMEOUT_MS,
-          "Chat memory introspection build"
-        );
-        const memorySources = (memoryResult.sources || []).map((source) => ({
-          id: source.id,
-          content: source.content,
-          type: source.type,
-        }));
-        const reply = buildIntrospectionReply(introspectionMode, memorySources, originalMessage);
-        await recordSpacesMeterReceiptBestEffort(req, {
-          status: "success",
-          durationMs: Date.now() - meterStartedAtMs,
-          message: originalMessage,
-          outputText: reply,
-          model: "spaces-memory",
-        });
-        sendSyntheticSseReply(
-          res,
-          reply,
-          { sources: memorySources }
-        );
-        return;
-      } catch (error) {
-        console.warn("[Memory] Introspection response fallback failed:", error?.message || error);
-        const reply = buildIntrospectionReply(introspectionMode, [], originalMessage);
-        await recordSpacesMeterReceiptBestEffort(req, {
-          status: "success",
-          durationMs: Date.now() - meterStartedAtMs,
-          message: originalMessage,
-          outputText: reply,
-          model: "spaces-memory",
-        });
-        sendSyntheticSseReply(
-          res,
-          reply,
-          { sources: [] }
-        );
-        return;
-      }
-    }
+    // Introspection questions ("what do you know about me", "where do i live")
+    // now flow through always-on memory injection + the LLM (no deterministic
+    // short-circuit). The always-on identity core guarantees the stable facts
+    // are present in context for these turns.
 
     const { slug, threadSlug } = req.params;
 
