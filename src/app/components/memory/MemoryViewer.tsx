@@ -1001,7 +1001,7 @@ export function MemoryViewer({
                   <div className="h-px flex-1 bg-zaki-subtle/40 dark:bg-[rgba(240,236,230,0.08)]" />
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-3 zaki-cascade">
                   {dayMemories.map((memory) => {
                     const typeStyle = getTypeStyle(memory.type);
                     const Icon = typeStyle.icon;
@@ -1257,7 +1257,7 @@ export function MemoryViewer({
   );
 
   const dossierGroupsGrid = () => (
-    <div className="grid gap-3 lg:grid-cols-2">
+    <div className="grid gap-3 lg:grid-cols-2 zaki-cascade">
       {notebookGroups
         .map((group) => {
           const Icon = group.icon;
@@ -1337,7 +1337,7 @@ export function MemoryViewer({
   }
 
   return (
-    <div className={cn("space-y-5 font-body zaki-stagger", isRtl && "rtl text-right")}>
+    <div className={cn("space-y-5 font-body", isRtl && "rtl text-right")}>
       <div className="rounded-zaki-xl border border-zaki bg-zaki-raised px-4 py-4 shadow-zaki-md dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
         <div className="flex items-start gap-3">
           <div className="size-10 rounded-full bg-zaki-brand/10 flex items-center justify-center text-zaki-brand">
@@ -1468,37 +1468,39 @@ export function MemoryViewer({
             )}
           </div>
 
-          {panelView === "facts" ? (
-            dossierGroupsGrid()
-          ) : panelView === "timeline" ? (
-            memoriesListContent
-          ) : (
-            <div className="space-y-5">
-              <button
-                type="button"
-                className={cn(
-                  "inline-flex items-center gap-1.5 text-sm text-zaki-secondary hover:text-zaki-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand rounded-full px-1",
-                  isRtl && "flex-row-reverse"
-                )}
-                onClick={() => setPanelView("facts")}
-              >
-                <RefreshCw className="size-3.5" />
-                {t("memoryViewer.panel.backToFacts", { defaultValue: "Back to Facts" })}
-              </button>
-              <div className="space-y-3">
-                <h4 className="font-display text-sm font-semibold text-zaki-primary">
-                  {t("memoryViewer.tabs.pending", { count: pendingMemories.length })}
-                </h4>
-                {pendingListContent}
+          <div key={panelView}>
+            {panelView === "facts" ? (
+              dossierGroupsGrid()
+            ) : panelView === "timeline" ? (
+              memoriesListContent
+            ) : (
+              <div className="space-y-5">
+                <button
+                  type="button"
+                  className={cn(
+                    "inline-flex items-center gap-1.5 text-sm text-zaki-secondary hover:text-zaki-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand rounded-full px-1",
+                    isRtl && "flex-row-reverse"
+                  )}
+                  onClick={() => setPanelView("facts")}
+                >
+                  <RefreshCw className="size-3.5" />
+                  {t("memoryViewer.panel.backToFacts", { defaultValue: "Back to Facts" })}
+                </button>
+                <div className="space-y-3">
+                  <h4 className="font-display text-sm font-semibold text-zaki-primary">
+                    {t("memoryViewer.tabs.pending", { count: pendingMemories.length })}
+                  </h4>
+                  {pendingListContent}
+                </div>
+                <div className="space-y-3">
+                  <h4 className="font-display text-sm font-semibold text-zaki-primary">
+                    {t("memoryViewer.tabs.conflicts", { count: conflicts.length })}
+                  </h4>
+                  {conflictsListContent}
+                </div>
               </div>
-              <div className="space-y-3">
-                <h4 className="font-display text-sm font-semibold text-zaki-primary">
-                  {t("memoryViewer.tabs.conflicts", { count: conflicts.length })}
-                </h4>
-                {conflictsListContent}
-              </div>
-            </div>
-          )}
+            )}
+          </div>
     </div>
   );
 }
