@@ -883,6 +883,8 @@ export function MemoryViewer({
                 disabled={memoryPolicyLoading || memoryPolicySaving}
                 onClick={() => {
                   void (async () => {
+                    // "On" deliberately resets to the default "balanced" policy;
+                    // the panel does not expose the granular capture modes.
                     const nextPolicy =
                       memoryPolicy === "off" ? "balanced" : "off";
                     const saved = await setMemoryPolicy(nextPolicy);
@@ -894,7 +896,7 @@ export function MemoryViewer({
                   })();
                 }}
                 className={cn(
-                  "relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                  "relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand",
                   memoryPolicy !== "off"
                     ? "border-zaki-brand bg-zaki-brand"
                     : "border-zaki-strong bg-zaki-subtle"

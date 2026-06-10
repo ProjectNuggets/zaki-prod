@@ -526,7 +526,8 @@
     "whyAnswer": "Why this answer?",
     "hideWhy": "Hide why",
     "usedMemory": "Used memory",
-    "usedMemoryCount": "Used {{count}} memories"
+    "usedMemoryCount": "Used {{count}} memories",
+    "memoryDontUse": "Don't use this"
   },
   "input": {
     "disclaimer": "Zaki can make mistakes. Consider checking important information.",
@@ -1570,6 +1571,10 @@
   },
   "memoryPanel": {
     "title": "Memories to Review",
+    "onoff": {
+      "title": "Memory",
+      "hint": "When on, ZAKI remembers useful details and uses them in chat."
+    },
     "pendingCount": "{{count}} pending confirmation",
     "loading": "Loading memories...",
     "emptyTitle": "All caught up!",
