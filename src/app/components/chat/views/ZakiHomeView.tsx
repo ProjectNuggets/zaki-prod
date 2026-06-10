@@ -168,6 +168,8 @@ function MemoryPopover({
   body,
   latestLabel,
   closeLabel,
+  viewAllLabel,
+  onOpenViewer,
   onClose,
   panelRef,
   isRtl,
@@ -179,6 +181,8 @@ function MemoryPopover({
   body: string;
   latestLabel: string;
   closeLabel: string;
+  viewAllLabel: string;
+  onOpenViewer: () => void;
   onClose: () => void;
   panelRef: RefObject<HTMLDivElement>;
   isRtl: boolean;
@@ -288,6 +292,16 @@ function MemoryPopover({
               ))}
             </div>
           </section>
+        </div>
+        <div className={cn("border-t border-zaki px-6 py-4", isRtl && "text-right")}>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-full border border-zaki-subtle bg-zaki-raised px-3 py-1.5 text-xs font-semibold text-zaki-brand hover:bg-zaki-hover transition-colors"
+            onClick={onOpenViewer}
+          >
+            <Sparkles className="size-3.5" />
+            {viewAllLabel}
+          </button>
         </div>
       </div>
     </div>
@@ -511,6 +525,13 @@ export function ZakiHomeView({
                   body={t("home.memoryClarityBody")}
                   latestLabel={t("home.latestLabel")}
                   closeLabel={t("home.closeMemoryDetailsAria")}
+                  viewAllLabel={t("home.viewAll")}
+                  onOpenViewer={() => {
+                    setMemoryPanelOpen(false);
+                    if (typeof window !== "undefined") {
+                      window.dispatchEvent(new CustomEvent("zaki:open-memory"));
+                    }
+                  }}
                   onClose={() => setMemoryPanelOpen(false)}
                   isRtl={isRtl}
                   panelStyle={memoryPanelStyle}

@@ -37,6 +37,7 @@ import { summarizeConversation } from "./memory/session-summary.js";
 import { createSessionEndHandler } from "./memory/session-end-route.js";
 import {
   buildStreamUpstreamPayload,
+  composeMemoryEnvelope,
   extractStreamMessage,
   getRequestedResponseFormat,
 } from "./chat-proxy.js";
@@ -187,6 +188,7 @@ import {
   resolveHireAutomationConsent,
 } from "./hire-automation-consent.js";
 import { recordHireUsageEvent } from "./hire-usage-events.js";
+import { recordUsageEvent } from "./usage-events.js";
 import {
   HIRE_METERING_CONTRACT_VERSION,
   buildHireMeterForwardHeaders,
@@ -692,6 +694,8 @@ const ZAKI_CHAT_MEMORY_CONTEXT_TIMEOUT_MS = Math.max(
   250,
   Number(process.env.ZAKI_CHAT_MEMORY_CONTEXT_TIMEOUT_MS || 2500)
 );
+// NOTE: ZAKI_CHAT_MEMORY_IDENTITY_CORE_ENABLED is read directly inside
+// memory/operations.js (isIdentityCoreEnabled); no constant needed here.
 const ZAKI_SYNC_MEMORY_INJECTION_ENABLED =
   String(process.env.ZAKI_SYNC_MEMORY_INJECTION_ENABLED || "true")
     .toLowerCase()
@@ -9836,8 +9840,8 @@ app.get("/api/verify", verifyHandler);
 // Chat Integration with Memory
 // =============================================================================
 
-const MEMORY_CONTEXT_ENVELOPE_OPEN = "[[ZAKI_MEMORY_CONTEXT_V2]]";
-const MEMORY_CONTEXT_ENVELOPE_CLOSE = "[[/ZAKI_MEMORY_CONTEXT_V2]]";
+// MEMORY_CONTEXT_ENVELOPE_OPEN / _CLOSE now live in ./chat-proxy.js, co-located with
+// composeMemoryEnvelope (the only consumer of the markers).
 const ZAKI_IDENTITY_ENVELOPE_OPEN = "[[ZAKI_IDENTITY_RULES_V1]]";
 const ZAKI_IDENTITY_ENVELOPE_CLOSE = "[[/ZAKI_IDENTITY_RULES_V1]]";
 
@@ -10339,13 +10343,46 @@ async function recordSpacesMeterReceiptBestEffort(req, {
       ? Number(streamMetrics.assistantOutputChars || 0)
       : String(outputText || "").length;
     const settledUnits = sawError ? 0 : actualChatUnits({ inputChars, outputChars, action: req.spacesChatAction });
-    return await settleHold({
+    const settleResult = await settleHold({
       holdId: hold.id,
       settleIdempotencyKey: `${req.spacesChatKey}:settle`,
       settledUnits,
       finalState: sawError ? "released" : "settled",
       providerModel: "spaces-chat",
     });
+    // First-class per-feature usage (mirrors HIRE). Emit ONLY on a successful settle (finalState
+    // "settled" → !sawError). Fire-and-forget + failsafe: a usage-event failure must NEVER break or
+    // delay the chat response or the settle — wrapped/swallowed below.
+    if (!sawError && settleResult?.ok) {
+      try {
+        await recordUsageEvent({
+          dbQuery,
+          logStructured,
+          event: {
+            userId: hold.user_id,
+            productId: "spaces",
+            surface: "spaces",
+            eventType: req.spacesChatAction || "spaces_chat_turn",
+            usageUnitType: "request",
+            usageUnits: settledUnits,
+            requestId: req.requestId || null,
+            sourceRoute: "/api/spaces/:spaceId/stream-chat",
+            metadata: {
+              action: req.spacesChatAction || "spaces_chat_turn",
+              inputChars,
+              outputChars,
+            },
+          },
+        });
+      } catch (usageError) {
+        logStructured("error", "spaces.usage.record_failed", {
+          requestId: req.requestId || null,
+          holdId: hold.id,
+          message: usageError?.message || String(usageError),
+        });
+      }
+    }
+    return settleResult;
   } catch (err) {
     console.error(`[Spaces] wallet settle failed (sweeper will reconcile) hold=${hold.id}: ${err?.message}`);
     return null;
@@ -10661,13 +10698,14 @@ const streamChatHandler = async (req, res) => {
         );
         console.log(`[Memory] Context build finished in ${Date.now() - contextStartedAt}ms`);
 
-        if (memoryResult.context) {
-          // Versioned envelope keeps context injection parseable and easy to strip client-side.
-          enrichedMessage = `${MEMORY_CONTEXT_ENVELOPE_OPEN}
-Use ONLY if directly relevant to the user's request. Ignore if not relevant. Do not quote verbatim. Do not hallucinate details beyond this memory.
-${memoryResult.context}
-${MEMORY_CONTEXT_ENVELOPE_CLOSE}
-${originalMessage}`;
+        // Versioned envelope keeps the injected memory parseable and easy to strip
+        // client-side. Two framed sections: always-on identity core + relevant recall.
+        const memoryEnvelope = composeMemoryEnvelope({
+          core: memoryResult.core,
+          context: memoryResult.context,
+        });
+        if (memoryEnvelope) {
+          enrichedMessage = `${memoryEnvelope}\n${originalMessage}`;
           memoryInjected = true;
           memorySources = (memoryResult.sources || []).map((source) => ({
             id: source.id,

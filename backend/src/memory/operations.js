@@ -68,6 +68,46 @@ function resolveTimeoutMs(envName, fallbackMs) {
 const RELEVANCE_TIMEOUT_MS = resolveTimeoutMs("ZAKI_MEMORY_RELEVANCE_TIMEOUT_MS", 8_000);
 const EMBEDDING_TIMEOUT_MS = resolveTimeoutMs("ZAKI_MEMORY_EMBEDDING_TIMEOUT_MS", 4_500);
 
+function isChatMemoryVectorEnabled() {
+  return String(process.env.ZAKI_CHAT_MEMORY_VECTOR_ENABLED || "").toLowerCase() !== "false";
+}
+
+function resolveChatMemorySemanticMin() {
+  const raw = Number.parseFloat(String(process.env.ZAKI_CHAT_MEMORY_SEMANTIC_MIN || ""));
+  // Default 0.10: all-MiniLM-L6-v2 produces low ABSOLUTE cosines for short
+  // query↔fact pairs (correct matches ~0.25-0.36, weakest ~0.10; noise ~0.06-0.12).
+  // A higher floor (the old 0.5) filtered out every correct match and silently
+  // disabled semantic recall. Relevance is enforced by cosine ORDERING + top-k cap,
+  // not this floor — which only drops near-zero garbage. Re-tune if the embedder model changes.
+  if (!Number.isFinite(raw)) return 0.1;
+  return Math.min(1, Math.max(0, raw));
+}
+
+function resolveChatMemoryEmbedTimeoutMs() {
+  return resolveTimeoutMs("ZAKI_CHAT_MEMORY_EMBED_TIMEOUT_MS", 1_200);
+}
+
+// Always-on "feels known" identity core: a tiny, high-confidence, deterministic
+// profile injected every chat turn. Query-independent — reuses the existing
+// diverse-selection + bucketed-render machinery, gated by the confidence floor.
+function resolveIdentityCoreMinConfidence() {
+  const raw = Number.parseFloat(
+    String(process.env.ZAKI_CHAT_MEMORY_IDENTITY_CORE_MIN_CONFIDENCE || "")
+  );
+  if (!Number.isFinite(raw)) return 0.85;
+  return Math.min(1, Math.max(0, raw));
+}
+
+const IDENTITY_CORE_MIN_CONFIDENCE = resolveIdentityCoreMinConfidence();
+const IDENTITY_CORE_MAX_ITEMS = 6;
+const IDENTITY_CORE_MAX_CHARS = 350;
+
+function isIdentityCoreEnabled() {
+  return (
+    String(process.env.ZAKI_CHAT_MEMORY_IDENTITY_CORE_ENABLED || "").toLowerCase() !== "false"
+  );
+}
+
 function shouldDebug() {
   return String(process.env.MEMORY_DEBUG || "").toLowerCase() === "true";
 }
@@ -75,6 +115,26 @@ function shouldDebug() {
 function isAbortError(error) {
   if (!error || typeof error !== "object") return false;
   return error.name === "AbortError";
+}
+
+// Wraps an arbitrary promise with a timeout. Used to bound embedding calls on the
+// live chat retrieval path so a slow provider can never stall the response.
+async function withTimeout(promise, { timeoutMs, label }) {
+  let timer = null;
+  const timeoutPromise = new Promise((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+      timeoutMs
+    );
+    if (typeof timer.unref === "function") {
+      timer.unref();
+    }
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function fetchWithTimeout(url, options, { timeoutMs, label }) {
@@ -374,6 +434,7 @@ function extractConflictKey(raw) {
     { regex: /^works as\s+([^.,]+)/i, key: "identity:occupation", type: "identity" },
     { regex: /i work as\s+([^.,]+)/i, key: "identity:occupation", type: "identity" },
     { regex: /my job is\s+([^.,]+)/i, key: "identity:occupation", type: "identity" },
+    { regex: /i speak\s+([^.,]+)/i, key: "identity:language", type: "identity" },
     { regex: /^likes?\s+([^.,]+)/i, key: "preference", polarity: 1 },
     { regex: /^dislikes?\s+([^.,]+)/i, key: "preference", polarity: -1 },
     { regex: /(?:user|the user)\s+(?:likes|loves|enjoys|prefers)\s+([^.,]+)/i, key: "preference", polarity: 1 },
@@ -390,6 +451,7 @@ function extractConflictKey(raw) {
     { regex: /(اسمي|انا اسمي)\s+([^.,]+)/i, key: "identity:name", type: "identity" },
     { regex: /(أعيش في|انا عايش في)\s+([^.,]+)/i, key: "identity:location", type: "identity" },
     { regex: /(أعمل|عملي)\s+([^.,]+)/i, key: "identity:occupation", type: "identity" },
+    { regex: /(أتحدث|بتكلم|لغتي)\s+([^.,]+)/i, key: "identity:language", type: "identity" },
     { regex: /(أحب|احب|أفضّل|افضل|بحب)\s+([^.,]+)/i, key: "preference", polarity: 1 },
     { regex: /(لا أحب|لا احب|أكره|اكره|ما بحب|مابحب)\s+([^.,]+)/i, key: "preference", polarity: -1 },
     { regex: /المستخدم\s+(?:يحب|يفضّل)\s+([^.,]+)/i, key: "preference", polarity: 1 },
@@ -1995,13 +2057,76 @@ export async function buildFastContext({
     [normalizedUserId, 50]
   );
 
+  // Semantic recall: merge a pgvector cosine candidate source into the keyword
+  // candidate pool so memories that are relevant but do NOT lexically overlap the
+  // query are still surfaced on the live chat path. Fully fail-open: any error
+  // (no vector storage, slow/failed embedding, SQL error) leaves the keyword
+  // behavior untouched.
+  const semanticVectorScores = new Map();
+  // Introspection / location / origin queries are deterministic special-cases with
+  // their own exact-match selection; semantic recall targets the general token-overlap
+  // path, so skip the embedding call for those to preserve their no-provider contract.
+  const eligibleForSemanticRecall =
+    !introspectionQuery && !locationIntrospectionQuery && !originIntrospectionQuery;
+  if (eligibleForSemanticRecall && isChatMemoryVectorEnabled()) {
+    try {
+      const storageSupportsVectors = await checkStorage();
+      if (storageSupportsVectors) {
+        const semanticMin = resolveChatMemorySemanticMin();
+        const embedTimeoutMs = resolveChatMemoryEmbedTimeoutMs();
+        const embeddingResult = await withTimeout(getEmbeddings(normalizedQuery), {
+          timeoutMs: embedTimeoutMs,
+          label: "Chat memory embedding",
+        });
+        const queryEmbedding = embeddingResult?.embeddings?.[0];
+        if (Array.isArray(queryEmbedding) && queryEmbedding.length > 0) {
+          const vectorLiteral = `[${queryEmbedding.join(",")}]`;
+          const vectorRows = await dbAll(
+            `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at,
+                    (1 - (embedding <=> $2::vector)) AS retrieval_score
+             FROM memories
+             WHERE user_id = $1
+               AND COALESCE(status, 'active') = 'active'
+               AND embedding IS NOT NULL
+             ORDER BY embedding <=> $2::vector ASC, importance_score DESC
+             LIMIT 20`,
+            [normalizedUserId, vectorLiteral]
+          );
+          const semanticCandidates = (vectorRows || [])
+            .filter((row) => Number(row?.retrieval_score || 0) >= semanticMin)
+            .map((row) => normalizeMemoryRowForUse(row));
+          for (const candidate of semanticCandidates) {
+            semanticVectorScores.set(
+              String(candidate?.id || ""),
+              Number(candidate?.retrieval_score || 0)
+            );
+          }
+          // Prepend so dedupeMemoryRows keeps the semantic candidate when an id
+          // collides with a keyword-pool row, but score/sort below decides order.
+          memories = [...semanticCandidates, ...memories];
+        }
+      }
+    } catch (err) {
+      console.warn("[Memory] Fast-path semantic recall unavailable:", err?.message || err);
+    }
+  }
+
   memories = dedupeMemoryRows(memories.map((memory) => normalizeMemoryRowForUse(memory)))
-    .map((memory) => ({
-      ...memory,
-      retrieval_score: introspectionQuery
+    .map((memory) => {
+      const keywordScore = introspectionQuery
         ? scoreFastContextMemory(memory, queryTokens) + getMemoryConfidenceScore(memory) * 2
-        : scoreFastContextMemory(memory, queryTokens),
-    }))
+        : scoreFastContextMemory(memory, queryTokens);
+      // A semantic-only candidate (no lexical overlap) scores 0 on keywords; give
+      // it a positive score derived from cosine similarity so it survives the
+      // keyword-overlap filter below. Scaled to sit alongside lexical scores.
+      const semanticScore = semanticVectorScores.has(String(memory?.id || ""))
+        ? 5 + semanticVectorScores.get(String(memory?.id || "")) * 10
+        : 0;
+      return {
+        ...memory,
+        retrieval_score: Math.max(keywordScore, semanticScore),
+      };
+    })
     .filter((memory) => introspectionQuery || Number(memory.retrieval_score || 0) > 0)
     .sort((a, b) => {
       const scoreDiff = Number(b.retrieval_score || 0) - Number(a.retrieval_score || 0);
@@ -2213,6 +2338,35 @@ function buildBucketedChatContext(memories, maxChars = 800) {
   };
 }
 
+// Deterministic, query-independent identity core. Pulls the user's top active
+// memories, keeps only high-confidence (or user-verified) facts, then reuses the
+// diverse-selection + bucketed-render machinery to emit a tiny bounded profile.
+// Returns "" when nothing qualifies.
+export async function buildIdentityCore({ userId }) {
+  const trusted = (
+    await dbAll(
+      `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
+       FROM memories
+       WHERE user_id = $1
+         AND COALESCE(status, 'active') = 'active'
+       ORDER BY importance_score DESC, last_accessed_at DESC NULLS LAST, created_at DESC
+       LIMIT 40`,
+      [normalizeUserId(userId)]
+    )
+  )
+    .map((row) => normalizeMemoryRowForUse(row))
+    .filter(
+      (row) =>
+        getMemoryConfidenceScore(row) >= IDENTITY_CORE_MIN_CONFIDENCE ||
+        getMemoryMetadata(row).userVerified === true
+    );
+
+  if (trusted.length === 0) return "";
+
+  const picks = selectDiverseIntrospectionMemories(trusted, IDENTITY_CORE_MAX_ITEMS);
+  return buildBucketedChatContext(picks, IDENTITY_CORE_MAX_CHARS).context || "";
+}
+
 export async function buildChatMemoryContext({
   userId,
   query,
@@ -2221,6 +2375,12 @@ export async function buildChatMemoryContext({
   limit = 6,
   mode = "default",
 }) {
+  const prefs = await getMemoryPreferences(userId);
+  if (normalizeMemoryPolicy(prefs?.policy) === "off") {
+    return { context: "", sources: [], core: "" };
+  }
+  const coreEnabled = isIdentityCoreEnabled();
+  const core = coreEnabled ? await buildIdentityCore({ userId }) : "";
   const normalizedMode =
     mode === "introspection_summary" || mode === "introspection_fact" ? mode : "default";
   const boundedLimit = Math.max(1, Math.min(6, Number(limit) || 6));
@@ -2245,9 +2405,7 @@ export async function buildChatMemoryContext({
   });
 
   const sources = dedupeMemoryRows(
-    (base.sources || [])
-      .map((memory) => normalizeMemoryRowForUse(memory))
-      .filter((memory) => getMemoryMetadata(memory)?.source !== "session_end")
+    (base.sources || []).map((memory) => normalizeMemoryRowForUse(memory))
   );
 
   if (sources.length < fallbackFloor) {
@@ -2261,9 +2419,7 @@ export async function buildChatMemoryContext({
          LIMIT 12`,
         [normalizeUserId(userId)]
       )
-    )
-      .map((memory) => normalizeMemoryRowForUse(memory))
-      .filter((memory) => getMemoryMetadata(memory)?.source !== "session_end");
+    ).map((memory) => normalizeMemoryRowForUse(memory));
 
     const seenIds = new Set(sources.map((memory) => String(memory?.id || "")));
     for (const memory of fallbackRows) {
@@ -2280,10 +2436,11 @@ export async function buildChatMemoryContext({
   }
 
   if (sources.length === 0) {
-    return { context: "", sources: [] };
+    return { context: "", sources: [], core };
   }
 
-  return buildBucketedChatContext(sources, maxChars);
+  const bucketed = buildBucketedChatContext(sources, maxChars);
+  return { context: bucketed.context, sources: bucketed.sources, core };
 }
 
 export function normalizeMemoryRecordForMaintenance(row) {

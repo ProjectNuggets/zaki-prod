@@ -11,6 +11,7 @@ import { extractGeneratedImages } from "./rendering/extractGeneratedImages";
 import { normalizeAssistantDisplayText } from "./rendering/agentReplyPresentation";
 import { stripToolCallMarkup } from "./rendering/toolMarkup";
 import { SourceChip } from "@/app/components/ui/zaki";
+import { deleteMemory } from "@/lib/api";
 
 function parseLegacyApprovalInstruction(raw: string):
   | { tool: string; id: string; risk: string; reason: string }
@@ -63,10 +64,17 @@ export interface MessageBubbleProps {
   animate?: boolean;
   botMode?: boolean;
   showSourceChip?: boolean;
+  /** When true, the "memories used" reveal opens by default (the in-bubble
+   *  toggle still lets the reader collapse it). When omitted, the reveal
+   *  stays collapsed behind the toggle. */
+  showWhy?: boolean;
   onCopy?: (message: Message) => void;
   onRegenerate?: (message: Message) => void;
   onThumbsUp?: (message: Message) => void;
   onThumbsDown?: (message: Message) => void;
+  /** Fired after a used memory is forgotten via the "Don't use this"
+   *  action so the parent can drop it from this message's memorySources. */
+  onMemoryForgotten?: (id: string) => void;
   /** Persisted reaction state — drives the highlight and the reason
    *  input that appears under thumbed-down messages. */
   reaction?: "up" | "down" | null;
@@ -79,6 +87,8 @@ export function MessageBubble({
   animate = true,
   botMode = false,
   showSourceChip = false,
+  showWhy: showWhyDefault = false,
+  onMemoryForgotten,
   onCopy,
   onRegenerate,
   onThumbsUp,
@@ -87,8 +97,10 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const isAssistantError = !isUser && Boolean(message.error);
-  const [showWhy, setShowWhy] = useState(false);
+  const [showWhy, setShowWhy] = useState(showWhyDefault);
   const memorySources = message.memorySources || [];
+  const [forgottenIds, setForgottenIds] = useState<Set<string>>(() => new Set<string>());
+  const visibleSources = memorySources.filter((source) => !forgottenIds.has(source.id));
   const { t, i18n } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const agentRune = isStreaming ? "▸" : isAssistantError ? "!" : "✓";
@@ -267,32 +279,51 @@ export function MessageBubble({
               onThumbsDown={onThumbsDown ? () => onThumbsDown(message) : undefined}
               reaction={reaction}
             />
-            {memorySources.length > 0 && (
+            {visibleSources.length > 0 && (
               <button
                 type="button"
                 className="text-2xs text-zaki-muted hover:text-zaki-primary transition-colors"
                 onClick={() => setShowWhy((prev) => !prev)}
               >
-                {showWhy ? t("chat.hideWhy") : t("chat.whyAnswer")}
+                {showWhy
+                  ? t("chat.hideWhy", { defaultValue: "Hide" })
+                  : t("chat.whyAnswer", { defaultValue: "Why this answer?" })}
               </button>
             )}
           </>
         )}
-        {showWhy && memorySources.length > 0 && (
+        {showWhy && visibleSources.length > 0 && (
           <div className="mt-2 rounded-zaki-lg border border-zaki-strong bg-zaki-raised px-3 py-2 text-2xs text-zaki-secondary transition-all duration-200">
             <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-zaki-muted mb-1">
-              <span>{t("chat.usedMemory")}</span>
+              <span>{t("chat.usedMemory", { defaultValue: "From your memory" })}</span>
               <span className="font-semibold text-zaki-secondary">
-                {t("chat.usedMemoryCount", { count: memorySources.length })}
+                {t("chat.usedMemoryCount", { count: visibleSources.length, defaultValue: "Used {{count}} memories" })}
               </span>
             </div>
             <div className="space-y-1">
-              {memorySources.map((source) => (
-                <div key={source.id} className="flex items-start gap-2">
-                  <span className="text-[10px] uppercase text-zaki-muted">
-                    {source.type}
-                  </span>
-                  <span className="text-zaki-primary">{source.content}</span>
+              {visibleSources.map((source) => (
+                <div key={source.id} className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2">
+                    <span className="text-[10px] uppercase text-zaki-muted">
+                      {source.type}
+                    </span>
+                    <span className="text-zaki-primary">{source.content}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="shrink-0 text-2xs text-zaki-muted underline hover:text-zaki-primary"
+                    onClick={async () => {
+                      try {
+                        await deleteMemory(source.id);
+                        setForgottenIds((prev) => new Set(prev).add(source.id));
+                        onMemoryForgotten?.(source.id);
+                      } catch {
+                        /* keep the memory visible on failure */
+                      }
+                    }}
+                  >
+                    {t("chat.memoryDontUse", { defaultValue: "Don't use this" })}
+                  </button>
                 </div>
               ))}
             </div>

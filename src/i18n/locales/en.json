@@ -193,7 +193,19 @@
       "dreamReflection": "Dream reflection",
       "dreamReflectionHelper": "Run the nightly 3 AM memory reflection job for this user.",
       "queryExpansion": "Query expansion",
-      "queryExpansionHelper": "Expand short or vague memory searches with AI. Improves recall and costs more."
+      "queryExpansionHelper": "Expand short or vague memory searches with AI. Improves recall and costs more.",
+      "capturePolicy": {
+        "name": "Memory capture",
+        "helper": "Control how aggressively ZAKI saves new memories from your conversations.",
+        "unavailable": "Memory preferences are not available in this environment.",
+        "options": {
+          "balanced": "Balanced",
+          "ask_before_saving": "Ask before saving",
+          "save_less": "Save less",
+          "save_more": "Save more",
+          "off": "Off (pause memory)"
+        }
+      }
     },
     "privacy": {
       "preparingExport": "Preparing export...",
@@ -514,7 +526,8 @@
     "whyAnswer": "Why this answer?",
     "hideWhy": "Hide why",
     "usedMemory": "Used memory",
-    "usedMemoryCount": "Used {{count}} memories"
+    "usedMemoryCount": "Used {{count}} memories",
+    "memoryDontUse": "Don't use this"
   },
   "input": {
     "disclaimer": "Zaki can make mistakes. Consider checking important information.",
@@ -1558,6 +1571,10 @@
   },
   "memoryPanel": {
     "title": "Memories to Review",
+    "onoff": {
+      "title": "Memory",
+      "hint": "When on, ZAKI remembers useful details and uses them in chat."
+    },
     "pendingCount": "{{count}} pending confirmation",
     "loading": "Loading memories...",
     "emptyTitle": "All caught up!",
@@ -1580,7 +1597,9 @@
       "save_less": "Save less",
       "save_lessHint": "Be stricter about what becomes lasting memory",
       "save_more": "Save more",
-      "save_moreHint": "Save more safe memories without extra interruption"
+      "save_moreHint": "Save more safe memories without extra interruption",
+      "off": "Off",
+      "offHint": "Pause memory — ZAKI won't save new memories or use them in chat."
     }
   },
   "memoryViewer": {

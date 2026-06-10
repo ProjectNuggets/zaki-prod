@@ -82,6 +82,10 @@ export async function summarizeConversation(
     return { skipped: true, reason: "invalid_user" };
   }
 
+  if (policy?.disabled) {
+    return { skipped: true, reason: "policy_off" };
+  }
+
   const userMessages = pickRecentUserMessages(messages);
   if (userMessages.length === 0) {
     return { skipped: true, reason: "no_user_messages" };

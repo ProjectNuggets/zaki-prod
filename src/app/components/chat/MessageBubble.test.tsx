@@ -1,16 +1,24 @@
 import "@testing-library/jest-dom";
 import { describe, expect, it, jest } from "@jest/globals";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MessageBubble, type Message } from "./MessageBubble";
 
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, opts?: { defaultValue?: string; count?: number }) => {
+      if (opts?.defaultValue) return opts.defaultValue;
+      if (opts?.count != null) return `${key} ${opts.count}`;
+      return key;
+    },
     i18n: {
       language: "en",
       dir: () => "ltr",
     },
   }),
+}));
+
+jest.mock("@/lib/api", () => ({
+  deleteMemory: jest.fn(async () => ({ ok: true })),
 }));
 
 describe("MessageBubble source chip", () => {
@@ -194,5 +202,43 @@ describe("MessageBubble source chip", () => {
     render(<MessageBubble message={message} showSourceChip animate={false} />);
     expect(screen.getByText("Telegram")).toBeInTheDocument();
     expect(screen.getByText("main")).toBeInTheDocument();
+  });
+
+  it("renders a 'memories used' reveal when the message has memorySources", () => {
+    render(
+      <MessageBubble
+        message={
+          {
+            id: "m1",
+            role: "assistant",
+            content: "hi",
+            memorySources: [{ id: "a", content: "Lives in Riyadh", type: "fact" }],
+          } as Message
+        }
+        showWhy
+        animate={false}
+      />
+    );
+    expect(screen.getByText(/used .*memor|memor.*used/i)).toBeInTheDocument();
+  });
+
+  it("offers a don't-use (delete) action on a used memory", async () => {
+    const api = await import("@/lib/api");
+    render(
+      <MessageBubble
+        message={
+          {
+            id: "m1",
+            role: "assistant",
+            content: "hi",
+            memorySources: [{ id: "a", content: "Lives in Riyadh", type: "fact" }],
+          } as Message
+        }
+        showWhy
+        animate={false}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /don.?t use|forget|delete/i }));
+    await waitFor(() => expect(api.deleteMemory).toHaveBeenCalledWith("a"));
   });
 });

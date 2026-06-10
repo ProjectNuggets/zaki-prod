@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@jest/globals";
 import {
   buildStreamUpstreamPayload,
+  composeMemoryEnvelope,
   extractStreamMessage,
   getRequestedResponseFormat,
 } from "./chat-proxy.js";
@@ -119,5 +120,40 @@ describe("chat proxy payload helpers", () => {
       getRequestedResponseFormat("Reply in one short sentence: what are workspace instructions?")
     ).toBe("concise");
     expect(getRequestedResponseFormat("Summarize this in one line")).toBeNull();
+  });
+});
+
+describe("composeMemoryEnvelope", () => {
+  it("frames both core and context sections when both are present", () => {
+    const envelope = composeMemoryEnvelope({
+      core: "Name: Alaa. Speaks Arabic.",
+      context: "Prefers concise replies.",
+    });
+
+    expect(envelope).toContain("[[ZAKI_MEMORY_CONTEXT_V2]]");
+    expect(envelope).toContain("[[/ZAKI_MEMORY_CONTEXT_V2]]");
+    expect(envelope).toContain("About this person");
+    expect(envelope).toContain("Do NOT restate");
+    expect(envelope).toContain("Possibly relevant memories");
+    expect(envelope).toContain("Name: Alaa. Speaks Arabic.");
+    expect(envelope).toContain("Prefers concise replies.");
+  });
+
+  it("returns an empty string when both sections are empty", () => {
+    expect(composeMemoryEnvelope({ core: "", context: "" })).toBe("");
+    expect(composeMemoryEnvelope({})).toBe("");
+    expect(composeMemoryEnvelope({ core: "   ", context: "  " })).toBe("");
+  });
+
+  it("includes only the core section when context is empty", () => {
+    const envelope = composeMemoryEnvelope({
+      core: "Name: Alaa. Speaks Arabic.",
+      context: "",
+    });
+
+    expect(envelope).toContain("[[ZAKI_MEMORY_CONTEXT_V2]]");
+    expect(envelope).toContain("About this person");
+    expect(envelope).toContain("Name: Alaa. Speaks Arabic.");
+    expect(envelope).not.toContain("Possibly relevant memories");
   });
 });

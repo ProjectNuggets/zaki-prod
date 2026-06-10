@@ -156,6 +156,28 @@ describe("memory capture", () => {
     expect(storeMemoryMock).not.toHaveBeenCalled();
   });
 
+  it("skips capture entirely when the policy is disabled (off)", async () => {
+    const { processChatMemoryCapture } = await loadCaptureModule();
+
+    const result = await processChatMemoryCapture({
+      userId: "u@x.co",
+      message: "I love sushi",
+      policy: { id: "off", disabled: true },
+    });
+
+    expect(result).toEqual({
+      saved: [],
+      review: [],
+      duplicates: [],
+      conflicts: [],
+      skipped: [],
+    });
+    expect(extractFactsMock).not.toHaveBeenCalled();
+    expect(findDuplicateMemoryMock).not.toHaveBeenCalled();
+    expect(storeMemoryMock).not.toHaveBeenCalled();
+    expect(stageMemoryMock).not.toHaveBeenCalled();
+  });
+
   it("creates conflict records for contradictory memories", async () => {
     const { processChatMemoryCapture } = await loadCaptureModule();
     extractFactsMock.mockResolvedValue([

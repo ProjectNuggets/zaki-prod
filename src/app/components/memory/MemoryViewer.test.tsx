@@ -1,9 +1,10 @@
 import "@testing-library/jest-dom";
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryViewer } from "./MemoryViewer";
 import {
   apiRequest,
+  fetchMemoryActivity,
   fetchMemoryPreferences,
   patchMemory,
   updateMemoryPreferences,
@@ -11,6 +12,7 @@ import {
 
 jest.mock("@/lib/api", () => ({
   apiRequest: jest.fn(),
+  fetchMemoryActivity: jest.fn(),
   fetchMemoryPreferences: jest.fn(),
   updateMemoryPreferences: jest.fn(),
   patchMemory: jest.fn(),
@@ -66,6 +68,7 @@ function jsonResponse(payload: unknown, ok = true) {
 describe("MemoryViewer", () => {
   beforeEach(() => {
     (apiRequest as jest.Mock).mockReset();
+    (fetchMemoryActivity as jest.Mock).mockReset();
     (fetchMemoryPreferences as jest.Mock).mockReset();
     (updateMemoryPreferences as jest.Mock).mockReset();
     (patchMemory as jest.Mock).mockReset();
@@ -101,6 +104,10 @@ describe("MemoryViewer", () => {
     (patchMemory as jest.Mock).mockResolvedValue({
       response: jsonResponse({ memory: null }),
       data: { memory: null },
+    });
+    (fetchMemoryActivity as jest.Mock).mockResolvedValue({
+      response: jsonResponse({ activities: [] }),
+      data: { activities: [] },
     });
   });
 
@@ -181,6 +188,60 @@ describe("MemoryViewer", () => {
     expect(screen.getByText("Recent changes")).toBeInTheDocument();
   });
 
+  it("does not render the orphan 'Raw records' header", async () => {
+    render(<MemoryViewer userId="tester@example.com" initialTab="memories" />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("No memories yet").length).toBeGreaterThan(0);
+    });
+
+    expect(screen.queryByText("memoryViewer.raw.title")).not.toBeInTheDocument();
+    expect(screen.queryByText("memoryViewer.raw.body")).not.toBeInTheDocument();
+  });
+
+  it("renders a source chip on a pending item with a source thread", async () => {
+    (apiRequest as jest.Mock).mockImplementation((path: string) => {
+      if (String(path).startsWith("/api/memory/list")) {
+        return Promise.resolve(
+          jsonResponse({ memories: [], nextCursor: null, hasMore: false })
+        );
+      }
+      if (path === "/api/memory/confirmations") {
+        return Promise.resolve(
+          jsonResponse({
+            confirmations: [
+              {
+                id: "pending-1",
+                content: "Considering a move to Riyadh",
+                type: "context",
+                confidence_score: 0.82,
+                created_at: "2026-03-23T10:00:00.000Z",
+                source_thread_id: "abc-1234-5678-xyz",
+              },
+            ],
+          })
+        );
+      }
+      if (path === "/api/memory/conflicts") {
+        return Promise.resolve(jsonResponse({ conflicts: [] }));
+      }
+      if (String(path).startsWith("/api/memory/activity")) {
+        return Promise.resolve(jsonResponse({ activities: [] }));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+
+    render(<MemoryViewer userId="tester@example.com" initialTab="pending" />);
+
+    await waitFor(() => {
+      const chips = document.querySelectorAll('[data-testid="source-chip"]');
+      expect(chips.length).toBeGreaterThanOrEqual(1);
+    });
+
+    const chip = document.querySelector('[data-testid="source-chip"]');
+    expect(chip?.getAttribute("data-lane")).toContain("thread:");
+  });
+
   it("shows a provenance chip (channel + lane) on every saved memory", async () => {
     (apiRequest as jest.Mock).mockImplementation((path: string) => {
       if (String(path).startsWith("/api/memory/list")) {
@@ -233,5 +294,32 @@ describe("MemoryViewer", () => {
     );
     const channels = chips.map((chip) => chip.getAttribute("data-channel"));
     expect(channels).toEqual(expect.arrayContaining(["telegram", "web"]));
+  });
+
+  it("panel variant shows a binary On/Off and hides scope cards + 5-mode toggle", async () => {
+    render(<MemoryViewer userId="u@x.co" variant="panel" />);
+    expect(await screen.findByRole("switch", { name: /memory/i })).toBeInTheDocument();
+    expect(screen.queryByText(/ask_before_saving|save_less|save_more/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Personal memory|Space context|session context/i)).not.toBeInTheDocument();
+  });
+
+  it("panel On/Off toggle persists policy=off", async () => {
+    const api = await import("@/lib/api");
+    render(<MemoryViewer userId="u@x.co" variant="panel" />);
+    const sw = await screen.findByRole("switch", { name: /memory/i });
+    fireEvent.click(sw);
+    await waitFor(() => expect(api.updateMemoryPreferences).toHaveBeenCalledWith("off"));
+  });
+
+  it("refetches when refreshKey changes", async () => {
+    const api = await import("@/lib/api");
+    const spy = api.fetchMemoryActivity as jest.Mock;
+    const { rerender } = render(
+      <MemoryViewer userId="u@x.co" variant="panel" refreshKey={0} />
+    );
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    const before = spy.mock.calls.length;
+    rerender(<MemoryViewer userId="u@x.co" variant="panel" refreshKey={1} />);
+    await waitFor(() => expect(spy.mock.calls.length).toBeGreaterThan(before));
   });
 });

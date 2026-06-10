@@ -227,7 +227,7 @@ describe("memory context retrieval behavior", () => {
     expect(dbGetMock).toHaveBeenCalledTimes(1);
   });
 
-  it("buildFastContext uses lexical lookup only and skips provider calls", async () => {
+  it("buildFastContext returns the lexical match without any LLM relevance/rerank call", async () => {
     const { buildFastContext, setStorageSupportProbeForTests } = await loadOperations();
     setStorageSupportProbeForTests(async () => true);
 
@@ -243,7 +243,10 @@ describe("memory context retrieval behavior", () => {
       },
     ]);
     dbGetMock.mockResolvedValue(null);
-    global.fetch = jest.fn();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ embeddings: [[0.1, 0.2, 0.3, 0.4]] }),
+    });
 
     const result = await buildFastContext({
       userId: "user@example.com",
@@ -255,7 +258,103 @@ describe("memory context retrieval behavior", () => {
     expect(result.context).toContain("About this person:");
     expect(result.sources).toHaveLength(1);
     expect(result.sources[0]?.id).toBe("m-1");
-    expect(global.fetch).not.toHaveBeenCalled();
+    // The fast path performs only an embedding lookup; it must never make an
+    // LLM chat-completion (relevance/rerank) call.
+    const calledUrls = global.fetch.mock.calls.map(([url]) => String(url));
+    expect(calledUrls.some((url) => url.includes("/chat/completions"))).toBe(false);
+  });
+
+  it("buildFastContext returns a semantic vector candidate that does not lexically match the query", async () => {
+    const { buildFastContext, setStorageSupportProbeForTests } = await loadOperations();
+    setStorageSupportProbeForTests(async () => true);
+
+    // Keyword candidate pool: no memory overlaps the query lexically.
+    const keywordPool = [
+      {
+        id: "m-keyword",
+        content: "Owns a golden retriever",
+        type: "fact",
+        metadata: {},
+        retrieval_score: 0,
+        importance_score: 0.6,
+        confidence_score: 0.8,
+        created_at: "2026-02-28T22:23:20.000Z",
+      },
+    ];
+    // Vector candidate: semantically related to the query but shares no tokens.
+    const vectorRows = [
+      {
+        id: "m-vector",
+        content: "Enjoys hiking in the mountains on weekends",
+        type: "preference",
+        metadata: { conflictKey: "preference:hiking" },
+        retrieval_score: 0.91,
+        importance_score: 0.7,
+        confidence_score: 0.85,
+        created_at: "2026-02-28T22:23:25.000Z",
+      },
+    ];
+
+    dbAllMock
+      .mockResolvedValueOnce(keywordPool)
+      .mockResolvedValueOnce(vectorRows);
+    dbGetMock.mockResolvedValue(null);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ embeddings: [[0.1, 0.2, 0.3, 0.4]] }),
+    });
+
+    const result = await buildFastContext({
+      userId: "user@example.com",
+      query: "what are my outdoor plans this Saturday",
+      maxChars: 400,
+      limit: 3,
+    });
+
+    // The semantic-only candidate (no token overlap with the query) is surfaced
+    // purely via the pgvector cosine source, not the keyword pool.
+    expect(result.sources.map((source) => source.id)).toContain("m-vector");
+    expect(result.context.toLowerCase()).toContain("hiking");
+    // Embedding provider was actually consulted for the live path.
+    expect(global.fetch).toHaveBeenCalled();
+  });
+
+  it("buildFastContext falls open to the keyword path when embedding generation throws", async () => {
+    const { buildFastContext, setStorageSupportProbeForTests } = await loadOperations();
+    setStorageSupportProbeForTests(async () => true);
+
+    dbAllMock.mockResolvedValue([
+      {
+        id: "m-1",
+        content: "Likes winter city breaks",
+        type: "preference",
+        metadata: { conflictKey: "preference:winter-city-break" },
+        retrieval_score: 0,
+        importance_score: 0.7,
+        confidence_score: 0.9,
+      },
+    ]);
+    dbGetMock.mockResolvedValue(null);
+    global.fetch = jest.fn().mockRejectedValue(new Error("embedding provider down"));
+
+    let result;
+    await expect(
+      (async () => {
+        result = await buildFastContext({
+          userId: "user@example.com",
+          query: "I want ideas based on my winter travel preferences",
+          maxChars: 400,
+          limit: 3,
+        });
+      })()
+    ).resolves.toBeUndefined();
+
+    expect(result.sources).toHaveLength(1);
+    expect(result.sources[0]?.id).toBe("m-1");
+    expect(result.context).toContain("About this person:");
+    // Embedding generation was attempted on the live path but failed; result is
+    // still produced via the keyword path.
+    expect(global.fetch).toHaveBeenCalled();
   });
 
   it("buildFastContext retrieves identity location for direct location questions", async () => {
@@ -484,7 +583,7 @@ describe("memory context retrieval behavior", () => {
     expect(result.context).toContain("Plans to travel to Riyadh");
   });
 
-  it("buildChatMemoryContext groups selected memories into stable buckets and omits session-end entries", async () => {
+  it("buildChatMemoryContext groups selected memories into stable buckets and recalls session-end entries", async () => {
     const { buildChatMemoryContext, setStorageSupportProbeForTests } = await loadOperations();
     setStorageSupportProbeForTests(async () => true);
 
@@ -543,12 +642,44 @@ describe("memory context retrieval behavior", () => {
     expect(result.context).toContain("From Damascus");
     expect(result.context).toContain("Prefers concise");
     expect(result.context).toContain("Preparing Lausanne Summit note");
-    expect(result.context).not.toContain("Last time:");
+    // Session-summary memories are now recalled like any other memory (the
+    // exclusion that previously dropped source === "session_end" was removed).
+    expect(result.context).toContain("Last time:");
     expect(result.sources.map((source) => source.id)).toEqual([
       "m-from",
       "m-pref",
       "m-active",
+      "m-delta",
     ]);
+  });
+
+  it("buildChatMemoryContext recalls session-summary memories that match the query", async () => {
+    const { buildChatMemoryContext, setStorageSupportProbeForTests } = await loadOperations();
+    setStorageSupportProbeForTests(async () => true);
+
+    dbAllMock.mockResolvedValue([
+      {
+        id: "m-summary",
+        content: "Wrapped up the Lausanne Summit deck and shipped the recap.",
+        type: "goal",
+        metadata: { source: "session_end" },
+        retrieval_score: 0.95,
+        importance_score: 0.9,
+        confidence_score: 0.85,
+      },
+    ]);
+    dbGetMock.mockResolvedValue(null);
+    global.fetch = jest.fn();
+
+    const result = await buildChatMemoryContext({
+      userId: "user@example.com",
+      query: "Remind me where I left off on the Lausanne Summit deck",
+      maxChars: 500,
+      currentThreadId: "thread-new",
+      limit: 6,
+    });
+
+    expect(result.sources.map((source) => source.id)).toContain("m-summary");
   });
 
   it("buildChatMemoryContext supports introspection summary mode with stable filtered sources", async () => {
@@ -622,11 +753,12 @@ describe("memory context retrieval behavior", () => {
     expect(result.context).toContain("Profile:");
     expect(result.context).toContain("Preferences:");
     expect(result.context).toContain("Active:");
-    expect(result.context).not.toContain("Last time:");
+    // Session-summary memories are now recalled in introspection summaries too.
+    expect(result.context).toContain("Last time:");
     expect(result.sources.map((source) => source.id)).toEqual(
       expect.arrayContaining(["m-from", "m-pref", "m-active"])
     );
-    expect(result.sources.map((source) => source.id)).not.toContain("m-session");
+    expect(result.sources.map((source) => source.id)).toContain("m-session");
     expect(result.sources.length).toBeGreaterThanOrEqual(3);
   });
 
@@ -683,5 +815,188 @@ describe("memory context retrieval behavior", () => {
     expect(result.context).toContain("Profile:");
     expect(result.context).toContain("From Damascus");
     expect(result.context).not.toContain("Prefers concise answers");
+  });
+
+  it("buildIdentityCore returns high-confidence facts only and excludes low-confidence", async () => {
+    const { buildIdentityCore } = await loadOperations();
+
+    dbAllMock.mockResolvedValue([
+      {
+        id: "m-live",
+        content: "Lives in Riyadh",
+        type: "fact",
+        metadata: { conflictKey: "identity:location" },
+        importance_score: 0.9,
+        confidence_score: 0.92,
+        created_at: "2026-02-28T22:23:30.779Z",
+      },
+      {
+        id: "m-pref",
+        content: "Prefers concise answers",
+        type: "preference",
+        metadata: { conflictKey: "preference:concise-answers" },
+        importance_score: 0.8,
+        confidence_score: 0.9,
+        created_at: "2026-02-28T22:23:29.779Z",
+      },
+      {
+        id: "m-jazz",
+        content: "Maybe likes jazz",
+        type: "preference",
+        metadata: { conflictKey: "preference:jazz" },
+        importance_score: 0.7,
+        confidence_score: 0.4,
+        created_at: "2026-02-28T22:23:28.779Z",
+      },
+    ]);
+    dbGetMock.mockResolvedValue(null);
+    global.fetch = jest.fn();
+
+    const core = await buildIdentityCore({ userId: "user@example.com" });
+
+    expect(typeof core).toBe("string");
+    expect(core).toContain("Lives in Riyadh");
+    expect(core).not.toContain("Maybe likes jazz");
+    expect(core.length).toBeLessThanOrEqual(400);
+  });
+
+  it("buildChatMemoryContext returns a string core field", async () => {
+    const { buildChatMemoryContext, setStorageSupportProbeForTests } = await loadOperations();
+    setStorageSupportProbeForTests(async () => true);
+
+    dbAllMock.mockResolvedValue([
+      {
+        id: "m-live",
+        content: "Lives in Riyadh",
+        type: "fact",
+        metadata: { conflictKey: "identity:location" },
+        retrieval_score: 0.9,
+        importance_score: 0.9,
+        confidence_score: 0.92,
+        created_at: "2026-02-28T22:23:30.779Z",
+      },
+    ]);
+    dbGetMock.mockResolvedValue(null);
+    global.fetch = jest.fn();
+
+    const result = await buildChatMemoryContext({
+      userId: "user@example.com",
+      query: "where do I live?",
+      maxChars: 500,
+      currentThreadId: "thread-new",
+      limit: 6,
+    });
+
+    expect(typeof result.core).toBe("string");
+  });
+
+  it("buildChatMemoryContext returns empty context/sources/core when policy is off", async () => {
+    const { buildChatMemoryContext, setStorageSupportProbeForTests } =
+      await loadOperations();
+    setStorageSupportProbeForTests(async () => true);
+
+    // The preferences query carries policy "off" for this user.
+    dbGetMock.mockImplementation(async (sql) => {
+      if (/zaki_memory_preferences/.test(sql)) {
+        return { policy: "off" };
+      }
+      return null;
+    });
+    dbAllMock.mockResolvedValue([
+      {
+        id: "m-live",
+        content: "Lives in Riyadh",
+        type: "fact",
+        metadata: { conflictKey: "identity:location" },
+        retrieval_score: 0.9,
+        importance_score: 0.9,
+        confidence_score: 0.92,
+        created_at: "2026-02-28T22:23:30.779Z",
+      },
+    ]);
+    global.fetch = jest.fn();
+
+    const result = await buildChatMemoryContext({
+      userId: "user@example.com",
+      query: "where do I live?",
+      limit: 6,
+    });
+
+    expect(result).toEqual({ context: "", sources: [], core: "" });
+  });
+
+  it("extractConflictKey distinguishes spoken languages for identity:language dedup (English)", async () => {
+    const { findDuplicateMemory } = await loadOperations();
+
+    // Both rows carry the identity:language conflict key (domain "identity").
+    // The actual spoken-language VALUE ("arabic" vs "spanish") is derived from
+    // content by extractConflictKey via the new "i speak ..." pattern. Without
+    // that pattern both values collapse to the key suffix and the two distinct
+    // languages would be wrongly treated as duplicates.
+    dbGetMock.mockResolvedValue(null); // no exact content-hash match
+    dbAllMock.mockResolvedValue([
+      {
+        id: "mem-lang-en",
+        content: "I speak Arabic",
+        type: "fact",
+        metadata: { conflictKey: "identity:language" },
+      },
+    ]);
+
+    const duplicate = await findDuplicateMemory({
+      userId: "user@example.com",
+      content: "I speak Spanish",
+      conflictKey: "identity:language",
+    });
+
+    // Different spoken languages must NOT be deduped.
+    expect(duplicate).toBeNull();
+  });
+
+  it("extractConflictKey treats the same spoken language as an identity:language duplicate (English)", async () => {
+    const { findDuplicateMemory } = await loadOperations();
+
+    dbGetMock.mockResolvedValue(null);
+    dbAllMock.mockResolvedValue([
+      {
+        id: "mem-lang-en",
+        content: "I speak Arabic",
+        type: "fact",
+        metadata: { conflictKey: "identity:language" },
+      },
+    ]);
+
+    const duplicate = await findDuplicateMemory({
+      userId: "user@example.com",
+      content: "i speak arabic",
+      conflictKey: "identity:language",
+    });
+
+    // Same spoken language (case-insensitive) is a duplicate.
+    expect(duplicate).toEqual(
+      expect.objectContaining({ id: "mem-lang-en" })
+    );
+  });
+
+  it("extractConflictKey distinguishes spoken languages for identity:language dedup (Arabic)", async () => {
+    const { findDuplicateMemory } = await loadOperations();
+
+    dbGetMock.mockResolvedValue(null);
+    dbAllMock.mockResolvedValue([
+      {
+        id: "mem-lang-ar",
+        content: "أتحدث العربية",
+        type: "fact",
+        metadata: { conflictKey: "identity:language" },
+      },
+    ]);
+
+    const duplicate = await findDuplicateMemory({
+      userId: "user@example.com",
+      content: "أتحدث الإنجليزية",
+      conflictKey: "identity:language",
+    });
+
+    expect(duplicate).toBeNull();
   });
 });

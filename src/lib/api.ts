@@ -40,7 +40,8 @@ export type MemoryPolicy =
   | "balanced"
   | "ask_before_saving"
   | "save_less"
-  | "save_more";
+  | "save_more"
+  | "off";
 
 export type MemoryPreferencesResponse = {
   policy: MemoryPolicy;
@@ -326,6 +327,12 @@ export async function patchMemory(memoryId: string, patch: MemoryPatch) {
     data = null;
   }
   return { response, data };
+}
+
+export async function deleteMemory(memoryId: string) {
+  return apiRequest(`/api/memory/${encodeURIComponent(memoryId)}`, {
+    method: "DELETE",
+  });
 }
 
 export async function fetchMemoryActivity(limit = 8) {

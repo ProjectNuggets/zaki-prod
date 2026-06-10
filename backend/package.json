@@ -15,6 +15,7 @@
     "email:smoke-resend-auth": "node scripts/smoke-resend-auth-flows.js",
     "access-code:create": "node scripts/create-access-code.js",
     "agent:sessions:cleanup-projections": "node scripts/cleanup-agent-session-projections.js",
+    "memory:eval": "node scripts/memory-eval.mjs",
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config jest.config.mjs --forceExit",
     "test:watch": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config jest.config.mjs --watch"
   },

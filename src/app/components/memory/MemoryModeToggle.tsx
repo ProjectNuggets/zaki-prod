@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Brain, CheckCircle2, ShieldAlert, ShieldMinus, ShieldPlus, Sparkles } from "lucide-react";
+import { Brain, CheckCircle2, Power, ShieldAlert, ShieldMinus, ShieldPlus, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import {
@@ -31,6 +31,10 @@ const policyMeta: Record<MemoryPolicy, MemoryPolicyMeta> = {
   save_more: {
     icon: ShieldPlus,
     activeClass: "border-zaki-success bg-zaki-success/10 text-zaki-success",
+  },
+  off: {
+    icon: Power,
+    activeClass: "border-zaki-strong bg-zaki-subtle text-zaki-secondary",
   },
 };
 
@@ -65,6 +69,7 @@ export function MemoryModeToggle({
     "ask_before_saving",
     "save_less",
     "save_more",
+    "off",
   ];
 
   return (
