@@ -269,6 +269,56 @@ describe("session memory summarization", () => {
     expect(createConflict).not.toHaveBeenCalled();
   });
 
+  it("skips capture entirely when policy is disabled (off)", async () => {
+    const extractFacts = jest.fn(async () => [
+      {
+        content: "Likes coffee",
+        type: "preference",
+        conflictKey: "preference:coffee",
+        polarity: "positive",
+        confidence: 0.93,
+      },
+    ]);
+    const findDuplicateMemory = jest.fn(async () => null);
+    const findConflict = jest.fn(async () => null);
+    const createConflict = jest.fn(async () => ({ id: "c1" }));
+    const stageMemory = jest.fn(async () => ({ id: "pending-1", duplicate: false }));
+    const storeMemory = jest.fn(async () => ({ id: "m1", duplicate: false }));
+
+    const result = await summarizeConversation(
+      {
+        userId: "user@example.com",
+        messages: [
+          { role: "user", content: "I like coffee" },
+          { role: "assistant", content: "Noted" },
+          { role: "user", content: "I really like coffee" },
+        ],
+        policy: { id: "off", disabled: true },
+      },
+      {
+        extractFacts,
+        findDuplicateMemory,
+        findConflict,
+        createConflict,
+        stageMemory,
+        storeMemory,
+      }
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        skipped: true,
+        reason: "policy_off",
+      })
+    );
+    expect(extractFacts).not.toHaveBeenCalled();
+    expect(storeMemory).not.toHaveBeenCalled();
+    expect(stageMemory).not.toHaveBeenCalled();
+    expect(createConflict).not.toHaveBeenCalled();
+    expect(findDuplicateMemory).not.toHaveBeenCalled();
+    expect(findConflict).not.toHaveBeenCalled();
+  });
+
   it("routes session-end memories to review when ask-before-saving policy is active", async () => {
     const extractFacts = jest.fn(async () => [
       {
