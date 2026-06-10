@@ -189,6 +189,7 @@ import {
 } from "./hire-automation-consent.js";
 import { recordHireUsageEvent } from "./hire-usage-events.js";
 import { recordUsageEvent } from "./usage-events.js";
+import { recordGeneratedFiles, userOwnsGeneratedFile } from "./generated-files.js";
 import {
   HIRE_METERING_CONTRACT_VERSION,
   buildHireMeterForwardHeaders,
@@ -10889,6 +10890,11 @@ ${originalMessage}`;
         streamMetrics,
         model: "typ-chat",
       });
+      try {
+        if (streamMetrics?.generatedFiles?.length) {
+          await recordGeneratedFiles(dbQuery, { zakiUserId: zakiUser.nova_user_id, workspaceSlug: slug, threadSlug }, streamMetrics.generatedFiles);
+        }
+      } catch (e) { console.warn("[GeneratedFiles] capture failed:", e.message); }
     } else {
       // Awaitable pipe so we settle on the ACTUAL outcome (success/failed/cancelled), not before it runs.
       const pipeResult = await pipeReadableToResponseWithCompletion(nodeStream, res, "Chat stream");
@@ -10946,6 +10952,59 @@ app.post(
   express.json({ limit: "10mb" }),
   streamChatHandler
 );
+
+// Authorized download proxy for agent-generated files (pptx/pdf/docx/xlsx/csv).
+// The engine's own route has no per-user ownership check; ZAKI enforces it here.
+app.get("/api/spaces/:spaceId/files/:storageFilename", async (req, res) => {
+  try {
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    const zakiUser = authResult.zakiUser;
+    if (!zakiUser?.nova_user_id) {
+      return res.status(401).json({ error: "Chat requires a linked TYP account." });
+    }
+
+    const { storageFilename } = req.params;
+    if (!await userOwnsGeneratedFile(dbQuery, storageFilename, zakiUser.nova_user_id)) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    const apiBase = getApiBase();
+    if (!apiBase) {
+      return res.status(500).json({ error: "NOVA_TYP_BASE_URL is not configured." });
+    }
+    if (!NOVA_TYP_API_KEY) {
+      return res.status(500).json({ error: "NOVA_TYP_API_KEY is not configured." });
+    }
+
+    const upstream = await fetchWithTimeout(
+      `${apiBase}/v1/document/generated-files/${encodeURIComponent(storageFilename)}`,
+      { headers: { Authorization: `Bearer ${NOVA_TYP_API_KEY}` } },
+      ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+      "Generated file download"
+    );
+
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ error: "File not available." });
+    }
+
+    const contentType = upstream.headers.get("content-type") || "application/octet-stream";
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="${storageFilename}"`);
+    res.status(upstream.status);
+
+    if (!upstream.body) {
+      res.end();
+      return;
+    }
+    pipeReadableToResponse(Readable.fromWeb(upstream.body), res, "Generated file download");
+  } catch (error) {
+    console.error("[GeneratedFiles] Download proxy error:", error);
+    if (!res.headersSent) {
+      return res.status(503).json({ error: error?.message || "Generated file download failed." });
+    }
+  }
+});
 
 function buildAgentMeterIdentity(authContext) {
   const zakiUser = authContext?.zakiUser || authContext;
