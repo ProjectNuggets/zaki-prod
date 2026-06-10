@@ -117,6 +117,10 @@ export async function processChatMemoryCapture({
   threadId = null,
   policy = {},
 }) {
+  if (policy?.disabled) {
+    return { saved: [], review: [], duplicates: [], conflicts: [], skipped: [] };
+  }
+
   const rawExtracted = await extractFacts(message);
   const extracted = sanitizeExtractedMemories(rawExtracted);
   if (extracted.length === 0) {

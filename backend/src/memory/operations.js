@@ -2368,6 +2368,10 @@ export async function buildChatMemoryContext({
   limit = 6,
   mode = "default",
 }) {
+  const prefs = await getMemoryPreferences(userId);
+  if (normalizeMemoryPolicy(prefs?.policy) === "off") {
+    return { context: "", sources: [], core: "" };
+  }
   const coreEnabled = isIdentityCoreEnabled();
   const core = coreEnabled ? await buildIdentityCore({ userId }) : "";
   const normalizedMode =

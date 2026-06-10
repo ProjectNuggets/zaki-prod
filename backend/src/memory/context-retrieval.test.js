@@ -889,4 +889,39 @@ describe("memory context retrieval behavior", () => {
 
     expect(typeof result.core).toBe("string");
   });
+
+  it("buildChatMemoryContext returns empty context/sources/core when policy is off", async () => {
+    const { buildChatMemoryContext, setStorageSupportProbeForTests } =
+      await loadOperations();
+    setStorageSupportProbeForTests(async () => true);
+
+    // The preferences query carries policy "off" for this user.
+    dbGetMock.mockImplementation(async (sql) => {
+      if (/zaki_memory_preferences/.test(sql)) {
+        return { policy: "off" };
+      }
+      return null;
+    });
+    dbAllMock.mockResolvedValue([
+      {
+        id: "m-live",
+        content: "Lives in Riyadh",
+        type: "fact",
+        metadata: { conflictKey: "identity:location" },
+        retrieval_score: 0.9,
+        importance_score: 0.9,
+        confidence_score: 0.92,
+        created_at: "2026-02-28T22:23:30.779Z",
+      },
+    ]);
+    global.fetch = jest.fn();
+
+    const result = await buildChatMemoryContext({
+      userId: "user@example.com",
+      query: "where do I live?",
+      limit: 6,
+    });
+
+    expect(result).toEqual({ context: "", sources: [], core: "" });
+  });
 });

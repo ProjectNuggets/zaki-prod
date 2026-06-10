@@ -3,6 +3,7 @@ export const MEMORY_POLICY_IDS = [
   "ask_before_saving",
   "save_less",
   "save_more",
+  "off",
 ];
 
 const LEGACY_MEMORY_MODE_TO_POLICY = {
@@ -22,6 +23,8 @@ export function normalizeMemoryPolicy(value) {
 export function buildMemoryCapturePolicyConfig(policyId) {
   const normalized = normalizeMemoryPolicy(policyId) || "balanced";
   switch (normalized) {
+    case "off":
+      return { id: "off", disabled: true };
     case "ask_before_saving":
       return {
         id: normalized,
