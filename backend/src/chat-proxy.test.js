@@ -1,6 +1,7 @@
-import { describe, expect, it } from "@jest/globals";
+import { describe, expect, it, test } from "@jest/globals";
 import {
   buildStreamUpstreamPayload,
+  composeContextEnvelope,
   extractStreamMessage,
   getRequestedResponseFormat,
 } from "./chat-proxy.js";
@@ -120,4 +121,24 @@ describe("chat proxy payload helpers", () => {
     ).toBe("concise");
     expect(getRequestedResponseFormat("Summarize this in one line")).toBeNull();
   });
+});
+
+test("composeContextEnvelope ALWAYS carries the ZAKI guardrail, even with no memory", () => {
+  const env = composeContextEnvelope({ guardrail: true, core: "", context: "" });
+  expect(env).toContain("[[ZAKI_MEMORY_CONTEXT_V2]]");
+  expect(env).toContain("[[/ZAKI_MEMORY_CONTEXT_V2]]");
+  expect(env).toContain("You are ZAKI");
+  expect((env.match(/ZAKI_MEMORY_CONTEXT_V2/g) || []).length).toBe(2); // one open + one close
+});
+
+test("composeContextEnvelope folds guardrail + memory into ONE block", () => {
+  const env = composeContextEnvelope({ guardrail: true, core: "Lives in Dubai", context: "Likes espresso" });
+  expect(env).toContain("You are ZAKI");
+  expect(env).toContain("Lives in Dubai");
+  expect(env).toContain("Likes espresso");
+  expect((env.match(/ZAKI_MEMORY_CONTEXT_V2/g) || []).length).toBe(2);
+});
+
+test("composeContextEnvelope without guardrail and without memory returns empty", () => {
+  expect(composeContextEnvelope({ guardrail: false, core: "", context: "" })).toBe("");
 });
