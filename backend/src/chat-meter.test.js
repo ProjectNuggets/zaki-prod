@@ -72,6 +72,16 @@ describe("chat-meter: estimateChatUnits (reserve)", () => {
   });
 });
 
+test("spaces_chat_tool is the 1.5u tool tier", () => {
+  expect(baseUnitsForAction("spaces_chat_tool")).toBe(1.5);
+  expect(baseUnitsForAction("spaces_chat_turn")).toBe(1);
+});
+test("reserve at tool weight; settle down to turn when no tool fired", () => {
+  expect(estimateChatUnits({ inputChars: 10, action: "spaces_chat_tool" })).toBe(1.5);
+  expect(actualChatUnits({ inputChars: 10, outputChars: 10, action: "spaces_chat_turn" })).toBe(1);
+  expect(actualChatUnits({ inputChars: 10, outputChars: 10, action: "spaces_chat_tool" })).toBe(1.5);
+});
+
 describe("chat-meter: actualChatUnits (settle)", () => {
   it("includes output chars in the count", () => {
     // (2000 in + 6000 out)/4000 = 2 units
