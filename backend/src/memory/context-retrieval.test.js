@@ -227,7 +227,7 @@ describe("memory context retrieval behavior", () => {
     expect(dbGetMock).toHaveBeenCalledTimes(1);
   });
 
-  it("buildFastContext uses lexical lookup only and skips provider calls", async () => {
+  it("buildFastContext returns the lexical match without any LLM relevance/rerank call", async () => {
     const { buildFastContext, setStorageSupportProbeForTests } = await loadOperations();
     setStorageSupportProbeForTests(async () => true);
 
@@ -243,7 +243,10 @@ describe("memory context retrieval behavior", () => {
       },
     ]);
     dbGetMock.mockResolvedValue(null);
-    global.fetch = jest.fn();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ embeddings: [[0.1, 0.2, 0.3, 0.4]] }),
+    });
 
     const result = await buildFastContext({
       userId: "user@example.com",
@@ -255,7 +258,103 @@ describe("memory context retrieval behavior", () => {
     expect(result.context).toContain("About this person:");
     expect(result.sources).toHaveLength(1);
     expect(result.sources[0]?.id).toBe("m-1");
-    expect(global.fetch).not.toHaveBeenCalled();
+    // The fast path performs only an embedding lookup; it must never make an
+    // LLM chat-completion (relevance/rerank) call.
+    const calledUrls = global.fetch.mock.calls.map(([url]) => String(url));
+    expect(calledUrls.some((url) => url.includes("/chat/completions"))).toBe(false);
+  });
+
+  it("buildFastContext returns a semantic vector candidate that does not lexically match the query", async () => {
+    const { buildFastContext, setStorageSupportProbeForTests } = await loadOperations();
+    setStorageSupportProbeForTests(async () => true);
+
+    // Keyword candidate pool: no memory overlaps the query lexically.
+    const keywordPool = [
+      {
+        id: "m-keyword",
+        content: "Owns a golden retriever",
+        type: "fact",
+        metadata: {},
+        retrieval_score: 0,
+        importance_score: 0.6,
+        confidence_score: 0.8,
+        created_at: "2026-02-28T22:23:20.000Z",
+      },
+    ];
+    // Vector candidate: semantically related to the query but shares no tokens.
+    const vectorRows = [
+      {
+        id: "m-vector",
+        content: "Enjoys hiking in the mountains on weekends",
+        type: "preference",
+        metadata: { conflictKey: "preference:hiking" },
+        retrieval_score: 0.91,
+        importance_score: 0.7,
+        confidence_score: 0.85,
+        created_at: "2026-02-28T22:23:25.000Z",
+      },
+    ];
+
+    dbAllMock
+      .mockResolvedValueOnce(keywordPool)
+      .mockResolvedValueOnce(vectorRows);
+    dbGetMock.mockResolvedValue(null);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ embeddings: [[0.1, 0.2, 0.3, 0.4]] }),
+    });
+
+    const result = await buildFastContext({
+      userId: "user@example.com",
+      query: "what are my outdoor plans this Saturday",
+      maxChars: 400,
+      limit: 3,
+    });
+
+    // The semantic-only candidate (no token overlap with the query) is surfaced
+    // purely via the pgvector cosine source, not the keyword pool.
+    expect(result.sources.map((source) => source.id)).toContain("m-vector");
+    expect(result.context.toLowerCase()).toContain("hiking");
+    // Embedding provider was actually consulted for the live path.
+    expect(global.fetch).toHaveBeenCalled();
+  });
+
+  it("buildFastContext falls open to the keyword path when embedding generation throws", async () => {
+    const { buildFastContext, setStorageSupportProbeForTests } = await loadOperations();
+    setStorageSupportProbeForTests(async () => true);
+
+    dbAllMock.mockResolvedValue([
+      {
+        id: "m-1",
+        content: "Likes winter city breaks",
+        type: "preference",
+        metadata: { conflictKey: "preference:winter-city-break" },
+        retrieval_score: 0,
+        importance_score: 0.7,
+        confidence_score: 0.9,
+      },
+    ]);
+    dbGetMock.mockResolvedValue(null);
+    global.fetch = jest.fn().mockRejectedValue(new Error("embedding provider down"));
+
+    let result;
+    await expect(
+      (async () => {
+        result = await buildFastContext({
+          userId: "user@example.com",
+          query: "I want ideas based on my winter travel preferences",
+          maxChars: 400,
+          limit: 3,
+        });
+      })()
+    ).resolves.toBeUndefined();
+
+    expect(result.sources).toHaveLength(1);
+    expect(result.sources[0]?.id).toBe("m-1");
+    expect(result.context).toContain("About this person:");
+    // Embedding generation was attempted on the live path but failed; result is
+    // still produced via the keyword path.
+    expect(global.fetch).toHaveBeenCalled();
   });
 
   it("buildFastContext retrieves identity location for direct location questions", async () => {

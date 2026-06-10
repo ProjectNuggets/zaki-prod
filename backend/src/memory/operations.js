@@ -68,6 +68,20 @@ function resolveTimeoutMs(envName, fallbackMs) {
 const RELEVANCE_TIMEOUT_MS = resolveTimeoutMs("ZAKI_MEMORY_RELEVANCE_TIMEOUT_MS", 8_000);
 const EMBEDDING_TIMEOUT_MS = resolveTimeoutMs("ZAKI_MEMORY_EMBEDDING_TIMEOUT_MS", 4_500);
 
+function isChatMemoryVectorEnabled() {
+  return String(process.env.ZAKI_CHAT_MEMORY_VECTOR_ENABLED || "").toLowerCase() !== "false";
+}
+
+function resolveChatMemorySemanticMin() {
+  const raw = Number.parseFloat(String(process.env.ZAKI_CHAT_MEMORY_SEMANTIC_MIN || ""));
+  if (!Number.isFinite(raw)) return 0.5;
+  return Math.min(1, Math.max(0, raw));
+}
+
+function resolveChatMemoryEmbedTimeoutMs() {
+  return resolveTimeoutMs("ZAKI_CHAT_MEMORY_EMBED_TIMEOUT_MS", 1_200);
+}
+
 function shouldDebug() {
   return String(process.env.MEMORY_DEBUG || "").toLowerCase() === "true";
 }
@@ -75,6 +89,26 @@ function shouldDebug() {
 function isAbortError(error) {
   if (!error || typeof error !== "object") return false;
   return error.name === "AbortError";
+}
+
+// Wraps an arbitrary promise with a timeout. Used to bound embedding calls on the
+// live chat retrieval path so a slow provider can never stall the response.
+async function withTimeout(promise, { timeoutMs, label }) {
+  let timer = null;
+  const timeoutPromise = new Promise((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+      timeoutMs
+    );
+    if (typeof timer.unref === "function") {
+      timer.unref();
+    }
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function fetchWithTimeout(url, options, { timeoutMs, label }) {
@@ -1995,13 +2029,76 @@ export async function buildFastContext({
     [normalizedUserId, 50]
   );
 
+  // Semantic recall: merge a pgvector cosine candidate source into the keyword
+  // candidate pool so memories that are relevant but do NOT lexically overlap the
+  // query are still surfaced on the live chat path. Fully fail-open: any error
+  // (no vector storage, slow/failed embedding, SQL error) leaves the keyword
+  // behavior untouched.
+  const semanticVectorScores = new Map();
+  // Introspection / location / origin queries are deterministic special-cases with
+  // their own exact-match selection; semantic recall targets the general token-overlap
+  // path, so skip the embedding call for those to preserve their no-provider contract.
+  const eligibleForSemanticRecall =
+    !introspectionQuery && !locationIntrospectionQuery && !originIntrospectionQuery;
+  if (eligibleForSemanticRecall && isChatMemoryVectorEnabled()) {
+    try {
+      const storageSupportsVectors = await checkStorage();
+      if (storageSupportsVectors) {
+        const semanticMin = resolveChatMemorySemanticMin();
+        const embedTimeoutMs = resolveChatMemoryEmbedTimeoutMs();
+        const embeddingResult = await withTimeout(getEmbeddings(normalizedQuery), {
+          timeoutMs: embedTimeoutMs,
+          label: "Chat memory embedding",
+        });
+        const queryEmbedding = embeddingResult?.embeddings?.[0];
+        if (Array.isArray(queryEmbedding) && queryEmbedding.length > 0) {
+          const vectorLiteral = `[${queryEmbedding.join(",")}]`;
+          const vectorRows = await dbAll(
+            `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at,
+                    (1 - (embedding <=> $2::vector)) AS retrieval_score
+             FROM memories
+             WHERE user_id = $1
+               AND COALESCE(status, 'active') = 'active'
+               AND embedding IS NOT NULL
+             ORDER BY embedding <=> $2::vector ASC, importance_score DESC
+             LIMIT 20`,
+            [normalizedUserId, vectorLiteral]
+          );
+          const semanticCandidates = (vectorRows || [])
+            .filter((row) => Number(row?.retrieval_score || 0) >= semanticMin)
+            .map((row) => normalizeMemoryRowForUse(row));
+          for (const candidate of semanticCandidates) {
+            semanticVectorScores.set(
+              String(candidate?.id || ""),
+              Number(candidate?.retrieval_score || 0)
+            );
+          }
+          // Prepend so dedupeMemoryRows keeps the semantic candidate when an id
+          // collides with a keyword-pool row, but score/sort below decides order.
+          memories = [...semanticCandidates, ...memories];
+        }
+      }
+    } catch (err) {
+      console.warn("[Memory] Fast-path semantic recall unavailable:", err?.message || err);
+    }
+  }
+
   memories = dedupeMemoryRows(memories.map((memory) => normalizeMemoryRowForUse(memory)))
-    .map((memory) => ({
-      ...memory,
-      retrieval_score: introspectionQuery
+    .map((memory) => {
+      const keywordScore = introspectionQuery
         ? scoreFastContextMemory(memory, queryTokens) + getMemoryConfidenceScore(memory) * 2
-        : scoreFastContextMemory(memory, queryTokens),
-    }))
+        : scoreFastContextMemory(memory, queryTokens);
+      // A semantic-only candidate (no lexical overlap) scores 0 on keywords; give
+      // it a positive score derived from cosine similarity so it survives the
+      // keyword-overlap filter below. Scaled to sit alongside lexical scores.
+      const semanticScore = semanticVectorScores.has(String(memory?.id || ""))
+        ? 5 + semanticVectorScores.get(String(memory?.id || "")) * 10
+        : 0;
+      return {
+        ...memory,
+        retrieval_score: Math.max(keywordScore, semanticScore),
+      };
+    })
     .filter((memory) => introspectionQuery || Number(memory.retrieval_score || 0) > 0)
     .sort((a, b) => {
       const scoreDiff = Number(b.retrieval_score || 0) - Number(a.retrieval_score || 0);
