@@ -38,7 +38,7 @@ import { createSessionEndHandler } from "./memory/session-end-route.js";
 import { shouldSkipChatMemoryContext } from "./memory/injection-gate.js";
 import {
   buildStreamUpstreamPayload,
-  composeMemoryEnvelope,
+  composeContextEnvelope,
   extractStreamMessage,
   getRequestedResponseFormat,
 } from "./chat-proxy.js";
@@ -190,6 +190,7 @@ import {
 } from "./hire-automation-consent.js";
 import { recordHireUsageEvent } from "./hire-usage-events.js";
 import { recordUsageEvent } from "./usage-events.js";
+import { recordGeneratedFiles, userOwnsGeneratedFile } from "./generated-files.js";
 import {
   HIRE_METERING_CONTRACT_VERSION,
   buildHireMeterForwardHeaders,
@@ -364,6 +365,7 @@ import { buildRefreshCookie } from "./zaki-session-cookie.js";
 import { sweepExpiredHolds, reserveUnits, settleHold, ensureWallet, readWallet } from "./unit-ledger.js";
 import { buildMeterDemoRouter } from "./meter-demo-router.js";
 import { actualChatUnits, estimateChatUnits, deterministicGrantId } from "./chat-meter.js";
+import { isToolFireEvent, extractGeneratedFile } from "./agent-stream-signals.js";
 import {
   buildClearedGoogleOAuthNonceCookie,
   buildGoogleOAuthRedirectUri,
@@ -956,6 +958,8 @@ async function pipeSseWithAgentLinks(readable, res, req, label = "Stream") {
     assistantOutputChars: 0,
     events: 0,
     sawError: false,
+    sawToolCall: false,
+    generatedFiles: [],
   };
 
   res.on("close", () => {
@@ -1010,6 +1014,9 @@ async function pipeSseWithAgentLinks(readable, res, req, label = "Stream") {
             metrics.sawError ||
             payload?.type === "error" ||
             payload?.error === true;
+          if (isToolFireEvent(payload)) metrics.sawToolCall = true;
+          const __gf = extractGeneratedFile(payload);
+          if (__gf) metrics.generatedFiles.push(__gf);
           outLines.push(`data: ${JSON.stringify(payload)}`);
           wrote = true;
         } catch {
@@ -9942,16 +9949,9 @@ function classifySpacesChatMeterAction(message = "", requestPayload = {}) {
   if (isComparisonPrompt(message)) {
     return "spaces_chat_synthetic";
   }
-  if (
-    requestPayload?.webSearchEnabled === true ||
-    requestPayload?.webSearch === true ||
-    /^@agent\b/i.test(String(message || "").trim())
-  ) {
-    return "spaces_chat_search";
-  }
   const mode = String(requestPayload?.mode || "").trim().toLowerCase();
   if (mode === "query") return "spaces_chat_query";
-  return "spaces_chat_turn";
+  return "spaces_chat_tool";
 }
 
 function estimateSpacesChatMeterUnits(message = "", action = "spaces_chat_turn") {
@@ -9959,7 +9959,7 @@ function estimateSpacesChatMeterUnits(message = "", action = "spaces_chat_turn")
   const estimatedTokenUnits = Math.max(0, String(message || "").length / 4000);
   const baseUnits = normalizedAction === "memory_read"
     ? 0.25
-    : normalizedAction.includes("search")
+    : normalizedAction.includes("tool")
       ? 1.5
       : normalizedAction.includes("query")
         ? 1.25
@@ -10127,6 +10127,9 @@ async function recordSpacesMeterReceiptBestEffort(req, {
     const outputChars = streamMetrics
       ? Number(streamMetrics.assistantOutputChars || 0)
       : String(outputText || "").length;
+    if (req.spacesChatAction === "spaces_chat_tool") {
+      req.spacesChatAction = streamMetrics?.sawToolCall ? "spaces_chat_tool" : "spaces_chat_turn";
+    }
     const settledUnits = sawError ? 0 : actualChatUnits({ inputChars, outputChars, action: req.spacesChatAction });
     const settleResult = await settleHold({
       holdId: hold.id,
@@ -10389,6 +10392,10 @@ const streamChatHandler = async (req, res) => {
     const { slug, threadSlug } = req.params;
 
     const disableResponseEnvelope = requestPayload?.disableResponseEnvelope === true;
+    // Single Auto mode: every non-"query" turn routes through the agent path. Only an explicit
+    // mode:"query" stays on the internal (per-user JWT) route with its existing behavior.
+    const isQueryMode = String(requestPayload?.mode || "").trim().toLowerCase() === "query";
+    const isAgentTurn = !isQueryMode;
     let enrichedMessage = isIdentityProbePrompt(originalMessage)
       ? applyIdentityGuardrails(originalMessage)
       : disableResponseEnvelope
@@ -10406,6 +10413,7 @@ const streamChatHandler = async (req, res) => {
       requestedFormat: requestedFormat || "plain",
       disableResponseEnvelope,
       skipMemoryContext,
+      isAgentTurn,
       mode:
         typeof requestPayload?.mode === "string" && requestPayload.mode.trim()
           ? requestPayload.mode.trim()
@@ -10414,7 +10422,11 @@ const streamChatHandler = async (req, res) => {
         requestPayload?.webSearchEnabled === true || requestPayload?.webSearch === true,
     };
 
-    // Inject memory context if we have a user and this is not a query/web-search style request.
+    // Fetch memory context when we have a user and this turn is eligible.
+    // Both the always-on identity core and query-relevant recall are folded into
+    // the message envelope below.
+    let memoryContext = "";
+    let memoryCore = "";
     if (userEmail && !skipMemoryContext) {
       try {
         const contextStartedAt = Date.now();
@@ -10432,14 +10444,11 @@ const streamChatHandler = async (req, res) => {
         );
         console.log(`[Memory] Context build finished in ${Date.now() - contextStartedAt}ms`);
 
-        // Versioned envelope keeps the injected memory parseable and easy to strip
-        // client-side. Two framed sections: always-on identity core + relevant recall.
-        const memoryEnvelope = composeMemoryEnvelope({
-          core: memoryResult.core,
-          context: memoryResult.context,
-        });
-        if (memoryEnvelope) {
-          enrichedMessage = `${memoryEnvelope}\n${originalMessage}`;
+        // Capture both the always-on identity core and query-relevant recall; the
+        // message envelope (guardrail on agent turns, plain on query turns) is composed below.
+        memoryCore = String(memoryResult.core || "");
+        memoryContext = String(memoryResult.context || "");
+        if (memoryCore || memoryContext) {
           memoryInjected = true;
           memorySources = (memoryResult.sources || []).map((source) => ({
             id: source.id,
@@ -10458,22 +10467,40 @@ const streamChatHandler = async (req, res) => {
         // Continue without memory
       }
     } else if (skipMemoryContext) {
-      console.log("[Memory] Skipping context injection for query/web-search or long prompt");
+      console.log("[Memory] Skipping context injection for query mode or long prompt");
     }
 
-    // Agent / web-search turns (the frontend prepends "@agent" when the web-search toggle is armed)
-    // must run on the DEV API stream-chat (EphemeralAgentHandler runs the agent INLINE over HTTP, with
-    // the admin key). The internal route only opens a websocket invocation, so the agent never streams
-    // back. Normal chat stays on the internal route (per-user TYP session JWT + memory injection).
-    const isAgentTurn =
-      /^@agent\b/i.test(String(originalMessage || "").trim()) ||
-      requestPayload?.webSearchEnabled === true ||
-      requestPayload?.webSearch === true;
+    if (isAgentTurn) {
+      // Single Auto mode runs on the dev-API agent path, which DROPS promptPrefix — so the ZAKI
+      // identity guardrail (and any memory context) must ride INSIDE the message envelope. Always
+      // wrap with guardrail:true so the model never leaks a third-party identity, even with no memory.
+      // The frontend strips the [[ZAKI_MEMORY_CONTEXT_V2]] envelope before display. We wrap the EXISTING
+      // enrichedMessage (the response-format / identity-probe envelope applied at init) so that the
+      // "in a table / briefly" formatting feature is preserved on Auto turns, not dropped.
+      enrichedMessage = `${composeContextEnvelope({
+        guardrail: true,
+        core: memoryCore,
+        context: memoryContext,
+        nowISO: new Date().toISOString().slice(0, 10),
+      })}\n\n${enrichedMessage}`;
+    } else if (memoryCore || memoryContext) {
+      // Query mode: inject the memory envelope (identity core + relevant recall), no guardrail.
+      enrichedMessage = `${composeContextEnvelope({
+        guardrail: false,
+        core: memoryCore,
+        context: memoryContext,
+      })}\n${originalMessage}`;
+    }
+
+    // Agent (Auto) turns run on the DEV API stream-chat (EphemeralAgentHandler runs the agent INLINE
+    // over HTTP with the admin key, and mode:"automatic" lets Qwen3 auto-decide tools). The internal
+    // route only opens a websocket invocation, so the agent never streams back. Query turns stay on the
+    // internal route (per-user TYP session JWT + existing behavior).
     const targetUrl = isAgentTurn
       ? `${apiBase}/v1/workspace/${slug}/thread/${threadSlug}/stream-chat`
       : `${apiBase}/workspace/${slug}/thread/${threadSlug}/stream-chat`;
 
-    console.log(`[Chat] Forwarding to NOVA: ${targetUrl}${isAgentTurn ? " (agent/web-search)" : ""}`);
+    console.log(`[Chat] Forwarding to NOVA: ${targetUrl}${isAgentTurn ? " (agent/auto)" : ""}`);
     console.log("[Chat] Dispatch", {
       ...chatLogContext,
       memoryInjected,
@@ -10481,17 +10508,16 @@ const streamChatHandler = async (req, res) => {
     });
 
     const upstreamPayload = buildStreamUpstreamPayload(requestPayload, enrichedMessage);
-    // The dev-API ephemeral agent only triggers when the message starts with "@agent". The frontend
-    // prepends it when the toggle is armed; ensure it here too so a webSearchEnabled request without
-    // the prefix still triggers the agent (and so the agent never sees a memory envelope in front).
-    if (isAgentTurn && !/^@agent\b/i.test(String(upstreamPayload.message || "").trim())) {
-      upstreamPayload.message = `@agent ${String(upstreamPayload.message || "").trim()}`.trim();
-    }
-    // Defense in depth against the v1.13 automatic-mode leak: a normal (non-agent) chat must run in
-    // "chat" (or the user-selected "query") mode, never "automatic" (raw tool-call tokens leak on the
-    // headless path). The frontend sends an explicit mode and new spaces are pinned to chat at create,
-    // but force a safe mode here so a mode-less or "automatic" payload can never leak into a user chat.
-    if (!isAgentTurn) {
+    if (isAgentTurn) {
+      // Per-request mode:"automatic" triggers the dev-API ephemeral agent (Qwen3 auto-decides tools)
+      // WITHOUT an "@agent" prefix — which is required so the memory/guardrail envelope can sit at the
+      // front of the message (an "@agent" prefix would have to come first and block the envelope).
+      upstreamPayload.mode = "automatic";
+    } else {
+      // Defense in depth against the v1.13 automatic-mode leak: the internal (query) path must run in
+      // "chat" (or the user-selected "query") mode, never "automatic" (raw tool-call tokens leak on the
+      // headless path). The frontend sends an explicit mode and new spaces are pinned to chat at create,
+      // but force a safe mode here so a mode-less or "automatic" payload can never leak into a user chat.
       const requestedMode = String(upstreamPayload.mode || "").trim().toLowerCase();
       if (requestedMode !== "chat" && requestedMode !== "query") {
         upstreamPayload.mode = "chat";
@@ -10597,6 +10623,11 @@ const streamChatHandler = async (req, res) => {
         streamMetrics,
         model: "typ-chat",
       });
+      try {
+        if (streamMetrics?.generatedFiles?.length) {
+          await recordGeneratedFiles(dbQuery, { zakiUserId: zakiUser.nova_user_id, workspaceSlug: slug, threadSlug }, streamMetrics.generatedFiles);
+        }
+      } catch (e) { console.warn("[GeneratedFiles] capture failed:", e.message); }
     } else {
       // Awaitable pipe so we settle on the ACTUAL outcome (success/failed/cancelled), not before it runs.
       const pipeResult = await pipeReadableToResponseWithCompletion(nodeStream, res, "Chat stream");
@@ -10654,6 +10685,59 @@ app.post(
   express.json({ limit: "10mb" }),
   streamChatHandler
 );
+
+// Authorized download proxy for agent-generated files (pptx/pdf/docx/xlsx/csv).
+// The engine's own route has no per-user ownership check; ZAKI enforces it here.
+app.get("/api/spaces/:spaceId/files/:storageFilename", async (req, res) => {
+  try {
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    const zakiUser = authResult.zakiUser;
+    if (!zakiUser?.nova_user_id) {
+      return res.status(401).json({ error: "Chat requires a linked TYP account." });
+    }
+
+    const { storageFilename } = req.params;
+    if (!await userOwnsGeneratedFile(dbQuery, storageFilename, zakiUser.nova_user_id)) {
+      return res.status(404).json({ error: "not found" });
+    }
+
+    const apiBase = getApiBase();
+    if (!apiBase) {
+      return res.status(500).json({ error: "NOVA_TYP_BASE_URL is not configured." });
+    }
+    if (!NOVA_TYP_API_KEY) {
+      return res.status(500).json({ error: "NOVA_TYP_API_KEY is not configured." });
+    }
+
+    const upstream = await fetchWithTimeout(
+      `${apiBase}/v1/document/generated-files/${encodeURIComponent(storageFilename)}`,
+      { headers: { Authorization: `Bearer ${NOVA_TYP_API_KEY}` } },
+      ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+      "Generated file download"
+    );
+
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ error: "File not available." });
+    }
+
+    const contentType = upstream.headers.get("content-type") || "application/octet-stream";
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="${storageFilename}"`);
+    res.status(upstream.status);
+
+    if (!upstream.body) {
+      res.end();
+      return;
+    }
+    pipeReadableToResponse(Readable.fromWeb(upstream.body), res, "Generated file download");
+  } catch (error) {
+    console.error("[GeneratedFiles] Download proxy error:", error);
+    if (!res.headersSent) {
+      return res.status(503).json({ error: error?.message || "Generated file download failed." });
+    }
+  }
+});
 
 function buildAgentMeterIdentity(authContext) {
   const zakiUser = authContext?.zakiUser || authContext;

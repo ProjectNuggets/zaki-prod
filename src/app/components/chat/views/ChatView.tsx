@@ -20,9 +20,13 @@ import {
 } from "../NullalisTurnTimeline";
 import { QuickReplyChips } from "../QuickReplyChips";
 import { buildAgentInspectorPanelModel } from "../AgentInspectorPanelModel";
+import { ChatAgentSteps } from "../ChatAgentSteps";
+import { GeneratedFileChip } from "../GeneratedFileChip";
 
 interface ChatViewProps {
   messages: Message[];
+  /** Active space id — used to build generated-file download URLs (normal Spaces). */
+  spaceId?: string;
   replayTimelines?: Record<string, NullalisTranscriptEntry[]>;
   isHistoryLoading: boolean;
   isStreaming: boolean;
@@ -231,6 +235,7 @@ function AgentReplyEvidence({
 
 export function ChatView({
   messages,
+  spaceId = "",
   replayTimelines,
   isHistoryLoading,
   isStreaming,
@@ -306,6 +311,30 @@ export function ChatView({
           usage={zakiUsageSummary}
         />
         <TaskChecklist tasks={nullalisTaskItems} />
+      </div>
+    );
+  };
+
+  // Normal Spaces always-agent narration (above the bubble). The nullALIS agent
+  // space (`botMode`) has its own timeline rail and must not render this.
+  const renderAgentSteps = (msg: Message) => {
+    if (botMode || msg.role !== "assistant") return null;
+    const steps = msg.agentSteps ?? [];
+    const running = msg.agentRunning ?? false;
+    if (steps.length === 0 && !running) return null;
+    return <ChatAgentSteps steps={steps} running={running} />;
+  };
+
+  // Generated-file download chips (below the bubble), normal Spaces only.
+  const renderGeneratedFiles = (msg: Message) => {
+    if (botMode || msg.role !== "assistant") return null;
+    const files = msg.agentFiles ?? [];
+    if (files.length === 0) return null;
+    return (
+      <div className="flex flex-col items-start gap-1.5">
+        {files.map((file) => (
+          <GeneratedFileChip key={file.storageFilename} spaceId={spaceId} file={file} />
+        ))}
       </div>
     );
   };
@@ -410,6 +439,7 @@ export function ChatView({
           return (
             <div key={msg.id} className="flex flex-col gap-2">
               {renderTimelineArtifacts({ phase: "revealing" })}
+              {renderAgentSteps(msg)}
               {String(msg.content || "").trim() ? (
                 <MessageBubble
                   message={msg}
@@ -429,6 +459,7 @@ export function ChatView({
                   />
                 )
               )}
+              {renderGeneratedFiles(msg)}
               {botMode ? (
                 <AgentReplyEvidence
                   entries={nullalisTranscriptEntries}
@@ -458,6 +489,7 @@ export function ChatView({
                 revealPhase="done"
               />
             ) : null}
+            {renderAgentSteps(msg)}
             <MessageBubble
               message={msg}
               botMode={botMode}
@@ -468,6 +500,7 @@ export function ChatView({
               onThumbsDown={onThumbsDownMessage}
               reaction={getReaction ? getReaction(msg.id) : null}
             />
+            {renderGeneratedFiles(msg)}
             {botMode && msg.role === "assistant" ? (
               <AgentReplyEvidence
                 entries={evidenceEntries}

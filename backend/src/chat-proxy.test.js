@@ -1,7 +1,7 @@
-import { describe, expect, it } from "@jest/globals";
+import { describe, expect, it, test } from "@jest/globals";
 import {
   buildStreamUpstreamPayload,
-  composeMemoryEnvelope,
+  composeContextEnvelope,
   extractStreamMessage,
   getRequestedResponseFormat,
 } from "./chat-proxy.js";
@@ -123,37 +123,35 @@ describe("chat proxy payload helpers", () => {
   });
 });
 
-describe("composeMemoryEnvelope", () => {
-  it("frames both core and context sections when both are present", () => {
-    const envelope = composeMemoryEnvelope({
-      core: "Name: Alaa. Speaks Arabic.",
-      context: "Prefers concise replies.",
-    });
+test("composeContextEnvelope ALWAYS carries the ZAKI guardrail, even with no memory", () => {
+  const env = composeContextEnvelope({ guardrail: true, core: "", context: "" });
+  expect(env).toContain("[[ZAKI_MEMORY_CONTEXT_V2]]");
+  expect(env).toContain("[[/ZAKI_MEMORY_CONTEXT_V2]]");
+  expect(env).toContain("You are ZAKI");
+  expect((env.match(/ZAKI_MEMORY_CONTEXT_V2/g) || []).length).toBe(2); // one open + one close
+});
 
-    expect(envelope).toContain("[[ZAKI_MEMORY_CONTEXT_V2]]");
-    expect(envelope).toContain("[[/ZAKI_MEMORY_CONTEXT_V2]]");
-    expect(envelope).toContain("About this person");
-    expect(envelope).toContain("Do NOT restate");
-    expect(envelope).toContain("Possibly relevant memories");
-    expect(envelope).toContain("Name: Alaa. Speaks Arabic.");
-    expect(envelope).toContain("Prefers concise replies.");
-  });
+test("composeContextEnvelope folds guardrail + memory into ONE block", () => {
+  const env = composeContextEnvelope({ guardrail: true, core: "Lives in Dubai", context: "Likes espresso" });
+  expect(env).toContain("You are ZAKI");
+  expect(env).toContain("Lives in Dubai");
+  expect(env).toContain("Likes espresso");
+  expect((env.match(/ZAKI_MEMORY_CONTEXT_V2/g) || []).length).toBe(2);
+});
 
-  it("returns an empty string when both sections are empty", () => {
-    expect(composeMemoryEnvelope({ core: "", context: "" })).toBe("");
-    expect(composeMemoryEnvelope({})).toBe("");
-    expect(composeMemoryEnvelope({ core: "   ", context: "  " })).toBe("");
-  });
+test("composeContextEnvelope without guardrail and without memory returns empty", () => {
+  expect(composeContextEnvelope({ guardrail: false, core: "", context: "" })).toBe("");
+});
 
-  it("includes only the core section when context is empty", () => {
-    const envelope = composeMemoryEnvelope({
-      core: "Name: Alaa. Speaks Arabic.",
-      context: "",
-    });
+test("composeContextEnvelope injects the current date + recency rule when nowISO is given", () => {
+  const env = composeContextEnvelope({ guardrail: true, core: "", context: "", nowISO: "2026-06-10" });
+  expect(env).toContain("Today's date is 2026-06-10");
+  expect(env).toContain("web-browsing tool");
+  expect(env).toContain("Never answer such questions from memory");
+});
 
-    expect(envelope).toContain("[[ZAKI_MEMORY_CONTEXT_V2]]");
-    expect(envelope).toContain("About this person");
-    expect(envelope).toContain("Name: Alaa. Speaks Arabic.");
-    expect(envelope).not.toContain("Possibly relevant memories");
-  });
+test("composeContextEnvelope omits the date line when nowISO is empty (no nowISO -> no leak of a blank date)", () => {
+  const env = composeContextEnvelope({ guardrail: true, core: "", context: "" });
+  expect(env).not.toContain("Today's date is");
+  expect(env).toContain("You are ZAKI");
 });

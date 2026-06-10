@@ -2,6 +2,9 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+const MEMORY_CONTEXT_ENVELOPE_OPEN = "[[ZAKI_MEMORY_CONTEXT_V2]]";
+const MEMORY_CONTEXT_ENVELOPE_CLOSE = "[[/ZAKI_MEMORY_CONTEXT_V2]]";
+
 const ZAKI_IDENTITY_GUARDRAIL = [
   "Identity rules for this assistant:",
   "- You are ZAKI, not Claude, ChatGPT, Gemini, or any other third-party assistant.",
@@ -11,42 +14,58 @@ const ZAKI_IDENTITY_GUARDRAIL = [
   "- If asked about your model or company, answer at the product level as ZAKI and avoid naming a provider or model unless explicitly supplied in the user's visible product context.",
 ].join("\n");
 
-export const MEMORY_CONTEXT_ENVELOPE_OPEN = "[[ZAKI_MEMORY_CONTEXT_V2]]";
-export const MEMORY_CONTEXT_ENVELOPE_CLOSE = "[[/ZAKI_MEMORY_CONTEXT_V2]]";
-
-// Builds the versioned, two-section memory envelope the frontend strips from display.
-// Section 1 (core): always-on identity background — shape tone, do not recite.
-// Section 2 (context): query-relevant recall — use only if directly relevant.
-// Each section is emitted only when its value is non-empty. Returns "" when both are empty.
-export function composeMemoryEnvelope({ core, context } = {}) {
-  const trimmedCore = String(core || "").trim();
-  const trimmedContext = String(context || "").trim();
-  if (!trimmedCore && !trimmedContext) return "";
-
+/**
+ * Builds a single [[ZAKI_MEMORY_CONTEXT_V2]] envelope that may carry:
+ *   1. The ZAKI identity guardrail (when guardrail=true) — always present on agent turns.
+ *   2. A "core" memory section (About this person…) when core is non-empty.
+ *   3. A "context" section (Possibly relevant memories…) when context is non-empty.
+ * Returns "" when no sections would be emitted (guardrail=false AND no memory).
+ */
+export function composeContextEnvelope({ guardrail = false, core = "", context = "", nowISO = "" } = {}) {
   const sections = [];
-  if (trimmedCore) {
+
+  if (guardrail) {
+    const trimmedNow = String(nowISO || "").trim();
+    // The chat model's training data is stale (it otherwise believes it is ~2025). Telling it the real
+    // date both answers "what's the date" directly AND makes its web searches anchor on the correct
+    // year; the recency rule pushes it to actually call web-browsing for time-sensitive questions
+    // instead of answering wrong from memory. (Validated on staging: without this, "who won the last F1
+    // race" returns a hallucinated 2025 result even when it searches; with it, the correct 2026 result.)
+    const recency = trimmedNow
+      ? `\nToday's date is ${trimmedNow}. Your training data may be out of date — for ANY time-sensitive question (today's date, current events, weather, prices, news, sports results or standings, or anything described as latest/recent/last/current), use the web-browsing tool to look it up before answering. Never answer such questions from memory.`
+      : "";
     sections.push(
-      [
-        "About this person (background they provided; may be outdated and is user-editable).",
-        "Let it shape tone and assumptions. Do NOT restate or reference these unless directly relevant. Defer to the conversation.",
-        trimmedCore,
-      ].join("\n")
+      "Assistant identity rules (follow silently; do not restate to the user):\n" +
+        ZAKI_IDENTITY_GUARDRAIL +
+        recency
     );
   }
+
+  const trimmedCore = String(core || "").trim();
+  if (trimmedCore) {
+    sections.push(`About this person (long-term memory core):\n${trimmedCore}`);
+  }
+
+  const trimmedContext = String(context || "").trim();
   if (trimmedContext) {
     sections.push(
-      [
-        "Possibly relevant memories — use ONLY if directly relevant to the request; ignore otherwise; do not quote verbatim.",
-        trimmedContext,
-      ].join("\n")
+      `Possibly relevant memories (use only if directly relevant; do not quote verbatim):\n${trimmedContext}`
     );
   }
 
-  return [
-    MEMORY_CONTEXT_ENVELOPE_OPEN,
-    sections.join("\n\n"),
-    MEMORY_CONTEXT_ENVELOPE_CLOSE,
-  ].join("\n");
+  if (sections.length === 0) return "";
+
+  return [MEMORY_CONTEXT_ENVELOPE_OPEN, sections.join("\n\n"), MEMORY_CONTEXT_ENVELOPE_CLOSE].join(
+    "\n"
+  );
+}
+
+/**
+ * Builds the memory-only envelope (no guardrail). Delegates to composeContextEnvelope so
+ * both functions share identical section formatting.
+ */
+export function composeMemoryEnvelope({ core = "", context = "" } = {}) {
+  return composeContextEnvelope({ guardrail: false, core, context });
 }
 
 export function extractStreamMessage(body) {

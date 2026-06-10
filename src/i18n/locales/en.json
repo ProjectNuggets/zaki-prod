@@ -543,15 +543,6 @@
       "onToast": "Query mode enabled: answers now use documents uploaded to this space.",
       "offToast": "Query mode is off. Back to normal chat."
     },
-    "webSearch": {
-      "enableAriaLabel": "Enable web search for the next message",
-      "disableAriaLabel": "Disable web search",
-      "enableTitle": "Use web search for the next message",
-      "disableTitle": "Turn off web search",
-      "offPill": "Web",
-      "onPill": "On",
-      "activePill": "Web search"
-    },
     "memoryMode": {
       "label": "Memory",
       "auto": "Auto",
