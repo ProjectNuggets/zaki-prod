@@ -6888,6 +6888,11 @@ export function ChatArea() {
                   if (nextPendingCount > 0) {
                     requestMemoryStatusSync(true);
                   }
+                  if (typeof window !== "undefined") {
+                    // Let the open memory panel refetch its dossier on any
+                    // memory-status change (not just conflict-count changes).
+                    window.dispatchEvent(new Event("zaki:memory-changed"));
+                  }
                 } catch {
                   // Ignore malformed events and rely on sync fallback.
                   requestMemoryStatusSync(true);

@@ -222,6 +222,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
     "memories" | "pending" | "conflicts"
   >("memories");
   const [memoryConflictCount, setMemoryConflictCount] = useState(0);
+  const [memoryRefreshKey, setMemoryRefreshKey] = useState(0);
   const { data: entitlementsResult } = useEntitlements();
   const entitlements = entitlementsResult?.data ?? null;
   const planTierRaw = entitlements?.plan?.tier ?? "free";
@@ -348,6 +349,16 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
       window.removeEventListener("zaki:memory-conflicts-count", handleConflictCount);
     };
   }, [openSettingsSection, user?.username]);
+
+  useEffect(() => {
+    const bump = () => setMemoryRefreshKey((k) => k + 1);
+    window.addEventListener("zaki:memory-conflicts-count", bump);
+    window.addEventListener("zaki:memory-changed", bump);
+    return () => {
+      window.removeEventListener("zaki:memory-conflicts-count", bump);
+      window.removeEventListener("zaki:memory-changed", bump);
+    };
+  }, []);
 
   useEffect(() => {
     if (!profileMenuOpen || !user?.username) return;
@@ -2378,6 +2389,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
                 variant="panel"
                 initialSearchQuery={memorySearchQuery}
                 initialTab={memoryInitialTab}
+                refreshKey={memoryRefreshKey}
               />
             </div>
           </div>

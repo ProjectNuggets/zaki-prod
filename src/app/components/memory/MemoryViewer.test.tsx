@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryViewer } from "./MemoryViewer";
 import {
   apiRequest,
+  fetchMemoryActivity,
   fetchMemoryPreferences,
   patchMemory,
   updateMemoryPreferences,
@@ -11,6 +12,7 @@ import {
 
 jest.mock("@/lib/api", () => ({
   apiRequest: jest.fn(),
+  fetchMemoryActivity: jest.fn(),
   fetchMemoryPreferences: jest.fn(),
   updateMemoryPreferences: jest.fn(),
   patchMemory: jest.fn(),
@@ -66,6 +68,7 @@ function jsonResponse(payload: unknown, ok = true) {
 describe("MemoryViewer", () => {
   beforeEach(() => {
     (apiRequest as jest.Mock).mockReset();
+    (fetchMemoryActivity as jest.Mock).mockReset();
     (fetchMemoryPreferences as jest.Mock).mockReset();
     (updateMemoryPreferences as jest.Mock).mockReset();
     (patchMemory as jest.Mock).mockReset();
@@ -101,6 +104,10 @@ describe("MemoryViewer", () => {
     (patchMemory as jest.Mock).mockResolvedValue({
       response: jsonResponse({ memory: null }),
       data: { memory: null },
+    });
+    (fetchMemoryActivity as jest.Mock).mockResolvedValue({
+      response: jsonResponse({ activities: [] }),
+      data: { activities: [] },
     });
   });
 
@@ -302,5 +309,17 @@ describe("MemoryViewer", () => {
     const sw = await screen.findByRole("switch", { name: /memory/i });
     fireEvent.click(sw);
     await waitFor(() => expect(api.updateMemoryPreferences).toHaveBeenCalledWith("off"));
+  });
+
+  it("refetches when refreshKey changes", async () => {
+    const api = await import("@/lib/api");
+    const spy = api.fetchMemoryActivity as jest.Mock;
+    const { rerender } = render(
+      <MemoryViewer userId="u@x.co" variant="panel" refreshKey={0} />
+    );
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    const before = spy.mock.calls.length;
+    rerender(<MemoryViewer userId="u@x.co" variant="panel" refreshKey={1} />);
+    await waitFor(() => expect(spy.mock.calls.length).toBeGreaterThan(before));
   });
 });

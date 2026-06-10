@@ -82,6 +82,7 @@ interface MemoryViewerProps {
   initialSearchQuery?: string | null;
   initialTab?: "memories" | "pending" | "conflicts";
   variant?: "modal" | "panel";
+  refreshKey?: number;
 }
 
 type MemorySummaryGroup =
@@ -271,6 +272,7 @@ export function MemoryViewer({
   initialSearchQuery = "",
   initialTab = "memories",
   variant = "modal",
+  refreshKey = 0,
 }: MemoryViewerProps) {
   const [memories, setMemories] = useState<MemoryRecord[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -449,7 +451,8 @@ export function MemoryViewer({
     void fetchPendingMemories(false);
     void fetchConflicts(false);
     void fetchActivity(false);
-  }, [userId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, refreshKey]);
 
   useEffect(() => {
     const nextQuery = String(initialSearchQuery || "").trim();
