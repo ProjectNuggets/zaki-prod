@@ -10745,12 +10745,14 @@ const streamChatHandler = async (req, res) => {
       // Single Auto mode runs on the dev-API agent path, which DROPS promptPrefix — so the ZAKI
       // identity guardrail (and any memory context) must ride INSIDE the message envelope. Always
       // wrap with guardrail:true so the model never leaks a third-party identity, even with no memory.
-      // The frontend strips the [[ZAKI_MEMORY_CONTEXT_V2]] envelope before display.
+      // The frontend strips the [[ZAKI_MEMORY_CONTEXT_V2]] envelope before display. We wrap the EXISTING
+      // enrichedMessage (the response-format / identity-probe envelope applied at init) so that the
+      // "in a table / briefly" formatting feature is preserved on Auto turns, not dropped.
       enrichedMessage = `${composeContextEnvelope({
         guardrail: true,
         core: "",
         context: memoryContext,
-      })}\n\n${originalMessage}`;
+      })}\n\n${enrichedMessage}`;
     } else if (memoryContext) {
       // Query mode: preserve the existing memory-envelope behavior unchanged (no guardrail).
       enrichedMessage = `${MEMORY_CONTEXT_ENVELOPE_OPEN}
