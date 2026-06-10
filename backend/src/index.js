@@ -10157,16 +10157,9 @@ function classifySpacesChatMeterAction(message = "", requestPayload = {}) {
   if (isComparisonPrompt(message)) {
     return "spaces_chat_synthetic";
   }
-  if (
-    requestPayload?.webSearchEnabled === true ||
-    requestPayload?.webSearch === true ||
-    /^@agent\b/i.test(String(message || "").trim())
-  ) {
-    return "spaces_chat_search";
-  }
   const mode = String(requestPayload?.mode || "").trim().toLowerCase();
   if (mode === "query") return "spaces_chat_query";
-  return "spaces_chat_turn";
+  return "spaces_chat_tool";
 }
 
 function estimateSpacesChatMeterUnits(message = "", action = "spaces_chat_turn") {
@@ -10174,7 +10167,7 @@ function estimateSpacesChatMeterUnits(message = "", action = "spaces_chat_turn")
   const estimatedTokenUnits = Math.max(0, String(message || "").length / 4000);
   const baseUnits = normalizedAction === "memory_read"
     ? 0.25
-    : normalizedAction.includes("search")
+    : normalizedAction.includes("tool")
       ? 1.5
       : normalizedAction.includes("query")
         ? 1.25
@@ -10342,6 +10335,9 @@ async function recordSpacesMeterReceiptBestEffort(req, {
     const outputChars = streamMetrics
       ? Number(streamMetrics.assistantOutputChars || 0)
       : String(outputText || "").length;
+    if (req.spacesChatAction === "spaces_chat_tool") {
+      req.spacesChatAction = streamMetrics?.sawToolCall ? "spaces_chat_tool" : "spaces_chat_turn";
+    }
     const settledUnits = sawError ? 0 : actualChatUnits({ inputChars, outputChars, action: req.spacesChatAction });
     const settleResult = await settleHold({
       holdId: hold.id,
