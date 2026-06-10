@@ -77,6 +77,7 @@ import {
   isInternalAgentReplyContent,
   normalizeAssistantDisplayText,
 } from "./chat/rendering/agentReplyPresentation";
+import { agentThoughtToStep } from "./chat/rendering/agentThoughtSteps";
 import {
   AgentInspectorRail,
   type AgentInspectorArtifact,
@@ -108,7 +109,13 @@ import { useNavigationStore, useAuthStore, useZakiSessionUiStore } from "@/store
 import { mapAgentSessionToZakiSessionUi } from "@/stores/zakiSessionUiStore";
 import { ShareModal } from "./ShareModal";
 import { toast } from "sonner";
-import type { PinnedFile, Space, Message } from "@/types";
+import type {
+  PinnedFile,
+  Space,
+  Message,
+  AgentNarrationStep,
+  GeneratedFileRef,
+} from "@/types";
 import { useMessages } from "@/queries/useThreads";
 import { spaceKeys } from "@/queries/useSpaces";
 import { useZakiSessions, zakiSessionKeys } from "@/queries/useZakiSessions";
@@ -4054,6 +4061,75 @@ export function ChatArea() {
     });
   }, []);
 
+  // Normal Spaces always-agent narration. These mutate per-turn state stored
+  // directly on the assistant message object (same pattern as `memorySources`
+  // / `turnEvents`). They are NOT used by the nullALIS agent space, which has
+  // its own transcript rail.
+  const appendAssistantAgentStep = useCallback(
+    (threadSlug: string, assistantId: string, step: AgentNarrationStep) => {
+      setMessagesByThread((prev) => {
+        const threadMessages = prev[threadSlug] ?? [];
+        const assistantIndex = threadMessages.findIndex((msg) => msg.id === assistantId);
+        if (assistantIndex === -1) return prev;
+        const existingMsg = threadMessages[assistantIndex];
+        if (!existingMsg) return prev;
+        const updated = [...threadMessages];
+        updated[assistantIndex] = {
+          ...existingMsg,
+          agentSteps: [...(existingMsg.agentSteps ?? []), step],
+          // First step of the turn flips the running flag on.
+          agentRunning: true,
+        };
+        return { ...prev, [threadSlug]: updated };
+      });
+    },
+    []
+  );
+
+  const appendAssistantGeneratedFile = useCallback(
+    (threadSlug: string, assistantId: string, file: GeneratedFileRef) => {
+      setMessagesByThread((prev) => {
+        const threadMessages = prev[threadSlug] ?? [];
+        const assistantIndex = threadMessages.findIndex((msg) => msg.id === assistantId);
+        if (assistantIndex === -1) return prev;
+        const existingMsg = threadMessages[assistantIndex];
+        if (!existingMsg) return prev;
+        // De-dupe by storageFilename in case the event repeats.
+        const existingFiles = existingMsg.agentFiles ?? [];
+        if (existingFiles.some((f) => f.storageFilename === file.storageFilename)) {
+          return prev;
+        }
+        const updated = [...threadMessages];
+        updated[assistantIndex] = {
+          ...existingMsg,
+          agentFiles: [...existingFiles, file],
+        };
+        return { ...prev, [threadSlug]: updated };
+      });
+    },
+    []
+  );
+
+  const setAssistantAgentRunning = useCallback(
+    (threadSlug: string, assistantId: string, running: boolean) => {
+      setMessagesByThread((prev) => {
+        const threadMessages = prev[threadSlug] ?? [];
+        const assistantIndex = threadMessages.findIndex((msg) => msg.id === assistantId);
+        if (assistantIndex === -1) return prev;
+        const existingMsg = threadMessages[assistantIndex];
+        if (!existingMsg) return prev;
+        if ((existingMsg.agentRunning ?? false) === running) return prev;
+        const updated = [...threadMessages];
+        updated[assistantIndex] = {
+          ...existingMsg,
+          agentRunning: running,
+        };
+        return { ...prev, [threadSlug]: updated };
+      });
+    },
+    []
+  );
+
   const updateAssistantError = useCallback(
     (threadSlug: string, assistantId: string, newContent: string, errorCode?: string | null) => {
       setMessagesByThread((prev) => {
@@ -6156,6 +6232,38 @@ export function ChatArea() {
         return {};
       }
 
+      // Normal Spaces always-agent narration. The engine streams `agentThought`
+      // status lines and `fileDownload` events on the per-turn SSE; the nullALIS
+      // agent space surfaces these through its own rail, so we ONLY handle them
+      // here for the normal Spaces path (!isZakiAgentSpace). They never become
+      // answer text — agentThought maps to a step, fileDownload to a chip.
+      if (!isZakiAgentSpace) {
+        if (eventType === "agentThought" || payloadType === "agentThought") {
+          const thought = typeof payload.thought === "string" ? payload.thought : "";
+          const step = agentThoughtToStep(thought);
+          if (step) {
+            appendAssistantAgentStep(threadSlug, assistantId, step);
+          }
+          return {};
+        }
+        if (eventType === "fileDownload" || payloadType === "fileDownload") {
+          const fd = (payload.fileDownload ?? null) as
+            | { filename?: unknown; storageFilename?: unknown; fileSize?: unknown }
+            | null;
+          const filename = typeof fd?.filename === "string" ? fd.filename : "";
+          const storageFilename =
+            typeof fd?.storageFilename === "string" ? fd.storageFilename : "";
+          if (filename && storageFilename) {
+            appendAssistantGeneratedFile(threadSlug, assistantId, {
+              filename,
+              storageFilename,
+              fileSize: typeof fd?.fileSize === "number" ? fd.fileSize : null,
+            });
+          }
+          return {};
+        }
+      }
+
       if (isZakiAgentSpace) {
         const explicitTextPayload =
           payloadType === "textResponse" ||
@@ -6380,6 +6488,12 @@ export function ChatArea() {
       finalizeZakiBotProgress("stream_end");
     }
 
+    // Normal Spaces: the turn is finished — stop the narration spinner. Any
+    // collected steps/file chips stay rendered. No-op for the agent space.
+    if (!isZakiAgentSpace) {
+      setAssistantAgentRunning(threadSlug, assistantId, false);
+    }
+
     flushRenderedContent();
     const finalized = normalizeAssistantFormatting(message, accumulated);
     if (finalized && finalized !== accumulated) {
@@ -6387,6 +6501,8 @@ export function ChatArea() {
     }
     return { content: finalized || accumulated };
   }, [
+    appendAssistantAgentStep,
+    appendAssistantGeneratedFile,
     applyQuotaHeaders,
     applyZakiBotToolResult,
     authUserId,
@@ -6397,6 +6513,7 @@ export function ChatArea() {
     isZakiBotActiveSpace,
     isMemoryPipelineEnabled,
     markZakiBotReplyStart,
+    setAssistantAgentRunning,
     pushNullalisNarrationFrame,
     pushNullalisTranscriptEntry,
     pushZakiBotProgressEvent,
@@ -8363,6 +8480,7 @@ export function ChatArea() {
     return (
       <ChatView
         messages={messages}
+        spaceId={activeWorkspaceSlug || ""}
         replayTimelines={replayTimelines}
         isHistoryLoading={isHistoryLoading || (isZakiBotActiveSpace && isBotHistoryLoading)}
         isStreaming={isStreaming}
