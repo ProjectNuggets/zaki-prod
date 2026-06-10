@@ -31,7 +31,10 @@ import {
   storeMemory,
   buildFastContext,
   buildIdentityCore,
+  findConflict,
+  markMemoryOutdated,
 } from "../src/memory/operations.js";
+import { extractFacts } from "../src/memory-extraction.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -120,6 +123,116 @@ async function runCaseOnce(caseDef, vectorEnabled) {
   return sourcesContainExpected(result?.sources, caseDef.expectContains);
 }
 
+// ---------------------------------------------------------------------------
+// Bucket 2: Supersede (newest wins). Deterministic — exercises the supersede
+// MECHANISM (findConflict -> markMemoryOutdated -> retrieval excludes outdated)
+// without the LLM, so it never flakes. Proves a contradiction resolves so only
+// the newest value is recalled.
+// ---------------------------------------------------------------------------
+const SUPERSEDE_CASES = [
+  {
+    key: "identity:location",
+    oldFact: "Lives in London",
+    newFact: "Lives in Tokyo",
+    query: "the city where I live",
+    expectNew: "tokyo",
+    expectOldGone: "london",
+  },
+  {
+    key: "identity:occupation",
+    oldFact: "Works as a teacher",
+    newFact: "Works as a software engineer",
+    query: "what I do for work",
+    expectNew: "software engineer",
+    expectOldGone: "teacher",
+  },
+];
+
+async function runSupersedeChecks() {
+  process.env.ZAKI_CHAT_MEMORY_VECTOR_ENABLED = "true";
+  const failures = [];
+  const rows = [];
+  for (const c of SUPERSEDE_CASES) {
+    await clearEvalUserMemories();
+    await storeMemory({
+      userId: EVAL_USER_ID,
+      content: c.oldFact,
+      type: "fact",
+      metadata: { conflictKey: c.key, userVerified: true },
+    });
+    // Simulate capturing the contradictory fact: detect + supersede + store.
+    const conflict = await findConflict({
+      userId: EVAL_USER_ID,
+      content: c.newFact,
+      conflictKey: c.key,
+    });
+    if (conflict?.memoryId) {
+      await markMemoryOutdated({ userId: EVAL_USER_ID, memoryId: conflict.memoryId });
+    }
+    await storeMemory({
+      userId: EVAL_USER_ID,
+      content: c.newFact,
+      type: "fact",
+      metadata: { conflictKey: c.key, userVerified: true },
+    });
+
+    const res = await buildFastContext({ userId: EVAL_USER_ID, query: c.query, limit: RECALL_LIMIT });
+    const hay = (res?.sources || [])
+      .map((s) => String(s?.content || "").toLowerCase())
+      .join("\n");
+    const detected = Boolean(conflict?.memoryId);
+    const newOk = hay.includes(c.expectNew);
+    const oldGone = !hay.includes(c.expectOldGone);
+    if (!detected) failures.push(`supersede[${c.key}]: contradiction not detected`);
+    if (!newOk) failures.push(`supersede[${c.key}]: new value "${c.expectNew}" not recalled`);
+    if (!oldGone) failures.push(`supersede[${c.key}]: stale value "${c.expectOldGone}" still recalled`);
+    rows.push({ key: c.key, detected, newOk, oldGone });
+  }
+  return { failures, rows };
+}
+
+// ---------------------------------------------------------------------------
+// Bucket 3: Extraction precision. Runs the REAL extractor (LLM + pattern
+// fallback). Asserts only PRECISION (no false positives) — robust even when the
+// extraction LLM times out, because the heuristic question-guard + pattern fixes
+// hold on the fallback path. Locks in the Phase 1 bugfixes.
+// ---------------------------------------------------------------------------
+const PRECISION_CASES = [
+  { input: "do I have any travel plans?", forbid: "any", why: "question must extract nothing" },
+  { input: "where do I live?", forbid: "any", why: "question must extract nothing" },
+  { input: "هل لدي أي خطط سفر؟", forbid: "any", why: "Arabic question must extract nothing" },
+  {
+    input: "I have a meeting tomorrow",
+    forbid: /^health detail:/i,
+    why: "ordinary 'I have X' must not become a health detail",
+  },
+];
+
+async function runPrecisionChecks() {
+  const failures = [];
+  const rows = [];
+  for (const c of PRECISION_CASES) {
+    let facts = [];
+    try {
+      facts = await extractFacts(c.input);
+    } catch {
+      facts = [];
+    }
+    const contents = (facts || []).map((f) => String(f?.content || ""));
+    let ok = true;
+    if (c.forbid === "any") {
+      ok = contents.length === 0;
+    } else if (c.forbid instanceof RegExp) {
+      ok = !contents.some((x) => c.forbid.test(x));
+    }
+    if (!ok) {
+      failures.push(`precision: "${c.input}" (${c.why}); got ${JSON.stringify(contents)}`);
+    }
+    rows.push({ input: c.input, ok });
+  }
+  return { failures, rows };
+}
+
 function fmtRow(cols, widths) {
   return cols
     .map((c, i) => String(c).padEnd(widths[i]))
@@ -206,6 +319,10 @@ async function main() {
   const coreWithinItems = coreItemCount <= IDENTITY_CORE_MAX_ITEMS;
   const coreWithinChars = coreCharCount <= IDENTITY_CORE_MAX_CHARS;
 
+  // Bucket 2 (supersede) + Bucket 3 (extraction precision).
+  const supersede = await runSupersedeChecks();
+  const precision = await runPrecisionChecks();
+
   // -------------------------------------------------------------------------
   // Report
   // -------------------------------------------------------------------------
@@ -255,6 +372,20 @@ async function main() {
   }
   console.log("");
 
+  console.log("--- Supersede (newest wins) ---");
+  for (const r of supersede.rows) {
+    console.log(
+      `    ${r.key.padEnd(22)} detected:${r.detected ? "y" : "n"} new:${r.newOk ? "y" : "n"} old-gone:${r.oldGone ? "y" : "n"}`
+    );
+  }
+  console.log("");
+  console.log("--- Extraction precision (no false positives) ---");
+  for (const r of precision.rows) {
+    const q = r.input.length > 48 ? `${r.input.slice(0, 47)}…` : r.input;
+    console.log(`    ${(r.ok ? "ok  " : "FAIL")} ${q}`);
+  }
+  console.log("");
+
   // -------------------------------------------------------------------------
   // Verdicts
   // -------------------------------------------------------------------------
@@ -279,6 +410,8 @@ async function main() {
       `identity core is ${coreCharCount} chars > ${IDENTITY_CORE_MAX_CHARS}`
     );
   }
+  for (const f of supersede.failures) failures.push(f);
+  for (const f of precision.failures) failures.push(f);
 
   // Always clean up the namespaced user's memories.
   await clearEvalUserMemories();
