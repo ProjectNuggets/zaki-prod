@@ -792,7 +792,7 @@ export function MemoryViewer({
   }
 
   return (
-    <div className={cn("space-y-5 font-body", isRtl && "rtl text-right")}>
+    <div className={cn("space-y-5 font-body", variant === "panel" && "zaki-stagger", isRtl && "rtl text-right")}>
       <div className="rounded-zaki-xl border border-zaki bg-zaki-raised px-4 py-4 shadow-zaki-md dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
         <div className="flex items-start gap-3">
           <div className="size-10 rounded-full bg-zaki-brand/10 flex items-center justify-center text-zaki-brand">

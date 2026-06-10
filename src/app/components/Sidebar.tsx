@@ -224,6 +224,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
   >("memories");
   const [memoryConflictCount, setMemoryConflictCount] = useState(0);
   const [memoryRefreshKey, setMemoryRefreshKey] = useState(0);
+  const [memoryEntering, setMemoryEntering] = useState(false);
   const { data: entitlementsResult } = useEntitlements();
   const entitlements = entitlementsResult?.data ?? null;
   const planTierRaw = entitlements?.plan?.tier ?? "free";
@@ -350,6 +351,18 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
       window.removeEventListener("zaki:memory-conflicts-count", handleConflictCount);
     };
   }, [openSettingsSection, user?.username]);
+
+  // Run the drawer's one-time choreographed entrance for ~850ms after it opens,
+  // then stop — so refetches while open never replay the cascade.
+  useEffect(() => {
+    if (!memoryOpen) {
+      setMemoryEntering(false);
+      return;
+    }
+    setMemoryEntering(true);
+    const id = window.setTimeout(() => setMemoryEntering(false), 850);
+    return () => window.clearTimeout(id);
+  }, [memoryOpen]);
 
   useEffect(() => {
     const bump = () => setMemoryRefreshKey((k) => k + 1);
@@ -2347,7 +2360,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
       {memoryOpen && user?.username && (
         <div className="fixed inset-0 z-50">
           <div
-            className="absolute inset-0 bg-black/20 dark:bg-black/50"
+            className="absolute inset-0 bg-black/20 dark:bg-black/50 animate-in fade-in duration-200"
             onClick={() => {
               setMemoryOpen(false);
               setMemorySearchQuery("");
@@ -2360,7 +2373,8 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
             aria-modal="true"
             aria-label={t("sidebar.memory.title")}
             data-onboarding-id="memory-viewer-dialog"
-            className="absolute right-0 top-0 h-full w-full sm:w-[420px] md:w-[460px] bg-white dark:bg-zaki-dark-card border-l border-zaki-subtle dark:border-zaki-dark shadow-[0_24px_60px_rgba(15,15,15,0.18)] flex flex-col"
+            data-memory-entering={memoryEntering ? "true" : "false"}
+            className="absolute right-0 top-0 h-full w-full sm:w-[420px] md:w-[460px] bg-white dark:bg-zaki-dark-card border-l border-zaki-subtle dark:border-zaki-dark shadow-[0_24px_60px_rgba(15,15,15,0.18)] flex flex-col animate-in slide-in-from-right fade-in duration-300 ease-out"
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-zaki-subtle dark:border-zaki-dark bg-[linear-gradient(135deg,#fff8f0_0%,#f3e7d9_100%)] dark:bg-[linear-gradient(140deg,#1a1714_0%,#141210_58%,#0c0a09_100%)]">
               <div className="flex items-center gap-3">
