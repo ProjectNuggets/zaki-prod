@@ -1005,7 +1005,6 @@ export function MemoryViewer({
                   {dayMemories.map((memory) => {
                     const typeStyle = getTypeStyle(memory.type);
                     const Icon = typeStyle.icon;
-                    const createdAt = memory.createdAt || new Date().toISOString();
                     const conflictKey = memory.metadata?.conflictKey;
                     const isEditing = editingMemoryId === memory.id;
                     const isSaving = savingMemoryId === memory.id;
@@ -1101,19 +1100,6 @@ export function MemoryViewer({
                               </p>
                             )}
 
-                            <div className={cn("mt-3 flex flex-wrap items-center gap-3 text-2xs text-zaki-muted", isRtl && "justify-end")}>
-                              <SourceChip
-                                channel={memory.source || memory.metadata?.source || memory.metadata?.channel}
-                                lane={
-                                  memory.metadata?.lane ||
-                                  (memory.threadId ? `thread:${shortId(memory.threadId)}` : "main")
-                                }
-                                role={memory.role}
-                                at={memory.at || createdAt}
-                                imageRef={memory.metadata?.imageRef || memory.metadata?.imageUrl}
-                                locale={locale}
-                              />
-                            </div>
                             <div className={cn("mt-3 flex flex-wrap items-center gap-2", isRtl && "justify-end")}>
                               {isEditing ? (
                                 <>

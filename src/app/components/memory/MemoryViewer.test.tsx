@@ -251,7 +251,7 @@ describe("MemoryViewer", () => {
     expect(chip?.getAttribute("data-lane")).toContain("thread:");
   });
 
-  it("shows a provenance chip (channel + lane) on every saved memory", async () => {
+  it("does not render source/provenance chips on Timeline memory rows", async () => {
     (apiRequest as jest.Mock).mockImplementation((path: string) => {
       if (String(path).startsWith("/api/memory/list")) {
         return Promise.resolve(
@@ -265,13 +265,6 @@ describe("MemoryViewer", () => {
                 source: "telegram_dm",
                 role: "continuity",
                 threadId: "abc-1234-5678-xyz",
-              },
-              {
-                id: "m-web",
-                content: "Working on quarterly review",
-                type: "context",
-                createdAt: "2026-03-22T10:00:00.000Z",
-                metadata: { source: "web", lane: "main" },
               },
             ],
             nextCursor: null,
@@ -289,20 +282,14 @@ describe("MemoryViewer", () => {
     });
 
     render(<MemoryViewer userId="tester@example.com" initialTab="memories" />);
-
-    // The saved-memories list (with provenance chips) lives in the Timeline view.
+    // Memory rows live in the Timeline view.
     fireEvent.click(await screen.findByRole("tab", { name: /timeline/i }));
 
     await waitFor(() => {
-      const chips = document.querySelectorAll('[data-testid="source-chip"]');
-      expect(chips.length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByText("Likes espresso in the morning")).toBeInTheDocument();
     });
-
-    const chips = Array.from(
-      document.querySelectorAll('[data-testid="source-chip"]')
-    );
-    const channels = chips.map((chip) => chip.getAttribute("data-channel"));
-    expect(channels).toEqual(expect.arrayContaining(["telegram", "web"]));
+    // The channel ("unknown") + thread source chips were removed from memory rows.
+    expect(document.querySelectorAll('[data-testid="source-chip"]').length).toBe(0);
   });
 
   it("shows a binary On/Off and hides the removed scope cards + 5-mode toggle", async () => {
