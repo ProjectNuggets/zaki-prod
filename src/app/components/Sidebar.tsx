@@ -2402,7 +2402,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
             <div className="flex-1 overflow-y-auto px-4 py-4 bg-zaki-base/60">
               <MemoryViewer
                 userId={user.username}
-                variant="panel"
                 initialSearchQuery={memorySearchQuery}
                 initialTab={memoryInitialTab}
                 refreshKey={memoryRefreshKey}

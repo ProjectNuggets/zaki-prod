@@ -6,15 +6,21 @@ import { MemoryViewer } from "./MemoryViewer";
 import { MEMORY_PANEL_REFRESH_EVENTS } from "@/lib/memoryEvents";
 import {
   apiRequest,
-  fetchMemoryActivity,
   fetchMemoryPreferences,
   patchMemory,
   updateMemoryPreferences,
 } from "@/lib/api";
 
+// Counts how many times the saved-memories list endpoint has been fetched.
+// This is the real refetch sentinel now that the activity-log timeline is gone.
+function memoryListCalls() {
+  return (apiRequest as jest.Mock).mock.calls.filter((call) =>
+    String(call[0]).startsWith("/api/memory/list")
+  ).length;
+}
+
 jest.mock("@/lib/api", () => ({
   apiRequest: jest.fn(),
-  fetchMemoryActivity: jest.fn(),
   fetchMemoryPreferences: jest.fn(),
   updateMemoryPreferences: jest.fn(),
   patchMemory: jest.fn(),
@@ -77,7 +83,6 @@ function jsonResponse(payload: unknown, ok = true) {
 describe("MemoryViewer", () => {
   beforeEach(() => {
     (apiRequest as jest.Mock).mockReset();
-    (fetchMemoryActivity as jest.Mock).mockReset();
     (fetchMemoryPreferences as jest.Mock).mockReset();
     (updateMemoryPreferences as jest.Mock).mockReset();
     (patchMemory as jest.Mock).mockReset();
@@ -114,37 +119,44 @@ describe("MemoryViewer", () => {
       response: jsonResponse({ memory: null }),
       data: { memory: null },
     });
-    (fetchMemoryActivity as jest.Mock).mockResolvedValue({
-      response: jsonResponse({ activities: [] }),
-      data: { activities: [] },
-    });
   });
 
-  it("opens directly to the pending tab when requested", async () => {
+  it("opens directly to the Review view when initialTab is pending", async () => {
+    // initialTab "pending"/"conflicts" now maps to the panel's Review view,
+    // which shows the pending + conflicts lists (empty states here).
     render(<MemoryViewer userId="tester@example.com" initialTab="pending" />);
 
     await waitFor(() => {
       expect(screen.getByText("Nothing needs review")).toBeInTheDocument();
     });
+    expect(screen.getByText("No conflicts")).toBeInTheDocument();
+    // Facts dossier is not shown while reviewing.
+    expect(screen.queryByText("About you")).not.toBeInTheDocument();
   });
 
-  it("switches to a later requested tab on rerender", async () => {
+  it("re-maps a later requested initialTab to the matching view on rerender", async () => {
+    // initialTab "memories" -> Facts (dossier default).
     const { rerender } = render(
       <MemoryViewer userId="tester@example.com" initialTab="memories" />
     );
 
     await waitFor(() => {
-      expect(screen.getAllByText("No memories yet").length).toBeGreaterThan(0);
+      expect(screen.getByText("About you")).toBeInTheDocument();
     });
+    expect(
+      screen.getByRole("tab", { name: /facts/i })
+    ).toHaveAttribute("aria-selected", "true");
 
+    // initialTab "conflicts" -> Review view (conflicts list visible).
     rerender(<MemoryViewer userId="tester@example.com" initialTab="conflicts" />);
 
     await waitFor(() => {
       expect(screen.getByText("No conflicts")).toBeInTheDocument();
     });
+    expect(screen.queryByText("About you")).not.toBeInTheDocument();
   });
 
-  it("renders notebook summaries from saved memories", async () => {
+  it("renders dossier summaries from saved memories in the Facts view", async () => {
     (apiRequest as jest.Mock).mockImplementation((path: string) => {
       if (String(path).startsWith("/api/memory/list")) {
         return Promise.resolve(
@@ -168,21 +180,6 @@ describe("MemoryViewer", () => {
       if (path === "/api/memory/conflicts") {
         return Promise.resolve(jsonResponse({ conflicts: [] }));
       }
-      if (String(path).startsWith("/api/memory/activity")) {
-        return Promise.resolve(
-          jsonResponse({
-            activities: [
-              {
-                id: "activity-1",
-                kind: "saved",
-                content: "Prefers concise weekly plans",
-                type: "preference",
-                occurredAt: "2026-03-23T10:00:00.000Z",
-              },
-            ],
-          })
-        );
-      }
       return Promise.resolve(jsonResponse({}));
     });
 
@@ -192,16 +189,19 @@ describe("MemoryViewer", () => {
       expect(screen.getByText("What ZAKI currently knows")).toBeInTheDocument();
     });
 
+    // The preference is bucketed into the dossier's "Preferences" group.
     expect(screen.getByText("Preferences")).toBeInTheDocument();
-    expect(screen.getAllByText("Prefers concise weekly plans").length).toBeGreaterThan(0);
-    expect(screen.getByText("Recent changes")).toBeInTheDocument();
+    expect(screen.getByText("Prefers concise weekly plans")).toBeInTheDocument();
+    // The activity-log "Recent changes" group is gone (timeline now = memories list).
+    expect(screen.queryByText("Recent changes")).not.toBeInTheDocument();
   });
 
   it("does not render the orphan 'Raw records' header", async () => {
     render(<MemoryViewer userId="tester@example.com" initialTab="memories" />);
 
+    // Facts is the default view; wait for the dossier to render.
     await waitFor(() => {
-      expect(screen.getAllByText("No memories yet").length).toBeGreaterThan(0);
+      expect(screen.getByText("About you")).toBeInTheDocument();
     });
 
     expect(screen.queryByText("memoryViewer.raw.title")).not.toBeInTheDocument();
@@ -285,13 +285,13 @@ describe("MemoryViewer", () => {
       if (path === "/api/memory/conflicts") {
         return Promise.resolve(jsonResponse({ conflicts: [] }));
       }
-      if (String(path).startsWith("/api/memory/activity")) {
-        return Promise.resolve(jsonResponse({ activities: [] }));
-      }
       return Promise.resolve(jsonResponse({}));
     });
 
     render(<MemoryViewer userId="tester@example.com" initialTab="memories" />);
+
+    // The saved-memories list (with provenance chips) lives in the Timeline view.
+    fireEvent.click(await screen.findByRole("tab", { name: /timeline/i }));
 
     await waitFor(() => {
       const chips = document.querySelectorAll('[data-testid="source-chip"]');
@@ -305,35 +305,33 @@ describe("MemoryViewer", () => {
     expect(channels).toEqual(expect.arrayContaining(["telegram", "web"]));
   });
 
-  it("panel variant shows a binary On/Off and hides scope cards + 5-mode toggle", async () => {
-    render(<MemoryViewer userId="u@x.co" variant="panel" />);
+  it("shows a binary On/Off and hides the removed scope cards + 5-mode toggle", async () => {
+    render(<MemoryViewer userId="u@x.co" />);
     expect(await screen.findByRole("switch", { name: /memory/i })).toBeInTheDocument();
     expect(screen.queryByText(/ask_before_saving|save_less|save_more/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Personal memory|Space context|session context/i)).not.toBeInTheDocument();
   });
 
-  it("panel On/Off toggle persists policy=off", async () => {
+  it("On/Off toggle persists policy=off", async () => {
     const api = await import("@/lib/api");
-    render(<MemoryViewer userId="u@x.co" variant="panel" />);
+    render(<MemoryViewer userId="u@x.co" />);
     const sw = await screen.findByRole("switch", { name: /memory/i });
     fireEvent.click(sw);
     await waitFor(() => expect(api.updateMemoryPreferences).toHaveBeenCalledWith("off"));
   });
 
   it("refetches when refreshKey changes", async () => {
-    const api = await import("@/lib/api");
-    const spy = api.fetchMemoryActivity as jest.Mock;
     const { rerender } = render(
-      <MemoryViewer userId="u@x.co" variant="panel" refreshKey={0} />
+      <MemoryViewer userId="u@x.co" refreshKey={0} />
     );
-    await waitFor(() => expect(spy).toHaveBeenCalled());
-    const before = spy.mock.calls.length;
-    rerender(<MemoryViewer userId="u@x.co" variant="panel" refreshKey={1} />);
-    await waitFor(() => expect(spy.mock.calls.length).toBeGreaterThan(before));
+    await waitFor(() => expect(memoryListCalls()).toBeGreaterThan(0));
+    const before = memoryListCalls();
+    rerender(<MemoryViewer userId="u@x.co" refreshKey={1} />);
+    await waitFor(() => expect(memoryListCalls()).toBeGreaterThan(before));
   });
 
   it("panel defaults to the Facts view with the dossier groups visible", async () => {
-    render(<MemoryViewer userId="u@x.co" variant="panel" />);
+    render(<MemoryViewer userId="u@x.co" />);
 
     // Facts/Timeline segmented control is present.
     const factsTab = await screen.findByRole("tab", { name: /facts/i });
@@ -349,11 +347,22 @@ describe("MemoryViewer", () => {
     expect(screen.queryByText("Recent changes")).not.toBeInTheDocument();
   });
 
-  it("clicking Timeline shows the activity log and hides the Facts dossier", async () => {
+  it("clicking Timeline shows the saved-memories list and hides the Facts dossier", async () => {
     (apiRequest as jest.Mock).mockImplementation((path: string) => {
       if (String(path).startsWith("/api/memory/list")) {
         return Promise.resolve(
-          jsonResponse({ memories: [], nextCursor: null, hasMore: false })
+          jsonResponse({
+            memories: [
+              {
+                id: "m-espresso",
+                content: "Likes espresso in the morning",
+                type: "preference",
+                createdAt: "2026-03-23T10:00:00.000Z",
+              },
+            ],
+            nextCursor: null,
+            hasMore: false,
+          })
         );
       }
       if (path === "/api/memory/confirmations") {
@@ -362,46 +371,26 @@ describe("MemoryViewer", () => {
       if (path === "/api/memory/conflicts") {
         return Promise.resolve(jsonResponse({ conflicts: [] }));
       }
-      if (String(path).startsWith("/api/memory/activity")) {
-        return Promise.resolve(jsonResponse({ activities: [] }));
-      }
       return Promise.resolve(jsonResponse({}));
     });
-    (fetchMemoryActivity as jest.Mock).mockResolvedValue({
-      response: jsonResponse({
-        activities: [
-          {
-            id: "activity-1",
-            kind: "saved",
-            content: "Likes espresso",
-            type: "preference",
-            occurredAt: "2026-03-23T10:00:00.000Z",
-          },
-        ],
-      }),
-      data: {
-        activities: [
-          {
-            id: "activity-1",
-            kind: "saved",
-            content: "Likes espresso",
-            type: "preference",
-            occurredAt: "2026-03-23T10:00:00.000Z",
-          },
-        ],
-      },
-    });
 
-    render(<MemoryViewer userId="u@x.co" variant="panel" />);
+    render(<MemoryViewer userId="u@x.co" />);
 
     // Facts dossier visible initially.
     expect(await screen.findByText("About you")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: /timeline/i }));
 
+    // Timeline now renders the saved-memories list (the editable memory card).
     await waitFor(() => {
-      expect(screen.getByText(/Saved: Likes espresso/)).toBeInTheDocument();
+      expect(
+        screen.getByText("Likes espresso in the morning")
+      ).toBeInTheDocument();
     });
+    // The list's search input is present in the Timeline view.
+    expect(
+      screen.getByPlaceholderText("memoryViewer.memories.searchPlaceholder")
+    ).toBeInTheDocument();
 
     // Facts dossier is hidden in Timeline view.
     expect(screen.queryByText("About you")).not.toBeInTheDocument();
@@ -412,7 +401,7 @@ describe("MemoryViewer", () => {
   });
 
   it("hides the Review badge when there is nothing to review", async () => {
-    render(<MemoryViewer userId="u@x.co" variant="panel" />);
+    render(<MemoryViewer userId="u@x.co" />);
     await screen.findByRole("tab", { name: /facts/i });
     expect(screen.queryByRole("button", { name: /review/i })).not.toBeInTheDocument();
   });
@@ -462,7 +451,7 @@ describe("MemoryViewer", () => {
       return Promise.resolve(jsonResponse({}));
     });
 
-    render(<MemoryViewer userId="u@x.co" variant="panel" />);
+    render(<MemoryViewer userId="u@x.co" />);
 
     const reviewBadge = await screen.findByRole("button", { name: /review/i });
     expect(reviewBadge).toBeInTheDocument();
@@ -495,33 +484,31 @@ describe("MemoryViewer panel refresh wiring (anti-flicker regression)", () => {
         MEMORY_PANEL_REFRESH_EVENTS.forEach((evt) => window.removeEventListener(evt, bump));
       };
     }, []);
-    return <MemoryViewer userId="u@x.co" variant="panel" refreshKey={refreshKey} />;
+    return <MemoryViewer userId="u@x.co" refreshKey={refreshKey} />;
   }
 
   // Regression: the panel emits "zaki:memory-conflicts-count" during its own load.
   // If that event drove a refetch (old bug), it looped -> the drawer flashed forever.
   it("does NOT refetch when the panel's own conflicts-count event fires (no loop)", async () => {
-    const spy = fetchMemoryActivity as jest.Mock;
     render(<RefreshHarness />);
-    await waitFor(() => expect(spy).toHaveBeenCalled());
-    const before = spy.mock.calls.length;
+    await waitFor(() => expect(memoryListCalls()).toBeGreaterThan(0));
+    const before = memoryListCalls();
     act(() => {
       window.dispatchEvent(
         new CustomEvent("zaki:memory-conflicts-count", { detail: { count: 1 } })
       );
     });
     await new Promise((resolve) => setTimeout(resolve, 30));
-    expect(spy.mock.calls.length).toBe(before);
+    expect(memoryListCalls()).toBe(before);
   });
 
   it("DOES refetch on a real zaki:memory-changed event", async () => {
-    const spy = fetchMemoryActivity as jest.Mock;
     render(<RefreshHarness />);
-    await waitFor(() => expect(spy).toHaveBeenCalled());
-    const before = spy.mock.calls.length;
+    await waitFor(() => expect(memoryListCalls()).toBeGreaterThan(0));
+    const before = memoryListCalls();
     act(() => {
       window.dispatchEvent(new Event("zaki:memory-changed"));
     });
-    await waitFor(() => expect(spy.mock.calls.length).toBeGreaterThan(before));
+    await waitFor(() => expect(memoryListCalls()).toBeGreaterThan(before));
   });
 });
