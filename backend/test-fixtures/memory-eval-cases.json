@@ -1,0 +1,128 @@
+[
+  {
+    "facts": [
+      { "content": "Prefers vegetarian food", "type": "preference", "conflict_key": "preference:vegetarian food" }
+    ],
+    "query": "Can you suggest a good restaurant for dinner tonight?",
+    "expectContains": ["vegetarian"]
+  },
+  {
+    "facts": [
+      { "content": "Lives in Riyadh", "type": "fact", "conflict_key": "identity:location" }
+    ],
+    "query": "What's the weather like outside right now?",
+    "expectContains": ["Riyadh"]
+  },
+  {
+    "facts": [
+      { "content": "Plans to travel to Japan next spring", "type": "goal", "conflict_key": "goal:travel" }
+    ],
+    "query": "I need help packing my suitcase for a trip abroad.",
+    "expectContains": ["Japan"]
+  },
+  {
+    "facts": [
+      { "content": "Is allergic to peanuts", "type": "preference", "conflict_key": "constraint:peanut" }
+    ],
+    "query": "Recommend a snack I can grab on the go.",
+    "expectContains": ["peanut"]
+  },
+  {
+    "facts": [
+      { "content": "Likes spicy food", "type": "preference", "conflict_key": "preference:spicy food" }
+    ],
+    "query": "How should I season the curry I'm cooking?",
+    "expectContains": ["spicy"]
+  },
+  {
+    "facts": [
+      { "content": "Works as a software engineer", "type": "fact", "conflict_key": "identity:occupation" }
+    ],
+    "query": "Any tips to grow in my career this year?",
+    "expectContains": ["software engineer"]
+  },
+  {
+    "facts": [
+      { "content": "Is learning to play the guitar", "type": "goal", "conflict_key": "goal:guitar" }
+    ],
+    "query": "What's a fun hobby I could practice this weekend?",
+    "expectContains": ["guitar"]
+  },
+  {
+    "facts": [
+      { "content": "Has a younger sister named Lina", "type": "relationship", "conflict_key": "relationship:sister" }
+    ],
+    "query": "I want to buy a thoughtful birthday present for a family member.",
+    "expectContains": ["Lina"]
+  },
+  {
+    "facts": [
+      { "content": "Prefers tea over coffee", "type": "preference", "conflict_key": "preference:tea" }
+    ],
+    "query": "What's a good morning drink to wake me up?",
+    "expectContains": ["tea"]
+  },
+  {
+    "facts": [
+      { "content": "Is training for a marathon", "type": "goal", "conflict_key": "goal:marathon" }
+    ],
+    "query": "How can I improve my running endurance?",
+    "expectContains": ["marathon"]
+  },
+  {
+    "facts": [
+      { "content": "From Damascus originally", "type": "fact", "conflict_key": "identity:origin" }
+    ],
+    "query": "Tell me about the place where I grew up.",
+    "expectContains": ["Damascus"]
+  },
+  {
+    "facts": [
+      { "content": "Dislikes loud crowded places", "type": "preference", "conflict_key": "preference:loud crowded place" }
+    ],
+    "query": "Where should I go to relax this evening?",
+    "expectContains": ["loud crowded"]
+  },
+  {
+    "facts": [
+      { "content": "Has a dog named Max", "type": "relationship", "conflict_key": "relationship:pet" }
+    ],
+    "query": "What's a fun outdoor activity for the morning?",
+    "expectContains": ["Max"]
+  },
+  {
+    "facts": [
+      { "content": "Is studying for the medical board exam", "type": "goal", "conflict_key": "goal:medical board" }
+    ],
+    "query": "Can you help me build a focused study schedule?",
+    "expectContains": ["medical board"]
+  },
+  {
+    "facts": [
+      { "content": "Prefers window seats when flying", "type": "preference", "conflict_key": "preference:window seat" }
+    ],
+    "query": "I'm booking a flight, any advice for the journey?",
+    "expectContains": ["window seat"]
+  },
+  {
+    "facts": [
+      { "content": "Speaks Arabic and English fluently", "type": "fact", "conflict_key": "identity:language" }
+    ],
+    "query": "Which subtitles should I pick for this movie?",
+    "expectContains": ["Arabic"]
+  },
+  {
+    "facts": [
+      { "content": "Is saving money to buy a house", "type": "goal", "conflict_key": "goal:house" }
+    ],
+    "query": "Should I splurge on a luxury vacation this year?",
+    "expectContains": ["house"]
+  },
+  {
+    "facts": [
+      { "content": "Enjoys playing chess online", "type": "preference", "conflict_key": "preference:chess" }
+    ],
+    "query": "Suggest a relaxing game I can play before bed.",
+    "expectContains": ["chess"]
+  }
+]
