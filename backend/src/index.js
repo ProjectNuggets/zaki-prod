@@ -694,8 +694,8 @@ const ZAKI_CHAT_MEMORY_CONTEXT_TIMEOUT_MS = Math.max(
   250,
   Number(process.env.ZAKI_CHAT_MEMORY_CONTEXT_TIMEOUT_MS || 2500)
 );
-const ZAKI_CHAT_MEMORY_IDENTITY_CORE_ENABLED =
-  String(process.env.ZAKI_CHAT_MEMORY_IDENTITY_CORE_ENABLED || "true").toLowerCase() !== "false";
+// NOTE: ZAKI_CHAT_MEMORY_IDENTITY_CORE_ENABLED is read directly inside
+// memory/operations.js (isIdentityCoreEnabled); no constant needed here.
 const ZAKI_SYNC_MEMORY_INJECTION_ENABLED =
   String(process.env.ZAKI_SYNC_MEMORY_INJECTION_ENABLED || "true")
     .toLowerCase()
