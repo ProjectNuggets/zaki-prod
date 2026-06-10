@@ -293,6 +293,7 @@ export function MemoryViewer({
   const [savingMemoryId, setSavingMemoryId] = useState<string | null>(null);
   const [pendingDeleteMemoryId, setPendingDeleteMemoryId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"memories" | "pending" | "conflicts">(initialTab);
+  const [panelView, setPanelView] = useState<"facts" | "timeline" | "review">("facts");
   const [searchQuery, setSearchQuery] = useState(String(initialSearchQuery || "").trim());
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [error, setError] = useState<string | null>(null);
@@ -467,6 +468,8 @@ export function MemoryViewer({
   }, [initialTab]);
 
   useEffect(() => {
+    // Modal variant drives review-list fetches off the 3-tab control.
+    if (variant === "panel") return;
     if (activeTab === "pending") {
       void fetchPendingMemories();
       return;
@@ -474,7 +477,25 @@ export function MemoryViewer({
     if (activeTab === "conflicts") {
       void fetchConflicts();
     }
-  }, [activeTab, userId]);
+  }, [activeTab, userId, variant]);
+
+  useEffect(() => {
+    // Panel variant drives fetches off the new views:
+    // Facts -> memories, Timeline -> activity, Review -> pending + conflicts.
+    if (variant !== "panel") return;
+    if (panelView === "facts") {
+      void fetchMemories();
+      return;
+    }
+    if (panelView === "timeline") {
+      void fetchActivity();
+      return;
+    }
+    if (panelView === "review") {
+      void fetchPendingMemories();
+      void fetchConflicts();
+    }
+  }, [panelView, userId, variant]);
 
   const confirmPendingMemory = async (confirmationId: string) => {
     setPendingActionId(confirmationId);
@@ -759,6 +780,653 @@ export function MemoryViewer({
     ];
   }, [locale, memories, recentActivity, t]);
 
+  const pendingListContent = (
+    <div className="space-y-3">
+      {pendingLoading ? (
+        <div className="rounded-zaki-md border border-zaki bg-zaki-raised px-4 py-3 text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+          {t("memoryViewer.pending.loading")}
+        </div>
+      ) : pendingMemories.length === 0 ? (
+        <EmptyState
+          icon={<Sparkles className="size-5" />}
+          title={t("memoryViewer.pending.emptyTitle")}
+          helper={t("memoryViewer.pending.emptyBody")}
+        />
+      ) : (
+        pendingMemories.map((memory) => {
+          const typeStyle = getTypeStyle(memory.type);
+          const Icon = typeStyle.icon;
+          const confidence =
+            typeof memory.confidence_score === "number"
+              ? Math.round(memory.confidence_score * 100)
+              : null;
+          const isProcessing = pendingActionId === memory.id;
+          return (
+            <article
+              key={memory.id}
+              className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-4 shadow-zaki-md transition-all hover:shadow-zaki-lg hover:-translate-y-0.5 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
+            >
+              <div className={cn("flex items-start gap-3", isRtl && "flex-row-reverse")}>
+                <div className={cn("size-9 rounded-full flex items-center justify-center", typeStyle.iconClass)}>
+                  <Icon className="size-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className={cn("flex flex-wrap items-center gap-2", isRtl && "justify-end")}>
+                    <span
+                      className={cn(
+                        "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]",
+                        typeStyle.chipClass
+                      )}
+                    >
+                      {t(`memory.types.${memory.type}`, { defaultValue: typeStyle.label })}
+                    </span>
+                    <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 text-amber-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+                      {t("memoryViewer.pending.reviewRequired")}
+                    </span>
+                    {confidence !== null && (
+                      <span className="inline-flex items-center rounded-full bg-zaki-hover px-2 py-0.5 text-[10px] font-medium text-zaki-secondary">
+                        {t("memoryViewer.pending.confidence", { value: confidence })}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-sm text-zaki-primary leading-relaxed">
+                    {memory.content}
+                  </p>
+                  <div className={cn("mt-3 text-2xs text-zaki-muted", isRtl && "text-right")}>
+                    {memory.created_at
+                      ? t("memoryViewer.pending.queuedAt", {
+                          date: formatDateLabel(memory.created_at, locale),
+                          time: formatTimeLabel(memory.created_at, locale),
+                        })
+                      : t("memoryViewer.pending.queuedRecent")}
+                  </div>
+                  {memory.source_thread_id ? (
+                    <div className={cn("mt-2 flex flex-wrap items-center gap-3 text-2xs text-zaki-muted", isRtl && "justify-end")}>
+                      <SourceChip
+                        lane={`thread:${shortId(memory.source_thread_id)}`}
+                        at={memory.created_at ?? null}
+                        locale={locale}
+                      />
+                    </div>
+                  ) : null}
+                  <div className={cn("mt-3 flex items-center gap-2", isRtl && "flex-row-reverse")}>
+                    <button
+                      type="button"
+                      className="inline-flex items-center rounded-full bg-zaki-brand text-white px-4 py-1.5 text-xs font-semibold shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-zaki-brand-hover disabled:opacity-60 disabled:translate-y-0"
+                      disabled={isProcessing}
+                      onClick={() => void confirmPendingMemory(memory.id)}
+                    >
+                      {isProcessing
+                        ? t("memoryViewer.pending.saving")
+                        : t("memory.remember")}
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex items-center rounded-full text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover px-4 py-1.5 text-xs font-medium transition-colors disabled:opacity-60"
+                      disabled={isProcessing}
+                      onClick={() => void rejectPendingMemory(memory.id)}
+                    >
+                      {t("memory.skip")}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </article>
+          );
+        })
+      )}
+    </div>
+  );
+
+  const conflictsListContent = (
+    <div className="space-y-3">
+      {conflictsLoading ? (
+        <div className="rounded-zaki-md border border-zaki bg-zaki-raised px-4 py-3 text-sm text-zaki-muted dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+          {t("memoryViewer.conflicts.loading")}
+        </div>
+      ) : conflicts.length === 0 ? (
+        <EmptyState
+          icon={<Sparkles className="size-5" />}
+          title={t("memoryViewer.conflicts.emptyTitle")}
+          helper={t("memoryViewer.conflicts.emptyBody")}
+        />
+      ) : (
+        conflicts.map((conflict) => {
+          const isResolving = resolvingConflictId === conflict.id;
+          const confidence =
+            typeof conflict.new_confidence_score === "number"
+              ? Math.round(conflict.new_confidence_score * 100)
+              : null;
+
+          return (
+            <div
+              key={conflict.id}
+              className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-4 shadow-zaki-md transition-all hover:shadow-zaki-lg hover:-translate-y-0.5 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
+            >
+              <div className={cn("flex items-start justify-between gap-3", isRtl && "flex-row-reverse")}>
+                <div className={cn("flex items-start gap-2", isRtl && "flex-row-reverse")}>
+                  <span className="mt-0.5 inline-flex size-7 items-center justify-center rounded-full bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                    <AlertTriangle className="size-4" />
+                  </span>
+                  <div>
+                    <div className="font-display text-sm font-semibold text-zaki-primary">
+                      {t("memoryViewer.conflicts.cardTitle")}
+                    </div>
+                    <div className="mt-1 text-2xs text-zaki-muted">
+                      {conflict.created_at
+                        ? t("memoryViewer.conflicts.detectedAt", {
+                            date: formatDateLabel(conflict.created_at, locale),
+                            time: formatTimeLabel(conflict.created_at, locale),
+                          })
+                        : t("memoryViewer.conflicts.detectedRecent")}
+                    </div>
+                  </div>
+                </div>
+                <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 text-amber-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+                  {t("memory.pending")}
+                </span>
+              </div>
+
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <div className="rounded-zaki-md border border-zaki bg-zaki-hover px-3 py-3 dark:border-[rgba(240,236,230,0.08)]">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zaki-muted">
+                    {t("memoryViewer.conflicts.currentMemory")}
+                  </div>
+                  <p className="mt-1.5 text-sm text-zaki-primary leading-relaxed">
+                    {conflict.conflicting_content || t("memoryViewer.conflicts.notAvailable")}
+                  </p>
+                  <div className="mt-2 text-2xs text-zaki-muted uppercase tracking-[0.12em]">
+                    {t("memoryViewer.conflicts.typeLabel")}:{" "}
+                    {conflict.conflicting_type
+                      ? t(`memory.types.${conflict.conflicting_type}`, {
+                          defaultValue: conflict.conflicting_type,
+                        })
+                      : t("memoryViewer.conflicts.unknown")}
+                  </div>
+                </div>
+
+                <div className="rounded-zaki-md border border-amber-200 bg-amber-50/60 px-3 py-3 dark:border-amber-900/40 dark:bg-amber-950/20">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-800 dark:text-amber-300">
+                    {t("memoryViewer.conflicts.incomingMemory")}
+                  </div>
+                  <p className="mt-1.5 text-sm text-zaki-primary leading-relaxed">
+                    {conflict.new_content}
+                  </p>
+                  <div className="mt-2 flex items-center gap-2 text-2xs text-amber-800/80 uppercase tracking-[0.12em] dark:text-amber-300/80">
+                    <span>
+                      {t("memoryViewer.conflicts.typeLabel")}:{" "}
+                      {conflict.new_type
+                        ? t(`memory.types.${conflict.new_type}`, {
+                            defaultValue: conflict.new_type,
+                          })
+                        : t("memoryViewer.conflicts.unknown")}
+                    </span>
+                    {confidence !== null && (
+                      <span>| {t("memoryViewer.conflicts.confidence", { value: confidence })}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <p className="mt-3 text-2xs text-zaki-secondary">
+                {t("memoryViewer.conflicts.help")}
+              </p>
+
+              <div className={cn("mt-4 flex items-center gap-2", isRtl && "flex-row-reverse")}>
+                <button
+                  type="button"
+                  className="inline-flex items-center rounded-full text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover px-4 py-1.5 text-xs font-medium transition-colors disabled:opacity-60"
+                  disabled={isResolving}
+                  onClick={() => void resolveConflict(conflict.id, "keep_existing")}
+                >
+                  {t("memoryViewer.conflicts.keepExisting")}
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex items-center rounded-full bg-zaki-brand text-white px-4 py-1.5 text-xs font-semibold shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-zaki-brand-hover disabled:opacity-60 disabled:translate-y-0"
+                  disabled={isResolving}
+                  onClick={() => void resolveConflict(conflict.id, "use_new")}
+                >
+                  {isResolving
+                    ? t("memoryViewer.conflicts.applying")
+                    : t("memoryViewer.conflicts.useNew")}
+                </button>
+              </div>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+
+  const memoriesListContent = (
+    <>
+      <div className="rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-4 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+        <div className="grid gap-3 md:grid-cols-[1fr_200px_auto] md:items-center">
+          <label className="relative block">
+            <Search className={cn("absolute top-1/2 -translate-y-1/2 size-4 text-zaki-muted", isRtl ? "right-3" : "left-3")} />
+            <input
+              type="text"
+              placeholder={t("memoryViewer.memories.searchPlaceholder")}
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className={cn(
+                "w-full rounded-zaki-md bg-zaki-hover border-0 px-10 py-2.5 text-sm text-zaki-primary placeholder:text-zaki-muted outline-none focus:ring-2 focus:ring-zaki-brand/20 transition-shadow",
+                isRtl && "text-right"
+              )}
+            />
+          </label>
+
+          <label className={cn("inline-flex items-center gap-2 rounded-zaki-md bg-zaki-hover border-0 px-3 py-2 text-xs text-zaki-secondary", isRtl && "flex-row-reverse")}>
+            <Filter className="size-3.5" />
+            <select
+              value={typeFilter}
+              onChange={(event) => setTypeFilter(event.target.value)}
+              className="bg-transparent text-sm text-zaki-primary outline-none"
+            >
+              <option value="all">{t("memoryViewer.memories.allTypes")}</option>
+              {availableTypes.map((type) => (
+                <option key={type} value={type}>
+                  {t(`memory.types.${type}`, { defaultValue: getTypeStyle(type).label })}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="text-xs text-zaki-muted">
+            {t("memoryViewer.memories.shownCount", { count: filteredMemories.length })}
+          </div>
+        </div>
+      </div>
+
+      {filteredMemories.length === 0 ? (
+        <EmptyState
+          icon={<Brain className="size-6" />}
+          title={
+            searchQuery || typeFilter !== "all"
+              ? t("memoryViewer.memories.emptyFilteredTitle")
+              : t("memoryViewer.memories.emptyTitle")
+          }
+          helper={
+            searchQuery || typeFilter !== "all"
+              ? t("memoryViewer.memories.emptyFilteredBody")
+              : t("memoryViewer.memories.emptyBody")
+          }
+          action={
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery("");
+                setTypeFilter("all");
+              }}
+              className="inline-flex items-center rounded-full bg-zaki-brand text-white px-5 py-2 text-sm font-semibold shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-zaki-brand-hover"
+            >
+              {searchQuery || typeFilter !== "all"
+                ? t("memoryViewer.memories.emptyFilteredBody")
+                : t("memoryViewer.memories.emptyTitle")}
+            </button>
+          }
+        />
+      ) : (
+        <>
+          <div className="space-y-5 max-h-[520px] overflow-y-auto pr-1">
+            {groupedMemories.map(([dateLabel, dayMemories]) => (
+              <section key={dateLabel}>
+                <div className={cn("mb-3 flex items-center gap-2", isRtl && "flex-row-reverse")}>
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-zaki-hover px-3 py-1 text-2xs font-semibold text-zaki-secondary">
+                    <CalendarClock className="size-3.5" />
+                    {dateLabel}
+                  </div>
+                  <div className="h-px flex-1 bg-zaki-subtle/40 dark:bg-[rgba(240,236,230,0.08)]" />
+                </div>
+
+                <div className="space-y-3">
+                  {dayMemories.map((memory) => {
+                    const typeStyle = getTypeStyle(memory.type);
+                    const Icon = typeStyle.icon;
+                    const createdAt = memory.createdAt || new Date().toISOString();
+                    const conflictKey = memory.metadata?.conflictKey;
+                    const isEditing = editingMemoryId === memory.id;
+                    const isSaving = savingMemoryId === memory.id;
+                    const isOutdated = (memory.status || "active") === "outdated";
+
+                    return (
+                      <article
+                        key={memory.id}
+                        className="group rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-4 shadow-zaki-md hover:shadow-zaki-lg hover:-translate-y-0.5 transition-all duration-200 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
+                      >
+                        <div className={cn("flex items-start gap-3", isRtl && "flex-row-reverse")}>
+                          <div className={cn("size-9 rounded-full flex items-center justify-center", typeStyle.iconClass)}>
+                            <Icon className="size-4" />
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className={cn("flex flex-wrap items-center gap-2", isRtl && "justify-end")}>
+                              <span
+                                className={cn(
+                                  "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]",
+                                  typeStyle.chipClass
+                                )}
+                              >
+                                {t(`memory.types.${memory.type}`, { defaultValue: typeStyle.label })}
+                              </span>
+                              <span className={cn(
+                                "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]",
+                                isOutdated
+                                  ? "border border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300"
+                                  : "bg-zaki-hover text-zaki-muted"
+                              )}>
+                                {isOutdated
+                                  ? t("memoryViewer.memories.outdatedBadge")
+                                  : t("memoryViewer.memories.storedBadge")}
+                              </span>
+                              {memory.metadata?.editedFrom ? (
+                                <span className="inline-flex items-center rounded-full bg-zaki-hover px-2 py-0.5 text-[10px] font-medium text-zaki-secondary">
+                                  {t("memoryViewer.memories.editedBadge")}
+                                </span>
+                              ) : null}
+                              {conflictKey ? (
+                                <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 text-amber-800 px-2 py-0.5 text-[10px] font-medium dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+                                  {conflictKey}
+                                </span>
+                              ) : null}
+                            </div>
+
+                            {isEditing ? (
+                              <div className="mt-2 space-y-3">
+                                <textarea
+                                  value={editContent}
+                                  onChange={(event) => setEditContent(event.target.value)}
+                                  rows={3}
+                                  className="w-full rounded-zaki-md bg-zaki-hover border-0 px-3 py-2 text-sm text-zaki-primary outline-none focus:ring-2 focus:ring-zaki-brand/20 transition-shadow"
+                                />
+                                <div className="grid gap-2 md:grid-cols-2">
+                                  <select
+                                    value={editType}
+                                    onChange={(event) => setEditType(event.target.value)}
+                                    className="rounded-zaki-md bg-zaki-hover border-0 px-3 py-2 text-sm text-zaki-primary outline-none focus:ring-2 focus:ring-zaki-brand/20 transition-shadow"
+                                  >
+                                    {Object.keys(memoryTypeStyles).map((type) => (
+                                      <option key={type} value={type}>
+                                        {t(`memory.types.${type}`, {
+                                          defaultValue: getTypeStyle(type).label,
+                                        })}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <select
+                                    value={editStatus}
+                                    onChange={(event) =>
+                                      setEditStatus(
+                                        event.target.value === "outdated"
+                                          ? "outdated"
+                                          : "active"
+                                      )
+                                    }
+                                    className="rounded-zaki-md bg-zaki-hover border-0 px-3 py-2 text-sm text-zaki-primary outline-none focus:ring-2 focus:ring-zaki-brand/20 transition-shadow"
+                                  >
+                                    <option value="active">
+                                      {t("memoryViewer.memories.statusActive")}
+                                    </option>
+                                    <option value="outdated">
+                                      {t("memoryViewer.memories.statusOutdated")}
+                                    </option>
+                                  </select>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-sm text-zaki-primary leading-relaxed">
+                                {memory.content}
+                              </p>
+                            )}
+
+                            <div className={cn("mt-3 flex flex-wrap items-center gap-3 text-2xs text-zaki-muted", isRtl && "justify-end")}>
+                              <SourceChip
+                                channel={memory.source || memory.metadata?.source || memory.metadata?.channel}
+                                lane={
+                                  memory.metadata?.lane ||
+                                  (memory.threadId ? `thread:${shortId(memory.threadId)}` : "main")
+                                }
+                                role={memory.role}
+                                at={memory.at || createdAt}
+                                imageRef={memory.metadata?.imageRef || memory.metadata?.imageUrl}
+                                locale={locale}
+                              />
+                            </div>
+                            <div className={cn("mt-3 flex flex-wrap items-center gap-2", isRtl && "justify-end")}>
+                              {isEditing ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center rounded-full bg-zaki-brand text-white px-4 py-1.5 text-xs font-semibold shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-zaki-brand-hover disabled:opacity-60 disabled:translate-y-0"
+                                    disabled={isSaving}
+                                    onClick={() => void saveEditedMemory(memory.id)}
+                                  >
+                                    {isSaving
+                                      ? t("memoryViewer.memories.savingEdit")
+                                      : t("memoryViewer.memories.saveEdit")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center rounded-full text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover px-4 py-1.5 text-xs font-medium transition-colors"
+                                    disabled={isSaving}
+                                    onClick={cancelEditMemory}
+                                  >
+                                    {t("memoryViewer.memories.cancelEdit")}
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center gap-1.5 rounded-full text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover px-3 py-1.5 text-xs font-medium transition-colors"
+                                    disabled={isSaving}
+                                    onClick={() => beginEditMemory(memory)}
+                                  >
+                                    <Edit2 className="size-3.5" />
+                                    {t("memoryViewer.memories.edit")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center rounded-full text-zaki-muted hover:text-zaki-primary hover:bg-zaki-hover px-3 py-1.5 text-xs font-medium transition-colors"
+                                    disabled={isSaving}
+                                    onClick={() =>
+                                      void setMemoryStatus(
+                                        memory.id,
+                                        isOutdated ? "active" : "outdated"
+                                      )
+                                    }
+                                  >
+                                    {isOutdated
+                                      ? t("memoryViewer.memories.restore")
+                                      : t("memoryViewer.memories.markOutdated")}
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {pendingDeleteMemoryId === memory.id ? (
+                            <InlineConfirm
+                              label={t("memoryViewer.delete.confirm")}
+                              onConfirm={() => void deleteMemory(memory.id)}
+                              onCancel={() => setPendingDeleteMemoryId(null)}
+                              disabled={isSaving}
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setPendingDeleteMemoryId(memory.id)}
+                              disabled={isSaving}
+                              className="shrink-0 inline-flex size-8 items-center justify-center rounded-full text-zaki-muted hover:bg-zaki-brand/10 hover:text-zaki-brand transition-colors disabled:opacity-50"
+                              aria-label={t("memoryViewer.delete.aria")}
+                              data-onboarding-id="memory-delete-button"
+                            >
+                              <Trash2 className="size-4" />
+                            </button>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
+          </div>
+
+          {hasMoreMemories && (
+            <div className={cn("flex justify-center pt-2", isRtl && "rtl")}>
+              <button
+              type="button"
+              onClick={() => void loadMoreMemories()}
+              disabled={loadingMoreMemories}
+              className="inline-flex items-center rounded-full bg-zaki-hover text-zaki-secondary hover:text-zaki-primary hover:bg-zaki-active px-4 py-1.5 text-xs font-medium transition-colors disabled:opacity-60"
+            >
+                {loadingMoreMemories
+                  ? t("memoryViewer.memories.loadingMore")
+                  : t("memoryViewer.memories.loadMore")}
+            </button>
+          </div>
+        )}
+        </>
+      )}
+
+      {memories.length > 0 && (
+        <div className={cn("flex items-center justify-between gap-2 border-t border-zaki pt-3 dark:border-[rgba(240,236,230,0.08)]", isRtl && "flex-row-reverse")}>
+          <button
+            type="button"
+            onClick={() => {
+              toast.info(t("memoryViewer.toasts.refreshing"));
+              void fetchMemories();
+              void fetchPendingMemories(false);
+              void fetchConflicts();
+            }}
+            className="inline-flex items-center gap-2 text-sm text-zaki-secondary hover:text-zaki-primary transition-colors"
+          >
+            <RefreshCw className="size-4" />
+            {t("memoryViewer.footer.refresh")}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                const dataBlob = new Blob([JSON.stringify(memories, null, 2)], {
+                  type: "application/json",
+                });
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = `zaki-memories-${new Date().toISOString().slice(0, 10)}.json`;
+                link.click();
+                URL.revokeObjectURL(url);
+                toast.success(t("memoryViewer.toasts.exported", { count: memories.length }));
+              } catch {
+                toast.error(t("memoryViewer.errors.exportMemories"));
+              }
+            }}
+            className="inline-flex items-center gap-2 text-sm text-zaki-brand hover:underline"
+          >
+            <Download className="size-4" />
+            {t("memoryViewer.footer.exportJson")}
+          </button>
+        </div>
+      )}
+    </>
+  );
+
+  const dossierGroupsGrid = (excludeRecentChanges: boolean) => (
+    <div className="grid gap-3 lg:grid-cols-2">
+      {notebookGroups
+        .filter((group) => !(excludeRecentChanges && group.id === "recent_changes"))
+        .map((group) => {
+          const Icon = group.icon;
+          const hasItems = group.items.length > 0;
+          return (
+            <section
+              key={group.id}
+              className="rounded-zaki-xl border border-zaki bg-zaki-raised px-4 py-4 shadow-zaki-md transition-all hover:shadow-zaki-lg dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]"
+            >
+              <div className={cn("flex items-start gap-3", isRtl && "flex-row-reverse")}>
+                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-zaki-brand/10 text-zaki-brand">
+                  <Icon className="size-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-display text-sm font-semibold text-zaki-primary">
+                    {group.title}
+                  </h4>
+                  <p className="mt-1 text-xs leading-5 text-zaki-secondary">
+                    {group.body}
+                  </p>
+                </div>
+              </div>
+              {hasItems ? (
+                <ul className={cn("mt-4 space-y-2", isRtl && "text-right")}>
+                  {group.items.map((item) => (
+                    <li
+                      key={`${group.id}:${item}`}
+                      className="rounded-zaki-md border border-zaki bg-zaki-hover px-3 py-2 text-sm leading-6 text-zaki-primary dark:border-[rgba(240,236,230,0.08)]"
+                    >
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="mt-4 rounded-zaki-md border border-dashed border-zaki bg-zaki-hover px-3 py-3 text-xs text-zaki-muted dark:border-[rgba(240,236,230,0.08)]">
+                  {t("memoryViewer.notebook.empty")}
+                </div>
+              )}
+            </section>
+          );
+        })}
+    </div>
+  );
+
+  const timelineContent = (() => {
+    const recentChangesGroup = notebookGroups.find((group) => group.id === "recent_changes");
+    const items = recentChangesGroup?.items ?? [];
+    return (
+      <div className="space-y-3">
+        <div className="flex items-start gap-3 rounded-zaki-xl border border-zaki bg-zaki-raised px-4 py-4 shadow-zaki-md dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]">
+          <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-zaki-brand/10 text-zaki-brand">
+            <RefreshCw className="size-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h4 className="font-display text-sm font-semibold text-zaki-primary">
+              {t("memoryViewer.notebook.groups.recent_changes.title")}
+            </h4>
+            <p className="mt-1 text-xs leading-5 text-zaki-secondary">
+              {t("memoryViewer.notebook.groups.recent_changes.body")}
+            </p>
+          </div>
+        </div>
+        {items.length > 0 ? (
+          <ul className={cn("space-y-2", isRtl && "text-right")}>
+            {recentActivity.map((activity, index) => (
+              <li
+                key={`${activity.kind}:${activity.occurredAt ?? index}:${index}`}
+                className={cn("flex items-start gap-3 rounded-zaki-md border border-zaki bg-zaki-raised px-3 py-2.5 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.08)]", isRtl && "flex-row-reverse")}
+              >
+                <span className="mt-1 inline-flex size-2 shrink-0 rounded-full bg-zaki-brand" />
+                <span className="text-sm leading-6 text-zaki-primary">
+                  {buildActivityLabel(activity, t, locale)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyState
+            icon={<CalendarClock className="size-5" />}
+            title={t("memoryViewer.notebook.groups.recent_changes.title")}
+            helper={t("memoryViewer.notebook.empty")}
+          />
+        )}
+      </div>
+    );
+  })();
+
+  const reviewCount = pendingMemories.length + conflicts.length;
+
   if (loading) {
     return <SkeletonMemoryViewer />;
   }
@@ -912,43 +1580,146 @@ export function MemoryViewer({
             </div>
           </div>
         )}
-        <div className="mt-4 grid gap-2 sm:grid-cols-4">
-          <div className="rounded-zaki-md border border-zaki bg-zaki-hover px-3 py-2 dark:border-[rgba(240,236,230,0.08)]">
-            <div className="text-[10px] uppercase tracking-[0.2em] text-zaki-muted">
-              {t("memoryViewer.pipeline.pending")}
+        {variant !== "panel" && (
+          <div className="mt-4 grid gap-2 sm:grid-cols-4">
+            <div className="rounded-zaki-md border border-zaki bg-zaki-hover px-3 py-2 dark:border-[rgba(240,236,230,0.08)]">
+              <div className="text-[10px] uppercase tracking-[0.2em] text-zaki-muted">
+                {t("memoryViewer.pipeline.pending")}
+              </div>
+              <div className="mt-1 text-lg font-semibold text-zaki-primary">
+                {memoryStats.pending}
+              </div>
             </div>
-            <div className="mt-1 text-lg font-semibold text-zaki-primary">
-              {memoryStats.pending}
+            <div className="rounded-zaki-md border border-zaki bg-zaki-hover px-3 py-2 dark:border-[rgba(240,236,230,0.08)]">
+              <div className="text-[10px] uppercase tracking-[0.2em] text-zaki-muted">
+                {t("memoryViewer.pipeline.stored")}
+              </div>
+              <div className="mt-1 text-lg font-semibold text-zaki-primary">
+                {memoryStats.stored}
+                {hasMoreMemories ? "+" : ""}
+              </div>
+            </div>
+            <div className="rounded-zaki-md border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900/40 dark:bg-amber-950/30">
+              <div className="text-[10px] uppercase tracking-[0.2em] text-amber-800 dark:text-amber-300">
+                {t("memoryViewer.pipeline.conflicts")}
+              </div>
+              <div className="mt-1 text-lg font-semibold text-amber-800 dark:text-amber-200">
+                {memoryStats.conflicts}
+              </div>
+            </div>
+            <div className="rounded-zaki-md border border-zaki bg-zaki-hover px-3 py-2 dark:border-[rgba(240,236,230,0.08)]">
+              <div className="text-[10px] uppercase tracking-[0.2em] text-zaki-muted">
+                {t("memoryViewer.pipeline.visible")}
+              </div>
+              <div className="mt-1 text-lg font-semibold text-zaki-primary">
+                {memoryStats.filtered}
+              </div>
             </div>
           </div>
-          <div className="rounded-zaki-md border border-zaki bg-zaki-hover px-3 py-2 dark:border-[rgba(240,236,230,0.08)]">
-            <div className="text-[10px] uppercase tracking-[0.2em] text-zaki-muted">
-              {t("memoryViewer.pipeline.stored")}
-            </div>
-            <div className="mt-1 text-lg font-semibold text-zaki-primary">
-              {memoryStats.stored}
-              {hasMoreMemories ? "+" : ""}
-            </div>
-          </div>
-          <div className="rounded-zaki-md border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900/40 dark:bg-amber-950/30">
-            <div className="text-[10px] uppercase tracking-[0.2em] text-amber-800 dark:text-amber-300">
-              {t("memoryViewer.pipeline.conflicts")}
-            </div>
-            <div className="mt-1 text-lg font-semibold text-amber-800 dark:text-amber-200">
-              {memoryStats.conflicts}
-            </div>
-          </div>
-          <div className="rounded-zaki-md border border-zaki bg-zaki-hover px-3 py-2 dark:border-[rgba(240,236,230,0.08)]">
-            <div className="text-[10px] uppercase tracking-[0.2em] text-zaki-muted">
-              {t("memoryViewer.pipeline.visible")}
-            </div>
-            <div className="mt-1 text-lg font-semibold text-zaki-primary">
-              {memoryStats.filtered}
-            </div>
-          </div>
-        </div>
+        )}
       </div>
 
+      {variant === "panel" ? (
+        <>
+          <div className={cn("flex items-center justify-between gap-3", isRtl && "flex-row-reverse")}>
+            <div
+              role="tablist"
+              aria-label={t("memoryViewer.notebook.title")}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full border border-zaki bg-zaki-hover p-1 dark:border-[rgba(240,236,230,0.08)]",
+                isRtl && "flex-row-reverse"
+              )}
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={panelView === "facts"}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand",
+                  panelView === "facts"
+                    ? "bg-zaki-raised text-zaki-primary shadow-zaki-sm dark:bg-[#141210]"
+                    : "text-zaki-muted hover:text-zaki-secondary"
+                )}
+                onClick={() => setPanelView("facts")}
+              >
+                <Sparkles className="size-3.5" />
+                {t("memoryViewer.panel.tabs.facts", { defaultValue: "Facts" })}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={panelView === "timeline"}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand",
+                  panelView === "timeline"
+                    ? "bg-zaki-raised text-zaki-primary shadow-zaki-sm dark:bg-[#141210]"
+                    : "text-zaki-muted hover:text-zaki-secondary"
+                )}
+                onClick={() => setPanelView("timeline")}
+              >
+                <CalendarClock className="size-3.5" />
+                {t("memoryViewer.panel.tabs.timeline", { defaultValue: "Timeline" })}
+              </button>
+            </div>
+
+            {reviewCount > 0 && (
+              <button
+                type="button"
+                aria-pressed={panelView === "review"}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand",
+                  panelView === "review"
+                    ? "border-zaki-brand bg-zaki-brand text-white"
+                    : "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300"
+                )}
+                onClick={() => setPanelView("review")}
+              >
+                <AlertTriangle className="size-3.5" />
+                {t("memoryViewer.panel.review", {
+                  defaultValue: "Review {{count}}",
+                  count: reviewCount,
+                })}
+              </button>
+            )}
+          </div>
+
+          {panelView === "facts" ? (
+            <>
+              {dossierGroupsGrid(true)}
+              {memoriesListContent}
+            </>
+          ) : panelView === "timeline" ? (
+            timelineContent
+          ) : (
+            <div className="space-y-5">
+              <button
+                type="button"
+                className={cn(
+                  "inline-flex items-center gap-1.5 text-sm text-zaki-secondary hover:text-zaki-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand rounded-full px-1",
+                  isRtl && "flex-row-reverse"
+                )}
+                onClick={() => setPanelView("facts")}
+              >
+                <RefreshCw className="size-3.5" />
+                {t("memoryViewer.panel.backToFacts", { defaultValue: "Back to Facts" })}
+              </button>
+              <div className="space-y-3">
+                <h4 className="font-display text-sm font-semibold text-zaki-primary">
+                  {t("memoryViewer.tabs.pending", { count: pendingMemories.length })}
+                </h4>
+                {pendingListContent}
+              </div>
+              <div className="space-y-3">
+                <h4 className="font-display text-sm font-semibold text-zaki-primary">
+                  {t("memoryViewer.tabs.conflicts", { count: conflicts.length })}
+                </h4>
+                {conflictsListContent}
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+      <>
       <div className="grid gap-3 lg:grid-cols-2">
         {notebookGroups.map((group) => {
           const Icon = group.icon;
@@ -1588,6 +2359,8 @@ export function MemoryViewer({
             </div>
           )}
         </>
+      )}
+      </>
       )}
     </div>
   );

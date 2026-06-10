@@ -33,6 +33,13 @@ jest.mock("react-i18next", () => ({
       if (key === "memoryViewer.tabs.memories") return `Saved memories (${options?.count ?? 0})`;
       if (key === "memoryViewer.tabs.pending") return `Needs review (${options?.count ?? 0})`;
       if (key === "memoryViewer.tabs.conflicts") return `Possible conflicts (${options?.count ?? 0})`;
+      if (key === "memoryViewer.panel.tabs.facts") return "Facts";
+      if (key === "memoryViewer.panel.tabs.timeline") return "Timeline";
+      if (key === "memoryViewer.panel.review") return `Review ${options?.count ?? 0}`;
+      if (key === "memoryViewer.panel.backToFacts") return "Back to Facts";
+      if (key === "memoryViewer.notebook.groups.about_you.title") return "About you";
+      if (key === "memoryViewer.notebook.groups.ongoing_work.title") return "Ongoing work";
+      if (key === "memoryViewer.notebook.groups.relationships.title") return "Relationships";
       if (key === "memoryViewer.pending.emptyTitle") return "Nothing needs review";
       if (key === "memoryViewer.conflicts.emptyTitle") return "No conflicts";
       if (key === "memoryViewer.memories.emptyTitle") return "No memories yet";
@@ -323,6 +330,158 @@ describe("MemoryViewer", () => {
     const before = spy.mock.calls.length;
     rerender(<MemoryViewer userId="u@x.co" variant="panel" refreshKey={1} />);
     await waitFor(() => expect(spy.mock.calls.length).toBeGreaterThan(before));
+  });
+
+  it("panel defaults to the Facts view with the dossier groups visible", async () => {
+    render(<MemoryViewer userId="u@x.co" variant="panel" />);
+
+    // Facts/Timeline segmented control is present.
+    const factsTab = await screen.findByRole("tab", { name: /facts/i });
+    const timelineTab = screen.getByRole("tab", { name: /timeline/i });
+    expect(factsTab).toHaveAttribute("aria-selected", "true");
+    expect(timelineTab).toHaveAttribute("aria-selected", "false");
+
+    // Dossier groups (Facts) are visible.
+    expect(screen.getByText("About you")).toBeInTheDocument();
+    expect(screen.getByText("Preferences")).toBeInTheDocument();
+
+    // recent_changes group is NOT rendered as a dossier card in Facts.
+    expect(screen.queryByText("Recent changes")).not.toBeInTheDocument();
+  });
+
+  it("clicking Timeline shows the activity log and hides the Facts dossier", async () => {
+    (apiRequest as jest.Mock).mockImplementation((path: string) => {
+      if (String(path).startsWith("/api/memory/list")) {
+        return Promise.resolve(
+          jsonResponse({ memories: [], nextCursor: null, hasMore: false })
+        );
+      }
+      if (path === "/api/memory/confirmations") {
+        return Promise.resolve(jsonResponse({ confirmations: [] }));
+      }
+      if (path === "/api/memory/conflicts") {
+        return Promise.resolve(jsonResponse({ conflicts: [] }));
+      }
+      if (String(path).startsWith("/api/memory/activity")) {
+        return Promise.resolve(jsonResponse({ activities: [] }));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    (fetchMemoryActivity as jest.Mock).mockResolvedValue({
+      response: jsonResponse({
+        activities: [
+          {
+            id: "activity-1",
+            kind: "saved",
+            content: "Likes espresso",
+            type: "preference",
+            occurredAt: "2026-03-23T10:00:00.000Z",
+          },
+        ],
+      }),
+      data: {
+        activities: [
+          {
+            id: "activity-1",
+            kind: "saved",
+            content: "Likes espresso",
+            type: "preference",
+            occurredAt: "2026-03-23T10:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    render(<MemoryViewer userId="u@x.co" variant="panel" />);
+
+    // Facts dossier visible initially.
+    expect(await screen.findByText("About you")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: /timeline/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Saved: Likes espresso/)).toBeInTheDocument();
+    });
+
+    // Facts dossier is hidden in Timeline view.
+    expect(screen.queryByText("About you")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /timeline/i })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+  });
+
+  it("hides the Review badge when there is nothing to review", async () => {
+    render(<MemoryViewer userId="u@x.co" variant="panel" />);
+    await screen.findByRole("tab", { name: /facts/i });
+    expect(screen.queryByRole("button", { name: /review/i })).not.toBeInTheDocument();
+  });
+
+  it("shows the Review badge and review lists when there are pending or conflict items", async () => {
+    (apiRequest as jest.Mock).mockImplementation((path: string) => {
+      if (String(path).startsWith("/api/memory/list")) {
+        return Promise.resolve(
+          jsonResponse({ memories: [], nextCursor: null, hasMore: false })
+        );
+      }
+      if (path === "/api/memory/confirmations") {
+        return Promise.resolve(
+          jsonResponse({
+            confirmations: [
+              {
+                id: "pending-1",
+                content: "Considering a move to Riyadh",
+                type: "context",
+                confidence_score: 0.82,
+                created_at: "2026-03-23T10:00:00.000Z",
+              },
+            ],
+          })
+        );
+      }
+      if (path === "/api/memory/conflicts") {
+        return Promise.resolve(
+          jsonResponse({
+            conflicts: [
+              {
+                id: "conflict-1",
+                new_content: "Now prefers tea",
+                new_type: "preference",
+                conflicting_content: "Prefers coffee",
+                conflicting_type: "preference",
+                created_at: "2026-03-23T10:00:00.000Z",
+              },
+            ],
+            count: 1,
+          })
+        );
+      }
+      if (String(path).startsWith("/api/memory/activity")) {
+        return Promise.resolve(jsonResponse({ activities: [] }));
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+
+    render(<MemoryViewer userId="u@x.co" variant="panel" />);
+
+    const reviewBadge = await screen.findByRole("button", { name: /review/i });
+    expect(reviewBadge).toBeInTheDocument();
+
+    fireEvent.click(reviewBadge);
+
+    await waitFor(() => {
+      expect(screen.getByText("Considering a move to Riyadh")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Now prefers tea")).toBeInTheDocument();
+
+    // Facts dossier is hidden while reviewing.
+    expect(screen.queryByText("About you")).not.toBeInTheDocument();
+
+    // There is a clear way back to Facts.
+    fireEvent.click(screen.getByRole("button", { name: /back to facts/i }));
+    await waitFor(() => {
+      expect(screen.getByText("About you")).toBeInTheDocument();
+    });
   });
 });
 

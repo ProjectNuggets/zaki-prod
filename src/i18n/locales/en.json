@@ -1718,6 +1718,14 @@
       "pending": "Needs review ({{count}})",
       "conflicts": "Possible conflicts ({{count}})"
     },
+    "panel": {
+      "tabs": {
+        "facts": "Facts",
+        "timeline": "Timeline"
+      },
+      "review": "Review {{count}}",
+      "backToFacts": "Back to Facts"
+    },
     "pending": {
       "loading": "Loading memories that need review...",
       "emptyTitle": "Nothing needs review",
