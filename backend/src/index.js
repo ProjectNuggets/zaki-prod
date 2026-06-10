@@ -78,6 +78,8 @@ import {
   classifyAgentMeterAction,
   createAgentStreamMeterMetrics,
   estimateAgentMeterUnits,
+  reserveAgentChatUnits,
+  settleAgentChatUnits,
   updateAgentStreamMeterMetrics,
 } from "./agent-metering.js";
 import {
@@ -11062,6 +11064,87 @@ function buildAgentMeterDenialPayload(result, requestId) {
   };
 }
 
+const AGENT_CHAT_STREAM_ROUTE = "/api/agent/chat/stream";
+
+// Reserve agent-chat units against the unit wallet (wallet = source of truth). Mirrors the SPACES
+// reserve gate (requireSpacesMeterGrantForChat) — productId="agent", reserve-high ceiling (40u),
+// 10-minute hold (agent turns run long). On success the hold is settled at the terminal path by
+// recordAgentWalletSettleBestEffort (reconciles to real cost, refunds the rest). Fail-OPEN on any
+// thrown error: a metering blip must never break the agent. Returns { allowed: bool }.
+async function requireAgentWalletReserveForChat(req, res, { identity, action, requestId } = {}) {
+  const reqId = requestId || getOrCreateRequestId(req);
+  const idempotencyKey = identity?.userId
+    ? `agent:${identity.userId}:${reqId}`.slice(0, 180)
+    : readAgentIdempotencyKey(req, action);
+  const decision = await reserveAgentChatUnits({
+    identity,
+    action,
+    idempotencyKey,
+    env: process.env,
+    reserveUnits,
+    ensureWallet,
+    deterministicGrantId,
+  });
+
+  if (decision.outcome === "denied") {
+    const denial = decision.denial || {};
+    res
+      .status(denial.status || 403)
+      .json(buildAgentMeterDenialPayload({ ...denial, action: decision.action }, reqId));
+    return { allowed: false };
+  }
+
+  if (decision.outcome === "unmetered") {
+    // Fail-OPEN: serve the turn unmetered; alert (matches spaces).
+    req.agentChatUnmetered = true;
+    console.error(
+      `[Agent] wallet reserve failed (allowing chat unmetered) req=${reqId}: ${decision.error?.message}`
+    );
+    void emitBillingAlert({
+      provider: "metering",
+      id: "agent.meter.fail_open",
+      severity: "high",
+      message: "Agent chat metering failed; serving unmetered (fail-open).",
+      details: { requestId: reqId, error: decision.error?.message },
+    });
+    return { allowed: true };
+  }
+
+  // allowed — hold is null on an idempotent retry (already charged).
+  req.agentChatHold = decision.hold;
+  req.agentChatKey = decision.idempotencyKey;
+  req.agentChatAction = decision.action;
+  return { allowed: true };
+}
+
+// Settle the agent turn against the unit wallet at the terminal path. Idempotent and safe across the
+// handler's multiple terminal paths (the req.agentChatHold = null guard prevents a double-settle;
+// settleHold is itself idempotent too). Mirrors the SPACES settle (recordSpacesMeterReceiptBestEffort):
+// SETTLE on success/cancel (the work was consumed), RELEASE on upstream failure (full refund), and
+// emit a zaki_usage_events row ONLY on a successful settle. No-op when there's no hold (founder bypass,
+// fail-open, or an idempotent retry).
+async function recordAgentWalletSettleBestEffort(req, { status = "success", message = "", streamMetrics = null, payload } = {}) {
+  const hold = req.agentChatHold;
+  if (!hold?.id) return null;
+  req.agentChatHold = null; // prevent double-settle across terminal paths
+  return settleAgentChatUnits({
+    hold,
+    idempotencyKey: req.agentChatKey,
+    action: req.agentChatAction,
+    status,
+    message,
+    payload: payload && typeof payload === "object" ? payload : (req.body && typeof req.body === "object" ? req.body : {}),
+    streamMetrics,
+    env: process.env,
+    sourceRoute: AGENT_CHAT_STREAM_ROUTE,
+    requestId: req.requestId || getOrCreateRequestId(req),
+    settleHold,
+    recordUsageEvent,
+    dbQuery,
+    logStructured,
+  });
+}
+
 async function requireAgentMeterGrantForChat({
   req,
   res,
@@ -11159,7 +11242,6 @@ async function recordAgentMeterReceiptBestEffort(req, {
  * Route: POST /api/agent/chat/stream
  */
 const agentChatStreamHandler = async (req, res) => {
-  const meterStartedAtMs = Date.now();
   if (!ZAKI_AGENT_BACKEND_ENABLED) {
     return res.status(404).json({ error: "ZAKI agent backend is disabled." });
   }
@@ -11194,14 +11276,10 @@ const agentChatStreamHandler = async (req, res) => {
     }
 
     const meterAction = classifyAgentMeterAction(payload, originalMessage);
-    const meterDecision = await requireAgentMeterGrantForChat({
-      req,
-      res,
+    const meterDecision = await requireAgentWalletReserveForChat(req, res, {
       identity: buildAgentMeterIdentity(authResult),
       action: meterAction,
-      message: originalMessage,
-      payload,
-      source: "agent_direct_chat_stream",
+      requestId: getOrCreateRequestId(req),
     });
     if (!meterDecision.allowed || res.headersSent) {
       return;
@@ -11217,12 +11295,10 @@ const agentChatStreamHandler = async (req, res) => {
         timeoutMs: ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS,
       });
       if (!readyProbe.ok) {
-        await recordAgentMeterReceiptBestEffort(req, {
+        await recordAgentWalletSettleBestEffort(req, {
           status: "failed",
-          durationMs: Date.now() - meterStartedAtMs,
           message: originalMessage,
           payload,
-          idempotencySuffix: "ready_failed",
         });
         if (String(req.headers.accept || "").includes("text/event-stream")) {
           sendChatStreamError(res, "ZAKI agent is temporarily unavailable. Please try again shortly.", {
@@ -11238,12 +11314,10 @@ const agentChatStreamHandler = async (req, res) => {
       }
     } catch (error) {
       trackAgentStreamDiagnostic(userId, error);
-      await recordAgentMeterReceiptBestEffort(req, {
+      await recordAgentWalletSettleBestEffort(req, {
         status: "failed",
-        durationMs: Date.now() - meterStartedAtMs,
         message: originalMessage,
         payload,
-        idempotencySuffix: "ready_error",
       });
       if (String(req.headers.accept || "").includes("text/event-stream")) {
         sendChatStreamError(res, "ZAKI agent is temporarily unavailable. Please try again shortly.", {
@@ -11266,12 +11340,11 @@ const agentChatStreamHandler = async (req, res) => {
       setPromptQuotaHeaders,
     });
     if (!agentQuotaDecision.allowed) {
-      await recordAgentMeterReceiptBestEffort(req, {
-        status: "cancelled",
-        durationMs: Date.now() - meterStartedAtMs,
+      // No agent work ran (quota gate denied after reserve) → release the hold (full refund).
+      await recordAgentWalletSettleBestEffort(req, {
+        status: "failed",
         message: originalMessage,
         payload,
-        idempotencySuffix: "legacy_quota_denied",
       });
       return res.status(agentQuotaDecision.status).json(agentQuotaDecision.payload);
     }
@@ -11303,12 +11376,10 @@ const agentChatStreamHandler = async (req, res) => {
       payload: normalizedPayload,
     });
     if (!sessionKey.success) {
-      await recordAgentMeterReceiptBestEffort(req, {
+      await recordAgentWalletSettleBestEffort(req, {
         status: "failed",
-        durationMs: Date.now() - meterStartedAtMs,
         message: originalMessage,
         payload: normalizedPayload,
-        idempotencySuffix: "invalid_session_key",
       });
       return res.status(400).json({ error: sessionKey.message, code: "invalid_chat_payload" });
     }
@@ -11330,12 +11401,10 @@ const agentChatStreamHandler = async (req, res) => {
       const payloadError = await upstream.json().catch(() => null);
       if (isChatSessionKeyValidationFailure(payloadError)) {
         setPromptQuotaHeaders(res, promptQuota);
-        await recordAgentMeterReceiptBestEffort(req, {
+        await recordAgentWalletSettleBestEffort(req, {
           status: "failed",
-          durationMs: Date.now() - meterStartedAtMs,
           message: originalMessage,
           payload: normalizedPayload,
-          idempotencySuffix: "upstream_invalid_session_key",
         });
         return res
           .status(400)
@@ -11348,12 +11417,10 @@ const agentChatStreamHandler = async (req, res) => {
     setPromptQuotaHeaders(res, promptQuota);
 
     if (!upstream.body) {
-      await recordAgentMeterReceiptBestEffort(req, {
+      await recordAgentWalletSettleBestEffort(req, {
         status: upstream.ok ? "success" : "failed",
-        durationMs: Date.now() - meterStartedAtMs,
         message: originalMessage,
         payload: normalizedPayload,
-        idempotencySuffix: "empty_body",
       });
       const retryPayload = buildAgentRetrySsePayload(upstream.status);
       if (retryPayload) {
@@ -11377,13 +11444,13 @@ const agentChatStreamHandler = async (req, res) => {
       if (upstream.ok && pipeResult.status === "success") {
         clearAgentStreamDiagnostic(userId);
       }
-      await recordAgentMeterReceiptBestEffort(req, {
-        status: upstream.ok && pipeResult.status === "success" ? "success" : pipeResult.status,
-        durationMs: Date.now() - meterStartedAtMs,
+      await recordAgentWalletSettleBestEffort(req, {
+        // A client CANCEL settles the accrued work (cancel is not free — else it's an abuse
+        // vector); only a real upstream failure releases. No done-frame cost on the non-SSE
+        // path, so a cancelled turn settles the flat estimate.
+        status: upstream.ok && (pipeResult.status === "success" || pipeResult.status === "cancelled") ? "success" : "failed",
         message: originalMessage,
         payload: normalizedPayload,
-        model: "nullalis-agent-non-sse",
-        idempotencySuffix: `non_sse_${pipeResult.status}`,
       });
       return;
     }
@@ -11402,7 +11469,12 @@ const agentChatStreamHandler = async (req, res) => {
       if (done) break;
       const decoded = decoder.decode(value, { stream: true });
       if (!decoded) continue;
-      res.write(decoded);
+      // Guard the client write: on a client cancel/abort the socket is destroyed, but we keep draining
+      // upstream so the done-frame cost still lands in streamMetrics → a cancelled turn SETTLES accrued
+      // cost (spec: the work was consumed). An unguarded write would throw into catch → release (wrong).
+      if (!res.destroyed && !res.writableEnded) {
+        res.write(decoded);
+      }
       buffer += decoded;
 
       let separatorIndex = buffer.indexOf("\n\n");
@@ -11424,21 +11496,23 @@ const agentChatStreamHandler = async (req, res) => {
       clearAgentStreamDiagnostic(userId);
     }
 
-    await recordAgentMeterReceiptBestEffort(req, {
+    // Terminal settle: SETTLE on success (incl. client cancel — upstream still completed and the
+    // done-frame cost was captured), RELEASE on upstream failure. Reconciles to real cost; refunds rest.
+    await recordAgentWalletSettleBestEffort(req, {
       status: streamStatus,
-      durationMs: Date.now() - meterStartedAtMs,
       message: originalMessage,
       streamMetrics,
       payload: normalizedPayload,
     });
-    res.end();
+    if (!res.destroyed && !res.writableEnded) {
+      res.end();
+    }
   } catch (error) {
-    await recordAgentMeterReceiptBestEffort(req, {
+    // Failed turn → release (no-op if a terminal path already settled; the hold guard makes this safe).
+    await recordAgentWalletSettleBestEffort(req, {
       status: "failed",
-      durationMs: Date.now() - meterStartedAtMs,
       message: extractStreamMessage(req.body || {}) || "",
       payload: req.body && typeof req.body === "object" ? req.body : {},
-      idempotencySuffix: "exception",
     });
     const trackedUserId = String(req.agentUserId || "").trim();
     if (trackedUserId) {

@@ -200,6 +200,10 @@ export function createAgentStreamMeterMetrics() {
     events: 0,
     sawError: false,
     toolCalls: 0,
+    usageTokens: null,
+    inputTokens: null,
+    outputTokens: null,
+    costUsd: null,
   };
 }
 
@@ -249,6 +253,10 @@ export function readAgentSseMeterBlock(block = "") {
   }
 }
 
+function finiteMeterNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 export function updateAgentStreamMeterMetrics(metrics, block = "") {
   const target = metrics || createAgentStreamMeterMetrics();
   const parsed = readAgentSseMeterBlock(block);
@@ -258,5 +266,223 @@ export function updateAgentStreamMeterMetrics(metrics, block = "") {
   }
   if (parsed.sawError) target.sawError = true;
   if (parsed.toolCall) target.toolCalls += 1;
+
+  const isDoneFrame =
+    lowerText(parsed.eventType) === "done" ||
+    lowerText(parsed.payload?.type || parsed.payload?.event) === "done";
+  if (isDoneFrame && isPlainObject(parsed.payload)) {
+    const usageTokens = finiteMeterNumber(parsed.payload.usage_tokens);
+    const inputTokens = finiteMeterNumber(parsed.payload.input_tokens);
+    const outputTokens = finiteMeterNumber(parsed.payload.output_tokens);
+    const costUsd = finiteMeterNumber(parsed.payload.cost_usd);
+    if (usageTokens !== null) target.usageTokens = usageTokens;
+    if (inputTokens !== null) target.inputTokens = inputTokens;
+    if (outputTokens !== null) target.outputTokens = outputTokens;
+    if (costUsd !== null) target.costUsd = costUsd;
+  }
   return target;
+}
+
+export const DEFAULT_UNIT_COST_USD = 0.00075;
+
+export function computeAgentSettleUnits({
+  costUsd = null,
+  message = "",
+  action = "agent_turn",
+  payload = {},
+  env = process.env,
+} = {}) {
+  const rawUnitCost = Number(env?.ZAKI_UNIT_COST_USD);
+  const unitCost = rawUnitCost > 0 ? rawUnitCost : DEFAULT_UNIT_COST_USD;
+  // Real path requires a POSITIVE cost — symmetric with the engine's own done-frame gate
+  // (it only emits cost_usd when totals_after.cost > 0). A null/absent/zero/non-finite cost
+  // therefore falls back to the flat estimate: a turn is never billed as free on missing cost.
+  const cost = Number(costUsd);
+  if (Number.isFinite(cost) && cost > 0) {
+    return { units: Math.round((cost / unitCost) * 10_000) / 10_000, costSource: "real" };
+  }
+  return { units: estimateAgentMeterUnits(message, action, payload), costSource: "estimate" };
+}
+
+// Agent turns run long (tool loops, deep research) → reserve high and hold long. The reserve is a
+// ceiling, not a charge: settle reconciles to real cost (computeAgentSettleUnits) at the terminal
+// path and refunds the rest. Mirrors the spaces wallet reserve, productId="agent".
+export const AGENT_RESERVE_UNITS_DEFAULT = 40;
+export const AGENT_HOLD_EXPIRY_MS = 10 * 60 * 1000;
+export const AGENT_PROVIDER = "nullalis";
+export const AGENT_PROVIDER_MODEL = "kimi-k2.6";
+
+export function resolveAgentReserveUnits(env = process.env) {
+  const override = Number(env?.ZAKI_AGENT_RESERVE_UNITS);
+  return override > 0 ? override : AGENT_RESERVE_UNITS_DEFAULT;
+}
+
+/**
+ * Reserve agent-chat units against the unit wallet (wallet = source of truth). Pure orchestration:
+ * dependency-injected so index.js wires the real ledger + req/res, and tests can mock. Mirrors the
+ * spaces reserve — fail-OPEN on any thrown error (a metering blip must never break the agent).
+ *
+ * @returns {Promise<{outcome:"allowed"|"denied"|"unmetered", hold?:object|null, idempotencyKey?:string,
+ *   action?:string, denial?:{status:number,error:string,message:string,remaining?:number}, error?:Error}>}
+ *   - "allowed": reserve succeeded; `hold` is the new hold (or null on an idempotent retry — already charged).
+ *   - "denied": out of units (or no identity); caller responds with `denial` via the denial-payload builder.
+ *   - "unmetered": fail-open (DB error); caller allows the turn unmetered.
+ */
+export async function reserveAgentChatUnits({
+  identity,
+  action = "agent_turn",
+  idempotencyKey,
+  env = process.env,
+  reserveUnits,
+  ensureWallet,
+  deterministicGrantId,
+} = {}) {
+  // The reserve is a flat reserve-high ceiling (resolveAgentReserveUnits), not message-derived — the
+  // settle reconciles to real cost. (Contrast the spaces reserve, which estimates from the message.)
+  if (!identity || identity.type !== "user" || !identity.userId) {
+    return {
+      outcome: "denied",
+      action,
+      denial: {
+        status: 401,
+        error: "agent_meter_identity_required",
+        message: "Agent usage requires an authenticated ZAKI user.",
+      },
+    };
+  }
+  const normalizedAction = normalizeMeterAction(action);
+  const reservedUnits = resolveAgentReserveUnits(env);
+  const grantId = deterministicGrantId(idempotencyKey);
+  const expiresAt = new Date(Date.now() + AGENT_HOLD_EXPIRY_MS).toISOString();
+  const reserveArgs = {
+    userId: identity.userId,
+    grantId,
+    productId: "agent",
+    action: normalizedAction,
+    reservedUnits,
+    reserveIdempotencyKey: idempotencyKey,
+    expiresAt,
+  };
+  try {
+    let reserved = await reserveUnits(reserveArgs);
+    if (!reserved.ok && reserved.reason === "no_wallet") {
+      await ensureWallet({ userId: identity.userId, planId: identity.zakiUser?.plan_tier || "free" });
+      reserved = await reserveUnits(reserveArgs);
+    }
+    if (!reserved.ok) {
+      return {
+        outcome: "denied",
+        action: normalizedAction,
+        denial: {
+          status: 429,
+          error: "insufficient_units",
+          message: "You're out of usage for now — it refreshes on your weekly cycle.",
+          remaining: reserved.remaining,
+        },
+      };
+    }
+    return {
+      outcome: "allowed",
+      // Hold to settle at the terminal path (null on an idempotent retry — already charged).
+      hold: reserved.idempotent ? null : reserved.hold,
+      idempotencyKey,
+      action: normalizedAction,
+    };
+  } catch (error) {
+    // Fail-OPEN: the agent is core product; a metering DB blip must not break chat. Not charged; logged by caller.
+    return { outcome: "unmetered", action: normalizedAction, error };
+  }
+}
+
+/**
+ * Settle (or release) an agent-chat hold against the unit wallet. Pure orchestration with injected
+ * deps. Mirrors the spaces settle: settle on success/cancel (work consumed), release on upstream
+ * failure (settledUnits 0 = full refund). Emits a zaki_usage_events row ONLY on a successful settle.
+ * Caller owns the idempotent double-settle guard (`req.agentChatHold = null`).
+ *
+ * @returns {Promise<{ok:boolean}|null>} the settle result, or null on a swallowed error (sweeper reconciles).
+ */
+export async function settleAgentChatUnits({
+  hold,
+  idempotencyKey,
+  action = "agent_turn",
+  status = "success",
+  message = "",
+  payload = {},
+  streamMetrics = null,
+  env = process.env,
+  sourceRoute = null,
+  requestId = null,
+  settleHold,
+  recordUsageEvent,
+  dbQuery,
+  logStructured,
+} = {}) {
+  if (!hold?.id) return null;
+  try {
+    const sawError = status !== "success" || Boolean(streamMetrics?.sawError);
+    const costUsd = streamMetrics?.costUsd ?? null;
+    const { units, costSource } = computeAgentSettleUnits({ costUsd, message, action, payload, env });
+    const costOverflow = units > Number(hold.reserved_units || 0);
+    const costMicros = Number.isFinite(Number(costUsd)) ? Math.round(Number(costUsd) * 1e6) : null;
+
+    const settleResult = await settleHold({
+      holdId: hold.id,
+      settleIdempotencyKey: `${idempotencyKey}:settle`,
+      // Passed uncapped: the ledger's computeSettleRefund clamps settledUnits to reserved_units
+      // (Math.min). costOverflow above flags the calibration signal; do NOT clamp here.
+      settledUnits: sawError ? 0 : units,
+      finalState: sawError ? "released" : "settled",
+      provider: AGENT_PROVIDER,
+      providerModel: AGENT_PROVIDER_MODEL,
+      providerCostUsdMicros: costMicros,
+      providerInputTokens: streamMetrics?.inputTokens ?? null,
+      providerOutputTokens: streamMetrics?.outputTokens ?? null,
+    });
+
+    // First-class per-feature usage (mirrors spaces/HIRE). Emit ONLY on a successful settle. Failsafe:
+    // a usage-event failure must NEVER break or delay the agent response or the settle.
+    if (!sawError && settleResult?.ok) {
+      try {
+        await recordUsageEvent({
+          dbQuery,
+          logStructured,
+          event: {
+            userId: hold.user_id,
+            productId: "agent",
+            surface: "agent",
+            eventType: action || "agent_turn",
+            usageUnitType: "request",
+            usageUnits: units,
+            requestId: requestId || null,
+            sourceRoute,
+            metadata: {
+              action: action || "agent_turn",
+              usageTokens: streamMetrics?.usageTokens ?? null,
+              inputTokens: streamMetrics?.inputTokens ?? null,
+              outputTokens: streamMetrics?.outputTokens ?? null,
+              costUsd,
+              costSource,
+              costOverflow,
+              toolCalls: Number(streamMetrics?.toolCalls || 0),
+            },
+          },
+        });
+      } catch (usageError) {
+        logStructured?.("error", "agent.usage.record_failed", {
+          requestId: requestId || null,
+          holdId: hold.id,
+          message: usageError?.message || String(usageError),
+        });
+      }
+    }
+    return settleResult;
+  } catch (error) {
+    logStructured?.("error", "agent.wallet.settle_failed", {
+      requestId: requestId || null,
+      holdId: hold.id,
+      message: error?.message || String(error),
+    });
+    return null;
+  }
 }
