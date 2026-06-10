@@ -1,13 +1,14 @@
 /**
- * Memory Extraction - LLM + Pattern Fallback
- * 
- * Extract facts, preferences, emotions from user messages.
+ * Memory Extraction - deterministic pattern extraction (stateless, local).
+ *
+ * Extract facts, preferences, emotions from user messages with regex patterns.
+ * No LLM/AnythingLLM round-trip for memory writes — the chat engine is for chat.
+ * (callNovaTypChat is retained only for optional preference-value translation.)
  * Pure function, no side effects.
  */
 
-import { z } from "zod";
 import { dbGet, dbQuery } from "./db.js";
-import { callNovaTypChat, parseJsonObjectFromText } from "./memory/nova-chat.js";
+import { callNovaTypChat } from "./memory/nova-chat.js";
 
 function resolveTimeoutMs(envName, fallbackMs) {
   const raw = Number.parseInt(String(process.env[envName] || ""), 10);
@@ -15,26 +16,7 @@ function resolveTimeoutMs(envName, fallbackMs) {
   return Math.min(30_000, Math.max(500, raw));
 }
 
-const EXTRACTION_TIMEOUT_MS = resolveTimeoutMs("ZAKI_MEMORY_EXTRACTION_TIMEOUT_MS", 12_000);
 const TRANSLATION_TIMEOUT_MS = resolveTimeoutMs("ZAKI_MEMORY_TRANSLATION_TIMEOUT_MS", 5_000);
-
-// LLM Extraction Schema
-const MemorySchema = z.object({
-  content: z.string(),
-  type: z.enum(["fact", "preference", "emotion", "event", "goal", "relationship", "struggle"]),
-  confidence: z.number().min(0).max(1).optional(),
-  conflict_key: z.string().optional(),
-  polarity: z.enum(["positive", "negative", "neutral"]).optional(),
-});
-
-const ClassificationSchema = z.enum([
-  "user_statement",
-  "fictional",
-  "draft",
-  "quote",
-  "instruction",
-  "roleplay",
-]);
 
 const ALLOWED_EXTRACTED_TYPES = new Set([
   "fact",
@@ -47,54 +29,6 @@ const ALLOWED_EXTRACTED_TYPES = new Set([
 ]);
 const MAX_EXTRACTED_MEMORIES_PER_MESSAGE = 12;
 
-const ExtractionResponseSchema = z.object({
-  classification: ClassificationSchema.optional(),
-  memories: z.array(MemorySchema).optional(),
-});
-
-const DEFAULT_PROMPT = `You are a memory extractor.
-First classify the message as one of:
-- user_statement: The user is stating facts/preferences/emotions ABOUT THEMSELVES.
-- fictional: The user is writing fiction/hypothetical content.
-- draft: The user is drafting an email/message/content (not personal info).
-- quote: The user is quoting someone/something.
-- instruction: The user is instructing the assistant (summarize/translate/write/etc).
-- roleplay: The user is asking you to roleplay or act as someone else.
-
-Questions and interrogatives are NEVER user_statement — classify them as instruction and return no memories (e.g., "Do I have any travel plans?", "What do I like?", "Where do I live?", "Am I free tomorrow?").
-Only extract memories if classification is user_statement. Otherwise return empty memories.
-
-Extraction quality rules:
-- Each memory must be atomic: exactly one fact, preference, goal, emotion, event, relationship, or struggle per item.
-- Split compound statements into separate memories.
-- Do NOT output vague references such as "this", "that", "these", "those", "all of those", "that place", or "the above".
-- Do NOT merge preferences with plans, facts, or locations in one memory.
-- Prefer direct canonical phrasing such as "Likes travel", "Plans to travel to Dubai", "From Damascus", "Lives in Hamburg".
-
-Return JSON: {"classification": "...", "memories": [{"content": "...", "type": "...", "confidence": 0.9, "conflict_key": "...", "polarity": "positive"}]}
-
-Types:
-- fact: Objective info (name, job, location)
-- preference: Likes/dislikes
-- emotion: How they feel
-- event: Life events
-- goal: Objectives/aspirations
-- relationship: People they mention
-- struggle: Challenges/problems
-
-Conflict key:
-- ALWAYS output conflict_key as a canonical English slug (lowercase, no spaces).
-- For preferences: "preference:coffee", "preference:spicy-food", "preference:black"
-- For constraints: "constraint:peanuts"
-- For identity: "identity:name", "identity:location", "identity:occupation", "identity:language"
-- ONLY use conflict_key "identity:name" when the user explicitly states their name (e.g., "my name is", "call me", "I go by").
-- Do NOT treat states/conditions/emotions (e.g., "I'm sick", "I'm tired", "I'm happy") as names.
-Polarity:
-- positive (likes/has/is)
-- negative (dislikes/doesn't/avoid)
-- neutral (facts that don't have polarity)
-
-Message: `;
 
 function slugifyValue(value) {
   return String(value || "")
@@ -745,52 +679,24 @@ async function translatePreferenceValue(value) {
 }
 
 export async function extractFacts(message) {
-  const heuristicClass = classifyWithHeuristics(message);
-  // Try LLM first
-  let llmMemories = [];
-  let llmClassification = null;
-  try {
-    const llmResult = await extractWithLLM(message);
-    llmMemories = Array.isArray(llmResult?.memories) ? llmResult.memories : [];
-    llmClassification = llmResult?.classification || null;
-  } catch (err) {
-    console.warn("LLM extraction failed, using patterns:", err.message);
-  }
-
-  const classification = llmClassification || heuristicClass;
-
-  let patternMemories = [];
-  const shouldRunPatterns =
-    classification === "user_statement" || heuristicClass === "user_statement";
-  if (shouldRunPatterns) {
-    const skipTranslation = llmMemories.some((m) => m.conflictKey);
-    patternMemories = await extractWithPatterns(message, {
-      skipTranslation,
-      simpleOnly: false,
-    });
-  }
-
-  if (classification !== "user_statement" && patternMemories.length === 0 && llmMemories.length === 0) {
+  // Stateless, local extraction: classify with heuristics (questions/instructions
+  // are skipped), then run the deterministic pattern extractor. No LLM round-trip.
+  const classification = classifyWithHeuristics(message);
+  if (classification !== "user_statement") {
     if (shouldDebug()) {
       console.log(`[Memory] Skipping extraction (classification: ${classification})`);
     }
     return [];
   }
 
+  const patternMemories = await extractWithPatterns(message, {
+    skipTranslation: false,
+    simpleOnly: false,
+  });
   if (shouldDebug()) {
-    console.log(
-      `[Memory] LLM memories: ${llmMemories.length}, pattern memories: ${patternMemories.length}, classification: ${classification}`
-    );
+    console.log(`[Memory] Extracted ${patternMemories.length} memories (regex)`);
   }
-
-  if (llmMemories.length === 0) return sanitizeExtractedMemories(patternMemories);
-  if (patternMemories.length === 0) return sanitizeExtractedMemories(llmMemories);
-
-  const merged = sanitizeExtractedMemories([...llmMemories, ...patternMemories]);
-  if (shouldDebug()) {
-    console.log(`[Memory] Extracted ${merged.length} total memories`);
-  }
-  return merged;
+  return sanitizeExtractedMemories(patternMemories);
 }
 
 function buildExtractedMemoryKey(memory) {
@@ -840,72 +746,21 @@ function finalizeExtractedMemories(memories) {
   );
 }
 
-async function extractWithLLM(message) {
-  const { content, transport } = await callNovaTypChat({
-    messages: [
-      { role: "system", content: DEFAULT_PROMPT },
-      { role: "user", content: message },
-    ],
-    jsonMode: true,
-    temperature: 0.1,
-    timeoutMs: EXTRACTION_TIMEOUT_MS,
-    label: "Memory extraction",
-  });
-
-  if (!content) {
-    return { classification: null, memories: [] };
-  }
-
-  if (shouldDebug()) {
-    console.log(`[Memory] Extraction transport: ${transport}`);
-  }
-
-  const parsed = parseJsonObjectFromText(content);
-  const validated = ExtractionResponseSchema.safeParse(parsed);
-  
-  if (!validated.success) {
-    console.warn("LLM response validation failed:", validated.error);
-    return { classification: null, memories: [] };
-  }
-  
-  const memories = sanitizeExtractedMemories(validated.data.memories || []);
-
-  return {
-    classification: validated.data.classification || null,
-    memories,
-  };
-}
-
 export async function probeMemoryExtractionProvider(
   sampleMessage = "I like coffee and I live in Dubai."
 ) {
+  // Extraction is now local + deterministic (regex patterns) — there is no LLM
+  // provider to probe. Run the pattern extractor and report that it ran.
   try {
-    const { content, transport, model } = await callNovaTypChat({
-      messages: [
-        { role: "system", content: DEFAULT_PROMPT },
-        { role: "user", content: String(sampleMessage || "").trim() || "I like coffee." },
-      ],
-      jsonMode: true,
-      temperature: 0,
-      timeoutMs: EXTRACTION_TIMEOUT_MS,
-      label: "Memory extraction probe",
-    });
-    const parsed = parseJsonObjectFromText(content);
-    const validated = ExtractionResponseSchema.safeParse(parsed);
-    if (!validated.success) {
-      return {
-        ok: false,
-        transport,
-        model,
-        error: "Extraction probe returned invalid schema.",
-      };
-    }
+    const memories = await extractWithPatterns(
+      String(sampleMessage || "").trim() || "I like coffee.",
+      { skipTranslation: true, simpleOnly: false }
+    );
     return {
       ok: true,
-      transport,
-      model,
-      classification: validated.data.classification || null,
-      extracted: Array.isArray(validated.data.memories) ? validated.data.memories.length : 0,
+      transport: "local_regex",
+      model: "regex-patterns",
+      extracted: Array.isArray(memories) ? memories.length : 0,
     };
   } catch (error) {
     return {

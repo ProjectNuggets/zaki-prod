@@ -42,99 +42,6 @@ describe("memory extraction", () => {
     );
   });
 
-  it("normalizes malformed preference phrasing from LLM output", async () => {
-    process.env.NOVA_TYP_BASE_URL = "https://example.com";
-    global.fetch = async () => ({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              content: JSON.stringify({
-                classification: "user_statement",
-                memories: [
-                  {
-                    content: "like to orange",
-                    type: "preference",
-                    confidence: 0.9,
-                  },
-                ],
-              }),
-            },
-          },
-        ],
-      }),
-    });
-
-    const result = await extractFacts("I like oranges.");
-    expect(result).toHaveLength(1);
-    expect(result[0].content).toBe("Likes orange");
-    expect(result[0].conflictKey).toBe("preference:orange");
-    expect(result[0].polarity).toBe("positive");
-  });
-
-  it("normalizes prefer phrasing without leaking the raw verb into content", async () => {
-    process.env.NOVA_TYP_BASE_URL = "https://example.com";
-    global.fetch = async () => ({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              content: JSON.stringify({
-                classification: "user_statement",
-                memories: [
-                  {
-                    content: "Prefers concise replies",
-                    type: "preference",
-                    confidence: 0.9,
-                  },
-                ],
-              }),
-            },
-          },
-        ],
-      }),
-    });
-
-    const result = await extractFacts("I prefer concise replies.");
-    expect(result).toHaveLength(1);
-    expect(result[0].content).toBe("Prefers concise replies");
-    expect(result[0].conflictKey).toBe("preference:concise-reply");
-    expect(result[0].polarity).toBe("positive");
-  });
-
-  it("normalizes nested malformed prefer phrasing from LLM output", async () => {
-    process.env.NOVA_TYP_BASE_URL = "https://example.com";
-    global.fetch = async () => ({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              content: JSON.stringify({
-                classification: "user_statement",
-                memories: [
-                  {
-                    content: "Likes Prefers concise replies",
-                    type: "preference",
-                    confidence: 0.9,
-                  },
-                ],
-              }),
-            },
-          },
-        ],
-      }),
-    });
-
-    const result = await extractFacts("I prefer concise replies.");
-    expect(result).toHaveLength(1);
-    expect(result[0].content).toBe("Prefers concise replies");
-    expect(result[0].conflictKey).toBe("preference:concise-reply");
-    expect(result[0].polarity).toBe("positive");
-  });
-
   it("strips conversational filler from preference memories", async () => {
     process.env.NOVA_TYP_BASE_URL = "https://example.com";
     global.fetch = async () => ({
@@ -187,45 +94,6 @@ describe("memory extraction", () => {
     expect(result.some((item) => item.content === "Likes blue")).toBe(true);
   });
 
-  it("dedupes semantically equivalent preferences using canonical conflict keys", async () => {
-    process.env.NOVA_TYP_BASE_URL = "https://example.com";
-    global.fetch = async () => ({
-      ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              content: JSON.stringify({
-                classification: "user_statement",
-                memories: [
-                  {
-                    content: "Likes oranges",
-                    type: "preference",
-                    confidence: 0.7,
-                    conflict_key: "preference:oranges",
-                    polarity: "positive",
-                  },
-                  {
-                    content: "Likes orange",
-                    type: "preference",
-                    confidence: 0.9,
-                    conflict_key: "preference:orange",
-                    polarity: "positive",
-                  },
-                ],
-              }),
-            },
-          },
-        ],
-      }),
-    });
-
-    const result = await extractFacts("I like oranges.");
-    expect(result).toHaveLength(1);
-    expect(result[0].conflictKey).toBe("preference:orange");
-    expect(result[0].content).toBe("Likes orange");
-  });
-
   it("keeps opposite polarity preferences as separate memories", async () => {
     process.env.NOVA_TYP_BASE_URL = "https://example.com";
     global.fetch = async () => ({
@@ -275,39 +143,6 @@ describe("memory extraction", () => {
 
     const result = await extractFacts("I like tea");
     expect(result.some((item) => item.content === "Likes tea")).toBe(true);
-  });
-
-  it("falls back to workspace chat when openai-compatible route is unauthorized", async () => {
-    process.env.NOVA_TYP_BASE_URL = "https://example.com";
-    global.fetch = jest
-      .fn()
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-        text: async () => "",
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          textResponse: JSON.stringify({
-            classification: "user_statement",
-            memories: [
-              {
-                content: "Likes mango",
-                type: "preference",
-                confidence: 0.9,
-                conflict_key: "preference:mango",
-                polarity: "positive",
-              },
-            ],
-          }),
-        }),
-      });
-
-    const result = await extractFacts("I like mango");
-    expect(result.some((item) => item.content === "Likes mango")).toBe(true);
-    expect(global.fetch).toHaveBeenCalledTimes(2);
-    expect(global.fetch.mock.calls[1][0]).toContain("/api/v1/workspace/zaky/chat");
   });
 
   it("rejects vague compound LLM memories and preserves atomic pattern facts", async () => {
@@ -521,5 +356,22 @@ describe("memory extraction", () => {
         type: "preference",
       }),
     ]);
+  });
+
+  it("dedupes semantically equivalent memories via canonical conflict keys", () => {
+    const result = sanitizeExtractedMemories([
+      { content: "Likes coffee", type: "preference", conflict_key: "preference:coffee", confidence: 0.8 },
+      { content: "Likes Coffee", type: "preference", conflict_key: "preference:coffee", confidence: 0.9 },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0].content).toBe("Likes Coffee"); // higher-confidence survivor
+  });
+
+  it("keeps opposite-polarity memories on the same key as separate", () => {
+    const result = sanitizeExtractedMemories([
+      { content: "Likes coffee", type: "preference", conflict_key: "preference:coffee", polarity: "positive", confidence: 0.9 },
+      { content: "Dislikes coffee", type: "preference", conflict_key: "preference:coffee", polarity: "negative", confidence: 0.9 },
+    ]);
+    expect(result).toHaveLength(2);
   });
 });
