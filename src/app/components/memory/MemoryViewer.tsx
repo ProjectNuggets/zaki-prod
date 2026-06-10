@@ -81,6 +81,7 @@ interface MemoryViewerProps {
   userId: string;
   initialSearchQuery?: string | null;
   initialTab?: "memories" | "pending" | "conflicts";
+  variant?: "modal" | "panel";
 }
 
 type MemorySummaryGroup =
@@ -269,6 +270,7 @@ export function MemoryViewer({
   userId,
   initialSearchQuery = "",
   initialTab = "memories",
+  variant = "modal",
 }: MemoryViewerProps) {
   const [memories, setMemories] = useState<MemoryRecord[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -805,53 +807,106 @@ export function MemoryViewer({
             </p>
           </div>
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div className="rounded-zaki-md border border-zaki bg-zaki-hover px-3 py-3 dark:border-[rgba(240,236,230,0.08)]">
-            <div className="text-sm font-semibold text-zaki-primary">
-              {t("memoryViewer.scope.personal.title")}
+        {variant !== "panel" && (
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-zaki-md border border-zaki bg-zaki-hover px-3 py-3 dark:border-[rgba(240,236,230,0.08)]">
+              <div className="text-sm font-semibold text-zaki-primary">
+                {t("memoryViewer.scope.personal.title")}
+              </div>
+              <p className="mt-1 text-xs leading-5 text-zaki-secondary">
+                {t("memoryViewer.scope.personal.body")}
+              </p>
             </div>
-            <p className="mt-1 text-xs leading-5 text-zaki-secondary">
-              {t("memoryViewer.scope.personal.body")}
+            <div className="rounded-zaki-md border border-zaki bg-zaki-hover px-3 py-3 dark:border-[rgba(240,236,230,0.08)]">
+              <div className="text-sm font-semibold text-zaki-primary">
+                {t("memoryViewer.scope.space.title")}
+              </div>
+              <p className="mt-1 text-xs leading-5 text-zaki-secondary">
+                {t("memoryViewer.scope.space.body")}
+              </p>
+            </div>
+            <div className="rounded-zaki-md border border-zaki bg-zaki-hover px-3 py-3 dark:border-[rgba(240,236,230,0.08)]">
+              <div className="text-sm font-semibold text-zaki-primary">
+                {t("memoryViewer.scope.session.title")}
+              </div>
+              <p className="mt-1 text-xs leading-5 text-zaki-secondary">
+                {t("memoryViewer.scope.session.body")}
+              </p>
+            </div>
+          </div>
+        )}
+        {variant !== "panel" && (
+          <div className="mt-4">
+            <MemoryModeToggle
+              value={memoryPolicy}
+              onChange={(nextPolicy) => {
+                void (async () => {
+                  const saved = await setMemoryPolicy(nextPolicy);
+                  if (!saved) {
+                    toast.error(t("memoryViewer.policy.saveFailed"));
+                    return;
+                  }
+                  toast.success(t("memoryViewer.policy.saved"));
+                })();
+              }}
+              disabled={memoryPolicyLoading || memoryPolicySaving}
+            />
+            <p className="mt-2 text-xs text-zaki-muted">
+              {memoryPolicyLoading
+                ? t("memoryViewer.policy.loading")
+                : t("memoryViewer.policy.helper")}
             </p>
           </div>
-          <div className="rounded-zaki-md border border-zaki bg-zaki-hover px-3 py-3 dark:border-[rgba(240,236,230,0.08)]">
-            <div className="text-sm font-semibold text-zaki-primary">
-              {t("memoryViewer.scope.space.title")}
+        )}
+        {variant === "panel" && (
+          <div className="mt-4 rounded-zaki-md border border-zaki bg-zaki-hover px-4 py-3 dark:border-[rgba(240,236,230,0.08)]">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
+                  {t("memoryPanel.onoff.title", { defaultValue: "Memory" })}
+                </div>
+                <p className="mt-1 text-xs leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
+                  {t("memoryPanel.onoff.hint", {
+                    defaultValue:
+                      "When on, ZAKI remembers useful details and uses them in chat.",
+                  })}
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={memoryPolicy !== "off"}
+                aria-label={t("memoryPanel.onoff.title", { defaultValue: "Memory" })}
+                disabled={memoryPolicyLoading || memoryPolicySaving}
+                onClick={() => {
+                  void (async () => {
+                    const nextPolicy =
+                      memoryPolicy === "off" ? "balanced" : "off";
+                    const saved = await setMemoryPolicy(nextPolicy);
+                    if (!saved) {
+                      toast.error(t("memoryViewer.policy.saveFailed"));
+                      return;
+                    }
+                    toast.success(t("memoryViewer.policy.saved"));
+                  })();
+                }}
+                className={cn(
+                  "relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                  memoryPolicy !== "off"
+                    ? "border-zaki-brand bg-zaki-brand"
+                    : "border-zaki-strong bg-zaki-subtle"
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-block h-5 w-5 transform rounded-full bg-white shadow-zaki-sm transition-transform",
+                    memoryPolicy !== "off" ? "translate-x-5" : "translate-x-0.5"
+                  )}
+                />
+              </button>
             </div>
-            <p className="mt-1 text-xs leading-5 text-zaki-secondary">
-              {t("memoryViewer.scope.space.body")}
-            </p>
           </div>
-          <div className="rounded-zaki-md border border-zaki bg-zaki-hover px-3 py-3 dark:border-[rgba(240,236,230,0.08)]">
-            <div className="text-sm font-semibold text-zaki-primary">
-              {t("memoryViewer.scope.session.title")}
-            </div>
-            <p className="mt-1 text-xs leading-5 text-zaki-secondary">
-              {t("memoryViewer.scope.session.body")}
-            </p>
-          </div>
-        </div>
-        <div className="mt-4">
-          <MemoryModeToggle
-            value={memoryPolicy}
-            onChange={(nextPolicy) => {
-              void (async () => {
-                const saved = await setMemoryPolicy(nextPolicy);
-                if (!saved) {
-                  toast.error(t("memoryViewer.policy.saveFailed"));
-                  return;
-                }
-                toast.success(t("memoryViewer.policy.saved"));
-              })();
-            }}
-            disabled={memoryPolicyLoading || memoryPolicySaving}
-          />
-          <p className="mt-2 text-xs text-zaki-muted">
-            {memoryPolicyLoading
-              ? t("memoryViewer.policy.loading")
-              : t("memoryViewer.policy.helper")}
-          </p>
-        </div>
+        )}
         <div className="mt-4 grid gap-2 sm:grid-cols-4">
           <div className="rounded-zaki-md border border-zaki bg-zaki-hover px-3 py-2 dark:border-[rgba(240,236,230,0.08)]">
             <div className="text-[10px] uppercase tracking-[0.2em] text-zaki-muted">

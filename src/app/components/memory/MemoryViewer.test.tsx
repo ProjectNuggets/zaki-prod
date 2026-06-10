@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom";
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryViewer } from "./MemoryViewer";
 import {
   apiRequest,
@@ -287,5 +287,20 @@ describe("MemoryViewer", () => {
     );
     const channels = chips.map((chip) => chip.getAttribute("data-channel"));
     expect(channels).toEqual(expect.arrayContaining(["telegram", "web"]));
+  });
+
+  it("panel variant shows a binary On/Off and hides scope cards + 5-mode toggle", async () => {
+    render(<MemoryViewer userId="u@x.co" variant="panel" />);
+    expect(await screen.findByRole("switch", { name: /memory/i })).toBeInTheDocument();
+    expect(screen.queryByText(/ask_before_saving|save_less|save_more/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Personal memory|Space context|session context/i)).not.toBeInTheDocument();
+  });
+
+  it("panel On/Off toggle persists policy=off", async () => {
+    const api = await import("@/lib/api");
+    render(<MemoryViewer userId="u@x.co" variant="panel" />);
+    const sw = await screen.findByRole("switch", { name: /memory/i });
+    fireEvent.click(sw);
+    await waitFor(() => expect(api.updateMemoryPreferences).toHaveBeenCalledWith("off"));
   });
 });
