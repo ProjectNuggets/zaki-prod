@@ -187,7 +187,12 @@ export async function callNovaTypChat({
 
   const apiBase = getNovaApiBase();
   const headers = buildAuthHeaders();
-  const model = getChatModel();
+  const workspaceSlug = getMemoryWorkspaceSlug();
+  // AnythingLLM's OpenAI-compatible endpoint routes by WORKSPACE SLUG via the `model`
+  // field (it runs that workspace's configured LLM). Passing a real model name like
+  // "gpt-4o-mini" returns 401. Use the memory workspace slug; only fall back to the
+  // legacy ZAKI_MEMORY_LLM_MODEL when no workspace is configured.
+  const model = workspaceSlug || getChatModel();
   const boundedTimeoutMs = resolveTimeoutMs(timeoutMs, 6_000);
 
   let openAiError = null;
@@ -233,7 +238,6 @@ export async function callNovaTypChat({
     openAiError = error;
   }
 
-  const workspaceSlug = getMemoryWorkspaceSlug();
   if (!workspaceSlug) {
     throw new Error(
       `Memory chat failed via OpenAI-compatible route${
