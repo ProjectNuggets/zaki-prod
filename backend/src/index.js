@@ -362,6 +362,7 @@ import { buildRefreshCookie } from "./zaki-session-cookie.js";
 import { sweepExpiredHolds, reserveUnits, settleHold, ensureWallet, readWallet } from "./unit-ledger.js";
 import { buildMeterDemoRouter } from "./meter-demo-router.js";
 import { actualChatUnits, estimateChatUnits, deterministicGrantId } from "./chat-meter.js";
+import { isToolFireEvent, extractGeneratedFile } from "./agent-stream-signals.js";
 import {
   buildClearedGoogleOAuthNonceCookie,
   buildGoogleOAuthRedirectUri,
@@ -999,6 +1000,8 @@ async function pipeSseWithAgentLinks(readable, res, req, label = "Stream") {
     assistantOutputChars: 0,
     events: 0,
     sawError: false,
+    sawToolCall: false,
+    generatedFiles: [],
   };
 
   res.on("close", () => {
@@ -1053,6 +1056,9 @@ async function pipeSseWithAgentLinks(readable, res, req, label = "Stream") {
             metrics.sawError ||
             payload?.type === "error" ||
             payload?.error === true;
+          if (isToolFireEvent(payload)) metrics.sawToolCall = true;
+          const __gf = extractGeneratedFile(payload);
+          if (__gf) metrics.generatedFiles.push(__gf);
           outLines.push(`data: ${JSON.stringify(payload)}`);
           wrote = true;
         } catch {
