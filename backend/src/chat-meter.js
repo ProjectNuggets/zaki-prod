@@ -18,6 +18,7 @@ function baseUnitsForAction(action) {
   const a = String(action || "");
   if (a.includes("memory_read")) return 0.25;
   if (a.includes("search")) return 1.5;
+  if (a.includes("tool")) return 1.5;
   if (a.includes("query")) return 1.25;
   if (a.includes("synthetic")) return 0.5;
   return 1; // spaces_chat_turn (default)

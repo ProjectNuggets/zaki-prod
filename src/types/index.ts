@@ -40,6 +40,26 @@ export interface PersistedTurnEvent {
   ts?: number;
 }
 
+/**
+ * One narration step for the normal Spaces always-agent chat, derived from an
+ * engine `agentThought` SSE event. `kind` drives the icon; `label` is a short,
+ * user-friendly string (never the raw `@agent` text).
+ */
+export interface AgentNarrationStep {
+  kind: "search" | "scrape" | "file" | "docs" | "thought";
+  label: string;
+}
+
+/**
+ * A file the engine agent generated during a normal Spaces turn, surfaced from
+ * a `fileDownload` SSE event and rendered as a download chip.
+ */
+export interface GeneratedFileRef {
+  filename: string;
+  storageFilename: string;
+  fileSize: number | null;
+}
+
 export interface Message {
   id: string;
   role: "user" | "assistant";
@@ -53,6 +73,15 @@ export interface Message {
   lane?: string | null;
   createdAt?: string | null;
   turnEvents?: PersistedTurnEvent[];
+  /**
+   * Per-turn agent narration for the NORMAL Spaces always-agent chat. These are
+   * stored on the assistant message during streaming and rendered above it
+   * (steps) / below it (file chips). The nullALIS agent space does NOT use
+   * these — it has its own transcript rail.
+   */
+  agentSteps?: AgentNarrationStep[];
+  agentFiles?: GeneratedFileRef[];
+  agentRunning?: boolean;
 }
 
 export interface MessageAttachment {
