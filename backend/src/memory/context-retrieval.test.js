@@ -783,4 +783,77 @@ describe("memory context retrieval behavior", () => {
     expect(result.context).toContain("From Damascus");
     expect(result.context).not.toContain("Prefers concise answers");
   });
+
+  it("buildIdentityCore returns high-confidence facts only and excludes low-confidence", async () => {
+    const { buildIdentityCore } = await loadOperations();
+
+    dbAllMock.mockResolvedValue([
+      {
+        id: "m-live",
+        content: "Lives in Riyadh",
+        type: "fact",
+        metadata: { conflictKey: "identity:location" },
+        importance_score: 0.9,
+        confidence_score: 0.92,
+        created_at: "2026-02-28T22:23:30.779Z",
+      },
+      {
+        id: "m-pref",
+        content: "Prefers concise answers",
+        type: "preference",
+        metadata: { conflictKey: "preference:concise-answers" },
+        importance_score: 0.8,
+        confidence_score: 0.9,
+        created_at: "2026-02-28T22:23:29.779Z",
+      },
+      {
+        id: "m-jazz",
+        content: "Maybe likes jazz",
+        type: "preference",
+        metadata: { conflictKey: "preference:jazz" },
+        importance_score: 0.7,
+        confidence_score: 0.4,
+        created_at: "2026-02-28T22:23:28.779Z",
+      },
+    ]);
+    dbGetMock.mockResolvedValue(null);
+    global.fetch = jest.fn();
+
+    const core = await buildIdentityCore({ userId: "user@example.com" });
+
+    expect(typeof core).toBe("string");
+    expect(core).toContain("Lives in Riyadh");
+    expect(core).not.toContain("Maybe likes jazz");
+    expect(core.length).toBeLessThanOrEqual(400);
+  });
+
+  it("buildChatMemoryContext returns a string core field", async () => {
+    const { buildChatMemoryContext, setStorageSupportProbeForTests } = await loadOperations();
+    setStorageSupportProbeForTests(async () => true);
+
+    dbAllMock.mockResolvedValue([
+      {
+        id: "m-live",
+        content: "Lives in Riyadh",
+        type: "fact",
+        metadata: { conflictKey: "identity:location" },
+        retrieval_score: 0.9,
+        importance_score: 0.9,
+        confidence_score: 0.92,
+        created_at: "2026-02-28T22:23:30.779Z",
+      },
+    ]);
+    dbGetMock.mockResolvedValue(null);
+    global.fetch = jest.fn();
+
+    const result = await buildChatMemoryContext({
+      userId: "user@example.com",
+      query: "where do I live?",
+      maxChars: 500,
+      currentThreadId: "thread-new",
+      limit: 6,
+    });
+
+    expect(typeof result.core).toBe("string");
+  });
 });

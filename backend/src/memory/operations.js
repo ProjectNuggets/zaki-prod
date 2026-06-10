@@ -82,6 +82,27 @@ function resolveChatMemoryEmbedTimeoutMs() {
   return resolveTimeoutMs("ZAKI_CHAT_MEMORY_EMBED_TIMEOUT_MS", 1_200);
 }
 
+// Always-on "feels known" identity core: a tiny, high-confidence, deterministic
+// profile injected every chat turn. Query-independent — reuses the existing
+// diverse-selection + bucketed-render machinery, gated by the confidence floor.
+function resolveIdentityCoreMinConfidence() {
+  const raw = Number.parseFloat(
+    String(process.env.ZAKI_CHAT_MEMORY_IDENTITY_CORE_MIN_CONFIDENCE || "")
+  );
+  if (!Number.isFinite(raw)) return 0.85;
+  return Math.min(1, Math.max(0, raw));
+}
+
+const IDENTITY_CORE_MIN_CONFIDENCE = resolveIdentityCoreMinConfidence();
+const IDENTITY_CORE_MAX_ITEMS = 6;
+const IDENTITY_CORE_MAX_CHARS = 350;
+
+function isIdentityCoreEnabled() {
+  return (
+    String(process.env.ZAKI_CHAT_MEMORY_IDENTITY_CORE_ENABLED || "").toLowerCase() !== "false"
+  );
+}
+
 function shouldDebug() {
   return String(process.env.MEMORY_DEBUG || "").toLowerCase() === "true";
 }
@@ -2310,6 +2331,35 @@ function buildBucketedChatContext(memories, maxChars = 800) {
   };
 }
 
+// Deterministic, query-independent identity core. Pulls the user's top active
+// memories, keeps only high-confidence (or user-verified) facts, then reuses the
+// diverse-selection + bucketed-render machinery to emit a tiny bounded profile.
+// Returns "" when nothing qualifies.
+export async function buildIdentityCore({ userId }) {
+  const trusted = (
+    await dbAll(
+      `SELECT id, content, type, metadata, importance_score, confidence_score, source_thread_id, created_at
+       FROM memories
+       WHERE user_id = $1
+         AND COALESCE(status, 'active') = 'active'
+       ORDER BY importance_score DESC, last_accessed_at DESC NULLS LAST, created_at DESC
+       LIMIT 40`,
+      [normalizeUserId(userId)]
+    )
+  )
+    .map((row) => normalizeMemoryRowForUse(row))
+    .filter(
+      (row) =>
+        getMemoryConfidenceScore(row) >= IDENTITY_CORE_MIN_CONFIDENCE ||
+        getMemoryMetadata(row).userVerified === true
+    );
+
+  if (trusted.length === 0) return "";
+
+  const picks = selectDiverseIntrospectionMemories(trusted, IDENTITY_CORE_MAX_ITEMS);
+  return buildBucketedChatContext(picks, IDENTITY_CORE_MAX_CHARS).context || "";
+}
+
 export async function buildChatMemoryContext({
   userId,
   query,
@@ -2318,6 +2368,8 @@ export async function buildChatMemoryContext({
   limit = 6,
   mode = "default",
 }) {
+  const coreEnabled = isIdentityCoreEnabled();
+  const core = coreEnabled ? await buildIdentityCore({ userId }) : "";
   const normalizedMode =
     mode === "introspection_summary" || mode === "introspection_fact" ? mode : "default";
   const boundedLimit = Math.max(1, Math.min(6, Number(limit) || 6));
@@ -2377,10 +2429,11 @@ export async function buildChatMemoryContext({
   }
 
   if (sources.length === 0) {
-    return { context: "", sources: [] };
+    return { context: "", sources: [], core };
   }
 
-  return buildBucketedChatContext(sources, maxChars);
+  const bucketed = buildBucketedChatContext(sources, maxChars);
+  return { context: bucketed.context, sources: bucketed.sources, core };
 }
 
 export function normalizeMemoryRecordForMaintenance(row) {
