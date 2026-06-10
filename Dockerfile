@@ -20,7 +20,9 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 COPY docker-entrypoint.d/40-zaki-env.sh /docker-entrypoint.d/40-zaki-env.sh
 RUN chmod +x /docker-entrypoint.d/40-zaki-env.sh
 
-RUN printf 'server {\n  listen 80;\n  server_name _;\n  root /usr/share/nginx/html;\n  index index.html;\n  location / {\n    try_files $uri /index.html;\n  }\n}\n' > /etc/nginx/conf.d/default.conf
+# SPA server config with correct cache headers: index.html/env.js no-cache (so deploys reach users),
+# hashed /assets/* immutable. See nginx/default.conf.
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 

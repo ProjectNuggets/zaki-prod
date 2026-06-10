@@ -142,3 +142,16 @@ test("composeContextEnvelope folds guardrail + memory into ONE block", () => {
 test("composeContextEnvelope without guardrail and without memory returns empty", () => {
   expect(composeContextEnvelope({ guardrail: false, core: "", context: "" })).toBe("");
 });
+
+test("composeContextEnvelope injects the current date + recency rule when nowISO is given", () => {
+  const env = composeContextEnvelope({ guardrail: true, core: "", context: "", nowISO: "2026-06-10" });
+  expect(env).toContain("Today's date is 2026-06-10");
+  expect(env).toContain("web-browsing tool");
+  expect(env).toContain("Never answer such questions from memory");
+});
+
+test("composeContextEnvelope omits the date line when nowISO is empty (no nowISO -> no leak of a blank date)", () => {
+  const env = composeContextEnvelope({ guardrail: true, core: "", context: "" });
+  expect(env).not.toContain("Today's date is");
+  expect(env).toContain("You are ZAKI");
+});
