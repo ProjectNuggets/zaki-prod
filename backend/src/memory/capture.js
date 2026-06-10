@@ -1,21 +1,11 @@
 import {
-  createConflict,
   findConflict,
   findDuplicateMemory,
-  stageMemory,
+  markMemoryOutdated,
   storeMemory,
 } from "./operations.js";
 import { extractFacts, sanitizeExtractedMemories } from "../memory-extraction.js";
 import { getMemoryUndoWindowMs, upsertUndoWindow } from "./auto-save.js";
-import { classifySensitiveMemoryCandidate } from "./sensitivity.js";
-
-const DEFAULT_AUTO_SAVE_MIN_CONFIDENCE = Number(
-  process.env.ZAKI_MEMORY_AUTO_SAVE_MIN_CONFIDENCE || 0.85
-);
-const REVIEW_IF_CONFIDENCE_MISSING =
-  String(process.env.ZAKI_MEMORY_REVIEW_IF_CONFIDENCE_MISSING || "true")
-    .trim()
-    .toLowerCase() !== "false";
 
 function normalizeConfidence(value) {
   if (value == null || value === "") return null;
@@ -24,7 +14,7 @@ function normalizeConfidence(value) {
   return Math.max(0, Math.min(1, parsed));
 }
 
-function buildSkippedEntry(fact, reason, stage = "policy", detail = null) {
+function buildSkippedEntry(fact, reason, stage = "store", detail = null) {
   return {
     content: String(fact?.content || "").trim(),
     type: String(fact?.type || "").trim(),
@@ -34,81 +24,26 @@ function buildSkippedEntry(fact, reason, stage = "policy", detail = null) {
   };
 }
 
-export function classifyMemoryCandidate({
-  fact,
-  duplicate = false,
-  conflict = false,
-  policy = {},
-}) {
+/**
+ * Classify a candidate memory. The review/approval flow has been removed:
+ * capture is binary (on/off). When memory is on, every extracted fact is saved
+ * (reversibly, with an undo window). The only branches are:
+ *   - duplicate  → skip (already known)
+ *   - supersede  → newer info contradicts an existing memory; mark the old one
+ *                  outdated (newest wins) then save the new one
+ *   - save       → store it
+ * Sensitive content is saved like anything else, and contradictions resolve
+ * deterministically via supersession + similarity recall (no user prompt).
+ */
+export function classifyMemoryCandidate({ fact, duplicate = false, conflict = false }) {
   const confidence = normalizeConfidence(fact?.confidence);
-  const sensitivity = classifySensitiveMemoryCandidate(fact);
-  const sensitive = Boolean(sensitivity.sensitive);
-  const autoSaveMinConfidence = Math.max(
-    0,
-    Math.min(
-      1,
-      Number(policy.autoSaveMinConfidence ?? DEFAULT_AUTO_SAVE_MIN_CONFIDENCE)
-    )
-  );
-  const alwaysReview = policy.alwaysReview === true;
-  const reviewIfConfidenceMissing =
-    policy.reviewIfConfidenceMissing ?? REVIEW_IF_CONFIDENCE_MISSING;
-
   if (duplicate) {
-    return {
-      action: "duplicate",
-      reason: "duplicate",
-      confidence,
-      sensitive,
-    };
+    return { action: "duplicate", reason: "duplicate", confidence };
   }
   if (conflict) {
-    return {
-      action: "conflict",
-      reason: "conflict",
-      confidence,
-      sensitive,
-    };
+    return { action: "supersede", reason: "supersede", confidence };
   }
-  if (sensitive) {
-    return {
-      action: "needs_review",
-      reason: sensitivity.reason || "sensitive",
-      confidence,
-      sensitive,
-      sensitiveCategory: sensitivity.category || null,
-    };
-  }
-  if (alwaysReview) {
-    return {
-      action: "needs_review",
-      reason: "policy_review",
-      confidence,
-      sensitive,
-    };
-  }
-  if (confidence == null && reviewIfConfidenceMissing) {
-    return {
-      action: "needs_review",
-      reason: "missing_confidence",
-      confidence,
-      sensitive,
-    };
-  }
-  if (confidence < autoSaveMinConfidence) {
-    return {
-      action: "needs_review",
-      reason: "low_confidence",
-      confidence,
-      sensitive,
-    };
-  }
-  return {
-    action: "save_reversible",
-    reason: "auto_save",
-    confidence,
-    sensitive,
-  };
+  return { action: "save", reason: "auto_save", confidence };
 }
 
 export async function processChatMemoryCapture({
@@ -118,19 +53,18 @@ export async function processChatMemoryCapture({
   policy = {},
 }) {
   if (policy?.disabled) {
-    return { saved: [], review: [], duplicates: [], conflicts: [], skipped: [] };
+    return { saved: [], duplicates: [], superseded: [], skipped: [] };
   }
 
   const rawExtracted = await extractFacts(message);
   const extracted = sanitizeExtractedMemories(rawExtracted);
   if (extracted.length === 0) {
-    return { saved: [], review: [], duplicates: [], conflicts: [], skipped: [] };
+    return { saved: [], duplicates: [], superseded: [], skipped: [] };
   }
 
   const saved = [];
-  const review = [];
   const duplicates = [];
-  const conflicts = [];
+  const superseded = [];
   const skipped = [];
   const undoWindowMs = getMemoryUndoWindowMs();
 
@@ -141,147 +75,64 @@ export async function processChatMemoryCapture({
       conflictKey: fact.conflictKey,
       polarity: fact.polarity,
     });
-    const conflictMemory = duplicate
-      ? null
-      : await findConflict({
-          userId,
-          content: fact.content,
-          conflictKey: fact.conflictKey,
-          polarity: fact.polarity,
-        });
-
-    const decision = classifyMemoryCandidate({
-      fact,
-      duplicate: Boolean(duplicate),
-      conflict: Boolean(conflictMemory),
-      policy,
-    });
-
-    if (decision.action === "duplicate") {
-      duplicates.push({
-        content: fact.content,
-        type: fact.type,
-      });
+    if (duplicate) {
+      duplicates.push({ content: fact.content, type: fact.type });
       continue;
     }
 
-    if (decision.action === "conflict") {
-      const createdConflict = await createConflict({
-        userId,
-        newContent: fact.content,
-        newType: fact.type,
-        newConfidenceScore: decision.confidence,
-        sourceThreadId: threadId,
-        conflictMemory,
-      });
-      conflicts.push({
-        id: createdConflict.id,
-        content: fact.content,
-        type: fact.type,
-        conflictingContent: conflictMemory?.content,
-        conflictingType: conflictMemory?.type,
-      });
-      continue;
-    }
-
-    if (decision.action === "needs_review") {
-      const staged = await stageMemory({
-        userId,
-        content: fact.content,
-        type: fact.type,
-        sourceThreadId: threadId,
-        confidenceScore: decision.confidence,
-        conflictKey: fact.conflictKey,
-        polarity: fact.polarity,
-      });
-      if (staged?.duplicate) {
-        duplicates.push({
-          content: fact.content,
-          type: fact.type,
-        });
-        continue;
-      }
-      if (!staged?.id) {
-        skipped.push(
-          buildSkippedEntry(fact, "stage_failed", "policy", "stage_memory_missing_identifier")
-        );
-        continue;
-      }
-      review.push({
-        id: staged.id,
-        content: fact.content,
-        type: fact.type,
-        state: "needs_review",
-        reason: decision.reason,
-      });
-      continue;
-    }
-
-    if (decision.action === "save_reversible") {
-      const metadata = fact.conflictKey
-        ? { conflictKey: fact.conflictKey, polarity: fact.polarity }
-        : null;
-      const stored = await storeMemory({
-        userId,
-        content: fact.content,
-        type: fact.type,
-        sourceThreadId: threadId,
-        metadata,
-      });
-      if (stored.duplicate) {
-        duplicates.push({
-          content: fact.content,
-          type: fact.type,
-        });
-        continue;
-      }
-      if (!stored?.id) {
-        skipped.push(
-          buildSkippedEntry(fact, "save_failed", "policy", "store_memory_missing_identifier")
-        );
-        continue;
-      }
-      const undoUntil = new Date(Date.now() + undoWindowMs).toISOString();
-      await upsertUndoWindow({
-        memoryId: stored.id,
-        userId,
-        expiresAt: undoUntil,
-      });
-      saved.push({
-        id: stored.id,
-        content: fact.content,
-        type: fact.type,
-        state: "saved_reversible",
-        undoUntil,
-      });
-      continue;
-    }
-
-    skipped.push({
-      ...buildSkippedEntry(fact, decision.reason, "policy"),
-    });
-  }
-
-  if (
-    extracted.length > 0 &&
-    saved.length === 0 &&
-    review.length === 0 &&
-    duplicates.length === 0 &&
-    conflicts.length === 0
-  ) {
-    console.warn("[Memory] capture produced no actionable result", {
+    // Auto-supersede: when newer info contradicts an existing memory, mark the
+    // old one outdated (live retrieval filters on status='active') so the newest
+    // value wins deterministically — no review queue, no conflict prompt.
+    const conflictMemory = await findConflict({
       userId,
-      threadId,
-      extractedCount: extracted.length,
-      skipped,
+      content: fact.content,
+      conflictKey: fact.conflictKey,
+      polarity: fact.polarity,
+    });
+    if (conflictMemory?.memoryId) {
+      await markMemoryOutdated({ userId, memoryId: conflictMemory.memoryId });
+      superseded.push({
+        memoryId: conflictMemory.memoryId,
+        content: conflictMemory.content,
+        type: conflictMemory.type,
+      });
+    }
+
+    const metadata = fact.conflictKey
+      ? { conflictKey: fact.conflictKey, polarity: fact.polarity }
+      : null;
+    const stored = await storeMemory({
+      userId,
+      content: fact.content,
+      type: fact.type,
+      sourceThreadId: threadId,
+      metadata,
+    });
+    if (stored?.duplicate) {
+      duplicates.push({ content: fact.content, type: fact.type });
+      continue;
+    }
+    if (!stored?.id) {
+      skipped.push(
+        buildSkippedEntry(fact, "save_failed", "store", "store_memory_missing_identifier")
+      );
+      continue;
+    }
+    const undoUntil = new Date(Date.now() + undoWindowMs).toISOString();
+    await upsertUndoWindow({
+      memoryId: stored.id,
+      userId,
+      expiresAt: undoUntil,
+    });
+    saved.push({
+      id: stored.id,
+      content: fact.content,
+      type: fact.type,
+      state: "saved_reversible",
+      undoUntil,
+      superseded: Boolean(conflictMemory?.memoryId),
     });
   }
 
-  return {
-    saved,
-    review,
-    duplicates,
-    conflicts,
-    skipped,
-  };
+  return { saved, duplicates, superseded, skipped };
 }

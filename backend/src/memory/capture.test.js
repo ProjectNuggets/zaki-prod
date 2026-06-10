@@ -4,8 +4,7 @@ const extractFactsMock = jest.fn();
 const sanitizeExtractedMemoriesMock = jest.fn();
 const findDuplicateMemoryMock = jest.fn();
 const findConflictMock = jest.fn();
-const createConflictMock = jest.fn();
-const stageMemoryMock = jest.fn();
+const markMemoryOutdatedMock = jest.fn();
 const storeMemoryMock = jest.fn();
 const getMemoryUndoWindowMsMock = jest.fn();
 const upsertUndoWindowMock = jest.fn();
@@ -17,10 +16,9 @@ async function loadCaptureModule() {
     sanitizeExtractedMemories: sanitizeExtractedMemoriesMock,
   }));
   jest.unstable_mockModule("./operations.js", () => ({
-    createConflict: createConflictMock,
     findConflict: findConflictMock,
     findDuplicateMemory: findDuplicateMemoryMock,
-    stageMemory: stageMemoryMock,
+    markMemoryOutdated: markMemoryOutdatedMock,
     storeMemory: storeMemoryMock,
   }));
   jest.unstable_mockModule("./auto-save.js", () => ({
@@ -32,73 +30,42 @@ async function loadCaptureModule() {
 
 describe("memory capture", () => {
   beforeEach(() => {
-    extractFactsMock.mockReset();
-    sanitizeExtractedMemoriesMock.mockReset();
-    findDuplicateMemoryMock.mockReset();
-    findConflictMock.mockReset();
-    createConflictMock.mockReset();
-    stageMemoryMock.mockReset();
-    storeMemoryMock.mockReset();
-    getMemoryUndoWindowMsMock.mockReset();
-    upsertUndoWindowMock.mockReset();
+    [
+      extractFactsMock,
+      sanitizeExtractedMemoriesMock,
+      findDuplicateMemoryMock,
+      findConflictMock,
+      markMemoryOutdatedMock,
+      storeMemoryMock,
+      getMemoryUndoWindowMsMock,
+      upsertUndoWindowMock,
+    ].forEach((m) => m.mockReset());
 
     extractFactsMock.mockResolvedValue([]);
     sanitizeExtractedMemoriesMock.mockImplementation((memories) => memories);
     findDuplicateMemoryMock.mockResolvedValue(null);
     findConflictMock.mockResolvedValue(null);
-    createConflictMock.mockResolvedValue({ id: "conf-1" });
-    stageMemoryMock.mockResolvedValue({ id: "pending-1" });
+    markMemoryOutdatedMock.mockResolvedValue({ success: true });
     storeMemoryMock.mockResolvedValue({ id: "mem-1" });
     getMemoryUndoWindowMsMock.mockReturnValue(5000);
     upsertUndoWindowMock.mockResolvedValue({ success: true });
   });
 
-  it("routes obvious PII to review instead of autosave", async () => {
-    const { processChatMemoryCapture } = await loadCaptureModule();
-    extractFactsMock.mockResolvedValue([
-      {
-        content: "Reach me at alice@example.com",
-        type: "fact",
-        confidence: 0.95,
-      },
-    ]);
-
-    const result = await processChatMemoryCapture({
-      userId: "user@example.com",
-      message: "My email is alice@example.com",
-    });
-
-    expect(result.saved).toEqual([]);
-    expect(result.review).toEqual([
-      expect.objectContaining({
-        content: "Reach me at alice@example.com",
-        reason: "pii_email",
-      }),
-    ]);
-    expect(storeMemoryMock).not.toHaveBeenCalled();
-  });
-
-  it("routes missing-confidence memories to review", async () => {
+  it("classifies fresh→save, duplicate→duplicate, conflict→supersede", async () => {
     const { classifyMemoryCandidate } = await loadCaptureModule();
 
-    const result = classifyMemoryCandidate({
-      fact: {
-        content: "Prefers concise answers",
-        type: "preference",
-        confidence: null,
-      },
-    });
-
-    expect(result).toEqual(
-      expect.objectContaining({
-        action: "needs_review",
-        reason: "missing_confidence",
-        confidence: null,
-      })
-    );
+    expect(
+      classifyMemoryCandidate({ fact: { content: "x", confidence: 0.9 } })
+    ).toEqual(expect.objectContaining({ action: "save", reason: "auto_save" }));
+    expect(
+      classifyMemoryCandidate({ fact: { content: "x" }, duplicate: true })
+    ).toEqual(expect.objectContaining({ action: "duplicate" }));
+    expect(
+      classifyMemoryCandidate({ fact: { content: "x" }, conflict: true })
+    ).toEqual(expect.objectContaining({ action: "supersede" }));
   });
 
-  it("autosaves high-confidence non-sensitive preferences with undo window", async () => {
+  it("auto-saves a high-confidence preference with an undo window", async () => {
     const { processChatMemoryCapture } = await loadCaptureModule();
     extractFactsMock.mockResolvedValue([
       {
@@ -121,39 +88,43 @@ describe("memory capture", () => {
         id: "mem-1",
         content: "Prefers concise answers",
         state: "saved_reversible",
+        superseded: false,
       }),
     ]);
     expect(upsertUndoWindowMock).toHaveBeenCalledTimes(1);
-    expect(result.review).toEqual([]);
+    expect(result.superseded).toEqual([]);
   });
 
-  it("respects always-review policy for otherwise safe memories", async () => {
+  it("auto-saves sensitive content like anything else (no review gate)", async () => {
     const { processChatMemoryCapture } = await loadCaptureModule();
     extractFactsMock.mockResolvedValue([
-      {
-        content: "Prefers concise answers",
-        type: "preference",
-        confidence: 0.97,
-        conflictKey: "preference:concise-answers",
-        polarity: "positive",
-      },
+      { content: "Reach me at alice@example.com", type: "fact", confidence: 0.95 },
+    ]);
+
+    const result = await processChatMemoryCapture({
+      userId: "user@example.com",
+      message: "My email is alice@example.com",
+    });
+
+    expect(storeMemoryMock).toHaveBeenCalledTimes(1);
+    expect(result.saved).toEqual([
+      expect.objectContaining({ content: "Reach me at alice@example.com" }),
+    ]);
+  });
+
+  it("auto-saves even when confidence is missing", async () => {
+    const { processChatMemoryCapture } = await loadCaptureModule();
+    extractFactsMock.mockResolvedValue([
+      { content: "Prefers concise answers", type: "preference", confidence: null },
     ]);
 
     const result = await processChatMemoryCapture({
       userId: "user@example.com",
       message: "I prefer concise answers",
-      policy: { id: "ask_before_saving", alwaysReview: true },
     });
 
-    expect(result.saved).toEqual([]);
-    expect(result.review).toEqual([
-      expect.objectContaining({
-        content: "Prefers concise answers",
-        reason: "policy_review",
-      }),
-    ]);
-    expect(stageMemoryMock).toHaveBeenCalledTimes(1);
-    expect(storeMemoryMock).not.toHaveBeenCalled();
+    expect(result.saved).toHaveLength(1);
+    expect(storeMemoryMock).toHaveBeenCalledTimes(1);
   });
 
   it("skips capture entirely when the policy is disabled (off)", async () => {
@@ -167,18 +138,17 @@ describe("memory capture", () => {
 
     expect(result).toEqual({
       saved: [],
-      review: [],
       duplicates: [],
-      conflicts: [],
+      superseded: [],
       skipped: [],
     });
     expect(extractFactsMock).not.toHaveBeenCalled();
     expect(findDuplicateMemoryMock).not.toHaveBeenCalled();
     expect(storeMemoryMock).not.toHaveBeenCalled();
-    expect(stageMemoryMock).not.toHaveBeenCalled();
+    expect(markMemoryOutdatedMock).not.toHaveBeenCalled();
   });
 
-  it("creates conflict records for contradictory memories", async () => {
+  it("auto-supersedes a contradictory memory (newest wins), then saves the new one", async () => {
     const { processChatMemoryCapture } = await loadCaptureModule();
     extractFactsMock.mockResolvedValue([
       {
@@ -190,7 +160,7 @@ describe("memory capture", () => {
       },
     ]);
     findConflictMock.mockResolvedValue({
-      id: "mem-old",
+      memoryId: "mem-old",
       content: "Lives in Berlin",
       type: "fact",
     });
@@ -200,20 +170,35 @@ describe("memory capture", () => {
       message: "I live in Hamburg",
     });
 
-    expect(createConflictMock).toHaveBeenCalledTimes(1);
-    expect(createConflictMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "user@example.com",
-        sourceThreadId: null,
-      })
-    );
-    expect(result.conflicts).toEqual([
-      expect.objectContaining({
-        id: "conf-1",
-        content: "Lives in Hamburg",
-        conflictingContent: "Lives in Berlin",
-      }),
+    expect(markMemoryOutdatedMock).toHaveBeenCalledWith({
+      userId: "user@example.com",
+      memoryId: "mem-old",
+    });
+    expect(result.superseded).toEqual([
+      expect.objectContaining({ memoryId: "mem-old", content: "Lives in Berlin" }),
     ]);
-    expect(result.saved).toEqual([]);
+    expect(storeMemoryMock).toHaveBeenCalledTimes(1);
+    expect(result.saved).toEqual([
+      expect.objectContaining({ content: "Lives in Hamburg", superseded: true }),
+    ]);
+  });
+
+  it("skips duplicates without storing or superseding", async () => {
+    const { processChatMemoryCapture } = await loadCaptureModule();
+    extractFactsMock.mockResolvedValue([
+      { content: "Likes tea", type: "preference", confidence: 0.9 },
+    ]);
+    findDuplicateMemoryMock.mockResolvedValue({ id: "dup-1" });
+
+    const result = await processChatMemoryCapture({
+      userId: "u@x.co",
+      message: "I like tea",
+    });
+
+    expect(result.duplicates).toEqual([
+      expect.objectContaining({ content: "Likes tea" }),
+    ]);
+    expect(storeMemoryMock).not.toHaveBeenCalled();
+    expect(markMemoryOutdatedMock).not.toHaveBeenCalled();
   });
 });

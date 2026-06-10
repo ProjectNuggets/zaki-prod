@@ -1529,158 +1529,28 @@ export async function getMemories(userId, { limit = 100, cursor = null } = {}) {
 }
 
 // ============================================================================
-// Manual Mode (Confirmation Flow)
+// Conflict detection + auto-supersede (newest wins, no user prompt)
 // ============================================================================
 
-export async function stageMemory({
-  userId,
-  content,
-  type,
-  sourceThreadId = null,
-  confidenceScore = 0.8,
-  conflictKey = null,
-  polarity = null,
-}) {
+/**
+ * Auto-supersede: mark an existing memory as outdated so live retrieval
+ * (which filters on status='active') stops surfacing it. Used when newer
+ * information contradicts an older memory — newest wins, deterministically,
+ * with no review/confirmation step.
+ */
+export async function markMemoryOutdated({ userId, memoryId }) {
   const normalizedUserId = normalizeUserId(userId);
-  const normalizedContent = normalizeStoredMemoryContent(content, type, { conflictKey, polarity });
-  if (!normalizedUserId || !normalizedContent) {
-    return { error: "Invalid memory payload." };
+  if (!normalizedUserId || !memoryId) {
+    return { success: false };
   }
-  const normalizedType = normalizeStoredType(type);
-  const normalizedFingerprint = buildConflictFingerprint({
-    content: normalizedContent,
-    conflictKey,
-    polarity,
-  });
-  const normalizedConflictKey = normalizedFingerprint?.key || conflictKey || null;
-  const normalizedPolarity =
-    normalizedFingerprint?.polarity !== undefined &&
-    normalizedFingerprint?.polarity !== null
-      ? normalizedFingerprint.polarity
-      : polarity;
-
-  // Dedupe pending queue entries so "preview/manual" doesn't stack duplicates.
-  const existingPending = await dbAll(
-    `SELECT id, content, conflict_key, polarity
-     FROM memory_confirmations
-     WHERE user_id = $1 AND status = 'pending'
-     ORDER BY created_at DESC
-     LIMIT 200`,
-    [normalizedUserId]
+  const result = await dbQuery(
+    `UPDATE memories
+     SET status = 'outdated', updated_at = NOW()
+     WHERE id = $1 AND user_id = $2 AND COALESCE(status, 'active') = 'active'`,
+    [memoryId, normalizedUserId]
   );
-  const incomingFingerprint = buildConflictFingerprint({
-    content: normalizedContent,
-    conflictKey: normalizedConflictKey,
-    polarity: normalizedPolarity,
-  });
-  for (const row of existingPending) {
-    const existingFingerprint = buildConflictFingerprint({
-      content: row.content,
-      conflictKey: row.conflict_key,
-      polarity: row.polarity,
-    });
-    if (
-      isSemanticDuplicate({
-        existingFingerprint,
-        incomingFingerprint,
-        existingContent: row.content,
-        incomingContent: normalizedContent,
-      })
-    ) {
-      return { id: row.id, status: "pending", duplicate: true };
-    }
-    if (normalizeText(row.content) === normalizeText(normalizedContent)) {
-      return { id: row.id, status: "pending", duplicate: true };
-    }
-  }
-
-  const id = crypto.randomUUID();
-  await dbQuery(
-    `INSERT INTO memory_confirmations 
-     (id, user_id, content, type, source_thread_id, source_message_id, conflict_key, polarity, confidence_score, status, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', NOW())`,
-    [
-      id,
-      normalizedUserId,
-      normalizedContent,
-      normalizedType,
-      sourceThreadId,
-      null,
-      normalizedConflictKey,
-      normalizedPolarity,
-      confidenceScore,
-    ]
-  );
-  return { id, status: "pending" };
+  return { success: (result?.rowCount ?? 0) > 0 };
 }
-
-export async function getPendingConfirmations(userId, limit = 50) {
-  const normalizedUserId = normalizeUserId(userId);
-  return await dbAll(
-    `SELECT id, content, type, confidence_score, created_at
-     FROM memory_confirmations WHERE user_id = $1 AND status = 'pending'
-     ORDER BY created_at DESC LIMIT $2`,
-    [normalizedUserId, limit]
-  );
-}
-
-export async function getPendingConfirmationCount(userId) {
-  const normalizedUserId = normalizeUserId(userId);
-  const row = await dbGet(
-    `SELECT COUNT(*)::int AS count
-     FROM memory_confirmations
-     WHERE user_id = $1 AND status = 'pending'`,
-    [normalizedUserId]
-  );
-  return Number(row?.count || 0);
-}
-
-export async function confirmMemory(confirmationId, userId) {
-  const normalizedUserId = normalizeUserId(userId);
-  const confirmation = await dbGet(
-    "SELECT * FROM memory_confirmations WHERE id = $1 AND user_id = $2",
-    [confirmationId, normalizedUserId]
-  );
-  
-  if (!confirmation) return { error: "Not found" };
-  
-  // Store to memories
-  const metadata = {};
-  if (confirmation.conflict_key) {
-    metadata.conflictKey = confirmation.conflict_key;
-  }
-  if (confirmation.polarity) {
-    metadata.polarity = confirmation.polarity;
-  }
-  const result = await storeMemory({
-    userId: normalizedUserId,
-    content: confirmation.content,
-    type: confirmation.type,
-    sourceThreadId: confirmation.source_thread_id,
-    metadata: Object.keys(metadata).length ? metadata : null,
-  });
-  
-  // Mark confirmed
-  await dbQuery(
-    "UPDATE memory_confirmations SET status = 'confirmed', updated_at = NOW() WHERE id = $1",
-    [confirmationId]
-  );
-  
-  return { success: true, memory: result };
-}
-
-export async function rejectMemory(confirmationId, userId) {
-  const normalizedUserId = normalizeUserId(userId);
-  await dbQuery(
-    "UPDATE memory_confirmations SET status = 'rejected' WHERE id = $1 AND user_id = $2",
-    [confirmationId, normalizedUserId]
-  );
-  return { success: true };
-}
-
-// ============================================================================
-// Conflict Handling (Always ask user)
-// ============================================================================
 
 export async function findConflict({ userId, content, conflictKey = null, polarity = null }) {
   const normalizedUserId = normalizeUserId(userId);
@@ -1757,119 +1627,6 @@ export async function findConflict({ userId, content, conflictKey = null, polari
   return null;
 }
 
-export async function createConflict({
-  userId,
-  newContent,
-  newType,
-  newConfidenceScore = 0.8,
-  sourceThreadId = null,
-  conflictMemory,
-}) {
-  const normalizedUserId = normalizeUserId(userId);
-  const normalizedNewContent = normalizeStoredContent(newContent);
-  if (!normalizedUserId || !normalizedNewContent) {
-    throw new Error("Invalid conflict payload.");
-  }
-
-  // Dedupe pending conflicts for the same user/fact pair.
-  const pendingConflicts = await dbAll(
-    `SELECT id, new_content, conflicting_memory_id
-     FROM memory_conflicts
-     WHERE user_id = $1 AND status = 'pending'
-     ORDER BY created_at DESC
-     LIMIT 200`,
-    [normalizedUserId]
-  );
-  for (const row of pendingConflicts) {
-    const sameConflictMemory =
-      String(row.conflicting_memory_id || "") ===
-      String(conflictMemory?.memoryId || "");
-    const sameContent =
-      normalizeText(row.new_content || "") === normalizeText(normalizedNewContent);
-    if (sameConflictMemory && sameContent) {
-      return { id: row.id, duplicate: true };
-    }
-  }
-
-  const id = crypto.randomUUID();
-  await dbQuery(
-    `INSERT INTO memory_conflicts
-     (id, user_id, new_content, new_type, new_confidence_score, conflicting_memory_id, conflicting_content, conflicting_type, source_thread_id, status, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', NOW())`,
-    [
-      id,
-      normalizedUserId,
-      normalizedNewContent,
-      normalizeStoredType(newType),
-      newConfidenceScore,
-      conflictMemory?.memoryId || null,
-      conflictMemory?.content || null,
-      conflictMemory?.type || null,
-      sourceThreadId || null,
-    ]
-  );
-  return { id };
-}
-
-export async function getConflicts(userId, limit = 50) {
-  const normalizedUserId = normalizeUserId(userId);
-  return await dbAll(
-    `SELECT id, new_content, new_type, new_confidence_score, conflicting_memory_id,
-            conflicting_content, conflicting_type, source_thread_id as "threadId", status, created_at, resolved_at, resolution
-     FROM memory_conflicts
-     WHERE user_id = $1 AND status = 'pending'
-     ORDER BY created_at DESC
-     LIMIT $2`,
-    [normalizedUserId, limit]
-  );
-}
-
-export async function getConflictCount(userId) {
-  const normalizedUserId = normalizeUserId(userId);
-  const row = await dbGet(
-    `SELECT COUNT(*)::int AS count
-     FROM memory_conflicts
-     WHERE user_id = $1 AND status = 'pending'`,
-    [normalizedUserId]
-  );
-  return Number(row?.count || 0);
-}
-
-export async function resolveConflict({ userId, conflictId, action }) {
-  const normalizedUserId = normalizeUserId(userId);
-  const conflict = await dbGet(
-    `SELECT * FROM memory_conflicts WHERE id = $1 AND user_id = $2`,
-    [conflictId, normalizedUserId]
-  );
-  if (!conflict) return { error: "Not found" };
-
-  if (action === "use_new") {
-    if (conflict.conflicting_memory_id) {
-      await deleteMemory(conflict.conflicting_memory_id, normalizedUserId);
-    }
-    await storeMemory({
-      userId: normalizedUserId,
-      content: conflict.new_content,
-      type: conflict.new_type,
-      sourceThreadId: conflict.source_thread_id || null,
-    });
-    await dbQuery(
-      `UPDATE memory_conflicts
-       SET status = 'resolved', resolution = 'use_new', resolved_at = NOW()
-       WHERE id = $1`,
-      [conflictId]
-    );
-    return { success: true, resolution: "use_new" };
-  }
-
-  await dbQuery(
-    `UPDATE memory_conflicts
-     SET status = 'resolved', resolution = 'keep_existing', resolved_at = NOW()
-     WHERE id = $1`,
-    [conflictId]
-  );
-  return { success: true, resolution: "keep_existing" };
-}
 
 // ============================================================================
 // Context Building

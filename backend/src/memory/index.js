@@ -12,11 +12,6 @@ export {
   buildContext,
   buildFastContext,
   buildChatMemoryContext,
-  stageMemory,
-  getPendingConfirmations,
-  getPendingConfirmationCount,
-  confirmMemory,
-  rejectMemory,
-  getConflictCount,
+  markMemoryOutdated,
   checkStorage,
 } from "./operations.js";

@@ -9,19 +9,8 @@ import {
   storeMemory as storeMemoryOp,
   deleteMemory as deleteMemoryOp,
   getMemories as getMemoriesOp,
-  findDuplicateMemory as findDuplicateMemoryOp,
   searchMemories as searchMemoriesOp,
   buildContext as buildContextOp,
-  stageMemory as stageMemoryOp,
-  getPendingConfirmations as getPendingConfirmationsOp,
-  getPendingConfirmationCount as getPendingConfirmationCountOp,
-  confirmMemory as confirmMemoryOp,
-  rejectMemory as rejectMemoryOp,
-  findConflict as findConflictOp,
-  createConflict as createConflictOp,
-  getConflicts as getConflictsOp,
-  getConflictCount as getConflictCountOp,
-  resolveConflict as resolveConflictOp,
   checkStorage as checkStorageOp,
   probeEmbeddingsProvider as probeEmbeddingsProviderOp,
   getMemoryPreferences as getMemoryPreferencesOp,
@@ -39,8 +28,6 @@ import {
 import { processChatMemoryCapture as processChatMemoryCaptureOp } from "./capture.js";
 
 import {
-  extractFacts as extractFactsOp,
-  sanitizeExtractedMemories,
   probeMemoryExtractionProvider as probeMemoryExtractionProviderOp,
 } from "../memory-extraction.js";
 import {
@@ -187,21 +174,9 @@ export function createMemoryRoutes(app, { requireAuthUser, dependencies = {} } =
     storeMemory = storeMemoryOp,
     deleteMemory = deleteMemoryOp,
     getMemories = getMemoriesOp,
-    findDuplicateMemory = findDuplicateMemoryOp,
     searchMemories = searchMemoriesOp,
     buildContext = buildContextOp,
-    stageMemory = stageMemoryOp,
-    getPendingConfirmations = getPendingConfirmationsOp,
-    getPendingConfirmationCount = getPendingConfirmationCountOp,
-    confirmMemory = confirmMemoryOp,
-    rejectMemory = rejectMemoryOp,
-    findConflict = findConflictOp,
-    createConflict = createConflictOp,
-    getConflicts = getConflictsOp,
-    getConflictCount = getConflictCountOp,
-    resolveConflict = resolveConflictOp,
     checkStorage = checkStorageOp,
-    extractFacts = extractFactsOp,
     probeMemoryExtractionProvider = probeMemoryExtractionProviderOp,
     probeEmbeddingsProvider = probeEmbeddingsProviderOp,
     getMemoryPreferences = getMemoryPreferencesOp,
@@ -259,18 +234,12 @@ export function createMemoryRoutes(app, { requireAuthUser, dependencies = {} } =
     recordMemoryTelemetry("sse.disconnect");
   };
 
-  const publishMemoryStatus = async (userId, reason = "update") => {
+  const publishMemoryStatus = (userId, reason = "update") => {
     const key = normalizeScopedUserId(userId);
     const targets = sseSubscribers.get(key);
     if (!targets || targets.size === 0) return;
     try {
-      const [pending, conflicts] = await Promise.all([
-        getPendingConfirmationCount(key),
-        getConflictCount(key),
-      ]);
       const payload = {
-        pending: Number(pending || 0),
-        conflicts: Number(conflicts || 0),
         reason,
         timestamp: new Date().toISOString(),
       };
@@ -625,16 +594,8 @@ export function createMemoryRoutes(app, { requireAuthUser, dependencies = {} } =
         Array.isArray(result?.saved) ? result.saved.length : 0
       );
       recordMemoryTelemetry(
-        "queue.pending",
-        Array.isArray(result?.review) ? result.review.length : 0
-      );
-      recordMemoryTelemetry(
         "store.duplicate",
         Array.isArray(result?.duplicates) ? result.duplicates.length : 0
-      );
-      recordMemoryTelemetry(
-        "queue.conflict",
-        Array.isArray(result?.conflicts) ? result.conflicts.length : 0
       );
       void publishMemoryStatus(scope.userId, "capture");
       res.json(result);
@@ -644,258 +605,22 @@ export function createMemoryRoutes(app, { requireAuthUser, dependencies = {} } =
     }
   });
 
-  // ==========================================================================
-  // Manual Mode: Confirmation Flow
-  // ==========================================================================
-  
-  app.post("/api/memory/preview", async (req, res) => {
-    try {
-      const scope = await requireMemoryUser(req, res);
-      if (!scope) return;
-      recordMemoryTelemetry("request.preview");
-
-      const { message, threadId } = req.body || {};
-      const normalizedMessage = toBoundedString(message, {
-        maxChars: MAX_MESSAGE_CHARS,
-      });
-      if (!normalizedMessage) {
-        return res.status(400).json({ error: "message required" });
-      }
-      const normalizedThreadId = toBoundedString(threadId, {
-        maxChars: MAX_THREAD_ID_CHARS,
-      });
-      
-      // Extract facts
-      const facts = sanitizeExtractedMemories(await extractFacts(normalizedMessage));
-      recordMemoryTelemetry("extract.fact", facts.length);
-      
-      if (facts.length === 0) {
-        void publishMemoryStatus(scope.userId, "preview_empty");
-        return res.json({ pending: [], duplicates: [] });
-      }
-      
-      const results = { pending: [], duplicates: [], conflicts: [] };
-      
-      for (const fact of facts) {
-        const duplicate = await findDuplicateMemory({
-          userId: scope.userId,
-          content: fact.content,
-          conflictKey: fact.conflictKey,
-          polarity: fact.polarity,
-        });
-        if (duplicate) {
-          results.duplicates.push({
-            content: fact.content,
-            type: fact.type,
-          });
-          continue;
-        }
-        
-        const conflict = await findConflict({
-          userId: scope.userId,
-          content: fact.content,
-          conflictKey: fact.conflictKey,
-          polarity: fact.polarity,
-        });
-        if (conflict) {
-          const { id } = await createConflict({
-            userId: scope.userId,
-            newContent: fact.content,
-            newType: fact.type,
-            newConfidenceScore: 0.8,
-            sourceThreadId: normalizedThreadId || null,
-            conflictMemory: conflict,
-          });
-          results.conflicts.push({
-            id,
-            content: fact.content,
-            type: fact.type,
-            conflictingContent: conflict.content,
-            conflictingType: conflict.type,
-          });
-          continue;
-        }
-
-        // Stage for confirmation
-        const staged = await stageMemory({
-          userId: scope.userId,
-          content: fact.content,
-          type: fact.type,
-          sourceThreadId: normalizedThreadId || null,
-          confidenceScore: 0.8,
-          conflictKey: fact.conflictKey,
-          polarity: fact.polarity,
-        });
-        if (staged?.error || !staged?.id) {
-          continue;
-        }
-        if (staged?.duplicate) {
-          results.duplicates.push({
-            content: fact.content,
-            type: fact.type,
-          });
-          continue;
-        }
-        
-        results.pending.push({
-          id: staged.id,
-          content: fact.content,
-          type: fact.type,
-          confirmationId: staged.id,
-        });
-      }
-      recordMemoryTelemetry("queue.pending", results.pending.length);
-      recordMemoryTelemetry("store.duplicate", results.duplicates.length);
-      recordMemoryTelemetry("queue.conflict", results.conflicts.length);
-      void publishMemoryStatus(scope.userId, "preview");
-      res.json(results);
-    } catch (err) {
-      recordMemoryTelemetry("pipeline.error");
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  const getConfirmationsHandler = async (req, res) => {
-    try {
-      const scope = await requireMemoryUser(req, res);
-      if (!scope) return;
-
-      const confirmations = await getPendingConfirmations(
-        scope.userId,
-        toBoundedInt(req.query.limit, {
-          fallback: 50,
-          min: 1,
-          max: MAX_PAGE_LIMIT,
-        })
-      );
-      res.json({ confirmations });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  };
-  app.get("/api/memory/confirmations", getConfirmationsHandler);
-  app.get("/api/memory/confirmations/:userId", getConfirmationsHandler);
-
-  app.post("/api/memory/confirmations/:id/confirm", async (req, res) => {
-    try {
-      const scope = await requireMemoryUser(req, res);
-      if (!scope) return;
-      if (!isValidUuid(req.params.id)) {
-        return res.status(400).json({ error: "Invalid confirmation id." });
-      }
-
-      const result = await confirmMemory(req.params.id, scope.userId);
-      
-      if (result.error) {
-        return res.status(404).json(result);
-      }
-      recordMemoryTelemetry("user.confirm");
-      if (result?.memory?.duplicate) {
-        recordMemoryTelemetry("store.duplicate");
-      } else {
-        recordMemoryTelemetry("store.saved");
-      }
-      void publishMemoryStatus(scope.userId, "confirm");
-      res.json(result);
-    } catch (err) {
-      recordMemoryTelemetry("pipeline.error");
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post("/api/memory/confirmations/:id/reject", async (req, res) => {
-    try {
-      const scope = await requireMemoryUser(req, res);
-      if (!scope) return;
-      if (!isValidUuid(req.params.id)) {
-        return res.status(400).json({ error: "Invalid confirmation id." });
-      }
-
-      const result = await rejectMemory(req.params.id, scope.userId);
-      recordMemoryTelemetry("user.reject");
-      void publishMemoryStatus(scope.userId, "reject");
-      res.json(result);
-    } catch (err) {
-      recordMemoryTelemetry("pipeline.error");
-      res.status(500).json({ error: err.message });
-    }
-  });
 
   // ==========================================================================
-  // Conflicts: Always ask user
+  // Status — review/conflict queues removed; counts are always zero.
+  // Kept as a stable endpoint so older clients don't 404 during rollout.
   // ==========================================================================
-
-  const getConflictsHandler = async (req, res) => {
-    try {
-      const scope = await requireMemoryUser(req, res);
-      if (!scope) return;
-
-      const conflicts = await getConflicts(
-        scope.userId,
-        toBoundedInt(req.query.limit, {
-          fallback: 50,
-          min: 1,
-          max: MAX_PAGE_LIMIT,
-        })
-      );
-      const count = await getConflictCount(scope.userId);
-      res.json({ conflicts, count });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  };
-  app.get("/api/memory/conflicts", getConflictsHandler);
-  app.get("/api/memory/conflicts/:userId", getConflictsHandler);
-
   const getStatusHandler = async (req, res) => {
     try {
       const scope = await requireMemoryUser(req, res);
       if (!scope) return;
-
-      const [pending, conflicts] = await Promise.all([
-        getPendingConfirmationCount(scope.userId),
-        getConflictCount(scope.userId),
-      ]);
-      res.json({ pending, conflicts });
+      res.json({ pending: 0, conflicts: 0 });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   };
   app.get("/api/memory/status", getStatusHandler);
   app.get("/api/memory/status/:userId", getStatusHandler);
-
-  app.post("/api/memory/conflicts/:id/resolve", async (req, res) => {
-    try {
-      const scope = await requireMemoryUser(req, res);
-      if (!scope) return;
-      if (!isValidUuid(req.params.id)) {
-        return res.status(400).json({ error: "Invalid conflict id." });
-      }
-
-      const { action } = req.body || {};
-      if (!["keep_existing", "use_new"].includes(String(action || ""))) {
-        return res
-          .status(400)
-          .json({ error: "action must be keep_existing or use_new" });
-      }
-      const result = await resolveConflict({
-        userId: scope.userId,
-        conflictId: req.params.id,
-        action,
-      });
-      if (result.error) {
-        return res.status(404).json(result);
-      }
-      recordMemoryTelemetry(
-        action === "use_new" ? "user.resolve_use_new" : "user.resolve_keep_existing"
-      );
-      void publishMemoryStatus(scope.userId, "resolve");
-      res.json(result);
-    } catch (err) {
-      recordMemoryTelemetry("pipeline.error");
-      res.status(500).json({ error: err.message });
-    }
-  });
 
   // Context retrieval - POST
   app.post("/api/memory/context", async (req, res) => {
@@ -978,10 +703,6 @@ export function createMemoryRoutes(app, { requireAuthUser, dependencies = {} } =
       recordMemoryTelemetry(
         "store.duplicate",
         Array.isArray(result?.duplicates) ? result.duplicates.length : 0
-      );
-      recordMemoryTelemetry(
-        "queue.conflict",
-        Array.isArray(result?.conflicts) ? result.conflicts.length : 0
       );
       void publishMemoryStatus(scope.userId, "autosave");
       res.json(result);

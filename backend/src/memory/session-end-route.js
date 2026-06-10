@@ -44,7 +44,7 @@ export function createSessionEndHandler({
             return;
           }
           console.log(
-            `[Memory] Session ended for ${userEmail}: stored=${result?.stored || 0} duplicates=${result?.duplicates || 0} conflicts=${result?.conflicts || 0} errors=${result?.errors || 0}`
+            `[Memory] Session ended for ${userEmail}: stored=${result?.stored || 0} duplicates=${result?.duplicates || 0} superseded=${result?.superseded || 0} errors=${result?.errors || 0}`
           );
         })
         .catch((err) => {

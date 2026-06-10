@@ -31,8 +31,7 @@ describe("session memory summarization", () => {
 
     const findConflict = jest.fn(async () => null);
     const findDuplicateMemory = jest.fn(async () => null);
-    const createConflict = jest.fn(async () => ({ id: "c1" }));
-    const stageMemory = jest.fn(async () => ({ id: "pending-1", duplicate: false }));
+    const markMemoryOutdated = jest.fn(async () => ({ success: true }));
     const storeMemory = jest.fn().mockResolvedValueOnce({ id: "m1", duplicate: false });
 
     const result = await summarizeConversation(
@@ -45,7 +44,7 @@ describe("session memory summarization", () => {
         ],
         threadId: "thread-1",
       },
-      { extractFacts, findDuplicateMemory, findConflict, createConflict, stageMemory, storeMemory }
+      { extractFacts, findDuplicateMemory, findConflict, markMemoryOutdated, storeMemory }
     );
 
     expect(result.skipped).toBe(false);
@@ -54,13 +53,12 @@ describe("session memory summarization", () => {
     expect(result.stored).toBe(1);
     expect(result.duplicates).toBe(0);
     expect(result.skippedFacts).toBe(1);
-    expect(result.conflicts).toBe(0);
+    expect(result.superseded).toBe(0);
     expect(result.errors).toBe(0);
     expect(result.storedIds).toEqual(["m1"]);
     expect(findConflict).toHaveBeenCalledTimes(1);
     expect(findDuplicateMemory).toHaveBeenCalledTimes(1);
-    expect(stageMemory).not.toHaveBeenCalled();
-    expect(createConflict).not.toHaveBeenCalled();
+    expect(markMemoryOutdated).not.toHaveBeenCalled();
     expect(storeMemory).toHaveBeenCalledTimes(1);
     expect(storeMemory).toHaveBeenNthCalledWith(
       1,
@@ -75,7 +73,7 @@ describe("session memory summarization", () => {
     );
   });
 
-  it("creates conflicts instead of storing when contradiction is found", async () => {
+  it("auto-supersedes a contradictory memory (newest wins), then stores the new one", async () => {
     const extractFacts = jest.fn(async () => [
       {
         content: "Dislikes coffee",
@@ -87,11 +85,11 @@ describe("session memory summarization", () => {
     ]);
     const findDuplicateMemory = jest.fn(async () => null);
     const findConflict = jest.fn(async () => ({
-      id: "existing-memory",
+      memoryId: "existing-memory",
       content: "Likes coffee",
       type: "preference",
     }));
-    const createConflict = jest.fn(async () => ({ id: "conflict-1" }));
+    const markMemoryOutdated = jest.fn(async () => ({ success: true }));
     const storeMemory = jest.fn(async () => ({ id: "m1", duplicate: false }));
 
     const result = await summarizeConversation(
@@ -99,22 +97,19 @@ describe("session memory summarization", () => {
         userId: "user@example.com",
         messages: [{ role: "user", content: "I don't like coffee anymore" }],
       },
-      { extractFacts, findDuplicateMemory, findConflict, createConflict, stageMemory: jest.fn(), storeMemory }
+      { extractFacts, findDuplicateMemory, findConflict, markMemoryOutdated, storeMemory }
     );
 
     expect(result.skipped).toBe(false);
     expect(result.extracted).toBe(1);
-    expect(result.stored).toBe(0);
-    expect(result.conflicts).toBe(1);
-    expect(result.conflictIds).toEqual(["conflict-1"]);
-    expect(storeMemory).not.toHaveBeenCalled();
-    expect(createConflict).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "user@example.com",
-        newContent: "Dislikes coffee",
-        sourceThreadId: null,
-      })
-    );
+    expect(result.stored).toBe(1);
+    expect(result.superseded).toBe(1);
+    expect(result.storedIds).toEqual(["m1"]);
+    expect(markMemoryOutdated).toHaveBeenCalledWith({
+      userId: "user@example.com",
+      memoryId: "existing-memory",
+    });
+    expect(storeMemory).toHaveBeenCalledTimes(1);
   });
 
   it("deduplicates repeated extracted facts within one session", async () => {
@@ -129,8 +124,7 @@ describe("session memory summarization", () => {
       ]);
     const findConflict = jest.fn(async () => null);
     const findDuplicateMemory = jest.fn(async () => null);
-    const createConflict = jest.fn(async () => ({ id: "c1" }));
-    const stageMemory = jest.fn(async () => ({ id: "pending-1", duplicate: false }));
+    const markMemoryOutdated = jest.fn(async () => ({ success: true }));
     const storeMemory = jest.fn(async () => ({ id: "m-tea", duplicate: false }));
 
     const result = await summarizeConversation(
@@ -141,17 +135,16 @@ describe("session memory summarization", () => {
           { role: "user", content: "I like tea very much" },
         ],
       },
-      { extractFacts, findDuplicateMemory, findConflict, createConflict, stageMemory, storeMemory }
+      { extractFacts, findDuplicateMemory, findConflict, markMemoryOutdated, storeMemory }
     );
 
     expect(result.skipped).toBe(false);
     expect(result.stored).toBe(1);
     expect(result.duplicates).toBe(0);
-    expect(result.conflicts).toBe(0);
+    expect(result.superseded).toBe(0);
     expect(result.skippedFacts).toBe(1);
     expect(storeMemory).toHaveBeenCalledTimes(1);
-    expect(stageMemory).not.toHaveBeenCalled();
-    expect(createConflict).not.toHaveBeenCalled();
+    expect(markMemoryOutdated).not.toHaveBeenCalled();
   });
 
   it("continues processing when extraction throws for one message", async () => {
@@ -163,8 +156,7 @@ describe("session memory summarization", () => {
       ]);
     const findConflict = jest.fn(async () => null);
     const findDuplicateMemory = jest.fn(async () => null);
-    const createConflict = jest.fn(async () => ({ id: "c1" }));
-    const stageMemory = jest.fn(async () => ({ id: "pending-1", duplicate: false }));
+    const markMemoryOutdated = jest.fn(async () => ({ success: true }));
     const storeMemory = jest.fn(async () => ({ id: "m2", duplicate: false }));
 
     const result = await summarizeConversation(
@@ -175,7 +167,7 @@ describe("session memory summarization", () => {
           { role: "user", content: "message 2" },
         ],
       },
-      { extractFacts, findDuplicateMemory, findConflict, createConflict, stageMemory, storeMemory }
+      { extractFacts, findDuplicateMemory, findConflict, markMemoryOutdated, storeMemory }
     );
 
     expect(result.skipped).toBe(false);
@@ -195,8 +187,7 @@ describe("session memory summarization", () => {
     const extractFacts = jest.fn(async () => burstFacts);
     const findConflict = jest.fn(async () => null);
     const findDuplicateMemory = jest.fn(async () => null);
-    const createConflict = jest.fn(async () => ({ id: "c1" }));
-    const stageMemory = jest.fn(async () => ({ id: "pending-1", duplicate: false }));
+    const markMemoryOutdated = jest.fn(async () => ({ success: true }));
     let storedIndex = 0;
     const storeMemory = jest.fn(async () => {
       storedIndex += 1;
@@ -211,14 +202,14 @@ describe("session memory summarization", () => {
           { role: "assistant", content: "assistant message should not be processed" },
         ],
       },
-      { extractFacts, findDuplicateMemory, findConflict, createConflict, stageMemory, storeMemory }
+      { extractFacts, findDuplicateMemory, findConflict, markMemoryOutdated, storeMemory }
     );
 
     expect(result.skipped).toBe(false);
     expect(result.factsCapped).toBe(true);
     expect(result.skippedFacts).toBeGreaterThan(0);
     expect(storeMemory).toHaveBeenCalledTimes(8);
-    expect(createConflict).not.toHaveBeenCalled();
+    expect(markMemoryOutdated).not.toHaveBeenCalled();
   });
 
   it("drops invalid extracted memories before session storage", async () => {
@@ -243,8 +234,7 @@ describe("session memory summarization", () => {
     ]);
     const findConflict = jest.fn(async () => null);
     const findDuplicateMemory = jest.fn(async () => null);
-    const createConflict = jest.fn(async () => ({ id: "c1" }));
-    const stageMemory = jest.fn(async () => ({ id: "pending-1", duplicate: false }));
+    const markMemoryOutdated = jest.fn(async () => ({ success: true }));
     const storeMemory = jest.fn(async () => ({ id: "m1", duplicate: false }));
 
     const result = await summarizeConversation(
@@ -252,7 +242,7 @@ describe("session memory summarization", () => {
         userId: "user@example.com",
         messages: [{ role: "user", content: "compound message" }],
       },
-      { extractFacts, findDuplicateMemory, findConflict, createConflict, stageMemory, storeMemory }
+      { extractFacts, findDuplicateMemory, findConflict, markMemoryOutdated, storeMemory }
     );
 
     expect(result.skipped).toBe(false);
@@ -266,7 +256,7 @@ describe("session memory summarization", () => {
         type: "goal",
       })
     );
-    expect(createConflict).not.toHaveBeenCalled();
+    expect(markMemoryOutdated).not.toHaveBeenCalled();
   });
 
   it("skips capture entirely when policy is disabled (off)", async () => {
@@ -281,8 +271,7 @@ describe("session memory summarization", () => {
     ]);
     const findDuplicateMemory = jest.fn(async () => null);
     const findConflict = jest.fn(async () => null);
-    const createConflict = jest.fn(async () => ({ id: "c1" }));
-    const stageMemory = jest.fn(async () => ({ id: "pending-1", duplicate: false }));
+    const markMemoryOutdated = jest.fn(async () => ({ success: true }));
     const storeMemory = jest.fn(async () => ({ id: "m1", duplicate: false }));
 
     const result = await summarizeConversation(
@@ -299,8 +288,7 @@ describe("session memory summarization", () => {
         extractFacts,
         findDuplicateMemory,
         findConflict,
-        createConflict,
-        stageMemory,
+        markMemoryOutdated,
         storeMemory,
       }
     );
@@ -313,48 +301,8 @@ describe("session memory summarization", () => {
     );
     expect(extractFacts).not.toHaveBeenCalled();
     expect(storeMemory).not.toHaveBeenCalled();
-    expect(stageMemory).not.toHaveBeenCalled();
-    expect(createConflict).not.toHaveBeenCalled();
+    expect(markMemoryOutdated).not.toHaveBeenCalled();
     expect(findDuplicateMemory).not.toHaveBeenCalled();
     expect(findConflict).not.toHaveBeenCalled();
-  });
-
-  it("routes session-end memories to review when ask-before-saving policy is active", async () => {
-    const extractFacts = jest.fn(async () => [
-      {
-        content: "Prefers concise weekly plans",
-        type: "preference",
-        confidence: 0.94,
-        conflictKey: "preference:concise-weekly-plans",
-        polarity: "positive",
-      },
-    ]);
-    const findDuplicateMemory = jest.fn(async () => null);
-    const findConflict = jest.fn(async () => null);
-    const createConflict = jest.fn(async () => ({ id: "c1" }));
-    const stageMemory = jest.fn(async () => ({ id: "pending-1", duplicate: false }));
-    const storeMemory = jest.fn(async () => ({ id: "m1", duplicate: false }));
-
-    const result = await summarizeConversation(
-      {
-        userId: "user@example.com",
-        messages: [{ role: "user", content: "I prefer concise weekly plans" }],
-        policy: { id: "ask_before_saving", alwaysReview: true },
-      },
-      {
-        extractFacts,
-        findDuplicateMemory,
-        findConflict,
-        createConflict,
-        stageMemory,
-        storeMemory,
-      }
-    );
-
-    expect(result.review).toBe(1);
-    expect(result.reviewIds).toEqual(["pending-1"]);
-    expect(stageMemory).toHaveBeenCalledTimes(1);
-    expect(storeMemory).not.toHaveBeenCalled();
-    expect(createConflict).not.toHaveBeenCalled();
   });
 });
