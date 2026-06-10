@@ -4,6 +4,7 @@ import {
   classifyAgentMeterAction,
   computeAgentSettleUnits,
   createAgentStreamMeterMetrics,
+  DEFAULT_UNIT_COST_USD,
   estimateAgentMeterUnits,
   estimateAgentPayloadStorageBytes,
   updateAgentStreamMeterMetrics,
@@ -105,12 +106,20 @@ describe("agent-metering: done-frame real cost", () => {
     updateAgentStreamMeterMetrics(m, 'event: done\ndata: {"type":"done"}');
     expect(m.costUsd).toBeNull();
   });
+
+  test("captures cost from a payload-typed done frame with no event header", () => {
+    const m = createAgentStreamMeterMetrics();
+    // no `event: done` line — done-ness comes only from payload.type
+    updateAgentStreamMeterMetrics(m, 'data: {"type":"done","usage_tokens":50,"cost_usd":0.002}');
+    expect(m.usageTokens).toBe(50);
+    expect(m.costUsd).toBe(0.002);
+  });
 });
 
 describe("agent-metering: computeAgentSettleUnits", () => {
   test("derives units from real cost at the unit price", () => {
     const r = computeAgentSettleUnits({ costUsd: 0.03, env: {} });
-    expect(r).toEqual({ units: 40, costSource: "real" }); // 0.03 / 0.00075
+    expect(r).toEqual({ units: 0.03 / DEFAULT_UNIT_COST_USD, costSource: "real" }); // 40
   });
 
   test("falls back to the flat estimate without cost", () => {
@@ -119,8 +128,21 @@ describe("agent-metering: computeAgentSettleUnits", () => {
     expect(r.units).toBeGreaterThan(0);
   });
 
+  test("treats zero/non-positive cost as not-measured → estimate (never bills a free turn)", () => {
+    const zero = computeAgentSettleUnits({ costUsd: 0, message: "hi", action: "agent_turn", env: {} });
+    expect(zero.costSource).toBe("estimate");
+    expect(zero.units).toBeGreaterThan(0);
+    const neg = computeAgentSettleUnits({ costUsd: -1, message: "hi", action: "agent_turn", env: {} });
+    expect(neg.costSource).toBe("estimate");
+  });
+
   test("honors ZAKI_UNIT_COST_USD override", () => {
     const r = computeAgentSettleUnits({ costUsd: 0.01, env: { ZAKI_UNIT_COST_USD: "0.001" } });
     expect(r.units).toBe(10);
+  });
+
+  test("ignores a non-positive ZAKI_UNIT_COST_USD override (falls back to default)", () => {
+    const r = computeAgentSettleUnits({ costUsd: 0.03, env: { ZAKI_UNIT_COST_USD: "0" } });
+    expect(r.units).toBe(0.03 / DEFAULT_UNIT_COST_USD);
   });
 });

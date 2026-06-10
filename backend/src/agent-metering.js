@@ -292,10 +292,13 @@ export function computeAgentSettleUnits({
   payload = {},
   env = process.env,
 } = {}) {
-  const unitCost =
-    Number(env?.ZAKI_UNIT_COST_USD) > 0 ? Number(env.ZAKI_UNIT_COST_USD) : DEFAULT_UNIT_COST_USD;
-  const cost = costUsd === null || costUsd === undefined ? NaN : Number(costUsd);
-  if (Number.isFinite(cost) && cost >= 0) {
+  const rawUnitCost = Number(env?.ZAKI_UNIT_COST_USD);
+  const unitCost = rawUnitCost > 0 ? rawUnitCost : DEFAULT_UNIT_COST_USD;
+  // Real path requires a POSITIVE cost — symmetric with the engine's own done-frame gate
+  // (it only emits cost_usd when totals_after.cost > 0). A null/absent/zero/non-finite cost
+  // therefore falls back to the flat estimate: a turn is never billed as free on missing cost.
+  const cost = Number(costUsd);
+  if (Number.isFinite(cost) && cost > 0) {
     return { units: Math.round((cost / unitCost) * 10_000) / 10_000, costSource: "real" };
   }
   return { units: estimateAgentMeterUnits(message, action, payload), costSource: "estimate" };
