@@ -2981,7 +2981,6 @@ export function ChatArea() {
   // can persist while invisible. Wire path is gated, so a ghost true
   // never reaches the agent.
   const [queryModeEnabled, setQueryModeEnabled] = useState(false);
-  const [webSearchArmed, setWebSearchArmed] = useState(false);
   const streamAbortRef = useRef<AbortController | null>(null);
   const agentCancelInFlightRef = useRef(false);
   const zakiBotProcessClearTimerRef = useRef<number | null>(null);
@@ -7234,8 +7233,6 @@ export function ChatArea() {
       }));
 
     setAttachments([]);
-    const manualAgentPrefix = /^@agent\b/i.test(trimmed);
-    const agentRequested = webSearchArmed || manualAgentPrefix;
     if (isZakiBotTarget) {
       clearZakiBotProgressVisuals();
       {
@@ -7277,16 +7274,12 @@ export function ChatArea() {
         },
       ]);
     }
-    setStreamingIndicatorMode(agentRequested ? "researching" : "thinking");
+    setStreamingIndicatorMode("thinking");
     setTurnStartedAt(Date.now());
     setTurnDurationMs(null);
     setIsStreaming(true);
     const streamController = new AbortController();
     streamAbortRef.current = streamController;
-    const normalizedText = manualAgentPrefix ? trimmed.replace(/^@agent\b\s*/i, "").trim() : trimmed;
-    const searchAgentInstruction = normalizedText
-      ? `@agent search the web for ${normalizedText}`.trim()
-      : "@agent search the web";
     // Unified file delivery (matches SOTA agents like Claude Code):
     //   All files (images + documents) are uploaded to the user's agent
     //   workspace at attachments/<safe_name>. The message only carries a
@@ -7337,17 +7330,9 @@ export function ChatArea() {
       }
       attachmentMarkers = parts.join("\n\n");
     }
-    const sendText = agentRequested
-      ? manualAgentPrefix
-        ? attachmentMarkers
-          ? `@agent ${attachmentMarkers}\n\n${normalizedText || trimmed}`.trim()
-          : `@agent ${normalizedText || trimmed}`.trim()
-        : attachmentMarkers
-          ? `${searchAgentInstruction}\n\n${attachmentMarkers}`.trim()
-          : searchAgentInstruction
-      : attachmentMarkers
-        ? `${attachmentMarkers}\n\n${trimmed}`
-        : trimmed;
+    const sendText = attachmentMarkers
+      ? `${attachmentMarkers}\n\n${trimmed}`
+      : trimmed;
 
     try {
       const streamResult = await streamChatMessage({
@@ -7369,8 +7354,6 @@ export function ChatArea() {
         userMessage: trimmed,
         assistantMessage: String(streamResult?.content || "").trim(),
       });
-      setWebSearchArmed(false);
-      
       // Keep chat UX responsive: memory save runs in background.
       void checkForSavedMemories(trimmed, threadId);
     } catch (error) {
@@ -7431,7 +7414,6 @@ export function ChatArea() {
     streamChatMessage,
     maybeAutoTitleThread,
     updateAssistantError,
-    webSearchArmed,
   ]);
 
   const handleStopStreaming = useCallback(() => {
