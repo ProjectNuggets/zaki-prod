@@ -1221,6 +1221,23 @@ export async function initDb() {
     ALTER TABLE zaki_sessions DROP COLUMN IF EXISTS typ_session_token;
   `);
 
+  // --- Agent-generated file ownership registry ---
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_generated_files (
+      storage_filename TEXT PRIMARY KEY,
+      zaki_user_id TEXT NOT NULL,
+      workspace_slug TEXT,
+      thread_slug TEXT,
+      filename TEXT,
+      file_size BIGINT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_generated_files_user
+      ON zaki_generated_files (zaki_user_id);
+  `);
+
   // --- SaaS V1 unit ledger (H-02): wallets + reserve→settle holds ---
   // Dynamic import avoids a static circular dependency (unit-ledger.js imports db.js).
   try {
