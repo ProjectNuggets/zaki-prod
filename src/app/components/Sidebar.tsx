@@ -2332,9 +2332,9 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
         />
       )}
       {memoryOpen && user?.username && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/60 backdrop-blur-[2px]">
+        <div className="fixed inset-0 z-50">
           <div
-            className="absolute inset-0"
+            className="absolute inset-0 bg-black/20 dark:bg-black/50"
             onClick={() => {
               setMemoryOpen(false);
               setMemorySearchQuery("");
@@ -2345,9 +2345,9 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Memory viewer"
+            aria-label={t("sidebar.memory.title")}
             data-onboarding-id="memory-viewer-dialog"
-            className="relative w-[720px] max-w-[calc(100%-2rem)] rounded-zaki-2xl border border-zaki-subtle dark:border-zaki-dark bg-white dark:bg-zaki-dark-card shadow-[0px_24px_60px_rgba(15,15,15,0.18)] dark:shadow-[0px_34px_90px_rgba(0,0,0,0.55)] overflow-hidden"
+            className="absolute right-0 top-0 h-full w-full sm:w-[420px] md:w-[460px] bg-white dark:bg-zaki-dark-card border-l border-zaki-subtle dark:border-zaki-dark shadow-[0_24px_60px_rgba(15,15,15,0.18)] flex flex-col"
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-zaki-subtle dark:border-zaki-dark bg-[linear-gradient(135deg,#fff8f0_0%,#f3e7d9_100%)] dark:bg-[linear-gradient(140deg,#1a1714_0%,#141210_58%,#0c0a09_100%)]">
               <div className="flex items-center gap-3">
@@ -2372,9 +2372,10 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
                 <span className="block text-lg leading-none">×</span>
               </button>
             </div>
-            <div className="max-h-[75vh] overflow-y-auto px-6 py-6 bg-zaki-base/60">
+            <div className="flex-1 overflow-y-auto px-4 py-4 bg-zaki-base/60">
               <MemoryViewer
                 userId={user.username}
+                variant="panel"
                 initialSearchQuery={memorySearchQuery}
                 initialTab={memoryInitialTab}
               />
