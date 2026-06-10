@@ -74,7 +74,12 @@ function isChatMemoryVectorEnabled() {
 
 function resolveChatMemorySemanticMin() {
   const raw = Number.parseFloat(String(process.env.ZAKI_CHAT_MEMORY_SEMANTIC_MIN || ""));
-  if (!Number.isFinite(raw)) return 0.5;
+  // Default 0.10: all-MiniLM-L6-v2 produces low ABSOLUTE cosines for short
+  // query↔fact pairs (correct matches ~0.25-0.36, weakest ~0.10; noise ~0.06-0.12).
+  // A higher floor (the old 0.5) filtered out every correct match and silently
+  // disabled semantic recall. Relevance is enforced by cosine ORDERING + top-k cap,
+  // not this floor — which only drops near-zero garbage. Re-tune if the embedder model changes.
+  if (!Number.isFinite(raw)) return 0.1;
   return Math.min(1, Math.max(0, raw));
 }
 
