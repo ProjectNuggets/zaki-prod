@@ -1580,7 +1580,9 @@
       "save_less": "Save less",
       "save_lessHint": "Be stricter about what becomes lasting memory",
       "save_more": "Save more",
-      "save_moreHint": "Save more safe memories without extra interruption"
+      "save_moreHint": "Save more safe memories without extra interruption",
+      "off": "Off",
+      "offHint": "Pause memory — ZAKI won't save new memories or use them in chat."
     }
   },
   "memoryViewer": {

@@ -40,7 +40,8 @@ export type MemoryPolicy =
   | "balanced"
   | "ask_before_saving"
   | "save_less"
-  | "save_more";
+  | "save_more"
+  | "off";
 
 export type MemoryPreferencesResponse = {
   policy: MemoryPolicy;
