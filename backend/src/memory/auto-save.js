@@ -71,6 +71,7 @@ export async function autoSaveWithUndo({ userId, message, threadId = null }) {
         content: fact.content,
         type: fact.type,
         sourceThreadId: threadId,
+        confidenceScore: fact.confidence,
         metadata,
       });
 

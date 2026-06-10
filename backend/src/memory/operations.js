@@ -1199,6 +1199,7 @@ export async function storeMemory({
   type = "context",
   sourceThreadId = null,
   importanceScore = null,
+  confidenceScore = null,
   metadata = null,
 }) {
   const normalizedUserId = normalizeUserId(userId);
@@ -1243,6 +1244,12 @@ export async function storeMemory({
   }
 
   const importance = importanceScore || calculateImportance(normalizedContent, normalizedType);
+  // Persist the extractor's confidence so high-confidence facts (e.g. identity
+  // at 0.9) clear the identity-core floor (0.85). Without this, every fact fell
+  // back to the column default (0.8) and the always-on core stayed empty.
+  const confidence = Number.isFinite(Number(confidenceScore))
+    ? Math.max(0, Math.min(1, Number(confidenceScore)))
+    : 0.8;
   const id = crypto.randomUUID();
   let storedId = id;
   
@@ -1250,9 +1257,9 @@ export async function storeMemory({
     let insertResult;
     if (embedding) {
       insertResult = await dbQuery(
-        `INSERT INTO memories 
-         (id, user_id, content, content_hash, type, embedding, importance_score, source_thread_id, metadata, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6::vector, $7, $8, $9, NOW())
+        `INSERT INTO memories
+         (id, user_id, content, content_hash, type, embedding, importance_score, confidence_score, source_thread_id, metadata, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6::vector, $7, $8, $9, $10, NOW())
          ON CONFLICT (user_id, content_hash) DO NOTHING
          RETURNING id`,
         [
@@ -1263,15 +1270,16 @@ export async function storeMemory({
           normalizedType,
           `[${embedding.join(",")}]`,
           importance,
+          confidence,
           sourceThreadId,
           resolvedMetadata,
         ]
       );
     } else {
       insertResult = await dbQuery(
-        `INSERT INTO memories 
-         (id, user_id, content, content_hash, type, importance_score, source_thread_id, metadata, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+        `INSERT INTO memories
+         (id, user_id, content, content_hash, type, importance_score, confidence_score, source_thread_id, metadata, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
          ON CONFLICT (user_id, content_hash) DO NOTHING
          RETURNING id`,
         [
@@ -1281,6 +1289,7 @@ export async function storeMemory({
           hash,
           normalizedType,
           importance,
+          confidence,
           sourceThreadId,
           resolvedMetadata,
         ]

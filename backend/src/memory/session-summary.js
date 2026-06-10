@@ -179,6 +179,7 @@ export async function summarizeConversation(
           content: fact.content,
           type: fact.type,
           sourceThreadId: threadId || null,
+          confidenceScore: fact.confidence,
           metadata: buildFactMetadata(fact),
         });
 

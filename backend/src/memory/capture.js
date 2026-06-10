@@ -106,6 +106,7 @@ export async function processChatMemoryCapture({
       content: fact.content,
       type: fact.type,
       sourceThreadId: threadId,
+      confidenceScore: fact.confidence,
       metadata,
     });
     if (stored?.duplicate) {

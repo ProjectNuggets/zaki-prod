@@ -2,21 +2,12 @@
  * Memory Extraction - deterministic pattern extraction (stateless, local).
  *
  * Extract facts, preferences, emotions from user messages with regex patterns.
- * No LLM/AnythingLLM round-trip for memory writes — the chat engine is for chat.
- * (callNovaTypChat is retained only for optional preference-value translation.)
+ * Fully local: NO LLM/AnythingLLM round-trip on the memory-write path — the chat
+ * engine is for chat, not memory writes.
  * Pure function, no side effects.
  */
 
-import { dbGet, dbQuery } from "./db.js";
-import { callNovaTypChat } from "./memory/nova-chat.js";
-
-function resolveTimeoutMs(envName, fallbackMs) {
-  const raw = Number.parseInt(String(process.env[envName] || ""), 10);
-  if (!Number.isFinite(raw)) return fallbackMs;
-  return Math.min(30_000, Math.max(500, raw));
-}
-
-const TRANSLATION_TIMEOUT_MS = resolveTimeoutMs("ZAKI_MEMORY_TRANSLATION_TIMEOUT_MS", 5_000);
+import { dbGet } from "./db.js";
 
 const ALLOWED_EXTRACTED_TYPES = new Set([
   "fact",
@@ -648,34 +639,11 @@ async function translatePreferenceValue(value) {
     return cached.translated_text;
   }
 
-  try {
-    const result = await callNovaTypChat({
-      messages: [
-        {
-          role: "system",
-          content:
-            "Translate the user preference value to a short English noun phrase. Reply with only the translation, no punctuation.",
-        },
-        { role: "user", content: raw },
-      ],
-      temperature: 0.2,
-      maxTokens: 20,
-      timeoutMs: TRANSLATION_TIMEOUT_MS,
-      label: "Preference translation",
-    });
-    const translated = String(result?.content || "").trim();
-    if (!translated) return null;
-    await dbQuery(
-      `INSERT INTO memory_translation_cache (source_text, translated_text, language, created_at, updated_at)
-       VALUES ($1, $2, $3, NOW(), NOW())
-       ON CONFLICT (source_text) DO UPDATE
-       SET translated_text = EXCLUDED.translated_text, updated_at = NOW()`,
-      [raw, translated, "auto"]
-    );
-    return translated;
-  } catch {
-    return null;
-  }
+  // Cache-only: never make a blocking LLM/AnythingLLM call on the write path.
+  // Memory writes stay local + fast; fall back to the raw value when uncached.
+  // (Cross-language conflict-key canonicalization works only for pre-cached
+  // translations; a future local translator can repopulate the cache.)
+  return raw.toLowerCase();
 }
 
 export async function extractFacts(message) {
