@@ -82,6 +82,7 @@ import {
   settleAgentChatUnits,
   updateAgentStreamMeterMetrics,
 } from "./agent-metering.js";
+import { makeAgentErrorCapture } from "./agent-error-capture.js";
 import {
   fetchNullclawPath,
   fetchNullclawUserHistory,
@@ -745,6 +746,9 @@ const ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS = Math.max(
   250,
   Number(process.env.ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS || 1_500)
 );
+// Agent error capture — routes genuine BFF failures (upstream 5xx, stream error, etc.) to GlitchTip.
+const { captureAgentError } = makeAgentErrorCapture({ sentry: Sentry });
+
 const ZAKI_BILLING_ALERT_WEBHOOK_URL = (
   process.env.ZAKI_BILLING_ALERT_WEBHOOK_URL || ""
 ).trim();
@@ -11295,6 +11299,10 @@ const agentChatStreamHandler = async (req, res) => {
         timeoutMs: ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS,
       });
       if (!readyProbe.ok) {
+        captureAgentError(
+          new Error(`Agent readiness probe failed (status=${readyProbe.status ?? "unknown"})`),
+          { req, phase: "readiness_probe", upstreamStatus: readyProbe.status ?? null }
+        );
         await recordAgentWalletSettleBestEffort(req, {
           status: "failed",
           message: originalMessage,
@@ -11313,6 +11321,7 @@ const agentChatStreamHandler = async (req, res) => {
         });
       }
     } catch (error) {
+      captureAgentError(error, { req, phase: "readiness_probe_throw" });
       trackAgentStreamDiagnostic(userId, error);
       await recordAgentWalletSettleBestEffort(req, {
         status: "failed",
@@ -11410,6 +11419,11 @@ const agentChatStreamHandler = async (req, res) => {
           .status(400)
           .json({ error: "invalid chat payload or session_key", code: "invalid_chat_payload" });
       }
+      // Non-2xx, non-sessionkey JSON error from upstream engine — genuine backend failure.
+      captureAgentError(
+        new Error(`Agent upstream non-2xx JSON response (status=${upstream.status})`),
+        { req, phase: "upstream_non2xx_json", upstreamStatus: upstream.status }
+      );
     }
 
     res.status(upstream.status);
@@ -11417,6 +11431,12 @@ const agentChatStreamHandler = async (req, res) => {
     setPromptQuotaHeaders(res, promptQuota);
 
     if (!upstream.body) {
+      if (!upstream.ok) {
+        captureAgentError(
+          new Error(`Agent upstream non-2xx empty response (status=${upstream.status})`),
+          { req, phase: "upstream_no_body", upstreamStatus: upstream.status }
+        );
+      }
       await recordAgentWalletSettleBestEffort(req, {
         status: upstream.ok ? "success" : "failed",
         message: originalMessage,
@@ -11443,6 +11463,13 @@ const agentChatStreamHandler = async (req, res) => {
       const pipeResult = await pipeReadableToResponseWithCompletion(nodeStream, res, "Agent stream");
       if (upstream.ok && pipeResult.status === "success") {
         clearAgentStreamDiagnostic(userId);
+      }
+      const nonSseFailed = !upstream.ok || pipeResult.status === "failed";
+      if (nonSseFailed) {
+        captureAgentError(
+          new Error(`Agent non-SSE stream failure (upstream=${upstream.status}, pipe=${pipeResult.status})`),
+          { req, phase: "non_sse_stream", upstreamStatus: upstream.status }
+        );
       }
       await recordAgentWalletSettleBestEffort(req, {
         // A client CANCEL settles the accrued work (cancel is not free — else it's an abuse
@@ -11494,6 +11521,15 @@ const agentChatStreamHandler = async (req, res) => {
     const streamStatus = upstream.ok && !streamMetrics.sawError ? "success" : "failed";
     if (streamStatus === "success") {
       clearAgentStreamDiagnostic(userId);
+    } else {
+      captureAgentError(
+        new Error(
+          streamMetrics.sawError
+            ? "Agent SSE stream contained an error frame"
+            : `Agent SSE stream completed with non-ok upstream status (${upstream.status})`
+        ),
+        { req, phase: "sse_stream", upstreamStatus: upstream.status }
+      );
     }
 
     // Terminal settle: SETTLE on success (incl. client cancel — upstream still completed and the
@@ -11509,6 +11545,7 @@ const agentChatStreamHandler = async (req, res) => {
     }
   } catch (error) {
     // Failed turn → release (no-op if a terminal path already settled; the hold guard makes this safe).
+    captureAgentError(error, { req, phase: "outer_catch" });
     await recordAgentWalletSettleBestEffort(req, {
       status: "failed",
       message: extractStreamMessage(req.body || {}) || "",
