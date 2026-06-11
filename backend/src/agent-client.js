@@ -133,6 +133,46 @@ export async function requestNullclawChatStream({
   });
 }
 
+// B4 (P1-16): server-side ensure-provisioned primitive. Posts the provision
+// payload to the engine's idempotent /api/v1/users/provision endpoint so the
+// BFF can (re)provision a user before driving chat — defense-in-depth for the
+// FK/not-found window where the engine no longer holds a user the BFF is about
+// to write for. Connection-class outages and non-2xx upstreams are reported as
+// { ok: false } (never thrown) so callers can hard-fail chat with a retryable
+// 503 instead of leaking an unhandled rejection.
+export async function ensureNullclawProvisioned({
+  baseUrl,
+  internalToken,
+  userId,
+  requestId,
+  payload,
+  fetchWithTimeout,
+  timeoutMs,
+}) {
+  try {
+    const response = await fetchNullclawPath({
+      baseUrl,
+      internalToken,
+      userId,
+      requestId,
+      path: "/api/v1/users/provision",
+      method: "POST",
+      body: payload,
+      fetchWithTimeout,
+      timeoutMs,
+      label: "Agent upstream provision",
+    });
+    return {
+      ok: Boolean(response && response.ok),
+      status: response ? (response.status ?? null) : null,
+      response: response ?? null,
+      error: null,
+    };
+  } catch (error) {
+    return { ok: false, status: null, response: null, error };
+  }
+}
+
 export async function fetchNullclawUserHistory({
   baseUrl,
   internalToken,

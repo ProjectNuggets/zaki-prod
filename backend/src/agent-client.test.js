@@ -1,5 +1,6 @@
 import { describe, expect, test, jest } from "@jest/globals";
 import {
+  ensureNullclawProvisioned,
   fetchNullclawPath,
   fetchNullclawUserHistory,
   getNullclawBase,
@@ -203,5 +204,70 @@ describe("probeNullclawReadyWithRetry — loosened readiness gate (P1-11)", () =
 
     expect(result.decision).toBe("ready");
     expect(result.attempts).toBe(2);
+  });
+});
+
+describe("ensureNullclawProvisioned — server-side ensure-provisioned (B4/P1-16)", () => {
+  const baseOptions = () => ({
+    baseUrl: "http://nullclaw:3000",
+    internalToken: "secret",
+    userId: "42",
+    requestId: "req-prov",
+    timeoutMs: 8000,
+  });
+
+  test("POSTs the provision payload to /api/v1/users/provision with internal headers", async () => {
+    const fetchWithTimeout = jest.fn().mockResolvedValue({ ok: true, status: 200 });
+
+    const result = await ensureNullclawProvisioned({
+      ...baseOptions(),
+      payload: { user_id: "42", plan_tier: "personal" },
+      fetchWithTimeout,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe(200);
+    expect(fetchWithTimeout).toHaveBeenCalledWith(
+      "http://nullclaw:3000/api/v1/users/provision",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "X-Internal-Token": "secret",
+          "X-Zaki-User-Id": "42",
+          "X-Request-Id": "req-prov",
+        }),
+        body: JSON.stringify({ user_id: "42", plan_tier: "personal" }),
+      }),
+      8000,
+      "Agent upstream provision"
+    );
+  });
+
+  test("returns ok=false with the upstream status on a non-2xx provision response", async () => {
+    const fetchWithTimeout = jest.fn().mockResolvedValue({ ok: false, status: 503 });
+
+    const result = await ensureNullclawProvisioned({
+      ...baseOptions(),
+      payload: { user_id: "42" },
+      fetchWithTimeout,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(503);
+  });
+
+  test("returns ok=false with the thrown error on a connection-class outage", async () => {
+    const outage = Object.assign(new Error("fetch failed"), { code: "ECONNREFUSED" });
+    const fetchWithTimeout = jest.fn().mockRejectedValue(outage);
+
+    const result = await ensureNullclawProvisioned({
+      ...baseOptions(),
+      payload: { user_id: "42" },
+      fetchWithTimeout,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBeNull();
+    expect(result.error).toBe(outage);
   });
 });

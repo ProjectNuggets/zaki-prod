@@ -520,6 +520,36 @@ export function isChatSessionKeyValidationFailure(payload) {
   return BOT_CHAT_SESSION_KEY_ERROR_CODES.some((value) => text.includes(value));
 }
 
+// B4 (P1-16): classify an upstream chat/session failure as "the engine no longer
+// holds this user" — i.e. a foreign-key violation or a user-not-found / 404 from
+// nullALIS. These are the failures the server-side ensure-provisioned guard
+// should re-provision-and-retry ONCE (mirroring the TYP re-provision pattern).
+// Deliberately NARROW: a session-key validation failure has its own handling and
+// must NOT trigger re-provision (returns false), and a generic 5xx outage is a
+// transient engine problem, not a missing user (returns false unless it is a 404).
+export function isUpstreamProvisioningFailure(payload, statusCode = 0) {
+  if (isChatSessionKeyValidationFailure(payload)) {
+    return false;
+  }
+  const text = textFromPayload(payload);
+  if (
+    /\buser[_\s-]*not[_\s-]*found\b|user does not exist|no such user|unknown user|unprovisioned/.test(
+      text
+    )
+  ) {
+    return true;
+  }
+  if (/foreign[_\s-]*key|fk[_\s-]*constraint|violates foreign key/.test(text)) {
+    return true;
+  }
+  // A bare 404 (no descriptive body, or one we did not already match) means the
+  // engine has no record for this user — re-provision-and-retry once.
+  if (Number(statusCode) === 404) {
+    return true;
+  }
+  return false;
+}
+
 function mapAuthError(type, requestId) {
   if (type === "unauthorized") {
     return {

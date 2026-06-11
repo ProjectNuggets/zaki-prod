@@ -2,6 +2,7 @@ import { describe, expect, it, jest } from "@jest/globals";
 import {
   PRODUCT_ERROR_CODES,
   createBotBffHandlers,
+  isUpstreamProvisioningFailure,
   normalizeBotUsageSummaryFromQuota,
   sanitizeBotOnboardingState,
   validateBotSettingsPatch,
@@ -771,5 +772,45 @@ describe("bot BFF provision — entitlement forwarding (S2.1)", () => {
 
     expect(sendUpstreamRequest).toHaveBeenCalledTimes(1);
     expect(res.statusCode).toBe(200);
+  });
+});
+
+describe("isUpstreamProvisioningFailure — FK/not-found classifier (B4/P1-16)", () => {
+  it("matches an explicit user_not_found code", () => {
+    expect(isUpstreamProvisioningFailure({ code: "user_not_found" }, 400)).toBe(true);
+  });
+
+  it("matches a foreign-key violation error string", () => {
+    expect(
+      isUpstreamProvisioningFailure(
+        { error: "insert or update on table violates foreign key constraint" },
+        500
+      )
+    ).toBe(true);
+  });
+
+  it("matches a 'user does not exist' message", () => {
+    expect(
+      isUpstreamProvisioningFailure({ message: "User does not exist" }, 422)
+    ).toBe(true);
+  });
+
+  it("matches a bare 404 with no descriptive body", () => {
+    expect(isUpstreamProvisioningFailure(null, 404)).toBe(true);
+    expect(isUpstreamProvisioningFailure({}, 404)).toBe(true);
+  });
+
+  it("does NOT match a session-key validation failure", () => {
+    expect(isUpstreamProvisioningFailure({ code: "invalid_session_key" }, 400)).toBe(false);
+  });
+
+  it("does NOT match an unrelated 503", () => {
+    expect(
+      isUpstreamProvisioningFailure({ error: "engine temporarily unavailable" }, 503)
+    ).toBe(false);
+  });
+
+  it("does NOT match a generic 200/ok payload", () => {
+    expect(isUpstreamProvisioningFailure({ status: "ok" }, 200)).toBe(false);
   });
 });

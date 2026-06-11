@@ -86,12 +86,18 @@ import {
 } from "./agent-metering.js";
 import { makeAgentErrorCapture } from "./agent-error-capture.js";
 import {
+  ensureNullclawProvisioned,
   fetchNullclawPath,
   fetchNullclawUserHistory,
   getNullclawBase,
   probeNullclawReadyWithRetry,
   requestNullclawChatStream,
 } from "./agent-client.js";
+import {
+  createProvisionConfirmationCache,
+  ensureProvisionedBeforeChat,
+  streamChatWithProvisionRetry,
+} from "./agent-ensure-provisioned.js";
 import {
   appendAgentCronJob,
   applyAgentCronPatch,
@@ -730,6 +736,16 @@ const ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS = Math.max(
   250,
   Number(process.env.ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS || 4_000)
 );
+// B4 (P1-16): server-side ensure-provisioned. TTL for "the BFF recently saw the
+// engine confirm this user is provisioned" — bounds how often the hot chat path
+// makes a lazy provision call without ever trusting the client's in-memory ref.
+const ZAKI_AGENT_PROVISION_CONFIRMATION_TTL_MS = Math.max(
+  1_000,
+  Number(process.env.ZAKI_AGENT_PROVISION_CONFIRMATION_TTL_MS || 5 * 60 * 1000)
+);
+const agentProvisionConfirmationCache = createProvisionConfirmationCache({
+  ttlMs: ZAKI_AGENT_PROVISION_CONFIRMATION_TTL_MS,
+});
 // Agent error capture — routes genuine BFF failures (upstream 5xx, stream error, etc.) to GlitchTip.
 const { captureAgentError } = makeAgentErrorCapture({ sentry: Sentry });
 
@@ -11056,6 +11072,29 @@ async function recordAgentMeterReceiptBestEffort(req, {
 }
 
 /**
+ * B4 (P1-16): (re)provision a user on the engine before the BFF drives chat for
+ * them. Builds the same trusted provision payload as agentProvisionHandler
+ * (buildBotProvisionPayload + loadUserEntitlement) so the engine caches the
+ * correct entitlement tuple, then POSTs it to the idempotent provision endpoint.
+ * Returns { ok, status, error } — never throws — so the caller can hard-fail
+ * chat with a retryable 503 instead of trusting the client ref.
+ */
+async function ensureAgentUserProvisioned({ nullclawBase, userId, email, requestId }) {
+  const basePayload = buildBotProvisionPayload(userId, {});
+  const entitlement = await loadUserEntitlement(userId, { email });
+  const body = entitlement ? { ...basePayload, ...entitlement } : basePayload;
+  return ensureNullclawProvisioned({
+    baseUrl: nullclawBase,
+    internalToken: NULLCLAW_INTERNAL_TOKEN,
+    userId,
+    requestId,
+    payload: body,
+    fetchWithTimeout,
+    timeoutMs: ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+  });
+}
+
+/**
  * Proxy authenticated ZAKI agent chat traffic to Nullclaw.
  * Route: POST /api/agent/chat/stream
  */
@@ -11174,6 +11213,47 @@ const agentChatStreamHandler = async (req, res) => {
       });
     }
 
+    // B4 (P1-16): server-side ensure-provisioned (proactive). Provisioning is
+    // otherwise gated only by a client in-memory ref (zakiBotProvisionedRef), so
+    // a long-lived tab / direct API client can drive chat for a user the engine
+    // no longer holds. If the BFF lacks a recent provision confirmation,
+    // (re)provision here; a provision failure cleanly BLOCKS chat with a
+    // retryable 503 — we do NOT rely on the client ref.
+    const provisionGuard = await ensureProvisionedBeforeChat({
+      userId,
+      cache: agentProvisionConfirmationCache,
+      ensureProvisioned: () =>
+        ensureAgentUserProvisioned({
+          nullclawBase,
+          userId,
+          email: authResult.email,
+          requestId: String(req.requestId || crypto.randomUUID()),
+        }),
+    });
+    if (!provisionGuard.ok) {
+      captureAgentError(
+        provisionGuard.error ||
+          new Error(`Agent ensure-provisioned failed (status=${provisionGuard.status ?? "unknown"})`),
+        { req, phase: "ensure_provisioned", upstreamStatus: provisionGuard.status ?? null }
+      );
+      await recordAgentWalletSettleBestEffort(req, {
+        status: "failed",
+        message: originalMessage,
+        payload,
+      });
+      if (String(req.headers.accept || "").includes("text/event-stream")) {
+        sendChatStreamError(res, "ZAKI agent is temporarily unavailable. Please try again shortly.", {
+          code: "agent_unavailable",
+          retryable: true,
+        });
+        return;
+      }
+      return res.status(503).json({
+        error: "ZAKI agent is temporarily unavailable. Please try again shortly.",
+        code: "agent_unavailable",
+      });
+    }
+
     const agentQuotaDecision = await enforcePromptQuotaForIngress({
       zakiUser: authResult.zakiUser,
       res,
@@ -11228,15 +11308,64 @@ const agentChatStreamHandler = async (req, res) => {
     upstreamPayload.session_key = sessionKey.sessionKey;
     delete upstreamPayload.user_id;
 
-    const upstream = await requestNullclawChatStream({
-      baseUrl: nullclawBase,
-      internalToken: NULLCLAW_INTERNAL_TOKEN,
+    // B4 (P1-16): server-side ensure-provisioned (reactive). If the first write
+    // to the engine fails with a foreign-key / user-not-found error, re-provision
+    // and retry the stream EXACTLY ONCE — mirroring the TYP re-provision-and-retry
+    // pattern (ensureValidNovaUserIdForUser). A re-provision failure leaves the
+    // original upstream untouched so it flows through the normal failure paths.
+    const requestUpstreamStream = () =>
+      requestNullclawChatStream({
+        baseUrl: nullclawBase,
+        internalToken: NULLCLAW_INTERNAL_TOKEN,
+        userId,
+        requestId: String(req.requestId || crypto.randomUUID()),
+        payload: upstreamPayload,
+        fetchWithTimeout,
+        timeoutMs: ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+      });
+    const provisionRetry = await streamChatWithProvisionRetry({
       userId,
-      requestId: String(req.requestId || crypto.randomUUID()),
-      payload: upstreamPayload,
-      fetchWithTimeout,
-      timeoutMs: ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+      cache: agentProvisionConfirmationCache,
+      requestChatStream: requestUpstreamStream,
+      ensureProvisioned: () =>
+        ensureAgentUserProvisioned({
+          nullclawBase,
+          userId,
+          email: authResult.email,
+          requestId: String(req.requestId || crypto.randomUUID()),
+        }),
     });
+    if (provisionRetry.reprovisioned) {
+      console.warn("[Agent] Re-provisioned on FK/not-found first write; retried stream once:", {
+        requestId: String(req.requestId || ""),
+        userId,
+      });
+    } else if (provisionRetry.provisionFailed) {
+      // FK/not-found surfaced but the re-provision itself failed → block chat as a
+      // retryable 503 (do not forward a stale FK error as a normal turn).
+      captureAgentError(
+        new Error("Agent re-provision after FK/not-found first write failed"),
+        { req, phase: "ensure_provisioned_retry", upstreamStatus: provisionRetry.upstream?.status ?? null }
+      );
+      setPromptQuotaHeaders(res, promptQuota);
+      await recordAgentWalletSettleBestEffort(req, {
+        status: "failed",
+        message: originalMessage,
+        payload: normalizedPayload,
+      });
+      if (String(req.headers.accept || "").includes("text/event-stream")) {
+        sendChatStreamError(res, "ZAKI agent is temporarily unavailable. Please try again shortly.", {
+          code: "agent_unavailable",
+          retryable: true,
+        });
+        return;
+      }
+      return res.status(503).json({
+        error: "ZAKI agent is temporarily unavailable. Please try again shortly.",
+        code: "agent_unavailable",
+      });
+    }
+    const upstream = provisionRetry.upstream;
 
     const contentType = String(upstream.headers.get("content-type") || "");
     if (!upstream.ok && contentType.toLowerCase().includes("application/json")) {
