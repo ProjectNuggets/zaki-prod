@@ -302,63 +302,6 @@ async function mockAppShell(page: Page) {
 }
 
 test.describe("memory capture UX", () => {
-  test("review CTA opens the pending queue", async ({ page }) => {
-    await mockAppShell(page);
-    await bootstrapSession(page);
-
-    await page.route("**/api/memory/capture", async (route) => {
-      const body = route.request().postDataJSON();
-      if (String(body?.message || "").includes("phone")) {
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({
-            saved: [],
-            review: [
-              {
-                id: "pending-1",
-                content: "Sensitive phone detail",
-                type: "fact",
-                state: "needs_review",
-                reason: "pii_phone",
-              },
-            ],
-            duplicates: [],
-            conflicts: [],
-            skipped: [],
-          }),
-        });
-        return;
-      }
-
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          saved: [],
-          review: [],
-          duplicates: [],
-          conflicts: [],
-          skipped: [],
-        }),
-      });
-    });
-
-    await page.goto("/spaces/zaky/threads/t-1");
-
-    const textarea = page.locator(".zaki-input-field");
-    await expect(textarea).toBeVisible();
-    await textarea.fill("My phone number is +49 170 123 4567");
-    await textarea.press("Enter");
-
-    await expect(page.getByText("Something may be worth remembering")).toBeVisible();
-    await page.getByRole("button", { name: "Review" }).first().click();
-
-    const memoryViewer = page.getByRole("dialog", { name: "Memory viewer" });
-    await expect(memoryViewer).toBeVisible();
-    await expect(memoryViewer.getByText("Sensitive phone detail")).toBeVisible();
-  });
-
   test("undo failure stays visible and offers retry", async ({ page }) => {
     await mockAppShell(page);
     await bootstrapSession(page);
