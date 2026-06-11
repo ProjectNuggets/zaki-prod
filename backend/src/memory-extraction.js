@@ -544,8 +544,17 @@ function classifyWithHeuristics(message) {
   ];
   if (interrogativePatterns.some((r) => r.test(text))) return "instruction";
 
+  // Imperative commands directed at the assistant ("summarize this for me",
+  // "help me", "show me", "tell me") should stay as instructions even though
+  // they contain the word "me". Guard before the broad \bme\b signal.
+  const imperativeCommandPatterns = [
+    /^(?:summarize|summarise|help|show|tell|give|explain|list|find|make|create|write|draft|describe|translate|check|review|analyze|analyse|fix|update|remind|send|get|fetch|look\s+up)\b/i,
+  ];
+  if (imperativeCommandPatterns.some((r) => r.test(text))) return "instruction";
+
   const firstPersonSignals = [
-    /\bi\s+(?:like|love|enjoy|prefer|hate|dislike|want|need|have|feel|live|work|study|am|was)\b/i,
+    /\bi\s+(?:like|love|enjoy|prefer|hate|dislike|want|need|have|feel|live|work|study|am|was|been|had|went|got)\b/i,
+    /\bi'?ve\b/i,
     /\bcall me\b/i,
     /\bi go by\b/i,
     /\bi am\b/i,
@@ -646,25 +655,54 @@ async function translatePreferenceValue(value) {
   return raw.toLowerCase();
 }
 
-export async function extractFacts(message) {
-  // Stateless, local extraction: classify with heuristics (questions/instructions
-  // are skipped), then run the deterministic pattern extractor. No LLM round-trip.
-  const classification = classifyWithHeuristics(message);
-  if (classification !== "user_statement") {
-    if (shouldDebug()) {
-      console.log(`[Memory] Skipping extraction (classification: ${classification})`);
+// Split into sentences on .!? (Latin + Arabic ؟) and newlines.
+function splitSentences(message) {
+  return String(message || "")
+    .split(/(?<=[.!?؟])\s+|\n+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+// Keep episodic noise out: require a few words of substance.
+function isSubstantiveEpisodic(sentence) {
+  const s = String(sentence || "").trim();
+  if (s.length < 12) return false;
+  if (s.split(/\s+/).length < 3) return false;
+  return true;
+}
+
+// Two-tier extraction. Per first-person *declarative* sentence:
+//   - regex yields structured fact(s) -> Tier 1 (facts)
+//   - regex yields nothing            -> Tier 2 (episodic: the raw sentence)
+// Questions/instructions/greetings are skipped entirely (no fact, no episodic).
+export async function extractMemories(message) {
+  const sentences = splitSentences(message);
+  const rawFacts = [];
+  const episodic = [];
+  const seen = new Set();
+
+  for (const sentence of sentences) {
+    if (classifyWithHeuristics(sentence) !== "user_statement") continue;
+    const patternFacts = await extractWithPatterns(sentence, {
+      skipTranslation: false,
+      simpleOnly: false,
+    });
+    if (patternFacts.length > 0) {
+      rawFacts.push(...patternFacts);
+    } else if (isSubstantiveEpisodic(sentence)) {
+      const key = sentence.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        episodic.push({ content: sentence, type: "episodic", confidence: 0.5 });
+      }
     }
-    return [];
   }
 
-  const patternMemories = await extractWithPatterns(message, {
-    skipTranslation: false,
-    simpleOnly: false,
-  });
-  if (shouldDebug()) {
-    console.log(`[Memory] Extracted ${patternMemories.length} memories (regex)`);
-  }
-  return sanitizeExtractedMemories(patternMemories);
+  return { facts: sanitizeExtractedMemories(rawFacts), episodic };
+}
+
+export async function extractFacts(message) {
+  return (await extractMemories(message)).facts;
 }
 
 function buildExtractedMemoryKey(memory) {

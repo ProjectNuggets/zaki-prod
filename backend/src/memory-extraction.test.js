@@ -374,4 +374,28 @@ describe("memory extraction", () => {
     ]);
     expect(result).toHaveLength(2);
   });
+
+  it("extractMemories splits a message into structured facts and episodic gap-fill", async () => {
+    const { extractMemories } = await import("./memory-extraction.js");
+    const { facts, episodic } = await extractMemories(
+      "I live in Berlin. I've been totally vibing with underground jazz lately."
+    );
+    expect(facts.map((f) => f.content)).toEqual(expect.arrayContaining(["Lives in Berlin"]));
+    expect(episodic).toHaveLength(1);
+    expect(episodic[0]).toEqual(expect.objectContaining({ type: "episodic" }));
+    expect(episodic[0].content).toMatch(/jazz/i);
+  });
+
+  it("extractMemories never makes a question or instruction episodic", async () => {
+    const { extractMemories } = await import("./memory-extraction.js");
+    const r = await extractMemories("do I have any travel plans? summarize this for me.");
+    expect(r.facts).toEqual([]);
+    expect(r.episodic).toEqual([]);
+  });
+
+  it("extractMemories drops trivially short fragments from episodic", async () => {
+    const { extractMemories } = await import("./memory-extraction.js");
+    const r = await extractMemories("I'm good. ok.");
+    expect(r.episodic).toEqual([]);
+  });
 });
