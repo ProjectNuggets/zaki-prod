@@ -639,6 +639,43 @@ describe("normalizeBotUsageSummaryFromQuota", () => {
 });
 
 describe("bot BFF provision — entitlement forwarding (S2.1)", () => {
+  it("forwards the authenticated email to loadEntitlement (enables super-admin override)", async () => {
+    // The provision handler is the engine-bound entitlement chokepoint. It
+    // must pass the authenticated email through so loadEntitlement can apply
+    // the owner-only super-admin override (engine payload only; wallet
+    // metering is a separate path and is not exercised here).
+    const loadEntitlement = jest.fn(async (userId, opts) => {
+      expect(userId).toBe("7");
+      expect(opts).toEqual({ email: "owner@novanuggets.com" });
+      return { plan_tier: "pro", status: "active", period_end_unix: null };
+    });
+    const { handlers, sendUpstreamRequest } = createHandlers({
+      getAuthContext: jest.fn(async () => ({
+        userId: "7",
+        email: "owner@novanuggets.com",
+        zakiUser: { id: 7, email: "owner@novanuggets.com" },
+      })),
+      loadEntitlement,
+      sendUpstreamRequest: jest.fn(async ({ body }) => {
+        expect(body).toEqual({
+          user_id: "7",
+          nickname: "nova",
+          plan_tier: "pro",
+          status: "active",
+          period_end_unix: null,
+        });
+        return jsonResponse({ status: "provisioned" });
+      }),
+    });
+    const req = { body: { nickname: "nova" }, headers: {} };
+    const res = createMockRes();
+
+    await handlers.provision(req, res);
+
+    expect(loadEntitlement).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(200);
+  });
+
   it("merges loadEntitlement result into the outbound provision payload", async () => {
     const loadEntitlement = jest.fn(async (userId) => {
       expect(userId).toBe("7");

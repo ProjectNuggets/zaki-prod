@@ -245,7 +245,10 @@ import {
 } from "./bot-bff.js";
 import { buildBackendHealthStatus, buildBackendReadyStatus } from "./health-readiness.js";
 import { prepareAndApplySecret } from "./nullalis-secrets.js";
-import { buildEntitlementFields } from "./nullalis-entitlement.js";
+import {
+  buildEntitlementFields,
+  applySuperAdminEntitlementOverride,
+} from "./nullalis-entitlement.js";
 import {
   APP_CHAT_SURFACE,
   DEFAULT_ANONYMOUS_SPACES_DAILY_PROMPT_BUCKET,
@@ -14479,13 +14482,26 @@ async function proxyNullclawRequest(req, res, targetPath, options = {}) {
   pipeReadableToResponse(Readable.fromWeb(upstream.body), res, "Nullclaw proxy response");
 }
 
-async function loadUserEntitlement(userId) {
+async function loadUserEntitlement(userId, { email } = {}) {
+  // Owner-only super-admin bypass of the AGENT entitlement paywall. The
+  // nullalis engine caches the entitlement tuple it receives at PROVISION
+  // time and 402s on chat when that cached status is expired/canceled. For an
+  // allowlisted super-admin we send the engine an entitled tuple regardless of
+  // DB tier/status so the engine provisions them entitled and never 402s.
+  // This is the single chokepoint both agent-provision call sites funnel
+  // through (agentProvisionHandler + bot-bff provision). It ONLY changes the
+  // entitlement payload sent to the engine — wallet metering is untouched, and
+  // the Stripe/Creem billing-write paths use buildEntitlementFields directly
+  // (no override) so DB state is never diverged.
+  const isSuperAdmin = superAdminEmailSet.has(normalizeEmail(email));
   try {
     const row = await dbGet(
       "SELECT plan_tier, plan_status, current_period_end FROM zaki_users WHERE id = $1",
       [userId]
     );
-    return buildEntitlementFields(row);
+    return applySuperAdminEntitlementOverride(buildEntitlementFields(row), {
+      isSuperAdmin,
+    });
   } catch (error) {
     // Soft-fail: forwarding entitlements is optional on the nullalis
     // side. If the lookup trips (cold start, transient DB blip) the
@@ -14495,7 +14511,9 @@ async function loadUserEntitlement(userId) {
       userId,
       error: error?.message || String(error),
     });
-    return null;
+    // A super-admin must remain entitled even when the DB lookup soft-fails,
+    // so the override still applies to the null result.
+    return applySuperAdminEntitlementOverride(null, { isSuperAdmin });
   }
 }
 
@@ -14520,7 +14538,9 @@ const agentProvisionHandler = async (req, res) => {
     const rawPayload =
       req.body && typeof req.body === "object" ? req.body : {};
     const basePayload = buildBotProvisionPayload(userId, rawPayload);
-    const entitlement = await loadUserEntitlement(userId);
+    const entitlement = await loadUserEntitlement(userId, {
+      email: authResult.email,
+    });
     const body = entitlement ? { ...basePayload, ...entitlement } : basePayload;
 
     await proxyNullclawRequest(req, res, "/api/v1/users/provision", {
