@@ -134,6 +134,10 @@ function isAbortError(error) {
   return error.name === "AbortError";
 }
 
+function embedModelIsE5() {
+  return /e5/i.test(String(process.env.ZAKI_MEMORY_EMBED_MODEL || ""));
+}
+
 // Wraps an arbitrary promise with a timeout. Used to bound embedding calls on the
 // live chat retrieval path so a slow provider can never stall the response.
 async function withTimeout(promise, { timeoutMs, label }) {
@@ -1109,10 +1113,14 @@ async function filterRelevantMemories({ query, memories, allowFallback = false }
 // Embeddings (with graceful degradation)
 // ============================================================================
 
-export async function getEmbeddings(texts) {
+export async function getEmbeddings(texts, { intent = "passage" } = {}) {
   const NOVA_TYP_API_KEY = (process.env.NOVA_TYP_API_KEY || "").trim();
   const apiBase = getNovaApiBase();
-  const input = Array.isArray(texts) ? texts : [texts];
+  let input = Array.isArray(texts) ? texts : [texts];
+  if (embedModelIsE5()) {
+    const prefix = intent === "query" ? "query: " : "passage: ";
+    input = input.map((entry) => `${prefix}${entry}`);
+  }
 
   const response = await fetchWithTimeout(
     `${apiBase}/v1/openai/embeddings`,
@@ -1154,7 +1162,7 @@ export async function getEmbeddings(texts) {
 
 export async function probeEmbeddingsProvider() {
   try {
-    const result = await getEmbeddings(["memory health probe"]);
+    const result = await getEmbeddings(["memory health probe"], { intent: "passage" });
     return {
       ok: true,
       provider: result.provider,
@@ -1270,7 +1278,7 @@ export async function storeMemory({
   // Get embeddings (graceful degradation - S-tier)
   let embedding = null;
   try {
-    const result = await getEmbeddings(normalizedContent);
+    const result = await getEmbeddings(normalizedContent, { intent: "passage" });
     embedding = result.embeddings[0];
   } catch (err) {
     console.warn("[Memory] No embeddings:", err.message);
@@ -1422,7 +1430,7 @@ export async function updateMemory({
       let embeddingLiteral = null;
       let embeddingProvider = null;
       try {
-        const embeddingResult = await getEmbeddings(nextContent);
+        const embeddingResult = await getEmbeddings(nextContent, { intent: "passage" });
         const nextEmbedding = embeddingResult?.embeddings?.[0];
         if (Array.isArray(nextEmbedding) && nextEmbedding.length > 0) {
           embeddingLiteral = `[${nextEmbedding.join(",")}]`;
@@ -1685,7 +1693,7 @@ export async function buildContext({
     try {
       const storageSupportsVectors = await checkStorage();
       if (storageSupportsVectors) {
-        const embeddingResult = await getEmbeddings(trimmedQuery);
+        const embeddingResult = await getEmbeddings(trimmedQuery, { intent: "query" });
         const queryEmbedding = embeddingResult?.embeddings?.[0];
         if (Array.isArray(queryEmbedding) && queryEmbedding.length > 0) {
           const vectorLiteral = `[${queryEmbedding.join(",")}]`;
@@ -1848,7 +1856,7 @@ export async function buildFastContext({
       if (storageSupportsVectors) {
         const semanticMin = resolveChatMemorySemanticMin();
         const embedTimeoutMs = resolveChatMemoryEmbedTimeoutMs();
-        const embeddingResult = await withTimeout(getEmbeddings(normalizedQuery), {
+        const embeddingResult = await withTimeout(getEmbeddings(normalizedQuery, { intent: "query" }), {
           timeoutMs: embedTimeoutMs,
           label: "Chat memory embedding",
         });

@@ -150,4 +150,33 @@ describe("memory operations external calls", () => {
     expect(ranked[0].type).toBe("fact");
     expect(ranked[1].type).toBe("episodic");
   });
+
+  it("getEmbeddings applies e5 query/passage prefixes only when the e5 flag is set", async () => {
+    const prev = process.env.ZAKI_MEMORY_EMBED_MODEL;
+    const prevBase = process.env.NOVA_TYP_BASE_URL;
+    const realFetch = global.fetch;
+    const calls = [];
+    global.fetch = async (_url, opts) => {
+      calls.push(JSON.parse(opts.body));
+      return { ok: true, json: async () => ({ data: [{ embedding: [0, 0, 0] }] }) };
+    };
+    try {
+      const { getEmbeddings } = await import("./operations.js");
+      process.env.NOVA_TYP_BASE_URL = "https://example.com";
+
+      process.env.ZAKI_MEMORY_EMBED_MODEL = "";
+      await getEmbeddings("hello", { intent: "query" });
+      expect(calls.at(-1).input).toEqual(["hello"]);
+
+      process.env.ZAKI_MEMORY_EMBED_MODEL = "multilingual-e5-small";
+      await getEmbeddings("hello", { intent: "query" });
+      expect(calls.at(-1).input).toEqual(["query: hello"]);
+      await getEmbeddings("hello", { intent: "passage" });
+      expect(calls.at(-1).input).toEqual(["passage: hello"]);
+    } finally {
+      global.fetch = realFetch;
+      if (prev === undefined) delete process.env.ZAKI_MEMORY_EMBED_MODEL; else process.env.ZAKI_MEMORY_EMBED_MODEL = prev;
+      if (prevBase === undefined) delete process.env.NOVA_TYP_BASE_URL; else process.env.NOVA_TYP_BASE_URL = prevBase;
+    }
+  });
 });
