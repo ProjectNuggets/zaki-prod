@@ -257,6 +257,35 @@ async function runExtractionRecallChecks() {
   return { failures, rows };
 }
 
+// ---------------------------------------------------------------------------
+// Bucket 5: multilingual recall — only meaningful with a multilingual embedder.
+// Skipped (and reported as skipped) unless ZAKI_MEMORY_EMBED_MODEL indicates e5,
+// so the eval stays green on the current all-MiniLM embedder pre-switch.
+// ---------------------------------------------------------------------------
+const MULTILINGUAL_CASES = [
+  { fact: "Wohnt in Berlin", query: "where does the user live", expect: "berlin" },
+  { fact: "Liebt Jazzmusik", query: "what music does the user like", expect: "jazz" },
+];
+
+async function runMultilingualChecks() {
+  if (!/e5/i.test(String(process.env.ZAKI_MEMORY_EMBED_MODEL || ""))) {
+    return { skipped: true, failures: [], rows: [] };
+  }
+  process.env.ZAKI_CHAT_MEMORY_VECTOR_ENABLED = "true";
+  const failures = [];
+  const rows = [];
+  for (const c of MULTILINGUAL_CASES) {
+    await clearEvalUserMemories();
+    await storeMemory({ userId: EVAL_USER_ID, content: c.fact, type: "fact", metadata: { userVerified: true } });
+    const res = await buildFastContext({ userId: EVAL_USER_ID, query: c.query, limit: RECALL_LIMIT });
+    const hay = (res?.sources || []).map((s) => String(s?.content || "").toLowerCase()).join("\n");
+    const ok = hay.includes(c.expect);
+    if (!ok) failures.push(`multilingual: "${c.query}" did not recall "${c.expect}"`);
+    rows.push({ query: c.query, ok });
+  }
+  return { skipped: false, failures, rows };
+}
+
 function fmtRow(cols, widths) {
   return cols
     .map((c, i) => String(c).padEnd(widths[i]))
@@ -343,10 +372,11 @@ async function main() {
   const coreWithinItems = coreItemCount <= IDENTITY_CORE_MAX_ITEMS;
   const coreWithinChars = coreCharCount <= IDENTITY_CORE_MAX_CHARS;
 
-  // Bucket 2 (supersede) + Bucket 3 (extraction precision) + Bucket 4 (extraction recall).
+  // Bucket 2 (supersede) + Bucket 3 (extraction precision) + Bucket 4 (extraction recall) + Bucket 5 (multilingual).
   const supersede = await runSupersedeChecks();
   const precision = await runPrecisionChecks();
   const extractionRecall = await runExtractionRecallChecks();
+  const multilingual = await runMultilingualChecks();
 
   // -------------------------------------------------------------------------
   // Report
@@ -416,6 +446,16 @@ async function main() {
     console.log(`    ${(r.ok ? "ok  " : "FAIL")} ${q}`);
   }
   console.log("");
+  console.log("--- Multilingual recall (cross-lingual) ---");
+  if (multilingual.skipped) {
+    console.log("    (skipped — not an e5 embedder; set ZAKI_MEMORY_EMBED_MODEL=multilingual-e5-small)");
+  } else {
+    for (const r of multilingual.rows) {
+      const q = r.query.length > 48 ? `${r.query.slice(0, 47)}…` : r.query;
+      console.log(`    ${(r.ok ? "ok  " : "FAIL")} ${q}`);
+    }
+  }
+  console.log("");
 
   // -------------------------------------------------------------------------
   // Verdicts
@@ -444,6 +484,7 @@ async function main() {
   for (const f of supersede.failures) failures.push(f);
   for (const f of precision.failures) failures.push(f);
   for (const f of extractionRecall.failures) failures.push(f);
+  for (const f of multilingual.failures) failures.push(f);
 
   // Always clean up the namespaced user's memories.
   await clearEvalUserMemories();
