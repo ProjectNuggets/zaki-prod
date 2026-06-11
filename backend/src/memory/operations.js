@@ -102,6 +102,15 @@ const IDENTITY_CORE_MIN_CONFIDENCE = resolveIdentityCoreMinConfidence();
 const IDENTITY_CORE_MAX_ITEMS = 6;
 const IDENTITY_CORE_MAX_CHARS = 350;
 
+const EPISODIC_RANK_FACTOR = (() => {
+  const v = Number.parseFloat(process.env.ZAKI_MEMORY_EPISODIC_RANK_FACTOR || "");
+  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.6;
+})();
+const EPISODIC_DECAY_DAYS = (() => {
+  const v = Number.parseInt(process.env.ZAKI_MEMORY_EPISODIC_DECAY_DAYS || "", 10);
+  return Number.isFinite(v) && v > 0 ? v : 90;
+})();
+
 function isIdentityCoreEnabled() {
   return (
     String(process.env.ZAKI_CHAT_MEMORY_IDENTITY_CORE_ENABLED || "").toLowerCase() !== "false"
@@ -748,20 +757,34 @@ function selectPersonalizationFallbackMemories(rows, limit = 2) {
   return selectedPool.slice(0, boundedLimit);
 }
 
+function applyEpisodicAdjustment(score, memory) {
+  if (String(memory?.type || "").toLowerCase() !== "episodic") return score;
+  const created = Date.parse(memory?.created_at || memory?.createdAt || "");
+  const ageDays = Number.isFinite(created)
+    ? Math.max(0, (Date.now() - created) / 86_400_000)
+    : 0;
+  const decay = Math.max(0.3, 1 - ageDays / EPISODIC_DECAY_DAYS); // floor 0.3
+  return score * EPISODIC_RANK_FACTOR * decay;
+}
+
 function rankContextCandidates(rows) {
   return [...(rows || [])].sort((a, b) => {
-    const aScore =
+    const aScore = applyEpisodicAdjustment(
       toFiniteNumber(a?.retrieval_score, 0) * 0.4 +
       getMemoryReplyUsefulnessScore(a) * 0.3 +
       getMemoryImportanceScore(a) * 0.15 +
       getMemoryActionabilityScore(a) * 0.1 +
-      getMemoryConfidenceScore(a) * 0.05;
-    const bScore =
+      getMemoryConfidenceScore(a) * 0.05,
+      a
+    );
+    const bScore = applyEpisodicAdjustment(
       toFiniteNumber(b?.retrieval_score, 0) * 0.4 +
       getMemoryReplyUsefulnessScore(b) * 0.3 +
       getMemoryImportanceScore(b) * 0.15 +
       getMemoryActionabilityScore(b) * 0.1 +
-      getMemoryConfidenceScore(b) * 0.05;
+      getMemoryConfidenceScore(b) * 0.05,
+      b
+    );
     return bScore - aScore;
   });
 }
@@ -2201,3 +2224,4 @@ function calculateImportance(content, type) {
 }
 
 export const __normalizeStoredTypeForTest = normalizeStoredType;
+export const __rankContextCandidatesForTest = rankContextCandidates;

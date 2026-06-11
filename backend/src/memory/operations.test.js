@@ -75,4 +75,14 @@ describe("memory operations external calls", () => {
     expect(__normalizeStoredTypeForTest("bogustype")).toBe("context");
     expect(__normalizeStoredTypeForTest("fact")).toBe("fact");
   });
+
+  it("ranks an episodic row below a fact row at equal retrieval score", async () => {
+    const { __rankContextCandidatesForTest } = await import("./operations.js");
+    const now = new Date().toISOString();
+    const fact = { type: "fact", retrieval_score: 0.5, importance_score: 0.5, confidence_score: 0.8, created_at: now };
+    const epi = { type: "episodic", retrieval_score: 0.5, importance_score: 0.5, confidence_score: 0.8, created_at: now };
+    const ranked = __rankContextCandidatesForTest([epi, fact]);
+    expect(ranked[0].type).toBe("fact");
+    expect(ranked[1].type).toBe("episodic");
+  });
 });
