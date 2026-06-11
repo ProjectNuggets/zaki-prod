@@ -10272,6 +10272,19 @@ async function requireSpacesMeterGrantForChat({
       await ensureWallet({ userId: identity.userId, planId: zakiUser?.plan_tier || "free" });
       reserved = await reserveUnits(reserveArgs);
     }
+    // C1: a key matching an existing hold is a duplicate — either a true in-flight RETRY (ledger
+    // `idempotent`, hold still reserved) or a REPLAY of a completed turn (ledger `idempotency_replayed`,
+    // terminal hold). In BOTH cases we must REFUSE (409): running here with a null hold would serve a
+    // free, UNMETERED chat turn for a reused client idempotency key (the money exploit). The original
+    // reserve owns the hold and settles it once.
+    if ((!reserved.ok && reserved.reason === "idempotency_replayed") || (reserved.ok && reserved.idempotent)) {
+      const result = {
+        allowed: false, status: 409, error: "duplicate_request",
+        message: "This request was already processed. Retry with a new request id.",
+      };
+      res.status(409).json(buildSpacesMeterDenialPayload(result, requestId));
+      return { ...result, action };
+    }
     if (!reserved.ok) {
       const result = {
         allowed: false, status: 429, error: "insufficient_units",
@@ -10281,8 +10294,8 @@ async function requireSpacesMeterGrantForChat({
       res.status(429).json(buildSpacesMeterDenialPayload(result, requestId));
       return { ...result, action };
     }
-    // Hold to settle at the terminal path (null on an idempotent retry — already charged).
-    req.spacesChatHold = reserved.idempotent ? null : reserved.hold;
+    // Genuinely new reserve → hold to settle at the terminal path.
+    req.spacesChatHold = reserved.hold;
     req.spacesChatKey = idempotencyKey;
     req.spacesChatAction = normalizedAction;
     req.spacesChatMessageChars = String(message || "").length;
@@ -11090,7 +11103,9 @@ async function requireAgentWalletReserveForChat(req, res, { identity, action, re
     deterministicGrantId,
   });
 
-  if (decision.outcome === "denied") {
+  if (decision.outcome === "denied" || decision.outcome === "duplicate") {
+    // C1: "duplicate" = the idempotency key matched an existing hold (in-flight retry OR replay of a
+    // completed turn). Refuse (409) so we NEVER run a fresh free/unmetered engine turn for a reused key.
     const denial = decision.denial || {};
     res
       .status(denial.status || 403)
@@ -11114,7 +11129,7 @@ async function requireAgentWalletReserveForChat(req, res, { identity, action, re
     return { allowed: true };
   }
 
-  // allowed — hold is null on an idempotent retry (already charged).
+  // allowed — a fresh reserve; decision.hold is the live reserved hold (duplicates 409 above).
   req.agentChatHold = decision.hold;
   req.agentChatKey = decision.idempotencyKey;
   req.agentChatAction = decision.action;

@@ -141,6 +141,11 @@ export async function applyWeeklyResetLocked(c, wallet) {
 
 /**
  * Reserve units for an op. Atomic + idempotent + fail-closed. Debits the wallet only on success.
+ * Idempotency outcomes (decided under the lock, keyed on the matched hold's STATE):
+ *   - new reserve            → {ok:true, hold, funding, remaining}   (debited once)
+ *   - in-flight retry        → {ok:true, idempotent:true, hold}      (state='reserved'; NOT re-debited)
+ *   - replay of a done op     → {ok:false, reason:'idempotency_replayed', hold}  (terminal hold; refuse —
+ *                               callers MUST NOT run a fresh free/unmetered op for this. C1 fix.)
  * @returns {Promise<{ok:boolean, hold?:object, funding?:object, remaining?:number, idempotent?:boolean, reason?:string, shortfall?:number}>}
  */
 export async function reserveUnits(
@@ -156,12 +161,25 @@ export async function reserveUnits(
     wallet = await applyWeeklyResetLocked(c, wallet);
 
     // 2) Idempotency UNDER the lock: a concurrent retry (same user/grant) is blocked above, so a
-    //    committed prior hold is visible now. Return it without re-debiting.
+    //    committed prior hold is visible now. The MEANING of a match depends on the matched hold's state:
+    //      - state='reserved' → a genuine in-flight RETRY of the SAME op (dropped connection, client
+    //        re-sends the key while the original hold is still open). Echo it WITHOUT re-debiting; the
+    //        ORIGINAL owner settles it (caller must NOT run a second billable op for this echo).
+    //      - terminal (settled/released/expired) → the key belongs to an ALREADY-COMPLETED op. This is a
+    //        REPLAY, not a reservation (C1 money exploit: with a client-controlled key this otherwise
+    //        yields a FREE, UNMETERED op). Signal a DISTINCT refusal so callers reject the duplicate
+    //        instead of proceeding allowed+null-hold.
     const existing = await c.query(
       `SELECT * FROM zaki_meter_holds WHERE grant_id = $1 AND reserve_idempotency_key = $2`,
       [grantId, reserveIdempotencyKey]
     );
-    if (existing.rows[0]) return { ok: true, idempotent: true, hold: existing.rows[0] };
+    if (existing.rows[0]) {
+      const hold = existing.rows[0];
+      if (TERMINAL_STATES.has(hold.state)) {
+        return { ok: false, reason: "idempotency_replayed", hold };
+      }
+      return { ok: true, idempotent: true, hold };
+    }
 
     // 3) Recompute burst usage INSIDE the lock (rolling window) → TOCTOU-safe 5h gate.
     const windowHours = Number(wallet.burst_window_hours) || 5;
@@ -205,12 +223,18 @@ export async function reserveUnits(
     );
     if (ins.rows.length === 0) {
       // Not expected (we hold the lock and checked existing), but if a conflict occurs we did NOT
-      // create the row → must NOT debit. Return the existing hold as an idempotent hit.
+      // create the row → must NOT debit. Apply the SAME state gate as step 2: a reserved winner is a
+      // true in-flight retry (echo idempotent); a terminal winner means the key was consumed by a
+      // completed op → a REPLAY (refuse, never a free reserve — C1).
       const again = await c.query(
         `SELECT * FROM zaki_meter_holds WHERE grant_id = $1 AND reserve_idempotency_key = $2`,
         [grantId, reserveIdempotencyKey]
       );
-      return { ok: true, idempotent: true, hold: again.rows[0] ?? null };
+      const winner = again.rows[0] ?? null;
+      if (winner && TERMINAL_STATES.has(winner.state)) {
+        return { ok: false, reason: "idempotency_replayed", hold: winner };
+      }
+      return { ok: true, idempotent: true, hold: winner };
     }
 
     // 5) Debit the wallet — same tx as the insert → atomic.

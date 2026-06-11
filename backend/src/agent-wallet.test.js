@@ -110,7 +110,11 @@ describe("reserveAgentChatUnits", () => {
     expect(ensureWallet).toHaveBeenCalledWith({ userId: 42, planId: "free" });
   });
 
-  it("returns hold=null on an idempotent retry (already charged)", async () => {
+  // C1 money-exploit fix: a true in-flight RETRY (ledger `idempotent`, hold still reserved) must NOT
+  // proceed as an allowed turn — that would run a second billable engine turn FREE. It is a duplicate.
+  // (This test previously asserted outcome="allowed" + hold=null — that encoded the BUGGY behavior
+  //  where a reused idempotency key ran the engine unmetered. Updated to the secure semantics.)
+  it("returns a 409 DUPLICATE (not allowed) on an in-flight idempotent retry — no free turn", async () => {
     const reserveUnits = jest.fn().mockResolvedValue({ ok: true, idempotent: true, hold: { id: "h" } });
     const result = await reserveAgentChatUnits({
       identity: identity(),
@@ -120,8 +124,45 @@ describe("reserveAgentChatUnits", () => {
       ensureWallet: jest.fn(),
       deterministicGrantId,
     });
-    expect(result.outcome).toBe("allowed");
+    expect(result.outcome).toBe("duplicate");
     expect(result.hold).toBeNull();
+    expect(result.denial.status).toBe(409);
+    expect(result.denial.error).toBe("duplicate_request");
+  });
+
+  // C1: a key replayed AFTER its hold went terminal (settled/released/expired) is refused by the
+  // ledger with reason "idempotency_replayed" → must surface as a 409 duplicate, NEVER a free turn.
+  it("returns a 409 DUPLICATE on a replay of a completed turn (ledger idempotency_replayed)", async () => {
+    const reserveUnits = jest.fn().mockResolvedValue({ ok: false, reason: "idempotency_replayed", hold: { id: "h", state: "settled" } });
+    const result = await reserveAgentChatUnits({
+      identity: identity(),
+      idempotencyKey: "agent:42:req-replay",
+      env: {},
+      reserveUnits,
+      ensureWallet: jest.fn(),
+      deterministicGrantId,
+    });
+    expect(result.outcome).toBe("duplicate");
+    expect(result.hold).toBeNull();
+    expect(result.denial.status).toBe(409);
+    expect(result.denial.error).toBe("duplicate_request");
+  });
+
+  // A genuinely NEW first turn still runs allowed with a real hold (charged exactly once).
+  it("a genuine first turn is allowed with the new hold (charged once)", async () => {
+    const hold = { id: "hold-new", reserved_units: 40, user_id: 42 };
+    const reserveUnits = jest.fn().mockResolvedValue({ ok: true, hold });
+    const result = await reserveAgentChatUnits({
+      identity: identity(),
+      idempotencyKey: "agent:42:req-first",
+      env: {},
+      reserveUnits,
+      ensureWallet: jest.fn(),
+      deterministicGrantId,
+    });
+    expect(result.outcome).toBe("allowed");
+    expect(result.hold).toBe(hold);
+    expect(reserveUnits).toHaveBeenCalledTimes(1);
   });
 
   it("denies with 429 + insufficient_units when out of units", async () => {
