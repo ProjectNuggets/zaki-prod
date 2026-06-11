@@ -50,6 +50,22 @@ describe("stripThreadDisplayName", () => {
     expect(stripThreadDisplayName("")).toBe("");
   });
 
+  it("strips a full doc-context envelope", () => {
+    const leaked =
+      "[[ZAKI_DOC_CONTEXT_V1]]\n<attached_documents>...\n</attached_documents>\n[[/ZAKI_DOC_CONTEXT_V1]] Quarterly report";
+    expect(stripThreadDisplayName(leaked)).toBe("Quarterly report");
+  });
+
+  it("strips a truncated (leading-only) doc-context marker", () => {
+    expect(stripThreadDisplayName("[[ZAKI_DOC_CONTEXT_V1]] <attached_doc…")).toBe("");
+  });
+
+  it("strips BOTH the memory and doc markers when present together", () => {
+    const leaked =
+      "[[ZAKI_MEMORY_CONTEXT_V2]] guardrail [[/ZAKI_MEMORY_CONTEXT_V2]] [[ZAKI_DOC_CONTEXT_V1]] docs [[/ZAKI_DOC_CONTEXT_V1]] Trip plan";
+    expect(stripThreadDisplayName(leaked)).toBe("Trip plan");
+  });
+
   it("a leaked title that is nothing but envelope reduces to a default label", () => {
     const cleaned = stripThreadDisplayName(
       "[[ZAKI_MEMORY_CONTEXT_V2]] Assistant identity ru…"
