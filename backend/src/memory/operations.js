@@ -1019,6 +1019,7 @@ export async function findDuplicateMemory({
      FROM memories
      WHERE user_id = $1
        AND COALESCE(status, 'active') = 'active'
+       AND COALESCE(type, '') <> 'episodic'
      ORDER BY created_at DESC
      LIMIT 300`,
     [normalizedUserId]
@@ -1577,6 +1578,7 @@ export async function findConflict({ userId, content, conflictKey = null, polari
      FROM memories
      WHERE user_id = $1
        AND COALESCE(status, 'active') = 'active'
+       AND COALESCE(type, '') <> 'episodic'
      ORDER BY created_at DESC
      LIMIT 200`,
     [normalizedUserId]
@@ -1894,9 +1896,10 @@ export async function buildFastContext({
       const semanticScore = semanticVectorScores.has(String(memory?.id || ""))
         ? 5 + semanticVectorScores.get(String(memory?.id || "")) * 10
         : 0;
+      const baseScore = Math.max(keywordScore, semanticScore);
       return {
         ...memory,
-        retrieval_score: Math.max(keywordScore, semanticScore),
+        retrieval_score: applyEpisodicAdjustment(baseScore, memory),
       };
     })
     .filter((memory) => introspectionQuery || Number(memory.retrieval_score || 0) > 0)
@@ -2129,8 +2132,9 @@ export async function buildIdentityCore({ userId }) {
     .map((row) => normalizeMemoryRowForUse(row))
     .filter(
       (row) =>
-        getMemoryConfidenceScore(row) >= IDENTITY_CORE_MIN_CONFIDENCE ||
-        getMemoryMetadata(row).userVerified === true
+        String(row?.type || "").toLowerCase() !== "episodic" &&
+        (getMemoryConfidenceScore(row) >= IDENTITY_CORE_MIN_CONFIDENCE ||
+          getMemoryMetadata(row).userVerified === true)
     );
 
   if (trusted.length === 0) return "";

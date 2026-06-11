@@ -817,6 +817,41 @@ describe("memory context retrieval behavior", () => {
     expect(result.context).not.toContain("Prefers concise answers");
   });
 
+  it("buildIdentityCore excludes episodic rows even when their confidence exceeds the floor (M1)", async () => {
+    const { buildIdentityCore } = await loadOperations();
+
+    dbAllMock.mockResolvedValue([
+      {
+        id: "m-live",
+        content: "Lives in Riyadh",
+        type: "fact",
+        metadata: { conflictKey: "identity:location" },
+        importance_score: 0.9,
+        confidence_score: 0.92,
+        created_at: "2026-02-28T22:23:30.779Z",
+      },
+      {
+        id: "m-episodic-high",
+        content: "Talked about the weather last Tuesday",
+        type: "episodic",
+        metadata: {},
+        importance_score: 0.9,
+        // Confidence above the 0.85 floor — without the type guard this would
+        // slip into the identity core.
+        confidence_score: 0.95,
+        created_at: "2026-02-28T22:23:29.779Z",
+      },
+    ]);
+    dbGetMock.mockResolvedValue(null);
+    global.fetch = jest.fn();
+
+    const core = await buildIdentityCore({ userId: "user@example.com" });
+
+    expect(core).toContain("Lives in Riyadh");
+    // Episodic must never appear in the identity core regardless of confidence.
+    expect(core).not.toContain("Talked about the weather");
+  });
+
   it("buildIdentityCore returns high-confidence facts only and excludes low-confidence", async () => {
     const { buildIdentityCore } = await loadOperations();
 
@@ -890,6 +925,52 @@ describe("memory context retrieval behavior", () => {
     expect(typeof result.core).toBe("string");
   });
 
+  it("buildFastContext demotes episodic rows below same-scoring facts on the live chat path (I1)", async () => {
+    const { buildFastContext, setStorageSupportProbeForTests } = await loadOperations();
+    setStorageSupportProbeForTests(async () => false); // no vector path; pure keyword path
+
+    // Both rows lexically match the query "coffee" — same raw keyword score.
+    // The episodic must be demoted below the fact by applyEpisodicAdjustment.
+    dbAllMock.mockResolvedValue([
+      {
+        id: "m-episodic",
+        content: "Talked about coffee with a friend last week",
+        type: "episodic",
+        metadata: {},
+        retrieval_score: 0,
+        importance_score: 0.5,
+        confidence_score: 0.5,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: "m-fact",
+        content: "Likes coffee in the morning",
+        type: "fact",
+        metadata: { conflictKey: "preference:coffee" },
+        retrieval_score: 0,
+        importance_score: 0.7,
+        confidence_score: 0.9,
+        created_at: new Date().toISOString(),
+      },
+    ]);
+    dbGetMock.mockResolvedValue(null);
+    global.fetch = jest.fn();
+
+    const result = await buildFastContext({
+      userId: "user@example.com",
+      query: "coffee preferences",
+      maxChars: 400,
+      limit: 3,
+    });
+
+    const sourceIds = result.sources.map((s) => s.id);
+    // Fact must appear before episodic in the ranked output.
+    expect(sourceIds).toContain("m-fact");
+    if (sourceIds.includes("m-episodic")) {
+      expect(sourceIds.indexOf("m-fact")).toBeLessThan(sourceIds.indexOf("m-episodic"));
+    }
+  });
+
   it("buildChatMemoryContext returns empty context/sources/core when policy is off", async () => {
     const { buildChatMemoryContext, setStorageSupportProbeForTests } =
       await loadOperations();
@@ -923,6 +1004,52 @@ describe("memory context retrieval behavior", () => {
     });
 
     expect(result).toEqual({ context: "", sources: [], core: "" });
+  });
+
+  it("findDuplicateMemory does not collide a new fact against an existing episodic row with the same fingerprint (I2)", async () => {
+    const { findDuplicateMemory } = await loadOperations();
+
+    // No exact content-hash match.
+    dbGetMock.mockResolvedValue(null);
+    // The DB mock simulates what the fixed SQL would return: the episodic row is
+    // filtered out by `AND COALESCE(type, '') <> 'episodic'`, so the candidate
+    // scan returns an empty result set. The SQL assertion test below independently
+    // verifies the clause is emitted.
+    dbAllMock.mockResolvedValue([]);
+
+    const duplicate = await findDuplicateMemory({
+      userId: "user@example.com",
+      content: "Lives in Riyadh",
+      conflictKey: "identity:location",
+    });
+
+    // With no candidates returned (episodic excluded by SQL), result is null.
+    expect(duplicate).toBeNull();
+  });
+
+  it("findDuplicateMemory SQL excludes episodic rows from the fingerprint scan (I2 — SQL assertion)", async () => {
+    jest.resetModules();
+    const capturedQueries = [];
+    jest.unstable_mockModule("../db.js", () => ({
+      dbAll: jest.fn(async (sql, params) => {
+        capturedQueries.push({ sql, params });
+        return [];
+      }),
+      dbGet: jest.fn().mockResolvedValue(null),
+      dbQuery: jest.fn().mockResolvedValue({ rowCount: 0, rows: [] }),
+      hasPgVector: jest.fn().mockResolvedValue(false),
+      withDbTransaction: async (cb) => cb({ query: jest.fn().mockResolvedValue({ rows: [] }) }),
+    }));
+    const { findDuplicateMemory: fdup } = await import("./operations.js");
+
+    await fdup({ userId: "u1", content: "Lives in Riyadh", conflictKey: "identity:location" });
+
+    // At least one of the issued SELECTs must exclude episodic rows.
+    const sqls = capturedQueries.map((q) => q.sql.replace(/\s+/g, " ").trim());
+    const hasEpisodicExclusion = sqls.some(
+      (sql) => /<>\s*'episodic'|!=\s*'episodic'/.test(sql)
+    );
+    expect(hasEpisodicExclusion).toBe(true);
   });
 
   it("extractConflictKey distinguishes spoken languages for identity:language dedup (English)", async () => {
