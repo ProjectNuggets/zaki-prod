@@ -813,8 +813,10 @@ export function createBotBffHandlers({
       const requestId = createRequestId(req);
       const idempotencyKey = createIdempotencyKey(req, requestId);
       const basePayload = buildBotProvisionPayload(context.userId, req.body);
+      // Pass the authenticated email so loadEntitlement can apply the
+      // owner-only super-admin entitlement override (engine-bound payload only).
       const entitlement = loadEntitlement
-        ? await loadEntitlement(context.userId)
+        ? await loadEntitlement(context.userId, { email: context.email })
         : null;
       const payload = entitlement ? { ...basePayload, ...entitlement } : basePayload;
 

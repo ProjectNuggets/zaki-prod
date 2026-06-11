@@ -69,3 +69,31 @@ export function buildEntitlementFields(zakiUserRow) {
     period_end_unix: toPeriodEndUnix(zakiUserRow.current_period_end),
   };
 }
+
+// Owner-only super-admin bypass of the AGENT entitlement paywall.
+// The nullalis ENGINE caches the entitlement tuple it receives at PROVISION
+// time (POST /api/v1/users/provision) and returns 402 entitlement_inactive on
+// chat when that cached status is expired/canceled. For an allowlisted
+// super-admin we send the engine an entitled tuple REGARDLESS of the DB
+// tier/status, so the engine provisions them entitled and never 402s them.
+//
+// This ONLY affects the entitlement payload sent to the engine. Wallet
+// metering (reserve/settle) is a separate path and is intentionally NOT
+// touched here — super-admins still debit units like everyone else.
+export const SUPER_ADMIN_ENTITLEMENT = Object.freeze({
+  plan_tier: "pro",
+  status: "active",
+  period_end_unix: null,
+});
+
+// Pure override: given the DB-derived entitlement (possibly null on soft-fail)
+// and whether the authenticated caller is a super-admin, return the tuple to
+// send to the engine. Non-super-admins get the input back untouched (same
+// reference). buildEntitlementFields stays a pure DB-state mapper; this is the
+// only place the engine-bound payload is intentionally diverged from DB state,
+// and it is applied at the agent-provision call site (never in the
+// Stripe/Creem billing-write paths).
+export function applySuperAdminEntitlementOverride(entitlement, { isSuperAdmin = false } = {}) {
+  if (!isSuperAdmin) return entitlement;
+  return { ...SUPER_ADMIN_ENTITLEMENT };
+}
