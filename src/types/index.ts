@@ -60,6 +60,17 @@ export interface GeneratedFileRef {
   fileSize: number | null;
 }
 
+/**
+ * A document citation surfaced by the BFF doc-grounding pre-injection. One per distinct source
+ * document retrieved from the workspace vector store for the turn. Rendered as a citation chip.
+ */
+export interface DocSource {
+  id: string;
+  title: string;
+  snippet?: string;
+  score?: number | null;
+}
+
 export interface Message {
   id: string;
   role: "user" | "assistant";
@@ -67,6 +78,7 @@ export interface Message {
   attachments?: MessageAttachment[];
   chatId?: number;
   memorySources?: MemorySource[];
+  docSources?: DocSource[];
   error?: boolean;
   errorCode?: string | null;
   channel?: string | null;
