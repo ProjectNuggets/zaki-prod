@@ -107,12 +107,17 @@ export function ApprovalRequiredCard({
   const [submitting, setSubmitting] = useState<"approve" | "modify" | "deny" | null>(null);
   const [decided, setDecided] = useState<"approved" | "modified" | "denied" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // Set when the approve POST failed because nullalis was briefly unreachable
+  // (connection-class outage). The click is NOT lost — the card shows a
+  // "retrying" banner and offers a one-click retry of the SAME approval_id.
+  const [retryable, setRetryable] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     setSubmitting(null);
     setDecided(null);
     setActionError(null);
+    setRetryable(false);
     setNow(Date.now());
   }, [request?.id]);
 
@@ -154,6 +159,7 @@ export function ApprovalRequiredCard({
         action === "approve" ? onApprove : action === "modify" ? onModify : onDeny;
       if (!cb) return;
       setActionError(null);
+      setRetryable(false);
       setSubmitting(action);
       if (action === "approve") {
         setDecided("approved");
@@ -165,17 +171,29 @@ export function ApprovalRequiredCard({
         }
       } catch (error) {
         const code = error instanceof Error ? error.message : "";
+        const isRetryable =
+          (error as { retryable?: boolean } | null)?.retryable === true ||
+          code === "agent_unreachable";
         setDecided(null);
-        setActionError(
-          code === "approval_id_mismatch"
-            ? t("zakiControls.approval.changedMessage", {
-                defaultValue: "Approval changed. Review the latest approval card.",
-              })
-            : t("zakiControls.approval.resolveFailed", {
-                defaultValue: "Approval could not be resolved. Try again.",
-              })
-        );
         setSubmitting(null);
+        if (isRetryable) {
+          // Connection-class outage — the click is preserved. Render the
+          // retrying banner + a one-click "Retry approval" instead of a hard
+          // error, so a brief agent restart never silently drops the approval.
+          setRetryable(true);
+          setActionError(null);
+        } else {
+          setRetryable(false);
+          setActionError(
+            code === "approval_id_mismatch"
+              ? t("zakiControls.approval.changedMessage", {
+                  defaultValue: "Approval changed. Review the latest approval card.",
+                })
+              : t("zakiControls.approval.resolveFailed", {
+                  defaultValue: "Approval could not be resolved. Try again.",
+                })
+          );
+        }
       }
     },
     [request, submitting, decided, isExpired, t, onApprove, onModify, onDeny]
@@ -305,6 +323,44 @@ export function ApprovalRequiredCard({
               {actionError}
             </div>
           ) : null}
+          {retryable ? (
+            <div role="status" className="zaki-approval-card__retrying">
+              <span className="zaki-approval-card__retrying-msg">
+                {submitting === "approve" ? (
+                  <Loader2 className="size-3 animate-spin" aria-hidden />
+                ) : (
+                  <TimerReset className="size-3" aria-hidden />
+                )}
+                {t("zakiControls.approval.retrying", {
+                  defaultValue: "Agent restarting — retrying your approval...",
+                })}
+              </span>
+              <button
+                type="button"
+                disabled={!!submitting || !onApprove}
+                onClick={() => handleAction("approve")}
+                aria-label={t("zakiControls.approval.retryAria", {
+                  defaultValue: "Retry approval for {{tool}}",
+                  tool: request.tool,
+                })}
+                className={cn(
+                  "zaki-approval-card__button is-primary",
+                  submitting === "approve" && "is-loading"
+                )}
+              >
+                {submitting === "approve" ? (
+                  <span>
+                    <Loader2 className="size-3 animate-spin" aria-hidden />{" "}
+                    {t("zakiControls.approval.approvingState")}
+                  </span>
+                ) : (
+                  t("zakiControls.approval.retryBtn", {
+                    defaultValue: "Retry approval",
+                  })
+                )}
+              </button>
+            </div>
+          ) : null}
           {previewRows.length ? (
             <dl className="zaki-approval-card__preview" aria-label={t("zakiControls.approval.previewAria", { defaultValue: "Approval preview" })}>
               {previewRows.map((row) => (
@@ -320,56 +376,58 @@ export function ApprovalRequiredCard({
             <span>{request.tool}</span>
             {request.expiresAt ? <span>{request.expiresAt}</span> : null}
           </div>
-          <div className="zaki-approval-card__actions">
-            <button
-              type="button"
-              disabled={isExpired || !!submitting || !onApprove}
-              onClick={() => handleAction("approve")}
-              aria-label={approveLabel}
-              className={cn("zaki-approval-card__button is-primary", submitting === "approve" && "is-loading")}
-            >
-              {submitting === "approve" ? (
-                <span>
-                  <Loader2 className="size-3 animate-spin" aria-hidden /> {t("zakiControls.approval.approvingState")}
-                </span>
-              ) : (
-                t("zakiControls.approval.approveBtn")
-              )}
-            </button>
-            <button
-              type="button"
-              disabled={isExpired || !!submitting || !onModify}
-              onClick={() => handleAction("modify")}
-              aria-label={modifyLabel}
-              className={cn("zaki-approval-card__button", submitting === "modify" && "is-loading")}
-            >
-              {submitting === "modify" ? (
-                <span>
-                  <Loader2 className="size-3 animate-spin" aria-hidden />{" "}
-                  {t("zakiControls.approval.modifyingState", {
-                    defaultValue: "Preparing...",
-                  })}
-                </span>
-              ) : (
-                t("zakiControls.approval.modifyBtn", { defaultValue: "Modify" })
-              )}
-            </button>
-            <button
-              type="button"
-              disabled={isExpired || !!submitting || !onDeny}
-              onClick={() => handleAction("deny")}
-              aria-label={denyLabel}
-              className={cn("zaki-approval-card__button is-danger", submitting === "deny" && "is-loading")}
-            >
-              {submitting === "deny" ? (
-                <span>
-                  <Loader2 className="size-3 animate-spin" aria-hidden /> {t("zakiControls.approval.denyingState")}
-                </span>
-              ) : (
-                t("zakiControls.approval.denyBtn")
-              )}
-            </button>
-          </div>
+          {retryable ? null : (
+            <div className="zaki-approval-card__actions">
+              <button
+                type="button"
+                disabled={isExpired || !!submitting || !onApprove}
+                onClick={() => handleAction("approve")}
+                aria-label={approveLabel}
+                className={cn("zaki-approval-card__button is-primary", submitting === "approve" && "is-loading")}
+              >
+                {submitting === "approve" ? (
+                  <span>
+                    <Loader2 className="size-3 animate-spin" aria-hidden /> {t("zakiControls.approval.approvingState")}
+                  </span>
+                ) : (
+                  t("zakiControls.approval.approveBtn")
+                )}
+              </button>
+              <button
+                type="button"
+                disabled={isExpired || !!submitting || !onModify}
+                onClick={() => handleAction("modify")}
+                aria-label={modifyLabel}
+                className={cn("zaki-approval-card__button", submitting === "modify" && "is-loading")}
+              >
+                {submitting === "modify" ? (
+                  <span>
+                    <Loader2 className="size-3 animate-spin" aria-hidden />{" "}
+                    {t("zakiControls.approval.modifyingState", {
+                      defaultValue: "Preparing...",
+                    })}
+                  </span>
+                ) : (
+                  t("zakiControls.approval.modifyBtn", { defaultValue: "Modify" })
+                )}
+              </button>
+              <button
+                type="button"
+                disabled={isExpired || !!submitting || !onDeny}
+                onClick={() => handleAction("deny")}
+                aria-label={denyLabel}
+                className={cn("zaki-approval-card__button is-danger", submitting === "deny" && "is-loading")}
+              >
+                {submitting === "deny" ? (
+                  <span>
+                    <Loader2 className="size-3 animate-spin" aria-hidden /> {t("zakiControls.approval.denyingState")}
+                  </span>
+                ) : (
+                  t("zakiControls.approval.denyBtn")
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

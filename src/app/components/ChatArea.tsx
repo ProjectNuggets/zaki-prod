@@ -7627,9 +7627,26 @@ export function ChatArea() {
         }
         const { response, data } = await approveAgentSession(sessionKey, payload);
         if (!response.ok) {
-          const code = typeof data?.error === "string" ? data.error : `approval_${response.status}`;
+          const code =
+            typeof data?.code === "string"
+              ? data.code
+              : typeof data?.error === "string"
+                ? data.error
+                : `approval_${response.status}`;
+          // A connection-class outage (nullalis briefly restarting) surfaces as
+          // 502 agent_unreachable with retryable:true after the BFF exhausted
+          // its bounded retry budget. Flag the error so the approval card can
+          // render a retrying state + a one-click "Retry approval" that re-POSTs
+          // the SAME approval_id, rather than treating the click as lost.
+          const retryable =
+            data?.retryable === true ||
+            code === "agent_unreachable" ||
+            response.status === 502 ||
+            response.status === 503 ||
+            response.status === 504;
           const error = new Error(code);
-          (error as Error & { code?: string }).code = code;
+          (error as Error & { code?: string; retryable?: boolean }).code = code;
+          (error as Error & { code?: string; retryable?: boolean }).retryable = retryable;
           throw error;
         }
         if (approved) {
@@ -7664,13 +7681,19 @@ export function ChatArea() {
       } catch (err) {
         setApprovalContinuationPendingId(null);
         console.error("[approval]", err);
-        if ((err as Error & { code?: string })?.code === "approval_id_mismatch") {
+        const typedErr = err as Error & { code?: string; retryable?: boolean };
+        if (typedErr?.code === "approval_id_mismatch") {
           await hydrateActiveSessionDetail(sessionKey);
           toast.error("Approval changed. Review the latest approval card.");
+        } else if (typedErr?.retryable) {
+          // The card renders an inline retrying / Retry-approval affordance for
+          // this case, so don't fire a hard error toast that would imply the
+          // click was lost.
+          toast.info("Agent restarting — retrying your approval...");
         } else {
           toast.error(approved ? "Failed to send approval" : "Failed to send denial");
         }
-        throw err; // re-throw so the card stays in the loading state
+        throw err; // re-throw so the card surfaces the (retrying) state
       }
     },
     [

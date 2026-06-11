@@ -2965,6 +2965,12 @@ export async function approveAgentSession(
     status?: string;
     message?: string;
     error?: string;
+    code?: string;
+    // Set by the BFF when nullalis was unreachable and the bounded retry budget
+    // was exhausted (HTTP 502 agent_unreachable). The UI uses this to render a
+    // "retrying" state and offer a one-click retry of the SAME approval_id
+    // instead of a hard error.
+    retryable?: boolean;
     hint?: string;
   }>(response);
   return { response, data };

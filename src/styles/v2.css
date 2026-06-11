@@ -6480,6 +6480,31 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   text-transform: uppercase;
 }
 
+/* Connection-class retry affordance: shown when the approve POST hit a brief
+   nullalis outage. The click is preserved; this banner reassures the user and
+   offers a one-click retry of the SAME approval. */
+.zaki-approval-card__retrying {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-raised);
+}
+
+.zaki-approval-card__retrying-msg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--v2-warn);
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-micro);
+  text-transform: uppercase;
+}
+
 .zaki-approval-card__preview {
   display: grid;
   gap: 1px;

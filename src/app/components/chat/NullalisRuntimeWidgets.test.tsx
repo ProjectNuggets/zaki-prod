@@ -21,6 +21,11 @@ const translations: Record<string, string> = {
   "zakiControls.approval.decidedDenied": "Denied",
   "zakiControls.approval.timer": "{{seconds}}s to decide",
   "zakiControls.approval.timerElapsed": "Decision overdue",
+  "zakiControls.approval.approvingState": "Approving...",
+  "zakiControls.approval.retrying": "Agent restarting — retrying your approval...",
+  "zakiControls.approval.retryBtn": "Retry approval",
+  "zakiControls.approval.retryAria": "Retry approval for {{tool}}",
+  "zakiControls.approval.resolveFailed": "Approval could not be resolved. Try again.",
   "contextGauge.label": "Context",
   "contextGauge.messageCount": "{{count}} messages",
 };
@@ -103,6 +108,87 @@ describe("ApprovalRequiredCard", () => {
     await act(async () => {
       resolveApproval?.();
     });
+  });
+
+  it("renders a retrying state + Retry-approval button when approve hits a connection-class outage", async () => {
+    const onApprove = jest.fn(async () => {
+      const error = new Error("agent_unreachable") as Error & { retryable?: boolean };
+      error.retryable = true;
+      throw error;
+    });
+
+    render(<ApprovalRequiredCard request={request} onApprove={onApprove} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve extension_click action" }));
+
+    // The click is NOT lost: instead of a hard error the card shows a retrying
+    // banner and a one-click Retry-approval affordance.
+    await waitFor(() => {
+      expect(screen.getByText(/Agent restarting — retrying your approval/)).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText("Approval could not be resolved. Try again.")
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Retry approval for extension_click" })
+    ).toBeInTheDocument();
+    // The standard action row is replaced by the retry affordance.
+    expect(
+      screen.queryByRole("button", { name: "Deny extension_click action" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("re-POSTs the SAME approval via the Retry button and clears the retrying state on success", async () => {
+    const onApprove = jest
+      .fn()
+      .mockImplementationOnce(async () => {
+        const error = new Error("agent_unreachable") as Error & { retryable?: boolean };
+        error.retryable = true;
+        throw error;
+      })
+      .mockImplementationOnce(async () => {});
+
+    render(<ApprovalRequiredCard request={request} onApprove={onApprove} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve extension_click action" }));
+    const retryButton = await screen.findByRole("button", {
+      name: "Retry approval for extension_click",
+    });
+
+    await act(async () => {
+      fireEvent.click(retryButton);
+    });
+
+    // Retry re-invokes onApprove with the identical request id (stable
+    // approval_id) — never a different/new approval.
+    expect(onApprove).toHaveBeenCalledTimes(2);
+    expect(onApprove).toHaveBeenNthCalledWith(2, "approval-1", request);
+    // On success the card flips back to the approved continuation state.
+    await waitFor(() => {
+      expect(screen.getByText(/Approved\. ZAKI is continuing/)).toBeInTheDocument();
+    });
+  });
+
+  it("treats a non-retryable approve failure as a hard error, not a retry", async () => {
+    const onApprove = jest.fn(async () => {
+      throw new Error("approval_500");
+    });
+
+    render(<ApprovalRequiredCard request={request} onApprove={onApprove} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve extension_click action" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Approval could not be resolved. Try again.")
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText(/Agent restarting/)
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Retry approval for extension_click" })
+    ).not.toBeInTheDocument();
   });
 });
 
