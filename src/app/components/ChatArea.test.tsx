@@ -25,6 +25,10 @@ import {
   inferStreamingModeFromProgress,
   buildNullalisContextGauge,
   resolveContextGaugePercent,
+  ChatRequestError,
+  isRetryableChatError,
+  CHAT_RETRYABLE_MAX_ATTEMPTS,
+  CHAT_RETRYABLE_BACKOFF_MS,
 } from "./ChatArea";
 import { useNavigationStore, useAuthStore, useZakiSessionUiStore } from "@/stores";
 import { useMessages } from "@/queries/useThreads";
@@ -445,6 +449,42 @@ async function renderChatAreaAndWaitForEffects() {
   await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/documents/accepted-file-types"));
   return result;
 }
+
+describe("P1-12 chat-stream retryable classification (isRetryableChatError)", () => {
+  it("honors an explicit retryable:true flag from the BFF error frame", () => {
+    expect(
+      isRetryableChatError(new ChatRequestError("slow", 502, "chat_error", true))
+    ).toBe(true);
+  });
+
+  it("honors the retryable BFF codes (gateway_draining / ownership_lock_conflict / agent_unavailable)", () => {
+    for (const code of ["gateway_draining", "ownership_lock_conflict", "agent_unavailable"]) {
+      expect(isRetryableChatError(new ChatRequestError("blip", 503, code))).toBe(true);
+    }
+  });
+
+  it("does NOT retry a non-retryable chat error (no flag, non-retryable code)", () => {
+    expect(isRetryableChatError(new ChatRequestError("nope", 502, "chat_error"))).toBe(false);
+    expect(isRetryableChatError(new ChatRequestError("quota", 429, "daily_limit_reached"))).toBe(false);
+  });
+
+  it("does NOT treat a plain Error or non-error value as retryable", () => {
+    expect(isRetryableChatError(new Error("boom"))).toBe(false);
+    expect(isRetryableChatError(null)).toBe(false);
+    expect(isRetryableChatError(undefined)).toBe(false);
+    expect(isRetryableChatError("retryable")).toBe(false);
+  });
+
+  it("exposes a bounded reconnect budget (3 attempts = first send + 2 replays)", () => {
+    expect(CHAT_RETRYABLE_MAX_ATTEMPTS).toBe(3);
+    // One backoff per replay (attempts - 1).
+    expect(CHAT_RETRYABLE_BACKOFF_MS.length).toBe(CHAT_RETRYABLE_MAX_ATTEMPTS - 1);
+    for (const ms of CHAT_RETRYABLE_BACKOFF_MS) {
+      expect(typeof ms).toBe("number");
+      expect(ms).toBeGreaterThan(0);
+    }
+  });
+});
 
 describe("ChatArea Component", () => {
   let navState: NavState;

@@ -240,16 +240,50 @@ function extractSystemNoticePayload(
   };
 }
 
-class ChatRequestError extends Error {
+export class ChatRequestError extends Error {
   status: number;
   code: string | null;
+  // P1-12: set when the BFF signals the turn is safe to replay (a retryable:true
+  // SSE error frame, or a retryable JSON status such as the readiness-gate 503).
+  // The chat send loop honors this with a bounded auto-reconnect before
+  // surfacing a hard error.
+  retryable: boolean;
 
-  constructor(message: string, status: number, code?: string | null) {
+  constructor(
+    message: string,
+    status: number,
+    code?: string | null,
+    retryable = false
+  ) {
     super(message);
     this.name = "ChatRequestError";
     this.status = status;
     this.code = code ?? null;
+    this.retryable = retryable;
   }
+}
+
+// P1-12: codes the BFF emits for transient, replay-safe conditions
+// (gateway_draining / ownership_lock_conflict via buildAgentRetrySsePayload;
+// agent_unavailable from the readiness gate). Any of these — or an explicit
+// payload.retryable===true — makes the same turn eligible for bounded replay.
+export const CHAT_RETRYABLE_ERROR_CODES = new Set<string>([
+  "gateway_draining",
+  "ownership_lock_conflict",
+  "agent_unavailable",
+]);
+
+// First send plus up to two replays (3 attempts total) before surfacing a hard
+// error. Kept small so a genuinely-down agent fails fast rather than hanging.
+export const CHAT_RETRYABLE_MAX_ATTEMPTS = 3;
+export const CHAT_RETRYABLE_BACKOFF_MS = [600, 1500];
+
+export function isRetryableChatError(error: unknown): boolean {
+  if (error instanceof ChatRequestError) {
+    if (error.retryable) return true;
+    if (error.code && CHAT_RETRYABLE_ERROR_CODES.has(error.code)) return true;
+  }
+  return false;
 }
 
 const MEMORY_STATUS_SYNC_THROTTLE_MS = 1200;
@@ -5833,6 +5867,7 @@ export function ChatArea() {
       console.error(`[Chat] Stream failed: ${response.status}`);
       let message = `Chat request failed (${response.status}).`;
       let errorCode: string | null = null;
+      let errorRetryable = false;
       let quotaResetAt: string | null = null;
       let quotaSurfaceCode: UsageQuotaSurface | null = null;
       const requestId = response.headers.get("x-request-id");
@@ -5843,6 +5878,7 @@ export function ChatArea() {
             error?: string;
             message?: string;
             code?: string;
+            retryable?: boolean;
             limit?: number;
             resetAt?: string;
             surface?: string;
@@ -5850,6 +5886,9 @@ export function ChatArea() {
           };
           if (typeof data.code === "string" && data.code.trim()) {
             errorCode = data.code.trim();
+          }
+          if (data.retryable === true) {
+            errorRetryable = true;
           }
           if (typeof data.resetAt === "string" && data.resetAt.trim()) {
             quotaResetAt = data.resetAt.trim();
@@ -5890,7 +5929,7 @@ export function ChatArea() {
       if (requestId) {
         message = `${message} (Ref: ${requestId})`;
       }
-      throw new ChatRequestError(message, response.status, errorCode);
+      throw new ChatRequestError(message, response.status, errorCode, errorRetryable);
     }
 
     const resolveAgentUrl = (payload: Record<string, unknown>): string | null => {
@@ -5994,7 +6033,8 @@ export function ChatArea() {
         throw new ChatRequestError(
           msg,
           502,
-          typeof payload.code === "string" ? payload.code : "chat_error"
+          typeof payload.code === "string" ? payload.code : "chat_error",
+          payload.retryable === true
         );
       }
 
@@ -6247,7 +6287,8 @@ export function ChatArea() {
         throw new ChatRequestError(
           errorMessage,
           502,
-          typeof payload.code === "string" ? payload.code : "chat_error"
+          typeof payload.code === "string" ? payload.code : "chat_error",
+          payload.retryable === true
         );
       }
 
@@ -7387,14 +7428,51 @@ export function ChatArea() {
       : trimmed;
 
     try {
-      const streamResult = await streamChatMessage({
-        workspaceSlug: resolvedWorkspaceSlug,
-        threadSlug: threadId,
-        message: sendText,
-        assistantId: assistantMessageId,
-        signal: streamController.signal,
-        turnOptions: isZakiBotTarget ? turnOptions?.zaki ?? null : null,
-      });
+      // P1-12: bounded auto-reconnect/replay of the SAME turn when the BFF
+      // signals a transient, replay-safe condition (a retryable:true SSE error
+      // frame, or a retryable JSON 5xx such as the readiness-gate 503 / a
+      // gateway_draining / ownership_lock_conflict frame). Up to
+      // CHAT_RETRYABLE_MAX_ATTEMPTS sends total; between attempts we clear any
+      // partial assistant output and show "Reconnecting to the agent...". A
+      // non-retryable error (or an aborted turn) breaks out immediately to the
+      // existing hard-error handling below.
+      let streamResult: Awaited<ReturnType<typeof streamChatMessage>> | undefined;
+      for (let attempt = 1; attempt <= CHAT_RETRYABLE_MAX_ATTEMPTS; attempt++) {
+        try {
+          streamResult = await streamChatMessage({
+            workspaceSlug: resolvedWorkspaceSlug,
+            threadSlug: threadId,
+            message: sendText,
+            assistantId: assistantMessageId,
+            signal: streamController.signal,
+            turnOptions: isZakiBotTarget ? turnOptions?.zaki ?? null : null,
+          });
+          break;
+        } catch (streamError) {
+          const isLastAttempt = attempt >= CHAT_RETRYABLE_MAX_ATTEMPTS;
+          if (
+            isAbortError(streamError) ||
+            isLastAttempt ||
+            !isRetryableChatError(streamError)
+          ) {
+            throw streamError;
+          }
+          // Transient + replay-safe: reset partial output, tell the user we're
+          // reconnecting, back off, then replay the same turn.
+          updateAssistantContent(threadId, assistantMessageId, "");
+          if (isZakiBotTarget) {
+            setStreamingIndicatorMode("thinking");
+          }
+          toast.info("Reconnecting to the agent...");
+          const backoff =
+            CHAT_RETRYABLE_BACKOFF_MS[attempt - 1] ??
+            CHAT_RETRYABLE_BACKOFF_MS[CHAT_RETRYABLE_BACKOFF_MS.length - 1];
+          await new Promise((resolve) => window.setTimeout(resolve, backoff));
+          if (streamController.signal.aborted) {
+            throw streamError;
+          }
+        }
+      }
       if (isZakiBotTarget && agentUserId) {
         const sessionKey = buildAgentSessionKey(threadId, agentUserId);
         if (sessionKey) {
