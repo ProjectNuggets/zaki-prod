@@ -7689,6 +7689,17 @@ export function ChatArea() {
           // The card renders an inline retrying / Retry-approval affordance for
           // this case, so don't fire a hard error toast that would imply the
           // click was lost.
+          if (approved) {
+            // The approve branch optimistically set a "ZAKI is continuing..."
+            // narration frame + a "writing" streaming indicator BEFORE the POST.
+            // Because the agent is unreachable, no SSE 'done' event will arrive
+            // to clear them — so reset them here. Otherwise the chat would show
+            // a contradictory state ("Approved. ZAKI is continuing..." + writing)
+            // alongside the card's "retrying your approval..." affordance,
+            // falsely implying the approval already succeeded.
+            setNullalisNarrationFrame(null);
+            setStreamingIndicatorMode("thinking");
+          }
           toast.info("Agent restarting — retrying your approval...");
         } else {
           toast.error(approved ? "Failed to send approval" : "Failed to send denial");
