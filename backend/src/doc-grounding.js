@@ -11,6 +11,25 @@ const MAX_DOC_CHUNKS = 6;
 const MAX_CHUNK_CHARS = 1200; // bound each chunk so the injected prompt stays reasonable
 const SNIPPET_CHARS = 240;
 
+// Strings that would let user-uploaded document content escape the <attached_documents> framing or forge
+// an internal envelope (which would also corrupt the FE thread-title / message-content strip). Chunk text
+// comes from files any space member can upload, so scrub these before injection (defense-in-depth — the
+// model is also guard-railed, but this makes the framing + the marker-strip deterministic).
+const INJECTION_SENTINELS = [
+  "</attached_documents>",
+  "</document>",
+  "[[ZAKI_DOC_CONTEXT_V1]]",
+  "[[/ZAKI_DOC_CONTEXT_V1]]",
+  "[[ZAKI_MEMORY_CONTEXT_V2]]",
+  "[[/ZAKI_MEMORY_CONTEXT_V2]]",
+];
+
+function scrubSentinels(value) {
+  let out = String(value ?? "");
+  for (const s of INJECTION_SENTINELS) out = out.split(s).join("");
+  return out;
+}
+
 function isPlainObject(v) {
   return Boolean(v) && typeof v === "object" && !Array.isArray(v);
 }
@@ -49,8 +68,9 @@ export function buildDocContextBlock(results = []) {
   if (chunks.length === 0) return "";
   const docs = chunks
     .map((r) => {
-      const name = String(r.title || "Document").replace(/"/g, "'");
-      const body = String(r.text || "").slice(0, MAX_CHUNK_CHARS);
+      // Scrub injection sentinels, THEN cap length, THEN escape the attribute quote in the name.
+      const name = scrubSentinels(r.title || "Document").replace(/"/g, "'");
+      const body = scrubSentinels(r.text || "").slice(0, MAX_CHUNK_CHARS);
       return `<document name="${name}">\n${body}\n</document>`;
     })
     .join("\n");

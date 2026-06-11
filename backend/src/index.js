@@ -700,7 +700,18 @@ const ZAKI_CHAT_MEMORY_CONTEXT_TIMEOUT_MS = Math.max(
   250,
   Number(process.env.ZAKI_CHAT_MEMORY_CONTEXT_TIMEOUT_MS || 2500)
 );
-const ZAKI_DOC_GROUNDING_TIMEOUT_MS = 4000; // best-effort vector pre-fetch; never blocks the turn
+const ZAKI_DOC_GROUNDING_TIMEOUT_MS = Math.max(
+  500,
+  Number(process.env.ZAKI_DOC_GROUNDING_TIMEOUT_MS || 4000)
+); // best-effort vector pre-fetch; never blocks the turn
+// Retrieval knobs — env-tunable so staging threshold/topN calibration (per SPEC §6) is a config change,
+// not a redeploy. scoreThreshold unset → the engine's per-workspace default (similarityThreshold ?? 0.25).
+const ZAKI_DOC_GROUNDING_TOP_N = Math.min(10, Math.max(1, Number(process.env.ZAKI_DOC_GROUNDING_TOP_N || 6)));
+const ZAKI_DOC_GROUNDING_SCORE_THRESHOLD =
+  process.env.ZAKI_DOC_GROUNDING_SCORE_THRESHOLD !== undefined &&
+  String(process.env.ZAKI_DOC_GROUNDING_SCORE_THRESHOLD).trim() !== ""
+    ? Number(process.env.ZAKI_DOC_GROUNDING_SCORE_THRESHOLD)
+    : undefined;
 const ZAKI_SYNC_MEMORY_INJECTION_ENABLED =
   String(process.env.ZAKI_SYNC_MEMORY_INJECTION_ENABLED || "true")
     .toLowerCase()
@@ -10672,7 +10683,13 @@ const streamChatHandler = async (req, res) => {
     let docContext = { block: "", sources: [] };
     const docContextPromise = isAgentTurn
       ? withTimeout(
-          fetchWorkspaceDocContext({ adminRequest: novaAdminRequest, slug, message: originalMessage }),
+          fetchWorkspaceDocContext({
+            adminRequest: novaAdminRequest,
+            slug,
+            message: originalMessage,
+            topN: ZAKI_DOC_GROUNDING_TOP_N,
+            scoreThreshold: ZAKI_DOC_GROUNDING_SCORE_THRESHOLD,
+          }),
           ZAKI_DOC_GROUNDING_TIMEOUT_MS,
           "Doc grounding"
         ).catch((err) => {
@@ -10774,6 +10791,9 @@ const streamChatHandler = async (req, res) => {
       // format) is injected between the envelope and the user message; the FE strips its
       // [[ZAKI_DOC_CONTEXT_V1]] marker too.
       docContext = await docContextPromise;
+      if (docContext.sources.length > 0) {
+        console.log(`[DocGrounding] injected ${docContext.sources.length} source(s) into agent turn for ${slug}`);
+      }
       const docBlock = docContext.block ? `${docContext.block}\n\n` : "";
       enrichedMessage = `${composeContextEnvelope({
         guardrail: true,
