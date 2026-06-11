@@ -119,6 +119,7 @@ import type {
   Message,
   AgentNarrationStep,
   GeneratedFileRef,
+  DocSource,
 } from "@/types";
 import { useMessages } from "@/queries/useThreads";
 import { spaceKeys } from "@/queries/useSpaces";
@@ -4371,6 +4372,25 @@ export function ChatArea() {
     []
   );
 
+  const updateAssistantDocSources = useCallback(
+    (threadSlug: string, assistantId: string, docSources: DocSource[]) => {
+      setMessagesByThread((prev) => {
+        const threadMessages = prev[threadSlug] ?? [];
+        const assistantIndex = threadMessages.findIndex((msg) => msg.id === assistantId);
+        if (assistantIndex === -1) return prev;
+        const updated = [...threadMessages];
+        const existingMsg = updated[assistantIndex];
+        if (!existingMsg) return prev;
+        updated[assistantIndex] = {
+          ...existingMsg,
+          docSources,
+        };
+        return { ...prev, [threadSlug]: updated };
+      });
+    },
+    []
+  );
+
   const clearZakiBotProgressVisuals = useCallback((options?: { preserveNullalisArtifacts?: boolean }) => {
     if (zakiBotProcessClearTimerRef.current) {
       window.clearTimeout(zakiBotProcessClearTimerRef.current);
@@ -5991,6 +6011,16 @@ export function ChatArea() {
         );
         return {};
       }
+      // Doc-grounding citations (independent of the memory pipeline flag) — the BFF emits these from the
+      // workspace vector chunks it pre-injected into the agent turn.
+      if (payload?.type === "docSources" && Array.isArray(payload.sources)) {
+        updateAssistantDocSources(
+          threadSlug,
+          assistantId,
+          payload.sources as DocSource[]
+        );
+        return {};
+      }
 
       if (payload?.type === "agentInitWebsocketConnection") {
         const agentUrl = resolveAgentUrl(payload);
@@ -6534,6 +6564,7 @@ export function ChatArea() {
     streamAgentInvocation,
     updateAssistantContent,
     updateAssistantSources,
+    updateAssistantDocSources,
     updateNullalisReasoningSummary,
     upsertNullalisTaskItem,
     upsertNullalisTodoTaskItems,
