@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 
 const extractFactsMock = jest.fn();
+const extractMemoriesMock = jest.fn();
 const sanitizeExtractedMemoriesMock = jest.fn();
 const findDuplicateMemoryMock = jest.fn();
 const findConflictMock = jest.fn();
@@ -13,6 +14,7 @@ async function loadCaptureModule() {
   jest.resetModules();
   jest.unstable_mockModule("../memory-extraction.js", () => ({
     extractFacts: extractFactsMock,
+    extractMemories: extractMemoriesMock,
     sanitizeExtractedMemories: sanitizeExtractedMemoriesMock,
   }));
   jest.unstable_mockModule("./operations.js", () => ({
@@ -32,6 +34,7 @@ describe("memory capture", () => {
   beforeEach(() => {
     [
       extractFactsMock,
+      extractMemoriesMock,
       sanitizeExtractedMemoriesMock,
       findDuplicateMemoryMock,
       findConflictMock,
@@ -42,6 +45,7 @@ describe("memory capture", () => {
     ].forEach((m) => m.mockReset());
 
     extractFactsMock.mockResolvedValue([]);
+    extractMemoriesMock.mockResolvedValue({ facts: [], episodic: [] });
     sanitizeExtractedMemoriesMock.mockImplementation((memories) => memories);
     findDuplicateMemoryMock.mockResolvedValue(null);
     findConflictMock.mockResolvedValue(null);
@@ -67,15 +71,18 @@ describe("memory capture", () => {
 
   it("auto-saves a high-confidence preference with an undo window", async () => {
     const { processChatMemoryCapture } = await loadCaptureModule();
-    extractFactsMock.mockResolvedValue([
-      {
-        content: "Prefers concise answers",
-        type: "preference",
-        confidence: 0.92,
-        conflictKey: "preference:concise-answers",
-        polarity: "positive",
-      },
-    ]);
+    extractMemoriesMock.mockResolvedValue({
+      facts: [
+        {
+          content: "Prefers concise answers",
+          type: "preference",
+          confidence: 0.92,
+          conflictKey: "preference:concise-answers",
+          polarity: "positive",
+        },
+      ],
+      episodic: [],
+    });
 
     const result = await processChatMemoryCapture({
       userId: "user@example.com",
@@ -97,9 +104,10 @@ describe("memory capture", () => {
 
   it("auto-saves sensitive content like anything else (no review gate)", async () => {
     const { processChatMemoryCapture } = await loadCaptureModule();
-    extractFactsMock.mockResolvedValue([
-      { content: "Reach me at alice@example.com", type: "fact", confidence: 0.95 },
-    ]);
+    extractMemoriesMock.mockResolvedValue({
+      facts: [{ content: "Reach me at alice@example.com", type: "fact", confidence: 0.95 }],
+      episodic: [],
+    });
 
     const result = await processChatMemoryCapture({
       userId: "user@example.com",
@@ -114,9 +122,10 @@ describe("memory capture", () => {
 
   it("auto-saves even when confidence is missing", async () => {
     const { processChatMemoryCapture } = await loadCaptureModule();
-    extractFactsMock.mockResolvedValue([
-      { content: "Prefers concise answers", type: "preference", confidence: null },
-    ]);
+    extractMemoriesMock.mockResolvedValue({
+      facts: [{ content: "Prefers concise answers", type: "preference", confidence: null }],
+      episodic: [],
+    });
 
     const result = await processChatMemoryCapture({
       userId: "user@example.com",
@@ -142,7 +151,7 @@ describe("memory capture", () => {
       superseded: [],
       skipped: [],
     });
-    expect(extractFactsMock).not.toHaveBeenCalled();
+    expect(extractMemoriesMock).not.toHaveBeenCalled();
     expect(findDuplicateMemoryMock).not.toHaveBeenCalled();
     expect(storeMemoryMock).not.toHaveBeenCalled();
     expect(markMemoryOutdatedMock).not.toHaveBeenCalled();
@@ -150,15 +159,18 @@ describe("memory capture", () => {
 
   it("auto-supersedes a contradictory memory (newest wins), then saves the new one", async () => {
     const { processChatMemoryCapture } = await loadCaptureModule();
-    extractFactsMock.mockResolvedValue([
-      {
-        content: "Lives in Hamburg",
-        type: "fact",
-        confidence: 0.91,
-        conflictKey: "identity:location",
-        polarity: "neutral",
-      },
-    ]);
+    extractMemoriesMock.mockResolvedValue({
+      facts: [
+        {
+          content: "Lives in Hamburg",
+          type: "fact",
+          confidence: 0.91,
+          conflictKey: "identity:location",
+          polarity: "neutral",
+        },
+      ],
+      episodic: [],
+    });
     findConflictMock.mockResolvedValue({
       memoryId: "mem-old",
       content: "Lives in Berlin",
@@ -185,9 +197,10 @@ describe("memory capture", () => {
 
   it("skips duplicates without storing or superseding", async () => {
     const { processChatMemoryCapture } = await loadCaptureModule();
-    extractFactsMock.mockResolvedValue([
-      { content: "Likes tea", type: "preference", confidence: 0.9 },
-    ]);
+    extractMemoriesMock.mockResolvedValue({
+      facts: [{ content: "Likes tea", type: "preference", confidence: 0.9 }],
+      episodic: [],
+    });
     findDuplicateMemoryMock.mockResolvedValue({ id: "dup-1" });
 
     const result = await processChatMemoryCapture({
@@ -200,5 +213,22 @@ describe("memory capture", () => {
     ]);
     expect(storeMemoryMock).not.toHaveBeenCalled();
     expect(markMemoryOutdatedMock).not.toHaveBeenCalled();
+  });
+
+  it("stores episodic gap-fill sentences as type=episodic with an undo window", async () => {
+    const { processChatMemoryCapture } = await loadCaptureModule();
+    extractMemoriesMock.mockResolvedValue({
+      facts: [{ content: "Lives in Berlin", type: "fact", confidence: 0.9, conflictKey: "identity:location" }],
+      episodic: [{ content: "I have been vibing with jazz", type: "episodic", confidence: 0.5 }],
+    });
+    storeMemoryMock.mockResolvedValueOnce({ id: "mem-fact" }).mockResolvedValueOnce({ id: "mem-epi" });
+
+    const result = await processChatMemoryCapture({ userId: "u@x.co", message: "..." });
+
+    expect(storeMemoryMock).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "episodic", confidenceScore: 0.5 })
+    );
+    expect(result.saved.some((s) => s.id === "mem-epi")).toBe(true);
+    expect(upsertUndoWindowMock).toHaveBeenCalledTimes(2);
   });
 });

@@ -4,7 +4,7 @@ import {
   markMemoryOutdated,
   storeMemory,
 } from "./operations.js";
-import { extractFacts, sanitizeExtractedMemories } from "../memory-extraction.js";
+import { extractMemories, sanitizeExtractedMemories } from "../memory-extraction.js";
 import { getMemoryUndoWindowMs, upsertUndoWindow } from "./auto-save.js";
 
 function normalizeConfidence(value) {
@@ -56,9 +56,9 @@ export async function processChatMemoryCapture({
     return { saved: [], duplicates: [], superseded: [], skipped: [] };
   }
 
-  const rawExtracted = await extractFacts(message);
-  const extracted = sanitizeExtractedMemories(rawExtracted);
-  if (extracted.length === 0) {
+  const { facts, episodic } = await extractMemories(message);
+  const extracted = sanitizeExtractedMemories(facts);
+  if (extracted.length === 0 && episodic.length === 0) {
     return { saved: [], duplicates: [], superseded: [], skipped: [] };
   }
 
@@ -132,6 +132,26 @@ export async function processChatMemoryCapture({
       state: "saved_reversible",
       undoUntil,
       superseded: Boolean(conflictMemory?.memoryId),
+    });
+  }
+
+  for (const sentence of episodic) {
+    const stored = await storeMemory({
+      userId,
+      content: sentence.content,
+      type: "episodic",
+      sourceThreadId: threadId,
+      confidenceScore: 0.5,
+    });
+    if (!stored?.id || stored.duplicate) continue;
+    const undoUntil = new Date(Date.now() + undoWindowMs).toISOString();
+    await upsertUndoWindow({ memoryId: stored.id, userId, expiresAt: undoUntil });
+    saved.push({
+      id: stored.id,
+      content: sentence.content,
+      type: "episodic",
+      state: "saved_reversible",
+      undoUntil,
     });
   }
 
