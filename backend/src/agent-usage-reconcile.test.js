@@ -14,9 +14,12 @@ import {
 // and "replay → mark reconciled, no re-debit".
 // ---------------------------------------------------------------------------
 
+// NOTE: the engine's migration-0004 turn_usage table has NO surrogate id/PK — row identity
+// is the composite UNIQUE(user_id, turn_key). The mock rows below intentionally carry NO `id`
+// field so this fake can't accidentally re-introduce the schema-contract bug it once masked.
+// `created_at` is the ORDER BY key the SELECT uses; we use it to deterministically order rows.
 function makeRow(overrides = {}) {
   return {
-    id: 1,
     user_id: 42,
     turn_key: "turn-abc",
     turn_origin: "agent_cron_turn",
@@ -26,6 +29,7 @@ function makeRow(overrides = {}) {
     cost_usd: 0.0015, // 0.0015 / 0.00075 = 2 units
     cost_available: true,
     entry_kind: "daemon",
+    created_at: "2026-01-01T00:00:00.000Z",
     reconciled_at: null,
     ...overrides,
   };
@@ -35,16 +39,26 @@ function makeRow(overrides = {}) {
 function makeDbQuery(store) {
   return jest.fn(async (text, params = []) => {
     if (/FROM\s+zaki_bot\.turn_usage/i.test(text) && /SELECT/i.test(text)) {
-      // The sweep's selection contract: entry_kind='daemon' AND reconciled_at IS NULL.
+      // The sweep's selection contract: entry_kind='daemon' AND reconciled_at IS NULL,
+      // ORDER BY created_at ASC. The SELECT must NOT project a non-existent `id` column.
+      expect(text).not.toMatch(/\bid\b/);
       const rows = store.rows
         .filter((r) => r.entry_kind === "daemon" && r.reconciled_at == null)
-        .sort((a, b) => a.id - b.id)
+        .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
         .slice(0, params[0] ?? store.rows.length);
       return { rows: rows.map((r) => ({ ...r })) };
     }
     if (/UPDATE\s+zaki_bot\.turn_usage/i.test(text) && /reconciled_at\s*=\s*now\(\)/i.test(text)) {
-      const id = params[0];
-      const row = store.rows.find((r) => r.id === id);
+      // The cursor UPDATE keys on the REAL composite identity (user_id + turn_key), never `id`,
+      // and is itself idempotent via `AND reconciled_at IS NULL`.
+      expect(text).toMatch(/user_id\s*=\s*\$1/i);
+      expect(text).toMatch(/turn_key\s*=\s*\$2/i);
+      expect(text).toMatch(/reconciled_at\s+IS\s+NULL/i);
+      expect(text).not.toMatch(/WHERE\s+id\b/i);
+      const [userId, turnKey] = params;
+      const row = store.rows.find(
+        (r) => r.user_id === userId && r.turn_key === turnKey && r.reconciled_at == null
+      );
       if (row) row.reconciled_at = new Date().toISOString();
       return { rowCount: row ? 1 : 0, rows: [] };
     }
@@ -183,8 +197,8 @@ describe("reconcileDaemonTurnUsage", () => {
   it("NEVER selects or touches http rows", async () => {
     const store = {
       rows: [
-        makeRow({ id: 1, entry_kind: "http", turn_key: "http-1" }),
-        makeRow({ id: 2, entry_kind: "daemon", turn_key: "daemon-2" }),
+        makeRow({ entry_kind: "http", turn_key: "http-1", created_at: "2026-01-01T00:00:01.000Z" }),
+        makeRow({ entry_kind: "daemon", turn_key: "daemon-2", created_at: "2026-01-01T00:00:02.000Z" }),
       ],
     };
     const deps = makeDeps(store);
@@ -197,16 +211,16 @@ describe("reconcileDaemonTurnUsage", () => {
     expect(deps.reserveUnits.mock.calls[0][0].reserveIdempotencyKey).toBe("reconcile:daemon-2");
 
     // http row untouched: never reconciled.
-    const httpRow = store.rows.find((r) => r.id === 1);
+    const httpRow = store.rows.find((r) => r.turn_key === "http-1");
     expect(httpRow.reconciled_at).toBeNull();
   });
 
   it("isolates a throwing row: others still settle, the bad row stays unreconciled for retry", async () => {
     const store = {
       rows: [
-        makeRow({ id: 1, turn_key: "good-1" }),
-        makeRow({ id: 2, turn_key: "bad-2" }),
-        makeRow({ id: 3, turn_key: "good-3" }),
+        makeRow({ turn_key: "good-1", created_at: "2026-01-01T00:00:01.000Z" }),
+        makeRow({ turn_key: "bad-2", created_at: "2026-01-01T00:00:02.000Z" }),
+        makeRow({ turn_key: "good-3", created_at: "2026-01-01T00:00:03.000Z" }),
       ],
     };
     const reserveUnits = jest.fn(async ({ reserveIdempotencyKey }) => {
@@ -224,9 +238,9 @@ describe("reconcileDaemonTurnUsage", () => {
     expect(result.failed).toBe(1);
 
     // good rows reconciled; bad row left NULL for the next sweep.
-    expect(store.rows.find((r) => r.id === 1).reconciled_at).not.toBeNull();
-    expect(store.rows.find((r) => r.id === 2).reconciled_at).toBeNull();
-    expect(store.rows.find((r) => r.id === 3).reconciled_at).not.toBeNull();
+    expect(store.rows.find((r) => r.turn_key === "good-1").reconciled_at).not.toBeNull();
+    expect(store.rows.find((r) => r.turn_key === "bad-2").reconciled_at).toBeNull();
+    expect(store.rows.find((r) => r.turn_key === "good-3").reconciled_at).not.toBeNull();
   });
 
   it("falls back to the estimate when cost is unavailable (cost_available=false / 0)", async () => {
@@ -285,7 +299,7 @@ describe("reconcileDaemonTurnUsage", () => {
 
   it("respects the batch LIMIT passed to the SELECT and the maxLoops guard", async () => {
     const rows = Array.from({ length: 5 }, (_, i) =>
-      makeRow({ id: i + 1, turn_key: `t-${i + 1}` })
+      makeRow({ turn_key: `t-${i + 1}`, created_at: `2026-01-01T00:00:0${i + 1}.000Z` })
     );
     const store = { rows };
     const deps = makeDeps(store, { limit: 2, maxLoops: 1 });
@@ -302,7 +316,7 @@ describe("reconcileDaemonTurnUsage", () => {
 
   it("drains multiple batches across loops until the table is clear", async () => {
     const rows = Array.from({ length: 5 }, (_, i) =>
-      makeRow({ id: i + 1, turn_key: `t-${i + 1}` })
+      makeRow({ turn_key: `t-${i + 1}`, created_at: `2026-01-01T00:00:0${i + 1}.000Z` })
     );
     const store = { rows };
     const deps = makeDeps(store, { limit: 2, maxLoops: 10 });

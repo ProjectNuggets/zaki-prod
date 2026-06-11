@@ -95,7 +95,7 @@ export async function reconcileDaemonTurnUsage({
   for (let loop = 0; loop < loopGuard; loop += 1) {
     counters.loops = loop + 1;
     const { rows } = await dbQuery(
-      `SELECT id, user_id, turn_key, turn_origin, model,
+      `SELECT user_id, turn_key, turn_origin, model,
               input_tokens, output_tokens, cost_usd, cost_available
          FROM zaki_bot.turn_usage
         WHERE entry_kind = 'daemon' AND reconciled_at IS NULL
@@ -127,7 +127,7 @@ export async function reconcileDaemonTurnUsage({
         // Per-row isolation: leave reconciled_at NULL → retried next sweep. Never abort the batch.
         counters.failed += 1;
         logStructured?.("error", "agent.reconcile.row_failed", {
-          id: row?.id,
+          userId: row?.user_id,
           turnKey: row?.turn_key,
           message: error?.message || String(error),
         });
@@ -197,7 +197,7 @@ async function reconcileRow({
     (!reserved.ok && reserved.reason === "idempotency_replayed") ||
     (reserved.ok && reserved.idempotent)
   ) {
-    await markReconciled({ dbQuery, id: row.id });
+    await markReconciled({ dbQuery, userId: row.user_id, turnKey: row.turn_key });
     return "replayed";
   }
 
@@ -206,7 +206,7 @@ async function reconcileRow({
   // TODO kill-switch: a platform-level spend cap will gate runaway daemon spend here later.
   if (!reserved.ok && reserved.reason === "insufficient_units") {
     logStructured?.("warn", "agent.reconcile.overdraw", {
-      id: row.id,
+      userId,
       turnKey,
       units,
       remaining: reserved.remaining ?? null,
@@ -271,14 +271,14 @@ async function reconcileRow({
     });
   } catch (usageError) {
     logStructured?.("error", "agent.reconcile.usage_record_failed", {
-      id: row.id,
+      userId,
       turnKey,
       message: usageError?.message || String(usageError),
     });
   }
 
   // --- 4) Advance the cursor — AFTER a successful debit. ---------------------------------------
-  await markReconciled({ dbQuery, id: row.id });
+  await markReconciled({ dbQuery, userId: row.user_id, turnKey: row.turn_key });
   return "debited";
 }
 
@@ -292,6 +292,15 @@ async function lookupPlanId({ dbGet, userId }) {
   }
 }
 
-async function markReconciled({ dbQuery, id }) {
-  await dbQuery(`UPDATE zaki_bot.turn_usage SET reconciled_at = now() WHERE id = $1`, [id]);
+// Advance the cursor on the row's REAL composite identity. The engine's migration-0004
+// table has NO surrogate id/PK — row identity is UNIQUE(user_id, turn_key). The
+// `AND reconciled_at IS NULL` guard makes the cursor-set itself idempotent (a re-run
+// touches zero rows once the cursor is written).
+async function markReconciled({ dbQuery, userId, turnKey }) {
+  await dbQuery(
+    `UPDATE zaki_bot.turn_usage
+        SET reconciled_at = now()
+      WHERE user_id = $1 AND turn_key = $2 AND reconciled_at IS NULL`,
+    [userId, turnKey]
+  );
 }
