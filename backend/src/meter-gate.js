@@ -31,7 +31,11 @@ async function settleWithRetry(args) {
  * `doWork` returns `{ units?, providerCostUsdMicros?, provider?, providerModel?, result? }`.
  *  - units: the ACTUAL weighted units consumed (defaults to the estimate; clamped to [0, estimate]).
  * On insufficient balance → { ok:false, status:429 }. On work failure → full release (not charged).
- * On an idempotent retry → returns without re-running work (result is NOT replayed).
+ * On a true IN-FLIGHT retry (the prior hold is still 'reserved') → returns { ok:true, idempotent:true }
+ *   without re-running work (result is NOT replayed; the original owner settles).
+ * On a REPLAY of an already-COMPLETED op (the matched hold is terminal) → { ok:false, status:409,
+ *   reason:'idempotency_replayed' }. Critically NOT ok:true — re-using a settled key must NEVER yield a
+ *   free, unmetered run of `doWork` (the C1 money exploit). Caller retries with a fresh idempotency key.
  */
 export async function runMeteredOperation(
   { userId, planId = "free", productId, action, estimatedUnits, grantId = crypto.randomUUID(), idempotencyKey, expiresAt },
@@ -47,11 +51,17 @@ export async function runMeteredOperation(
     await ensureWallet({ userId, planId });
     reserved = await reserveUnits(reserveArgs);
   }
+  if (!reserved.ok && reserved.reason === "idempotency_replayed") {
+    // C1: the key matched an ALREADY-TERMINAL hold → a replay of a completed op. Refuse (409) rather
+    // than re-running doWork free/unmetered. Distinct from the 429 insufficient-balance path.
+    return { ok: false, status: 409, reason: "idempotency_replayed", holdId: reserved.hold?.id };
+  }
   if (!reserved.ok) {
     return { ok: false, status: 429, reason: reserved.reason, shortfall: reserved.shortfall, remaining: reserved.remaining };
   }
   if (reserved.idempotent) {
-    // Retry of an already-processed op — do NOT re-run work or re-charge. result is not replayed.
+    // True in-flight retry (prior hold still 'reserved') — do NOT re-run work or re-charge; the
+    // original owner settles. result is not replayed.
     return { ok: true, idempotent: true, holdId: reserved.hold?.id };
   }
 

@@ -72,6 +72,42 @@ d("unit-ledger — real Postgres concurrency, idempotency, sweeper", () => {
     expect(created).toBe(6);
   });
 
+  // C1 money-exploit proof (real Postgres): replaying a reserve key AFTER its hold is TERMINAL must be
+  // REFUSED (idempotency_replayed) — it must NOT echo a reusable reserve (which the BFF maps to
+  // allowed+null-hold → a FREE, UNMETERED engine turn). And it must NOT re-debit (already settled once).
+  it("a reserve key replayed after SETTLE is refused (no free turn, no re-debit) — C1", async () => {
+    await setWallet({ weekly: 100, used: 0 });
+    const key = "c1-replay";
+    const grantId = "c1111111-1111-1111-1111-111111111111";
+    const r1 = await reserve({ grantId, units: 10, key });
+    expect(r1.ok && !r1.idempotent).toBe(true);
+    expect(Number((await getWallet()).weekly_used_units)).toBe(10);
+
+    // Settle the real cost (4) → hold is now terminal (state='settled'), wallet shows 4 used.
+    await settleHold({ holdId: r1.hold.id, settleIdempotencyKey: `${key}:settle`, settledUnits: 4 });
+    expect(Number((await getWallet()).weekly_used_units)).toBe(4);
+
+    // Replay the SAME key (the exploit: x-request-id reused for a brand-new, distinct turn).
+    const replay = await reserve({ grantId, units: 10, key });
+    expect(replay).toMatchObject({ ok: false, reason: "idempotency_replayed" });
+    expect(replay.idempotent).not.toBe(true);
+    expect(Number((await getWallet()).weekly_used_units)).toBe(4); // unchanged — not re-debited, not freed
+    const holds = await dbAll(`SELECT * FROM zaki_meter_holds WHERE user_id = $1`, [userId]);
+    expect(holds.length).toBe(1); // no new hold materialized for the replay
+  });
+
+  // Same proof for a RELEASED (error-turn) hold: still terminal → replay refused.
+  it("a reserve key replayed after RELEASE is refused — C1", async () => {
+    await setWallet({ weekly: 100, used: 0 });
+    const key = "c1-replay-rel";
+    const grantId = "c2222222-2222-2222-2222-222222222222";
+    const r1 = await reserve({ grantId, units: 10, key });
+    await settleHold({ holdId: r1.hold.id, settleIdempotencyKey: `${key}:settle`, settledUnits: 0, finalState: "released" });
+    expect(Number((await getWallet()).weekly_used_units)).toBe(0);
+    const replay = await reserve({ grantId, units: 10, key });
+    expect(replay).toMatchObject({ ok: false, reason: "idempotency_replayed" });
+  });
+
   it("reserve → settle refunds the unused portion (real round-trip)", async () => {
     await setWallet({ weekly: 100, used: 0 });
     const r = await reserve({ grantId: "33333333-3333-3333-3333-333333333333", units: 10, key: "rt" });

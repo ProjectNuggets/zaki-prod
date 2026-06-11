@@ -322,12 +322,33 @@ export function resolveAgentReserveUnits(env = process.env) {
  * dependency-injected so index.js wires the real ledger + req/res, and tests can mock. Mirrors the
  * spaces reserve — fail-OPEN on any thrown error (a metering blip must never break the agent).
  *
- * @returns {Promise<{outcome:"allowed"|"denied"|"unmetered", hold?:object|null, idempotencyKey?:string,
+ * @returns {Promise<{outcome:"allowed"|"denied"|"duplicate"|"unmetered", hold?:object|null, idempotencyKey?:string,
  *   action?:string, denial?:{status:number,error:string,message:string,remaining?:number}, error?:Error}>}
- *   - "allowed": reserve succeeded; `hold` is the new hold (or null on an idempotent retry — already charged).
+ *   - "allowed": reserve succeeded; `hold` is the NEW hold. The caller runs the billable engine turn.
+ *   - "duplicate": the idempotency key matched an existing hold — either a true in-flight RETRY of the
+ *      SAME turn (ledger `idempotent`, hold still reserved) or a REPLAY of an already-completed turn
+ *      (ledger `idempotency_replayed`, terminal hold). In BOTH cases the caller MUST NOT run a fresh
+ *      billable engine turn (that would be free/unmetered inference — the C1 exploit) and MUST NOT
+ *      settle (the original reserve owns the hold). Caller responds 409 via `denial`.
  *   - "denied": out of units (or no identity); caller responds with `denial` via the denial-payload builder.
  *   - "unmetered": fail-open (DB error); caller allows the turn unmetered.
  */
+// A duplicate reserve (in-flight retry OR replay of a completed turn). 409 Conflict, no engine run,
+// no settle. The original reserve owns the hold and settles it once.
+function buildDuplicateOutcome(action, idempotencyKey) {
+  return {
+    outcome: "duplicate",
+    action,
+    idempotencyKey,
+    hold: null,
+    denial: {
+      status: 409,
+      error: "duplicate_request",
+      message: "This request was already processed. Retry with a new request id.",
+    },
+  };
+}
+
 export async function reserveAgentChatUnits({
   identity,
   action = "agent_turn",
@@ -369,6 +390,11 @@ export async function reserveAgentChatUnits({
       await ensureWallet({ userId: identity.userId, planId: identity.zakiUser?.plan_tier || "free" });
       reserved = await reserveUnits(reserveArgs);
     }
+    // C1: a key matching an ALREADY-TERMINAL hold is a replay of a completed turn — the ledger refuses
+    // it (idempotency_replayed). Treat it as a duplicate (do NOT run a fresh free turn), NOT as 429.
+    if (!reserved.ok && reserved.reason === "idempotency_replayed") {
+      return buildDuplicateOutcome(normalizedAction, idempotencyKey);
+    }
     if (!reserved.ok) {
       return {
         outcome: "denied",
@@ -381,10 +407,14 @@ export async function reserveAgentChatUnits({
         },
       };
     }
+    // C1: a true in-flight RETRY of the SAME turn (ledger `idempotent`, hold still reserved) must NOT
+    // run a second billable engine turn either. Only a genuinely NEW reserve runs the engine.
+    if (reserved.idempotent) {
+      return buildDuplicateOutcome(normalizedAction, idempotencyKey);
+    }
     return {
       outcome: "allowed",
-      // Hold to settle at the terminal path (null on an idempotent retry — already charged).
-      hold: reserved.idempotent ? null : reserved.hold,
+      hold: reserved.hold,
       idempotencyKey,
       action: normalizedAction,
     };
