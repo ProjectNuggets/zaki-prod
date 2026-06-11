@@ -176,7 +176,14 @@ export function ApprovalRequiredCard({
           code === "agent_unreachable";
         setDecided(null);
         setSubmitting(null);
-        if (isRetryable) {
+        // The retrying banner's only affordance re-POSTs an APPROVE, so it is
+        // valid solely for the approve action. Backend retry-with-backoff is
+        // scoped to /approve too. For a deny/modify outage we must NOT show the
+        // approve-only retry UX (that would invert the user's intent and could
+        // silently convert a denial into an approval of a security-sensitive
+        // gate). Fall back to the hard-error path so the full action row
+        // (Approve/Modify/Deny) stays available and the user can re-decide.
+        if (isRetryable && action === "approve") {
           // Connection-class outage — the click is preserved. Render the
           // retrying banner + a one-click "Retry approval" instead of a hard
           // error, so a brief agent restart never silently drops the approval.

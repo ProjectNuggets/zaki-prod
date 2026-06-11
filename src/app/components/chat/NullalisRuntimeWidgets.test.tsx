@@ -169,6 +169,66 @@ describe("ApprovalRequiredCard", () => {
     });
   });
 
+  it("does NOT show the approve-only retry UX when a DENY hits a connection-class outage", async () => {
+    // A deny POST that hits a retryable 502 must NOT render the retrying
+    // banner: its only button re-POSTs an APPROVE, which would invert the
+    // user's intent and silently convert a denial into an approval. The full
+    // action row must stay available so the user can re-decide (re-deny).
+    const onDeny = jest.fn(async () => {
+      const error = new Error("agent_unreachable") as Error & { retryable?: boolean };
+      error.retryable = true;
+      throw error;
+    });
+
+    render(<ApprovalRequiredCard request={request} onDeny={onDeny} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Deny extension_click action" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Approval could not be resolved. Try again.")
+      ).toBeInTheDocument();
+    });
+    // No retrying banner and no approve-only retry button.
+    expect(screen.queryByText(/Agent restarting/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Retry approval for extension_click" })
+    ).not.toBeInTheDocument();
+    // The full action row stays available so the user can re-deny.
+    expect(
+      screen.getByRole("button", { name: "Deny extension_click action" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Approve extension_click action" })
+    ).toBeInTheDocument();
+  });
+
+  it("does NOT show the approve-only retry UX when a MODIFY hits a connection-class outage", async () => {
+    const onModify = jest.fn(async () => {
+      const error = new Error("agent_unreachable") as Error & { retryable?: boolean };
+      error.retryable = true;
+      throw error;
+    });
+
+    render(<ApprovalRequiredCard request={request} onModify={onModify} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Modify extension_click action" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Approval could not be resolved. Try again.")
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Agent restarting/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Retry approval for extension_click" })
+    ).not.toBeInTheDocument();
+    // The full action row stays available so the user can re-decide.
+    expect(
+      screen.getByRole("button", { name: "Modify extension_click action" })
+    ).toBeInTheDocument();
+  });
+
   it("treats a non-retryable approve failure as a hard error, not a retry", async () => {
     const onApprove = jest.fn(async () => {
       throw new Error("approval_500");
