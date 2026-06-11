@@ -89,7 +89,7 @@ import {
   fetchNullclawPath,
   fetchNullclawUserHistory,
   getNullclawBase,
-  probeNullclawReady,
+  probeNullclawReadyWithRetry,
   requestNullclawChatStream,
 } from "./agent-client.js";
 import {
@@ -721,9 +721,14 @@ const AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS = Math.max(
   500,
   Number(process.env.ZAKI_AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS || 3_000)
 );
+// P1-11: per-chat readiness gate timeout. 1500ms was too tight for a
+// busy-but-healthy agent and produced spurious 503s + refunded turns
+// (GlitchTip "Agent upstream ready probe timed out after 1500ms"). Raised to
+// 4000ms; probeNullclawReadyWithRetry also re-probes once and, on a
+// connected-but-slow gate, prefers attempting the stream over a hard 503.
 const ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS = Math.max(
   250,
-  Number(process.env.ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS || 1_500)
+  Number(process.env.ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS || 4_000)
 );
 // Agent error capture — routes genuine BFF failures (upstream 5xx, stream error, etc.) to GlitchTip.
 const { captureAgentError } = makeAgentErrorCapture({ sentry: Sentry });
@@ -11099,7 +11104,12 @@ const agentChatStreamHandler = async (req, res) => {
     }
 
     try {
-      const readyProbe = await probeNullclawReady({
+      // P1-11: loosened readiness gate. probeNullclawReadyWithRetry re-probes
+      // once and classifies the outcome: "ready" → stream; "proceed" → the agent
+      // answered the socket but was slow/non-ok, so attempt the stream (it has
+      // its own ~300s budget) rather than refund + 503; "refused" → a true
+      // connection refusal, which stays a retryable 503.
+      const readyDecision = await probeNullclawReadyWithRetry({
         baseUrl: nullclawBase,
         internalToken: NULLCLAW_INTERNAL_TOKEN,
         userId,
@@ -11107,10 +11117,11 @@ const agentChatStreamHandler = async (req, res) => {
         fetchWithTimeout,
         timeoutMs: ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS,
       });
-      if (!readyProbe.ok) {
+      if (readyDecision.decision === "refused") {
         captureAgentError(
-          new Error(`Agent readiness probe failed (status=${readyProbe.status ?? "unknown"})`),
-          { req, phase: "readiness_probe", upstreamStatus: readyProbe.status ?? null }
+          readyDecision.lastError ||
+            new Error(`Agent readiness probe refused (status=${readyDecision.lastStatus ?? "unknown"})`),
+          { req, phase: "readiness_probe", upstreamStatus: readyDecision.lastStatus ?? null }
         );
         await recordAgentWalletSettleBestEffort(req, {
           status: "failed",
@@ -11129,7 +11140,20 @@ const agentChatStreamHandler = async (req, res) => {
           code: "agent_unavailable",
         });
       }
+      if (readyDecision.decision === "proceed") {
+        // Connected-but-slow: do NOT refund and do NOT 503. Attempting the stream
+        // is the recovery; log a warning only (not a GlitchTip error frame).
+        console.warn("[Agent] Readiness probe slow/non-ok; attempting stream anyway:", {
+          requestId: String(req.requestId || ""),
+          userId,
+          attempts: readyDecision.attempts,
+          lastStatus: readyDecision.lastStatus ?? null,
+          lastError: readyDecision.lastError ? String(readyDecision.lastError.message || readyDecision.lastError) : null,
+        });
+      }
     } catch (error) {
+      // probeNullclawReadyWithRetry absorbs connection/timeout throws internally,
+      // so reaching here means an unexpected programming error — fail closed.
       captureAgentError(error, { req, phase: "readiness_probe_throw" });
       trackAgentStreamDiagnostic(userId, error);
       await recordAgentWalletSettleBestEffort(req, {
