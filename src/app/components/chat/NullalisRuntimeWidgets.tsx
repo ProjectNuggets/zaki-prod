@@ -8,7 +8,7 @@ import {
   TimerReset,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import type {
@@ -16,8 +16,6 @@ import type {
   NullalisTaskItem,
   NullalisTaskStatus,
 } from "./BotStatusRail";
-
-const APPROVAL_DECISION_WINDOW_SECONDS = 60;
 
 function taskStatusCopy(status: NullalisTaskStatus) {
   if (status === "succeeded") return "done";
@@ -111,50 +109,23 @@ export function ApprovalRequiredCard({
   // (connection-class outage). The click is NOT lost — the card shows a
   // "retrying" banner and offers a one-click retry of the SAME approval_id.
   const [retryable, setRetryable] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     setSubmitting(null);
     setDecided(null);
     setActionError(null);
     setRetryable(false);
-    setNow(Date.now());
   }, [request?.id]);
 
-  useEffect(() => {
-    if (!request || decided) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [request, decided]);
-
-  const expiresAtMs = useMemo(() => {
-    if (!request?.expiresAt) return null;
-    const parsed = Date.parse(request.expiresAt);
-    return Number.isNaN(parsed) ? null : parsed;
-  }, [request?.expiresAt]);
-
-  const secondsRemaining = useMemo(() => {
-    if (expiresAtMs != null) {
-      return Math.max(0, Math.ceil((expiresAtMs - now) / 1000));
-    }
-    if (!request?.timestamp) return APPROVAL_DECISION_WINDOW_SECONDS;
-    const elapsed = Math.max(0, Math.floor((now - request.timestamp) / 1000));
-    return Math.max(0, APPROVAL_DECISION_WINDOW_SECONDS - elapsed);
-  }, [expiresAtMs, now, request?.timestamp]);
-
-  const isExpired = expiresAtMs != null && now >= expiresAtMs;
+  // P0-4 f/g: the approval card is DURABLE. It is re-hydrated from the session
+  // GET (pending_approvals) on every mount/reconnect and must stay pinned until
+  // the user approves or denies. There is intentionally NO countdown and NO
+  // client-side expiry: expires_at is always null server-side, so any timer
+  // here would only ever be a false deadline. The card never auto-dismisses.
 
   const handleAction = useCallback(
     async (action: "approve" | "modify" | "deny") => {
       if (!request || submitting || decided) return;
-      if (isExpired) {
-        setActionError(
-          t("zakiControls.approval.expiredMessage", {
-            defaultValue: "Approval expired. Refresh the session to load the latest card.",
-          })
-        );
-        return;
-      }
       const cb =
         action === "approve" ? onApprove : action === "modify" ? onModify : onDeny;
       if (!cb) return;
@@ -203,7 +174,7 @@ export function ApprovalRequiredCard({
         }
       }
     },
-    [request, submitting, decided, isExpired, t, onApprove, onModify, onDeny]
+    [request, submitting, decided, t, onApprove, onModify, onDeny]
   );
 
   if (!request) return null;
@@ -280,19 +251,6 @@ export function ApprovalRequiredCard({
         }
       : null,
   ].filter((row): row is { label: string; value: string } => row != null && row.value.trim().length > 0);
-  const timerLabel =
-    isExpired
-      ? t("zakiControls.approval.expired", {
-          defaultValue: "Approval expired",
-        })
-      : secondsRemaining > 0
-      ? t("zakiControls.approval.timer", {
-          defaultValue: "{{seconds}}s to decide",
-          seconds: secondsRemaining,
-        })
-      : t("zakiControls.approval.timerElapsed", {
-          defaultValue: "Decision overdue",
-        });
 
   return (
     <div
@@ -311,13 +269,6 @@ export function ApprovalRequiredCard({
                 {t("zakiControls.approval.title", { tool: request.tool })}
               </h3>
             </div>
-            <span
-              className="zaki-approval-card__timer"
-              aria-label={timerLabel}
-            >
-              <TimerReset className="size-3" aria-hidden />
-              {timerLabel}
-            </span>
           </header>
           <div
             id={`approval-reason-${request.id}`}
@@ -381,13 +332,12 @@ export function ApprovalRequiredCard({
           <div className="zaki-approval-card__meta">
             <span>{t("zakiControls.approval.riskLabel")} {request.riskLevel || "unknown"}</span>
             <span>{request.tool}</span>
-            {request.expiresAt ? <span>{request.expiresAt}</span> : null}
           </div>
           {retryable ? null : (
             <div className="zaki-approval-card__actions">
               <button
                 type="button"
-                disabled={isExpired || !!submitting || !onApprove}
+                disabled={!!submitting || !onApprove}
                 onClick={() => handleAction("approve")}
                 aria-label={approveLabel}
                 className={cn("zaki-approval-card__button is-primary", submitting === "approve" && "is-loading")}
@@ -402,7 +352,7 @@ export function ApprovalRequiredCard({
               </button>
               <button
                 type="button"
-                disabled={isExpired || !!submitting || !onModify}
+                disabled={!!submitting || !onModify}
                 onClick={() => handleAction("modify")}
                 aria-label={modifyLabel}
                 className={cn("zaki-approval-card__button", submitting === "modify" && "is-loading")}
@@ -420,7 +370,7 @@ export function ApprovalRequiredCard({
               </button>
               <button
                 type="button"
-                disabled={isExpired || !!submitting || !onDeny}
+                disabled={!!submitting || !onDeny}
                 onClick={() => handleAction("deny")}
                 aria-label={denyLabel}
                 className={cn("zaki-approval-card__button is-danger", submitting === "deny" && "is-loading")}

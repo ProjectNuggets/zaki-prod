@@ -6451,20 +6451,6 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   line-height: var(--v2-leading-snug);
 }
 
-.zaki-approval-card__timer {
-  display: inline-flex;
-  min-height: 24px;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 5px;
-  padding: 0 8px;
-  border: 1px solid var(--v2-warn);
-  color: var(--v2-warn);
-  font-size: var(--v2-text-micro);
-  line-height: 1;
-  text-transform: uppercase;
-}
-
 .zaki-approval-card__reason {
   margin-top: 8px;
   color: var(--v2-ink-2);
@@ -6662,11 +6648,6 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   .zaki-approval-card__head {
     flex-direction: column;
     gap: 8px;
-  }
-
-  .zaki-approval-card__timer {
-    width: 100%;
-    justify-content: center;
   }
 
   .zaki-approval-card__preview div {

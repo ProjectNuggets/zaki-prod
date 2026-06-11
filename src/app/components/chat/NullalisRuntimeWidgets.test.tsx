@@ -56,7 +56,7 @@ describe("ApprovalRequiredCard", () => {
     jest.useRealTimers();
   });
 
-  it("renders the V2 approval gate with a 60 second decision timer", () => {
+  it("renders the durable approval gate with NO countdown timer", () => {
     jest.useFakeTimers();
     jest.setSystemTime(1_000_000);
 
@@ -64,16 +64,54 @@ describe("ApprovalRequiredCard", () => {
 
     expect(screen.getByText("Approval gate")).toBeInTheDocument();
     expect(screen.getByText("Approval required for extension_click")).toBeInTheDocument();
-    expect(screen.getByText("60s to decide")).toBeInTheDocument();
     expect(screen.getByText("Clicks the send button in the active tab.")).toBeInTheDocument();
     expect(screen.getByText('{ selector: "#send" }')).toBeInTheDocument();
     expect(screen.getByText("extension.click #send")).toBeInTheDocument();
 
+    // The card is durable: it shows NO decision countdown and NO "expired"
+    // copy. The approval stays pinned until approve/deny — never a timer.
+    expect(screen.queryByText(/to decide/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Decision overdue/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Approval expired/)).not.toBeInTheDocument();
+
+    // Advancing wall-clock time must NEVER introduce a countdown or change
+    // the card (no setInterval ticking a timer).
     act(() => {
-      jest.advanceTimersByTime(30_000);
+      jest.advanceTimersByTime(120_000);
     });
 
-    expect(screen.getByText("30s to decide")).toBeInTheDocument();
+    expect(screen.queryByText(/to decide/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Decision overdue/)).not.toBeInTheDocument();
+  });
+
+  it("never auto-dismisses or disables actions off a past expiresAt", () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(1_000_000);
+
+    // expires_at is always null server-side, but even a stale/past expiresAt
+    // string must NOT expire the card client-side: no countdown, no disabled
+    // actions, card stays pinned and fully actionable until approve/deny.
+    const expiredRequest: NullalisApprovalRequest = {
+      ...request,
+      expiresAt: new Date(0).toISOString(),
+    };
+
+    render(<ApprovalRequiredCard request={expiredRequest} onApprove={async () => {}} onDeny={async () => {}} />);
+
+    act(() => {
+      jest.advanceTimersByTime(120_000);
+    });
+
+    // Card is still present and the actions are still enabled.
+    expect(screen.getByText("Approval required for extension_click")).toBeInTheDocument();
+    expect(screen.queryByText(/Approval expired/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/to decide/)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Approve extension_click action" })
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Deny extension_click action" })
+    ).toBeEnabled();
   });
 
   it("supports the modify action as an explicit callback", async () => {
