@@ -89,22 +89,36 @@ Superseded (`status='outdated'`) rows remain excluded by both retrieval queries
 
 The two-tier design makes the system multilingual **for free at the capture
 layer**: a German declarative regex misses → stored as episodic, no patterns.
-The real lever is the **embedder**:
-- Swap `all-MiniLM-L6-v2` (English-centric, 384-dim) → a **multilingual 384-dim**
-  model (e.g. `paraphrase-multilingual-MiniLM-L12-v2`) — dimension-compatible with
-  the `vector(384)` column (drop-in), enabling recall across ~50 languages with
-  **no per-language patterns**.
-- **One-time migration:** re-embed existing memories (vector space changes); content
-  is stored, so this is a straightforward backfill.
+The real lever is the **embedder** — `multilingual-e5-small` is available in
+AnythingLLM and is **384-dim** (drop-in for `vector(384)`).
+
+**VERIFIED (2026-06-11):** AnythingLLM **ignores the per-request `model` field**
+for embeddings — identical text returned identical vectors for both
+`all-MiniLM-L6-v2` and `multilingual-e5-small` (cosine 1.000000). The embedder is
+chosen by **AnythingLLM's global config**, not per call. Implications:
+- **It is an admin config change** (set the system embedder to `multilingual-e5-small`)
+  — our `getEmbeddings` model string is cosmetic and should be removed/ignored.
+- **Blast radius is cluster-wide.** The configured embedder is shared with the chat
+  engine's own document RAG. Switching it means AnythingLLM's existing document
+  embeddings become a mixed vector space and would need re-embedding too — this is
+  bigger than the memory layer. Decide this is acceptable (or stand up a dedicated
+  embed endpoint for memory) before switching.
+- **e5 needs `query:`/`passage:` prefixes.** Mandatory for e5 quality, and must be
+  **conditional on the configured model** — probe confirmed that adding e5 prefixes
+  while a non-e5 model is configured *hurts* recall (cross-lingual cosine 0.187 →
+  0.115). So `getEmbeddings` must prefix only when the configured model is e5.
+- **Re-embed our memories** (Postgres) after the switch — vector space changes.
+- **Retune the relevance floor.** e5's cosine distribution differs from all-MiniLM
+  (higher, more normalized); the current `ZAKI_CHAT_MEMORY_SEMANTIC_MIN=0.1` would
+  be wrong → ineffective floor → noise. Re-measure via the eval and reset it.
 - **Classifier markers:** add per-language first-person + interrogative markers
   (German `ich/mein/mir`, `wo wohne ich?`) to the gate so non-English declaratives
-  are captured at all. Small list per language (pronouns + question words), not
-  extraction patterns.
-- German Tier-1 regex (clean German *structured facts*) is **optional polish**,
-  out of scope unless the dossier needs German facts specifically.
+  are captured at all. Small list per language, not extraction patterns.
+- German Tier-1 regex (clean German *structured facts*) is **optional polish**.
 
-**Dependency to confirm before Phase B:** the cluster's `/v1/openai/embeddings`
-must serve a multilingual model. Verify available models first.
+**Value is measurable but unproven until the switch.** The per-request probe could
+not test real e5 (config-controlled). After the admin switch + prefixes + re-embed,
+run the eval (recall@5 + cross-lingual cases) to confirm the lift before trusting it.
 
 ## UI
 
@@ -144,7 +158,10 @@ raised recall.
 
 - **Phase A (recall core, English):** Tier-2 episodic — per-sentence gap-fill,
   recency+cap retention, Timeline UI, eval bucket 4. No embedder change.
-- **Phase B (multilingual):** verify cluster embedder → swap model + re-embed
-  migration → classifier markers (German first) → multilingual eval cases.
+- **Phase B (multilingual):** admin-switch the AnythingLLM embedder to
+  `multilingual-e5-small` (accept the cluster-wide blast radius, or use a dedicated
+  embed endpoint) → conditional e5 `query:`/`passage:` prefixes in `getEmbeddings`
+  → re-embed our memories → retune the relevance floor → classifier markers
+  (German first) → multilingual eval cases. Gate on the eval lift.
 
 Each phase: spec → plan → implement → eval-gated.
