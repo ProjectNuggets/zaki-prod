@@ -554,6 +554,7 @@ function classifyWithHeuristics(message) {
 
   const firstPersonSignals = [
     /\bi\s+(?:like|love|enjoy|prefer|hate|dislike|want|need|have|feel|live|work|study|am|was|been|had|went|got)\b/i,
+    /\bi\s+\w+\s+(?:got|been|started|am|was|have|feel)\b/i, // "I just got", "I recently been"
     /\bi'?ve\b/i,
     /\bcall me\b/i,
     /\bi go by\b/i,

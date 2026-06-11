@@ -398,4 +398,10 @@ describe("memory extraction", () => {
     const r = await extractMemories("I'm good. ok.");
     expect(r.episodic).toEqual([]);
   });
+
+  it("captures 'I [adverb] verb' self-statements (e.g. 'I just got into X') as episodic", async () => {
+    const { extractMemories } = await import("./memory-extraction.js");
+    const r = await extractMemories("I just got really into bouldering at the local gym");
+    expect(r.facts.length + r.episodic.length).toBeGreaterThan(0);
+  });
 });
