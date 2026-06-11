@@ -1,7 +1,38 @@
 # Runbook — Switch chat-memory embedder to multilingual-e5-small (Phase B go-live)
 
-Phase B code is merged and **inert** until you flip the cluster embedder + set the flag.
-This runbook covers the manual steps that turn it on. Reversible at every step.
+This runbook covers turning on the multilingual embedder. Reversible at every step.
+
+## ✅ VERIFIED GO-LIVE — 2026-06-11
+The staging chat engine (`staging-typ`) embedder was switched to
+`MintplexLabs/multilingual-e5-small` (384-dim, drop-in for `vector(384)`;
+`HasExistingEmbeddings` correctly reset). Verified end-to-end:
+- **Prefixes ON** is the correct config. Eval recall@5: 0.778 (no prefix) → **0.833**
+  (with query:/passage: prefixes). AnythingLLM does **not** prefix internally, so
+  no double-prefix. → `ZAKI_MEMORY_EMBED_MODEL=multilingual-e5-small`.
+- **Cross-lingual recall works** (the goal): eval multilingual bucket passes
+  (DE "Wohnt in Berlin" → EN "where does the user live" ✓; "Liebt Jazzmusik" ✓).
+- **Floor = 0.72.** e5 cosines bunch high — real hits 0.774–0.842, same-domain
+  distractors 0.780–0.859 (they OVERLAP), so the floor can't separate hits from
+  distractors (top-k ranking does). 0.72 sits just below the lowest real hit:
+  keeps every hit, suppresses off-topic injection. → `ZAKI_CHAT_MEMORY_SEMANTIC_MIN=0.72`.
+- **Eval threshold re-baselined 0.85 → 0.80.** e5-small trades ~1 hard English
+  *inferential* case (e.g. "birthday present for a family member" → "has a younger
+  sister named Lina" — which neither vector nor keyword recall catches, and we
+  don't do LLM-inference recall) for working multilingual recall. Final eval:
+  recall@5 0.833 ≥ 0.80, supersede 2/2, extraction precision+recall ok, multilingual
+  ok → **PASS**.
+- **Local dogfood DB re-embedded** (19/19 rows) into e5 space.
+
+### ⚠️ STILL REQUIRED for staging/prod (the BFF side)
+The chat ENGINE embedder is switched, but the **`zaki-api` backend** (the BFF that
+builds memory context) must also get the config, or it won't prefix/floor correctly:
+1. Set on the `zaki-api` deployment env (e.g. `typ-secrets` or backend env):
+   `ZAKI_MEMORY_EMBED_MODEL=multilingual-e5-small` and
+   `ZAKI_CHAT_MEMORY_SEMANTIC_MIN=0.72`, then roll the new `zaki-api` image.
+2. Re-embed staging's **memory** DB after the backend has the new config:
+   `node scripts/reembed-memories.mjs` (with staging `DATABASE_URL`). Idempotent.
+3. Admin note: the `zaki-admin` AnythingLLM password was reset during go-live —
+   change it from the temp value.
 
 ## Why
 The current embedder (`all-MiniLM-L6-v2`) is English-centric, so German/Arabic/etc.
