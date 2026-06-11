@@ -11129,7 +11129,7 @@ async function requireAgentWalletReserveForChat(req, res, { identity, action, re
     return { allowed: true };
   }
 
-  // allowed — hold is null on an idempotent retry (already charged).
+  // allowed — a fresh reserve; decision.hold is the live reserved hold (duplicates 409 above).
   req.agentChatHold = decision.hold;
   req.agentChatKey = decision.idempotencyKey;
   req.agentChatAction = decision.action;
