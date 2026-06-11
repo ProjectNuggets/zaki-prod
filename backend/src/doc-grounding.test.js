@@ -6,6 +6,7 @@ import {
   normalizeVectorResults,
   buildDocContextBlock,
   extractDocSources,
+  fetchWorkspaceDocContext,
 } from "./doc-grounding.js";
 
 describe("shouldFetchDocContext", () => {
@@ -74,5 +75,47 @@ describe("extractDocSources", () => {
     expect(out.map((s) => s.title)).toEqual(["a.pdf", "b.txt"]);
     expect(out[0]).toMatchObject({ id: "1", title: "a.pdf" });
     expect(out[0].snippet).toContain("alpha");
+  });
+});
+
+describe("fetchWorkspaceDocContext", () => {
+  const okResp = (json) => ({ ok: true, json: async () => json });
+
+  it("returns block + sources when the engine returns chunks", async () => {
+    let calledPath = null;
+    let calledBody = null;
+    const adminRequest = async (path, opts) => {
+      calledPath = path;
+      calledBody = JSON.parse(opts.body);
+      return okResp({ results: [{ id: "1", text: "Net-30 terms.", metadata: { title: "c.pdf" }, score: 0.8 }] });
+    };
+    const out = await fetchWorkspaceDocContext({ adminRequest, slug: "space-1", message: "what are the payment terms?" });
+    expect(calledPath).toBe("/v1/workspace/space-1/vector-search");
+    expect(calledBody.query).toBe("what are the payment terms?");
+    expect(out.block).toContain('<document name="c.pdf">');
+    expect(out.sources).toEqual([
+      expect.objectContaining({ id: "1", title: "c.pdf" }),
+    ]);
+  });
+
+  it("returns empty for greetings WITHOUT calling the engine", async () => {
+    let called = false;
+    const adminRequest = async () => { called = true; return okResp({ results: [] }); };
+    const out = await fetchWorkspaceDocContext({ adminRequest, slug: "s", message: "hi" });
+    expect(called).toBe(false);
+    expect(out).toEqual({ block: "", sources: [] });
+  });
+
+  it("returns empty when the engine reports no embeddings", async () => {
+    const adminRequest = async () => okResp({ results: [], message: "No embeddings found for this workspace." });
+    const out = await fetchWorkspaceDocContext({ adminRequest, slug: "s", message: "summarize my uploaded doc" });
+    expect(out).toEqual({ block: "", sources: [] });
+  });
+
+  it("never throws — non-ok response or a thrown adminRequest yields empty", async () => {
+    const bad = await fetchWorkspaceDocContext({ adminRequest: async () => ({ ok: false }), slug: "s", message: "tell me about the report" });
+    expect(bad).toEqual({ block: "", sources: [] });
+    const threw = await fetchWorkspaceDocContext({ adminRequest: async () => { throw new Error("boom"); }, slug: "s", message: "tell me about the report" });
+    expect(threw).toEqual({ block: "", sources: [] });
   });
 });
