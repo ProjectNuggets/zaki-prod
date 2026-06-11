@@ -475,6 +475,7 @@ export function MemoryViewer({
     ]);
 
     for (const memory of orderedMemories) {
+      if (memory.type === "episodic") continue; // episodic is Timeline-only, not Facts
       const bucket = grouped.get(getSummaryGroupForMemory(memory));
       if (!bucket) continue;
       const content = String(memory.content || "").trim();

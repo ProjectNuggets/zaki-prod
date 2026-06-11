@@ -292,6 +292,54 @@ describe("MemoryViewer", () => {
     expect(paths.some((p) => p.includes("/api/memory/confirmations"))).toBe(false);
     expect(paths.some((p) => p.includes("/api/memory/conflicts"))).toBe(false);
   });
+
+  it("episodic memories appear in Timeline but are excluded from Facts dossier", async () => {
+    (apiRequest as jest.Mock).mockImplementation((path: string) => {
+      if (String(path).startsWith("/api/memory/list")) {
+        return Promise.resolve(
+          jsonResponse({
+            memories: [
+              {
+                id: "m-fact-1",
+                content: "Lives in Berlin",
+                type: "fact",
+                createdAt: "2026-03-23T10:00:00.000Z",
+              },
+              {
+                id: "m-episodic-1",
+                content: "I have been vibing with jazz",
+                type: "episodic",
+                createdAt: "2026-03-22T10:00:00.000Z",
+              },
+            ],
+            nextCursor: null,
+            hasMore: false,
+          })
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+
+    render(<MemoryViewer userId="tester@example.com" initialTab="memories" />);
+
+    // Wait for Facts dossier to load.
+    await waitFor(() => {
+      expect(screen.getByText("About you")).toBeInTheDocument();
+    });
+
+    // Facts tab: episodic must NOT appear in the dossier.
+    expect(screen.queryByText("I have been vibing with jazz")).not.toBeInTheDocument();
+    // Facts tab: the plain fact should appear.
+    expect(screen.getByText("Lives in Berlin")).toBeInTheDocument();
+
+    // Switch to Timeline tab.
+    fireEvent.click(screen.getByRole("tab", { name: /timeline/i }));
+
+    // Timeline: episodic memory must appear.
+    await waitFor(() => {
+      expect(screen.getByText("I have been vibing with jazz")).toBeInTheDocument();
+    });
+  });
 });
 
 describe("MemoryViewer panel refresh wiring (anti-flicker regression)", () => {
