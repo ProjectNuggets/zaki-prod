@@ -81,6 +81,17 @@ describe("unit-ledger: reserveUnits", () => {
     expect(walletUpdate()).toBeUndefined();
   });
 
+  it("allowOverdraw funds past the balance (topup-first, remainder onto weekly_used) — for the reconcile sweep", async () => {
+    // remaining = recurring 10 + topup 5 = 15; reserve 20 → 5 over. Overdraw drains topup (5) then
+    // pushes the rest (15) onto weekly_used, so the debit covers the full 20 and the hold is created.
+    const { client, walletUpdate } = makeClient({ wallet: { ...WALLET }, burstUsed: 0 });
+    const r = await reserveUnits({ ...baseReserve, reservedUnits: 20, allowOverdraw: true }, client);
+    expect(r.ok).toBe(true);
+    expect(r.funding).toMatchObject({ fromRecurring: 15, fromTopup: 5, overdraw: true });
+    // [userId, +weekly_used=15, -topup=5] → weekly_used_units goes past allowance (CHECK is >= 0 only).
+    expect(walletUpdate().params).toEqual([42, 15, 5]);
+  });
+
   it("enforces the burst (5h) gate even when weekly has plenty", async () => {
     // weekly_remaining = 100, but burst_allowance 50 - burstUsed 48 = 2 → recurring capped at 2
     const wallet = { ...WALLET, weekly_used_units: 0, burst_allowance_units: 50, topup_units: 0 };
