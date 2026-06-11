@@ -261,6 +261,7 @@ const ALLOWED_MEMORY_TYPES = new Set([
   "goal",
   "relationship",
   "struggle",
+  "episodic",
 ]);
 const ALLOWED_MEMORY_STATUSES = new Set(["active", "outdated"]);
 
@@ -2198,3 +2199,5 @@ function calculateImportance(content, type) {
   };
   return weights[type] || 0.6;
 }
+
+export const __normalizeStoredTypeForTest = normalizeStoredType;

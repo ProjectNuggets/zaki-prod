@@ -67,4 +67,12 @@ describe("memory operations external calls", () => {
     await checkStorage();
     expect(spy).toHaveBeenCalledTimes(1);
   });
+
+  it("normalizeStoredType keeps 'episodic' and still coerces unknowns to context", async () => {
+    const { __normalizeStoredTypeForTest } = await import("./operations.js");
+    expect(__normalizeStoredTypeForTest("episodic")).toBe("episodic");
+    expect(__normalizeStoredTypeForTest("EPISODIC")).toBe("episodic");
+    expect(__normalizeStoredTypeForTest("bogustype")).toBe("context");
+    expect(__normalizeStoredTypeForTest("fact")).toBe("fact");
+  });
 });
