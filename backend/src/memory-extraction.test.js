@@ -404,4 +404,17 @@ describe("memory extraction", () => {
     const r = await extractMemories("I just got really into bouldering at the local gym");
     expect(r.facts.length + r.episodic.length).toBeGreaterThan(0);
   });
+
+  it("classifies German first-person declaratives as capturable", async () => {
+    const { extractMemories } = await import("./memory-extraction.js");
+    const r = await extractMemories("Ich wohne in Berlin und ich liebe Jazz");
+    expect(r.facts.length + r.episodic.length).toBeGreaterThan(0);
+  });
+
+  it("does not extract from German questions", async () => {
+    const { extractMemories } = await import("./memory-extraction.js");
+    const r = await extractMemories("Wo wohne ich?");
+    expect(r.facts).toEqual([]);
+    expect(r.episodic).toEqual([]);
+  });
 });

@@ -541,6 +541,7 @@ function classifyWithHeuristics(message) {
     /[?؟]\s*$/, // ends with a question mark (Latin or Arabic)
     /\b(?:do|does|did|can|could|should|would|will|may|might)\s+(?:i|we|you)\b/i, // "do I", "can I", "will you"
     /(?:^|\s)(?:هل|ألا|أليس)\b/, // Arabic yes/no interrogatives
+    /(?:^|\s)(?:wo|was|wie|wann|warum|wieso|welche|welcher|welches|wer)\b[^.?!]*\?/i, // German question words
   ];
   if (interrogativePatterns.some((r) => r.test(text))) return "instruction";
 
@@ -564,6 +565,8 @@ function classifyWithHeuristics(message) {
     /\bmy\b/i,
     /\bme\b/i,
     /أنا|انا|اسمي|عندي|لدي|أعاني|اعاني|أحب|احب|بحب|أكره|اكره|أفضّل|أفضل|افضل|ما بحب|مابحب/,
+    /\bich\b/i, // German first-person pronoun
+    /\b(?:mein|meine|meinen|meinem|meiner|mir|mich)\b/i, // German first-person possessive/object forms
   ];
   if (firstPersonSignals.some((r) => r.test(text))) return "user_statement";
 
