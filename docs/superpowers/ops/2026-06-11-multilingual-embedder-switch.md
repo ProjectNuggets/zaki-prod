@@ -15,17 +15,50 @@ document vectors become a mixed space and must be re-embedded too. Either accept
 that (and re-embed the engine's docs per AnythingLLM) **or** stand up a dedicated
 embedding endpoint for the memory layer before proceeding.
 
+## Verified cluster state (2026-06-11, read-only kubectl + admin API)
+- Workload: `deployment/staging-typ` (ns `zaki`, ctx `do-fra1-nova-cloud`), image
+  `ghcr.io/projectnuggets/zaki-chat-engine:1.13.0-zaki.4` (AnythingLLM v1.13 fork).
+- Env: `EMBEDDING_ENGINE=native`, **no** `EMBEDDING_MODEL_PREF`; `VECTOR_DB=lancedb`;
+  secrets via the `typ-secrets` Secret.
+- Config is **DB-backed** on PVC `staging-typ-storage` → `/app/server/storage`
+  (AnythingLLM SQLite `system_settings` + native model cache + lancedb). So the
+  **admin UI/API is authoritative; an env var alone will NOT reliably override** the
+  stored value.
+- `GET /api/v1/system` reports: `EmbeddingEngine=native`,
+  `EmbeddingModelPref=Xenova/all-MiniLM-L6-v2`, `EmbeddingOutputDimensions=null`,
+  `HasExistingEmbeddings=true` (the chat engine's doc RAG is already populated →
+  switching re-bases it → it needs re-embedding too).
+- Target model id (native/Xenova): **`Xenova/multilingual-e5-small`** (384-dim →
+  drop-in for both `vector(384)` and AnythingLLM's lancedb).
+
+## ⚠️ Critical test: do NOT double-prefix
+AnythingLLM's native e5 embedder may add the `query:`/`passage:` prefixes *itself*.
+Our PB1 code (`ZAKI_MEMORY_EMBED_MODEL`) also adds them. If both do → `"query: query: …"`
+→ degraded recall. **So after the switch, run the eval FIRST with `ZAKI_MEMORY_EMBED_MODEL`
+UNSET** (no prefixes from our side):
+- multilingual bucket passes → AnythingLLM prefixes internally → leave our flag OFF.
+- multilingual bucket fails → AnythingLLM does NOT prefix → set the flag (our prefixes) → re-run.
+The eval is the arbiter.
+
 ## Steps
-1. **Switch the embedder** in AnythingLLM (admin → Embedding Preference) to
-   `multilingual-e5-small`. The per-request `model` field is ignored — this admin
-   setting is what actually selects the model.
-2. **Activate e5 prefixing:** set in `backend/.env`:
+1. **Switch the embedder** — recommended via the AnythingLLM **admin UI** (authoritative,
+   DB-backed): port-forward `svc/staging-typ 3001:3001`, open `http://localhost:3001`,
+   log in as admin → Settings → Embedding Preference → engine "AnythingLLM Embedder"
+   (native) → model → **multilingual-e5-small** → Save. The native embedder downloads
+   `Xenova/multilingual-e5-small` into the PVC on first use; no pod restart needed.
+   (Env alternative: add `EMBEDDING_MODEL_PREF=Xenova/multilingual-e5-small` to the
+   `typ-secrets` Secret + `kubectl rollout restart deploy/staging-typ` — but the DB
+   value set above takes precedence, so the admin UI is the reliable lever.)
+   The per-request `model` field in our API calls is ignored — this setting selects it.
+2. **(Conditional) activate our e5 prefixing** — only if the "Critical test" above
+   shows AnythingLLM does NOT prefix internally. If needed, set in `backend/.env`:
    ```
    ZAKI_MEMORY_EMBED_MODEL=multilingual-e5-small
    ```
-   (This makes `getEmbeddings` emit the required `query:` / `passage:` prefixes.
-   Without it, e5 recall degrades; with it set but the cluster NOT on e5, recall
-   also degrades — keep the flag and the cluster model in lockstep.)
+   (Makes `getEmbeddings` emit `query:`/`passage:` prefixes.) If AnythingLLM already
+   prefixes, leave this UNSET to avoid double-prefixing. Determine which via the eval
+   (run once unset; set only if the multilingual bucket fails). Whatever you choose,
+   re-embed (step 3) so stored vectors match the query-time prefixing.
 3. **Re-embed memory rows** (vector space changed):
    ```
    cd backend && node scripts/reembed-memories.mjs            # all users
