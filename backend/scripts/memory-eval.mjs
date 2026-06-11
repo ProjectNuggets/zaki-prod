@@ -34,7 +34,7 @@ import {
   findConflict,
   markMemoryOutdated,
 } from "../src/memory/operations.js";
-import { extractFacts } from "../src/memory-extraction.js";
+import { extractFacts, extractMemories } from "../src/memory-extraction.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -233,6 +233,30 @@ async function runPrecisionChecks() {
   return { failures, rows };
 }
 
+// ---------------------------------------------------------------------------
+// Bucket 4: Extraction recall. Statements the regex misses must still be
+// CAPTURED (as episodic); questions must capture nothing.
+// ---------------------------------------------------------------------------
+const EXTRACTION_RECALL_CASES = [
+  { input: "I just got really into bouldering at the local gym", expect: "captured" },
+  { input: "my weekends lately are all about restoring an old motorbike", expect: "captured" },
+  { input: "I live in Hamburg", expect: "captured" }, // via Tier-1 fact
+  { input: "what hobbies do I have?", expect: "none" }, // question
+];
+
+async function runExtractionRecallChecks() {
+  const failures = [];
+  const rows = [];
+  for (const c of EXTRACTION_RECALL_CASES) {
+    const { facts, episodic } = await extractMemories(c.input);
+    const captured = facts.length + episodic.length > 0;
+    const ok = c.expect === "captured" ? captured : !captured;
+    if (!ok) failures.push(`extraction-recall: "${c.input}" expected ${c.expect}, got ${captured ? "captured" : "none"}`);
+    rows.push({ input: c.input, ok });
+  }
+  return { failures, rows };
+}
+
 function fmtRow(cols, widths) {
   return cols
     .map((c, i) => String(c).padEnd(widths[i]))
@@ -319,9 +343,10 @@ async function main() {
   const coreWithinItems = coreItemCount <= IDENTITY_CORE_MAX_ITEMS;
   const coreWithinChars = coreCharCount <= IDENTITY_CORE_MAX_CHARS;
 
-  // Bucket 2 (supersede) + Bucket 3 (extraction precision).
+  // Bucket 2 (supersede) + Bucket 3 (extraction precision) + Bucket 4 (extraction recall).
   const supersede = await runSupersedeChecks();
   const precision = await runPrecisionChecks();
+  const extractionRecall = await runExtractionRecallChecks();
 
   // -------------------------------------------------------------------------
   // Report
@@ -385,6 +410,12 @@ async function main() {
     console.log(`    ${(r.ok ? "ok  " : "FAIL")} ${q}`);
   }
   console.log("");
+  console.log("--- Extraction recall (capture the long tail) ---");
+  for (const r of extractionRecall.rows) {
+    const q = r.input.length > 48 ? `${r.input.slice(0, 47)}…` : r.input;
+    console.log(`    ${(r.ok ? "ok  " : "FAIL")} ${q}`);
+  }
+  console.log("");
 
   // -------------------------------------------------------------------------
   // Verdicts
@@ -412,6 +443,7 @@ async function main() {
   }
   for (const f of supersede.failures) failures.push(f);
   for (const f of precision.failures) failures.push(f);
+  for (const f of extractionRecall.failures) failures.push(f);
 
   // Always clean up the namespaced user's memories.
   await clearEvalUserMemories();
