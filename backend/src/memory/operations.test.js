@@ -50,6 +50,8 @@ describe("pruneEpisodicMemories", () => {
 
     // Second statement: cap/offset-based delete (mentions OFFSET)
     expect(sqls[1]).toMatch(/OFFSET/i);
+    // ...with a deterministic tiebreaker so created_at ties prune predictably.
+    expect(sqls[1]).toMatch(/ORDER BY created_at DESC, id DESC/i);
   });
 
   it("returns {ok:false} and issues no queries when userId is empty", async () => {
@@ -178,5 +180,89 @@ describe("memory operations external calls", () => {
       if (prev === undefined) delete process.env.ZAKI_MEMORY_EMBED_MODEL; else process.env.ZAKI_MEMORY_EMBED_MODEL = prev;
       if (prevBase === undefined) delete process.env.NOVA_TYP_BASE_URL; else process.env.NOVA_TYP_BASE_URL = prevBase;
     }
+  });
+});
+
+// ============================================================================
+// findConflict — indexed conflict-key lookup (no LIMIT-200 missed-conflict bug)
+// ============================================================================
+
+describe("findConflict", () => {
+  it("looks up candidates by metadata->>'conflictKey' (uses the index), not a LIMIT-200 scan", async () => {
+    const captured = [];
+    const dbAllMock = jest.fn(async (sql, params) => {
+      captured.push({ sql, params });
+      return [];
+    });
+    jest.resetModules();
+    jest.unstable_mockModule("../db.js", () => ({
+      dbQuery: jest.fn(),
+      dbGet: jest.fn().mockResolvedValue(null),
+      dbAll: dbAllMock,
+      hasPgVector: jest.fn().mockResolvedValue(true),
+      withDbTransaction: jest.fn(),
+    }));
+
+    const ops = await import("./operations.js");
+    await ops.findConflict({
+      userId: "user@example.com",
+      content: "Lives in Tokyo",
+      conflictKey: "identity:location",
+    });
+
+    expect(dbAllMock).toHaveBeenCalledTimes(1);
+    const sql = captured[0].sql.replace(/\s+/g, " ");
+    expect(sql).toMatch(/metadata->>'conflictKey'\s*=\s*\$2/);
+    expect(sql).not.toMatch(/LIMIT\s+200/i);
+    expect(captured[0].params).toEqual(["user@example.com", "identity:location"]);
+  });
+});
+
+// ============================================================================
+// pruneOutdatedMemories — retention sweep for superseded rows
+// ============================================================================
+
+describe("pruneOutdatedMemories", () => {
+  it("deletes outdated rows older than the TTL, scoped to the user", async () => {
+    const captured = [];
+    const dbQueryMock = jest.fn(async (sql, params) => {
+      captured.push({ sql, params });
+      return { rowCount: 3, rows: [] };
+    });
+    jest.resetModules();
+    jest.unstable_mockModule("../db.js", () => ({
+      dbQuery: dbQueryMock,
+      dbGet: jest.fn().mockResolvedValue(null),
+      dbAll: jest.fn().mockResolvedValue([]),
+      hasPgVector: jest.fn().mockResolvedValue(false),
+      withDbTransaction: jest.fn(),
+    }));
+
+    const ops = await import("./operations.js");
+    const res = await ops.pruneOutdatedMemories("user@example.com");
+
+    expect(res).toEqual({ ok: true, deleted: 3 });
+    expect(dbQueryMock).toHaveBeenCalledTimes(1);
+    const sql = captured[0].sql.replace(/\s+/g, " ");
+    expect(sql).toMatch(/DELETE FROM memories/i);
+    expect(sql).toMatch(/'outdated'/);
+    expect(sql).toMatch(/interval/i);
+    expect(captured[0].params[0]).toBe("user@example.com");
+  });
+
+  it("returns {ok:false} and issues no query when userId is empty", async () => {
+    const dbQueryMock = jest.fn();
+    jest.resetModules();
+    jest.unstable_mockModule("../db.js", () => ({
+      dbQuery: dbQueryMock,
+      dbGet: jest.fn().mockResolvedValue(null),
+      dbAll: jest.fn().mockResolvedValue([]),
+      hasPgVector: jest.fn().mockResolvedValue(false),
+      withDbTransaction: jest.fn(),
+    }));
+
+    const ops = await import("./operations.js");
+    expect(await ops.pruneOutdatedMemories("")).toEqual({ ok: false });
+    expect(dbQueryMock).not.toHaveBeenCalled();
   });
 });

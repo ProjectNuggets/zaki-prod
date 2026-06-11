@@ -1,8 +1,8 @@
 import {
   findConflict,
   findDuplicateMemory,
-  markMemoryOutdated,
   pruneEpisodicMemories,
+  pruneOutdatedMemories,
   storeMemory,
 } from "./operations.js";
 import { extractMemories, sanitizeExtractedMemories } from "../memory-extraction.js";
@@ -81,9 +81,10 @@ export async function processChatMemoryCapture({
       continue;
     }
 
-    // Auto-supersede: when newer info contradicts an existing memory, mark the
-    // old one outdated (live retrieval filters on status='active') so the newest
-    // value wins deterministically — no review queue, no conflict prompt.
+    // Auto-supersede: when newer info contradicts an existing memory, the old row
+    // is marked outdated AND the new row inserted in ONE transaction inside
+    // storeMemory (atomic newest-wins; live retrieval filters status='active') —
+    // no review queue, no conflict prompt.
     const conflictMemory = await findConflict({
       userId,
       content: fact.content,
@@ -91,7 +92,6 @@ export async function processChatMemoryCapture({
       polarity: fact.polarity,
     });
     if (conflictMemory?.memoryId) {
-      await markMemoryOutdated({ userId, memoryId: conflictMemory.memoryId });
       superseded.push({
         memoryId: conflictMemory.memoryId,
         content: conflictMemory.content,
@@ -109,6 +109,7 @@ export async function processChatMemoryCapture({
       sourceThreadId: threadId,
       confidenceScore: fact.confidence,
       metadata,
+      supersedeMemoryId: conflictMemory?.memoryId || null,
     });
     if (stored?.duplicate) {
       duplicates.push({ content: fact.content, type: fact.type });
@@ -158,6 +159,10 @@ export async function processChatMemoryCapture({
 
   if (episodic.length > 0) {
     try { await pruneEpisodicMemories(userId); } catch { /* best-effort */ }
+  }
+  // A supersede just created outdated rows — opportunistically sweep expired ones.
+  if (superseded.length > 0) {
+    try { await pruneOutdatedMemories(userId); } catch { /* best-effort */ }
   }
 
   return { saved, duplicates, superseded, skipped };

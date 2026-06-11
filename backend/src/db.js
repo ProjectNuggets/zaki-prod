@@ -969,7 +969,12 @@ export async function initDb() {
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(user_id, importance_score DESC);
     `);
-    
+    // Speeds active-only filters (findConflict, identity core, retrieval) and the
+    // outdated-row retention sweep (pruneOutdatedMemories).
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_memories_user_status ON memories(user_id, status);
+    `);
+
     // Vector similarity index (IVFFlat for approximate search)
     try {
       await pool.query(`
