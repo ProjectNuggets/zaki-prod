@@ -2,7 +2,9 @@ import { describe, expect, test } from "@jest/globals";
 import {
   buildAgentMeterUsageFacts,
   classifyAgentMeterAction,
+  computeAgentSettleUnits,
   createAgentStreamMeterMetrics,
+  DEFAULT_UNIT_COST_USD,
   estimateAgentMeterUnits,
   estimateAgentPayloadStorageBytes,
   updateAgentStreamMeterMetrics,
@@ -78,6 +80,69 @@ describe("agent central metering helpers", () => {
       events: 3,
       sawError: true,
       toolCalls: 1,
+      usageTokens: null,
+      inputTokens: null,
+      outputTokens: null,
+      costUsd: null,
     });
+  });
+});
+
+describe("agent-metering: done-frame real cost", () => {
+  test("captures usage/cost fields from the done frame", () => {
+    const m = createAgentStreamMeterMetrics();
+    updateAgentStreamMeterMetrics(
+      m,
+      'event: done\ndata: {"type":"done","usage_tokens":1234,"input_tokens":1000,"output_tokens":234,"cost_usd":0.0123}'
+    );
+    expect(m.usageTokens).toBe(1234);
+    expect(m.inputTokens).toBe(1000);
+    expect(m.outputTokens).toBe(234);
+    expect(m.costUsd).toBe(0.0123);
+  });
+
+  test("leaves cost fields null when the done frame has none", () => {
+    const m = createAgentStreamMeterMetrics();
+    updateAgentStreamMeterMetrics(m, 'event: done\ndata: {"type":"done"}');
+    expect(m.costUsd).toBeNull();
+  });
+
+  test("captures cost from a payload-typed done frame with no event header", () => {
+    const m = createAgentStreamMeterMetrics();
+    // no `event: done` line — done-ness comes only from payload.type
+    updateAgentStreamMeterMetrics(m, 'data: {"type":"done","usage_tokens":50,"cost_usd":0.002}');
+    expect(m.usageTokens).toBe(50);
+    expect(m.costUsd).toBe(0.002);
+  });
+});
+
+describe("agent-metering: computeAgentSettleUnits", () => {
+  test("derives units from real cost at the unit price", () => {
+    const r = computeAgentSettleUnits({ costUsd: 0.03, env: {} });
+    expect(r).toEqual({ units: 0.03 / DEFAULT_UNIT_COST_USD, costSource: "real" }); // 40
+  });
+
+  test("falls back to the flat estimate without cost", () => {
+    const r = computeAgentSettleUnits({ costUsd: null, message: "hi", action: "agent_turn", env: {} });
+    expect(r.costSource).toBe("estimate");
+    expect(r.units).toBeGreaterThan(0);
+  });
+
+  test("treats zero/non-positive cost as not-measured → estimate (never bills a free turn)", () => {
+    const zero = computeAgentSettleUnits({ costUsd: 0, message: "hi", action: "agent_turn", env: {} });
+    expect(zero.costSource).toBe("estimate");
+    expect(zero.units).toBeGreaterThan(0);
+    const neg = computeAgentSettleUnits({ costUsd: -1, message: "hi", action: "agent_turn", env: {} });
+    expect(neg.costSource).toBe("estimate");
+  });
+
+  test("honors ZAKI_UNIT_COST_USD override", () => {
+    const r = computeAgentSettleUnits({ costUsd: 0.01, env: { ZAKI_UNIT_COST_USD: "0.001" } });
+    expect(r.units).toBe(10);
+  });
+
+  test("ignores a non-positive ZAKI_UNIT_COST_USD override (falls back to default)", () => {
+    const r = computeAgentSettleUnits({ costUsd: 0.03, env: { ZAKI_UNIT_COST_USD: "0" } });
+    expect(r.units).toBe(0.03 / DEFAULT_UNIT_COST_USD);
   });
 });

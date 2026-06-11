@@ -81,6 +81,17 @@ describe("unit-ledger: reserveUnits", () => {
     expect(walletUpdate()).toBeUndefined();
   });
 
+  it("allowOverdraw funds past the balance (topup-first, remainder onto weekly_used) — for the reconcile sweep", async () => {
+    // remaining = recurring 10 + topup 5 = 15; reserve 20 → 5 over. Overdraw drains topup (5) then
+    // pushes the rest (15) onto weekly_used, so the debit covers the full 20 and the hold is created.
+    const { client, walletUpdate } = makeClient({ wallet: { ...WALLET }, burstUsed: 0 });
+    const r = await reserveUnits({ ...baseReserve, reservedUnits: 20, allowOverdraw: true }, client);
+    expect(r.ok).toBe(true);
+    expect(r.funding).toMatchObject({ fromRecurring: 15, fromTopup: 5, overdraw: true });
+    // [userId, +weekly_used=15, -topup=5] → weekly_used_units goes past allowance (CHECK is >= 0 only).
+    expect(walletUpdate().params).toEqual([42, 15, 5]);
+  });
+
   it("enforces the burst (5h) gate even when weekly has plenty", async () => {
     // weekly_remaining = 100, but burst_allowance 50 - burstUsed 48 = 2 → recurring capped at 2
     const wallet = { ...WALLET, weekly_used_units: 0, burst_allowance_units: 50, topup_units: 0 };
@@ -90,17 +101,34 @@ describe("unit-ledger: reserveUnits", () => {
     expect(walletUpdate()).toBeUndefined();
   });
 
-  it("is idempotent under the lock: existing hold returns without re-debiting", async () => {
+  it("is idempotent under the lock: existing RESERVED hold returns without re-debiting (true in-flight retry)", async () => {
     const { client, walletUpdate, walletLock } = makeClient({
       wallet: { ...WALLET }, existingHold: { id: "hold-x", state: "reserved" },
     });
     const r = await reserveUnits({ ...baseReserve, reservedUnits: 12 }, client);
     expect(r).toMatchObject({ ok: true, idempotent: true });
+    expect(r.hold).toMatchObject({ id: "hold-x" });
     expect(walletLock()).toBeDefined();      // wallet IS locked first
     expect(walletUpdate()).toBeUndefined();  // but never debited
   });
 
-  it("insert conflict (lost race) returns idempotent WITHOUT debiting", async () => {
+  // C1 money-exploit regression: a key matching an ALREADY-TERMINAL hold is a REPLAY of a completed
+  // operation, NOT a reusable reserve. It must NOT be echoed as {ok:true, idempotent:true} (which the
+  // callers map to allowed+null-hold → a FREE, UNMETERED engine turn). It must be a distinct refusal.
+  it.each(["settled", "released", "expired"])(
+    "rejects a replay against a TERMINAL hold (state=%s) — no free turn, no re-debit",
+    async (state) => {
+      const { client, walletUpdate } = makeClient({
+        wallet: { ...WALLET }, existingHold: { id: "hold-terminal", state },
+      });
+      const r = await reserveUnits({ ...baseReserve, reservedUnits: 12 }, client);
+      expect(r).toMatchObject({ ok: false, reason: "idempotency_replayed" });
+      expect(r.idempotent).not.toBe(true); // crucially NOT the reusable-reserve echo
+      expect(walletUpdate()).toBeUndefined(); // not re-charged either (it was already settled once)
+    }
+  );
+
+  it("insert conflict (lost race) against a RESERVED winner returns idempotent WITHOUT debiting", async () => {
     // step-2 lookup empty → proceeds; INSERT conflicts (0 rows) → re-select returns the winner's hold
     const { client, walletUpdate } = makeClient({
       wallet: { ...WALLET }, burstUsed: 0, insertConflict: true,
@@ -110,6 +138,19 @@ describe("unit-ledger: reserveUnits", () => {
     expect(r).toMatchObject({ ok: true, idempotent: true });
     expect(r.hold).toMatchObject({ id: "hold-winner" });
     expect(walletUpdate()).toBeUndefined(); // conflict → never debited (no double-charge)
+  });
+
+  // C1 regression on the conflict re-select path: if the conflicting row is ALREADY TERMINAL the
+  // unique-key was consumed by a COMPLETED prior op (replay) — must refuse, not echo a free reserve.
+  it("insert conflict against a TERMINAL winner is a replay (refused, not a free reserve)", async () => {
+    const { client, walletUpdate } = makeClient({
+      wallet: { ...WALLET }, burstUsed: 0, insertConflict: true,
+      grantLookups: [null, { id: "hold-winner", state: "settled" }],
+    });
+    const r = await reserveUnits({ ...baseReserve, reservedUnits: 5 }, client);
+    expect(r).toMatchObject({ ok: false, reason: "idempotency_replayed" });
+    expect(r.idempotent).not.toBe(true);
+    expect(walletUpdate()).toBeUndefined();
   });
 
   it("returns no_wallet when the user has no wallet row", async () => {

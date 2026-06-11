@@ -527,7 +527,8 @@
     "hideWhy": "إخفاء السبب",
     "usedMemory": "استخدمت الذاكرة",
     "usedMemoryCount": "استخدمت {{count}} ذكريات",
-    "memoryDontUse": "لا تستخدم هذا"
+    "memoryDontUse": "لا تستخدم هذا",
+    "sources": "المصادر"
   },
   "input": {
     "disclaimer": "قد يخطئ Zaki. يُفضّل التحقق من المعلومات المهمة.",

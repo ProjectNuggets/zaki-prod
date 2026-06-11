@@ -70,13 +70,21 @@ d("meter-gate — HTTP request debits a real wallet (real PG)", () => {
     expect(await usedUnits()).toBe(20); // never over-debited
   });
 
-  it("is idempotent over HTTP: same grant+key never double-debits", async () => {
+  // C1 money-exploit fix: replaying the SAME grant+key AFTER the first op has fully completed (its hold
+  // is terminal/settled) is a REPLAY of a completed operation — it must be REFUSED (409), NOT served as
+  // a 200 idempotent success. Serving it 200 without re-charging = a free, unmetered run of the work
+  // (the exploit, since the idempotency key is client-controlled).
+  // (This test previously asserted r2.status===200 + r2.body.idempotent===true — that encoded the BUGGY
+  //  behavior where a reused key after settle ran free. Updated to the secure semantics.)
+  it("replaying a completed grant+key is REFUSED (409), never a free unmetered run — C1", async () => {
     const body = { units: 6, actualUnits: 6, grantId: "88888888-8888-8888-8888-888888888888", idempotencyKey: "idem1" };
     const r1 = await post(body);
-    const r2 = await post(body);
-    expect(r1.status).toBe(200);
-    expect(r2.status).toBe(200);
-    expect(r2.body.idempotent).toBe(true);
+    expect(r1.status).toBe(200); // first op runs + settles → hold terminal
     expect(await usedUnits()).toBe(6); // charged once
+
+    const r2 = await post(body); // same key replayed after completion
+    expect(r2.status).toBe(409);
+    expect(r2.body).toMatchObject({ ok: false, reason: "idempotency_replayed" });
+    expect(await usedUnits()).toBe(6); // STILL charged exactly once — not re-charged, not freed
   });
 });

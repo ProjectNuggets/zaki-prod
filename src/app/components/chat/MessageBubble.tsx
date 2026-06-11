@@ -49,6 +49,7 @@ export interface Message {
   attachments?: { name: string; type: string; url: string }[];
   chatId?: number;
   memorySources?: { id: string; content: string; type: string }[];
+  docSources?: { id: string; title: string; snippet?: string; score?: number | null }[];
   error?: boolean;
   errorCode?: string | null;
   channel?: string | null;
@@ -101,6 +102,7 @@ export function MessageBubble({
   const memorySources = message.memorySources || [];
   const [forgottenIds, setForgottenIds] = useState<Set<string>>(() => new Set<string>());
   const visibleSources = memorySources.filter((source) => !forgottenIds.has(source.id));
+  const docSources = message.docSources || [];
   const { t, i18n } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const agentRune = isStreaming ? "▸" : isAssistantError ? "!" : "✓";
@@ -327,6 +329,23 @@ export function MessageBubble({
                 </div>
               ))}
             </div>
+          </div>
+        )}
+        {docSources.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] uppercase tracking-wider text-zaki-muted">
+              {t("chat.sources", { defaultValue: "Sources" })}
+            </span>
+            {docSources.map((src) => (
+              <span
+                key={src.id}
+                title={src.snippet || src.title}
+                className="inline-flex items-center gap-1 rounded-zaki-md border border-zaki-strong bg-zaki-raised px-2 py-0.5 text-2xs text-zaki-secondary"
+              >
+                <FileText className="h-3 w-3 text-zaki-muted" />
+                {src.title}
+              </span>
+            ))}
           </div>
         )}
       </div>

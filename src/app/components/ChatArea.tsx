@@ -119,6 +119,7 @@ import type {
   Message,
   AgentNarrationStep,
   GeneratedFileRef,
+  DocSource,
 } from "@/types";
 import { useMessages } from "@/queries/useThreads";
 import { spaceKeys } from "@/queries/useSpaces";
@@ -3888,15 +3889,26 @@ export function ChatArea() {
     ]
   );
 
-  // Strip memory context prefix from user messages (injected by backend for AI context)
+  // Strip internal context prefixes from user messages (injected by the backend for AI context).
+  // The enriched message the engine persists is ordered leading blocks:
+  //   [[ZAKI_MEMORY_CONTEXT_V2]]…[[/…]]  then  [[ZAKI_DOC_CONTEXT_V1]]…[[/…]]  then {user message}
+  // On history reload the engine returns that enriched content, so strip EACH leading envelope (else the
+  // doc block of XML leaks into the user's bubble). Chunk content is sentinel-scrubbed at injection
+  // (backend doc-grounding.js), so indexOf(close) lands on the real close, not a forged one in doc text.
   const stripMemoryContext = (content: string): string => {
-    // V2 contract: [[ZAKI_MEMORY_CONTEXT_V2]] ... [[/ZAKI_MEMORY_CONTEXT_V2]] {user message}
-    const v2Open = "[[ZAKI_MEMORY_CONTEXT_V2]]";
-    const v2Close = "[[/ZAKI_MEMORY_CONTEXT_V2]]";
-    const v2Start = content.indexOf(v2Open);
-    const v2End = content.indexOf(v2Close);
-    if (v2Start !== -1 && v2End !== -1 && v2End > v2Start) {
-      return content.slice(v2End + v2Close.length).trim();
+    const stripLeadingEnvelope = (text: string, open: string, close: string): string => {
+      const start = text.indexOf(open);
+      const end = text.indexOf(close);
+      if (start !== -1 && end !== -1 && end > start) return text.slice(end + close.length);
+      return text;
+    };
+    const afterEnvelopes = stripLeadingEnvelope(
+      stripLeadingEnvelope(content, "[[ZAKI_MEMORY_CONTEXT_V2]]", "[[/ZAKI_MEMORY_CONTEXT_V2]]"),
+      "[[ZAKI_DOC_CONTEXT_V1]]",
+      "[[/ZAKI_DOC_CONTEXT_V1]]"
+    );
+    if (afterEnvelopes !== content) {
+      return afterEnvelopes.trim();
     }
 
     // Old format: [MEMORY CONTEXT - ...]...[USER MESSAGE]\n{actual message}
@@ -4356,6 +4368,25 @@ export function ChatArea() {
         updated[assistantIndex] = {
           ...existingMsg,
           memorySources: sources,
+        };
+        return { ...prev, [threadSlug]: updated };
+      });
+    },
+    []
+  );
+
+  const updateAssistantDocSources = useCallback(
+    (threadSlug: string, assistantId: string, docSources: DocSource[]) => {
+      setMessagesByThread((prev) => {
+        const threadMessages = prev[threadSlug] ?? [];
+        const assistantIndex = threadMessages.findIndex((msg) => msg.id === assistantId);
+        if (assistantIndex === -1) return prev;
+        const updated = [...threadMessages];
+        const existingMsg = updated[assistantIndex];
+        if (!existingMsg) return prev;
+        updated[assistantIndex] = {
+          ...existingMsg,
+          docSources,
         };
         return { ...prev, [threadSlug]: updated };
       });
@@ -5983,6 +6014,16 @@ export function ChatArea() {
         );
         return {};
       }
+      // Doc-grounding citations (independent of the memory pipeline flag) — the BFF emits these from the
+      // workspace vector chunks it pre-injected into the agent turn.
+      if (payload?.type === "docSources" && Array.isArray(payload.sources)) {
+        updateAssistantDocSources(
+          threadSlug,
+          assistantId,
+          payload.sources as DocSource[]
+        );
+        return {};
+      }
 
       if (payload?.type === "agentInitWebsocketConnection") {
         const agentUrl = resolveAgentUrl(payload);
@@ -6526,6 +6567,7 @@ export function ChatArea() {
     streamAgentInvocation,
     updateAssistantContent,
     updateAssistantSources,
+    updateAssistantDocSources,
     updateNullalisReasoningSummary,
     upsertNullalisTaskItem,
     upsertNullalisTodoTaskItems,

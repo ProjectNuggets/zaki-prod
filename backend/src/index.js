@@ -42,6 +42,7 @@ import {
   extractStreamMessage,
   getRequestedResponseFormat,
 } from "./chat-proxy.js";
+import { fetchWorkspaceDocContext } from "./doc-grounding.js";
 import { markWebhookEventProcessed as markWebhookEventProcessedOnce } from "./billing-webhook-events.js";
 import { createBillingHealthTracker } from "./billing-health.js";
 import { createBillingAlertDispatcher } from "./billing-alerts.js";
@@ -79,8 +80,11 @@ import {
   classifyAgentMeterAction,
   createAgentStreamMeterMetrics,
   estimateAgentMeterUnits,
+  reserveAgentChatUnits,
+  settleAgentChatUnits,
   updateAgentStreamMeterMetrics,
 } from "./agent-metering.js";
+import { makeAgentErrorCapture } from "./agent-error-capture.js";
 import {
   fetchNullclawPath,
   fetchNullclawUserHistory,
@@ -363,6 +367,7 @@ import {
 } from "./zaki-auth.js";
 import { buildRefreshCookie } from "./zaki-session-cookie.js";
 import { sweepExpiredHolds, reserveUnits, settleHold, ensureWallet, readWallet } from "./unit-ledger.js";
+import { reconcileDaemonTurnUsage } from "./agent-usage-reconcile.js";
 import { buildMeterDemoRouter } from "./meter-demo-router.js";
 import { actualChatUnits, estimateChatUnits, deterministicGrantId } from "./chat-meter.js";
 import { isToolFireEvent, extractGeneratedFile } from "./agent-stream-signals.js";
@@ -656,6 +661,20 @@ const ZAKI_CHAT_MEMORY_CONTEXT_TIMEOUT_MS = Math.max(
 );
 // NOTE: ZAKI_CHAT_MEMORY_IDENTITY_CORE_ENABLED is read directly inside
 // memory/operations.js (isIdentityCoreEnabled); no constant needed here.
+// NOTE: ZAKI_SYNC_MEMORY_INJECTION_ENABLED is read directly inside
+// memory/injection-gate.js (shouldSkipChatMemoryContext); no constant needed here.
+const ZAKI_DOC_GROUNDING_TIMEOUT_MS = Math.max(
+  500,
+  Number(process.env.ZAKI_DOC_GROUNDING_TIMEOUT_MS || 4000)
+); // best-effort vector pre-fetch; never blocks the turn
+// Retrieval knobs — env-tunable so staging threshold/topN calibration (per SPEC §6) is a config change,
+// not a redeploy. scoreThreshold unset → the engine's per-workspace default (similarityThreshold ?? 0.25).
+const ZAKI_DOC_GROUNDING_TOP_N = Math.min(10, Math.max(1, Number(process.env.ZAKI_DOC_GROUNDING_TOP_N || 6)));
+const ZAKI_DOC_GROUNDING_SCORE_THRESHOLD =
+  process.env.ZAKI_DOC_GROUNDING_SCORE_THRESHOLD !== undefined &&
+  String(process.env.ZAKI_DOC_GROUNDING_SCORE_THRESHOLD).trim() !== ""
+    ? Number(process.env.ZAKI_DOC_GROUNDING_SCORE_THRESHOLD)
+    : undefined;
 const ZAKI_STREAM_UPSTREAM_TIMEOUT_MS = Math.max(
   5_000,
   Number(process.env.ZAKI_STREAM_UPSTREAM_TIMEOUT_MS || 300_000)
@@ -699,6 +718,9 @@ const ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS = Math.max(
   250,
   Number(process.env.ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS || 1_500)
 );
+// Agent error capture — routes genuine BFF failures (upstream 5xx, stream error, etc.) to GlitchTip.
+const { captureAgentError } = makeAgentErrorCapture({ sentry: Sentry });
+
 const ZAKI_BILLING_ALERT_WEBHOOK_URL = (
   process.env.ZAKI_BILLING_ALERT_WEBHOOK_URL || ""
 ).trim();
@@ -10057,6 +10079,19 @@ async function requireSpacesMeterGrantForChat({
       await ensureWallet({ userId: identity.userId, planId: zakiUser?.plan_tier || "free" });
       reserved = await reserveUnits(reserveArgs);
     }
+    // C1: a key matching an existing hold is a duplicate — either a true in-flight RETRY (ledger
+    // `idempotent`, hold still reserved) or a REPLAY of a completed turn (ledger `idempotency_replayed`,
+    // terminal hold). In BOTH cases we must REFUSE (409): running here with a null hold would serve a
+    // free, UNMETERED chat turn for a reused client idempotency key (the money exploit). The original
+    // reserve owns the hold and settles it once.
+    if ((!reserved.ok && reserved.reason === "idempotency_replayed") || (reserved.ok && reserved.idempotent)) {
+      const result = {
+        allowed: false, status: 409, error: "duplicate_request",
+        message: "This request was already processed. Retry with a new request id.",
+      };
+      res.status(409).json(buildSpacesMeterDenialPayload(result, requestId));
+      return { ...result, action };
+    }
     if (!reserved.ok) {
       const result = {
         allowed: false, status: 429, error: "insufficient_units",
@@ -10066,8 +10101,8 @@ async function requireSpacesMeterGrantForChat({
       res.status(429).json(buildSpacesMeterDenialPayload(result, requestId));
       return { ...result, action };
     }
-    // Hold to settle at the terminal path (null on an idempotent retry — already charged).
-    req.spacesChatHold = reserved.idempotent ? null : reserved.hold;
+    // Genuinely new reserve → hold to settle at the terminal path.
+    req.spacesChatHold = reserved.hold;
     req.spacesChatKey = idempotencyKey;
     req.spacesChatAction = normalizedAction;
     req.spacesChatMessageChars = String(message || "").length;
@@ -10396,6 +10431,29 @@ const streamChatHandler = async (req, res) => {
     // mode:"query" stays on the internal (per-user JWT) route with its existing behavior.
     const isQueryMode = String(requestPayload?.mode || "").trim().toLowerCase() === "query";
     const isAgentTurn = !isQueryMode;
+
+    // Doc-grounding parity: pre-fetch relevance-filtered workspace vector chunks so the agent grounds on
+    // embedded docs WITHOUT depending on the model choosing rag-memory. Runs in PARALLEL with the memory
+    // build below; best-effort (never blocks/fails the turn). Agent turns only — query mode already does
+    // native RAG. See SPEC-doc-grounding-parity.md.
+    let docContext = { block: "", sources: [] };
+    const docContextPromise = isAgentTurn
+      ? withTimeout(
+          fetchWorkspaceDocContext({
+            adminRequest: novaAdminRequest,
+            slug,
+            message: originalMessage,
+            topN: ZAKI_DOC_GROUNDING_TOP_N,
+            scoreThreshold: ZAKI_DOC_GROUNDING_SCORE_THRESHOLD,
+          }),
+          ZAKI_DOC_GROUNDING_TIMEOUT_MS,
+          "Doc grounding"
+        ).catch((err) => {
+          console.warn("[DocGrounding] fetch failed:", err?.message);
+          return { block: "", sources: [] };
+        })
+      : Promise.resolve({ block: "", sources: [] });
+
     let enrichedMessage = isIdentityProbePrompt(originalMessage)
       ? applyIdentityGuardrails(originalMessage)
       : disableResponseEnvelope
@@ -10477,12 +10535,20 @@ const streamChatHandler = async (req, res) => {
       // The frontend strips the [[ZAKI_MEMORY_CONTEXT_V2]] envelope before display. We wrap the EXISTING
       // enrichedMessage (the response-format / identity-probe envelope applied at init) so that the
       // "in a table / briefly" formatting feature is preserved on Auto turns, not dropped.
+      // The doc-context block (relevance-filtered workspace chunks, engine-native <attached_documents>
+      // format) is injected between the envelope and the user message; the FE strips its
+      // [[ZAKI_DOC_CONTEXT_V1]] marker too.
+      docContext = await docContextPromise;
+      if (docContext.sources.length > 0) {
+        console.log(`[DocGrounding] injected ${docContext.sources.length} source(s) into agent turn for ${slug}`);
+      }
+      const docBlock = docContext.block ? `${docContext.block}\n\n` : "";
       enrichedMessage = `${composeContextEnvelope({
         guardrail: true,
         core: memoryCore,
         context: memoryContext,
         nowISO: new Date().toISOString().slice(0, 10),
-      })}\n\n${enrichedMessage}`;
+      })}\n\n${docBlock}${enrichedMessage}`;
     } else if (memoryCore || memoryContext) {
       // Query mode: inject the memory envelope (identity core + relevant recall), no guardrail.
       enrichedMessage = `${composeContextEnvelope({
@@ -10610,6 +10676,14 @@ const streamChatHandler = async (req, res) => {
           type: "memoryUsed",
           count: memorySources.length,
           sources: memorySources.slice(0, 5),
+        });
+      }
+
+      if (docContext.sources.length > 0) {
+        writeSseData(res, {
+          type: "docSources",
+          count: docContext.sources.length,
+          sources: docContext.sources.slice(0, 6),
         });
       }
     }
@@ -10794,6 +10868,89 @@ function buildAgentMeterDenialPayload(result, requestId) {
   };
 }
 
+const AGENT_CHAT_STREAM_ROUTE = "/api/agent/chat/stream";
+
+// Reserve agent-chat units against the unit wallet (wallet = source of truth). Mirrors the SPACES
+// reserve gate (requireSpacesMeterGrantForChat) — productId="agent", reserve-high ceiling (40u),
+// 10-minute hold (agent turns run long). On success the hold is settled at the terminal path by
+// recordAgentWalletSettleBestEffort (reconciles to real cost, refunds the rest). Fail-OPEN on any
+// thrown error: a metering blip must never break the agent. Returns { allowed: bool }.
+async function requireAgentWalletReserveForChat(req, res, { identity, action, requestId } = {}) {
+  const reqId = requestId || getOrCreateRequestId(req);
+  const idempotencyKey = identity?.userId
+    ? `agent:${identity.userId}:${reqId}`.slice(0, 180)
+    : readAgentIdempotencyKey(req, action);
+  const decision = await reserveAgentChatUnits({
+    identity,
+    action,
+    idempotencyKey,
+    env: process.env,
+    reserveUnits,
+    ensureWallet,
+    deterministicGrantId,
+  });
+
+  if (decision.outcome === "denied" || decision.outcome === "duplicate") {
+    // C1: "duplicate" = the idempotency key matched an existing hold (in-flight retry OR replay of a
+    // completed turn). Refuse (409) so we NEVER run a fresh free/unmetered engine turn for a reused key.
+    const denial = decision.denial || {};
+    res
+      .status(denial.status || 403)
+      .json(buildAgentMeterDenialPayload({ ...denial, action: decision.action }, reqId));
+    return { allowed: false };
+  }
+
+  if (decision.outcome === "unmetered") {
+    // Fail-OPEN: serve the turn unmetered; alert (matches spaces).
+    req.agentChatUnmetered = true;
+    console.error(
+      `[Agent] wallet reserve failed (allowing chat unmetered) req=${reqId}: ${decision.error?.message}`
+    );
+    void emitBillingAlert({
+      provider: "metering",
+      id: "agent.meter.fail_open",
+      severity: "high",
+      message: "Agent chat metering failed; serving unmetered (fail-open).",
+      details: { requestId: reqId, error: decision.error?.message },
+    });
+    return { allowed: true };
+  }
+
+  // allowed — a fresh reserve; decision.hold is the live reserved hold (duplicates 409 above).
+  req.agentChatHold = decision.hold;
+  req.agentChatKey = decision.idempotencyKey;
+  req.agentChatAction = decision.action;
+  return { allowed: true };
+}
+
+// Settle the agent turn against the unit wallet at the terminal path. Idempotent and safe across the
+// handler's multiple terminal paths (the req.agentChatHold = null guard prevents a double-settle;
+// settleHold is itself idempotent too). Mirrors the SPACES settle (recordSpacesMeterReceiptBestEffort):
+// SETTLE on success/cancel (the work was consumed), RELEASE on upstream failure (full refund), and
+// emit a zaki_usage_events row ONLY on a successful settle. No-op when there's no hold (founder bypass,
+// fail-open, or an idempotent retry).
+async function recordAgentWalletSettleBestEffort(req, { status = "success", message = "", streamMetrics = null, payload } = {}) {
+  const hold = req.agentChatHold;
+  if (!hold?.id) return null;
+  req.agentChatHold = null; // prevent double-settle across terminal paths
+  return settleAgentChatUnits({
+    hold,
+    idempotencyKey: req.agentChatKey,
+    action: req.agentChatAction,
+    status,
+    message,
+    payload: payload && typeof payload === "object" ? payload : (req.body && typeof req.body === "object" ? req.body : {}),
+    streamMetrics,
+    env: process.env,
+    sourceRoute: AGENT_CHAT_STREAM_ROUTE,
+    requestId: req.requestId || getOrCreateRequestId(req),
+    settleHold,
+    recordUsageEvent,
+    dbQuery,
+    logStructured,
+  });
+}
+
 async function requireAgentMeterGrantForChat({
   req,
   res,
@@ -10891,7 +11048,6 @@ async function recordAgentMeterReceiptBestEffort(req, {
  * Route: POST /api/agent/chat/stream
  */
 const agentChatStreamHandler = async (req, res) => {
-  const meterStartedAtMs = Date.now();
   if (!ZAKI_AGENT_BACKEND_ENABLED) {
     return res.status(404).json({ error: "ZAKI agent backend is disabled." });
   }
@@ -10926,14 +11082,10 @@ const agentChatStreamHandler = async (req, res) => {
     }
 
     const meterAction = classifyAgentMeterAction(payload, originalMessage);
-    const meterDecision = await requireAgentMeterGrantForChat({
-      req,
-      res,
+    const meterDecision = await requireAgentWalletReserveForChat(req, res, {
       identity: buildAgentMeterIdentity(authResult),
       action: meterAction,
-      message: originalMessage,
-      payload,
-      source: "agent_direct_chat_stream",
+      requestId: getOrCreateRequestId(req),
     });
     if (!meterDecision.allowed || res.headersSent) {
       return;
@@ -10949,12 +11101,14 @@ const agentChatStreamHandler = async (req, res) => {
         timeoutMs: ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS,
       });
       if (!readyProbe.ok) {
-        await recordAgentMeterReceiptBestEffort(req, {
+        captureAgentError(
+          new Error(`Agent readiness probe failed (status=${readyProbe.status ?? "unknown"})`),
+          { req, phase: "readiness_probe", upstreamStatus: readyProbe.status ?? null }
+        );
+        await recordAgentWalletSettleBestEffort(req, {
           status: "failed",
-          durationMs: Date.now() - meterStartedAtMs,
           message: originalMessage,
           payload,
-          idempotencySuffix: "ready_failed",
         });
         if (String(req.headers.accept || "").includes("text/event-stream")) {
           sendChatStreamError(res, "ZAKI agent is temporarily unavailable. Please try again shortly.", {
@@ -10969,13 +11123,12 @@ const agentChatStreamHandler = async (req, res) => {
         });
       }
     } catch (error) {
+      captureAgentError(error, { req, phase: "readiness_probe_throw" });
       trackAgentStreamDiagnostic(userId, error);
-      await recordAgentMeterReceiptBestEffort(req, {
+      await recordAgentWalletSettleBestEffort(req, {
         status: "failed",
-        durationMs: Date.now() - meterStartedAtMs,
         message: originalMessage,
         payload,
-        idempotencySuffix: "ready_error",
       });
       if (String(req.headers.accept || "").includes("text/event-stream")) {
         sendChatStreamError(res, "ZAKI agent is temporarily unavailable. Please try again shortly.", {
@@ -10998,12 +11151,11 @@ const agentChatStreamHandler = async (req, res) => {
       setPromptQuotaHeaders,
     });
     if (!agentQuotaDecision.allowed) {
-      await recordAgentMeterReceiptBestEffort(req, {
-        status: "cancelled",
-        durationMs: Date.now() - meterStartedAtMs,
+      // No agent work ran (quota gate denied after reserve) → release the hold (full refund).
+      await recordAgentWalletSettleBestEffort(req, {
+        status: "failed",
         message: originalMessage,
         payload,
-        idempotencySuffix: "legacy_quota_denied",
       });
       return res.status(agentQuotaDecision.status).json(agentQuotaDecision.payload);
     }
@@ -11035,12 +11187,10 @@ const agentChatStreamHandler = async (req, res) => {
       payload: normalizedPayload,
     });
     if (!sessionKey.success) {
-      await recordAgentMeterReceiptBestEffort(req, {
+      await recordAgentWalletSettleBestEffort(req, {
         status: "failed",
-        durationMs: Date.now() - meterStartedAtMs,
         message: originalMessage,
         payload: normalizedPayload,
-        idempotencySuffix: "invalid_session_key",
       });
       return res.status(400).json({ error: sessionKey.message, code: "invalid_chat_payload" });
     }
@@ -11062,17 +11212,20 @@ const agentChatStreamHandler = async (req, res) => {
       const payloadError = await upstream.json().catch(() => null);
       if (isChatSessionKeyValidationFailure(payloadError)) {
         setPromptQuotaHeaders(res, promptQuota);
-        await recordAgentMeterReceiptBestEffort(req, {
+        await recordAgentWalletSettleBestEffort(req, {
           status: "failed",
-          durationMs: Date.now() - meterStartedAtMs,
           message: originalMessage,
           payload: normalizedPayload,
-          idempotencySuffix: "upstream_invalid_session_key",
         });
         return res
           .status(400)
           .json({ error: "invalid chat payload or session_key", code: "invalid_chat_payload" });
       }
+      // Non-2xx, non-sessionkey JSON error from upstream engine — genuine backend failure.
+      captureAgentError(
+        new Error(`Agent upstream non-2xx JSON response (status=${upstream.status})`),
+        { req, phase: "upstream_non2xx_json", upstreamStatus: upstream.status }
+      );
     }
 
     res.status(upstream.status);
@@ -11080,12 +11233,16 @@ const agentChatStreamHandler = async (req, res) => {
     setPromptQuotaHeaders(res, promptQuota);
 
     if (!upstream.body) {
-      await recordAgentMeterReceiptBestEffort(req, {
+      if (!upstream.ok) {
+        captureAgentError(
+          new Error(`Agent upstream non-2xx empty response (status=${upstream.status})`),
+          { req, phase: "upstream_no_body", upstreamStatus: upstream.status }
+        );
+      }
+      await recordAgentWalletSettleBestEffort(req, {
         status: upstream.ok ? "success" : "failed",
-        durationMs: Date.now() - meterStartedAtMs,
         message: originalMessage,
         payload: normalizedPayload,
-        idempotencySuffix: "empty_body",
       });
       const retryPayload = buildAgentRetrySsePayload(upstream.status);
       if (retryPayload) {
@@ -11109,13 +11266,20 @@ const agentChatStreamHandler = async (req, res) => {
       if (upstream.ok && pipeResult.status === "success") {
         clearAgentStreamDiagnostic(userId);
       }
-      await recordAgentMeterReceiptBestEffort(req, {
-        status: upstream.ok && pipeResult.status === "success" ? "success" : pipeResult.status,
-        durationMs: Date.now() - meterStartedAtMs,
+      const nonSseFailed = !upstream.ok || pipeResult.status === "failed";
+      if (nonSseFailed) {
+        captureAgentError(
+          new Error(`Agent non-SSE stream failure (upstream=${upstream.status}, pipe=${pipeResult.status})`),
+          { req, phase: "non_sse_stream", upstreamStatus: upstream.status }
+        );
+      }
+      await recordAgentWalletSettleBestEffort(req, {
+        // A client CANCEL settles the accrued work (cancel is not free — else it's an abuse
+        // vector); only a real upstream failure releases. No done-frame cost on the non-SSE
+        // path, so a cancelled turn settles the flat estimate.
+        status: upstream.ok && (pipeResult.status === "success" || pipeResult.status === "cancelled") ? "success" : "failed",
         message: originalMessage,
         payload: normalizedPayload,
-        model: "nullalis-agent-non-sse",
-        idempotencySuffix: `non_sse_${pipeResult.status}`,
       });
       return;
     }
@@ -11134,7 +11298,12 @@ const agentChatStreamHandler = async (req, res) => {
       if (done) break;
       const decoded = decoder.decode(value, { stream: true });
       if (!decoded) continue;
-      res.write(decoded);
+      // Guard the client write: on a client cancel/abort the socket is destroyed, but we keep draining
+      // upstream so the done-frame cost still lands in streamMetrics → a cancelled turn SETTLES accrued
+      // cost (spec: the work was consumed). An unguarded write would throw into catch → release (wrong).
+      if (!res.destroyed && !res.writableEnded) {
+        res.write(decoded);
+      }
       buffer += decoded;
 
       let separatorIndex = buffer.indexOf("\n\n");
@@ -11154,23 +11323,35 @@ const agentChatStreamHandler = async (req, res) => {
     const streamStatus = upstream.ok && !streamMetrics.sawError ? "success" : "failed";
     if (streamStatus === "success") {
       clearAgentStreamDiagnostic(userId);
+    } else {
+      captureAgentError(
+        new Error(
+          streamMetrics.sawError
+            ? "Agent SSE stream contained an error frame"
+            : `Agent SSE stream completed with non-ok upstream status (${upstream.status})`
+        ),
+        { req, phase: "sse_stream", upstreamStatus: upstream.status }
+      );
     }
 
-    await recordAgentMeterReceiptBestEffort(req, {
+    // Terminal settle: SETTLE on success (incl. client cancel — upstream still completed and the
+    // done-frame cost was captured), RELEASE on upstream failure. Reconciles to real cost; refunds rest.
+    await recordAgentWalletSettleBestEffort(req, {
       status: streamStatus,
-      durationMs: Date.now() - meterStartedAtMs,
       message: originalMessage,
       streamMetrics,
       payload: normalizedPayload,
     });
-    res.end();
+    if (!res.destroyed && !res.writableEnded) {
+      res.end();
+    }
   } catch (error) {
-    await recordAgentMeterReceiptBestEffort(req, {
+    // Failed turn → release (no-op if a terminal path already settled; the hold guard makes this safe).
+    captureAgentError(error, { req, phase: "outer_catch" });
+    await recordAgentWalletSettleBestEffort(req, {
       status: "failed",
-      durationMs: Date.now() - meterStartedAtMs,
       message: extractStreamMessage(req.body || {}) || "",
       payload: req.body && typeof req.body === "object" ? req.body : {},
-      idempotencySuffix: "exception",
     });
     const trackedUserId = String(req.agentUserId || "").trim();
     if (trackedUserId) {
@@ -19319,6 +19500,44 @@ server.listen(PORT, () => {
     runLedgerSweep();
     setInterval(runLedgerSweep, LEDGER_SWEEP_INTERVAL_MS);
   }, 45_000);
+
+  // Agent-usage reconciliation sweep (Wave 2 metering completeness): debit the unit wallet for
+  // DAEMON (cron/heartbeat/channel) agent turns the engine recorded in zaki_bot.turn_usage but that
+  // were never metered live (http turns are settled on the SSE done-frame and are NEVER touched here).
+  // Idempotent + crash-safe: reconciled_at cursor + 'reconcile:<turn_key>' ledger keys. Gated off by
+  // default; staging sets ZAKI_AGENT_USAGE_RECONCILE_ENABLED=1. A running flag prevents overlap.
+  if (process.env.ZAKI_AGENT_USAGE_RECONCILE_ENABLED === "1" || process.env.ZAKI_AGENT_USAGE_RECONCILE_ENABLED === "true") {
+    const RECONCILE_SWEEP_INTERVAL_MS = 60 * 1000;
+    let reconcileRunning = false;
+    const runReconcileSweep = async () => {
+      if (reconcileRunning) return; // no overlapping sweeps
+      reconcileRunning = true;
+      try {
+        const r = await reconcileDaemonTurnUsage({
+          dbQuery,
+          dbGet,
+          reserveUnits,
+          settleHold,
+          ensureWallet,
+          recordUsageEvent,
+          deterministicGrantId,
+          logStructured,
+          env: process.env,
+        });
+        if (r.debited > 0 || r.replayed > 0 || r.failed > 0) {
+          logStructured("info", "agent.reconcile.sweep", r);
+        }
+      } catch (err) {
+        logStructured("error", "agent.reconcile.sweep_failed", { message: err?.message || String(err) });
+      } finally {
+        reconcileRunning = false;
+      }
+    };
+    setTimeout(() => {
+      void runReconcileSweep();
+      setInterval(() => { void runReconcileSweep(); }, RECONCILE_SWEEP_INTERVAL_MS);
+    }, 50_000);
+  }
 
   if (runtimeLearningRetentionPolicy.enabled) {
     const LEARNING_RETENTION_CLEANUP_INTERVAL_MS =

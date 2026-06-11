@@ -241,4 +241,19 @@ describe("MessageBubble source chip", () => {
     fireEvent.click(screen.getByRole("button", { name: /don.?t use|forget|delete/i }));
     await waitFor(() => expect(api.deleteMemory).toHaveBeenCalledWith("a"));
   });
+
+  it("renders document citation chips when the message has docSources", () => {
+    const message: Message = {
+      id: "m1",
+      role: "assistant",
+      content: "Payment terms are net-30.",
+      docSources: [
+        { id: "d1", title: "contract.pdf", snippet: "Payment is net-30." },
+        { id: "d2", title: "appendix.docx" },
+      ],
+    };
+    render(<MessageBubble message={message} animate={false} />);
+    expect(screen.getByText("contract.pdf")).toBeInTheDocument();
+    expect(screen.getByText("appendix.docx")).toBeInTheDocument();
+  });
 });
