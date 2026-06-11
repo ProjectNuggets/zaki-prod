@@ -2,6 +2,7 @@ import {
   findConflict,
   findDuplicateMemory,
   markMemoryOutdated,
+  pruneEpisodicMemories,
   storeMemory,
 } from "./operations.js";
 import { extractMemories, sanitizeExtractedMemories } from "../memory-extraction.js";
@@ -153,6 +154,10 @@ export async function processChatMemoryCapture({
       state: "saved_reversible",
       undoUntil,
     });
+  }
+
+  if (episodic.length > 0) {
+    try { await pruneEpisodicMemories(userId); } catch { /* best-effort */ }
   }
 
   return { saved, duplicates, superseded, skipped };

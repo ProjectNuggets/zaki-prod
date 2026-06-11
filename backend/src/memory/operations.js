@@ -110,6 +110,14 @@ const EPISODIC_DECAY_DAYS = (() => {
   const v = Number.parseInt(process.env.ZAKI_MEMORY_EPISODIC_DECAY_DAYS || "", 10);
   return Number.isFinite(v) && v > 0 ? v : 90;
 })();
+const EPISODIC_TTL_DAYS = (() => {
+  const v = Number.parseInt(process.env.ZAKI_MEMORY_EPISODIC_TTL_DAYS || "", 10);
+  return Number.isFinite(v) && v > 0 ? v : 90;
+})();
+const EPISODIC_MAX_PER_USER = (() => {
+  const v = Number.parseInt(process.env.ZAKI_MEMORY_EPISODIC_MAX_PER_USER || "", 10);
+  return Number.isFinite(v) && v > 0 ? v : 200;
+})();
 
 function isIdentityCoreEnabled() {
   return (
@@ -1533,6 +1541,30 @@ export async function markMemoryOutdated({ userId, memoryId }) {
     [memoryId, normalizedUserId]
   );
   return { success: (result?.rowCount ?? 0) > 0 };
+}
+
+// Bound the episodic tier: delete TTL-expired rows and keep only the newest N
+// per user. Best-effort; safe to call opportunistically after capture.
+export async function pruneEpisodicMemories(userId) {
+  const normalizedUserId = normalizeUserId(userId);
+  if (!normalizedUserId) return { ok: false };
+  await dbQuery(
+    `DELETE FROM memories
+     WHERE user_id = $1 AND type = 'episodic'
+       AND created_at < NOW() - ($2 || ' days')::interval`,
+    [normalizedUserId, String(EPISODIC_TTL_DAYS)]
+  );
+  await dbQuery(
+    `DELETE FROM memories
+     WHERE id IN (
+       SELECT id FROM memories
+       WHERE user_id = $1 AND type = 'episodic'
+       ORDER BY created_at DESC
+       OFFSET $2
+     )`,
+    [normalizedUserId, EPISODIC_MAX_PER_USER]
+  );
+  return { ok: true };
 }
 
 export async function findConflict({ userId, content, conflictKey = null, polarity = null }) {

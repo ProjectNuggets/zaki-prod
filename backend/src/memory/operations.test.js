@@ -6,6 +6,71 @@ import {
   setStorageSupportProbeForTests,
 } from "./operations.js";
 
+// ============================================================================
+// pruneEpisodicMemories — DB mock suite
+// ============================================================================
+
+describe("pruneEpisodicMemories", () => {
+  it("deletes episodic rows by TTL and caps to newest N, scoped to the user", async () => {
+    const capturedCalls = [];
+    const dbQueryMock = jest.fn(async (sql, params) => {
+      capturedCalls.push({ sql, params });
+      return { rowCount: 0, rows: [] };
+    });
+
+    jest.resetModules();
+    jest.unstable_mockModule("../db.js", () => ({
+      dbQuery: dbQueryMock,
+      dbGet: jest.fn().mockResolvedValue(null),
+      dbAll: jest.fn().mockResolvedValue([]),
+      hasPgVector: jest.fn().mockResolvedValue(false),
+      withDbTransaction: jest.fn(),
+    }));
+
+    const ops = await import("./operations.js");
+    const result = await ops.pruneEpisodicMemories("user@example.com");
+
+    expect(result).toEqual({ ok: true });
+    expect(dbQueryMock).toHaveBeenCalledTimes(2);
+
+    const sqls = capturedCalls.map((c) => c.sql.replace(/\s+/g, " ").trim());
+    const params = capturedCalls.map((c) => c.params);
+
+    // Both statements must target type = 'episodic'
+    expect(sqls[0]).toMatch(/type\s*=\s*'episodic'/);
+    expect(sqls[1]).toMatch(/type\s*=\s*'episodic'/);
+
+    // Both statements must be scoped to the user
+    expect(params[0]).toContain("user@example.com");
+    expect(params[1]).toContain("user@example.com");
+
+    // First statement: TTL-based delete (mentions created_at and interval)
+    expect(sqls[0]).toMatch(/created_at/i);
+    expect(sqls[0]).toMatch(/interval/i);
+
+    // Second statement: cap/offset-based delete (mentions OFFSET)
+    expect(sqls[1]).toMatch(/OFFSET/i);
+  });
+
+  it("returns {ok:false} and issues no queries when userId is empty", async () => {
+    const dbQueryMock = jest.fn();
+    jest.resetModules();
+    jest.unstable_mockModule("../db.js", () => ({
+      dbQuery: dbQueryMock,
+      dbGet: jest.fn().mockResolvedValue(null),
+      dbAll: jest.fn().mockResolvedValue([]),
+      hasPgVector: jest.fn().mockResolvedValue(false),
+      withDbTransaction: jest.fn(),
+    }));
+
+    const ops = await import("./operations.js");
+    const result = await ops.pruneEpisodicMemories("");
+
+    expect(result).toEqual({ ok: false });
+    expect(dbQueryMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("memory operations external calls", () => {
   const originalBaseUrl = process.env.NOVA_TYP_BASE_URL;
   const originalFetch = global.fetch;

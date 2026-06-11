@@ -7,6 +7,7 @@ const findDuplicateMemoryMock = jest.fn();
 const findConflictMock = jest.fn();
 const markMemoryOutdatedMock = jest.fn();
 const storeMemoryMock = jest.fn();
+const pruneEpisodicMemoriesMock = jest.fn();
 const getMemoryUndoWindowMsMock = jest.fn();
 const upsertUndoWindowMock = jest.fn();
 
@@ -21,6 +22,7 @@ async function loadCaptureModule() {
     findConflict: findConflictMock,
     findDuplicateMemory: findDuplicateMemoryMock,
     markMemoryOutdated: markMemoryOutdatedMock,
+    pruneEpisodicMemories: pruneEpisodicMemoriesMock,
     storeMemory: storeMemoryMock,
   }));
   jest.unstable_mockModule("./auto-save.js", () => ({
@@ -40,6 +42,7 @@ describe("memory capture", () => {
       findConflictMock,
       markMemoryOutdatedMock,
       storeMemoryMock,
+      pruneEpisodicMemoriesMock,
       getMemoryUndoWindowMsMock,
       upsertUndoWindowMock,
     ].forEach((m) => m.mockReset());
@@ -51,6 +54,7 @@ describe("memory capture", () => {
     findConflictMock.mockResolvedValue(null);
     markMemoryOutdatedMock.mockResolvedValue({ success: true });
     storeMemoryMock.mockResolvedValue({ id: "mem-1" });
+    pruneEpisodicMemoriesMock.mockResolvedValue({ ok: true });
     getMemoryUndoWindowMsMock.mockReturnValue(5000);
     upsertUndoWindowMock.mockResolvedValue({ success: true });
   });
