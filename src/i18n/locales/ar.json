@@ -514,7 +514,8 @@
     "whyAnswer": "لماذا هذه الإجابة؟",
     "hideWhy": "إخفاء السبب",
     "usedMemory": "استخدمت الذاكرة",
-    "usedMemoryCount": "استخدمت {{count}} ذكريات"
+    "usedMemoryCount": "استخدمت {{count}} ذكريات",
+    "sources": "المصادر"
   },
   "input": {
     "disclaimer": "قد يخطئ Zaki. يُفضّل التحقق من المعلومات المهمة.",

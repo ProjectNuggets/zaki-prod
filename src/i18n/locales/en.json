@@ -514,7 +514,8 @@
     "whyAnswer": "Why this answer?",
     "hideWhy": "Hide why",
     "usedMemory": "Used memory",
-    "usedMemoryCount": "Used {{count}} memories"
+    "usedMemoryCount": "Used {{count}} memories",
+    "sources": "Sources"
   },
   "input": {
     "disclaimer": "Zaki can make mistakes. Consider checking important information.",
