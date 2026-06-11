@@ -331,8 +331,25 @@ describe("agent BOT BFF contract", () => {
       { method: "get",    path: "/api/agent/sessions/:sessionKey/export",   upstreamSuffix: "/export",  json: false },
       { method: "get",    path: "/api/agent/sessions/:sessionKey/history",  upstreamSuffix: "/history", json: false },
       { method: "post",   path: "/api/agent/sessions/:sessionKey/mode",     upstreamSuffix: "/mode",    json: true  },
-      { method: "post",   path: "/api/agent/sessions/:sessionKey/approve",  upstreamSuffix: "/approve", json: true  },
+      { method: "post",   path: "/api/agent/sessions/:sessionKey/approve",  upstreamSuffix: "/approve", json: true,  retry: true },
       { method: "post",   path: "/api/agent/sessions/:sessionKey/cancel",   upstreamSuffix: "/cancel",  json: false },
+    ]);
+  });
+
+  it("enables connection-class retry ONLY on the idempotent /approve route", () => {
+    // /approve is the single idempotent control route (the FE always ships a
+    // stable approval_id), so it is the only entry allowed to opt into retry.
+    // A regression that flips `retry` on a non-idempotent route (compact, mode,
+    // cancel, todos) would double-execute a side effect — pin it here.
+    const retryRoutes = AGENT_SESSION_BFF_ROUTES.filter((route) => route.retry);
+    expect(retryRoutes).toEqual([
+      {
+        method: "post",
+        path: "/api/agent/sessions/:sessionKey/approve",
+        upstreamSuffix: "/approve",
+        json: true,
+        retry: true,
+      },
     ]);
   });
 
@@ -374,9 +391,10 @@ describe("agent BOT BFF contract", () => {
       // assert per-route wiring + invoke a single handler to check the
       // upstream path it would build.
       const proxyHandlersBySuffix = new Map();
-      const makeSessionProxyHandler = jest.fn((pathBuilder) => {
+      const makeSessionProxyHandler = jest.fn((pathBuilder, proxyOptions = {}) => {
         const proxyHandler = jest.fn();
         proxyHandler.pathBuilder = pathBuilder;
+        proxyHandler.proxyOptions = proxyOptions;
         proxyHandlersBySuffix.set(pathBuilder, proxyHandler);
         return proxyHandler;
       });
@@ -534,6 +552,38 @@ describe("agent BOT BFF contract", () => {
       expect(todoUpdateUpstream).toBe(
         "/api/v1/users/user%20with%20space/sessions/agent%3Azaki-bot%3Auser%3A42%3Athread%3Amain/todos/list%20a/items/2"
       );
+    });
+
+    it("passes { retry: true } to the proxy only for /approve, not for non-idempotent routes", () => {
+      const app = buildApp();
+      const { proxyHandlersBySuffix, ...handlers } = buildHandlers();
+
+      registerAgentSessionBffRoutes(app, handlers);
+
+      const proxyHandlerFor = (verb, path) => {
+        const call = app[verb].mock.calls.find((args) => args[0] === path);
+        expect(call).toBeDefined();
+        return call[call.length - 1];
+      };
+
+      // /approve is idempotent (stable approval_id) → retry enabled.
+      expect(
+        proxyHandlerFor("post", "/api/agent/sessions/:sessionKey/approve").proxyOptions
+      ).toEqual({ retry: true });
+
+      // Non-idempotent / read-only routes must NOT retry.
+      expect(
+        proxyHandlerFor("post", "/api/agent/sessions/:sessionKey/mode").proxyOptions
+      ).toEqual({});
+      expect(
+        proxyHandlerFor("post", "/api/agent/sessions/:sessionKey/cancel").proxyOptions
+      ).toEqual({});
+      expect(
+        proxyHandlerFor("post", "/api/agent/sessions/:sessionKey/compact").proxyOptions
+      ).toEqual({});
+      expect(
+        proxyHandlerFor("get", "/api/agent/sessions/:sessionKey").proxyOptions
+      ).toEqual({});
     });
   });
 

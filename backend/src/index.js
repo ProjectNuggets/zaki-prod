@@ -235,6 +235,10 @@ import {
   sanitizeAgentChannelBindingPayload,
 } from "./agent-bff-contract.js";
 import {
+  fetchWithUpstreamRetry,
+  isRetryableUpstreamError,
+} from "./agent-approve-retry.js";
+import {
   createBotBffHandlers,
   PRODUCT_ERROR_CODES,
   buildProductError,
@@ -14444,21 +14448,45 @@ async function proxyNullclawRequest(req, res, targetPath, options = {}) {
     headers.set("Content-Type", "application/json");
   }
 
-  const upstream = await fetchWithTimeout(
-    targetUrl,
-    {
-      method,
-      headers,
-      body:
-        body === undefined || body === null
-          ? undefined
-          : body instanceof FormData
-          ? body
-          : JSON.stringify(body),
-    },
-    ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
-    "Nullclaw proxy request"
-  );
+  // Serialize the body once so retried attempts re-send the exact same bytes.
+  // The /approve route ships a stable approval_id, which makes re-POSTing it
+  // idempotent on the engine — the precondition for enabling `options.retry`.
+  const serializedBody =
+    body === undefined || body === null
+      ? undefined
+      : body instanceof FormData
+      ? body
+      : JSON.stringify(body);
+
+  const performUpstreamFetch = () =>
+    fetchWithTimeout(
+      targetUrl,
+      {
+        method,
+        headers,
+        body: serializedBody,
+      },
+      ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+      "Nullclaw proxy request"
+    );
+
+  // Retry only on connection-class outages (ECONNREFUSED / "fetch failed" /
+  // 502 / 503 / 504), and only when the caller opted in (idempotent routes
+  // such as /approve). Non-idempotent routes pass no `retry` and never retry.
+  let upstream;
+  if (options.retry) {
+    upstream = await fetchWithUpstreamRetry(performUpstreamFetch, {
+      onRetry(info) {
+        console.warn("[Agent] Retrying idempotent proxy request:", {
+          requestId: String(req.requestId || ""),
+          targetPath,
+          ...info,
+        });
+      },
+    });
+  } else {
+    upstream = await performUpstreamFetch();
+  }
 
   if (typeof options.onUpstreamResponse === "function") {
     await options.onUpstreamResponse(upstream);
@@ -14978,6 +15006,23 @@ const makeAgentUserProxyHandler = (pathBuilder, proxyOptions = {}) => async (req
     return;
   } catch (error) {
     console.error("[Agent] Control proxy error:", error);
+    if (res.headersSent) {
+      // A streamed proxy already started writing; nothing safe left to send.
+      if (!res.writableEnded) res.end();
+      return;
+    }
+    // Connection-class outage (e.g. nullalis briefly restarting). For idempotent
+    // routes the proxy already exhausted its bounded retry budget, so surface a
+    // 502 with `retryable: true` + a stable code the frontend uses to render a
+    // retrying state and a one-click "Retry approval" instead of a hard error.
+    if (isRetryableUpstreamError(error)) {
+      return res.status(502).json({
+        error: "agent_unreachable",
+        code: "agent_unreachable",
+        retryable: true,
+        message: error?.message || "Agent is temporarily unreachable.",
+      });
+    }
     const status = Number(error?.status || 500);
     if (status >= 400 && status < 600) {
       return res.status(status).json({ error: error?.message || "Agent control request failed." });
@@ -15785,8 +15830,8 @@ function validateSessionKeyParam(req, res) {
   return sessionKey;
 }
 
-const makeSessionProxyHandler = (pathBuilder) => {
-  const inner = makeAgentUserProxyHandler(pathBuilder);
+const makeSessionProxyHandler = (pathBuilder, proxyOptions = {}) => {
+  const inner = makeAgentUserProxyHandler(pathBuilder, proxyOptions);
   return async (req, res) => {
     if (!validateSessionKeyParam(req, res)) return;
     return inner(req, res);
