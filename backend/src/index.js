@@ -366,6 +366,7 @@ import {
 } from "./zaki-auth.js";
 import { buildRefreshCookie } from "./zaki-session-cookie.js";
 import { sweepExpiredHolds, reserveUnits, settleHold, ensureWallet, readWallet } from "./unit-ledger.js";
+import { reconcileDaemonTurnUsage } from "./agent-usage-reconcile.js";
 import { buildMeterDemoRouter } from "./meter-demo-router.js";
 import { actualChatUnits, estimateChatUnits, deterministicGrantId } from "./chat-meter.js";
 import { isToolFireEvent, extractGeneratedFile } from "./agent-stream-signals.js";
@@ -19765,6 +19766,44 @@ server.listen(PORT, () => {
     runLedgerSweep();
     setInterval(runLedgerSweep, LEDGER_SWEEP_INTERVAL_MS);
   }, 45_000);
+
+  // Agent-usage reconciliation sweep (Wave 2 metering completeness): debit the unit wallet for
+  // DAEMON (cron/heartbeat/channel) agent turns the engine recorded in zaki_bot.turn_usage but that
+  // were never metered live (http turns are settled on the SSE done-frame and are NEVER touched here).
+  // Idempotent + crash-safe: reconciled_at cursor + 'reconcile:<turn_key>' ledger keys. Gated off by
+  // default; staging sets ZAKI_AGENT_USAGE_RECONCILE_ENABLED=1. A running flag prevents overlap.
+  if (process.env.ZAKI_AGENT_USAGE_RECONCILE_ENABLED === "1" || process.env.ZAKI_AGENT_USAGE_RECONCILE_ENABLED === "true") {
+    const RECONCILE_SWEEP_INTERVAL_MS = 60 * 1000;
+    let reconcileRunning = false;
+    const runReconcileSweep = async () => {
+      if (reconcileRunning) return; // no overlapping sweeps
+      reconcileRunning = true;
+      try {
+        const r = await reconcileDaemonTurnUsage({
+          dbQuery,
+          dbGet,
+          reserveUnits,
+          settleHold,
+          ensureWallet,
+          recordUsageEvent,
+          deterministicGrantId,
+          logStructured,
+          env: process.env,
+        });
+        if (r.debited > 0 || r.replayed > 0 || r.failed > 0) {
+          logStructured("info", "agent.reconcile.sweep", r);
+        }
+      } catch (err) {
+        logStructured("error", "agent.reconcile.sweep_failed", { message: err?.message || String(err) });
+      } finally {
+        reconcileRunning = false;
+      }
+    };
+    setTimeout(() => {
+      void runReconcileSweep();
+      setInterval(() => { void runReconcileSweep(); }, RECONCILE_SWEEP_INTERVAL_MS);
+    }, 50_000);
+  }
 
   if (runtimeLearningRetentionPolicy.enabled) {
     const LEARNING_RETENTION_CLEANUP_INTERVAL_MS =

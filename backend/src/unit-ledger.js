@@ -149,7 +149,7 @@ export async function applyWeeklyResetLocked(c, wallet) {
  * @returns {Promise<{ok:boolean, hold?:object, funding?:object, remaining?:number, idempotent?:boolean, reason?:string, shortfall?:number}>}
  */
 export async function reserveUnits(
-  { userId, grantId, productId, action, reservedUnits, reserveIdempotencyKey, expiresAt },
+  { userId, grantId, productId, action, reservedUnits, reserveIdempotencyKey, expiresAt, allowOverdraw = false },
   client
 ) {
   const run = async (c) => {
@@ -205,7 +205,23 @@ export async function reserveUnits(
       topupUnits: rem.topupUnits,
     });
     if (!funding.ok) {
-      return { ok: false, reason: "insufficient_units", shortfall: funding.shortfall, remaining: rem.remaining };
+      // allowOverdraw: the op ALREADY happened and MUST be debited regardless of balance — only
+      // the reconciliation sweep for daemon turns uses this (a background turn can't 429). We
+      // drain top-up first (paid units), then push the remainder onto weekly_used past allowance:
+      // weekly_used_units has only a >= 0 CHECK, so over-the-cap debits are permitted, and routing
+      // the overflow through fromRecurring keeps the funding_json refund-correct at settle.
+      // Live (interactive) reserves never set this flag → the 429 gate is unchanged for them.
+      if (!allowOverdraw) {
+        return { ok: false, reason: "insufficient_units", shortfall: funding.shortfall, remaining: rem.remaining };
+      }
+      const need = Math.max(0, Number(reservedUnits) || 0);
+      const fromTopup = Math.min(need, Number(rem.topupUnits) || 0);
+      funding.fromTopup = fromTopup;
+      funding.fromRecurring = need - fromTopup;
+      funding.funded = need;
+      funding.shortfall = 0;
+      funding.ok = true;
+      funding.overdraw = true;
     }
 
     // 4) Insert the hold FIRST (DB UNIQUE is the idempotency arbiter). Debit ONLY if we created the row.
