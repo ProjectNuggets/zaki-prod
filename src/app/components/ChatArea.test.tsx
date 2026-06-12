@@ -27,6 +27,7 @@ import {
   resolveContextGaugePercent,
   ChatRequestError,
   isRetryableChatError,
+  resolveTurnRetryable,
   CHAT_RETRYABLE_MAX_ATTEMPTS,
   CHAT_RETRYABLE_BACKOFF_MS,
 } from "./ChatArea";
@@ -483,6 +484,52 @@ describe("P1-12 chat-stream retryable classification (isRetryableChatError)", ()
       expect(typeof ms).toBe("number");
       expect(ms).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("P1-12 follow-up: post-content retryable is NOT replay-safe (resolveTurnRetryable)", () => {
+  it("stays retryable when the BFF flagged it AND no content was received yet (pre-content drop)", () => {
+    // Pre-content path (readiness-503 / ensure-provisioned-503 / gateway_draining
+    // before !upstream.body): genuinely replay-safe, no engine work done.
+    expect(resolveTurnRetryable(true, false)).toBe(true);
+  });
+
+  it("DOWNGRADES to non-retryable once any content was received (mid-stream drop)", () => {
+    // The turn already partially executed (tool calls + metering may have run);
+    // auto-replaying it would duplicate the turn + double-meter.
+    expect(resolveTurnRetryable(true, true)).toBe(false);
+  });
+
+  it("stays non-retryable when the BFF did not flag it, regardless of content", () => {
+    expect(resolveTurnRetryable(false, false)).toBe(false);
+    expect(resolveTurnRetryable(false, true)).toBe(false);
+  });
+
+  it("a ChatRequestError built from a post-content retryable frame is NOT auto-retried", () => {
+    // Integration of the helper with the replay gate: when content was received,
+    // resolveTurnRetryable yields false → the error carries retryable:false →
+    // isRetryableChatError returns false → the send loop will NOT replay.
+    const contentReceived = true;
+    const err = new ChatRequestError(
+      "Agent stream failed.",
+      502,
+      "chat_error",
+      resolveTurnRetryable(true, contentReceived)
+    );
+    expect(err.retryable).toBe(false);
+    expect(isRetryableChatError(err)).toBe(false);
+  });
+
+  it("a ChatRequestError built from a pre-content retryable frame IS auto-retried", () => {
+    const contentReceived = false;
+    const err = new ChatRequestError(
+      "ZAKI agent is temporarily unavailable. Please try again shortly.",
+      502,
+      "chat_error",
+      resolveTurnRetryable(true, contentReceived)
+    );
+    expect(err.retryable).toBe(true);
+    expect(isRetryableChatError(err)).toBe(true);
   });
 });
 
@@ -1109,6 +1156,91 @@ describe("ChatArea Component", () => {
     } finally {
       nowSpy.mockRestore();
     }
+  });
+
+  // P1-12 follow-up (Wave A): the chat POST has no idempotency/turn key, so a
+  // retryable error frame auto-replays the SAME turn. These two tests pin the
+  // safety boundary: a MID-stream drop (content already streamed) must NOT replay
+  // (else duplicate turn + double metering); a PRE-content drop (no content) MUST
+  // still replay (readiness-503 / draining recovery preserved).
+  it("does NOT auto-replay a retryable error frame that arrives AFTER content streamed (no duplicate send)", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+
+    // Agent SSE: a content token FIRST, then a retryable:true error frame. Even
+    // though the BFF (mis)labelled it retryable, the FE must treat it as a hard
+    // error because content was already received — the turn may have partially run.
+    const midStreamDrop = [
+      "event: token\ndata: " + JSON.stringify({ delta: "partial answer" }) + "\n\n",
+      "event: error\ndata: " +
+        JSON.stringify({ code: "chat_error", message: "connection dropped", retryable: true }) +
+        "\n\n",
+    ];
+
+    let streamSends = 0;
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/agent/chat/stream") {
+        streamSends += 1;
+        return makeSseStreamResponse(midStreamDrop);
+      }
+      return { ok: true, status: 200, json: async () => ({}), headers: new Headers() };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "do the thing" } });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    // The single send lands.
+    await waitFor(() => expect(streamSends).toBe(1));
+    // Give the replay loop (incl. its 600ms first backoff) ample real time to fire
+    // if the guard were broken; it must NOT — exactly one send, no duplicate turn.
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    expect(streamSends).toBe(1);
+  });
+
+  it("DOES auto-replay a retryable error frame that arrives BEFORE any content (pre-content recovery preserved)", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+
+    // Agent SSE: a retryable:true error frame with NO content first — a genuine
+    // pre-content drop (e.g. gateway_draining). This MUST replay the same turn.
+    const preContentDrop = [
+      "event: error\ndata: " +
+        JSON.stringify({
+          code: "gateway_draining",
+          message: "agent is draining, retry shortly",
+          retryable: true,
+        }) +
+        "\n\n",
+    ];
+    // Second attempt succeeds with content so the loop terminates.
+    const recovered = [
+      "event: token\ndata: " + JSON.stringify({ delta: "recovered answer" }) + "\n\n",
+      "event: done\ndata: " + JSON.stringify({ status: "ok" }) + "\n\n",
+    ];
+
+    let streamSends = 0;
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/agent/chat/stream") {
+        streamSends += 1;
+        return makeSseStreamResponse(streamSends === 1 ? preContentDrop : recovered);
+      }
+      return { ok: true, status: 200, json: async () => ({}), headers: new Headers() };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "do the thing" } });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    // The bounded replay fires a SECOND send after the backoff — pre-content
+    // recovery is preserved. (Generous timeout to absorb the 600ms backoff.)
+    await waitFor(() => expect(streamSends).toBe(2), { timeout: 4000 });
   });
 
   it("renders ready state for a new chat", async () => {

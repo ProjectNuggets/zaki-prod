@@ -64,6 +64,7 @@ import { createStripeWebhookHandler } from "./billing-stripe-webhook-handler.js"
 import {
   buildAgentForwardHeaders,
   buildAgentRetrySsePayload,
+  buildErroredStreamSseFrames,
   extractAgentTokenChunk,
   normalizeTelegramConnectPayload,
   resolveCanonicalAgentUserId,
@@ -936,14 +937,20 @@ function finishErroredStreamResponse(res, label, error, options = {}) {
   }
 
   if (options.sse && !res.destroyed && !res.writableEnded) {
-    res.write(
-      `event: error\ndata: ${JSON.stringify({
-        code: code || "upstream_stream_error",
-        message,
-        retryable: true,
-      })}\n\n`
-    );
-    res.write(`event: done\ndata: ${JSON.stringify({ status: "error" })}\n\n`);
+    // Wave A (P1-12 follow-up): a mid-stream error frame is only auto-replay-safe
+    // if NO content was written for this turn yet. The chat POST has no idempotency
+    // key, so the FE replays any retryable frame — replaying a turn that already
+    // partially executed (content streamed) duplicates side-effecting tool calls +
+    // metering. Callers pass options.contentStreamed=true once the first content
+    // chunk has been written; that downgrades this frame to retryable:false (hard,
+    // user-recoverable). Pre-content callers (the default) stay retryable:true.
+    const { errorFrame, doneFrame } = buildErroredStreamSseFrames({
+      code: code || "upstream_stream_error",
+      message,
+      contentStreamed: options.contentStreamed === true,
+    });
+    res.write(errorFrame);
+    res.write(doneFrame);
   }
 
   if (!res.destroyed && !res.writableEnded) {
@@ -11103,6 +11110,14 @@ const agentChatStreamHandler = async (req, res) => {
     return res.status(404).json({ error: "ZAKI agent backend is disabled." });
   }
 
+  // Wave A (P1-12 follow-up): declared at handler scope so the outer catch can read
+  // it. Tracks whether ANY content chunk has been written to the client for this
+  // turn (set true on the first res.write(decoded) in the SSE loop below). The outer
+  // catch uses it to decide retryability: a reader error BEFORE any content is
+  // replay-safe (engine did no turn work); AFTER content the turn partially executed
+  // and MUST NOT auto-replay (would duplicate the turn + double-meter).
+  const streamProgress = { contentStreamed: false };
+
   try {
     const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
     if (!nullclawBase) {
@@ -11463,6 +11478,9 @@ const agentChatStreamHandler = async (req, res) => {
       // cost (spec: the work was consumed). An unguarded write would throw into catch → release (wrong).
       if (!res.destroyed && !res.writableEnded) {
         res.write(decoded);
+        // First content write for this turn → a subsequent reader error is no longer
+        // safe to auto-replay (see streamProgress declaration above).
+        streamProgress.contentStreamed = true;
       }
       buffer += decoded;
 
@@ -11521,7 +11539,15 @@ const agentChatStreamHandler = async (req, res) => {
     const message = error?.message || "Agent stream failed.";
     const timedOut = /\btimed out\b/i.test(message);
     if (res.headersSent) {
-      finishErroredStreamResponse(res, "Agent stream", error, { sse: true });
+      // Wave A (P1-12 follow-up): if content already streamed for this turn, emit a
+      // NON-retryable (terminal) error frame — the turn may have partially executed,
+      // so auto-replaying it would duplicate the turn + double-meter. Pre-content
+      // drops (headers sent but contentStreamed still false) stay retryable so the FE
+      // can safely auto-recover.
+      finishErroredStreamResponse(res, "Agent stream", error, {
+        sse: true,
+        contentStreamed: streamProgress.contentStreamed === true,
+      });
       return;
     }
     res.status(timedOut ? 504 : 500).json({

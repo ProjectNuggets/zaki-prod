@@ -148,14 +148,23 @@ describe("ApprovalRequiredCard", () => {
     });
   });
 
-  it("renders a retrying state + Retry-approval button when approve hits a connection-class outage", async () => {
+  it("renders a retrying state + Retry-approval button when approve hits a connection-class outage, but keeps Deny/Modify available so the user can pivot", async () => {
     const onApprove = jest.fn(async () => {
       const error = new Error("agent_unreachable") as Error & { retryable?: boolean };
       error.retryable = true;
       throw error;
     });
+    const onModify = jest.fn(async () => {});
+    const onDeny = jest.fn(async () => {});
 
-    render(<ApprovalRequiredCard request={request} onApprove={onApprove} />);
+    render(
+      <ApprovalRequiredCard
+        request={request}
+        onApprove={onApprove}
+        onModify={onModify}
+        onDeny={onDeny}
+      />
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Approve extension_click action" }));
 
@@ -170,10 +179,20 @@ describe("ApprovalRequiredCard", () => {
     expect(
       screen.getByRole("button", { name: "Retry approval for extension_click" })
     ).toBeInTheDocument();
-    // The standard action row is replaced by the retry affordance.
-    expect(
-      screen.queryByRole("button", { name: "Deny extension_click action" })
-    ).not.toBeInTheDocument();
+    // Wave A (P1-12 follow-up / MINOR): Deny + Modify must STILL be available so the
+    // user is never stuck on Retry alone if the agent stays unreachable.
+    const denyBtn = screen.getByRole("button", { name: "Deny extension_click action" });
+    expect(denyBtn).toBeInTheDocument();
+    expect(denyBtn).not.toBeDisabled();
+    const modifyBtn = screen.getByRole("button", { name: "Modify extension_click action" });
+    expect(modifyBtn).toBeInTheDocument();
+    expect(modifyBtn).not.toBeDisabled();
+
+    // And the user can actually pivot to Deny from the retrying state.
+    await act(async () => {
+      fireEvent.click(denyBtn);
+    });
+    expect(onDeny).toHaveBeenCalledWith("approval-1", request);
   });
 
   it("re-POSTs the SAME approval via the Retry button and clears the retrying state on success", async () => {

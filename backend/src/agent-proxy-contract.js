@@ -66,6 +66,34 @@ export function buildAgentRetrySsePayload(statusCode) {
   return null;
 }
 
+// Wave A (B5 / P1-12 follow-up): decide whether a mid-stream error frame may be
+// labelled retryable. The chat POST carries no idempotency/turn key, so the FE
+// auto-replays any `event: error` frame with retryable:true. Replaying a turn
+// whose engine has ALREADY partially processed it (content streamed → tool calls
+// + metering may have run) produces a DUPLICATE turn + double metering. A turn is
+// only safe to auto-replay if NO content has been written to the client yet
+// (pre-content paths: readiness 503, ensure-provisioned 503, gateway_draining
+// when !upstream.body — all fire before the first content write). Once any
+// content has streamed, the error is terminal/hard (retryable:false) so the FE
+// surfaces it to the user instead of silently re-sending.
+export function resolveStreamErrorRetryable({ contentStreamed } = {}) {
+  return contentStreamed !== true;
+}
+
+// Builds the SSE frames for a terminal stream error, choosing retryability from
+// whether content has already been streamed for this turn. Returns the raw frame
+// string so the decision is unit-testable independent of the Express response.
+export function buildErroredStreamSseFrames({ code, message, contentStreamed } = {}) {
+  const retryable = resolveStreamErrorRetryable({ contentStreamed });
+  const errorFrame = `event: error\ndata: ${JSON.stringify({
+    code: code || "upstream_stream_error",
+    message: message || "Stream failed.",
+    retryable,
+  })}\n\n`;
+  const doneFrame = `event: done\ndata: ${JSON.stringify({ status: "error" })}\n\n`;
+  return { retryable, errorFrame, doneFrame, frames: `${errorFrame}${doneFrame}` };
+}
+
 function normalizedStringOrNull(value) {
   if (value === undefined || value === null) return null;
   const normalized = String(value).trim();

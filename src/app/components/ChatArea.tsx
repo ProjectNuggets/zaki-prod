@@ -286,6 +286,21 @@ export function isRetryableChatError(error: unknown): boolean {
   return false;
 }
 
+// P1-12 follow-up (Wave A): the chat POST carries no idempotency/turn key, so the
+// send loop auto-replays any retryable error frame. A retryable error is only
+// SAFE to auto-replay when NO content has been received for this turn — once
+// content has streamed, the engine may have partially executed the turn (tool
+// calls + metering ran), so replaying would duplicate the turn + double-meter.
+// This downgrades the BFF-supplied retryable flag to false once content arrived.
+// Defense in depth: the BFF now also labels post-content drops non-retryable, but
+// the FE stays safe even if some path mislabels.
+export function resolveTurnRetryable(
+  bffRetryable: boolean,
+  contentReceived: boolean
+): boolean {
+  return bffRetryable === true && contentReceived !== true;
+}
+
 const MEMORY_STATUS_SYNC_THROTTLE_MS = 1200;
 const NULLALIS_NARRATION_PHASES = new Set<NullalisNarrationPhase>([
   "thinking",
@@ -5947,11 +5962,26 @@ export function ChatArea() {
       return null;
     };
 
+    // P1-12 follow-up (Wave A): track whether ANY content chunk has been received
+    // for THIS turn. The chat POST carries no idempotency/turn key, so the replay
+    // loop auto-resends on a retryable error frame. If content already streamed,
+    // the engine may have partially executed the turn (side-effecting tool calls +
+    // metering), so auto-replaying would duplicate the turn + double-meter. We only
+    // treat a retryable error as replay-safe when zero content was received; a
+    // retryable error AFTER content is downgraded to non-retryable (hard) below.
+    // This is defense in depth — the BFF now also labels post-content drops
+    // non-retryable, but the FE must stay safe even if some path mislabels.
+    const turnContent = { received: false };
+
     const readPayloadChunk = (
       payload: Record<string, unknown>,
       eventType?: string
     ): { done?: boolean; chunk?: string; agentUrl?: string } => {
       const payloadType = typeof payload.type === "string" ? payload.type : "";
+      const trackChunk = (chunk: string): { chunk: string } => {
+        if (chunk) turnContent.received = true;
+        return { chunk };
+      };
       if (isZakiAgentSpace && (eventType === "ready" || eventType === "reply_start")) {
         if (eventType === "reply_start") {
           markZakiBotReplyStart({ ...payload, type: "reply_start" });
@@ -5966,7 +5996,7 @@ export function ChatArea() {
           (typeof payload.chunk === "string" && payload.chunk) ||
           (typeof payload.content === "string" && payload.content) ||
           "";
-        return tokenChunk ? { chunk: tokenChunk } : {};
+        return tokenChunk ? trackChunk(tokenChunk) : {};
       }
       if (isZakiAgentSpace && payloadType === "token") {
         const tokenChunk =
@@ -5976,7 +6006,7 @@ export function ChatArea() {
           (typeof payload.chunk === "string" && payload.chunk) ||
           (typeof payload.content === "string" && payload.content) ||
           "";
-        return tokenChunk ? { chunk: tokenChunk } : {};
+        return tokenChunk ? trackChunk(tokenChunk) : {};
       }
       if (
         eventType === "done" ||
@@ -6020,7 +6050,11 @@ export function ChatArea() {
               (typeof payload.content === "string" && payload.content) ||
               ""
             : "";
-        return finalChunk ? { done: true, chunk: finalChunk } : { done: true };
+        if (finalChunk) {
+          turnContent.received = true;
+          return { done: true, chunk: finalChunk };
+        }
+        return { done: true };
       }
       if (eventType === "error") {
         if (isZakiAgentSpace) {
@@ -6030,11 +6064,16 @@ export function ChatArea() {
           (typeof payload.message === "string" && payload.message) ||
           (typeof payload.error === "string" && payload.error) ||
           "Agent stream failed.";
+        // P1-12 follow-up (Wave A): only honor retryable when NO content has been
+        // received for this turn. A retryable error AFTER content means the turn may
+        // have partially executed (tool calls + metering), so auto-replaying would
+        // duplicate the turn + double-meter — treat it as a hard error instead.
+        const retryable = resolveTurnRetryable(payload.retryable === true, turnContent.received);
         throw new ChatRequestError(
           msg,
           502,
           typeof payload.code === "string" ? payload.code : "chat_error",
-          payload.retryable === true
+          retryable
         );
       }
 
@@ -6284,11 +6323,14 @@ export function ChatArea() {
           (typeof payload.message === "string" && payload.message.trim()) ||
           (typeof payload.error === "string" && payload.error.trim()) ||
           "ZAKI couldn't finish that reply. Please try again.";
+        // P1-12 follow-up (Wave A): a retryable error after content was received is
+        // unsafe to auto-replay (partial turn → duplicate + double-meter). Downgrade.
+        const retryable = resolveTurnRetryable(payload.retryable === true, turnContent.received);
         throw new ChatRequestError(
           errorMessage,
           502,
           typeof payload.code === "string" ? payload.code : "chat_error",
-          payload.retryable === true
+          retryable
         );
       }
 
@@ -6371,7 +6413,7 @@ export function ChatArea() {
         console.warn("[zaki:sse] unhandled event type:", eventType, payload);
       }
 
-      return chunk ? { chunk } : {};
+      return chunk ? trackChunk(chunk) : {};
     };
 
     const contentType = response.headers.get("content-type") || "";
@@ -6517,33 +6559,39 @@ export function ChatArea() {
 
       if (dataLines.length > 0) {
         const payloadText = dataLines.join("\n");
+        // Only JSON.parse is allowed to fall back to processRawData. readPayloadChunk
+        // is INTENTIONAL about throwing a ChatRequestError on an `event: error` frame
+        // (P1-12 replay relies on that throw propagating to the send loop); keep it
+        // OUTSIDE the parse-fallback catch so the error is never swallowed + lost.
+        let payload: Record<string, unknown> | null = null;
         try {
-          const payload = JSON.parse(payloadText) as Record<string, unknown>;
-          const result = readPayloadChunk(payload, eventType);
-          if (result.chunk) {
-            appendAgentDisplayChunk(result.chunk);
-          }
-          if (result.done) {
-            sawTerminalEvent = true;
-            flushRenderedContent();
-            streamClosed = true;
-            return;
-          }
-          if (result.agentUrl) {
-            flushRenderedContent();
-            await streamAgentInvocation(result.agentUrl, threadSlug, assistantId, signal);
-            try {
-              await reader.cancel();
-            } catch {
-              // ignore cancel errors
-            }
-            streamClosed = true;
-            return;
-          }
-          return;
+          payload = JSON.parse(payloadText) as Record<string, unknown>;
         } catch {
           await processRawData(payloadText);
+          return;
         }
+        const result = readPayloadChunk(payload, eventType);
+        if (result.chunk) {
+          appendAgentDisplayChunk(result.chunk);
+        }
+        if (result.done) {
+          sawTerminalEvent = true;
+          flushRenderedContent();
+          streamClosed = true;
+          return;
+        }
+        if (result.agentUrl) {
+          flushRenderedContent();
+          await streamAgentInvocation(result.agentUrl, threadSlug, assistantId, signal);
+          try {
+            await reader.cancel();
+          } catch {
+            // ignore cancel errors
+          }
+          streamClosed = true;
+          return;
+        }
+        return;
       }
     };
 

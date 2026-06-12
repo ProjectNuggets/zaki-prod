@@ -2,9 +2,11 @@ import { describe, expect, test } from "@jest/globals";
 import {
   buildAgentForwardHeaders,
   buildAgentRetrySsePayload,
+  buildErroredStreamSseFrames,
   extractAgentTokenChunk,
   normalizeTelegramConnectPayload,
   resolveCanonicalAgentUserId,
+  resolveStreamErrorRetryable,
 } from "./agent-proxy-contract.js";
 
 describe("resolveCanonicalAgentUserId", () => {
@@ -68,6 +70,54 @@ describe("buildAgentRetrySsePayload", () => {
       message: "agent is draining, retry shortly",
     });
     expect(buildAgentRetrySsePayload(500)).toBeNull();
+  });
+});
+
+describe("resolveStreamErrorRetryable (P1-12 follow-up)", () => {
+  test("retryable when NO content has streamed yet (pre-content drop is replay-safe)", () => {
+    expect(resolveStreamErrorRetryable({ contentStreamed: false })).toBe(true);
+    expect(resolveStreamErrorRetryable({})).toBe(true);
+    expect(resolveStreamErrorRetryable()).toBe(true);
+  });
+
+  test("NOT retryable once content has streamed (turn may have partially executed)", () => {
+    expect(resolveStreamErrorRetryable({ contentStreamed: true })).toBe(false);
+  });
+});
+
+describe("buildErroredStreamSseFrames (P1-12 follow-up)", () => {
+  test("emits retryable:false once content has been written for the turn", () => {
+    const { retryable, errorFrame, doneFrame } = buildErroredStreamSseFrames({
+      code: "upstream_stream_error",
+      message: "Agent stream failed.",
+      contentStreamed: true,
+    });
+    expect(retryable).toBe(false);
+    // The error frame the FE parses must carry retryable:false so it does NOT
+    // auto-replay a mid-stream drop (which would duplicate the turn + double-meter).
+    expect(errorFrame).toContain("event: error");
+    const errorData = JSON.parse(errorFrame.split("data: ")[1].split("\n\n")[0]);
+    expect(errorData).toMatchObject({
+      code: "upstream_stream_error",
+      retryable: false,
+    });
+    expect(doneFrame).toContain('"status":"error"');
+  });
+
+  test("emits retryable:true before any content (pre-content drop stays auto-recoverable)", () => {
+    const { retryable, errorFrame } = buildErroredStreamSseFrames({
+      code: "upstream_stream_error",
+      message: "Agent stream failed.",
+      contentStreamed: false,
+    });
+    expect(retryable).toBe(true);
+    const errorData = JSON.parse(errorFrame.split("data: ")[1].split("\n\n")[0]);
+    expect(errorData.retryable).toBe(true);
+  });
+
+  test("defaults to retryable:true when contentStreamed is omitted (other pre-content callers)", () => {
+    const { retryable } = buildErroredStreamSseFrames({ code: "x", message: "y" });
+    expect(retryable).toBe(true);
   });
 });
 

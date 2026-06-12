@@ -282,6 +282,10 @@ export function ApprovalRequiredCard({
             </div>
           ) : null}
           {retryable ? (
+            // Wave A (P1-12 follow-up / MINOR): show the "agent restarting" status,
+            // but the Retry / Modify / Deny affordances live in the always-rendered
+            // actions row below — so if the agent stays unreachable the user can
+            // still pivot to Deny (or Modify) and is never stuck on Retry alone.
             <div role="status" className="zaki-approval-card__retrying">
               <span className="zaki-approval-card__retrying-msg">
                 {submitting === "approve" ? (
@@ -293,30 +297,6 @@ export function ApprovalRequiredCard({
                   defaultValue: "Agent restarting — retrying your approval...",
                 })}
               </span>
-              <button
-                type="button"
-                disabled={!!submitting || !onApprove}
-                onClick={() => handleAction("approve")}
-                aria-label={t("zakiControls.approval.retryAria", {
-                  defaultValue: "Retry approval for {{tool}}",
-                  tool: request.tool,
-                })}
-                className={cn(
-                  "zaki-approval-card__button is-primary",
-                  submitting === "approve" && "is-loading"
-                )}
-              >
-                {submitting === "approve" ? (
-                  <span>
-                    <Loader2 className="size-3 animate-spin" aria-hidden />{" "}
-                    {t("zakiControls.approval.approvingState")}
-                  </span>
-                ) : (
-                  t("zakiControls.approval.retryBtn", {
-                    defaultValue: "Retry approval",
-                  })
-                )}
-              </button>
             </div>
           ) : null}
           {previewRows.length ? (
@@ -333,19 +313,34 @@ export function ApprovalRequiredCard({
             <span>{t("zakiControls.approval.riskLabel")} {request.riskLevel || "unknown"}</span>
             <span>{request.tool}</span>
           </div>
-          {retryable ? null : (
+          {/* Wave A (P1-12 follow-up / MINOR): always render the actions row. When
+              retryable, the primary button becomes "Retry approval" (re-POSTs the
+              same approve), but Modify + Deny stay available so the user can always
+              pivot away from a stuck retry. */}
+          {(
             <div className="zaki-approval-card__actions">
               <button
                 type="button"
                 disabled={!!submitting || !onApprove}
                 onClick={() => handleAction("approve")}
-                aria-label={approveLabel}
+                aria-label={
+                  retryable
+                    ? t("zakiControls.approval.retryAria", {
+                        defaultValue: "Retry approval for {{tool}}",
+                        tool: request.tool,
+                      })
+                    : approveLabel
+                }
                 className={cn("zaki-approval-card__button is-primary", submitting === "approve" && "is-loading")}
               >
                 {submitting === "approve" ? (
                   <span>
                     <Loader2 className="size-3 animate-spin" aria-hidden /> {t("zakiControls.approval.approvingState")}
                   </span>
+                ) : retryable ? (
+                  t("zakiControls.approval.retryBtn", {
+                    defaultValue: "Retry approval",
+                  })
                 ) : (
                   t("zakiControls.approval.approveBtn")
                 )}
