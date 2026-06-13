@@ -122,12 +122,14 @@ import type {
   DocSource,
 } from "@/types";
 import { useMessages } from "@/queries/useThreads";
+import { useEntitlements, useMeterStatus } from "@/queries/useBilling";
 import { spaceKeys } from "@/queries/useSpaces";
 import { useZakiSessions, zakiSessionKeys } from "@/queries/useZakiSessions";
 import { buildZakiSessionRepairTitle, prepareAutoTitleExchange } from "@/lib/sessionAutoTitle";
 import { useMessageReactions } from "@/queries/useMessageReactions";
 import { MemoryCaptureToast } from "./memory/MemoryCaptureToast";
 import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
+import { PaywallCard, classifyBillingDenial, type PaywallState } from "./PaywallCard";
 import { MemoryImportSheet } from "./onboarding/MemoryImportSheet";
 import { OnboardingTour } from "./onboarding/OnboardingTour";
 import { AgentArtifactCanvas } from "./agent/AgentArtifactCanvas";
@@ -3005,6 +3007,15 @@ export function ChatArea() {
   const [agentExtensionDiagnosticsError, setAgentExtensionDiagnosticsError] = useState<string | null>(null);
   const [nullalisApprovalRequest, setNullalisApprovalRequest] =
     useState<NullalisApprovalRequest | null>(null);
+  // Paywall card: shown when a billing denial fires (insufficient_units /
+  // entitlement_inactive / access_expired). Mirrors the approval-card pattern.
+  const [paywallCardData, setPaywallCardData] = useState<{
+    state: PaywallState;
+    planLabel?: string;
+    remaining?: number;
+    resetAt?: string | null;
+    message: string;
+  } | null>(null);
   const [approvalContinuationPendingId, setApprovalContinuationPendingId] = useState<string | null>(null);
   const [agentArtifactEventCount, setAgentArtifactEventCount] = useState(0);
   const [nullalisContextGauge, setNullalisContextGauge] =
@@ -3203,6 +3214,10 @@ export function ChatArea() {
   });
   const onboardingBrainCount =
     onboardingBrainGraph.data?.total_nodes_in_corpus ?? 0;
+  // Billing state — read here so the paywall card can surface plan/usage data
+  // without an extra fetch when the error handler fires.
+  const { data: entitlementsResult } = useEntitlements();
+  const { data: meterResult } = useMeterStatus();
   const [memoryImportOpen, setMemoryImportOpen] = useState(false);
   // Legacy holdover: ZakiExperimentalNotice still keys off this flag.
   // The welcome hero is retired, so it remains complete for the bot surface.
@@ -7542,13 +7557,27 @@ export function ChatArea() {
         updateAssistantError(threadId, assistantMessageId, "Generation stopped.", "aborted");
         return;
       }
-      if (error instanceof ChatRequestError && error.code === "access_expired") {
-        if (isZakiBotTarget) {
-          finalizeZakiBotProgress("error");
+      if (error instanceof ChatRequestError) {
+        const { isPaywall, state: paywallState } = classifyBillingDenial(error.code);
+        if (isPaywall && paywallState) {
+          if (isZakiBotTarget) {
+            finalizeZakiBotProgress("error");
+          }
+          // Show the inline paywall card — subsumes the old access_expired redirect.
+          const planLabel =
+            entitlementsResult?.data?.effective?.tier ??
+            entitlementsResult?.data?.plan?.tier;
+          const remaining = meterResult?.data?.weekly?.remaining ?? undefined;
+          const resetAt = meterResult?.data?.weekly?.resetAt ?? null;
+          setPaywallCardData({
+            state: paywallState,
+            planLabel: planLabel ?? undefined,
+            remaining: typeof remaining === "number" ? remaining : undefined,
+            resetAt,
+            message: error.message,
+          });
+          return;
         }
-        toast.error(error.message);
-        navigate("/pricing");
-        return;
       }
       if (isZakiBotTarget) {
         finalizeZakiBotProgress("error");
@@ -9017,6 +9046,19 @@ export function ChatArea() {
                   timeline copy was dropped in 18328cd so the decided
                   state has one owner. Surfaces directly above the
                   composer where the user's attention is. */}
+              {paywallCardData ? (
+                <div className="zaki-approval-card-slot">
+                  <PaywallCard
+                    state={paywallCardData.state}
+                    planLabel={paywallCardData.planLabel}
+                    remaining={paywallCardData.remaining}
+                    resetAt={paywallCardData.resetAt}
+                    message={paywallCardData.message}
+                    onSeePlans={() => navigate("/pricing")}
+                    onDismiss={() => setPaywallCardData(null)}
+                  />
+                </div>
+              ) : null}
               {isZakiBotActiveSpace && nullalisApprovalRequest ? (
                 <div className="zaki-approval-card-slot">
                   <ApprovalRequiredCard
