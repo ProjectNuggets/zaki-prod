@@ -7268,6 +7268,11 @@ export function ChatArea() {
       return;
     }
 
+    // A new turn is starting — clear any prior billing-denial card so a stale
+    // "out of usage" notice doesn't linger after the user resolves billing.
+    // It re-appears automatically if this turn also hits the paywall.
+    setPaywallCardData(null);
+
     const isZakiBotTarget = isZakiBotSpaceId(resolvedWorkspaceSlug);
     if (isZakiBotTarget) {
       const provisioned = await ensureZakiBotProvisioned(false);
