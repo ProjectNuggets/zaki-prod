@@ -67,6 +67,18 @@ function hasAttachmentPayload(payload = {}) {
   });
 }
 
+function hasSuperpowersMode(payload = {}) {
+  if (!isPlainObject(payload)) return false;
+  const modeFields = [
+    payload.mode,
+    payload.reasoningEffort,
+    payload.reasoning_effort,
+    payload.assistant_mode,
+    payload.assistantMode,
+  ].map(lowerText);
+  return modeFields.some((value) => value === "superpowers");
+}
+
 function hasDeepMode(payload = {}, message = "") {
   if (!isPlainObject(payload)) return false;
   const modeFields = [
@@ -115,6 +127,9 @@ export function classifyAgentMeterAction(payload = {}, message = "") {
   if (hasVoiceMode(payload)) return "agent_voice_turn";
   if (hasMemoryWriteIntent(text)) return "agent_memory_write";
   if (hasMemoryReadIntent(text)) return "agent_memory_read";
+  // Superpowers check MUST precede deep-mode: a superpowers turn is a distinct
+  // telemetry event; cost comes from billed subagent turns, not a flat surcharge.
+  if (hasSuperpowersMode(payload)) return "agent_superpowers";
   if (hasDeepMode(payload, text)) return "agent_deep_research";
   if (hasToolMode(payload, text)) return "agent_tool_call";
   return "agent_turn";
@@ -132,11 +147,15 @@ export function estimateAgentMeterUnits(message = "", action = "agent_turn", pay
         ? 1
         : normalizedAction.includes("voice")
           ? 1.25
-          : normalizedAction.includes("deep") || normalizedAction.includes("research")
+          // agent_superpowers: baseUnits = 3 (same as deep-research).
+          // Real cost comes from billed subagent turns; this is telemetry/estimate only.
+          : normalizedAction.includes("superpowers")
             ? 3
-            : normalizedAction.includes("tool") || normalizedAction.includes("search")
-              ? 2
-              : 1;
+            : normalizedAction.includes("deep") || normalizedAction.includes("research")
+              ? 3
+              : normalizedAction.includes("tool") || normalizedAction.includes("search")
+                ? 2
+                : 1;
   return Math.round(Math.max(baseUnits, tokenUnits + storageUnits) * 10_000) / 10_000;
 }
 
