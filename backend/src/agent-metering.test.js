@@ -21,6 +21,27 @@ describe("agent central metering helpers", () => {
     expect(classifyAgentMeterAction({ attachments: [{ bytes: 1024 }] }, "read this")).toBe("agent_file_upload");
   });
 
+  test("classifies superpowers turns as agent_superpowers (Phase 5 T7)", () => {
+    // Primary detection: reasoning_effort === "superpowers"
+    expect(classifyAgentMeterAction({ reasoning_effort: "superpowers" }, "Do something ambitious")).toBe("agent_superpowers");
+    // Also via reasoningEffort camelCase
+    expect(classifyAgentMeterAction({ reasoningEffort: "superpowers" }, "Fan out")).toBe("agent_superpowers");
+    // Also via mode field
+    expect(classifyAgentMeterAction({ mode: "superpowers" }, "Coordinate agents")).toBe("agent_superpowers");
+    // Superpowers wins over deep (inserted ahead of hasDeepMode)
+    expect(classifyAgentMeterAction({ reasoning_effort: "superpowers", mode: "deep" }, "research")).toBe("agent_superpowers");
+    // NO REGRESSION: mode:"deep" still → agent_deep_research (not superseded by superpowers check)
+    expect(classifyAgentMeterAction({ mode: "deep" }, "Study this market")).toBe("agent_deep_research");
+    // NO REGRESSION: reasoning_effort:"high" with no deep mode indicator → agent_turn (existing behaviour)
+    expect(classifyAgentMeterAction({ reasoning_effort: "high" }, "Study this market")).toBe("agent_turn");
+  });
+
+  test("agent_superpowers baseUnits = 3 (same as deep-research, no flat surcharge)", () => {
+    expect(estimateAgentMeterUnits("hello", "agent_superpowers")).toBe(3);
+    // Deep research regression
+    expect(estimateAgentMeterUnits("hello", "agent_deep_research")).toBe(3);
+  });
+
   test("estimates agent grants with stable action floors and payload storage", () => {
     expect(estimateAgentMeterUnits("hello", "agent_turn")).toBe(1);
     expect(estimateAgentMeterUnits("hello", "agent_memory_read")).toBe(0.25);

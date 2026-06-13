@@ -5590,8 +5590,17 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-turn-chip__glyph--reasoning[data-level="1"] rect:nth-child(1),
 .zaki-app-v2 .zaki-agent-v2 .zaki-turn-chip__glyph--reasoning[data-level="2"] rect:nth-child(-n + 2),
-.zaki-app-v2 .zaki-agent-v2 .zaki-turn-chip__glyph--reasoning[data-level="3"] rect {
+.zaki-app-v2 .zaki-agent-v2 .zaki-turn-chip__glyph--reasoning[data-level="3"] rect,
+.zaki-app-v2 .zaki-agent-v2 .zaki-turn-chip__glyph--reasoning[data-level="4"] rect {
   fill: currentColor;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-turn-chip.is-reasoning-superpowers .zaki-turn-chip__glyph--reasoning {
+  color: var(--v2-accent, #f59e0b);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-turn-chip.is-reasoning-superpowers {
+  color: var(--v2-accent, #f59e0b);
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-turn-chip.is-reasoning-high .zaki-turn-chip__glyph--reasoning,
