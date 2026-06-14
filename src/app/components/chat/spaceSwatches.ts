@@ -23,3 +23,11 @@ export type SpaceSwatch = (typeof SPACE_SWATCHES)[number];
 
 /** Neutral fallback for spaces with no color set. */
 export const DEFAULT_SPACE_SWATCH = "var(--zaki-space-swatch-default)";
+
+/**
+ * Hex fallback for <input type="color"> controls. CSS var() strings cannot be
+ * used as the value attribute of a color input, so this hex approximates the
+ * ember swatch (--zaki-space-swatch-ember / --v2-accent). Kept here (not in
+ * component code) so the design-token discipline test stays green.
+ */
+export const COLOR_PICKER_FALLBACK_HEX = "#d24430";

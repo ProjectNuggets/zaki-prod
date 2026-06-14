@@ -6,6 +6,7 @@ import {
   SectionHeader,
   TypeToConfirmDialog,
 } from "@/app/components/ui/zaki";
+import { COLOR_PICKER_FALLBACK_HEX } from "@/app/components/chat/spaceSwatches";
 import type { PinnedFile } from "@/types";
 
 type FileStatusTone = {
@@ -170,7 +171,7 @@ export function SpaceSettingsSheet({
                     value={
                       /^#[0-9a-f]{6}$/i.test(draft.color.trim())
                         ? draft.color.trim()
-                        : "#d24430"
+                        : COLOR_PICKER_FALLBACK_HEX
                     }
                     onChange={(event) =>
                       setDraft((current) => ({ ...current, color: event.target.value }))
