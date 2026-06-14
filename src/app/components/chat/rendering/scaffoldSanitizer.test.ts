@@ -57,6 +57,27 @@ describe("sanitizeAssistantScaffold", () => {
     ).toBe("I created the report. Ready.");
   });
 
+  it("removes an unterminated [[ZAKI_*]] envelope tail during streaming", () => {
+    expect(
+      sanitizeAssistantScaffold(
+        "Here is the data. [[ZAKI_MEMORY_CONTEXT_V2]]SECRET daemon brief still streaming"
+      )
+    ).toBe("Here is the data.");
+  });
+
+  it("removes an unterminated <reflection> tail during streaming", () => {
+    expect(sanitizeAssistantScaffold("Done.<reflection>still thinking")).toBe(
+      "Done."
+    );
+  });
+
+  it("strips a closed-ATX marker heading (## Brain Architecture ##) when scaffold is present", () => {
+    const input =
+      "Answer.\n\n## Brain Architecture ##\nbody\n" +
+      "[[ZAKI_DOC_CONTEXT_V1]]x[[/ZAKI_DOC_CONTEXT_V1]]";
+    expect(sanitizeAssistantScaffold(input)).toBe("Answer.");
+  });
+
   it("PRESERVES genuine content: a lone ## Safety heading with no scaffold signal stays", () => {
     const input = "## Safety considerations\nAlways wear a helmet.\n\n## Safety\nLock the door.";
     const out = sanitizeAssistantScaffold(input);

@@ -158,7 +158,9 @@ function categoryForEntry(entry: NullalisTranscriptEntry): AgentInspectorPanelEv
 
 function toPanelEvent(entry: NullalisTranscriptEntry): AgentInspectorPanelEvent {
   return {
-    id: entry.id || `${entry.kind || "event"}:${entry.timestamp || 0}:${primarySummary(entry)}`,
+    id:
+      entry.id ||
+      `${entry.kind || "event"}:${entry.timestamp || 0}:${sanitizeAssistantScaffold(primarySummary(entry))}`,
     artifactId: artifactIdForEntry(entry),
     category: categoryForEntry(entry),
     href: firstUrl(entry),

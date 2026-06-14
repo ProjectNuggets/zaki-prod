@@ -17,7 +17,10 @@ export const STABLE_PROMPT_MARKERS = [
 // [[ZAKI_*]] … [[/ZAKI_*]] envelope families (memory / doc / response-format / identity + future).
 const ZAKI_ENVELOPE_RE =
   /\[\[\s*ZAKI_[A-Z0-9_]+\s*\]\][\s\S]*?\[\[\s*\/\s*ZAKI_[A-Z0-9_]+\s*\]\]/gi;
-// Any remaining lone / unterminated ZAKI marker (streaming tail, stray open or close).
+// An OPEN envelope marker with no matching close — a streaming partial. Strip the marker AND
+// everything after it (the injected body) so the secret never flashes before the close arrives.
+const ZAKI_ENVELOPE_TAIL_RE = /\[\[\s*ZAKI_[A-Z0-9_]+\s*\]\][\s\S]*$/i;
+// Any remaining lone marker (a stray/forged orphan open or close after genuine content).
 const ZAKI_MARKER_RE = /\[\[\s*\/?\s*ZAKI_[A-Z0-9_]+\s*\]\]/gi;
 
 // <memory_for_turn> … </memory_for_turn> (paired) + an unterminated streaming tail.
@@ -46,7 +49,7 @@ function stripStablePromptSections(text: string): string {
   const out: string[] = [];
   let skipUntilLevel: number | null = null;
   for (const line of lines) {
-    const heading = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
+    const heading = /^(#{1,6})\s+(.+?)(?:\s+#+)?\s*$/.exec(line);
     const level = heading?.[1]?.length ?? null;
     const title = heading?.[2] ?? null;
     if (skipUntilLevel !== null) {
@@ -69,7 +72,10 @@ export function sanitizeAssistantScaffold(raw: string): string {
   if (!raw) return raw;
   let text = String(raw);
   const leaked = DISTINCTIVE_SCAFFOLD_RE.test(text);
-  text = text.replace(ZAKI_ENVELOPE_RE, "").replace(ZAKI_MARKER_RE, "");
+  text = text
+    .replace(ZAKI_ENVELOPE_RE, "")
+    .replace(ZAKI_ENVELOPE_TAIL_RE, "")
+    .replace(ZAKI_MARKER_RE, "");
   text = text
     .replace(MEMORY_FOR_TURN_RE, "")
     .replace(MEMORY_FOR_TURN_TAIL_RE, "");
