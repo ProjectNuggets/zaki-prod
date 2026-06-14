@@ -5868,9 +5868,6 @@ export function ChatArea() {
           spaceId: workspaceSlug,
           ...(turnOptions?.mode ? { mode: turnOptions.mode } : {}),
           ...(turnOptions?.autonomy ? { autonomy: turnOptions.autonomy } : {}),
-          ...(turnOptions?.assistant_mode
-            ? { assistant_mode: turnOptions.assistant_mode }
-            : {}),
           ...(turnOptions?.reasoning_effort
             ? { reasoning_effort: turnOptions.reasoning_effort }
             : {}),

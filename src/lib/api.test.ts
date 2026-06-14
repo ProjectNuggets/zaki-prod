@@ -30,6 +30,7 @@ jest.mock("@/lib/runtimeEnv", () => ({
 // We will spy on global fetch
 const mockFetch = jest.fn();
 global.fetch = mockFetch as unknown as typeof fetch;
+const mockLoginRedirect = jest.fn();
 
 // Helper to create a mock Response
 function makeResponse(
@@ -53,16 +54,15 @@ function makeResponse(
   } as unknown as Response;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   jest.clearAllMocks();
   _storeToken = null;
   mockSetToken.mockClear();
   mockLogout.mockClear();
-  // Reset window.location mock
-  delete (global as Record<string, unknown>).window;
-  (global as Record<string, unknown>).window = {
-    location: { href: "" },
-  };
+  mockLoginRedirect.mockClear();
+  window.history.replaceState({}, "", "/settings#settings-memory-data");
+  const { __setLoginRedirectDispatcherForTests } = await import("@/lib/api");
+  __setLoginRedirectDispatcherForTests(mockLoginRedirect);
 });
 
 // --------------------------------------------------------------------------
@@ -207,8 +207,9 @@ describe("apiRequest — 401 retry", () => {
     // Should only call 3 times, not loop again
     await new Promise((r) => setTimeout(r, 0));
     expect(mockFetch).toHaveBeenCalledTimes(3);
-    // Should redirect
-    expect((global as Record<string, unknown>).window).toBeDefined();
+    expect(mockLoginRedirect).toHaveBeenCalledWith(
+      "/?auth=login&next=%2Fsettings%23settings-memory-data"
+    );
   });
 
   it("if /api/auth/refresh returns 401, redirects and does NOT retry", async () => {
@@ -223,6 +224,9 @@ describe("apiRequest — 401 retry", () => {
     // No third call — refresh failed, should redirect
     await new Promise((r) => setTimeout(r, 0));
     expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockLoginRedirect).toHaveBeenCalledWith(
+      "/?auth=login&next=%2Fsettings%23settings-memory-data"
+    );
   });
 
   it("skips 401 retry when skipAuth=true", async () => {
@@ -235,17 +239,25 @@ describe("apiRequest — 401 retry", () => {
 });
 
 // --------------------------------------------------------------------------
-// 401 logout redirects to /?auth=login (LoginScreen), not the marketing site
+// 401 logout redirects to /?auth=login (LoginScreen), not the marketing site,
+// and preserves the current protected route as a safe next target.
 // --------------------------------------------------------------------------
 
 // On a session-dead 401 the dead-session branches must (a) log the user out and
 // (b) navigate to the LoginScreen at "/?auth=login" — NOT bare "/", which renders
-// the marketing homepage with no login. jest-environment-jsdom locks window and
-// window.location (non-configurable getters) and blocks real navigation, so the
-// assigned href can't be observed at runtime. We therefore assert the logout
-// behaviour at runtime and the exact redirect target via the module source — the
-// source guard fails on bare "/" and passes only on "/?auth=login".
+// the marketing homepage with no login. The helper also carries next=/settings...
+// so users return to the protected Settings section after re-authentication.
 describe("session-dead 401 redirect target", () => {
+  it("builds safe login redirects with protected return targets", async () => {
+    const { buildLoginRedirectUrl } = await import("@/lib/api");
+
+    expect(buildLoginRedirectUrl("/settings#settings-memory-data")).toBe(
+      "/?auth=login&next=%2Fsettings%23settings-memory-data"
+    );
+    expect(buildLoginRedirectUrl("https://evil.example/settings")).toBe("/?auth=login");
+    expect(buildLoginRedirectUrl("//evil.example/settings")).toBe("/?auth=login");
+  });
+
   it("apiRequest: retry-also-401 logs the dead session out", async () => {
     _storeToken = "expired-token";
     mockFetch
@@ -257,6 +269,9 @@ describe("session-dead 401 redirect target", () => {
     await apiRequest("/api/protected", { method: "GET" });
 
     expect(mockLogout).toHaveBeenCalled();
+    expect(mockLoginRedirect).toHaveBeenCalledWith(
+      "/?auth=login&next=%2Fsettings%23settings-memory-data"
+    );
   });
 
   it("apiRequest: refresh-failed logs the dead session out", async () => {
@@ -269,6 +284,9 @@ describe("session-dead 401 redirect target", () => {
     await apiRequest("/api/protected", { method: "GET" });
 
     expect(mockLogout).toHaveBeenCalled();
+    expect(mockLoginRedirect).toHaveBeenCalledWith(
+      "/?auth=login&next=%2Fsettings%23settings-memory-data"
+    );
   });
 
   it("backendAuthRequest: refresh-failed logs the dead session out", async () => {
@@ -281,21 +299,44 @@ describe("session-dead 401 redirect target", () => {
     await backendAuthRequest("/api/profile", { method: "GET" });
 
     expect(mockLogout).toHaveBeenCalled();
+    expect(mockLoginRedirect).toHaveBeenCalledWith(
+      "/?auth=login&next=%2Fsettings%23settings-memory-data"
+    );
   });
 
-  it("every dead-session logout branch redirects to /?auth=login, never bare /", () => {
+  it("every dead-session logout branch uses the canonical login redirect helper, never bare /", () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const fs = require("fs") as typeof import("fs");
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const path = require("path") as typeof import("path");
     const source = fs.readFileSync(path.join(__dirname, "api.ts"), "utf8");
 
-    // The login redirect must be the auth-gated path that renders LoginScreen.
-    const loginRedirects = source.match(/window\.location\.href\s*=\s*"\/\?auth=login";/g) ?? [];
+    const loginRedirects = source.match(/redirectToLogin\(\);/g) ?? [];
     expect(loginRedirects.length).toBe(3);
 
     // No dead-session logout branch may navigate to the bare marketing homepage.
     expect(source).not.toMatch(/window\.location\.href\s*=\s*"\/";/);
+  });
+});
+
+describe("billing API helpers", () => {
+  it("createTopupCheckoutSession posts the selected pack and settings context", async () => {
+    _storeToken = "valid-token";
+    mockFetch.mockResolvedValueOnce(
+      makeResponse(200, { success: true, url: "https://checkout.example/topup" })
+    );
+
+    const { createTopupCheckoutSession } = await import("@/lib/api");
+    const result = await createTopupCheckoutSession("boost_500", { source: "settings" });
+
+    expect(result.data.url).toBe("https://checkout.example/topup");
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/billing/topups/checkout",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ packId: "boost_500", context: { source: "settings" } }),
+      })
+    );
   });
 });
 

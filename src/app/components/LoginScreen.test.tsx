@@ -13,6 +13,8 @@ import {
   redeemAccessCode,
   fetchLegalConsentStatus,
   fetchGoogleOAuthStatus,
+  fetchCurrentUser,
+  fetchProfile,
 } from "@/lib/api";
 
 jest.mock("react-i18next", () => ({
@@ -33,11 +35,14 @@ jest.mock("@/lib/api", () => ({
   redeemAccessCode: jest.fn(),
   fetchLegalConsentStatus: jest.fn(),
   fetchGoogleOAuthStatus: jest.fn(),
+  fetchCurrentUser: jest.fn(),
+  fetchProfile: jest.fn(),
   buildGoogleOAuthStartUrl: jest.fn(() => "http://localhost:8787/api/auth/google/start"),
 }));
 
 describe("LoginScreen legal consent", () => {
   const setToken = jest.fn();
+  const setUser = jest.fn();
   const policyVersion = "2027-01-01.v2";
 
   beforeEach(() => {
@@ -46,6 +51,7 @@ describe("LoginScreen legal consent", () => {
 
     (useAuthStore as unknown as jest.Mock).mockReturnValue({
       setToken,
+      setUser,
     });
 
     (fetchLegalConsentStatus as unknown as jest.Mock).mockResolvedValue({
@@ -56,6 +62,22 @@ describe("LoginScreen legal consent", () => {
     (fetchGoogleOAuthStatus as unknown as jest.Mock).mockResolvedValue({
       response: { ok: true },
       data: { success: true, enabled: true },
+    });
+
+    (fetchCurrentUser as unknown as jest.Mock).mockResolvedValue({
+      response: { ok: true },
+      data: {
+        success: true,
+        user: { id: "user-1", username: "user@example.com", fullName: null },
+      },
+    });
+
+    (fetchProfile as unknown as jest.Mock).mockResolvedValue({
+      response: { ok: true },
+      data: {
+        success: true,
+        user: { username: "user@example.com", fullName: "User Name" },
+      },
     });
 
     (requestLogin as unknown as jest.Mock).mockResolvedValue({
@@ -130,6 +152,11 @@ describe("LoginScreen legal consent", () => {
       });
     });
     expect(setToken).toHaveBeenCalledWith("token-123");
+    expect(setUser).toHaveBeenCalledWith({
+      id: "user-1",
+      username: "user@example.com",
+      fullName: "User Name",
+    });
   });
 
   it("requires consent checkbox and sends consent payload on signup", async () => {
@@ -246,6 +273,30 @@ describe("LoginScreen legal consent", () => {
         "Local login failed because the configured NOVA.TYP TLS certificate has expired."
       )
     ).toBeInTheDocument();
+  });
+
+  it("returns to the requested Settings section after credential login", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(
+      {},
+      "",
+      "/?auth=login&next=%2Fsettings%23settings-memory-data"
+    );
+
+    renderLoginScreen();
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
+
+    await user.type(screen.getByPlaceholderText("Email address"), "user@example.com");
+    await user.type(screen.getByPlaceholderText("Password"), "Password123");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => {
+      expect(setToken).toHaveBeenCalledWith("token-123");
+    });
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/settings");
+      expect(window.location.hash).toBe("#settings-memory-data");
+    });
   });
 
   it("keeps explicit pricing-intent auth on pricing after login", async () => {

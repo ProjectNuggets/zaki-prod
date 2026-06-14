@@ -252,7 +252,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
   const [openMenu, setOpenMenu] = useState<{ type: "thread"; id: string } | null>(null);
   const [spaceSettingsOpen, setSpaceSettingsOpen] = useState(false);
   const [spaceSettingsTarget, setSpaceSettingsTarget] = useState<SidebarSpace | null>(null);
-  const [spaceNameDraft, setSpaceNameDraft] = useState("");
   const [editingItem, setEditingItem] = useState<{ type: "space" | "thread"; id: string } | null>(null);
   const [editingValue, setEditingValue] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<{ type: "space" | "thread"; id: string; label: string } | null>(null);
@@ -1227,7 +1226,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
       const target = spaces.find((space) => space.id === detail?.id);
       if (!target) return;
       setSpaceSettingsTarget(target);
-      setSpaceNameDraft(target.title ?? "");
       setSpaceSettingsOpen(true);
     };
     const handleDeleteSpace = (event: Event) => {
@@ -1912,7 +1910,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
                         className="size-7 rounded-md p-0 flex items-center justify-center opacity-100 transition hover:bg-zaki-hover focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2 md:opacity-0 md:group-hover:opacity-100"
                         onClick={() => {
                           setSpaceSettingsTarget(space);
-                          setSpaceNameDraft(space.title ?? "");
                           setSpaceSettingsOpen(true);
                         }}
                         aria-label={`${space.title} settings`}
@@ -2357,33 +2354,27 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
       <SpaceSettingsSheet
         isOpen={spaceSettingsOpen}
         space={spaceSettingsTarget}
-        nameDraft={spaceNameDraft}
-        onNameChange={setSpaceNameDraft}
         onClose={() => {
           setSpaceSettingsOpen(false);
           setSpaceSettingsTarget(null);
         }}
-        onSave={() => {
+        onSave={(draft) => {
           if (!spaceSettingsTarget) return;
-          const trimmedName = spaceNameDraft.trim();
-          if (!trimmedName) return;
+          if (!draft.title.trim()) return;
           window.dispatchEvent(
             new CustomEvent("zaki:update-space", {
-              detail: { id: spaceSettingsTarget.id, name: trimmedName },
+              detail: {
+                id: spaceSettingsTarget.id,
+                name: draft.title,
+                description: draft.description,
+                icon: draft.icon,
+                color: draft.color,
+                instructions: draft.instructions,
+              },
             })
           );
           setSpaceSettingsOpen(false);
           setSpaceSettingsTarget(null);
-        }}
-        onEditInstructions={() => {
-          if (!spaceSettingsTarget) return;
-          setSpaceSettingsOpen(false);
-          setSpaceSettingsTarget(null);
-          window.dispatchEvent(
-            new CustomEvent("zaki:edit-space-instructions", {
-              detail: { id: spaceSettingsTarget.id },
-            })
-          );
         }}
         onUploadFiles={() => {
           if (!spaceSettingsTarget) return;

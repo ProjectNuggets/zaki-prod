@@ -1,5 +1,9 @@
 import { render, screen } from "@testing-library/react";
-import { GatedRow } from "./V2SettingsPrimitives";
+import { GatedRow, V2SettingsNav } from "./V2SettingsPrimitives";
+
+function TestIcon({ className }: { className?: string }) {
+  return <svg className={className} aria-hidden="true" />;
+}
 
 describe("GatedRow", () => {
   it("renders the name and the reason, and marks the row disabled", () => {
@@ -41,5 +45,27 @@ describe("GatedRow", () => {
     expect(screen.getByText("Backend channel contract pending")).toHaveClass(
       "v2-settings-gated__reason",
     );
+  });
+});
+
+describe("V2SettingsNav", () => {
+  it("marks the active hash as the current settings section", () => {
+    render(
+      <V2SettingsNav
+        eyebrow="Control plane"
+        title="Settings"
+        ariaLabel="Settings sections"
+        activeHref="#settings-memory-data"
+        items={[
+          { href: "#settings-agent", label: "Agent", icon: TestIcon },
+          { href: "#settings-memory-data", label: "Memory & Data", icon: TestIcon },
+        ]}
+      />,
+    );
+
+    const activeLink = screen.getByRole("link", { name: "Memory & Data" });
+    expect(activeLink).toHaveAttribute("aria-current", "page");
+    expect(activeLink).toHaveClass("is-active");
+    expect(screen.getByRole("link", { name: "Agent" })).not.toHaveAttribute("aria-current");
   });
 });

@@ -46,25 +46,48 @@ const botOnboardingUpdateSchema = z.object({ completed: z.boolean() }).strict();
 
 const botSettingsProfileSchema = z
   .object({
-    assistant_mode: z.enum(["fast", "balanced", "deep"]),
     group_activation: z.enum(["mention", "always"]),
     proactive_updates: z.boolean(),
     voice_replies: z.boolean(),
     session_timeout_minutes: z.number().int().min(5).max(180),
+    assistant_mode: z.enum(["fast", "balanced", "deep"]).optional(),
     autonomy: z.enum(["read_only", "supervised", "full"]).optional(),
     dream_enabled: z.boolean().optional(),
     query_expansion_enabled: z.boolean().optional(),
     selected_model: z.string().trim().min(1).max(64).nullable().optional(),
   })
-  .strict();
+  .passthrough()
+  .transform(
+    ({
+      group_activation,
+      proactive_updates,
+      voice_replies,
+      session_timeout_minutes,
+      assistant_mode,
+      autonomy,
+      dream_enabled,
+      query_expansion_enabled,
+      selected_model,
+    }) => ({
+      group_activation,
+      proactive_updates,
+      voice_replies,
+      session_timeout_minutes,
+      ...(assistant_mode === undefined ? {} : { assistant_mode }),
+      ...(autonomy === undefined ? {} : { autonomy }),
+      ...(dream_enabled === undefined ? {} : { dream_enabled }),
+      ...(query_expansion_enabled === undefined ? {} : { query_expansion_enabled }),
+      ...(selected_model === undefined ? {} : { selected_model }),
+    })
+  );
 
 const botSettingsPatchSchema = z
   .object({
-    assistant_mode: z.enum(["fast", "balanced", "deep"]).optional(),
     group_activation: z.enum(["mention", "always"]).optional(),
     proactive_updates: z.boolean().optional(),
     voice_replies: z.boolean().optional(),
     session_timeout_minutes: z.number().int().min(5).max(180).optional(),
+    assistant_mode: z.enum(["fast", "balanced", "deep"]).optional(),
     autonomy: z.enum(["read_only", "supervised", "full"]).optional(),
     dream_enabled: z.boolean().optional(),
     query_expansion_enabled: z.boolean().optional(),

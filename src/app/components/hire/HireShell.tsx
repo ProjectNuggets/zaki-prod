@@ -113,11 +113,11 @@ export function HireShellHeader({
             Profile evidence, opportunity fit, generated packages, and apply consent in one operations console.
           </p>
           <div className="mt-3 flex flex-wrap gap-3 text-[11px]">
-            <a className="zaki-hire-link" href="/settings?section=account">account</a>
-            <a className="zaki-hire-link" href="/settings?section=billing">billing</a>
-            <a className="zaki-hire-link" href="/settings?section=usage">usage</a>
-            <a className="zaki-hire-link" href="/settings?section=privacy">privacy</a>
-            <a className="zaki-hire-link" href="/settings?section=oauth">OAuth</a>
+            <a className="zaki-hire-link" href="/settings#settings-account">account</a>
+            <a className="zaki-hire-link" href="/settings#settings-billing">billing</a>
+            <a className="zaki-hire-link" href="/settings#settings-usage">usage</a>
+            <a className="zaki-hire-link" href="/settings#settings-privacy">privacy</a>
+            <a className="zaki-hire-link" href="/settings#settings-connections">OAuth</a>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">

@@ -142,6 +142,58 @@ export function buildApiUrl(path: string) {
   return `${base}${normalizedPath}`;
 }
 
+export function buildLoginRedirectUrl(returnTo?: string) {
+  const url = new URL("/?auth=login", "https://zaki.local");
+  const currentLocation =
+    typeof window !== "undefined"
+      ? `${window.location.pathname || "/"}${window.location.search || ""}${
+          window.location.hash || ""
+        }`
+      : "";
+  const rawReturnTo =
+    returnTo || currentLocation;
+  const normalizedReturnTo = String(rawReturnTo || "").trim();
+  if (
+    normalizedReturnTo &&
+    normalizedReturnTo !== "/" &&
+    !normalizedReturnTo.startsWith("http://") &&
+    !normalizedReturnTo.startsWith("https://") &&
+    !normalizedReturnTo.startsWith("//")
+  ) {
+    const parsedReturnTo = new URL(
+      normalizedReturnTo.startsWith("/") ? normalizedReturnTo : `/${normalizedReturnTo}`,
+      "https://zaki.local"
+    );
+    parsedReturnTo.searchParams.delete("auth");
+    url.searchParams.set(
+      "next",
+      `${parsedReturnTo.pathname}${parsedReturnTo.search}${parsedReturnTo.hash}`
+    );
+  }
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+type LoginRedirectDispatcher = (url: string) => void;
+let loginRedirectDispatcherForTests: LoginRedirectDispatcher | null = null;
+
+export function __setLoginRedirectDispatcherForTests(
+  dispatcher: LoginRedirectDispatcher | null
+) {
+  loginRedirectDispatcherForTests = dispatcher;
+}
+
+export function redirectToLogin(returnTo?: string) {
+  const target = buildLoginRedirectUrl(returnTo);
+  if (loginRedirectDispatcherForTests) {
+    loginRedirectDispatcherForTests(target);
+    return target;
+  }
+  if (typeof window !== "undefined") {
+    window.location.href = target;
+  }
+  return target;
+}
+
 export async function apiRequest(
   path: string,
   options: ApiRequestOptions = {},
@@ -180,14 +232,14 @@ export async function apiRequest(
       // WR-01: if the retry also returns 401, the token is invalid — log out.
       if (retryResponse.status === 401 && typeof window !== "undefined") {
         useAuthStore.getState().logout();
-        window.location.href = "/?auth=login";
+        redirectToLogin();
       }
       return retryResponse;
     }
     // Refresh failed — redirect to login
     if (typeof window !== "undefined") {
       useAuthStore.getState().logout();
-      window.location.href = "/?auth=login";
+      redirectToLogin();
     }
   }
 
@@ -243,7 +295,7 @@ export async function backendAuthRequest(
     }
     if (typeof window !== "undefined") {
       useAuthStore.getState().logout();
-      window.location.href = "/?auth=login";
+      redirectToLogin();
     }
   }
   return response;
@@ -701,6 +753,16 @@ export async function fetchBillingConfig() {
       cancelEnabled?: boolean;
       webhookEnabled?: boolean;
       accessCodePurchaseEnabled?: boolean;
+      topupCheckoutEnabled?: boolean;
+      topupPacks?: Array<{
+        id: string;
+        label: string;
+        units: number;
+        stripePriceId?: string;
+        unitAmount?: number | null;
+        currency?: string | null;
+        available: boolean;
+      }>;
       pricingCatalog?: {
         student?: {
           monthly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
@@ -770,6 +832,28 @@ export async function createAccessCodePurchaseCheckoutSession(context?: {
   const response = await backendAuthRequest("/api/access-code/purchase/checkout", {
     method: "POST",
     body: JSON.stringify({
+      ...(context ? { context } : {}),
+    }),
+  });
+  let data: { success?: boolean; url?: string | null; error?: string | null } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+  return { response, data };
+}
+
+export async function createTopupCheckoutSession(
+  packId: string,
+  context?: {
+    source?: ProductTelemetrySource;
+  }
+) {
+  const response = await backendAuthRequest("/api/billing/topups/checkout", {
+    method: "POST",
+    body: JSON.stringify({
+      packId,
       ...(context ? { context } : {}),
     }),
   });
@@ -1359,6 +1443,8 @@ export type MeterWindowSnapshot = {
   used?: number | null;
   receipts?: number;
   limit?: number | null;
+  recurringRemaining?: number | null;
+  topupUnits?: number | null;
   remaining?: number | null;
   startedAt?: string | null;
   resetAt?: string | null;
@@ -1525,11 +1611,11 @@ export type AgentOnboardingState = BotApiError & {
 };
 
 export type BotSettingsProfile = BotApiError & {
-  assistant_mode?: "fast" | "balanced" | "deep";
   group_activation?: "mention" | "always";
   proactive_updates?: boolean;
   voice_replies?: boolean;
   session_timeout_minutes?: number;
+  assistant_mode?: "fast" | "balanced" | "deep";
   autonomy?: "read_only" | "supervised" | "full";
   dream_enabled?: boolean;
   query_expansion_enabled?: boolean;
@@ -1537,11 +1623,11 @@ export type BotSettingsProfile = BotApiError & {
 };
 
 export type BotSettingsPatch = {
-  assistant_mode?: "fast" | "balanced" | "deep";
   group_activation?: "mention" | "always";
   proactive_updates?: boolean;
   voice_replies?: boolean;
   session_timeout_minutes?: number;
+  assistant_mode?: "fast" | "balanced" | "deep";
   autonomy?: "read_only" | "supervised" | "full";
   dream_enabled?: boolean;
   query_expansion_enabled?: boolean;

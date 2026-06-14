@@ -66,6 +66,7 @@ function createDependencies({ event, constructError = null, markResult = true, r
       price_complete: "complete",
     },
     fulfillAccessCodePurchaseCheckoutSession: jest.fn(async () => ({ handled: false })),
+    fulfillTopupCheckoutSession: jest.fn(async () => ({ handled: false })),
   };
 }
 
@@ -192,6 +193,37 @@ describe("stripe webhook handler integration", () => {
     expect(deps.fulfillAccessCodePurchaseCheckoutSession).toHaveBeenCalledWith({
       session: event.data.object,
       eventId: "evt_access_1",
+    });
+  });
+
+  it("invokes unit top-up fulfillment callback for checkout sessions", async () => {
+    const event = {
+      id: "evt_topup_1",
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: "cs_test_topup_1",
+          customer: "cus_topup_1",
+          customer_email: "owner@example.com",
+          metadata: {
+            fulfillment_type: "unit_topup",
+            user_email: "owner@example.com",
+            pack_id: "boost_500",
+            units: "500",
+          },
+        },
+      },
+    };
+    const deps = createDependencies({ event, markResult: true });
+    deps.dbGet.mockResolvedValueOnce({ id: 7 });
+    const handler = createStripeWebhookHandler(deps);
+
+    const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ received: true });
+    expect(deps.fulfillTopupCheckoutSession).toHaveBeenCalledWith({
+      session: event.data.object,
+      eventId: "evt_topup_1",
     });
   });
 

@@ -31,7 +31,6 @@ type DiagnosticsData = {
   provider_retries?: number | null;
   fallback_provider_count?: number | null;
   effective_config_source?: string;
-  assistant_mode?: string | null;
   telegram_connected_normalized?: boolean | null;
   heartbeat_enabled_normalized?: boolean | null;
   onboarding_ready_normalized?: boolean | null;
@@ -163,7 +162,6 @@ export function DiagnosticsSheet({ isOpen, onClose }: Props) {
               <div>
                 <MetaLabel className="mb-1 flex">Agent</MetaLabel>
                 <div className="divide-y divide-zaki border border-zaki-strong rounded-zaki-xl bg-zaki-raised px-3 dark:bg-[#1a1714]">
-                  <Row label="Assistant mode" value={data.assistant_mode} />
                   <Row label="Message timeout" value={data.agent_message_timeout_secs ? `${data.agent_message_timeout_secs}s` : null} />
                   <Row label="Provider retries" value={data.provider_retries} />
                   <Row label="Fallback providers" value={data.fallback_provider_count} />

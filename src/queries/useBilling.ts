@@ -4,6 +4,7 @@ import {
   createAccessCodePurchaseCheckoutSession,
   createBillingPortal,
   createCheckoutSession,
+  createTopupCheckoutSession,
   deleteAccount,
   fetchBillingConfig,
   fetchEntitlements,
@@ -129,6 +130,30 @@ export function useBillingPortal() {
       const { response, data } = await createBillingPortal();
       if (!response.ok || !data.url) {
         throw new Error(data.error ?? "Unable to open billing portal");
+      }
+      return data.url;
+    },
+    onSuccess: (url) => {
+      invalidateCommercialState(queryClient);
+      if (typeof window !== "undefined") {
+        window.location.href = url;
+      }
+    },
+  });
+}
+
+export function useTopupCheckout() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      packId: string;
+      context?: {
+        source?: ProductTelemetrySource;
+      };
+    }) => {
+      const { response, data } = await createTopupCheckoutSession(payload.packId, payload.context);
+      if (!response.ok || !data.url) {
+        throw new Error(data.error ?? "Unable to start top-up checkout");
       }
       return data.url;
     },

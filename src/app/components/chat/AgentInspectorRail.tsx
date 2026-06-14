@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Activity,
+  Bot,
   Brain,
   Boxes,
   Cable,
@@ -103,6 +104,7 @@ export type AgentInspectorTabRequest = {
 };
 
 export type AgentSettingsSection =
+  | "agent"
   | "channels"
   | "secrets"
   | "providers"
@@ -173,6 +175,12 @@ const AGENT_SETTINGS_LINKS: Array<{
   ariaLabel: string;
   icon: ReactNode;
 }> = [
+  {
+    section: "agent",
+    label: "Agent",
+    ariaLabel: "Open Agent settings",
+    icon: <Bot className="size-4" aria-hidden />,
+  },
   {
     section: "channels",
     label: "Channels",

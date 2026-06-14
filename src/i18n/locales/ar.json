@@ -19,8 +19,16 @@
       "label": "أقسام الإعدادات",
       "account": "الحساب",
       "connections": "الاتصالات",
-      "billing": "الفوترة",
+      "billing": "الخطة والاستخدام",
+      "planUsage": "الخطة والاستخدام",
       "products": "المنتجات",
+      "agent": "الوكيل",
+      "spaces": "المساحات",
+      "brain": "العقل",
+      "channels": "القنوات",
+      "secrets": "الأسرار",
+      "providers": "النماذج والمزودون",
+      "devices": "أجهزة الإضافة",
       "usage": "الاستخدام",
       "memoryData": "الذاكرة",
       "developerAccess": "المطور",
@@ -31,14 +39,21 @@
       "profile": "الملف الشخصي",
       "preferences": "التفضيلات",
       "connections": "الحسابات المتصلة",
-      "billing": "الفوترة",
+      "billing": "الخطة والاستخدام",
       "planBilling": "الخطة والفوترة",
       "productsAccess": "المنتجات والوصول",
+      "agent": "الوكيل",
+      "spaces": "المساحات",
+      "brain": "العقل",
       "usage": "الاستخدام",
       "memoryData": "الذاكرة والبيانات",
       "developerAccess": "وصول المطور",
       "privacy": "الخصوصية",
       "dataPrivacy": "البيانات والخصوصية"
+    },
+    "status": {
+      "on": "تشغيل",
+      "off": "إيقاف"
     },
     "profile": {
       "displayName": "اسم العرض",
@@ -75,7 +90,21 @@
       "viewPricing": "عرض التسعير",
       "manageAccess": "إدارة الوصول",
       "managePlan": "إدارة الخطة",
+      "manageSubscription": "إدارة الاشتراك",
+      "viewSubscriptionOptions": "عرض خيارات الاشتراك",
+      "upgradeAgent": "الترقية إلى Agent",
+      "upgradeComplete": "الترقية إلى Complete",
+      "syncBilling": "مزامنة الفوترة",
       "upgrade": "ترقية",
+      "recurringRemaining": "المتبقي المتكرر",
+      "topupBalance": "رصيد التعبئة",
+      "topups": {
+        "title": "تعبئة الوحدات",
+        "helper": "تبقى الوحدات المشتراة وتُستخدم بعد الرصيد المتكرر.",
+        "unavailable": "التعبئة غير متاحة في هذه البيئة.",
+        "disabled": "التعبئة غير متاحة",
+        "buyPack": "شراء {{label}}{{priceLabel}}"
+      },
       "cancelSubscription": "إلغاء الاشتراك",
       "cancellationScheduled": "تم جدولة الإلغاء",
       "billingUnavailable": "الفوترة غير متاحة مؤقتًا. يرجى التواصل مع الدعم.",
@@ -84,12 +113,18 @@
         "billingUnavailable": "الفوترة غير متاحة مؤقتًا.",
         "portalUnavailable": "بوابة الفوترة غير متاحة مؤقتًا.",
         "openPortal": "تعذر فتح بوابة الفوترة",
+        "portal": "تعذر فتح بوابة الاشتراك.",
+        "checkout": "تعذر بدء الدفع.",
+        "syncUnavailable": "مزامنة الفوترة غير مهيأة.",
+        "sync": "تعذر مزامنة حالة الفوترة.",
+        "topup": "تعذر بدء دفع التعبئة.",
         "cancelUnavailable": "إلغاء الاشتراك غير متاح مؤقتًا.",
         "cancelSubscription": "تعذر إلغاء الاشتراك"
       },
       "success": {
         "cancelAlreadyScheduled": "الإلغاء مجدول بالفعل لنهاية الفترة.",
-        "cancelScheduled": "سيتم إلغاء الاشتراك بنهاية الفترة."
+        "cancelScheduled": "سيتم إلغاء الاشتراك بنهاية الفترة.",
+        "synced": "تمت مزامنة حالة الفوترة."
       }
     },
     "usage": {
@@ -162,25 +197,61 @@
       }
     },
     "agentModel": {
-      "eyebrow": "نموذج الوكيل",
-      "title": "توجيه نموذج الذكاء الاصطناعي",
-      "operatorDefault": "الافتراضي التشغيلي",
-      "userSelected": "اختيار المستخدم",
-      "tableLabel": "خيارات نموذج الوكيل",
-      "columns": {
-        "model": "النموذج",
-        "context": "السياق",
-        "cost": "التكلفة",
-        "action": "الإجراء"
-      },
-      "costClass": "الفئة {{class}}",
-      "current": "الحالي",
-      "use": "استخدم",
-      "useOperatorDefault": "استخدم الافتراضي التشغيلي",
-      "helper": "يتم حفظ تغييرات النموذج لكل مستخدم وتُطبّق في دورة الوكيل التالية."
+      "operatorDefault": "الافتراضي التشغيلي"
     },
     "agentSettings": {
-      "loading": "جارٍ تحميل إعدادات ذاكرة الوكيل...",
+      "loading": "جارٍ تحميل إعدادات الوكيل...",
+      "loadingShort": "جارٍ التحميل",
+      "ready": "الإعدادات الافتراضية",
+      "reasoningEffort": {
+        "name": "جهد الاستدلال",
+        "helper": "عمق التفكير الافتراضي لدورات الوكيل الجديدة. تبقى تحكمات الدورة الحية داخل الوكيل.",
+        "options": {
+          "low": "استدلال منخفض",
+          "medium": "استدلال متوسط",
+          "high": "استدلال عالٍ"
+        }
+      },
+      "autonomy": {
+        "name": "الاستقلالية",
+        "helper": "الاستقلالية الافتراضية للتشغيل الحي. تبقى الموافقة والإلغاء داخل الوكيل.",
+        "options": {
+          "read_only": "قراءة فقط",
+          "supervised": "بإشراف",
+          "full": "استقلالية كاملة"
+        }
+      },
+      "groupActivation": {
+        "name": "تفعيل المجموعات",
+        "helper": "يتحكم هل تحتاج سياقات القنوات أو المجموعات إلى ذكر الوكيل أو تعمل دائمًا.",
+        "options": {
+          "mention": "يتطلب ذكرًا",
+          "always": "نشط دائمًا"
+        }
+      },
+      "proactiveUpdates": {
+        "name": "التحديثات الاستباقية",
+        "helper": "السماح بتحديثات الوكيل الخلفية عندما تسمح القنوات والموافقات بذلك."
+      },
+      "voiceReplies": {
+        "name": "الردود الصوتية",
+        "helper": "استخدم ردودًا صوتية في القنوات المدعومة."
+      },
+      "sessionTimeout": {
+        "name": "مهلة الجلسة",
+        "helper": "عدد الدقائق قبل اعتبار جلسات الوكيل الخاملة قديمة افتراضيًا.",
+        "error": "استخدم رقمًا صحيحًا من 5 إلى 180 دقيقة."
+      },
+      "memoryStatus": {
+        "name": "سلوك الذاكرة",
+        "helper": "تأمل الذاكرة وتوسيع الاستعلام والحفظ والتصدير والنسيان وتنظيف PII مملوكة لقسم الذاكرة والبيانات.",
+        "dream": "التأمل {{status}}",
+        "query": "الاستعلام {{status}}"
+      },
+      "openAgent": "فتح الوكيل",
+      "openChannels": "القنوات",
+      "openProviders": "المزودون",
+      "openMemoryData": "الذاكرة والبيانات",
       "success": {
         "updated": "تم تحديث إعدادات الوكيل."
       },
@@ -188,8 +259,77 @@
         "update": "تعذر تحديث إعدادات الوكيل."
       }
     },
+    "spaces": {
+      "loading": "جارٍ التحميل",
+      "count": "{{count}} مساحات",
+      "subtitle": "هذه نظرة عامة فقط. اسم المساحة ووصفها وأيقونتها ولونها وتعليماتها وملفاتها وحذفها تعيش داخل المساحة.",
+      "owner": {
+        "editable": "إعدادات العنصر المحلي تعيش داخل المساحة",
+        "readonly": "الإعدادات تعرض حالة مساحة العمل"
+      },
+      "summary": {
+        "title": "دورة حياة مساحة العمل",
+        "unavailable": "غير متاح",
+        "ready": "مدعوم من BFF",
+        "spaces": "المساحات",
+        "docs": "المستندات",
+        "threads": "السلاسل",
+        "instructions": "التعليمات",
+        "memory": "حفظ الذاكرة",
+        "engine": "حقول المحرك",
+        "engineDeferred": "غير معروضة"
+      },
+      "space": {
+        "pinned": "مثبتة",
+        "active": "نشطة",
+        "edit": "تعديل",
+        "save": "حفظ",
+        "saving": "جارٍ الحفظ",
+        "cancel": "إلغاء",
+        "noDescription": "لا يوجد وصف",
+        "identity": "الهوية",
+        "instructions": "التعليمات",
+        "files": "الملفات",
+        "threads": "السلاسل",
+        "set": "مضبوطة",
+        "empty": "فارغة"
+      },
+      "editor": {
+        "name": "اسم المساحة",
+        "icon": "الأيقونة",
+        "color": "اللون",
+        "description": "الوصف",
+        "instructions": "التعليمات"
+      },
+      "success": {
+        "saved": "تم حفظ إعدادات المساحة."
+      },
+      "errors": {
+        "nameRequired": "اسم المساحة مطلوب.",
+        "save": "تعذر حفظ هذه المساحة."
+      },
+      "empty": "لا توجد مساحات قابلة للإعداد بعد.",
+      "openSpaces": "فتح المساحات"
+    },
+    "brain": {
+      "meta": {
+        "ready": "ملخص الذاكرة",
+        "limited": "محدود"
+      },
+      "subtitle": "ملخص فقط. يتم تعديل الحفظ وتأمل الذاكرة وتوسيع الاستعلام والتصدير والنسيان وتنظيف PII في الذاكرة والبيانات.",
+      "owner": {
+        "workbench": "واجهة العمل تملك حالة عرض الرسم",
+        "memoryData": "الذاكرة والبيانات تملك الحوكمة"
+      },
+      "summary": {
+        "title": "سطح الذاكرة",
+        "capture": "سياسة الحفظ",
+        "dreams": "تأمل الذاكرة",
+        "queryExpansion": "توسيع الاستعلام"
+      },
+      "openBrain": "فتح العقل"
+    },
     "memoryData": {
-      "openMemory": "فتح عناصر تحكم الذاكرة",
       "dreamReflection": "تأمل الذاكرة الليلي",
       "dreamReflectionHelper": "تشغيل مهمة تأمل الذاكرة اليومية الساعة 3 صباحًا لهذا المستخدم.",
       "queryExpansion": "توسيع الاستعلام",
@@ -641,257 +781,6 @@
     },
     "actions": {
       "continue": "ابدأ الدردشة"
-    }
-  },
-  "zakiSettingsSheet": {
-    "title": "اضبط كيف يظهر زكي",
-    "subtitle": "تحكم في سلوك المساعد، وربط تيليجرام، ودرجة الاستقلالية من مكان واحد.",
-    "closeAria": "إغلاق إعدادات زكي",
-    "loading": {
-      "state": "جارٍ تحميل إعدادات الوكيل..."
-    },
-    "status": {
-      "enabled": "مفعّل",
-      "disabled": "متوقف"
-    },
-    "sections": {
-      "overview": {
-        "title": "نظرة عامة"
-      },
-      "assistant": {
-        "title": "المساعد",
-        "summary": "ردود {{style}}، ووصول {{join}}"
-      },
-      "telegram": {
-        "title": "تيليجرام"
-      },
-      "usage": {
-        "title": "الاستخدام",
-        "summary": "{{requests}} طلبات اليوم، الحالة {{state}}",
-        "summaryUnavailable": "الاستخدام غير متاح مؤقتًا.",
-        "summaryPending": "لا توجد لقطة استخدام بعد.",
-        "stateUnknown": "غير معروف"
-      },
-      "autonomy": {
-        "title": "الاستقلالية"
-      }
-    },
-    "fields": {
-      "responseStyle": {
-        "title": "أسلوب الرد",
-        "helper": "اختر هل يميل زكي إلى السرعة أو التوازن أو التفكير الأعمق.",
-        "modes": {
-          "fast": {
-            "description": "ردود سريعة بسياق أخف.",
-            "helper": "الأنسب للفحوصات السريعة والأسئلة القصيرة."
-          },
-          "balanced": {
-            "description": "افتراضي. مزيج متوازن بين السرعة والتفكير.",
-            "helper": "مناسب لمعظم المحادثات."
-          },
-          "deep": {
-            "description": "ردود أبطأ مع تفكير أعمق.",
-            "helper": "الأنسب للتخطيط والقرارات والمحادثات الطويلة."
-          }
-        }
-      },
-      "sessionWindow": {
-        "title": "نافذة الجلسة",
-        "summary": "جلسة لمدة {{minutes}} دقيقة",
-        "helper": "حدّد المدة التي يعتبر فيها زكي النشاط القريب جلسة عمل واحدة."
-      },
-      "joinBehavior": {
-        "title": "متى ينضم زكي",
-        "helper": "تحكم هل ينتظر الإشارة إليه أو يبقى متاحًا في المحادثات المشتركة."
-      },
-      "proactiveUpdates": {
-        "title": "تحديثات استباقية",
-        "helper": "اسمح لزكي بأن يعرض التحديثات أولًا بدل انتظار كل طلب يدوي."
-      },
-      "voiceReplies": {
-        "title": "ردود صوتية",
-        "helper": "فعّل الردود المنطوقة عندما تدعمها القناة.",
-        "requiresTelegram": "يتطلب تيليجرام",
-        "connectTelegram": "اربط تيليجرام"
-      }
-    },
-    "options": {
-      "fast": "سريع",
-      "balanced": "متوازن",
-      "deep": "عميق",
-      "mentionOnly": "عند الإشارة فقط",
-      "alwaysActive": "نشط دائمًا"
-    },
-    "workspace": {
-      "setupNotCompleted": "لم يكتمل بعد",
-      "channelStatus": {
-        "connected": "متصل",
-        "notConnected": "غير متصل",
-        "needsSetup": "يحتاج إعدادًا"
-      },
-      "telegramToken": "رمز بوت تيليجرام"
-    },
-    "overview": {
-      "operatorRequired": "ما يزال إعداد المشغل مطلوبًا قبل أن يتمكن هذا المستخدم من البدء خارجيًا.",
-      "readyToStart": "يمكن لهذا الوكيل أن يبدأ الدردشة الآن.",
-      "missingRequirements": "ما تزال بعض المتطلبات الدنيا غير مكتملة.",
-      "awaitingStatus": "ما تزال الحالة قيد التحضير.",
-      "operatorBlockingTitle": "ما يزال إعداد المشغل مطلوبًا",
-      "operatorBlockingBody": "يجب أن يكتمل إعداد النموذج ومزود الخدمة من جهة المشغل قبل أن يتمكن هذا المستخدم من إتمام التفعيل.",
-      "statusHelper": "آخر تحديث للإعداد: {{updated}}.",
-      "readinessTitle": "الجاهزية",
-      "readinessHelper": "تأتي هذه الحالة من مسار الإعداد وتعكس ما إذا كان التوصيل الخارجي جاهزًا.",
-      "telegramTitle": "حالة تيليجرام",
-      "telegramHelper": "اربط تيليجرام لكي يتمكن هذا الوكيل من الاستقبال والرد خارج التطبيق.",
-      "minimumRequiredTitle": "الحد الأدنى المطلوب",
-      "minimumRequiredHelper": "هذه هي المتطلبات المتبقية كما يذكرها مسار الإعداد.",
-      "nothingMissing": "لا يوجد شيء ناقص حاليًا.",
-      "notReady": "ليس جاهزًا بعد"
-    },
-    "telegram": {
-      "botTokenLabel": "رمز البوت",
-      "botTokenMasked": "الرمز المحفوظ مخفي",
-      "allowFromLabel": "معرّفات تيليجرام المسموح بها (اختياري)",
-      "allowFromPlaceholder": "أدخل معرّف دردشة أو حساب في كل سطر، أو افصل بينها بفواصل.",
-      "allowFromHelper": "اختياري. أضف معرّفات دردشة أو حسابات تيليجرام إذا أردت تقييد من يمكنه الوصول إلى وكيلك. اتركه فارغًا في المسار المعتاد.",
-      "guide": {
-        "title": "احصل على رمز بوت تيليجرام",
-        "openBotFather": "افتح BotFather"
-      }
-    },
-    "usage": {
-      "state": "الحالة",
-      "requestsToday": "الطلبات اليوم",
-      "tokensToday": "الرموز اليوم",
-      "tokensMonth": "الرموز هذا الشهر",
-      "unavailable": "الاستخدام غير متاح مؤقتًا. مساحة وكيلك ما تزال تعمل، لكن لم يتم تحميل ملخص اليوم.",
-      "pending": "لا توجد لقطة استخدام متاحة بعد.",
-      "helper": "تتحدث بيانات الاستخدام عند فتح هذه اللوحة. سيُضاف تفصيل التكلفة الكامل عند توفّره من المحرّك."
-    },
-    "autonomy": {
-      "levelTitle": "مستوى الاستقلالية",
-      "levelHelper": "اختر مدى استقلالية ZAKI داخل البيئة المعزولة. الوضع المراقَب يناسب الاستخدام اليومي.",
-      "levels": {
-        "supervised": {
-          "label": "مراقَب (موصى به)",
-          "description": "يطلب الإذن قبل العمليات متوسطة وعالية الخطورة. يقرأ ويتصفّح وينفذ الأوامر الآمنة دون إذن."
-        },
-        "full": {
-          "label": "استقلالية كاملة",
-          "description": "يعمل دون استئذان داخل البيئة المعزولة. تبقى الشبكة والأوامر عالية الخطورة محظورة."
-        },
-        "read_only": {
-          "label": "للقراءة فقط",
-          "description": "يراقب فقط. يستطيع القراءة والإجابة دون تشغيل أي أداة."
-        }
-      },
-      "proactiveTitle": "التحديثات الاستباقية",
-      "proactiveHelper": "يبقى هذا الخيار ضمن إعدادات المساعد لأنه يتحكم بالسلوك، لا بإيقاع التوصيل.",
-      "heartbeatTitle": "النبض",
-      "heartbeatHelper": "توقيت النبض تديره ZAKI. هذا المفتاح يتحكم فقط في تفعيل أو إيقاف توصيل النبض.",
-      "heartbeatRequiresTelegram": "يجب ربط تيليجرام أولًا."
-    },
-    "actions": {
-      "connecting": "جارٍ الاتصال...",
-      "connectTelegram": "اتصال تيليجرام",
-      "reconnectTelegram": "إعادة ربط تيليجرام",
-      "disconnect": "فصل الاتصال"
-    },
-    "success": {
-      "settingsSaved": "تم حفظ إعدادات ZAKI.",
-      "telegramConnected": "تم ربط تيليجرام. أرسل رسالة إلى البوت للتأكد من المسار.",
-      "telegramDisconnected": "تم فصل تيليجرام.",
-      "heartbeatEnabled": "تم تفعيل النبض.",
-      "heartbeatDisabled": "تم إيقاف النبض."
-    },
-    "errors": {
-      "onboardingLoad": "تعذر تحميل إعداد زكي الآن.",
-      "settingsLoad": "تعذر تحميل إعدادات زكي الآن.",
-      "heartbeatLoad": "تعذر تحميل حالة النبض الآن.",
-      "botStateUnavailableUnknownUser": "إعدادات زكي غير متاحة لهذا الحساب بعد.",
-      "sessionTimeoutRange": "يجب أن تكون نافذة الجلسة بين 5 و180 دقيقة.",
-      "telegramTokenRequired": "أدخل رمز بوت تيليجرام قبل الاتصال.",
-      "telegramTokenInvalid": "رمز بوت تيليجرام غير صالح.",
-      "telegramAllowFromRequired": "أضف معرّف دردشة أو حساب واحدًا على الأقل مسموحًا له.",
-      "telegramConnectFailed": "تعذر ربط تيليجرام.",
-      "telegramConnectStillVerifying": "ما يزال تيليجرام قيد التحقق. حدّث الصفحة بعد بضع ثوانٍ إذا كان البوت يرد بالفعل في تيليجرام.",
-      "telegramDisconnectFailed": "تعذر فصل تيليجرام.",
-      "telegramDisconnectUnconfirmed": "ما يزال تيليجرام يظهر كمتصل بعد الفصل. حدّث الصفحة وحاول مرة أخرى.",
-      "heartbeatSave": "تعذر تحديث النبض الآن.",
-      "settingsSave": "تعذر حفظ إعدادات زكي.",
-      "invalidAssistantMode": "اختر وضع مساعد صالحًا.",
-      "invalidGroupActivation": "اختر وضع تفعيل صالحًا.",
-      "invalidProactiveUpdates": "يجب أن تكون التحديثات الاستباقية مفعلة أو متوقفة فقط.",
-      "invalidVoiceReplies": "يجب أن تكون الردود الصوتية مفعلة أو متوقفة فقط.",
-      "invalidSessionTimeoutMinutes": "يجب أن تكون مهلة الجلسة بين 5 و180 دقيقة.",
-      "invalidAutonomy": "اختر مستوى استقلالية: قراءة فقط، أو مراقَب، أو كامل.",
-      "bot": {
-        "temporary_contention": "ZAKI مشغول على عقدة أخرى. يرجى المحاولة بعد قليل.",
-        "unauthorized": "سجّل الدخول مرة أخرى لإدارة مساحة ZAKI.",
-        "forbidden": "هذا الإجراء غير متاح لحسابك.",
-        "invalid_telegram_token": "رمز تيليجرام غير صالح. تحقق منه وحاول مرة أخرى.",
-        "provision_failed": "تعذّر تجهيز مساحة ZAKI الآن.",
-        "settings_update_failed": "تعذّر حفظ إعدادات ZAKI.",
-        "usage_unavailable": "بيانات الاستخدام غير متاحة مؤقتًا."
-      }
-    },
-    "footer": {
-      "unsaved": "تغييرات غير محفوظة",
-      "saving": "جارٍ الحفظ...",
-      "saveAssistant": "احفظ إعدادات المساعد"
-    },
-    "rail": {
-      "identity": {
-        "label": "الهوية"
-      },
-      "responseStyle": {
-        "label": "أسلوب الرد"
-      },
-      "channels": {
-        "label": "القنوات"
-      },
-      "autonomy": {
-        "label": "الاستقلالية"
-      },
-      "plan": {
-        "label": "استخدام الوكيل"
-      }
-    },
-    "placeholders": {
-      "navAria": "أقسام الإعدادات"
-    },
-    "privacy": {
-      "footer": "بياناتك ملك لك. يلتزم ZAKI بـ GDPR. أرسل بريدًا إلى privacy@zakiai.com لحذف أي بيانات عند الطلب."
-    },
-    "channelsList": {
-      "headerHeading": "أين يظهر ZAKI",
-      "headerSummary": "اربط ZAKI بالتطبيقات التي تستخدمها. مزيد من القنوات قريبًا.",
-      "comingSoonPill": "قريبًا",
-      "connectedPill": "متصل",
-      "notConnectedPill": "غير متصل",
-      "telegram": {
-        "name": "تيليجرام",
-        "tagline": "تحدث مع ZAKI من أي جهاز أو مجموعة على تيليجرام."
-      },
-      "slack": {
-        "name": "Slack",
-        "tagline": "أحضر ZAKI إلى مساحة عمل فريقك. أوامر /zaki والردود على الخيوط."
-      },
-      "discord": {
-        "name": "Discord",
-        "tagline": "أضف ZAKI كبوت للسيرفر. أوامر مائلة وسياق الخيوط."
-      },
-      "teams": {
-        "name": "Microsoft Teams",
-        "tagline": "تواصل مع ZAKI عبر مساحة عمل تيمز — رسائل خاصة، قنوات، ومتابعات الاجتماعات."
-      },
-      "email": {
-        "name": "البريد الإلكتروني",
-        "tagline": "حوّل بريدك إلى ZAKI ليقرأ ويصيغ ويرد نيابةً عنك."
-      },
-      "connectingPill": "جارٍ الاتصال…",
-      "verifyingPill": "جارٍ التحقق…",
-      "needsAttentionPill": "يحتاج انتباهًا"
     }
   },
   "zakiControls": {
@@ -1887,6 +1776,7 @@
       "manageLink": "نطاقات الذاكرة والخصوصية"
     },
     "governance": {
+      "brainSettingsLink": "إعدادات العقل",
       "manageLink": "الذاكرة والخصوصية في الإعدادات"
     },
     "timeline": {

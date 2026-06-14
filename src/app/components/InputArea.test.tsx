@@ -319,7 +319,6 @@ describe("InputArea primary action button", () => {
       zaki: {
         mode: "review",
         autonomy: "supervised",
-        assistant_mode: "deep",
         reasoning_effort: "high",
       },
     });

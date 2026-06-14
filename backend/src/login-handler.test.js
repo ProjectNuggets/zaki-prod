@@ -3,6 +3,8 @@
 // Mocking patterns mirror auth-endpoints.test.js verbatim.
 
 import { jest } from "@jest/globals";
+import fs from "node:fs";
+import path from "node:path";
 
 const dbGetMock = jest.fn();
 const dbQueryMock = jest.fn();
@@ -98,5 +100,51 @@ describe("loginHandler — [ZakiAudit] login log (AUTH-07)", () => {
     );
 
     logSpy.mockRestore();
+  });
+
+  it("throttles repeated invalid credential attempts for the same email", async () => {
+    dbGetMock.mockResolvedValue(null);
+
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const res = makeRes();
+      await loginHandler(
+        {
+          body: { email: "blocked-login@example.com", password: "wrong" },
+          ip: "10.0.0.5",
+          headers: { "user-agent": "jest" },
+        },
+        res
+      );
+      expect(res.status).toHaveBeenCalledWith(401);
+    }
+
+    const throttledRes = makeRes();
+    await loginHandler(
+      {
+        body: { email: "blocked-login@example.com", password: "wrong" },
+        ip: "10.0.0.5",
+        headers: { "user-agent": "jest" },
+      },
+      throttledRes
+    );
+
+    expect(throttledRes.status).toHaveBeenCalledWith(429);
+    expect(throttledRes.json).toHaveBeenCalledWith({
+      valid: false,
+      token: null,
+      message: "Too many failed login attempts. Try again later.",
+    });
+  });
+
+  it("keeps backend index routes wired to the shared login handler", () => {
+    const indexSource = fs.readFileSync(
+      path.join(process.cwd(), "src/index.js"),
+      "utf8"
+    );
+
+    expect(indexSource).toContain('import { loginHandler as zakiLoginHandler } from "./login-handler.js";');
+    expect(indexSource).toContain('app.post("/login", zakiLoginHandler);');
+    expect(indexSource).toContain('app.post("/api/login", zakiLoginHandler);');
+    expect(indexSource).not.toMatch(/const\s+loginHandler\s*=\s*async/);
   });
 });
