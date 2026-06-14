@@ -993,7 +993,18 @@ export async function initDb() {
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(user_id, importance_score DESC);
     `);
-    
+    // Speeds active-only filters (findConflict, identity core, retrieval) and the
+    // outdated-row retention sweep (pruneOutdatedMemories).
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_memories_user_status ON memories(user_id, status);
+    `);
+    // Conflict-key lookup for findConflict's subject-scoped supersede. Lives in the
+    // memories block (not a review-flow table block) so it survives that cleanup.
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_memories_conflict_key
+      ON memories ((metadata->>'conflictKey'));
+    `);
+
     // Vector similarity index (IVFFlat for approximate search)
     try {
       await pool.query(`
@@ -1050,39 +1061,11 @@ export async function initDb() {
     console.warn("[DB] Memory triggers table creation failed:", err.message);
   }
   
-  // P0 FIX: Memory Confirmations table (user feedback system)
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS memory_confirmations (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id TEXT NOT NULL,
-        content TEXT NOT NULL,
-        type TEXT NOT NULL DEFAULT 'context',
-        source_thread_id TEXT,
-        source_message_id TEXT,
-        conflict_key TEXT,
-        polarity TEXT,
-        confidence_score FLOAT DEFAULT 0.8,
-        status TEXT DEFAULT 'pending',
-        memory_id UUID REFERENCES memories(id) ON DELETE SET NULL,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-    `);
-
-    await pool.query(`ALTER TABLE memory_confirmations ADD COLUMN IF NOT EXISTS conflict_key TEXT;`);
-    await pool.query(`ALTER TABLE memory_confirmations ADD COLUMN IF NOT EXISTS polarity TEXT;`);
-    
-    await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_memory_confirmations_user_pending 
-      ON memory_confirmations(user_id, status) 
-      WHERE status = 'pending';
-    `);
-    
-    console.log("[DB] Memory confirmations table ready (P0)");
-  } catch (err) {
-    console.warn("[DB] Memory confirmations table creation failed:", err.message);
-  }
+  // M2 cleanup (2026-06-11): the memory review/confirmation flow was RETIRED in
+  // favor of deterministic auto-supersede. The memory_confirmations,
+  // memory_conflicts, and memory_notifications tables are no longer created or
+  // written. Legacy envs keep their (empty) tables; the data-export reads and the
+  // GDPR delete-by-email both tolerate the tables' absence (Postgres 42P01).
 
   try {
     await pool.query(`
@@ -1121,68 +1104,7 @@ export async function initDb() {
     console.warn("[DB] Memory translation cache table creation failed:", err.message);
   }
 
-  // P1: Memory Conflicts table (always ask user on conflicts)
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS memory_conflicts (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id TEXT NOT NULL,
-        new_content TEXT NOT NULL,
-        new_type TEXT NOT NULL DEFAULT 'context',
-        new_confidence_score FLOAT DEFAULT 0.8,
-        conflicting_memory_id UUID REFERENCES memories(id) ON DELETE SET NULL,
-        conflicting_content TEXT,
-        conflicting_type TEXT,
-        status TEXT DEFAULT 'pending',
-        resolution TEXT,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        resolved_at TIMESTAMPTZ
-      );
-    `);
-
-    await pool.query(`ALTER TABLE memory_conflicts ADD COLUMN IF NOT EXISTS source_thread_id TEXT;`);
-
-    await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_memory_conflicts_user_pending
-      ON memory_conflicts(user_id, status)
-      WHERE status = 'pending';
-    `);
-
-    await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_memories_conflict_key
-      ON memories ((metadata->>'conflictKey'));
-    `);
-
-    console.log("[DB] Memory conflicts table ready (P1)");
-  } catch (err) {
-    console.warn("[DB] Memory conflicts table creation failed:", err.message);
-  }
-  
-  // P0 FIX: Memory Notifications table
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS memory_notifications (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id TEXT NOT NULL,
-        type TEXT NOT NULL,
-        title TEXT NOT NULL,
-        message TEXT NOT NULL,
-        data JSONB DEFAULT '{}',
-        read BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-    `);
-    
-    await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_memory_notifications_user_unread 
-      ON memory_notifications(user_id, read, created_at DESC) 
-      WHERE read = FALSE;
-    `);
-
-    console.log("[DB] Memory notifications table ready (P0)");
-  } catch (err) {
-    console.warn("[DB] Memory notifications table creation failed:", err.message);
-  }
+  // (memory_conflicts + memory_notifications tables removed — see M2 cleanup note above.)
 
   // P0: Persistent undo windows (survives restarts / multi-instance)
   try {

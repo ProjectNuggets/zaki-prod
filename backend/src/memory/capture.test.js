@@ -8,6 +8,7 @@ const findConflictMock = jest.fn();
 const markMemoryOutdatedMock = jest.fn();
 const storeMemoryMock = jest.fn();
 const pruneEpisodicMemoriesMock = jest.fn();
+const pruneOutdatedMemoriesMock = jest.fn();
 const getMemoryUndoWindowMsMock = jest.fn();
 const upsertUndoWindowMock = jest.fn();
 
@@ -23,6 +24,7 @@ async function loadCaptureModule() {
     findDuplicateMemory: findDuplicateMemoryMock,
     markMemoryOutdated: markMemoryOutdatedMock,
     pruneEpisodicMemories: pruneEpisodicMemoriesMock,
+    pruneOutdatedMemories: pruneOutdatedMemoriesMock,
     storeMemory: storeMemoryMock,
   }));
   jest.unstable_mockModule("./auto-save.js", () => ({
@@ -43,6 +45,7 @@ describe("memory capture", () => {
       markMemoryOutdatedMock,
       storeMemoryMock,
       pruneEpisodicMemoriesMock,
+      pruneOutdatedMemoriesMock,
       getMemoryUndoWindowMsMock,
       upsertUndoWindowMock,
     ].forEach((m) => m.mockReset());
@@ -55,6 +58,7 @@ describe("memory capture", () => {
     markMemoryOutdatedMock.mockResolvedValue({ success: true });
     storeMemoryMock.mockResolvedValue({ id: "mem-1" });
     pruneEpisodicMemoriesMock.mockResolvedValue({ ok: true });
+    pruneOutdatedMemoriesMock.mockResolvedValue({ ok: true, deleted: 0 });
     getMemoryUndoWindowMsMock.mockReturnValue(5000);
     upsertUndoWindowMock.mockResolvedValue({ success: true });
   });
@@ -186,10 +190,16 @@ describe("memory capture", () => {
       message: "I live in Hamburg",
     });
 
-    expect(markMemoryOutdatedMock).toHaveBeenCalledWith({
-      userId: "user@example.com",
-      memoryId: "mem-old",
-    });
+    // Atomic newest-wins: capture no longer calls markMemoryOutdated separately —
+    // it hands the conflict id to storeMemory, which outdates the old row and
+    // inserts the new one in one transaction.
+    expect(markMemoryOutdatedMock).not.toHaveBeenCalled();
+    expect(storeMemoryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: "Lives in Hamburg",
+        supersedeMemoryId: "mem-old",
+      })
+    );
     expect(result.superseded).toEqual([
       expect.objectContaining({ memoryId: "mem-old", content: "Lives in Berlin" }),
     ]);

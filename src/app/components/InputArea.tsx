@@ -95,7 +95,7 @@ export type InputAreaHandle = {
 };
 
 export type ZakiTurnAutonomyLevel = "read_only" | "supervised" | "full";
-export type ZakiTurnReasoningEffort = "low" | "medium" | "high";
+export type ZakiTurnReasoningEffort = "low" | "medium" | "high" | "superpowers";
 
 export type InputAreaSendOptions = {
   zaki?: {
@@ -107,7 +107,7 @@ export type InputAreaSendOptions = {
 
 const ZAKI_MODE_ORDER: AgentSessionMode[] = ["plan", "review", "execute"];
 const ZAKI_AUTONOMY_ORDER: ZakiTurnAutonomyLevel[] = ["read_only", "supervised", "full"];
-const ZAKI_REASONING_ORDER: ZakiTurnReasoningEffort[] = ["low", "medium", "high"];
+const ZAKI_REASONING_ORDER: ZakiTurnReasoningEffort[] = ["low", "medium", "high", "superpowers"];
 
 const ZAKI_MODE_LABELS: Record<AgentSessionMode, string> = {
   plan: "plan",
@@ -125,6 +125,14 @@ const ZAKI_REASONING_LABELS: Record<ZakiTurnReasoningEffort, string> = {
   low: "low",
   medium: "mid",
   high: "high",
+  superpowers: "⚡ Superpowers",
+};
+
+const ZAKI_REASONING_COST_NOTES: Record<ZakiTurnReasoningEffort, string> = {
+  low: "Faster, lighter thinking — uses fewer credits.",
+  medium: "Balanced reasoning — moderate credit use.",
+  high: "Deep reasoning — more credits, higher quality.",
+  superpowers: "⚡ Multi-agent fan-out — burns the most credits, for your most ambitious work.",
 };
 
 type ZakiArtifactPreset = {
@@ -1737,10 +1745,10 @@ export function InputArea({
                   defaultValue: "Reasoning effort: {{value}}",
                   value: ZAKI_REASONING_LABELS[zakiReasoningEffort],
                 })}
-                title={t("input.zaki.reasoningTitle", {
+                title={`${t("input.zaki.reasoningTitle", {
                   defaultValue: "This turn · reasoning effort — {{value}}. Click to cycle.",
                   value: ZAKI_REASONING_LABELS[zakiReasoningEffort],
-                })}
+                })} ${ZAKI_REASONING_COST_NOTES[zakiReasoningEffort]}`}
                 data-testid="zaki-composer-reasoning"
                 data-reasoning={zakiReasoningEffort}
               >

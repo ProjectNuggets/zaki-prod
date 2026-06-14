@@ -244,6 +244,10 @@ describe("InputArea primary action button", () => {
 
     const reasoning = screen.getByTestId("zaki-composer-reasoning");
     expect(reasoning).toHaveTextContent("high");
+    // "superpowers" is appended last in ZAKI_REASONING_ORDER; high → superpowers on one click.
+    fireEvent.click(reasoning);
+    expect(reasoning).toHaveTextContent("⚡ Superpowers");
+    // One more click wraps back to "low".
     fireEvent.click(reasoning);
     expect(reasoning).toHaveTextContent("low");
 

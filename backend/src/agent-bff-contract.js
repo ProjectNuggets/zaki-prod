@@ -9,6 +9,13 @@
 //                   to build the nullalis target. Empty string is valid.
 // - json:           when true, `agentJson1mb` is inserted before the proxy
 //                   handler so `req.body` is parsed for forwarding.
+// - retry:          when true, the proxy retries connection-class upstream
+//                   outages (ECONNREFUSED / "fetch failed" / 502/503/504) with
+//                   bounded jittered backoff. ONLY set this on idempotent
+//                   routes. /approve qualifies because the frontend always
+//                   sends a stable `approval_id`, so re-POSTing the same
+//                   approval is safe; non-idempotent routes (compact, mode,
+//                   cancel, ...) must leave this false.
 export const AGENT_SESSION_BFF_ROUTES = Object.freeze([
   { method: "get",    path: "/api/agent/sessions/:sessionKey",          upstreamSuffix: "",         json: false },
   { method: "post",   path: "/api/agent/sessions/:sessionKey/compact",  upstreamSuffix: "/compact", json: false },
@@ -19,7 +26,7 @@ export const AGENT_SESSION_BFF_ROUTES = Object.freeze([
   { method: "get",    path: "/api/agent/sessions/:sessionKey/export",   upstreamSuffix: "/export",  json: false },
   { method: "get",    path: "/api/agent/sessions/:sessionKey/history",  upstreamSuffix: "/history", json: false },
   { method: "post",   path: "/api/agent/sessions/:sessionKey/mode",     upstreamSuffix: "/mode",    json: true  },
-  { method: "post",   path: "/api/agent/sessions/:sessionKey/approve",  upstreamSuffix: "/approve", json: true  },
+  { method: "post",   path: "/api/agent/sessions/:sessionKey/approve",  upstreamSuffix: "/approve", json: true,  retry: true },
   { method: "post",   path: "/api/agent/sessions/:sessionKey/cancel",   upstreamSuffix: "/cancel",  json: false },
 ]);
 
@@ -393,20 +400,23 @@ export function registerBotBffAliases(app, handlers) {
 // the contract test cover wiring directly and prevents drift between the
 // listing the frontend depends on (`src/lib/api.ts`) and what the BFF wires up.
 //
-// `handlers.makeSessionProxyHandler(pathBuilder)` must return an express
-// handler that proxies the request to the nullalis path built by
-// `pathBuilder(userId, req)`. `agentJson1mb` is the JSON body parser; it is
+// `handlers.makeSessionProxyHandler(pathBuilder, proxyOptions)` must return an
+// express handler that proxies the request to the nullalis path built by
+// `pathBuilder(userId, req)`. `proxyOptions` (e.g. `{ retry: true }`) is passed
+// through to the underlying proxy. `agentJson1mb` is the JSON body parser; it is
 // applied only for routes that opt in via `json: true`.
 export function registerAgentSessionBffRoutes(app, handlers) {
   const { requireAgentContext, agentJson1mb, makeSessionProxyHandler } = handlers;
   for (const route of AGENT_SESSION_BFF_ROUTES) {
+    const proxyOptions = route.retry ? { retry: true } : {};
     const proxyHandler = makeSessionProxyHandler(
       (userId, req) => {
         const suffix = route.upstreamSuffix.replace(/:([A-Za-z0-9_]+)/g, (_, name) =>
           encodeURIComponent(String(req.params?.[name] ?? ""))
         );
         return `/api/v1/users/${encodeURIComponent(userId)}/sessions/${encodeURIComponent(req.params.sessionKey)}${suffix}`;
-      }
+      },
+      proxyOptions
     );
     const middlewares = [requireAgentContext];
     if (route.json) middlewares.push(agentJson1mb);

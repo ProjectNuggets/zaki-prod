@@ -65,6 +65,7 @@ import { createStripeWebhookHandler } from "./billing-stripe-webhook-handler.js"
 import {
   buildAgentForwardHeaders,
   buildAgentRetrySsePayload,
+  buildErroredStreamSseFrames,
   extractAgentTokenChunk,
   normalizeTelegramConnectPayload,
   resolveCanonicalAgentUserId,
@@ -93,12 +94,18 @@ import {
 } from "./agent-metering.js";
 import { makeAgentErrorCapture } from "./agent-error-capture.js";
 import {
+  ensureNullclawProvisioned,
   fetchNullclawPath,
   fetchNullclawUserHistory,
   getNullclawBase,
-  probeNullclawReady,
+  probeNullclawReadyWithRetry,
   requestNullclawChatStream,
 } from "./agent-client.js";
+import {
+  createProvisionConfirmationCache,
+  ensureProvisionedBeforeChat,
+  streamChatWithProvisionRetry,
+} from "./agent-ensure-provisioned.js";
 import {
   appendAgentCronJob,
   applyAgentCronPatch,
@@ -241,6 +248,10 @@ import {
   registerTelegramDisconnectAliases,
   sanitizeAgentChannelBindingPayload,
 } from "./agent-bff-contract.js";
+import {
+  fetchWithUpstreamRetry,
+  isRetryableUpstreamError,
+} from "./agent-approve-retry.js";
 import {
   createBotBffHandlers,
   PRODUCT_ERROR_CODES,
@@ -726,10 +737,25 @@ const AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS = Math.max(
   500,
   Number(process.env.ZAKI_AGENT_DIAGNOSTIC_HEALTH_TIMEOUT_MS || 3_000)
 );
+// P1-11: per-chat readiness gate timeout. 1500ms was too tight for a
+// busy-but-healthy agent and produced spurious 503s + refunded turns
+// (GlitchTip "Agent upstream ready probe timed out after 1500ms"). Raised to
+// 4000ms; probeNullclawReadyWithRetry also re-probes once and, on a
+// connected-but-slow gate, prefers attempting the stream over a hard 503.
 const ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS = Math.max(
   250,
-  Number(process.env.ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS || 1_500)
+  Number(process.env.ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS || 4_000)
 );
+// B4 (P1-16): server-side ensure-provisioned. TTL for "the BFF recently saw the
+// engine confirm this user is provisioned" — bounds how often the hot chat path
+// makes a lazy provision call without ever trusting the client's in-memory ref.
+const ZAKI_AGENT_PROVISION_CONFIRMATION_TTL_MS = Math.max(
+  1_000,
+  Number(process.env.ZAKI_AGENT_PROVISION_CONFIRMATION_TTL_MS || 5 * 60 * 1000)
+);
+const agentProvisionConfirmationCache = createProvisionConfirmationCache({
+  ttlMs: ZAKI_AGENT_PROVISION_CONFIRMATION_TTL_MS,
+});
 // Agent error capture — routes genuine BFF failures (upstream 5xx, stream error, etc.) to GlitchTip.
 const { captureAgentError } = makeAgentErrorCapture({ sentry: Sentry });
 
@@ -921,14 +947,20 @@ function finishErroredStreamResponse(res, label, error, options = {}) {
   }
 
   if (options.sse && !res.destroyed && !res.writableEnded) {
-    res.write(
-      `event: error\ndata: ${JSON.stringify({
-        code: code || "upstream_stream_error",
-        message,
-        retryable: true,
-      })}\n\n`
-    );
-    res.write(`event: done\ndata: ${JSON.stringify({ status: "error" })}\n\n`);
+    // Wave A (P1-12 follow-up): a mid-stream error frame is only auto-replay-safe
+    // if NO content was written for this turn yet. The chat POST has no idempotency
+    // key, so the FE replays any retryable frame — replaying a turn that already
+    // partially executed (content streamed) duplicates side-effecting tool calls +
+    // metering. Callers pass options.contentStreamed=true once the first content
+    // chunk has been written; that downgrades this frame to retryable:false (hard,
+    // user-recoverable). Pre-content callers (the default) stay retryable:true.
+    const { errorFrame, doneFrame } = buildErroredStreamSseFrames({
+      code: code || "upstream_stream_error",
+      message,
+      contentStreamed: options.contentStreamed === true,
+    });
+    res.write(errorFrame);
+    res.write(doneFrame);
   }
 
   if (!res.destroyed && !res.writableEnded) {
@@ -11114,6 +11146,29 @@ async function recordAgentMeterReceiptBestEffort(req, {
 }
 
 /**
+ * B4 (P1-16): (re)provision a user on the engine before the BFF drives chat for
+ * them. Builds the same trusted provision payload as agentProvisionHandler
+ * (buildBotProvisionPayload + loadUserEntitlement) so the engine caches the
+ * correct entitlement tuple, then POSTs it to the idempotent provision endpoint.
+ * Returns { ok, status, error } — never throws — so the caller can hard-fail
+ * chat with a retryable 503 instead of trusting the client ref.
+ */
+async function ensureAgentUserProvisioned({ nullclawBase, userId, email, requestId }) {
+  const basePayload = buildBotProvisionPayload(userId, {});
+  const entitlement = await loadUserEntitlement(userId, { email });
+  const body = entitlement ? { ...basePayload, ...entitlement } : basePayload;
+  return ensureNullclawProvisioned({
+    baseUrl: nullclawBase,
+    internalToken: NULLCLAW_INTERNAL_TOKEN,
+    userId,
+    requestId,
+    payload: body,
+    fetchWithTimeout,
+    timeoutMs: ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+  });
+}
+
+/**
  * Proxy authenticated ZAKI agent chat traffic to Nullclaw.
  * Route: POST /api/agent/chat/stream
  */
@@ -11121,6 +11176,14 @@ const agentChatStreamHandler = async (req, res) => {
   if (!ZAKI_AGENT_BACKEND_ENABLED) {
     return res.status(404).json({ error: "ZAKI agent backend is disabled." });
   }
+
+  // Wave A (P1-12 follow-up): declared at handler scope so the outer catch can read
+  // it. Tracks whether ANY content chunk has been written to the client for this
+  // turn (set true on the first res.write(decoded) in the SSE loop below). The outer
+  // catch uses it to decide retryability: a reader error BEFORE any content is
+  // replay-safe (engine did no turn work); AFTER content the turn partially executed
+  // and MUST NOT auto-replay (would duplicate the turn + double-meter).
+  const streamProgress = { contentStreamed: false };
 
   try {
     const nullclawBase = getNullclawBase(NULLCLAW_BASE_URL);
@@ -11162,7 +11225,12 @@ const agentChatStreamHandler = async (req, res) => {
     }
 
     try {
-      const readyProbe = await probeNullclawReady({
+      // P1-11: loosened readiness gate. probeNullclawReadyWithRetry re-probes
+      // once and classifies the outcome: "ready" → stream; "proceed" → the agent
+      // answered the socket but was slow/non-ok, so attempt the stream (it has
+      // its own ~300s budget) rather than refund + 503; "refused" → a true
+      // connection refusal, which stays a retryable 503.
+      const readyDecision = await probeNullclawReadyWithRetry({
         baseUrl: nullclawBase,
         internalToken: NULLCLAW_INTERNAL_TOKEN,
         userId,
@@ -11170,10 +11238,11 @@ const agentChatStreamHandler = async (req, res) => {
         fetchWithTimeout,
         timeoutMs: ZAKI_AGENT_UPSTREAM_READY_TIMEOUT_MS,
       });
-      if (!readyProbe.ok) {
+      if (readyDecision.decision === "refused") {
         captureAgentError(
-          new Error(`Agent readiness probe failed (status=${readyProbe.status ?? "unknown"})`),
-          { req, phase: "readiness_probe", upstreamStatus: readyProbe.status ?? null }
+          readyDecision.lastError ||
+            new Error(`Agent readiness probe refused (status=${readyDecision.lastStatus ?? "unknown"})`),
+          { req, phase: "readiness_probe", upstreamStatus: readyDecision.lastStatus ?? null }
         );
         await recordAgentWalletSettleBestEffort(req, {
           status: "failed",
@@ -11192,9 +11261,63 @@ const agentChatStreamHandler = async (req, res) => {
           code: "agent_unavailable",
         });
       }
+      if (readyDecision.decision === "proceed") {
+        // Connected-but-slow: do NOT refund and do NOT 503. Attempting the stream
+        // is the recovery; log a warning only (not a GlitchTip error frame).
+        console.warn("[Agent] Readiness probe slow/non-ok; attempting stream anyway:", {
+          requestId: String(req.requestId || ""),
+          userId,
+          attempts: readyDecision.attempts,
+          lastStatus: readyDecision.lastStatus ?? null,
+          lastError: readyDecision.lastError ? String(readyDecision.lastError.message || readyDecision.lastError) : null,
+        });
+      }
     } catch (error) {
+      // probeNullclawReadyWithRetry absorbs connection/timeout throws internally,
+      // so reaching here means an unexpected programming error — fail closed.
       captureAgentError(error, { req, phase: "readiness_probe_throw" });
       trackAgentStreamDiagnostic(userId, error);
+      await recordAgentWalletSettleBestEffort(req, {
+        status: "failed",
+        message: originalMessage,
+        payload,
+      });
+      if (String(req.headers.accept || "").includes("text/event-stream")) {
+        sendChatStreamError(res, "ZAKI agent is temporarily unavailable. Please try again shortly.", {
+          code: "agent_unavailable",
+          retryable: true,
+        });
+        return;
+      }
+      return res.status(503).json({
+        error: "ZAKI agent is temporarily unavailable. Please try again shortly.",
+        code: "agent_unavailable",
+      });
+    }
+
+    // B4 (P1-16): server-side ensure-provisioned (proactive). Provisioning is
+    // otherwise gated only by a client in-memory ref (zakiBotProvisionedRef), so
+    // a long-lived tab / direct API client can drive chat for a user the engine
+    // no longer holds. If the BFF lacks a recent provision confirmation,
+    // (re)provision here; a provision failure cleanly BLOCKS chat with a
+    // retryable 503 — we do NOT rely on the client ref.
+    const provisionGuard = await ensureProvisionedBeforeChat({
+      userId,
+      cache: agentProvisionConfirmationCache,
+      ensureProvisioned: () =>
+        ensureAgentUserProvisioned({
+          nullclawBase,
+          userId,
+          email: authResult.email,
+          requestId: String(req.requestId || crypto.randomUUID()),
+        }),
+    });
+    if (!provisionGuard.ok) {
+      captureAgentError(
+        provisionGuard.error ||
+          new Error(`Agent ensure-provisioned failed (status=${provisionGuard.status ?? "unknown"})`),
+        { req, phase: "ensure_provisioned", upstreamStatus: provisionGuard.status ?? null }
+      );
       await recordAgentWalletSettleBestEffort(req, {
         status: "failed",
         message: originalMessage,
@@ -11267,15 +11390,64 @@ const agentChatStreamHandler = async (req, res) => {
     upstreamPayload.session_key = sessionKey.sessionKey;
     delete upstreamPayload.user_id;
 
-    const upstream = await requestNullclawChatStream({
-      baseUrl: nullclawBase,
-      internalToken: NULLCLAW_INTERNAL_TOKEN,
+    // B4 (P1-16): server-side ensure-provisioned (reactive). If the first write
+    // to the engine fails with a foreign-key / user-not-found error, re-provision
+    // and retry the stream EXACTLY ONCE — mirroring the TYP re-provision-and-retry
+    // pattern (ensureValidNovaUserIdForUser). A re-provision failure leaves the
+    // original upstream untouched so it flows through the normal failure paths.
+    const requestUpstreamStream = () =>
+      requestNullclawChatStream({
+        baseUrl: nullclawBase,
+        internalToken: NULLCLAW_INTERNAL_TOKEN,
+        userId,
+        requestId: String(req.requestId || crypto.randomUUID()),
+        payload: upstreamPayload,
+        fetchWithTimeout,
+        timeoutMs: ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+      });
+    const provisionRetry = await streamChatWithProvisionRetry({
       userId,
-      requestId: String(req.requestId || crypto.randomUUID()),
-      payload: upstreamPayload,
-      fetchWithTimeout,
-      timeoutMs: ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+      cache: agentProvisionConfirmationCache,
+      requestChatStream: requestUpstreamStream,
+      ensureProvisioned: () =>
+        ensureAgentUserProvisioned({
+          nullclawBase,
+          userId,
+          email: authResult.email,
+          requestId: String(req.requestId || crypto.randomUUID()),
+        }),
     });
+    if (provisionRetry.reprovisioned) {
+      console.warn("[Agent] Re-provisioned on FK/not-found first write; retried stream once:", {
+        requestId: String(req.requestId || ""),
+        userId,
+      });
+    } else if (provisionRetry.provisionFailed) {
+      // FK/not-found surfaced but the re-provision itself failed → block chat as a
+      // retryable 503 (do not forward a stale FK error as a normal turn).
+      captureAgentError(
+        new Error("Agent re-provision after FK/not-found first write failed"),
+        { req, phase: "ensure_provisioned_retry", upstreamStatus: provisionRetry.upstream?.status ?? null }
+      );
+      setPromptQuotaHeaders(res, promptQuota);
+      await recordAgentWalletSettleBestEffort(req, {
+        status: "failed",
+        message: originalMessage,
+        payload: normalizedPayload,
+      });
+      if (String(req.headers.accept || "").includes("text/event-stream")) {
+        sendChatStreamError(res, "ZAKI agent is temporarily unavailable. Please try again shortly.", {
+          code: "agent_unavailable",
+          retryable: true,
+        });
+        return;
+      }
+      return res.status(503).json({
+        error: "ZAKI agent is temporarily unavailable. Please try again shortly.",
+        code: "agent_unavailable",
+      });
+    }
+    const upstream = provisionRetry.upstream;
 
     const contentType = String(upstream.headers.get("content-type") || "");
     if (!upstream.ok && contentType.toLowerCase().includes("application/json")) {
@@ -11373,6 +11545,9 @@ const agentChatStreamHandler = async (req, res) => {
       // cost (spec: the work was consumed). An unguarded write would throw into catch → release (wrong).
       if (!res.destroyed && !res.writableEnded) {
         res.write(decoded);
+        // First content write for this turn → a subsequent reader error is no longer
+        // safe to auto-replay (see streamProgress declaration above).
+        streamProgress.contentStreamed = true;
       }
       buffer += decoded;
 
@@ -11431,7 +11606,15 @@ const agentChatStreamHandler = async (req, res) => {
     const message = error?.message || "Agent stream failed.";
     const timedOut = /\btimed out\b/i.test(message);
     if (res.headersSent) {
-      finishErroredStreamResponse(res, "Agent stream", error, { sse: true });
+      // Wave A (P1-12 follow-up): if content already streamed for this turn, emit a
+      // NON-retryable (terminal) error frame — the turn may have partially executed,
+      // so auto-replaying it would duplicate the turn + double-meter. Pre-content
+      // drops (headers sent but contentStreamed still false) stay retryable so the FE
+      // can safely auto-recover.
+      finishErroredStreamResponse(res, "Agent stream", error, {
+        sse: true,
+        contentStreamed: streamProgress.contentStreamed === true,
+      });
       return;
     }
     res.status(timedOut ? 504 : 500).json({
@@ -14511,21 +14694,45 @@ async function proxyNullclawRequest(req, res, targetPath, options = {}) {
     headers.set("Content-Type", "application/json");
   }
 
-  const upstream = await fetchWithTimeout(
-    targetUrl,
-    {
-      method,
-      headers,
-      body:
-        body === undefined || body === null
-          ? undefined
-          : body instanceof FormData
-          ? body
-          : JSON.stringify(body),
-    },
-    ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
-    "Nullclaw proxy request"
-  );
+  // Serialize the body once so retried attempts re-send the exact same bytes.
+  // The /approve route ships a stable approval_id, which makes re-POSTing it
+  // idempotent on the engine — the precondition for enabling `options.retry`.
+  const serializedBody =
+    body === undefined || body === null
+      ? undefined
+      : body instanceof FormData
+      ? body
+      : JSON.stringify(body);
+
+  const performUpstreamFetch = () =>
+    fetchWithTimeout(
+      targetUrl,
+      {
+        method,
+        headers,
+        body: serializedBody,
+      },
+      ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+      "Nullclaw proxy request"
+    );
+
+  // Retry only on connection-class outages (ECONNREFUSED / "fetch failed" /
+  // 502 / 503 / 504), and only when the caller opted in (idempotent routes
+  // such as /approve). Non-idempotent routes pass no `retry` and never retry.
+  let upstream;
+  if (options.retry) {
+    upstream = await fetchWithUpstreamRetry(performUpstreamFetch, {
+      onRetry(info) {
+        console.warn("[Agent] Retrying idempotent proxy request:", {
+          requestId: String(req.requestId || ""),
+          targetPath,
+          ...info,
+        });
+      },
+    });
+  } else {
+    upstream = await performUpstreamFetch();
+  }
 
   if (typeof options.onUpstreamResponse === "function") {
     await options.onUpstreamResponse(upstream);
@@ -15045,6 +15252,23 @@ const makeAgentUserProxyHandler = (pathBuilder, proxyOptions = {}) => async (req
     return;
   } catch (error) {
     console.error("[Agent] Control proxy error:", error);
+    if (res.headersSent) {
+      // A streamed proxy already started writing; nothing safe left to send.
+      if (!res.writableEnded) res.end();
+      return;
+    }
+    // Connection-class outage (e.g. nullalis briefly restarting). For idempotent
+    // routes the proxy already exhausted its bounded retry budget, so surface a
+    // 502 with `retryable: true` + a stable code the frontend uses to render a
+    // retrying state and a one-click "Retry approval" instead of a hard error.
+    if (isRetryableUpstreamError(error)) {
+      return res.status(502).json({
+        error: "agent_unreachable",
+        code: "agent_unreachable",
+        retryable: true,
+        message: error?.message || "Agent is temporarily unreachable.",
+      });
+    }
     const status = Number(error?.status || 500);
     if (status >= 400 && status < 600) {
       return res.status(status).json({ error: error?.message || "Agent control request failed." });
@@ -15852,8 +16076,8 @@ function validateSessionKeyParam(req, res) {
   return sessionKey;
 }
 
-const makeSessionProxyHandler = (pathBuilder) => {
-  const inner = makeAgentUserProxyHandler(pathBuilder);
+const makeSessionProxyHandler = (pathBuilder, proxyOptions = {}) => {
+  const inner = makeAgentUserProxyHandler(pathBuilder, proxyOptions);
   return async (req, res) => {
     if (!validateSessionKeyParam(req, res)) return;
     return inner(req, res);

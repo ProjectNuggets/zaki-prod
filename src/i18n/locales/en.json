@@ -825,10 +825,11 @@
       "decidedApproved": "Approved. ZAKI is continuing...",
       "decidedModified": "Revision requested",
       "decidedDenied": "Denied",
-      "timer": "{{seconds}}s to decide",
-      "timerElapsed": "Decision overdue",
       "modifyDraft": "Please retry {{tool}} with these changes: ",
-      "modifyReady": "Approval denied. Describe the change and ZAKI will retry."
+      "modifyReady": "Approval denied. Describe the change and ZAKI will retry.",
+      "retrying": "Agent restarting — retrying your approval...",
+      "retryBtn": "Retry approval",
+      "retryAria": "Retry approval for {{tool}}"
     },
     "sidebarMenu": {
       "settings": "Settings",

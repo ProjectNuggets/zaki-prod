@@ -10,6 +10,9 @@ RUN npm ci --omit=dev
 
 # Copy application code
 COPY src/ ./src/
+# Maintenance/migration scripts (e.g. reembed-memories.mjs) so they can run
+# in-cluster as a one-off Job/exec without a ConfigMap mount.
+COPY scripts/ ./scripts/
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

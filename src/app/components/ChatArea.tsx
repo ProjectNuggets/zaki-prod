@@ -122,12 +122,14 @@ import type {
   DocSource,
 } from "@/types";
 import { useMessages } from "@/queries/useThreads";
+import { useEntitlements, useMeterStatus } from "@/queries/useBilling";
 import { spaceKeys } from "@/queries/useSpaces";
 import { useZakiSessions, zakiSessionKeys } from "@/queries/useZakiSessions";
 import { buildZakiSessionRepairTitle, prepareAutoTitleExchange } from "@/lib/sessionAutoTitle";
 import { useMessageReactions } from "@/queries/useMessageReactions";
 import { MemoryCaptureToast } from "./memory/MemoryCaptureToast";
 import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
+import { PaywallCard, classifyBillingDenial, type PaywallState } from "./PaywallCard";
 import { MemoryImportSheet } from "./onboarding/MemoryImportSheet";
 import { OnboardingTour } from "./onboarding/OnboardingTour";
 import { AgentArtifactCanvas } from "./agent/AgentArtifactCanvas";
@@ -240,16 +242,65 @@ function extractSystemNoticePayload(
   };
 }
 
-class ChatRequestError extends Error {
+export class ChatRequestError extends Error {
   status: number;
   code: string | null;
+  // P1-12: set when the BFF signals the turn is safe to replay (a retryable:true
+  // SSE error frame, or a retryable JSON status such as the readiness-gate 503).
+  // The chat send loop honors this with a bounded auto-reconnect before
+  // surfacing a hard error.
+  retryable: boolean;
 
-  constructor(message: string, status: number, code?: string | null) {
+  constructor(
+    message: string,
+    status: number,
+    code?: string | null,
+    retryable = false
+  ) {
     super(message);
     this.name = "ChatRequestError";
     this.status = status;
     this.code = code ?? null;
+    this.retryable = retryable;
   }
+}
+
+// P1-12: codes the BFF emits for transient, replay-safe conditions
+// (gateway_draining / ownership_lock_conflict via buildAgentRetrySsePayload;
+// agent_unavailable from the readiness gate). Any of these — or an explicit
+// payload.retryable===true — makes the same turn eligible for bounded replay.
+export const CHAT_RETRYABLE_ERROR_CODES = new Set<string>([
+  "gateway_draining",
+  "ownership_lock_conflict",
+  "agent_unavailable",
+]);
+
+// First send plus up to two replays (3 attempts total) before surfacing a hard
+// error. Kept small so a genuinely-down agent fails fast rather than hanging.
+export const CHAT_RETRYABLE_MAX_ATTEMPTS = 3;
+export const CHAT_RETRYABLE_BACKOFF_MS = [600, 1500];
+
+export function isRetryableChatError(error: unknown): boolean {
+  if (error instanceof ChatRequestError) {
+    if (error.retryable) return true;
+    if (error.code && CHAT_RETRYABLE_ERROR_CODES.has(error.code)) return true;
+  }
+  return false;
+}
+
+// P1-12 follow-up (Wave A): the chat POST carries no idempotency/turn key, so the
+// send loop auto-replays any retryable error frame. A retryable error is only
+// SAFE to auto-replay when NO content has been received for this turn — once
+// content has streamed, the engine may have partially executed the turn (tool
+// calls + metering ran), so replaying would duplicate the turn + double-meter.
+// This downgrades the BFF-supplied retryable flag to false once content arrived.
+// Defense in depth: the BFF now also labels post-content drops non-retryable, but
+// the FE stays safe even if some path mislabels.
+export function resolveTurnRetryable(
+  bffRetryable: boolean,
+  contentReceived: boolean
+): boolean {
+  return bffRetryable === true && contentReceived !== true;
 }
 
 const MEMORY_STATUS_SYNC_THROTTLE_MS = 1200;
@@ -2956,6 +3007,15 @@ export function ChatArea() {
   const [agentExtensionDiagnosticsError, setAgentExtensionDiagnosticsError] = useState<string | null>(null);
   const [nullalisApprovalRequest, setNullalisApprovalRequest] =
     useState<NullalisApprovalRequest | null>(null);
+  // Paywall card: shown when a billing denial fires (insufficient_units /
+  // entitlement_inactive / access_expired). Mirrors the approval-card pattern.
+  const [paywallCardData, setPaywallCardData] = useState<{
+    state: PaywallState;
+    planLabel?: string;
+    remaining?: number;
+    resetAt?: string | null;
+    message: string;
+  } | null>(null);
   const [approvalContinuationPendingId, setApprovalContinuationPendingId] = useState<string | null>(null);
   const [agentArtifactEventCount, setAgentArtifactEventCount] = useState(0);
   const [nullalisContextGauge, setNullalisContextGauge] =
@@ -3154,6 +3214,10 @@ export function ChatArea() {
   });
   const onboardingBrainCount =
     onboardingBrainGraph.data?.total_nodes_in_corpus ?? 0;
+  // Billing state — read here so the paywall card can surface plan/usage data
+  // without an extra fetch when the error handler fires.
+  const { data: entitlementsResult } = useEntitlements();
+  const { data: meterResult } = useMeterStatus();
   const [memoryImportOpen, setMemoryImportOpen] = useState(false);
   // Legacy holdover: ZakiExperimentalNotice still keys off this flag.
   // The welcome hero is retired, so it remains complete for the bot surface.
@@ -5830,6 +5894,7 @@ export function ChatArea() {
       console.error(`[Chat] Stream failed: ${response.status}`);
       let message = `Chat request failed (${response.status}).`;
       let errorCode: string | null = null;
+      let errorRetryable = false;
       let quotaResetAt: string | null = null;
       let quotaSurfaceCode: UsageQuotaSurface | null = null;
       const requestId = response.headers.get("x-request-id");
@@ -5840,6 +5905,7 @@ export function ChatArea() {
             error?: string;
             message?: string;
             code?: string;
+            retryable?: boolean;
             limit?: number;
             resetAt?: string;
             surface?: string;
@@ -5847,6 +5913,9 @@ export function ChatArea() {
           };
           if (typeof data.code === "string" && data.code.trim()) {
             errorCode = data.code.trim();
+          }
+          if (data.retryable === true) {
+            errorRetryable = true;
           }
           if (typeof data.resetAt === "string" && data.resetAt.trim()) {
             quotaResetAt = data.resetAt.trim();
@@ -5887,7 +5956,7 @@ export function ChatArea() {
       if (requestId) {
         message = `${message} (Ref: ${requestId})`;
       }
-      throw new ChatRequestError(message, response.status, errorCode);
+      throw new ChatRequestError(message, response.status, errorCode, errorRetryable);
     }
 
     const resolveAgentUrl = (payload: Record<string, unknown>): string | null => {
@@ -5905,11 +5974,26 @@ export function ChatArea() {
       return null;
     };
 
+    // P1-12 follow-up (Wave A): track whether ANY content chunk has been received
+    // for THIS turn. The chat POST carries no idempotency/turn key, so the replay
+    // loop auto-resends on a retryable error frame. If content already streamed,
+    // the engine may have partially executed the turn (side-effecting tool calls +
+    // metering), so auto-replaying would duplicate the turn + double-meter. We only
+    // treat a retryable error as replay-safe when zero content was received; a
+    // retryable error AFTER content is downgraded to non-retryable (hard) below.
+    // This is defense in depth — the BFF now also labels post-content drops
+    // non-retryable, but the FE must stay safe even if some path mislabels.
+    const turnContent = { received: false };
+
     const readPayloadChunk = (
       payload: Record<string, unknown>,
       eventType?: string
     ): { done?: boolean; chunk?: string; agentUrl?: string } => {
       const payloadType = typeof payload.type === "string" ? payload.type : "";
+      const trackChunk = (chunk: string): { chunk: string } => {
+        if (chunk) turnContent.received = true;
+        return { chunk };
+      };
       if (isZakiAgentSpace && (eventType === "ready" || eventType === "reply_start")) {
         if (eventType === "reply_start") {
           markZakiBotReplyStart({ ...payload, type: "reply_start" });
@@ -5924,7 +6008,7 @@ export function ChatArea() {
           (typeof payload.chunk === "string" && payload.chunk) ||
           (typeof payload.content === "string" && payload.content) ||
           "";
-        return tokenChunk ? { chunk: tokenChunk } : {};
+        return tokenChunk ? trackChunk(tokenChunk) : {};
       }
       if (isZakiAgentSpace && payloadType === "token") {
         const tokenChunk =
@@ -5934,7 +6018,7 @@ export function ChatArea() {
           (typeof payload.chunk === "string" && payload.chunk) ||
           (typeof payload.content === "string" && payload.content) ||
           "";
-        return tokenChunk ? { chunk: tokenChunk } : {};
+        return tokenChunk ? trackChunk(tokenChunk) : {};
       }
       if (
         eventType === "done" ||
@@ -5978,7 +6062,11 @@ export function ChatArea() {
               (typeof payload.content === "string" && payload.content) ||
               ""
             : "";
-        return finalChunk ? { done: true, chunk: finalChunk } : { done: true };
+        if (finalChunk) {
+          turnContent.received = true;
+          return { done: true, chunk: finalChunk };
+        }
+        return { done: true };
       }
       if (eventType === "error") {
         if (isZakiAgentSpace) {
@@ -5988,10 +6076,16 @@ export function ChatArea() {
           (typeof payload.message === "string" && payload.message) ||
           (typeof payload.error === "string" && payload.error) ||
           "Agent stream failed.";
+        // P1-12 follow-up (Wave A): only honor retryable when NO content has been
+        // received for this turn. A retryable error AFTER content means the turn may
+        // have partially executed (tool calls + metering), so auto-replaying would
+        // duplicate the turn + double-meter — treat it as a hard error instead.
+        const retryable = resolveTurnRetryable(payload.retryable === true, turnContent.received);
         throw new ChatRequestError(
           msg,
           502,
-          typeof payload.code === "string" ? payload.code : "chat_error"
+          typeof payload.code === "string" ? payload.code : "chat_error",
+          retryable
         );
       }
 
@@ -6241,10 +6335,14 @@ export function ChatArea() {
           (typeof payload.message === "string" && payload.message.trim()) ||
           (typeof payload.error === "string" && payload.error.trim()) ||
           "ZAKI couldn't finish that reply. Please try again.";
+        // P1-12 follow-up (Wave A): a retryable error after content was received is
+        // unsafe to auto-replay (partial turn → duplicate + double-meter). Downgrade.
+        const retryable = resolveTurnRetryable(payload.retryable === true, turnContent.received);
         throw new ChatRequestError(
           errorMessage,
           502,
-          typeof payload.code === "string" ? payload.code : "chat_error"
+          typeof payload.code === "string" ? payload.code : "chat_error",
+          retryable
         );
       }
 
@@ -6327,7 +6425,7 @@ export function ChatArea() {
         console.warn("[zaki:sse] unhandled event type:", eventType, payload);
       }
 
-      return chunk ? { chunk } : {};
+      return chunk ? trackChunk(chunk) : {};
     };
 
     const contentType = response.headers.get("content-type") || "";
@@ -6473,33 +6571,39 @@ export function ChatArea() {
 
       if (dataLines.length > 0) {
         const payloadText = dataLines.join("\n");
+        // Only JSON.parse is allowed to fall back to processRawData. readPayloadChunk
+        // is INTENTIONAL about throwing a ChatRequestError on an `event: error` frame
+        // (P1-12 replay relies on that throw propagating to the send loop); keep it
+        // OUTSIDE the parse-fallback catch so the error is never swallowed + lost.
+        let payload: Record<string, unknown> | null = null;
         try {
-          const payload = JSON.parse(payloadText) as Record<string, unknown>;
-          const result = readPayloadChunk(payload, eventType);
-          if (result.chunk) {
-            appendAgentDisplayChunk(result.chunk);
-          }
-          if (result.done) {
-            sawTerminalEvent = true;
-            flushRenderedContent();
-            streamClosed = true;
-            return;
-          }
-          if (result.agentUrl) {
-            flushRenderedContent();
-            await streamAgentInvocation(result.agentUrl, threadSlug, assistantId, signal);
-            try {
-              await reader.cancel();
-            } catch {
-              // ignore cancel errors
-            }
-            streamClosed = true;
-            return;
-          }
-          return;
+          payload = JSON.parse(payloadText) as Record<string, unknown>;
         } catch {
           await processRawData(payloadText);
+          return;
         }
+        const result = readPayloadChunk(payload, eventType);
+        if (result.chunk) {
+          appendAgentDisplayChunk(result.chunk);
+        }
+        if (result.done) {
+          sawTerminalEvent = true;
+          flushRenderedContent();
+          streamClosed = true;
+          return;
+        }
+        if (result.agentUrl) {
+          flushRenderedContent();
+          await streamAgentInvocation(result.agentUrl, threadSlug, assistantId, signal);
+          try {
+            await reader.cancel();
+          } catch {
+            // ignore cancel errors
+          }
+          streamClosed = true;
+          return;
+        }
+        return;
       }
     };
 
@@ -7161,6 +7265,11 @@ export function ChatArea() {
       return;
     }
 
+    // A new turn is starting — clear any prior billing-denial card so a stale
+    // "out of usage" notice doesn't linger after the user resolves billing.
+    // It re-appears automatically if this turn also hits the paywall.
+    setPaywallCardData(null);
+
     const isZakiBotTarget = isZakiBotSpaceId(resolvedWorkspaceSlug);
     if (isZakiBotTarget) {
       const provisioned = await ensureZakiBotProvisioned(false);
@@ -7384,14 +7493,51 @@ export function ChatArea() {
       : trimmed;
 
     try {
-      const streamResult = await streamChatMessage({
-        workspaceSlug: resolvedWorkspaceSlug,
-        threadSlug: threadId,
-        message: sendText,
-        assistantId: assistantMessageId,
-        signal: streamController.signal,
-        turnOptions: isZakiBotTarget ? turnOptions?.zaki ?? null : null,
-      });
+      // P1-12: bounded auto-reconnect/replay of the SAME turn when the BFF
+      // signals a transient, replay-safe condition (a retryable:true SSE error
+      // frame, or a retryable JSON 5xx such as the readiness-gate 503 / a
+      // gateway_draining / ownership_lock_conflict frame). Up to
+      // CHAT_RETRYABLE_MAX_ATTEMPTS sends total; between attempts we clear any
+      // partial assistant output and show "Reconnecting to the agent...". A
+      // non-retryable error (or an aborted turn) breaks out immediately to the
+      // existing hard-error handling below.
+      let streamResult: Awaited<ReturnType<typeof streamChatMessage>> | undefined;
+      for (let attempt = 1; attempt <= CHAT_RETRYABLE_MAX_ATTEMPTS; attempt++) {
+        try {
+          streamResult = await streamChatMessage({
+            workspaceSlug: resolvedWorkspaceSlug,
+            threadSlug: threadId,
+            message: sendText,
+            assistantId: assistantMessageId,
+            signal: streamController.signal,
+            turnOptions: isZakiBotTarget ? turnOptions?.zaki ?? null : null,
+          });
+          break;
+        } catch (streamError) {
+          const isLastAttempt = attempt >= CHAT_RETRYABLE_MAX_ATTEMPTS;
+          if (
+            isAbortError(streamError) ||
+            isLastAttempt ||
+            !isRetryableChatError(streamError)
+          ) {
+            throw streamError;
+          }
+          // Transient + replay-safe: reset partial output, tell the user we're
+          // reconnecting, back off, then replay the same turn.
+          updateAssistantContent(threadId, assistantMessageId, "");
+          if (isZakiBotTarget) {
+            setStreamingIndicatorMode("thinking");
+          }
+          toast.info("Reconnecting to the agent...");
+          const backoff =
+            CHAT_RETRYABLE_BACKOFF_MS[attempt - 1] ??
+            CHAT_RETRYABLE_BACKOFF_MS[CHAT_RETRYABLE_BACKOFF_MS.length - 1];
+          await new Promise((resolve) => window.setTimeout(resolve, backoff));
+          if (streamController.signal.aborted) {
+            throw streamError;
+          }
+        }
+      }
       if (isZakiBotTarget && agentUserId) {
         const sessionKey = buildAgentSessionKey(threadId, agentUserId);
         if (sessionKey) {
@@ -7413,13 +7559,27 @@ export function ChatArea() {
         updateAssistantError(threadId, assistantMessageId, "Generation stopped.", "aborted");
         return;
       }
-      if (error instanceof ChatRequestError && error.code === "access_expired") {
-        if (isZakiBotTarget) {
-          finalizeZakiBotProgress("error");
+      if (error instanceof ChatRequestError) {
+        const { isPaywall, state: paywallState } = classifyBillingDenial(error.code);
+        if (isPaywall && paywallState) {
+          if (isZakiBotTarget) {
+            finalizeZakiBotProgress("error");
+          }
+          // Show the inline paywall card — subsumes the old access_expired redirect.
+          const planLabel =
+            entitlementsResult?.data?.effective?.tier ??
+            entitlementsResult?.data?.plan?.tier;
+          const remaining = meterResult?.data?.weekly?.remaining ?? undefined;
+          const resetAt = meterResult?.data?.weekly?.resetAt ?? null;
+          setPaywallCardData({
+            state: paywallState,
+            planLabel: planLabel ?? undefined,
+            remaining: typeof remaining === "number" ? remaining : undefined,
+            resetAt,
+            message: error.message,
+          });
+          return;
         }
-        toast.error(error.message);
-        navigate("/pricing");
-        return;
       }
       if (isZakiBotTarget) {
         finalizeZakiBotProgress("error");
@@ -7624,9 +7784,26 @@ export function ChatArea() {
         }
         const { response, data } = await approveAgentSession(sessionKey, payload);
         if (!response.ok) {
-          const code = typeof data?.error === "string" ? data.error : `approval_${response.status}`;
+          const code =
+            typeof data?.code === "string"
+              ? data.code
+              : typeof data?.error === "string"
+                ? data.error
+                : `approval_${response.status}`;
+          // A connection-class outage (nullalis briefly restarting) surfaces as
+          // 502 agent_unreachable with retryable:true after the BFF exhausted
+          // its bounded retry budget. Flag the error so the approval card can
+          // render a retrying state + a one-click "Retry approval" that re-POSTs
+          // the SAME approval_id, rather than treating the click as lost.
+          const retryable =
+            data?.retryable === true ||
+            code === "agent_unreachable" ||
+            response.status === 502 ||
+            response.status === 503 ||
+            response.status === 504;
           const error = new Error(code);
-          (error as Error & { code?: string }).code = code;
+          (error as Error & { code?: string; retryable?: boolean }).code = code;
+          (error as Error & { code?: string; retryable?: boolean }).retryable = retryable;
           throw error;
         }
         if (approved) {
@@ -7661,13 +7838,30 @@ export function ChatArea() {
       } catch (err) {
         setApprovalContinuationPendingId(null);
         console.error("[approval]", err);
-        if ((err as Error & { code?: string })?.code === "approval_id_mismatch") {
+        const typedErr = err as Error & { code?: string; retryable?: boolean };
+        if (typedErr?.code === "approval_id_mismatch") {
           await hydrateActiveSessionDetail(sessionKey);
           toast.error("Approval changed. Review the latest approval card.");
+        } else if (typedErr?.retryable) {
+          // The card renders an inline retrying / Retry-approval affordance for
+          // this case, so don't fire a hard error toast that would imply the
+          // click was lost.
+          if (approved) {
+            // The approve branch optimistically set a "ZAKI is continuing..."
+            // narration frame + a "writing" streaming indicator BEFORE the POST.
+            // Because the agent is unreachable, no SSE 'done' event will arrive
+            // to clear them — so reset them here. Otherwise the chat would show
+            // a contradictory state ("Approved. ZAKI is continuing..." + writing)
+            // alongside the card's "retrying your approval..." affordance,
+            // falsely implying the approval already succeeded.
+            setNullalisNarrationFrame(null);
+            setStreamingIndicatorMode("thinking");
+          }
+          toast.info("Agent restarting — retrying your approval...");
         } else {
           toast.error(approved ? "Failed to send approval" : "Failed to send denial");
         }
-        throw err; // re-throw so the card stays in the loading state
+        throw err; // re-throw so the card surfaces the (retrying) state
       }
     },
     [
@@ -8854,6 +9048,19 @@ export function ChatArea() {
                   timeline copy was dropped in 18328cd so the decided
                   state has one owner. Surfaces directly above the
                   composer where the user's attention is. */}
+              {paywallCardData ? (
+                <div className="zaki-approval-card-slot">
+                  <PaywallCard
+                    state={paywallCardData.state}
+                    planLabel={paywallCardData.planLabel}
+                    remaining={paywallCardData.remaining}
+                    resetAt={paywallCardData.resetAt}
+                    message={paywallCardData.message}
+                    onSeePlans={() => navigate("/pricing")}
+                    onDismiss={() => setPaywallCardData(null)}
+                  />
+                </div>
+              ) : null}
               {isZakiBotActiveSpace && nullalisApprovalRequest ? (
                 <div className="zaki-approval-card-slot">
                   <ApprovalRequiredCard

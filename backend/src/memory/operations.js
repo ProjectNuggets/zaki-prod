@@ -118,6 +118,13 @@ const EPISODIC_MAX_PER_USER = (() => {
   const v = Number.parseInt(process.env.ZAKI_MEMORY_EPISODIC_MAX_PER_USER || "", 10);
   return Number.isFinite(v) && v > 0 ? v : 200;
 })();
+// Retention for superseded (status='outdated') rows. Newest-wins marks the old
+// value outdated but nothing pruned them, so they grew unbounded. Keep them long
+// enough for undo/audit, then sweep. Best-effort, like the episodic prune.
+const OUTDATED_TTL_DAYS = (() => {
+  const v = Number.parseInt(process.env.ZAKI_MEMORY_OUTDATED_TTL_DAYS || "", 10);
+  return Number.isFinite(v) && v > 0 ? v : 30;
+})();
 
 function isIdentityCoreEnabled() {
   return (
@@ -1242,6 +1249,11 @@ export async function storeMemory({
   importanceScore = null,
   confidenceScore = null,
   metadata = null,
+  // When set, mark this existing memory outdated and insert the new row in ONE
+  // transaction (atomic newest-wins supersede — no partial state where the old
+  // is outdated but the new failed to store, or vice versa). The embedding is
+  // computed BEFORE the transaction so the network call never holds it open.
+  supersedeMemoryId = null,
 }) {
   const normalizedUserId = normalizeUserId(userId);
   const normalizedContent = normalizeStoredMemoryContent(content, type, metadata);
@@ -1271,6 +1283,12 @@ export async function storeMemory({
       polarity: resolvedMetadata.polarity,
     });
     if (duplicate?.id) {
+      // The new value already exists as an active row, but it may still need to
+      // supersede a CONTRADICTING value (a rare already-inconsistent state).
+      // Outdate that old value so newest-wins holds even on a duplicate insert.
+      if (supersedeMemoryId && supersedeMemoryId !== duplicate.id) {
+        await markMemoryOutdated({ userId: normalizedUserId, memoryId: supersedeMemoryId });
+      }
       return { id: duplicate.id, duplicate: true };
     }
   }
@@ -1295,46 +1313,36 @@ export async function storeMemory({
   let storedId = id;
   
   if (isPg) {
-    let insertResult;
-    if (embedding) {
-      insertResult = await dbQuery(
-        `INSERT INTO memories
+    // Build the insert once; execute it either directly or inside a supersede
+    // transaction. (Embedding already computed above — outside any transaction.)
+    const insertSql = embedding
+      ? `INSERT INTO memories
          (id, user_id, content, content_hash, type, embedding, importance_score, confidence_score, source_thread_id, metadata, created_at)
          VALUES ($1, $2, $3, $4, $5, $6::vector, $7, $8, $9, $10, NOW())
          ON CONFLICT (user_id, content_hash) DO NOTHING
-         RETURNING id`,
-        [
-          id,
-          normalizedUserId,
-          normalizedContent,
-          hash,
-          normalizedType,
-          `[${embedding.join(",")}]`,
-          importance,
-          confidence,
-          sourceThreadId,
-          resolvedMetadata,
-        ]
-      );
-    } else {
-      insertResult = await dbQuery(
-        `INSERT INTO memories
+         RETURNING id`
+      : `INSERT INTO memories
          (id, user_id, content, content_hash, type, importance_score, confidence_score, source_thread_id, metadata, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
          ON CONFLICT (user_id, content_hash) DO NOTHING
-         RETURNING id`,
-        [
-          id,
-          normalizedUserId,
-          normalizedContent,
-          hash,
-          normalizedType,
-          importance,
-          confidence,
-          sourceThreadId,
-          resolvedMetadata,
-        ]
-      );
+         RETURNING id`;
+    const insertParams = embedding
+      ? [id, normalizedUserId, normalizedContent, hash, normalizedType, `[${embedding.join(",")}]`, importance, confidence, sourceThreadId, resolvedMetadata]
+      : [id, normalizedUserId, normalizedContent, hash, normalizedType, importance, confidence, sourceThreadId, resolvedMetadata];
+
+    let insertResult;
+    if (supersedeMemoryId) {
+      // Atomic newest-wins: outdate the old value + insert the new one together.
+      insertResult = await withDbTransaction(async (client) => {
+        await client.query(
+          `UPDATE memories SET status = 'outdated', updated_at = NOW()
+           WHERE id = $1 AND user_id = $2 AND COALESCE(status, 'active') = 'active'`,
+          [supersedeMemoryId, normalizedUserId]
+        );
+        return client.query(insertSql, insertParams);
+      });
+    } else {
+      insertResult = await dbQuery(insertSql, insertParams);
     }
 
     const insertedId = insertResult?.rows?.[0]?.id;
@@ -1568,7 +1576,7 @@ export async function pruneEpisodicMemories(userId) {
      WHERE id IN (
        SELECT id FROM memories
        WHERE user_id = $1 AND type = 'episodic'
-       ORDER BY created_at DESC
+       ORDER BY created_at DESC, id DESC
        OFFSET $2
      )`,
     [normalizedUserId, EPISODIC_MAX_PER_USER]
@@ -1576,20 +1584,41 @@ export async function pruneEpisodicMemories(userId) {
   return { ok: true };
 }
 
+// Retention for superseded rows: delete status='outdated' memories older than the
+// TTL. Newest-wins marks the old value outdated; this sweep stops them growing
+// unbounded while keeping a window for undo/audit. Best-effort; scoped to user.
+export async function pruneOutdatedMemories(userId) {
+  const normalizedUserId = normalizeUserId(userId);
+  if (!normalizedUserId) return { ok: false };
+  const result = await dbQuery(
+    `DELETE FROM memories
+     WHERE user_id = $1
+       AND COALESCE(status, 'active') = 'outdated'
+       AND updated_at < NOW() - ($2 || ' days')::interval`,
+    [normalizedUserId, String(OUTDATED_TTL_DAYS)]
+  );
+  return { ok: true, deleted: result?.rowCount ?? 0 };
+}
+
 export async function findConflict({ userId, content, conflictKey = null, polarity = null }) {
   const normalizedUserId = normalizeUserId(userId);
   const newKey = buildConflictFingerprint({ content, conflictKey, polarity });
   if (!newKey) return null;
 
+  // Indexed lookup by conflict key (idx_memories_conflict_key). The fingerprint
+  // key is subject-scoped (e.g. "identity:location" is shared by London & Tokyo;
+  // "preference:coffee" by like & dislike), so an exact key match finds ALL active
+  // rows that could conflict — regardless of how many other facts the user has.
+  // (Previously a `LIMIT 200 ORDER BY created_at DESC` scan silently MISSED
+  // conflicts once a user had >200 active facts → stale facts never superseded.)
   const existing = await dbAll(
     `SELECT id, content, type, metadata
      FROM memories
      WHERE user_id = $1
        AND COALESCE(status, 'active') = 'active'
        AND COALESCE(type, '') <> 'episodic'
-     ORDER BY created_at DESC
-     LIMIT 200`,
-    [normalizedUserId]
+       AND metadata->>'conflictKey' = $2`,
+    [normalizedUserId, newKey.key]
   );
 
   for (const memory of existing) {
