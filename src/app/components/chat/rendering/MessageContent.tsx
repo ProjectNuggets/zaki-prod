@@ -2,6 +2,7 @@ import { useDeferredValue, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { parseMessageMarkdown } from "./parseMessageMarkdown";
 import { parseAssistantContent } from "./parseAssistantImages";
+import { sanitizeAssistantScaffold } from "./scaffoldSanitizer";
 import { BlockRenderer } from "./BlockRenderer";
 import type { MessageBlock } from "./types";
 
@@ -35,10 +36,13 @@ export function MessageContent({
       return { blocks: [] as MessageBlock[] };
     }
     const parsedBlocks = isAssistant
-      ? parseAssistantContent(parseSource, {
-          streaming: streaming && isAssistant,
-          agentReply: agentReply || surface === "bot",
-        })
+      ? parseAssistantContent(
+          surface === "shared" ? sanitizeAssistantScaffold(parseSource) : parseSource,
+          {
+            streaming: streaming && isAssistant,
+            agentReply: agentReply || surface === "bot",
+          },
+        )
       : parseMessageMarkdown(parseSource, {
           streaming: streaming && isAssistant,
         }).blocks;

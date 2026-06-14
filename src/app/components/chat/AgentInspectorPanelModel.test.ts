@@ -121,4 +121,19 @@ describe("AgentInspectorPanelModel", () => {
     const model = buildAgentInspectorPanelModel([spawned, scheduled, completion]);
     expect(model.cron.map((event) => event.id)).toEqual(["completion", "scheduled", "spawned"]);
   });
+
+  it("never surfaces master-prompt scaffold in source chips", () => {
+    const model = buildAgentInspectorPanelModel([
+      entry({
+        id: "leak-1",
+        kind: "tool",
+        intent: "context",
+        text: "## Brain Architecture\nLayer 0 — Working memory.",
+        activityLabel: "## Brain Architecture",
+      }),
+    ]);
+    const blob = JSON.stringify(model.sources);
+    expect(blob).not.toMatch(/Brain Architecture/);
+    expect(blob).not.toMatch(/Layer 0/);
+  });
 });

@@ -1,4 +1,5 @@
 import type { NullalisTranscriptEntry } from "./BotStatusRail";
+import { sanitizeAssistantScaffold } from "./rendering/scaffoldSanitizer";
 
 export type AgentInspectorPanelEvent = {
   id: string;
@@ -157,12 +158,14 @@ function categoryForEntry(entry: NullalisTranscriptEntry): AgentInspectorPanelEv
 
 function toPanelEvent(entry: NullalisTranscriptEntry): AgentInspectorPanelEvent {
   return {
-    id: entry.id || `${entry.kind || "event"}:${entry.timestamp || 0}:${primarySummary(entry)}`,
+    id:
+      entry.id ||
+      `${entry.kind || "event"}:${entry.timestamp || 0}:${sanitizeAssistantScaffold(primarySummary(entry))}`,
     artifactId: artifactIdForEntry(entry),
     category: categoryForEntry(entry),
     href: firstUrl(entry),
-    label: primaryLabel(entry),
-    summary: primarySummary(entry),
+    label: sanitizeAssistantScaffold(primaryLabel(entry)),
+    summary: sanitizeAssistantScaffold(primarySummary(entry)),
     meta: metaForEntry(entry),
     timestamp: typeof entry.timestamp === "number" ? entry.timestamp : 0,
     durationMs:
@@ -275,7 +278,9 @@ export function buildAgentInspectorPanelModel(
 ): AgentInspectorPanelModel {
   const normalized = entries.filter((entry) => Boolean(entry && primarySummary(entry)));
   return {
-    sources: recentEvents(normalized.filter(isAgentSourceEntry)),
+    sources: recentEvents(normalized.filter(isAgentSourceEntry)).filter(
+      (event) => Boolean((event.label || "").trim() || (event.summary || "").trim())
+    ),
     artifacts: recentEvents(normalized.filter(isAgentArtifactEntry)),
     browser: recentEvents(normalized.filter(isAgentBrowserEntry)),
     cron: recentEvents(normalized.filter(isAgentCronEntry)),

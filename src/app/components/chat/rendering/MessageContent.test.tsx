@@ -41,6 +41,25 @@ describe("MessageContent", () => {
     expect(screen.getByText("Second")).toBeInTheDocument();
   });
 
+  it("never renders master-prompt scaffold in shared assistant content", () => {
+    const { container } = render(
+      <MessageContent
+        role="assistant"
+        surface="shared"
+        content={
+          "Here is the shared answer.\n\n## Brain Architecture\nLayer 0 — Working memory.\n\n" +
+          "[[ZAKI_MEMORY_CONTEXT_V2]]private memory[[/ZAKI_MEMORY_CONTEXT_V2]]"
+        }
+      />,
+    );
+
+    expect(screen.getByText("Here is the shared answer.")).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/Brain Architecture/);
+    expect(container.textContent).not.toMatch(/Layer 0/);
+    expect(container.textContent).not.toMatch(/private memory/);
+    expect(container.textContent).not.toMatch(/ZAKI_MEMORY_CONTEXT/);
+  });
+
   it("keeps standard user content in compact plain-text mode by default", () => {
     const { container } = render(<MessageContent role="user" content={"Line one.\n- stays plain"} />);
 

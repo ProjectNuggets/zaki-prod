@@ -1,4 +1,5 @@
 import { stripToolCallMarkup } from "./toolMarkup";
+import { sanitizeAssistantScaffold } from "./scaffoldSanitizer";
 
 export type AgentEmailDraftSegment = {
   kind: "email";
@@ -499,7 +500,7 @@ export function segmentAgentReplyContent(
   content: string,
   options?: { streaming?: boolean }
 ): AgentReplySegment[] {
-  const stripped = stripToolCallMarkup(String(content || ""));
+  const stripped = stripToolCallMarkup(sanitizeAssistantScaffold(String(content || "")));
   if (!stripped.trim()) return [];
   const controlMessages = stripInternalControlMessages(stripped, options);
   if (!controlMessages.text.trim()) {
@@ -534,7 +535,7 @@ export function normalizeAssistantDisplayText(
   content: string,
   options?: { agentReply?: boolean; streaming?: boolean }
 ): string {
-  const stripped = stripToolCallMarkup(String(content || ""));
+  const stripped = stripToolCallMarkup(sanitizeAssistantScaffold(String(content || "")));
   if (!options?.agentReply) return stripped.trim();
   const segments = segmentAgentReplyContent(stripped, { streaming: options.streaming });
   return segments
