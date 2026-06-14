@@ -4363,7 +4363,19 @@ async function _resolveZakiUser(token) {
     const payload = await verifyZakiAccessToken(token);
     if (!payload?.sub) return { error: "invalid_token" };
     const userId = Number.parseInt(String(payload.sub), 10);
-    if (!Number.isInteger(userId) || userId <= 0) return { error: "invalid_token" };
+    if (!Number.isInteger(userId) || userId <= 0) {
+      // Q6 (W1.1 visibility): non-numeric sub silently produces NaN → tenant guard skip.
+      // Log a structured warn so the skip is observable in production logs / GlitchTip.
+      const rawSub = String(payload.sub);
+      if (Number.isNaN(userId)) {
+        logStructured("warn", "auth.zaki.non_numeric_user_id", {
+          sub: rawSub.slice(0, 64),
+          reason: "parseInt_yielded_NaN",
+          note: "W1.1 tenant guard skipped for this token",
+        });
+      }
+      return { error: "invalid_token" };
+    }
     const zakiUser = await dbGet(`SELECT ${_ZAKI_USER_COLS} FROM zaki_users WHERE id = $1`, [userId]);
     if (!zakiUser || !zakiUser.verified) return { error: "user_not_found" };
     return { ok: true, email: zakiUser.email, zakiUser, sessionUser: null };
