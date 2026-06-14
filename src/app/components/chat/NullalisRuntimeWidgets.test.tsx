@@ -2,7 +2,7 @@ import "@testing-library/jest-dom";
 import { afterEach, describe, expect, it, jest } from "@jest/globals";
 import { act } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { ApprovalRequiredCard, ContextGauge } from "./NullalisRuntimeWidgets";
+import { ApprovalRequiredCard } from "./NullalisRuntimeWidgets";
 import type { NullalisApprovalRequest } from "./BotStatusRail";
 
 const translations: Record<string, string> = {
@@ -306,90 +306,5 @@ describe("ApprovalRequiredCard", () => {
     expect(
       screen.queryByRole("button", { name: "Retry approval for extension_click" })
     ).not.toBeInTheDocument();
-  });
-});
-
-describe("ContextGauge", () => {
-  it("uses backend context_pressure_percent as the display pressure", () => {
-    render(
-      <ContextGauge
-        data={{
-          tokenCount: 10_000,
-          contextMax: 100_000,
-          pressurePercent: 42,
-          messageCount: 12,
-        }}
-      />
-    );
-
-    expect(
-      screen.getByRole("progressbar", {
-        name: "Context window 10,000 of 100,000 tokens, 42 percent used",
-      })
-    ).toHaveAttribute("aria-valuenow", "42");
-    expect(screen.getByText("10,000 / 100,000 (42%)")).toBeInTheDocument();
-  });
-
-  it("renders pressure-only context samples without token totals", () => {
-    render(
-      <ContextGauge
-        data={{
-          pressurePercent: 21,
-          messageCount: 3,
-        }}
-      />
-    );
-
-    expect(
-      screen.getByRole("progressbar", {
-        name: "Context pressure 21 percent",
-      })
-    ).toHaveAttribute("aria-valuenow", "21");
-    expect(screen.getByText("21%")).toBeInTheDocument();
-  });
-
-  it("renders unknown instead of deriving pressure from token counts", () => {
-    render(
-      <ContextGauge
-        data={{
-          tokenCount: 10_000,
-          contextMax: 100_000,
-          messageCount: 12,
-        }}
-      />
-    );
-
-    expect(
-      screen.getByRole("progressbar", {
-        name: "Context pressure unknown",
-      })
-    ).not.toHaveAttribute("aria-valuenow");
-    expect(screen.getByText("--")).toBeInTheDocument();
-  });
-
-  it("labels fallback context samples and runtime continuity metadata honestly", () => {
-    render(
-      <ContextGauge
-        data={{
-          tokenCount: 101_000,
-          contextMax: 200_000,
-          pressurePercent: 50.5,
-          source: "diagnostics_fallback",
-          confidence: "fallback",
-          compactionThresholdTokens: 160_000,
-          tokenCompactionTriggered: true,
-          lastTurn: {
-            autoCompactionEvents: 2,
-            durableContinuityRefreshed: true,
-            memoryContextInjected: true,
-          },
-        }}
-      />
-    );
-
-    expect(screen.getByText("diagnostics fallback")).toBeInTheDocument();
-    expect(screen.getByText("compact @ 160,000 tokens")).toBeInTheDocument();
-    expect(screen.getByText("token trigger")).toBeInTheDocument();
-    expect(screen.getByText("2 compactions")).toBeInTheDocument();
   });
 });

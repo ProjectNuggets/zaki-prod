@@ -31,8 +31,6 @@ function blockText(block: MessageBlock): string {
     case "paragraph":
     case "heading":
       return inlineText(block.inlines);
-    case "plain_text":
-      return block.text;
     case "bullet_list":
     case "ordered_list":
       return block.items.map((item) => item.blocks.map(blockText).join("\n")).join("\n");
@@ -52,8 +50,6 @@ function blockText(block: MessageBlock): string {
         .join("\n");
     case "email":
       return emailDraftText(block);
-    case "callout":
-      return block.blocks.map(blockText).join("\n");
     case "runtime_payload_suppressed":
       return `${block.title}\n${block.text}`;
     default:
@@ -83,8 +79,6 @@ export const BlockRenderer = memo(
   switch (block.type) {
     case "paragraph":
       return <ParagraphBlock block={block} />;
-    case "plain_text":
-      return <p className="text-[15px] leading-[1.68] text-zaki-primary dark:text-zaki-dark-primary">{block.text}</p>;
     case "heading":
       return (
         <div className={cn(!nested && (block.level === 2 ? "pt-2" : "pt-1"))}>
@@ -165,21 +159,6 @@ export const BlockRenderer = memo(
           className="text-[11px] italic text-zaki-muted/70 dark:text-zaki-dark-muted/70"
         >
           saved locally
-        </div>
-      );
-    case "callout":
-      return (
-        <div className="rounded-[14px] border border-zaki-subtle bg-zaki-sunken px-4 py-3 dark:border-zaki-dark">
-          {block.title ? (
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:text-zaki-dark-muted">
-              {block.title}
-            </div>
-          ) : null}
-          <div className="space-y-3">
-            {block.blocks.map((child) => (
-              <BlockRenderer key={child.id} block={child} nested />
-            ))}
-          </div>
         </div>
       );
     case "runtime_payload_suppressed":
