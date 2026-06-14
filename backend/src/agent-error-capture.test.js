@@ -132,4 +132,30 @@ describe("makeAgentErrorCapture", () => {
     expect(sentry.captureException).toHaveBeenCalledTimes(1);
     expect(sentry._lastScope.tags["agent_phase"]).toBe(phase);
   });
+
+  // ---
+  // Q5: client-disconnect noise must NOT reach GlitchTip.
+  // ---
+
+  it.each([
+    ["ECONNRESET via .code", Object.assign(new Error("socket hang up"), { code: "ECONNRESET" })],
+    ["EPIPE via .code", Object.assign(new Error("write EPIPE"), { code: "EPIPE" })],
+    ["econnreset via lower-case .code", Object.assign(new Error("socket hang up"), { code: "econnreset" })],
+    ["ECONNRESET in message (no code)", new Error("read ECONNRESET")],
+    ["EPIPE in message (no code)", new Error("write epipe")],
+  ])("does NOT capture client-disconnect to GlitchTip: %s", (_label, err) => {
+    captureAgentError(err, { req: makeReq(), phase: "outer_catch" });
+    expect(sentry.captureException).not.toHaveBeenCalled();
+    expect(sentry.captureMessage).not.toHaveBeenCalled();
+    expect(sentry.withScope).not.toHaveBeenCalled();
+  });
+
+  it("still captures a real error whose message happens to contain 'reset' (not disconnect)", () => {
+    captureAgentError(new Error("upstream connection reset by peer (not a client disconnect)"), {
+      req: makeReq(),
+      phase: "outer_catch",
+    });
+    // This does NOT match 'econnreset' substring, so it SHOULD be captured.
+    expect(sentry.captureException).toHaveBeenCalledTimes(1);
+  });
 });
