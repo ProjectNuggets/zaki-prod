@@ -50,7 +50,7 @@ describe("MessageBubble source chip", () => {
       role: "assistant",
       content: "done",
     };
-    render(<MessageBubble message={message} showSourceChip={false} animate={false} />);
+    render(<MessageBubble message={message} animate={false} />);
     expect(document.querySelector('[data-testid="source-chip"]')).toBeNull();
   });
 
@@ -65,7 +65,6 @@ describe("MessageBubble source chip", () => {
       <MessageBubble
         message={message}
         botMode
-        showSourceChip={false}
         animate={false}
       />
     );
@@ -85,7 +84,7 @@ describe("MessageBubble source chip", () => {
       createdAt: "2026-05-27T09:30:00.000Z",
     };
 
-    render(<MessageBubble message={message} botMode showSourceChip={false} animate={false} />);
+    render(<MessageBubble message={message} botMode animate={false} />);
 
     const timestamp = screen.getByTestId("message-timestamp");
     expect(timestamp).toHaveAttribute("dateTime", "2026-05-27T09:30:00.000Z");
@@ -94,28 +93,6 @@ describe("MessageBubble source chip", () => {
     expect(timestamp.textContent?.trim()).toBeTruthy();
     expect(timestamp).not.toHaveTextContent(/just now/i);
     expect(timestamp).toHaveTextContent(/\d{1,2}:\d{2}/);
-  });
-
-  it("renders persisted Agent approval instructions as operational approval rows", () => {
-    const message: Message = {
-      id: "approval-1",
-      role: "assistant",
-      content:
-        "Approval required for tool artifact_create (id=2, risk=low, reason=supervised_mutating_requires_approval). Use /approve 2 allow-once|deny",
-    };
-
-    render(
-      <MessageBubble
-        message={message}
-        botMode
-        showSourceChip={false}
-        animate={false}
-      />
-    );
-
-    expect(screen.getByTestId("approval-history-2")).toHaveTextContent("Approval requested");
-    expect(screen.getByTestId("approval-history-2")).toHaveTextContent("artifact_create");
-    expect(screen.queryByText(/Use \/approve/)).not.toBeInTheDocument();
   });
 
   it("does not leak malformed tool-call tag fragments in assistant replies", () => {
@@ -130,7 +107,6 @@ describe("MessageBubble source chip", () => {
       <MessageBubble
         message={message}
         botMode
-        showSourceChip={false}
         animate={false}
       />
     );
@@ -151,7 +127,6 @@ describe("MessageBubble source chip", () => {
       <MessageBubble
         message={message}
         botMode
-        showSourceChip={false}
         animate={false}
       />
     );
@@ -177,7 +152,6 @@ describe("MessageBubble source chip", () => {
       <MessageBubble
         message={message}
         botMode
-        showSourceChip={false}
         animate={false}
       />
     );
@@ -188,20 +162,6 @@ describe("MessageBubble source chip", () => {
     expect(screen.queryByText(/content_preview/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Approved tool execution/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Continue your reasoning/i)).not.toBeInTheDocument();
-  });
-
-  it("renders an explicit Telegram chip when a surface opts into source chips", () => {
-    const message: Message = {
-      id: "2",
-      role: "user",
-      content: "from phone",
-      channel: "telegram",
-      lane: "main",
-      createdAt: new Date().toISOString(),
-    };
-    render(<MessageBubble message={message} showSourceChip animate={false} />);
-    expect(screen.getByText("Telegram")).toBeInTheDocument();
-    expect(screen.getByText("main")).toBeInTheDocument();
   });
 
   it("renders a 'memories used' reveal when the message has memorySources", () => {

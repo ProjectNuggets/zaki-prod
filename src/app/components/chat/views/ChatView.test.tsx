@@ -5,16 +5,13 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 jest.mock("../index", () => ({
   MessageBubble: ({
     message,
-    showSourceChip,
     botMode,
   }: {
     message: { id?: string; content: string };
-    showSourceChip?: boolean;
     botMode?: boolean;
   }) => (
     <div
       data-testid={message.id ? `message-bubble-${message.id}` : undefined}
-      data-show-source-chip={String(showSourceChip)}
       data-bot-mode={String(botMode)}
     >
       {message.content}
@@ -75,7 +72,7 @@ describe("ChatView", () => {
     expect(screen.getByRole("status")).toHaveTextContent("thinking: Reading backend contract");
   });
 
-  it("hides source chips for bot mode messages because provenance lives in the Agent panel", () => {
+  it("threads bot mode through to the message bubble", () => {
     render(
       <ChatView
         messages={[
@@ -88,10 +85,6 @@ describe("ChatView", () => {
       />
     );
 
-    expect(screen.getByTestId("message-bubble-assistant-1")).toHaveAttribute(
-      "data-show-source-chip",
-      "false"
-    );
     expect(screen.getByTestId("message-bubble-assistant-1")).toHaveAttribute(
       "data-bot-mode",
       "true"

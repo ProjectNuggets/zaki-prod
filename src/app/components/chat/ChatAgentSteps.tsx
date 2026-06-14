@@ -8,7 +8,7 @@ import type { AgentStep, AgentStepKind } from "./rendering/agentThoughtSteps";
  * document lookup) that the engine streams via `agentThought` events.
  *
  * This is deliberately unobtrusive and self-contained. It reuses the visual
- * language of {@link ./BotToolCallBlock} (the `<details>` disclosure + zaki
+ * language of the legacy tool-call disclosure (the `<details>` disclosure + zaki
  * surface classes) but is much smaller. The separate nullALIS agent space has
  * its own rich rail and must NOT use this component.
  *

@@ -16,9 +16,7 @@ export type MessageBlock =
   | ThematicBreakBlock
   | TableBlock
   | EmailBlock
-  | CalloutBlock
   | CopyPromptBlock
-  | PlainTextBlock
   | ImageBlock
   | DownloadButtonBlock
   | SavedLocallyBlock
@@ -104,18 +102,6 @@ export type RuntimePayloadSuppressedBlock = BlockBase & {
 
 export type ThematicBreakBlock = BlockBase & {
   type: "thematic_break";
-};
-
-export type PlainTextBlock = BlockBase & {
-  type: "plain_text";
-  text: string;
-};
-
-export type CalloutBlock = BlockBase & {
-  type: "callout";
-  tone: "neutral" | "tip" | "note";
-  title?: string | null;
-  blocks: MessageBlock[];
 };
 
 export type CopyPromptBlock = BlockBase & {

@@ -10,24 +10,7 @@ import { ImageBlock } from "./rendering/blocks/ImageBlock";
 import { extractGeneratedImages } from "./rendering/extractGeneratedImages";
 import { normalizeAssistantDisplayText } from "./rendering/agentReplyPresentation";
 import { stripToolCallMarkup } from "./rendering/toolMarkup";
-import { SourceChip } from "@/app/components/ui/zaki";
 import { deleteMemory } from "@/lib/api";
-
-function parseLegacyApprovalInstruction(raw: string):
-  | { tool: string; id: string; risk: string; reason: string }
-  | null {
-  const text = raw.trim();
-  const match = text.match(
-    /^Approval required for tool\s+([A-Za-z0-9_.:-]+)\s+\(id=([^,]+),\s*risk=([^,]+),\s*reason=([^)]+)\)\.?\s+Use\s+\/approve\b/i
-  );
-  if (!match) return null;
-  return {
-    tool: match[1] || "tool",
-    id: match[2] || "",
-    risk: match[3] || "review",
-    reason: match[4] || "approval_required",
-  };
-}
 
 function isImageAttachment(type?: string | null, name?: string | null) {
   const t = String(type || "").toLowerCase();
@@ -64,7 +47,6 @@ export interface MessageBubbleProps {
   isStreaming?: boolean;
   animate?: boolean;
   botMode?: boolean;
-  showSourceChip?: boolean;
   /** When true, the "memories used" reveal opens by default (the in-bubble
    *  toggle still lets the reader collapse it). When omitted, the reveal
    *  stays collapsed behind the toggle. */
@@ -87,7 +69,6 @@ export function MessageBubble({
   isStreaming = false,
   animate = true,
   botMode = false,
-  showSourceChip = false,
   showWhy: showWhyDefault = false,
   onMemoryForgotten,
   onCopy,
@@ -220,7 +201,6 @@ export function MessageBubble({
         {(() => {
           const content = !isUser ? stripToolCallMarkup(message.content || "") : (message.content || "");
           if (!content) return null;
-          const legacyApproval = !isUser && botMode ? parseLegacyApprovalInstruction(content) : null;
           return (
             <div
               className={cn(
@@ -235,15 +215,7 @@ export function MessageBubble({
                     : "zaki-assistant-bubble w-full bg-transparent px-0 py-0 text-zaki-primary"
               )}
             >
-              {legacyApproval ? (
-                <div className="zaki-approval-history" data-testid={`approval-history-${legacyApproval.id}`}>
-                  <span className="zaki-approval-history__kicker">Approval requested</span>
-                  <span className="zaki-approval-history__tool">{legacyApproval.tool}</span>
-                  <span className="zaki-approval-history__meta">
-                    {legacyApproval.risk} · {legacyApproval.reason.replace(/_/g, " ")}
-                  </span>
-                </div>
-              ) : !isUser ? (
+              {!isUser ? (
                 <MessageContent
                   content={content}
                   role="assistant"
@@ -261,14 +233,6 @@ export function MessageBubble({
           role={message.role}
           locale={i18n.language}
         />
-        {showSourceChip ? (
-          <SourceChip
-            channel={message.channel || "web"}
-            lane={message.lane || "main"}
-            at={message.createdAt}
-            className={cn("mt-0.5", isUser && "self-end")}
-          />
-        ) : null}
         {showActions && !isUser && (
           <>
             <MessageActions
