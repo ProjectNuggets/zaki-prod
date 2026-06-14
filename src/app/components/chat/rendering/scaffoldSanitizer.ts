@@ -47,15 +47,17 @@ function stripStablePromptSections(text: string): string {
   let skipUntilLevel: number | null = null;
   for (const line of lines) {
     const heading = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
+    const level = heading?.[1]?.length ?? null;
+    const title = heading?.[2] ?? null;
     if (skipUntilLevel !== null) {
-      if (heading && heading[1].length <= skipUntilLevel) {
+      if (level !== null && level <= skipUntilLevel) {
         skipUntilLevel = null; // section ended — re-evaluate this heading below
       } else {
         continue; // still inside the skipped section
       }
     }
-    if (heading && MARKER_SET.has(norm(heading[2]))) {
-      skipUntilLevel = heading[1].length;
+    if (level !== null && title !== null && MARKER_SET.has(norm(title))) {
+      skipUntilLevel = level;
       continue;
     }
     out.push(line);

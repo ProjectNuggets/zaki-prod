@@ -82,3 +82,21 @@ describe("sanitizeAssistantScaffold", () => {
     );
   });
 });
+
+describe("regression contract: internal system-prompt sections never appear", () => {
+  const LEAK =
+    "Answer.\n\n## Brain Architecture\nbody\n## Memory Link Types\nbody\n" +
+    "## Response Protocol\nbody\n## Channel Attachments\nbody\n" +
+    "## Task Decomposition\nbody\n## Safety\nbody\n" +
+    "<memory_for_turn>x</memory_for_turn>[[ZAKI_IDENTITY_RULES_V1]]y[[/ZAKI_IDENTITY_RULES_V1]]";
+
+  it("removes every stable_prompt_marker section from a full leaked block", () => {
+    const out = sanitizeAssistantScaffold(LEAK);
+    for (const marker of STABLE_PROMPT_MARKERS) {
+      expect(out).not.toContain(marker);
+    }
+    expect(out).not.toMatch(/ZAKI_/);
+    expect(out).not.toMatch(/memory_for_turn/);
+    expect(out.trim()).toBe("Answer.");
+  });
+});
