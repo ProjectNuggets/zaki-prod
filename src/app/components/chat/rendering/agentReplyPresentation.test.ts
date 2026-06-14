@@ -183,4 +183,17 @@ describe("Agent reply presentation", () => {
 
     expect(display).toBe("The report is ready.");
   });
+
+  it("strips master-prompt scaffold from a rendered agent reply", () => {
+    const leaked =
+      "Here is your plan.\n\n## Brain Architecture\nLayer 0 — Working memory.\n\n" +
+      "[[ZAKI_MEMORY_CONTEXT_V2]]private[[/ZAKI_MEMORY_CONTEXT_V2]]";
+    const blocks = parseAssistantContent(leaked, { agentReply: true });
+    const text = JSON.stringify(blocks);
+    expect(text).toContain("Here is your plan.");
+    expect(text).not.toMatch(/Brain Architecture/);
+    expect(text).not.toMatch(/Layer 0/);
+    expect(text).not.toMatch(/ZAKI_MEMORY_CONTEXT/);
+    expect(text).not.toContain("private");
+  });
 });
