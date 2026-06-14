@@ -2,10 +2,12 @@ import { describe, it, expect } from "@jest/globals";
 import {
   BILLING_INTERVALS,
   STRIPE_BILLING_PLANS,
+  buildTopupPackCatalog,
   buildStripePricingCatalog,
   normalizeBillingInterval,
   resolveStripePriceDetailsById,
   resolveStripePriceForSelection,
+  resolveTopupPack,
 } from "./billing-pricing.js";
 
 describe("billing pricing helpers", () => {
@@ -132,5 +134,47 @@ describe("billing pricing helpers", () => {
       interval: "monthly",
     });
     expect(resolveStripePriceDetailsById(catalog, "unknown")).toBeNull();
+  });
+
+  it("builds a config-driven top-up catalog and omits invalid packs", () => {
+    const catalog = buildTopupPackCatalog(
+      JSON.stringify([
+        {
+          id: "boost_500",
+          label: "500 units",
+          units: 500,
+          stripePriceId: "price_topup_500",
+          unitAmount: 900,
+          currency: "USD",
+        },
+        { id: "bad_units", label: "bad", units: 0, stripePriceId: "price_bad" },
+        { id: "missing_price", label: "100 units", units: 100 },
+        { id: "boost_500", label: "duplicate", units: 999, stripePriceId: "price_dup" },
+      ])
+    );
+
+    expect(catalog).toEqual([
+      {
+        id: "boost_500",
+        label: "500 units",
+        units: 500,
+        stripePriceId: "price_topup_500",
+        unitAmount: 900,
+        currency: "usd",
+        available: true,
+      },
+      {
+        id: "missing_price",
+        label: "100 units",
+        units: 100,
+        stripePriceId: "",
+        unitAmount: null,
+        currency: null,
+        available: false,
+      },
+    ]);
+    expect(resolveTopupPack(catalog, "BOOST_500")?.stripePriceId).toBe("price_topup_500");
+    expect(resolveTopupPack(catalog, "unknown")).toBeNull();
+    expect(buildTopupPackCatalog("{bad json")).toEqual([]);
   });
 });

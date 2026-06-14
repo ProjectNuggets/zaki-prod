@@ -151,6 +151,8 @@ export function walletToWeeklyWindow(wallet = {}) {
     used: roundUnits(used),
     receipts: 0,
     limit: allowance,
+    recurringRemaining: roundUnits(weeklyRemaining),
+    topupUnits: roundUnits(topup),
     remaining: roundUnits(weeklyRemaining + topup),
     startedAt: pendingFirstUse ? null : anchorAtIso,
     resetAt: resetAtIso,

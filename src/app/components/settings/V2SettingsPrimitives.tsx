@@ -1,4 +1,4 @@
-import type { ComponentType, HTMLAttributes, ReactNode } from "react";
+import { useEffect, useRef, type ComponentType, type HTMLAttributes, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export type V2SettingsNavItem = {
@@ -15,27 +15,46 @@ export function V2SettingsNav({
   items,
   ariaLabel,
   className,
+  activeHref,
 }: {
   eyebrow: ReactNode;
   title: ReactNode;
   items: readonly V2SettingsNavItem[];
   ariaLabel: string;
   className?: string;
+  activeHref?: string;
 }) {
+  const navRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const activeLink = navRef.current?.querySelector<HTMLAnchorElement>('a[aria-current="page"]');
+    if (typeof activeLink?.scrollIntoView === "function") {
+      activeLink.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  }, [activeHref]);
+
   return (
     <aside className={cn("v2-settings-nav", className)}>
       <div className="v2-settings-nav__head">
         <div>{eyebrow}</div>
         <h1>{title}</h1>
       </div>
-      <nav aria-label={ariaLabel} className="v2-settings-nav__list">
-        {items.map(({ href, label, meta, icon: Icon, tone = "default" }) => (
-          <a key={href} href={href} className={cn(tone !== "default" && `is-${tone}`)}>
-            <Icon className="size-3.5" aria-hidden="true" />
-            <span>{label}</span>
-            {meta != null ? <small>{meta}</small> : null}
-          </a>
-        ))}
+      <nav ref={navRef} aria-label={ariaLabel} className="v2-settings-nav__list">
+        {items.map(({ href, label, meta, icon: Icon, tone = "default" }) => {
+          const isActive = activeHref === href;
+          return (
+            <a
+              key={href}
+              href={href}
+              aria-current={isActive ? "page" : undefined}
+              className={cn(isActive && "is-active", tone !== "default" && `is-${tone}`)}
+            >
+              <Icon className="size-3.5" aria-hidden="true" />
+              <span>{label}</span>
+              {meta != null ? <small>{meta}</small> : null}
+            </a>
+          );
+        })}
       </nav>
     </aside>
   );

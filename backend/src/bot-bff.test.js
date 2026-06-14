@@ -431,11 +431,12 @@ describe("bot BFF T6 contract", () => {
 
   it("roundtrips settings profiles and rejects UI-specific fields", async () => {
     const profile = {
-      assistant_mode: "deep",
       group_activation: "always",
       proactive_updates: true,
       voice_replies: false,
       session_timeout_minutes: 45,
+      assistant_mode: "deep",
+      autonomy: "supervised",
       dream_enabled: true,
       query_expansion_enabled: false,
       selected_model: "claude-opus-4.7",
@@ -459,6 +460,8 @@ describe("bot BFF T6 contract", () => {
       view_mode: "compact",
     });
     expect(invalidPatch.success).toBe(false);
+    expect(validateBotSettingsPatch({ assistant_mode: "deep" }).success).toBe(true);
+    expect(validateBotSettingsPatch({ assistant_mode: "turbo" }).success).toBe(false);
 
     const invalidReq = { body: { view_mode: "compact" }, headers: {} };
     const invalidRes = createMockRes();
@@ -586,11 +589,11 @@ describe("bot BFF T6 contract", () => {
 
   it("returns the same product DTO for synthetic web and mobile clients unchanged", async () => {
     const settingsPayload = {
-      assistant_mode: "balanced",
       group_activation: "mention",
       proactive_updates: true,
       voice_replies: false,
       session_timeout_minutes: 30,
+      assistant_mode: "balanced",
       dream_enabled: true,
       query_expansion_enabled: false,
       selected_model: null,
@@ -603,10 +606,10 @@ describe("bot BFF T6 contract", () => {
 
     await handlers.getSettings(req, res);
 
-    const webClient = (payload) => `${payload.assistant_mode}:${payload.group_activation}`;
+    const webClient = (payload) => payload.group_activation;
     const mobileClient = (payload) => `${payload.session_timeout_minutes}:${payload.voice_replies}`;
 
-    expect(webClient(res.jsonBody)).toBe("balanced:mention");
+    expect(webClient(res.jsonBody)).toBe("mention");
     expect(mobileClient(res.jsonBody)).toBe("30:false");
     expect(Object.keys(res.jsonBody).sort()).toEqual([
       "assistant_mode",

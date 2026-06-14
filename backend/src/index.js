@@ -15,7 +15,6 @@ import { initDb, dbAll, dbGet, dbQuery, withDbTransaction } from "./db.js";
 import { getUsageMetrics } from "./platform-metrics.js";
 import {
   resolveLegalPolicyVersion,
-  buildLoginSchema,
   buildSignupSchema,
   buildLegalConsentShape,
   validateLegalPolicyVersion,
@@ -47,8 +46,10 @@ import { markWebhookEventProcessed as markWebhookEventProcessedOnce } from "./bi
 import { createBillingHealthTracker } from "./billing-health.js";
 import { createBillingAlertDispatcher } from "./billing-alerts.js";
 import {
+  buildTopupPackCatalog,
   buildStripePricingCatalog,
   normalizeBillingInterval,
+  resolveTopupPack,
   resolveStripePriceDetailsById,
   resolveStripePriceForSelection,
 } from "./billing-pricing.js";
@@ -68,6 +69,12 @@ import {
   normalizeTelegramConnectPayload,
   resolveCanonicalAgentUserId,
 } from "./agent-proxy-contract.js";
+import {
+  buildLocalWorkspaceMetadataPayload,
+  buildWorkspaceMutationPayload,
+  extractWorkspaceFromUpstream,
+  mergeWorkspaceMetadata,
+} from "./workspace-settings-contract.js";
 import {
   BRAIN_LIMITS,
   clampFloatParam,
@@ -362,6 +369,7 @@ import {
   getTypUserSessionToken,
 } from "./typ-client.js";
 import { buildAuthRouter } from "./auth-endpoints.js";
+import { loginHandler as zakiLoginHandler } from "./login-handler.js";
 import {
   verifyZakiAccessToken,
   tryDecodeJwtPayload,
@@ -602,6 +610,7 @@ const STRIPE_PRICE_COMPLETE_MONTHLY = (process.env.STRIPE_PRICE_COMPLETE_MONTHLY
 const STRIPE_PRICE_ACCESS_CODE_MONTHLY = (
   process.env.STRIPE_PRICE_ACCESS_CODE_MONTHLY || ""
 ).trim();
+const ZAKI_TOPUP_PACKS_JSON = process.env.ZAKI_TOPUP_PACKS_JSON || "";
 const STRIPE_BILLING_PORTAL_CONFIGURATION = (
   process.env.STRIPE_BILLING_PORTAL_CONFIGURATION || ""
 ).trim();
@@ -817,6 +826,7 @@ const stripePricingCatalog = buildStripePricingCatalog({
 const PRICE_BY_PLAN_INTERVAL = stripePricingCatalog.priceByPlanInterval;
 const PRICE_DETAILS_BY_ID = stripePricingCatalog.priceDetailsById;
 const TIER_BY_PRICE = stripePricingCatalog.tierByPrice;
+const TOPUP_PACK_CATALOG = buildTopupPackCatalog(ZAKI_TOPUP_PACKS_JSON);
 
 function getStripePricingAvailability() {
   return stripePricingCatalog.pricingAvailability;
@@ -1381,6 +1391,11 @@ function getBillingConfigStatus() {
   const accessCodePurchaseEnabled = Boolean(
     activeProvider === "stripe" && stripe && STRIPE_PRICE_ACCESS_CODE_MONTHLY
   );
+  const topupCheckoutEnabled = Boolean(
+    activeProvider === "stripe" &&
+      stripe &&
+      TOPUP_PACK_CATALOG.some((pack) => pack.available)
+  );
   const stripeHasConfiguredPrice = Object.values(pricingAvailability).some(
     (item) => item.monthly || item.yearly
   );
@@ -1404,6 +1419,7 @@ function getBillingConfigStatus() {
       webhookEnabled: Boolean(CREEM_WEBHOOK_SECRET),
       pricingAvailability,
       accessCodePurchaseEnabled,
+      topupCheckoutEnabled,
       missing,
     };
   }
@@ -1427,6 +1443,7 @@ function getBillingConfigStatus() {
       webhookEnabled: false,
       pricingAvailability,
       accessCodePurchaseEnabled,
+      topupCheckoutEnabled,
       missing,
     };
   }
@@ -1450,6 +1467,7 @@ function getBillingConfigStatus() {
       webhookEnabled: false,
       pricingAvailability,
       accessCodePurchaseEnabled,
+      topupCheckoutEnabled,
       missing,
     };
   }
@@ -1502,6 +1520,7 @@ function getBillingConfigStatus() {
     webhookEnabled,
     pricingAvailability,
     accessCodePurchaseEnabled,
+    topupCheckoutEnabled,
     missing,
   };
 }
@@ -2103,6 +2122,137 @@ async function fulfillAccessCodePurchaseCheckoutSession({ session, eventId } = {
   }
 }
 
+async function fulfillTopupCheckoutSession({ session, eventId } = {}) {
+  const metadata = session?.metadata || {};
+  if (String(metadata?.fulfillment_type || "").trim() !== "unit_topup") {
+    return { handled: false };
+  }
+
+  const checkoutSessionId = String(session?.id || "").trim();
+  if (!checkoutSessionId) {
+    throw new Error("Stripe checkout session missing id for unit top-up fulfillment.");
+  }
+
+  const metadataUserId = Number(metadata?.user_id || 0);
+  const metadataUserEmail = normalizeEmail(
+    session?.customer_email ||
+      session?.customer_details?.email ||
+      metadata?.user_email ||
+      ""
+  );
+  let user = null;
+  if (Number.isInteger(metadataUserId) && metadataUserId > 0) {
+    user = await dbGet("SELECT id, email, plan_tier FROM zaki_users WHERE id = $1", [
+      metadataUserId,
+    ]);
+  }
+  if (!user && metadataUserEmail) {
+    user = await dbGet("SELECT id, email, plan_tier FROM zaki_users WHERE email = $1", [
+      metadataUserEmail,
+    ]);
+  }
+  if (!user) {
+    throw new Error(`Unable to resolve user for unit top-up session ${checkoutSessionId}.`);
+  }
+
+  const pack = resolveTopupPack(TOPUP_PACK_CATALOG, metadata?.pack_id);
+  const metadataUnits = Number(metadata?.units);
+  const units =
+    pack && Number.isFinite(Number(pack.units)) && Number(pack.units) > 0
+      ? Number(pack.units)
+      : metadataUnits;
+  if (!Number.isFinite(units) || units <= 0) {
+    throw new Error(`Invalid top-up unit count for session ${checkoutSessionId}.`);
+  }
+
+  const packId = pack?.id || String(metadata?.pack_id || "unknown").trim().slice(0, 64);
+  const paymentIntent =
+    typeof session?.payment_intent === "string"
+      ? session.payment_intent
+      : session?.payment_intent?.id || null;
+  const amountTotalCents = Number.isFinite(Number(session?.amount_total))
+    ? Number(session.amount_total)
+    : null;
+  const currency = String(session?.currency || "").trim().toLowerCase() || null;
+
+  return withDbTransaction(async (client) => {
+    const existingOrderResult = await client.query(
+      `SELECT id, status, user_id, units
+       FROM billing_topup_orders
+       WHERE checkout_session_id = $1
+       FOR UPDATE`,
+      [checkoutSessionId]
+    );
+    let order = existingOrderResult.rows[0] || null;
+
+    if (!order) {
+      const inserted = await client.query(
+        `INSERT INTO billing_topup_orders
+         (user_id, checkout_session_id, stripe_event_id, stripe_payment_intent_id, pack_id, units, amount_total_cents, currency, status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', NOW(), NOW())
+         RETURNING id, status, user_id, units`,
+        [
+          user.id,
+          checkoutSessionId,
+          eventId || null,
+          paymentIntent,
+          packId || "unknown",
+          units,
+          amountTotalCents,
+          currency,
+        ]
+      );
+      order = inserted.rows[0] || null;
+    }
+
+    if (order?.status === "fulfilled") {
+      return { handled: true, duplicate: true };
+    }
+
+    await ensureWallet({
+      userId: user.id,
+      planId: String(user.plan_tier || "free").trim().toLowerCase() || "free",
+    }, client);
+
+    await client.query(
+      `UPDATE zaki_unit_wallets
+       SET topup_units = topup_units + $2,
+           updated_at = NOW(),
+           version = version + 1
+       WHERE user_id = $1`,
+      [user.id, units]
+    );
+
+    await client.query(
+      `UPDATE billing_topup_orders
+       SET user_id = $1,
+           stripe_event_id = COALESCE($2, stripe_event_id),
+           stripe_payment_intent_id = COALESCE($3, stripe_payment_intent_id),
+           pack_id = $4,
+           units = $5,
+           amount_total_cents = COALESCE($6, amount_total_cents),
+           currency = COALESCE($7, currency),
+           status = 'fulfilled',
+           fulfilled_at = COALESCE(fulfilled_at, NOW()),
+           failure_reason = NULL,
+           updated_at = NOW()
+       WHERE checkout_session_id = $8`,
+      [
+        user.id,
+        eventId || null,
+        paymentIntent,
+        packId || "unknown",
+        units,
+        amountTotalCents,
+        currency,
+        checkoutSessionId,
+      ]
+    );
+
+    return { handled: true, duplicate: false, units };
+  });
+}
+
 const stripeWebhookHandler = createStripeWebhookHandler({
   getBillingConfigStatus,
   stripe,
@@ -2118,6 +2268,7 @@ const stripeWebhookHandler = createStripeWebhookHandler({
   resolveTier,
   tierByPrice: TIER_BY_PRICE,
   fulfillAccessCodePurchaseCheckoutSession,
+  fulfillTopupCheckoutSession,
   revokeNullalisEntitlement,
 });
 
@@ -2719,32 +2870,6 @@ async function listWorkspaceMetadata(workspaceSlugs = []) {
   return new Map(rows.map((row) => [normalizeWorkspaceSlugValue(row.workspace_slug), row]));
 }
 
-function mergeWorkspaceMetadata(workspace, metadata) {
-  if (!workspace) return null;
-  if (!metadata) return workspace;
-  return {
-    ...workspace,
-    description:
-      typeof metadata.description === "string" ? metadata.description : workspace.description,
-    icon: typeof metadata.icon === "string" ? metadata.icon : workspace.icon,
-    color: typeof metadata.color === "string" ? metadata.color : workspace.color,
-  };
-}
-
-function buildLocalWorkspaceMetadataPayload(body = {}) {
-  const payload = {};
-  if (typeof body.description === "string") {
-    payload.description = body.description.trim();
-  }
-  if (typeof body.icon === "string") {
-    payload.icon = body.icon.trim();
-  }
-  if (typeof body.color === "string") {
-    payload.color = body.color.trim();
-  }
-  return payload;
-}
-
 async function upsertWorkspaceMetadata(workspaceSlug, metadata = {}, updatedBy = null) {
   const normalizedSlug = normalizeWorkspaceSlugValue(workspaceSlug);
   if (!normalizedSlug) return null;
@@ -2793,37 +2918,6 @@ async function upsertWorkspaceMetadata(workspaceSlug, metadata = {}, updatedBy =
     ]
   );
   return result.rows[0] ?? null;
-}
-
-function extractWorkspaceFromUpstream(data) {
-  if (Array.isArray(data?.workspace)) {
-    return data.workspace[0] || null;
-  }
-  return data?.workspace || null;
-}
-
-function buildWorkspaceMutationPayload(body = {}) {
-  const payload = {};
-  const name = String(body.name || body.title || "").trim();
-  if (name) {
-    payload.name = name;
-  }
-
-  const instructionsSource =
-    typeof body.openAiPrompt === "string" ? body.openAiPrompt : body.instructions;
-  if (typeof instructionsSource === "string") {
-    payload.openAiPrompt = instructionsSource.trim();
-  }
-
-  if (Number.isFinite(Number(body.openAiTemp))) {
-    payload.openAiTemp = Number(body.openAiTemp);
-  }
-
-  if (Number.isFinite(Number(body.openAiHistory))) {
-    payload.openAiHistory = Number(body.openAiHistory);
-  }
-
-  return payload;
 }
 
 async function requireWorkspaceAccess(req, res) {
@@ -3180,7 +3274,6 @@ app.use("/api/auth", express.json({ limit: "16kb" }), buildAuthRouter());
 // INPUT VALIDATION SCHEMAS
 // =============================================================================
 
-const LoginSchema = buildLoginSchema();
 const SignupSchema = buildSignupSchema();
 const LegalReconsentSchema = z.object(buildLegalConsentShape());
 
@@ -5982,154 +6075,8 @@ app.post(
   passwordResetConfirmHandler
 );
 
-// Per-email login failure tracker — stops credential-stuffing against specific accounts.
-// In-memory: cleared on restart (acceptable — restarts are rare and this is a second layer).
-// Keyed by normalised email → { count: number, resetAt: number (epoch ms) }.
-const _emailLoginFailures = new Map();
-const EMAIL_FAILURE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-const EMAIL_FAILURE_MAX = 10; // lock account for 15 min after 10 consecutive failures
-
-function checkEmailLoginThrottle(email) {
-  const now = Date.now();
-  const entry = _emailLoginFailures.get(email);
-  if (!entry || now >= entry.resetAt) return { blocked: false };
-  if (entry.count >= EMAIL_FAILURE_MAX) {
-    const retryAfterSec = Math.ceil((entry.resetAt - now) / 1000);
-    return { blocked: true, retryAfterSec };
-  }
-  return { blocked: false };
-}
-
-function recordEmailLoginFailure(email) {
-  const now = Date.now();
-  const entry = _emailLoginFailures.get(email);
-  if (!entry || now >= entry.resetAt) {
-    _emailLoginFailures.set(email, { count: 1, resetAt: now + EMAIL_FAILURE_WINDOW_MS });
-  } else {
-    entry.count += 1;
-  }
-}
-
-function clearEmailLoginFailures(email) {
-  _emailLoginFailures.delete(email);
-}
-
-const loginHandler = async (req, res) => {
-  try {
-    // Validate input
-    const validation = validateInput(LoginSchema, req.body || {});
-    if (!validation.valid) {
-      res.status(400).json({
-        valid: false,
-        token: null,
-        message: validation.errors.map(e => e.message).join(', '),
-      });
-      return;
-    }
-
-    const { email, username, password } = validation.data;
-    const normalizedEmail = normalizeEmail(email || username);
-
-    // Per-email brute-force guard (in-memory, complements IP rate limit)
-    const throttle = checkEmailLoginThrottle(normalizedEmail);
-    if (throttle.blocked) {
-      res.status(429).json({
-        valid: false,
-        token: null,
-        message: "Too many failed login attempts. Try again later.",
-      });
-      return;
-    }
-
-    const user = await dbGet("SELECT * FROM zaki_users WHERE email = $1", [
-      normalizedEmail,
-    ]);
-    if (!user) {
-      recordEmailLoginFailure(normalizedEmail);
-      res.status(401).json({
-        valid: false,
-        token: null,
-        message: "Invalid login credentials.",
-      });
-      return;
-    }
-    if (!user.verified) {
-      recordEmailLoginFailure(normalizedEmail);
-      res.status(401).json({
-        valid: false,
-        token: null,
-        message: "Please verify your email before signing in.",
-      });
-      return;
-    }
-    if (!bcrypt.compareSync(String(password), user.password_hash)) {
-      recordEmailLoginFailure(normalizedEmail);
-      res.status(401).json({
-        valid: false,
-        token: null,
-        message: "Invalid login credentials.",
-      });
-      return;
-    }
-
-    // Credentials verified — reset failure counter
-    clearEmailLoginFailures(normalizedEmail);
-
-    // Best-effort: link nova_user_id for workspace access. Failure does not block login —
-    // ZAKI owns auth in Phase 4; TYP is an adapter.
-    if (!user.nova_user_id) {
-      try {
-        const apiBase = getApiBase();
-        if (apiBase) {
-          const fetchedId = await fetchNovaUserIdByUsername(normalizedEmail);
-          if (fetchedId) {
-            await dbQuery(
-              `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
-              [Number(fetchedId), new Date().toISOString(), user.id]
-            );
-          } else {
-            const createResponse = await novaAdminRequest("/v1/admin/users/new", {
-              method: "POST",
-              body: JSON.stringify({
-                username: normalizedEmail,
-                password: String(password),
-                role: "default",
-              }),
-            });
-            const payload = await createResponse.json().catch(() => ({}));
-            if (createResponse.ok && payload?.user?.id) {
-              await dbQuery(
-                `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
-                [Number(payload.user.id), new Date().toISOString(), user.id]
-              );
-            } else if (payload?.error && String(payload.error).toLowerCase().includes("exists")) {
-              const retryFetchId = await fetchNovaUserIdByUsername(normalizedEmail);
-              if (retryFetchId) {
-                await dbQuery(
-                  `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
-                  [Number(retryFetchId), new Date().toISOString(), user.id]
-                );
-              }
-            }
-          }
-        }
-      } catch (linkErr) {
-        console.warn("[Login] nova_user_id linking failed (non-fatal):", linkErr?.message);
-      }
-    }
-
-    // Mint ZAKI session — ZAKI JWT (iss: "zaki") returned to client, HttpOnly refresh cookie set.
-    const { accessToken, refreshToken } = await mintZakiSession({ id: user.id, email: user.email }, req);
-    console.log(`[ZakiAudit] login userId=${user.id} ip=${req?.ip ?? "unknown"}`);
-    res.setHeader("Set-Cookie", [buildRefreshCookie(refreshToken)]);
-    res.status(200).json({ valid: true, token: accessToken });
-  } catch (error) {
-    res.status(500).json({ error: error?.message || "Server error." });
-  }
-};
-
-app.post("/login", loginHandler);
-app.post("/api/login", loginHandler);
+app.post("/login", zakiLoginHandler);
+app.post("/api/login", zakiLoginHandler);
 
 app.get("/api/legal/consent-status", async (req, res) => {
   try {
@@ -7784,6 +7731,29 @@ const CheckoutSchema = z.object({
     .optional(),
 });
 
+const TopupCheckoutSchema = z.object({
+  packId: z.string().trim().min(1).max(64),
+  context: z
+    .object({
+      source: z
+        .enum([
+          "website_nav",
+          "website_pricing",
+          "website_product_agent",
+          "website_product_learn",
+          "website_product_hire",
+          "website_product_complete",
+          "website_product_spaces",
+          "chat_input",
+          "settings",
+          "pricing_page",
+          "success_page",
+        ])
+        .optional(),
+    })
+    .optional(),
+});
+
 app.get("/api/billing/config", async (req, res) => {
   const authResult = await requireAuthUser(req, res);
   if (!authResult) return;
@@ -7795,6 +7765,7 @@ app.get("/api/billing/config", async (req, res) => {
     configured: {
       ...configured,
       pricingCatalog,
+      topupPacks: TOPUP_PACK_CATALOG,
     },
   });
 });
@@ -7886,6 +7857,102 @@ app.post("/api/billing/checkout", express.json({ limit: "1mb" }), async (req, re
   } catch (error) {
     console.error("[Billing] Checkout error:", error);
     res.status(error?.status || 500).json({ error: error?.message || "Checkout failed." });
+  }
+});
+
+app.post("/api/billing/topups/checkout", express.json({ limit: "100kb" }), async (req, res) => {
+  try {
+    const validation = validateInput(TopupCheckoutSchema, req.body || {});
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: validation.errors.map((e) => e.message).join(", "),
+      });
+      return;
+    }
+
+    const { email, zakiUser } = (await requireAuthUser(req, res)) || {};
+    if (!email || !zakiUser) return;
+
+    const billingConfig = getBillingConfigStatus();
+    if (
+      billingConfig.provider !== "stripe" ||
+      !billingConfig.stripeEnabled ||
+      !billingConfig.topupCheckoutEnabled ||
+      !stripe
+    ) {
+      res.status(503).json({
+        success: false,
+        code: "topup_checkout_unavailable",
+        error: "Unit top-up checkout is not configured.",
+      });
+      return;
+    }
+
+    const pack = resolveTopupPack(TOPUP_PACK_CATALOG, validation.data.packId);
+    if (!pack || !pack.available || !pack.stripePriceId) {
+      res.status(404).json({
+        success: false,
+        code: "unknown_topup_pack",
+        error: "Selected top-up pack is not available.",
+      });
+      return;
+    }
+
+    const checkoutSource =
+      String(validation.data.context?.source || "").trim().toLowerCase() || "settings";
+    const customerId = await ensureStripeCustomerId({ email, zakiUser });
+    const appUrl = getAppUrl();
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      customer: customerId,
+      line_items: [{ price: pack.stripePriceId, quantity: 1 }],
+      allow_promotion_codes: true,
+      success_url: `${appUrl}/pricing/success?billing=topup_success&kind=unit_topup&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appUrl}/settings#settings-billing`,
+      metadata: {
+        fulfillment_type: "unit_topup",
+        user_id: String(zakiUser.id),
+        user_email: email,
+        pack_id: pack.id,
+        units: String(pack.units),
+        checkout_source: checkoutSource,
+      },
+    });
+    if (!session?.url) {
+      throw new Error("Stripe checkout URL missing for unit top-up.");
+    }
+
+    await dbQuery(
+      `INSERT INTO billing_topup_orders
+       (user_id, checkout_session_id, stripe_payment_intent_id, pack_id, units, amount_total_cents, currency, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', NOW(), NOW())
+       ON CONFLICT (checkout_session_id)
+       DO UPDATE SET
+         user_id = EXCLUDED.user_id,
+         stripe_payment_intent_id = COALESCE(EXCLUDED.stripe_payment_intent_id, billing_topup_orders.stripe_payment_intent_id),
+         pack_id = EXCLUDED.pack_id,
+         units = EXCLUDED.units,
+         amount_total_cents = COALESCE(EXCLUDED.amount_total_cents, billing_topup_orders.amount_total_cents),
+         currency = COALESCE(EXCLUDED.currency, billing_topup_orders.currency),
+         updated_at = NOW()`,
+      [
+        zakiUser.id,
+        session.id,
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : session.payment_intent?.id || null,
+        pack.id,
+        pack.units,
+        Number.isFinite(Number(session.amount_total)) ? Number(session.amount_total) : pack.unitAmount,
+        String(session.currency || pack.currency || "").trim().toLowerCase() || null,
+      ]
+    );
+
+    res.status(200).json({ success: true, url: session.url });
+  } catch (error) {
+    console.error("[Billing] Top-up checkout error:", error);
+    res.status(error?.status || 500).json({ error: error?.message || "Top-up checkout failed." });
   }
 });
 

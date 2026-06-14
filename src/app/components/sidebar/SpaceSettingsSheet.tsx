@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import {
@@ -17,18 +17,26 @@ type SpaceTarget = {
   id: string;
   title: string;
   description?: string | null;
+  icon?: string | null;
+  color?: string | null;
+  instructions?: string | null;
   pinnedFiles?: PinnedFile[] | null;
   fixed?: boolean;
+};
+
+type SpaceSettingsDraft = {
+  title: string;
+  description: string;
+  icon: string;
+  color: string;
+  instructions: string;
 };
 
 type Props = {
   isOpen: boolean;
   space: SpaceTarget | null;
-  nameDraft: string;
-  onNameChange: (value: string) => void;
   onClose: () => void;
-  onSave: () => void;
-  onEditInstructions: () => void;
+  onSave: (draft: SpaceSettingsDraft) => void;
   onUploadFiles: () => void;
   onRemoveFile: (file: PinnedFile) => void;
   onDelete: () => void;
@@ -47,11 +55,8 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 export function SpaceSettingsSheet({
   isOpen,
   space,
-  nameDraft,
-  onNameChange,
   onClose,
   onSave,
-  onEditInstructions,
   onUploadFiles,
   onRemoveFile,
   onDelete,
@@ -61,6 +66,24 @@ export function SpaceSettingsSheet({
   const { t, i18n } = useTranslation();
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [draft, setDraft] = useState<SpaceSettingsDraft>({
+    title: "",
+    description: "",
+    icon: "",
+    color: "",
+    instructions: "",
+  });
+
+  useEffect(() => {
+    if (!space || !isOpen) return;
+    setDraft({
+      title: space.title || "",
+      description: space.description || "",
+      icon: space.icon || "",
+      color: space.color || "",
+      instructions: space.instructions || "",
+    });
+  }, [isOpen, space]);
 
   if (!isOpen || !space) return null;
 
@@ -81,7 +104,14 @@ export function SpaceSettingsSheet({
             <button
               type="button"
               className="zaki-spaces-btn zaki-spaces-btn--primary"
-              onClick={onSave}
+              onClick={() => onSave({
+                title: draft.title.trim(),
+                description: draft.description.trim(),
+                icon: draft.icon.trim(),
+                color: draft.color.trim(),
+                instructions: draft.instructions.trim(),
+              })}
+              disabled={!draft.title.trim()}
             >
               {t("settingsModal.footer.saveChanges")}
             </button>
@@ -97,40 +127,74 @@ export function SpaceSettingsSheet({
                 className="mt-2 w-full rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3 text-sm text-zaki-primary outline-none transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand"
                 type="text"
                 maxLength={80}
-                value={nameDraft}
-                onChange={(event) => onNameChange(event.target.value)}
+                value={draft.title}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, title: event.target.value }))
+                }
                 placeholder={
                   isRtl ? "اكتب اسمًا واضحًا للمساحة" : "Give this space a clear name"
                 }
               />
             </label>
+            <label className="block">
+              <SectionLabel>{isRtl ? "الوصف" : "Description"}</SectionLabel>
+              <textarea
+                className="mt-2 min-h-[84px] w-full rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3 text-sm text-zaki-primary outline-none transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand"
+                value={draft.description}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, description: event.target.value }))
+                }
+                placeholder={isRtl ? "ماذا يحدث داخل هذه المساحة؟" : "What is this space for?"}
+              />
+            </label>
+            {!space.fixed ? (
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <label className="block">
+                  <SectionLabel>{isRtl ? "الأيقونة" : "Icon"}</SectionLabel>
+                  <input
+                    className="mt-2 w-full rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3 text-sm text-zaki-primary outline-none transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand"
+                    type="text"
+                    maxLength={12}
+                    value={draft.icon}
+                    onChange={(event) =>
+                      setDraft((current) => ({ ...current, icon: event.target.value }))
+                    }
+                    placeholder={isRtl ? "رمز قصير" : "Short icon"}
+                  />
+                </label>
+                <label className="block">
+                  <SectionLabel>{isRtl ? "اللون" : "Color"}</SectionLabel>
+                  <input
+                    className="mt-2 h-[46px] w-full min-w-[96px] rounded-zaki-lg border border-zaki bg-zaki-raised px-2 py-2 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand"
+                    type="color"
+                    value={
+                      /^#[0-9a-f]{6}$/i.test(draft.color.trim())
+                        ? draft.color.trim()
+                        : "#d24430"
+                    }
+                    onChange={(event) =>
+                      setDraft((current) => ({ ...current, color: event.target.value }))
+                    }
+                  />
+                </label>
+              </div>
+            ) : null}
           </section>
 
           <section className="space-y-3">
             <SectionHeader title={t("sidebar.sharedContext")} subtitle={t("sidebar.sharedContextSubtitle")} />
             <div className="space-y-3">
-              <button
-                type="button"
-                className={cn(
-                  "w-full rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3 transition-colors hover:border-zaki-brand/30 hover:bg-zaki-hover",
-                  isRtl ? "text-right" : "text-left"
-                )}
-                onClick={onEditInstructions}
-              >
-                <div className={cn("flex items-start justify-between gap-3", isRtl && "flex-row-reverse")}>
-                  <div className={cn("min-w-0", isRtl && "text-right")}>
-                    <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-                      {t("sidebar.instructionsTitle")}
-                    </div>
-                    <div className="mt-1 text-xs leading-5 text-zaki-muted dark:text-zaki-dark-muted">
-                      {t("sidebar.instructionsBody")}
-                    </div>
-                  </div>
-                  <span className="shrink-0 rounded-full bg-zaki-sunken px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-secondary">
-                    {t("sidebar.editAction")}
-                  </span>
-                </div>
-              </button>
+              <label className="block">
+                <SectionLabel>{t("sidebar.instructionsTitle")}</SectionLabel>
+                <textarea
+                  className="mt-2 min-h-[116px] w-full rounded-zaki-lg border border-zaki bg-zaki-raised px-4 py-3 text-sm text-zaki-primary outline-none transition-colors focus-visible:ring-2 focus-visible:ring-zaki-brand"
+                  value={draft.instructions}
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, instructions: event.target.value }))
+                  }
+                  placeholder={t("sidebar.instructionsBody")}
+                />
+              </label>
 
               <button
                 type="button"

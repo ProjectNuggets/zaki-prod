@@ -10,6 +10,7 @@ export {
   useAnonymousMeterStatus,
   useCheckout,
   useBillingPortal,
+  useTopupCheckout,
   useCancelSubscription,
   useSyncBilling,
   useDeleteAccount,

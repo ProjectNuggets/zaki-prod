@@ -68,6 +68,7 @@ export function createStripeWebhookHandler({
   resolveTier,
   tierByPrice,
   fulfillAccessCodePurchaseCheckoutSession,
+  fulfillTopupCheckoutSession,
   revokeNullalisEntitlement = null,
 } = {}) {
   return async function stripeWebhookHandler(req, res) {
@@ -183,6 +184,12 @@ export function createStripeWebhookHandler({
         }
         if (typeof fulfillAccessCodePurchaseCheckoutSession === "function") {
           await fulfillAccessCodePurchaseCheckoutSession({
+            session,
+            eventId,
+          });
+        }
+        if (typeof fulfillTopupCheckoutSession === "function") {
+          await fulfillTopupCheckoutSession({
             session,
             eventId,
           });

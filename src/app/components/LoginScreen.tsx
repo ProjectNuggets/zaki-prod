@@ -53,6 +53,38 @@ export function hasExplicitPricingIntent(input: {
   return PRICING_INTENT_SOURCES.has(source);
 }
 
+function getSafeRelativeReturnTo(value: string | null) {
+  const raw = String(value || "").trim();
+  if (
+    !raw ||
+    raw.startsWith("http://") ||
+    raw.startsWith("https://") ||
+    raw.startsWith("//")
+  ) {
+    return "";
+  }
+  const parsed = new URL(raw.startsWith("/") ? raw : `/${raw}`, "https://zaki.local");
+  parsed.searchParams.delete("auth");
+  const normalized = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  return normalized === "/" ? "" : normalized;
+}
+
+function getPostLoginReturnTo(location: ReturnType<typeof useLocation>) {
+  const searchParams = new URLSearchParams(location.search);
+  const next = getSafeRelativeReturnTo(searchParams.get("next"));
+  if (next) return next;
+  if (
+    location.pathname === "/pricing" &&
+    !hasExplicitPricingIntent({
+      pathname: location.pathname,
+      searchParams,
+    })
+  ) {
+    return "/";
+  }
+  return "";
+}
+
 const AUTH_COPY = {
   en: {
     title: {
@@ -576,14 +608,9 @@ export function LoginScreen() {
       }
       setLoginAccessCode("");
       setShowLoginAccessCode(false);
-      if (
-        location.pathname === "/pricing" &&
-        !hasExplicitPricingIntent({
-          pathname: location.pathname,
-          searchParams: new URLSearchParams(location.search),
-        })
-      ) {
-        navigate("/", { replace: true });
+      const returnTo = getPostLoginReturnTo(location);
+      if (returnTo) {
+        navigate(returnTo, { replace: true });
       }
     } catch (err) {
       setError(

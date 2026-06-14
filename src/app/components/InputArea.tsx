@@ -101,7 +101,6 @@ export type InputAreaSendOptions = {
   zaki?: {
     mode: AgentSessionMode;
     autonomy: ZakiTurnAutonomyLevel;
-    assistant_mode: "fast" | "balanced" | "deep";
     reasoning_effort: ZakiTurnReasoningEffort;
   };
 };
@@ -259,14 +258,6 @@ const ZAKI_ARTIFACT_PRESETS: ZakiArtifactPreset[] = [
 function nextCycleValue<T extends string>(values: readonly T[], value: T): T {
   const index = values.indexOf(value);
   return values[(index + 1) % values.length] ?? values[0]!;
-}
-
-function assistantModeFromReasoning(
-  effort: ZakiTurnReasoningEffort
-): "fast" | "balanced" | "deep" {
-  if (effort === "low") return "fast";
-  if (effort === "medium") return "balanced";
-  return "deep";
 }
 
 export function InputArea({
@@ -433,7 +424,6 @@ export function InputArea({
   const { pins: pinnedMemories, pin: pinMemory, unpin: unpinMemory, limit: pinLimit } =
     usePinnedContext(pinnedThreadKey);
   const effectiveZakiMode: AgentSessionMode = zakiMode ?? "execute";
-  const zakiAssistantMode = assistantModeFromReasoning(zakiReasoningEffort);
   const zakiContextTooltip = zakiContextTooltipCopy || t("input.zaki.contextTooltip");
 
   // 2026-05-08 — Composer-level paste + drag-drop for files.
@@ -809,7 +799,6 @@ export function InputArea({
           zaki: {
             mode: effectiveZakiMode,
             autonomy: zakiAutonomy,
-            assistant_mode: zakiAssistantMode,
             reasoning_effort: zakiReasoningEffort,
           },
         });
@@ -839,7 +828,6 @@ export function InputArea({
       zakiBotMode,
       effectiveZakiMode,
       zakiAutonomy,
-      zakiAssistantMode,
       zakiReasoningEffort,
       setAttachments,
       draftStorageKey,

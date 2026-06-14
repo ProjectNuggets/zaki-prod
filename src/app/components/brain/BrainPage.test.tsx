@@ -132,6 +132,10 @@ describe("BrainPage", () => {
     expect(screen.getAllByText("Personal brain").length).toBeGreaterThan(0);
     expect(screen.getByTestId("brain-manage-memory-link")).toHaveAttribute(
       "href",
+      "/settings#settings-brain",
+    );
+    expect(screen.getByTestId("brain-unavailable-settings-link")).toHaveAttribute(
+      "href",
       "/settings#settings-memory-data",
     );
     expect(screen.getByTestId("brain-unavailable-state")).toBeInTheDocument();
@@ -182,6 +186,6 @@ describe("BrainPage", () => {
     mockGraph = { ...POPULATED };
     renderPage();
     const link = screen.getByTestId("brain-manage-memory-link");
-    expect(link).toHaveAttribute("href", "/settings#settings-memory-data");
+    expect(link).toHaveAttribute("href", "/settings#settings-brain");
   });
 });

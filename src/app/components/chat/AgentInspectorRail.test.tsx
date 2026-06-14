@@ -368,15 +368,19 @@ describe("AgentInspectorRail", () => {
     fireEvent.click(screen.getByRole("tab", { name: /Browser/i }));
 
     const links = screen.getByTestId("agent-settings-deep-links");
-    for (const label of ["Channels", "Secrets", "Providers", "Devices", "Developer"]) {
+    for (const label of ["Agent", "Channels", "Secrets", "Providers", "Devices", "Developer"]) {
       expect(within(links).getByRole("button", { name: new RegExp(label, "i") })).toBeInTheDocument();
     }
 
+    fireEvent.click(within(links).getByRole("button", { name: "Open Agent settings" }));
+    fireEvent.click(within(links).getByRole("button", { name: "Open Channels settings" }));
     fireEvent.click(within(links).getByRole("button", { name: "Open Devices settings" }));
     fireEvent.click(within(links).getByRole("button", { name: "Open Developer Access settings" }));
 
-    expect(onOpenSettings).toHaveBeenNthCalledWith(1, "devices");
-    expect(onOpenSettings).toHaveBeenNthCalledWith(2, "developer-access");
+    expect(onOpenSettings).toHaveBeenNthCalledWith(1, "agent");
+    expect(onOpenSettings).toHaveBeenNthCalledWith(2, "channels");
+    expect(onOpenSettings).toHaveBeenNthCalledWith(3, "devices");
+    expect(onOpenSettings).toHaveBeenNthCalledWith(4, "developer-access");
   });
 
   it("separates provisional artifact activity in the right panel", () => {

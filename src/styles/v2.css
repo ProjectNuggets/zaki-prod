@@ -339,8 +339,18 @@
 .v2-btn[aria-disabled="true"] {
   color: var(--v2-ink-4);
   border-color: var(--v2-hairline);
+  background: transparent;
   cursor: not-allowed;
   opacity: 1;
+}
+
+.v2-btn--primary:disabled,
+.v2-btn--primary[aria-disabled="true"],
+.v2-btn--accent:disabled,
+.v2-btn--accent[aria-disabled="true"] {
+  border-color: var(--v2-hairline);
+  background: var(--v2-bg-sunken);
+  color: var(--v2-ink-4);
 }
 
 .v2-btn--sm {
@@ -2177,13 +2187,28 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   height: 100%;
   min-height: 0;
   overflow: auto;
-  background:
-    linear-gradient(to right, var(--v2-hairline-faint) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--v2-hairline-faint) 1px, transparent 1px),
-    var(--v2-bg);
-  background-size: 32px 32px;
+  background: var(--v2-bg);
   color: var(--v2-ink-1);
   font-family: var(--v2-font-mono);
+}
+
+.v2-brand-substrate {
+  background: var(--v2-bg);
+}
+
+.v2-brand-control-surface {
+  border: 1px solid var(--v2-hairline-strong);
+  background:
+    linear-gradient(to bottom, transparent 0, transparent 23px, var(--v2-hairline-faint) 24px),
+    var(--v2-bg-raised);
+  background-size: 100% 24px;
+}
+
+.v2-brand-input-surface {
+  background:
+    linear-gradient(to bottom, transparent 0, transparent 23px, var(--v2-hairline-faint) 24px),
+    var(--v2-bg-raised);
+  background-size: 100% 24px;
 }
 
 .zaki-settings-v2 :where(h1, h2, h3, p, dl, dt, dd) {
@@ -2207,7 +2232,13 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   overflow: hidden;
 }
 
+.v2-settings-nav::after {
+  content: none;
+}
+
 .v2-settings-nav__head {
+  position: relative;
+  z-index: 1;
   padding: 16px 18px 14px;
   border-bottom: 1px solid var(--v2-hairline);
 }
@@ -2233,6 +2264,8 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   display: flex;
   flex-direction: column;
   padding: 12px 0;
+  position: relative;
+  z-index: 1;
 }
 
 .v2-settings-nav__list a {
@@ -2251,6 +2284,23 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 .v2-settings-nav__list a:hover {
   background: var(--v2-hover);
   color: var(--v2-ink-1);
+}
+
+.v2-settings-nav__list a.is-active,
+.v2-settings-nav__list a[aria-current="page"] {
+  border-left-color: var(--v2-accent);
+  background: var(--v2-selected);
+  color: var(--v2-ink-1);
+}
+
+.v2-settings-nav__list a.is-active svg,
+.v2-settings-nav__list a[aria-current="page"] svg {
+  color: var(--v2-accent);
+}
+
+.v2-settings-nav__list a.is-active small,
+.v2-settings-nav__list a[aria-current="page"] small {
+  color: var(--v2-ink-2);
 }
 
 .v2-settings-nav__list a:focus-visible {
@@ -2305,36 +2355,48 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   order: 4;
 }
 
-.zaki-settings-v2__main > #settings-channels {
+.zaki-settings-v2__main > #settings-agent {
   order: 5;
 }
 
-.zaki-settings-v2__main > #settings-secrets {
+.zaki-settings-v2__main > #settings-spaces {
   order: 6;
 }
 
-.zaki-settings-v2__main > #settings-providers {
+.zaki-settings-v2__main > #settings-brain {
   order: 7;
 }
 
-.zaki-settings-v2__main > #settings-devices {
+.zaki-settings-v2__main > #settings-channels {
   order: 8;
 }
 
-.zaki-settings-v2__main > #settings-memory-data {
+.zaki-settings-v2__main > #settings-secrets {
   order: 9;
 }
 
-.zaki-settings-v2__main > #settings-developer-access {
+.zaki-settings-v2__main > #settings-providers {
   order: 10;
 }
 
-.zaki-settings-v2__main > #settings-connections {
+.zaki-settings-v2__main > #settings-devices {
   order: 11;
 }
 
-.zaki-settings-v2__main > #settings-privacy {
+.zaki-settings-v2__main > #settings-memory-data {
   order: 12;
+}
+
+.zaki-settings-v2__main > #settings-developer-access {
+  order: 13;
+}
+
+.zaki-settings-v2__main > #settings-connections {
+  order: 14;
+}
+
+.zaki-settings-v2__main > #settings-privacy {
+  order: 15;
 }
 
 .zaki-settings-v2__hero {
@@ -2366,8 +2428,23 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .v2-settings-block {
-  margin-bottom: 34px;
+  position: relative;
+  margin-bottom: 38px;
   scroll-margin-top: 76px;
+}
+
+.v2-settings-block:target .v2-settings-block__head {
+  border-bottom-color: var(--v2-accent-hairline);
+}
+
+.v2-settings-block:target .v2-settings-block__head h2::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  background: var(--v2-accent);
+  vertical-align: 1px;
 }
 
 .v2-settings-block__head {
@@ -2400,6 +2477,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 .v2-settings-block__body {
   display: grid;
   gap: 0;
+  border-top: 1px solid transparent;
 }
 
 .v2-settings-row {
@@ -2407,7 +2485,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   grid-template-columns: minmax(0, 1fr) minmax(220px, auto);
   gap: 24px;
   align-items: center;
-  padding: 14px 0;
+  padding: 15px 0;
   border-bottom: 1px solid var(--v2-hairline-faint);
 }
 
@@ -2433,6 +2511,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 .v2-settings-row__control {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   min-width: 0;
 }
 
@@ -2440,6 +2519,27 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 .v2-settings-row__control select {
   width: min(100%, 320px);
   min-width: 220px;
+}
+
+.zaki-settings-v2 .v2-input,
+.zaki-settings-v2 .v2-textarea,
+.zaki-settings-v2 select.v2-input {
+  border-radius: var(--v2-r-1);
+  background:
+    linear-gradient(to bottom, transparent 0, transparent 23px, var(--v2-hairline-faint) 24px),
+    var(--v2-bg-raised);
+  background-size: 100% 24px;
+}
+
+.zaki-settings-v2 .v2-input:focus,
+.zaki-settings-v2 .v2-textarea:focus,
+.zaki-settings-v2 select.v2-input:focus {
+  border-color: var(--v2-accent);
+  background:
+    linear-gradient(to right, var(--v2-accent-hairline) 1px, transparent 1px),
+    linear-gradient(to bottom, transparent 0, transparent 23px, var(--v2-hairline-faint) 24px),
+    var(--v2-bg-raised);
+  background-size: 100% 100%, 100% 24px;
 }
 
 .v2-settings-row--danger .v2-settings-row__label > div {
@@ -2520,21 +2620,107 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   line-height: 1.5;
 }
 
+.zaki-settings-v2__plan-cockpit {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.zaki-settings-v2__plan-cockpit .zaki-settings-v2__plan-card {
+  margin: 0;
+}
+
+.zaki-settings-v2__plan-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--v2-hairline);
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.zaki-settings-v2__plan-metrics > div {
+  min-width: 0;
+  padding: 12px 14px;
+  border-right: 1px solid var(--v2-hairline-faint);
+  background: var(--v2-bg);
+}
+
+.zaki-settings-v2__plan-metrics > div:last-child {
+  border-right: 0;
+}
+
+.zaki-settings-v2__plan-metrics span {
+  display: block;
+  color: var(--v2-ink-3);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.zaki-settings-v2__plan-metrics strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.zaki-settings-v2__plan-actions {
+  justify-content: flex-start;
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.zaki-settings-v2__topup-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.zaki-settings-v2__topup-strip strong {
+  display: block;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
 .zaki-settings-v2__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
   padding: 14px 0;
+}
+
+.zaki-settings-v2__actions--with-note {
+  justify-content: flex-start;
+  padding: 0;
+}
+
+.zaki-settings-v2__action-note {
+  flex: 1 1 220px;
+  min-width: min(100%, 220px);
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-prose);
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .zaki-settings-v2__product-list,
 .zaki-settings-v2__usage-grid,
 .zaki-settings-v2__memory-list {
   display: grid;
-  gap: 1px;
   margin-top: 14px;
-  border: 1px solid var(--v2-hairline);
-  background: var(--v2-hairline);
+  border-top: 1px solid var(--v2-hairline);
+  border-bottom: 1px solid var(--v2-hairline);
+  background: transparent;
 }
 
 .zaki-settings-v2__product-row,
@@ -2542,10 +2728,34 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 .zaki-settings-v2__memory-list > div {
   min-width: 0;
   background: var(--v2-bg);
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-settings-v2__product-row:last-child,
+.zaki-settings-v2__usage-row:last-child,
+.zaki-settings-v2__memory-list > div:last-child {
+  border-bottom: 0;
 }
 
 .zaki-settings-v2__product-row {
+  padding: 14px 0;
+}
+
+.zaki-settings-v2__product-list .zaki-settings-v2__product-row,
+.zaki-settings-v2__usage-grid .zaki-settings-v2__usage-row,
+.zaki-settings-v2__memory-list > div {
+  padding-right: 14px;
+  padding-left: 14px;
+}
+
+.zaki-settings-v2__product-row--editable,
+.zaki-settings-v2__product-row--governance {
   padding: 14px;
+  border: 1px solid var(--v2-hairline-strong);
+  background:
+    linear-gradient(to bottom, transparent 0, transparent 23px, var(--v2-hairline-faint) 24px),
+    var(--v2-bg-raised);
+  background-size: 100% 24px;
 }
 
 .zaki-settings-v2__product-row header {
@@ -2579,12 +2789,163 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   overflow-wrap: anywhere;
 }
 
-.zaki-settings-v2__provider-edit {
+.zaki-settings-v2__owner-strip,
+.zaki-settings-v2__status-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.zaki-settings-v2__owner-strip {
+  padding: 10px 0 4px;
+}
+
+.zaki-settings-v2__status-chips {
+  justify-content: flex-end;
+}
+
+.zaki-settings-v2__edit-tray {
   display: grid;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding: 14px;
+  border: 1px solid var(--v2-hairline-strong);
+  background:
+    linear-gradient(to bottom, transparent 0, transparent 23px, var(--v2-hairline-faint) 24px),
+    var(--v2-bg-raised);
+  background-size: 100% 24px;
+}
+
+.zaki-settings-v2__edit-tray--bindings {
+  margin-left: min(280px, 38%);
+}
+
+.zaki-settings-v2__edit-tray--section {
+  margin-top: 14px;
+}
+
+.zaki-settings-v2__tray-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.zaki-settings-v2__field-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.zaki-settings-v2__field-grid > *,
+.zaki-settings-v2__control-stack > * {
+  min-width: 0;
+}
+
+.zaki-settings-v2__field-grid--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.zaki-settings-v2__field-grid--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.zaki-settings-v2__control-stack {
+  display: grid;
+  width: min(100%, 320px);
+  min-width: 260px;
+  gap: 8px;
+}
+
+.zaki-settings-v2__binding-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg);
+  color: var(--v2-ink-2);
+  font-size: 12px;
+}
+
+.zaki-settings-v2__empty-state {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--v2-hairline);
+  background:
+    linear-gradient(to bottom, transparent 0, transparent 23px, var(--v2-hairline-faint) 24px),
+    var(--v2-bg-sunken);
+  background-size: 100% 24px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-prose);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.zaki-settings-v2__field-error {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  color: var(--v2-danger);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.zaki-settings-v2__space-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(120px, 0.5fr) minmax(80px, auto);
   gap: 10px;
   margin-top: 14px;
   padding-top: 14px;
   border-top: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-settings-v2__field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.zaki-settings-v2__field > span {
+  color: var(--v2-ink-3);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-settings-v2__field--wide,
+.zaki-settings-v2__space-editor .zaki-settings-v2__actions,
+.zaki-settings-v2__space-editor .zaki-settings-v2__field-error {
+  grid-column: 1 / -1;
+}
+
+.zaki-settings-v2__field--color input {
+  width: 100%;
+  min-height: 38px;
+  padding: 2px;
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg-raised);
+}
+
+.zaki-settings-v2__space-editor textarea.v2-input {
+  min-height: 68px;
+  resize: vertical;
+}
+
+.zaki-settings-v2__provider-edit {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--v2-hairline-strong);
+  background:
+    linear-gradient(to bottom, transparent 0, transparent 23px, var(--v2-hairline-faint) 24px),
+    var(--v2-bg-raised);
+  background-size: 100% 24px;
 }
 
 .zaki-settings-v2__agent-model {
@@ -2733,7 +3094,9 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   }
 
   .v2-settings-nav {
-    position: static;
+    position: sticky;
+    top: 0;
+    z-index: 20;
     height: auto;
     border-right: 0;
     border-bottom: 1px solid var(--v2-hairline);
@@ -2744,16 +3107,26 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   }
 
   .v2-settings-nav__list {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+    overflow-x: auto;
     padding: 8px;
+    scroll-padding-inline: 8px;
   }
 
   .v2-settings-nav__list a {
+    flex: 0 0 150px;
     min-height: 38px;
     padding: 0 8px;
     border-left: 0;
     border: 1px solid transparent;
+  }
+
+  .v2-settings-nav__list a.is-active,
+  .v2-settings-nav__list a[aria-current="page"] {
+    border-color: var(--v2-accent-hairline);
+    background: var(--v2-selected);
   }
 
   .zaki-settings-v2__main {
@@ -2766,15 +3139,27 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   .zaki-settings-v2__hero,
   .v2-settings-row,
   .zaki-settings-v2__plan-card,
+  .zaki-settings-v2__topup-strip,
   .zaki-settings-v2__product-row dl,
+  .zaki-settings-v2__space-editor,
   .zaki-settings-v2__model-table > div,
   .zaki-settings-v2__usage-row,
-  .zaki-settings-v2__memory-list > div {
+  .zaki-settings-v2__memory-list > div,
+  .zaki-settings-v2__field-grid--2,
+  .zaki-settings-v2__field-grid--4 {
     grid-template-columns: 1fr;
   }
 
   .zaki-settings-v2__hero {
     display: grid;
+  }
+
+  .zaki-settings-v2__plan-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .zaki-settings-v2__plan-metrics > div:nth-child(2n) {
+    border-right: 0;
   }
 
   .v2-settings-row__control {
@@ -2787,8 +3172,37 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
     min-width: 0;
   }
 
-  .v2-settings-nav__list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .zaki-settings-v2__control-stack,
+  .zaki-settings-v2__edit-tray--bindings {
+    width: 100%;
+    min-width: 0;
+    margin-left: 0;
+  }
+
+  .zaki-settings-v2__actions {
+    justify-content: stretch;
+  }
+
+  .zaki-settings-v2__actions .v2-btn {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .zaki-settings-v2__actions--with-note .v2-btn {
+    flex: 0 0 auto;
+  }
+
+  .zaki-settings-v2__status-chips {
+    justify-content: flex-start;
+  }
+
+  .zaki-settings-v2__product-row header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .v2-settings-nav__list a {
+    flex-basis: 136px;
   }
 
   .zaki-settings-v2__usage-row small {

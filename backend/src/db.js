@@ -394,6 +394,30 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS billing_topup_orders (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      checkout_session_id TEXT NOT NULL UNIQUE,
+      stripe_event_id TEXT,
+      stripe_payment_intent_id TEXT,
+      pack_id TEXT NOT NULL,
+      units DOUBLE PRECISION NOT NULL CHECK (units > 0),
+      amount_total_cents INT,
+      currency TEXT,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'fulfilled', 'failed')),
+      fulfilled_at TIMESTAMPTZ,
+      failure_reason TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_billing_topup_orders_user_created
+    ON billing_topup_orders (user_id, created_at DESC);
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS billing_webhook_events (
       id BIGSERIAL PRIMARY KEY,
       provider TEXT NOT NULL,

@@ -19,8 +19,16 @@
       "label": "Settings sections",
       "account": "Account",
       "connections": "Connections",
-      "billing": "Billing",
+      "billing": "Plan & Usage",
+      "planUsage": "Plan & Usage",
       "products": "Products",
+      "agent": "Agent",
+      "spaces": "Spaces",
+      "brain": "Brain",
+      "channels": "Channels",
+      "secrets": "Secrets",
+      "providers": "Providers & models",
+      "devices": "Extension devices",
       "usage": "Usage",
       "memoryData": "Memory",
       "developerAccess": "Developer",
@@ -31,14 +39,21 @@
       "profile": "Profile",
       "preferences": "Preferences",
       "connections": "Connected accounts",
-      "billing": "Billing",
+      "billing": "Plan & Usage",
       "planBilling": "Plan & Billing",
       "productsAccess": "Products & Access",
+      "agent": "Agent",
+      "spaces": "Spaces",
+      "brain": "Brain",
       "usage": "Usage",
       "memoryData": "Memory & Data",
       "developerAccess": "Developer Access",
       "privacy": "Privacy",
       "dataPrivacy": "Data & Privacy"
+    },
+    "status": {
+      "on": "On",
+      "off": "Off"
     },
     "profile": {
       "displayName": "Display name",
@@ -75,7 +90,21 @@
       "viewPricing": "View pricing",
       "manageAccess": "Manage access",
       "managePlan": "Manage plan",
+      "manageSubscription": "Manage subscription",
+      "viewSubscriptionOptions": "View subscription options",
+      "upgradeAgent": "Upgrade to Agent",
+      "upgradeComplete": "Upgrade to Complete",
+      "syncBilling": "Sync billing",
       "upgrade": "Upgrade",
+      "recurringRemaining": "Recurring remaining",
+      "topupBalance": "Top-up balance",
+      "topups": {
+        "title": "Unit top-ups",
+        "helper": "Purchased units persist and are used after recurring allowance.",
+        "unavailable": "Top-ups unavailable in this environment.",
+        "disabled": "Top-ups unavailable",
+        "buyPack": "Buy {{label}}{{priceLabel}}"
+      },
       "cancelSubscription": "Cancel subscription",
       "cancellationScheduled": "Cancellation scheduled",
       "billingUnavailable": "Billing is temporarily unavailable. Please contact support.",
@@ -84,12 +113,18 @@
         "billingUnavailable": "Billing is temporarily unavailable.",
         "portalUnavailable": "Billing portal is temporarily unavailable.",
         "openPortal": "Unable to open billing portal",
+        "portal": "Unable to open subscription portal.",
+        "checkout": "Unable to start checkout.",
+        "syncUnavailable": "Billing sync is not configured.",
+        "sync": "Unable to sync billing state.",
+        "topup": "Unable to start top-up checkout.",
         "cancelUnavailable": "Subscription cancellation is temporarily unavailable.",
         "cancelSubscription": "Unable to cancel subscription"
       },
       "success": {
         "cancelAlreadyScheduled": "Cancellation is already scheduled for period end.",
-        "cancelScheduled": "Subscription will cancel at period end."
+        "cancelScheduled": "Subscription will cancel at period end.",
+        "synced": "Billing state synced."
       }
     },
     "usage": {
@@ -162,25 +197,61 @@
       }
     },
     "agentModel": {
-      "eyebrow": "Agent model",
-      "title": "AI model routing",
-      "operatorDefault": "Operator default",
-      "userSelected": "User selected",
-      "tableLabel": "Agent model options",
-      "columns": {
-        "model": "Model",
-        "context": "Context",
-        "cost": "Cost",
-        "action": "Action"
-      },
-      "costClass": "Class {{class}}",
-      "current": "Current",
-      "use": "Use",
-      "useOperatorDefault": "Use operator default",
-      "helper": "Model changes persist per user and take effect on the next Agent turn."
+      "operatorDefault": "Operator default"
     },
     "agentSettings": {
-      "loading": "Loading Agent memory settings...",
+      "loading": "Loading Agent settings...",
+      "loadingShort": "Loading",
+      "ready": "Tenant defaults",
+      "reasoningEffort": {
+        "name": "Reasoning effort",
+        "helper": "Default thinking depth for new Agent turns. Live per-turn controls stay in Agent.",
+        "options": {
+          "low": "Low reasoning",
+          "medium": "Medium reasoning",
+          "high": "High reasoning"
+        }
+      },
+      "autonomy": {
+        "name": "Autonomy",
+        "helper": "Default autonomy for live runs. Approval and cancel controls remain in Agent.",
+        "options": {
+          "read_only": "Read only",
+          "supervised": "Supervised",
+          "full": "Full autonomy"
+        }
+      },
+      "groupActivation": {
+        "name": "Group activation",
+        "helper": "Controls whether channel/group contexts require a mention or always wake the Agent.",
+        "options": {
+          "mention": "Mention required",
+          "always": "Always active"
+        }
+      },
+      "proactiveUpdates": {
+        "name": "Proactive updates",
+        "helper": "Allow background Agent updates where channels and approvals permit it."
+      },
+      "voiceReplies": {
+        "name": "Voice replies",
+        "helper": "Use voice-capable replies on supported channels."
+      },
+      "sessionTimeout": {
+        "name": "Session timeout",
+        "helper": "Minutes before idle Agent sessions are treated as stale by default.",
+        "error": "Use a whole number from 5 to 180 minutes."
+      },
+      "memoryStatus": {
+        "name": "Memory behavior",
+        "helper": "Dream reflection, query expansion, capture, export, forget, and PII actions are owned by Memory & Data.",
+        "dream": "Dream {{status}}",
+        "query": "Query {{status}}"
+      },
+      "openAgent": "Open Agent",
+      "openChannels": "Channels",
+      "openProviders": "Providers",
+      "openMemoryData": "Memory & Data",
       "success": {
         "updated": "Agent settings updated."
       },
@@ -188,8 +259,77 @@
         "update": "Unable to update Agent settings."
       }
     },
+    "spaces": {
+      "loading": "Loading",
+      "count": "{{count}} spaces",
+      "subtitle": "Overview only. Individual space name, description, icon, color, instructions, files, and delete live inside the Space.",
+      "owner": {
+        "editable": "Local object settings live in Space",
+        "readonly": "Settings shows workspace status"
+      },
+      "summary": {
+        "title": "Workspace lifecycle",
+        "unavailable": "Unavailable",
+        "ready": "BFF-backed",
+        "spaces": "Spaces",
+        "docs": "Docs",
+        "threads": "Threads",
+        "instructions": "Instructions",
+        "memory": "Memory capture",
+        "engine": "Engine fields",
+        "engineDeferred": "Not exposed"
+      },
+      "space": {
+        "pinned": "Pinned",
+        "active": "Active",
+        "edit": "Edit",
+        "save": "Save",
+        "saving": "Saving",
+        "cancel": "Cancel",
+        "noDescription": "No description",
+        "identity": "Identity",
+        "instructions": "Instructions",
+        "files": "Files",
+        "threads": "Threads",
+        "set": "Set",
+        "empty": "Empty"
+      },
+      "editor": {
+        "name": "Space name",
+        "icon": "Icon",
+        "color": "Color",
+        "description": "Description",
+        "instructions": "Instructions"
+      },
+      "success": {
+        "saved": "Space settings saved."
+      },
+      "errors": {
+        "nameRequired": "Space name is required.",
+        "save": "Unable to save this space."
+      },
+      "empty": "No configurable spaces yet.",
+      "openSpaces": "Open Spaces"
+    },
+    "brain": {
+      "meta": {
+        "ready": "Memory summary",
+        "limited": "Limited"
+      },
+      "subtitle": "Summary only. Capture, dream reflection, query expansion, export, forget, and PII actions are edited in Memory & Data.",
+      "owner": {
+        "workbench": "Workbench owns graph view state",
+        "memoryData": "Memory & Data owns governance"
+      },
+      "summary": {
+        "title": "Memory surface",
+        "capture": "Capture policy",
+        "dreams": "Dream reflection",
+        "queryExpansion": "Query expansion"
+      },
+      "openBrain": "Open Brain"
+    },
     "memoryData": {
-      "openMemory": "Open memory controls",
       "dreamReflection": "Dream reflection",
       "dreamReflectionHelper": "Run the nightly 3 AM memory reflection job for this user.",
       "queryExpansion": "Query expansion",
@@ -641,257 +781,6 @@
     },
     "actions": {
       "continue": "Start chatting"
-    }
-  },
-  "zakiSettingsSheet": {
-    "title": "Tune how ZAKI shows up",
-    "subtitle": "Control assistant behavior, Telegram delivery, and autonomy from one place.",
-    "closeAria": "Close ZAKI settings",
-    "loading": {
-      "state": "Loading agent settings..."
-    },
-    "status": {
-      "enabled": "Enabled",
-      "disabled": "Disabled"
-    },
-    "sections": {
-      "overview": {
-        "title": "Overview"
-      },
-      "assistant": {
-        "title": "Assistant",
-        "summary": "{{style}} replies, {{join}} access"
-      },
-      "telegram": {
-        "title": "Telegram"
-      },
-      "autonomy": {
-        "title": "Autonomy"
-      },
-      "usage": {
-        "title": "Usage",
-        "summary": "{{requests}} requests today, {{state}} status",
-        "summaryUnavailable": "Usage temporarily unavailable.",
-        "summaryPending": "No usage snapshot yet.",
-        "stateUnknown": "unknown"
-      }
-    },
-    "fields": {
-      "responseStyle": {
-        "title": "Response style",
-        "helper": "Choose whether ZAKI leans toward speed, balance, or deeper reasoning.",
-        "modes": {
-          "fast": {
-            "description": "Snap replies, lighter context.",
-            "helper": "Best for quick check-ins and short questions."
-          },
-          "balanced": {
-            "description": "Default. Even mix of speed and reasoning.",
-            "helper": "Right for most chat, including back-and-forth."
-          },
-          "deep": {
-            "description": "Slower replies, deeper thinking.",
-            "helper": "Best for planning, decisions, and longer threads."
-          }
-        }
-      },
-      "sessionWindow": {
-        "title": "Session window",
-        "summary": "{{minutes}} minute session",
-        "helper": "Choose how long ZAKI should treat nearby activity as one working session."
-      },
-      "joinBehavior": {
-        "title": "When ZAKI joins",
-        "helper": "Control whether ZAKI waits for a mention or stays available in shared channel conversations."
-      },
-      "proactiveUpdates": {
-        "title": "Proactive updates",
-        "helper": "Let ZAKI surface updates first instead of waiting for every prompt."
-      },
-      "voiceReplies": {
-        "title": "Voice replies",
-        "helper": "Enable spoken responses when the channel supports them.",
-        "requiresTelegram": "Requires Telegram",
-        "connectTelegram": "Connect Telegram"
-      }
-    },
-    "options": {
-      "fast": "Fast",
-      "balanced": "Balanced",
-      "deep": "Deep",
-      "mentionOnly": "Mention only",
-      "alwaysActive": "Always active"
-    },
-    "workspace": {
-      "setupNotCompleted": "Not completed yet",
-      "channelStatus": {
-        "connected": "Connected",
-        "notConnected": "Not connected",
-        "needsSetup": "Needs setup"
-      },
-      "telegramToken": "Telegram bot token"
-    },
-    "overview": {
-      "operatorRequired": "Operator setup is still required before this user can start externally.",
-      "readyToStart": "This agent can start chatting now.",
-      "missingRequirements": "Some minimum requirements are still missing.",
-      "awaitingStatus": "Status is still being prepared.",
-      "operatorBlockingTitle": "Operator configuration still required",
-      "operatorBlockingBody": "Model and provider setup must be completed by the platform operator before this user can finish activation.",
-      "statusHelper": "Last onboarding update: {{updated}}.",
-      "readinessTitle": "Readiness",
-      "readinessHelper": "This status comes from onboarding and reflects whether external delivery is ready.",
-      "telegramTitle": "Telegram status",
-      "telegramHelper": "Connect Telegram so this agent can receive and answer outside the app.",
-      "minimumRequiredTitle": "Minimum required",
-      "minimumRequiredHelper": "These are the remaining prerequisites reported by onboarding.",
-      "nothingMissing": "Nothing is currently missing.",
-      "notReady": "Not ready yet"
-    },
-    "telegram": {
-      "botTokenLabel": "Bot token",
-      "botTokenMasked": "Saved token is hidden",
-      "allowFromLabel": "Allowed Telegram ID(s) (optional)",
-      "allowFromPlaceholder": "One chat ID or account ID per line, or separate with commas.",
-      "allowFromHelper": "Optional. Add Telegram chat or account IDs if you want to restrict who can reach your agent. Leave it blank for the normal setup flow.",
-      "guide": {
-        "title": "Get your Telegram bot token",
-        "openBotFather": "Open BotFather"
-      }
-    },
-    "autonomy": {
-      "levelTitle": "Autonomy level",
-      "levelHelper": "Pick how independently ZAKI can act inside its sandbox. Supervised is recommended for everyday use.",
-      "levels": {
-        "supervised": {
-          "label": "Supervised (recommended)",
-          "description": "Asks before medium and high risk actions. Reads, browses, and runs safe commands without asking."
-        },
-        "full": {
-          "label": "Full autonomy",
-          "description": "Acts without prompts inside the sandbox. Network and high-risk commands are still blocked."
-        },
-        "read_only": {
-          "label": "Read only",
-          "description": "Observes only. ZAKI can read and answer but cannot run any tools."
-        }
-      },
-      "proactiveTitle": "Proactive updates",
-      "proactiveHelper": "This stays in assistant settings because it controls behavior, not delivery cadence.",
-      "heartbeatTitle": "Heartbeat",
-      "heartbeatHelper": "Heartbeat cadence is managed by ZAKI. This switch only controls whether heartbeat delivery is enabled.",
-      "heartbeatRequiresTelegram": "Telegram must be connected first."
-    },
-    "usage": {
-      "state": "State",
-      "requestsToday": "Requests today",
-      "tokensToday": "Tokens today",
-      "tokensMonth": "Tokens this month",
-      "unavailable": "Usage is temporarily unavailable. Your bot space still works, but the daily summary did not load.",
-      "pending": "No usage snapshot is available yet.",
-      "helper": "Usage refreshes when this panel opens. The full cost breakdown will land once the runtime exposes per-period totals."
-    },
-    "actions": {
-      "connecting": "Connecting...",
-      "connectTelegram": "Connect Telegram",
-      "reconnectTelegram": "Reconnect Telegram",
-      "disconnect": "Disconnect"
-    },
-    "success": {
-      "settingsSaved": "ZAKI settings saved.",
-      "telegramConnected": "Telegram connected. Send a message to your bot to confirm routing.",
-      "telegramDisconnected": "Telegram disconnected.",
-      "heartbeatEnabled": "Heartbeat enabled.",
-      "heartbeatDisabled": "Heartbeat disabled."
-    },
-    "errors": {
-      "onboardingLoad": "Unable to load ZAKI setup right now.",
-      "settingsLoad": "Unable to load ZAKI settings right now.",
-      "heartbeatLoad": "Unable to load heartbeat status right now.",
-      "botStateUnavailableUnknownUser": "ZAKI settings are not available for this account yet.",
-      "sessionTimeoutRange": "Session window must be between 5 and 180 minutes.",
-      "telegramTokenRequired": "Enter a Telegram bot token before connecting.",
-      "telegramTokenInvalid": "The Telegram bot token is invalid.",
-      "telegramAllowFromRequired": "Add at least one allowed Telegram chat or account ID.",
-      "telegramConnectFailed": "Unable to connect Telegram.",
-      "telegramConnectStillVerifying": "Telegram is still being verified. Refresh in a few seconds if your bot already responds in Telegram.",
-      "telegramDisconnectFailed": "Unable to disconnect Telegram.",
-      "telegramDisconnectUnconfirmed": "Telegram still looks connected after disconnect. Refresh and try again.",
-      "heartbeatSave": "Unable to update heartbeat right now.",
-      "settingsSave": "Unable to save ZAKI settings.",
-      "invalidAssistantMode": "Choose a valid assistant mode.",
-      "invalidGroupActivation": "Choose a valid group activation mode.",
-      "invalidProactiveUpdates": "Proactive updates must be either enabled or disabled.",
-      "invalidVoiceReplies": "Voice replies must be either enabled or disabled.",
-      "invalidSessionTimeoutMinutes": "Session timeout must be between 5 and 180 minutes.",
-      "invalidAutonomy": "Pick read only, supervised, or full autonomy.",
-      "bot": {
-        "temporary_contention": "ZAKI is busy on another node. Retry shortly.",
-        "unauthorized": "Sign in again to manage your ZAKI space.",
-        "forbidden": "This ZAKI action is not available for your account.",
-        "invalid_telegram_token": "The Telegram token is invalid. Check it and try again.",
-        "provision_failed": "We could not provision your ZAKI space right now.",
-        "settings_update_failed": "We could not save your ZAKI settings.",
-        "usage_unavailable": "Usage is temporarily unavailable."
-      }
-    },
-    "footer": {
-      "unsaved": "Unsaved changes",
-      "saving": "Saving...",
-      "saveAssistant": "Save assistant settings"
-    },
-    "rail": {
-      "identity": {
-        "label": "Identity"
-      },
-      "responseStyle": {
-        "label": "Response style"
-      },
-      "channels": {
-        "label": "Channels"
-      },
-      "autonomy": {
-        "label": "Autonomy"
-      },
-      "plan": {
-        "label": "Agent usage"
-      }
-    },
-    "placeholders": {
-      "navAria": "Settings sections"
-    },
-    "privacy": {
-      "footer": "Your data is yours. ZAKI is GDPR-compliant. Email privacy@zakiai.com to delete any data on request."
-    },
-    "channelsList": {
-      "headerHeading": "Where ZAKI shows up",
-      "headerSummary": "Connect ZAKI to the apps you already use. More integrations land as backend wiring ships.",
-      "comingSoonPill": "COMING SOON",
-      "connectedPill": "CONNECTED",
-      "notConnectedPill": "NOT CONNECTED",
-      "telegram": {
-        "name": "Telegram",
-        "tagline": "Chat with ZAKI from any Telegram device, group, or channel."
-      },
-      "slack": {
-        "name": "Slack",
-        "tagline": "Bring ZAKI into your team workspace. /zaki commands and threaded replies."
-      },
-      "discord": {
-        "name": "Discord",
-        "tagline": "Add ZAKI as a server bot. Slash commands and thread context."
-      },
-      "teams": {
-        "name": "Microsoft Teams",
-        "tagline": "Reach ZAKI in your Teams workspace — DMs, channels, and meeting follow-ups."
-      },
-      "email": {
-        "name": "Email",
-        "tagline": "Forward an inbox; ZAKI reads, drafts, and replies as you."
-      },
-      "connectingPill": "CONNECTING…",
-      "verifyingPill": "VERIFYING…",
-      "needsAttentionPill": "NEEDS ATTENTION"
     }
   },
   "zakiControls": {
@@ -1874,6 +1763,7 @@
       "manageLink": "Memory scopes & privacy"
     },
     "governance": {
+      "brainSettingsLink": "Brain settings",
       "manageLink": "Memory & privacy in Settings"
     },
     "timeline": {
