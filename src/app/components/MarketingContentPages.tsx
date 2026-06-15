@@ -61,7 +61,7 @@ const comparisons: Record<ComparisonSlug, TablePage> = {
     intro:
       "ChatGPT is the general-purpose default. Spaces is the lighter, cleaner ZAKI entry point for focused work when you want a workspace, not another loose thread.",
     definition:
-      "Use ChatGPT when you want the widest mainstream AI surface. Use Spaces when you want a free, structured place to draft, compare, translate, plan, and decide without creating an account. When memory matters, upgrade into ZAKI Complete.",
+      "Use ChatGPT when you want the widest mainstream AI surface. Use ZAKI Chat when you want a free, structured place to draft, compare, translate, plan, and decide without creating an account. When memory matters, move into Agent and Brain.",
     quote:
       "The edge is not pretending Spaces beats every frontier model. The edge is making everyday AI work easier to start, easier to separate, and easier to continue.",
     table: {
@@ -77,7 +77,7 @@ const comparisons: Record<ComparisonSlug, TablePage> = {
         },
         {
           feature: "Memory",
-          values: ["Anonymous use is memory-free; paid Complete adds memory", "Plan-dependent memory"],
+          values: ["Anonymous use is memory-free; Agent and Brain add account continuity", "Plan-dependent memory"],
         },
         {
           feature: "Best fit",
@@ -87,7 +87,7 @@ const comparisons: Record<ComparisonSlug, TablePage> = {
     },
     sections: [
       {
-        title: "Choose Spaces when",
+        title: "Choose ZAKI Chat when",
         items: [
           "You want to try ZAKI without friction.",
           "You are drafting, translating, researching, or planning a single job.",
@@ -99,13 +99,13 @@ const comparisons: Record<ComparisonSlug, TablePage> = {
         items: [
           "You primarily want the broadest model ecosystem.",
           "You are already deep inside OpenAI’s consumer workflow.",
-          "You do not need ZAKI’s product ladder: Spaces, Agent, Learn, and Complete.",
+          "You do not need ZAKI’s current core: Chat, Agent, Brain, and parked future lanes.",
         ],
       },
     ],
     links: [
-      { label: "Try Spaces", href: "/spaces" },
-      { label: "See Complete", href: "/pricing?plan=complete" },
+      { label: "Start chat", href: "/spaces" },
+      { label: "See plans", href: "/pricing" },
     ],
   },
   "zaki-vs-spaces": {
@@ -114,7 +114,7 @@ const comparisons: Record<ComparisonSlug, TablePage> = {
     intro:
       "Spaces is where a job starts. ZAKI Agent is what stays with you after the job becomes part of your life or work.",
     definition:
-      "Spaces are structured work areas. ZAKI Agent is the paid personal agent for continuity, planning, follow-through, scheduled work, and durable context. Complete connects both, adding Learn and uncapped Spaces with memory.",
+      "Chat/Spaces are structured work areas. ZAKI Agent is the personal agent for continuity, planning, follow-through, scheduled work, and durable context. Brain makes the memory layer visible.",
     quote:
       "Spaces gives the first answer room to breathe. ZAKI Agent gives the relationship memory and follow-through.",
     table: {
@@ -134,7 +134,7 @@ const comparisons: Record<ComparisonSlug, TablePage> = {
         },
         {
           feature: "Best upgrade",
-          values: ["Agent plan or Complete", "Complete for uncapped Spaces with memory"],
+          values: ["Agent and Brain", "Sign in when work should persist"],
         },
       ],
     },
@@ -167,7 +167,7 @@ const comparisons: Record<ComparisonSlug, TablePage> = {
     intro:
       "The best Arabic AI assistant depends on the job. ZAKI’s strength is not a slogan about Arabic. It is bilingual work, memory boundaries, and product structure that makes Arabic-English workflows less messy.",
     definition:
-      "Use Spaces for fast Arabic-English drafting, translation, and structured work. Use ZAKI Agent when continuity matters. Use ZAKI Learn when the job is studying, explaining, practicing, or turning material into durable knowledge.",
+      "Use Chat for fast Arabic-English drafting, translation, and structured work. Use ZAKI Agent when continuity matters. Learn, Design, and Career stay visible as coming-soon lanes until the core platform is finished.",
     quote:
       "Arabic AI quality is not only language support. It is whether the product respects how bilingual people actually work.",
     table: {
@@ -183,11 +183,11 @@ const comparisons: Record<ComparisonSlug, TablePage> = {
         },
         {
           feature: "Study and understanding",
-          values: ["ZAKI Learn", "Deep Solve, research, quiz, notes, and guided practice belong together"],
+          values: ["Chat or Agent today", "Learn is coming soon; start with quick study help or a learning plan"],
         },
         {
           feature: "Everything",
-          values: ["ZAKI Complete", "Agent, Learn, and uncapped Spaces with memory"],
+          values: ["Core V1", "Chat, Agent, Brain, Settings, with future lanes parked"],
         },
       ],
     },
@@ -196,26 +196,26 @@ const comparisons: Record<ComparisonSlug, TablePage> = {
         title: "What makes the experience better",
         items: [
           "Mixed Arabic-English prompts do not need ceremony.",
-          "Anonymous Spaces keeps the first try simple.",
+          "Anonymous Chat keeps the first try simple.",
           "Paid plans make the memory boundary explicit instead of vague.",
         ],
       },
       {
         title: "What we will not claim",
         body:
-          "We are not claiming that every ZAKI answer beats every frontier assistant. The claim is product fit: cleaner routes, better continuity, and a real upgrade path from free workspace chat to paid memory and learning.",
+          "We are not claiming that every ZAKI answer beats every frontier assistant. The claim is product fit: cleaner routes, better continuity, and an honest path from free chat to account memory.",
       },
     ],
     links: [
-      { label: "Try Spaces", href: "/spaces" },
-      { label: "See Learn", href: "/products/learn" },
+      { label: "Start chat", href: "/spaces" },
+      { label: "Open dashboard", href: "/" },
     ],
   },
   "zaki-vs-openclaw": {
     badge: "Technical comparison",
     title: "ZAKI vs tool-first agent runtimes",
     intro:
-      "Some agent systems are built around maximal tool breadth. ZAKI is built around a commercial product ladder: free workspace chat, paid personal agent, paid learning system, and a Complete bundle.",
+      "Some agent systems are built around maximal tool breadth. ZAKI is being simplified around the public core first: free chat, personal Agent, visible Brain memory, and parked future lanes.",
     definition:
       "Tool-first runtimes are compelling for builders and experimenters. ZAKI is shaped for users who want a calmer product: memory, study, execution, billing, account access, and support boundaries in one place.",
     quote:
@@ -225,7 +225,7 @@ const comparisons: Record<ComparisonSlug, TablePage> = {
       rows: [
         {
           feature: "Product surface",
-          values: ["Spaces, Agent, Learn, Complete", "Usually a broader operator console"],
+          values: ["Chat, Agent, Brain, future lanes", "Usually a broader operator console"],
         },
         {
           feature: "User model",
@@ -233,7 +233,7 @@ const comparisons: Record<ComparisonSlug, TablePage> = {
         },
         {
           feature: "Strength",
-          values: ["Continuity, commercial routing, learning, and controlled memory", "Tool breadth and experimentation"],
+          values: ["Continuity, commercial routing, and controlled memory", "Tool breadth and experimentation"],
         },
         {
           feature: "Best fit",
@@ -247,7 +247,7 @@ const comparisons: Record<ComparisonSlug, TablePage> = {
         items: [
           "A clearer first-use experience.",
           "Memory users can understand and pay for.",
-          "Learning workflows that feel like a product, not a prompt trick.",
+          "Future lanes that stay honest until they are real products.",
           "A commercial bundle that makes the upgrade path obvious.",
         ],
       },
@@ -259,7 +259,7 @@ const comparisons: Record<ComparisonSlug, TablePage> = {
     ],
     links: [
       { label: "See Agent", href: "/products/agent" },
-      { label: "See Complete", href: "/products/complete" },
+      { label: "See plans", href: "/pricing" },
     ],
   },
 };
@@ -341,19 +341,19 @@ const howTos: Record<HowToSlug, HowToPage> = {
       },
     ],
     examplePrompt:
-      "Write three Arabic LinkedIn posts about launching a paid AI learning product. Make them human, specific, and not hype-driven.",
+      "Write three Arabic LinkedIn posts about launching a focused AI product. Make them human, specific, and not hype-driven.",
     goodOutput:
       "Good content has a real angle, one clear reader, a useful idea, and language that a person would actually publish.",
     links: [
       { label: "Open Spaces", href: "/spaces" },
-      { label: "See Learn", href: "/products/learn" },
+      { label: "Open dashboard", href: "/" },
     ],
   },
   "how-zaki-and-spaces-work": {
     badge: "Guide",
     title: "How ZAKI and Spaces work together",
     intro:
-      "Spaces is the free workspace. Agent is the paid continuity layer. Learn is the paid study system. Complete ties all of it together.",
+      "Chat is the free workspace. Agent is the continuity layer. Brain is where memory becomes visible. Learn, Design, and Career come later.",
     steps: [
       {
         title: "Start with Spaces.",
@@ -361,20 +361,20 @@ const howTos: Record<HowToSlug, HowToPage> = {
       },
       {
         title: "Upgrade when memory matters.",
-        text: "If the work repeats, if preferences matter, or if context should carry forward, move into Agent or Complete.",
+        text: "If the work repeats, if preferences matter, or if context should carry forward, move into Agent and Brain.",
       },
       {
-        title: "Use Learn for study.",
-        text: "When the work is explaining, practicing, researching, quizzing, or building knowledge, Learn is the right product.",
+        title: "Keep future lanes parked.",
+        text: "When the work is study, design, or career planning, start with Chat or Agent today. Dedicated products return when the full flow is ready.",
       },
     ],
     examplePrompt:
-      "I am starting a new research project. Help me separate what belongs in Spaces, what Agent should remember, and what Learn should turn into study material.",
+      "I am starting a new research project. Help me separate what belongs in Chat, what Agent should remember, and what should become a future study plan.",
     goodOutput:
       "Good output should route the job instead of mixing every need into one chat.",
     links: [
       { label: "View pricing", href: "/pricing" },
-      { label: "See Complete", href: "/products/complete" },
+      { label: "Open dashboard", href: "/" },
     ],
   },
   "what-to-use-spaces-for": {
@@ -438,7 +438,7 @@ const howTos: Record<HowToSlug, HowToPage> = {
 const faqs = [
   {
     q: "Is ZAKI still beta?",
-    a: "No. ZAKI Agent is now a full paid product. Spaces remains the free entry point, and Learn is the dedicated paid learning product.",
+    a: "No. The public core is Chat, Agent, Brain, Settings, and the dashboard. Learn, Design, and Career are coming soon.",
   },
   {
     q: "Can I use Spaces without registering?",
@@ -446,15 +446,15 @@ const faqs = [
   },
   {
     q: "What is the difference between Learn and Agent?",
-    a: "Agent is for continuity, planning, follow-through, and recurring work. Learn is for study workflows: explanations, deep problem solving, quizzes, research, notes, and knowledge work.",
+    a: "Agent is for continuity, planning, follow-through, and recurring work. Learn is coming soon; for now, use Chat for quick study help or Agent to plan a learning path.",
   },
   {
-    q: "What does Complete include?",
-    a: "Complete includes Agent, Learn, and uncapped Spaces with memory. It is the cleanest plan for people who want the full product.",
+    q: "What is public in V1?",
+    a: "Dashboard, Chat, Agent, Brain, Settings, billing, and account continuity. Future products stay parked until they are ready.",
   },
   {
     q: "What is the free preview?",
-    a: "Agent and Learn each include 10 preview messages per week. Spaces gives anonymous users 10 messages per day.",
+    a: "Free credits are shared across the platform. Chat is the fastest anonymous entry point; Agent and Brain are the core account surfaces.",
   },
   {
     q: "What does the LoCoMo result mean?",
@@ -465,7 +465,7 @@ const faqs = [
 const faqsAr = [
   {
     q: "هل ZAKI ما زال بيتا؟",
-    a: "لا. ZAKI Agent أصبح منتجًا مدفوعًا كاملًا. Spaces تبقى المدخل المجاني، و Learn هو منتج التعلم المدفوع.",
+    a: "لا. القلب العام هو Chat وAgent وBrain والإعدادات ولوحة التحكم. Learn وDesign وCareer قادمة لاحقًا.",
   },
   {
     q: "هل يمكن استخدام Spaces بدون تسجيل؟",
@@ -473,11 +473,11 @@ const faqsAr = [
   },
   {
     q: "ما الفرق بين Learn و Agent؟",
-    a: "Agent للاستمرارية والتخطيط والمتابعة والعمل المتكرر. Learn للدراسة: الشرح، حل المسائل، البحث، الاختبارات، الدفاتر، والعمل المعرفي.",
+    a: "Agent للاستمرارية والتخطيط والمتابعة والعمل المتكرر. Learn قادم لاحقًا؛ الآن استخدم Chat للمساعدة السريعة أو Agent لتخطيط مسار تعلم.",
   },
   {
-    q: "ماذا تشمل Complete؟",
-    a: "Complete تشمل Agent و Learn و Spaces غير محدودة مع الذاكرة. هي أبسط خطة لمن يريد المنتج كاملًا.",
+    q: "ما العام في V1؟",
+    a: "لوحة التحكم وChat وAgent وBrain والإعدادات والفوترة واستمرارية الحساب. المنتجات القادمة تبقى متوقفة حتى تجهز.",
   },
   {
     q: "هل يمكن نقل الذاكرة من أدوات أخرى؟",
@@ -645,7 +645,7 @@ export function WebsiteHowToRoute() {
 export function WebsiteStoryPage() {
   const beats = [
     ["The gap", "Most AI products are strong in the moment and weak over time. Users keep rebuilding context, repeating preferences, and losing the thread between jobs."],
-    ["The product", "ZAKI separates the work: Spaces for the first useful task, Agent for memory and follow-through, Learn for turning material into practice."],
+    ["The product", "ZAKI separates the work: Chat for the first useful task, Agent for follow-through, Brain for visible memory, and future lanes when ready."],
     ["The proof", "The first LoCoMo benchmark run scored 91.7%, giving us a concrete signal that ZAKI’s memory system is worth building around."],
   ] satisfies Array<[string, string]>;
   return <WebsiteStoryContent locale="en" beats={beats} />;
@@ -654,7 +654,7 @@ export function WebsiteStoryPage() {
 export function WebsiteStoryPageAr() {
   const beats = [
     ["الفجوة", "معظم منتجات AI قوية في اللحظة وضعيفة مع الوقت. المستخدم يعيد بناء السياق ويكرر التفضيلات ويفقد الخيط بين الأعمال."],
-    ["المنتج", "ZAKI يفصل العمل: Spaces لأول مهمة مفيدة، Agent للذاكرة والمتابعة، و Learn لتحويل المادة إلى تدريب."],
+    ["المنتج", "ZAKI يفصل العمل: Chat لأول مهمة مفيدة، Agent للمتابعة، وBrain للذاكرة المرئية، والمنتجات القادمة عندما تجهز."],
     ["الإثبات", "أول تشغيل على معيار LoCoMo حقق 91.7%، وهي إشارة ملموسة أن نظام ذاكرة ZAKI يستحق البناء عليه."],
   ] satisfies Array<[string, string]>;
   return <WebsiteStoryContent locale="ar" beats={beats} />;
@@ -669,7 +669,7 @@ function WebsiteStoryContent({ locale, beats }: { locale: WebsiteLocale; beats: 
         title={isArabic ? "قيمة ZAKI تظهر بعد الإجابة الأولى." : "ZAKI becomes valuable after the first answer."}
         intro={isArabic
           ? "الفكرة الأصلية بسيطة: المساعد المفيد لا يكتفي بإجابة جيدة ثم ينسى. يجب أن يحفظ السياق عندما تسمح له، يساعدك على المتابعة، ويفصل بين العمل السريع والتعلم والعمل المتكرر."
-          : "The original idea is simple: a useful assistant should not give one good answer and forget everything around it. It should keep context when you allow it, help you continue, and separate quick work from learning and recurring execution."}
+          : "The original idea is simple: a useful assistant should not give one good answer and forget everything around it. It should keep context when you allow it, help you continue, and keep future lanes honest until they are ready."}
       />
       <section className="px-4 py-12 sm:px-6 lg:px-8">
         <div className="mx-auto grid max-w-6xl gap-4 md:grid-cols-3">
@@ -697,13 +697,13 @@ function WebsiteStoryContent({ locale, beats }: { locale: WebsiteLocale; beats: 
               ? [
                   ["للمستخدم العادي", "ابدأ في Spaces بدون حساب عندما تحتاج مسودة أو ترجمة أو قرارًا سريعًا."],
                   ["للمستخدم المتقدم", "Agent يحفظ السياق، يستورد الذاكرة، ويتابع العمل المتكرر بدل أن تبدأ كل مرة من الصفر."],
-                  ["للمتعلم", "Learn يحول الملفات والأسئلة والبحث والدفاتر إلى شرح وتدريب ومراجعة."],
+                  ["للمتعلم", "ابدأ في Chat أو Agent الآن؛ Learn يعود عندما تكتمل ذاكرة المتعلم وتجربة الدراسة."],
                   ["للمهاجر من أدوات أخرى", "استيراد الذاكرة من ChatGPT أو Claude أو Gemini يقلل ألم الانتقال."],
                 ]
               : [
                   ["For normal users", "Start in Spaces without an account when you need a draft, translation, decision, or quick plan."],
                   ["For power users", "Agent keeps context, imports memory, and follows through on recurring work instead of making you start over."],
-                  ["For students", "Learn turns files, questions, research, and notebooks into explanation, practice, and review."],
+                  ["For students", "Start in Chat or Agent today; Learn returns when learner memory and study UX are ready."],
                   ["For people migrating", "Memory import from ChatGPT, Claude, or Gemini lowers the cost of switching."],
                 ]).map(([title, body]) => (
               <div key={title} className="rounded-zaki-lg border border-[#eadfce] bg-[#fffaf4] p-4 dark:border-[#2a2018] dark:bg-[#0c0a09]">
@@ -727,8 +727,8 @@ export function WebsiteFaqPage({ locale = "en" }: { locale?: WebsiteLocale }) {
         badge={isArabic ? "الأسئلة" : "FAQ"}
         title={isArabic ? "أسئلة المنتج، بإجابات مباشرة." : "Product questions, answered directly."}
         intro={isArabic
-          ? "النموذج التجاري تغير. هذه هي الإجابات التي يحتاجها المستخدم قبل أن يبدأ مجانًا أو يجرب Agent أو Learn أو يشتري Complete."
-          : "The commercial model changed. These are the answers users need before they decide whether to start free, preview Agent or Learn, or buy Complete."}
+          ? "النموذج التجاري تغير. هذه هي الإجابات التي يحتاجها المستخدم قبل أن يبدأ مجانًا أو يستخدم Agent أو ينتظر المنتجات القادمة."
+          : "The commercial model changed. These are the answers users need before they start free, use Agent, or wait for future products."}
       />
       <section className="px-4 py-12 sm:px-6 lg:px-8">
         <div className="mx-auto grid max-w-4xl gap-3">

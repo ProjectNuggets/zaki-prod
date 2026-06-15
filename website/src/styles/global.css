@@ -31,6 +31,14 @@ body {
   overflow-x: hidden;
 }
 
+body[data-route="home"] {
+  background:
+    linear-gradient(90deg, rgba(236, 231, 223, 0.035) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(236, 231, 223, 0.025) 1px, transparent 1px),
+    var(--zk-bg);
+  background-size: 48px 48px, 48px 48px, auto;
+}
+
 main {
   position: relative;
   z-index: 1;
@@ -57,9 +65,7 @@ select {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  background:
-    radial-gradient(ellipse 60% 40% at 50% -5%, rgba(241, 2, 2, 0.10), transparent),
-    radial-gradient(circle at 80% 20%, rgba(241, 2, 2, 0.04), transparent 40%);
+  background: linear-gradient(180deg, rgba(210, 68, 48, 0.08), transparent 28%);
   z-index: -2;
 }
 
@@ -122,13 +128,13 @@ select {
 
 /* ── Focus ring ── */
 :focus-visible {
-  outline: 2px solid var(--zk-accent);
+  outline: 1px solid var(--zk-accent);
   outline-offset: 2px;
 }
 
 /* ── Selection ── */
 ::selection {
-  background: rgba(241, 2, 2, 0.24);
+  background: rgba(210, 68, 48, 0.28);
   color: var(--zk-text);
 }
 
@@ -188,7 +194,7 @@ select {
   color: #fff;
   font-weight: 600;
   font-size: 0.875rem;
-  border-radius: 0 0 0.5rem 0;
+  border-radius: 0 0 4px 0;
 }
 
 .skip-to-main:focus {

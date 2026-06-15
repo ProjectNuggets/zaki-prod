@@ -90,7 +90,7 @@ function invalidateCommercialState(queryClient: ReturnType<typeof useQueryClient
 
 export function useCheckout() {
   const queryClient = useQueryClient();
-  type CheckoutPlan = "student" | "personal" | "agent" | "learn" | "complete";
+  type CheckoutPlan = "student" | "personal" | "pro" | "pro_max" | "agent" | "learn" | "complete";
   return useMutation({
     mutationFn: async (
       payload:

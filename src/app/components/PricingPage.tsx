@@ -25,7 +25,7 @@ import { useAuthStore } from "@/stores";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-type CommercialPaidPlan = "agent" | "learn" | "complete";
+type CommercialPaidPlan = "agent";
 type CheckoutProviderKey = "stripe" | "paddle" | "creem";
 
 type BillingNotice = {
@@ -41,25 +41,26 @@ type CheckoutProvider = {
 };
 
 type PricingCard = {
-  id: "spaces_free" | CommercialPaidPlan;
+  id: "chat_free" | CommercialPaidPlan | "brain" | "future";
   plan?: CommercialPaidPlan;
-  translationKey: "free" | CommercialPaidPlan;
+  translationKey: "free" | CommercialPaidPlan | "brain" | "future";
   emphasized?: boolean;
+  href?: string;
 };
 
-const PAID_PLAN_IDS: CommercialPaidPlan[] = ["agent", "learn", "complete"];
+const PAID_PLAN_IDS: CommercialPaidPlan[] = ["agent"];
 
 const PRICING_CARDS: PricingCard[] = [
-  { id: "spaces_free", translationKey: "free" },
-  { id: "agent", plan: "agent", translationKey: "agent" },
-  { id: "learn", plan: "learn", translationKey: "learn" },
-  { id: "complete", plan: "complete", translationKey: "complete", emphasized: true },
+  { id: "chat_free", translationKey: "free", href: "/spaces" },
+  { id: "agent", plan: "agent", translationKey: "agent", emphasized: true },
+  { id: "brain", translationKey: "brain", href: "/brain" },
+  { id: "future", translationKey: "future", href: "/" },
 ];
 
 function checkoutProviderSupportsPlan(provider: CheckoutProvider, plan: CommercialPaidPlan) {
-  // Agent, Learn, and Complete use the new Stripe commercial catalog. Legacy
-  // provider URLs may remain configured for old plans, but they must not sell
-  // a new product under the wrong checkout.
+  // Public V1 only sells Agent from this pricing surface. Legacy provider URLs
+  // may remain configured for old plans, but they must not sell unavailable
+  // products under the wrong checkout.
   return provider.key === "stripe" && provider.enabled && !provider.comingSoon && Boolean(plan);
 }
 
@@ -224,12 +225,11 @@ export function PricingPage() {
   const currentPlanLabel = useMemo(() => {
     if (activeViaAccessCode) return t("pricingPage.codeActivePlanLabel");
     if (commercialPlanId === "agent") return t("pricingPage.plans.agent.label");
-    if (commercialPlanId === "learn") return t("pricingPage.plans.learn.label");
-    if (commercialPlanId === "complete" || commercialPlanId === "legacy_personal") {
-      return t("pricingPage.plans.complete.label");
+    if (commercialPlanId === "learn" || commercialPlanId === "complete" || commercialPlanId === "legacy_personal") {
+      return t("pricingPage.legacyPremiumPlanLabel");
     }
     if (currentTier === "student" || currentTier === "personal" || currentTier === "pro") {
-      return t("pricingPage.plans.complete.label");
+      return t("pricingPage.legacyPremiumPlanLabel");
     }
     return t("pricingPage.plans.free.label");
   }, [activeViaAccessCode, commercialPlanId, currentTier, t]);
@@ -382,27 +382,22 @@ export function PricingPage() {
   const renderPlanButton = (card: PricingCard) => {
     if (!card.plan) {
       return (
-        <a href="/spaces" className="w-full zaki-btn-sm zaki-btn-secondary text-center">
-          {t("pricingPage.plans.free.cta")}
+        <a href={card.href || "/"} className="w-full zaki-btn-sm zaki-btn-secondary text-center">
+          {t(`pricingPage.plans.${card.translationKey}.cta`)}
         </a>
       );
     }
 
-    const current =
-      commercialPlanId === card.plan ||
-      (card.plan === "complete" &&
-        (commercialPlanId === "legacy_personal" ||
-          currentTier === "student" ||
-          currentTier === "personal" ||
-          currentTier === "pro"));
+    const current = commercialPlanId === card.plan;
     const currentPlanIncludesCard =
       hasSubscription &&
-      (commercialPlanId === "complete" || commercialPlanId === "legacy_personal") &&
-      card.plan !== "complete";
-    const singleProductSubscription =
-      hasSubscription && (commercialPlanId === "agent" || commercialPlanId === "learn");
-    const checkoutPlan =
-      singleProductSubscription && card.plan !== commercialPlanId ? "complete" : card.plan;
+      (commercialPlanId === "complete" ||
+        commercialPlanId === "legacy_personal" ||
+        currentTier === "student" ||
+        currentTier === "personal" ||
+        currentTier === "pro") &&
+      card.plan === "agent";
+    const checkoutPlan = card.plan;
 
     if (hasSubscription && current) {
       return (
@@ -439,8 +434,6 @@ export function PricingPage() {
             })
           : currentPlanIncludesCard
           ? t("pricingPage.included")
-          : singleProductSubscription && checkoutPlan === "complete"
-          ? t("pricingPage.upgradeToComplete")
           : t("pricingPage.choose", {
               plan: t(`pricingPage.plans.${card.translationKey}.label`),
             })}
@@ -451,8 +444,8 @@ export function PricingPage() {
   const pricingHighlights = [
     t("pricingPage.highlightsTemplates.free"),
     t("pricingPage.highlightsTemplates.agent"),
-    t("pricingPage.highlightsTemplates.learn"),
-    t("pricingPage.highlightsTemplates.complete"),
+    t("pricingPage.highlightsTemplates.brain"),
+    t("pricingPage.highlightsTemplates.future"),
   ];
 
   return (
@@ -719,7 +712,7 @@ export function PricingPage() {
                       event: "upgrade_cta_clicked",
                       source: sourceFromQuery,
                       language: isRtl ? "ar" : "en",
-                      plan: "complete",
+                      plan: null,
                       interval: null,
                     }).catch(() => {
                       // Best-effort telemetry only.

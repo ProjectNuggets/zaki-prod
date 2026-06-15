@@ -1,74 +1,158 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, CircleDot, LockKeyhole, SendHorizontal } from "lucide-react";
 import type { Locale } from "../lib/content";
 import { Reveal } from "./Reveal";
-import { TextGenerate } from "./ui/text-generate";
-import { ShimmerButton } from "./ui/shimmer-button";
-import { ChatDemo } from "./ui/chat-demo";
+
+const productLanes = {
+  en: [
+    { label: "Chat", state: "live" },
+    { label: "Agent", state: "preview" },
+    { label: "Brain", state: "memory" },
+    { label: "Learn", state: "beta" },
+    { label: "Design", state: "waitlist" },
+    { label: "Hire", state: "beta" },
+  ],
+  ar: [
+    { label: "الدردشة", state: "مباشر" },
+    { label: "الوكيل", state: "معاينة" },
+    { label: "الذاكرة", state: "ذاكرة" },
+    { label: "التعلّم", state: "بيتا" },
+    { label: "التصميم", state: "انتظار" },
+    { label: "التوظيف", state: "بيتا" },
+  ],
+};
 
 export function Hero({ locale }: { locale: Locale }) {
   const isArabic = locale === "ar";
-  const tryHref = `https://app.chatzaki.com/?auth=signup&source=website_home_hero`;
+  const lanes = productLanes[locale];
+  const appHref = "https://app.chatzaki.com/?source=website_home_command";
+  const signupHref = "https://app.chatzaki.com/?auth=signup&source=website_home_keep_work";
 
   return (
-    <section className="relative overflow-hidden px-5 pb-20 pt-[10vh] md:px-8 md:pb-32 md:pt-[14vh]">
-      <div className="mx-auto max-w-5xl text-center">
-        {/* Badge */}
+    <section className="border-b border-zk-border px-5 pb-2 pt-3 md:px-8 md:pb-8 md:pt-8">
+      <div className="mx-auto max-w-6xl">
         <Reveal variant="fade">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-zk-border-strong bg-zk-surface/50 px-4 py-1.5 text-xs font-medium text-zk-text-secondary backdrop-blur-sm">
-            <span className="inline-block size-1.5 rounded-full bg-zk-accent animate-pulse" />
-            {isArabic ? "ابدأ مجانًا · أول موظف رقمي لك" : "Start for free · Your first digital employee"}
-          </div>
-        </Reveal>
+          <div className="grid min-h-[calc(100vh-14rem)] content-center gap-8 lg:min-h-[calc(100vh-13rem)]">
+            <div className="grid border border-zk-border-strong bg-zk-bg lg:grid-cols-[minmax(0,1fr)_310px]">
+              <div className="border-b border-zk-border lg:border-b-0 lg:border-e">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-zk-border bg-[var(--zk-bg-sunken)] px-4 py-2 font-mono-ui text-[10px] uppercase tracking-[0.16em] text-zk-text-tertiary md:px-5">
+                  <span className="inline-flex items-center gap-2 text-zk-text">
+                    <span className="size-1.5 bg-zk-success" />
+                    {isArabic ? "جلسة مجهولة متاحة" : "Anonymous session online"}
+                  </span>
+                  <span>{isArabic ? "الخطة المجانية" : "Free weekly credits"}</span>
+                  <span>{isArabic ? "لا إعداد مطلوب" : "No setup required"}</span>
+                </div>
 
-        {/* Headline */}
-        <h1 className="font-display mx-auto max-w-[16ch] text-[clamp(2.5rem,8vw,5rem)] font-extrabold leading-[0.92] tracking-[-0.04em] text-zk-text">
-          {isArabic ? (
-            <Reveal>
-              <span>ذكاء اصطناعي</span>
-              <br />
-              <span className="text-zk-accent">يبقى معك.</span>
-            </Reveal>
-          ) : (
-            <TextGenerate words="AI that stays with you." delay={0.15} />
-          )}
-        </h1>
+                <div className="px-4 py-6 md:px-6 md:py-8 lg:px-8 lg:py-10">
+                  <p className="font-mono-ui text-[11px] uppercase tracking-[0.2em] text-zk-accent">
+                    {isArabic ? "مركز أوامر زكي" : "ZAKI command entry"}
+                  </p>
+                  <h1 className="mt-4 max-w-[13ch] font-mono-ui text-[clamp(2.25rem,7vw,4.75rem)] leading-[0.98] tracking-normal text-zk-text">
+                    {isArabic ? "ابدأ من أمر واحد." : "Start from one command."}
+                  </h1>
+                  <p className="mt-5 max-w-[64ch] text-sm leading-7 text-zk-text-secondary md:text-base md:leading-8">
+                    {isArabic
+                      ? "اختر المسار، اكتب ما تريد، واجعل زكي يحوّل المحادثة إلى عمل قابل للحفظ عند تسجيل الدخول."
+                      : "Pick a lane, write the work once, and let ZAKI turn the prompt into a run you can keep when you sign in."}
+                  </p>
 
-        {/* Subheadline */}
-        <Reveal delay={200}>
-          <p className="mx-auto mt-6 max-w-[52ch] text-base leading-7 text-zk-text-secondary md:text-lg md:leading-8">
-            {isArabic
-              ? "زكي هو وكيل ذكاء اصطناعي شخصي بذاكرة مستمرة، خزنة مشفّرة، وأتمتة تعمل وأنت نائم. ليس شات بوت. وكيل يعمل من أجلك."
-              : "A personal AI agent with persistent memory, encrypted secrets, and automation that runs while you sleep. Not a chatbot. An agent that works for you."}
-          </p>
-        </Reveal>
+                  <form action="https://app.chatzaki.com/" method="get" className="mt-8 border border-zk-border-strong bg-zk-bg-raised">
+                    <input type="hidden" name="source" value="website_home_command" />
+                    <input type="hidden" name="intent" value="anonymous_command" />
+                    <div className="grid grid-cols-3 border-b border-zk-border md:grid-cols-6">
+                      {lanes.map((lane, index) => (
+                        <button
+                          key={lane.label}
+                          type="button"
+                          className={`min-h-11 border-b border-e border-zk-border px-3 py-2 text-start font-mono-ui text-[10px] uppercase tracking-[0.15em] transition-colors hover:bg-zk-surface-hover md:border-b-0 ${
+                            index === 0 ? "bg-zk-surface text-zk-accent" : "text-zk-text-tertiary"
+                          }`}
+                          aria-pressed={index === 0}
+                        >
+                          <span className="block text-zk-text">{lane.label}</span>
+                          <span className="mt-1 block text-[9px] text-zk-text-tertiary">{lane.state}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <label htmlFor="home-command" className="sr-only">
+                      {isArabic ? "اكتب أمرك لزكي" : "Write your command for ZAKI"}
+                    </label>
+                    <textarea
+                      id="home-command"
+                      name="prompt"
+                      rows={5}
+                      className="min-h-[104px] w-full resize-none border-0 bg-transparent px-4 py-4 font-mono-ui text-sm leading-7 text-zk-text outline-none placeholder:text-zk-text-tertiary md:min-h-[144px] md:px-5"
+                      placeholder={
+                        isArabic
+                          ? "مثال: لخّص هذا المشروع وحدد أول ثلاث خطوات..."
+                          : "Example: summarize this project and identify the first three steps..."
+                      }
+                    />
+                    <div className="flex flex-col gap-3 border-t border-zk-border bg-[var(--zk-bg-sunken)] px-4 py-3 md:flex-row md:items-center md:justify-between md:px-5">
+                      <div className="font-mono-ui text-[10px] uppercase tracking-[0.16em] text-zk-text-tertiary">
+                        <span className="text-zk-text">{isArabic ? "الرصيد" : "Credits"}</span>
+                        <span className="px-2 text-zk-text-ghost">/</span>
+                        <span>{isArabic ? "مخصص أسبوعي مجاني" : "Free weekly allocation"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={signupHref}
+                          className="inline-flex min-h-10 items-center gap-2 border border-zk-border-strong px-3 font-mono-ui text-[10px] uppercase tracking-[0.14em] text-zk-text-secondary transition-colors hover:border-zk-text-tertiary hover:text-zk-text"
+                        >
+                          <LockKeyhole className="size-3.5" strokeWidth={1.5} />
+                          {isArabic ? "احفظ العمل" : "Keep work"}
+                        </a>
+                        <button
+                          type="submit"
+                          className="inline-flex min-h-10 items-center gap-2 border border-zk-accent bg-zk-accent px-4 font-mono-ui text-[10px] uppercase tracking-[0.14em] text-white transition-colors hover:bg-zk-accent-hover"
+                        >
+                          <SendHorizontal className="size-3.5" strokeWidth={1.5} />
+                          {isArabic ? "ابدأ" : "Start run"}
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              </div>
 
-        {/* CTAs */}
-        <Reveal delay={350}>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-            <a href={tryHref}>
-              <ShimmerButton>
-                {isArabic ? "قابل وكيلك" : "Meet your agent"}
-              </ShimmerButton>
-            </a>
-            <a
-              href={isArabic ? "/ar/story/" : "/story/"}
-              className="inline-flex items-center gap-1.5 px-5 py-3 text-sm font-medium text-zk-text-secondary transition-colors hover:text-zk-text"
-            >
-              {isArabic ? "كيف يعمل" : "See how it works"}
-              <ArrowRight className="size-3.5" />
-            </a>
-          </div>
-        </Reveal>
-
-        {/* Product screenshot */}
-        <Reveal delay={500} variant="scale">
-          <div className="relative mx-auto mt-14 max-w-4xl">
-            {/* Red glow behind mockup */}
-            <div className="pointer-events-none absolute inset-x-0 top-1/4 -z-10 h-64 bg-[radial-gradient(ellipse_60%_50%_at_50%_50%,var(--zk-accent-glow),transparent)] blur-3xl" />
-            <ChatDemo
-              locale={locale}
-              className="shadow-2xl shadow-black/40 ring-1 ring-zk-border"
-            />
+              <aside className="hidden bg-zk-bg-raised md:block">
+                <div className="border-b border-zk-border px-4 py-3 font-mono-ui text-[10px] uppercase tracking-[0.16em] text-zk-text-tertiary md:px-5">
+                  {isArabic ? "حالة الدخول" : "Entry state"}
+                </div>
+                <div className="grid gap-0">
+                  {[
+                    [isArabic ? "المتاح الآن" : "Available now", isArabic ? "الدردشة والذاكرة" : "Chat and memory preview"],
+                    [isArabic ? "بعد تسجيل الدخول" : "After sign in", isArabic ? "الحفظ، الرفع، التصدير" : "Save, upload, export"],
+                    [isArabic ? "مسارات مقيّدة" : "Gated lanes", isArabic ? "التعلّم، التصميم، التوظيف" : "Learn, Design, Hire"],
+                  ].map(([label, value]) => (
+                    <div key={label} className="grid grid-cols-[24px_1fr] gap-3 border-b border-zk-border px-4 py-4 md:px-5">
+                      <CircleDot className="mt-0.5 size-3.5 text-zk-accent" strokeWidth={1.5} />
+                      <div>
+                        <p className="font-mono-ui text-[10px] uppercase tracking-[0.16em] text-zk-text-tertiary">{label}</p>
+                        <p className="mt-1 text-sm leading-6 text-zk-text">{value}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="px-4 py-5 md:px-5">
+                  <p className="font-mono-ui text-[10px] uppercase tracking-[0.16em] text-zk-accent">
+                    {isArabic ? "مسار مباشر" : "Direct path"}
+                  </p>
+                  <p className="mt-3 text-sm leading-7 text-zk-text-secondary">
+                    {isArabic
+                      ? "استخدم الدردشة فوراً. عندما تحتاج ذاكرة مستمرة أو ملفات أو تصدير، سجّل الدخول والمتابعة محفوظة."
+                      : "Use Chat immediately. When you need persistent memory, files, or exports, sign in and continue with the same intent."}
+                  </p>
+                  <a
+                    href={appHref}
+                    className="mt-5 inline-flex min-h-10 items-center gap-2 border border-zk-border-strong px-3 font-mono-ui text-[10px] uppercase tracking-[0.14em] text-zk-text transition-colors hover:border-zk-accent hover:text-zk-accent"
+                  >
+                    {isArabic ? "افتح زكي" : "Open ZAKI"}
+                    <ArrowRight className="size-3.5" strokeWidth={1.5} />
+                  </a>
+                </div>
+              </aside>
+            </div>
           </div>
         </Reveal>
       </div>

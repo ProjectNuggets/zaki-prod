@@ -23,6 +23,9 @@ type EntitlementPayload = {
 
 export type CommercialPlanId =
   | "spaces_free"
+  | "personal"
+  | "pro"
+  | "pro_max"
   | "agent"
   | "learn"
   | "complete"
@@ -55,7 +58,7 @@ export type ProductEntitlements = {
 };
 
 function normalizeTier(tier: string | null | undefined) {
-  if (tier === "pro") return "personal";
+  if (tier === "pro" || tier === "pro_max") return tier;
   if (tier === "agent" || tier === "learn" || tier === "complete") return tier;
   if (tier === "legacy_personal" || tier === "access_code") return "personal";
   if (tier === "student" || tier === "personal") return tier;
@@ -73,7 +76,7 @@ function normalizeStatus(status: string | null | undefined) {
 function hasPaidSubscription(payload: EntitlementPayload) {
   const tier = normalizeTier(payload?.plan?.tier);
   const status = normalizeStatus(payload?.plan?.status);
-  return ["student", "personal", "agent", "learn", "complete"].includes(tier) && ["active", "trialing", "past_due"].includes(status);
+  return ["student", "personal", "pro", "pro_max", "agent", "learn", "complete"].includes(tier) && ["active", "trialing", "past_due"].includes(status);
 }
 
 export function resolveEffectiveEntitlement(payload: EntitlementPayload) {
@@ -136,6 +139,9 @@ export function resolveCommercialPlanId(payload: EntitlementPayload): Commercial
     value === "agent" ||
     value === "learn" ||
     value === "complete" ||
+    value === "personal" ||
+    value === "pro" ||
+    value === "pro_max" ||
     value === "legacy_personal" ||
     value === "access_code"
   ) {
@@ -151,7 +157,11 @@ export function resolveProductEntitlements(payload: EntitlementPayload): Product
   }
 
   const effective = resolveEffectiveEntitlement(payload);
-  const wholeApp = effective.source === "access_code" || effective.tier === "personal";
+  const wholeApp =
+    effective.source === "access_code" ||
+    effective.tier === "personal" ||
+    effective.tier === "pro" ||
+    effective.tier === "pro_max";
   return {
     spaces: {
       access: true,

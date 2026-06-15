@@ -4,20 +4,21 @@ import {
   ArrowRight,
   Bot,
   Brain,
+  BriefcaseBusiness,
   Check,
   GraduationCap,
   LayoutGrid,
   Lock,
   MessageSquare,
+  Palette,
   Shield,
-  Sparkles,
   Timer,
   Zap,
 } from "lucide-react";
 import { CenterLogo } from "./icons";
 import { cn } from "@/lib/utils";
 
-type ProductSlug = "spaces" | "agent" | "learn" | "complete";
+type ProductSlug = "spaces" | "agent" | "brain" | "learn" | "design" | "hire";
 type WebsiteLocale = "en" | "ar";
 
 type Product = {
@@ -38,7 +39,7 @@ type Product = {
 const PRODUCTS_EN: Product[] = [
   {
     slug: "spaces",
-    name: "Spaces",
+    name: "ZAKI Chat",
     eyebrow: "Free entry point",
     price: "$0",
     headline: "Start useful AI work before you sign up.",
@@ -46,12 +47,12 @@ const PRODUCTS_EN: Product[] = [
       "Open a focused workspace for a draft, translation, plan, decision, or research thread. It is free, fast, and intentionally memory-free until you decide the work should continue.",
     icon: LayoutGrid,
     accent: "bg-[#e9f5f1] text-[#1f6c54] border-[#b7ded0]",
-    cta: "Open Spaces",
+    cta: "Start chat",
     href: "/spaces",
     points: [
       "Anonymous daily quota: 10 messages per day.",
       "No durable memory while anonymous.",
-      "Complete unlocks uncapped Spaces with account memory.",
+      "Sign in when you want work and history to follow you.",
     ],
     sections: [
       {
@@ -67,7 +68,7 @@ const PRODUCTS_EN: Product[] = [
       {
         title: "Memory stays an upgrade boundary",
         body:
-          "Anonymous Spaces is deliberately simple: useful daily work, no durable memory. Complete turns Spaces into an uncapped memory-backed workspace.",
+          "Anonymous Chat is deliberately simple: useful work now, no durable memory. Sign in when the work should persist across sessions.",
       },
     ],
   },
@@ -107,72 +108,142 @@ const PRODUCTS_EN: Product[] = [
     ],
   },
   {
-    slug: "learn",
-    name: "ZAKI Learn",
-    eyebrow: "Paid learning system",
-    price: "$19/mo",
-    headline: "Turn material into understanding, practice, and recall.",
+    slug: "brain",
+    name: "ZAKI Brain",
+    eyebrow: "Memory control plane",
+    price: "Included",
+    headline: "See what ZAKI knows, where it came from, and what should change.",
     summary:
-      "ZAKI Learn turns source material into explanations, Deep Solve work, research paths, quizzes, notebooks, co-writing, knowledge files, and visual explanations so learning becomes a system.",
-    icon: GraduationCap,
-    accent: "bg-[#fff4d8] text-[#765716] border-[#efd27d]",
-    cta: "Choose Learn",
-    href: "/pricing?plan=learn&autostart=1&source=website_product_learn",
+      "Brain is the visible memory layer for Agent and account continuity: search, inspect, govern, and understand the context ZAKI can carry forward.",
+    icon: Brain,
+    accent: "bg-[#eef7ff] text-[#235a7c] border-[#b9d8eb]",
+    cta: "Open Brain",
+    href: "/brain",
     points: [
-      "10 free preview messages each week.",
-      "Paid plan unlocks the Learn product.",
-      "Best for self-learners, operators, and knowledge-heavy work.",
+      "Canonical personal memory surface.",
+      "Works with signed-in account continuity.",
+      "Best for reviewing, searching, and governing memory.",
     ],
     sections: [
       {
-        title: "From source material to study flow",
+        title: "Memory should be visible",
         body:
-          "Bring knowledge into a learning workspace, then turn it into explanations, notebooks, practice questions, research paths, and guided study tasks.",
+          "Brain exists so memory is not a hidden side effect. The user can inspect what ZAKI is using and decide what should stay useful.",
       },
       {
-        title: "Practice is built in",
+        title: "Built for continuity",
         body:
-          "Generate quizzes, keep a question bank, revisit weak spots, and move from explanation to repetition without leaving the learning surface.",
+          "Agent can carry work forward because Brain gives long-running context a visible home instead of burying it inside a chat thread.",
       },
       {
-        title: "Research, writing, and visuals together",
+        title: "Governance before expansion",
         body:
-          "Deep Research, Co-Writer, notebooks, knowledge files, books, and visual explanations live together instead of becoming separate prompt tricks.",
+          "Before more products write durable memory, Brain stays the place to prove source, scope, and user control.",
       },
     ],
   },
   {
-    slug: "complete",
-    name: "ZAKI Complete",
-    eyebrow: "Best value bundle",
-    price: "$39/mo",
-    headline: "The full ZAKI loop in one plan.",
+    slug: "learn",
+    name: "ZAKI Learn",
+    eyebrow: "Coming soon",
+    price: "Soon",
+    headline: "Learning workflows are parked until the core platform is finished.",
     summary:
-      "Complete gives you Agent for continuity, Learn for study, and uncapped Spaces with memory. It is the simplest plan when ZAKI becomes part of daily work.",
-    icon: Sparkles,
-    accent: "bg-[#fdebe6] text-[#9b3f2c] border-[#edb4a6]",
-    cta: "Choose Complete",
-    href: "/pricing?plan=complete&autostart=1&source=website_product_complete",
+      "Learn will return as a proper study system. For V1, use Chat for quick study help or Agent to plan a learning path while we finish the core product.",
+    icon: GraduationCap,
+    accent: "bg-[#fff4d8] text-[#765716] border-[#efd27d]",
+    cta: "Open dashboard",
+    href: "/",
     points: [
-      "Includes ZAKI Agent.",
-      "Includes ZAKI Learn.",
-      "Includes uncapped Spaces with memory.",
+      "Coming soon, not sold as public access.",
+      "Use Chat or Agent today.",
+      "Learner memory stays separate until launch.",
     ],
     sections: [
       {
-        title: "One subscription for the full loop",
+        title: "Truthful staging",
         body:
-          "Use Spaces for quick organized work, Learn for deep study, and Agent for ongoing execution without having to decide which surface deserves access later.",
+          "Learn is not being presented as paid public access until its route, memory, entitlement, and E2E path are ready together.",
       },
       {
-        title: "Uncapped Spaces with memory",
+        title: "Use the core now",
         body:
-          "Complete turns Spaces from an anonymous daily-cap entry point into the persistent workspace layer for your account.",
+          "Chat can answer immediate study questions. Agent can help plan a learning path or organize a study workflow.",
       },
       {
-        title: "Whole-app access",
+        title: "Memory boundary",
         body:
-          "Active legacy paid users and V1 access-code users receive Complete-style access, so the commercial model stays simple during launch.",
+          "Learner memory remains separate from Brain and Agent memory until Learn is deliberately launched.",
+      },
+    ],
+  },
+  {
+    slug: "design",
+    name: "ZAKI Design",
+    eyebrow: "Coming soon",
+    price: "Soon",
+    headline: "Design will launch after the service and project flow are ready.",
+    summary:
+      "For now, use Chat to shape a brief or Agent to plan design work. Full design projects remain gated until the backend, health checks, and project creation flow are proven.",
+    icon: Palette,
+    accent: "bg-[#fdebe6] text-[#9b3f2c] border-[#edb4a6]",
+    cta: "Open dashboard",
+    href: "/",
+    points: [
+      "Coming soon, not public project access.",
+      "Static briefs can start in Chat or Agent.",
+      "Design memory stays separate until launch.",
+    ],
+    sections: [
+      {
+        title: "Preview language only",
+        body:
+          "The website can explain the direction, but normal navigation should not imply a working design studio is available.",
+      },
+      {
+        title: "Project creation stays gated",
+        body:
+          "Full Design project creation waits for staging health, BFF readiness, and product registry truth to agree.",
+      },
+      {
+        title: "Start with core products",
+        body:
+          "Use Chat for quick exploration or Agent for planning and follow-through while Design is being finished.",
+      },
+    ],
+  },
+  {
+    slug: "hire",
+    name: "ZAKI Career",
+    eyebrow: "Coming soon",
+    price: "Soon",
+    headline: "Career help will be user-side job search, not employer recruiting.",
+    summary:
+      "Career will help with target roles, CV positioning, fit notes, applications, and interview preparation. It stays parked until the private job-search workflow is ready.",
+    icon: BriefcaseBusiness,
+    accent: "bg-[#f2f0fb] text-[#594b8a] border-[#d0c8ef]",
+    cta: "Open dashboard",
+    href: "/",
+    points: [
+      "Coming soon, not candidate workflow access.",
+      "Use Chat for CV copy today.",
+      "Use Agent to plan your job search.",
+    ],
+    sections: [
+      {
+        title: "User-side career lane",
+        body:
+          "Career is framed around the user finding a role, improving a CV, and preparing applications, not running employer-side hiring pipelines.",
+      },
+      {
+        title: "No candidate PII path",
+        body:
+          "Public V1 should not expose candidate workflows, uploads, or pipeline memory until the privacy and beta paths are proven.",
+      },
+      {
+        title: "Start safely",
+        body:
+          "Chat can help refine text today. Agent can plan the search without pretending the full Career product has launched.",
       },
     ],
   },
@@ -181,7 +252,7 @@ const PRODUCTS_EN: Product[] = [
 const PRODUCTS_AR: Product[] = [
   {
     slug: "spaces",
-    name: "Spaces",
+    name: "ZAKI Chat",
     eyebrow: "المدخل المجاني",
     price: "$0",
     headline: "ابدأ عملًا مفيدًا بالذكاء الاصطناعي قبل التسجيل.",
@@ -189,12 +260,12 @@ const PRODUCTS_AR: Product[] = [
       "افتح مساحة مركزة لمسودة أو ترجمة أو خطة أو قرار أو بحث. Spaces مجانية وسريعة وبلا ذاكرة دائمة حتى تقرر أن العمل يستحق الاستمرار.",
     icon: LayoutGrid,
     accent: "bg-[#e9f5f1] text-[#1f6c54] border-[#b7ded0]",
-    cta: "افتح Spaces",
+    cta: "ابدأ الدردشة",
     href: "/spaces",
     points: [
       "10 رسائل يوميًا للمستخدم المجهول.",
       "لا توجد ذاكرة دائمة بدون حساب.",
-      "Complete يفتح Spaces غير محدودة مع ذاكرة الحساب.",
+      "سجّل الدخول عندما تريد أن يتبعك العمل والتاريخ.",
     ],
     sections: [
       {
@@ -210,7 +281,7 @@ const PRODUCTS_AR: Product[] = [
       {
         title: "الذاكرة حد واضح للترقية",
         body:
-          "الاستخدام المجهول مفيد ومحدود يوميًا وبلا ذاكرة دائمة. Complete يحول Spaces إلى مساحة غير محدودة مع ذاكرة الحساب.",
+          "الدردشة المجهولة بسيطة عمدًا: عمل مفيد الآن بلا ذاكرة دائمة. سجّل الدخول عندما تريد استمرار العمل بين الجلسات.",
       },
     ],
   },
@@ -250,72 +321,142 @@ const PRODUCTS_AR: Product[] = [
     ],
   },
   {
-    slug: "learn",
-    name: "ZAKI Learn",
-    eyebrow: "نظام تعلم مدفوع",
-    price: "$19/mo",
-    headline: "حوّل المادة إلى فهم وتدريب واسترجاع.",
+    slug: "brain",
+    name: "ZAKI Brain",
+    eyebrow: "لوحة الذاكرة",
+    price: "مشمول",
+    headline: "اعرف ماذا يعرف ZAKI، ومن أين جاء السياق، وما الذي يجب تعديله.",
     summary:
-      "ZAKI Learn يحول المادة إلى شرح، Deep Solve، مسارات بحث، اختبارات، دفاتر، كتابة، ملفات معرفة، وشرح مرئي حتى يصبح التعلم نظامًا متكررًا.",
-    icon: GraduationCap,
-    accent: "bg-[#fff4d8] text-[#765716] border-[#efd27d]",
-    cta: "اختر Learn",
-    href: "/pricing?plan=learn&autostart=1&source=website_product_learn_ar",
+      "Brain هو طبقة الذاكرة المرئية للوكيل واستمرارية الحساب: ابحث، راجع، افهم، واضبط السياق الذي يستطيع ZAKI حمله للأمام.",
+    icon: Brain,
+    accent: "bg-[#eef7ff] text-[#235a7c] border-[#b9d8eb]",
+    cta: "افتح Brain",
+    href: "/brain",
     points: [
-      "10 رسائل تجربة كل أسبوع.",
-      "الخطة المدفوعة تفتح منتج Learn.",
-      "أفضل للمتعلمين والعمل المعرفي المكثف.",
+      "سطح الذاكرة الشخصية المركزي.",
+      "يعمل مع استمرارية الحساب بعد تسجيل الدخول.",
+      "أفضل لمراجعة الذاكرة والبحث فيها وحوكمتها.",
     ],
     sections: [
       {
-        title: "من المادة إلى خطة دراسة",
+        title: "الذاكرة يجب أن تكون مرئية",
         body:
-          "أدخل ملفاتك ومعرفتك ثم حوّلها إلى شرح، دفاتر، أسئلة تدريب، بحث، ومهام دراسة موجهة.",
+          "Brain موجود حتى لا تصبح الذاكرة أثرًا جانبيًا مخفيًا. يستطيع المستخدم مراجعة ما يستخدمه ZAKI وتحديد ما يبقى مفيدًا.",
       },
       {
-        title: "التدريب جزء من المنتج",
+        title: "مصمم للاستمرارية",
         body:
-          "أنشئ اختبارات، احفظ بنك أسئلة، راجع نقاط الضعف، وانتقل من الشرح إلى التكرار بدون مغادرة مساحة التعلم.",
+          "يستطيع Agent حمل العمل للأمام لأن Brain يعطي السياق طويل المدى مكانًا مرئيًا بدل دفنه داخل محادثة.",
       },
       {
-        title: "بحث وكتابة وشرح مرئي معًا",
+        title: "الحوكمة قبل التوسع",
         body:
-          "Deep Research و Co-Writer والدفاتر وملفات المعرفة والكتب والشرح المرئي تعمل معًا بدل أن تكون حيلًا منفصلة في محادثة.",
+          "قبل أن تكتب منتجات أكثر ذاكرة دائمة، يبقى Brain المكان الذي يثبت المصدر والنطاق وتحكم المستخدم.",
       },
     ],
   },
   {
-    slug: "complete",
-    name: "ZAKI Complete",
-    eyebrow: "أفضل قيمة",
-    price: "$39/mo",
-    headline: "حلقة ZAKI الكاملة في خطة واحدة.",
+    slug: "learn",
+    name: "ZAKI Learn",
+    eyebrow: "قريبًا",
+    price: "قريبًا",
+    headline: "مسارات التعلم متوقفة حتى يكتمل قلب المنصة.",
     summary:
-      "Complete تمنحك Agent للاستمرارية، و Learn للدراسة، و Spaces غير محدودة مع ذاكرة. هي الخطة الأبسط عندما يصبح ZAKI جزءًا من عملك اليومي.",
-    icon: Sparkles,
-    accent: "bg-[#fdebe6] text-[#9b3f2c] border-[#edb4a6]",
-    cta: "اختر Complete",
-    href: "/pricing?plan=complete&autostart=1&source=website_product_complete_ar",
+      "سيعود Learn كنظام دراسة حقيقي. في V1 استخدم Chat للمساعدة السريعة أو Agent لتخطيط مسار تعلم حتى نكمل المنتج الأساسي.",
+    icon: GraduationCap,
+    accent: "bg-[#fff4d8] text-[#765716] border-[#efd27d]",
+    cta: "افتح لوحة التحكم",
+    href: "/",
     points: [
-      "يشمل ZAKI Agent.",
-      "يشمل ZAKI Learn.",
-      "يشمل Spaces غير محدودة مع ذاكرة.",
+      "قريبًا، وليس وصولًا عامًا مدفوعًا.",
+      "استخدم Chat أو Agent اليوم.",
+      "ذاكرة التعلم تبقى منفصلة حتى الإطلاق.",
     ],
     sections: [
       {
-        title: "اشتراك واحد للحلقة الكاملة",
+        title: "إطلاق صادق",
         body:
-          "استخدم Spaces للعمل السريع، Learn للدراسة العميقة، وAgent للاستمرارية والتنفيذ.",
+          "لا نعرض Learn كمنتج عام مدفوع حتى تتفق المسارات والذاكرة والصلاحيات واختبارات E2E معًا.",
       },
       {
-        title: "Spaces غير محدودة مع ذاكرة",
+        title: "استخدم القلب الآن",
         body:
-          "Complete يحول Spaces من مدخل مجاني محدود إلى طبقة عمل مستمرة داخل حسابك.",
+          "يمكن لـ Chat الإجابة على أسئلة الدراسة الفورية. ويمكن لـ Agent تخطيط مسار تعلم أو تنظيم سير دراسة.",
       },
       {
-        title: "وصول كامل للتطبيق",
+        title: "حدود الذاكرة",
         body:
-          "المستخدمون المدفوعون الحاليون وأكواد الوصول V1 يحصلون على وصول كامل مبسط أثناء الإطلاق.",
+          "تبقى ذاكرة التعلم منفصلة عن Brain وذاكرة Agent حتى يتم إطلاق Learn بشكل مقصود.",
+      },
+    ],
+  },
+  {
+    slug: "design",
+    name: "ZAKI Design",
+    eyebrow: "قريبًا",
+    price: "قريبًا",
+    headline: "سيتم إطلاق Design بعد جاهزية الخدمة وتدفق المشاريع.",
+    summary:
+      "الآن استخدم Chat لصياغة موجز أو Agent لتخطيط عمل التصميم. المشاريع الكاملة تبقى مغلقة حتى تثبت الخدمة والفحوصات وتدفق الإنشاء.",
+    icon: Palette,
+    accent: "bg-[#fdebe6] text-[#9b3f2c] border-[#edb4a6]",
+    cta: "افتح لوحة التحكم",
+    href: "/",
+    points: [
+      "قريبًا، وليس وصولًا عامًا للمشاريع.",
+      "يمكن بدء الموجزات في Chat أو Agent.",
+      "ذاكرة التصميم تبقى منفصلة حتى الإطلاق.",
+    ],
+    sections: [
+      {
+        title: "لغة معاينة فقط",
+        body:
+          "يمكن للموقع شرح الاتجاه، لكن التنقل العادي لا يجب أن يوحي بأن استوديو تصميم كامل متاح الآن.",
+      },
+      {
+        title: "إنشاء المشاريع يبقى مغلقًا",
+        body:
+          "إنشاء مشاريع Design الكاملة ينتظر صحة الخدمة وجاهزية BFF واتفاق سجل المنتجات.",
+      },
+      {
+        title: "ابدأ بالمنتجات الأساسية",
+        body:
+          "استخدم Chat للاستكشاف السريع أو Agent للتخطيط والمتابعة بينما ننهي Design.",
+      },
+    ],
+  },
+  {
+    slug: "hire",
+    name: "ZAKI Career",
+    eyebrow: "قريبًا",
+    price: "قريبًا",
+    headline: "المسار المهني سيكون لمساعدة المستخدم في البحث عن عمل، لا لتوظيف المرشحين.",
+    summary:
+      "Career سيساعد في تحديد الوظائف المناسبة، تحسين السيرة، ملاحظات الملاءمة، التقديمات، والاستعداد للمقابلات. يبقى متوقفًا حتى يجهز تدفق البحث عن عمل الخاص.",
+    icon: BriefcaseBusiness,
+    accent: "bg-[#f2f0fb] text-[#594b8a] border-[#d0c8ef]",
+    cta: "افتح لوحة التحكم",
+    href: "/",
+    points: [
+      "قريبًا، وليس وصولًا لسير مرشحين.",
+      "استخدم Chat لتحسين نص السيرة اليوم.",
+      "استخدم Agent لتخطيط بحثك عن عمل.",
+    ],
+    sections: [
+      {
+        title: "مسار مهني للمستخدم",
+        body:
+          "Career يركز على المستخدم الذي يبحث عن وظيفة، يحسن سيرته، ويستعد للتقديمات، لا على تشغيل عمليات توظيف للجهات.",
+      },
+      {
+        title: "لا مسار بيانات مرشحين",
+        body:
+          "V1 العام لا يعرض سير مرشحين أو ملفات أو ذاكرة مسارات حتى تثبت الخصوصية ومسار البيتا.",
+      },
+      {
+        title: "ابدأ بأمان",
+        body:
+          "يمكن لـ Chat تحسين النص اليوم. ويمكن لـ Agent تخطيط البحث بدون الإيحاء بأن Career الكامل أُطلق.",
       },
     ],
   },
@@ -358,9 +499,9 @@ const DIFFERENTIATORS = [
   },
   {
     icon: Lock,
-    title: "Learning is its own surface",
+    title: "Parked products stay honest",
     body:
-      "Learn is not a tutor prompt. It combines solving, research, quizzes, notebooks, writing, knowledge files, and visual explanation.",
+      "Learn, Design, and Career stay visible as coming-soon lanes while V1 focuses on Chat, Agent, Brain, and Settings.",
   },
 ];
 
@@ -408,13 +549,13 @@ function WebsiteNav({ locale = "en" }: { locale?: WebsiteLocale }) {
             to="/spaces"
             className={cn("hidden rounded-zaki-md border border-zaki-strong px-3 py-2 text-sm font-semibold text-zaki-secondary hover:text-zaki-primary sm:inline-flex dark:border-[#2a2018] dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]", linkFocusClass)}
           >
-            {locale === "ar" ? "جرّب Spaces" : "Try Spaces"}
+            {locale === "ar" ? "ابدأ Chat" : "Start chat"}
           </Link>
           <Link
-            to="/pricing?plan=complete&source=website_nav"
+            to="/pricing?source=website_nav"
             className={cn("inline-flex items-center gap-2 rounded-zaki-md bg-[#231a13] px-3 py-2 text-sm font-semibold text-white hover:bg-[#3a2a1f] dark:bg-[#efe6d9] dark:text-[#0c0a09] dark:hover:bg-white", linkFocusClass)}
           >
-            Complete
+            {locale === "ar" ? "الخطط" : "Plans"}
             <DirectionalArrow locale={locale} className="size-4" />
           </Link>
           <Link
@@ -509,14 +650,16 @@ export function WebsiteShell({ children, locale = "en" }: { children: ReactNode;
 
 function productPreviewImage(slug: ProductSlug) {
   if (slug === "spaces") return "/marketing/spaces-preview.png";
+  if (slug === "brain") return "/marketing/agent-preview.png";
   if (slug === "learn") return "/marketing/learn-preview.png";
+  if (slug === "design" || slug === "hire") return "/marketing/pricing-preview.png";
   if (slug === "agent") return "/marketing/agent-preview.png";
   return "/marketing/pricing-preview.png";
 }
 
 function productPreviewDimensions(slug: ProductSlug) {
   if (slug === "spaces") return { width: 1280, height: 900 };
-  if (slug === "complete") return { width: 1360, height: 920 };
+  if (slug === "design" || slug === "hire") return { width: 1360, height: 920 };
   return { width: 1280, height: 800 };
 }
 
@@ -592,20 +735,14 @@ function LearnProofSection({ locale = "en" }: { locale?: WebsiteLocale }) {
   const isArabic = locale === "ar";
   const workflows = isArabic
     ? [
-        ["Deep Solve", "حل مسائل متعددة الخطوات مع تخطيط وتحقيق ومراجعة."],
-        ["Deep Research", "تقسيم الموضوع وبحثه وتحويله إلى تقرير أو مسار تعلم."],
-        ["Quiz + Question Bank", "توليد أسئلة، حفظها، ومراجعة الأخطاء لاحقًا."],
-        ["Visualize", "تحويل المفاهيم إلى رسوم، مخططات، أو صفحات شرح تفاعلية."],
-        ["Co-Writer", "مساحة كتابة متعددة الوثائق تستخدم معرفتك ودفاترك."],
-        ["Knowledge + notebooks", "ملفات معرفة، دفاتر، كتب تفاعلية، وذاكرة تعلم شخصية."],
+        ["الآن", "استخدم Chat للأسئلة الدراسية السريعة أو Agent لتخطيط مسار تعلم."],
+        ["لاحقًا", "سيعود Learn عندما تتفق الذاكرة والصلاحيات وتجربة الدراسة واختبارات E2E."],
+        ["الحد", "ذاكرة التعلم لا تختلط مع Brain أو ذاكرة Agent حتى الإطلاق."],
       ]
     : [
-        ["Deep Solve", "Multi-step problem solving with planning, investigation, answer, and verification."],
-        ["Deep Research", "Break a topic down, research it, and produce reports or learning paths."],
-        ["Quiz + Question Bank", "Generate practice, keep questions, and revisit weak spots later."],
-        ["Visualize", "Turn concepts into diagrams, charts, or interactive explanation pages."],
-        ["Co-Writer", "A multi-document writing surface that can use your knowledge and notebooks."],
-        ["Knowledge + notebooks", "Knowledge bases, notebooks, living books, and personal learning memory."],
+        ["Now", "Use Chat for quick study questions or Agent to plan a learning path."],
+        ["Later", "Learn returns when memory, entitlement, study UX, and E2E are ready together."],
+        ["Boundary", "Learner memory does not mix with Brain or Agent memory until launch."],
       ];
 
   return (
@@ -613,15 +750,15 @@ function LearnProofSection({ locale = "en" }: { locale?: WebsiteLocale }) {
       <div className="mx-auto max-w-7xl">
         <div className="max-w-3xl">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:text-[#a89684]">
-            {isArabic ? "لماذا Learn يستحق صفحة مستقلة" : "Why Learn deserves its own product"}
+            {isArabic ? "لماذا Learn متوقف الآن" : "Why Learn is parked now"}
           </p>
           <h2 className="mt-2 text-3xl font-semibold text-zaki-primary dark:text-[#efe6d9]">
-            {isArabic ? "Learn يحول المادة إلى نظام دراسة." : "Learn turns material into a study system."}
+            {isArabic ? "نحافظ على الوعد أصغر من الحقيقة." : "Keep the promise smaller than the truth."}
           </h2>
           <p className="mt-4 text-sm leading-6 text-zaki-secondary dark:text-[#c9b8a4]">
             {isArabic
-              ? "الطالب أو الباحث لا يحتاج إجابة فقط. يحتاج شرحًا، تدريبًا، دفاتر، بحثًا، تصورًا بصريًا، وطريقة للعودة إلى نقاط الضعف."
-              : "Students and knowledge workers do not only need an answer. They need explanation, practice, notebooks, research, visual understanding, and a way back to weak spots."}
+              ? "Learn لن يظهر كمنتج عام حتى يستطيع حفظ حالة المتعلم والعمل عليها بأمان. حتى ذلك الوقت، تبقى البداية في Chat أو Agent."
+              : "Learn should not appear as a public product until it can safely hold learner state and act on it. Until then, start in Chat or Agent."}
           </p>
         </div>
         <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -662,9 +799,9 @@ export function WebsiteHomePage({ locale = "en" }: { locale?: WebsiteLocale }) {
         },
         {
           icon: Lock,
-          title: "التعلم له سطحه الخاص",
+          title: "المنتجات القادمة تبقى صادقة",
           body:
-            "Learn ليس مطالبة تعليمية فقط. هو حل مسائل وبحث واختبارات ودفاتر وكتابة وملفات معرفة وشرح مرئي.",
+            "Learn وDesign وCareer تبقى ظاهرة كمسارات قادمة بينما يركز V1 على Chat وAgent وBrain والإعدادات.",
         },
       ]
     : DIFFERENTIATORS;
@@ -675,26 +812,26 @@ export function WebsiteHomePage({ locale = "en" }: { locale?: WebsiteLocale }) {
           <div className="flex flex-col justify-center">
             <div className="inline-flex w-fit items-center gap-2 rounded-full border border-[#eadfce] bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-zaki-muted dark:border-[#2a2018] dark:bg-[#14100d] dark:text-[#a89684]">
               <Zap className="size-3.5 text-zaki-brand" />
-              {isArabic ? "AI يتذكر ويتابع ويعلّم" : "AI that remembers, teaches, and follows through"}
+              {isArabic ? "AI يبدأ فورًا ويتذكر عند الحاجة" : "AI that starts now and remembers when it matters"}
             </div>
             <h1 className="mt-5 max-w-3xl text-4xl font-semibold leading-[1.05] text-zaki-primary sm:text-5xl lg:text-6xl dark:text-[#efe6d9]">
               {isArabic ? "لا يجب أن يختفي عملك عندما تنتهي المحادثة." : "Your AI work should not disappear when the chat ends."}
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-zaki-secondary sm:text-lg dark:text-[#c9b8a4]">
               {isArabic
-                ? "ابدأ مجانًا وبدون تسجيل في Spaces. عندما يصبح العمل مهمًا، فعّل الذاكرة مع Agent، حوّل المادة إلى فهم داخل Learn، أو اختر Complete لكل الأسطح مع Spaces غير محدودة."
-                : "Start free, without registration, in Spaces. When the work becomes important, turn on continuity with Agent, turn material into study with Learn, or choose Complete for every surface with uncapped Spaces."}
+                ? "ابدأ مجانًا وبدون تسجيل في Chat. عندما يصبح العمل مهمًا، فعّل الاستمرارية مع Agent وراجع الذاكرة في Brain. Learn وDesign وCareer قادمة لاحقًا."
+                : "Start free, without registration, in Chat. When the work becomes important, turn on continuity with Agent and review memory in Brain. Learn, Design, and Career come later."}
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
               <Link
                 to="/spaces"
                 className={cn("inline-flex items-center justify-center gap-2 rounded-zaki-md bg-[#e10600] px-5 py-3 text-sm font-semibold text-white hover:bg-[#b90505]", linkFocusClass)}
               >
-                {isArabic ? "جرّب Spaces مجانًا" : "Try Spaces free"}
+                {isArabic ? "ابدأ Chat مجانًا" : "Start free chat"}
                 <DirectionalArrow locale={locale} className="size-4" />
               </Link>
               <Link
-                to="/pricing?plan=complete&source=website_hero"
+                to="/pricing?source=website_hero"
                 className={cn("inline-flex items-center justify-center gap-2 rounded-zaki-md border border-zaki-strong bg-white px-5 py-3 text-sm font-semibold text-zaki-primary hover:bg-zaki-hover dark:border-[#2a2018] dark:bg-[#14100d] dark:text-[#efe6d9] dark:hover:bg-[#1d1712]", linkFocusClass)}
               >
                 {isArabic ? "شاهد الخطط" : "See plans"}
@@ -705,7 +842,7 @@ export function WebsiteHomePage({ locale = "en" }: { locale?: WebsiteLocale }) {
             <div className="overflow-hidden rounded-zaki-2xl border border-[#eadfce] bg-white shadow-[0_24px_70px_rgba(42,28,12,0.18)] dark:border-[#2a2018] dark:bg-[#14100d]">
               <img
                 src="/marketing/spaces-preview.png"
-                alt="ZAKI Spaces product interface preview"
+                alt="ZAKI Chat product interface preview"
                 width={1280}
                 height={900}
                 className="aspect-[16/11] w-full object-cover object-left-top"
@@ -713,10 +850,10 @@ export function WebsiteHomePage({ locale = "en" }: { locale?: WebsiteLocale }) {
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[
-                ["Spaces", "Free"],
-                ["Agent", "$29"],
-                ["Learn", "$19"],
-                ["Complete", "$39"],
+                ["Chat", "Free"],
+                ["Agent", "Preview"],
+                ["Brain", "Memory"],
+                ["Next", "Soon"],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-zaki-lg border border-[#eadfce] bg-white px-4 py-3 dark:border-[#2a2018] dark:bg-[#14100d]">
                   <div className="text-xs font-semibold uppercase tracking-[0.14em] text-zaki-muted dark:text-[#a89684]">{label}</div>
@@ -731,10 +868,10 @@ export function WebsiteHomePage({ locale = "en" }: { locale?: WebsiteLocale }) {
       <section className="border-b border-[#eadfce] bg-white px-4 py-5 dark:border-[#2a2018] dark:bg-[#14100d] sm:px-6 lg:px-8">
         <div className="mx-auto grid max-w-7xl gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
-            ["Spaces", isArabic ? "ابدأ بدون تسجيل" : "Start without signup"],
+            ["Chat", isArabic ? "ابدأ بدون تسجيل" : "Start without signup"],
             ["Agent", isArabic ? "ذاكرة ومتابعة" : "Memory and follow-through"],
-            ["Learn", isArabic ? "فهم وتدريب" : "Understand and practice"],
-            ["Complete", isArabic ? "$39 للحلقة الكاملة" : "$39 for the full loop"],
+            ["Brain", isArabic ? "ذاكرة مرئية" : "Visible memory"],
+            ["Next", isArabic ? "Learn وDesign وCareer قريبًا" : "Learn, Design, Career soon"],
           ].map(([label, value]) => (
             <div key={label} className="flex items-baseline justify-between gap-3 border-b border-[#eadfce] py-2 last:border-b-0 dark:border-[#2a2018] sm:border-b-0 sm:border-r sm:pr-4 sm:last:border-r-0">
               <span className="text-xs font-semibold uppercase tracking-[0.14em] text-zaki-muted dark:text-[#a89684]">{label}</span>
@@ -806,10 +943,10 @@ export function WebsiteHomePage({ locale = "en" }: { locale?: WebsiteLocale }) {
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             {[
-              [isArabic ? "Spaces المجهولة" : "Anonymous Spaces", isArabic ? "10 رسائل يوميًا، بلا تسجيل وبلا ذاكرة دائمة." : "10 messages per day, no registration, no durable memory."],
+              [isArabic ? "Chat المجهول" : "Anonymous Chat", isArabic ? "10 رسائل يوميًا، بلا تسجيل وبلا ذاكرة دائمة." : "10 messages per day, no registration, no durable memory."],
               [isArabic ? "تجربة Agent" : "Agent preview", isArabic ? "10 رسائل أسبوعيًا لتجربة الذاكرة والمتابعة قبل الدفع." : "10 weekly preview messages to test memory and follow-through before paying."],
-              [isArabic ? "تجربة Learn" : "Learn preview", isArabic ? "10 رسائل أسبوعيًا لتجربة الشرح والتدريب والبحث." : "10 weekly preview messages to test explanation, practice, and research."],
-              ["Complete", isArabic ? "كل المنتج: Agent و Learn و Spaces غير محدودة مع ذاكرة." : "The whole product: Agent, Learn, and uncapped Spaces with memory."],
+              [isArabic ? "Brain" : "Brain", isArabic ? "ذاكرة الحساب المرئية عندما تريد حفظ العمل ومراجعته." : "Visible account memory when you want work to carry forward."],
+              [isArabic ? "قادم لاحقًا" : "Coming later", isArabic ? "Learn وDesign وCareer تبقى متوقفة حتى تكتمل المسارات." : "Learn, Design, and Career stay parked until the flows are complete."],
             ].map(([title, body]) => (
               <div key={title} className="flex gap-3 rounded-zaki-lg border border-[#eadfce] bg-[#fffaf4] p-4 dark:border-[#2a2018] dark:bg-[#0c0a09]">
                 <Check className="mt-0.5 size-4 shrink-0 text-zaki-brand" />
@@ -834,15 +971,15 @@ export function WebsiteHomePage({ locale = "en" }: { locale?: WebsiteLocale }) {
             </h2>
             <p className="mt-4 text-sm leading-6 text-zaki-secondary dark:text-[#c9b8a4]">
               {isArabic
-                ? "استكشف Spaces المجانية و Learn المدفوع و Agent المدفوع وخطة Complete من خلال لقطات واضحة للأسطح الأساسية."
-                : "See the actual product surfaces: free Spaces, paid Learn, paid Agent, and the Complete plan."}
+                ? "استكشف Chat المجاني وAgent وBrain، مع مسار واضح للمنتجات القادمة."
+                : "See the actual core surfaces: free Chat, Agent, Brain, and a clear path for coming-soon products."}
             </p>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             {([
-              ["Spaces", "/marketing/spaces-preview.png", localizeProductPath("spaces", locale), 1280, 900],
-              ["Learn", "/marketing/learn-preview.png", localizeProductPath("learn", locale), 1280, 800],
+              ["Chat", "/marketing/spaces-preview.png", localizeProductPath("spaces", locale), 1280, 900],
               ["Agent", "/marketing/agent-preview.png", localizeProductPath("agent", locale), 1280, 800],
+              ["Brain", "/marketing/agent-preview.png", localizeProductPath("brain", locale), 1280, 800],
               ["Pricing", "/marketing/pricing-preview.png", "/pricing", 1360, 920],
             ] satisfies Array<[string, string, string, number, number]>).map(([label, src, href, width, height]) => (
               <Link key={label} to={href} className={cn("group overflow-hidden rounded-zaki-2xl border border-[#eadfce] bg-white shadow-zaki-sm transition hover:-translate-y-0.5 hover:shadow-zaki-lg dark:border-[#2a2018] dark:bg-[#14100d]", linkFocusClass)}>
@@ -908,8 +1045,8 @@ export function WebsiteHomePage({ locale = "en" }: { locale?: WebsiteLocale }) {
         <div className="mx-auto grid max-w-7xl gap-4 md:grid-cols-3">
           {[
             ["91.7%", isArabic ? "أول نتيجة LoCoMo لنظام ذاكرة ZAKI." : "First LoCoMo benchmark run for ZAKI’s memory system."],
-            ["10/day", isArabic ? "حصة Spaces المجهولة، بلا ذاكرة عمدًا." : "Anonymous Spaces quota, intentionally memory-free."],
-            ["$39", isArabic ? "Complete يشمل Agent و Learn و Spaces غير محدودة مع ذاكرة." : "Complete includes Agent, Learn, and uncapped Spaces with memory."],
+            ["10/day", isArabic ? "حصة Chat المجهول، بلا ذاكرة عمدًا." : "Anonymous Chat quota, intentionally memory-free."],
+            ["Soon", isArabic ? "Learn وDesign وCareer مرئية لكنها غير مطروحة كمنتجات عامة بعد." : "Learn, Design, and Career are visible, but not sold as public products yet."],
           ].map(([stat, body]) => (
             <article key={stat} className="rounded-zaki-2xl border border-[#eadfce] bg-white p-6 dark:border-[#2a2018] dark:bg-[#14100d]">
               <div className="text-3xl font-semibold text-zaki-primary dark:text-[#efe6d9]">{stat}</div>
@@ -923,11 +1060,11 @@ export function WebsiteHomePage({ locale = "en" }: { locale?: WebsiteLocale }) {
         <div className="mx-auto flex max-w-7xl flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#d8c7b7]">{isArabic ? "ابدأ هنا" : "Start here"}</p>
-            <h2 className="mt-2 text-3xl font-semibold">{isArabic ? "ابدأ بمساحة مجانية. ترقَّ عندما تريد أن يتذكر ZAKI العمل ويتابعه." : "Start with a free Space. Upgrade when you want ZAKI to remember and continue the work."}</h2>
+            <h2 className="mt-2 text-3xl font-semibold">{isArabic ? "ابدأ بـ Chat مجانًا. ترقَّ عندما تريد أن يتذكر ZAKI العمل ويتابعه." : "Start with free Chat. Upgrade when you want ZAKI to remember and continue the work."}</h2>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link to="/spaces" className={cn("inline-flex items-center justify-center gap-2 rounded-zaki-md bg-white px-5 py-3 text-sm font-semibold text-[#231a13] hover:bg-[#fff3e8]", linkFocusClass)}>
-              {isArabic ? "جرّب Spaces مجانًا" : "Try Spaces free"}
+              {isArabic ? "ابدأ Chat مجانًا" : "Start free chat"}
               <DirectionalArrow locale={locale} className="size-4" />
             </Link>
             <Link to="/pricing" className={cn("inline-flex items-center justify-center rounded-zaki-md border border-white/25 px-5 py-3 text-sm font-semibold text-white hover:bg-white/10", linkFocusClass)}>
@@ -944,7 +1081,7 @@ export function WebsiteProductPage({ locale = "en" }: { locale?: WebsiteLocale }
   const { productId } = useParams();
   const products = getProducts(locale);
   const productBySlug = new Map(products.map((product) => [product.slug, product]));
-  const product = productBySlug.get(String(productId || "") as ProductSlug) || productBySlug.get("complete")!;
+  const product = productBySlug.get(String(productId || "") as ProductSlug) || productBySlug.get("spaces")!;
   const previewDimensions = productPreviewDimensions(product.slug);
   const Icon = product.icon;
   const isArabic = locale === "ar";
