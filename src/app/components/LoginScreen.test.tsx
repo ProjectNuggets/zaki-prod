@@ -16,6 +16,7 @@ import {
   fetchCurrentUser,
   fetchProfile,
 } from "@/lib/api";
+import { PENDING_INTENT_KEY } from "@/lib/pendingIntent";
 
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -48,6 +49,7 @@ describe("LoginScreen legal consent", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     window.history.replaceState({}, "", "/");
+    window.sessionStorage.clear();
 
     (useAuthStore as unknown as jest.Mock).mockReturnValue({
       setToken,
@@ -297,6 +299,38 @@ describe("LoginScreen legal consent", () => {
       expect(window.location.pathname).toBe("/settings");
       expect(window.location.hash).toBe("#settings-memory-data");
     });
+  });
+
+  it("uses pending dashboard intent as the post-login fallback route", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/?auth=login");
+    window.sessionStorage.setItem(
+      PENDING_INTENT_KEY,
+      JSON.stringify({
+        productId: "design",
+        taskKind: "brief",
+        prompt: "Create a design brief",
+        source: "dashboard",
+        returnTo: "/design",
+        anonymousWorkId: "work-1",
+        createdAt: "2026-06-15T00:00:00.000Z",
+      })
+    );
+
+    renderLoginScreen();
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
+
+    await user.type(screen.getByPlaceholderText("Email address"), "user@example.com");
+    await user.type(screen.getByPlaceholderText("Password"), "Password123");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => {
+      expect(setToken).toHaveBeenCalledWith("token-123");
+    });
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/design");
+    });
+    expect(window.sessionStorage.getItem(PENDING_INTENT_KEY)).toBeTruthy();
   });
 
   it("keeps explicit pricing-intent auth on pricing after login", async () => {

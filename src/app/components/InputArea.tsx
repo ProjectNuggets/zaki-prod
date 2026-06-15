@@ -96,6 +96,7 @@ export type InputAreaHandle = {
 
 export type ZakiTurnAutonomyLevel = "read_only" | "supervised" | "full";
 export type ZakiTurnReasoningEffort = "low" | "medium" | "high" | "superpowers";
+export type ZakiDefaultReasoningEffort = Exclude<ZakiTurnReasoningEffort, "superpowers">;
 
 export type InputAreaSendOptions = {
   zaki?: {
@@ -279,6 +280,8 @@ export function InputArea({
   showUpgradeStrip = true,
   sendLocked = false,
   zakiBotMode = false,
+  zakiDefaultAutonomy = "supervised",
+  zakiDefaultReasoningEffort = "high",
   quotaBadge = null,
   zakiMode = "execute",
   onZakiModeChange,
@@ -311,6 +314,8 @@ export function InputArea({
   showUpgradeStrip?: boolean;
   sendLocked?: boolean;
   zakiBotMode?: boolean;
+  zakiDefaultAutonomy?: ZakiTurnAutonomyLevel;
+  zakiDefaultReasoningEffort?: ZakiDefaultReasoningEffort;
   quotaBadge?: {
     label: string;
     tone: "neutral" | "warning" | "danger";
@@ -348,9 +353,11 @@ export function InputArea({
   const [scheduleFollowUpOpen, setScheduleFollowUpOpen] = useState(false);
   const [pinContextOpen, setPinContextOpen] = useState(false);
   const [zakiAutonomy, setZakiAutonomy] =
-    useState<ZakiTurnAutonomyLevel>("supervised");
+    useState<ZakiTurnAutonomyLevel>(zakiDefaultAutonomy);
   const [zakiReasoningEffort, setZakiReasoningEffort] =
-    useState<ZakiTurnReasoningEffort>("high");
+    useState<ZakiTurnReasoningEffort>(zakiDefaultReasoningEffort);
+  const zakiAutonomyTouchedRef = useRef(false);
+  const zakiReasoningTouchedRef = useRef(false);
   const [isOnboardingControlsLocked, setIsOnboardingControlsLocked] = useState(false);
   // 2026-05-08 — Drop-overlay visual state. Tracks pixel-level dragenter
   // depth (a dragenter on a child fires another dragenter) so the overlay
@@ -370,6 +377,24 @@ export function InputArea({
       return "";
     }
   });
+
+  useEffect(() => {
+    if (!zakiBotMode || zakiAutonomyTouchedRef.current) return;
+    setZakiAutonomy(zakiDefaultAutonomy);
+  }, [zakiBotMode, zakiDefaultAutonomy]);
+
+  useEffect(() => {
+    if (!zakiBotMode || zakiReasoningTouchedRef.current) return;
+    setZakiReasoningEffort(zakiDefaultReasoningEffort);
+  }, [zakiBotMode, zakiDefaultReasoningEffort]);
+
+  useEffect(() => {
+    if (!zakiBotMode) return;
+    zakiAutonomyTouchedRef.current = false;
+    zakiReasoningTouchedRef.current = false;
+    setZakiAutonomy(zakiDefaultAutonomy);
+    setZakiReasoningEffort(zakiDefaultReasoningEffort);
+  }, [threadKey, zakiBotMode]);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [slashOpen, setSlashOpen] = useState(false);
   const [slashHighlight, setSlashHighlight] = useState(0);
@@ -810,6 +835,10 @@ export function InputArea({
             reasoning_effort: zakiReasoningEffort,
           },
         });
+        zakiAutonomyTouchedRef.current = false;
+        zakiReasoningTouchedRef.current = false;
+        setZakiAutonomy(zakiDefaultAutonomy);
+        setZakiReasoningEffort(zakiDefaultReasoningEffort);
       } else {
         onSend(wireText, attachments);
       }
@@ -837,6 +866,8 @@ export function InputArea({
       effectiveZakiMode,
       zakiAutonomy,
       zakiReasoningEffort,
+      zakiDefaultAutonomy,
+      zakiDefaultReasoningEffort,
       setAttachments,
       draftStorageKey,
       pinnedMemories,
@@ -1736,11 +1767,12 @@ export function InputArea({
                   "zaki-turn-chip zaki-turn-chip--reasoning",
                   `is-reasoning-${zakiReasoningEffort}`
                 )}
-                onClick={() =>
+                onClick={() => {
+                  zakiReasoningTouchedRef.current = true;
                   setZakiReasoningEffort((current) =>
                     nextCycleValue(ZAKI_REASONING_ORDER, current)
-                  )
-                }
+                  );
+                }}
                 aria-label={t("input.zaki.reasoningAria", {
                   defaultValue: "Reasoning effort: {{value}}",
                   value: ZAKI_REASONING_LABELS[zakiReasoningEffort],
@@ -1775,11 +1807,12 @@ export function InputArea({
                   "zaki-turn-chip zaki-turn-chip--autonomy",
                   `is-autonomy-${zakiAutonomy}`
                 )}
-                onClick={() =>
+                onClick={() => {
+                  zakiAutonomyTouchedRef.current = true;
                   setZakiAutonomy((current) =>
                     nextCycleValue(ZAKI_AUTONOMY_ORDER, current)
-                  )
-                }
+                  );
+                }}
                 aria-label={t("input.zaki.autonomyAria", {
                   defaultValue: "Autonomy level: {{value}}",
                   value: ZAKI_AUTONOMY_LABELS[zakiAutonomy],

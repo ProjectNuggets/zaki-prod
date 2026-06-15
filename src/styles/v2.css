@@ -1393,6 +1393,11 @@ button.v2-status-strip__item:focus-visible {
   cursor: not-allowed;
 }
 
+.zaki-product-rail__button.is-menu-open {
+  color: var(--v2-ink-1);
+  background: var(--v2-hover);
+}
+
 .zaki-product-rail__icon {
   width: 15px;
   height: 15px;
@@ -1427,6 +1432,10 @@ button.v2-status-strip__item:focus-visible {
   opacity: 1;
 }
 
+.zaki-product-rail__button.is-menu-open .zaki-product-rail__tip {
+  opacity: 0;
+}
+
 .zaki-product-rail__kbd {
   padding-left: 8px;
   border-left: 1px solid var(--v2-hairline);
@@ -1435,6 +1444,165 @@ button.v2-status-strip__item:focus-visible {
 
 .zaki-product-rail__spacer {
   flex: 1;
+}
+
+.zaki-product-rail__settings {
+  position: relative;
+}
+
+.zaki-product-rail__quick-menu {
+  position: absolute;
+  left: 36px;
+  bottom: 0;
+  z-index: 120;
+  width: min(320px, calc(100vw - 56px));
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg);
+  color: var(--v2-ink-1);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+}
+
+.zaki-product-rail__quick-head {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.zaki-product-rail__quick-head span {
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--v2-ink-3);
+}
+
+.zaki-product-rail__quick-head strong {
+  overflow: hidden;
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--v2-ink-1);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zaki-product-rail__quick-group,
+.zaki-product-rail__quick-actions {
+  display: grid;
+}
+
+.zaki-product-rail__quick-row,
+.zaki-product-rail__quick-actions button,
+.zaki-product-rail__quick-apps button {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+  background: transparent;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  text-align: left;
+}
+
+.zaki-product-rail__quick-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 14px;
+}
+
+.zaki-product-rail__quick-row span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.zaki-product-rail__quick-row strong {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--v2-ink-1);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zaki-product-rail__quick-row small {
+  overflow: hidden;
+  font-family: var(--v2-font-prose);
+  font-size: 11px;
+  color: var(--v2-ink-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zaki-product-rail__quick-icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.5;
+}
+
+.zaki-product-rail__quick-apps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.zaki-product-rail__quick-apps button {
+  min-width: 0;
+  padding: 9px 6px;
+  border-right: 1px solid var(--v2-hairline-faint);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.zaki-product-rail__quick-apps button:last-child {
+  border-right: 0;
+}
+
+.zaki-product-rail__quick-actions {
+  grid-template-columns: 1fr 1fr;
+}
+
+.zaki-product-rail__quick-actions button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border-bottom: 0;
+  border-right: 1px solid var(--v2-hairline-faint);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.zaki-product-rail__quick-actions button:last-child {
+  border-right: 0;
+}
+
+.zaki-product-rail__quick-row:hover,
+.zaki-product-rail__quick-row:focus-visible,
+.zaki-product-rail__quick-actions button:hover,
+.zaki-product-rail__quick-actions button:focus-visible,
+.zaki-product-rail__quick-apps button:hover,
+.zaki-product-rail__quick-apps button:focus-visible {
+  color: var(--v2-ink-1);
+  background: var(--v2-hover);
+  outline: none;
+}
+
+.zaki-product-rail__quick-actions button.is-danger {
+  color: var(--v2-accent);
+}
+
+.zaki-product-rail__quick-actions button.is-danger:hover,
+.zaki-product-rail__quick-actions button.is-danger:focus-visible {
+  color: var(--v2-ink-on-accent);
+  background: var(--v2-accent);
 }
 
 .zaki-v2-loading {
@@ -2263,9 +2431,22 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 .v2-settings-nav__list {
   display: flex;
   flex-direction: column;
-  padding: 12px 0;
+  padding: 10px 0;
   position: relative;
   z-index: 1;
+}
+
+.v2-settings-nav__group {
+  padding: 14px 18px 6px;
+  color: var(--v2-ink-4);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.v2-settings-nav__item:first-child .v2-settings-nav__group {
+  padding-top: 4px;
 }
 
 .v2-settings-nav__list a {
@@ -2356,47 +2537,31 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-settings-v2__main > #settings-agent {
-  order: 5;
-}
-
-.zaki-settings-v2__main > #settings-spaces {
-  order: 6;
-}
-
-.zaki-settings-v2__main > #settings-brain {
-  order: 7;
+  order: 3;
 }
 
 .zaki-settings-v2__main > #settings-channels {
-  order: 8;
+  order: 4;
 }
 
 .zaki-settings-v2__main > #settings-secrets {
-  order: 9;
+  order: 5;
 }
 
 .zaki-settings-v2__main > #settings-providers {
-  order: 10;
+  order: 6;
 }
 
 .zaki-settings-v2__main > #settings-devices {
-  order: 11;
+  order: 7;
 }
 
 .zaki-settings-v2__main > #settings-memory-data {
-  order: 12;
-}
-
-.zaki-settings-v2__main > #settings-developer-access {
-  order: 13;
-}
-
-.zaki-settings-v2__main > #settings-connections {
-  order: 14;
+  order: 8;
 }
 
 .zaki-settings-v2__main > #settings-privacy {
-  order: 15;
+  order: 9;
 }
 
 .zaki-settings-v2__hero {
@@ -2581,18 +2746,6 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   line-height: 1.4;
 }
 
-.zaki-settings-v2__plan-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 20px;
-  align-items: start;
-  padding: 18px;
-  border: 1px solid var(--v2-hairline-strong);
-  background: var(--v2-bg-raised);
-  margin: 14px 0;
-}
-
-.zaki-settings-v2__plan-card span,
 .zaki-settings-v2__product-row dt {
   display: block;
   color: var(--v2-ink-3);
@@ -2602,17 +2755,48 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   text-transform: uppercase;
 }
 
-.zaki-settings-v2__plan-card strong {
+.zaki-settings-v2__billing-cockpit {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.zaki-settings-v2__billing-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: start;
+  padding: 18px;
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg-raised);
+}
+
+.zaki-settings-v2__billing-hero span,
+.zaki-settings-v2__billing-meter header span,
+.zaki-settings-v2__billing-wallet span,
+.zaki-settings-v2__usage-heading strong,
+.zaki-settings-v2__billing-actions strong {
   display: block;
-  margin-top: 6px;
-  color: var(--v2-ink-1);
-  font-size: 22px;
-  font-weight: 600;
-  line-height: 1.1;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
   text-transform: uppercase;
 }
 
-.zaki-settings-v2__plan-card p {
+.zaki-settings-v2__billing-hero strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 24px;
+  font-weight: 650;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+
+.zaki-settings-v2__billing-hero p {
   margin-top: 8px;
   color: var(--v2-ink-3);
   font-family: var(--v2-font-prose);
@@ -2620,56 +2804,124 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   line-height: 1.5;
 }
 
-.zaki-settings-v2__plan-cockpit {
+.zaki-settings-v2__billing-meter-grid {
   display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
   gap: 12px;
-  margin-top: 14px;
 }
 
-.zaki-settings-v2__plan-cockpit .zaki-settings-v2__plan-card {
-  margin: 0;
-}
-
-.zaki-settings-v2__plan-metrics {
+.zaki-settings-v2__billing-meter {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg);
+}
+
+.zaki-settings-v2__billing-meter--primary {
+  border-color: var(--v2-hairline-strong);
+  background:
+    linear-gradient(to bottom, transparent 0, transparent 23px, var(--v2-hairline-faint) 24px),
+    var(--v2-bg-raised);
+  background-size: 100% 24px;
+}
+
+.zaki-settings-v2__billing-meter header {
+  display: grid;
+  gap: 6px;
+}
+
+.zaki-settings-v2__billing-meter header strong {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.zaki-settings-v2__meter-track {
+  position: relative;
+  height: 8px;
+  overflow: hidden;
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg-muted);
+}
+
+.zaki-settings-v2__meter-track > span {
+  display: block;
+  width: var(--zaki-meter-percent, 0%);
+  height: 100%;
+  background: var(--v2-accent);
+}
+
+.zaki-settings-v2__billing-meter dl,
+.zaki-settings-v2__billing-wallet {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
   border-top: 1px solid var(--v2-hairline);
   border-bottom: 1px solid var(--v2-hairline);
 }
 
-.zaki-settings-v2__plan-metrics > div {
-  min-width: 0;
-  padding: 12px 14px;
-  border-right: 1px solid var(--v2-hairline-faint);
-  background: var(--v2-bg);
+.zaki-settings-v2__billing-wallet {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.zaki-settings-v2__plan-metrics > div:last-child {
+.zaki-settings-v2__billing-meter dl > div,
+.zaki-settings-v2__billing-wallet > div {
+  min-width: 0;
+  padding: 11px 12px;
+  border-right: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-settings-v2__billing-meter dl > div:last-child,
+.zaki-settings-v2__billing-wallet > div:last-child {
   border-right: 0;
 }
 
-.zaki-settings-v2__plan-metrics span {
-  display: block;
+.zaki-settings-v2__billing-meter dt {
   color: var(--v2-ink-3);
   font-size: 10px;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   line-height: 1.4;
   text-transform: uppercase;
 }
 
-.zaki-settings-v2__plan-metrics strong {
-  display: block;
-  margin-top: 6px;
+.zaki-settings-v2__billing-meter dd,
+.zaki-settings-v2__billing-wallet strong {
+  margin: 4px 0 0;
   color: var(--v2-ink-1);
   font-family: var(--v2-font-mono);
-  font-size: 13px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.4;
+}
+
+.zaki-settings-v2__billing-actions {
+  display: grid;
+  gap: 12px;
+  align-items: start;
+  padding: 14px 0;
+  border-top: 1px solid var(--v2-hairline);
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.zaki-settings-v2__billing-actions > div:first-child {
+  max-width: 680px;
+}
+
+.zaki-settings-v2__billing-actions strong,
+.zaki-settings-v2__usage-heading strong {
+  color: var(--v2-ink-1);
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .zaki-settings-v2__plan-actions {
   justify-content: flex-start;
-  border-bottom: 1px solid var(--v2-hairline);
+  padding: 0;
 }
 
 .zaki-settings-v2__topup-strip {
@@ -2688,6 +2940,84 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
+}
+
+.zaki-settings-v2__usage-details {
+  margin-top: 14px;
+  border-top: 1px solid var(--v2-hairline);
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.zaki-settings-v2__usage-details[open] {
+  padding-bottom: 14px;
+}
+
+.zaki-settings-v2__usage-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.zaki-settings-v2__usage-heading::-webkit-details-marker {
+  display: none;
+}
+
+.zaki-settings-v2__usage-heading::before {
+  content: "+";
+  align-self: start;
+  grid-column: 1;
+  grid-row: 1;
+  width: 18px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.zaki-settings-v2__usage-heading > div {
+  padding-left: 24px;
+}
+
+.zaki-settings-v2__usage-details[open] .zaki-settings-v2__usage-heading::before {
+  content: "-";
+}
+
+.zaki-settings-v2__advanced-details {
+  margin-top: 14px;
+  border-top: 1px solid var(--v2-hairline);
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.zaki-settings-v2__advanced-details summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--v2-ink-1);
+  cursor: pointer;
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  list-style: none;
+  text-transform: uppercase;
+}
+
+.zaki-settings-v2__advanced-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.zaki-settings-v2__advanced-details summary::before {
+  content: "+";
+  color: var(--v2-ink-3);
+}
+
+.zaki-settings-v2__advanced-details[open] summary::before {
+  content: "-";
 }
 
 .zaki-settings-v2__actions {
@@ -2774,6 +3104,21 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   line-height: 1.4;
 }
 
+.zaki-settings-v2__usage-row > div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.zaki-settings-v2__usage-row > div:first-child small {
+  display: block;
+  color: var(--v2-ink-3);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
 .zaki-settings-v2__product-row dl {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2805,6 +3150,26 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   justify-content: flex-end;
 }
 
+.zaki-settings-v2__channel-list {
+  display: grid;
+  border-top: 1px solid var(--v2-hairline);
+}
+
+.zaki-settings-v2__channel-row {
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-settings-v2__channel-row:last-child {
+  border-bottom: 0;
+}
+
+.zaki-settings-v2__channel-lane {
+  display: grid;
+  min-width: min(100%, 360px);
+  gap: 8px;
+  justify-items: end;
+}
+
 .zaki-settings-v2__edit-tray {
   display: grid;
   gap: 12px;
@@ -2819,6 +3184,90 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
 .zaki-settings-v2__edit-tray--bindings {
   margin-left: min(280px, 38%);
+}
+
+.zaki-settings-v2__edit-tray--channel {
+  margin: 0 0 14px min(280px, 38%);
+}
+
+.zaki-settings-v2__channel-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--v2-hairline-faint);
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-settings-v2__channel-summary-grid > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border-right: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-settings-v2__channel-summary-grid > div:last-child {
+  border-right: 0;
+}
+
+.zaki-settings-v2__channel-summary-grid span,
+.zaki-settings-v2__channel-panel-title span,
+.zaki-settings-v2__channel-check span,
+.zaki-settings-v2__channel-check small {
+  color: var(--v2-ink-3);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-settings-v2__channel-summary-grid strong,
+.zaki-settings-v2__channel-panel-title strong,
+.zaki-settings-v2__channel-check strong {
+  color: var(--v2-ink-1);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.zaki-settings-v2__channel-notes {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-prose);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.zaki-settings-v2__channel-notes li::before {
+  content: "->";
+  margin-right: 6px;
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+}
+
+.zaki-settings-v2__channel-panel-section {
+  display: grid;
+  gap: 10px;
+}
+
+.zaki-settings-v2__channel-panel-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.zaki-settings-v2__channel-check {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
 }
 
 .zaki-settings-v2__edit-tray--section {
@@ -2869,6 +3318,13 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   background: var(--v2-bg);
   color: var(--v2-ink-2);
   font-size: 12px;
+}
+
+.zaki-settings-v2__binding-panel {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--v2-hairline-faint);
 }
 
 .zaki-settings-v2__empty-state {
@@ -3061,10 +3517,16 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
 .zaki-settings-v2__usage-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1fr) auto;
   gap: 16px;
-  align-items: baseline;
+  align-items: center;
   padding: 12px 14px;
+}
+
+.zaki-settings-v2__usage-row-meter {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
 }
 
 .zaki-settings-v2__usage-row span {
@@ -3137,29 +3599,50 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
 @media (max-width: 640px) {
   .zaki-settings-v2__hero,
+  .zaki-settings-v2__billing-actions,
+  .zaki-settings-v2__billing-hero,
+  .zaki-settings-v2__billing-meter-grid,
+  .zaki-settings-v2__billing-wallet,
   .v2-settings-row,
-  .zaki-settings-v2__plan-card,
   .zaki-settings-v2__topup-strip,
   .zaki-settings-v2__product-row dl,
   .zaki-settings-v2__space-editor,
   .zaki-settings-v2__model-table > div,
+  .zaki-settings-v2__usage-heading,
   .zaki-settings-v2__usage-row,
   .zaki-settings-v2__memory-list > div,
   .zaki-settings-v2__field-grid--2,
-  .zaki-settings-v2__field-grid--4 {
+  .zaki-settings-v2__field-grid--4,
+  .zaki-settings-v2__channel-summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .zaki-settings-v2__channel-summary-grid > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--v2-hairline-faint);
+  }
+
+  .zaki-settings-v2__channel-summary-grid > div:last-child {
+    border-bottom: 0;
   }
 
   .zaki-settings-v2__hero {
     display: grid;
   }
 
-  .zaki-settings-v2__plan-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .zaki-settings-v2__billing-meter dl {
+    grid-template-columns: 1fr;
   }
 
-  .zaki-settings-v2__plan-metrics > div:nth-child(2n) {
+  .zaki-settings-v2__billing-meter dl > div,
+  .zaki-settings-v2__billing-wallet > div {
     border-right: 0;
+    border-bottom: 1px solid var(--v2-hairline-faint);
+  }
+
+  .zaki-settings-v2__billing-meter dl > div:last-child,
+  .zaki-settings-v2__billing-wallet > div:last-child {
+    border-bottom: 0;
   }
 
   .v2-settings-row__control {
@@ -3173,10 +3656,17 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   }
 
   .zaki-settings-v2__control-stack,
-  .zaki-settings-v2__edit-tray--bindings {
+  .zaki-settings-v2__edit-tray--bindings,
+  .zaki-settings-v2__edit-tray--channel {
     width: 100%;
     min-width: 0;
     margin-left: 0;
+  }
+
+  .zaki-settings-v2__channel-lane {
+    width: 100%;
+    min-width: 0;
+    justify-items: stretch;
   }
 
   .zaki-settings-v2__actions {
@@ -3186,6 +3676,11 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   .zaki-settings-v2__actions .v2-btn {
     flex: 1 1 100%;
     min-width: 0;
+  }
+
+  .zaki-settings-v2__billing-actions .v2-btn,
+  .zaki-settings-v2__topup-strip .v2-btn {
+    min-height: 44px;
   }
 
   .zaki-settings-v2__actions--with-note .v2-btn {
@@ -10764,5 +11259,1245 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
   .zaki-product-gate__facts {
     grid-template-columns: 1fr;
+  }
+}
+
+.zaki-dashboard-command {
+  display: grid;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-raised);
+}
+
+.zaki-dashboard-command__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px 24px 16px;
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.zaki-dashboard-command__title {
+  max-width: 980px;
+  margin: 6px 0 0;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: clamp(26px, 4vw, 48px);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.02;
+}
+
+.zaki-dashboard-command__meter {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--v2-hairline);
+  padding: 0 12px;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.zaki-dashboard-command__meter svg {
+  color: var(--v2-accent);
+}
+
+.zaki-dashboard-command__form {
+  padding: 18px 24px 22px;
+}
+
+.zaki-dashboard-command__strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1px;
+  margin-bottom: 12px;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-hairline);
+}
+
+.zaki-dashboard-command__product {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  border: 0;
+  background: var(--v2-bg);
+  padding: 0 12px;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  letter-spacing: 0;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.zaki-dashboard-command__product:hover,
+.zaki-dashboard-command__product--active {
+  background: var(--v2-bg-inset);
+  color: var(--v2-ink-1);
+}
+
+.zaki-dashboard-command__product:focus-visible,
+.zaki-dashboard-command__ledger-row:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 1px solid var(--v2-accent);
+  outline-offset: -1px;
+}
+
+.zaki-dashboard-command__product--active svg {
+  color: var(--v2-accent);
+}
+
+.zaki-dashboard-command__product-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zaki-dashboard-command__product-marker {
+  margin-left: auto;
+  border: 1px solid var(--v2-hairline);
+  padding: 2px 5px;
+  color: var(--v2-ink-3);
+  font-size: 9px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.zaki-dashboard-command__product--active .zaki-dashboard-command__product-marker {
+  border-color: var(--v2-accent-hairline);
+  color: var(--v2-accent);
+}
+
+.zaki-dashboard-command__textarea {
+  width: 100%;
+  min-height: 132px;
+  resize: vertical;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-inset);
+  padding: 16px;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-prose);
+  font-size: 15px;
+  line-height: 1.6;
+  outline: none;
+}
+
+.zaki-dashboard-command__textarea:focus {
+  border-color: var(--v2-accent-hairline);
+  box-shadow: 0 0 0 1px var(--v2-accent-hairline);
+}
+
+.zaki-dashboard-command__textarea:focus-visible {
+  outline: 1px solid var(--v2-accent);
+  outline-offset: 2px;
+}
+
+.zaki-dashboard-command__foot {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-top: 14px;
+}
+
+.zaki-dashboard-command__selected {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.zaki-dashboard-command__selected span {
+  color: var(--v2-ink-3);
+  font-weight: 500;
+}
+
+.zaki-dashboard-command__foot p {
+  max-width: 720px;
+  margin: 6px 0 0;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-prose);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.zaki-dashboard-command__credit-guard {
+  display: grid;
+  gap: 8px;
+  max-width: 680px;
+  margin-top: 12px;
+  border: 1px solid var(--v2-accent-hairline);
+  background: var(--v2-danger-faint);
+  padding: 12px;
+}
+
+.zaki-dashboard-command__credit-guard strong {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.zaki-dashboard-command__credit-guard span {
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-prose);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.zaki-dashboard-command__credit-guard > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.zaki-dashboard-command__reset-choice {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  border: 1px solid var(--v2-hairline);
+  padding: 0 10px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.zaki-dashboard-command__helper {
+  width: 100%;
+  min-height: 18px;
+  margin: 0;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.zaki-dashboard-command__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.zaki-dashboard-command__ledger {
+  border-top: 1px solid var(--v2-hairline);
+  padding: 18px 24px 22px;
+}
+
+.zaki-dashboard-command__ledger-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.zaki-dashboard-command__ledger-head h2 {
+  margin: 0;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+.zaki-dashboard-command__ledger-head p {
+  max-width: 680px;
+  margin: 6px 0 0;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-prose);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.zaki-dashboard-command__ledger-list {
+  display: grid;
+  gap: 1px;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-hairline);
+}
+
+.zaki-dashboard-command__ledger-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 92px;
+  gap: 14px;
+  align-items: center;
+  border: 0;
+  background: var(--v2-bg);
+  padding: 12px 14px;
+  text-align: left;
+}
+
+.zaki-dashboard-command__ledger-row:hover {
+  background: var(--v2-bg-inset);
+}
+
+.zaki-dashboard-command__ledger-product,
+.zaki-dashboard-command__ledger-time {
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+}
+
+.zaki-dashboard-command__ledger-main {
+  min-width: 0;
+}
+
+.zaki-dashboard-command__ledger-main strong,
+.zaki-dashboard-command__ledger-main span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zaki-dashboard-command__ledger-main strong {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+}
+
+.zaki-dashboard-command__ledger-main span {
+  margin-top: 3px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-prose);
+  font-size: 12px;
+}
+
+.zaki-dashboard-command__ledger-time {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.zaki-dashboard-v2 .v2-product-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.zaki-dashboard-support {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(0, 1.8fr) minmax(180px, 0.55fr) auto;
+  gap: 1px;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-hairline);
+}
+
+.zaki-dashboard-support > * {
+  min-width: 0;
+  background: var(--v2-bg);
+}
+
+.zaki-dashboard-support__identity,
+.zaki-dashboard-support__rolling {
+  display: grid;
+  gap: 5px;
+  padding: 12px 14px;
+}
+
+.zaki-dashboard-support__identity span,
+.zaki-dashboard-support__rolling span,
+.zaki-dashboard-support__grid span,
+.zaki-dashboard-support__grid small,
+.zaki-dashboard-support__rolling small {
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-dashboard-support__identity strong,
+.zaki-dashboard-support__grid strong {
+  overflow: hidden;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 14px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zaki-dashboard-support__identity em {
+  overflow: hidden;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.zaki-dashboard-support__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--v2-hairline);
+}
+
+.zaki-dashboard-support__grid > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  background: var(--v2-bg);
+}
+
+.zaki-dashboard-support__rolling .zaki-dashboard-v2__ticks {
+  margin-top: 2px;
+}
+
+.zaki-dashboard-support > .v2-badge {
+  align-self: stretch;
+  justify-self: stretch;
+  min-height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+
+@media (max-width: 860px) {
+  .zaki-dashboard-command__head,
+  .zaki-dashboard-command__foot,
+  .zaki-dashboard-command__ledger-head {
+    flex-direction: column;
+  }
+
+  .zaki-dashboard-command__meter,
+  .zaki-dashboard-command__actions,
+  .zaki-dashboard-command__ledger-head .v2-btn {
+    width: 100%;
+  }
+
+  .zaki-dashboard-command__actions .v2-btn {
+    flex: 1 1 180px;
+  }
+
+  .zaki-dashboard-command__helper {
+    text-align: left;
+  }
+
+  .zaki-dashboard-command__strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .zaki-dashboard-support {
+    grid-template-columns: 1fr;
+  }
+
+  .zaki-dashboard-support__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .zaki-dashboard-command__ledger-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .zaki-dashboard-command__ledger-time {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 520px) {
+  .zaki-dashboard-command__head,
+  .zaki-dashboard-command__form,
+  .zaki-dashboard-command__ledger {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .zaki-dashboard-command__strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .zaki-dashboard-command__product {
+    justify-content: flex-start;
+    padding: 0 10px;
+  }
+
+  .zaki-dashboard-command__product-marker {
+    font-size: 8px;
+  }
+
+  .zaki-dashboard-support__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.zaki-dashboard-v2--productized,
+.zaki-dashboard-v2 {
+  min-height: 100%;
+}
+
+.zaki-dashboard-v2__wrap {
+  width: min(100% - 64px, 1120px);
+  margin: 0 auto;
+  padding: clamp(40px, 8vh, 76px) 0 80px;
+}
+
+.zaki-dashboard-v2__entry {
+  display: grid;
+  gap: 30px;
+}
+
+.zaki-dashboard-command__greeting {
+  display: grid;
+  gap: 16px;
+}
+
+.zaki-dashboard-command__greeting .zaki-dashboard-v2__eyebrow {
+  margin: 0;
+}
+
+.zaki-dashboard-command__greeting p {
+  max-width: 680px;
+  margin: 0;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-prose);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.zaki-dashboard-command__title {
+  max-width: 760px;
+  margin: 0;
+  font-size: clamp(38px, 6vw, 62px);
+  letter-spacing: 0;
+}
+
+.zaki-dashboard-command__title-signal {
+  position: relative;
+  display: inline-block;
+  color: var(--v2-accent);
+  font-variant-ligatures: none;
+  animation: zaki-dashboard-signal-scramble 420ms steps(2, end);
+}
+
+.zaki-dashboard-command__title-signal::after {
+  content: attr(data-scramble);
+  position: absolute;
+  right: -1.15em;
+  bottom: 0.16em;
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 0.26em;
+  letter-spacing: 0.12em;
+  opacity: 0;
+  animation: zaki-dashboard-signal-marker 420ms steps(2, end);
+}
+
+.zaki-dashboard-command__entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.zaki-dashboard-command__entry-actions button {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--v2-hairline-strong);
+  background: transparent;
+  padding: 0 12px;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.zaki-dashboard-command__entry-actions button:hover,
+.zaki-dashboard-command__entry-actions button:focus-visible {
+  background: var(--v2-hover);
+  color: var(--v2-ink-1);
+}
+
+.zaki-dashboard-command__entry-actions button span {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid currentColor;
+  font-size: 9px;
+}
+
+.zaki-dashboard-command__entry-action--accent {
+  border-color: var(--v2-accent-hairline) !important;
+  background: var(--v2-accent) !important;
+  color: var(--v2-ink-on-accent) !important;
+}
+
+@keyframes zaki-dashboard-signal-scramble {
+  0% {
+    transform: translateY(0);
+    filter: blur(0);
+  }
+  28% {
+    transform: translateY(-1px);
+    filter: blur(0.6px);
+  }
+  56% {
+    transform: translateY(1px);
+    filter: blur(0.4px);
+  }
+  100% {
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes zaki-dashboard-signal-marker {
+  0%,
+  68% {
+    opacity: 0.72;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zaki-dashboard-command__title-signal,
+  .zaki-dashboard-command__title-signal::after {
+    animation: none;
+  }
+
+  .zaki-dashboard-command__title-signal::after {
+    opacity: 0;
+  }
+}
+
+.zaki-dashboard-command {
+  display: grid;
+  gap: 14px;
+  border: 0;
+  background: transparent;
+}
+
+.zaki-dashboard-command__strip {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  border-color: var(--v2-hairline-strong);
+  background: var(--v2-bg);
+}
+
+.zaki-dashboard-command__product {
+  min-height: 46px;
+  justify-content: center;
+  border-right: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-sunken);
+  color: var(--v2-ink-3);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.zaki-dashboard-command__product:last-child {
+  border-right: 0;
+}
+
+.zaki-dashboard-command__product:hover {
+  background: var(--v2-hover);
+}
+
+.zaki-dashboard-command__product--active {
+  position: relative;
+  background: var(--v2-bg);
+}
+
+.zaki-dashboard-command__product--soon {
+  color: var(--v2-ink-4);
+}
+
+.zaki-dashboard-command__product--active::before {
+  content: "";
+  position: absolute;
+  inset: -1px 0 auto;
+  height: 2px;
+  background: var(--v2-accent);
+}
+
+.zaki-dashboard-command__product-marker {
+  display: inline-flex;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--v2-ink-4);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zaki-dashboard-command__composer {
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg);
+}
+
+.zaki-dashboard-command__textarea {
+  display: block;
+  min-height: 124px;
+  max-height: 240px;
+  resize: vertical;
+  border: 0;
+  background: transparent;
+  padding: 20px;
+  font-family: var(--v2-font-mono);
+  font-size: 15px;
+}
+
+.zaki-dashboard-command__textarea:focus,
+.zaki-dashboard-command__textarea:focus-visible {
+  box-shadow: none;
+  outline-offset: -2px;
+}
+
+.zaki-dashboard-command__foot {
+  align-items: center;
+  padding: 12px 16px 12px 20px;
+  border-top: 1px solid var(--v2-hairline);
+}
+
+.zaki-dashboard-command__meter {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 220px;
+  min-height: 0;
+  gap: 7px;
+  border: 0;
+  padding: 0;
+  white-space: normal;
+}
+
+.zaki-dashboard-command__meter-top {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.zaki-dashboard-command__meter-top span,
+.zaki-dashboard-command__meter-top small {
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.zaki-dashboard-command__meter-top strong {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.zaki-dashboard-command__meter-top strong em {
+  color: var(--v2-ink-3);
+  font-style: normal;
+}
+
+.zaki-dashboard-command__meter-top small {
+  margin-left: auto;
+}
+
+.zaki-dashboard-command__meter-track {
+  height: 4px;
+  background: var(--v2-bg-sunken);
+}
+
+.zaki-dashboard-command__meter-track > span {
+  display: block;
+  height: 100%;
+  background: var(--v2-accent);
+  transition: width 180ms ease;
+}
+
+.zaki-dashboard-command__meter-fill--zero {
+  background: var(--v2-danger);
+}
+
+.zaki-dashboard-command__actions {
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.zaki-dashboard-command__helper {
+  flex-basis: 100%;
+  order: -1;
+  text-align: right;
+}
+
+.zaki-dashboard-command__credit-guard {
+  max-width: none;
+  margin-top: 14px;
+  background: var(--v2-bg-raised);
+}
+
+.zaki-dashboard-command__hint {
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg-raised);
+}
+
+.zaki-dashboard-command__hint-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.zaki-dashboard-command__hint-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  color: var(--v2-ink-1);
+}
+
+.zaki-dashboard-command__hint-name svg {
+  color: var(--v2-accent);
+}
+
+.zaki-dashboard-command__hint-name h2 {
+  margin: 0;
+  font-family: var(--v2-font-mono);
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.zaki-dashboard-command__hint-body {
+  display: grid;
+  gap: 13px;
+  padding: 15px 16px 16px;
+}
+
+.zaki-dashboard-command__hint-body p,
+.zaki-dashboard-command__hint-body dd,
+.zaki-dashboard-command__truth strong {
+  margin: 0;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-prose);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.zaki-dashboard-command__hint-body p {
+  color: var(--v2-ink-1);
+  font-size: 14px;
+}
+
+.zaki-dashboard-command__hint-body dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin: 0;
+}
+
+.zaki-dashboard-command__hint-body dt {
+  margin-bottom: 5px;
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-dashboard-command__truth {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding-top: 12px;
+  border-top: 1px solid var(--v2-hairline);
+}
+
+.zaki-dashboard-command__truth span {
+  color: var(--v2-accent);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+}
+
+.zaki-dashboard-command__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.zaki-dashboard-command__links button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.zaki-dashboard-command__links button:hover,
+.zaki-dashboard-command__links button:focus-visible {
+  color: var(--v2-ink-1);
+}
+
+.zaki-dashboard-command__links span {
+  color: var(--v2-accent);
+}
+
+.zaki-dashboard-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--v2-bg-overlay);
+}
+
+.zaki-dashboard-intro__panel {
+  width: min(100%, 720px);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg);
+  box-shadow: var(--v2-elev-4);
+}
+
+.zaki-dashboard-intro__head,
+.zaki-dashboard-intro__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.zaki-dashboard-intro__head span,
+.zaki-dashboard-intro__slide-kicker {
+  color: var(--v2-accent);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.zaki-dashboard-intro__head h2 {
+  margin: 5px 0 0;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 20px;
+  letter-spacing: 0;
+}
+
+.zaki-dashboard-intro__close {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--v2-hairline-strong);
+  background: transparent;
+  color: var(--v2-ink-2);
+}
+
+.zaki-dashboard-intro__close:hover,
+.zaki-dashboard-intro__close:focus-visible {
+  color: var(--v2-ink-1);
+  background: var(--v2-hover);
+}
+
+.zaki-dashboard-intro__slide {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 28px 30px 30px;
+  border-bottom: 1px solid var(--v2-hairline);
+}
+
+.zaki-dashboard-intro__slide h3 {
+  margin: 0;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: clamp(24px, 4vw, 40px);
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.05;
+}
+
+.zaki-dashboard-intro__slide p {
+  max-width: 58ch;
+  margin: 0;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-prose);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.zaki-dashboard-intro__slide ul {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.zaki-dashboard-intro__slide li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-mono);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.zaki-dashboard-intro__slide li::before {
+  content: "->";
+  color: var(--v2-accent);
+}
+
+.zaki-dashboard-intro__foot {
+  align-items: center;
+  justify-content: flex-end;
+  border-bottom: 0;
+}
+
+.zaki-dashboard-intro__dots,
+.zaki-dashboard-intro__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.zaki-dashboard-intro__dots {
+  margin-right: auto;
+}
+
+.zaki-dashboard-intro__dots button {
+  display: inline-flex;
+  min-width: 34px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--v2-hairline);
+  background: transparent;
+  color: var(--v2-ink-4);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.zaki-dashboard-intro__dots button:hover,
+.zaki-dashboard-intro__dots button:focus-visible,
+.zaki-dashboard-intro__dots button[aria-current="step"] {
+  border-color: var(--v2-hairline-strong);
+  background: var(--v2-hover);
+  color: var(--v2-ink-1);
+}
+
+@media (max-width: 860px) {
+  .zaki-dashboard-v2__wrap {
+    width: min(100% - 32px, 940px);
+    padding-top: 28px;
+  }
+
+  .zaki-dashboard-command__foot,
+  .zaki-dashboard-command__meter-top,
+  .zaki-dashboard-intro__foot {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .zaki-dashboard-intro__head {
+    align-items: flex-start;
+  }
+
+  .zaki-dashboard-intro__head > div {
+    min-width: 0;
+  }
+
+  .zaki-dashboard-intro__close {
+    flex: 0 0 auto;
+  }
+
+  .zaki-dashboard-command__meter,
+  .zaki-dashboard-command__actions,
+  .zaki-dashboard-command__actions .v2-btn {
+    width: 100%;
+  }
+
+  .zaki-dashboard-intro__panel {
+    width: min(100%, 560px);
+  }
+
+  .zaki-dashboard-intro__slide {
+    padding: 22px 18px;
+  }
+
+  .zaki-dashboard-intro__dots {
+    margin-right: 0;
+  }
+
+  .zaki-dashboard-intro__dots,
+  .zaki-dashboard-intro__actions,
+  .zaki-dashboard-intro__actions .v2-btn {
+    width: 100%;
+  }
+
+  .zaki-dashboard-intro__actions {
+    justify-content: stretch;
+  }
+
+  .zaki-dashboard-command__helper {
+    text-align: left;
+  }
+
+  .zaki-dashboard-command__meter-top small {
+    margin-left: 0;
+  }
+
+  .zaki-dashboard-command__strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .zaki-dashboard-command__product:nth-child(3n) {
+    border-right: 0;
+  }
+
+  .zaki-dashboard-command__product:nth-child(-n + 3) {
+    border-bottom: 1px solid var(--v2-hairline);
+  }
+
+  .zaki-dashboard-command__hint-body dl {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .zaki-dashboard-v2__wrap {
+    width: min(100% - 32px, 940px);
+    padding-top: 16px;
+  }
+
+  .zaki-dashboard-v2__entry {
+    gap: 18px;
+  }
+
+  .zaki-dashboard-command__greeting {
+    gap: 10px;
+  }
+
+  .zaki-dashboard-command__greeting p {
+    font-size: 13px;
+    line-height: 1.42;
+  }
+
+  .zaki-dashboard-command__title {
+    font-size: 29px;
+    line-height: 1.02;
+  }
+
+  .zaki-dashboard-command__entry-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .zaki-dashboard-command__entry-actions button {
+    min-height: 28px;
+    justify-content: center;
+    padding: 0 8px;
+    font-size: 10px;
+  }
+
+  .zaki-dashboard-command__strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .zaki-dashboard-command__product,
+  .zaki-dashboard-command__product:nth-child(3n) {
+    border-right: 1px solid var(--v2-hairline);
+  }
+
+  .zaki-dashboard-command__product:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .zaki-dashboard-command__product:nth-child(-n + 4) {
+    border-bottom: 1px solid var(--v2-hairline);
+  }
+
+  .zaki-dashboard-command__textarea {
+    min-height: 78px;
+    padding: 14px 18px;
+  }
+
+  .zaki-dashboard-command__hint-top {
+    padding: 10px 12px;
+  }
+
+  .zaki-dashboard-command__hint-body {
+    gap: 9px;
+    padding: 11px 12px 12px;
+  }
+
+  .zaki-dashboard-command__hint-body p,
+  .zaki-dashboard-command__truth strong {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .zaki-dashboard-command__hint-body dl {
+    display: none;
+  }
+
+  .zaki-dashboard-command__truth {
+    padding-top: 9px;
+  }
+
+  .zaki-dashboard-command__foot {
+    gap: 9px;
+    padding: 9px 18px 10px;
+  }
+
+  .zaki-dashboard-command__meter {
+    gap: 6px;
+  }
+
+  .zaki-dashboard-command__actions {
+    gap: 7px;
+  }
+
+  .zaki-dashboard-command__helper {
+    min-height: auto;
   }
 }
