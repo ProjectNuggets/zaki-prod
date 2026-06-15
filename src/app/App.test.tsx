@@ -83,6 +83,19 @@ describe("App route hydration", () => {
     expect(await screen.findByText("anonymous spaces")).toBeInTheDocument();
   });
 
+  it("renders the anonymous command dashboard route on bare home", async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({}),
+    } as Response);
+
+    renderAppAt("/");
+
+    expect(await screen.findByText("public home")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /continue/i })).not.toBeInTheDocument();
+  });
+
   it("honors an explicit auth intent on the public home route", async () => {
     fetchMock.mockResolvedValue({
       ok: false,
@@ -96,7 +109,7 @@ describe("App route hydration", () => {
     expect(screen.queryByText("public home")).not.toBeInTheDocument();
   });
 
-  it("requires authentication for the Hire workspace route", async () => {
+  it("lets coming-soon product gates render without an auth cliff", async () => {
     fetchMock.mockResolvedValue({
       ok: false,
       status: 401,
@@ -105,7 +118,7 @@ describe("App route hydration", () => {
 
     renderAppAt("/hire");
 
-    expect(await screen.findByRole("button", { name: /continue/i })).toBeInTheDocument();
-    expect(screen.queryByText("hire workspace")).not.toBeInTheDocument();
+    expect(await screen.findByText("hire workspace")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /continue/i })).not.toBeInTheDocument();
   });
 });

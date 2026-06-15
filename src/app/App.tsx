@@ -1,5 +1,5 @@
 import "@/styles/fonts.css";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "./components/Sidebar";
@@ -9,7 +9,6 @@ import { ProductRail } from "./components/ProductRail";
 import { AppTopbar } from "./components/AppTopbar";
 import { SkipLink } from "./components/SkipLink";
 import { LoginScreen } from "./components/LoginScreen";
-import { LegalPage } from "./components/LegalPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Toaster } from "./components/ui/sonner";
 import {
@@ -17,12 +16,16 @@ import {
   fetchCurrentUser,
   fetchProfile,
   fetchLegalConsentStatus,
+  requestLogout,
   submitLegalReconsent,
 } from "@/lib/api";
 import { useAuthStore, useUIStore, useNavigationStore } from "@/stores";
 import { ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID } from "@/lib/zakiBot";
 
 const LEGAL_POLICY_VERSION_FALLBACK = "2026-02-17.v2";
+const LegalPage = lazy(() =>
+  import("./components/LegalPage").then((m) => ({ default: m.LegalPage }))
+);
 const PUBLIC_WEBSITE_PATHS = new Set([
   "/",
   "/pricing",
@@ -72,10 +75,7 @@ export default function App() {
     normalizedPath === "/learn" ||
     normalizedPath === "/hire" ||
     normalizedPath === "/design";
-  // Only /hire uses the workspace shell. /learn intentionally uses the normal
-  // shell on current main (the pre-Hire-merge behavior — its e2e depends on it);
-  // the Hire merge erroneously pulled the branch's older /learn-workspace design.
-  const isWorkspaceRoute = normalizedPath === "/hire";
+  const isWorkspaceRoute = false;
   const isDashboardRoute = normalizedPath === "/";
   const isAgentRoute = normalizedPath === "/agent";
   const isBrainRoute = normalizedPath === "/brain";
@@ -91,6 +91,7 @@ export default function App() {
     PUBLIC_WEBSITE_PREFIXES.some((prefix) => normalizedPath.startsWith(prefix));
   const isAnonymousAllowedRoute =
     isPublicWebsiteRoute ||
+    isGatedProductRoute ||
     normalizedPath === "/spaces" ||
     normalizedPath.startsWith("/spaces/") ||
     normalizedPath === "/pricing/success";
@@ -136,9 +137,7 @@ export default function App() {
       );
     } else if (path === '/brain') {
       store.setSidebarMode("brain");
-    } else if (path === '/hire') {
-      store.setSidebarMode("hire");
-    } else if (path === '/learn' || path === '/design') {
+    } else if (path === '/learn' || path === '/hire' || path === '/design') {
       store.goHome();
     } else if (path === '/spaces' && !spaceId) {
       store.goToSpaces();
@@ -236,7 +235,6 @@ export default function App() {
         } else {
           // 401 from /api/auth/refresh — no valid session
           if (isMounted) logout();
-          if (typeof window !== "undefined" && window.location.pathname === "/" && !new URLSearchParams(window.location.search).has("auth")) { window.location.replace("/?auth=login"); }
         }
       } catch {
         if (isMounted) logout();
@@ -307,7 +305,11 @@ export default function App() {
   };
 
   if (!token && !isHydrating && normalizedPath === "/legal") {
-    return <LegalPage />;
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-zaki-bg" aria-label="Loading legal page" />}>
+        <LegalPage />
+      </Suspense>
+    );
   }
 
   if (!token && !isHydrating && (hasExplicitAuthIntent || !isAnonymousAllowedRoute)) {
@@ -328,20 +330,6 @@ export default function App() {
   }
 
   if (isPublicWebsiteRoute && normalizedPath !== "/") {
-    return (
-      <>
-        <SkipLink />
-        <main id="main-content" role="main" className="min-h-screen">
-          <ErrorBoundary>
-            <Outlet />
-          </ErrorBoundary>
-        </main>
-        <Toaster />
-      </>
-    );
-  }
-
-  if (!token && normalizedPath === "/") {
     return (
       <>
         <SkipLink />
@@ -433,10 +421,28 @@ export default function App() {
                 type="button"
                 className="v2-btn v2-btn--sm"
                 onClick={() => {
-                  logout();
-                  setLegalReconsentRequired(false);
-                  setLegalReconsentChecked(false);
-                  setLegalReconsentError("");
+                  void requestLogout().then(({ response }) => {
+                    if (response.ok) {
+                      logout();
+                      setLegalReconsentRequired(false);
+                      setLegalReconsentChecked(false);
+                      setLegalReconsentError("");
+                    } else {
+                      setLegalReconsentError(
+                        t("app.legal.signOutError", {
+                          defaultValue:
+                            "Unable to sign out securely. Check your connection and try again.",
+                        })
+                      );
+                    }
+                  }).catch(() => {
+                    setLegalReconsentError(
+                      t("app.legal.signOutError", {
+                        defaultValue:
+                          "Unable to sign out securely. Check your connection and try again.",
+                      })
+                    );
+                  });
                 }}
               >
                 {t("app.legal.signOut")}

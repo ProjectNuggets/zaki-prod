@@ -11,6 +11,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   apiRequest,
   deleteAgentSession,
+  requestLogout,
 } from "@/lib/api";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { useAuthStore, useUIStore, useSpacesStore, useNavigationStore } from "@/stores";
@@ -190,7 +191,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
     goToThread,
     goToZakiBot,
     goToZakiHome,
-    setSidebarMode,
   } = useNavigation();
   const { sidebarMode, zakiSessionKey: storedZakiSessionKey } = useNavigationStore();
   const {
@@ -301,6 +301,23 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
     },
     [navigate]
   );
+
+  const handleSecureLogout = useCallback(async () => {
+    try {
+      const { response, data } = await requestLogout();
+      if (!response.ok || data?.error) {
+        throw new Error(data?.error || "logout_failed");
+      }
+      logout();
+      navigate("/?auth=login");
+    } catch {
+      toast.error(
+        t("settingsModal.account.signOutError", {
+          defaultValue: "Unable to sign out securely. Check your connection and try again.",
+        })
+      );
+    }
+  }, [logout, navigate, t]);
 
   useEffect(() => {
     const handleOpenMemory = (event: Event) => {
@@ -1315,38 +1332,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
             >
               <CenterLogo className="size-4 text-zaki-brand" />
             </button>
-            <button
-              className={cn(
-                "size-9 rounded-zaki-md transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
-                sidebarMode === "learning" ? "bg-zaki-hover" : "hover:bg-zaki-hover"
-              )}
-              onClick={() => {
-                setSidebarMode("learning");
-                navigate("/learn");
-              }}
-              onMouseUp={blurButtonOnPointerClick}
-              type="button"
-              title={t("sidebar.learning")}
-              aria-label={t("sidebar.learning")}
-            >
-              <GraduationCap className="size-4 text-zaki-muted" />
-            </button>
-            <button
-              className={cn(
-                "size-9 rounded-zaki-md transition-colors flex items-center justify-center focus-visible:ring-2 focus-visible:ring-zaki-brand focus-visible:ring-offset-2",
-                sidebarMode === "hire" ? "bg-zaki-hover" : "hover:bg-zaki-hover"
-              )}
-              onClick={() => {
-                setSidebarMode("hire");
-                navigate("/hire");
-              }}
-              onMouseUp={blurButtonOnPointerClick}
-              type="button"
-              title={t("sidebar.hire")}
-              aria-label={t("sidebar.hire")}
-            >
-              <Briefcase className="size-4 text-zaki-muted" />
-            </button>
           </div>
 
           <div className="mt-auto flex flex-col items-center gap-3 pt-4">
@@ -1472,7 +1457,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
           onOpenSettings={() => openSettingsSection()}
           onOpenCron={() => requestAgentControls("cron")}
           onOpenSecrets={() => openSettingsSection("settings-secrets")}
-          onOpenDiagnostics={() => openSettingsSection("settings-developer-access")}
+          onOpenDiagnostics={() => openSettingsSection("settings-devices")}
         />
       ) : sidebarMode === "zaki" ? (
         <div className="zaki-sidebar-v2-action-row" aria-label={t("sidebar.context.agentActions", { defaultValue: "Agent actions" })}>
@@ -2262,7 +2247,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
 	              type="button"
 		              onClick={() => {
 		                setProfileMenuOpen(false);
-	                logout();
+	                void handleSecureLogout();
 	              }}
 	            >
 	              <LogOut className="size-4" />
