@@ -1,17 +1,22 @@
 import "@testing-library/jest-dom";
-import { describe, expect, it, jest } from "@jest/globals";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { SettingsModal } from "./SettingsModal";
 import { SettingsPage } from "../settings/SettingsPage";
 import { useAuthStore, useUIStore } from "@/stores";
 import {
+  connectBotTelegram,
   connectAgentChannelControl,
-  createAgentProviderProfile,
   deleteAgentChannelBinding,
+  disconnectBotTelegram,
   disconnectAgentChannelControl,
+  fetchAgentChannelControls,
+  fetchAgentExtensionDevices,
+  listAgentSecrets,
   pairAgentExtensionDevice,
   putAgentSecret,
+  requestLogout,
   testAgentChannelControl,
   updateBotSettings,
   updateMemoryPreferences,
@@ -133,6 +138,21 @@ jest.mock("@/lib/api", () => ({
     data: {
       channels: [
         {
+          channel: "telegram",
+          label: "Telegram",
+          build_enabled: true,
+          operator_configured: true,
+          user_managed: true,
+          user_connected: true,
+          status: "connected",
+          secret_refs: [
+            { key: "telegram_bot_token", label: "Bot token", required: true, present: true },
+            { key: "telegram_webhook_secret", label: "Webhook secret", required: false, present: false },
+          ],
+          config: {},
+          last_test: null,
+        },
+        {
           channel: "slack",
           label: "Slack",
           build_enabled: true,
@@ -198,6 +218,10 @@ jest.mock("@/lib/api", () => ({
     response: { ok: true },
     data: { channel: "slack", status: "connected" },
   })),
+  connectBotTelegram: jest.fn(async () => ({
+    response: { ok: true },
+    data: { channel: "telegram", status: "connected" },
+  })),
   testAgentChannelControl: jest.fn(async () => ({
     response: { ok: true },
     data: { channel: "slack", last_test: { ok: true, detail: "credentials_present" } },
@@ -205,6 +229,10 @@ jest.mock("@/lib/api", () => ({
   disconnectAgentChannelControl: jest.fn(async () => ({
     response: { ok: true },
     data: { status: "disconnected", channel: "slack" },
+  })),
+  disconnectBotTelegram: jest.fn(async () => ({
+    response: { ok: true },
+    data: { status: "disconnected", channel: "telegram" },
   })),
   fetchAgentProviderProfiles: jest.fn(async () => ({
     response: { ok: true },
@@ -312,6 +340,10 @@ jest.mock("@/lib/api", () => ({
     response: { ok: true },
     data: { success: true, user: { username: "nova@example.com", fullName: "Nova" } },
   })),
+  requestLogout: jest.fn(async () => ({
+    response: { ok: true },
+    data: { success: true },
+  })),
 }));
 
 jest.mock("@/lib/productTelemetry", () => ({
@@ -327,13 +359,13 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.nav.connections": "Connections",
     "settingsModal.nav.planUsage": "Plan & Usage",
     "settingsModal.nav.channels": "Channels",
-    "settingsModal.nav.secrets": "Secrets",
+    "settingsModal.nav.secrets": "Advanced credentials",
     "settingsModal.nav.providers": "Providers",
     "settingsModal.nav.devices": "Devices",
     "settingsModal.nav.billing": "Plan & Usage",
     "settingsModal.nav.products": "Products",
     "settingsModal.nav.usage": "Usage",
-    "settingsModal.nav.memoryData": "Memory",
+    "settingsModal.nav.memoryData": "Memory & Privacy",
     "settingsModal.nav.developerAccess": "Developer",
     "settingsModal.nav.privacy": "Privacy",
     "settingsModal.sections.account": "Account",
@@ -341,17 +373,22 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.sections.preferences": "Preferences",
     "settingsModal.sections.connections": "Connected accounts",
     "settingsModal.sections.channels": "Channels",
-    "settingsModal.sections.secrets": "Secrets & API keys",
+    "settingsModal.sections.secrets": "Advanced credentials",
     "settingsModal.sections.providers": "Models & providers",
     "settingsModal.sections.devices": "Browser extension & devices",
     "settingsModal.sections.billing": "Plan & Usage",
     "settingsModal.sections.planBilling": "Plan & Billing",
     "settingsModal.sections.productsAccess": "Products & Access",
     "settingsModal.sections.usage": "Usage",
-    "settingsModal.sections.memoryData": "Memory & Data",
+    "settingsModal.sections.memoryData": "Memory & Privacy",
     "settingsModal.sections.developerAccess": "Developer Access",
     "settingsModal.sections.privacy": "Privacy",
     "settingsModal.sections.dataPrivacy": "Data & Privacy",
+    "settingsModal.account.signOut": "Sign out",
+    "settingsModal.account.signingOut": "Signing out",
+    "settingsModal.account.signOutHelper": "End this browser session and return to sign in.",
+    "settingsModal.account.signOutError":
+      "Unable to sign out securely. Check your connection and try again.",
     "settingsModal.profile.displayName": "Display name",
     "settingsModal.profile.email": "Email",
     "settingsModal.preferences.theme": "Theme",
@@ -366,18 +403,15 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.connections.checking": "Checking",
     "settingsModal.connections.available": "Available",
     "settingsModal.connections.notConfigured": "Not configured",
-    "settingsModal.channels.agentTelegram.name": "Agent Telegram",
-    "settingsModal.channels.agentTelegram.description":
-      "Connect, disconnect, and rotate the Agent Telegram channel.",
     "settingsModal.channels.learningTutors.name": "Learning tutor channels",
     "settingsModal.channels.learningTutors.description":
       "Private-beta tutor channel schema is available through Learning.",
     "settingsModal.channels.loading": "Checking channels",
-    "settingsModal.channels.count": "{{count}} launch channels",
+    "settingsModal.channels.count": "{{count}} channels",
     "settingsModal.channels.status.checking": "Checking",
     "settingsModal.channels.otherChannels.name": "Additional channels",
     "settingsModal.channels.otherChannels.description":
-      "Teams, WhatsApp, Signal, Matrix, and other adapters stay hidden until their user-safe BFF contracts are exposed.",
+      "Teams, Signal, Matrix, and other adapters stay hidden until their user-safe BFF contracts are exposed.",
     "settingsModal.channels.status.configured": "Configured",
     "settingsModal.channels.status.notConfigured": "Not configured",
     "settingsModal.channels.status.privateBeta": "Private beta",
@@ -386,11 +420,11 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.channels.bindings.count": "{{count}} bindings",
     "settingsModal.channels.bindings.account": "Account",
     "settingsModal.channels.bindings.thread": "Thread optional",
-    "settingsModal.channels.bindings.save": "Save binding",
+    "settingsModal.channels.bindings.saveChannel": "Bind {{channel}} identity",
     "settingsModal.channels.bindings.saving": "Saving",
     "settingsModal.channels.bindings.helper":
       "Bindings route inbound identities to your Agent without exposing channel secrets.",
-    "settingsModal.channels.bindings.delete": "Delete binding",
+    "settingsModal.channels.bindings.deleteChannel": "Delete {{channel}} binding",
     "settingsModal.channels.bindings.missing": "Account, principal, and scope are required.",
     "settingsModal.channels.bindings.saved": "Channel binding saved.",
     "settingsModal.channels.bindings.deleted": "Channel binding deleted.",
@@ -401,9 +435,9 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.channels.secrets.vaultRefs": "Vault refs",
     "settingsModal.secrets.loading": "Loading secrets",
     "settingsModal.secrets.count": "{{count}} stored",
-    "settingsModal.secrets.addOrRotate": "Add or rotate secret",
+    "settingsModal.secrets.addOrRotate": "Add or rotate a vault credential",
     "settingsModal.secrets.addOrRotateHelper":
-      "Values are write-only after save; Settings shows metadata keys only.",
+      "Use this only for advanced manual keys. Channel tokens should be saved from Channels.",
     "settingsModal.secrets.keyPlaceholder": "OPENAI_API_KEY",
     "settingsModal.secrets.valuePlaceholder": "Secret value",
     "settingsModal.secrets.save": "Save secret",
@@ -437,20 +471,34 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.plan.managePlan": "Manage plan",
     "settingsModal.plan.manageSubscription": "Manage subscription",
     "settingsModal.plan.viewSubscriptionOptions": "View subscription options",
-    "settingsModal.plan.upgradeAgent": "Upgrade to Agent",
-    "settingsModal.plan.upgradeComplete": "Upgrade to Complete",
+    "settingsModal.plan.tiers.free": "Free",
+    "settingsModal.plan.tiers.personal": "Personal",
+    "settingsModal.plan.tiers.pro": "Pro",
+    "settingsModal.plan.tiers.pro_max": "Pro MAX",
+    "settingsModal.plan.upgradePlan": "Upgrade to {{plan}}",
     "settingsModal.plan.syncBilling": "Sync billing",
     "settingsModal.plan.recurringRemaining": "Recurring remaining",
-    "settingsModal.plan.topupBalance": "Top-up balance",
-    "settingsModal.plan.topups.title": "Unit top-ups",
-    "settingsModal.plan.topups.helper":
-      "Purchased units persist and are used after recurring allowance.",
-    "settingsModal.plan.topups.unavailable": "Top-ups unavailable in this environment.",
-    "settingsModal.plan.topups.disabled": "Top-ups unavailable",
-    "settingsModal.plan.topups.buyPack": "Buy {{label}}{{priceLabel}}",
+    "settingsModal.plan.topupBalance": "Extra units balance",
+    "settingsModal.plan.billingSource": "Billing source",
+    "settingsModal.plan.billingHealth": "Billing health",
+    "settingsModal.plan.billingConfigured": "Configured",
+    "settingsModal.plan.billingChecking": "Checking",
+    "settingsModal.plan.billingUnavailable": "Payment actions are unavailable in this environment.",
+    "settingsModal.plan.actionsTitle": "Upgrade or manage plan",
+    "settingsModal.plan.actionsHelper":
+      "Choose the monthly plan that keeps ZAKI available when work spikes. Payment details and billing sync stay here.",
+    "settingsModal.plan.sources.subscription": "Subscription",
+    "settingsModal.plan.sources.subscriptionWithAccessCode": "Subscription + access code",
+    "settingsModal.plan.sources.accessCode": "Access code",
+    "settingsModal.plan.sources.free": "Free account",
+    "settingsModal.plan.topups.title": "Extra usage units",
+    "settingsModal.plan.topups.deferred":
+      "Top-up purchases are deferred for this release. Existing balances remain visible.",
+    "settingsModal.plan.topups.statusOnly": "Deferred",
+    "settingsModal.plan.cancelSubscription": "Cancel subscription",
     "settingsModal.plan.upgrade": "Upgrade",
     "settingsModal.usage.plan": "Plan",
-    "settingsModal.usage.weeklyAllowance": "Weekly allowance",
+    "settingsModal.usage.weeklyAllowance": "Weekly",
     "settingsModal.usage.weeklyAllowanceValue": "{{limit}} units",
     "settingsModal.usage.weeklyAllowancePending": "Policy pending",
     "settingsModal.usage.burstWindow": "Burst window",
@@ -463,13 +511,18 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.usage.usedOfLimit": "{{used}} / {{limit}}",
     "settingsModal.usage.usedUnits": "{{used}} used",
     "settingsModal.usage.usedUnlimited": "{{used}} · unlimited",
+    "settingsModal.usage.lifecycleLabel": "Lifecycle: {{lifecycle}}",
     "settingsModal.usage.period.day": "Daily",
     "settingsModal.usage.period.week": "Weekly",
     "settingsModal.usage.period.none": "No reset period",
     "settingsModal.usage.resetPending": "Reset pending",
+    "settingsModal.usage.productUsage": "Weekly by product",
+    "settingsModal.usage.productCount": "{{count}} products",
     "settingsModal.usage.helper":
       "This is the platform usage view. Agent-specific runtime usage remains inside Agent settings.",
     "settingsModal.agentSettings.reasoningEffort.name": "Reasoning effort",
+    "settingsModal.agentSettings.defaultsNotice":
+      "Defaults for new Agent turns. Per-turn controls can still be changed in Agent.",
     "settingsModal.agentSettings.reasoningEffort.helper":
       "Default thinking depth for new Agent turns. Live per-turn controls stay in Agent.",
     "settingsModal.agentSettings.reasoningEffort.options.low": "Low reasoning",
@@ -527,12 +580,15 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.agentSettings.loading": "Loading Agent memory settings...",
     "settingsModal.agentSettings.success.updated": "Agent settings updated.",
     "settingsModal.agentSettings.errors.update": "Unable to update Agent settings.",
-    "settingsModal.memoryData.dreamReflection": "Dream reflection",
+    "settingsModal.memoryData.dreamReflection": "Improve Agent memories automatically",
     "settingsModal.memoryData.dreamReflectionHelper":
-      "Run the nightly 3 AM memory reflection job for this user.",
-    "settingsModal.memoryData.queryExpansion": "Query expansion",
+      "Let Agent run background maintenance that organizes saved memories. This is not a memory on/off switch.",
+    "settingsModal.memoryData.queryExpansion": "Improve Agent recall",
     "settingsModal.memoryData.queryExpansionHelper":
-      "Expand short or vague memory searches with AI. Improves recall and costs more.",
+      "Let Agent broaden short memory searches so it can find relevant saved context more reliably.",
+    "settingsModal.memoryData.capturePolicy.name": "Chat memory capture",
+    "settingsModal.memoryData.capturePolicy.helper":
+      "Controls only Chat/Spaces memory capture. Agent memory does not have a master on/off switch yet.",
     "settingsModal.privacy.exportAllData": "Export all data",
     "settingsModal.privacy.exportHelper": "Download your chats and files",
     "settingsModal.privacy.deleteAccount": "Delete account",
@@ -557,6 +613,9 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     .replace("{{count}}", String(options?.count ?? ""))
     .replace("{{class}}", String(options?.class ?? ""))
     .replace("{{label}}", String(options?.label ?? ""))
+    .replace("{{channel}}", String(options?.channel ?? ""))
+    .replace("{{plan}}", String(options?.plan ?? ""))
+    .replace("{{lifecycle}}", String(options?.lifecycle ?? ""))
     .replace("{{priceLabel}}", String(options?.priceLabel ?? ""))
     .replace("{{status}}", String(options?.status ?? ""));
 };
@@ -570,6 +629,30 @@ jest.mock("react-i18next", () => ({
     },
   }),
 }));
+
+const checkoutMutateMock = jest.fn(async () => "https://checkout.example/plan");
+const billingPortalMutateMock = jest.fn(async () => "https://billing.example/portal");
+const syncBillingMutateMock = jest.fn(async () => ({ success: true }));
+const cancelSubscriptionMutateMock = jest.fn(async () => ({ success: true }));
+const mockDefaultBillingConfigured = {
+  checkoutEnabled: true,
+  portalEnabled: true,
+  cancelEnabled: true,
+  stripeEnabled: true,
+  topupCheckoutEnabled: true,
+  topupPacks: [
+    {
+      id: "boost_500",
+      label: "500 units",
+      units: 500,
+      stripePriceId: "price_topup_500",
+      unitAmount: 900,
+      currency: "usd",
+      available: true,
+    },
+  ],
+};
+let mockBillingConfigured = mockDefaultBillingConfigured;
 
 jest.mock("@/queries", () => ({
   useEntitlements: () => ({
@@ -589,41 +672,20 @@ jest.mock("@/queries", () => ({
   useBillingConfig: () => ({
     data: {
       data: {
-        configured: {
-          checkoutEnabled: true,
-          portalEnabled: true,
-          cancelEnabled: true,
-          stripeEnabled: true,
-          topupCheckoutEnabled: true,
-          topupPacks: [
-            {
-              id: "boost_500",
-              label: "500 units",
-              units: 500,
-              stripePriceId: "price_topup_500",
-              unitAmount: 900,
-              currency: "usd",
-              available: true,
-            },
-          ],
-        },
+        configured: mockBillingConfigured,
       },
     },
   }),
   useCheckout: () => ({
-    mutateAsync: jest.fn(async () => "https://checkout.example/plan"),
+    mutateAsync: checkoutMutateMock,
     isPending: false,
   }),
   useBillingPortal: () => ({
-    mutateAsync: jest.fn(async () => "https://billing.example/portal"),
+    mutateAsync: billingPortalMutateMock,
     isPending: false,
   }),
   useSyncBilling: () => ({
-    mutateAsync: jest.fn(async () => ({ success: true })),
-    isPending: false,
-  }),
-  useTopupCheckout: () => ({
-    mutateAsync: jest.fn(async () => "https://checkout.example/topup"),
+    mutateAsync: syncBillingMutateMock,
     isPending: false,
   }),
   usePlatformUsageSummary: () => ({
@@ -927,7 +989,7 @@ jest.mock("@/queries", () => ({
     isLoading: false,
     isError: false,
   }),
-  useCancelSubscription: () => ({ mutateAsync: jest.fn(), isPending: false }),
+  useCancelSubscription: () => ({ mutateAsync: cancelSubscriptionMutateMock, isPending: false }),
   useDeleteAccount: () => ({ mutateAsync: jest.fn(), isPending: false }),
 }));
 
@@ -961,9 +1023,12 @@ function LocationProbe() {
   );
 }
 
-function renderSettingsPage(initialEntry = "/settings") {
+async function renderSettingsPage(initialEntry = "/settings") {
   if (!HTMLElement.prototype.scrollIntoView) {
     HTMLElement.prototype.scrollIntoView = jest.fn();
+  }
+  if (!HTMLElement.prototype.scrollTo) {
+    HTMLElement.prototype.scrollTo = jest.fn();
   }
   useAuthStore.setState({
     token: "token",
@@ -972,12 +1037,18 @@ function renderSettingsPage(initialEntry = "/settings") {
     isLoading: false,
   });
   useUIStore.setState({ themePreference: "system", systemTheme: "light" });
-  return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
-      <SettingsPage />
-      <LocationProbe />
-    </MemoryRouter>
-  );
+  let result: ReturnType<typeof render> | undefined;
+  await act(async () => {
+    result = render(
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <SettingsPage />
+        <LocationProbe />
+      </MemoryRouter>
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  return result!;
 }
 
 describe("SettingsModal", () => {
@@ -1040,44 +1111,48 @@ describe("SettingsModal", () => {
 });
 
 describe("SettingsPage", () => {
-  it("renders the route-level V2 settings surface with the same MECE sections", async () => {
-    renderSettingsPage();
+  beforeEach(() => {
+    mockBillingConfigured = mockDefaultBillingConfigured;
+  });
+
+  it("renders the route-level V2 settings surface with configurable sections only", async () => {
+    await renderSettingsPage();
 
     expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeInTheDocument();
     expect(screen.getByTestId("settings-account")).toBeInTheDocument();
-    expect(screen.getByTestId("settings-connections")).toBeInTheDocument();
     expect(screen.getByTestId("settings-channels")).toBeInTheDocument();
     expect(screen.getByTestId("settings-secrets")).toBeInTheDocument();
-    expect(screen.getByTestId("settings-providers")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-providers")).not.toBeInTheDocument();
     expect(screen.getByTestId("settings-devices")).toBeInTheDocument();
     expect(screen.getByTestId("settings-billing")).toBeInTheDocument();
-    expect(screen.getByTestId("settings-products-access")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-products-access")).not.toBeInTheDocument();
     expect(screen.getByTestId("settings-agent")).toBeInTheDocument();
-    expect(screen.getByTestId("settings-spaces")).toBeInTheDocument();
-    expect(screen.getByTestId("settings-brain")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-spaces")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("settings-brain")).not.toBeInTheDocument();
     expect(screen.getByTestId("settings-platform-usage")).toBeInTheDocument();
     expect(screen.getByTestId("settings-memory-data")).toBeInTheDocument();
-    expect(screen.getByTestId("settings-developer-access")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-developer-access")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("settings-connections")).not.toBeInTheDocument();
     expect(screen.getByTestId("settings-privacy")).toBeInTheDocument();
 
     expect(screen.getByRole("link", { name: "Plan & Usage" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Products" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Agent" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Spaces/ })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Brain" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Spaces/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Brain" })).not.toBeInTheDocument();
+    expect(screen.getByText("Personal")).toBeInTheDocument();
+    expect(screen.getByText("Data")).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("settings-account")).getByRole("button", { name: "Sign out" })
+    ).toBeInTheDocument();
     const routeOrder = [
       "settings-account",
       "settings-billing",
-      "settings-products-access",
       "settings-agent",
-      "settings-spaces",
-      "settings-brain",
       "settings-channels",
       "settings-secrets",
-      "settings-providers",
       "settings-devices",
       "settings-memory-data",
-      "settings-developer-access",
-      "settings-connections",
       "settings-privacy",
     ].map((testId) => screen.getByTestId(testId));
     for (let index = 0; index < routeOrder.length - 1; index += 1) {
@@ -1088,42 +1163,43 @@ describe("SettingsPage", () => {
     }
 
     expect(within(screen.getByTestId("settings-billing")).getByText("ZAKI Hire")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-billing")).getByText("Unit top-ups")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-billing")).getByRole("button", { name: /Buy 500 units/ })).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-products-access")).getByText("ZAKI Design")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-billing")).getByText("Extra usage units")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-billing")).getByTestId("settings-weekly-meter")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-billing")).getByTestId("settings-burst-meter")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-billing")).queryByRole("button", { name: /Buy 500 units/ })).not.toBeInTheDocument();
     expect(within(screen.getByTestId("settings-agent")).queryByText("Assistant mode")).not.toBeInTheDocument();
     expect(within(screen.getByTestId("settings-agent")).getByText("Reasoning effort")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-agent")).getByText("Session timeout")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-providers")).getByText("Agent model default")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-providers")).getByLabelText("Agent model default")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-spaces")).getByText("Research Room")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-spaces-summary")).getByText("1/2")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-spaces-summary")).queryByText("Memory capture")).not.toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-spaces")).queryByText("Memory controls")).not.toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-brain")).getByText("Memory surface")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-brain")).queryByText("Memory controls")).not.toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-channels")).getByText("Telegram")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-channels")).getByText("Slack")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-channels")).getByText("Discord")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-channels")).getByText("Email")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-providers")).getByText("OpenAI-compatible provider")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-memory-data")).getByText("Personal brain")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-memory-data")).getByText("Dream reflection")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-memory-data")).getByText("Query expansion")).toBeInTheDocument();
+    expect(screen.queryByText("Agent model default")).not.toBeInTheDocument();
+    expect(screen.queryByText("OpenAI-compatible provider")).not.toBeInTheDocument();
+    const channelsSection = within(screen.getByTestId("settings-channels"));
+    expect(channelsSection.getByText("Telegram")).toBeInTheDocument();
+    expect(channelsSection.getAllByText("Slack")).toHaveLength(1);
+    expect(channelsSection.getAllByText("Discord")).toHaveLength(1);
+    expect(channelsSection.getAllByText("Email")).toHaveLength(1);
+    expect(channelsSection.getAllByText("WhatsApp")).toHaveLength(1);
+    expect(within(screen.getByTestId("settings-memory-data")).getByText("Chat memory capture")).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("settings-memory-data")).getByText("Improve Agent memories automatically")
+    ).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-memory-data")).getByText("Improve Agent recall")).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(within(screen.getByTestId("settings-connections")).getByText("Available")).toBeInTheDocument();
-      expect(within(screen.getByTestId("settings-channels")).getByText("Configured")).toBeInTheDocument();
+      expect(within(screen.getByTestId("settings-channels")).getAllByText("Credentials saved").length).toBeGreaterThan(0);
       expect(within(screen.getByTestId("settings-channels")).getByText("1 bindings")).toBeInTheDocument();
-      expect(within(screen.getByTestId("settings-channels")).getByText(/U123/)).toBeInTheDocument();
+      expect(within(screen.getByTestId("settings-channels")).queryByText(/U123/)).not.toBeInTheDocument();
       expect(within(screen.getByTestId("settings-secrets")).getByText("telegram_bot_token")).toBeInTheDocument();
       expect(within(screen.getByTestId("settings-secrets")).getByText("Metadata only")).toBeInTheDocument();
       expect(within(screen.getByTestId("settings-devices")).getAllByText("Not paired").length).toBeGreaterThan(0);
+      expect(within(screen.getByTestId("settings-devices")).getByRole("link", { name: "Download extension" })).toHaveAttribute(
+        "href",
+        "/downloads/zaki-browser-extension.zip"
+      );
     });
   });
 
   it("normalizes legacy settings query sections to canonical hashes", async () => {
-    renderSettingsPage("/settings?section=billing&utm=qa");
+    await renderSettingsPage("/settings?section=billing&utm=qa");
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-location")).toHaveTextContent(
@@ -1135,8 +1211,167 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("maps removed settings links to their configurable owners", async () => {
+    const productsRender = await renderSettingsPage("/settings?section=products&utm=qa");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-location")).toHaveTextContent(
+        "/settings?utm=qa#settings-billing"
+      );
+    });
+    productsRender.unmount();
+
+    const accessRender = await renderSettingsPage("/settings?section=access");
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-location")).toHaveTextContent(
+        "/settings#settings-billing"
+      );
+    });
+    accessRender.unmount();
+
+    const productsHashRender = await renderSettingsPage("/settings#settings-products");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-location")).toHaveTextContent(
+        "/settings#settings-billing"
+      );
+    });
+    productsHashRender.unmount();
+
+    const spacesRender = await renderSettingsPage("/settings#settings-spaces");
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-location")).toHaveTextContent(
+        "/settings#settings-billing"
+      );
+    });
+    spacesRender.unmount();
+
+    const brainRender = await renderSettingsPage("/settings#settings-brain");
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-location")).toHaveTextContent(
+        "/settings#settings-memory-data"
+      );
+    });
+    brainRender.unmount();
+
+    const developerRender = await renderSettingsPage("/settings#settings-developer-access");
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-location")).toHaveTextContent(
+        "/settings#settings-secrets"
+      );
+    });
+    developerRender.unmount();
+
+    const connectionsRender = await renderSettingsPage("/settings#settings-connections");
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-location")).toHaveTextContent(
+        "/settings#settings-account"
+      );
+    });
+    connectionsRender.unmount();
+
+    const usageRender = await renderSettingsPage("/settings#settings-usage");
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-location")).toHaveTextContent(
+        "/settings#settings-billing"
+      );
+    });
+    usageRender.unmount();
+  });
+
+  it("wires Plan & Usage actions to the monthly platform billing mutations", async () => {
+    checkoutMutateMock.mockClear();
+    billingPortalMutateMock.mockClear();
+    syncBillingMutateMock.mockClear();
+    cancelSubscriptionMutateMock.mockClear();
+
+    await renderSettingsPage("/settings#settings-billing");
+
+    const billing = within(screen.getByTestId("settings-billing"));
+    await waitFor(() => {
+      expect(billing.getByRole("button", { name: "Upgrade to Pro MAX" })).toBeInTheDocument();
+    });
+    expect(billing.queryByRole("button", { name: "Upgrade to Agent" })).not.toBeInTheDocument();
+    expect(billing.queryByRole("button", { name: "Upgrade to Complete" })).not.toBeInTheDocument();
+
+    fireEvent.click(billing.getByRole("button", { name: "Upgrade to Pro MAX" }));
+    await waitFor(() => {
+      expect(checkoutMutateMock).toHaveBeenCalledWith({
+        plan: "pro_max",
+        interval: "monthly",
+        context: { source: "settings" },
+      });
+    });
+
+    fireEvent.click(billing.getByRole("button", { name: "Manage subscription" }));
+    await waitFor(() => {
+      expect(billingPortalMutateMock).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(billing.getByRole("button", { name: "Sync billing" }));
+    await waitFor(() => {
+      expect(syncBillingMutateMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(billing.getByText("Extra usage units")).toBeInTheDocument();
+    expect(billing.getByText("Deferred")).toBeInTheDocument();
+    expect(billing.queryByRole("button", { name: /Buy 500 units/ })).not.toBeInTheDocument();
+
+    fireEvent.click(billing.getByRole("button", { name: "Cancel subscription" }));
+    await waitFor(() => {
+      expect(cancelSubscriptionMutateMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("renders Plan & Usage as a billing cockpit with overall, burst, wallet, and product meters", async () => {
+    await renderSettingsPage("/settings#settings-billing");
+
+    const billing = within(screen.getByTestId("settings-billing"));
+    const weeklyMeter = within(billing.getByTestId("settings-weekly-meter"));
+    const burstMeter = within(billing.getByTestId("settings-burst-meter"));
+
+    expect(weeklyMeter.getByText("Weekly")).toBeInTheDocument();
+    expect(weeklyMeter.getByText("1,920 / 1,500 left")).toBeInTheDocument();
+    expect(weeklyMeter.getByText("Used")).toBeInTheDocument();
+    expect(weeklyMeter.getByText("Remaining")).toBeInTheDocument();
+    expect(burstMeter.getByText("Burst window")).toBeInTheDocument();
+    expect(burstMeter.getByText("80 / 100 left")).toBeInTheDocument();
+    expect(billing.getByText("Recurring remaining")).toBeInTheDocument();
+    expect(billing.getByText("Extra units balance")).toBeInTheDocument();
+    expect(billing.getByText("Billing source")).toBeInTheDocument();
+    expect(billing.getByText("Subscription")).toBeInTheDocument();
+    expect(billing.getByText("Choose the monthly plan that keeps ZAKI available when work spikes. Payment details and billing sync stay here.")).toBeInTheDocument();
+    expect(billing.queryByText(/Stripe/i)).not.toBeInTheDocument();
+    expect(billing.getByText("Weekly by product")).toBeInTheDocument();
+    expect(billing.getByText("ZAKI Spaces")).toBeInTheDocument();
+    expect(billing.getByText("ZAKI Agent")).toBeInTheDocument();
+  });
+
+  it("hides unavailable billing and top-up actions with named explanations", async () => {
+    mockBillingConfigured = {
+      ...mockDefaultBillingConfigured,
+      checkoutEnabled: false,
+      portalEnabled: false,
+      cancelEnabled: false,
+      stripeEnabled: false,
+      topupCheckoutEnabled: false,
+      topupPacks: [],
+    };
+
+    await renderSettingsPage("/settings#settings-billing");
+
+    const billing = within(screen.getByTestId("settings-billing"));
+    expect(billing.queryByRole("button", { name: "Upgrade to Pro MAX" })).not.toBeInTheDocument();
+    expect(billing.queryByRole("button", { name: "Manage subscription" })).not.toBeInTheDocument();
+    expect(billing.queryByRole("button", { name: "Sync billing" })).not.toBeInTheDocument();
+    expect(billing.queryByRole("button", { name: "Cancel subscription" })).not.toBeInTheDocument();
+    expect(billing.getByText("Payment actions are unavailable in this environment.")).toBeInTheDocument();
+    expect(billing.getByText("Top-up purchases are deferred for this release. Existing balances remain visible.")).toBeInTheDocument();
+    expect(billing.getByText("Deferred")).toBeInTheDocument();
+  });
+
   it("updates the active sidebar section when the settings page scrolls", async () => {
-    renderSettingsPage("/settings#settings-billing");
+    await renderSettingsPage("/settings#settings-billing");
 
     const scroller = document.querySelector<HTMLElement>(".zaki-settings-v2");
     expect(scroller).toBeTruthy();
@@ -1214,7 +1449,7 @@ describe("SettingsPage", () => {
   it("sends precise Agent settings PATCH payloads from the product tab", async () => {
     const updateBotSettingsMock = updateBotSettings as jest.MockedFunction<typeof updateBotSettings>;
     updateBotSettingsMock.mockClear();
-    renderSettingsPage();
+    await renderSettingsPage();
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-agent")).toBeInTheDocument();
@@ -1234,10 +1469,27 @@ describe("SettingsPage", () => {
       expect(updateBotSettingsMock).toHaveBeenCalledWith({ assistant_mode: "deep" });
     });
 
+    fireEvent.change(screen.getByLabelText("Group activation"), {
+      target: { value: "always" },
+    });
+    await waitFor(() => {
+      expect(updateBotSettingsMock).toHaveBeenCalledWith({ group_activation: "always" });
+    });
+
     fireEvent.click(screen.getByLabelText("Proactive updates"));
     await waitFor(() => {
       expect(updateBotSettingsMock).toHaveBeenCalledWith({ proactive_updates: false });
     });
+
+    fireEvent.click(screen.getByLabelText("Voice replies"));
+    await waitFor(() => {
+      expect(updateBotSettingsMock).toHaveBeenCalledWith({ voice_replies: true });
+    });
+
+    expect(screen.queryByText("Agent model default")).not.toBeInTheDocument();
+    expect(updateBotSettingsMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ selected_model: expect.anything() })
+    );
 
     const sessionTimeoutInput = screen.getByLabelText("Session timeout");
     fireEvent.change(sessionTimeoutInput, {
@@ -1250,8 +1502,42 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("keeps the Agent settings tab focused on controls instead of navigation chips", async () => {
+    await renderSettingsPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-agent")).toBeInTheDocument();
+    });
+
+    const agentSettings = within(screen.getByTestId("settings-agent"));
+    expect(agentSettings.queryByRole("button", { name: "Open Agent" })).not.toBeInTheDocument();
+    expect(agentSettings.queryByRole("button", { name: "Channels" })).not.toBeInTheDocument();
+    expect(agentSettings.queryByRole("button", { name: "Providers" })).not.toBeInTheDocument();
+  });
+
+  it("rejects Agent session timeout values outside the BFF contract before PATCH", async () => {
+    const updateBotSettingsMock = updateBotSettings as jest.MockedFunction<typeof updateBotSettings>;
+    updateBotSettingsMock.mockClear();
+    await renderSettingsPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-agent")).toBeInTheDocument();
+    });
+
+    const sessionTimeoutInput = screen.getByLabelText("Session timeout");
+    expect(sessionTimeoutInput).toHaveAttribute("max", "180");
+    fireEvent.change(sessionTimeoutInput, {
+      target: { value: "181" },
+    });
+    fireEvent.blur(sessionTimeoutInput);
+
+    expect(sessionTimeoutInput).toHaveValue(181);
+    expect(screen.getByText("Use a whole number from 5 to 180 minutes.")).toBeInTheDocument();
+    expect(updateBotSettingsMock).not.toHaveBeenCalledWith({ session_timeout_minutes: 181 });
+  });
+
   it("keeps memory governance editable only in Memory & Data", async () => {
-    renderSettingsPage();
+    await renderSettingsPage();
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-agent")).toBeInTheDocument();
@@ -1263,17 +1549,12 @@ describe("SettingsPage", () => {
     expect(
       within(screen.getByTestId("settings-agent")).queryByLabelText("Agent query expansion")
     ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("settings-brain")).not.toBeInTheDocument();
     expect(
-      within(screen.getByTestId("settings-brain")).queryByLabelText("Brain dream reflection")
-    ).not.toBeInTheDocument();
-    expect(
-      within(screen.getByTestId("settings-brain")).queryByLabelText("Brain query expansion")
-    ).not.toBeInTheDocument();
-    expect(
-      within(screen.getByTestId("settings-memory-data")).getByLabelText("Dream reflection")
+      within(screen.getByTestId("settings-memory-data")).getByLabelText("Improve Agent memories automatically")
     ).toBeInTheDocument();
     expect(
-      within(screen.getByTestId("settings-memory-data")).getByLabelText("Query expansion")
+      within(screen.getByTestId("settings-memory-data")).getByLabelText("Improve Agent recall")
     ).toBeInTheDocument();
     const memoryData = within(screen.getByTestId("settings-memory-data"));
     const forgetButton = memoryData.getByRole("button", { name: "Forget memory" });
@@ -1284,6 +1565,23 @@ describe("SettingsPage", () => {
     expect(forgetButton).toBeEnabled();
   });
 
+  it("signs out from the Account settings section", async () => {
+    const requestLogoutMock = requestLogout as jest.MockedFunction<typeof requestLogout>;
+    requestLogoutMock.mockClear();
+    await renderSettingsPage();
+
+    fireEvent.click(
+      within(screen.getByTestId("settings-account")).getByRole("button", { name: "Sign out" })
+    );
+
+    await waitFor(() => {
+      expect(requestLogoutMock).toHaveBeenCalledTimes(1);
+      expect(useAuthStore.getState().token).toBeNull();
+      expect(useAuthStore.getState().user).toBeNull();
+      expect(useAuthStore.getState().isLoading).toBe(false);
+    });
+  });
+
   it("wires Memory & Data capture, dream, and query settings to their BFF APIs", async () => {
     const updateMemoryPreferencesMock = updateMemoryPreferences as jest.MockedFunction<
       typeof updateMemoryPreferences
@@ -1291,26 +1589,26 @@ describe("SettingsPage", () => {
     const updateBotSettingsMock = updateBotSettings as jest.MockedFunction<typeof updateBotSettings>;
     updateMemoryPreferencesMock.mockClear();
     updateBotSettingsMock.mockClear();
-    renderSettingsPage();
+    await renderSettingsPage();
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-memory-data")).toBeInTheDocument();
     });
 
     const memoryData = within(screen.getByTestId("settings-memory-data"));
-    fireEvent.change(memoryData.getByLabelText("Memory capture"), {
+    fireEvent.change(memoryData.getByLabelText("Chat memory capture"), {
       target: { value: "off" },
     });
     await waitFor(() => {
       expect(updateMemoryPreferencesMock).toHaveBeenCalledWith("off");
     });
 
-    fireEvent.click(memoryData.getByLabelText("Dream reflection"));
+    fireEvent.click(memoryData.getByLabelText("Improve Agent memories automatically"));
     await waitFor(() => {
       expect(updateBotSettingsMock).toHaveBeenCalledWith({ dream_enabled: false });
     });
 
-    fireEvent.click(memoryData.getByLabelText("Query expansion"));
+    fireEvent.click(memoryData.getByLabelText("Improve Agent recall"));
     await waitFor(() => {
       expect(updateBotSettingsMock).toHaveBeenCalledWith({
         query_expansion_enabled: true,
@@ -1327,18 +1625,22 @@ describe("SettingsPage", () => {
     >;
     upsertBindingMock.mockClear();
     deleteBindingMock.mockClear();
-    renderSettingsPage();
+    await renderSettingsPage();
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-channels")).toBeInTheDocument();
     });
 
-    const slackBindingEditor = screen
-      .getByLabelText("Slack principal key")
-      .closest(".zaki-settings-v2__edit-tray");
+    fireEvent.click(
+      within(screen.getByTestId("settings-channel-slack")).getByRole("button", {
+        name: "Manage Slack",
+      })
+    );
+
+    const slackBindingEditor = screen.getByTestId("settings-channel-bindings-slack");
     expect(slackBindingEditor).not.toBeNull();
     const saveBindingButton = within(slackBindingEditor as HTMLElement).getByRole("button", {
-      name: "Save binding",
+      name: "Bind Slack identity",
     });
     expect(saveBindingButton).toBeDisabled();
 
@@ -1367,7 +1669,7 @@ describe("SettingsPage", () => {
     const existingBindingRow = screen.getByText(/main \/ U123 \/ C123/).closest("div");
     expect(existingBindingRow).not.toBeNull();
     fireEvent.click(
-      within(existingBindingRow as HTMLElement).getByRole("button", { name: "Delete binding" })
+      within(existingBindingRow as HTMLElement).getByRole("button", { name: "Delete Slack binding" })
     );
 
     await waitFor(() => {
@@ -1379,20 +1681,57 @@ describe("SettingsPage", () => {
     const connectMock = connectAgentChannelControl as jest.MockedFunction<
       typeof connectAgentChannelControl
     >;
+    const connectTelegramMock = connectBotTelegram as jest.MockedFunction<typeof connectBotTelegram>;
     const testMock = testAgentChannelControl as jest.MockedFunction<typeof testAgentChannelControl>;
     const disconnectMock = disconnectAgentChannelControl as jest.MockedFunction<
       typeof disconnectAgentChannelControl
     >;
+    const disconnectTelegramMock = disconnectBotTelegram as jest.MockedFunction<typeof disconnectBotTelegram>;
     connectMock.mockClear();
+    connectTelegramMock.mockClear();
     testMock.mockClear();
     disconnectMock.mockClear();
-    renderSettingsPage();
+    disconnectTelegramMock.mockClear();
+    await renderSettingsPage();
 
     await waitFor(() => {
-      expect(screen.getByTestId("settings-channel-control-slack")).toBeInTheDocument();
+      expect(screen.getByTestId("settings-channel-slack")).toBeInTheDocument();
     });
 
-    const slackControl = within(screen.getByTestId("settings-channel-control-slack"));
+    fireEvent.click(
+      within(screen.getByTestId("settings-channel-telegram")).getByRole("button", {
+        name: "Manage Telegram",
+      })
+    );
+
+    const telegramControl = within(screen.getByTestId("settings-channel-panel-telegram"));
+    const saveTelegramButton = telegramControl.getByRole("button", {
+      name: "Update Telegram credentials",
+    });
+    expect(saveTelegramButton).toBeDisabled();
+    fireEvent.change(telegramControl.getByLabelText("Telegram Bot token"), {
+      target: { value: " 123456:telegram-token " },
+    });
+    expect(saveTelegramButton).toBeEnabled();
+    fireEvent.click(saveTelegramButton);
+
+    await waitFor(() => {
+      expect(connectTelegramMock).toHaveBeenCalledWith({
+        bot_token: "123456:telegram-token",
+      });
+    });
+    fireEvent.click(telegramControl.getByRole("button", { name: "Disconnect Telegram" }));
+    await waitFor(() => {
+      expect(disconnectTelegramMock).toHaveBeenCalled();
+    });
+
+    fireEvent.click(
+      within(screen.getByTestId("settings-channel-slack")).getByRole("button", {
+        name: "Manage Slack",
+      })
+    );
+
+    const slackControl = within(screen.getByTestId("settings-channel-panel-slack"));
     const saveCredentialsButton = slackControl.getByRole("button", {
       name: "Update Slack credentials",
     });
@@ -1414,7 +1753,7 @@ describe("SettingsPage", () => {
       });
     });
 
-    fireEvent.click(slackControl.getByRole("button", { name: "Test Slack" }));
+    fireEvent.click(slackControl.getByRole("button", { name: "Check Slack credentials" }));
     await waitFor(() => {
       expect(testMock).toHaveBeenCalledWith("slack");
     });
@@ -1425,51 +1764,91 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("wires provider profile creation through the Agent provider BFF", async () => {
-    const createProviderMock = createAgentProviderProfile as jest.MockedFunction<
-      typeof createAgentProviderProfile
+  it("hides channel credential actions when the channel control plane is unavailable", async () => {
+    const fetchChannelControlsMock = fetchAgentChannelControls as jest.MockedFunction<
+      typeof fetchAgentChannelControls
     >;
-    createProviderMock.mockClear();
-    renderSettingsPage();
+    fetchChannelControlsMock.mockResolvedValueOnce({
+      response: { ok: false } as Response,
+      data: { error: "channel_controls_unavailable" },
+    });
+
+    await renderSettingsPage();
 
     await waitFor(() => {
-      expect(screen.getByTestId("settings-provider-create")).toBeInTheDocument();
+      expect(
+        within(screen.getByTestId("settings-channels")).getAllByText("Control plane unavailable")
+          .length
+      ).toBeGreaterThan(0);
     });
 
-    const providerCreate = within(screen.getByTestId("settings-provider-create"));
-    const saveProviderButton = providerCreate.getByRole("button", { name: "Save provider" });
-    expect(saveProviderButton).toBeDisabled();
-    fireEvent.change(providerCreate.getByPlaceholderText("Label"), {
-      target: { value: " Local OpenAI " },
+    const channels = within(screen.getByTestId("settings-channels"));
+    expect(channels.queryByRole("button", { name: "Save Slack credentials" })).not.toBeInTheDocument();
+    expect(channels.queryByRole("button", { name: "Test Slack" })).not.toBeInTheDocument();
+    expect(channels.queryByRole("button", { name: "Check Slack credentials" })).not.toBeInTheDocument();
+    expect(channels.queryByRole("button", { name: "Disconnect Slack" })).not.toBeInTheDocument();
+    expect(
+      channels.getAllByText("Credential actions are unavailable until the channel control plane responds.")
+        .length
+    ).toBeGreaterThan(0);
+  });
+
+  it("shows user token setup fields for supported channel controls", async () => {
+    const fetchChannelControlsMock = fetchAgentChannelControls as jest.MockedFunction<
+      typeof fetchAgentChannelControls
+    >;
+    fetchChannelControlsMock.mockResolvedValueOnce({
+      response: { ok: true } as Response,
+      data: {
+        channels: [
+          {
+            channel: "slack",
+            label: "Slack",
+            build_enabled: true,
+            operator_configured: false,
+            user_managed: true,
+            user_connected: false,
+            status: "not_connected",
+            secret_refs: [
+              { key: "slack_bot_token", label: "Bot token", required: true, present: false },
+              { key: "slack_signing_secret", label: "Signing secret", required: true, present: false },
+            ],
+            config: {},
+            last_test: null,
+          },
+        ],
+      },
     });
-    fireEvent.change(providerCreate.getByPlaceholderText("https://api.example.com/v1"), {
-      target: { value: " https://models.example.com/v1 " },
-    });
-    fireEvent.change(providerCreate.getByPlaceholderText("API key"), {
-      target: { value: " sk-settings-test " },
-    });
-    fireEvent.change(providerCreate.getByPlaceholderText("model-a, model-b"), {
-      target: { value: " gpt-4.1, gpt-4.1-mini " },
-    });
-    fireEvent.change(providerCreate.getByPlaceholderText("Default model"), {
-      target: { value: " gpt-4.1-mini " },
-    });
-    expect(saveProviderButton).toBeEnabled();
-    fireEvent.click(saveProviderButton);
+
+    await renderSettingsPage();
 
     await waitFor(() => {
-      expect(createProviderMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          label: "Local OpenAI",
-          provider_kind: "openai_compatible",
-          base_url: "https://models.example.com/v1",
-          api_key: "sk-settings-test",
-          auth_style: "bearer",
-          model_allowlist: ["gpt-4.1", "gpt-4.1-mini"],
-          default_model: "gpt-4.1-mini",
-        })
-      );
+      expect(screen.getByTestId("settings-channel-slack")).toBeInTheDocument();
     });
+
+    fireEvent.click(
+      within(screen.getByTestId("settings-channel-slack")).getByRole("button", {
+        name: "Manage Slack",
+      })
+    );
+
+    const slackPanel = within(screen.getByTestId("settings-channel-panel-slack"));
+    expect(slackPanel.getByTestId("settings-channel-credentials-slack")).toBeInTheDocument();
+    expect(slackPanel.getByLabelText("Slack Bot token")).toBeInTheDocument();
+    expect(slackPanel.getByLabelText("Slack Signing secret")).toBeInTheDocument();
+    expect(slackPanel.getByLabelText("Slack App token")).toBeInTheDocument();
+    expect(slackPanel.getByLabelText("Slack Workspace ID")).toBeInTheDocument();
+    expect(slackPanel.getByRole("button", { name: "Update Slack credentials" })).toBeDisabled();
+    expect(slackPanel.getByText("Bind Slack identity")).toBeInTheDocument();
+  });
+
+  it("keeps future provider and model controls hidden from end-user settings", async () => {
+    await renderSettingsPage();
+
+    expect(screen.queryByTestId("settings-providers")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("settings-provider-create")).not.toBeInTheDocument();
+    expect(screen.queryByText("Agent model default")).not.toBeInTheDocument();
+    expect(screen.queryByText("OpenAI-compatible provider")).not.toBeInTheDocument();
   });
 
   it("wires secret rotation and extension device pairing", async () => {
@@ -1479,7 +1858,7 @@ describe("SettingsPage", () => {
     >;
     putSecretMock.mockClear();
     pairDeviceMock.mockClear();
-    renderSettingsPage();
+    await renderSettingsPage();
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-secrets")).toBeInTheDocument();
@@ -1515,20 +1894,54 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("keeps Spaces settings as an overview with object-level manage links", async () => {
-    renderSettingsPage();
-
-    await waitFor(() => {
-      expect(screen.getByTestId("settings-space-research")).toBeInTheDocument();
+  it("hides secret and device mutation forms when their BFF facades are unavailable", async () => {
+    const listSecretsMock = listAgentSecrets as jest.MockedFunction<typeof listAgentSecrets>;
+    const fetchDevicesMock = fetchAgentExtensionDevices as jest.MockedFunction<
+      typeof fetchAgentExtensionDevices
+    >;
+    listSecretsMock.mockResolvedValueOnce({
+      response: { ok: false } as Response,
+      data: { error: "agent_secrets_unavailable" },
+    });
+    fetchDevicesMock.mockResolvedValueOnce({
+      response: { ok: false } as Response,
+      data: { error: "extension_devices_unavailable" },
     });
 
-    const spaces = within(screen.getByTestId("settings-spaces"));
-    expect(spaces.getByTestId("settings-space-open-research")).toBeInTheDocument();
-    expect(spaces.getByTestId("settings-space-manage-research")).toBeInTheDocument();
-    expect(spaces.queryByTestId("settings-space-edit-research")).not.toBeInTheDocument();
-    expect(spaces.queryByTestId("settings-space-save-research")).not.toBeInTheDocument();
-    expect(spaces.queryByTestId("settings-space-editor-research")).not.toBeInTheDocument();
-    expect(spaces.queryByText("Memory controls")).not.toBeInTheDocument();
+    await renderSettingsPage();
+
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId("settings-secrets")).getByText(
+          "Secret actions are unavailable until the Agent vault responds."
+        )
+      ).toBeInTheDocument();
+    });
+
+    const secrets = within(screen.getByTestId("settings-secrets"));
+    expect(secrets.queryByRole("button", { name: "Save secret" })).not.toBeInTheDocument();
+    expect(secrets.queryByPlaceholderText("OPENAI_API_KEY")).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId("settings-devices")).getByText(
+          "Device pairing is unavailable until the extension device service responds."
+        )
+      ).toBeInTheDocument();
+    });
+
+    const devices = within(screen.getByTestId("settings-devices"));
+    expect(devices.queryByRole("button", { name: "Pair device" })).not.toBeInTheDocument();
+    expect(devices.queryByPlaceholderText("Work laptop")).not.toBeInTheDocument();
+  });
+
+  it("keeps Spaces object settings out of route-level Settings", async () => {
+    await renderSettingsPage();
+
+    expect(screen.queryByTestId("settings-spaces")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("settings-space-research")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("settings-space-open-research")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("settings-space-manage-research")).not.toBeInTheDocument();
   });
 
 });

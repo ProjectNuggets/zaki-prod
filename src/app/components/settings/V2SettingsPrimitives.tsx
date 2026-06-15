@@ -7,6 +7,7 @@ export type V2SettingsNavItem = {
   meta?: ReactNode;
   icon: ComponentType<{ className?: string }>;
   tone?: "default" | "warn" | "danger";
+  group?: ReactNode;
 };
 
 export function V2SettingsNav({
@@ -40,19 +41,23 @@ export function V2SettingsNav({
         <h1>{title}</h1>
       </div>
       <nav ref={navRef} aria-label={ariaLabel} className="v2-settings-nav__list">
-        {items.map(({ href, label, meta, icon: Icon, tone = "default" }) => {
+        {items.map(({ href, label, meta, icon: Icon, tone = "default", group }, index) => {
           const isActive = activeHref === href;
+          const previousGroup = index > 0 ? items[index - 1]?.group : null;
+          const showGroup = group != null && group !== previousGroup;
           return (
-            <a
-              key={href}
-              href={href}
-              aria-current={isActive ? "page" : undefined}
-              className={cn(isActive && "is-active", tone !== "default" && `is-${tone}`)}
-            >
-              <Icon className="size-3.5" aria-hidden="true" />
-              <span>{label}</span>
-              {meta != null ? <small>{meta}</small> : null}
-            </a>
+            <div key={href} className="v2-settings-nav__item">
+              {showGroup ? <div className="v2-settings-nav__group">{group}</div> : null}
+              <a
+                href={href}
+                aria-current={isActive ? "page" : undefined}
+                className={cn(isActive && "is-active", tone !== "default" && `is-${tone}`)}
+              >
+                <Icon className="size-3.5" aria-hidden="true" />
+                <span>{label}</span>
+                {meta != null ? <small>{meta}</small> : null}
+              </a>
+            </div>
           );
         })}
       </nav>
