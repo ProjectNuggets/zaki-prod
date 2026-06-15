@@ -102,19 +102,32 @@ type MeterUsageRow = {
   meterProduct: MeterStatusProduct | null;
 };
 
-type SettingsBillingPlanId = "free" | "personal" | "pro" | "pro_max";
-type SettingsCheckoutPlanId = Exclude<SettingsBillingPlanId, "free">;
+type SettingsBillingPlanId =
+  | "free"
+  | "personal"
+  | "agent"
+  | "learn"
+  | "complete"
+  | "pro"
+  | "pro_max";
+type SettingsCheckoutPlanId = "agent";
 
-const SETTINGS_PAID_PLAN_IDS = ["personal", "pro", "pro_max"] as const satisfies readonly SettingsCheckoutPlanId[];
+const SETTINGS_PAID_PLAN_IDS = ["agent"] as const satisfies readonly SettingsCheckoutPlanId[];
 const SETTINGS_PLAN_RANK: Record<SettingsBillingPlanId, number> = {
   free: 0,
   personal: 1,
+  agent: 1,
+  learn: 2,
   pro: 2,
+  complete: 3,
   pro_max: 3,
 };
 const SETTINGS_PLAN_LABELS: Record<SettingsBillingPlanId, string> = {
   free: "Free",
   personal: "Personal",
+  agent: "ZAKI Agent",
+  learn: "ZAKI Learn",
+  complete: "ZAKI Complete",
   pro: "Pro",
   pro_max: "Pro MAX",
 };
@@ -272,14 +285,15 @@ function formatUsageUnits(value?: number | null) {
 function normalizeSettingsPlanId(value: unknown): SettingsBillingPlanId {
   const plan = String(value || "").trim().toLowerCase();
   if (plan === "pro_max" || plan === "promax") return "pro_max";
-  if (plan === "pro" || plan === "complete") return "pro";
+  if (plan === "complete") return "complete";
+  if (plan === "pro") return "pro";
+  if (plan === "agent") return "agent";
+  if (plan === "learn") return "learn";
   if (
     plan === "personal" ||
     plan === "student" ||
     plan === "legacy_personal" ||
-    plan === "access_code" ||
-    plan === "agent" ||
-    plan === "learn"
+    plan === "access_code"
   ) {
     return "personal";
   }

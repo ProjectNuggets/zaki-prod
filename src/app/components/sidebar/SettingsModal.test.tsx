@@ -1289,19 +1289,12 @@ describe("SettingsPage", () => {
 
     const billing = within(screen.getByTestId("settings-billing"));
     await waitFor(() => {
-      expect(billing.getByRole("button", { name: "Upgrade to Pro MAX" })).toBeInTheDocument();
+      expect(billing.getByRole("button", { name: "Manage subscription" })).toBeInTheDocument();
     });
+    expect(billing.queryByRole("button", { name: "Upgrade to Pro MAX" })).not.toBeInTheDocument();
     expect(billing.queryByRole("button", { name: "Upgrade to Agent" })).not.toBeInTheDocument();
     expect(billing.queryByRole("button", { name: "Upgrade to Complete" })).not.toBeInTheDocument();
-
-    fireEvent.click(billing.getByRole("button", { name: "Upgrade to Pro MAX" }));
-    await waitFor(() => {
-      expect(checkoutMutateMock).toHaveBeenCalledWith({
-        plan: "pro_max",
-        interval: "monthly",
-        context: { source: "settings" },
-      });
-    });
+    expect(checkoutMutateMock).not.toHaveBeenCalled();
 
     fireEvent.click(billing.getByRole("button", { name: "Manage subscription" }));
     await waitFor(() => {

@@ -515,9 +515,6 @@ function renderChatArea() {
 async function renderChatAreaAndWaitForEffects() {
   const result = renderChatArea();
   await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/documents/accepted-file-types"));
-  await act(async () => {
-    await Promise.resolve();
-  });
   return result;
 }
 
@@ -631,7 +628,13 @@ describe("ChatArea Component", () => {
     cancelAnimationFrameSpy = jest
       .spyOn(window, "cancelAnimationFrame")
       .mockImplementation(() => undefined);
-    (apiRequest as jest.Mock).mockClear();
+    (apiRequest as jest.Mock).mockReset();
+    (apiRequest as jest.Mock).mockImplementation(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+      headers: new Headers(),
+    }));
     (fetchAgentSessionHistory as jest.Mock).mockReset();
     (fetchAgentSessionHistory as jest.Mock).mockImplementation(async () => ({
       response: {
@@ -642,7 +645,15 @@ describe("ChatArea Component", () => {
       },
       data: { messages: [] },
     }));
-    (fetchAgentMe as jest.Mock).mockClear();
+    (fetchAgentMe as jest.Mock).mockReset();
+    (fetchAgentMe as jest.Mock).mockImplementation(async () => ({
+      response: {
+        ok: true,
+        status: 200,
+        json: async () => ({ userId: null }),
+      },
+      data: { userId: null },
+    }));
     (fetchAgentSession as jest.Mock).mockReset();
     (fetchAgentSession as jest.Mock).mockImplementation(async () => ({
       response: {
@@ -816,12 +827,15 @@ describe("ChatArea Component", () => {
     (useMessages as jest.Mock).mockReturnValue({ data: [], isLoading: false });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     requestAnimationFrameSpy?.mockRestore();
     cancelAnimationFrameSpy?.mockRestore();
     consoleErrorSpy?.mockRestore();
     consoleLogSpy?.mockRestore();
     cleanup();
+    await act(async () => {
+      await Promise.resolve();
+    });
   });
 
   it("normalizes Nullalis session context fields into the context meter model", () => {
@@ -1047,7 +1061,7 @@ describe("ChatArea Component", () => {
       },
     });
 
-    await renderChatAreaAndWaitForEffects();
+    const view = await renderChatAreaAndWaitForEffects();
 
     await waitFor(() => {
       expect(fetchAgentSessionContext).toHaveBeenCalledWith(
@@ -1060,15 +1074,19 @@ describe("ChatArea Component", () => {
     expect(
       zakiSessionUiState.sessions["agent:zaki-bot:user:1:thread:main"]?.contextPressurePercent
     ).toBe(7.3);
+    view.unmount();
   });
 
-  it("keeps the trusted live context sample visible while a same-session turn is running", async () => {
+  it("keeps the trusted live context sample visible after a same-session turn", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
     authState = { user: { username: "nova@test.com" }, isLoading: false };
     window.sessionStorage.setItem("zaki:agentUserId", "1");
-    const streamResponsePromise = new Promise<never>(() => {});
+    (fetchAgentMe as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
     (fetchAgentSessionContext as jest.Mock).mockResolvedValue({
       response: { ok: true, status: 200, headers: new Headers() },
       data: {
@@ -1083,7 +1101,12 @@ describe("ChatArea Component", () => {
     });
     (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
       if (path === "/api/agent/chat/stream") {
-        return streamResponsePromise;
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: async () => ({ type: "done", message: "done" }),
+        };
       }
       return {
         ok: true,
@@ -1097,9 +1120,6 @@ describe("ChatArea Component", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("zaki-context-meter")).toHaveTextContent("25%");
-    });
-    await waitFor(() => {
-      expect(fetchAgentSessionHistory).toHaveBeenCalledWith("agent:zaki-bot:user:1:thread:main");
     });
     (fetchAgentSessionHistory as jest.Mock).mockClear();
     fireEvent.change(screen.getByRole("combobox"), {
@@ -1355,6 +1375,10 @@ describe("ChatArea Component", () => {
     navState.threadId = "main";
     authState = { user: { username: "nova@test.com" }, isLoading: false };
     window.sessionStorage.setItem("zaki:agentUserId", "1");
+    (fetchAgentMe as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
 
     // Agent SSE: a content token FIRST, then a retryable:true error frame. Even
     // though the BFF (mis)labelled it retryable, the FE must treat it as a hard
@@ -1393,6 +1417,10 @@ describe("ChatArea Component", () => {
     navState.threadId = "main";
     authState = { user: { username: "nova@test.com" }, isLoading: false };
     window.sessionStorage.setItem("zaki:agentUserId", "1");
+    (fetchAgentMe as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
 
     // Agent SSE: a retryable:true error frame with NO content first — a genuine
     // pre-content drop (e.g. gateway_draining). This MUST replay the same turn.

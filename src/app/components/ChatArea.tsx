@@ -6033,6 +6033,17 @@ export function ChatArea() {
       eventType?: string
     ): { done?: boolean; chunk?: string; agentUrl?: string } => {
       const payloadType = typeof payload.type === "string" ? payload.type : "";
+      const payloadHasText =
+        (typeof payload.delta === "string" && payload.delta.length > 0) ||
+        (typeof payload.token === "string" && payload.token.length > 0) ||
+        (typeof payload.text === "string" && payload.text.length > 0) ||
+        (typeof payload.textResponse === "string" && payload.textResponse.length > 0) ||
+        (typeof payload.chunk === "string" && payload.chunk.length > 0) ||
+        (typeof payload.content === "string" && payload.content.length > 0) ||
+        (typeof payload.message === "string" && payload.message.length > 0);
+      if (eventType === "token" || payloadType === "token") {
+        if (payloadHasText) turnContent.received = true;
+      }
       const trackChunk = (chunk: string): { chunk: string } => {
         if (chunk) turnContent.received = true;
         return { chunk };
@@ -6535,6 +6546,7 @@ export function ChatArea() {
 
     const appendChunk = (chunk: string) => {
       if (!chunk) return;
+      turnContent.received = true;
       accumulated += chunk;
       if (renderRaf != null) return;
       renderRaf = window.requestAnimationFrame(() => {
