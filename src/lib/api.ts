@@ -424,6 +424,21 @@ export async function requestLogin({
   return { response, data };
 }
 
+export async function requestLogout() {
+  const response = await backendRequest("/api/auth/logout", {
+    method: "POST",
+  });
+
+  let data: { success?: boolean; error?: string | null } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+
+  return { response, data };
+}
+
 export function buildGoogleOAuthStartUrl(returnTo?: string) {
   const fallbackReturnTo =
     typeof window !== "undefined"

@@ -314,13 +314,13 @@ export function BrainPage() {
               deep-link keeps the brain page "Settings-link ready".
             */}
             <Link
-              to="/settings#settings-brain"
+              to="/settings#settings-memory-data"
               className="zaki-brain-v2__governance-link"
               data-testid="brain-manage-memory-link"
             >
               <Shield className="size-3.5" aria-hidden="true" />
               {t("brain.governance.brainSettingsLink", {
-                defaultValue: "Brain settings",
+                defaultValue: "Memory settings",
               })}
             </Link>
           </div>
