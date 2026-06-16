@@ -39,6 +39,7 @@ import { useAuthStore } from "@/stores";
 import { cn } from "@/lib/utils";
 import {
   buildAnonymousWorkTitle,
+  clearAnonymousWorkLedger,
   readAnonymousWorkLedger,
   upsertAnonymousWorkItem,
   type AnonymousWorkItem,
@@ -694,11 +695,13 @@ function DashboardIntroModal({
 function ReturningWorkStrip({
   t,
   items,
+  claimed = false,
   onContinue,
   onSave,
 }: {
   t: TranslateFn;
   items: AnonymousWorkItem[];
+  claimed?: boolean;
   onContinue: (item: AnonymousWorkItem) => void;
   onSave: (item?: AnonymousWorkItem) => void;
 }) {
@@ -709,22 +712,32 @@ function ReturningWorkStrip({
       <div className="zaki-dashboard-command__ledger-head">
         <div>
           <h2>
-            {t("zakiDashboard.anonymousWork.title", {
-              defaultValue: "Continue what you started",
-            })}
+            {claimed
+              ? t("zakiDashboard.anonymousWork.claimedTitle", {
+                  defaultValue: "We kept your work",
+                })
+              : t("zakiDashboard.anonymousWork.title", {
+                  defaultValue: "Continue what you started",
+                })}
           </h2>
           <p>
-            {t("zakiDashboard.anonymousWork.subtitle", {
-              defaultValue: "Saved in this browser only. Sign in to keep it across devices.",
-            })}
+            {claimed
+              ? t("zakiDashboard.anonymousWork.claimedSubtitle", {
+                  defaultValue: "Your recent browser work is available after sign-in.",
+                })
+              : t("zakiDashboard.anonymousWork.subtitle", {
+                  defaultValue: "Saved in this browser only. Sign in to keep it across devices.",
+                })}
           </p>
         </div>
-        <V2Button type="button" onClick={() => onSave(items[0])}>
-          <LogIn className="size-4" aria-hidden="true" />
-          {t("zakiDashboard.anonymousWork.save", {
-            defaultValue: "Save this work",
-          })}
-        </V2Button>
+        {!claimed ? (
+          <V2Button type="button" onClick={() => onSave(items[0])}>
+            <LogIn className="size-4" aria-hidden="true" />
+            {t("zakiDashboard.anonymousWork.save", {
+              defaultValue: "Save this work",
+            })}
+          </V2Button>
+        ) : null}
       </div>
       <div className="zaki-dashboard-command__ledger-list">
         {items.slice(0, 4).map((item) => (
@@ -764,6 +777,7 @@ export function ZakiDashboard({
   );
   const [commandText, setCommandText] = useState("");
   const [anonymousWorkItems, setAnonymousWorkItems] = useState<AnonymousWorkItem[]>([]);
+  const [anonymousWorkClaimed, setAnonymousWorkClaimed] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
   const [titleSignalIndex, setTitleSignalIndex] = useState(0);
   const { isLoading: productRegistryLoading } = useProductRegistry();
@@ -788,10 +802,16 @@ export function ZakiDashboard({
 
   const refreshAnonymousWork = useCallback(() => {
     if (token) {
-      setAnonymousWorkItems([]);
+      const items = readAnonymousWorkLedger().items;
+      if (items.length > 0) {
+        setAnonymousWorkItems(items);
+        setAnonymousWorkClaimed(true);
+        clearAnonymousWorkLedger();
+      }
       return;
     }
     setAnonymousWorkItems(readAnonymousWorkLedger().items);
+    setAnonymousWorkClaimed(false);
   }, [token]);
 
   useEffect(() => {
@@ -1110,10 +1130,11 @@ export function ZakiDashboard({
 
       <div className="zaki-dashboard-v2__wrap">
         <section className="zaki-dashboard-v2__entry">
-          {!token ? (
+          {!token || anonymousWorkClaimed ? (
             <ReturningWorkStrip
               t={t}
               items={anonymousWorkItems}
+              claimed={anonymousWorkClaimed}
               onContinue={handleContinueAnonymousWork}
               onSave={handleSaveAnonymousWork}
             />

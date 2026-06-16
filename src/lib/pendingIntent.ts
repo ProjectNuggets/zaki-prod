@@ -7,6 +7,7 @@ const MAX_PROMPT_LENGTH = 1200;
 const MAX_SOURCE_LENGTH = 80;
 const MAX_TASK_KIND_LENGTH = 64;
 const MAX_WORK_ID_LENGTH = 120;
+const PENDING_INTENT_TTL_MS = 30 * 60 * 1000;
 
 export type PendingIntent = {
   productId: AnonymousWorkProductId;
@@ -26,7 +27,7 @@ export type PendingIntentInput = Partial<Omit<PendingIntent, "createdAt">> & {
 function getStorage() {
   if (typeof window === "undefined") return null;
   try {
-    return window.sessionStorage;
+    return window.localStorage;
   } catch {
     return null;
   }
@@ -77,6 +78,15 @@ export function readPendingIntent(): PendingIntent | null {
     const prompt = sanitizeText(raw?.prompt, MAX_PROMPT_LENGTH);
     if (!productId || !prompt) return null;
     const createdAt = new Date(String(raw?.createdAt || ""));
+    const createdAtMs = createdAt.getTime();
+    if (Number.isFinite(createdAtMs) && Date.now() - createdAtMs > PENDING_INTENT_TTL_MS) {
+      try {
+        storage.removeItem(PENDING_INTENT_KEY);
+      } catch {
+        // Best-effort stale intent cleanup only.
+      }
+      return null;
+    }
     return {
       productId,
       taskKind: sanitizeText(raw?.taskKind, MAX_TASK_KIND_LENGTH) || "preview",
@@ -84,7 +94,7 @@ export function readPendingIntent(): PendingIntent | null {
       source: sanitizeText(raw?.source, MAX_SOURCE_LENGTH) || "dashboard",
       returnTo: sanitizeReturnTo(raw?.returnTo, productId),
       anonymousWorkId: sanitizeText(raw?.anonymousWorkId, MAX_WORK_ID_LENGTH) || null,
-      createdAt: Number.isFinite(createdAt.getTime())
+      createdAt: Number.isFinite(createdAtMs)
         ? createdAt.toISOString()
         : new Date().toISOString(),
     };
@@ -119,6 +129,6 @@ export function clearPendingIntent() {
   try {
     getStorage()?.removeItem(PENDING_INTENT_KEY);
   } catch {
-    // Best-effort session cleanup only.
+    // Best-effort cleanup only.
   }
 }

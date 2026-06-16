@@ -50,6 +50,7 @@ describe("LoginScreen legal consent", () => {
     jest.clearAllMocks();
     window.history.replaceState({}, "", "/");
     window.sessionStorage.clear();
+    window.localStorage.clear();
 
     (useAuthStore as unknown as jest.Mock).mockReturnValue({
       setToken,
@@ -304,7 +305,7 @@ describe("LoginScreen legal consent", () => {
   it("uses pending dashboard intent as the post-login fallback route", async () => {
     const user = userEvent.setup();
     window.history.replaceState({}, "", "/?auth=login");
-    window.sessionStorage.setItem(
+    window.localStorage.setItem(
       PENDING_INTENT_KEY,
       JSON.stringify({
         productId: "design",
@@ -313,7 +314,7 @@ describe("LoginScreen legal consent", () => {
         source: "dashboard",
         returnTo: "/design",
         anonymousWorkId: "work-1",
-        createdAt: "2026-06-15T00:00:00.000Z",
+        createdAt: new Date().toISOString(),
       })
     );
 
@@ -330,7 +331,7 @@ describe("LoginScreen legal consent", () => {
     await waitFor(() => {
       expect(window.location.pathname).toBe("/design");
     });
-    expect(window.sessionStorage.getItem(PENDING_INTENT_KEY)).toBeTruthy();
+    expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeTruthy();
   });
 
   it("keeps explicit pricing-intent auth on pricing after login", async () => {

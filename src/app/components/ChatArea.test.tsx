@@ -54,6 +54,8 @@ import {
   setAgentSessionMode,
 } from "@/lib/api";
 import { ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY } from "./ZakiExperimentalNotice";
+import { PENDING_INTENT_KEY } from "@/lib/pendingIntent";
+import { ANONYMOUS_WORK_LEDGER_KEY } from "@/lib/anonymousWork";
 
 jest.mock("@/lib/api", () => ({
   apiRequest: jest.fn(async () => ({
@@ -1555,6 +1557,101 @@ describe("ChatArea Component", () => {
 
     expect(screen.queryByText("zakiBootstrapCard.title")).not.toBeInTheDocument();
     expect(screen.queryByText("zakiExperimentalNotice.title")).not.toBeInTheDocument();
+  });
+
+  it("replays a matching post-auth Agent intent into the composer and focuses it", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+    window.localStorage.setItem(
+      PENDING_INTENT_KEY,
+      JSON.stringify({
+        productId: "agent",
+        taskKind: "preview",
+        prompt: "Plan the launch checklist",
+        returnTo: "/agent",
+        createdAt: new Date().toISOString(),
+      })
+    );
+
+    await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(screen.getByRole("combobox")).toHaveValue("Plan the launch checklist");
+    });
+    expect(document.activeElement).toBe(screen.getByRole("combobox"));
+    expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
+  });
+
+  it("replays a matching post-auth Spaces intent by sending it into the active thread", async () => {
+    navState.view = "chat";
+    navState.spaceId = "space-1";
+    navState.threadId = "thread-1";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    window.localStorage.setItem(
+      PENDING_INTENT_KEY,
+      JSON.stringify({
+        productId: "spaces",
+        taskKind: "chat",
+        prompt: "Summarize this workspace",
+        returnTo: "/spaces",
+        createdAt: new Date().toISOString(),
+      })
+    );
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/stream-chat")) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: async () => ({ type: "textResponse", textResponse: "Done" }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+        headers: new Headers(),
+      };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(apiRequest).toHaveBeenCalledWith(
+        "/workspace/space-1/thread/thread-1/stream-chat",
+        expect.objectContaining({
+          body: expect.stringContaining("Summarize this workspace"),
+        })
+      );
+    });
+    expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
+  });
+
+  it("captures anonymous Agent preview work before auth-gated provisioning stops the send", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: null, isLoading: false };
+
+    await renderChatAreaAndWaitForEffects();
+
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "Research launch tasks as an Agent preview" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    const ledger = JSON.parse(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY) || "{}");
+    expect(ledger.items?.[0]).toMatchObject({
+      productId: "agent",
+      taskKind: "preview",
+      prompt: "Research launch tasks as an Agent preview",
+      route: "/agent",
+      threadId: "main",
+      status: "draft",
+    });
   });
 
   it("waits for auth hydration before auto-provisioning the ZAKI bot route", async () => {
