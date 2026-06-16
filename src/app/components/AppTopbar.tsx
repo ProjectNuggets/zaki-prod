@@ -35,7 +35,9 @@ export function AppTopbar() {
   const [agentMenuOpen, setAgentMenuOpen] = useState(false);
   const agentMenuRef = useRef<HTMLDivElement | null>(null);
   const stage = resolvedTheme() === "dark" ? "dark" : "light";
-  const isAgentRoute = (location.pathname.replace(/\/+$/, "") || "/") === "/agent";
+  const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
+  const isAgentRoute = normalizedPath === "/agent";
+  const isSpacesRoute = normalizedPath === "/spaces" || normalizedPath.startsWith("/spaces/");
   const displayName =
     user?.fullName?.trim() ||
     user?.username?.trim() ||
@@ -81,6 +83,8 @@ export function AppTopbar() {
       document.removeEventListener("keydown", handleEscape);
     };
   }, [isAgentRoute]);
+
+  if (isSpacesRoute) return null;
 
   return (
     <header className="zaki-app-topbar hidden md:flex">

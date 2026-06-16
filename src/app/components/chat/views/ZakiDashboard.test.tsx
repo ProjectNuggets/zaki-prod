@@ -225,6 +225,13 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.activeWork.recentSession": "{{title}} · recent",
     "zakiDashboard.activeWork.sessionMeta": "{{messages}} messages · {{mode}}",
     "zakiDashboard.activeWork.noMode": "standard",
+    "zakiDashboard.activeWork.openSessionAria": "Open Agent session {{title}}",
+    "zakiDashboard.memoryBridge.ariaLabel": "Memory import",
+    "zakiDashboard.memoryBridge.kicker": "Memory bridge",
+    "zakiDashboard.memoryBridge.title": "Bring your memory from ChatGPT/Claude",
+    "zakiDashboard.memoryBridge.copy": "Paste a structured export once.",
+    "zakiDashboard.memoryBridge.action": "Bring your memory from ChatGPT/Claude",
+    "zakiDashboard.memoryBridge.dismiss": "Not now",
     "zakiDashboard.commercial.title": "Commercial release spine is central.",
     "zakiDashboard.commercial.copy": "Meter and memory are central.",
     "zakiDashboard.commercial.plans": "See plans",
@@ -422,10 +429,13 @@ function setupQueries() {
   }));
 }
 
-function renderDashboard(onSendExample = jest.fn()) {
+function renderDashboard(
+  onSendExample = jest.fn(),
+  props: Partial<React.ComponentProps<typeof ZakiDashboard>> = {},
+) {
   return render(
     <MemoryRouter>
-      <ZakiDashboard onSendExample={onSendExample} />
+      <ZakiDashboard onSendExample={onSendExample} {...props} />
     </MemoryRouter>
   );
 }
@@ -479,6 +489,40 @@ describe("ZakiDashboard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue in Agent" }));
 
     expect(mockNavigate).toHaveBeenCalledWith("/agent");
+  });
+
+  it("offers signed-in first-run users a one-time memory bridge", () => {
+    const onOpenMemoryImport = jest.fn();
+
+    renderDashboard(jest.fn(), { onOpenMemoryImport });
+
+    fireEvent.click(screen.getByRole("button", { name: "Bring your memory from ChatGPT/Claude" }));
+
+    expect(onOpenMemoryImport).toHaveBeenCalledTimes(1);
+    expect(window.localStorage.getItem("zaki:memory-bridge-offered:42")).toBe("1");
+    expect(
+      screen.queryByRole("button", { name: "Bring your memory from ChatGPT/Claude" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not repeat the memory bridge once the signed-in user has seen it", () => {
+    window.localStorage.setItem("zaki:memory-bridge-offered:42", "1");
+
+    renderDashboard(jest.fn(), { onOpenMemoryImport: jest.fn() });
+
+    expect(
+      screen.queryByRole("button", { name: "Bring your memory from ChatGPT/Claude" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens recent signed-in Agent sessions from the dashboard", () => {
+    const onOpenSession = jest.fn();
+
+    renderDashboard(jest.fn(), { onOpenSession });
+
+    fireEvent.click(screen.getByRole("button", { name: /Open Agent session Investor brief/i }));
+
+    expect(onOpenSession).toHaveBeenCalledWith("agent:4821");
   });
 
   it("uses the anonymous meter contract when there is no auth token", () => {

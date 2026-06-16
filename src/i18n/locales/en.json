@@ -699,6 +699,8 @@
       "manualHint": "Manually confirm each memory"
     },
     "sendAria": "Send message",
+    "sendLabel": "SEND",
+    "offlineToast": "You are offline. Your draft will stay here until the connection returns.",
     "stopAria": "Stop generating",
     "menu": {
       "addOptions": "Add options",
@@ -761,18 +763,6 @@
         "Turn this into a checklist"
       ],
     "dropFile": "Drop to attach"
-  },
-  "zakiExperimentalNotice": {
-    "eyebrow": "Experimental",
-    "title": "ZAKI is still evolving.",
-    "intro": "Use it like a capable operator: ask clearly, give context, and expect it to help plan, draft, research, and move work forward.",
-    "capability": "ZAKI can use vetted tools and skills when a task needs more than a plain text reply.",
-    "footer": "Important outputs should still be reviewed, especially when the task is high-stakes or time-sensitive.",
-    "dismissAria": "Dismiss ZAKI experimental notice",
-    "actions": {
-      "continue": "Continue",
-      "learnMore": "Learn more"
-    }
   },
   "zakiBootstrapCard": {
     "eyebrow": "Start here",
@@ -1830,6 +1820,7 @@
       "submitting": "Synthesizing…",
       "cancel": "Cancel",
       "youSynthesized": "You synthesized",
+      "offline": "You are offline. Keep this draft open and submit when the connection returns.",
       "errorGeneric": "Could not synthesize. Try again."
     },
     "dashboard": {
@@ -1870,6 +1861,7 @@
     },
     "status": {
       "online": "Online",
+      "offline": "Offline",
       "syncing": "Syncing",
       "plan": "Plan",
       "weeklyReset": "Weekly reset",
@@ -1902,6 +1894,7 @@
       "placeholder": "Ask {{product}} to start from your prompt...",
       "saveWork": "Save this work",
       "emptyHelper": "Type a prompt to start.",
+      "offlineHelper": "You are offline. We kept this draft here and will send when you reconnect.",
       "creditHelper": "Credits are used when ZAKI responds.",
       "comingSoonHelper": "{{product}} is coming soon. Pick Chat, Agent, or Brain to start now.",
       "submitPreviewSave": "Preview first",
@@ -2099,6 +2092,14 @@
       "scopeCount": "{{count}} scopes",
       "productUnit": "products"
     },
+    "memoryBridge": {
+      "ariaLabel": "Memory import",
+      "kicker": "Memory bridge",
+      "title": "Bring your memory from ChatGPT/Claude",
+      "copy": "Paste a structured export once so ZAKI starts with the facts and preferences you already taught another assistant.",
+      "action": "Bring your memory from ChatGPT/Claude",
+      "dismiss": "Not now"
+    },
     "activeWork": {
       "title": "Active work · Agent",
       "source": "Runtime",
@@ -2109,7 +2110,8 @@
       "liveSession": "{{title}} · streaming",
       "recentSession": "{{title}} · recent",
       "sessionMeta": "{{messages}} messages · {{mode}}",
-      "noMode": "standard"
+      "noMode": "standard",
+      "openSessionAria": "Open Agent session {{title}}"
     },
     "commercial": {
       "title": "Commercial release spine is central: plan, meter, memory, products, and settings.",
@@ -2159,6 +2161,12 @@
   "common": {
     "dismiss": "Dismiss",
     "cancel": "Cancel"
+  },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "body": "We encountered an unexpected error. Your work is preserved where the service has already saved it.",
+    "tryAgain": "Try again",
+    "goHome": "Go home"
   },
   "scheduleFollowUp": {
     "title": "Schedule a follow-up",

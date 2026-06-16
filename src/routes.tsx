@@ -230,15 +230,15 @@ export const router = createBrowserRouter([
       },
       {
         path: 'privacy',
-        element: <Navigate to="/legal" replace />,
+        element: routeSuspense(<LegalPage slug="privacy" />),
       },
       {
         path: 'terms',
-        element: <Navigate to="/legal" replace />,
+        element: routeSuspense(<LegalPage slug="terms" />),
       },
       {
         path: 'compliance',
-        element: <Navigate to="/legal" replace />,
+        element: routeSuspense(<LegalPage slug="compliance" />),
       },
       {
         path: 'ar',
@@ -270,15 +270,15 @@ export const router = createBrowserRouter([
       },
       {
         path: 'ar/privacy',
-        element: <Navigate to="/legal" replace />,
+        element: routeSuspense(<LegalPage slug="privacy" />),
       },
       {
         path: 'ar/terms',
-        element: <Navigate to="/legal" replace />,
+        element: routeSuspense(<LegalPage slug="terms" />),
       },
       {
         path: 'ar/compliance',
-        element: <Navigate to="/legal" replace />,
+        element: routeSuspense(<LegalPage slug="compliance" />),
       },
       {
         path: 'help',

@@ -148,6 +148,10 @@ const AUTH_COPY = {
       resetRequest: "We will email you a secure reset link.",
       resetConfirm: "Set a new password to regain access.",
     },
+    preservedWork: {
+      title: "We kept your work.",
+      body: "Sign in or create an account and ZAKI will take you back to the prompt you started.",
+    },
     aria: {
       hidePassword: "Hide password",
       showPassword: "Show password",
@@ -240,6 +244,10 @@ const AUTH_COPY = {
       resetRequest: "سنرسل لك رابطًا آمنًا لإعادة تعيين كلمة المرور.",
       resetConfirm: "عيّن كلمة مرور جديدة لاستعادة الوصول.",
     },
+    preservedWork: {
+      title: "احتفظنا بعملك.",
+      body: "سجّل الدخول أو أنشئ حسابًا وسيعيدك ZAKI إلى الطلب الذي بدأت منه.",
+    },
     aria: {
       hidePassword: "إخفاء كلمة المرور",
       showPassword: "إظهار كلمة المرور",
@@ -323,6 +331,8 @@ export function LoginScreen() {
     getInitialLegalPolicyVersion
   );
   const [googleOAuthEnabled, setGoogleOAuthEnabled] = useState(false);
+  const postLoginReturnTo = getPostLoginReturnTo(location);
+  const hasPreservedWork = Boolean(postLoginReturnTo);
 
   const setModeClean = useCallback(
     (nextMode: "login" | "signup" | "reset-request" | "reset-confirm") => {
@@ -714,9 +724,7 @@ export function LoginScreen() {
             title={!googleOAuthEnabled ? copy.actions.googleUnavailable : undefined}
             onClick={() => {
               if (!googleOAuthEnabled) return;
-              window.location.href = buildGoogleOAuthStartUrl(
-                `${location.pathname}${location.search}${location.hash}`
-              );
+              window.location.href = buildGoogleOAuthStartUrl(postLoginReturnTo || "/");
             }}
           >
             <span className="flex size-5 items-center justify-center rounded-full border border-zaki-subtle bg-white text-xs font-bold text-[#4285f4]">
@@ -727,6 +735,14 @@ export function LoginScreen() {
         ) : null}
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+          {hasPreservedWork && (mode === "login" || mode === "signup") ? (
+            <div className="rounded-zaki-md border border-zaki bg-zaki-base px-3 py-2 text-xs text-zaki-secondary dark:bg-[#1a1714] dark:border-[rgba(240,236,230,0.08)] dark:text-[#c9b8a4]">
+              <strong className="block text-zaki-primary dark:text-[#efe6d9]">
+                {copy.preservedWork.title}
+              </strong>
+              <span>{copy.preservedWork.body}</span>
+            </div>
+          ) : null}
           {mode === "reset-confirm" && (
             <div className="rounded-zaki-md border border-zaki bg-zaki-base px-3 py-2 text-xs text-zaki-secondary dark:bg-[#1a1714] dark:border-[rgba(240,236,230,0.08)] dark:text-[#c9b8a4]">
               {copy.resetHint}
@@ -841,7 +857,7 @@ export function LoginScreen() {
               <span className="leading-relaxed">
                 {copy.consent.prefix}{" "}
                 <a
-                  href="/legal"
+                  href="/terms"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-semibold text-zaki-brand hover:underline"
@@ -857,7 +873,7 @@ export function LoginScreen() {
             <>
               <button
                 type="button"
-                className="text-left text-sm text-zaki-secondary hover:text-zaki-primary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
+                className="block text-left text-sm text-zaki-secondary hover:text-zaki-primary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
                 onClick={() => setShowLoginAccessCode((prev) => !prev)}
               >
                 {showLoginAccessCode ? copy.actions.hideActivationCode : copy.actions.showActivationCode}
@@ -881,7 +897,7 @@ export function LoginScreen() {
           {mode === "login" && (
             <button
               type="button"
-              className="text-left text-sm text-zaki-secondary hover:text-zaki-primary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
+              className="block text-left text-sm text-zaki-secondary hover:text-zaki-primary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
               onClick={() => {
                 setModeClean("reset-request");
               }}

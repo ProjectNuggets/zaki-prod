@@ -15,6 +15,7 @@ import {
   fetchGoogleOAuthStatus,
   fetchCurrentUser,
   fetchProfile,
+  buildGoogleOAuthStartUrl,
 } from "@/lib/api";
 import { PENDING_INTENT_KEY } from "@/lib/pendingIntent";
 
@@ -299,6 +300,26 @@ describe("LoginScreen legal consent", () => {
       expect(window.location.pathname).toBe("/settings");
       expect(window.location.hash).toBe("#settings-memory-data");
     });
+  });
+
+  it("uses the same preserved-work target for Google OAuth", async () => {
+    const user = userEvent.setup();
+    (buildGoogleOAuthStartUrl as unknown as jest.Mock).mockReturnValueOnce("#google-start");
+    window.history.replaceState(
+      {},
+      "",
+      "/?auth=login&next=%2Fsettings%23settings-memory-data"
+    );
+
+    renderLoginScreen();
+    await waitFor(() => expect(fetchGoogleOAuthStatus).toHaveBeenCalled());
+
+    expect(await screen.findByText("We kept your work.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Continue with Google/ }));
+
+    expect(buildGoogleOAuthStartUrl).toHaveBeenCalledWith(
+      "/settings#settings-memory-data"
+    );
   });
 
   it("uses pending dashboard intent as the post-login fallback route", async () => {

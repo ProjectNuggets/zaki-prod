@@ -2305,7 +2305,7 @@ export function SettingsPage() {
                 })}
                 description={t("settingsModal.agentSettings.proactiveUpdates.helper", {
                   defaultValue:
-                    "Allow Nullalis to send outbound updates where a connected channel and approval policy permit it.",
+                    "Paused for launch while scheduled return delivery is hardened.",
                 })}
               >
                 <input
@@ -2314,13 +2314,9 @@ export function SettingsPage() {
                   aria-label={t("settingsModal.agentSettings.proactiveUpdates.name", {
                     defaultValue: "Proactive updates",
                   })}
-                  checked={agentSettingsDraft.proactive_updates}
-                  disabled={agentSettingsLoading || agentSettingsSaving}
-                  onChange={(event) => {
-                    const proactive_updates = event.target.checked;
-                    setAgentSettingsDraft((current) => ({ ...current, proactive_updates }));
-                    void patchAgentSettings({ proactive_updates });
-                  }}
+                  checked={false}
+                  disabled
+                  onChange={() => undefined}
                 />
               </V2SettingsRow>
               <V2SettingsRow

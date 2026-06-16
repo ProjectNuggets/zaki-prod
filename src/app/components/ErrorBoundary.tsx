@@ -2,6 +2,7 @@ import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { buildApiUrl } from '@/lib/api';
 import { isDevRuntime, isProdRuntime } from '@/lib/runtimeEnv';
+import { i18n } from '@/i18n';
 
 const IS_PRODUCTION = isProdRuntime();
 const IS_DEVELOPMENT = isDevRuntime();
@@ -76,6 +77,8 @@ export class ErrorBoundary extends Component<Props, State> {
         return this.props.fallback;
       }
 
+      const t = i18n.t.bind(i18n);
+
       return (
         <div className="zaki-v2-loading p-6">
           <div className="v2-modal max-w-md p-8 text-center">
@@ -84,11 +87,14 @@ export class ErrorBoundary extends Component<Props, State> {
             </div>
             
             <h2 className="v2-modal-title mb-3">
-              Something went wrong
+              {t("errorBoundary.title", { defaultValue: "Something went wrong" })}
             </h2>
             
             <p className="v2-body-sm mb-6">
-              We encountered an unexpected error. Don't worry, your data is safe.
+              {t("errorBoundary.body", {
+                defaultValue:
+                  "We encountered an unexpected error. Your work is preserved where the service has already saved it.",
+              })}
             </p>
 
             {IS_DEVELOPMENT && this.state.error && (
@@ -110,14 +116,14 @@ export class ErrorBoundary extends Component<Props, State> {
                 className="v2-btn v2-btn--accent"
               >
                 <RefreshCw className="w-4 h-4" />
-                Try Again
+                {t("errorBoundary.tryAgain", { defaultValue: "Try again" })}
               </button>
               
               <button
                 onClick={this.handleGoHome}
                 className="v2-btn"
               >
-                Go Home
+                {t("errorBoundary.goHome", { defaultValue: "Go home" })}
               </button>
             </div>
           </div>

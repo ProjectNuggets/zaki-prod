@@ -29,6 +29,7 @@ type LegalSectionEntry = {
 type LegalLocaleCopy = {
   badge: string;
   title: string;
+  documents: Record<LegalSlug, { badge: string; title: string; note: string }>;
   effectiveDateLabel: string;
   effectiveDateValue: string;
   intro: string[];
@@ -42,10 +43,32 @@ type LegalLocaleCopy = {
   sections: LegalSectionEntry[];
 };
 
+export type LegalSlug = "terms" | "privacy" | "compliance";
+
 const LEGAL_COPY: Record<"en" | "ar", LegalLocaleCopy> = {
   en: {
     badge: "Legal",
     title: "Terms, Privacy & Compliance",
+    documents: {
+      terms: {
+        badge: "Terms",
+        title: "Terms of Use",
+        note:
+          "These terms govern account access, acceptable use, billing, AI output review, disputes, and service limits.",
+      },
+      privacy: {
+        badge: "Privacy",
+        title: "Privacy Notice",
+        note:
+          "This notice explains what data ZAKI processes, why it is processed, retention, security controls, and your GDPR-aligned rights.",
+      },
+      compliance: {
+        badge: "Legal",
+        title: "Terms, Privacy & Compliance",
+        note:
+          "If you do not agree with these terms, do not use the service. Material updates are published here with a new effective date.",
+      },
+    },
     effectiveDateLabel: "Effective date",
     effectiveDateValue: "February 17, 2026",
     intro: [
@@ -187,6 +210,26 @@ const LEGAL_COPY: Record<"en" | "ar", LegalLocaleCopy> = {
   ar: {
     badge: "قانوني",
     title: "الشروط والخصوصية والامتثال",
+    documents: {
+      terms: {
+        badge: "الشروط",
+        title: "شروط الاستخدام",
+        note:
+          "تحكم هذه الشروط الوصول إلى الحساب والاستخدام المقبول والفوترة ومراجعة مخرجات الذكاء الاصطناعي والنزاعات وحدود الخدمة.",
+      },
+      privacy: {
+        badge: "الخصوصية",
+        title: "إشعار الخصوصية",
+        note:
+          "يوضح هذا الإشعار البيانات التي يعالجها ZAKI وسبب المعالجة والاحتفاظ والضوابط الأمنية وحقوقك المتوافقة مع GDPR.",
+      },
+      compliance: {
+        badge: "قانوني",
+        title: "الشروط والخصوصية والامتثال",
+        note:
+          "إذا كنت لا توافق على هذه الشروط، فلا تستخدم الخدمة. يتم نشر أي تحديثات جوهرية هنا مع تاريخ نفاذ جديد.",
+      },
+    },
     effectiveDateLabel: "تاريخ النفاذ",
     effectiveDateValue: "17 فبراير 2026",
     intro: [
@@ -327,12 +370,41 @@ const LEGAL_COPY: Record<"en" | "ar", LegalLocaleCopy> = {
   },
 };
 
-export function LegalPage() {
+function getSectionsForSlug(sections: LegalSectionEntry[], slug: LegalSlug) {
+  if (slug === "compliance") return sections;
+  return sections.filter((section) => {
+    const title = section.title.trim();
+    if (title.startsWith("14")) return true;
+    if (slug === "privacy") {
+      return (
+        title.startsWith("5)") ||
+        title.startsWith("6)") ||
+        title.startsWith("7)") ||
+        title.startsWith("8)") ||
+        title.startsWith("12)")
+      );
+    }
+    return (
+      title.startsWith("1)") ||
+      title.startsWith("2)") ||
+      title.startsWith("3)") ||
+      title.startsWith("4)") ||
+      title.startsWith("9)") ||
+      title.startsWith("10)") ||
+      title.startsWith("11)") ||
+      title.startsWith("13)")
+    );
+  });
+}
+
+export function LegalPage({ slug = "compliance" }: { slug?: LegalSlug }) {
   const { i18n } = useTranslation();
   const locale = i18n.language?.toLowerCase().startsWith("ar") ? "ar" : "en";
   const isRtl = locale === "ar";
   const copy = LEGAL_COPY[locale];
-  const legalEmail = "info@novanuggets.com";
+  const documentCopy = copy.documents[slug];
+  const sections = getSectionsForSlug(copy.sections, slug);
+  const legalEmail = "support@chatzaki.com";
 
   return (
     <div
@@ -344,10 +416,10 @@ export function LegalPage() {
         <div className="overflow-hidden rounded-[28px] border border-zaki-subtle bg-[linear-gradient(180deg,#fffdf9_0%,#fff8ef_62%,#f6ecdf_100%)] shadow-[0px_24px_56px_rgba(15,15,15,0.1)] dark:border-[#2c221a] dark:bg-[linear-gradient(165deg,#1b140f_0%,#120f0c_58%,#0d0a08_100%)]">
           <div className="border-b border-zaki-subtle bg-[linear-gradient(130deg,#fff8ef_0%,#f4e8d9_70%,#eddcc8_100%)] px-7 py-7 dark:border-[#2c221a] dark:bg-[linear-gradient(130deg,#261d16_0%,#1a1410_65%,#130f0c_100%)]">
             <div className="inline-flex items-center rounded-full border border-zaki-subtle bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-zaki-muted dark:border-[#2c221a] dark:bg-[#201912] dark:text-zaki-dark-muted">
-              {copy.badge}
+              {documentCopy.badge}
             </div>
             <h1 className="mt-3 text-3xl font-semibold text-zaki-primary dark:text-zaki-dark-primary text-start">
-              {copy.title}
+              {documentCopy.title}
             </h1>
             <p className="mt-2 text-xs text-zaki-muted text-start">
               {copy.effectiveDateLabel}: {copy.effectiveDateValue}
@@ -375,10 +447,10 @@ export function LegalPage() {
 
           <div className="space-y-4 px-6 py-6">
             <div className="rounded-2xl border border-zaki-subtle bg-zaki-hover/60 px-4 py-4 dark:border-[#2c221a] dark:bg-[#17120f]">
-              <p className="text-xs text-zaki-muted text-start">{copy.note}</p>
+              <p className="text-xs text-zaki-muted text-start">{documentCopy.note}</p>
             </div>
 
-            {copy.sections.map((section) => (
+            {sections.map((section) => (
               <LegalSection key={section.title} title={section.title}>
                 {section.paragraphs.map((paragraph) => (
                   <p key={paragraph}>{paragraph}</p>

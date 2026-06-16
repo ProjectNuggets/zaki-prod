@@ -33,10 +33,12 @@ import {
   type V2BadgeTone,
 } from "@/app/components/v2";
 import type {
+  AgentSession,
   MeterWindowSnapshot,
 } from "@/lib/api";
 import { useAuthStore } from "@/stores";
 import { cn } from "@/lib/utils";
+import { formatZakiSessionLabel } from "@/lib/zakiSessions";
 import {
   buildAnonymousWorkTitle,
   readAnonymousWorkLedger,
@@ -45,9 +47,12 @@ import {
   type AnonymousWorkProductId,
 } from "@/lib/anonymousWork";
 import { buildProductReturnTo, writePendingIntent } from "@/lib/pendingIntent";
+import { useOnlineStatus } from "@/hooks";
 
 interface ZakiDashboardProps {
   onSendExample: (example: string) => void;
+  onOpenMemoryImport?: () => void;
+  onOpenSession?: (sessionKey: string) => void;
 }
 
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
@@ -81,6 +86,7 @@ const ANONYMOUS_COMMAND_PRODUCT_ORDER: AnonymousWorkProductId[] = [
 
 const SIGNED_IN_COMMAND_PRODUCT_ORDER = COMMAND_PRODUCT_ORDER;
 const DASHBOARD_INTRO_DISMISSED_KEY = "zaki:dashboard-v2-intro-dismissed";
+const MEMORY_BRIDGE_OFFER_KEY_PREFIX = "zaki:memory-bridge-offered";
 const WEBSITE_V1_STORY_ROUTE = "/story";
 const WEBSITE_V1_PRICING_ROUTE = "/pricing";
 const WEBSITE_V1_PRODUCTS_ROUTE = "/products/agent";
@@ -138,6 +144,28 @@ function formatTime(value?: string | number | null) {
   return date.toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
+  });
+}
+
+function getMemoryBridgeOfferKey(user: unknown) {
+  const record =
+    typeof user === "object" && user !== null
+      ? (user as Record<string, unknown>)
+      : {};
+  const raw =
+    record.id ??
+    record.userId ??
+    record.username ??
+    record.email ??
+    "signed-in";
+  return `${MEMORY_BRIDGE_OFFER_KEY_PREFIX}:${String(raw).trim() || "signed-in"}`;
+}
+
+function getSessionTitle(session: AgentSession) {
+  return formatZakiSessionLabel({
+    sessionKey: session.session_key,
+    title: session.title,
+    createdAt: session.created_at ?? session.last_active,
   });
 }
 
@@ -754,17 +782,22 @@ function ReturningWorkStrip({
 
 export function ZakiDashboard({
   onSendExample,
+  onOpenMemoryImport,
+  onOpenSession,
 }: ZakiDashboardProps) {
   const { i18n, t } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const navigate = useNavigate();
+  const isOnline = useOnlineStatus();
   const token = useAuthStore((state) => state.token);
+  const authUser = useAuthStore((state) => state.user);
   const [selectedProductId, setSelectedProductId] = useState<AnonymousWorkProductId>(
     token ? "agent" : "spaces"
   );
   const [commandText, setCommandText] = useState("");
   const [anonymousWorkItems, setAnonymousWorkItems] = useState<AnonymousWorkItem[]>([]);
   const [showIntro, setShowIntro] = useState(false);
+  const [memoryBridgeSeen, setMemoryBridgeSeen] = useState(false);
   const [titleSignalIndex, setTitleSignalIndex] = useState(0);
   const { isLoading: productRegistryLoading } = useProductRegistry();
   const { data: meterStatusResult, isLoading: meterStatusLoading } =
@@ -821,13 +854,26 @@ export function ZakiDashboard({
     setShowIntro(window.localStorage.getItem(DASHBOARD_INTRO_DISMISSED_KEY) !== "1");
   }, [token]);
 
+  const memoryBridgeOfferKey = getMemoryBridgeOfferKey(authUser);
+
+  useEffect(() => {
+    if (!token || typeof window === "undefined") {
+      setMemoryBridgeSeen(false);
+      return;
+    }
+    setMemoryBridgeSeen(window.localStorage.getItem(memoryBridgeOfferKey) === "1");
+  }, [memoryBridgeOfferKey, token]);
+
   const weeklyStats = getWindowStats(meterStatus?.weekly);
   const weeklyReset = formatReset(meterStatus?.weekly?.resetAt);
   const liveAgentSession = zakiSessions?.find(
     (session) => session.live || (session.pending_approval_count ?? 0) > 0
   );
+  const recentAgentSessions = (zakiSessions ?? []).slice(0, 3);
   const statusLabel =
-    productRegistryLoading || meterLoading
+    !isOnline
+      ? t("zakiDashboard.status.offline", { defaultValue: "Offline" })
+      : productRegistryLoading || meterLoading
       ? t("zakiDashboard.status.syncing")
       : t("zakiDashboard.status.online");
   const selectedCommandName = getCommandProductName(t, selectedProductId);
@@ -855,12 +901,16 @@ export function ZakiDashboard({
   const creditsExhausted =
     !meterLoading && typeof weeklyStats.remaining === "number" && weeklyStats.remaining <= 0;
   const isCommandSubmitDisabled =
-    selectedCommandPrompt.length === 0 || meterLoading || creditsExhausted;
+    !isOnline || selectedCommandPrompt.length === 0 || meterLoading || creditsExhausted;
   const commandHelperText = selectedProductComingSoon
     ? t("zakiDashboard.command.comingSoonHelper", {
         product: selectedCommandName,
         defaultValue: "{{product}} is coming soon. Pick Chat, Agent, or Brain to start now.",
       })
+    : !isOnline
+      ? t("zakiDashboard.command.offlineHelper", {
+          defaultValue: "You are offline. We kept this draft here and will send when you reconnect.",
+        })
     : selectedCommandPrompt
       ? t("zakiDashboard.command.creditHelper", {
           defaultValue: "Credits are used when ZAKI responds.",
@@ -920,6 +970,18 @@ export function ZakiDashboard({
   const openIntro = useCallback(() => {
     setShowIntro(true);
   }, []);
+
+  const markMemoryBridgeSeen = useCallback(() => {
+    setMemoryBridgeSeen(true);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(memoryBridgeOfferKey, "1");
+    }
+  }, [memoryBridgeOfferKey]);
+
+  const openMemoryBridge = useCallback(() => {
+    markMemoryBridgeSeen();
+    onOpenMemoryImport?.();
+  }, [markMemoryBridgeSeen, onOpenMemoryImport]);
 
   const writeDashboardIntent = useCallback(
     (productId: AnonymousWorkProductId, prompt: string, anonymousWorkId?: string | null) => {
@@ -1071,8 +1133,8 @@ export function ZakiDashboard({
           {
             id: "online",
             label: statusLabel,
-            active: true,
-            tone: productRegistryLoading || meterLoading ? "warn" : "success",
+            active: isOnline,
+            tone: !isOnline ? "warn" : productRegistryLoading || meterLoading ? "warn" : "success",
           },
           {
             id: "plan",
@@ -1152,6 +1214,119 @@ export function ZakiDashboard({
               ) : null}
             </div>
           </div>
+
+          {token && onOpenMemoryImport && !memoryBridgeSeen ? (
+            <section
+              className="zaki-dashboard-command__memory-bridge"
+              aria-label={t("zakiDashboard.memoryBridge.ariaLabel", {
+                defaultValue: "Memory import",
+              })}
+            >
+              <div>
+                <span>
+                  {t("zakiDashboard.memoryBridge.kicker", {
+                    defaultValue: "Memory bridge",
+                  })}
+                </span>
+                <strong>
+                  {t("zakiDashboard.memoryBridge.title", {
+                    defaultValue: "Bring your memory from ChatGPT/Claude",
+                  })}
+                </strong>
+                <p>
+                  {t("zakiDashboard.memoryBridge.copy", {
+                    defaultValue:
+                      "Paste a structured export once so ZAKI starts with the facts and preferences you already taught another assistant.",
+                  })}
+                </p>
+              </div>
+              <div>
+                <button type="button" onClick={openMemoryBridge}>
+                  {t("zakiDashboard.memoryBridge.action", {
+                    defaultValue: "Bring your memory from ChatGPT/Claude",
+                  })}
+                </button>
+                <button type="button" onClick={markMemoryBridgeSeen}>
+                  {t("zakiDashboard.memoryBridge.dismiss", {
+                    defaultValue: "Not now",
+                  })}
+                </button>
+              </div>
+            </section>
+          ) : null}
+
+          {token && recentAgentSessions.length > 0 ? (
+            <section
+              className="zaki-dashboard-command__resume"
+              aria-labelledby="zaki-dashboard-resume-title"
+            >
+              <div className="zaki-dashboard-command__resume-head">
+                <div>
+                  <span>
+                    {t("zakiDashboard.activeWork.source", {
+                      defaultValue: "Runtime",
+                    })}
+                  </span>
+                  <h2 id="zaki-dashboard-resume-title">
+                    {t("zakiDashboard.activeWork.title", {
+                      defaultValue: "Active work · Agent",
+                    })}
+                  </h2>
+                </div>
+              </div>
+              <div className="zaki-dashboard-command__resume-list">
+                {recentAgentSessions.map((session) => {
+                  const title = getSessionTitle(session);
+                  const pendingCount = session.pending_approval_count ?? 0;
+                  const stateLabel =
+                    pendingCount > 0
+                      ? t("zakiDashboard.activeWork.pendingApproval", {
+                          title,
+                          count: pendingCount,
+                          defaultValue: "{{title}} · {{count}} approval waiting",
+                        })
+                      : session.live
+                        ? t("zakiDashboard.activeWork.liveSession", {
+                            title,
+                            defaultValue: "{{title}} · streaming",
+                          })
+                        : t("zakiDashboard.activeWork.recentSession", {
+                            title,
+                            defaultValue: "{{title}} · recent",
+                          });
+                  return (
+                    <button
+                      key={session.session_key}
+                      type="button"
+                      className="zaki-dashboard-command__resume-row"
+                      onClick={() => onOpenSession?.(session.session_key)}
+                      aria-label={t("zakiDashboard.activeWork.openSessionAria", {
+                        title,
+                        defaultValue: "Open Agent session {{title}}",
+                      })}
+                    >
+                      <span className="zaki-dashboard-command__resume-main">
+                        <strong>{title}</strong>
+                        <span>{stateLabel}</span>
+                      </span>
+                      <span className="zaki-dashboard-command__resume-meta">
+                        {t("zakiDashboard.activeWork.sessionMeta", {
+                          messages: session.message_count ?? 0,
+                          mode:
+                            session.mode ||
+                            t("zakiDashboard.activeWork.noMode", {
+                              defaultValue: "standard",
+                            }),
+                          defaultValue: "{{messages}} messages · {{mode}}",
+                        })}
+                      </span>
+                      <time>{formatTime(session.last_active)}</time>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
 
           <form
             className="zaki-dashboard-command"

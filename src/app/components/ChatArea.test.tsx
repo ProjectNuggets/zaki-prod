@@ -53,7 +53,6 @@ import {
   provisionAgent,
   setAgentSessionMode,
 } from "@/lib/api";
-import { ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY } from "./ZakiExperimentalNotice";
 
 jest.mock("@/lib/api", () => ({
   apiRequest: jest.fn(async () => ({
@@ -1535,8 +1534,7 @@ describe("ChatArea Component", () => {
 
     await renderChatAreaAndWaitForEffects();
 
-    expect(screen.queryByText("zakiExperimentalNotice.title")).not.toBeInTheDocument();
-    window.sessionStorage.setItem(ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY, "1");
+    expect(screen.queryByText(/experimental/i)).not.toBeInTheDocument();
   });
 
   it("keeps signed-in users on the V2 Agent thread without the legacy bootstrap card", async () => {
@@ -1554,7 +1552,7 @@ describe("ChatArea Component", () => {
     await renderChatAreaAndWaitForEffects();
 
     expect(screen.queryByText("zakiBootstrapCard.title")).not.toBeInTheDocument();
-    expect(screen.queryByText("zakiExperimentalNotice.title")).not.toBeInTheDocument();
+    expect(screen.queryByText(/experimental/i)).not.toBeInTheDocument();
   });
 
   it("waits for auth hydration before auto-provisioning the ZAKI bot route", async () => {
@@ -1933,7 +1931,8 @@ describe("ChatArea Component", () => {
 
     await renderChatAreaAndWaitForEffects();
 
-    expect(screen.getByText("zakiAgent.empty.kicker")).toBeInTheDocument();
+    expect(screen.queryByText("zakiAgent.empty.kicker")).not.toBeInTheDocument();
+    expect(screen.getByTestId("zaki-composer-mode")).toBeInTheDocument();
   });
 
   it("opens the canonical Agent inspector from the global controls event", async () => {

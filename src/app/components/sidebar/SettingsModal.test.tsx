@@ -1439,7 +1439,7 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("sends precise Agent settings PATCH payloads from the product tab", async () => {
+  it("sends precise Agent settings PATCH payloads and keeps return-loop delivery paused", async () => {
     const updateBotSettingsMock = updateBotSettings as jest.MockedFunction<typeof updateBotSettings>;
     updateBotSettingsMock.mockClear();
     await renderSettingsPage();
@@ -1469,10 +1469,11 @@ describe("SettingsPage", () => {
       expect(updateBotSettingsMock).toHaveBeenCalledWith({ group_activation: "always" });
     });
 
+    expect(screen.getByLabelText("Proactive updates")).toBeDisabled();
     fireEvent.click(screen.getByLabelText("Proactive updates"));
-    await waitFor(() => {
-      expect(updateBotSettingsMock).toHaveBeenCalledWith({ proactive_updates: false });
-    });
+    expect(updateBotSettingsMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ proactive_updates: expect.any(Boolean) })
+    );
 
     fireEvent.click(screen.getByLabelText("Voice replies"));
     await waitFor(() => {
