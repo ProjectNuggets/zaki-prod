@@ -48,6 +48,7 @@ import {
   type AgentTask,
   type AgentExtensionDiagnosticsResponse,
   type AgentSessionContext,
+  type MeterStatusResponse,
 } from "@/lib/api";
 import {
   assistantModeToReasoningEffort,
@@ -248,6 +249,23 @@ function extractSystemNoticePayload(
   };
 }
 
+type ChatDenialDetails = {
+  constraint?: string | null;
+  requiredUnits?: number | null;
+  effectiveRemaining?: number | null;
+  resetAt?: string | null;
+  meter?: {
+    availableNow?: {
+      agent?: {
+        constraint?: string | null;
+        requiredReserveUnits?: number | null;
+        effectiveRemaining?: number | null;
+        resetAt?: string | null;
+      } | null;
+    } | null;
+  } | null;
+} | null;
+
 export class ChatRequestError extends Error {
   status: number;
   code: string | null;
@@ -256,19 +274,78 @@ export class ChatRequestError extends Error {
   // The chat send loop honors this with a bounded auto-reconnect before
   // surfacing a hard error.
   retryable: boolean;
+  denialDetails: ChatDenialDetails;
 
   constructor(
     message: string,
     status: number,
     code?: string | null,
-    retryable = false
+    retryable = false,
+    denialDetails: ChatDenialDetails = null
   ) {
     super(message);
     this.name = "ChatRequestError";
     this.status = status;
     this.code = code ?? null;
     this.retryable = retryable;
+    this.denialDetails = denialDetails;
   }
+}
+
+export function buildBillingPaywallCardData({
+  error,
+  paywallState,
+  planLabel,
+  meterStatus,
+  isAgentTarget,
+}: {
+  error: ChatRequestError;
+  paywallState: PaywallState;
+  planLabel?: string | null;
+  meterStatus?: MeterStatusResponse | null;
+  isAgentTarget?: boolean;
+}) {
+  const agentAvailability = isAgentTarget
+    ? error.denialDetails?.meter?.availableNow?.agent ??
+      meterStatus?.availableNow?.agent ??
+      null
+    : null;
+  const effectiveRemaining =
+    typeof error.denialDetails?.effectiveRemaining === "number"
+      ? error.denialDetails.effectiveRemaining
+      : typeof agentAvailability?.effectiveRemaining === "number"
+        ? agentAvailability.effectiveRemaining
+        : undefined;
+  const requiredUnits =
+    typeof error.denialDetails?.requiredUnits === "number"
+      ? error.denialDetails.requiredUnits
+      : typeof agentAvailability?.requiredReserveUnits === "number"
+        ? agentAvailability.requiredReserveUnits
+        : undefined;
+  const constraint =
+    error.denialDetails?.constraint ||
+    agentAvailability?.constraint ||
+    null;
+  const remaining =
+    effectiveRemaining ??
+    meterStatus?.weekly?.remaining ??
+    undefined;
+  const resetAt =
+    error.denialDetails?.resetAt ||
+    agentAvailability?.resetAt ||
+    meterStatus?.weekly?.resetAt ||
+    null;
+
+  return {
+    state: paywallState,
+    planLabel: planLabel ?? undefined,
+    remaining: typeof remaining === "number" ? remaining : undefined,
+    effectiveRemaining,
+    requiredUnits,
+    constraint,
+    resetAt,
+    message: error.message,
+  };
 }
 
 // P1-12: codes the BFF emits for transient, replay-safe conditions
@@ -3020,6 +3097,9 @@ export function ChatArea() {
     state: PaywallState;
     planLabel?: string;
     remaining?: number;
+    effectiveRemaining?: number;
+    requiredUnits?: number;
+    constraint?: string | null;
     resetAt?: string | null;
     message: string;
   } | null>(null);
@@ -5879,7 +5959,6 @@ export function ChatArea() {
           message,
           threadId: threadSlug,
           spaceId: workspaceSlug,
-          ...(turnOptions?.mode ? { mode: turnOptions.mode } : {}),
           ...(turnOptions?.autonomy ? { autonomy: turnOptions.autonomy } : {}),
           ...(turnOptions?.reasoning_effort
             ? { reasoning_effort: turnOptions.reasoning_effort }
@@ -5910,6 +5989,7 @@ export function ChatArea() {
       let errorRetryable = false;
       let quotaResetAt: string | null = null;
       let quotaSurfaceCode: UsageQuotaSurface | null = null;
+      let denialDetails: ChatDenialDetails = null;
       const requestId = response.headers.get("x-request-id");
       const errorContentType = response.headers.get("content-type") || "";
       try {
@@ -5920,9 +6000,24 @@ export function ChatArea() {
             code?: string;
             retryable?: boolean;
             limit?: number;
+            constraint?: string | null;
+            requiredUnits?: number | null;
+            effectiveRemaining?: number | null;
             resetAt?: string;
             surface?: string;
             period?: string;
+            meter?: NonNullable<ChatDenialDetails>["meter"];
+          };
+          denialDetails = {
+            constraint: typeof data.constraint === "string" ? data.constraint : null,
+            requiredUnits:
+              typeof data.requiredUnits === "number" ? data.requiredUnits : null,
+            effectiveRemaining:
+              typeof data.effectiveRemaining === "number"
+                ? data.effectiveRemaining
+                : null,
+            resetAt: typeof data.resetAt === "string" ? data.resetAt : null,
+            meter: data.meter || null,
           };
           if (typeof data.code === "string" && data.code.trim()) {
             errorCode = data.code.trim();
@@ -5969,7 +6064,13 @@ export function ChatArea() {
       if (requestId) {
         message = `${message} (Ref: ${requestId})`;
       }
-      throw new ChatRequestError(message, response.status, errorCode, errorRetryable);
+      throw new ChatRequestError(
+        message,
+        response.status,
+        errorCode,
+        errorRetryable,
+        denialDetails
+      );
     }
 
     const resolveAgentUrl = (payload: Record<string, unknown>): string | null => {
@@ -7659,15 +7760,15 @@ export function ChatArea() {
           const planLabel =
             entitlementsResult?.data?.effective?.tier ??
             entitlementsResult?.data?.plan?.tier;
-          const remaining = meterResult?.data?.weekly?.remaining ?? undefined;
-          const resetAt = meterResult?.data?.weekly?.resetAt ?? null;
-          setPaywallCardData({
-            state: paywallState,
-            planLabel: planLabel ?? undefined,
-            remaining: typeof remaining === "number" ? remaining : undefined,
-            resetAt,
-            message: error.message,
-          });
+          setPaywallCardData(
+            buildBillingPaywallCardData({
+              error,
+              paywallState,
+              planLabel,
+              meterStatus: meterResult?.data ?? null,
+              isAgentTarget: isZakiBotTarget,
+            })
+          );
           return;
         }
       }
@@ -8036,10 +8137,15 @@ export function ChatArea() {
       }
       const previousMode = activeSessionMode ?? "execute";
       if (previousMode === mode) return;
-      setZakiSessionModeUi(sessionKey, mode);
       if (!isActiveZakiSessionLive) {
+        toast.error(
+          t("zakiControls.errors.sessionNotLive", {
+            defaultValue: "Start this session before changing mode.",
+          })
+        );
         return;
       }
+      setZakiSessionModeUi(sessionKey, mode);
       setSessionModePending(true);
       try {
         const { response, data } = await setAgentSessionMode(sessionKey, mode);
@@ -9264,6 +9370,9 @@ export function ChatArea() {
                     state={paywallCardData.state}
                     planLabel={paywallCardData.planLabel}
                     remaining={paywallCardData.remaining}
+                    effectiveRemaining={paywallCardData.effectiveRemaining}
+                    requiredUnits={paywallCardData.requiredUnits}
+                    constraint={paywallCardData.constraint}
                     resetAt={paywallCardData.resetAt}
                     message={paywallCardData.message}
                     onSeePlans={() => navigate("/pricing")}

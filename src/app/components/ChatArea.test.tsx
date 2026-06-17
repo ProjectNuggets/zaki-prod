@@ -26,6 +26,7 @@ import {
   buildNullalisContextGauge,
   resolveContextGaugePercent,
   ChatRequestError,
+  buildBillingPaywallCardData,
   isRetryableChatError,
   resolveTurnRetryable,
   CHAT_RETRYABLE_MAX_ATTEMPTS,
@@ -535,6 +536,59 @@ describe("P1-12 chat-stream retryable classification (isRetryableChatError)", ()
   it("does NOT retry a non-retryable chat error (no flag, non-retryable code)", () => {
     expect(isRetryableChatError(new ChatRequestError("nope", 502, "chat_error"))).toBe(false);
     expect(isRetryableChatError(new ChatRequestError("quota", 429, "daily_limit_reached"))).toBe(false);
+  });
+
+  it("preserves structured billing-denial details for paywall rendering", () => {
+    const error = new ChatRequestError("capacity low", 429, "insufficient_units", false, {
+      constraint: "rolling",
+      requiredUnits: 40,
+      effectiveRemaining: 20,
+      resetAt: "2026-06-20T00:00:00.000Z",
+    });
+    expect(error.denialDetails).toEqual(
+      expect.objectContaining({
+        constraint: "rolling",
+        requiredUnits: 40,
+        effectiveRemaining: 20,
+      })
+    );
+    expect(isRetryableChatError(error)).toBe(false);
+  });
+
+  it("does not use Agent available-now fallback for non-Agent paywall denials", () => {
+    const error = new ChatRequestError("spaces quota", 429, "insufficient_units");
+    const cardData = buildBillingPaywallCardData({
+      error,
+      paywallState: "out_of_usage",
+      planLabel: "Free",
+      isAgentTarget: false,
+      meterStatus: {
+        weekly: {
+          remaining: 5,
+          resetAt: "2026-06-24T00:00:00.000Z",
+        },
+        availableNow: {
+          agent: {
+            constraint: "rolling",
+            requiredReserveUnits: 40,
+            effectiveRemaining: 20,
+            resetAt: "2026-06-17T15:00:00.000Z",
+          },
+        },
+      },
+    });
+
+    expect(cardData).toEqual(
+      expect.objectContaining({
+        state: "out_of_usage",
+        planLabel: "Free",
+        remaining: 5,
+        effectiveRemaining: undefined,
+        requiredUnits: undefined,
+        constraint: null,
+        resetAt: "2026-06-24T00:00:00.000Z",
+      })
+    );
   });
 
   it("does NOT treat a plain Error or non-error value as retryable", () => {
@@ -1969,7 +2023,7 @@ describe("ChatArea Component", () => {
     });
   });
 
-  it("keeps Agent mode changes local when the selected session is not live yet", async () => {
+  it("does not persist or mirror Agent mode changes when the selected session is not live yet", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
@@ -2018,7 +2072,7 @@ describe("ChatArea Component", () => {
     fireEvent.click(screen.getByTestId("zaki-composer-mode"));
 
     expect(setAgentSessionMode).not.toHaveBeenCalled();
-    expect(zakiSessionUiState.sessions["agent:zaki-bot:user:1:thread:main"]?.mode).toBe("plan");
+    expect(zakiSessionUiState.sessions["agent:zaki-bot:user:1:thread:main"]?.mode).toBeNull();
   });
 
   it("does not auto-title ZAKI bot threads", async () => {

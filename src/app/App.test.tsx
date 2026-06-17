@@ -111,7 +111,7 @@ describe("App route hydration", () => {
 
     renderAppAt("/?auth=login&error=google_oauth_failed");
 
-    expect(await screen.findByRole("button", { name: /continue/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /sign in/i })).toBeInTheDocument();
     expect(screen.queryByText("public home")).not.toBeInTheDocument();
   });
 

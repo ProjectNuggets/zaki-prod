@@ -993,7 +993,11 @@ export function LoginScreen() {
               />
               <span>
                 {copy.consent.prefix}{" "}
-                <a href={isRtl ? "/ar/terms?from=signup" : "/terms?from=signup"}>
+                <a
+                  href={isRtl ? "https://chatzaki.com/ar/terms?from=signup" : "https://chatzaki.com/terms?from=signup"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   {copy.consent.link}
                 </a>
                 .

@@ -1490,6 +1490,19 @@ export type MeterStatusProduct = {
   };
 };
 
+export type MeterAvailableNow = {
+  requiredReserveUnits?: number | null;
+  weeklyRemaining?: number | null;
+  rollingRemaining?: number | null;
+  topupUnits?: number | null;
+  effectiveRemaining?: number | null;
+  limitingWindow?: "weekly" | "rolling" | string | null;
+  constraint?: "weekly" | "rolling" | string | null;
+  shortfall?: number | null;
+  available?: boolean;
+  resetAt?: string | null;
+};
+
 export type MeterStatusResponse = {
   success?: boolean;
   contractVersion?: string;
@@ -1509,6 +1522,9 @@ export type MeterStatusResponse = {
   };
   rolling?: MeterWindowSnapshot | null;
   weekly?: MeterWindowSnapshot | null;
+  availableNow?: {
+    agent?: MeterAvailableNow | null;
+  } | null;
   products?: Partial<Record<ProductRegistryProductId, MeterStatusProduct>>;
   error?: string | null;
 };

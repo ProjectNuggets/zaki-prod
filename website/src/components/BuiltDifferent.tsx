@@ -4,28 +4,28 @@ import { NumberTicker } from "./ui/number-ticker";
 
 const metrics = [
   {
-    value: 83500,
-    suffix: "+",
-    label: { en: "Lines of code", ar: "سطر برمجي" },
-    sublabel: { en: "Custom agent runtime", ar: "محرّك وكيل مخصص" },
-  },
-  {
-    value: 5300,
-    suffix: "+",
-    label: { en: "Tests passing", ar: "اختبار ناجح" },
-    sublabel: { en: "Production-grade", ar: "جاهز للإنتاج" },
-  },
-  {
-    value: 7,
+    value: 4,
     suffix: "",
-    label: { en: "AI providers", ar: "مزوّد ذكاء" },
-    sublabel: { en: "Auto-routed per task", ar: "توجيه تلقائي لكل مهمة" },
+    label: { en: "Public routes", ar: "مسارات عامة" },
+    sublabel: { en: "Home, Agent, Brain, Settings", ar: "الرئيسية، Agent، Brain، Settings" },
   },
   {
-    value: 25,
+    value: 3,
     suffix: "",
-    label: { en: "Iteration depth", ar: "عمق التكرار" },
-    sublabel: { en: "Forced follow-through", ar: "متابعة إجبارية" },
+    label: { en: "Public products", ar: "منتجات عامة" },
+    sublabel: { en: "Chat, Agent, Brain", ar: "Chat وAgent وBrain" },
+  },
+  {
+    value: 2,
+    suffix: "",
+    label: { en: "Beta lanes", ar: "مسارات بيتا" },
+    sublabel: { en: "Learn and Hire", ar: "Learn وHire" },
+  },
+  {
+    value: 1,
+    suffix: "",
+    label: { en: "Waitlist lane", ar: "قائمة انتظار" },
+    sublabel: { en: "Design", ar: "Design" },
   },
 ];
 
@@ -41,13 +41,13 @@ export function BuiltDifferent({ locale }: { locale: Locale }) {
           </p>
           <h2 className="font-display mt-3 max-w-[22ch] text-3xl font-extrabold leading-tight tracking-[-0.03em] text-zk-text md:text-4xl">
             {isArabic
-              ? "محرّك وكيل مخصص. ليس غلاف واجهة."
-              : "Custom agent runtime. Not a wrapper."}
+              ? "الموقع يبيع المسار الحقيقي، لا قائمة ميزات متخيلة."
+              : "The website sells the real path, not an imaginary feature list."}
           </h2>
           <p className="mt-4 max-w-[56ch] text-sm leading-6 text-zk-text-secondary md:text-base md:leading-7">
             {isArabic
-              ? "بُني زكي من الصفر بمحرّك مخصص. بدون جامع نفايات، بدون حمل زائد، ملف تنفيذي واحد يعمل على Kubernetes. أداء حقيقي، لا تسويق."
-              : "ZAKI is built from the ground up on a custom runtime. No garbage collector, no runtime overhead, single binary deploys on Kubernetes. Real engineering, not marketing."}
+              ? "كل CTA يقود إلى سطح متاح أو قائمة انتظار صحيحة: Chat للبدء، Agent للاستمرارية، Brain للذاكرة، Settings للتحكم."
+              : "Every CTA routes to a real state: Chat to start, Agent for continuity, Brain for memory, Settings for control, and waitlist where the product is not public."}
           </p>
         </Reveal>
 
@@ -75,16 +75,16 @@ export function BuiltDifferent({ locale }: { locale: Locale }) {
           <div className="mt-8 grid gap-4 md:grid-cols-3">
             {[
               {
-                title: { en: "Per-user pods", ar: "حاويات لكل مستخدم" },
-                desc: { en: "Isolated compute, memory, and secrets. Not multi-tenant. Your agent is yours alone.", ar: "حوسبة وذاكرة وأسرار معزولة. ليس متعدد المستأجرين. وكيلك لك وحدك." },
+                title: { en: "Website to app handoff", ar: "تسليم من الموقع إلى التطبيق" },
+                desc: { en: "Source, intent, product, and prompt travel into the app so the user path can continue after auth.", ar: "المصدر والنية والمنتج والأمر تنتقل إلى التطبيق حتى يستمر المسار بعد تسجيل الدخول." },
               },
               {
-                title: { en: "ChaCha20-Poly1305", ar: "ChaCha20-Poly1305" },
-                desc: { en: "AEAD encryption for every secret the agent touches. API keys encrypted at rest, decrypted only during execution.", ar: "تشفير AEAD لكل سر يلمسه الوكيل. مفاتيح مشفرة أثناء التخزين." },
+                title: { en: "Central control plane", ar: "لوحة تحكم مركزية" },
+                desc: { en: "Account, billing, products, channels, secrets, providers, devices, memory, and privacy all route to Settings.", ar: "الحساب، الدفع، المنتجات، القنوات، الأسرار، المزودون، الأجهزة، الذاكرة، والخصوصية تعود إلى Settings." },
               },
               {
-                title: { en: "Three-pass context", ar: "سياق ثلاثي المراحل" },
-                desc: { en: "Smart compression prevents context degradation on long tasks. Your agent doesn't forget what happened 10 minutes ago.", ar: "ضغط ذكي يمنع تدهور السياق في المهام الطويلة. وكيلك لا ينسى ما حدث قبل 10 دقائق." },
+                title: { en: "Truthful gates", ar: "بوابات صادقة" },
+                desc: { en: "Private beta and waitlist products stay visible without implying general availability or a working runtime.", ar: "منتجات البيتا وقائمة الانتظار تبقى مرئية بدون الإيحاء بتوفر عام أو تشغيل كامل." },
               },
             ].map((item, i) => (
               <div key={i} className="rounded-xl border border-zk-border bg-zk-bg-raised p-5">

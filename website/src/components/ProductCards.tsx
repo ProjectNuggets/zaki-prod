@@ -1,6 +1,6 @@
-import { Check, ArrowRight } from "lucide-react";
+import { Brain, Check, ArrowRight } from "lucide-react";
 import type { Locale } from "../lib/content";
-import { appHandoffUrl } from "../lib/appHandoff";
+import { productHandoffUrl } from "../lib/appHandoff";
 import { Reveal } from "./Reveal";
 import { BorderBeam } from "./ui/border-beam";
 import { ShimmerButton } from "./ui/shimmer-button";
@@ -25,16 +25,16 @@ export function ProductCards({ locale }: { locale: Locale }) {
             {isArabic ? "اختر طريقك" : "Choose your path"}
           </p>
           <h2 className="font-display mt-3 text-center text-3xl font-extrabold leading-tight tracking-[-0.03em] text-zk-text md:text-4xl">
-            {isArabic ? "منتجان. هدف واحد." : "Two products. One goal."}
+            {isArabic ? "ثلاثة أسطح عامة. مسار واحد." : "Three public surfaces. One path."}
           </h2>
           <p className="mx-auto mt-4 max-w-[48ch] text-center text-sm leading-6 text-zk-text-secondary">
             {isArabic
-              ? "Chat للبدء فورًا. Agent للاستمرارية والذاكرة عندما يصبح العمل مهمًا."
-              : "Chat to start immediately. Agent for continuity and memory when the work matters."}
+              ? "Chat للبدء فورًا. Agent للاستمرارية. Brain لمراجعة الذاكرة والتحكم بها."
+              : "Chat starts the work. Agent keeps it moving. Brain makes memory visible and controllable."}
           </p>
         </Reveal>
 
-        <div className="mt-12 grid gap-6 md:grid-cols-2">
+        <div className="mt-12 grid gap-6 lg:grid-cols-3">
           {/* Chat card */}
           <Reveal delay={60}>
             <div className="relative flex h-full flex-col rounded-2xl border border-zk-border bg-zk-surface p-7">
@@ -65,7 +65,7 @@ export function ProductCards({ locale }: { locale: Locale }) {
 
               <div className="mt-auto pt-6">
                 <a
-                  href={appHandoffUrl("/spaces", "website_home_chat_card", "chat")}
+                  href={productHandoffUrl("chat")}
                   className="flex w-full items-center justify-center gap-2 rounded-full border border-zk-border-strong bg-zk-surface-hover py-3 text-sm font-medium text-zk-text transition-all duration-300 hover:-translate-y-0.5 hover:border-zk-text-ghost hover:bg-zk-surface-active"
                 >
                   {isArabic ? "ابدأ Chat" : "Start Chat"}
@@ -107,16 +107,57 @@ export function ProductCards({ locale }: { locale: Locale }) {
                 <FeatureItem>{isArabic ? "ذاكرة مستمرة وتحسين ذاتي" : "Memory & self-improvement"}</FeatureItem>
                 <FeatureItem>{isArabic ? "3 أوضاع: سريع، متوازن، عميق" : "3 modes: Fast, Balanced, Deep"}</FeatureItem>
                 <FeatureItem>{isArabic ? "أتمتة مجدولة (cron)" : "Scheduled automation (cron)"}</FeatureItem>
-                <FeatureItem>{isArabic ? "خزنة أسرار مشفّرة" : "Encrypted secrets vault"}</FeatureItem>
-                <FeatureItem>{isArabic ? "توجيه ذكي بين 7 مزوّدين" : "Smart routing across 7 providers"}</FeatureItem>
+                <FeatureItem>{isArabic ? "خزنة أسرار ببيانات مخفية بعد الحفظ" : "Secrets stay write-only after save"}</FeatureItem>
+                <FeatureItem>{isArabic ? "موافقات واضحة قبل الأدوات الحساسة" : "Clear approvals for sensitive tools"}</FeatureItem>
               </ul>
 
               <div className="mt-auto pt-6">
-                <a href={appHandoffUrl("/agent", "website_home_agent_card", "agent")}>
+                <a href={productHandoffUrl("agent")}>
                   <ShimmerButton className="w-full">
                     {isArabic ? "افتح Agent" : "Open Agent"}
                     <ArrowRight className="size-3.5" />
                   </ShimmerButton>
+                </a>
+              </div>
+            </div>
+          </Reveal>
+
+          {/* Brain card */}
+          <Reveal delay={180}>
+            <div className="relative flex h-full flex-col rounded-2xl border border-zk-border bg-zk-surface p-7">
+              <div className="flex items-center gap-2">
+                <Brain className="size-5 text-zk-accent" strokeWidth={1.5} />
+                <span className="font-display text-xl font-bold text-zk-text">ZAKI Brain</span>
+                <span className="rounded-full bg-zk-accent/10 px-2.5 py-0.5 text-[11px] font-medium text-zk-accent">
+                  {isArabic ? "مشمول" : "Included"}
+                </span>
+              </div>
+
+              <p className="mt-2 text-sm text-zk-text-secondary">
+                {isArabic
+                  ? "سطح الذاكرة الشخصي: ابحث، راجع المصدر، وافهم ما يحمله ZAKI للأمام."
+                  : "The personal memory surface: search, inspect provenance, and understand what ZAKI carries forward."}
+              </p>
+
+              <div className="mt-6 flex items-baseline gap-1">
+                <span className="text-4xl font-bold text-zk-text">{isArabic ? "مرئي" : "Visible"}</span>
+                <span className="text-sm text-zk-text-tertiary">{isArabic ? "بالتحكم" : "memory"}</span>
+              </div>
+
+              <ul className="mt-6 flex flex-col gap-3">
+                <FeatureItem>{isArabic ? "بحث في الذاكرة الشخصية" : "Personal memory search"}</FeatureItem>
+                <FeatureItem>{isArabic ? "مصدر وسياق لكل ذاكرة" : "Source and context for each memory"}</FeatureItem>
+                <FeatureItem>{isArabic ? "مسار التحكم قبل التوسع" : "Governance before expansion"}</FeatureItem>
+                <FeatureItem>{isArabic ? "يرتبط بـ Agent وSettings" : "Linked to Agent and Settings"}</FeatureItem>
+              </ul>
+
+              <div className="mt-auto pt-6">
+                <a
+                  href={productHandoffUrl("brain")}
+                  className="flex w-full items-center justify-center gap-2 rounded-full border border-zk-border-strong bg-zk-surface-hover py-3 text-sm font-medium text-zk-text transition-all duration-300 hover:-translate-y-0.5 hover:border-zk-text-ghost hover:bg-zk-surface-active"
+                >
+                  {isArabic ? "افتح Brain" : "Open Brain"}
+                  <ArrowRight className="size-3.5" />
                 </a>
               </div>
             </div>

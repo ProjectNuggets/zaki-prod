@@ -1,5 +1,11 @@
 import { extractAgentTokenChunk } from "./agent-proxy-contract.js";
+import {
+  AGENT_RESERVE_UNITS_DEFAULT,
+  resolveAgentReserveUnits,
+} from "./agent-reserve-policy.js";
 import { normalizeMeterAction } from "./meter-contract.js";
+
+export { AGENT_RESERVE_UNITS_DEFAULT, resolveAgentReserveUnits };
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -326,15 +332,9 @@ export function computeAgentSettleUnits({
 // Agent turns run long (tool loops, deep research) → reserve high and hold long. The reserve is a
 // ceiling, not a charge: settle reconciles to real cost (computeAgentSettleUnits) at the terminal
 // path and refunds the rest. Mirrors the spaces wallet reserve, productId="agent".
-export const AGENT_RESERVE_UNITS_DEFAULT = 40;
 export const AGENT_HOLD_EXPIRY_MS = 10 * 60 * 1000;
 export const AGENT_PROVIDER = "nullalis";
 export const AGENT_PROVIDER_MODEL = "kimi-k2.6";
-
-export function resolveAgentReserveUnits(env = process.env) {
-  const override = Number(env?.ZAKI_AGENT_RESERVE_UNITS);
-  return override > 0 ? override : AGENT_RESERVE_UNITS_DEFAULT;
-}
 
 /**
  * Reserve agent-chat units against the unit wallet (wallet = source of truth). Pure orchestration:
@@ -365,6 +365,51 @@ function buildDuplicateOutcome(action, idempotencyKey) {
       error: "duplicate_request",
       message: "This request was already processed. Retry with a new request id.",
     },
+  };
+}
+
+function resolveIdentityPlanId(identity = {}) {
+  return (
+    identity.effectivePlanId ||
+    identity.zakiUser?.effectivePlanId ||
+    identity.zakiUser?.plan_tier ||
+    "free"
+  );
+}
+
+function buildInsufficientUnitsDenial(reserved = {}, requiredUnits) {
+  const effectiveRemaining =
+    typeof reserved.effectiveRemaining === "number"
+      ? reserved.effectiveRemaining
+      : typeof reserved.remaining === "number"
+        ? reserved.remaining
+        : 0;
+  const constraint =
+    reserved.constraint === "rolling" || reserved.constraint === "weekly"
+      ? reserved.constraint
+      : "unknown";
+  const required = Number(reserved.requiredUnits || requiredUnits) || requiredUnits;
+  return {
+    status: 429,
+    error: "insufficient_units",
+    code: "insufficient_units",
+    constraint,
+    requiredUnits: required,
+    effectiveRemaining,
+    remaining: effectiveRemaining,
+    weeklyRemaining:
+      typeof reserved.weeklyRemaining === "number" ? reserved.weeklyRemaining : null,
+    rollingRemaining:
+      typeof reserved.rollingRemaining === "number" ? reserved.rollingRemaining : null,
+    topupUnits: typeof reserved.topupUnits === "number" ? reserved.topupUnits : null,
+    shortfall:
+      typeof reserved.shortfall === "number"
+        ? reserved.shortfall
+        : Math.max(0, required - effectiveRemaining),
+    message:
+      constraint === "rolling"
+        ? "Current Agent capacity is low. It refreshes as your 5-hour window clears."
+        : "You're out of usage for now — it refreshes on your weekly cycle.",
   };
 }
 
@@ -404,9 +449,16 @@ export async function reserveAgentChatUnits({
     expiresAt,
   };
   try {
+    await ensureWallet({
+      userId: identity.userId,
+      planId: resolveIdentityPlanId(identity),
+    });
     let reserved = await reserveUnits(reserveArgs);
     if (!reserved.ok && reserved.reason === "no_wallet") {
-      await ensureWallet({ userId: identity.userId, planId: identity.zakiUser?.plan_tier || "free" });
+      await ensureWallet({
+        userId: identity.userId,
+        planId: resolveIdentityPlanId(identity),
+      });
       reserved = await reserveUnits(reserveArgs);
     }
     // C1: a key matching an ALREADY-TERMINAL hold is a replay of a completed turn — the ledger refuses
@@ -418,12 +470,14 @@ export async function reserveAgentChatUnits({
       return {
         outcome: "denied",
         action: normalizedAction,
-        denial: {
-          status: 429,
-          error: "insufficient_units",
-          message: "You're out of usage for now — it refreshes on your weekly cycle.",
-          remaining: reserved.remaining,
-        },
+        denial:
+          reserved.reason === "insufficient_units"
+            ? buildInsufficientUnitsDenial(reserved, reservedUnits)
+            : {
+                status: 429,
+                error: reserved.reason || "agent_meter_denied",
+                message: "Agent usage is not currently available.",
+              },
       };
     }
     // C1: a true in-flight RETRY of the SAME turn (ledger `idempotent`, hold still reserved) must NOT

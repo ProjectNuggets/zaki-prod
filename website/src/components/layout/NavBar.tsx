@@ -8,16 +8,18 @@ import { Menu, Terminal, X } from "lucide-react";
 export function NavBar({ locale }: { locale: Locale }) {
   const location = useLocation();
   const isArabic = locale === "ar";
-  const botHref = isArabic ? "/ar/zaki-bot/" : "/zaki-bot/";
+  const homeHref = isArabic ? "/ar/" : "/";
+  const productHref = isArabic ? "/ar/product/" : "/product/";
+  const pricingHref = isArabic ? "/ar/pricing/" : "/pricing/";
+  const useCasesHref = isArabic ? "/ar/use-cases/" : "/use-cases/";
   const storyHref = isArabic ? "/ar/story/" : "/story/";
-  const contactHref = isArabic ? "/ar/contact/" : "/contact/";
 
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
   const handleLogoClick = useCallback((e: React.MouseEvent) => {
-    const homePath = isArabic ? "/ar/" : "/";
+    const homePath = homeHref;
     if (location.pathname === homePath || location.pathname === (isArabic ? "/ar" : "/")) {
       e.preventDefault();
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -43,10 +45,11 @@ export function NavBar({ locale }: { locale: Locale }) {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const navLinks = [
-    { to: botHref, label: isArabic ? "الوكيل" : "Agent" },
+  const navLinks: Array<{ to: string; label: string; external?: boolean }> = [
+    { to: productHref, label: isArabic ? "المنتج" : "Product" },
+    { to: useCasesHref, label: isArabic ? "الاستخدامات" : "Use cases" },
     { to: storyHref, label: isArabic ? "القصة" : "Story" },
-    { to: contactHref, label: isArabic ? "تواصل" : "Contact" },
+    { to: pricingHref, label: isArabic ? "الأسعار" : "Pricing" },
   ];
 
   const isActive = (to: string) => location.pathname === to;
@@ -76,20 +79,30 @@ export function NavBar({ locale }: { locale: Locale }) {
         {/* Desktop nav */}
         <nav className="hidden items-center gap-1 md:flex" aria-label={isArabic ? "التنقل الرئيسي" : "Primary navigation"}>
           {navLinks.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className={`relative min-h-8 px-3 py-2 text-[10px] uppercase tracking-[0.16em] transition-colors duration-200 ${
-                isActive(link.to)
-                  ? "text-zk-text"
-                  : "text-zk-text-secondary hover:text-zk-text"
-              }`}
-            >
-              {link.label}
-              {isActive(link.to) && (
-                <span className="absolute inset-x-3 bottom-0 h-px bg-zk-accent" />
-              )}
-            </Link>
+            link.external ? (
+              <a
+                key={link.to}
+                href={link.to}
+                className="relative min-h-8 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-zk-text-secondary transition-colors duration-200 hover:text-zk-text"
+              >
+                {link.label}
+              </a>
+            ) : (
+              <Link
+                key={link.to}
+                to={link.to}
+                className={`relative min-h-8 px-3 py-2 text-[10px] uppercase tracking-[0.16em] transition-colors duration-200 ${
+                  isActive(link.to)
+                    ? "text-zk-text"
+                    : "text-zk-text-secondary hover:text-zk-text"
+                }`}
+              >
+                {link.label}
+                {isActive(link.to) && (
+                  <span className="absolute inset-x-3 bottom-0 h-px bg-zk-accent" />
+                )}
+              </Link>
+            )
           ))}
 
           <span className="mx-2 h-4 w-px bg-zk-border-strong" />
@@ -136,17 +149,27 @@ export function NavBar({ locale }: { locale: Locale }) {
       >
         <nav className="mx-auto flex max-w-6xl flex-col gap-0.5 px-5 py-3">
           {navLinks.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className={`border-b border-zk-border px-3 py-3 text-[11px] uppercase tracking-[0.16em] transition-colors ${
-                isActive(link.to)
-                  ? "text-zk-text"
-                  : "text-zk-text-secondary hover:text-zk-text"
-              }`}
-            >
-              {link.label}
-            </Link>
+            link.external ? (
+              <a
+                key={link.to}
+                href={link.to}
+                className="border-b border-zk-border px-3 py-3 text-[11px] uppercase tracking-[0.16em] text-zk-text-secondary transition-colors hover:text-zk-text"
+              >
+                {link.label}
+              </a>
+            ) : (
+              <Link
+                key={link.to}
+                to={link.to}
+                className={`border-b border-zk-border px-3 py-3 text-[11px] uppercase tracking-[0.16em] transition-colors ${
+                  isActive(link.to)
+                    ? "text-zk-text"
+                    : "text-zk-text-secondary hover:text-zk-text"
+                }`}
+              >
+                {link.label}
+              </Link>
+            )
           ))}
           <a
             href={appHandoffUrl("/", "website_nav_mobile_command", "dashboard")}
