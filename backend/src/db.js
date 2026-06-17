@@ -684,6 +684,50 @@ export async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_anonymous_device_usage (
+      device_signal_hash TEXT NOT NULL,
+      usage_date DATE NOT NULL,
+      bucket TEXT NOT NULL DEFAULT 'anonymous_spaces_device',
+      used_count INT NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (device_signal_hash, usage_date, bucket)
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_anonymous_device_usage_date_bucket
+    ON zaki_anonymous_device_usage (usage_date, bucket);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_rate_limit_hits (
+      rate_key TEXT PRIMARY KEY,
+      total_hits INT NOT NULL DEFAULT 0,
+      reset_at TIMESTAMPTZ NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_rate_limit_hits_reset_at
+    ON zaki_rate_limit_hits (reset_at);
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS zaki_login_failures (
+      email TEXT PRIMARY KEY,
+      failure_count INT NOT NULL DEFAULT 0,
+      reset_at TIMESTAMPTZ NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_login_failures_reset_at
+    ON zaki_login_failures (reset_at);
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS zaki_meter_grants (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       tenant_id TEXT NOT NULL,

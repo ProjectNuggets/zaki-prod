@@ -103,7 +103,21 @@ describe("loginHandler — [ZakiAudit] login log (AUTH-07)", () => {
   });
 
   it("throttles repeated invalid credential attempts for the same email", async () => {
-    dbGetMock.mockResolvedValue(null);
+    let failureCount = 0;
+    dbGetMock.mockImplementation(async (sql) => {
+      if (String(sql).includes("zaki_login_failures")) {
+        return failureCount >= 10
+          ? { failure_count: failureCount, reset_at: "2026-06-17T12:15:00.000Z" }
+          : null;
+      }
+      return null;
+    });
+    dbQueryMock.mockImplementation(async (sql) => {
+      if (String(sql).includes("zaki_login_failures")) {
+        failureCount += 1;
+      }
+      return { rows: [], rowCount: 1 };
+    });
 
     for (let attempt = 0; attempt < 10; attempt += 1) {
       const res = makeRes();
@@ -143,8 +157,8 @@ describe("loginHandler — [ZakiAudit] login log (AUTH-07)", () => {
     );
 
     expect(indexSource).toContain('import { loginHandler as zakiLoginHandler } from "./login-handler.js";');
-    expect(indexSource).toContain('app.post("/login", zakiLoginHandler);');
-    expect(indexSource).toContain('app.post("/api/login", zakiLoginHandler);');
+    expect(indexSource).toContain('app.post("/login", loginRouteRateLimiter, zakiLoginHandler);');
+    expect(indexSource).toContain('app.post("/api/login", loginRouteRateLimiter, zakiLoginHandler);');
     expect(indexSource).not.toMatch(/const\s+loginHandler\s*=\s*async/);
   });
 });

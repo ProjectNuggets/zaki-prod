@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -16,9 +16,11 @@ import {
   fetchGoogleOAuthStatus,
 } from "@/lib/api";
 import { clearPendingIntent, readPendingIntent } from "@/lib/pendingIntent";
+import { getConfiguredTurnstileSiteKey } from "@/lib/runtimeEnv";
 import { useAuthStore } from "@/stores";
 
 const LEGAL_POLICY_VERSION_FALLBACK = "2026-06-17.v2";
+const TURNSTILE_SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 const PRICING_INTENT_SOURCES = new Set([
   "website_pricing",
   "website_product_agent",
@@ -37,6 +39,28 @@ const PRICING_INTENT_SOURCES = new Set([
 ]);
 
 type AuthMode = "login" | "signup" | "reset-request" | "reset-confirm";
+
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (
+        container: HTMLElement,
+        options: {
+          sitekey: string;
+          callback?: (token: string) => void;
+          "expired-callback"?: () => void;
+          "error-callback"?: () => void;
+        }
+      ) => string;
+      reset?: (widgetId: string) => void;
+      remove?: (widgetId: string) => void;
+    };
+  }
+}
+
+function getTurnstileSiteKey() {
+  return String(getConfiguredTurnstileSiteKey() || "").trim();
+}
 
 export function hasExplicitPricingIntent(input: {
   pathname: string;
@@ -190,6 +214,7 @@ const AUTH_COPY = {
       genericSignupFailed: "Sign up failed. Please try again.",
       genericResetFailed: "Password reset failed. Please try again.",
       genericLoginFailed: "Login failed. Please try again.",
+      captchaRequired: "Complete the verification challenge before creating an account.",
     },
   },
   ar: {
@@ -293,6 +318,7 @@ const AUTH_COPY = {
       genericSignupFailed: "فشل إنشاء الحساب. حاول مرة أخرى.",
       genericResetFailed: "فشلت إعادة تعيين كلمة المرور. حاول مرة أخرى.",
       genericLoginFailed: "فشل تسجيل الدخول. حاول مرة أخرى.",
+      captchaRequired: "أكمل تحدي التحقق قبل إنشاء الحساب.",
     },
   },
 } as const;
@@ -331,6 +357,8 @@ export function LoginScreen() {
   const [showLoginAccessCode, setShowLoginAccessCode] = useState(false);
   const [signupLegalConsent, setSignupLegalConsent] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileReady, setTurnstileReady] = useState(false);
   const [resetPassword, setResetPassword] = useState("");
   const [resetConfirm, setResetConfirm] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -342,6 +370,9 @@ export function LoginScreen() {
     getInitialLegalPolicyVersion
   );
   const [googleOAuthEnabled, setGoogleOAuthEnabled] = useState(false);
+  const turnstileContainerRef = useRef<HTMLDivElement | null>(null);
+  const turnstileWidgetIdRef = useRef<string | null>(null);
+  const turnstileSiteKey = getTurnstileSiteKey();
   const postLoginReturnTo = getPostLoginReturnTo(location);
   const hasPreservedWork = Boolean(postLoginReturnTo);
 
@@ -360,6 +391,14 @@ export function LoginScreen() {
         setDateOfBirth("");
         setConfirmPassword("");
         setSignupLegalConsent(false);
+        setTurnstileToken("");
+        setTurnstileReady(false);
+        if (turnstileWidgetIdRef.current && window.turnstile?.remove) {
+          window.turnstile.remove(turnstileWidgetIdRef.current);
+        } else if (turnstileWidgetIdRef.current && window.turnstile?.reset) {
+          window.turnstile.reset(turnstileWidgetIdRef.current);
+        }
+        turnstileWidgetIdRef.current = null;
       }
       if (nextMode !== "reset-confirm") {
         setResetPassword("");
@@ -443,6 +482,71 @@ export function LoginScreen() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (mode !== "signup" || !turnstileSiteKey) {
+      setTurnstileReady(false);
+      return;
+    }
+
+    let cancelled = false;
+    const renderWidget = () => {
+      if (
+        cancelled ||
+        !turnstileContainerRef.current ||
+        !window.turnstile ||
+        turnstileWidgetIdRef.current
+      ) {
+        return;
+      }
+      turnstileWidgetIdRef.current = window.turnstile.render(turnstileContainerRef.current, {
+        sitekey: turnstileSiteKey,
+        callback: (token) => {
+          setTurnstileToken(String(token || ""));
+          setTurnstileReady(true);
+        },
+        "expired-callback": () => {
+          setTurnstileToken("");
+          setTurnstileReady(false);
+        },
+        "error-callback": () => {
+          setTurnstileToken("");
+          setTurnstileReady(false);
+        },
+      });
+    };
+
+    if (window.turnstile) {
+      renderWidget();
+      return () => {
+        cancelled = true;
+        if (turnstileWidgetIdRef.current && window.turnstile?.remove) {
+          window.turnstile.remove(turnstileWidgetIdRef.current);
+          turnstileWidgetIdRef.current = null;
+        }
+      };
+    }
+
+    const existing = document.querySelector<HTMLScriptElement>(
+      `script[src="${TURNSTILE_SCRIPT_SRC}"]`
+    );
+    const script = existing || document.createElement("script");
+    if (!existing) {
+      script.src = TURNSTILE_SCRIPT_SRC;
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+    }
+    script.addEventListener("load", renderWidget);
+    return () => {
+      cancelled = true;
+      script.removeEventListener("load", renderWidget);
+      if (turnstileWidgetIdRef.current && window.turnstile?.remove) {
+        window.turnstile.remove(turnstileWidgetIdRef.current);
+        turnstileWidgetIdRef.current = null;
+      }
+    };
+  }, [mode, turnstileSiteKey]);
 
   const clearResetUrl = () => {
     if (typeof window === "undefined") return;
@@ -551,6 +655,10 @@ export function LoginScreen() {
           setError(copy.errors.consentRequired);
           return;
         }
+        if (turnstileSiteKey && !turnstileToken) {
+          setError(copy.errors.captchaRequired);
+          return;
+        }
 
         const { data } = await requestPublicSignup({
           email: email.trim(),
@@ -559,6 +667,7 @@ export function LoginScreen() {
           dateOfBirth: dateOfBirth.trim(),
           legalConsentAccepted: true,
           legalPolicyVersion,
+          ...(turnstileSiteKey ? { turnstileToken: turnstileToken || null } : {}),
         });
         if (!data?.success) {
           setError(data?.error || copy.errors.signupFailed);
@@ -680,7 +789,8 @@ export function LoginScreen() {
       (!fullName.trim() ||
         !dateOfBirth.trim() ||
         confirmPassword.length === 0 ||
-        !signupLegalConsent)) ||
+        !signupLegalConsent ||
+        (Boolean(turnstileSiteKey) && !turnstileReady))) ||
     (mode === "reset-confirm" &&
       (resetPassword.length === 0 || resetConfirm.length === 0));
   const submitLabel = isLoading
@@ -890,6 +1000,10 @@ export function LoginScreen() {
               </span>
             </label>
           )}
+
+          {mode === "signup" && turnstileSiteKey ? (
+            <div className="zaki-auth-v2__turnstile" ref={turnstileContainerRef} />
+          ) : null}
 
           {mode === "login" ? (
             <div className="zaki-auth-v2__inline-actions">

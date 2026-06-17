@@ -62,3 +62,12 @@ export function getConfiguredLegacyApiBase(): string | undefined {
   }
   return readProcessEnv("VITE_API_BASE_URL")?.replace(/\/+$/, "");
 }
+
+export function getConfiguredTurnstileSiteKey(): string | undefined {
+  const runtime = readRuntimeEnv("VITE_TURNSTILE_SITE_KEY");
+  if (runtime) return runtime;
+  if (typeof __VITE_TURNSTILE_SITE_KEY__ !== "undefined") {
+    return normalizeEnvValue(__VITE_TURNSTILE_SITE_KEY__);
+  }
+  return readProcessEnv("VITE_TURNSTILE_SITE_KEY");
+}

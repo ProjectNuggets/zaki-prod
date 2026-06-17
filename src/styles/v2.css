@@ -1057,6 +1057,14 @@ button.v2-status-strip__item:focus-visible {
   text-decoration: underline;
 }
 
+.zaki-auth-v2__turnstile {
+  min-height: 65px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
 .zaki-auth-v2__inline-actions {
   display: flex;
   align-items: center;

@@ -414,6 +414,39 @@ describe("fetchAnonymousMeterStatus", () => {
   });
 });
 
+describe("requestPublicSignup", () => {
+  it("includes the Turnstile token when supplied", async () => {
+    mockFetch.mockResolvedValueOnce(makeResponse(200, { success: true }));
+
+    const { requestPublicSignup } = await import("@/lib/api");
+    await requestPublicSignup({
+      email: "signup@example.com",
+      password: "Password123",
+      name: "Signup User",
+      dateOfBirth: "1995-01-15",
+      legalConsentAccepted: true,
+      legalPolicyVersion: "2026-06-17.v2",
+      turnstileToken: "turnstile-token",
+    });
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/signup",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          email: "signup@example.com",
+          password: "Password123",
+          name: "Signup User",
+          dateOfBirth: "1995-01-15",
+          legalConsentAccepted: true,
+          legalPolicyVersion: "2026-06-17.v2",
+          turnstileToken: "turnstile-token",
+        }),
+      })
+    );
+  });
+});
+
 describe("agent runtime API clients", () => {
   it("calls the canonical Agent diagnostics facade", async () => {
     mockFetch.mockResolvedValueOnce(makeResponse(200, { active: true }));
