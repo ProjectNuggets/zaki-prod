@@ -1,5 +1,11 @@
 export const BILLING_INTERVALS = ["monthly", "yearly"];
-export const STRIPE_BILLING_PLANS = ["student", "personal", "agent", "learn", "complete"];
+// All Stripe-checkoutable plans. `student` is retained because student
+// eligibility/verification, external (Paddle) and Creem checkout URLs still
+// reference it. The new commercial tiers are personal/pro/pro_max.
+export const STRIPE_BILLING_PLANS = ["student", "personal", "pro", "pro_max"];
+// Commercial (paid platform) tiers sold via the new pricing surface. Excludes
+// the legacy `student` discount plan.
+export const STRIPE_COMMERCIAL_PLANS = ["personal", "pro", "pro_max"];
 
 function normalizePriceId(value) {
   return String(value || "").trim();
@@ -15,6 +21,14 @@ function normalizeCurrency(value) {
   return /^[a-z]{3}$/.test(currency) ? currency : null;
 }
 
+// True when `plan` is a plan the checkout flow is allowed to validate/accept.
+// Mirrors the vocabulary enforced by the checkout Zod enum so the two stay in
+// sync. Removed legacy plans (agent/learn/complete) return false.
+export function isCheckoutablePlan(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return STRIPE_BILLING_PLANS.includes(normalized);
+}
+
 export function normalizeBillingInterval(value, fallback = "monthly") {
   const normalized = String(value || "")
     .trim()
@@ -28,9 +42,8 @@ export function buildStripePricingCatalog({
   studentYearly = "",
   personalMonthly = "",
   personalYearly = "",
-  agentMonthly = "",
-  learnMonthly = "",
-  completeMonthly = "",
+  proMonthly = "",
+  proMaxMonthly = "",
 } = {}) {
   const priceByPlanInterval = {
     student: {
@@ -41,16 +54,12 @@ export function buildStripePricingCatalog({
       monthly: normalizePriceId(personalMonthly),
       yearly: normalizePriceId(personalYearly),
     },
-    agent: {
-      monthly: normalizePriceId(agentMonthly),
+    pro: {
+      monthly: normalizePriceId(proMonthly),
       yearly: "",
     },
-    learn: {
-      monthly: normalizePriceId(learnMonthly),
-      yearly: "",
-    },
-    complete: {
-      monthly: normalizePriceId(completeMonthly),
+    pro_max: {
+      monthly: normalizePriceId(proMaxMonthly),
       yearly: "",
     },
   };

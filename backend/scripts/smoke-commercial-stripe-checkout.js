@@ -48,9 +48,9 @@ async function main() {
   const successUrl = process.env.ZAKI_APP_URL || "https://app.chatzaki.com/billing/success";
   const cancelUrl = process.env.ZAKI_APP_URL || "https://app.chatzaki.com/pricing";
   const plans = [
-    { plan: "agent", price: requiredPrice("STRIPE_PRICE_AGENT_MONTHLY"), expectedAmount: 2900 },
-    { plan: "learn", price: requiredPrice("STRIPE_PRICE_LEARN_MONTHLY"), expectedAmount: 1900 },
-    { plan: "complete", price: requiredPrice("STRIPE_PRICE_COMPLETE_MONTHLY"), expectedAmount: 3900 },
+    { plan: "personal", price: requiredPrice("STRIPE_PRICE_PERSONAL"), expectedAmount: 1500 },
+    { plan: "pro", price: requiredPrice("STRIPE_PRICE_PRO"), expectedAmount: 4500 },
+    { plan: "pro_max", price: requiredPrice("STRIPE_PRICE_PRO_MAX"), expectedAmount: 9900 },
   ];
 
   const results = [];

@@ -6,31 +6,40 @@ import { pathToFileURL } from "node:url";
 import dotenv from "dotenv";
 import Stripe from "stripe";
 
-const CATALOG_VERSION = "2026-05-09.commercialization";
+const CATALOG_VERSION = "2026-06-15.tiers-personal-pro-promax";
 const CURRENCY = "usd";
 const PORTAL_METADATA_PURPOSE = "commercial_subscription_updates";
 
+// Maps a plan to the deployed secret name that should carry its monthly price ID.
+// The new commercial tiers use suffix-less env names (matching the deployed
+// sandbox secrets); any other plan falls back to the legacy `*_MONTHLY` form.
+const PLAN_ENV_OVERRIDES = Object.freeze({
+  personal: "STRIPE_PRICE_PERSONAL",
+  pro: "STRIPE_PRICE_PRO",
+  pro_max: "STRIPE_PRICE_PRO_MAX",
+});
+
 const PRODUCTS = Object.freeze([
   {
-    plan: "agent",
-    name: "ZAKI Agent",
-    description: "Paid ZAKI personal agent product.",
-    monthlyUnitAmount: 2900,
-    lookupKey: "zaki_agent_monthly_2026_05",
+    plan: "personal",
+    name: "ZAKI Personal",
+    description: "Personal tier — individual access to ZAKI with the personal weekly allowance.",
+    monthlyUnitAmount: 1500,
+    lookupKey: "zaki_personal_monthly_2026_06",
   },
   {
-    plan: "learn",
-    name: "ZAKI Learn",
-    description: "Paid ZAKI learning product.",
-    monthlyUnitAmount: 1900,
-    lookupKey: "zaki_learn_monthly_2026_05",
+    plan: "pro",
+    name: "ZAKI Pro",
+    description: "Pro tier — higher weekly allowance and full product access for power users.",
+    monthlyUnitAmount: 4500,
+    lookupKey: "zaki_pro_monthly_2026_06",
   },
   {
-    plan: "complete",
-    name: "ZAKI Complete",
-    description: "Paid bundle for ZAKI Agent, ZAKI Learn, and uncapped Spaces.",
-    monthlyUnitAmount: 3900,
-    lookupKey: "zaki_complete_monthly_2026_05",
+    plan: "pro_max",
+    name: "ZAKI Pro Max",
+    description: "Pro Max tier — the highest weekly allowance for the heaviest ZAKI workloads.",
+    monthlyUnitAmount: 9900,
+    lookupKey: "zaki_pro_max_monthly_2026_06",
   },
 ]);
 
@@ -189,7 +198,9 @@ async function findOrCreatePortalConfiguration(stripe, products) {
 }
 
 function envNameForPlan(plan) {
-  return `STRIPE_PRICE_${plan.toUpperCase()}_MONTHLY`;
+  return (
+    PLAN_ENV_OVERRIDES[plan] || `STRIPE_PRICE_${plan.toUpperCase()}_MONTHLY`
+  );
 }
 
 async function main() {
@@ -262,6 +273,9 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
 }
 
 export {
+  CATALOG_VERSION,
+  PRODUCTS,
+  envNameForPlan,
   buildCommercialPortalConfigurationPayload,
   findOrCreatePortalConfiguration,
 };

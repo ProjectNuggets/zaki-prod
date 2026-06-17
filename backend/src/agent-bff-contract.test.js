@@ -7,6 +7,9 @@ import {
   AGENT_RUNTIME_FACADE_ROUTES,
   AGENT_SETTINGS_CONTROL_PLANE_ROUTES,
   AGENT_SESSION_BFF_ROUTES,
+  AGENT_SESSION_IDLE_CONTEXT_PAYLOAD,
+  AGENT_SESSION_IDLE_PLAN_PAYLOAD,
+  AGENT_SESSION_IDLE_TODOS_PAYLOAD,
   BOT_BFF_ALIAS_ROUTES,
   BOT_CHAT_STREAM_SESSION_KEY_CONTRACT,
   buildBotProvisionPayload,
@@ -19,6 +22,7 @@ import {
   registerAgentSessionBffRoutes,
   registerBotBffAliases,
   registerTelegramDisconnectAliases,
+  resolveSoftEmptyAgentResponse,
   sanitizeAgentChannelBindingPayload,
 } from "./agent-bff-contract.js";
 
@@ -324,10 +328,10 @@ describe("agent BOT BFF contract", () => {
     expect(AGENT_SESSION_BFF_ROUTES).toEqual([
       { method: "get",    path: "/api/agent/sessions/:sessionKey",          upstreamSuffix: "",         json: false },
       { method: "post",   path: "/api/agent/sessions/:sessionKey/compact",  upstreamSuffix: "/compact", json: false },
-      { method: "get",    path: "/api/agent/sessions/:sessionKey/context",  upstreamSuffix: "/context", json: false },
-      { method: "get",    path: "/api/agent/sessions/:sessionKey/todos",    upstreamSuffix: "/todos",   json: false },
+      { method: "get",    path: "/api/agent/sessions/:sessionKey/context",  upstreamSuffix: "/context", json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_CONTEXT_PAYLOAD },
+      { method: "get",    path: "/api/agent/sessions/:sessionKey/todos",    upstreamSuffix: "/todos",   json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_TODOS_PAYLOAD },
       { method: "patch",  path: "/api/agent/sessions/:sessionKey/todos/:listId/items/:itemId", upstreamSuffix: "/todos/:listId/items/:itemId", json: true },
-      { method: "get",    path: "/api/agent/sessions/:sessionKey/plan",     upstreamSuffix: "/plan",    json: false },
+      { method: "get",    path: "/api/agent/sessions/:sessionKey/plan",     upstreamSuffix: "/plan",    json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_PLAN_PAYLOAD },
       { method: "get",    path: "/api/agent/sessions/:sessionKey/export",   upstreamSuffix: "/export",  json: false },
       { method: "get",    path: "/api/agent/sessions/:sessionKey/history",  upstreamSuffix: "/history", json: false },
       { method: "post",   path: "/api/agent/sessions/:sessionKey/mode",     upstreamSuffix: "/mode",    json: true  },
@@ -609,5 +613,164 @@ describe("agent BOT BFF contract", () => {
       handlers.requireAgentContext,
       handlers.agentTelegramDisconnectHandler
     );
+  });
+
+  // ---------------------------------------------------------------------------
+  // Agent-panel idle-state normalization (plan / todos / context)
+  // ---------------------------------------------------------------------------
+  // The nullalis engine does not implement /plan or /todos yet (deferred
+  // post-launch) so it mis-parses those reads and 400s with
+  // `invalid_session_key`; /context legitimately 404s when the thread has no
+  // active run. Surfacing those raw errors leaks
+  //   "Checklist unavailable: invalid_session_key"
+  //   "Run plan unavailable: invalid_session_key"
+  // into the inspector panel. For these three READ-ONLY reads the BFF converts
+  // a `400 invalid_session_key` or any `404` into HTTP 200 + a clean idle
+  // payload the FE renders as "no active run". Everything else passes through.
+  describe("agent-panel idle-state normalization", () => {
+    it("declares idle payloads that match the FE 'no active run' shapes", () => {
+      // src/lib/api.ts: AgentSessionPlanResponse → activePlan = data.active ? data.plan : null
+      expect(AGENT_SESSION_IDLE_PLAN_PAYLOAD).toEqual({ active: false, plan: null });
+      // src/lib/api.ts: AgentSessionTodosResponse → activeTodoList from lists[] (empty → none)
+      expect(AGENT_SESSION_IDLE_TODOS_PAYLOAD).toEqual({ lists: [], current_list_id: null });
+      // PowerUserSheet / agentContext treat active:false + code:no_active_session as idle
+      expect(AGENT_SESSION_IDLE_CONTEXT_PAYLOAD).toEqual({
+        active: false,
+        runtime: false,
+        code: "no_active_session",
+        report: null,
+      });
+    });
+
+    it("opts only plan/todos/context reads into softEmptyOnMissing with the right payload", () => {
+      const byPath = Object.fromEntries(
+        AGENT_SESSION_BFF_ROUTES.map((route) => [route.path, route])
+      );
+
+      expect(byPath["/api/agent/sessions/:sessionKey/plan"].softEmptyOnMissing).toEqual(
+        AGENT_SESSION_IDLE_PLAN_PAYLOAD
+      );
+      expect(byPath["/api/agent/sessions/:sessionKey/todos"].softEmptyOnMissing).toEqual(
+        AGENT_SESSION_IDLE_TODOS_PAYLOAD
+      );
+      expect(byPath["/api/agent/sessions/:sessionKey/context"].softEmptyOnMissing).toEqual(
+        AGENT_SESSION_IDLE_CONTEXT_PAYLOAD
+      );
+
+      // Every other route — including the mutating ones and the other reads —
+      // must NOT opt in, so their upstream status/body is forwarded verbatim.
+      for (const route of AGENT_SESSION_BFF_ROUTES) {
+        if (
+          route.path === "/api/agent/sessions/:sessionKey/plan" ||
+          route.path === "/api/agent/sessions/:sessionKey/todos" ||
+          route.path === "/api/agent/sessions/:sessionKey/context"
+        ) {
+          continue;
+        }
+        expect(route.softEmptyOnMissing).toBeUndefined();
+      }
+    });
+
+    it("forwards softEmptyOnMissing into proxyOptions only for the opted-in reads", () => {
+      const app = {
+        get: jest.fn(),
+        post: jest.fn(),
+        patch: jest.fn(),
+        delete: jest.fn(),
+      };
+      const makeSessionProxyHandler = jest.fn((pathBuilder, proxyOptions = {}) => {
+        const handler = jest.fn();
+        handler.proxyOptions = proxyOptions;
+        return handler;
+      });
+      registerAgentSessionBffRoutes(app, {
+        requireAgentContext: jest.fn(),
+        agentJson1mb: jest.fn(),
+        makeSessionProxyHandler,
+      });
+
+      const proxyOptionsFor = (verb, path) => {
+        const call = app[verb].mock.calls.find((args) => args[0] === path);
+        expect(call).toBeDefined();
+        return call[call.length - 1].proxyOptions;
+      };
+
+      expect(proxyOptionsFor("get", "/api/agent/sessions/:sessionKey/plan")).toEqual({
+        softEmptyOnMissing: AGENT_SESSION_IDLE_PLAN_PAYLOAD,
+      });
+      expect(proxyOptionsFor("get", "/api/agent/sessions/:sessionKey/todos")).toEqual({
+        softEmptyOnMissing: AGENT_SESSION_IDLE_TODOS_PAYLOAD,
+      });
+      expect(proxyOptionsFor("get", "/api/agent/sessions/:sessionKey/context")).toEqual({
+        softEmptyOnMissing: AGENT_SESSION_IDLE_CONTEXT_PAYLOAD,
+      });
+
+      // The mutating + non-opted reads carry no soft-empty option.
+      expect(proxyOptionsFor("get", "/api/agent/sessions/:sessionKey")).toEqual({});
+      expect(proxyOptionsFor("get", "/api/agent/sessions/:sessionKey/export")).toEqual({});
+      expect(proxyOptionsFor("get", "/api/agent/sessions/:sessionKey/history")).toEqual({});
+      expect(proxyOptionsFor("post", "/api/agent/sessions/:sessionKey/compact")).toEqual({});
+      expect(proxyOptionsFor("post", "/api/agent/sessions/:sessionKey/mode")).toEqual({});
+      expect(proxyOptionsFor("post", "/api/agent/sessions/:sessionKey/cancel")).toEqual({});
+      expect(
+        proxyOptionsFor("patch", "/api/agent/sessions/:sessionKey/todos/:listId/items/:itemId")
+      ).toEqual({});
+      // /approve keeps its retry option and gains no soft-empty.
+      expect(proxyOptionsFor("post", "/api/agent/sessions/:sessionKey/approve")).toEqual({
+        retry: true,
+      });
+    });
+
+    describe("resolveSoftEmptyAgentResponse", () => {
+      const idle = AGENT_SESSION_IDLE_PLAN_PAYLOAD;
+
+      it("returns the idle payload on upstream 400 invalid_session_key", () => {
+        expect(
+          resolveSoftEmptyAgentResponse(idle, 400, JSON.stringify({ error: "invalid_session_key" }))
+        ).toEqual({ soft: true, payload: idle });
+        // Also matches when the engine nests it under `code`.
+        expect(
+          resolveSoftEmptyAgentResponse(idle, 400, JSON.stringify({ code: "invalid_session_key" }))
+        ).toEqual({ soft: true, payload: idle });
+        // ...or in a bare/extra-text body.
+        expect(
+          resolveSoftEmptyAgentResponse(idle, 400, "invalid_session_key")
+        ).toEqual({ soft: true, payload: idle });
+      });
+
+      it("returns the idle payload on any upstream 404 (no active run)", () => {
+        expect(resolveSoftEmptyAgentResponse(idle, 404, "")).toEqual({
+          soft: true,
+          payload: idle,
+        });
+        expect(
+          resolveSoftEmptyAgentResponse(idle, 404, JSON.stringify({ error: "not_found" }))
+        ).toEqual({ soft: true, payload: idle });
+      });
+
+      it("passes through a 400 with a DIFFERENT error body unchanged", () => {
+        expect(
+          resolveSoftEmptyAgentResponse(idle, 400, JSON.stringify({ error: "session_not_owned" }))
+        ).toEqual({ soft: false });
+        expect(
+          resolveSoftEmptyAgentResponse(idle, 400, JSON.stringify({ error: "invalid_title" }))
+        ).toEqual({ soft: false });
+      });
+
+      it("passes through every non-400/404 status unchanged", () => {
+        for (const status of [200, 201, 403, 409, 422, 500, 502, 503]) {
+          expect(
+            resolveSoftEmptyAgentResponse(idle, status, JSON.stringify({ error: "invalid_session_key" }))
+          ).toEqual({ soft: false });
+        }
+      });
+
+      it("never softens when no soft-empty payload is configured (mutating routes)", () => {
+        expect(
+          resolveSoftEmptyAgentResponse(undefined, 400, JSON.stringify({ error: "invalid_session_key" }))
+        ).toEqual({ soft: false });
+        expect(resolveSoftEmptyAgentResponse(null, 404, "")).toEqual({ soft: false });
+      });
+    });
   });
 });

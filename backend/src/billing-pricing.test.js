@@ -2,8 +2,10 @@ import { describe, it, expect } from "@jest/globals";
 import {
   BILLING_INTERVALS,
   STRIPE_BILLING_PLANS,
+  STRIPE_COMMERCIAL_PLANS,
   buildTopupPackCatalog,
   buildStripePricingCatalog,
+  isCheckoutablePlan,
   normalizeBillingInterval,
   resolveStripePriceDetailsById,
   resolveStripePriceForSelection,
@@ -16,10 +18,10 @@ describe("billing pricing helpers", () => {
     expect(STRIPE_BILLING_PLANS).toEqual([
       "student",
       "personal",
-      "agent",
-      "learn",
-      "complete",
+      "pro",
+      "pro_max",
     ]);
+    expect(STRIPE_COMMERCIAL_PLANS).toEqual(["personal", "pro", "pro_max"]);
     expect(normalizeBillingInterval("yearly")).toBe("yearly");
     expect(normalizeBillingInterval("MONTHLY")).toBe("monthly");
     expect(normalizeBillingInterval("invalid")).toBe("monthly");
@@ -31,26 +33,23 @@ describe("billing pricing helpers", () => {
       studentYearly: "price_student_year",
       personalMonthly: "price_personal_month",
       personalYearly: "",
-      agentMonthly: "price_agent_month",
-      learnMonthly: "price_learn_month",
-      completeMonthly: "price_complete_month",
+      proMonthly: "price_pro_month",
+      proMaxMonthly: "price_pro_max_month",
     });
 
     expect(catalog.hasAnyStripePrice).toBe(true);
     expect(catalog.pricingAvailability).toEqual({
       student: { monthly: true, yearly: true },
       personal: { monthly: true, yearly: false },
-      agent: { monthly: true, yearly: false },
-      learn: { monthly: true, yearly: false },
-      complete: { monthly: true, yearly: false },
+      pro: { monthly: true, yearly: false },
+      pro_max: { monthly: true, yearly: false },
     });
     expect(catalog.tierByPrice).toEqual({
       price_student_month: "student",
       price_student_year: "student",
       price_personal_month: "personal",
-      price_agent_month: "agent",
-      price_learn_month: "learn",
-      price_complete_month: "complete",
+      price_pro_month: "pro",
+      price_pro_max_month: "pro_max",
     });
   });
 
@@ -59,9 +58,8 @@ describe("billing pricing helpers", () => {
       studentMonthly: "price_student_month",
       studentYearly: "price_student_year",
       personalMonthly: "price_personal_month",
-      agentMonthly: "price_agent_month",
-      learnMonthly: "price_learn_month",
-      completeMonthly: "price_complete_month",
+      proMonthly: "price_pro_month",
+      proMaxMonthly: "price_pro_max_month",
     });
 
     expect(
@@ -79,27 +77,74 @@ describe("billing pricing helpers", () => {
     expect(
       resolveStripePriceForSelection(catalog, {
         plan: "personal",
+        interval: "monthly",
+      })
+    ).toBe("price_personal_month");
+    expect(
+      resolveStripePriceForSelection(catalog, {
+        plan: "personal",
         interval: "yearly",
       })
     ).toBe("");
     expect(
       resolveStripePriceForSelection(catalog, {
-        plan: "agent",
+        plan: "pro",
         interval: "monthly",
       })
-    ).toBe("price_agent_month");
+    ).toBe("price_pro_month");
     expect(
       resolveStripePriceForSelection(catalog, {
-        plan: "learn",
+        plan: "pro_max",
         interval: "monthly",
       })
-    ).toBe("price_learn_month");
+    ).toBe("price_pro_max_month");
+  });
+
+  it("rejects removed legacy plans (agent/learn/complete) when resolving a price", () => {
+    const catalog = buildStripePricingCatalog({
+      personalMonthly: "price_personal_month",
+      proMonthly: "price_pro_month",
+      proMaxMonthly: "price_pro_max_month",
+    });
+
     expect(
-      resolveStripePriceForSelection(catalog, {
-        plan: "complete",
-        interval: "monthly",
-      })
-    ).toBe("price_complete_month");
+      resolveStripePriceForSelection(catalog, { plan: "agent", interval: "monthly" })
+    ).toBe("");
+    expect(
+      resolveStripePriceForSelection(catalog, { plan: "learn", interval: "monthly" })
+    ).toBe("");
+    expect(
+      resolveStripePriceForSelection(catalog, { plan: "complete", interval: "monthly" })
+    ).toBe("");
+  });
+
+  it("accepts the new tiers at checkout and rejects removed legacy plans", () => {
+    // The checkout Zod enum is derived from STRIPE_BILLING_PLANS, so these are
+    // exactly the plans checkout will accept.
+    expect(isCheckoutablePlan("personal")).toBe(true);
+    expect(isCheckoutablePlan("pro")).toBe(true);
+    expect(isCheckoutablePlan("pro_max")).toBe(true);
+    expect(isCheckoutablePlan("student")).toBe(true);
+    expect(isCheckoutablePlan("PRO_MAX")).toBe(true);
+
+    expect(isCheckoutablePlan("agent")).toBe(false);
+    expect(isCheckoutablePlan("learn")).toBe(false);
+    expect(isCheckoutablePlan("complete")).toBe(false);
+    expect(isCheckoutablePlan("")).toBe(false);
+  });
+
+  it("each commercial tier resolves to a price when its env id is configured", () => {
+    const catalog = buildStripePricingCatalog({
+      personalMonthly: "price_personal_env",
+      proMonthly: "price_pro_env",
+      proMaxMonthly: "price_pro_max_env",
+    });
+    for (const plan of STRIPE_COMMERCIAL_PLANS) {
+      expect(isCheckoutablePlan(plan)).toBe(true);
+      expect(
+        resolveStripePriceForSelection(catalog, { plan, interval: "monthly" })
+      ).not.toBe("");
+    }
   });
 
   it("resolves price details by price id", () => {
@@ -108,9 +153,8 @@ describe("billing pricing helpers", () => {
       studentYearly: "price_student_year",
       personalMonthly: "price_personal_month",
       personalYearly: "price_personal_year",
-      agentMonthly: "price_agent_month",
-      learnMonthly: "price_learn_month",
-      completeMonthly: "price_complete_month",
+      proMonthly: "price_pro_month",
+      proMaxMonthly: "price_pro_max_month",
     });
 
     expect(resolveStripePriceDetailsById(catalog, "price_student_year")).toEqual({
@@ -121,16 +165,12 @@ describe("billing pricing helpers", () => {
       tier: "personal",
       interval: "monthly",
     });
-    expect(resolveStripePriceDetailsById(catalog, "price_agent_month")).toEqual({
-      tier: "agent",
+    expect(resolveStripePriceDetailsById(catalog, "price_pro_month")).toEqual({
+      tier: "pro",
       interval: "monthly",
     });
-    expect(resolveStripePriceDetailsById(catalog, "price_learn_month")).toEqual({
-      tier: "learn",
-      interval: "monthly",
-    });
-    expect(resolveStripePriceDetailsById(catalog, "price_complete_month")).toEqual({
-      tier: "complete",
+    expect(resolveStripePriceDetailsById(catalog, "price_pro_max_month")).toEqual({
+      tier: "pro_max",
       interval: "monthly",
     });
     expect(resolveStripePriceDetailsById(catalog, "unknown")).toBeNull();

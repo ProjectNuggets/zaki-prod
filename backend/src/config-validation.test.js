@@ -17,9 +17,9 @@ describe("runtime config validation", () => {
       createBaseEnv({
         STRIPE_PRICE_STUDENT_YEARLY: "",
         STRIPE_PRICE_PERSONAL_YEARLY: "",
-        STRIPE_PRICE_AGENT_MONTHLY: "",
-        STRIPE_PRICE_LEARN_MONTHLY: "",
-        STRIPE_PRICE_COMPLETE_MONTHLY: "",
+        STRIPE_PRICE_PERSONAL: "",
+        STRIPE_PRICE_PRO: "",
+        STRIPE_PRICE_PRO_MAX: "",
         STRIPE_PRICE_ACCESS_CODE_MONTHLY: "",
       })
     );
@@ -30,9 +30,9 @@ describe("runtime config validation", () => {
       expect.arrayContaining([
         expect.objectContaining({ key: "STRIPE_PRICE_STUDENT_YEARLY" }),
         expect.objectContaining({ key: "STRIPE_PRICE_PERSONAL_YEARLY" }),
-        expect.objectContaining({ key: "STRIPE_PRICE_AGENT_MONTHLY" }),
-        expect.objectContaining({ key: "STRIPE_PRICE_LEARN_MONTHLY" }),
-        expect.objectContaining({ key: "STRIPE_PRICE_COMPLETE_MONTHLY" }),
+        expect.objectContaining({ key: "STRIPE_PRICE_PERSONAL" }),
+        expect.objectContaining({ key: "STRIPE_PRICE_PRO" }),
+        expect.objectContaining({ key: "STRIPE_PRICE_PRO_MAX" }),
         expect.objectContaining({ key: "STRIPE_PRICE_ACCESS_CODE_MONTHLY" }),
       ])
     );
@@ -48,18 +48,18 @@ describe("runtime config validation", () => {
     const warningKeys = report.warnings.map((warning) => warning.key);
     expect(warningKeys).not.toContain("STRIPE_PRICE_STUDENT_YEARLY");
     expect(warningKeys).not.toContain("STRIPE_PRICE_PERSONAL_YEARLY");
-    expect(warningKeys).not.toContain("STRIPE_PRICE_AGENT_MONTHLY");
-    expect(warningKeys).not.toContain("STRIPE_PRICE_LEARN_MONTHLY");
-    expect(warningKeys).not.toContain("STRIPE_PRICE_COMPLETE_MONTHLY");
+    expect(warningKeys).not.toContain("STRIPE_PRICE_PERSONAL");
+    expect(warningKeys).not.toContain("STRIPE_PRICE_PRO");
+    expect(warningKeys).not.toContain("STRIPE_PRICE_PRO_MAX");
     expect(warningKeys).not.toContain("STRIPE_PRICE_ACCESS_CODE_MONTHLY");
   });
 
   it("warns when commercial Stripe upgrades lack an explicit portal configuration", () => {
     const report = validateRuntimeConfig(
       createBaseEnv({
-        STRIPE_PRICE_AGENT_MONTHLY: "price_agent",
-        STRIPE_PRICE_LEARN_MONTHLY: "price_learn",
-        STRIPE_PRICE_COMPLETE_MONTHLY: "price_complete",
+        STRIPE_PRICE_PERSONAL: "price_personal",
+        STRIPE_PRICE_PRO: "price_pro",
+        STRIPE_PRICE_PRO_MAX: "price_pro_max",
         STRIPE_BILLING_PORTAL_CONFIGURATION: "",
       })
     );

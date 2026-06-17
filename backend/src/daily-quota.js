@@ -135,13 +135,15 @@ export function getWeeklyQuotaResetAtUtcIso(nowDate = new Date()) {
   return new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
 }
 
-export function isUnlimitedUser({ tier, status, accessActive }) {
-  const normalizedTier = String(tier || "").trim().toLowerCase();
-  const normalizedStatus = String(status || "").trim().toLowerCase();
-  const paidActive =
-    ["student", "personal"].includes(normalizedTier) &&
-    ["active", "trialing", "past_due"].includes(normalizedStatus);
-  return paidActive || accessActive === true;
+// Bug 1 fix — a PAID subscription is metered, not unlimited. UNMETERED chat is
+// granted ONLY by an active access-code/bypass (accessActive), which is how the
+// local-unlimited-quota bypass and super-admin override surface here. Tying
+// "unlimited" to the `student`/`personal` tier (as this did) was the second
+// revenue-leak path: it let buildUserQuotaContext mark paid subscribers
+// unlimited via `|| isUnlimitedUser(...)` even after spaces.uncapped was fixed,
+// so their chat never debited the wallet.
+export function isUnlimitedUser({ accessActive } = {}) {
+  return accessActive === true;
 }
 
 export function hasLocalUnlimitedQuotaBypass(zakiUser, env = process.env) {
