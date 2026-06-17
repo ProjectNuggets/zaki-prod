@@ -140,7 +140,7 @@ describe("agent-metering: done-frame real cost", () => {
 describe("agent-metering: computeAgentSettleUnits", () => {
   test("derives units from real cost at the unit price", () => {
     const r = computeAgentSettleUnits({ costUsd: 0.03, env: {} });
-    expect(r).toEqual({ units: 0.03 / DEFAULT_UNIT_COST_USD, costSource: "real" }); // 40
+    expect(r).toEqual({ units: 0.03 / DEFAULT_UNIT_COST_USD, costSource: "real" }); // 20
   });
 
   test("falls back to the flat estimate without cost", () => {

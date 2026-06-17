@@ -49,26 +49,31 @@ describe("platform policy", () => {
     expect(defaultPolicy.numericLimitsFinalized).toBe(true);
     expect(defaultPolicy.plans.free.weeklyAllowanceUnits).toBe(100);
     expect(defaultPolicy.plans.free.rollingAllowanceUnits).toBe(40);
-    expect(defaultPolicy.plans.pro.weeklyAllowanceUnits).toBe(1500);
+    expect(defaultPolicy.plans.personal.weeklyAllowanceUnits).toBe(1000);
+    expect(defaultPolicy.plans.personal.rollingAllowanceUnits).toBe(200);
+    expect(defaultPolicy.plans.pro.weeklyAllowanceUnits).toBe(3000);
+    expect(defaultPolicy.plans.pro.rollingAllowanceUnits).toBe(600);
+    expect(defaultPolicy.plans.pro_max.weeklyAllowanceUnits).toBe(7500);
+    expect(defaultPolicy.plans.pro_max.rollingAllowanceUnits).toBe(1500);
     expect(defaultPolicy.burstWindowHours).toBe(5);
 
     const configuredPolicy = buildPlatformPlanPolicy({
       env: {
         ZAKI_PLATFORM_FREE_WEEKLY_ALLOWANCE_UNITS: "100",
-        ZAKI_PLATFORM_PERSONAL_WEEKLY_ALLOWANCE_UNITS: "500",
-        ZAKI_PLATFORM_PRO_WEEKLY_ALLOWANCE_UNITS: "1500",
-        ZAKI_PLATFORM_PRO_MAX_WEEKLY_ALLOWANCE_UNITS: "5000",
+        ZAKI_PLATFORM_PERSONAL_WEEKLY_ALLOWANCE_UNITS: "1000",
+        ZAKI_PLATFORM_PRO_WEEKLY_ALLOWANCE_UNITS: "3000",
+        ZAKI_PLATFORM_PRO_MAX_WEEKLY_ALLOWANCE_UNITS: "7500",
         ZAKI_PLATFORM_FREE_ROLLING_ALLOWANCE_UNITS: "20",
-        ZAKI_PLATFORM_PERSONAL_ROLLING_ALLOWANCE_UNITS: "100",
-        ZAKI_PLATFORM_PRO_ROLLING_ALLOWANCE_UNITS: "300",
-        ZAKI_PLATFORM_PRO_MAX_ROLLING_ALLOWANCE_UNITS: "1000",
+        ZAKI_PLATFORM_PERSONAL_ROLLING_ALLOWANCE_UNITS: "200",
+        ZAKI_PLATFORM_PRO_ROLLING_ALLOWANCE_UNITS: "600",
+        ZAKI_PLATFORM_PRO_MAX_ROLLING_ALLOWANCE_UNITS: "1500",
         ZAKI_PLATFORM_BURST_WINDOW_HOURS: "6",
       },
     });
     expect(configuredPolicy.numericLimitsFinalized).toBe(true);
     expect(configuredPolicy.burstWindowHours).toBe(6);
-    expect(configuredPolicy.plans.pro.weeklyAllowanceUnits).toBe(1500);
-    expect(configuredPolicy.plans.pro.rollingAllowanceUnits).toBe(300);
+    expect(configuredPolicy.plans.pro.weeklyAllowanceUnits).toBe(3000);
+    expect(configuredPolicy.plans.pro.rollingAllowanceUnits).toBe(600);
   });
 
   it("defines weighted product and capability meter policy", () => {

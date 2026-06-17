@@ -21,8 +21,8 @@ const items: { title: { en: string; ar: string }; desc: { en: string; ar: string
     status: "building",
   },
   {
-    title: { en: "Learn and Hire beta", ar: "Learn وHire بيتا" },
-    desc: { en: "These products stay private beta until entitlement, memory, usage, UI, and E2E agree.", ar: "هذه المنتجات تبقى بيتا خاصة حتى تتفق الصلاحيات والذاكرة والاستخدام والواجهة والاختبارات." },
+    title: { en: "Learn and Carrier gated", ar: "Learn وCarrier بوصول مقيد" },
+    desc: { en: "These products stay gated until entitlement, memory, usage, UI, and E2E agree.", ar: "هذه المنتجات تبقى مقيدة حتى تتفق الصلاحيات والذاكرة والاستخدام والواجهة والاختبارات." },
     status: "building",
   },
   {

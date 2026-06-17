@@ -9,13 +9,13 @@ const laneLabels = {
   brain: { en: "Brain", ar: "الذاكرة" },
   learn: { en: "Learn", ar: "التعلّم" },
   design: { en: "Design", ar: "التصميم" },
-  hire: { en: "Hire", ar: "التوظيف" },
+  hire: { en: "Carrier", ar: "Carrier" },
 } as const;
 
 const localizedStatus = {
   Live: { en: "live", ar: "مباشر" },
   Included: { en: "included", ar: "مشمول" },
-  "Private beta": { en: "beta", ar: "بيتا" },
+  "Private access": { en: "private access", ar: "وصول خاص" },
   Waitlist: { en: "waitlist", ar: "انتظار" },
 } as const;
 
@@ -127,7 +127,7 @@ export function Hero({ locale }: { locale: Locale }) {
                   {[
                     [isArabic ? "المتاح الآن" : "Available now", isArabic ? "الدردشة و Agent و Brain" : "Chat, Agent, and Brain"],
                     [isArabic ? "بعد تسجيل الدخول" : "After sign in", isArabic ? "الحفظ، الرفع، التصدير" : "Save, upload, export"],
-                    [isArabic ? "مسارات مقيّدة" : "Gated lanes", isArabic ? "Learn وHire بيتا، Design انتظار" : "Learn and Hire beta, Design waitlist"],
+                    [isArabic ? "مسارات مقيّدة" : "Gated lanes", isArabic ? "Learn وCarrier وصول خاص، Design انتظار" : "Learn and Carrier private access, Design waitlist"],
                   ].map(([label, value]) => (
                     <div key={label} className="grid grid-cols-[24px_1fr] gap-3 border-b border-zk-border px-4 py-4 md:px-5">
                       <CircleDot className="mt-0.5 size-3.5 text-zk-accent" strokeWidth={1.5} />

@@ -47,12 +47,12 @@ function modeCopy(mode: ProductGateMode): ProductGateCopy {
       tone: "warn",
     },
     private_beta: {
-      badge: "Private beta",
-      heading: "This product is in private beta",
+      badge: "Private access",
+      heading: "This product is gated for private access",
       body:
         "{{product}} is gated while route access, entitlement, memory boundaries, and signed-in E2E coverage are finalized together.",
-      status: "Launch state: private beta",
-      next: "Use Chat, Agent, or Brain today. Beta access stays gated until the full product contract is ready.",
+      status: "Launch state: private access",
+      next: "Use Chat, Agent, or Brain today. Access stays gated until the full product contract is ready.",
       action: "Open dashboard",
       tone: "accent",
     },

@@ -38,16 +38,16 @@ const useCases = [
   {
     icon: GraduationCap,
     title: "Study planning",
-    body: "Learn remains private beta. Today, Chat can help with study notes and Agent can plan a learning path without claiming a launched Learn product.",
+    body: "Learn remains private access. Today, Chat can help with study notes and Agent can plan a learning path without claiming a launched Learn product.",
     href: appHandoffUrl("/learn", "website_use_cases_learn_beta", "learn_waitlist"),
-    cta: "View beta",
+    cta: "View access",
   },
   {
     icon: BriefcaseBusiness,
     title: "Job-search preparation",
-    body: "Hire remains private beta. Today, Chat can improve CV copy and Agent can plan the search while the full Hire flow stays gated.",
+    body: "Carrier remains private access. Today, Chat can improve CV copy and Agent can plan the search while the full Carrier flow stays gated.",
     href: appHandoffUrl("/hire", "website_use_cases_hire_beta", "hire_waitlist"),
-    cta: "View beta",
+    cta: "View access",
   },
 ];
 

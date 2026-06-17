@@ -216,7 +216,7 @@ function getCommandProductName(t: TranslateFn, productId: AnonymousWorkProductId
         : productId === "spaces"
           ? "Chat"
           : productId === "hire"
-            ? "Hire"
+            ? "Career"
           : productId[0]?.toUpperCase() + productId.slice(1),
   });
 }
@@ -227,7 +227,7 @@ function getCommandProductHint(t: TranslateFn, productId: AnonymousWorkProductId
     brain: "Paste notes, links, or raw context and see the shape of what ZAKI would remember.",
     learning: "Learn is coming soon. For now, use Chat for quick study help or Agent to plan a learning path.",
     design: "Design is coming soon. For now, use Chat to shape a brief or Agent to plan the design work.",
-    hire: "Hire is coming soon. For now, use Chat to improve CV copy or Agent to plan your job search.",
+    hire: "Career is gated. For now, use Chat to improve CV copy or Agent to plan your next move.",
     spaces: "Ask now, draft quickly, or test the platform without setting anything up.",
   };
   return t(`zakiDashboard.command.hints.${productId}`, {
@@ -264,19 +264,19 @@ function getCommandProductDetails(t: TranslateFn, productId: AnonymousWorkProduc
     agent: {
       bestFor: "Turning a messy goal into a concrete plan, then executing when you allow it.",
       memory: "Personal Brain after sign-in.",
-      truth: "Guest Agent is a planning preview. External tools, files, browser control, and durable memory require sign-in.",
+      truth: "Guest Agent supports planning. External tools, files, browser control, and durable memory require sign-in.",
       accessTone: "accent",
     },
     brain: {
       bestFor: "Making notes, preferences, decisions, and project facts visible instead of hidden in chat.",
-      memory: "Browser-only preview; saved graph after sign-in.",
-      truth: "Brain can preview structure from pasted text. Saving durable memory requires an account.",
+      memory: "Browser-only view; saved graph after sign-in.",
+      truth: "Brain can structure pasted text. Saving durable memory requires an account.",
       accessTone: "accent",
     },
     learning: {
       bestFor: "Study plans, source walkthroughs, questions, weak spots, and guided practice.",
       memory: "Learner memory is not public yet.",
-      truth: "Coming soon. Use Chat or Agent today; Learn will return when the learner state and beta path are ready.",
+      truth: "Gated for private access. Use Chat or Agent today; Learn returns when the learner state and access path are ready.",
       accessTone: "warn",
     },
     design: {
@@ -287,8 +287,8 @@ function getCommandProductDetails(t: TranslateFn, productId: AnonymousWorkProduc
     },
     hire: {
       bestFor: "Finding your next role, improving your CV, comparing fit, and preparing applications.",
-      memory: "Hire pipeline memory is not public yet.",
-      truth: "Coming soon. Use Chat or Agent today; Hire opens when the private job-search flow is ready.",
+      memory: "Career pipeline memory is not public yet.",
+      truth: "Gated for private access. Use Chat or Agent today; Career opens when the private career flow is ready.",
       accessTone: "warn",
     },
     spaces: {
@@ -638,7 +638,7 @@ function DashboardIntroModal({
           defaultValue: "Chat, Agent, and Brain are the launch core.",
         }),
         t("zakiDashboard.intro.slides.palette.bullets.preview", {
-          defaultValue: "Design, Learn, and Hire start as truthful previews or gates.",
+          defaultValue: "Design, Learn, and Career start as truthful gates.",
         }),
         t("zakiDashboard.intro.slides.palette.bullets.website", {
           defaultValue: "Visit the website when you want the broader product story.",

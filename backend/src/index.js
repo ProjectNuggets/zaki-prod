@@ -6644,6 +6644,12 @@ async function readMeterSnapshotForRequest(identity, platform, policy) {
   // ENFORCEMENT ledger the spaces chat gate debits) instead of the receipts ledger — spaces chat
   // never writes a receipt, so the receipts-based weekly would always read used:0/remaining:limit.
   // Anonymous identities (and users without a wallet) → wallet stays null → receipts path unchanged.
+  if (identity?.type === "user" && identity?.userId != null) {
+    await ensureWallet({
+      userId: identity.userId,
+      planId: platform?.plan?.id || identity?.zakiUser?.plan_tier || "free",
+    });
+  }
   const wallet =
     identity?.type === "user" && identity?.userId != null
       ? await readWallet(identity.userId)

@@ -2,7 +2,6 @@ import { Brain, Check, ArrowRight } from "lucide-react";
 import type { Locale } from "../lib/content";
 import { productHandoffUrl } from "../lib/appHandoff";
 import { Reveal } from "./Reveal";
-import { BorderBeam } from "./ui/border-beam";
 import { ShimmerButton } from "./ui/shimmer-button";
 
 function FeatureItem({ children }: { children: React.ReactNode }) {
@@ -78,8 +77,6 @@ export function ProductCards({ locale }: { locale: Locale }) {
           {/* ZAKI Agent card */}
           <Reveal delay={120}>
             <div className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-zk-border-accent bg-zk-surface p-7">
-              <BorderBeam size={80} duration={6} />
-
               <div className="flex items-center gap-2">
                 <span className="font-logo text-xl text-zk-accent">ZAKI</span>
                 <span className="font-display text-xl font-bold text-zk-text">Agent</span>

@@ -89,7 +89,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.markers.free": "Free",
     "zakiDashboard.command.markers.preview": "Preview",
     "zakiDashboard.command.markers.save": "Save",
-    "zakiDashboard.command.markers.beta": "Beta",
+    "zakiDashboard.command.markers.beta": "Gated",
     "zakiDashboard.command.markers.waitlist": "Waitlist",
     "zakiDashboard.command.markers.comingSoon": "Coming soon",
     "zakiDashboard.command.creditsExhaustedTitle": "Weekly credits are used.",
@@ -107,17 +107,17 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.hints.brain": "Map pasted text.",
     "zakiDashboard.command.hints.learning": "Learn is coming soon.",
     "zakiDashboard.command.hints.design": "Design is coming soon.",
-    "zakiDashboard.command.hints.hire": "Hire is coming soon.",
+    "zakiDashboard.command.hints.hire": "Career is gated.",
     "zakiDashboard.command.hints.spaces": "Chat immediately.",
     "zakiDashboard.command.details.agent.bestFor": "Planning, follow-through, tool runs, and browser work.",
     "zakiDashboard.command.details.agent.memory": "Personal brain after sign-in.",
-    "zakiDashboard.command.details.agent.truth": "Anonymous Agent starts as planning preview.",
+    "zakiDashboard.command.details.agent.truth": "Anonymous Agent supports planning.",
     "zakiDashboard.command.details.spaces.bestFor": "Quick questions, drafting, and thinking out loud. No setup.",
     "zakiDashboard.command.details.spaces.memory": "Session only until you sign in.",
     "zakiDashboard.command.details.spaces.truth": "Chat runs now on free weekly credits.",
     "zakiDashboard.command.details.hire.bestFor": "Finding your next role, improving your CV, comparing fit, and preparing applications.",
-    "zakiDashboard.command.details.hire.memory": "Hire pipeline memory is not public yet.",
-    "zakiDashboard.command.details.hire.truth": "Coming soon. Use Chat or Agent today.",
+    "zakiDashboard.command.details.hire.memory": "Career pipeline memory is not public yet.",
+    "zakiDashboard.command.details.hire.truth": "Gated for private access. Use Chat or Agent today.",
     "zakiDashboard.command.details.design.bestFor": "Product direction and design project generation.",
     "zakiDashboard.command.details.design.memory": "Design project memory is not public yet.",
     "zakiDashboard.command.details.design.truth": "Coming soon. Use Chat or Agent today.",
@@ -203,10 +203,10 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.products.names.spaces": "Chat",
     "zakiDashboard.products.names.brain": "Brain",
     "zakiDashboard.products.names.learning": "Learn",
-    "zakiDashboard.products.names.hire": "Hire",
+    "zakiDashboard.products.names.hire": "Career",
     "zakiDashboard.products.names.design": "Design",
     "zakiDashboard.products.tags.live": "Live",
-    "zakiDashboard.products.tags.privateBeta": "Private beta",
+    "zakiDashboard.products.tags.privateBeta": "Private access",
     "zakiDashboard.products.tags.waitlist": "Waitlist",
     "zakiDashboard.products.tags.controlPlane": "Control plane",
     "zakiDashboard.products.tags.degraded": "Degraded",
@@ -216,7 +216,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.products.descriptions.spaces": "Workspace chat.",
     "zakiDashboard.products.descriptions.brain": "Memory graph.",
     "zakiDashboard.products.descriptions.learning": "Study surface.",
-    "zakiDashboard.products.descriptions.hire": "Hire search agent.",
+    "zakiDashboard.products.descriptions.hire": "Career support.",
     "zakiDashboard.products.descriptions.design": "Design surface.",
     "zakiDashboard.memory.title": "Memory scopes",
     "zakiDashboard.memory.subtitle": "Every product writes to a known memory owner.",
@@ -261,7 +261,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.productsAccess.memoryScopes.personalBrain": "Personal brain",
     "settingsModal.productsAccess.memoryScopes.workspaceMemory": "Workspace memory",
     "settingsModal.productsAccess.memoryScopes.learnerMemory": "Learner memory",
-    "settingsModal.productsAccess.memoryScopes.hireMemory": "Hire memory",
+    "settingsModal.productsAccess.memoryScopes.hireMemory": "Career memory",
     "settingsModal.productsAccess.memoryScopes.designMemory": "Design memory",
     "settingsModal.productsAccess.memoryScopes.sessionMemory": "Session memory",
   };
@@ -329,13 +329,13 @@ const registryProducts = [
   },
   {
     productId: "hire",
-    label: "ZAKI Hire",
+    label: "ZAKI Career",
     productKind: "product",
     state: "disabled",
     lifecycle: "future",
     visibleInSettings: true,
     route: "/products/hire",
-    entryPoint: "Hire",
+    entryPoint: "Career",
     memoryScope: "hire_memory",
   },
   {
@@ -505,7 +505,7 @@ describe("ZakiDashboard", () => {
       .getAllByRole("tab")
       .map((tab) => tab.getAttribute("aria-label"));
 
-    expect(tabs).toEqual(["Agent", "Brain", "Chat", "Design", "Learn", "Hire"]);
+    expect(tabs).toEqual(["Agent", "Brain", "Chat", "Design", "Learn", "Career"]);
   });
 
   it("routes signed-in command prompts to the selected product surface", () => {
@@ -666,7 +666,7 @@ describe("ZakiDashboard", () => {
       .getAllByRole("tab")
       .map((tab) => tab.getAttribute("aria-label"));
 
-    expect(tabs).toEqual(["Chat", "Agent", "Brain", "Design", "Learn", "Hire"]);
+    expect(tabs).toEqual(["Chat", "Agent", "Brain", "Design", "Learn", "Career"]);
     expect(screen.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Type a prompt to start.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save this work" })).not.toBeInTheDocument();
@@ -704,7 +704,7 @@ describe("ZakiDashboard", () => {
     });
   });
 
-  it("frames the Hire product as a user Hire lane", () => {
+  it("frames the Career product as a user career lane", () => {
     useAuthStore.setState({
       token: null,
       user: null,
@@ -714,13 +714,13 @@ describe("ZakiDashboard", () => {
 
     renderDashboard();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Hire" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Career" }));
 
     const hint = screen.getByTestId("zaki-dashboard-product-hint");
-    expect(hint).toHaveTextContent("Hire is coming soon.");
+    expect(hint).toHaveTextContent("Career is gated.");
     expect(hint).toHaveTextContent("improving your CV");
-    expect(hint).toHaveTextContent("Coming soon. Use Chat or Agent today.");
-    expect(screen.getByRole("button", { name: "Hire coming soon" })).toBeDisabled();
+    expect(hint).toHaveTextContent("Gated for private access. Use Chat or Agent today.");
+    expect(screen.getByRole("button", { name: "Career coming soon" })).toBeDisabled();
     expect(hint).not.toHaveTextContent("Job descriptions");
     expect(hint).not.toHaveTextContent("Candidate");
   });
@@ -813,7 +813,7 @@ describe("ZakiDashboard", () => {
 
     renderDashboard();
 
-    for (const product of ["Design", "Learn", "Hire"]) {
+    for (const product of ["Design", "Learn", "Career"]) {
       fireEvent.click(screen.getByRole("tab", { name: product }));
       fireEvent.change(screen.getByLabelText("Describe what you want ZAKI to do"), {
         target: { value: `Try ${product}` },
