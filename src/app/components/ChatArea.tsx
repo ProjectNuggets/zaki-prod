@@ -67,6 +67,7 @@ import {
 } from "@/lib/threadTitles";
 import { createAnonymousThreadId } from "@/lib/anonymousSpaces";
 import { upsertAnonymousWorkItem } from "@/lib/anonymousWork";
+import { clearPendingIntent, readPendingIntent } from "@/lib/pendingIntent";
 import { openSpacesMemoryViewer, type MemoryViewerTab } from "@/lib/spacesMemory";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import {
@@ -3350,6 +3351,7 @@ export function ChatArea() {
   // per-turn toggle reset and could send privately when the user had
   // armed privacy for a different turn.
   const composerHandleRef = useRef<InputAreaHandle | null>(null);
+  const replayedPendingIntentKeyRef = useRef<string | null>(null);
   const inputWrapRef = useRef<HTMLDivElement>(null);
   const readyRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -7326,6 +7328,22 @@ export function ChatArea() {
     setPaywallCardData(null);
 
     const isZakiBotTarget = isZakiBotSpaceId(resolvedWorkspaceSlug);
+    const anonymousWork =
+      !authUserId
+        ? upsertAnonymousWorkItem({
+            productId: isZakiBotTarget ? "agent" : "spaces",
+            taskKind: isZakiBotTarget ? "preview" : "chat",
+            prompt: trimmed,
+            route: isZakiBotTarget
+              ? "/agent"
+              : activeThreadId
+                ? `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(activeThreadId)}`
+                : `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}`,
+            threadId: activeThreadId,
+            meterRemaining: null,
+            status: "draft",
+          })
+        : null;
     if (isZakiBotTarget) {
       const provisioned = await ensureZakiBotProvisioned(false);
       if (!provisioned) return;
@@ -7371,18 +7389,18 @@ export function ChatArea() {
     }
 
     if (!threadId) return;
-    const anonymousSpacesWork =
-      !authUserId && !isZakiBotTarget
-        ? upsertAnonymousWorkItem({
-            productId: "spaces",
-            taskKind: "chat",
-            prompt: trimmed,
-            route: `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
-            threadId,
-            meterRemaining: null,
-            status: "draft",
-          })
-        : null;
+    if (anonymousWork && !isZakiBotTarget) {
+      upsertAnonymousWorkItem({
+        id: anonymousWork.id,
+        productId: "spaces",
+        taskKind: "chat",
+        prompt: trimmed,
+        route: `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
+        threadId,
+        meterRemaining: null,
+        status: "draft",
+      });
+    }
 
     const turnSessionKey =
       isZakiBotTarget && agentUserId ? buildAgentSessionKey(threadId, agentUserId) : null;
@@ -7616,14 +7634,17 @@ export function ChatArea() {
         userMessage: trimmed,
         assistantMessage: String(streamResult?.content || "").trim(),
       });
-      if (anonymousSpacesWork) {
+      if (anonymousWork) {
+        const productId = isZakiBotTarget ? "agent" : "spaces";
         upsertAnonymousWorkItem({
-          id: anonymousSpacesWork.id,
-          productId: "spaces",
-          taskKind: "chat",
+          id: anonymousWork.id,
+          productId,
+          taskKind: isZakiBotTarget ? "preview" : "chat",
           prompt: trimmed,
           replyPreview: String(streamResult?.content || "").trim(),
-          route: `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
+          route: isZakiBotTarget
+            ? "/agent"
+            : `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
           threadId,
           meterRemaining: null,
           status: "succeeded",
@@ -7632,13 +7653,16 @@ export function ChatArea() {
       // Keep chat UX responsive: memory save runs in background.
       void checkForSavedMemories(trimmed, threadId);
     } catch (error) {
-      if (anonymousSpacesWork) {
+      if (anonymousWork) {
+        const productId = isZakiBotTarget ? "agent" : "spaces";
         upsertAnonymousWorkItem({
-          id: anonymousSpacesWork.id,
-          productId: "spaces",
-          taskKind: "chat",
+          id: anonymousWork.id,
+          productId,
+          taskKind: isZakiBotTarget ? "preview" : "chat",
           prompt: trimmed,
-          route: `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
+          route: isZakiBotTarget
+            ? "/agent"
+            : `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
           threadId,
           meterRemaining: null,
           status: "failed",
@@ -7715,6 +7739,37 @@ export function ChatArea() {
     streamChatMessage,
     maybeAutoTitleThread,
     updateAssistantError,
+  ]);
+
+  useEffect(() => {
+    if (!isAuthReady || !authUserId || isStreaming) return;
+    const pendingIntent = readPendingIntent();
+    if (!pendingIntent?.prompt) return;
+    const replayKey = `${pendingIntent.productId}:${pendingIntent.createdAt}:${pendingIntent.prompt}`;
+    if (replayedPendingIntentKeyRef.current === replayKey) return;
+
+    if (pendingIntent.productId === "agent") {
+      if (!isZakiBotActiveSpace) return;
+      replayedPendingIntentKeyRef.current = replayKey;
+      composerHandleRef.current?.setDraft(pendingIntent.prompt);
+      window.dispatchEvent(new Event("zaki:focus-composer"));
+      clearPendingIntent();
+      return;
+    }
+
+    if (pendingIntent.productId === "spaces") {
+      if (!activeWorkspaceSlug || isZakiBotActiveSpace) return;
+      replayedPendingIntentKeyRef.current = replayKey;
+      clearPendingIntent();
+      composerHandleRef.current?.submitWith(pendingIntent.prompt);
+    }
+  }, [
+    activeWorkspaceSlug,
+    authUserId,
+    handleSend,
+    isAuthReady,
+    isStreaming,
+    isZakiBotActiveSpace,
   ]);
 
   const handleStopStreaming = useCallback(() => {

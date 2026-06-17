@@ -147,6 +147,8 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.intro.visitWebsite": "Visit V1 website",
     "zakiDashboard.anonymousWork.title": "Continue what you started",
     "zakiDashboard.anonymousWork.subtitle": "Same-browser history.",
+    "zakiDashboard.anonymousWork.claimedTitle": "We kept your work",
+    "zakiDashboard.anonymousWork.claimedSubtitle": "Your recent browser work is available after sign-in.",
     "zakiDashboard.anonymousWork.save": "Save this work",
     "zakiDashboard.support.label": "Dashboard telemetry",
     "zakiDashboard.support.session": "Session",
@@ -541,7 +543,7 @@ describe("ZakiDashboard", () => {
       prompt: "Map these notes after I sign in",
       status: "draft",
     });
-    const intent = JSON.parse(window.sessionStorage.getItem(PENDING_INTENT_KEY) || "{}");
+    const intent = JSON.parse(window.localStorage.getItem(PENDING_INTENT_KEY) || "{}");
     expect(intent).toMatchObject({
       productId: "brain",
       prompt: "Map these notes after I sign in",
@@ -595,7 +597,7 @@ describe("ZakiDashboard", () => {
       status: "draft",
       meterRemaining: 97,
     });
-    const intent = JSON.parse(window.sessionStorage.getItem(PENDING_INTENT_KEY) || "{}");
+    const intent = JSON.parse(window.localStorage.getItem(PENDING_INTENT_KEY) || "{}");
     expect(intent).toMatchObject({
       productId: "spaces",
       prompt: "Let's test the platform flow",
@@ -629,6 +631,25 @@ describe("ZakiDashboard", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/spaces/zaky/threads/thread-1");
   });
 
+  it("claims returning anonymous work after sign-in and clears the local ledger", () => {
+    upsertAnonymousWorkItem({
+      productId: "agent",
+      taskKind: "preview",
+      prompt: "Plan my launch sequence",
+      title: "Launch sequence",
+      route: "/agent",
+      threadId: null,
+      meterRemaining: 12,
+      status: "draft",
+    });
+
+    renderDashboard();
+
+    expect(screen.getByTestId("zaki-anonymous-work")).toHaveTextContent("We kept your work");
+    expect(screen.getByTestId("zaki-anonymous-work")).toHaveTextContent("Launch sequence");
+    expect(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY)).toBeNull();
+  });
+
   it("keeps future spokes visible but coming soon without creating auth work", () => {
     useAuthStore.setState({
       token: null,
@@ -652,7 +673,7 @@ describe("ZakiDashboard", () => {
     expect(screen.queryByRole("button", { name: "Save this work" })).not.toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalledWith(expect.stringContaining("/?auth=signup"));
     expect(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY)).toBeNull();
-    expect(window.sessionStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
+    expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
   });
 
   it("keeps the prompt visible and offers choices when free credits are exhausted", () => {

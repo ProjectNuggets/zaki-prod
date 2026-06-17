@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "@jest/globals";
+import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import {
   PENDING_INTENT_KEY,
   buildProductReturnTo,
@@ -10,9 +10,14 @@ import {
 describe("pending intent", () => {
   beforeEach(() => {
     window.sessionStorage.clear();
+    window.localStorage.clear();
   });
 
-  it("stores prompt-preserving auth handoff intent in session storage", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("stores prompt-preserving auth handoff intent in local storage", () => {
     const intent = writePendingIntent({
       productId: "design",
       taskKind: "brief",
@@ -23,6 +28,8 @@ describe("pending intent", () => {
     });
 
     expect(intent?.returnTo).toBe("/design");
+    expect(window.localStorage.getItem(PENDING_INTENT_KEY)).not.toBeNull();
+    expect(window.sessionStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
     expect(readPendingIntent()).toMatchObject({
       productId: "design",
       taskKind: "brief",
@@ -41,10 +48,29 @@ describe("pending intent", () => {
 
     expect(readPendingIntent()?.returnTo).toBe("/hire");
 
-    window.sessionStorage.setItem(
+    window.localStorage.setItem(
       PENDING_INTENT_KEY,
       JSON.stringify({ productId: "cli", prompt: "No route" })
     );
+    expect(readPendingIntent()).toBeNull();
+  });
+
+  it("ignores intents older than the short redirect handoff window", () => {
+    window.localStorage.setItem(
+      PENDING_INTENT_KEY,
+      JSON.stringify({
+        productId: "agent",
+        taskKind: "preview",
+        prompt: "Summarize my notebook",
+        returnTo: "/agent",
+        createdAt: "2026-06-01T10:00:00.000Z",
+      })
+    );
+
+    jest.spyOn(Date, "now").mockReturnValue(Date.parse("2026-06-01T10:29:00.000Z"));
+    expect(readPendingIntent()?.prompt).toBe("Summarize my notebook");
+
+    jest.spyOn(Date, "now").mockReturnValue(Date.parse("2026-06-01T10:31:00.000Z"));
     expect(readPendingIntent()).toBeNull();
   });
 
