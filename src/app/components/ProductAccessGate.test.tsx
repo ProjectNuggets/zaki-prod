@@ -23,16 +23,16 @@ function renderGate(
 }
 
 describe("ProductAccessGate", () => {
-  it("labels private beta products separately from coming soon", () => {
+  it("labels private-access products separately from coming soon", () => {
     renderGate("learning", "ZAKI Learn", "private_beta");
 
     expect(screen.getByTestId("product-gate-learning")).toHaveAttribute(
       "data-product-gate",
       "private_beta"
     );
-    expect(screen.getByRole("heading", { name: "This product is in private beta" })).toBeInTheDocument();
-    expect(screen.getByText("Private beta")).toBeInTheDocument();
-    expect(screen.getByText("Launch state: private beta")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "This product is gated for private access" })).toBeInTheDocument();
+    expect(screen.getByText("Private access")).toBeInTheDocument();
+    expect(screen.getByText("Launch state: private access")).toBeInTheDocument();
     expect(screen.getByText("Dashboard, Agent, Chat, Brain, Settings")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open dashboard/ })).toHaveAttribute("href", "/");
   });

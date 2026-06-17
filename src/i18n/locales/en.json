@@ -162,7 +162,7 @@
       "resetPending": "Reset pending",
       "launchState": {
         "public_app": "Launch: public app",
-        "private_beta": "Launch: private beta",
+        "private_beta": "Launch: private access",
         "waitlist": "Launch: waitlist",
         "hidden": "Launch: hidden"
       },
@@ -196,7 +196,7 @@
         "personalBrain": "Personal brain",
         "workspaceMemory": "Workspace memory",
         "learnerMemory": "Learner memory",
-        "hireMemory": "Hire memory",
+        "hireMemory": "Career memory",
         "designMemory": "Design memory",
         "sessionMemory": "Session memory"
       },
@@ -204,7 +204,7 @@
         "spaces": "Spaces / Chat",
         "agent": "Agent workbench",
         "learning": "Learning",
-        "hire": "Hire",
+        "hire": "Career",
         "design": "Design",
         "brain": "Memory control plane",
         "cli": "CLI",
@@ -486,7 +486,7 @@
     },
     "brain": "Brain",
     "learning": "Learn",
-    "hire": "Hire",
+    "hire": "Career",
     "memory": {
       "title": "Your Memory",
       "subtitle": "What ZAKI remembers about you",
@@ -1221,14 +1221,14 @@
   "pricingPage": {
     "eyebrow": "Plans",
     "title": "Choose how ZAKI should keep working with you",
-    "subtitle": "Start free in Chat without an account. Pay when you want Agent continuity, account memory, and follow-through. Learn, Design, and Hire stay parked until their full flows are ready.",
+    "subtitle": "Start free in Chat without an account. Pay when you want Agent continuity, account memory, and follow-through. Learn, Design, and Career stay parked until their full flows are ready.",
     "subtitleAccessActive": "Your access code unlocks the V1 core for now. Product-specific codes come later.",
     "comparisonNote": "V1 pricing is intentionally simple: free Chat, paid Agent, Brain included with account continuity, and future products clearly marked as coming soon.",
     "highlightsTemplates": {
       "free": "Chat Free: anonymous weekly credits",
       "agent": "Agent: $29/month",
       "brain": "Brain: included",
-      "future": "Learn, Design, Hire: coming soon"
+      "future": "Learn, Design, Career: gated"
     },
     "currentPlan": "You’re currently on {{plan}}",
     "currentPlanSignedOut": "You’re viewing plans signed out",
@@ -1329,11 +1329,11 @@
       "future": {
         "label": "Coming next",
         "price": "Soon",
-        "blurb": "Learn, Design, and Hire are visible, but not sold as public products yet.",
+        "blurb": "Learn, Design, and Career are visible, but not sold as public products yet.",
         "features": [
           "Learn returns when learner state is safe",
           "Design launches after project creation is proven",
-          "Hire stays user-side and private until ready"
+          "Career stays user-side and private until ready"
         ],
         "cta": "Open dashboard"
       }
@@ -1678,7 +1678,7 @@
     "chat": "Chat",
     "brain": "Brain",
     "learn": "Learn",
-    "hire": "Hire",
+    "hire": "Career",
     "design": "Design",
     "settings": "Settings",
     "quickSettings": {
@@ -1796,9 +1796,9 @@
       "shownHere": "Shown here",
       "workspace": "Workspace",
       "learner": "Learner",
-      "hire": "Hire",
+      "hire": "Career",
       "separate": "Separate",
-      "note": "Workspace, Learner, and Hire memory are kept separate and live in their own surfaces.",
+      "note": "Workspace, Learner, and Career memory are kept separate and live in their own surfaces.",
       "manageLink": "Memory scopes & privacy"
     },
     "governance": {
@@ -1938,7 +1938,7 @@
         "spaces": "Ask now, draft quickly, or test the platform without setting anything up.",
         "design": "Design is coming soon. For now, use Chat to shape a brief or Agent to plan the design work.",
         "learning": "Learn is coming soon. For now, use Chat for quick study help or Agent to plan a learning path.",
-        "hire": "Hire is coming soon. For now, use Chat to improve CV copy or Agent to plan your job search."
+        "hire": "Career is gated. For now, use Chat to improve CV copy or Agent to plan your next move."
       },
       "details": {
         "agent": {
@@ -1968,8 +1968,8 @@
         },
         "hire": {
           "bestFor": "Finding your next role, improving your CV, comparing fit, and preparing applications.",
-          "memory": "Hire pipeline memory is not public yet.",
-          "truth": "Coming soon. Use Chat or Agent today; Hire opens when the private job-search flow is ready."
+          "memory": "Career pipeline memory is not public yet.",
+          "truth": "Gated for private access. Use Chat or Agent today; Career opens when the private career flow is ready."
         }
       }
     },
@@ -2007,7 +2007,7 @@
           "body": "The app is the working surface. The website is the narrative layer for story, pricing, product pages, and public context.",
           "bullets": {
             "chat": "Chat, Agent, and Brain are the launch core.",
-            "preview": "Design, Learn, and Hire start as truthful previews or gates.",
+            "preview": "Design, Learn, and Career start as truthful gates.",
             "website": "Visit the website when you want the broader product story."
           }
         }
@@ -2073,12 +2073,12 @@
         "spaces": "Chat",
         "brain": "Brain",
         "learning": "Learn",
-        "hire": "Hire",
+        "hire": "Career",
         "design": "Design"
       },
       "tags": {
         "live": "Live",
-        "privateBeta": "Private beta",
+        "privateBeta": "Private access",
         "waitlist": "Waitlist",
         "controlPlane": "Control plane",
         "degraded": "Degraded",
@@ -2090,7 +2090,7 @@
         "spaces": "Workspace chat for threads, files, and focused shared context.",
         "brain": "The memory graph made visible: provenance, scopes, conflicts, and governance.",
         "learning": "Study surface for sources, notebooks, tutors, quizzes, and learner memory.",
-        "hire": "Hire agent for target roles, CV positioning, fit notes, applications, and Hire memory.",
+        "hire": "Career support for target roles, CV positioning, fit notes, applications, and career memory.",
         "design": "Future design surface for briefs, assets, iterations, and design memory."
       }
     },
@@ -2148,8 +2148,8 @@
       "action": "Open dashboard"
     },
     "privateBeta": {
-      "badge": "Private beta",
-      "heading": "This product is in private beta",
+      "badge": "Private access",
+      "heading": "This product is gated for private access",
       "body": "{{product}} is gated while route access, entitlement, memory boundaries, and signed-in E2E coverage are finalized together.",
       "action": "Open dashboard"
     },
@@ -2162,7 +2162,7 @@
     "status": {
       "checking": "Checking access",
       "comingSoon": "Launch state: coming soon",
-      "privateBeta": "Launch state: private beta",
+      "privateBeta": "Launch state: private access",
       "waitlist": "Launch state: waitlist",
       "state": "State: {{state}}",
       "hidden": "Not exposed"
@@ -2178,7 +2178,7 @@
       "memoryValue": "Kept separate until explicitly launched",
       "next": "Next step",
       "comingSoonValue": "Start today with Chat, Agent, or Brain from the dashboard.",
-      "privateBetaValue": "Use Chat, Agent, or Brain today. Beta access stays gated until the full product contract is ready.",
+      "privateBetaValue": "Use Chat, Agent, or Brain today. Access stays gated until the full product contract is ready.",
       "waitlistValue": "Visit the product page for context, or start with Chat, Agent, or Brain today."
     }
   },

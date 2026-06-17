@@ -395,7 +395,7 @@ function getUsageLaunchStateLabel(
   if (launchState === "unknown") return null;
   const fallback: Record<Exclude<ProductLaunchState, "unknown">, string> = {
     public_app: "Launch: public app",
-    private_beta: "Launch: private beta",
+    private_beta: "Launch: private access",
     waitlist: "Launch: waitlist",
     hidden: "Launch: hidden",
   };

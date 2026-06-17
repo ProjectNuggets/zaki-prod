@@ -104,7 +104,7 @@ export function ProductRail() {
     {
       id: "hire",
       labelKey: "productRail.hire",
-      fallback: "Hire",
+      fallback: "Career",
       shortcut: "⌘6",
       icon: BriefcaseBusiness,
       disabled: true,

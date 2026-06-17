@@ -282,7 +282,7 @@ function learningStateLabel(state: LearningOperationalState) {
     degraded: "Degraded",
     hidden: "Unavailable",
     readOnly: "Read-only",
-    privateBeta: "Private beta",
+    privateBeta: "Private access",
     loading: "Syncing",
     unknown: "Registry pending",
   };
@@ -294,7 +294,7 @@ function learningStateMessage(state: LearningOperationalState) {
   if (state === "maintenance") return "Learn is in maintenance. Keep reading saved material; generation and mutations may be paused.";
   if (state === "readOnly") return "Learn is read-only from the central registry. Saved material is available; new expensive work should wait.";
   if (state === "degraded") return "Learn is degraded. Core study flows remain visible while upstream learning services recover.";
-  if (state === "privateBeta") return "Learn is in private beta. Access is controlled centrally; learner memory remains separate.";
+  if (state === "privateBeta") return "Learn is gated for private access. Access is controlled centrally; learner memory remains separate.";
   return "";
 }
 
@@ -1250,7 +1250,7 @@ export function LearningPage() {
                   {learningStateLabel(productState)}
                 </V2Badge>
                 {learningProduct?.lifecycle && learningProduct.lifecycle !== "current" ? (
-                  <V2Badge tone="warn">Private beta</V2Badge>
+                  <V2Badge tone="warn">Private access</V2Badge>
                 ) : null}
                 {productRegistry.isError || meterStatus.isError ? (
                   <V2Badge tone="warn">Central state degraded</V2Badge>

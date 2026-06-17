@@ -1,13 +1,13 @@
-// Product visibility gate — Agent/Chat/Brain public; Learn/Hire beta; Design waitlist.
+// Product visibility gate — Agent/Chat/Brain public; Learn/Career gated; Design waitlist.
 // Agent 5 (codex/v2-release-e2e).
 //
 // Two layers:
 //   1. FIRM (always run): the ProductRail shell nav is a small, stable
 //      component. It reliably encodes public-vs-gated: Agent/Chat/Brain
-//      are interactive; Learn/Hire are private beta; Design is disabled until its
+//      are interactive; Learn/Career are gated; Design is disabled until its
 //      backend is configured. These assertions are safe today.
 //   2. Dashboard command strip: the app front door exposes public launch
-//      surfaces while Learn/Hire/Design stay visible as beta/waitlist context,
+//      surfaces while Learn/Career/Design stay visible as gated/waitlist context,
 //      not generally available app surfaces.
 
 import { expect, test } from "@playwright/test";
@@ -35,7 +35,7 @@ test.describe("ZAKI V1 product visibility", () => {
 
     // Gated surfaces are present but not interactive in the public V1 build.
     await expect(rail.getByTitle(/^Learn/i)).toBeDisabled();
-    await expect(rail.getByTitle(/^Hire/i)).toBeDisabled();
+    await expect(rail.getByTitle(/^Career/i)).toBeDisabled();
     await expect(rail.getByTitle(/^Design/i)).toBeDisabled();
   });
 
@@ -58,7 +58,7 @@ test.describe("ZAKI V1 product visibility", () => {
     await expect(hint.locator("p").filter({ hasText: /Design is coming soon/i })).toBeVisible();
 
     await strip.getByRole("tab", { name: "Career" }).click();
-    await expect(hint.locator("p").filter({ hasText: /Career is coming soon/i })).toBeVisible();
+    await expect(hint.locator("p").filter({ hasText: /Career is gated/i })).toBeVisible();
   });
 
   test("direct beta and waitlist routes render gates instead of product surfaces", async ({ page }) => {
@@ -67,13 +67,13 @@ test.describe("ZAKI V1 product visibility", () => {
         path: "/learn",
         gate: "product-gate-learning",
         hiddenSurface: '[data-product-id="learning"]',
-        label: "Private beta",
+        label: "Private access",
       },
       {
         path: "/hire",
         gate: "product-gate-hire",
         hiddenSurface: '[data-product-id="hire"]',
-        label: "Private beta",
+        label: "Private access",
       },
       {
         path: "/design",

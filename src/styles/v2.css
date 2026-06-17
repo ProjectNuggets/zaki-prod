@@ -12190,13 +12190,112 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   width: fit-content;
 }
 
+.zaki-product-launch {
+  min-height: 100%;
+  background:
+    linear-gradient(var(--v2-hairline-faint) 1px, transparent 1px),
+    linear-gradient(90deg, var(--v2-hairline-faint) 1px, transparent 1px),
+    var(--v2-bg);
+  background-size: 32px 32px;
+  color: var(--v2-ink-1);
+  overflow: auto;
+}
+
+.zaki-product-launch__inner {
+  width: min(920px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: clamp(56px, 9vh, 112px) 0;
+}
+
+.zaki-product-launch__kicker,
+.zaki-product-launch__badges,
+.zaki-product-launch__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.zaki-product-launch__kicker,
+.zaki-product-launch__badges {
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.zaki-product-launch__kicker svg {
+  color: var(--v2-accent);
+}
+
+.zaki-product-launch h1 {
+  max-width: 760px;
+  margin: 22px 0 12px;
+  font-family: var(--v2-font-mono);
+  font-size: clamp(34px, 6vw, 72px);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 0.98;
+}
+
+.zaki-product-launch p {
+  max-width: 680px;
+  margin: 0;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-prose);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.zaki-product-launch__badges,
+.zaki-product-launch__actions {
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+.zaki-product-launch__panel {
+  margin-top: 44px;
+}
+
+.zaki-product-launch__facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-hairline);
+}
+
+.zaki-product-launch__facts > div {
+  min-height: 112px;
+  padding: 18px;
+  background: var(--v2-bg-raised);
+}
+
+.zaki-product-launch__facts dt {
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.zaki-product-launch__facts dd {
+  margin: 12px 0 0;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 @media (max-width: 720px) {
-  .zaki-product-gate__inner {
+  .zaki-product-gate__inner,
+  .zaki-product-launch__inner {
     width: min(100% - 24px, 920px);
     padding: 36px 0 96px;
   }
 
-  .zaki-product-gate__facts {
+  .zaki-product-gate__facts,
+  .zaki-product-launch__facts {
     grid-template-columns: 1fr;
   }
 }

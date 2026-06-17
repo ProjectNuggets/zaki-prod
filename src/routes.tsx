@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-rou
 import App from './app/App';
 import { SkeletonBrainPage } from './app/components/ui/skeleton';
 import { ProductAccessGate } from './app/components/ProductAccessGate';
+import { ProductLaunchPage } from './app/components/ProductLaunchPage';
 import { useAuthStore } from './stores';
 import { getCanonicalAppProductRoute } from './lib/productRoutes';
 
@@ -78,7 +79,7 @@ function ProductRoute({ locale = "en" }: { locale?: "en" | "ar" }) {
   const { productId } = useParams();
   const appRoute = getCanonicalAppProductRoute(productId);
   if (token && appRoute) return <Navigate to={appRoute} replace />;
-  return <WebsiteRedirect to={`https://chatzaki.com${locale === "ar" ? "/ar" : ""}/product`} />;
+  return <ProductLaunchPage productId={productId} locale={locale} />;
 }
 
 function LegacyZakiBotRoute({ locale = "en" }: { locale?: "en" | "ar" }) {
@@ -291,7 +292,7 @@ export const router = createBrowserRouter([
         element: routeSuspense(
           <ProductAccessGate
             productId="hire"
-            title="ZAKI Hire"
+            title="ZAKI Career"
             mode="private_beta"
           />
         ),
