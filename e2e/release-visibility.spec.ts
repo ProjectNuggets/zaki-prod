@@ -1,4 +1,4 @@
-// Product visibility gate — Agent/Chat/Brain public; Learn/Hire beta; Design waitlist.
+// Product visibility gate — Agent/Chat/Brain public; Learn/Career gated; Design waitlist.
 // Agent 5 (codex/v2-release-e2e).
 //
 // Two layers:
@@ -35,7 +35,7 @@ test.describe("ZAKI V1 product visibility", () => {
 
     // Gated surfaces are present but not interactive in the public V1 build.
     await expect(rail.getByTitle(/^Learn/i)).toBeDisabled();
-    await expect(rail.getByTitle(/^Hire/i)).toBeDisabled();
+    await expect(rail.getByTitle(/^Career/i)).toBeDisabled();
     await expect(rail.getByTitle(/^Design/i)).toBeDisabled();
   });
 
@@ -58,7 +58,7 @@ test.describe("ZAKI V1 product visibility", () => {
     await expect(hint.locator("p").filter({ hasText: /Design is coming soon/i })).toBeVisible();
 
     await strip.getByRole("tab", { name: "Career" }).click();
-    await expect(hint.locator("p").filter({ hasText: /Career is coming soon/i })).toBeVisible();
+    await expect(hint.locator("p").filter({ hasText: /Career is gated/i })).toBeVisible();
   });
 
   test("direct beta and waitlist routes render gates instead of product surfaces", async ({ page }) => {
@@ -67,13 +67,13 @@ test.describe("ZAKI V1 product visibility", () => {
         path: "/learn",
         gate: "product-gate-learning",
         hiddenSurface: '[data-product-id="learning"]',
-        label: "Private beta",
+        label: "Private access",
       },
       {
         path: "/hire",
         gate: "product-gate-hire",
         hiddenSurface: '[data-product-id="hire"]',
-        label: "Private beta",
+        label: "Private access",
       },
       {
         path: "/design",
