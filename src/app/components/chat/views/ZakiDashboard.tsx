@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -87,9 +88,9 @@ const ANONYMOUS_COMMAND_PRODUCT_ORDER: AnonymousWorkProductId[] = [
 const SIGNED_IN_COMMAND_PRODUCT_ORDER = COMMAND_PRODUCT_ORDER;
 const DASHBOARD_INTRO_DISMISSED_KEY = "zaki:dashboard-v2-intro-dismissed";
 const MEMORY_BRIDGE_OFFER_KEY_PREFIX = "zaki:memory-bridge-offered";
-const WEBSITE_V1_STORY_ROUTE = "/story";
-const WEBSITE_V1_PRICING_ROUTE = "/pricing";
-const WEBSITE_V1_PRODUCTS_ROUTE = "/products/agent";
+const WEBSITE_STORY_ROUTE = "/story";
+const WEBSITE_PRICING_ROUTE = "/pricing";
+const WEBSITE_PRODUCTS_ROUTE = "/products/agent";
 const COMING_SOON_PRODUCT_IDS = new Set<AnonymousWorkProductId>([
   "design",
   "learning",
@@ -540,11 +541,15 @@ function DashboardIntroModal({
   t,
   open,
   onClose,
+  onStartWork,
+  onCreateAccount,
   onVisitWebsite,
 }: {
   t: TranslateFn;
   open: boolean;
   onClose: () => void;
+  onStartWork: () => void;
+  onCreateAccount: () => void;
   onVisitWebsite: () => void;
 }) {
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
@@ -558,7 +563,7 @@ function DashboardIntroModal({
       }),
       body: t("zakiDashboard.intro.slides.what.body", {
         defaultValue:
-          "One command entry for chat, Agent, Brain, Learn, Design, and Career. Start with the outcome; ZAKI routes it.",
+          "One command center for Chat, Agent, Brain, and future products. Start with the outcome; ZAKI routes the work.",
       }),
       bullets: [
         t("zakiDashboard.intro.slides.what.bullets.command", {
@@ -576,11 +581,11 @@ function DashboardIntroModal({
       id: "buy",
       step: "02",
       title: t("zakiDashboard.intro.slides.buy.title", {
-        defaultValue: "Use it your way",
+        defaultValue: "Activate the loop",
       }),
       body: t("zakiDashboard.intro.slides.buy.body", {
         defaultValue:
-          "Guest credits let you try now. Sign in when you want work and history across devices. Upgrade when you need more capacity.",
+          "Guest credits let you try now. Create an account when you want work, memory, files, and history to follow you.",
       }),
       bullets: [
         t("zakiDashboard.intro.slides.buy.bullets.guest", {
@@ -598,11 +603,11 @@ function DashboardIntroModal({
       id: "palette",
       step: "03",
       title: t("zakiDashboard.intro.slides.palette.title", {
-        defaultValue: "V1 website and product palette",
+        defaultValue: "Visit the website when you want the full story",
       }),
       body: t("zakiDashboard.intro.slides.palette.body", {
         defaultValue:
-          "The current website stays behind this dashboard as V1 while the V2 website is rebuilt. Use it for the story, pricing, and product pages.",
+          "The app is the working surface. The website is the narrative layer for story, pricing, product pages, and public context.",
       }),
       bullets: [
         t("zakiDashboard.intro.slides.palette.bullets.chat", {
@@ -612,7 +617,7 @@ function DashboardIntroModal({
           defaultValue: "Design, Learn, and Career start as truthful previews or gates.",
         }),
         t("zakiDashboard.intro.slides.palette.bullets.website", {
-          defaultValue: "Visit V1 when you want the full website.",
+          defaultValue: "Visit the website when you want the broader product story.",
         }),
       ],
     },
@@ -668,6 +673,29 @@ function DashboardIntroModal({
               <li key={bullet}>{bullet}</li>
             ))}
           </ul>
+          {activeSlide.id === "buy" ? (
+            <div className="zaki-dashboard-intro__slide-actions">
+              <V2Button type="button" onClick={onStartWork}>
+                {t("zakiDashboard.intro.startFreeChat", {
+                  defaultValue: "Start free chat",
+                })}
+              </V2Button>
+              <V2Button type="button" variant="ghost" onClick={onCreateAccount}>
+                {t("zakiDashboard.intro.createAccount", {
+                  defaultValue: "Create account",
+                })}
+              </V2Button>
+            </div>
+          ) : null}
+          {activeSlide.id === "palette" ? (
+            <div className="zaki-dashboard-intro__slide-actions">
+              <V2Button type="button" variant="ghost" onClick={onVisitWebsite}>
+                {t("zakiDashboard.intro.openWebsite", {
+                  defaultValue: "Open website",
+                })}
+              </V2Button>
+            </div>
+          ) : null}
         </article>
         <div className="zaki-dashboard-intro__foot">
           <div className="zaki-dashboard-intro__dots" aria-label={t("zakiDashboard.intro.progress", { defaultValue: "Intro slides" })}>
@@ -697,19 +725,19 @@ function DashboardIntroModal({
             </V2Button>
             {isLastSlide ? (
               <V2Button type="button" variant="ghost" onClick={onVisitWebsite}>
-                {t("zakiDashboard.intro.visitWebsite", { defaultValue: "Visit V1 website" })}
+                {t("zakiDashboard.intro.visitWebsite", { defaultValue: "Visit website" })}
               </V2Button>
             ) : null}
             <V2Button
               type="button"
               onClick={
                 isLastSlide
-                  ? onClose
+                  ? onStartWork
                   : () => setActiveSlideIndex((current) => Math.min(slides.length - 1, current + 1))
               }
             >
               {isLastSlide
-                ? t("zakiDashboard.intro.startTyping", { defaultValue: "Start typing" })
+                ? t("zakiDashboard.intro.startTyping", { defaultValue: "Enter dashboard" })
                 : t("zakiDashboard.intro.next", { defaultValue: "Next" })}
             </V2Button>
           </div>
@@ -791,6 +819,7 @@ export function ZakiDashboard({
   const isOnline = useOnlineStatus();
   const token = useAuthStore((state) => state.token);
   const authUser = useAuthStore((state) => state.user);
+  const commandInputRef = useRef<HTMLTextAreaElement | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<AnonymousWorkProductId>(
     token ? "agent" : "spaces"
   );
@@ -1053,6 +1082,19 @@ export function ZakiDashboard({
     ]
   );
 
+  const startWorkFromIntro = useCallback(() => {
+    dismissIntro();
+    if (typeof window === "undefined") return;
+    window.setTimeout(() => {
+      commandInputRef.current?.focus();
+    }, 0);
+  }, [dismissIntro]);
+
+  const createAccountFromIntro = useCallback(() => {
+    dismissIntro();
+    handleAuthEntry("signup");
+  }, [dismissIntro, handleAuthEntry]);
+
   const handleCommandSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
@@ -1194,9 +1236,9 @@ export function ZakiDashboard({
             </h1>
             <p>{introCopy}</p>
             <div className="zaki-dashboard-command__entry-actions">
-              <button type="button" onClick={() => navigate(WEBSITE_V1_STORY_ROUTE)}>
+              <button type="button" onClick={() => navigate(WEBSITE_STORY_ROUTE)}>
                 <span aria-hidden="true">?</span>
-                {t("zakiDashboard.entry.website", { defaultValue: "V1 website" })}
+                {t("zakiDashboard.entry.website", { defaultValue: "Website" })}
               </button>
               {!token ? (
                 <>
@@ -1353,6 +1395,7 @@ export function ZakiDashboard({
               </label>
               <textarea
                 id="zaki-dashboard-command-input"
+                ref={commandInputRef}
                 className="zaki-dashboard-command__textarea"
                 rows={5}
                 value={commandText}
@@ -1443,7 +1486,7 @@ export function ZakiDashboard({
                   <V2Button
                     type="button"
                     size="sm"
-                    onClick={() => navigate(WEBSITE_V1_PRICING_ROUTE)}
+                    onClick={() => navigate(WEBSITE_PRICING_ROUTE)}
                   >
                     <Gauge className="size-3.5" aria-hidden="true" />
                     {t("zakiDashboard.command.viewPlans", {
@@ -1470,13 +1513,13 @@ export function ZakiDashboard({
               <span aria-hidden="true">-&gt;</span>
               {t("zakiDashboard.links.howItWorks", { defaultValue: "How it works" })}
             </button>
-            <button type="button" onClick={() => navigate(WEBSITE_V1_PRICING_ROUTE)}>
+            <button type="button" onClick={() => navigate(WEBSITE_PRICING_ROUTE)}>
               <span aria-hidden="true">-&gt;</span>
-              {t("zakiDashboard.links.waysToBuy", { defaultValue: "V1: Ways to buy" })}
+              {t("zakiDashboard.links.waysToBuy", { defaultValue: "Plans" })}
             </button>
-            <button type="button" onClick={() => navigate(WEBSITE_V1_PRODUCTS_ROUTE)}>
+            <button type="button" onClick={() => navigate(WEBSITE_PRODUCTS_ROUTE)}>
               <span aria-hidden="true">-&gt;</span>
-              {t("zakiDashboard.links.fullPalette", { defaultValue: "V1: Product palette" })}
+              {t("zakiDashboard.links.fullPalette", { defaultValue: "Product overview" })}
             </button>
           </nav>
         </section>
@@ -1485,9 +1528,11 @@ export function ZakiDashboard({
           t={t}
           open={showIntro}
           onClose={dismissIntro}
+          onStartWork={startWorkFromIntro}
+          onCreateAccount={createAccountFromIntro}
           onVisitWebsite={() => {
             dismissIntro();
-            navigate(WEBSITE_V1_STORY_ROUTE);
+            navigate(WEBSITE_STORY_ROUTE);
           }}
         />
       </div>

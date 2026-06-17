@@ -1874,7 +1874,7 @@
       "openChat": "Open Chat"
     },
     "entry": {
-      "website": "V1 website",
+      "website": "Website",
       "signIn": "Sign in",
       "signUp": "Sign up"
     },
@@ -1966,8 +1966,8 @@
     },
     "links": {
       "howItWorks": "How it works",
-      "waysToBuy": "V1: Ways to buy",
-      "fullPalette": "V1: Product palette"
+      "waysToBuy": "Plans",
+      "fullPalette": "Product overview"
     },
     "intro": {
       "kicker": "First run",
@@ -1977,7 +1977,7 @@
       "slides": {
         "what": {
           "title": "What is ZAKI?",
-          "body": "One command entry for chat, Agent, Brain, Learn, Design, and Career. Start with the outcome; ZAKI routes it.",
+          "body": "One command center for Chat, Agent, Brain, and future products. Start with the outcome; ZAKI routes the work.",
           "bullets": {
             "command": "Write the work once.",
             "route": "Choose the product lane above the prompt.",
@@ -1985,8 +1985,8 @@
           }
         },
         "buy": {
-          "title": "Use it your way",
-          "body": "Guest credits let you try now. Sign in when you want work and history across devices. Upgrade when you need more capacity.",
+          "title": "Activate the loop",
+          "body": "Guest credits let you try now. Create an account when you want work, memory, files, and history to follow you.",
           "bullets": {
             "guest": "Guest: start immediately with weekly credits.",
             "account": "Account: save work, memory, files, and history.",
@@ -1994,19 +1994,22 @@
           }
         },
         "palette": {
-          "title": "V1 website and product palette",
-          "body": "The current website stays behind this dashboard as V1 while the V2 website is rebuilt. Use it for the story, pricing, and product pages.",
+          "title": "Visit the website when you want the full story",
+          "body": "The app is the working surface. The website is the narrative layer for story, pricing, product pages, and public context.",
           "bullets": {
             "chat": "Chat, Agent, and Brain are the launch core.",
             "preview": "Design, Learn, and Career start as truthful previews or gates.",
-            "website": "Visit V1 when you want the full website."
+            "website": "Visit the website when you want the broader product story."
           }
         }
       },
       "back": "Back",
       "next": "Next",
-      "startTyping": "Start typing",
-      "visitWebsite": "Visit V1 website"
+      "startTyping": "Enter dashboard",
+      "visitWebsite": "Visit website",
+      "startFreeChat": "Start free chat",
+      "createAccount": "Create account",
+      "openWebsite": "Open website"
     },
     "anonymousWork": {
       "title": "Continue what you started",

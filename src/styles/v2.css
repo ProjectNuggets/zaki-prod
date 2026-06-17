@@ -12431,6 +12431,13 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   color: var(--v2-accent);
 }
 
+.zaki-dashboard-intro__slide-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v2-s-2);
+  margin-top: var(--v2-s-2);
+}
+
 .zaki-dashboard-intro__foot {
   align-items: center;
   justify-content: flex-end;
@@ -12532,6 +12539,8 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
   .zaki-dashboard-intro__dots,
   .zaki-dashboard-intro__actions,
+  .zaki-dashboard-intro__slide-actions,
+  .zaki-dashboard-intro__slide-actions .v2-btn,
   .zaki-dashboard-intro__actions .v2-btn {
     width: 100%;
   }
