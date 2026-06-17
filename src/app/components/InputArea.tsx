@@ -100,7 +100,6 @@ export type ZakiDefaultReasoningEffort = Exclude<ZakiTurnReasoningEffort, "super
 
 export type InputAreaSendOptions = {
   zaki?: {
-    mode: AgentSessionMode;
     autonomy: ZakiTurnAutonomyLevel;
     reasoning_effort: ZakiTurnReasoningEffort;
   };
@@ -852,7 +851,6 @@ export function InputArea({
       if (zakiBotMode) {
         onSend(wireText, attachments, {
           zaki: {
-            mode: effectiveZakiMode,
             autonomy: zakiAutonomy,
             reasoning_effort: zakiReasoningEffort,
           },
@@ -885,7 +883,6 @@ export function InputArea({
       attachments,
       onSend,
       zakiBotMode,
-      effectiveZakiMode,
       zakiAutonomy,
       zakiReasoningEffort,
       zakiDefaultAutonomy,
@@ -933,22 +930,10 @@ export function InputArea({
       if (!isOnboardingControlsLocked) {
         setMenuOpen(false);
       }
-      if (
-        zakiBotMode &&
-        effectiveZakiMode !== "execute" &&
-        onZakiModeChange &&
-        !zakiModePending
-      ) {
-        void onZakiModeChange("execute");
-      }
     },
     [
-      effectiveZakiMode,
       isOnboardingControlsLocked,
-      onZakiModeChange,
       setComposerDraft,
-      zakiBotMode,
-      zakiModePending,
     ]
   );
 
@@ -1763,7 +1748,7 @@ export function InputArea({
                   value: ZAKI_MODE_LABELS[effectiveZakiMode],
                 })}
                 title={t("input.zaki.modeCycleTitle", {
-                  defaultValue: "This turn · mode — {{value}}. Click to cycle.",
+                  defaultValue: "Session mode — {{value}}. Click to change.",
                   value: ZAKI_MODE_LABELS[effectiveZakiMode],
                 })}
                 data-testid="zaki-composer-mode"

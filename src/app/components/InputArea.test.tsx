@@ -291,7 +291,7 @@ describe("InputArea primary action button", () => {
     expect(composer.value).toContain("Title slide with the decision or thesis");
     expect(composer.value).toContain("Do not leave bracket placeholders in the artifact.");
     expect(composer.value).toContain("Make it ready to export and present without another cleanup pass.");
-    expect(onZakiModeChange).toHaveBeenCalledWith("execute");
+    expect(onZakiModeChange).not.toHaveBeenCalled();
     expect(onSend).not.toHaveBeenCalled();
     expect(screen.queryByTestId("zaki-composer-menu")).not.toBeInTheDocument();
   });
@@ -317,7 +317,6 @@ describe("InputArea primary action button", () => {
 
     expect(onSend).toHaveBeenCalledWith("inspect the browser lane", [], {
       zaki: {
-        mode: "review",
         autonomy: "supervised",
         reasoning_effort: "high",
       },
@@ -346,7 +345,6 @@ describe("InputArea primary action button", () => {
 
     expect(onSend).toHaveBeenCalledWith("start from my defaults", [], {
       zaki: {
-        mode: "execute",
         autonomy: "read_only",
         reasoning_effort: "low",
       },
@@ -380,7 +378,6 @@ describe("InputArea primary action button", () => {
 
     expect(onSend).toHaveBeenCalledWith("override this turn", [], {
       zaki: {
-        mode: "execute",
         autonomy: "read_only",
         reasoning_effort: "superpowers",
       },
@@ -412,7 +409,6 @@ describe("InputArea primary action button", () => {
 
     expect(onSend).toHaveBeenLastCalledWith("one turn override", [], {
       zaki: {
-        mode: "execute",
         autonomy: "read_only",
         reasoning_effort: "superpowers",
       },
@@ -428,7 +424,6 @@ describe("InputArea primary action button", () => {
 
     expect(onSend).toHaveBeenLastCalledWith("use defaults again", [], {
       zaki: {
-        mode: "execute",
         autonomy: "full",
         reasoning_effort: "high",
       },

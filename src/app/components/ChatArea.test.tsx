@@ -1969,7 +1969,7 @@ describe("ChatArea Component", () => {
     });
   });
 
-  it("keeps Agent mode changes local when the selected session is not live yet", async () => {
+  it("does not persist or mirror Agent mode changes when the selected session is not live yet", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
@@ -2018,7 +2018,7 @@ describe("ChatArea Component", () => {
     fireEvent.click(screen.getByTestId("zaki-composer-mode"));
 
     expect(setAgentSessionMode).not.toHaveBeenCalled();
-    expect(zakiSessionUiState.sessions["agent:zaki-bot:user:1:thread:main"]?.mode).toBe("plan");
+    expect(zakiSessionUiState.sessions["agent:zaki-bot:user:1:thread:main"]?.mode).toBeNull();
   });
 
   it("does not auto-title ZAKI bot threads", async () => {

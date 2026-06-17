@@ -5879,7 +5879,6 @@ export function ChatArea() {
           message,
           threadId: threadSlug,
           spaceId: workspaceSlug,
-          ...(turnOptions?.mode ? { mode: turnOptions.mode } : {}),
           ...(turnOptions?.autonomy ? { autonomy: turnOptions.autonomy } : {}),
           ...(turnOptions?.reasoning_effort
             ? { reasoning_effort: turnOptions.reasoning_effort }
@@ -8036,10 +8035,15 @@ export function ChatArea() {
       }
       const previousMode = activeSessionMode ?? "execute";
       if (previousMode === mode) return;
-      setZakiSessionModeUi(sessionKey, mode);
       if (!isActiveZakiSessionLive) {
+        toast.error(
+          t("zakiControls.errors.sessionNotLive", {
+            defaultValue: "Start this session before changing mode.",
+          })
+        );
         return;
       }
+      setZakiSessionModeUi(sessionKey, mode);
       setSessionModePending(true);
       try {
         const { response, data } = await setAgentSessionMode(sessionKey, mode);
