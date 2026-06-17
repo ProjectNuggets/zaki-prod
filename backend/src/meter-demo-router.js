@@ -36,7 +36,10 @@ export function buildMeterDemoRouter({ resolveUser, enabled = true } = {}) {
       );
       return res.status(out.ok ? 200 : out.status || 402).json(out);
     } catch (err) {
-      return res.status(500).json({ error: "meter_demo_error", message: err?.message });
+      // Keep raw error detail server-side; never echo err.message to the client
+      // (info-disclosure). Client gets only the stable code.
+      console.error("[MeterDemo] Metered operation error:", err);
+      return res.status(500).json({ error: "meter_demo_error" });
     }
   });
   return router;

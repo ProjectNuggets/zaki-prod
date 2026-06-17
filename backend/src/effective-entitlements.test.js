@@ -90,7 +90,11 @@ describe("effective entitlements", () => {
     expect(effective.products.agent.access).toBe(true);
     expect(effective.products.learn.access).toBe(true);
     expect(effective.products.hire.access).toBe(true);
-    expect(effective.products.spaces.uncapped).toBe(true);
+    // Legacy personal keeps full PRODUCT access but is METERED for Spaces chat —
+    // uncapped is a bypass/access-code grant only, never a paid-subscription
+    // perk (Bug 1 fix).
+    expect(effective.products.spaces.uncapped).toBe(false);
+    expect(effective.products.spaces.quota).toBe("metered");
   });
 
   it("keeps canceled legacy personal subscriptions on free access", () => {
@@ -207,7 +211,10 @@ describe("effective entitlements", () => {
     expect(effective.products.agent.access).toBe(true);
     expect(effective.products.learn.access).toBe(true);
     expect(effective.products.hire.access).toBe(true);
-    expect(effective.products.spaces.uncapped).toBe(true);
+    // Complete (whole-app) keeps product access but is METERED for Spaces chat
+    // (Bug 1 fix) — only access-code/bypass grants are uncapped.
+    expect(effective.products.spaces.uncapped).toBe(false);
+    expect(effective.products.spaces.quota).toBe("metered");
   });
 
   it("treats active access-code users as effective personal access", () => {
@@ -253,5 +260,72 @@ describe("effective entitlements", () => {
         hasActiveSubscription: true,
       })
     );
+  });
+
+  // -- V1 commercial ladder: pro / pro_max are first-class paid tiers (Bug 2/3) --
+
+  it("treats pro and pro_max active subscriptions as paid", () => {
+    // Bug 3: pro_max was absent from the paid-active set → free entitlement.
+    expect(isPaidActive("pro", "active")).toBe(true);
+    expect(isPaidActive("pro_max", "active")).toBe(true);
+    expect(isPaidActive("pro_max", "trialing")).toBe(true);
+    expect(isPaidActive("pro_max", "inactive")).toBe(false);
+  });
+
+  it("surfaces Pro (€45) as its own tier with premium + agent access, METERED (Bug 2)", () => {
+    const effective = getEffectiveEntitlementState(
+      { plan_tier: "pro", plan_status: "active", access_expires_at: null },
+      new Date("2026-03-17T00:00:00.000Z")
+    );
+
+    expect(effective).toEqual(
+      expect.objectContaining({
+        tier: "pro",
+        source: "subscription",
+        premium: true,
+        hasActiveSubscription: true,
+      })
+    );
+    expect(effective.products.agent.access).toBe(true);
+    // Pro keeps product access but Spaces chat is metered — no uncapped leak.
+    expect(effective.products.spaces.uncapped).toBe(false);
+    expect(effective.products.spaces.quota).toBe("metered");
+  });
+
+  it("surfaces Pro Max (€99) as its own tier with premium + agent access, METERED (Bug 3)", () => {
+    const effective = getEffectiveEntitlementState(
+      { plan_tier: "pro_max", plan_status: "active", access_expires_at: null },
+      new Date("2026-03-17T00:00:00.000Z")
+    );
+
+    expect(effective).toEqual(
+      expect.objectContaining({
+        tier: "pro_max",
+        source: "subscription",
+        premium: true,
+        hasActiveSubscription: true,
+      })
+    );
+    // Bug 3: pro_max previously locked to tier:'free', premium:false, agent locked.
+    expect(effective.products.agent.access).toBe(true);
+    expect(effective.products.learn.access).toBe(true);
+    expect(effective.products.hire.access).toBe(true);
+    expect(effective.products.spaces.uncapped).toBe(false);
+    expect(effective.products.spaces.quota).toBe("metered");
+  });
+
+  it("keeps an active access-code grant UNCAPPED (the only non-bypass uncapped path)", () => {
+    const effective = getEffectiveEntitlementState(
+      {
+        plan_tier: "free",
+        plan_status: "inactive",
+        access_expires_at: "2026-03-20T00:00:00.000Z",
+        access_code_campaign: "gift",
+      },
+      new Date("2026-03-17T00:00:00.000Z")
+    );
+    expect(effective.commercial.planId).toBe(COMMERCIAL_PLAN_IDS.ACCESS_CODE);
+    expect(effective.products.spaces.uncapped).toBe(true);
+    expect(effective.products.spaces.quota).toBe("uncapped");
   });
 });
