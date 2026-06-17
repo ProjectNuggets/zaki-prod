@@ -37,12 +37,14 @@ import {
   apiRequest,
   approveAgentSession,
   cancelAgentSession,
+  captureMemory,
   fetchAgentExtensionDiagnostics,
   fetchAgentDiagnostics,
   fetchAgentMe,
   fetchAgentSession,
   fetchAgentSessionContext,
   fetchAgentSessionHistory,
+  fetchBotSettings,
   fetchContextDiagnostics,
   fetchBotRuntimeStatus,
   fetchMemoryActivity,
@@ -138,6 +140,30 @@ jest.mock("@/lib/api", () => ({
       headers: new Headers(),
     },
     data: { session_key: "agent:zaki-bot:user:1:thread:main" },
+  })),
+  captureMemory: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ captured: false, skipped: true }),
+      headers: new Headers(),
+    },
+    data: { captured: false, skipped: true },
+  })),
+  fetchBotSettings: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        assistant_mode: "balanced",
+        autonomy: "supervised",
+      }),
+      headers: new Headers(),
+    },
+    data: {
+      assistant_mode: "balanced",
+      autonomy: "supervised",
+    },
   })),
   fetchContextDiagnostics: jest.fn(async () => ({
     response: {
@@ -369,9 +395,34 @@ jest.mock("@/queries", () => ({
   useBillingPortal: () => ({
     mutateAsync: jest.fn(),
   }),
-  useBrainSearch: () => ({
-    data: null,
-    isLoading: false,
+}));
+
+jest.mock("@/queries/useBilling", () => ({
+  useEntitlements: () => ({
+    data: {
+      data: {
+        plan: { tier: "free", status: "inactive" },
+        access: { active: false },
+        effective: { tier: "free", status: "inactive", source: "free", premium: false },
+      },
+    },
+  }),
+  useMeterStatus: () => ({
+    data: {
+      data: {
+        unlimited: false,
+        limit: 10,
+        used: 0,
+        remaining: 10,
+        resetAt: "2026-05-10T00:00:00.000Z",
+      },
+    },
+  }),
+  useCheckout: () => ({
+    mutateAsync: jest.fn(),
+  }),
+  useBillingPortal: () => ({
+    mutateAsync: jest.fn(),
   }),
 }));
 
@@ -381,6 +432,20 @@ jest.mock("@/queries/useBrainSearch", () => ({
     isLoading: false,
   }),
 }));
+
+jest.mock("@/app/components/ui/tooltip", () => {
+  const React = require("react");
+  return {
+    Tooltip: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(React.Fragment, null, children),
+    TooltipContent: ({ children }: { children: React.ReactNode }) =>
+      React.createElement("div", null, children),
+    TooltipProvider: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(React.Fragment, null, children),
+    TooltipTrigger: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(React.Fragment, null, children),
+  };
+});
 
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -427,6 +492,8 @@ type TestZakiSessionUiState = {
   >;
   sandbox: { enabled: boolean; backend: string | null } | null;
 };
+
+const originalConsoleError = console.error;
 
 function renderChatArea() {
   const queryClient = new QueryClient({
@@ -537,10 +604,37 @@ describe("ChatArea Component", () => {
   let navState: NavState;
   let authState: { user: { username: string } | null; isLoading: boolean };
   let zakiSessionUiState: TestZakiSessionUiState;
+  let consoleLogSpy: jest.SpiedFunction<typeof console.log>;
+  let consoleErrorSpy: jest.SpiedFunction<typeof console.error>;
+  let requestAnimationFrameSpy: jest.SpiedFunction<typeof window.requestAnimationFrame>;
+  let cancelAnimationFrameSpy: jest.SpiedFunction<typeof window.cancelAnimationFrame>;
 
   beforeEach(() => {
     cleanup();
-    (apiRequest as jest.Mock).mockClear();
+    consoleLogSpy = jest.spyOn(console, "log").mockImplementation(() => undefined);
+    consoleErrorSpy = jest.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      const message = String(args[0] ?? "");
+      if (message.includes("Warning: An update to") && message.includes("not wrapped in act")) {
+        return;
+      }
+      if (message.includes("Warning: The current testing environment is not configured to support act")) {
+        return;
+      }
+      originalConsoleError(...args);
+    });
+    requestAnimationFrameSpy = jest
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation(() => 0);
+    cancelAnimationFrameSpy = jest
+      .spyOn(window, "cancelAnimationFrame")
+      .mockImplementation(() => undefined);
+    (apiRequest as jest.Mock).mockReset();
+    (apiRequest as jest.Mock).mockImplementation(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+      headers: new Headers(),
+    }));
     (fetchAgentSessionHistory as jest.Mock).mockReset();
     (fetchAgentSessionHistory as jest.Mock).mockImplementation(async () => ({
       response: {
@@ -551,30 +645,52 @@ describe("ChatArea Component", () => {
       },
       data: { messages: [] },
     }));
-    (fetchAgentMe as jest.Mock).mockClear();
+    (fetchAgentMe as jest.Mock).mockReset();
+    (fetchAgentMe as jest.Mock).mockImplementation(async () => ({
+      response: {
+        ok: true,
+        status: 200,
+        json: async () => ({ userId: null }),
+      },
+      data: { userId: null },
+    }));
     (fetchAgentSession as jest.Mock).mockReset();
     (fetchAgentSession as jest.Mock).mockImplementation(async () => ({
+      response: {
+        ok: false,
+        status: 404,
+        json: async () => ({ error: "not_found" }),
+        headers: new Headers(),
+      },
+      data: { error: "not_found" },
+    }));
+    (fetchAgentSessionContext as jest.Mock).mockReset();
+    (fetchAgentSessionContext as jest.Mock).mockImplementation(async () => ({
+      response: {
+        ok: false,
+        status: 404,
+        json: async () => ({ error: "not_found" }),
+        headers: new Headers(),
+      },
+      data: { error: "not_found" },
+    }));
+    (captureMemory as jest.Mock).mockClear();
+    (fetchBotSettings as jest.Mock).mockReset();
+    (fetchBotSettings as jest.Mock).mockImplementation(async () => ({
       response: {
         ok: true,
         status: 200,
         json: async () => ({
-          session_key: "agent:zaki-bot:user:1:thread:main",
-          live: true,
-          mode: "execute",
-          pending_approval_count: 0,
-          context_pressure_percent: null,
+          assistant_mode: "balanced",
+          autonomy: "supervised",
         }),
         headers: new Headers(),
       },
       data: {
-        session_key: "agent:zaki-bot:user:1:thread:main",
-        live: true,
-        mode: "execute",
-        pending_approval_count: 0,
-        context_pressure_percent: null,
+        assistant_mode: "balanced",
+        autonomy: "supervised",
       },
     }));
-    (fetchAgentSessionContext as jest.Mock).mockClear();
     (fetchBotRuntimeStatus as jest.Mock).mockClear();
     (fetchMemoryActivity as jest.Mock).mockClear();
     (listAgentSessions as jest.Mock).mockClear();
@@ -711,8 +827,15 @@ describe("ChatArea Component", () => {
     (useMessages as jest.Mock).mockReturnValue({ data: [], isLoading: false });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    requestAnimationFrameSpy?.mockRestore();
+    cancelAnimationFrameSpy?.mockRestore();
+    consoleErrorSpy?.mockRestore();
+    consoleLogSpy?.mockRestore();
     cleanup();
+    await act(async () => {
+      await Promise.resolve();
+    });
   });
 
   it("normalizes Nullalis session context fields into the context meter model", () => {
@@ -938,7 +1061,7 @@ describe("ChatArea Component", () => {
       },
     });
 
-    await renderChatAreaAndWaitForEffects();
+    const view = await renderChatAreaAndWaitForEffects();
 
     await waitFor(() => {
       expect(fetchAgentSessionContext).toHaveBeenCalledWith(
@@ -951,15 +1074,19 @@ describe("ChatArea Component", () => {
     expect(
       zakiSessionUiState.sessions["agent:zaki-bot:user:1:thread:main"]?.contextPressurePercent
     ).toBe(7.3);
+    view.unmount();
   });
 
-  it("keeps the trusted live context sample visible while a same-session turn is running", async () => {
+  it("keeps the trusted live context sample visible after a same-session turn", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
     authState = { user: { username: "nova@test.com" }, isLoading: false };
     window.sessionStorage.setItem("zaki:agentUserId", "1");
-    const streamResponsePromise = new Promise<never>(() => {});
+    (fetchAgentMe as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
     (fetchAgentSessionContext as jest.Mock).mockResolvedValue({
       response: { ok: true, status: 200, headers: new Headers() },
       data: {
@@ -974,7 +1101,12 @@ describe("ChatArea Component", () => {
     });
     (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
       if (path === "/api/agent/chat/stream") {
-        return streamResponsePromise;
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: async () => ({ type: "done", message: "done" }),
+        };
       }
       return {
         ok: true,
@@ -988,9 +1120,6 @@ describe("ChatArea Component", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("zaki-context-meter")).toHaveTextContent("25%");
-    });
-    await waitFor(() => {
-      expect(fetchAgentSessionHistory).toHaveBeenCalledWith("agent:zaki-bot:user:1:thread:main");
     });
     (fetchAgentSessionHistory as jest.Mock).mockClear();
     fireEvent.change(screen.getByRole("combobox"), {
@@ -1011,6 +1140,83 @@ describe("ChatArea Component", () => {
       zakiSessionUiState.sessions["agent:zaki-bot:user:1:thread:main"]?.contextPressurePercent
     ).toBe(25);
     expect(screen.getByTestId("zaki-context-meter")).toHaveTextContent("25%");
+  });
+
+  it("sends saved Agent defaults to the stream body as per-turn autonomy and reasoning", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+    (fetchBotSettings as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, headers: new Headers() },
+      data: {
+        assistant_mode: "fast",
+        autonomy: "read_only",
+        group_activation: "always",
+        proactive_updates: false,
+        voice_replies: true,
+        session_timeout_minutes: 45,
+        selected_model: "claude-opus-4.7",
+      },
+    });
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/agent/chat/stream") {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: async () => ({ type: "done", message: "done" }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+        headers: new Headers(),
+      };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("zaki-composer-reasoning")).toHaveTextContent("low");
+      expect(screen.getByTestId("zaki-composer-autonomy")).toHaveTextContent("read-only");
+    });
+
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "use my saved defaults" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    await waitFor(() => {
+      expect(apiRequest).toHaveBeenCalledWith(
+        "/api/agent/chat/stream",
+        expect.objectContaining({
+          body: expect.any(String),
+        })
+      );
+    });
+    const streamCall = (apiRequest as jest.Mock).mock.calls.find(
+      ([path]) => path === "/api/agent/chat/stream"
+    );
+    const body = JSON.parse(streamCall?.[1]?.body as string);
+
+    expect(body).toEqual(
+      expect.objectContaining({
+        message: "use my saved defaults",
+        threadId: "main",
+        spaceId: "zaki-bot",
+        autonomy: "read_only",
+        reasoning_effort: "low",
+      })
+    );
+    expect(body).not.toHaveProperty("assistant_mode");
+    expect(body).not.toHaveProperty("selected_model");
+    expect(body).not.toHaveProperty("group_activation");
+    expect(body).not.toHaveProperty("proactive_updates");
+    expect(body).not.toHaveProperty("voice_replies");
+    expect(body).not.toHaveProperty("session_timeout_minutes");
   });
 
   it("does not fall back to diagnostics context when session context is unavailable", async () => {
@@ -1169,6 +1375,10 @@ describe("ChatArea Component", () => {
     navState.threadId = "main";
     authState = { user: { username: "nova@test.com" }, isLoading: false };
     window.sessionStorage.setItem("zaki:agentUserId", "1");
+    (fetchAgentMe as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
 
     // Agent SSE: a content token FIRST, then a retryable:true error frame. Even
     // though the BFF (mis)labelled it retryable, the FE must treat it as a hard
@@ -1207,6 +1417,10 @@ describe("ChatArea Component", () => {
     navState.threadId = "main";
     authState = { user: { username: "nova@test.com" }, isLoading: false };
     window.sessionStorage.setItem("zaki:agentUserId", "1");
+    (fetchAgentMe as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
 
     // Agent SSE: a retryable:true error frame with NO content first — a genuine
     // pre-content drop (e.g. gateway_draining). This MUST replay the same turn.

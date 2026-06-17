@@ -15,6 +15,7 @@ import {
   buildGoogleOAuthStartUrl,
   fetchGoogleOAuthStatus,
 } from "@/lib/api";
+import { readPendingIntent } from "@/lib/pendingIntent";
 import { useAuthStore } from "@/stores";
 
 const LEGAL_POLICY_VERSION_FALLBACK = "2026-02-17.v2";
@@ -82,6 +83,9 @@ function getPostLoginReturnTo(location: ReturnType<typeof useLocation>) {
   ) {
     return "/";
   }
+  const pendingIntent = readPendingIntent();
+  const pendingReturnTo = getSafeRelativeReturnTo(pendingIntent?.returnTo ?? null);
+  if (pendingReturnTo) return pendingReturnTo;
   return "";
 }
 

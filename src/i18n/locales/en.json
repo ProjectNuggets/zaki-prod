@@ -26,11 +26,11 @@
       "spaces": "Spaces",
       "brain": "Brain",
       "channels": "Channels",
-      "secrets": "Secrets",
+      "secrets": "Advanced credentials",
       "providers": "Providers & models",
       "devices": "Extension devices",
       "usage": "Usage",
-      "memoryData": "Memory",
+      "memoryData": "Memory & Privacy",
       "developerAccess": "Developer",
       "privacy": "Privacy"
     },
@@ -45,8 +45,9 @@
       "agent": "Agent",
       "spaces": "Spaces",
       "brain": "Brain",
+      "secrets": "Advanced credentials",
       "usage": "Usage",
-      "memoryData": "Memory & Data",
+      "memoryData": "Memory & Privacy",
       "developerAccess": "Developer Access",
       "privacy": "Privacy",
       "dataPrivacy": "Data & Privacy"
@@ -54,6 +55,12 @@
     "status": {
       "on": "On",
       "off": "Off"
+    },
+    "account": {
+      "signOut": "Sign out",
+      "signingOut": "Signing out",
+      "signOutHelper": "End this browser session and return to sign in.",
+      "signOutError": "Unable to sign out securely. Check your connection and try again."
     },
     "profile": {
       "displayName": "Display name",
@@ -86,24 +93,27 @@
         "unpaid": "unpaid"
       },
       "activeViaAccessCode": "Active via access code",
+      "tiers": {
+        "free": "Free",
+        "personal": "Personal",
+        "pro": "Pro",
+        "pro_max": "Pro MAX"
+      },
       "until": "until",
       "viewPricing": "View pricing",
       "manageAccess": "Manage access",
       "managePlan": "Manage plan",
       "manageSubscription": "Manage subscription",
       "viewSubscriptionOptions": "View subscription options",
-      "upgradeAgent": "Upgrade to Agent",
-      "upgradeComplete": "Upgrade to Complete",
+      "upgradePlan": "Upgrade to {{plan}}",
       "syncBilling": "Sync billing",
       "upgrade": "Upgrade",
       "recurringRemaining": "Recurring remaining",
-      "topupBalance": "Top-up balance",
+      "topupBalance": "Extra units balance",
       "topups": {
-        "title": "Unit top-ups",
-        "helper": "Purchased units persist and are used after recurring allowance.",
-        "unavailable": "Top-ups unavailable in this environment.",
-        "disabled": "Top-ups unavailable",
-        "buyPack": "Buy {{label}}{{priceLabel}}"
+        "title": "Extra usage units",
+        "deferred": "Top-up purchases are deferred for this release. Existing balances remain visible.",
+        "statusOnly": "Deferred"
       },
       "cancelSubscription": "Cancel subscription",
       "cancellationScheduled": "Cancellation scheduled",
@@ -129,7 +139,7 @@
     },
     "usage": {
       "plan": "Plan",
-      "weeklyAllowance": "Weekly allowance",
+      "weeklyAllowance": "Weekly",
       "weeklyAllowanceValue": "{{limit}} units",
       "weeklyAllowancePending": "Policy pending",
       "burstWindow": "Burst window",
@@ -203,6 +213,7 @@
       "loading": "Loading Agent settings...",
       "loadingShort": "Loading",
       "ready": "Tenant defaults",
+      "defaultsNotice": "Defaults for new Agent turns and supported channel runtimes. Composer chips can still override the next Agent send only.",
       "reasoningEffort": {
         "name": "Reasoning effort",
         "helper": "Default thinking depth for new Agent turns. Live per-turn controls stay in Agent.",
@@ -223,7 +234,7 @@
       },
       "groupActivation": {
         "name": "Group activation",
-        "helper": "Controls whether channel/group contexts require a mention or always wake the Agent.",
+        "helper": "Default wake policy for group channels: require a mention or let the Agent respond whenever the channel runtime wakes it.",
         "options": {
           "mention": "Mention required",
           "always": "Always active"
@@ -231,27 +242,23 @@
       },
       "proactiveUpdates": {
         "name": "Proactive updates",
-        "helper": "Allow background Agent updates where channels and approvals permit it."
+        "helper": "Allow Nullalis to send outbound updates where a connected channel and approval policy permit it."
       },
       "voiceReplies": {
         "name": "Voice replies",
-        "helper": "Use voice-capable replies on supported channels."
+        "helper": "Use text-to-speech replies for supported voice-note or audio-capable channel turns."
       },
       "sessionTimeout": {
         "name": "Session timeout",
-        "helper": "Minutes before idle Agent sessions are treated as stale by default.",
+        "helper": "Minutes before idle Agent channel sessions are evicted from the runtime. Direct composer turns can still start a fresh session.",
         "error": "Use a whole number from 5 to 180 minutes."
       },
       "memoryStatus": {
-        "name": "Memory behavior",
-        "helper": "Dream reflection, query expansion, capture, export, forget, and PII actions are owned by Memory & Data.",
+        "name": "Memory status",
+        "helper": "Notification only. Dream reflection, query expansion, capture, export, forget, and PII actions are edited in Memory & Data.",
         "dream": "Dream {{status}}",
         "query": "Query {{status}}"
       },
-      "openAgent": "Open Agent",
-      "openChannels": "Channels",
-      "openProviders": "Providers",
-      "openMemoryData": "Memory & Data",
       "success": {
         "updated": "Agent settings updated."
       },
@@ -330,20 +337,20 @@
       "openBrain": "Open Brain"
     },
     "memoryData": {
-      "dreamReflection": "Dream reflection",
-      "dreamReflectionHelper": "Run the nightly 3 AM memory reflection job for this user.",
-      "queryExpansion": "Query expansion",
-      "queryExpansionHelper": "Expand short or vague memory searches with AI. Improves recall and costs more.",
+      "dreamReflection": "Improve Agent memories automatically",
+      "dreamReflectionHelper": "Let Agent run background maintenance that organizes saved memories. This is not a memory on/off switch.",
+      "queryExpansion": "Improve Agent recall",
+      "queryExpansionHelper": "Let Agent broaden short memory searches so it can find relevant saved context more reliably.",
       "capturePolicy": {
-        "name": "Memory capture",
-        "helper": "Control how aggressively ZAKI saves new memories from your conversations.",
+        "name": "Chat memory capture",
+        "helper": "Controls only Chat/Spaces memory capture. Agent memory does not have a master on/off switch yet.",
         "unavailable": "Memory preferences are not available in this environment.",
         "options": {
-          "balanced": "Balanced",
+          "balanced": "Save useful Chat context",
           "ask_before_saving": "Ask before saving",
           "save_less": "Save less",
           "save_more": "Save more",
-          "off": "Off (pause memory)"
+          "off": "Do not save Chat context"
         }
       }
     },
@@ -746,13 +753,13 @@
       "errorGeneric": "Voice capture failed",
       "errorNoBrowser": "Voice not supported in this browser"
     },
-    "placeholders": [
-      "Ask anything",
-      "Summarize our last conversation",
-      "Help me brainstorm a plan",
-      "Draft a message or email",
-      "Turn this into a checklist"
-    ],
+      "placeholders": [
+        "Ask anything",
+        "Summarize our last conversation",
+        "Let's brainstorm a plan",
+        "Draft a message or email",
+        "Turn this into a checklist"
+      ],
     "dropFile": "Drop to attach"
   },
   "zakiExperimentalNotice": {
@@ -1218,22 +1225,23 @@
   "pricingPage": {
     "eyebrow": "Plans",
     "title": "Choose how ZAKI should keep working with you",
-    "subtitle": "Start free in Spaces without an account. Pay when you want memory, learning workflows, follow-through, or the full ZAKI loop with uncapped Spaces.",
-    "subtitleAccessActive": "Your access code unlocks the full app for now. Product-specific codes come later.",
-    "comparisonNote": "Agent and Learn each include a free weekly preview. Complete is the simplest paid path when you want memory, learning, follow-through, and uncapped Spaces together.",
+    "subtitle": "Start free in Chat without an account. Pay when you want Agent continuity, account memory, and follow-through. Learn, Design, and Career stay parked until their full flows are ready.",
+    "subtitleAccessActive": "Your access code unlocks the V1 core for now. Product-specific codes come later.",
+    "comparisonNote": "V1 pricing is intentionally simple: free Chat, paid Agent, Brain included with account continuity, and future products clearly marked as coming soon.",
     "highlightsTemplates": {
-      "free": "Spaces Free: 10 anonymous messages a day",
+      "free": "Chat Free: anonymous weekly credits",
       "agent": "Agent: $29/month",
-      "learn": "Learn: $19/month",
-      "complete": "Complete: $39/month"
+      "brain": "Brain: included",
+      "future": "Learn, Design, Career: coming soon"
     },
     "currentPlan": "You’re currently on {{plan}}",
     "currentPlanSignedOut": "You’re viewing plans signed out",
     "currentPlanSignInHint": "Pick a paid plan and sign in to continue checkout.",
     "currentPlanPremium": "Manage or cancel anytime.",
     "currentPlanCodeActive": "Access code is active.",
-    "currentPlanFree": "Spaces stays free. Paid products unlock after checkout.",
+    "currentPlanFree": "Chat stays free. Agent unlocks after checkout.",
     "codeActivePlanLabel": "Access code",
+    "legacyPremiumPlanLabel": "Legacy premium access",
     "billingNotices": {
       "success": "Billing update received. Your plan status will refresh shortly.",
       "cancel": "Checkout canceled. You can pick a plan anytime.",
@@ -1263,16 +1271,16 @@
     },
     "access": {
       "title": "Access code",
-      "description": "Marketing and gift codes unlock the whole app in V1: Agent, Learn, and uncapped Spaces.",
+      "description": "Marketing and gift codes unlock the V1 core: Chat, Agent, Brain, and account continuity. Future products stay gated until launch.",
       "stateActive": "Active",
       "stateInactive": "Inactive",
       "placeholder": "Enter access code",
       "apply": "Apply code",
       "applying": "Applying...",
       "purchase": {
-        "eyebrow": "Whole-app code",
+        "eyebrow": "Core access code",
         "title": "Buy an access code",
-        "description": "Use it yourself, or send it to someone else. V1 codes unlock the whole app.",
+        "description": "Use it yourself, or send it to someone else. V1 codes unlock the current core products.",
         "price": "$15 one-time",
         "cta": "Buy access code",
         "processing": "Opening checkout...",
@@ -1291,15 +1299,15 @@
     },
     "plans": {
       "free": {
-        "label": "Spaces Free",
+        "label": "Chat Free",
         "price": "$0",
         "blurb": "A focused workspace for drafts, translation, planning, and decisions before you sign up.",
         "features": [
-          "10 Spaces messages per day",
+          "Free credits for immediate Chat use",
           "No durable memory while anonymous",
           "Upgrade when the work should continue with memory"
         ],
-        "cta": "Open Spaces"
+        "cta": "Start chat"
       },
       "agent": {
         "label": "ZAKI Agent",
@@ -1311,32 +1319,34 @@
           "Built for recurring work, decisions, and follow-through"
         ]
       },
-      "learn": {
-        "label": "ZAKI Learn",
-        "price": "$19 / month",
-        "blurb": "The learning product that turns material into explanation, practice, research, and recall.",
+      "brain": {
+        "label": "ZAKI Brain",
+        "price": "Included",
+        "blurb": "The visible memory control plane for account continuity.",
         "features": [
-          "10 free preview messages each week",
-          "Paid learning workspace after checkout",
-          "Knowledge files, notebooks, quizzes, Deep Solve, research, and visuals"
-        ]
+          "Review what ZAKI can remember",
+          "Works with signed-in Agent continuity",
+          "Control memory before future products write to it"
+        ],
+        "cta": "Open Brain"
       },
-      "complete": {
-        "label": "ZAKI Complete",
-        "price": "$39 / month",
-        "blurb": "The full ZAKI loop: Agent, Learn, and uncapped Spaces with memory.",
+      "future": {
+        "label": "Coming next",
+        "price": "Soon",
+        "blurb": "Learn, Design, and Career are visible, but not sold as public products yet.",
         "features": [
-          "Agent for continuity and follow-through",
-          "Learn for study, research, and practice",
-          "Uncapped Spaces with memory"
-        ]
+          "Learn returns when learner state is safe",
+          "Design launches after project creation is proven",
+          "Career stays user-side and private until ready"
+        ],
+        "cta": "Open dashboard"
       }
     },
     "recommendedBadge": "Best value",
     "currentBadge": "Current",
     "included": "Included",
     "alreadySubscribed": "Already subscribed",
-    "upgradeToComplete": "Upgrade to Complete",
+    "upgradeToComplete": "Upgrade",
     "signInRequired": "Sign in",
     "signInToChoose": "Sign in for {{plan}}",
     "choose": "Choose {{plan}}",
@@ -1664,6 +1674,34 @@
       "exportJson": "Export JSON"
     }
   },
+  "productRail": {
+    "ariaLabel": "Products",
+    "openDashboard": "Open dashboard",
+    "dashboard": "Dashboard",
+    "agent": "Agent",
+    "chat": "Chat",
+    "brain": "Brain",
+    "learn": "Learn",
+    "hire": "Hire",
+    "design": "Design",
+    "settings": "Settings",
+    "quickSettings": {
+      "title": "Quick settings",
+      "eyebrow": "Quick settings",
+      "account": "Account",
+      "accountHelper": "Profile and sign-in",
+      "plan": "Plan & usage",
+      "planHelper": "Billing and meters",
+      "agent": "Agent defaults",
+      "agentHelper": "Reasoning and autonomy",
+      "channels": "Channels",
+      "channelsHelper": "Tokens and bindings",
+      "memory": "Memory & privacy",
+      "memoryHelper": "Export, forget, PII",
+      "apps": "App links",
+      "allSettings": "All settings"
+    }
+  },
   "app": {
     "loadingSession": "Loading session...",
     "openNavigationMenu": "Open navigation menu",
@@ -1675,6 +1713,7 @@
       "errorConsentRequired": "Please accept Terms, Privacy & Compliance to continue.",
       "errorSaveFailed": "Unable to record consent. Please try again.",
       "signOut": "Sign out",
+      "signOutError": "Unable to sign out securely. Check your connection and try again.",
       "saving": "Saving...",
       "accept": "Accept and continue"
     }
@@ -1764,7 +1803,7 @@
       "manageLink": "Memory scopes & privacy"
     },
     "governance": {
-      "brainSettingsLink": "Brain settings",
+      "brainSettingsLink": "Memory settings",
       "manageLink": "Memory & privacy in Settings"
     },
     "timeline": {
@@ -1842,6 +1881,145 @@
       "openAgent": "Open Agent",
       "openChat": "Open Chat"
     },
+    "entry": {
+      "website": "V1 website",
+      "signIn": "Sign in",
+      "signUp": "Sign up"
+    },
+    "command": {
+      "signedEyebrow": "Signed in · your work can carry forward",
+      "guestEyebrow": "Guest session · start without setup",
+      "signedTitlePrefix": "Let's ",
+      "guestTitlePrefix": "Let's ",
+      "signedCopy": "Choose the kind of help you need, write the outcome once, and ZAKI will open the right workspace with your context intact.",
+      "guestCopy": "Ask immediately with free weekly credits. This browser can remember drafts; sign in when you want work, memory, files, and history to follow you.",
+      "weeklyFreeCredit": "Weekly free credit",
+      "bestFor": "Best for",
+      "memoryScope": "Memory scope",
+      "selectedProduct": "{{product}} overview",
+      "productStrip": "Choose product",
+      "inputLabel": "Describe what you want ZAKI to do",
+      "placeholder": "Ask {{product}} to start from your prompt...",
+      "saveWork": "Save this work",
+      "emptyHelper": "Type a prompt to start.",
+      "creditHelper": "Credits are used when ZAKI responds.",
+      "comingSoonHelper": "{{product}} is coming soon. Pick Chat, Agent, or Brain to start now.",
+      "submitPreviewSave": "Preview first",
+      "submitChat": "Start chat",
+      "submitOpen": "Continue in {{product}}",
+      "submitComingSoon": "{{product}} coming soon",
+      "creditsExhaustedTitle": "Weekly credits are used.",
+      "creditsExhaustedCopy": "Keep your prompt here, then sign up, wait for reset, or choose a plan.",
+      "saveAndSignup": "Save and sign up",
+      "viewPlans": "View plans",
+      "waitForReset": "Wait for reset",
+      "waitForResetDate": "Wait for reset {{reset}}",
+      "markers": {
+        "free": "Free",
+        "preview": "Preview",
+        "save": "Save",
+        "beta": "Beta",
+        "waitlist": "Waitlist",
+        "comingSoon": "Coming soon"
+      },
+      "verbs": {
+        "agent": { "signed": "move", "guest": "plan" },
+        "brain": { "signed": "map", "guest": "map" },
+        "spaces": { "signed": "chat", "guest": "chat" },
+        "design": { "signed": "shape", "guest": "shape" },
+        "learning": { "signed": "learn", "guest": "study" },
+        "hire": { "signed": "advance", "guest": "advance" }
+      },
+      "hints": {
+        "agent": "Turn a goal into a plan ZAKI can carry forward. Tools and browser control require sign-in.",
+        "brain": "Paste notes, links, or raw context and see the shape of what ZAKI would remember.",
+        "spaces": "Ask now, draft quickly, or test the platform without setting anything up.",
+        "design": "Design is coming soon. For now, use Chat to shape a brief or Agent to plan the design work.",
+        "learning": "Learn is coming soon. For now, use Chat for quick study help or Agent to plan a learning path.",
+        "hire": "Career is coming soon. For now, use Chat to improve CV copy or Agent to plan your job search."
+      },
+      "details": {
+        "agent": {
+          "bestFor": "Turning a messy goal into a concrete plan, then executing when you allow it.",
+          "memory": "Personal Brain after sign-in.",
+          "truth": "Guest Agent is a planning preview. External tools, files, browser control, and durable memory require sign-in."
+        },
+        "brain": {
+          "bestFor": "Making notes, preferences, decisions, and project facts visible instead of hidden in chat.",
+          "memory": "Browser-only preview; saved graph after sign-in.",
+          "truth": "Brain can preview structure from pasted text. Saving durable memory requires an account."
+        },
+        "spaces": {
+          "bestFor": "Quick questions, drafting, translation, and thinking out loud. No setup.",
+          "memory": "This-browser session only until you sign in.",
+          "truth": "Chat runs now on free weekly credits. Sign in when you want to keep the work."
+        },
+        "design": {
+          "bestFor": "Product direction, page structure, brand systems, and design project generation.",
+          "memory": "Design project memory is not public yet.",
+          "truth": "Coming soon. Use Chat or Agent today; full Design opens after the service and project flow are ready."
+        },
+        "learning": {
+          "bestFor": "Study plans, source walkthroughs, questions, weak spots, and guided practice.",
+          "memory": "Learner memory is not public yet.",
+          "truth": "Coming soon. Use Chat or Agent today; Learn will return when the learner state and beta path are ready."
+        },
+        "hire": {
+          "bestFor": "Finding your next role, improving your CV, comparing fit, and preparing applications.",
+          "memory": "Career pipeline memory is not public yet.",
+          "truth": "Coming soon. Use Chat or Agent today; Career opens when the private job-search flow is ready."
+        }
+      }
+    },
+    "links": {
+      "howItWorks": "How it works",
+      "waysToBuy": "V1: Ways to buy",
+      "fullPalette": "V1: Product palette"
+    },
+    "intro": {
+      "kicker": "First run",
+      "title": "Start the work first. Choose an account when it matters.",
+      "progress": "Intro slides",
+      "goToSlide": "Go to slide {{index}}",
+      "slides": {
+        "what": {
+          "title": "What is ZAKI?",
+          "body": "One command entry for chat, Agent, Brain, Learn, Design, and Career. Start with the outcome; ZAKI routes it.",
+          "bullets": {
+            "command": "Write the work once.",
+            "route": "Choose the product lane above the prompt.",
+            "keep": "Keep local drafts in this browser."
+          }
+        },
+        "buy": {
+          "title": "Use it your way",
+          "body": "Guest credits let you try now. Sign in when you want work and history across devices. Upgrade when you need more capacity.",
+          "bullets": {
+            "guest": "Guest: start immediately with weekly credits.",
+            "account": "Account: save work, memory, files, and history.",
+            "plan": "Plan: add capacity when your work grows."
+          }
+        },
+        "palette": {
+          "title": "V1 website and product palette",
+          "body": "The current website stays behind this dashboard as V1 while the V2 website is rebuilt. Use it for the story, pricing, and product pages.",
+          "bullets": {
+            "chat": "Chat, Agent, and Brain are the launch core.",
+            "preview": "Design, Learn, and Career start as truthful previews or gates.",
+            "website": "Visit V1 when you want the full website."
+          }
+        }
+      },
+      "back": "Back",
+      "next": "Next",
+      "startTyping": "Start typing",
+      "visitWebsite": "Visit V1 website"
+    },
+    "anonymousWork": {
+      "title": "Continue what you started",
+      "subtitle": "Saved in this browser only. Sign in to keep it across devices.",
+      "save": "Save this work"
+    },
     "hero": {
       "title": "Hi, {{name}}.",
       "remaining": "{{remaining}} left."
@@ -1890,7 +2068,7 @@
         "spaces": "Chat",
         "brain": "Brain",
         "learning": "Learn",
-        "hire": "Hire",
+        "hire": "Career",
         "design": "Design"
       },
       "tags": {
@@ -1907,7 +2085,7 @@
         "spaces": "Workspace chat for threads, files, and focused shared context.",
         "brain": "The memory graph made visible: provenance, scopes, conflicts, and governance.",
         "learning": "Study surface for sources, notebooks, tutors, quizzes, and learner memory.",
-        "hire": "Hiring workflow surface for candidates, jobs, evaluations, and hire memory.",
+        "hire": "Career agent for target roles, CV positioning, fit notes, applications, and career memory.",
         "design": "Future design surface for briefs, assets, iterations, and design memory."
       }
     },
@@ -1916,7 +2094,7 @@
       "subtitle": "Every product writes to a known memory owner.",
       "pending": "Pending",
       "loading": "Memory scopes are loading.",
-      "open": "Open memory controls",
+      "open": "Open memory",
       "import": "Import memory",
       "scopeCount": "{{count}} scopes",
       "productUnit": "products"
@@ -1946,6 +2124,31 @@
       "meter": "Central meter drives plan usage",
       "routing": "Routes honor product state",
       "memory": "Memory is scoped by product"
+    }
+  },
+  "productGate": {
+    "comingSoon": {
+      "badge": "Coming soon",
+      "heading": "This product is coming soon",
+      "body": "{{product}} is visible in the ZAKI family, but public V1 is focused on Dashboard, Agent, Chat, Brain, and Settings first.",
+      "action": "Open dashboard"
+    },
+    "status": {
+      "checking": "Checking access",
+      "state": "State: {{state}}",
+      "hidden": "Not exposed"
+    },
+    "panel": {
+      "title": "Launch policy",
+      "meta": "Public V1"
+    },
+    "facts": {
+      "public": "Public surfaces",
+      "publicValue": "Dashboard, Agent, Chat, Brain, Settings",
+      "memory": "Memory boundary",
+      "memoryValue": "Kept separate until explicitly launched",
+      "next": "Next step",
+      "comingSoonValue": "Start today with Chat, Agent, or Brain from the dashboard."
     }
   },
   "task": {

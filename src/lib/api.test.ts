@@ -115,6 +115,25 @@ describe("clearAuthToken", () => {
   });
 });
 
+describe("requestLogout", () => {
+  it("posts to the auth logout endpoint with the refresh cookie included", async () => {
+    mockFetch.mockResolvedValueOnce(makeResponse(200, { success: true }));
+
+    const { requestLogout } = await import("@/lib/api");
+    const { response, data } = await requestLogout();
+
+    expect(response.ok).toBe(true);
+    expect(data).toEqual({ success: true });
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/auth/logout",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+      })
+    );
+  });
+});
+
 // --------------------------------------------------------------------------
 // apiRequest — X-Zaki-Session-Upgrade interceptor
 // --------------------------------------------------------------------------

@@ -324,6 +324,117 @@ describe("InputArea primary action button", () => {
     });
   });
 
+  it("uses saved Agent defaults for the first ZAKI send", () => {
+    const onSend = jest.fn();
+
+    render(
+      <InputArea
+        onSend={onSend}
+        attachments={[]}
+        setAttachments={jest.fn()}
+        zakiBotMode
+        zakiMode="execute"
+        zakiDefaultAutonomy="read_only"
+        zakiDefaultReasoningEffort="low"
+      />
+    );
+
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "start from my defaults" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    expect(onSend).toHaveBeenCalledWith("start from my defaults", [], {
+      zaki: {
+        mode: "execute",
+        autonomy: "read_only",
+        reasoning_effort: "low",
+      },
+    });
+  });
+
+  it("lets per-turn composer chips override saved Agent defaults", () => {
+    const onSend = jest.fn();
+
+    render(
+      <InputArea
+        onSend={onSend}
+        attachments={[]}
+        setAttachments={jest.fn()}
+        zakiBotMode
+        zakiMode="execute"
+        zakiDefaultAutonomy="full"
+        zakiDefaultReasoningEffort="high"
+      />
+    );
+
+    fireEvent.click(screen.getByTestId("zaki-composer-reasoning"));
+    expect(screen.getByTestId("zaki-composer-reasoning")).toHaveTextContent("⚡ Superpowers");
+    fireEvent.click(screen.getByTestId("zaki-composer-autonomy"));
+    expect(screen.getByTestId("zaki-composer-autonomy")).toHaveTextContent("read-only");
+
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "override this turn" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    expect(onSend).toHaveBeenCalledWith("override this turn", [], {
+      zaki: {
+        mode: "execute",
+        autonomy: "read_only",
+        reasoning_effort: "superpowers",
+      },
+    });
+  });
+
+  it("resets composer chip overrides to saved Agent defaults after a ZAKI send", () => {
+    const onSend = jest.fn();
+
+    render(
+      <InputArea
+        onSend={onSend}
+        attachments={[]}
+        setAttachments={jest.fn()}
+        zakiBotMode
+        zakiMode="execute"
+        zakiDefaultAutonomy="full"
+        zakiDefaultReasoningEffort="high"
+      />
+    );
+
+    fireEvent.click(screen.getByTestId("zaki-composer-reasoning"));
+    fireEvent.click(screen.getByTestId("zaki-composer-autonomy"));
+
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "one turn override" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    expect(onSend).toHaveBeenLastCalledWith("one turn override", [], {
+      zaki: {
+        mode: "execute",
+        autonomy: "read_only",
+        reasoning_effort: "superpowers",
+      },
+    });
+
+    expect(screen.getByTestId("zaki-composer-reasoning")).toHaveTextContent("high");
+    expect(screen.getByTestId("zaki-composer-autonomy")).toHaveTextContent("full");
+
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "use defaults again" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    expect(onSend).toHaveBeenLastCalledWith("use defaults again", [], {
+      zaki: {
+        mode: "execute",
+        autonomy: "full",
+        reasoning_effort: "high",
+      },
+    });
+  });
+
   it("shows the context meter when ZAKI has known or pending context pressure", () => {
     const { rerender } = render(
       <InputArea

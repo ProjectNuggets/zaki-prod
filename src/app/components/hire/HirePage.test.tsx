@@ -123,7 +123,7 @@ describe("HirePage", () => {
     expect(screen.getByText("Engine online")).toBeInTheDocument();
     expect(screen.getByText("central")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "billing" })).toHaveAttribute("href", "/settings#settings-billing");
-    expect(screen.getByRole("link", { name: "usage" })).toHaveAttribute("href", "/settings#settings-usage");
+    expect(screen.getByRole("link", { name: "usage" })).toHaveAttribute("href", "/settings#settings-billing");
   });
 
   it("creates a manual lead through the BFF client", async () => {

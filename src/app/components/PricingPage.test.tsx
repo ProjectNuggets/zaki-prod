@@ -22,9 +22,9 @@ jest.mock("react-i18next", () => ({
         "Checkout canceled. You can pick a plan anytime.",
       "pricingPage.billingNotices.manage": "Returned from billing portal.",
       "pricingPage.subtitleAccessActive":
-        "Your access code unlocks the full app for now. Product-specific codes come later.",
+        "Your access code unlocks the V1 core for now. Product-specific codes come later.",
       "pricingPage.comparisonNote":
-        "Agent and Learn each include a free weekly preview. Complete is the cleanest paid path when you want all products and uncapped Spaces.",
+        "V1 pricing is intentionally simple: free Chat, paid Agent, Brain included with account continuity, and future products clearly marked as coming soon.",
       "pricingPage.cancelSubscription": "Cancel subscription",
       "pricingPage.cancellationScheduled": "Cancellation scheduled",
       "pricingPage.cancelScheduled": "Subscription will cancel at period end.",
@@ -42,24 +42,26 @@ jest.mock("react-i18next", () => ({
       "pricingPage.viewPlans": "View plans",
       "pricingPage.accessActiveCta": "Access active",
       "pricingPage.included": "Included",
-      "pricingPage.upgradeToComplete": "Upgrade to Complete",
+      "pricingPage.legacyPremiumPlanLabel": "Legacy premium access",
       "pricingPage.signInRequired": "Sign in",
       "pricingPage.signInToChoose": "Sign in for {{plan}}",
       "pricingPage.choose": "Choose {{plan}}",
       "pricingPage.managePlan": "Manage plan",
-      "pricingPage.plans.free.label": "Spaces Free",
+      "pricingPage.plans.free.label": "Chat Free",
       "pricingPage.plans.free.price": "$0",
-      "pricingPage.plans.free.cta": "Open Spaces",
-      "pricingPage.plans.free.features": ["10 Spaces messages per day", "No durable memory while anonymous", "Upgrade when you need memory or uncapped Spaces"],
+      "pricingPage.plans.free.cta": "Start chat",
+      "pricingPage.plans.free.features": ["Free credits for immediate Chat use", "No durable memory while anonymous", "Upgrade when the work should continue with memory"],
       "pricingPage.plans.agent.label": "ZAKI Agent",
       "pricingPage.plans.agent.price": "$29 / month",
       "pricingPage.plans.agent.features": ["10 free preview messages each week"],
-      "pricingPage.plans.learn.label": "ZAKI Learn",
-      "pricingPage.plans.learn.price": "$19 / month",
-      "pricingPage.plans.learn.features": ["10 free preview messages each week"],
-      "pricingPage.plans.complete.label": "ZAKI Complete",
-      "pricingPage.plans.complete.price": "$39 / month",
-      "pricingPage.plans.complete.features": ["ZAKI Agent included", "ZAKI Learn included", "Uncapped Spaces with memory"],
+      "pricingPage.plans.brain.label": "ZAKI Brain",
+      "pricingPage.plans.brain.price": "Included",
+      "pricingPage.plans.brain.cta": "Open Brain",
+      "pricingPage.plans.brain.features": ["Review what ZAKI can remember"],
+      "pricingPage.plans.future.label": "Coming next",
+      "pricingPage.plans.future.price": "Soon",
+      "pricingPage.plans.future.cta": "Open dashboard",
+      "pricingPage.plans.future.features": ["Learn returns when learner state is safe", "Design launches after project creation is proven", "Career stays user-side and private until ready"],
     };
     return {
       t: (key: string, options?: { returnObjects?: boolean; defaultValue?: string; plan?: string }) => {
@@ -333,7 +335,7 @@ describe("PricingPage", () => {
     });
   });
 
-  it("starts Learn checkout with monthly Stripe selection", async () => {
+  it("does not expose Learn or Complete checkout as public pricing options", () => {
     render(
       <MemoryRouter initialEntries={["/pricing"]}>
         <Routes>
@@ -342,31 +344,16 @@ describe("PricingPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Choose ZAKI Learn" }));
-
-    await waitFor(() => {
-      expect(checkoutMutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({ plan: "learn", interval: "monthly", provider: "stripe" })
-      );
-    });
-  });
-
-  it("starts Complete checkout with monthly Stripe selection", async () => {
-    render(
-      <MemoryRouter initialEntries={["/pricing"]}>
-        <Routes>
-          <Route path="/pricing" element={<PricingPage />} />
-        </Routes>
-      </MemoryRouter>
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Choose ZAKI Complete" }));
-
-    await waitFor(() => {
-      expect(checkoutMutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({ plan: "complete", interval: "monthly", provider: "stripe" })
-      );
-    });
+    expect(screen.getByText("Chat Free")).toBeInTheDocument();
+    expect(screen.getByText("ZAKI Agent")).toBeInTheDocument();
+    expect(screen.getByText("ZAKI Brain")).toBeInTheDocument();
+    expect(screen.getByText("Coming next")).toBeInTheDocument();
+    expect(screen.queryByText("ZAKI Learn")).not.toBeInTheDocument();
+    expect(screen.queryByText("ZAKI Complete")).not.toBeInTheDocument();
+    expect(screen.queryByText("$19 / month")).not.toBeInTheDocument();
+    expect(screen.queryByText("$39 / month")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Choose ZAKI Learn" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Choose ZAKI Complete" })).not.toBeInTheDocument();
   });
 
   it("keeps commercial checkout on Stripe when legacy providers are also configured", async () => {
@@ -450,7 +437,7 @@ describe("PricingPage", () => {
     expect(checkoutMutateAsync).not.toHaveBeenCalled();
   });
 
-  it("autostarts Complete checkout from a signed-in pricing intent", async () => {
+  it("ignores legacy Complete checkout autostart intents", async () => {
     render(
       <MemoryRouter initialEntries={["/pricing?plan=complete&interval=monthly&autostart=1"]}>
         <Routes>
@@ -460,10 +447,9 @@ describe("PricingPage", () => {
     );
 
     await waitFor(() => {
-      expect(checkoutMutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({ plan: "complete", interval: "monthly", provider: "stripe" })
-      );
+      expect(screen.getByText("Coming next")).toBeInTheDocument();
     });
+    expect(checkoutMutateAsync).not.toHaveBeenCalled();
   });
 
   it("starts access-code purchase checkout from pricing card", async () => {
@@ -514,7 +500,7 @@ describe("PricingPage", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText("Your access code unlocks the full app for now. Product-specific codes come later.")).toBeInTheDocument();
+    expect(screen.getByText("Your access code unlocks the V1 core for now. Product-specific codes come later.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Choose ZAKI Agent" }));
     await waitFor(() => {
       expect(checkoutMutateAsync).toHaveBeenCalledWith(
@@ -525,7 +511,7 @@ describe("PricingPage", () => {
     expect(screen.getByText("Redeem another code to extend your access.")).toBeInTheDocument();
   });
 
-  it("routes single-product subscribers to Complete instead of a second product subscription", async () => {
+  it("lets active Agent subscribers manage the current plan without Complete upsell", async () => {
     entitlementsData = {
       data: {
         plan: {
@@ -559,13 +545,13 @@ describe("PricingPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Upgrade to Complete" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Manage plan" })[0]);
 
     await waitFor(() => {
-      expect(checkoutMutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({ plan: "complete", interval: "monthly", provider: "stripe" })
-      );
+      expect(portalMutateAsync).toHaveBeenCalledTimes(1);
     });
+    expect(checkoutMutateAsync).not.toHaveBeenCalled();
+    expect(screen.queryByText("Upgrade to Complete")).not.toBeInTheDocument();
   });
 
   it("does not autostart access-code purchase checkout from gift intent query", async () => {

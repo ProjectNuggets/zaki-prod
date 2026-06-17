@@ -1258,7 +1258,7 @@ export function LearningPage() {
               </div>
               <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--v2-ink-3)]">
                 Sources / study plans / notebooks / books / tutor loop. Global account, billing,
-                OAuth, privacy, and product usage stay in central settings.
+                privacy, and product usage stay in central settings.
               </p>
             </div>
             <V2UsageGauge
@@ -1271,7 +1271,7 @@ export function LearningPage() {
               className="hidden p-2 lg:block [&_.v2-usage-gauge__bar]:mt-2 [&_.v2-usage-gauge__foot]:mt-1 [&_.v2-usage-gauge__number]:mt-1 [&_.v2-usage-gauge__number_strong]:text-[20px]"
             />
             <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
-              <a href="/settings#settings-products" className="v2-btn v2-btn--sm">
+              <a href="/settings#settings-billing" className="v2-btn v2-btn--sm">
                 Usage settings
               </a>
               <a href="/settings#settings-privacy" className="v2-btn v2-btn--sm">

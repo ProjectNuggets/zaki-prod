@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { Locale } from "../../lib/content";
 import { getLocaleSwitchPath } from "../../lib/routeRegistry";
-import { Menu, X } from "lucide-react";
+import { Menu, Terminal, X } from "lucide-react";
 
 export function NavBar({ locale }: { locale: Locale }) {
   const location = useLocation();
@@ -43,8 +43,8 @@ export function NavBar({ locale }: { locale: Locale }) {
   }, []);
 
   const navLinks = [
-    { to: botHref, label: isArabic ? "زكي" : "ZAKI" },
-    { to: storyHref, label: isArabic ? "لماذا زكي" : "Why ZAKI" },
+    { to: botHref, label: isArabic ? "الوكيل" : "Agent" },
+    { to: storyHref, label: isArabic ? "القصة" : "Story" },
     { to: contactHref, label: isArabic ? "تواصل" : "Contact" },
   ];
 
@@ -52,30 +52,33 @@ export function NavBar({ locale }: { locale: Locale }) {
 
   return (
     <header
-      className={`sticky top-0 z-40 transition-all duration-500 ${
+      className={`sticky top-0 z-40 font-mono-ui transition-colors duration-200 ${
         scrolled
-          ? "border-b border-zk-border-strong bg-zk-bg/80 backdrop-blur-xl"
-          : "border-b border-transparent bg-transparent"
+          ? "border-b border-zk-border-strong bg-zk-bg"
+          : "border-b border-zk-border bg-zk-bg"
       }`}
     >
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-5">
+      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-5 md:px-8">
         {/* Logo */}
         <Link
           to={isArabic ? "/ar/" : "/"}
           onClick={handleLogoClick}
           className="inline-flex shrink-0 items-center gap-2.5 transition-opacity hover:opacity-80"
         >
-          <img src="/assets/zaki-logo.png" alt="ZAKI" className="size-7 rounded-[6px]" />
-          <span className="font-logo text-base tracking-wider text-zk-text">ZAKI</span>
+          <span className="relative inline-flex size-6 items-center justify-center bg-zk-accent" aria-hidden="true">
+            <span className="absolute inset-[5px] bg-zk-bg" />
+            <span className="absolute inset-[9px] bg-zk-accent" />
+          </span>
+          <span className="text-[11px] uppercase tracking-[0.22em] text-zk-text">ZAKI</span>
         </Link>
 
         {/* Desktop nav */}
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav className="hidden items-center gap-1 md:flex" aria-label={isArabic ? "التنقل الرئيسي" : "Primary navigation"}>
           {navLinks.map((link) => (
             <Link
               key={link.to}
               to={link.to}
-              className={`relative px-3 py-1.5 text-[13px] font-medium tracking-wide transition-colors duration-200 ${
+              className={`relative min-h-8 px-3 py-2 text-[10px] uppercase tracking-[0.16em] transition-colors duration-200 ${
                 isActive(link.to)
                   ? "text-zk-text"
                   : "text-zk-text-secondary hover:text-zk-text"
@@ -83,7 +86,7 @@ export function NavBar({ locale }: { locale: Locale }) {
             >
               {link.label}
               {isActive(link.to) && (
-                <span className="absolute inset-x-3 -bottom-0.5 h-px bg-zk-accent" />
+                <span className="absolute inset-x-3 bottom-0 h-px bg-zk-accent" />
               )}
             </Link>
           ))}
@@ -92,16 +95,17 @@ export function NavBar({ locale }: { locale: Locale }) {
 
           <Link
             to={getLocaleSwitchPath(location.pathname, isArabic ? "en" : "ar")}
-            className="px-2 py-1 text-[12px] font-medium text-zk-text-tertiary transition-colors hover:text-zk-text"
+            className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-zk-text-tertiary transition-colors hover:text-zk-text"
           >
             {isArabic ? "EN" : "عربي"}
           </Link>
 
           <a
-            href="https://app.chatzaki.com/?auth=signup&source=website_nav"
-            className="ms-1 inline-flex items-center rounded-full bg-zk-accent px-4 py-1.5 text-[12px] font-semibold tracking-wide text-white shadow-[0_1px_2px_rgba(0,0,0,0.2),0_8px_24px_rgba(241,2,2,0.25)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-zk-accent-hover hover:shadow-[0_1px_2px_rgba(0,0,0,0.2),0_14px_40px_rgba(241,2,2,0.35)]"
+            href="https://app.chatzaki.com/?source=website_nav_command"
+            className="ms-1 inline-flex min-h-8 items-center gap-2 border border-zk-accent bg-zk-accent px-3 text-[10px] uppercase tracking-[0.14em] text-white transition-colors duration-200 hover:bg-zk-accent-hover"
           >
-            {isArabic ? "ابدأ الآن" : "Get started"}
+            <Terminal className="size-3.5" strokeWidth={1.5} />
+            {isArabic ? "جرّب الأمر" : "Try command"}
           </a>
         </nav>
 
@@ -109,14 +113,14 @@ export function NavBar({ locale }: { locale: Locale }) {
         <div className="flex items-center gap-2 md:hidden">
           <Link
             to={getLocaleSwitchPath(location.pathname, isArabic ? "en" : "ar")}
-            className="text-[12px] font-medium text-zk-text-tertiary transition-colors hover:text-zk-text"
+            className="text-[10px] uppercase tracking-[0.16em] text-zk-text-tertiary transition-colors hover:text-zk-text"
           >
             {isArabic ? "EN" : "عربي"}
           </Link>
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="inline-flex size-9 items-center justify-center rounded-lg text-zk-text transition-colors hover:bg-white/[0.05]"
-            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            className="inline-flex size-9 items-center justify-center border border-zk-border-strong text-zk-text transition-colors hover:bg-zk-surface"
+            aria-label={mobileOpen ? (isArabic ? "أغلق القائمة" : "Close menu") : isArabic ? "افتح القائمة" : "Open menu"}
           >
             {mobileOpen ? <X className="size-[18px]" /> : <Menu className="size-[18px]" />}
           </button>
@@ -125,7 +129,7 @@ export function NavBar({ locale }: { locale: Locale }) {
 
       {/* Mobile menu */}
       <div
-        className={`overflow-hidden border-t border-zk-border bg-zk-bg/95 backdrop-blur-xl transition-all duration-300 md:hidden ${
+        className={`overflow-hidden border-t border-zk-border bg-zk-bg transition-all duration-200 md:hidden ${
           mobileOpen ? "max-h-80 opacity-100" : "max-h-0 opacity-0"
         }`}
       >
@@ -134,7 +138,7 @@ export function NavBar({ locale }: { locale: Locale }) {
             <Link
               key={link.to}
               to={link.to}
-              className={`rounded-lg px-3 py-2.5 text-[15px] font-medium transition-colors ${
+              className={`border-b border-zk-border px-3 py-3 text-[11px] uppercase tracking-[0.16em] transition-colors ${
                 isActive(link.to)
                   ? "text-zk-text"
                   : "text-zk-text-secondary hover:text-zk-text"
@@ -144,10 +148,11 @@ export function NavBar({ locale }: { locale: Locale }) {
             </Link>
           ))}
           <a
-            href="https://app.chatzaki.com/?auth=signup&source=website_nav_mobile"
-            className="mt-2 flex items-center justify-center rounded-full bg-zk-accent px-4 py-2.5 text-[14px] font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.2),0_8px_24px_rgba(241,2,2,0.25)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-zk-accent-hover"
+            href="https://app.chatzaki.com/?source=website_nav_mobile_command"
+            className="mt-3 flex min-h-11 items-center justify-center gap-2 border border-zk-accent bg-zk-accent px-4 text-[11px] uppercase tracking-[0.14em] text-white transition-colors duration-200 hover:bg-zk-accent-hover"
           >
-            {isArabic ? "ابدأ الآن" : "Get started"}
+            <Terminal className="size-3.5" strokeWidth={1.5} />
+            {isArabic ? "جرّب الأمر" : "Try command"}
           </a>
         </nav>
       </div>

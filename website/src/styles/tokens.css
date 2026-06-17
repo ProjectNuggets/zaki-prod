@@ -71,36 +71,56 @@
   font-display: swap;
 }
 
-/* ── Color System: Dark Precision ── */
+/* ── Color System: V2 operational dark ── */
 :root {
   /* Core backgrounds */
-  --zk-bg: #0c0a09;
-  --zk-bg-raised: #141210;
-  --zk-surface: #1a1714;
-  --zk-surface-hover: #252118;
-  --zk-surface-active: #302a22;
+  --zk-bg: #0a0908;
+  --zk-bg-raised: #131110;
+  --zk-bg-sunken: #050403;
+  --zk-surface: #151311;
+  --zk-surface-hover: #1d1a17;
+  --zk-surface-active: #24201c;
 
   /* Text hierarchy (warm white, opacity for levels) */
-  --zk-text: #f0ece6;
-  --zk-text-secondary: rgba(240, 236, 230, 0.55);
-  --zk-text-tertiary: rgba(240, 236, 230, 0.45);
-  --zk-text-ghost: rgba(240, 236, 230, 0.18);
+  --zk-text: #ece7df;
+  --zk-text-secondary: rgba(236, 231, 223, 0.64);
+  --zk-text-tertiary: rgba(236, 231, 223, 0.42);
+  --zk-text-ghost: rgba(236, 231, 223, 0.18);
 
-  /* Brand accent — #f10202, used surgically */
-  --zk-accent: #f10202;
-  --zk-accent-hover: #ff2d2d;
-  --zk-accent-muted: rgba(241, 2, 2, 0.55);
-  --zk-accent-glow: rgba(241, 2, 2, 0.12);
-  --zk-accent-subtle: rgba(241, 2, 2, 0.06);
+  /* Product accent: ember signal, used surgically */
+  --zk-accent: #d24430;
+  --zk-accent-hover: #e35a45;
+  --zk-accent-muted: rgba(210, 68, 48, 0.56);
+  --zk-accent-glow: rgba(210, 68, 48, 0.14);
+  --zk-accent-subtle: rgba(210, 68, 48, 0.07);
 
   /* Borders */
-  --zk-border: rgba(240, 236, 230, 0.08);
-  --zk-border-strong: rgba(240, 236, 230, 0.15);
-  --zk-border-accent: rgba(241, 2, 2, 0.15);
+  --zk-border: rgba(236, 231, 223, 0.09);
+  --zk-border-strong: rgba(236, 231, 223, 0.18);
+  --zk-border-accent: rgba(210, 68, 48, 0.3);
 
   /* Semantic */
-  --zk-success: #22c55e;
-  --zk-warning: #f59e0b;
-  --zk-error: #ef4444;
+  --zk-success: #219171;
+  --zk-warning: #c28d2c;
+  --zk-error: #d24430;
+
+  /* V2 aliases for standalone website surfaces */
+  --v2-bg: var(--zk-bg);
+  --v2-bg-raised: var(--zk-bg-raised);
+  --v2-bg-sunken: var(--zk-bg-sunken);
+  --v2-ink-1: var(--zk-text);
+  --v2-ink-2: var(--zk-text-secondary);
+  --v2-ink-3: var(--zk-text-tertiary);
+  --v2-ink-4: var(--zk-text-ghost);
+  --v2-accent: var(--zk-accent);
+  --v2-success: var(--zk-success);
+  --v2-warn: var(--zk-warning);
+  --v2-danger: var(--zk-error);
+  --v2-hairline: var(--zk-border);
+  --v2-hairline-strong: var(--zk-border-strong);
+  --v2-hairline-accent: var(--zk-border-accent);
+  --v2-font-mono: "DM Mono", monospace;
+  --v2-font-prose: "Plus Jakarta Sans", sans-serif;
+  --v2-font-display: "Cabinet Grotesk", sans-serif;
 
 }

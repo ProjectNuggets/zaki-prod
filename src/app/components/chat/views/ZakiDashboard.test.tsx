@@ -4,6 +4,8 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ZakiDashboard } from "./ZakiDashboard";
 import { useAuthStore } from "@/stores";
+import { ANONYMOUS_WORK_LEDGER_KEY, upsertAnonymousWorkItem } from "@/lib/anonymousWork";
+import { PENDING_INTENT_KEY } from "@/lib/pendingIntent";
 
 const mockNavigate = jest.fn();
 const mockUseProductRegistry = jest.fn();
@@ -44,6 +46,113 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.actions.askAgent": "Ask Agent",
     "zakiDashboard.actions.openAgent": "Open Agent",
     "zakiDashboard.actions.openChat": "Open Chat",
+    "zakiDashboard.command.eyebrow": "Start here",
+    "zakiDashboard.command.title": "Tell ZAKI what you want to do.",
+    "zakiDashboard.command.signedEyebrow": "Signed in · your work can carry forward",
+    "zakiDashboard.command.guestEyebrow": "Guest session · start without setup",
+    "zakiDashboard.command.signedTitlePrefix": "Let's ",
+    "zakiDashboard.command.guestTitlePrefix": "Let's ",
+    "zakiDashboard.command.signedCopy": "Choose the kind of help you need.",
+    "zakiDashboard.command.guestCopy": "Ask immediately with free weekly credits.",
+    "zakiDashboard.command.verbs.agent.signed": "move",
+    "zakiDashboard.command.verbs.agent.guest": "plan",
+    "zakiDashboard.command.verbs.brain.signed": "map",
+    "zakiDashboard.command.verbs.brain.guest": "map",
+    "zakiDashboard.command.verbs.learning.signed": "learn",
+    "zakiDashboard.command.verbs.learning.guest": "study",
+    "zakiDashboard.command.verbs.design.signed": "shape",
+    "zakiDashboard.command.verbs.design.guest": "shape",
+    "zakiDashboard.command.verbs.hire.signed": "advance",
+    "zakiDashboard.command.verbs.hire.guest": "advance",
+    "zakiDashboard.command.verbs.spaces.signed": "chat",
+    "zakiDashboard.command.verbs.spaces.guest": "chat",
+    "zakiDashboard.entry.website": "V1 website",
+    "zakiDashboard.entry.signIn": "Sign in",
+    "zakiDashboard.entry.signUp": "Sign up",
+    "zakiDashboard.command.weeklyFreeCredit": "Weekly free credit",
+    "zakiDashboard.command.bestFor": "Best for",
+    "zakiDashboard.command.memoryScope": "Memory scope",
+    "zakiDashboard.command.selectedProduct": "{{product}} overview",
+    "zakiDashboard.command.meter": "{{remaining}} weekly credits left",
+    "zakiDashboard.command.productStrip": "Choose product",
+    "zakiDashboard.command.inputLabel": "Describe what you want ZAKI to do",
+    "zakiDashboard.command.placeholder": "Ask {{product}} to start from your prompt...",
+    "zakiDashboard.command.saveWork": "Save this work",
+    "zakiDashboard.command.emptyHelper": "Type a prompt to start.",
+    "zakiDashboard.command.creditHelper": "Credits are used when ZAKI responds.",
+    "zakiDashboard.command.comingSoonHelper": "{{product}} is coming soon. Pick Chat, Agent, or Brain to start now.",
+    "zakiDashboard.command.submitPreviewSave": "Preview first",
+    "zakiDashboard.command.submitComingSoon": "{{product}} coming soon",
+    "zakiDashboard.command.markers.free": "Free",
+    "zakiDashboard.command.markers.preview": "Preview",
+    "zakiDashboard.command.markers.save": "Save",
+    "zakiDashboard.command.markers.beta": "Beta",
+    "zakiDashboard.command.markers.waitlist": "Waitlist",
+    "zakiDashboard.command.markers.comingSoon": "Coming soon",
+    "zakiDashboard.command.creditsExhaustedTitle": "Weekly credits are used.",
+    "zakiDashboard.command.creditsExhaustedCopy": "Keep your prompt here, then sign up, wait for reset, or choose a plan.",
+    "zakiDashboard.command.saveAndSignup": "Save and sign up",
+    "zakiDashboard.command.viewPlans": "View plans",
+    "zakiDashboard.command.waitForReset": "Wait for reset",
+    "zakiDashboard.command.waitForResetDate": "Wait for reset {{reset}}",
+    "zakiDashboard.command.submitChat": "Start chat",
+    "zakiDashboard.command.submitOpen": "Continue in {{product}}",
+    "zakiDashboard.command.submitSignup": "Save and continue",
+    "zakiDashboard.command.hints.agent": "Plan the next action.",
+    "zakiDashboard.command.hints.brain": "Map pasted text.",
+    "zakiDashboard.command.hints.learning": "Learn is coming soon.",
+    "zakiDashboard.command.hints.design": "Design is coming soon.",
+    "zakiDashboard.command.hints.hire": "Career is coming soon.",
+    "zakiDashboard.command.hints.spaces": "Chat immediately.",
+    "zakiDashboard.command.details.agent.bestFor": "Planning, follow-through, tool runs, and browser work.",
+    "zakiDashboard.command.details.agent.memory": "Personal brain after sign-in.",
+    "zakiDashboard.command.details.agent.truth": "Anonymous Agent starts as planning preview.",
+    "zakiDashboard.command.details.spaces.bestFor": "Quick questions, drafting, and thinking out loud. No setup.",
+    "zakiDashboard.command.details.spaces.memory": "Session only until you sign in.",
+    "zakiDashboard.command.details.spaces.truth": "Chat runs now on free weekly credits.",
+    "zakiDashboard.command.details.hire.bestFor": "Finding your next role, improving your CV, comparing fit, and preparing applications.",
+    "zakiDashboard.command.details.hire.memory": "Career pipeline memory is not public yet.",
+    "zakiDashboard.command.details.hire.truth": "Coming soon. Use Chat or Agent today.",
+    "zakiDashboard.command.details.design.bestFor": "Product direction and design project generation.",
+    "zakiDashboard.command.details.design.memory": "Design project memory is not public yet.",
+    "zakiDashboard.command.details.design.truth": "Coming soon. Use Chat or Agent today.",
+    "zakiDashboard.command.details.learning.bestFor": "Study plans and guided practice.",
+    "zakiDashboard.command.details.learning.memory": "Learner memory is not public yet.",
+    "zakiDashboard.command.details.learning.truth": "Coming soon. Use Chat or Agent today.",
+    "zakiDashboard.links.howItWorks": "How it works",
+    "zakiDashboard.links.waysToBuy": "V1: Ways to buy",
+    "zakiDashboard.links.fullPalette": "V1: Product palette",
+    "zakiDashboard.intro.kicker": "First run",
+    "zakiDashboard.intro.title": "Start the work first. Choose an account when it matters.",
+    "zakiDashboard.intro.progress": "Intro slides",
+    "zakiDashboard.intro.goToSlide": "Go to slide {{index}}",
+    "zakiDashboard.intro.slides.what.title": "What is ZAKI?",
+    "zakiDashboard.intro.slides.what.body": "A command workspace.",
+    "zakiDashboard.intro.slides.what.bullets.command": "Write the work once.",
+    "zakiDashboard.intro.slides.what.bullets.route": "Choose the product lane.",
+    "zakiDashboard.intro.slides.what.bullets.keep": "Keep local drafts.",
+    "zakiDashboard.intro.slides.buy.title": "Use it your way",
+    "zakiDashboard.intro.slides.buy.body": "Try weekly credits as a guest.",
+    "zakiDashboard.intro.slides.buy.bullets.guest": "Guest credits.",
+    "zakiDashboard.intro.slides.buy.bullets.account": "Account saves work.",
+    "zakiDashboard.intro.slides.buy.bullets.plan": "Plan adds capacity.",
+    "zakiDashboard.intro.slides.palette.title": "V1 website and product palette",
+    "zakiDashboard.intro.slides.palette.body": "Current website stays behind the dashboard as V1.",
+    "zakiDashboard.intro.slides.palette.bullets.chat": "Launch core.",
+    "zakiDashboard.intro.slides.palette.bullets.preview": "Truthful previews.",
+    "zakiDashboard.intro.slides.palette.bullets.website": "Visit V1.",
+    "zakiDashboard.intro.back": "Back",
+    "zakiDashboard.intro.next": "Next",
+    "zakiDashboard.intro.startTyping": "Start typing",
+    "zakiDashboard.intro.visitWebsite": "Visit V1 website",
+    "zakiDashboard.anonymousWork.title": "Continue what you started",
+    "zakiDashboard.anonymousWork.subtitle": "Same-browser history.",
+    "zakiDashboard.anonymousWork.save": "Save this work",
+    "zakiDashboard.support.label": "Dashboard telemetry",
+    "zakiDashboard.support.session": "Session",
+    "zakiDashboard.support.open": "open",
+    "zakiDashboard.support.scopes": "scopes",
+    "common.close": "Close",
     "zakiDashboard.hero.title": "Hi, {{name}}.",
     "zakiDashboard.hero.remaining": "{{remaining}} left.",
     "zakiDashboard.tags.plan": "Plan",
@@ -84,7 +193,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.products.names.spaces": "Chat",
     "zakiDashboard.products.names.brain": "Brain",
     "zakiDashboard.products.names.learning": "Learn",
-    "zakiDashboard.products.names.hire": "Hire",
+    "zakiDashboard.products.names.hire": "Career",
     "zakiDashboard.products.names.design": "Design",
     "zakiDashboard.products.tags.live": "Live",
     "zakiDashboard.products.tags.privateBeta": "Private beta",
@@ -97,13 +206,13 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.products.descriptions.spaces": "Workspace chat.",
     "zakiDashboard.products.descriptions.brain": "Memory graph.",
     "zakiDashboard.products.descriptions.learning": "Study surface.",
-    "zakiDashboard.products.descriptions.hire": "Hiring workflow.",
+    "zakiDashboard.products.descriptions.hire": "Career search agent.",
     "zakiDashboard.products.descriptions.design": "Design surface.",
     "zakiDashboard.memory.title": "Memory scopes",
     "zakiDashboard.memory.subtitle": "Every product writes to a known memory owner.",
     "zakiDashboard.memory.pending": "Pending",
     "zakiDashboard.memory.loading": "Memory scopes are loading.",
-    "zakiDashboard.memory.open": "Open memory controls",
+    "zakiDashboard.memory.open": "Open memory",
     "zakiDashboard.memory.scopeCount": "{{count}} scopes",
     "zakiDashboard.memory.productUnit": "products",
     "zakiDashboard.activeWork.title": "Active work · Agent",
@@ -150,6 +259,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     .replace("{{count}}", String(options?.count ?? ""))
     .replace("{{total}}", String(options?.total ?? ""))
     .replace("{{product}}", String(options?.product ?? ""))
+    .replace("{{index}}", String(options?.index ?? ""))
     .replace("{{id}}", String(options?.id ?? ""))
     .replace("{{title}}", String(options?.title ?? ""))
     .replace("{{messages}}", String(options?.messages ?? ""))
@@ -312,10 +422,10 @@ function setupQueries() {
   }));
 }
 
-function renderDashboard() {
+function renderDashboard(onSendExample = jest.fn()) {
   return render(
     <MemoryRouter>
-      <ZakiDashboard onSendExample={jest.fn()} />
+      <ZakiDashboard onSendExample={onSendExample} />
     </MemoryRouter>
   );
 }
@@ -323,6 +433,8 @@ function renderDashboard() {
 describe("ZakiDashboard", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    window.localStorage.clear();
+    window.sessionStorage.clear();
     setupQueries();
     useAuthStore.setState({
       token: "signed-in-token",
@@ -336,53 +448,37 @@ describe("ZakiDashboard", () => {
     renderDashboard();
 
     expect(screen.getByTestId("zaki-command-center")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Hi, Nova User. 1,420 left." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Let's move." })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Hi, Nova User. 1,420 left." })).not.toBeInTheDocument();
     expect(screen.getAllByText("Pro").length).toBeGreaterThan(0);
     expect(screen.getAllByText("1,420").length).toBeGreaterThan(0);
-    expect(screen.getByLabelText("80 / 100 left")).toBeInTheDocument();
-    expect(screen.getByText("Signed-in account")).toBeInTheDocument();
+    expect(screen.getAllByText("Signed-in account").length).toBeGreaterThan(0);
 
-    expect(screen.getByTestId("zaki-product-card-agent")).toHaveTextContent("Agent");
-    expect(screen.getByTestId("zaki-product-card-spaces")).toHaveTextContent("Chat");
-    expect(screen.getByTestId("zaki-product-card-brain")).toHaveTextContent("Brain");
-    expect(screen.getByTestId("zaki-product-card-learning")).toHaveTextContent("Learn");
-    expect(screen.getByTestId("zaki-product-card-learning")).toHaveTextContent("Private beta");
-    expect(screen.getByTestId("zaki-product-card-learning")).toHaveTextContent("Request access");
-    expect(screen.getByTestId("zaki-product-card-hire")).toHaveTextContent("Request access");
-    expect(screen.getByTestId("zaki-product-card-design")).toHaveTextContent("Join waitlist");
+    expect(screen.getByTestId("zaki-dashboard-product-hint")).toHaveTextContent("Agent");
+    expect(screen.getByTestId("zaki-dashboard-product-hint")).toHaveTextContent("Planning, follow-through");
+    expect(screen.queryByTestId("zaki-dashboard-products")).not.toBeInTheDocument();
     expect(screen.queryByText("ZAKI CLI")).not.toBeInTheDocument();
-    expect(screen.getByTestId("zaki-dashboard-active-work")).toHaveTextContent("Investor brief · streaming");
-
-    const memory = screen.getByTestId("zaki-dashboard-memory");
-    expect(within(memory).getByText("Personal brain")).toBeInTheDocument();
-    expect(within(memory).getByText("Workspace memory")).toBeInTheDocument();
-    expect(within(memory).getByText("Learner memory")).toBeInTheDocument();
-    expect(within(memory).getByText("Hire memory")).toBeInTheDocument();
-    expect(within(memory).getByText("Design memory")).toBeInTheDocument();
   });
 
-  it("routes gated dashboard cards to access states instead of disabling them", () => {
+  it("orders command products for signed-in users by launch workflow", () => {
     renderDashboard();
 
-    fireEvent.click(
-      within(screen.getByTestId("zaki-product-card-learning")).getByRole("button", {
-        name: "Open Learn access state",
-      })
-    );
-    fireEvent.click(
-      within(screen.getByTestId("zaki-product-card-hire")).getByRole("button", {
-        name: "Open Hire access state",
-      })
-    );
-    fireEvent.click(
-      within(screen.getByTestId("zaki-product-card-design")).getByRole("button", {
-        name: "Open Design access state",
-      })
-    );
+    const tabs = within(screen.getByTestId("zaki-dashboard-command-strip"))
+      .getAllByRole("tab")
+      .map((tab) => tab.getAttribute("aria-label"));
 
-    expect(mockNavigate).toHaveBeenNthCalledWith(1, "/learn");
-    expect(mockNavigate).toHaveBeenNthCalledWith(2, "/hire");
-    expect(mockNavigate).toHaveBeenNthCalledWith(3, "/design");
+    expect(tabs).toEqual(["Agent", "Brain", "Chat", "Design", "Learn", "Career"]);
+  });
+
+  it("routes signed-in command prompts to the selected product surface", () => {
+    renderDashboard();
+
+    fireEvent.change(screen.getByLabelText("Describe what you want ZAKI to do"), {
+      target: { value: "Plan the launch sequence" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue in Agent" }));
+
+    expect(mockNavigate).toHaveBeenCalledWith("/agent");
   });
 
   it("uses the anonymous meter contract when there is no auth token", () => {
@@ -396,17 +492,276 @@ describe("ZakiDashboard", () => {
     renderDashboard();
 
     expect(mockUseAnonymousMeterStatus).toHaveBeenCalledWith(true);
-    expect(screen.getByText("Anonymous free session")).toBeInTheDocument();
+    expect(screen.getAllByText("Anonymous free session").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Free").length).toBeGreaterThan(0);
     expect(screen.getAllByText("97").length).toBeGreaterThan(0);
   });
 
-  it("routes the Agent launcher to the product surface instead of the command center", () => {
+  it("orders command products for anonymous users around immediate chat", () => {
+    useAuthStore.setState({
+      token: null,
+      user: null,
+      isHydrating: false,
+      isLoading: false,
+    });
+
     renderDashboard();
 
-    const agentCard = screen.getByTestId("zaki-product-card-agent");
-    fireEvent.click(within(agentCard).getByRole("button", { name: "Open Agent" }));
+    const tabs = within(screen.getByTestId("zaki-dashboard-command-strip"))
+      .getAllByRole("tab")
+      .map((tab) => tab.getAttribute("aria-label"));
 
-    expect(mockNavigate).toHaveBeenCalledWith("/agent");
+    expect(tabs).toEqual(["Chat", "Agent", "Brain", "Design", "Learn", "Career"]);
+    expect(screen.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Type a prompt to start.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save this work" })).not.toBeInTheDocument();
+  });
+
+  it("preserves typed anonymous prompts when using the sign-in entry point", () => {
+    useAuthStore.setState({
+      token: null,
+      user: null,
+      isHydrating: false,
+      isLoading: false,
+    });
+
+    renderDashboard();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Brain" }));
+    fireEvent.change(screen.getByLabelText("Describe what you want ZAKI to do"), {
+      target: { value: "Map these notes after I sign in" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(mockNavigate).toHaveBeenCalledWith("/?auth=login&next=%2Fbrain");
+    const ledger = JSON.parse(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY) || "{}");
+    expect(ledger.items?.[0]).toMatchObject({
+      productId: "brain",
+      taskKind: "map",
+      prompt: "Map these notes after I sign in",
+      status: "draft",
+    });
+    const intent = JSON.parse(window.sessionStorage.getItem(PENDING_INTENT_KEY) || "{}");
+    expect(intent).toMatchObject({
+      productId: "brain",
+      prompt: "Map these notes after I sign in",
+      returnTo: "/brain",
+    });
+  });
+
+  it("frames the Hire product as a user career lane", () => {
+    useAuthStore.setState({
+      token: null,
+      user: null,
+      isHydrating: false,
+      isLoading: false,
+    });
+
+    renderDashboard();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Career" }));
+
+    const hint = screen.getByTestId("zaki-dashboard-product-hint");
+    expect(hint).toHaveTextContent("Career is coming soon.");
+    expect(hint).toHaveTextContent("improving your CV");
+    expect(hint).toHaveTextContent("Coming soon. Use Chat or Agent today.");
+    expect(screen.getByRole("button", { name: "Career coming soon" })).toBeDisabled();
+    expect(hint).not.toHaveTextContent("Job descriptions");
+    expect(hint).not.toHaveTextContent("Candidate");
+  });
+
+  it("submits anonymous chat from the command dashboard with local work and pending intent", () => {
+    useAuthStore.setState({
+      token: null,
+      user: null,
+      isHydrating: false,
+      isLoading: false,
+    });
+    const onSendExample = jest.fn();
+
+    renderDashboard(onSendExample);
+
+    fireEvent.change(screen.getByLabelText("Describe what you want ZAKI to do"), {
+      target: { value: "Let's test the platform flow" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Start chat" }));
+
+    expect(onSendExample).toHaveBeenCalledWith("Let's test the platform flow");
+    const ledger = JSON.parse(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY) || "{}");
+    expect(ledger.items?.[0]).toMatchObject({
+      productId: "spaces",
+      taskKind: "chat",
+      prompt: "Let's test the platform flow",
+      status: "draft",
+      meterRemaining: 97,
+    });
+    const intent = JSON.parse(window.sessionStorage.getItem(PENDING_INTENT_KEY) || "{}");
+    expect(intent).toMatchObject({
+      productId: "spaces",
+      prompt: "Let's test the platform flow",
+      returnTo: "/spaces",
+    });
+  });
+
+  it("shows returning anonymous work and continues a saved space thread", () => {
+    useAuthStore.setState({
+      token: null,
+      user: null,
+      isHydrating: false,
+      isLoading: false,
+    });
+    upsertAnonymousWorkItem({
+      productId: "spaces",
+      taskKind: "chat",
+      prompt: "Continue this product launch outline",
+      title: "Launch outline",
+      route: "/spaces/zaky/threads/thread-1",
+      threadId: "thread-1",
+      meterRemaining: 21,
+      status: "succeeded",
+    });
+
+    renderDashboard();
+
+    expect(screen.getByTestId("zaki-anonymous-work")).toHaveTextContent("Continue what you started");
+    fireEvent.click(screen.getByText("Launch outline"));
+
+    expect(mockNavigate).toHaveBeenCalledWith("/spaces/zaky/threads/thread-1");
+  });
+
+  it("keeps future spokes visible but coming soon without creating auth work", () => {
+    useAuthStore.setState({
+      token: null,
+      user: null,
+      isHydrating: false,
+      isLoading: false,
+    });
+
+    renderDashboard();
+
+    for (const product of ["Design", "Learn", "Career"]) {
+      fireEvent.click(screen.getByRole("tab", { name: product }));
+      fireEvent.change(screen.getByLabelText("Describe what you want ZAKI to do"), {
+        target: { value: `Try ${product}` },
+      });
+
+      expect(screen.getByTestId("zaki-dashboard-product-hint")).toHaveTextContent("Coming soon");
+      expect(screen.getByRole("button", { name: `${product} coming soon` })).toBeDisabled();
+    }
+
+    expect(screen.queryByRole("button", { name: "Save this work" })).not.toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalledWith(expect.stringContaining("/?auth=signup"));
+    expect(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY)).toBeNull();
+    expect(window.sessionStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
+  });
+
+  it("keeps the prompt visible and offers choices when free credits are exhausted", () => {
+    useAuthStore.setState({
+      token: null,
+      user: null,
+      isHydrating: false,
+      isLoading: false,
+    });
+    mockUseAnonymousMeterStatus.mockReturnValue({
+      data: {
+        data: {
+          success: true,
+          identity: { type: "anonymous", anonymousSessionId: "anon-empty" },
+          plan: { tier: "free", label: "Free", source: "anonymous" },
+          rolling: { windowHours: 5, limit: 10, used: 10, remaining: 0 },
+          weekly: { limit: 100, used: 100, remaining: 0 },
+          products: {},
+        },
+      },
+      isLoading: false,
+    });
+
+    renderDashboard();
+
+    const textarea = screen.getByLabelText("Describe what you want ZAKI to do");
+    fireEvent.change(textarea, {
+      target: { value: "Do not lose this exhausted-credit prompt" },
+    });
+
+    expect(screen.getByText("Weekly credits are used.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start chat" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Save and sign up" }));
+
+    expect(textarea).toHaveValue("Do not lose this exhausted-credit prompt");
+    expect(mockNavigate).toHaveBeenCalledWith("/?auth=signup&next=%2Fspaces");
+  });
+
+  it("shows and dismisses the first-run intro for anonymous users", () => {
+    useAuthStore.setState({
+      token: null,
+      user: null,
+      isHydrating: false,
+      isLoading: false,
+    });
+
+    renderDashboard();
+
+    expect(screen.getByTestId("zaki-dashboard-intro")).toHaveTextContent("Start the work first. Choose an account when it matters.");
+    expect(screen.getByTestId("zaki-dashboard-intro-slide")).toHaveTextContent("What is ZAKI?");
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start typing" }));
+
+    expect(screen.queryByTestId("zaki-dashboard-intro")).not.toBeInTheDocument();
+    expect(window.localStorage.getItem("zaki:dashboard-v2-intro-dismissed")).toBe("1");
+  });
+
+  it("runs the intro as three slides and routes the V1 website action", () => {
+    useAuthStore.setState({
+      token: null,
+      user: null,
+      isHydrating: false,
+      isLoading: false,
+    });
+
+    renderDashboard();
+
+    const slide = screen.getByTestId("zaki-dashboard-intro-slide");
+    expect(slide).toHaveTextContent("What is ZAKI?");
+    expect(slide).not.toHaveTextContent("Use it your way");
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(slide).toHaveTextContent("Use it your way");
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(slide).toHaveTextContent("V1 website and product palette");
+    fireEvent.click(screen.getByRole("button", { name: "Visit V1 website" }));
+
+    expect(mockNavigate).toHaveBeenCalledWith("/story");
+    expect(window.localStorage.getItem("zaki:dashboard-v2-intro-dismissed")).toBe("1");
+  });
+
+  it("places the product explainer before the command input", () => {
+    renderDashboard();
+
+    const hint = screen.getByTestId("zaki-dashboard-product-hint");
+    const textarea = screen.getByLabelText("Describe what you want ZAKI to do");
+
+    expect(Boolean(hint.compareDocumentPosition(textarea) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+  });
+
+  it("labels the current website entry points and keeps How it works in the popup", () => {
+    window.localStorage.setItem("zaki:dashboard-v2-intro-dismissed", "1");
+    renderDashboard();
+
+    fireEvent.click(screen.getByRole("button", { name: "V1 website" }));
+    expect(mockNavigate).toHaveBeenCalledWith("/story");
+    mockNavigate.mockClear();
+
+    fireEvent.click(screen.getByRole("button", { name: "How it works" }));
+    expect(screen.getByTestId("zaki-dashboard-intro")).toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "V1: Ways to buy" }));
+    expect(mockNavigate).toHaveBeenCalledWith("/pricing");
+
+    fireEvent.click(screen.getByRole("button", { name: "V1: Product palette" }));
+    expect(mockNavigate).toHaveBeenCalledWith("/products/agent");
   });
 });

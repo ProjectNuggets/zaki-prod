@@ -3405,7 +3405,10 @@ const ProductEventSchema = z.object({
   ]),
   language: z.enum(["en", "ar"]).optional(),
   viewport: z.enum(["mobile", "tablet", "desktop"]).optional(),
-  plan: z.enum(["free", "student", "personal", "agent", "learn", "hire", "complete"]).nullable().optional(),
+  plan: z
+    .enum(["free", "student", "personal", "pro", "pro_max", "agent", "learn", "hire", "complete"])
+    .nullable()
+    .optional(),
   interval: z.enum(["monthly", "yearly"]).nullable().optional(),
   timestamp: z.string().max(120).optional(),
 });
@@ -7751,7 +7754,7 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
 // Billing: Stripe Checkout, Portal, Entitlements
 // -----------------------------------------------------------------------------
 const CheckoutSchema = z.object({
-  plan: z.enum(["student", "personal", "agent", "learn", "complete"]),
+  plan: z.enum(["student", "personal", "pro", "pro_max", "agent", "learn", "complete"]),
   interval: z.enum(["monthly", "yearly"]).optional(),
   provider: z.enum(["stripe", "paddle", "external", "creem"]).optional(),
   context: z

@@ -1,115 +1,63 @@
-import { useQuery } from "@tanstack/react-query";
-import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import { ArrowRight, FlaskConical, LockKeyhole, Palette } from "lucide-react";
-import { useProductRegistry } from "@/queries/useProducts";
-import { getDesignHealth } from "@/lib/designApi";
+import { ArrowRight, Clock3, LockKeyhole } from "lucide-react";
 import type { ProductRegistryProductId } from "@/lib/api";
 import { V2Badge, V2Panel, V2PanelBody, V2PanelHead } from "@/app/components/v2";
 
-type ProductGateMode = "private_beta" | "waitlist";
+type ProductGateMode = "coming_soon";
 
 type ProductAccessGateProps = {
   productId: ProductRegistryProductId;
   title: string;
   mode: ProductGateMode;
-  children?: ReactNode;
 };
 
-function modeCopy(mode: ProductGateMode) {
-  if (mode === "waitlist") {
-    return {
-      badge: "Waitlist",
-      heading: "Early access is not open yet",
-      body:
-        "This product is visible in the ZAKI family, but the public V1 app keeps it behind early access until the service is explicitly enabled.",
-      action: "Open settings",
-    };
-  }
+function modeCopy() {
   return {
-    badge: "Private beta",
-    heading: "Private beta access",
+    badge: "Coming soon",
+    heading: "This product is coming soon",
     body:
-      "This surface is production-plumbed but intentionally hidden from public V1 users while the beta cohort validates the workflow.",
-    action: "Open settings",
+      "This product is visible in the ZAKI family, but public V1 is focused on Dashboard, Agent, Chat, Brain, and Settings first.",
+    action: "Open dashboard",
   };
 }
 
 export function ProductAccessGate({
   productId,
   title,
-  mode,
-  children,
 }: ProductAccessGateProps) {
   const { t } = useTranslation();
-  const productRegistry = useProductRegistry();
-  const product = productRegistry.data?.data?.products?.find(
-    (item) => item.productId === productId
-  );
-  const designConfigured = productId === "design" && product?.state === "enabled";
-  const designHealth = useQuery({
-    queryKey: ["design", "health", "access-gate"],
-    queryFn: getDesignHealth,
-    enabled: designConfigured,
-    retry: false,
-    staleTime: 15_000,
+  const copy = modeCopy();
+  const status = t("productGate.status.comingSoon", {
+    defaultValue: "Launch state: coming soon",
   });
-
-  const designAllowed =
-    productId === "design" &&
-    product?.state === "enabled" &&
-    designHealth.data?.ok === true &&
-    designHealth.data?.configured === true;
-
-  if (designAllowed && children) return <>{children}</>;
-
-  const copy = modeCopy(mode);
-  const Icon = mode === "waitlist" ? Palette : FlaskConical;
-  const status = productRegistry.isLoading
-    ? t("productGate.status.checking", { defaultValue: "Checking access" })
-    : product?.state
-      ? t("productGate.status.state", {
-          state: product.state,
-          defaultValue: `State: ${product.state}`,
-        })
-      : t("productGate.status.hidden", { defaultValue: "Not exposed" });
 
   return (
     <section
       className="zaki-product-gate"
       data-testid={`product-gate-${productId}`}
-      data-product-gate={mode}
+      data-product-gate="coming_soon"
       aria-labelledby={`product-gate-${productId}-title`}
     >
       <div className="zaki-product-gate__inner">
         <div className="zaki-product-gate__kicker">
-          <Icon className="size-4" aria-hidden />
+          <Clock3 className="size-4" aria-hidden />
           <span>{title}</span>
         </div>
         <h1 id={`product-gate-${productId}-title`}>
-          {t(`productGate.${mode}.heading`, { defaultValue: copy.heading })}
+          {t("productGate.comingSoon.heading", { defaultValue: copy.heading })}
         </h1>
         <p>
-          {t(`productGate.${mode}.body`, {
+          {t("productGate.comingSoon.body", {
             product: title,
             defaultValue: copy.body,
           })}
         </p>
         <div className="zaki-product-gate__badges" aria-label="Product access state">
-          <V2Badge tone={mode === "waitlist" ? "warn" : "accent"}>
-            {t(`productGate.${mode}.badge`, { defaultValue: copy.badge })}
+          <V2Badge tone="warn">
+            {t("productGate.comingSoon.badge", { defaultValue: copy.badge })}
           </V2Badge>
           <V2Badge>{status}</V2Badge>
-          {productId === "design" ? (
-            <V2Badge tone={designHealth.data?.ok ? "success" : "default"}>
-              {designHealth.isLoading
-                ? t("productGate.design.checking", { defaultValue: "Design health pending" })
-                : designHealth.data?.ok
-                  ? t("productGate.design.ready", { defaultValue: "Design service ready" })
-                  : t("productGate.design.notReady", { defaultValue: "Design service gated" })}
-            </V2Badge>
-          ) : null}
         </div>
 
         <V2Panel className="zaki-product-gate__panel">
@@ -130,15 +78,15 @@ export function ProductAccessGate({
               <div>
                 <dt>{t("productGate.facts.next", { defaultValue: "Next step" })}</dt>
                 <dd>
-                  {mode === "waitlist"
-                    ? t("productGate.facts.waitlistValue", { defaultValue: "Join or manage early access in Settings." })
-                    : t("productGate.facts.betaValue", { defaultValue: "Ask the operator for beta access." })}
+                  {t("productGate.facts.comingSoonValue", {
+                    defaultValue: "Start today with Chat, Agent, or Brain from the dashboard.",
+                  })}
                 </dd>
               </div>
             </dl>
-            <Link className="v2-btn v2-btn--accent v2-btn--sm" to="/settings#settings-products">
+            <Link className="v2-btn v2-btn--accent v2-btn--sm" to="/">
               <LockKeyhole className="size-3.5" aria-hidden />
-              {t(`productGate.${mode}.action`, { defaultValue: copy.action })}
+              {t("productGate.comingSoon.action", { defaultValue: copy.action })}
               <ArrowRight className="size-3.5" aria-hidden />
             </Link>
           </V2PanelBody>

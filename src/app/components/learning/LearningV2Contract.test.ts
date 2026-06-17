@@ -18,7 +18,7 @@ describe("Learning V2 product contract", () => {
   });
 
   it("keeps global account, billing, privacy, and usage controls linked to central settings", () => {
-    expect(learningPageSource).toContain("/settings#settings-products");
+    expect(learningPageSource).toContain("/settings#settings-billing");
     expect(learningPageSource).toContain("/settings#settings-privacy");
     expect(learningPageSource).toContain("learner_memory");
     expect(learningPageSource).not.toContain("/learn/settings/billing");

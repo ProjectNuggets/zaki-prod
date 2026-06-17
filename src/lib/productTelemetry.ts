@@ -49,7 +49,16 @@ export type ProductTelemetryPayload = {
   source: ProductTelemetrySource;
   language?: "en" | "ar";
   viewport?: ProductTelemetryViewport;
-  plan?: "free" | "student" | "personal" | "agent" | "learn" | "complete" | null;
+  plan?:
+    | "free"
+    | "student"
+    | "personal"
+    | "pro"
+    | "pro_max"
+    | "agent"
+    | "learn"
+    | "complete"
+    | null;
   interval?: "monthly" | "yearly" | null;
   timestamp?: string;
 };

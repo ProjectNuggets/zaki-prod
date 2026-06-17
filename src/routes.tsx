@@ -1,31 +1,94 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter, Navigate, useParams } from 'react-router-dom';
 import App from './app/App';
-import { ChatArea } from './app/components/ChatArea';
-import { SharedArtifact } from './app/components/SharedArtifact';
-import { SharedConversation } from './app/components/SharedConversation';
-import { PricingPage } from './app/components/PricingPage';
-import { BillingSuccessPage } from './app/components/BillingSuccessPage';
-import { AdminAccessCodesPage } from './app/components/admin/AdminAccessCodesPage';
-import { HelpPage } from './app/components/HelpPage';
-import { LegalPage } from './app/components/LegalPage';
 import { SkeletonBrainPage } from './app/components/ui/skeleton';
-import { DesignPage } from './app/components/design/DesignPage';
-import { SettingsPage } from './app/components/settings/SettingsPage';
 import { ProductAccessGate } from './app/components/ProductAccessGate';
-import { HirePage } from './app/components/hire/HirePage';
-import { WebsiteHomePage, WebsiteProductPage, WebsiteShell } from './app/components/WebsitePage';
-import {
-  WebsiteAutismGuidancePage,
-  WebsiteComparisonPage,
-  WebsiteContactPage,
-  WebsiteFaqPage,
-  WebsiteHowToRoute,
-  WebsiteStoryPage,
-  WebsiteStoryPageAr,
-} from './app/components/MarketingContentPages';
 import { useAuthStore } from './stores';
 import { getCanonicalAppProductRoute } from './lib/productRoutes';
+
+function RouteFallback() {
+  return <div className="min-h-screen bg-zaki-bg" aria-label="Loading route" />;
+}
+
+function routeSuspense(children: ReactNode) {
+  return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
+}
+
+const ChatArea = lazy(() =>
+  import('./app/components/ChatArea').then((m) => ({ default: m.ChatArea })),
+);
+
+const SharedArtifact = lazy(() =>
+  import('./app/components/SharedArtifact').then((m) => ({ default: m.SharedArtifact })),
+);
+
+const SharedConversation = lazy(() =>
+  import('./app/components/SharedConversation').then((m) => ({ default: m.SharedConversation })),
+);
+
+const PricingPage = lazy(() =>
+  import('./app/components/PricingPage').then((m) => ({ default: m.PricingPage })),
+);
+
+const BillingSuccessPage = lazy(() =>
+  import('./app/components/BillingSuccessPage').then((m) => ({ default: m.BillingSuccessPage })),
+);
+
+const AdminAccessCodesPage = lazy(() =>
+  import('./app/components/admin/AdminAccessCodesPage').then((m) => ({ default: m.AdminAccessCodesPage })),
+);
+
+const HelpPage = lazy(() =>
+  import('./app/components/HelpPage').then((m) => ({ default: m.HelpPage })),
+);
+
+const LegalPage = lazy(() =>
+  import('./app/components/LegalPage').then((m) => ({ default: m.LegalPage })),
+);
+
+const SettingsPage = lazy(() =>
+  import('./app/components/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })),
+);
+
+const WebsiteHomePage = lazy(() =>
+  import('./app/components/WebsitePage').then((m) => ({ default: m.WebsiteHomePage })),
+);
+
+const WebsiteProductPage = lazy(() =>
+  import('./app/components/WebsitePage').then((m) => ({ default: m.WebsiteProductPage })),
+);
+
+const WebsiteShell = lazy(() =>
+  import('./app/components/WebsitePage').then((m) => ({ default: m.WebsiteShell })),
+);
+
+const WebsiteAutismGuidancePage = lazy(() =>
+  import('./app/components/MarketingContentPages').then((m) => ({ default: m.WebsiteAutismGuidancePage })),
+);
+
+const WebsiteComparisonPage = lazy(() =>
+  import('./app/components/MarketingContentPages').then((m) => ({ default: m.WebsiteComparisonPage })),
+);
+
+const WebsiteContactPage = lazy(() =>
+  import('./app/components/MarketingContentPages').then((m) => ({ default: m.WebsiteContactPage })),
+);
+
+const WebsiteFaqPage = lazy(() =>
+  import('./app/components/MarketingContentPages').then((m) => ({ default: m.WebsiteFaqPage })),
+);
+
+const WebsiteHowToRoute = lazy(() =>
+  import('./app/components/MarketingContentPages').then((m) => ({ default: m.WebsiteHowToRoute })),
+);
+
+const WebsiteStoryPage = lazy(() =>
+  import('./app/components/MarketingContentPages').then((m) => ({ default: m.WebsiteStoryPage })),
+);
+
+const WebsiteStoryPageAr = lazy(() =>
+  import('./app/components/MarketingContentPages').then((m) => ({ default: m.WebsiteStoryPageAr })),
+);
 
 // Brain is the first lazy-loaded route: its WebGL "Galaxy" renderer (three +
 // d3-force-3d) is heavy and only needed on /brain, so it is code-split into
@@ -35,8 +98,7 @@ const BrainPage = lazy(() =>
 );
 
 function HomeRoute() {
-  const token = useAuthStore((state) => state.token);
-  return token ? <ChatArea /> : <WebsiteHomePage />;
+  return routeSuspense(<ChatArea />);
 }
 
 function ProductRoute({ locale = "en" }: { locale?: "en" | "ar" }) {
@@ -44,7 +106,7 @@ function ProductRoute({ locale = "en" }: { locale?: "en" | "ar" }) {
   const { productId } = useParams();
   const appRoute = getCanonicalAppProductRoute(productId);
   if (token && appRoute) return <Navigate to={appRoute} replace />;
-  return <WebsiteProductPage locale={locale} />;
+  return routeSuspense(<WebsiteProductPage locale={locale} />);
 }
 
 function LegacyZakiBotRoute({ locale = "en" }: { locale?: "en" | "ar" }) {
@@ -59,7 +121,7 @@ function InternalOperatorRoute() {
   const email = String(user?.username || "").trim().toLowerCase();
   if (!token) return <Navigate to="/" replace />;
   if (email !== "as@novanuggets.com") return <Navigate to="/" replace />;
-  return <AdminAccessCodesPage />;
+  return routeSuspense(<AdminAccessCodesPage />);
 }
 
 /**
@@ -80,39 +142,39 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <HomeRoute />, // Public website for guests, app home for signed-in users
+        element: <HomeRoute />, // Command dashboard for anonymous and signed-in users
       },
       {
         path: 'agent',
-        element: <ChatArea />, // Authenticated Agent workbench
+        element: routeSuspense(<ChatArea />), // Authenticated Agent workbench
       },
       {
         path: 'spaces',
-        element: <ChatArea />, // Will show spaces view
+        element: routeSuspense(<ChatArea />), // Will show spaces view
       },
       {
         path: 'spaces/:spaceId',
-        element: <ChatArea />, // Will show space detail
+        element: routeSuspense(<ChatArea />), // Will show space detail
       },
       {
         path: 'spaces/:spaceId/threads/:threadId',
-        element: <ChatArea />, // Will show chat view
+        element: routeSuspense(<ChatArea />), // Will show chat view
       },
       {
         path: 'about',
-        element: <ChatArea />,
+        element: routeSuspense(<ChatArea />),
       },
       {
         path: 'reset',
-        element: <ChatArea />,
+        element: routeSuspense(<ChatArea />),
       },
       {
         path: 'artifact/:shareCode',
-        element: <SharedArtifact />,
+        element: routeSuspense(<SharedArtifact />),
       },
       {
         path: 'pricing',
-        element: (
+        element: routeSuspense(
           <WebsiteShell>
             <PricingPage />
           </WebsiteShell>
@@ -120,7 +182,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'pricing/success',
-        element: <BillingSuccessPage />,
+        element: routeSuspense(<BillingSuccessPage />),
       },
       {
         path: 'products/:productId',
@@ -132,39 +194,39 @@ export const router = createBrowserRouter([
       },
       {
         path: 'story',
-        element: <WebsiteStoryPage />,
+        element: routeSuspense(<WebsiteStoryPage />),
       },
       {
         path: 'faq',
-        element: <WebsiteFaqPage />,
+        element: routeSuspense(<WebsiteFaqPage />),
       },
       {
         path: 'contact',
-        element: <WebsiteContactPage />,
+        element: routeSuspense(<WebsiteContactPage />),
       },
       {
         path: 'autism-guidance',
-        element: <WebsiteAutismGuidancePage />,
+        element: routeSuspense(<WebsiteAutismGuidancePage />),
       },
       {
         path: 'vs-chatgpt',
-        element: <WebsiteComparisonPage slug="vs-chatgpt" />,
+        element: routeSuspense(<WebsiteComparisonPage slug="vs-chatgpt" />),
       },
       {
         path: 'zaki-vs-spaces',
-        element: <WebsiteComparisonPage slug="zaki-vs-spaces" />,
+        element: routeSuspense(<WebsiteComparisonPage slug="zaki-vs-spaces" />),
       },
       {
         path: 'best-arabic-ai-assistant',
-        element: <WebsiteComparisonPage slug="best-arabic-ai-assistant" />,
+        element: routeSuspense(<WebsiteComparisonPage slug="best-arabic-ai-assistant" />),
       },
       {
         path: 'zaki-vs-openclaw',
-        element: <WebsiteComparisonPage slug="zaki-vs-openclaw" />,
+        element: routeSuspense(<WebsiteComparisonPage slug="zaki-vs-openclaw" />),
       },
       {
         path: 'how-to/:slug',
-        element: <WebsiteHowToRoute />,
+        element: routeSuspense(<WebsiteHowToRoute />),
       },
       {
         path: 'privacy',
@@ -180,7 +242,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'ar',
-        element: <WebsiteHomePage locale="ar" />,
+        element: routeSuspense(<WebsiteHomePage locale="ar" />),
       },
       {
         path: 'ar/products/:productId',
@@ -192,19 +254,19 @@ export const router = createBrowserRouter([
       },
       {
         path: 'ar/story',
-        element: <WebsiteStoryPageAr />,
+        element: routeSuspense(<WebsiteStoryPageAr />),
       },
       {
         path: 'ar/faq',
-        element: <WebsiteFaqPage locale="ar" />,
+        element: routeSuspense(<WebsiteFaqPage locale="ar" />),
       },
       {
         path: 'ar/contact',
-        element: <WebsiteContactPage locale="ar" />,
+        element: routeSuspense(<WebsiteContactPage locale="ar" />),
       },
       {
         path: 'ar/autism-guidance',
-        element: <WebsiteAutismGuidancePage locale="ar" />,
+        element: routeSuspense(<WebsiteAutismGuidancePage locale="ar" />),
       },
       {
         path: 'ar/privacy',
@@ -220,11 +282,11 @@ export const router = createBrowserRouter([
       },
       {
         path: 'help',
-        element: <HelpPage />,
+        element: routeSuspense(<HelpPage />),
       },
       {
         path: 'legal',
-        element: <LegalPage />,
+        element: routeSuspense(<LegalPage />),
       },
       {
         path: 'internal/admin-access-codes',
@@ -244,7 +306,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'settings',
-        element: <SettingsPage />,
+        element: routeSuspense(<SettingsPage />),
       },
       {
         path: 'learn',
@@ -252,32 +314,28 @@ export const router = createBrowserRouter([
           <ProductAccessGate
             productId="learning"
             title="ZAKI Learn"
-            mode="private_beta"
+            mode="coming_soon"
           />
         ),
       },
       {
         path: 'hire',
-        element: (
+        element: routeSuspense(
           <ProductAccessGate
             productId="hire"
-            title="ZAKI Hire"
-            mode="private_beta"
-          >
-            <HirePage />
-          </ProductAccessGate>
+            title="ZAKI Career"
+            mode="coming_soon"
+          />
         ),
       },
       {
         path: 'design',
-        element: (
+        element: routeSuspense(
           <ProductAccessGate
             productId="design"
             title="ZAKI Design"
-            mode="waitlist"
-          >
-            <DesignPage />
-          </ProductAccessGate>
+            mode="coming_soon"
+          />
         ),
       },
     ],
@@ -285,7 +343,7 @@ export const router = createBrowserRouter([
   {
     // Public share route (outside of App layout)
     path: '/share/:token',
-    element: <SharedConversation />,
+    element: routeSuspense(<SharedConversation />),
   },
   {
     // Backward-compatible alias

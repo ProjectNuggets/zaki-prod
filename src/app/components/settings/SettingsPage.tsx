@@ -1,19 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Bot,
-  Brain,
-  Boxes,
   Cable,
   CreditCard,
   Database,
-  Gauge,
-  KeyRound,
   LockKeyhole,
-  MessageSquare,
   MonitorSmartphone,
-  ServerCog,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
@@ -28,28 +22,23 @@ import {
   useMeterStatus,
   usePlatformUsageSummary,
   useProductRegistry,
-  useSpaces,
   useSyncBilling,
-  useTopupCheckout,
 } from "@/queries";
 import {
   exportAccountData,
+  connectBotTelegram,
   connectAgentChannelControl,
-  createAgentProviderProfile,
   deleteAgentChannelBinding,
-  deleteAgentProviderProfile,
   deleteAgentSecret,
+  disconnectBotTelegram,
   disconnectAgentChannelControl,
   exportAgentMemory,
   fetchAgentChannelControls,
   fetchAgentChannels,
   fetchAgentExtensionDevices,
   fetchAgentExtensionDiagnostics,
-  fetchAgentIntegrations,
   fetchAgentMemoryGovernance,
-  fetchAgentProviderProfiles,
   fetchBotSettings,
-  fetchGoogleOAuthStatus,
   fetchMemoryPreferences,
   forgetAgentMemory,
   upsertAgentChannelBinding,
@@ -59,44 +48,47 @@ import {
   purgeAgentMemoryPii,
   revokeAgentExtensionDevice,
   testAgentChannelControl,
-  testAgentProviderProfile,
-  updateAgentProviderProfile,
+  requestLogout,
   updateBotSettings,
   updateMemoryPreferences,
   updateProfile,
-  type AgentChannelBindingPayload,
   type AgentChannelControlId,
   type AgentChannelControlStatus,
   type AgentChannelId,
   type AgentChannelStatus,
   type AgentExtensionDevice,
   type AgentExtensionDiagnosticsResponse,
-  type AgentIntegrationsResponse,
   type AgentMemoryGovernanceResponse,
   type AgentMemoryPurgePiiResponse,
-  type AgentProviderProfile,
-  type AgentProviderProfilePayload,
+  type BotTelegramConnectPayload,
   type BotSettingsPatch,
   type BotSettingsProfile,
   type MemoryPolicy,
   type MeterStatusProduct,
   type MeterWindowSnapshot,
   type PlatformUsageProductId,
-  type ProductOperationalState,
   type ProductRegistryItem,
-  type ProductRegistryProductId,
   type UsageQuotaSnapshot,
 } from "@/lib/api";
-import {
-  AGENT_MODEL_CATALOG,
-  DEFAULT_AGENT_MODEL_ID,
-  resolveAgentModel,
-} from "@/lib/agentModelCatalog";
 import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
+import {
+  AGENT_DEFAULT_REASONING_EFFORTS,
+  assistantModeToReasoningEffort,
+  reasoningEffortToAssistantMode,
+  type AgentDefaultReasoningEffort,
+} from "@/lib/agentSettingsDefaults";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import { useAuthStore, useUIStore } from "@/stores";
 import { TypeToConfirmDialog } from "@/app/components/ui/zaki";
-import { V2Badge, V2Button, V2StatusStrip, V2UsageGauge } from "@/app/components/v2";
+import { V2Badge, V2Button, V2StatusStrip } from "@/app/components/v2";
+import {
+  SettingsChannelsSection,
+  buildEmptyChannelActivationDrafts,
+  compactStringPayload,
+  defaultChannelBindingDraft,
+  type ChannelBindingDraft,
+  type SettingsChannelId,
+} from "./SettingsChannelsSection";
 import {
   GatedRow,
   V2SettingsBlock,
@@ -104,11 +96,40 @@ import {
   V2SettingsRow,
   type V2SettingsNavItem,
 } from "./V2SettingsPrimitives";
-import type { Space } from "@/types";
 
 type MeterUsageRow = {
   product: ProductRegistryItem;
   meterProduct: MeterStatusProduct | null;
+};
+
+type SettingsBillingPlanId =
+  | "free"
+  | "personal"
+  | "agent"
+  | "learn"
+  | "complete"
+  | "pro"
+  | "pro_max";
+type SettingsCheckoutPlanId = "agent";
+
+const SETTINGS_PAID_PLAN_IDS = ["agent"] as const satisfies readonly SettingsCheckoutPlanId[];
+const SETTINGS_PLAN_RANK: Record<SettingsBillingPlanId, number> = {
+  free: 0,
+  personal: 1,
+  agent: 1,
+  learn: 2,
+  pro: 2,
+  complete: 3,
+  pro_max: 3,
+};
+const SETTINGS_PLAN_LABELS: Record<SettingsBillingPlanId, string> = {
+  free: "Free",
+  personal: "Personal",
+  agent: "ZAKI Agent",
+  learn: "ZAKI Learn",
+  complete: "ZAKI Complete",
+  pro: "Pro",
+  pro_max: "Pro MAX",
 };
 
 const PLATFORM_USAGE_PRODUCTS: PlatformUsageProductId[] = [
@@ -118,36 +139,6 @@ const PLATFORM_USAGE_PRODUCTS: PlatformUsageProductId[] = [
   "hire",
   "design",
 ];
-
-const PRODUCT_ENTRY_POINT_KEYS: Partial<Record<ProductRegistryProductId, string>> = {
-  spaces: "settingsModal.productsAccess.entryPoints.spaces",
-  agent: "settingsModal.productsAccess.entryPoints.agent",
-  learning: "settingsModal.productsAccess.entryPoints.learning",
-  hire: "settingsModal.productsAccess.entryPoints.hire",
-  design: "settingsModal.productsAccess.entryPoints.design",
-  brain: "settingsModal.productsAccess.entryPoints.brain",
-  cli: "settingsModal.productsAccess.entryPoints.cli",
-  local_app: "settingsModal.productsAccess.entryPoints.localApp",
-  extensions: "settingsModal.productsAccess.entryPoints.extensions",
-};
-
-const MEMORY_SCOPE_KEYS: Record<string, string> = {
-  personal_brain: "settingsModal.productsAccess.memoryScopes.personalBrain",
-  workspace_memory: "settingsModal.productsAccess.memoryScopes.workspaceMemory",
-  learner_memory: "settingsModal.productsAccess.memoryScopes.learnerMemory",
-  hire_memory: "settingsModal.productsAccess.memoryScopes.hireMemory",
-  design_memory: "settingsModal.productsAccess.memoryScopes.designMemory",
-  session_memory: "settingsModal.productsAccess.memoryScopes.sessionMemory",
-};
-
-const MEMORY_SCOPE_ORDER = [
-  "personal_brain",
-  "workspace_memory",
-  "learner_memory",
-  "hire_memory",
-  "design_memory",
-  "session_memory",
-] as const;
 
 type AgentSettingsDraft = Required<
   Pick<
@@ -185,24 +176,24 @@ const SETTINGS_SECTION_QUERY_MAP: Record<string, string> = {
   billing: "#settings-billing",
   plan: "#settings-billing",
   usage: "#settings-billing",
-  products: "#settings-products",
-  access: "#settings-products",
+  products: "#settings-billing",
+  access: "#settings-billing",
   agent: "#settings-agent",
-  spaces: "#settings-spaces",
-  chat: "#settings-spaces",
-  brain: "#settings-brain",
+  spaces: "#settings-billing",
+  chat: "#settings-billing",
+  brain: "#settings-memory-data",
   memory: "#settings-memory-data",
   "memory-data": "#settings-memory-data",
   channels: "#settings-channels",
   secrets: "#settings-secrets",
-  providers: "#settings-providers",
-  models: "#settings-providers",
+  providers: "#settings-agent",
+  models: "#settings-agent",
   devices: "#settings-devices",
   extension: "#settings-devices",
-  oauth: "#settings-connections",
-  connections: "#settings-connections",
-  developer: "#settings-developer-access",
-  "developer-access": "#settings-developer-access",
+  oauth: "#settings-account",
+  connections: "#settings-account",
+  developer: "#settings-secrets",
+  "developer-access": "#settings-secrets",
   privacy: "#settings-privacy",
   data: "#settings-privacy",
 };
@@ -210,19 +201,23 @@ const SETTINGS_SECTION_QUERY_MAP: Record<string, string> = {
 const SETTINGS_NAV_HASHES = [
   "#settings-account",
   "#settings-billing",
-  "#settings-products",
   "#settings-agent",
-  "#settings-spaces",
-  "#settings-brain",
   "#settings-channels",
   "#settings-secrets",
-  "#settings-providers",
   "#settings-devices",
   "#settings-memory-data",
-  "#settings-developer-access",
-  "#settings-connections",
   "#settings-privacy",
 ] as const;
+
+const SETTINGS_HASH_COMPAT_MAP: Record<string, (typeof SETTINGS_NAV_HASHES)[number]> = {
+  "#settings-products": "#settings-billing",
+  "#settings-spaces": "#settings-billing",
+  "#settings-brain": "#settings-memory-data",
+  "#settings-developer-access": "#settings-secrets",
+  "#settings-connections": "#settings-account",
+  "#settings-usage": "#settings-billing",
+  "#settings-providers": "#settings-agent",
+};
 
 function isSettingsNavHash(hash: string): hash is (typeof SETTINGS_NAV_HASHES)[number] {
   return (SETTINGS_NAV_HASHES as readonly string[]).includes(hash);
@@ -238,24 +233,6 @@ const AGENT_AUTONOMY_LEVELS: Array<NonNullable<BotSettingsProfile["autonomy"]>> 
   "supervised",
   "full",
 ];
-
-const AGENT_REASONING_EFFORT_LEVELS = ["low", "medium", "high"] as const;
-
-function assistantModeToReasoningEffort(
-  mode?: BotSettingsProfile["assistant_mode"]
-): (typeof AGENT_REASONING_EFFORT_LEVELS)[number] {
-  if (mode === "fast") return "low";
-  if (mode === "deep") return "high";
-  return "medium";
-}
-
-function reasoningEffortToAssistantMode(
-  effort: (typeof AGENT_REASONING_EFFORT_LEVELS)[number]
-): NonNullable<BotSettingsProfile["assistant_mode"]> {
-  if (effort === "low") return "fast";
-  if (effort === "high") return "deep";
-  return "balanced";
-}
 
 function normalizeAgentSettingsProfile(profile?: BotSettingsProfile | null): AgentSettingsDraft {
   return {
@@ -275,133 +252,6 @@ function normalizeAgentSettingsProfile(profile?: BotSettingsProfile | null): Age
   };
 }
 
-function countSpaceDocuments(space: Space) {
-  return (space.pinnedFiles ?? []).filter((file) => file.status !== "failed").length;
-}
-
-function countEmbeddedSpaceDocuments(space: Space) {
-  return (space.pinnedFiles ?? []).filter((file) => file.status === "embedded").length;
-}
-
-const AGENT_LAUNCH_CHANNELS: Array<{
-  id: AgentChannelId;
-  label: string;
-  helper: string;
-  principalPlaceholder: string;
-  scopePlaceholder: string;
-}> = [
-  {
-    id: "telegram",
-    label: "Telegram",
-    helper: "Direct connect plus identity bindings for Telegram chats.",
-    principalPlaceholder: "telegram-user-id",
-    scopePlaceholder: "telegram-chat-id",
-  },
-  {
-    id: "slack",
-    label: "Slack",
-    helper: "Workspace bot is live downstream; bind Slack users or channels to this account.",
-    principalPlaceholder: "U123456",
-    scopePlaceholder: "C123456",
-  },
-  {
-    id: "discord",
-    label: "Discord",
-    helper: "Discord gateway is live downstream; bind Discord users or guild channels.",
-    principalPlaceholder: "discord-user-id",
-    scopePlaceholder: "discord-channel-id",
-  },
-  {
-    id: "email",
-    label: "Email",
-    helper: "IMAP/SMTP channel is live downstream; bind sender addresses or domains.",
-    principalPlaceholder: "person@example.com",
-    scopePlaceholder: "inbox@example.com",
-  },
-];
-
-const USER_MANAGED_CHANNELS: AgentChannelControlId[] = ["slack", "discord", "email", "whatsapp"];
-
-const CHANNEL_ACTIVATION_FIELDS: Record<
-  Exclude<AgentChannelControlId, "telegram">,
-  Array<{ key: string; label: string; placeholder: string; secret?: boolean }>
-> = {
-  slack: [
-    { key: "slack_bot_token", label: "Bot token", placeholder: "xoxb-...", secret: true },
-    { key: "slack_signing_secret", label: "Signing secret", placeholder: "Slack signing secret", secret: true },
-  ],
-  discord: [
-    { key: "discord_bot_token", label: "Bot token", placeholder: "Discord bot token", secret: true },
-  ],
-  email: [
-    { key: "username", label: "Mailbox", placeholder: "inbox@example.com" },
-    { key: "imap_host", label: "IMAP host", placeholder: "imap.example.com" },
-    { key: "smtp_host", label: "SMTP host", placeholder: "smtp.example.com" },
-    { key: "email_imap_password", label: "IMAP password", placeholder: "IMAP password", secret: true },
-    { key: "email_smtp_password", label: "SMTP password", placeholder: "SMTP password", secret: true },
-  ],
-  whatsapp: [
-    { key: "whatsapp_access_token", label: "Access token", placeholder: "WhatsApp access token", secret: true },
-    { key: "whatsapp_verify_token", label: "Verify token", placeholder: "Webhook verify token", secret: true },
-    { key: "phone_number_id", label: "Phone number ID", placeholder: "Meta phone number ID" },
-  ],
-};
-
-const DEFAULT_PROVIDER_DRAFT: AgentProviderProfilePayload = {
-  label: "",
-  provider_kind: "openai_compatible",
-  base_url: "",
-  auth_style: "bearer",
-  api_key: "",
-  model_allowlist: [],
-  default_model: null,
-};
-
-type ChannelBindingDraft = Pick<
-  AgentChannelBindingPayload,
-  "account_id" | "principal_key" | "scope_key" | "thread_key"
->;
-
-function defaultChannelBindingDraft(): ChannelBindingDraft {
-  return {
-    account_id: "main",
-    principal_key: "",
-    scope_key: "",
-    thread_key: "",
-  };
-}
-
-function buildEmptyChannelActivationDrafts() {
-  return USER_MANAGED_CHANNELS.reduce<Record<string, Record<string, string>>>((drafts, channel) => {
-    drafts[channel] = CHANNEL_ACTIVATION_FIELDS[channel as Exclude<AgentChannelControlId, "telegram">]
-      .reduce<Record<string, string>>((fields, field) => {
-        fields[field.key] = "";
-        return fields;
-      }, {});
-    return drafts;
-  }, {});
-}
-
-function compactStringPayload(payload: Record<string, string>) {
-  return Object.fromEntries(
-    Object.entries(payload)
-      .map(([key, value]) => [key, String(value || "").trim()])
-      .filter(([, value]) => Boolean(value))
-  ) as Record<string, string>;
-}
-
-function canSaveChannelBindingDraft(draft: ChannelBindingDraft) {
-  return Boolean(
-    draft.account_id.trim() &&
-      draft.principal_key.trim() &&
-      draft.scope_key.trim()
-  );
-}
-
-function hasChannelActivationPayload(draft: Record<string, string>) {
-  return Object.keys(compactStringPayload(draft)).length > 0;
-}
-
 function formatUnixDate(value?: number | null) {
   if (!value) return null;
   const date = new Date(value * 1000);
@@ -412,13 +262,6 @@ function formatUnixDate(value?: number | null) {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function normalizeProviderModels(value: string) {
-  return value
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
 }
 
 // Memory capture policy is bound to the real BFF route GET|PATCH
@@ -439,17 +282,28 @@ function formatUsageUnits(value?: number | null) {
   }).format(Math.max(0, Number(value)));
 }
 
-function formatCurrencyFromCents(value?: number | null, currency?: string | null) {
-  if (value == null || !Number.isFinite(Number(value))) return null;
-  try {
-    return Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: String(currency || "usd").toUpperCase(),
-      maximumFractionDigits: 2,
-    }).format(Number(value) / 100);
-  } catch {
-    return null;
+function normalizeSettingsPlanId(value: unknown): SettingsBillingPlanId {
+  const plan = String(value || "").trim().toLowerCase();
+  if (plan === "pro_max" || plan === "promax") return "pro_max";
+  if (plan === "complete") return "complete";
+  if (plan === "pro") return "pro";
+  if (plan === "agent") return "agent";
+  if (plan === "learn") return "learn";
+  if (
+    plan === "personal" ||
+    plan === "student" ||
+    plan === "legacy_personal" ||
+    plan === "access_code"
+  ) {
+    return "personal";
   }
+  return "free";
+}
+
+function getSettingsPlanLabel(t: ReturnType<typeof useTranslation>["t"], plan: SettingsBillingPlanId) {
+  return t(`settingsModal.plan.tiers.${plan}`, {
+    defaultValue: SETTINGS_PLAN_LABELS[plan],
+  });
 }
 
 function formatUsageReset(value?: string | null) {
@@ -508,16 +362,6 @@ function getQuotaSummaryLabel(
   return t("settingsModal.usage.pending");
 }
 
-function getProductStateLabel(
-  t: (key: string, options?: Record<string, unknown>) => string,
-  state?: ProductOperationalState
-) {
-  if (!state) return t("settingsModal.productsAccess.states.disabled");
-  return t(`settingsModal.productsAccess.states.${state}`, {
-    defaultValue: state,
-  });
-}
-
 function getProductLifecycleLabel(
   t: (key: string, options?: Record<string, unknown>) => string,
   lifecycle?: string
@@ -528,61 +372,15 @@ function getProductLifecycleLabel(
   });
 }
 
-function getProductEntryPointLabel(
+function getUsageLifecycleLabel(
   t: (key: string, options?: Record<string, unknown>) => string,
-  product?: ProductRegistryItem
+  lifecycle?: string
 ) {
-  const productId = product?.productId;
-  if (!productId) return t("settingsModal.productsAccess.pending");
-  const key = PRODUCT_ENTRY_POINT_KEYS[productId];
-  return key
-    ? t(key, { defaultValue: product?.entryPoint || productId })
-    : product?.entryPoint || productId;
-}
-
-function getMemoryScopeLabel(
-  t: (key: string, options?: Record<string, unknown>) => string,
-  memoryScope?: string | null
-) {
-  if (!memoryScope) return t("settingsModal.productsAccess.pending");
-  const key = MEMORY_SCOPE_KEYS[memoryScope];
-  return key ? t(key) : memoryScope;
-}
-
-function getStateTone(state?: ProductOperationalState) {
-  if (state === "enabled") return "success";
-  if (state === "degraded" || state === "maintenance" || state === "readOnly") return "warn";
-  if (state === "disabled") return "default";
-  return "default";
-}
-
-function getChannelTone(channel?: AgentChannelStatus | null) {
-  if (channel?.connected || channel?.configured) return "success";
-  if (channel?.available || channel?.live) return "warn";
-  return "default";
-}
-
-function getChannelStatusLabel(channel?: AgentChannelStatus | null) {
-  if (!channel) return "Checking";
-  if (channel.connected) return "Connected";
-  if (channel.configured) return "Configured";
-  if (channel.available || channel.live) return "Ready";
-  return "Not configured";
-}
-
-function getChannelControlTone(control?: AgentChannelControlStatus | null) {
-  if (control?.user_connected || control?.status === "connected") return "success";
-  if (control?.status === "partial") return "warn";
-  if (control?.status === "operator_managed") return "accent";
-  if (control?.build_enabled === false || control?.status === "disabled_in_build") return "danger";
-  return "default";
-}
-
-function getProviderTone(profile?: AgentProviderProfile | null) {
-  if (profile?.policy_state === "blocked") return "danger";
-  if (profile?.policy_state === "disabled") return "warn";
-  if (profile?.secret_ref?.present) return "success";
-  return "default";
+  const lifecycleLabel = getProductLifecycleLabel(t, lifecycle);
+  return t("settingsModal.usage.lifecycleLabel", {
+    defaultValue: `Lifecycle: ${lifecycleLabel}`,
+    lifecycle: lifecycleLabel,
+  });
 }
 
 function getDeviceTone(device?: AgentExtensionDevice | null) {
@@ -613,6 +411,23 @@ function normalizeWeeklyWindow(
   return { limit, remaining, recurringRemaining, resetAt, topupUnits, used };
 }
 
+function getMeterPercent(used?: number | null, limit?: number | null) {
+  if (
+    typeof used !== "number" ||
+    typeof limit !== "number" ||
+    !Number.isFinite(used) ||
+    !Number.isFinite(limit) ||
+    limit <= 0
+  ) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, (used / limit) * 100));
+}
+
+function getMeterBarStyle(used?: number | null, limit?: number | null) {
+  return { "--zaki-meter-percent": `${getMeterPercent(used, limit)}%` } as CSSProperties;
+}
+
 export function SettingsPage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -627,11 +442,12 @@ export function SettingsPage() {
   const setThemePreference = useUIStore((state) => state.setThemePreference);
   const [displayName, setDisplayName] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
+  const [signOutSaving, setSignOutSaving] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [googleOAuthEnabled, setGoogleOAuthEnabled] = useState<boolean | null>(null);
   const [agentSecretsKeys, setAgentSecretsKeys] = useState<string[]>([]);
   const [agentSecretsLoading, setAgentSecretsLoading] = useState(true);
+  const [agentSecretsAvailable, setAgentSecretsAvailable] = useState(true);
   const [agentSecretsAction, setAgentSecretsAction] = useState<string | null>(null);
   const [newSecretKey, setNewSecretKey] = useState("");
   const [newSecretValue, setNewSecretValue] = useState("");
@@ -645,6 +461,7 @@ export function SettingsPage() {
     Record<string, Record<string, string>>
   >(() => buildEmptyChannelActivationDrafts());
   const [channelAction, setChannelAction] = useState<string | null>(null);
+  const [expandedChannelId, setExpandedChannelId] = useState<SettingsChannelId | null>(null);
   const [channelBindingDrafts, setChannelBindingDrafts] = useState<
     Record<AgentChannelId, ChannelBindingDraft>
   >({
@@ -661,22 +478,6 @@ export function SettingsPage() {
   const [extensionDevicesAvailable, setExtensionDevicesAvailable] = useState(true);
   const [extensionDeviceLabel, setExtensionDeviceLabel] = useState("");
   const [extensionDeviceAction, setExtensionDeviceAction] = useState<string | null>(null);
-  const [providerProfiles, setProviderProfiles] = useState<AgentProviderProfile[]>([]);
-  const [providersLoading, setProvidersLoading] = useState(true);
-  const [providersAvailable, setProvidersAvailable] = useState(true);
-  const [providerAction, setProviderAction] = useState<string | null>(null);
-  const [providerDraft, setProviderDraft] =
-    useState<AgentProviderProfilePayload>(DEFAULT_PROVIDER_DRAFT);
-  const [providerModelText, setProviderModelText] = useState("");
-  const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
-  const [providerEditDraft, setProviderEditDraft] =
-    useState<AgentProviderProfilePayload>(DEFAULT_PROVIDER_DRAFT);
-  const [providerEditModelText, setProviderEditModelText] = useState("");
-  const [integrations, setIntegrations] = useState<
-    NonNullable<AgentIntegrationsResponse["integrations"]>
-  >([]);
-  const [integrationsLoading, setIntegrationsLoading] = useState(true);
-  const [integrationsAvailable, setIntegrationsAvailable] = useState(true);
   const [memoryGovernance, setMemoryGovernance] =
     useState<AgentMemoryGovernanceResponse | null>(null);
   const [memoryGovernanceLoading, setMemoryGovernanceLoading] = useState(true);
@@ -706,12 +507,10 @@ export function SettingsPage() {
   const { data: billingConfigResult } = useBillingConfig();
   const { data: meterStatusResult, isLoading: meterStatusLoading } = useMeterStatus();
   const { data: platformUsageResult, isLoading: platformUsageLoading } = usePlatformUsageSummary();
-  const { data: productRegistryResult, isLoading: productRegistryLoading } = useProductRegistry();
-  const { data: spaces = [], isLoading: spacesLoading, isError: spacesError } = useSpaces(Boolean(user?.id));
+  const { data: productRegistryResult } = useProductRegistry();
   const checkout = useCheckout();
   const billingPortal = useBillingPortal();
   const syncBilling = useSyncBilling();
-  const topupCheckout = useTopupCheckout();
   const cancelSubscription = useCancelSubscription();
   const deleteAccountMutation = useDeleteAccount();
 
@@ -721,7 +520,6 @@ export function SettingsPage() {
   const meterStatus = meterStatusResult?.data ?? null;
   const planTier = entitlements?.plan?.tier ?? "free";
   const cancelAtPeriodEnd = Boolean(entitlements?.plan?.cancelAtPeriodEnd);
-  const accessCampaign = entitlements?.access?.campaign ?? null;
   const accessExpiresAt = entitlements?.access?.expiresAt ?? null;
   const effectiveEntitlement = resolveEffectiveEntitlement(entitlements);
   const isPremium = effectiveEntitlement.premium;
@@ -734,15 +532,11 @@ export function SettingsPage() {
   const billingCheckoutEnabled = billingConfigLoaded ? Boolean(billingConfig?.checkoutEnabled) : true;
   const billingCancelEnabled = billingConfigLoaded ? Boolean(billingConfig?.cancelEnabled) : true;
   const billingSyncEnabled = billingConfigLoaded ? Boolean(billingConfig?.stripeEnabled) : true;
-  const topupPacks = billingConfig?.topupPacks?.filter((pack) => pack.available) ?? [];
-  const topupCheckoutEnabled = billingConfigLoaded
-    ? Boolean(billingConfig?.topupCheckoutEnabled && topupPacks.length > 0)
-    : false;
   const billingUnavailableMessage =
     billingConfigLoaded &&
     (!billingCheckoutEnabled || (hasSubscription && (!billingPortalEnabled || !billingCancelEnabled)))
       ? t("settingsModal.plan.billingUnavailable", {
-          defaultValue: "Billing actions are not configured in this environment.",
+          defaultValue: "Payment actions are unavailable in this environment.",
         })
       : null;
   const languageValue = i18n.language?.toLowerCase().startsWith("ar") ? "ar" : "en";
@@ -765,6 +559,11 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (!location.hash) return;
+    const compatibleHash = SETTINGS_HASH_COMPAT_MAP[location.hash];
+    if (compatibleHash) {
+      navigate(`${location.pathname}${location.search}${compatibleHash}`, { replace: true });
+      return;
+    }
     const targetId = decodeURIComponent(location.hash.slice(1));
     if (!targetId) return;
     const timer = window.setTimeout(() => {
@@ -773,11 +572,19 @@ export function SettingsPage() {
       if (!target.hasAttribute("tabindex")) {
         target.setAttribute("tabindex", "-1");
       }
-      target.scrollIntoView({ block: "start", behavior: "smooth" });
+      const scroller = document.querySelector<HTMLElement>(".zaki-settings-v2");
+      if (scroller && typeof scroller.scrollTo === "function") {
+        const scrollerRect = scroller.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        const targetTop = targetRect.top - scrollerRect.top + scroller.scrollTop - 24;
+        scroller.scrollTo({ top: Math.max(0, targetTop), behavior: "auto" });
+      } else {
+        target.scrollIntoView({ block: "start", behavior: "auto" });
+      }
       target.focus({ preventScroll: true });
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [location.hash]);
+  }, [location.hash, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     if (isSettingsNavHash(location.hash)) {
@@ -852,28 +659,15 @@ export function SettingsPage() {
     );
   }, [t, user?.fullName, user?.username]);
 
-  useEffect(() => {
-    let active = true;
-    setGoogleOAuthEnabled(null);
-    fetchGoogleOAuthStatus()
-      .then(({ response, data }) => {
-        if (active) setGoogleOAuthEnabled(Boolean(response.ok && data?.enabled));
-      })
-      .catch(() => {
-        if (active) setGoogleOAuthEnabled(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
   const loadAgentSecrets = async () => {
     setAgentSecretsLoading(true);
     try {
       const { response, data } = await listAgentSecrets();
       if (!response.ok) throw new Error("agent_secrets_unavailable");
+      setAgentSecretsAvailable(true);
       setAgentSecretsKeys(Array.isArray(data?.keys) ? data.keys : []);
     } catch {
+      setAgentSecretsAvailable(false);
       setAgentSecretsKeys([]);
     } finally {
       setAgentSecretsLoading(false);
@@ -886,10 +680,13 @@ export function SettingsPage() {
     listAgentSecrets()
       .then(({ response, data }) => {
         if (!active) return;
+        setAgentSecretsAvailable(response.ok);
         setAgentSecretsKeys(response.ok && Array.isArray(data?.keys) ? data.keys : []);
       })
       .catch(() => {
-        if (active) setAgentSecretsKeys([]);
+        if (!active) return;
+        setAgentSecretsAvailable(false);
+        setAgentSecretsKeys([]);
       })
       .finally(() => {
         if (active) setAgentSecretsLoading(false);
@@ -1023,65 +820,6 @@ export function SettingsPage() {
     };
   }, []);
 
-  const loadProviderProfiles = async () => {
-    setProvidersLoading(true);
-    try {
-      const { response, data } = await fetchAgentProviderProfiles();
-      if (!response.ok) throw new Error("providers_unavailable");
-      setProvidersAvailable(true);
-      setProviderProfiles(Array.isArray(data?.providers) ? data.providers : []);
-    } catch {
-      setProvidersAvailable(false);
-      setProviderProfiles([]);
-    } finally {
-      setProvidersLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    let active = true;
-    setProvidersLoading(true);
-    fetchAgentProviderProfiles()
-      .then(({ response, data }) => {
-        if (!active) return;
-        setProvidersAvailable(response.ok);
-        setProviderProfiles(response.ok && Array.isArray(data?.providers) ? data.providers : []);
-      })
-      .catch(() => {
-        if (!active) return;
-        setProvidersAvailable(false);
-        setProviderProfiles([]);
-      })
-      .finally(() => {
-        if (active) setProvidersLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    setIntegrationsLoading(true);
-    fetchAgentIntegrations()
-      .then(({ response, data }) => {
-        if (!active) return;
-        setIntegrationsAvailable(response.ok);
-        setIntegrations(response.ok && Array.isArray(data?.integrations) ? data.integrations : []);
-      })
-      .catch(() => {
-        if (!active) return;
-        setIntegrationsAvailable(false);
-        setIntegrations([]);
-      })
-      .finally(() => {
-        if (active) setIntegrationsLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
   const loadMemoryGovernance = async () => {
     setMemoryGovernanceLoading(true);
     try {
@@ -1208,13 +946,40 @@ export function SettingsPage() {
     }
   };
 
-  const currentPlanLabel = activeViaAccessCode
-    ? t("sidebar.profile.planBadge.codeActive", { defaultValue: "Access code" })
-    : t(`sidebar.profile.planBadge.${planTier}`, { defaultValue: planTier });
+  const currentPlatformPlanId = normalizeSettingsPlanId(
+    platformUsage?.plan?.id ||
+      entitlements?.platform?.plan?.id ||
+      effectiveEntitlement.tier ||
+      planTier ||
+      meterStatus?.plan?.tier
+  );
+  const currentPlanLabel = getSettingsPlanLabel(t, currentPlatformPlanId);
   const effectiveStatusLabel = t(`settingsModal.plan.statusValues.${effectiveStatus}`, {
     defaultValue: effectiveStatus,
   });
-  const platformPlanLabel = meterStatus?.plan?.label || platformUsage?.plan?.label || currentPlanLabel;
+  const platformPlanLabel = currentPlanLabel;
+  const availableUpgradePlans = SETTINGS_PAID_PLAN_IDS.filter(
+    (plan) => SETTINGS_PLAN_RANK[plan] > SETTINGS_PLAN_RANK[currentPlatformPlanId]
+  );
+  const accessCodeStatusLabel = activeViaAccessCode
+    ? hasSubscription
+      ? t("settingsModal.plan.accessCodeSupplement", {
+          defaultValue: "Access code is also active",
+        })
+      : t("settingsModal.plan.activeViaAccessCode", {
+          defaultValue: "Active via access code",
+        })
+    : null;
+  const billingSourceLabel =
+    activeViaAccessCode && hasSubscription
+      ? t("settingsModal.plan.sources.subscriptionWithAccessCode", {
+          defaultValue: "Subscription + access code",
+        })
+      : activeViaAccessCode
+        ? t("settingsModal.plan.sources.accessCode", { defaultValue: "Access code" })
+        : hasSubscription
+          ? t("settingsModal.plan.sources.subscription", { defaultValue: "Subscription" })
+          : t("settingsModal.plan.sources.free", { defaultValue: "Free account" });
   const allowance = platformUsage?.allowance;
   const weeklyWindow = normalizeWeeklyWindow(meterStatus?.weekly ?? null, allowance?.weekly ?? null);
   const weeklyAllowanceLabel =
@@ -1254,8 +1019,6 @@ export function SettingsPage() {
     productRegistry?.products?.filter(
       (product) => product.visibleInSettings !== false && product.state !== "hidden"
     ) ?? [];
-  const developerAccessRows =
-    productRegistry?.products?.filter((product) => product.productKind === "client") ?? [];
   const meteredProducts = productAccessRows.filter(
     (product) => product.productKind !== "control_plane" && product.productKind !== "client"
   );
@@ -1270,54 +1033,10 @@ export function SettingsPage() {
     if (!product) return null;
     return product;
   }).filter(Boolean);
-  const memoryScopeRows = useMemo(() => {
-    const rows = new Map<string, { scope: string; products: string[] }>();
-    for (const product of productAccessRows) {
-      const scope = String(product.memoryScope || "").trim();
-      if (!scope) continue;
-      const row = rows.get(scope) || { scope, products: [] };
-      row.products.push(product.label || product.productId || scope);
-      rows.set(scope, row);
-    }
-    return [...rows.values()].sort((a, b) => {
-      const aIndex = MEMORY_SCOPE_ORDER.indexOf(a.scope as (typeof MEMORY_SCOPE_ORDER)[number]);
-      const bIndex = MEMORY_SCOPE_ORDER.indexOf(b.scope as (typeof MEMORY_SCOPE_ORDER)[number]);
-      if (aIndex !== -1 || bIndex !== -1) {
-        const normalizedAIndex = aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex;
-        const normalizedBIndex = bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex;
-        return normalizedAIndex - normalizedBIndex;
-      }
-      return a.scope.localeCompare(b.scope);
-    });
-  }, [productAccessRows]);
-  const configurableSpaces = useMemo(() => spaces.filter((space) => !space.fixed), [spaces]);
-  const spacesDocumentCount = configurableSpaces.reduce(
-    (total, space) => total + countSpaceDocuments(space),
-    0
-  );
-  const spacesEmbeddedDocumentCount = configurableSpaces.reduce(
-    (total, space) => total + countEmbeddedSpaceDocuments(space),
-    0
-  );
-  const spacesThreadCount = configurableSpaces.reduce(
-    (total, space) => total + (space.threads?.length ?? 0),
-    0
-  );
-  const spacesWithInstructionsCount = configurableSpaces.filter((space) =>
-    Boolean(space.instructions?.trim())
-  ).length;
-  const effectiveAgentModelId = agentSettingsDraft.selected_model || DEFAULT_AGENT_MODEL_ID;
-  const effectiveAgentModel = resolveAgentModel(effectiveAgentModelId);
-  const selectedModelIsOperatorDefault = !agentSettingsDraft.selected_model;
   const getBooleanStatusLabel = (value: boolean) =>
     value
       ? t("settingsModal.status.on", { defaultValue: "On" })
       : t("settingsModal.status.off", { defaultValue: "Off" });
-  const capturePolicyLabel = capturePolicyAvailable
-    ? t(`settingsModal.memoryData.capturePolicy.options.${capturePolicy}`, {
-        defaultValue: capturePolicy,
-      })
-    : t("settingsModal.usage.unavailable", { defaultValue: "Unavailable" });
   const dreamStatusLabel = getBooleanStatusLabel(agentSettingsDraft.dream_enabled);
   const queryExpansionStatusLabel = getBooleanStatusLabel(
     agentSettingsDraft.query_expansion_enabled
@@ -1359,7 +1078,7 @@ export function SettingsPage() {
   };
 
   const handleConnectChannelControl = async (channel: AgentChannelControlId) => {
-    if (!channelControlsAvailable) return;
+    if (!channelControlsAvailable && channel !== "telegram") return;
     const payload = compactStringPayload(channelActivationDrafts[channel] || {});
     if (Object.keys(payload).length === 0) {
       toast.error(
@@ -1371,7 +1090,10 @@ export function SettingsPage() {
     }
     setChannelControlAction(`${channel}:connect`);
     try {
-      const { response, data } = await connectAgentChannelControl(channel, payload);
+      const { response, data } =
+        channel === "telegram"
+          ? await connectBotTelegram(payload as BotTelegramConnectPayload)
+          : await connectAgentChannelControl(channel, payload);
       if (!response.ok || data?.error) {
         throw new Error(data?.message || data?.error || "channel_connect_failed");
       }
@@ -1400,6 +1122,7 @@ export function SettingsPage() {
   };
 
   const handleTestChannelControl = async (channel: AgentChannelControlId) => {
+    if (channel === "telegram") return;
     if (!channelControlsAvailable) return;
     setChannelControlAction(`${channel}:test`);
     try {
@@ -1431,10 +1154,13 @@ export function SettingsPage() {
   };
 
   const handleDisconnectChannelControl = async (channel: AgentChannelControlId) => {
-    if (!channelControlsAvailable) return;
+    if (!channelControlsAvailable && channel !== "telegram") return;
     setChannelControlAction(`${channel}:disconnect`);
     try {
-      const { response, data } = await disconnectAgentChannelControl(channel);
+      const { response, data } =
+        channel === "telegram"
+          ? await disconnectBotTelegram()
+          : await disconnectAgentChannelControl(channel);
       if (!response.ok || data?.error) {
         throw new Error(data?.message || data?.error || "channel_disconnect_failed");
       }
@@ -1527,172 +1253,6 @@ export function SettingsPage() {
     }
   };
 
-  const handleCreateProviderProfile = async () => {
-    if (!providersAvailable) return;
-    const modelAllowlist = normalizeProviderModels(providerModelText);
-    const payload: AgentProviderProfilePayload = {
-      ...providerDraft,
-      label: String(providerDraft.label || "").trim(),
-      base_url: String(providerDraft.base_url || "").trim(),
-      api_key: String(providerDraft.api_key || "").trim(),
-      model_allowlist: modelAllowlist,
-      default_model: String(providerDraft.default_model || "").trim() || modelAllowlist[0] || null,
-    };
-    if (!payload.base_url || !payload.api_key) {
-      toast.error(
-        t("settingsModal.providers.errors.required", {
-          defaultValue: "Base URL and API key are required.",
-        })
-      );
-      return;
-    }
-    setProviderAction("create");
-    try {
-      const { response, data } = await createAgentProviderProfile(payload);
-      if (!response.ok || data?.error) {
-        throw new Error(data?.message || data?.error || "provider_create_failed");
-      }
-      setProviderDraft(DEFAULT_PROVIDER_DRAFT);
-      setProviderModelText("");
-      await loadProviderProfiles();
-      toast.success(
-        t("settingsModal.providers.success.created", {
-          defaultValue: "Provider profile saved.",
-        })
-      );
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : t("settingsModal.providers.errors.create", {
-              defaultValue: "Unable to save provider profile.",
-            })
-      );
-    } finally {
-      setProviderAction(null);
-    }
-  };
-
-  const beginEditProviderProfile = (profile: AgentProviderProfile) => {
-    setEditingProviderId(profile.id);
-    setProviderEditDraft({
-      label: profile.label || "",
-      provider_kind: profile.provider_kind || "openai_compatible",
-      base_url: profile.base_url || "",
-      auth_style: (profile.auth_style as AgentProviderProfilePayload["auth_style"]) || "bearer",
-      api_key: "",
-      model_allowlist: profile.model_allowlist || [],
-      default_model: profile.default_model || null,
-      policy_state:
-        profile.policy_state === "disabled" || profile.policy_state === "active"
-          ? profile.policy_state
-          : "active",
-    });
-    setProviderEditModelText((profile.model_allowlist || []).join(", "));
-  };
-
-  const handleUpdateProviderProfile = async (profileId: string) => {
-    if (!providersAvailable) return;
-    const modelAllowlist = normalizeProviderModels(providerEditModelText);
-    const payload: AgentProviderProfilePayload = {
-      ...providerEditDraft,
-      label: String(providerEditDraft.label || "").trim(),
-      base_url: String(providerEditDraft.base_url || "").trim(),
-      api_key: String(providerEditDraft.api_key || "").trim() || undefined,
-      model_allowlist: modelAllowlist,
-      default_model:
-        String(providerEditDraft.default_model || "").trim() || modelAllowlist[0] || null,
-    };
-    if (!payload.base_url) {
-      toast.error(
-        t("settingsModal.providers.errors.requiredBaseUrl", {
-          defaultValue: "Base URL is required.",
-        })
-      );
-      return;
-    }
-    setProviderAction(`${profileId}:update`);
-    try {
-      const { response, data } = await updateAgentProviderProfile(profileId, payload);
-      if (!response.ok || data?.error) {
-        throw new Error(data?.message || data?.error || "provider_update_failed");
-      }
-      setEditingProviderId(null);
-      setProviderEditDraft(DEFAULT_PROVIDER_DRAFT);
-      setProviderEditModelText("");
-      await loadProviderProfiles();
-      toast.success(
-        t("settingsModal.providers.success.updated", {
-          defaultValue: "Provider profile updated.",
-        })
-      );
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : t("settingsModal.providers.errors.update", {
-              defaultValue: "Unable to update provider profile.",
-            })
-      );
-    } finally {
-      setProviderAction(null);
-    }
-  };
-
-  const handleTestProviderProfile = async (profileId: string) => {
-    if (!providersAvailable) return;
-    setProviderAction(`${profileId}:test`);
-    try {
-      const { response, data } = await testAgentProviderProfile(profileId);
-      if (!response.ok || data?.error) {
-        throw new Error(data?.message || data?.error || "provider_test_failed");
-      }
-      await loadProviderProfiles();
-      toast.success(
-        t("settingsModal.providers.success.tested", {
-          defaultValue: "Provider profile checked.",
-        })
-      );
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : t("settingsModal.providers.errors.test", {
-              defaultValue: "Unable to test provider profile.",
-            })
-      );
-    } finally {
-      setProviderAction(null);
-    }
-  };
-
-  const handleDeleteProviderProfile = async (profileId: string) => {
-    if (!providersAvailable) return;
-    setProviderAction(`${profileId}:delete`);
-    try {
-      const { response, data } = await deleteAgentProviderProfile(profileId);
-      if (!response.ok || data?.error) {
-        throw new Error(data?.message || data?.error || "provider_delete_failed");
-      }
-      await loadProviderProfiles();
-      toast.success(
-        t("settingsModal.providers.success.deleted", {
-          defaultValue: "Provider profile deleted.",
-        })
-      );
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : t("settingsModal.providers.errors.delete", {
-              defaultValue: "Unable to delete provider profile.",
-            })
-      );
-    } finally {
-      setProviderAction(null);
-    }
-  };
-
   const handlePairExtensionDevice = async () => {
     if (!extensionDevicesAvailable) return;
     setExtensionDeviceAction("pair");
@@ -1751,64 +1311,56 @@ export function SettingsPage() {
   };
 
   const navItems: V2SettingsNavItem[] = [
-    { href: "#settings-account", label: t("settingsModal.nav.account"), icon: UserRound },
+    {
+      href: "#settings-account",
+      label: t("settingsModal.nav.account"),
+      icon: UserRound,
+      group: t("settingsModal.navGroups.personal", { defaultValue: "Personal" }),
+    },
     {
       href: "#settings-billing",
       label: t("settingsModal.nav.planUsage", { defaultValue: "Plan & Usage" }),
       icon: CreditCard,
-    },
-    {
-      href: "#settings-products",
-      label: t("settingsModal.nav.products"),
-      icon: Boxes,
-      meta: productAccessRows.length || undefined,
+      group: t("settingsModal.navGroups.personal", { defaultValue: "Personal" }),
     },
     {
       href: "#settings-agent",
       label: t("settingsModal.nav.agent", { defaultValue: "Agent" }),
       icon: Bot,
-    },
-    {
-      href: "#settings-spaces",
-      label: t("settingsModal.nav.spaces", { defaultValue: "Spaces" }),
-      icon: MessageSquare,
-      meta: configurableSpaces.length || undefined,
-    },
-    {
-      href: "#settings-brain",
-      label: t("settingsModal.nav.brain", { defaultValue: "Brain" }),
-      icon: Brain,
+      group: t("settingsModal.navGroups.agent", { defaultValue: "Agent" }),
     },
     {
       href: "#settings-channels",
       label: t("settingsModal.nav.channels", { defaultValue: "Channels" }),
       icon: Cable,
+      group: t("settingsModal.navGroups.agent", { defaultValue: "Agent" }),
     },
     {
       href: "#settings-secrets",
-      label: t("settingsModal.nav.secrets", { defaultValue: "Secrets" }),
+      label: t("settingsModal.nav.secrets", { defaultValue: "Advanced credentials" }),
       icon: LockKeyhole,
       meta: agentSecretsKeys.length || undefined,
-    },
-    {
-      href: "#settings-providers",
-      label: t("settingsModal.nav.providers", { defaultValue: "Providers & models" }),
-      icon: ServerCog,
+      group: t("settingsModal.navGroups.agent", { defaultValue: "Agent" }),
     },
     {
       href: "#settings-devices",
       label: t("settingsModal.nav.devices", { defaultValue: "Extension devices" }),
       icon: MonitorSmartphone,
+      group: t("settingsModal.navGroups.agent", { defaultValue: "Agent" }),
     },
-    { href: "#settings-memory-data", label: t("settingsModal.nav.memoryData"), icon: Database },
     {
-      href: "#settings-developer-access",
-      label: t("settingsModal.nav.developerAccess"),
-      icon: KeyRound,
-      meta: developerAccessRows.length || undefined,
+      href: "#settings-memory-data",
+      label: t("settingsModal.nav.memoryData"),
+      icon: Database,
+      group: t("settingsModal.navGroups.data", { defaultValue: "Data" }),
     },
-    { href: "#settings-connections", label: t("settingsModal.nav.connections"), icon: Gauge },
-    { href: "#settings-privacy", label: t("settingsModal.nav.privacy"), icon: ShieldCheck, tone: "danger" },
+    {
+      href: "#settings-privacy",
+      label: t("settingsModal.nav.privacy"),
+      icon: ShieldCheck,
+      tone: "danger",
+      group: t("settingsModal.navGroups.data", { defaultValue: "Data" }),
+    },
   ];
   const saveDisplayName = async () => {
     if (!user?.username) return;
@@ -1829,6 +1381,32 @@ export function SettingsPage() {
       toast.error(t("sidebar.profile.saveError", { defaultValue: "Unable to save profile." }));
     } finally {
       setProfileSaving(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    setSignOutSaving(true);
+    try {
+      const { response, data } = await requestLogout();
+      if (!response.ok || data?.error) {
+        throw new Error(data?.error || "logout_failed");
+      }
+      logout();
+      navigate("/?auth=login");
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? t("settingsModal.account.signOutError", {
+              defaultValue:
+                "Unable to sign out securely. Check your connection and try again.",
+            })
+          : t("settingsModal.account.signOutError", {
+              defaultValue:
+                "Unable to sign out securely. Check your connection and try again.",
+            })
+      );
+    } finally {
+      setSignOutSaving(false);
     }
   };
 
@@ -1918,22 +1496,8 @@ export function SettingsPage() {
     }
   };
 
-  const openSpaceFromSettings = (spaceId: string) => {
-    navigate(`/spaces/${encodeURIComponent(spaceId)}`);
-  };
-
-  const manageSpaceFromSettings = (spaceId: string) => {
-    navigate(`/spaces/${encodeURIComponent(spaceId)}`);
-    window.setTimeout(() => {
-      window.dispatchEvent(
-        new CustomEvent("zaki:open-space-settings", {
-          detail: { id: spaceId },
-        })
-      );
-    }, 50);
-  };
-
   const handleSaveSecret = async () => {
+    if (!agentSecretsAvailable) return;
     const key = newSecretKey.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
     if (!key || !newSecretValue) {
       toast.error(
@@ -1973,6 +1537,7 @@ export function SettingsPage() {
   };
 
   const handleDeleteSecret = async (key: string) => {
+    if (!agentSecretsAvailable) return;
     setAgentSecretsAction(key);
     try {
       const { response, data } = await deleteAgentSecret(key);
@@ -2145,7 +1710,7 @@ export function SettingsPage() {
     }
   };
 
-  const handleUpgradePlan = async (plan: "agent" | "complete") => {
+  const handleUpgradePlan = async (plan: SettingsCheckoutPlanId) => {
     try {
       await trackProductEvent({
         event: "upgrade_cta_clicked",
@@ -2217,23 +1782,6 @@ export function SettingsPage() {
     }
   };
 
-  const handleBuyTopup = async (packId: string) => {
-    try {
-      await topupCheckout.mutateAsync({
-        packId,
-        context: { source: "settings" },
-      });
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : t("settingsModal.plan.errors.topup", {
-              defaultValue: "Unable to start top-up checkout.",
-            })
-      );
-    }
-  };
-
   return (
     <>
       <div className="zaki-settings-v2 zaki-scrollbar-fade">
@@ -2243,23 +1791,12 @@ export function SettingsPage() {
             { id: "plan", label: t("settingsModal.usage.plan"), value: platformPlanLabel },
             { id: "weekly", label: t("settingsModal.usage.weeklyAllowance"), value: weeklyAllowanceLabel },
             { id: "burst", label: t("settingsModal.usage.burstWindow"), value: burstWindowLabel },
-            {
-              id: "oauth",
-              label: t("settingsModal.nav.connections"),
-              value:
-                googleOAuthEnabled === null
-                  ? t("settingsModal.connections.checking")
-                  : googleOAuthEnabled
-                    ? t("settingsModal.connections.available")
-                    : t("settingsModal.connections.notConfigured"),
-              tone: googleOAuthEnabled ? "success" : "default",
-            },
           ]}
         />
         <div className="zaki-settings-v2__grid">
           <V2SettingsNav
-            eyebrow={t("settingsModal.header.title")}
-            title={t("settingsModal.header.subtitle")}
+            eyebrow={t("settingsModal.header.navEyebrow", { defaultValue: "ZAKI" })}
+            title={t("settingsModal.header.title", { defaultValue: "Settings" })}
             ariaLabel={t("settingsModal.nav.label")}
             items={navItems}
             activeHref={activeSettingsHref}
@@ -2268,23 +1805,36 @@ export function SettingsPage() {
           <main className="zaki-settings-v2__main" aria-labelledby="settings-page-title">
             <header className="zaki-settings-v2__hero">
               <div>
-                <p>{t("settingsModal.header.title")}</p>
-                <h1 id="settings-page-title">{t("settingsModal.header.subtitle")}</h1>
+                <p>{t("settingsModal.header.heroEyebrow", { defaultValue: "Control plane" })}</p>
+                <h1 id="settings-page-title">{t("settingsModal.header.title", { defaultValue: "Settings" })}</h1>
               </div>
-              <V2Button onClick={saveDisplayName} disabled={profileSaving} variant="accent">
-                {profileSaving ? t("app.legal.saving") : t("settingsModal.footer.saveChanges")}
-              </V2Button>
             </header>
 
             <V2SettingsBlock id="settings-account" data-testid="settings-account" title={t("settingsModal.sections.account")}>
-              <V2SettingsRow name={t("settingsModal.profile.displayName")}>
-                <input
-                  className="v2-input"
-                  value={displayName}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                />
+              <V2SettingsRow
+                name={t("settingsModal.profile.displayName")}
+                description={t("settingsModal.profile.displayNameHelper", {
+                  defaultValue: "The name shown in ZAKI surfaces and account menus.",
+                })}
+              >
+                <div className="zaki-settings-v2__control-stack">
+                  <input
+                    className="v2-input"
+                    aria-label={t("settingsModal.profile.displayName")}
+                    value={displayName}
+                    onChange={(event) => setDisplayName(event.target.value)}
+                  />
+                  <V2Button onClick={saveDisplayName} disabled={profileSaving} size="sm">
+                    {profileSaving ? t("app.legal.saving") : t("settingsModal.footer.saveChanges")}
+                  </V2Button>
+                </div>
               </V2SettingsRow>
-              <V2SettingsRow name={t("settingsModal.profile.email")}>
+              <V2SettingsRow
+                name={t("settingsModal.profile.email")}
+                description={t("settingsModal.profile.emailHelper", {
+                  defaultValue: "Read-only sign-in identity for this account.",
+                })}
+              >
                 <input className="v2-input" value={user?.username || ""} readOnly />
               </V2SettingsRow>
               <V2SettingsRow name={t("settingsModal.preferences.theme")}>
@@ -2310,6 +1860,18 @@ export function SettingsPage() {
                   <option value="ar">{t("language.arabic")}</option>
                 </select>
               </V2SettingsRow>
+              <V2SettingsRow
+                name={t("settingsModal.account.signOut", { defaultValue: "Sign out" })}
+                description={t("settingsModal.account.signOutHelper", {
+                  defaultValue: "End this browser session and return to sign in.",
+                })}
+              >
+                <V2Button size="sm" variant="danger" disabled={signOutSaving} onClick={() => void handleSignOut()}>
+                  {signOutSaving
+                    ? t("settingsModal.account.signingOut", { defaultValue: "Signing out" })
+                    : t("settingsModal.account.signOut", { defaultValue: "Sign out" })}
+                </V2Button>
+              </V2SettingsRow>
             </V2SettingsBlock>
 
             <V2SettingsBlock
@@ -2318,15 +1880,14 @@ export function SettingsPage() {
               title={t("settingsModal.sections.billing", { defaultValue: "Plan & Usage" })}
               meta={platformUsageLoading || meterStatusLoading ? t("settingsModal.usage.loading") : null}
             >
-              <div className="zaki-settings-v2__plan-cockpit">
-                <div className="zaki-settings-v2__plan-card">
+              <div className="zaki-settings-v2__billing-cockpit">
+                <div className="zaki-settings-v2__billing-hero">
                   <div>
                     <span>{t("settingsModal.plan.currentPlan")}</span>
-                    <strong>{currentPlanLabel}</strong>
-                    {activeViaAccessCode ? (
+                    <strong>{platformPlanLabel}</strong>
+                    {accessCodeStatusLabel ? (
                       <p>
-                        {t("settingsModal.plan.activeViaAccessCode", { defaultValue: "Active via access code" })}
-                        {accessCampaign ? ` (${accessCampaign})` : ""}
+                        {accessCodeStatusLabel}
                         {accessExpiryLabel
                           ? ` ${t("settingsModal.plan.until", { defaultValue: "until" })} ${accessExpiryLabel}`
                           : ""}
@@ -2335,233 +1896,279 @@ export function SettingsPage() {
                   </div>
                   <V2Badge tone={isPremium ? "success" : "default"}>{effectiveStatusLabel}</V2Badge>
                 </div>
-                <div className="zaki-settings-v2__plan-metrics">
-                  <div>
-                    <span>{t("settingsModal.usage.weeklyAllowance")}</span>
-                    <strong>{weeklyAllowanceLabel}</strong>
-                  </div>
-                  <div>
-                    <span>{t("settingsModal.usage.burstWindow")}</span>
-                    <strong>{burstWindowLabel}</strong>
-                  </div>
+                <div className="zaki-settings-v2__billing-meter-grid">
+                  <section
+                    className="zaki-settings-v2__billing-meter zaki-settings-v2__billing-meter--primary"
+                    data-testid="settings-weekly-meter"
+                  >
+                    <header>
+                      <span>{t("settingsModal.usage.weeklyAllowance")}</span>
+                      <strong>{weeklyAllowanceLabel}</strong>
+                    </header>
+                    <div
+                      className="zaki-settings-v2__meter-track"
+                      style={getMeterBarStyle(weeklyWindow.used, weeklyWindow.limit)}
+                      aria-hidden="true"
+                    >
+                      <span />
+                    </div>
+                    <dl>
+                      <div>
+                        <dt>{t("settingsModal.usage.used", { defaultValue: "Used" })}</dt>
+                        <dd>{formatUsageUnits(weeklyWindow.used)}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("settingsModal.usage.remaining", { defaultValue: "Remaining" })}</dt>
+                        <dd>{formatUsageUnits(weeklyWindow.remaining)}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("settingsModal.usage.reset", { defaultValue: "Reset" })}</dt>
+                        <dd>
+                          {formatUsageReset(weeklyWindow.resetAt) ||
+                            t("settingsModal.usage.resetPending")}
+                        </dd>
+                      </div>
+                    </dl>
+                  </section>
+                  <section
+                    className="zaki-settings-v2__billing-meter"
+                    data-testid="settings-burst-meter"
+                  >
+                    <header>
+                      <span>{t("settingsModal.usage.burstWindow")}</span>
+                      <strong>{burstWindowLabel}</strong>
+                    </header>
+                    <div
+                      className="zaki-settings-v2__meter-track"
+                      style={getMeterBarStyle(meterStatus?.rolling?.used, meterStatus?.rolling?.limit)}
+                      aria-hidden="true"
+                    >
+                      <span />
+                    </div>
+                    <dl>
+                      <div>
+                        <dt>{t("settingsModal.usage.window", { defaultValue: "Window" })}</dt>
+                        <dd>
+                          {typeof meterStatus?.rolling?.windowHours === "number"
+                            ? t("settingsModal.usage.windowHours", {
+                                hours: meterStatus.rolling.windowHours,
+                                defaultValue: `${meterStatus.rolling.windowHours}h`,
+                              })
+                            : "—"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{t("settingsModal.usage.used", { defaultValue: "Used" })}</dt>
+                        <dd>{formatUsageUnits(meterStatus?.rolling?.used)}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("settingsModal.usage.remaining", { defaultValue: "Remaining" })}</dt>
+                        <dd>{formatUsageUnits(meterStatus?.rolling?.remaining)}</dd>
+                      </div>
+                    </dl>
+                  </section>
+                </div>
+                <div className="zaki-settings-v2__billing-wallet">
                   <div>
                     <span>{t("settingsModal.plan.recurringRemaining", { defaultValue: "Recurring remaining" })}</span>
                     <strong>{formatUsageUnits(recurringRemainingUnits)}</strong>
                   </div>
                   <div>
-                    <span>{t("settingsModal.plan.topupBalance", { defaultValue: "Top-up balance" })}</span>
+                    <span>{t("settingsModal.plan.topupBalance", { defaultValue: "Extra units balance" })}</span>
                     <strong>{formatUsageUnits(topupBalanceUnits)}</strong>
+                  </div>
+                  <div>
+                    <span>{t("settingsModal.plan.billingSource", { defaultValue: "Billing source" })}</span>
+                    <strong>{billingSourceLabel}</strong>
+                  </div>
+                  <div>
+                    <span>{t("settingsModal.plan.billingHealth", { defaultValue: "Billing health" })}</span>
+                    <strong>
+                      {billingConfigLoaded
+                        ? t("settingsModal.plan.billingConfigured", { defaultValue: "Configured" })
+                        : t("settingsModal.plan.billingChecking", { defaultValue: "Checking" })}
+                    </strong>
                   </div>
                 </div>
               </div>
-              <div className="zaki-settings-v2__actions zaki-settings-v2__plan-actions">
-                <V2Button
-                  size="sm"
-                  variant="accent"
-                  disabled={!billingCheckoutEnabled || checkout.isPending}
-                  onClick={() => void handleUpgradePlan("agent")}
-                >
-                  {t("settingsModal.plan.upgradeAgent", { defaultValue: "Upgrade to Agent" })}
-                </V2Button>
-                <V2Button
-                  size="sm"
-                  variant="accent"
-                  disabled={!billingCheckoutEnabled || checkout.isPending}
-                  onClick={() => void handleUpgradePlan("complete")}
-                >
-                  {t("settingsModal.plan.upgradeComplete", { defaultValue: "Upgrade to Complete" })}
-                </V2Button>
-                {hasSubscription ? (
-                  <V2Button
-                    size="sm"
-                    disabled={!billingPortalEnabled || billingPortal.isPending}
-                    onClick={() => void handleOpenBillingPortal()}
-                  >
-                    {t("settingsModal.plan.manageSubscription", { defaultValue: "Manage subscription" })}
-                  </V2Button>
-                ) : activeViaAccessCode ? (
-                  <V2Button size="sm" onClick={() => navigate("/pricing?source=settings")}>
-                    {t("settingsModal.plan.viewSubscriptionOptions", {
-                      defaultValue: "View subscription options",
+              <details className="zaki-settings-v2__usage-details" data-testid="settings-platform-usage">
+                <summary className="zaki-settings-v2__usage-heading">
+                  <div>
+                    <strong>
+                      {t("settingsModal.usage.productUsage", { defaultValue: "Weekly by product" })}
+                    </strong>
+                    <p className="v2-body-sm">
+                      {t("settingsModal.usage.helper", {
+                        defaultValue:
+                          "Open when you want to see which ZAKI products used this week's units.",
+                      })}
+                    </p>
+                  </div>
+                  <V2Badge>
+                    {t("settingsModal.usage.productCount", {
+                      count: meterUsageRows.length || legacyUsageProducts.length,
+                      defaultValue: `${meterUsageRows.length || legacyUsageProducts.length} products`,
                     })}
-                  </V2Button>
-                ) : null}
-                <V2Button
-                  size="sm"
-                  disabled={!billingSyncEnabled || syncBilling.isPending}
-                  onClick={() => void handleSyncBilling()}
-                >
-                  {t("settingsModal.plan.syncBilling", { defaultValue: "Sync billing" })}
-                </V2Button>
-                {hasSubscription ? (
-                  <V2Button
-                    size="sm"
-                    variant="danger"
-                    disabled={cancelAtPeriodEnd || cancelSubscription.isPending || !billingCancelEnabled}
-                    onClick={async () => {
-                      try {
-                        if (!billingCancelEnabled) {
-                          throw new Error(t("settingsModal.plan.errors.cancelUnavailable"));
-                        }
-                        const result = await cancelSubscription.mutateAsync();
-                        toast.success(
-                          result?.alreadyScheduled
-                            ? t("settingsModal.plan.success.cancelAlreadyScheduled")
-                            : t("settingsModal.plan.success.cancelScheduled")
+                  </V2Badge>
+                </summary>
+                <div className="zaki-settings-v2__usage-grid">
+                  {meterUsageRows.length > 0
+                    ? meterUsageRows.map(({ product, meterProduct }) => {
+                        const summaryLabel =
+                          getMeterWindowLabel(t, meterProduct?.weekly ?? null) ||
+                          t("settingsModal.usage.pending");
+                        const resetLabel = formatUsageReset(meterProduct?.weekly?.resetAt);
+                        const weekly = meterProduct?.weekly ?? null;
+                        return (
+                          <div key={product.productId} className="zaki-settings-v2__usage-row">
+                            <div>
+                              <strong>{product.label}</strong>
+                              <small>{getUsageLifecycleLabel(t, product.lifecycle)}</small>
+                            </div>
+                            <div className="zaki-settings-v2__usage-row-meter">
+                              <span>{summaryLabel}</span>
+                              <div
+                                className="zaki-settings-v2__meter-track"
+                                style={getMeterBarStyle(weekly?.used, weekly?.limit)}
+                                aria-hidden="true"
+                              >
+                                <span />
+                              </div>
+                            </div>
+                            <small>
+                              {resetLabel
+                                ? t("settingsModal.usage.resetsAt", { reset: resetLabel })
+                                : t("settingsModal.usage.resetPending")}
+                            </small>
+                          </div>
                         );
-                      } catch (err) {
-                        toast.error(
-                          err instanceof Error
-                            ? err.message
-                            : t("settingsModal.plan.errors.cancelSubscription")
+                      })
+                    : legacyUsageProducts.map((product) => {
+                        const quota = product?.quota;
+                        const resetLabel = formatUsageReset(quota?.resetAt);
+                        return (
+                          <div key={product?.productId} className="zaki-settings-v2__usage-row">
+                            <div>
+                              <strong>{product?.label}</strong>
+                              <small>{getUsageLifecycleLabel(t, product?.lifecycle || "current")}</small>
+                            </div>
+                            <div className="zaki-settings-v2__usage-row-meter">
+                              <span>{getQuotaSummaryLabel(t, quota)}</span>
+                              <div
+                                className="zaki-settings-v2__meter-track"
+                                style={getMeterBarStyle(quota?.used, quota?.limit)}
+                                aria-hidden="true"
+                              >
+                                <span />
+                              </div>
+                            </div>
+                            <small>
+                              {resetLabel
+                                ? t("settingsModal.usage.resetsAt", { reset: resetLabel })
+                                : t("settingsModal.usage.resetPending")}
+                            </small>
+                          </div>
                         );
-                      }
-                    }}
-                  >
-                    {cancelAtPeriodEnd
-                      ? t("settingsModal.plan.cancellationScheduled")
-                      : t("settingsModal.plan.cancelSubscription")}
-                  </V2Button>
-                ) : null}
-              </div>
-              {billingUnavailableMessage ? <p className="v2-body-sm">{billingUnavailableMessage}</p> : null}
-              <div className="zaki-settings-v2__topup-strip">
+                      })}
+                </div>
+              </details>
+              <div className="zaki-settings-v2__billing-actions">
                 <div>
-                  <strong>{t("settingsModal.plan.topups.title", { defaultValue: "Unit top-ups" })}</strong>
+                  <strong>
+                    {t("settingsModal.plan.actionsTitle", { defaultValue: "Upgrade or manage plan" })}
+                  </strong>
                   <p className="v2-body-sm">
-                    {topupCheckoutEnabled
-                      ? t("settingsModal.plan.topups.helper", {
-                          defaultValue: "Purchased units persist and are used after recurring allowance.",
-                        })
-                      : t("settingsModal.plan.topups.unavailable", {
-                          defaultValue: "Top-ups unavailable in this environment.",
+                    {billingUnavailableMessage ||
+                      t("settingsModal.plan.actionsHelper", {
+                        defaultValue:
+                          "Choose the monthly plan that keeps ZAKI available when work spikes. Payment details and billing sync stay here.",
+                      })}
+                  </p>
+                </div>
+                <div className="zaki-settings-v2__actions zaki-settings-v2__plan-actions">
+                  {billingCheckoutEnabled && availableUpgradePlans.length > 0 ? (
+                    availableUpgradePlans.map((plan) => (
+                      <V2Button
+                        key={plan}
+                        size="sm"
+                        variant="accent"
+                        disabled={checkout.isPending}
+                        onClick={() => void handleUpgradePlan(plan)}
+                      >
+                        {t("settingsModal.plan.upgradePlan", {
+                          defaultValue: `Upgrade to ${SETTINGS_PLAN_LABELS[plan]}`,
+                          plan: getSettingsPlanLabel(t, plan),
                         })}
+                      </V2Button>
+                    ))
+                  ) : null}
+                  {hasSubscription && billingPortalEnabled ? (
+                    <V2Button
+                      size="sm"
+                      disabled={billingPortal.isPending}
+                      onClick={() => void handleOpenBillingPortal()}
+                    >
+                      {t("settingsModal.plan.manageSubscription", { defaultValue: "Manage subscription" })}
+                    </V2Button>
+                  ) : activeViaAccessCode ? (
+                    <V2Button size="sm" onClick={() => navigate("/pricing?source=settings")}>
+                      {t("settingsModal.plan.viewSubscriptionOptions", {
+                        defaultValue: "View subscription options",
+                      })}
+                    </V2Button>
+                  ) : null}
+                  {billingSyncEnabled ? (
+                    <V2Button
+                      size="sm"
+                      disabled={syncBilling.isPending}
+                      onClick={() => void handleSyncBilling()}
+                    >
+                      {t("settingsModal.plan.syncBilling", { defaultValue: "Sync billing" })}
+                    </V2Button>
+                  ) : null}
+                  {hasSubscription && billingCancelEnabled ? (
+                    <V2Button
+                      size="sm"
+                      variant="danger"
+                      disabled={cancelAtPeriodEnd || cancelSubscription.isPending}
+                      onClick={async () => {
+                        try {
+                          const result = await cancelSubscription.mutateAsync();
+                          toast.success(
+                            result?.alreadyScheduled
+                              ? t("settingsModal.plan.success.cancelAlreadyScheduled")
+                              : t("settingsModal.plan.success.cancelScheduled")
+                          );
+                        } catch (err) {
+                          toast.error(
+                            err instanceof Error
+                              ? err.message
+                              : t("settingsModal.plan.errors.cancelSubscription")
+                          );
+                        }
+                      }}
+                    >
+                      {cancelAtPeriodEnd
+                        ? t("settingsModal.plan.cancellationScheduled")
+                        : t("settingsModal.plan.cancelSubscription")}
+                    </V2Button>
+                  ) : null}
+                </div>
+              </div>
+              <div className="zaki-settings-v2__topup-strip" data-testid="settings-topup-strip">
+                <div>
+                  <strong>{t("settingsModal.plan.topups.title", { defaultValue: "Extra usage units" })}</strong>
+                  <p className="v2-body-sm">
+                    {t("settingsModal.plan.topups.deferred", {
+                      defaultValue:
+                        "Top-up purchases are deferred for this release. Existing balances remain visible.",
+                    })}
                   </p>
                 </div>
                 <div className="zaki-settings-v2__actions">
-                  {topupCheckoutEnabled ? (
-                    topupPacks.map((pack) => {
-                      const price = formatCurrencyFromCents(pack.unitAmount, pack.currency);
-                      return (
-                        <V2Button
-                          key={pack.id}
-                          size="sm"
-                          disabled={topupCheckout.isPending}
-                          onClick={() => void handleBuyTopup(pack.id)}
-                        >
-                          {t("settingsModal.plan.topups.buyPack", {
-                            defaultValue: `Buy ${pack.label}${price ? ` · ${price}` : ""}`,
-                            label: pack.label,
-                            priceLabel: price ? ` · ${price}` : "",
-                          })}
-                        </V2Button>
-                      );
-                    })
-                  ) : (
-                    <V2Badge>{t("settingsModal.plan.topups.disabled", { defaultValue: "Top-ups unavailable" })}</V2Badge>
-                  )}
+                  <V2Badge>{t("settingsModal.plan.topups.statusOnly", { defaultValue: "Deferred" })}</V2Badge>
                 </div>
               </div>
-              <V2UsageGauge
-                label={t("settingsModal.usage.weeklyAllowance")}
-                used={weeklyWindow.used}
-                limit={weeklyWindow.limit}
-                remaining={
-                  typeof weeklyWindow.remaining === "number"
-                    ? t("settingsModal.usage.remainingOfLimit", {
-                        remaining: formatUsageUnits(weeklyWindow.remaining),
-                        limit: formatUsageUnits(weeklyWindow.limit),
-                      })
-                    : weeklyAllowanceLabel
-                }
-                reset={
-                  formatUsageReset(weeklyWindow.resetAt)
-                    ? t("settingsModal.usage.resetsAt", {
-                        reset: formatUsageReset(weeklyWindow.resetAt),
-                      })
-                    : t("settingsModal.usage.resetPending")
-                }
-                unit={t("settingsModal.usage.units", { defaultValue: "units" })}
-              />
-              <div className="zaki-settings-v2__usage-grid" data-testid="settings-platform-usage">
-                {meterUsageRows.length > 0
-                  ? meterUsageRows.map(({ product, meterProduct }) => {
-                      const summaryLabel =
-                        getMeterWindowLabel(t, meterProduct?.weekly ?? null) ||
-                        t("settingsModal.usage.pending");
-                      const resetLabel = formatUsageReset(meterProduct?.weekly?.resetAt);
-                      return (
-                        <div key={product.productId} className="zaki-settings-v2__usage-row">
-                          <strong>{product.label}</strong>
-                          <span>{summaryLabel}</span>
-                          <small>
-                            {resetLabel
-                              ? t("settingsModal.usage.resetsAt", { reset: resetLabel })
-                              : t("settingsModal.usage.resetPending")}
-                          </small>
-                        </div>
-                      );
-                    })
-                  : legacyUsageProducts.map((product) => {
-                      const quota = product?.quota;
-                      const resetLabel = formatUsageReset(quota?.resetAt);
-                      return (
-                        <div key={product?.productId} className="zaki-settings-v2__usage-row">
-                          <strong>{product?.label}</strong>
-                          <span>{getQuotaSummaryLabel(t, quota)}</span>
-                          <small>
-                            {resetLabel
-                              ? t("settingsModal.usage.resetsAt", { reset: resetLabel })
-                              : t("settingsModal.usage.resetPending")}
-                          </small>
-                        </div>
-                      );
-                    })}
-              </div>
-              <p className="v2-body-sm">{t("settingsModal.usage.helper")}</p>
-            </V2SettingsBlock>
-
-            <V2SettingsBlock
-              id="settings-products"
-              data-testid="settings-products-access"
-              title={t("settingsModal.sections.productsAccess")}
-              meta={productRegistryLoading && !productRegistry ? t("settingsModal.productsAccess.loading") : null}
-            >
-              <p className="v2-body-sm">{t("settingsModal.productsAccess.subtitle")}</p>
-              <div className="zaki-settings-v2__product-list">
-                {productAccessRows.map((product) => (
-                  <article
-                    key={product.productId}
-                    data-testid={`settings-product-access-${product.productId}`}
-                    className="zaki-settings-v2__product-row"
-                  >
-                    <header>
-                      <strong>{product.label || product.productId}</strong>
-                      <V2Badge tone={getStateTone(product.state)}>
-                        {getProductStateLabel(t, product.state)}
-                      </V2Badge>
-                    </header>
-                    <dl>
-                      <div>
-                        <dt>{t("settingsModal.productsAccess.fields.lifecycle")}</dt>
-                        <dd>{getProductLifecycleLabel(t, product.lifecycle)}</dd>
-                      </div>
-                      <div>
-                        <dt>{t("settingsModal.productsAccess.fields.memory")}</dt>
-                        <dd>{getMemoryScopeLabel(t, product.memoryScope)}</dd>
-                      </div>
-                      <div>
-                        <dt>{t("settingsModal.productsAccess.fields.entryPoint")}</dt>
-                        <dd>{getProductEntryPointLabel(t, product)}</dd>
-                      </div>
-                    </dl>
-                  </article>
-                ))}
-              </div>
-              {productAccessRows.length === 0 && !productRegistryLoading ? (
-                <p className="v2-body-sm">{t("settingsModal.productsAccess.empty")}</p>
-              ) : null}
-              <p className="v2-body-sm">{t("settingsModal.productsAccess.helper")}</p>
             </V2SettingsBlock>
 
             <V2SettingsBlock
@@ -2581,6 +2188,12 @@ export function SettingsPage() {
                   })}
                 </p>
               ) : null}
+              <p className="v2-body-sm">
+                {t("settingsModal.agentSettings.defaultsNotice", {
+                  defaultValue:
+                    "Defaults for new Agent turns and supported channel runtimes. Composer chips can still override the next Agent send only.",
+                })}
+              </p>
               <V2SettingsRow
                 name={t("settingsModal.agentSettings.reasoningEffort.name", {
                   defaultValue: "Reasoning effort",
@@ -2598,14 +2211,13 @@ export function SettingsPage() {
                   value={assistantModeToReasoningEffort(agentSettingsDraft.assistant_mode)}
                   disabled={agentSettingsLoading || agentSettingsSaving}
                   onChange={(event) => {
-                    const reasoningEffort = event.target
-                      .value as (typeof AGENT_REASONING_EFFORT_LEVELS)[number];
+                    const reasoningEffort = event.target.value as AgentDefaultReasoningEffort;
                     const assistant_mode = reasoningEffortToAssistantMode(reasoningEffort);
                     setAgentSettingsDraft((current) => ({ ...current, assistant_mode }));
                     void patchAgentSettings({ assistant_mode });
                   }}
                 >
-                  {AGENT_REASONING_EFFORT_LEVELS.map((level) => (
+                  {AGENT_DEFAULT_REASONING_EFFORTS.map((level) => (
                     <option key={level} value={level}>
                       {t(`settingsModal.agentSettings.reasoningEffort.options.${level}`, {
                         defaultValue:
@@ -2661,7 +2273,7 @@ export function SettingsPage() {
                 })}
                 description={t("settingsModal.agentSettings.groupActivation.helper", {
                   defaultValue:
-                    "Controls whether channel/group contexts require a mention or always wake the Agent.",
+                    "Default wake policy for group channels: require a mention or let the Agent respond whenever the channel runtime wakes it.",
                 })}
               >
                 <select
@@ -2692,7 +2304,8 @@ export function SettingsPage() {
                   defaultValue: "Proactive updates",
                 })}
                 description={t("settingsModal.agentSettings.proactiveUpdates.helper", {
-                  defaultValue: "Allow background Agent updates where channels and approvals permit it.",
+                  defaultValue:
+                    "Allow Nullalis to send outbound updates where a connected channel and approval policy permit it.",
                 })}
               >
                 <input
@@ -2715,7 +2328,8 @@ export function SettingsPage() {
                   defaultValue: "Voice replies",
                 })}
                 description={t("settingsModal.agentSettings.voiceReplies.helper", {
-                  defaultValue: "Use voice-capable replies on supported channels.",
+                  defaultValue:
+                    "Use text-to-speech replies for supported voice-note or audio-capable channel turns.",
                 })}
               >
                 <input
@@ -2739,7 +2353,7 @@ export function SettingsPage() {
                 })}
                 description={t("settingsModal.agentSettings.sessionTimeout.helper", {
                   defaultValue:
-                    "Minutes before idle Agent sessions are treated as stale by default.",
+                    "Minutes before idle Agent channel sessions are evicted from the runtime. Direct composer turns can still start a fresh session.",
                 })}
               >
                 <input
@@ -2763,11 +2377,11 @@ export function SettingsPage() {
               </V2SettingsRow>
               <V2SettingsRow
                 name={t("settingsModal.agentSettings.memoryStatus.name", {
-                  defaultValue: "Memory behavior",
+                  defaultValue: "Memory status",
                 })}
                 description={t("settingsModal.agentSettings.memoryStatus.helper", {
                   defaultValue:
-                    "Dream reflection, query expansion, capture, export, forget, and PII actions are owned by Memory & Data.",
+                    "Notification only. Dream reflection, query expansion, capture, export, forget, and PII actions are edited in Memory & Data.",
                 })}
               >
                 <div className="zaki-settings-v2__status-chips">
@@ -2787,637 +2401,38 @@ export function SettingsPage() {
                   </V2Badge>
                 </div>
               </V2SettingsRow>
-              <div className="zaki-settings-v2__actions">
-                <V2Button size="sm" onClick={() => navigate("/agent")}>
-                  {t("settingsModal.agentSettings.openAgent", { defaultValue: "Open Agent" })}
-                </V2Button>
-                <V2Button size="sm" onClick={() => navigate("/settings#settings-channels")}>
-                  {t("settingsModal.agentSettings.openChannels", { defaultValue: "Channels" })}
-                </V2Button>
-                <V2Button size="sm" onClick={() => navigate("/settings#settings-providers")}>
-                  {t("settingsModal.agentSettings.openProviders", {
-                    defaultValue: "Providers",
-                  })}
-                </V2Button>
-              </div>
             </V2SettingsBlock>
 
-            <V2SettingsBlock
-              id="settings-spaces"
-              data-testid="settings-spaces"
-              title={t("settingsModal.sections.spaces", { defaultValue: "Spaces" })}
-              meta={
-                spacesLoading
-                  ? t("settingsModal.spaces.loading", { defaultValue: "Loading" })
-                  : t("settingsModal.spaces.count", {
-                      count: configurableSpaces.length,
-                      defaultValue: `${configurableSpaces.length} spaces`,
-                    })
-              }
-            >
-              <p className="v2-body-sm">
-                {t("settingsModal.spaces.subtitle", {
-                  defaultValue:
-                    "Overview only. Individual space name, description, icon, color, instructions, files, and delete live inside the Space.",
-                })}
-              </p>
-              <div className="zaki-settings-v2__owner-strip">
-                <V2Badge tone="success">
-                  {t("settingsModal.spaces.owner.editable", {
-                    defaultValue: "Local object settings live in Space",
-                  })}
-                </V2Badge>
-                <V2Badge tone="default">
-                  {t("settingsModal.spaces.owner.readonly", {
-                    defaultValue: "Settings shows workspace status",
-                  })}
-                </V2Badge>
-              </div>
-              <article className="zaki-settings-v2__product-row" data-testid="settings-spaces-summary">
-                <header>
-                  <strong>{t("settingsModal.spaces.summary.title", { defaultValue: "Workspace lifecycle" })}</strong>
-                  <V2Badge tone={spacesError ? "danger" : "success"}>
-                    {spacesError
-                      ? t("settingsModal.spaces.summary.unavailable", { defaultValue: "Unavailable" })
-                      : t("settingsModal.spaces.summary.ready", { defaultValue: "BFF-backed" })}
-                  </V2Badge>
-                </header>
-                <dl>
-                  <div>
-                    <dt>{t("settingsModal.spaces.summary.spaces", { defaultValue: "Spaces" })}</dt>
-                    <dd>{configurableSpaces.length}</dd>
-                  </div>
-                  <div>
-                    <dt>{t("settingsModal.spaces.summary.docs", { defaultValue: "Docs" })}</dt>
-                    <dd>
-                      {spacesEmbeddedDocumentCount}/{spacesDocumentCount}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{t("settingsModal.spaces.summary.threads", { defaultValue: "Threads" })}</dt>
-                    <dd>{spacesThreadCount}</dd>
-                  </div>
-                  <div>
-                    <dt>{t("settingsModal.spaces.summary.instructions", { defaultValue: "Instructions" })}</dt>
-                    <dd>{spacesWithInstructionsCount}</dd>
-                  </div>
-                  <div>
-                    <dt>{t("settingsModal.spaces.summary.engine", { defaultValue: "Engine fields" })}</dt>
-                    <dd>{t("settingsModal.spaces.summary.engineDeferred", { defaultValue: "Not exposed" })}</dd>
-                  </div>
-                </dl>
-              </article>
-              <div className="zaki-settings-v2__product-list">
-                {configurableSpaces.slice(0, 6).map((space) => {
-                  return (
-                    <article
-                      key={space.id}
-                      className="zaki-settings-v2__product-row"
-                      data-testid={`settings-space-${space.id}`}
-                    >
-                      <header>
-                        <strong>{space.title}</strong>
-                        <div className="zaki-settings-v2__status-chips">
-                          <V2Badge tone={space.pinned ? "accent" : "default"}>
-                            {space.pinned
-                              ? t("settingsModal.spaces.space.pinned", { defaultValue: "Pinned" })
-                              : t("settingsModal.spaces.space.active", { defaultValue: "Active" })}
-                          </V2Badge>
-                        </div>
-                      </header>
-                      <p>
-                        {space.description ||
-                          t("settingsModal.spaces.space.noDescription", {
-                            defaultValue: "No description",
-                          })}
-                      </p>
-                      <dl>
-                        <div>
-                          <dt>{t("settingsModal.spaces.space.identity", { defaultValue: "Identity" })}</dt>
-                          <dd>
-                            {space.icon || "-"} {space.color || "default"}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>{t("settingsModal.spaces.space.instructions", { defaultValue: "Instructions" })}</dt>
-                          <dd>
-                            {space.instructions?.trim()
-                              ? t("settingsModal.spaces.space.set", { defaultValue: "Set" })
-                              : t("settingsModal.spaces.space.empty", { defaultValue: "Empty" })}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>{t("settingsModal.spaces.space.files", { defaultValue: "Files" })}</dt>
-                          <dd>
-                            {countEmbeddedSpaceDocuments(space)}/{countSpaceDocuments(space)}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>{t("settingsModal.spaces.space.threads", { defaultValue: "Threads" })}</dt>
-                          <dd>{space.threads?.length ?? 0}</dd>
-                        </div>
-                      </dl>
-                      <div className="zaki-settings-v2__actions">
-                        <V2Button
-                          size="sm"
-                          data-testid={`settings-space-open-${space.id}`}
-                          onClick={() => openSpaceFromSettings(space.id)}
-                        >
-                          {t("settingsModal.spaces.space.open", { defaultValue: "Open space" })}
-                        </V2Button>
-                        <V2Button
-                          size="sm"
-                          data-testid={`settings-space-manage-${space.id}`}
-                          onClick={() => manageSpaceFromSettings(space.id)}
-                        >
-                          {t("settingsModal.spaces.space.manage", {
-                            defaultValue: "Manage in Space",
-                          })}
-                        </V2Button>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-              {configurableSpaces.length === 0 && !spacesLoading ? (
-                <p className="v2-body-sm">
-                  {t("settingsModal.spaces.empty", { defaultValue: "No configurable spaces yet." })}
-                </p>
-              ) : null}
-              <div className="zaki-settings-v2__actions">
-                <V2Button size="sm" onClick={() => navigate("/spaces")}>
-                  {t("settingsModal.spaces.openSpaces", { defaultValue: "Open Spaces" })}
-                </V2Button>
-              </div>
-            </V2SettingsBlock>
-
-            <V2SettingsBlock
-              id="settings-brain"
-              data-testid="settings-brain"
-              title={t("settingsModal.sections.brain", { defaultValue: "Brain" })}
-              meta={
-                memoryGovernanceAvailable
-                  ? t("settingsModal.brain.meta.ready", { defaultValue: "Memory summary" })
-                  : t("settingsModal.brain.meta.limited", { defaultValue: "Limited" })
-              }
-            >
-              <p className="v2-body-sm">
-                {t("settingsModal.brain.subtitle", {
-                  defaultValue:
-                    "Summary only. Capture, dream reflection, query expansion, export, forget, and PII actions are edited in Memory & Data.",
-                })}
-              </p>
-              <div className="zaki-settings-v2__owner-strip">
-                <V2Badge tone="default">
-                  {t("settingsModal.brain.owner.workbench", {
-                    defaultValue: "Workbench owns graph view state",
-                  })}
-                </V2Badge>
-                <V2Badge tone="success">
-                  {t("settingsModal.brain.owner.memoryData", {
-                    defaultValue: "Memory & Data owns governance",
-                  })}
-                </V2Badge>
-              </div>
-              <article className="zaki-settings-v2__product-row" data-testid="settings-brain-summary">
-                <header>
-                  <strong>{t("settingsModal.brain.summary.title", { defaultValue: "Memory surface" })}</strong>
-                  <V2Badge
-                    tone={
-                      memoryGovernanceLoading
-                        ? "default"
-                        : memoryGovernanceAvailable
-                          ? "success"
-                          : "danger"
-                    }
-                  >
-                    {memoryGovernanceLoading
-                      ? t("settingsModal.usage.loading", { defaultValue: "Loading" })
-                      : memoryGovernanceAvailable
-                        ? t("settingsModal.memoryData.governance.total", {
-                            count: memoryGovernance?.total ?? 0,
-                            defaultValue: `${memoryGovernance?.total ?? 0} memories`,
-                          })
-                        : t("settingsModal.memoryData.governance.unavailable", {
-                            defaultValue: "Unavailable",
-                          })}
-                  </V2Badge>
-                </header>
-                <dl>
-                  <div>
-                    <dt>{t("settingsModal.brain.summary.capture", { defaultValue: "Capture policy" })}</dt>
-                    <dd>{capturePolicyLabel}</dd>
-                  </div>
-                  <div>
-                    <dt>{t("settingsModal.brain.summary.dreams", { defaultValue: "Dream reflection" })}</dt>
-                    <dd>{dreamStatusLabel}</dd>
-                  </div>
-                  <div>
-                    <dt>{t("settingsModal.brain.summary.queryExpansion", { defaultValue: "Query expansion" })}</dt>
-                    <dd>{queryExpansionStatusLabel}</dd>
-                  </div>
-                </dl>
-              </article>
-              <div className="zaki-settings-v2__actions">
-                <V2Button size="sm" onClick={() => navigate("/brain")}>
-                  {t("settingsModal.brain.openBrain", { defaultValue: "Open Brain" })}
-                </V2Button>
-              </div>
-            </V2SettingsBlock>
-
-            <V2SettingsBlock
-              id="settings-channels"
-              data-testid="settings-channels"
-              title={t("settingsModal.sections.channels", { defaultValue: "Channels" })}
-              meta={
-                agentChannelsLoading
-                  ? t("settingsModal.channels.loading", { defaultValue: "Checking channels" })
-                  : t("settingsModal.channels.count", {
-                      count: AGENT_LAUNCH_CHANNELS.length,
-                      defaultValue: `${AGENT_LAUNCH_CHANNELS.length} launch channels`,
-                    })
-              }
-            >
-              {AGENT_LAUNCH_CHANNELS.map((config) => {
-                const channel = agentChannelsById.get(config.id);
-                const draft = channelBindingDrafts[config.id] || defaultChannelBindingDraft();
-                const canSaveBindingDraft = canSaveChannelBindingDraft(draft);
-                const bindings = channel?.bindings?.items ?? [];
-                const statusLabel = agentChannelsLoading
-                  ? t("settingsModal.channels.status.checking", { defaultValue: "Checking" })
-                  : getChannelStatusLabel(channel);
-                const missingSecrets = channel?.missing_secrets ?? [];
-                const configuredSecrets = channel?.configured_secrets ?? [];
-                const requiredSecrets = channel?.required_secrets ?? [];
-                const launchChannelActionable =
-                  channel?.status !== "disabled_in_build" && channel?.status !== "unavailable";
-                return (
-                  <div key={config.id} className="border-b border-[var(--v2-line)] last:border-b-0">
-                    <V2SettingsRow
-                      name={config.label}
-                      description={
-                        channel?.operator_managed_runtime
-                          ? `${config.helper} Runtime app credentials are operator-managed; user identity bindings are live.`
-                          : config.helper
-                      }
-                    >
-                      <div className="grid min-w-[280px] gap-2">
-                        <div className="zaki-settings-v2__actions">
-                          <V2Badge tone={getChannelTone(channel)}>{statusLabel}</V2Badge>
-                          {channel?.bindings_supported && launchChannelActionable ? (
-                            <V2Badge tone={bindings.length > 0 ? "success" : "default"}>
-                              {t("settingsModal.channels.bindings.count", {
-                                count: bindings.length,
-                                defaultValue: `${bindings.length} bindings`,
-                              })}
-                            </V2Badge>
-                          ) : null}
-                          {config.id === "telegram" ? (
-                            <V2Button size="sm" onClick={() => navigate("/settings#settings-secrets")}>
-                              {t("settingsModal.channels.openCredentials", {
-                                defaultValue: "Manage credentials",
-                              })}
-                            </V2Button>
-                          ) : null}
-                        </div>
-                        {requiredSecrets.length > 0 ? (
-                          <p className="text-[11px] leading-5 text-[var(--v2-text-muted)]">
-                            {channel?.operator_managed_runtime
-                              ? t("settingsModal.channels.secrets.vaultRefs", {
-                                  defaultValue: `Vault refs: ${requiredSecrets.join(", ")}`,
-                                })
-                              : configuredSecrets.length > 0
-                              ? t("settingsModal.channels.secrets.configured", {
-                                  count: configuredSecrets.length,
-                                  defaultValue: `${configuredSecrets.length} secrets stored`,
-                                })
-                              : t("settingsModal.channels.secrets.required", {
-                                  defaultValue: `Secrets: ${requiredSecrets.join(", ")}`,
-                                })}
-                            {!channel?.operator_managed_runtime && missingSecrets.length > 0
-                              ? ` · Missing: ${missingSecrets.join(", ")}`
-                              : ""}
-                          </p>
-                        ) : null}
-                      </div>
-                    </V2SettingsRow>
-                    {channel?.bindings_supported && launchChannelActionable ? (
-                      <div className="zaki-settings-v2__edit-tray zaki-settings-v2__edit-tray--bindings">
-                        <div className="zaki-settings-v2__field-grid zaki-settings-v2__field-grid--4">
-                          <input
-                            className="v2-input"
-                            value={draft.account_id}
-                            onChange={(event) =>
-                              updateChannelBindingDraft(config.id, { account_id: event.target.value })
-                            }
-                            placeholder={t("settingsModal.channels.bindings.account", {
-                              defaultValue: "Account",
-                            })}
-                            aria-label={`${config.label} account id`}
-                          />
-                          <input
-                            className="v2-input"
-                            value={draft.principal_key}
-                            onChange={(event) =>
-                              updateChannelBindingDraft(config.id, { principal_key: event.target.value })
-                            }
-                            placeholder={config.principalPlaceholder}
-                            aria-label={`${config.label} principal key`}
-                          />
-                          <input
-                            className="v2-input"
-                            value={draft.scope_key}
-                            onChange={(event) =>
-                              updateChannelBindingDraft(config.id, { scope_key: event.target.value })
-                            }
-                            placeholder={config.scopePlaceholder}
-                            aria-label={`${config.label} scope key`}
-                          />
-                          <input
-                            className="v2-input"
-                            value={draft.thread_key || ""}
-                            onChange={(event) =>
-                              updateChannelBindingDraft(config.id, { thread_key: event.target.value })
-                            }
-                            placeholder={t("settingsModal.channels.bindings.thread", {
-                              defaultValue: "Thread optional",
-                            })}
-                            aria-label={`${config.label} thread key`}
-                          />
-                        </div>
-                        <div className="zaki-settings-v2__actions zaki-settings-v2__actions--with-note">
-                          <V2Button
-                            size="sm"
-                            onClick={() => void handleSaveChannelBinding(config.id)}
-                            disabled={channelAction === `${config.id}:save` || !canSaveBindingDraft}
-                          >
-                            {channelAction === `${config.id}:save`
-                              ? t("settingsModal.channels.bindings.saving", {
-                                  defaultValue: "Saving",
-                                })
-                              : t("settingsModal.channels.bindings.save", {
-                                  defaultValue: "Save binding",
-                                })}
-                          </V2Button>
-                          <span className="zaki-settings-v2__action-note">
-                            {canSaveBindingDraft
-                              ? t("settingsModal.channels.bindings.helper", {
-                                  defaultValue:
-                                    "Bindings route inbound identities to your Agent without exposing channel secrets.",
-                                })
-                              : t("settingsModal.channels.bindings.requiredHelper", {
-                                  defaultValue:
-                                    "Enter account, principal, and scope to save a binding.",
-                                })}
-                          </span>
-                        </div>
-                        {bindings.length > 0 ? (
-                          <div className="grid gap-1">
-                            {bindings.map((binding) => (
-                              <div
-                                key={binding.id}
-                              className="zaki-settings-v2__binding-row"
-                              >
-                                <span className="font-mono text-[var(--v2-text)]">
-                                  {binding.account_id} / {binding.principal_key} / {binding.scope_key}
-                                </span>
-                                <V2Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => void handleDeleteChannelBinding(config.id, binding.id)}
-                                  disabled={channelAction === `${config.id}:${binding.id}`}
-                                >
-                                  {t("settingsModal.channels.bindings.delete", {
-                                    defaultValue: "Delete binding",
-                                  })}
-                                </V2Button>
-                              </div>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-              <div className="zaki-settings-v2__edit-tray zaki-settings-v2__edit-tray--section">
-                <div className="zaki-settings-v2__tray-head">
-                  <div>
-                    <strong className="font-mono text-xs uppercase tracking-[0.08em] text-[var(--v2-text)]">
-                      {t("settingsModal.channels.control.title", {
-                        defaultValue: "User-managed channel credentials",
-                      })}
-                    </strong>
-                    <p className="v2-body-sm">
-                      {t("settingsModal.channels.control.helper", {
-                        defaultValue:
-                          "Slack, Discord, Email, and WhatsApp use the central channel control plane. Secret values are write-only.",
-                      })}
-                    </p>
-                  </div>
-                  <V2Badge
-                    tone={
-                      channelControlsLoading
-                        ? "default"
-                        : channelControlsAvailable
-                          ? "success"
-                          : "danger"
-                    }
-                  >
-                    {channelControlsLoading
-                      ? t("settingsModal.channels.loading", { defaultValue: "Checking" })
-                      : channelControlsAvailable
-                        ? t("settingsModal.channels.control.loaded", {
-                            defaultValue: "Control plane live",
-                          })
-                        : t("settingsModal.channels.control.unavailable", {
-                            defaultValue: "Control plane unavailable",
-                          })}
-                  </V2Badge>
-                </div>
-                {USER_MANAGED_CHANNELS.map((channelId) => {
-                  if (channelId === "telegram") return null;
-                  const fields =
-                    CHANNEL_ACTIVATION_FIELDS[
-                      channelId as Exclude<AgentChannelControlId, "telegram">
-                    ];
-                  const control = channelControlsById.get(channelId);
-                  const draft = channelActivationDrafts[channelId] || {};
-                  const presentSecrets =
-                    control?.secret_refs?.filter((secret) => secret.present).length ?? 0;
-                  const requiredSecrets =
-                    control?.secret_refs?.filter((secret) => secret.required).length ??
-                    fields.filter((field) => field.secret).length;
-                  const lastTestDate = formatUnixDate(control?.last_test?.checked_at_s);
-                  const channelLabel = control?.label || channelId;
-                  const userManageable = control?.user_managed !== false;
-                  const controlDisabledInBuild = control?.status === "disabled_in_build";
-                  const credentialFormVisible =
-                    userManageable && channelControlsAvailable && !controlDisabledInBuild;
-                  const isConnected =
-                    control?.user_connected === true || control?.status === "connected";
-                  const hasRequiredSecrets = requiredSecrets === 0 || presentSecrets >= requiredSecrets;
-                  const hasActivationDraft = hasChannelActivationPayload(draft);
-                  const canTestChannel =
-                    credentialFormVisible && (isConnected || hasRequiredSecrets);
-                  const canDisconnectChannel =
-                    credentialFormVisible && (isConnected || presentSecrets > 0);
-                  return (
-                    <article
-                      key={channelId}
-                      className="zaki-settings-v2__product-row zaki-settings-v2__product-row--editable"
-                      data-testid={`settings-channel-control-${channelId}`}
-                    >
-                      <header>
-                        <strong>{control?.label || channelId}</strong>
-                        <div className="zaki-settings-v2__actions">
-                          <V2Badge tone={getChannelControlTone(control)}>
-                            {control?.status || "not_connected"}
-                          </V2Badge>
-                          <V2Badge tone={presentSecrets >= requiredSecrets ? "success" : "default"}>
-                            {presentSecrets}/{requiredSecrets} secrets
-                          </V2Badge>
-                        </div>
-                      </header>
-                      <dl>
-                        <div>
-                          <dt>{t("settingsModal.channels.control.operator", { defaultValue: "Operator" })}</dt>
-                          <dd>{control?.operator_configured ? "configured" : "not configured"}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("settingsModal.channels.control.lastTest", { defaultValue: "Last test" })}</dt>
-                          <dd>
-                            {control?.last_test
-                              ? `${control.last_test.ok ? "ok" : "failed"} · ${control.last_test.detail || "checked"}${
-                                  lastTestDate ? ` · ${lastTestDate}` : ""
-                                }`
-                              : "not tested"}
-                          </dd>
-                        </div>
-                      </dl>
-                      {credentialFormVisible ? (
-                        <div className="zaki-settings-v2__field-grid zaki-settings-v2__field-grid--2">
-                          {fields.map((field) => (
-                            <input
-                              key={field.key}
-                              className="v2-input"
-                              type={field.secret ? "password" : "text"}
-                              value={draft[field.key] || ""}
-                              placeholder={`${field.label}: ${field.placeholder}`}
-                              aria-label={`${channelLabel} ${field.label}`}
-                              onChange={(event) =>
-                                updateChannelActivationDraft(channelId, field.key, event.target.value)
-                              }
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="v2-body-sm">
-                          {controlDisabledInBuild
-                            ? t("settingsModal.channels.control.disabledInBuild", {
-                                channel: channelLabel,
-                                defaultValue: `${channelLabel} credentials are disabled in this build.`,
-                              })
-                            : !channelControlsAvailable
-                              ? t("settingsModal.channels.control.unavailableHelper", {
-                                  defaultValue:
-                                    "Credential actions are unavailable until the channel control plane responds.",
-                                })
-                              : t("settingsModal.channels.control.operatorManaged", {
-                                  channel: channelLabel,
-                                  defaultValue: `${channelLabel} credentials are operator-managed in this environment.`,
-                                })}
-                        </p>
-                      )}
-                      <div className="zaki-settings-v2__actions">
-                        {credentialFormVisible ? (
-                          <V2Button
-                            size="sm"
-                            variant="accent"
-                            disabled={
-                              channelControlAction === `${channelId}:connect` ||
-                              !hasActivationDraft
-                            }
-                            onClick={() => void handleConnectChannelControl(channelId)}
-                          >
-                            {channelControlAction === `${channelId}:connect`
-                              ? t("app.legal.saving")
-                              : t("settingsModal.channels.control.connect", {
-                                  channel: channelLabel,
-                                  defaultValue: `${
-                                    isConnected || presentSecrets > 0 ? "Update" : "Save"
-                                  } ${channelLabel} credentials`,
-                                })}
-                          </V2Button>
-                        ) : null}
-                        {canTestChannel ? (
-                          <V2Button
-                            size="sm"
-                            disabled={channelControlAction === `${channelId}:test`}
-                            onClick={() => void handleTestChannelControl(channelId)}
-                          >
-                            {t("settingsModal.channels.control.test", {
-                              channel: channelLabel,
-                              defaultValue: `Test ${channelLabel}`,
-                            })}
-                          </V2Button>
-                        ) : null}
-                        {canDisconnectChannel ? (
-                          <V2Button
-                            size="sm"
-                            variant="danger"
-                            disabled={channelControlAction === `${channelId}:disconnect`}
-                            onClick={() => void handleDisconnectChannelControl(channelId)}
-                          >
-                            {t("settingsModal.channels.control.disconnect", {
-                              channel: channelLabel,
-                              defaultValue: `Disconnect ${channelLabel}`,
-                            })}
-                          </V2Button>
-                        ) : null}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-              <V2SettingsRow
-                name={t("settingsModal.channels.learningTutors.name", {
-                  defaultValue: "Learning tutor channels",
-                })}
-                description={t("settingsModal.channels.learningTutors.description", {
-                  defaultValue: "Private-beta tutor channel schema is available through Learning.",
-                })}
-              >
-                <V2Badge tone="warn">
-                  {t("settingsModal.channels.status.privateBeta", {
-                    defaultValue: "Private beta",
-                  })}
-                </V2Badge>
-              </V2SettingsRow>
-              <V2SettingsRow
-                name={t("settingsModal.channels.otherChannels.name", {
-                  defaultValue: "Additional channels",
-                })}
-                description={t("settingsModal.channels.otherChannels.description", {
-                  defaultValue:
-                    "Teams, Signal, Matrix, and other adapters stay hidden until their user-safe BFF contracts are exposed.",
-                })}
-              >
-                <V2Badge>
-                  {t("settingsModal.channels.status.operatorManaged", {
-                    defaultValue: "Operator managed",
-                  })}
-                </V2Badge>
-              </V2SettingsRow>
-            </V2SettingsBlock>
+            <SettingsChannelsSection
+              agentChannelsById={agentChannelsById}
+              agentChannelsLoading={agentChannelsLoading}
+              channelControlsById={channelControlsById}
+              channelControlsLoading={channelControlsLoading}
+              channelControlsAvailable={channelControlsAvailable}
+              expandedChannelId={expandedChannelId}
+              setExpandedChannelId={setExpandedChannelId}
+              channelBindingDrafts={channelBindingDrafts}
+              channelActivationDrafts={channelActivationDrafts}
+              channelAction={channelAction}
+              channelControlAction={channelControlAction}
+              updateChannelBindingDraft={updateChannelBindingDraft}
+              updateChannelActivationDraft={updateChannelActivationDraft}
+              handleSaveChannelBinding={handleSaveChannelBinding}
+              handleDeleteChannelBinding={handleDeleteChannelBinding}
+              handleConnectChannelControl={handleConnectChannelControl}
+              handleTestChannelControl={handleTestChannelControl}
+              handleDisconnectChannelControl={handleDisconnectChannelControl}
+            />
 
             <V2SettingsBlock
               id="settings-secrets"
               data-testid="settings-secrets"
-              title={t("settingsModal.sections.secrets", { defaultValue: "Secrets & API keys" })}
+              title={t("settingsModal.sections.secrets", { defaultValue: "Advanced credentials" })}
               meta={
                 agentSecretsLoading
                   ? t("settingsModal.secrets.loading", { defaultValue: "Loading secrets" })
+                  : !agentSecretsAvailable
+                    ? t("settingsModal.secrets.unavailable", { defaultValue: "Unavailable" })
                   : t("settingsModal.secrets.count", {
                       count: agentSecretsKeys.length,
                       defaultValue: `${agentSecretsKeys.length} stored`,
@@ -3426,46 +2441,65 @@ export function SettingsPage() {
             >
               <V2SettingsRow
                 name={t("settingsModal.secrets.addOrRotate", {
-                  defaultValue: "Add or rotate secret",
+                  defaultValue: "Add or rotate a vault credential",
                 })}
                 description={t("settingsModal.secrets.addOrRotateHelper", {
-                  defaultValue: "Values are write-only after save; Settings shows metadata keys only.",
+                  defaultValue:
+                    "Use this only for advanced manual keys. Channel tokens should be saved from Channels.",
                 })}
               >
                 <div className="zaki-settings-v2__control-stack">
-                  <input
-                    className="v2-input"
-                    value={newSecretKey}
-                    placeholder={t("settingsModal.secrets.keyPlaceholder", {
-                      defaultValue: "OPENAI_API_KEY",
-                    })}
-                    onChange={(event) =>
-                      setNewSecretKey(event.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_"))
-                    }
-                  />
-                  <input
-                    className="v2-input"
-                    type="password"
-                    value={newSecretValue}
-                    placeholder={t("settingsModal.secrets.valuePlaceholder", {
-                      defaultValue: "Secret value",
-                    })}
-                    onChange={(event) => setNewSecretValue(event.target.value)}
-                  />
-                  <V2Button
-                    size="sm"
-                    variant="accent"
-                    disabled={
-                      agentSecretsAction === "save" ||
-                      !newSecretKey.trim() ||
-                      !newSecretValue
-                    }
-                    onClick={() => void handleSaveSecret()}
-                  >
-                    {agentSecretsAction === "save"
-                      ? t("app.legal.saving")
-                      : t("settingsModal.secrets.save", { defaultValue: "Save secret" })}
-                  </V2Button>
+                  {agentSecretsAvailable ? (
+                    <>
+                      <input
+                        className="v2-input"
+                        value={newSecretKey}
+                        placeholder={t("settingsModal.secrets.keyPlaceholder", {
+                          defaultValue: "OPENAI_API_KEY",
+                        })}
+                        onChange={(event) =>
+                          setNewSecretKey(event.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_"))
+                        }
+                      />
+                      <input
+                        className="v2-input"
+                        type="password"
+                        value={newSecretValue}
+                        placeholder={t("settingsModal.secrets.valuePlaceholder", {
+                          defaultValue: "Secret value",
+                        })}
+                        onChange={(event) => setNewSecretValue(event.target.value)}
+                      />
+                      <V2Button
+                        size="sm"
+                        variant="accent"
+                        disabled={
+                          agentSecretsAction === "save" ||
+                          !newSecretKey.trim() ||
+                          !newSecretValue
+                        }
+                        onClick={() => void handleSaveSecret()}
+                      >
+                        {agentSecretsAction === "save"
+                          ? t("app.legal.saving")
+                          : t("settingsModal.secrets.save", { defaultValue: "Save secret" })}
+                      </V2Button>
+                      {newSecretKey.trim() && newSecretValue ? null : (
+                        <span className="zaki-settings-v2__action-note">
+                          {t("settingsModal.secrets.requiredHelper", {
+                            defaultValue: "Enter a secret key and value to save.",
+                          })}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <p className="v2-body-sm">
+                      {t("settingsModal.secrets.unavailableHelper", {
+                        defaultValue:
+                          "Secret actions are unavailable until the Agent vault responds.",
+                      })}
+                    </p>
+                  )}
                 </div>
               </V2SettingsRow>
               <div className="zaki-settings-v2__product-list">
@@ -3494,435 +2528,13 @@ export function SettingsPage() {
                   </article>
                 ))}
               </div>
-              {!agentSecretsLoading && agentSecretsKeys.length === 0 ? (
+              {!agentSecretsLoading && agentSecretsAvailable && agentSecretsKeys.length === 0 ? (
                 <p className="zaki-settings-v2__empty-state">
                   {t("settingsModal.secrets.empty", {
                     defaultValue: "No secrets stored yet.",
                   })}
                 </p>
               ) : null}
-            </V2SettingsBlock>
-
-            <V2SettingsBlock
-              id="settings-providers"
-              data-testid="settings-providers"
-              title={t("settingsModal.sections.providers", {
-                defaultValue: "Models & providers",
-              })}
-            >
-              <V2SettingsRow
-                name={t("settingsModal.providers.operatorDefault.name", {
-                  defaultValue: "Agent model default",
-                })}
-                description={t("settingsModal.providers.operatorDefault.description", {
-                  defaultValue:
-                    "Provider-owned default for new Agent turns. Live per-turn choices stay in Agent.",
-                })}
-              >
-                <div className="zaki-settings-v2__control-stack">
-                  <select
-                    className="v2-input"
-                    aria-label={t("settingsModal.providers.operatorDefault.name", {
-                      defaultValue: "Agent model default",
-                    })}
-                    value={agentSettingsDraft.selected_model || ""}
-                    disabled={agentSettingsLoading || agentSettingsSaving}
-                    onChange={(event) =>
-                      void patchAgentSettings({
-                        selected_model: event.target.value || null,
-                      })
-                    }
-                  >
-                    <option value="">
-                      {t("settingsModal.agentModel.operatorDefault", {
-                        defaultValue: "Operator default",
-                      })}
-                      {" · "}
-                      {resolveAgentModel(DEFAULT_AGENT_MODEL_ID).label}
-                    </option>
-                    {AGENT_MODEL_CATALOG.map((model) => (
-                      <option key={model.id} value={model.id}>
-                        {model.label}
-                      </option>
-                    ))}
-                  </select>
-                  <V2Badge tone="success">
-                    {selectedModelIsOperatorDefault
-                      ? t("settingsModal.agentModel.operatorDefault", {
-                          defaultValue: "Operator default",
-                        })
-                      : effectiveAgentModel.label}
-                  </V2Badge>
-                </div>
-              </V2SettingsRow>
-              <V2SettingsRow
-                name={t("settingsModal.providers.openAiCompatible.name", {
-                  defaultValue: "OpenAI-compatible provider",
-                })}
-                description={t("settingsModal.providers.openAiCompatible.description", {
-                  defaultValue: "Add a user-scoped provider profile. API keys are stored write-only in the vault.",
-                })}
-              >
-                <V2Badge
-                  tone={providersLoading ? "default" : providersAvailable ? "success" : "danger"}
-                >
-                  {providersLoading
-                    ? t("settingsModal.providers.loading", { defaultValue: "Loading" })
-                    : providersAvailable
-                      ? t("settingsModal.providers.count", {
-                          count: providerProfiles.length,
-                          defaultValue: `${providerProfiles.length} profiles`,
-                        })
-                      : t("settingsModal.providers.unavailable", {
-                          defaultValue: "Unavailable",
-                        })}
-                </V2Badge>
-              </V2SettingsRow>
-              <div
-                className="zaki-settings-v2__product-row zaki-settings-v2__product-row--editable"
-                data-testid="settings-provider-create"
-              >
-                <header>
-                  <strong>
-                    {t("settingsModal.providers.create.title", {
-                      defaultValue: "Create provider profile",
-                    })}
-                  </strong>
-                  <V2Badge>{providerDraft.provider_kind || "openai_compatible"}</V2Badge>
-                </header>
-                <div className="zaki-settings-v2__field-grid zaki-settings-v2__field-grid--2">
-                  <input
-                    className="v2-input"
-                    value={providerDraft.label || ""}
-                    placeholder={t("settingsModal.providers.fields.label", {
-                      defaultValue: "Label",
-                    })}
-                    onChange={(event) =>
-                      setProviderDraft((current) => ({ ...current, label: event.target.value }))
-                    }
-                  />
-                  <input
-                    className="v2-input"
-                    value={providerDraft.base_url || ""}
-                    placeholder={t("settingsModal.providers.fields.baseUrl", {
-                      defaultValue: "https://api.example.com/v1",
-                    })}
-                    onChange={(event) =>
-                      setProviderDraft((current) => ({ ...current, base_url: event.target.value }))
-                    }
-                  />
-                  <input
-                    className="v2-input"
-                    type="password"
-                    value={providerDraft.api_key || ""}
-                    placeholder={t("settingsModal.providers.fields.apiKey", {
-                      defaultValue: "API key",
-                    })}
-                    onChange={(event) =>
-                      setProviderDraft((current) => ({ ...current, api_key: event.target.value }))
-                    }
-                  />
-                  <input
-                    className="v2-input"
-                    value={providerModelText}
-                    placeholder={t("settingsModal.providers.fields.models", {
-                      defaultValue: "model-a, model-b",
-                    })}
-                    onChange={(event) => setProviderModelText(event.target.value)}
-                  />
-                  <input
-                    className="v2-input"
-                    value={String(providerDraft.default_model || "")}
-                    placeholder={t("settingsModal.providers.fields.defaultModel", {
-                      defaultValue: "Default model",
-                    })}
-                    onChange={(event) =>
-                      setProviderDraft((current) => ({
-                        ...current,
-                        default_model: event.target.value,
-                      }))
-                    }
-                  />
-                  <select
-                    className="v2-input"
-                    value={providerDraft.auth_style || "bearer"}
-                    onChange={(event) =>
-                      setProviderDraft((current) => ({
-                        ...current,
-                        auth_style: event.target.value as NonNullable<
-                          AgentProviderProfilePayload["auth_style"]
-                        >,
-                      }))
-                    }
-                  >
-                    <option value="bearer">Bearer</option>
-                    <option value="api_key_header">API key header</option>
-                    <option value="query_param">Query param</option>
-                  </select>
-                </div>
-                <div className="zaki-settings-v2__actions">
-                  <V2Button
-                    size="sm"
-                    variant="accent"
-                    disabled={
-                      !providersAvailable ||
-                      providerAction === "create" ||
-                      !String(providerDraft.base_url || "").trim() ||
-                      !String(providerDraft.api_key || "").trim()
-                    }
-                    onClick={() => void handleCreateProviderProfile()}
-                  >
-                    {providerAction === "create"
-                      ? t("app.legal.saving")
-                      : t("settingsModal.providers.actions.save", {
-                          defaultValue: "Save provider",
-                        })}
-                  </V2Button>
-                </div>
-              </div>
-              <div className="zaki-settings-v2__product-list">
-                {providerProfiles.map((profile) => {
-                  const lastTestDate = formatUnixDate(profile.last_test?.checked_at_s);
-                  return (
-                    <article
-                      key={profile.id}
-                      className="zaki-settings-v2__product-row"
-                      data-testid={`settings-provider-${profile.id}`}
-                    >
-                      <header>
-                        <strong>{profile.label || profile.id}</strong>
-                        <div className="zaki-settings-v2__actions">
-                          <V2Badge tone={getProviderTone(profile)}>
-                            {profile.policy_state || "active"}
-                          </V2Badge>
-                          <V2Badge tone={profile.secret_ref?.present ? "success" : "default"}>
-                            {profile.secret_ref?.present ? "key present" : "key missing"}
-                          </V2Badge>
-                        </div>
-                      </header>
-                      <dl>
-                        <div>
-                          <dt>{t("settingsModal.providers.fields.baseUrl", { defaultValue: "Base URL" })}</dt>
-                          <dd>{profile.base_url}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("settingsModal.providers.fields.defaultModel", { defaultValue: "Default model" })}</dt>
-                          <dd>{profile.default_model || "not set"}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("settingsModal.providers.fields.lastTest", { defaultValue: "Last test" })}</dt>
-                          <dd>
-                            {profile.last_test
-                              ? `${profile.last_test.ok ? "ok" : "failed"} · ${
-                                  profile.last_test.detail || "checked"
-                                }${lastTestDate ? ` · ${lastTestDate}` : ""}`
-                              : "not tested"}
-                          </dd>
-                        </div>
-                      </dl>
-                      {editingProviderId === profile.id ? (
-                        <div className="zaki-settings-v2__provider-edit" data-testid={`settings-provider-edit-${profile.id}`}>
-                          <div className="zaki-settings-v2__field-grid zaki-settings-v2__field-grid--2">
-                            <input
-                              className="v2-input"
-                              value={providerEditDraft.label || ""}
-                              placeholder={t("settingsModal.providers.fields.label", {
-                                defaultValue: "Label",
-                              })}
-                              onChange={(event) =>
-                                setProviderEditDraft((current) => ({
-                                  ...current,
-                                  label: event.target.value,
-                                }))
-                              }
-                            />
-                            <input
-                              className="v2-input"
-                              value={providerEditDraft.base_url || ""}
-                              placeholder={t("settingsModal.providers.fields.baseUrl", {
-                                defaultValue: "https://api.example.com/v1",
-                              })}
-                              onChange={(event) =>
-                                setProviderEditDraft((current) => ({
-                                  ...current,
-                                  base_url: event.target.value,
-                                }))
-                              }
-                            />
-                            <input
-                              className="v2-input"
-                              type="password"
-                              value={providerEditDraft.api_key || ""}
-                              placeholder={t("settingsModal.providers.fields.rotateApiKey", {
-                                defaultValue: "New API key, optional",
-                              })}
-                              onChange={(event) =>
-                                setProviderEditDraft((current) => ({
-                                  ...current,
-                                  api_key: event.target.value,
-                                }))
-                              }
-                            />
-                            <input
-                              className="v2-input"
-                              value={providerEditModelText}
-                              placeholder={t("settingsModal.providers.fields.models", {
-                                defaultValue: "model-a, model-b",
-                              })}
-                              onChange={(event) => setProviderEditModelText(event.target.value)}
-                            />
-                            <input
-                              className="v2-input"
-                              value={String(providerEditDraft.default_model || "")}
-                              placeholder={t("settingsModal.providers.fields.defaultModel", {
-                                defaultValue: "Default model",
-                              })}
-                              onChange={(event) =>
-                                setProviderEditDraft((current) => ({
-                                  ...current,
-                                  default_model: event.target.value,
-                                }))
-                              }
-                            />
-                            <select
-                              className="v2-input"
-                              value={providerEditDraft.policy_state || "active"}
-                              onChange={(event) =>
-                                setProviderEditDraft((current) => ({
-                                  ...current,
-                                  policy_state: event.target.value as "active" | "disabled",
-                                }))
-                              }
-                            >
-                              <option value="active">Active</option>
-                              <option value="disabled">Disabled</option>
-                            </select>
-                          </div>
-                          <div className="zaki-settings-v2__actions">
-                            <V2Button
-                              size="sm"
-                              variant="accent"
-                              disabled={
-                                !providersAvailable || providerAction === `${profile.id}:update`
-                              }
-                              onClick={() => void handleUpdateProviderProfile(profile.id)}
-                            >
-                              {providerAction === `${profile.id}:update`
-                                ? t("app.legal.saving")
-                                : t("settingsModal.providers.actions.update", {
-                                    defaultValue: "Update provider",
-                                  })}
-                            </V2Button>
-                            <V2Button
-                              size="sm"
-                              onClick={() => {
-                                setEditingProviderId(null);
-                                setProviderEditDraft(DEFAULT_PROVIDER_DRAFT);
-                                setProviderEditModelText("");
-                              }}
-                            >
-                              {t("app.legal.cancel", { defaultValue: "Cancel" })}
-                            </V2Button>
-                          </div>
-                        </div>
-                      ) : null}
-                      <div className="zaki-settings-v2__actions">
-                        <V2Button
-                          size="sm"
-                          disabled={!providersAvailable}
-                          onClick={() => beginEditProviderProfile(profile)}
-                        >
-                          {t("settingsModal.providers.actions.edit", { defaultValue: "Edit provider" })}
-                        </V2Button>
-                        <V2Button
-                          size="sm"
-                          disabled={!providersAvailable || providerAction === `${profile.id}:test`}
-                          onClick={() => void handleTestProviderProfile(profile.id)}
-                        >
-                          {t("settingsModal.providers.actions.test", { defaultValue: "Test provider" })}
-                        </V2Button>
-                        <V2Button
-                          size="sm"
-                          variant="danger"
-                          disabled={!providersAvailable || providerAction === `${profile.id}:delete`}
-                          onClick={() => void handleDeleteProviderProfile(profile.id)}
-                        >
-                          {t("settingsModal.providers.actions.delete", { defaultValue: "Delete provider" })}
-                        </V2Button>
-                      </div>
-                    </article>
-                  );
-                })}
-                {!providersLoading && providerProfiles.length === 0 ? (
-                  <p className="zaki-settings-v2__empty-state">
-                    {t("settingsModal.providers.empty", {
-                      defaultValue: "No user-managed provider profiles yet.",
-                    })}
-                  </p>
-                ) : null}
-              </div>
-              <V2SettingsRow
-                name={t("settingsModal.providers.openapiConnector.name", {
-                  defaultValue: "OpenAPI connectors",
-                })}
-                description={t("settingsModal.providers.openapiConnector.description", {
-                  defaultValue: "Operator-managed OpenAPI/MCP/Composio inventory is visible below.",
-                })}
-              >
-                <V2Badge
-                  tone={
-                    integrationsAvailable && integrations.length > 0
-                      ? "success"
-                      : integrationsAvailable
-                        ? "default"
-                        : "danger"
-                  }
-                >
-                  {integrationsAvailable
-                    ? t("settingsModal.providers.status.operatorManaged", {
-                        defaultValue: "Operator managed",
-                      })
-                    : t("settingsModal.providers.status.unavailable", {
-                        defaultValue: "Unavailable",
-                      })}
-                </V2Badge>
-              </V2SettingsRow>
-              <div className="zaki-settings-v2__product-list">
-                {integrations.map((integration) => (
-                  <article
-                    key={`${integration.kind}:${integration.label}`}
-                    className="zaki-settings-v2__product-row"
-                  >
-                    <header>
-                      <strong>{integration.label}</strong>
-                      <V2Badge tone={integration.configured ? "success" : "default"}>
-                        {integration.configured ? "configured" : "not configured"}
-                      </V2Badge>
-                    </header>
-                    <dl>
-                      <div>
-                        <dt>{t("settingsModal.providers.integrations.kind", { defaultValue: "Kind" })}</dt>
-                        <dd>{integration.kind}</dd>
-                      </div>
-                      <div>
-                        <dt>{t("settingsModal.providers.integrations.managedBy", { defaultValue: "Managed by" })}</dt>
-                        <dd>{integration.managed_by || "operator"}</dd>
-                      </div>
-                      <div>
-                        <dt>{t("settingsModal.providers.integrations.count", { defaultValue: "Count" })}</dt>
-                        <dd>{integration.count ?? integration.items?.length ?? "—"}</dd>
-                      </div>
-                    </dl>
-                  </article>
-                ))}
-                {!integrationsLoading && integrations.length === 0 ? (
-                  <p className="v2-body-sm">
-                    {t("settingsModal.providers.integrations.empty", {
-                      defaultValue: "No operator-managed integrations are reported by the Agent backend.",
-                    })}
-                  </p>
-                ) : null}
-              </div>
             </V2SettingsBlock>
 
             <V2SettingsBlock
@@ -3934,11 +2546,40 @@ export function SettingsPage() {
               meta={
                 extensionDiagnosticsLoading
                   ? t("settingsModal.devices.loading", { defaultValue: "Checking" })
+                  : !extensionDevicesAvailable
+                    ? t("settingsModal.devices.unavailable", { defaultValue: "Unavailable" })
                   : extensionDiagnostics?.paired
                     ? t("settingsModal.devices.paired", { defaultValue: "Paired" })
                     : t("settingsModal.devices.notPaired", { defaultValue: "Not paired" })
               }
             >
+              <V2SettingsRow
+                name={t("settingsModal.devices.download.name", {
+                  defaultValue: "Download Chrome extension",
+                })}
+                description={t("settingsModal.devices.download.description", {
+                  defaultValue:
+                    "Install the extension when ZAKI needs browser control in your signed-in tabs. Chrome, Edge, Arc, and Brave can load this package in developer mode.",
+                })}
+              >
+                <div className="zaki-settings-v2__control-stack">
+                  <a
+                    className="v2-btn v2-btn--accent v2-btn--sm"
+                    href="/downloads/zaki-browser-extension.zip"
+                    download
+                  >
+                    {t("settingsModal.devices.download.action", {
+                      defaultValue: "Download extension",
+                    })}
+                  </a>
+                  <span className="zaki-settings-v2__action-note">
+                    {t("settingsModal.devices.download.helper", {
+                      defaultValue:
+                        "Unzip it, open chrome://extensions, enable Developer mode, then Load unpacked.",
+                    })}
+                  </span>
+                </div>
+              </V2SettingsRow>
               <V2SettingsRow
                 name={t("settingsModal.devices.extension.name", {
                   defaultValue: "Browser extension",
@@ -3977,30 +2618,44 @@ export function SettingsPage() {
                 })}
               >
                 <div className="grid min-w-[260px] gap-2">
-                  <input
-                    className="v2-input"
-                    value={extensionDeviceLabel}
-                    placeholder={t("settingsModal.devices.labelPlaceholder", {
-                      defaultValue: "Work laptop",
-                    })}
-                    onChange={(event) => setExtensionDeviceLabel(event.target.value)}
-                  />
-                  <V2Button
-                    size="sm"
-                    variant="accent"
-                    disabled={
-                      !extensionDevicesAvailable ||
-                      extensionDeviceAction === "pair" ||
-                      !extensionDeviceLabel.trim()
-                    }
-                    onClick={() => void handlePairExtensionDevice()}
-                  >
-                    {extensionDeviceAction === "pair"
-                      ? t("app.legal.saving")
-                      : t("settingsModal.devices.actions.register", {
-                          defaultValue: "Pair device",
+                  {extensionDevicesAvailable ? (
+                    <>
+                      <input
+                        className="v2-input"
+                        value={extensionDeviceLabel}
+                        placeholder={t("settingsModal.devices.labelPlaceholder", {
+                          defaultValue: "Work laptop",
                         })}
-                  </V2Button>
+                        onChange={(event) => setExtensionDeviceLabel(event.target.value)}
+                      />
+                      <V2Button
+                        size="sm"
+                        variant="accent"
+                        disabled={extensionDeviceAction === "pair" || !extensionDeviceLabel.trim()}
+                        onClick={() => void handlePairExtensionDevice()}
+                      >
+                        {extensionDeviceAction === "pair"
+                          ? t("app.legal.saving")
+                          : t("settingsModal.devices.actions.register", {
+                              defaultValue: "Pair device",
+                            })}
+                      </V2Button>
+                      {extensionDeviceLabel.trim() ? null : (
+                        <span className="zaki-settings-v2__action-note">
+                          {t("settingsModal.devices.pairDeviceRequiredHelper", {
+                            defaultValue: "Enter a device label to pair an extension device.",
+                          })}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <p className="v2-body-sm">
+                      {t("settingsModal.devices.unavailableHelper", {
+                        defaultValue:
+                          "Device pairing is unavailable until the extension device service responds.",
+                      })}
+                    </p>
+                  )}
                 </div>
               </V2SettingsRow>
               <div className="zaki-settings-v2__product-list">
@@ -4056,7 +2711,7 @@ export function SettingsPage() {
                     </article>
                   );
                 })}
-                {!extensionDevicesLoading && extensionDevices.length === 0 ? (
+                {!extensionDevicesLoading && extensionDevicesAvailable && extensionDevices.length === 0 ? (
                   <p className="zaki-settings-v2__empty-state">
                     {t("settingsModal.devices.empty", {
                       defaultValue: "No extension devices registered yet.",
@@ -4081,17 +2736,17 @@ export function SettingsPage() {
               {capturePolicyAvailable ? (
                 <V2SettingsRow
                   name={t("settingsModal.memoryData.capturePolicy.name", {
-                    defaultValue: "Memory capture",
+                    defaultValue: "Chat memory capture",
                   })}
                   description={t("settingsModal.memoryData.capturePolicy.helper", {
                     defaultValue:
-                      "Control how aggressively ZAKI saves new memories from your conversations.",
+                      "Controls only Chat/Spaces memory capture. Agent memory does not have a master on/off switch yet.",
                   })}
                 >
                   <select
                     className="v2-input"
                     aria-label={t("settingsModal.memoryData.capturePolicy.name", {
-                      defaultValue: "Memory capture",
+                      defaultValue: "Chat memory capture",
                     })}
                     value={capturePolicy}
                     disabled={capturePolicyLoading || capturePolicySaving}
@@ -4111,25 +2766,17 @@ export function SettingsPage() {
               ) : (
                 <GatedRow
                   name={t("settingsModal.memoryData.capturePolicy.name", {
-                    defaultValue: "Memory capture",
+                    defaultValue: "Chat memory capture",
                   })}
                   description={t("settingsModal.memoryData.capturePolicy.helper", {
                     defaultValue:
-                      "Control how aggressively ZAKI saves new memories from your conversations.",
+                      "Controls only Chat/Spaces memory capture. Agent memory does not have a master on/off switch yet.",
                   })}
                   reason={t("settingsModal.memoryData.capturePolicy.unavailable", {
                     defaultValue: "Memory preferences are not available in this environment.",
                   })}
                 />
               )}
-              <div className="zaki-settings-v2__memory-list">
-                {memoryScopeRows.map((row) => (
-                  <div key={row.scope}>
-                    <strong>{getMemoryScopeLabel(t, row.scope)}</strong>
-                    <span>{row.products.join(" · ")}</span>
-                  </div>
-                ))}
-              </div>
               <div
                 className="zaki-settings-v2__product-row zaki-settings-v2__product-row--governance"
                 data-testid="settings-memory-governance"
@@ -4137,7 +2784,7 @@ export function SettingsPage() {
                 <header>
                   <strong>
                     {t("settingsModal.memoryData.governance.title", {
-                      defaultValue: "Agent memory governance",
+                      defaultValue: "Saved Agent memories",
                     })}
                   </strong>
                   <V2Badge
@@ -4221,11 +2868,11 @@ export function SettingsPage() {
               </div>
               <V2SettingsRow
                 name={t("settingsModal.memoryData.forgetOne.name", {
-                  defaultValue: "Forget one memory",
+                  defaultValue: "Delete by memory key",
                 })}
                 description={t("settingsModal.memoryData.forgetOne.helper", {
                   defaultValue:
-                    "Delete by stable memory key. Topic-substring purges remain agent-only.",
+                    "Use a stable memory key from Brain or memory detail views. Topic purges are not exposed here.",
                 })}
               >
                 <div className="zaki-settings-v2__control-stack">
@@ -4253,43 +2900,50 @@ export function SettingsPage() {
                   </V2Button>
                 </div>
               </V2SettingsRow>
-              <V2SettingsRow
-                name={t("settingsModal.memoryData.dreamReflection")}
-                description={t("settingsModal.memoryData.dreamReflectionHelper")}
-              >
-                <input
-                  className="v2-toggle"
-                  type="checkbox"
-                  aria-label={t("settingsModal.memoryData.dreamReflection")}
-                  checked={agentSettingsDraft.dream_enabled ?? true}
-                  disabled={agentSettingsLoading || agentSettingsSaving}
-                  onChange={(event) => {
-                    const dream_enabled = event.target.checked;
-                    setAgentSettingsDraft((current) => ({ ...current, dream_enabled }));
-                    void patchAgentSettings({ dream_enabled });
-                  }}
-                />
-              </V2SettingsRow>
-              <V2SettingsRow
-                name={t("settingsModal.memoryData.queryExpansion")}
-                description={t("settingsModal.memoryData.queryExpansionHelper")}
-              >
-                <input
-                  className="v2-toggle"
-                  type="checkbox"
-                  aria-label={t("settingsModal.memoryData.queryExpansion")}
-                  checked={agentSettingsDraft.query_expansion_enabled ?? false}
-                  disabled={agentSettingsLoading || agentSettingsSaving}
-                  onChange={(event) => {
-                    const query_expansion_enabled = event.target.checked;
-                    setAgentSettingsDraft((current) => ({
-                      ...current,
-                      query_expansion_enabled,
-                    }));
-                    void patchAgentSettings({ query_expansion_enabled });
-                  }}
-                />
-              </V2SettingsRow>
+              <details className="zaki-settings-v2__advanced-details">
+                <summary>
+                  {t("settingsModal.memoryData.advanced.title", {
+                    defaultValue: "Advanced Agent memory behavior",
+                  })}
+                </summary>
+                <V2SettingsRow
+                  name={t("settingsModal.memoryData.dreamReflection")}
+                  description={t("settingsModal.memoryData.dreamReflectionHelper")}
+                >
+                  <input
+                    className="v2-toggle"
+                    type="checkbox"
+                    aria-label={t("settingsModal.memoryData.dreamReflection")}
+                    checked={agentSettingsDraft.dream_enabled ?? true}
+                    disabled={agentSettingsLoading || agentSettingsSaving}
+                    onChange={(event) => {
+                      const dream_enabled = event.target.checked;
+                      setAgentSettingsDraft((current) => ({ ...current, dream_enabled }));
+                      void patchAgentSettings({ dream_enabled });
+                    }}
+                  />
+                </V2SettingsRow>
+                <V2SettingsRow
+                  name={t("settingsModal.memoryData.queryExpansion")}
+                  description={t("settingsModal.memoryData.queryExpansionHelper")}
+                >
+                  <input
+                    className="v2-toggle"
+                    type="checkbox"
+                    aria-label={t("settingsModal.memoryData.queryExpansion")}
+                    checked={agentSettingsDraft.query_expansion_enabled ?? false}
+                    disabled={agentSettingsLoading || agentSettingsSaving}
+                    onChange={(event) => {
+                      const query_expansion_enabled = event.target.checked;
+                      setAgentSettingsDraft((current) => ({
+                        ...current,
+                        query_expansion_enabled,
+                      }));
+                      void patchAgentSettings({ query_expansion_enabled });
+                    }}
+                  />
+                </V2SettingsRow>
+              </details>
               <div className="zaki-settings-v2__actions">
                 <V2Button size="sm" disabled={isExporting} onClick={() => void handleExport()}>
                   {isExporting
@@ -4297,45 +2951,6 @@ export function SettingsPage() {
                     : t("settingsModal.privacy.exportAllData")}
                 </V2Button>
               </div>
-            </V2SettingsBlock>
-
-            <V2SettingsBlock
-              id="settings-developer-access"
-              data-testid="settings-developer-access"
-              title={t("settingsModal.sections.developerAccess")}
-            >
-              <div className="zaki-settings-v2__product-list">
-                {developerAccessRows.map((product) => (
-                  <article key={product.productId} className="zaki-settings-v2__product-row">
-                    <header>
-                      <strong>{product.label}</strong>
-                      <V2Badge tone={getStateTone(product.state)}>
-                        {getProductStateLabel(t, product.state)}
-                      </V2Badge>
-                    </header>
-                    <p>{getProductEntryPointLabel(t, product)}</p>
-                  </article>
-                ))}
-              </div>
-            </V2SettingsBlock>
-
-            <V2SettingsBlock
-              id="settings-connections"
-              data-testid="settings-connections"
-              title={t("settingsModal.sections.connections")}
-            >
-              <V2SettingsRow
-                name={t("settingsModal.connections.google")}
-                description={t("settingsModal.connections.googleHelper")}
-              >
-                <V2Badge tone={googleOAuthEnabled ? "success" : "default"}>
-                  {googleOAuthEnabled === null
-                    ? t("settingsModal.connections.checking")
-                    : googleOAuthEnabled
-                      ? t("settingsModal.connections.available")
-                      : t("settingsModal.connections.notConfigured")}
-                </V2Badge>
-              </V2SettingsRow>
             </V2SettingsBlock>
 
             <V2SettingsBlock

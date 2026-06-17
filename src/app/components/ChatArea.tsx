@@ -27,6 +27,7 @@ import {
   fetchAgentArtifact,
   fetchBotRuntimeStatus,
   fetchAgentExtensionDiagnostics,
+  fetchBotSettings,
   listAgentArtifacts,
   listAgentCron,
   listAgentJobs,
@@ -49,6 +50,11 @@ import {
   type AgentSessionContext,
 } from "@/lib/api";
 import {
+  assistantModeToReasoningEffort,
+  type AgentDefaultAutonomy,
+  type AgentDefaultReasoningEffort,
+} from "@/lib/agentSettingsDefaults";
+import {
   buildAgentContextGauge,
   contextUnavailableCode,
   isContextUnavailableCode,
@@ -60,6 +66,7 @@ import {
   stripThreadDisplayName,
 } from "@/lib/threadTitles";
 import { createAnonymousThreadId } from "@/lib/anonymousSpaces";
+import { upsertAnonymousWorkItem } from "@/lib/anonymousWork";
 import { openSpacesMemoryViewer, type MemoryViewerTab } from "@/lib/spacesMemory";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import {
@@ -3061,6 +3068,10 @@ export function ChatArea() {
   const lastAgentHistoryReconcileThreadRef = useRef<string | null>(null);
   const [zakiBotProvisionReady, setZakiBotProvisionReady] = useState(false);
   const [sessionModePending, setSessionModePending] = useState(false);
+  const [agentDefaultAutonomy, setAgentDefaultAutonomy] =
+    useState<AgentDefaultAutonomy>("supervised");
+  const [agentDefaultReasoningEffort, setAgentDefaultReasoningEffort] =
+    useState<AgentDefaultReasoningEffort>("high");
   const [selectedAgentArtifact, setSelectedAgentArtifact] =
     useState<AgentInspectorArtifact | null>(null);
   const [agentInspectorOpen, setAgentInspectorOpen] = useState(() => {
@@ -3309,6 +3320,7 @@ export function ChatArea() {
   }, [inputLeft, inputTop, inputWidth, viewportHeight, viewportWidth]);
 
   useEffect(() => {
+    if (showZakiHome && sidebarMode === "zaki") return;
     let cancelled = false;
     void apiRequest("/api/documents/accepted-file-types")
       .then(async (response) => {
@@ -3327,7 +3339,7 @@ export function ChatArea() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [showZakiHome, sidebarMode]);
 
 
   // Refs
@@ -3426,6 +3438,37 @@ export function ChatArea() {
         // non-critical — session key just won't resolve until next attempt
       });
     return () => { cancelled = true; };
+  }, [isAuthReady, isZakiBotActiveSpace]);
+
+  useEffect(() => {
+    if (!isAuthReady || !isZakiBotActiveSpace) return;
+    let cancelled = false;
+    void fetchBotSettings()
+      .then(({ response, data }) => {
+        if (cancelled) return;
+        if (!response.ok || data?.error) {
+          setAgentDefaultAutonomy("supervised");
+          setAgentDefaultReasoningEffort("high");
+          return;
+        }
+        const autonomy = data?.autonomy;
+        setAgentDefaultAutonomy(
+          autonomy === "read_only" || autonomy === "supervised" || autonomy === "full"
+            ? autonomy
+            : "supervised"
+        );
+        setAgentDefaultReasoningEffort(
+          assistantModeToReasoningEffort(data?.assistant_mode)
+        );
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAgentDefaultAutonomy("supervised");
+        setAgentDefaultReasoningEffort("high");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [isAuthReady, isZakiBotActiveSpace]);
 
   useEffect(() => {
@@ -5990,6 +6033,17 @@ export function ChatArea() {
       eventType?: string
     ): { done?: boolean; chunk?: string; agentUrl?: string } => {
       const payloadType = typeof payload.type === "string" ? payload.type : "";
+      const payloadHasText =
+        (typeof payload.delta === "string" && payload.delta.length > 0) ||
+        (typeof payload.token === "string" && payload.token.length > 0) ||
+        (typeof payload.text === "string" && payload.text.length > 0) ||
+        (typeof payload.textResponse === "string" && payload.textResponse.length > 0) ||
+        (typeof payload.chunk === "string" && payload.chunk.length > 0) ||
+        (typeof payload.content === "string" && payload.content.length > 0) ||
+        (typeof payload.message === "string" && payload.message.length > 0);
+      if (eventType === "token" || payloadType === "token") {
+        if (payloadHasText) turnContent.received = true;
+      }
       const trackChunk = (chunk: string): { chunk: string } => {
         if (chunk) turnContent.received = true;
         return { chunk };
@@ -6492,6 +6546,7 @@ export function ChatArea() {
 
     const appendChunk = (chunk: string) => {
       if (!chunk) return;
+      turnContent.received = true;
       accumulated += chunk;
       if (renderRaf != null) return;
       renderRaf = window.requestAnimationFrame(() => {
@@ -7316,6 +7371,18 @@ export function ChatArea() {
     }
 
     if (!threadId) return;
+    const anonymousSpacesWork =
+      !authUserId && !isZakiBotTarget
+        ? upsertAnonymousWorkItem({
+            productId: "spaces",
+            taskKind: "chat",
+            prompt: trimmed,
+            route: `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
+            threadId,
+            meterRemaining: null,
+            status: "draft",
+          })
+        : null;
 
     const turnSessionKey =
       isZakiBotTarget && agentUserId ? buildAgentSessionKey(threadId, agentUserId) : null;
@@ -7549,9 +7616,34 @@ export function ChatArea() {
         userMessage: trimmed,
         assistantMessage: String(streamResult?.content || "").trim(),
       });
+      if (anonymousSpacesWork) {
+        upsertAnonymousWorkItem({
+          id: anonymousSpacesWork.id,
+          productId: "spaces",
+          taskKind: "chat",
+          prompt: trimmed,
+          replyPreview: String(streamResult?.content || "").trim(),
+          route: `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
+          threadId,
+          meterRemaining: null,
+          status: "succeeded",
+        });
+      }
       // Keep chat UX responsive: memory save runs in background.
       void checkForSavedMemories(trimmed, threadId);
     } catch (error) {
+      if (anonymousSpacesWork) {
+        upsertAnonymousWorkItem({
+          id: anonymousSpacesWork.id,
+          productId: "spaces",
+          taskKind: "chat",
+          prompt: trimmed,
+          route: `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
+          threadId,
+          meterRemaining: null,
+          status: "failed",
+        });
+      }
       if (isAbortError(error)) {
         if (isZakiBotTarget) {
           finalizeZakiBotProgress("abort");
@@ -8534,7 +8626,6 @@ export function ChatArea() {
         return (
           <ZakiDashboard
             onSendExample={(example) => handleSend(example, [])}
-            onOpenMemoryImport={() => setMemoryImportOpen(true)}
           />
         );
       }
@@ -9088,6 +9179,8 @@ export function ChatArea() {
                 showUpgradeStrip={false}
                 sendLocked={isZakiBotSendLocked}
                 zakiBotMode={isZakiBotActiveSpace}
+                zakiDefaultAutonomy={agentDefaultAutonomy}
+                zakiDefaultReasoningEffort={agentDefaultReasoningEffort}
                 threadKey={
                   activeThreadId
                     ? `${activeWorkspaceSlug || "_"}::${activeThreadId}`
