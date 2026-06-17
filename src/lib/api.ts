@@ -471,6 +471,7 @@ export async function requestPublicSignup({
   dateOfBirth,
   legalConsentAccepted,
   legalPolicyVersion,
+  turnstileToken,
 }: {
   email: string;
   password: string;
@@ -478,6 +479,7 @@ export async function requestPublicSignup({
   dateOfBirth: string;
   legalConsentAccepted?: boolean;
   legalPolicyVersion?: string;
+  turnstileToken?: string | null;
 }) {
   const payload: Record<string, string | boolean> = {
     email,
@@ -490,6 +492,9 @@ export async function requestPublicSignup({
   }
   if (legalPolicyVersion) {
     payload.legalPolicyVersion = legalPolicyVersion;
+  }
+  if (turnstileToken) {
+    payload.turnstileToken = turnstileToken;
   }
 
   const response = await backendRequest("/signup", {
