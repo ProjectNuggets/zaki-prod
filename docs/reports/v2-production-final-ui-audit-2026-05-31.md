@@ -1,8 +1,9 @@
 # V2 Production-Final UI Audit
 
 Date: 2026-05-31  
+Updated: 2026-06-17 release lock
 Branch: `codex/zaki-prod-finalization`  
-Scope: Dashboard, Agent, Chat/Spaces route visibility, Brain, Settings, and gated Learn/Hire/Design direct routes.
+Scope: Dashboard, Agent, Chat/Spaces route visibility, Brain, Settings, website handoff, standalone website reconciliation, and hidden operator guard.
 
 ## Public Route Matrix
 
@@ -11,7 +12,7 @@ Scope: Dashboard, Agent, Chat/Spaces route visibility, Brain, Settings, and gate
 | `/` | Public signed-in | Dashboard command center | `zaki-command-center`, products, meter |
 | `/agent` | Public signed-in | Agent workbench | composer controls, inspector tabs, narration |
 | `/spaces` | Public signed-in | Chat/Spaces | workspace shell renders in release E2E |
-| `/brain` | Public signed-in | Graph-first memory control plane | `brain-graph-slot` default, timeline hidden unless requested |
+| `/brain` | Public signed-in | Brain home with graph/timeline/search entry points | release smoke + screenshots |
 | `/brain?tab=timeline` | Public signed-in | Timeline secondary tab | focused Jest coverage |
 | `/settings` | Public signed-in | Route-level settings control plane | all MECE sections rendered |
 | `/learn` | Private beta | Product access gate | `product-gate-learning` |
@@ -19,7 +20,8 @@ Scope: Dashboard, Agent, Chat/Spaces route visibility, Brain, Settings, and gate
 | `/design` | Waitlist | Product access gate unless registry and service health allow | `product-gate-design` |
 | `/products/agent`, `/ar/products/agent`, `/zaki-bot` | Signed-in app redirect | Agent workbench | `/agent`, `.zaki-agent-v2` |
 | `/products/spaces` | Signed-in app redirect | Chat/Spaces | `/spaces`, workspace shell |
-| `/products/learn`, `/products/hire`, `/products/design` | Signed-in app redirect | Beta/waitlist gate | `/learn`, `/hire`, `/design` gates |
+| `/products/learn`, `/products/hire`, `/products/design` | Signed-in marketing page | Coming-soon/beta/waitlist truth | product marketing copy, no public app redirect |
+| `/internal/operator`, `/internal/admin-access-codes` | Hidden internal | Super-admin only | non-superadmin redirects to `/`; no normal nav links |
 
 ## Exposure Matrix
 
@@ -28,11 +30,11 @@ Scope: Dashboard, Agent, Chat/Spaces route visibility, Brain, Settings, and gate
 | Dashboard | Public | Enabled | Renders app dashboard |
 | Agent | Public | Enabled | Renders Agent workbench |
 | Chat/Spaces | Public | Enabled | Renders ChatArea |
-| Brain | Public control plane | Enabled | Renders graph-first Brain |
+| Brain | Public control plane | Enabled | Renders Brain home; graph remains an entry surface |
 | Settings | Public control plane | Enabled | Renders Settings |
 | Learn | Private beta | ProductRail disabled; dashboard card opens gate | Gate only |
 | Hire | Private beta | ProductRail disabled; dashboard card opens gate | Gate only |
-| Design | Waitlist/early access | ProductRail disabled; dashboard card opens gate | Gate only unless registry and health both allow |
+| Design | Waitlist/early access | ProductRail disabled; dashboard hint stays contextual | Gate only unless registry and health both allow |
 
 ## Screenshot Package
 
@@ -80,13 +82,16 @@ npm run build
 - Design shell is not exposed unless product registry state is `enabled` and design health reports `ok: true` and `configured: true`.
 - User-managed channel credential values are write-only; Settings shows key metadata and vault references only.
 - Provider profile secrets and extension device tokens are not rendered.
-- Signed-in product marketing routes redirect to app surfaces so in-app product clicks cannot fall through to the website.
+- Signed-in product marketing routes redirect only for public app products. Learn, Hire, and Design stay as marketing pages so their copy can remain truthful without exposing product shells.
+- Integrated website CTAs carry `source` and `intent` before entering app routes.
+- Standalone `website/` is a secondary marketing shell. Old public-beta, student-price, and paid-Spaces claims are removed or documented as forbidden drift.
+- Operator routes remain absent from normal navigation and guarded for `as@novanuggets.com`.
 
 ## Manual Audit Start
 
 1. Start from `/` and verify the dashboard reads as the product command center.
 2. Open `/agent` at desktop and mobile widths; compare composer grammar, right panel tabs, narration, and bottom-row controls against `V2 Agent v6.html`.
 3. Open `/spaces`; confirm Chat/Spaces remains public and usable.
-4. Open `/brain`; confirm graph is default and `/brain?tab=timeline` still opens timeline.
+4. Open `/brain`; confirm Brain home renders and graph/timeline/search entry points remain reachable.
 5. Open `/settings`; verify Account, Plan & Usage, Products & Access, Channels, Secrets, Providers & Models, Extension Devices, Memory & Data, Developer Access, Connections, and Privacy.
 6. Open `/learn`, `/hire`, and `/design` directly; confirm only gates appear.

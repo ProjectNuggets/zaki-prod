@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Check, Sparkles, ArrowRight } from "lucide-react";
 import type { Locale, WebsiteContent } from "../lib/content";
+import { appHandoffUrl } from "../lib/appHandoff";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
@@ -77,7 +78,7 @@ function InlineWaitlist({ locale }: { locale: Locale }) {
     return (
       <p className="flex items-center gap-2 rounded-xl border border-zk-success/20 bg-zk-success/[0.06] px-4 py-3 text-sm text-zk-success">
         <Check className="size-4" />
-        {isArabic ? "تم تسجيلك في بيتا زكي. سنرسل لك التحديثات والوصول المبكر." : "You're on the ZAKI beta list. We'll send updates and early-access details."}
+        {isArabic ? "تم تسجيلك في تحديثات زكي. سنرسل لك التحديثات والوصول المبكر." : "You're on the ZAKI Agent list. We'll send updates and early-access details."}
       </p>
     );
   }
@@ -109,25 +110,26 @@ function InlineWaitlist({ locale }: { locale: Locale }) {
 }
 
 /* ── Main component ──────────────────────────────────── */
-export function PricingSplit({ locale, t }: { locale: Locale; t: WebsiteContent }) {
+export function PricingSplit({ locale, t: _t }: { locale: Locale; t: WebsiteContent }) {
   const isArabic = locale === "ar";
-  const [isStudent, setIsStudent] = useState(false);
-  const plan = t.pricing.plans.find((p) => p.tier === "personal")!;
-  const chatFeatureItems = [
-    ...plan.features,
-    isArabic
-      ? "مساحات منظّمة للعربية والإنجليزية مع سياق أوضح لكل مشروع"
-      : "Organized Arabic-English spaces with cleaner context for each project",
-  ];
+  const chatFeatureItems = isArabic
+    ? ["10 رسائل يوميًا للمستخدم المجهول", "بلا تسجيل للبدء", "بلا ذاكرة دائمة حتى تسجّل الدخول", "عربي وإنجليزي في نفس مساحة العمل"]
+    : ["10 anonymous messages per day", "No signup required to start", "No durable memory until you sign in", "Arabic and English in the same work lane"];
+  const agentFeatureItems = isArabic
+    ? ["ذاكرة واستمرارية للحساب", "موافقات أدوات قبل الأفعال الحساسة", "متابعات وجلسات وسياق قابل للمراجعة", "Brain يعرض الذاكرة ومصدرها"]
+    : ["Account memory and continuity", "Tool approvals before sensitive actions", "Follow-ups, sessions, and reviewable context", "Brain shows memory and provenance"];
+  const futureFeatureItems = isArabic
+    ? ["Learn يبقى وصولًا خاصًا", "Design يبقى قائمة انتظار", "Career يبقى مسارًا مهنيًا للمستخدم", "لا وعود عامة حتى تكتمل المسارات"]
+    : ["Learn stays private access", "Design stays waitlist", "Career stays user-side job-search", "No public promises until flows are complete"];
   const chatStats = [
-    { value: "$13", label: isArabic ? "شهريًا" : "Per month" },
-    { value: isArabic ? "مباشر" : "Live", label: isArabic ? "الحالة" : "State" },
-    { value: isArabic ? "سياق مشترك" : "Shared context", label: isArabic ? "داخل المساحة" : "Inside each space" },
+    { value: "$0", label: isArabic ? "للبدء" : "To start" },
+    { value: "10", label: isArabic ? "رسائل / يوم" : "Msgs / day" },
+    { value: isArabic ? "بلا ذاكرة" : "No memory", label: isArabic ? "مجهول" : "Anonymous" },
   ];
-  const betaStats = [
-    { value: "5", label: isArabic ? "رسائل مجانية / يوم" : "Free msgs / day" },
-    { value: isArabic ? "بيتا عامة" : "Public beta", label: isArabic ? "الحالة" : "State" },
-    { value: isArabic ? "استمرارية" : "Continuity", label: isArabic ? "الطبقة" : "Layer" },
+  const agentStats = [
+    { value: "Agent", label: isArabic ? "السطح" : "Surface" },
+    { value: "Brain", label: isArabic ? "الذاكرة" : "Memory" },
+    { value: isArabic ? "حساب" : "Account", label: isArabic ? "مطلوب" : "Required" },
   ];
   const cardClassName =
     "relative flex-1 overflow-hidden rounded-2xl border bg-zk-surface p-6 shadow-[0_2px_4px_rgba(0,0,0,0.02),0_16px_48px_rgba(17,10,6,0.06)] transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-[0_2px_4px_rgba(0,0,0,0.03),0_24px_64px_rgba(17,10,6,0.10)] md:p-8";
@@ -140,18 +142,22 @@ export function PricingSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
             <div className="mb-4 flex items-center gap-3">
               <img src="/assets/zaki-logo.png" alt="" className="size-8 rounded-[8px] shadow-[0_2px_8px_rgba(0,0,0,0.08)]" />
               <p className="font-mono-ui text-[11px] uppercase tracking-[0.28em] text-zk-accent">
-                {isArabic ? "التسعير" : "Pricing"}
+                {isArabic ? "الوصول" : "Access"}
               </p>
             </div>
             <h2 className="font-display mt-3 text-[32px] font-extrabold leading-[1.08] tracking-[-0.04em] text-zk-text md:text-[48px]">
-              {t.pricing.heading}
+              {isArabic ? "ابدأ مجانًا. فعّل الاستمرارية عندما يهم العمل." : "Start free. Turn on continuity when the work matters."}
             </h2>
-            <p className="mt-4 text-[15px] leading-[1.8] text-zk-text-secondary md:text-base">{t.pricing.subheading}</p>
+            <p className="mt-4 text-[15px] leading-[1.8] text-zk-text-secondary md:text-base">
+              {isArabic
+                ? "الموقع لا يبيع مسارًا قديمًا. Chat هو المدخل المجاني، Agent هو سطح الاستمرارية، وLearn وDesign وCareer تبقى مقيّدة حتى تكتمل."
+                : "This site no longer sells the old ladder. Chat is the free entry point, Agent is the continuity surface, and Learn, Design, and Career remain gated until complete."}
+            </p>
           </div>
         </Reveal>
 
-        <div className="grid gap-5 md:grid-cols-2 items-stretch">
-          {/* ─── Personal plan card ─── */}
+        <div className="grid items-stretch gap-5 lg:grid-cols-3">
+          {/* ─── Chat card ─── */}
           <Reveal className="flex">
             <div className={`${cardClassName} border-zk-border-strong`}>
               <div className="relative flex h-full flex-col">
@@ -159,61 +165,40 @@ export function PricingSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
                   <div>
                     <Badge tone="chat">{isArabic ? "مباشر" : "Live"}</Badge>
                     <h3 className="font-display mt-4 text-[28px] font-extrabold tracking-[-0.04em] text-zk-text md:text-[36px]">
-                      Spaces
+                      ZAKI Chat
                     </h3>
                   </div>
                   <div className="text-end">
                     <p className="font-mono-ui text-[11px] uppercase tracking-[0.2em] text-zk-text-secondary">
-                      {isArabic ? "شهريًا" : "Monthly"}
+                      {isArabic ? "دخول" : "Entry"}
                     </p>
                     <p className="font-display mt-1 text-[36px] font-extrabold tracking-[-0.04em] text-zk-text md:text-[42px]">
-                      {isStudent ? "$8" : "$13"}
+                      $0
                     </p>
                   </div>
                 </div>
 
                 <p className="mt-4 text-[14px] leading-[1.75] text-zk-text-secondary">
                   {isArabic
-                    ? "للعمل اليومي المنظّم. كل مساحة يمكن أن تحمل تعليماتها وملفاتها الخاصة، والخيوط داخلها تشترك في ذلك السياق. هذا هو المنتج المدفوع المباشر مقابل 13 دولارًا شهريًا."
-                    : "For structured daily work. Each Space can hold its own instructions and documents, and threads inside that Space share the same context. This is the live paid product at $13/month."}
+                    ? "ابدأ من دردشة مجانية وسريعة للمسودات والترجمة والبحث والتخطيط. تبقى بلا ذاكرة دائمة حتى تسجّل الدخول."
+                    : "Start from free, fast chat for drafts, translation, research, and planning. It stays memory-free until you sign in."}
                 </p>
 
                 <PricingStatStrip stats={chatStats} />
                 <PricingFeatureList items={chatFeatureItems} />
 
-                <PricingSupportPanel eyebrow={isArabic ? "خيار الخطة" : "Plan option"}>
-                  <label className="flex cursor-pointer items-start gap-3 transition-colors hover:border-zk-accent/15">
-                    <input
-                      type="checkbox"
-                      checked={isStudent}
-                      onChange={(e) => setIsStudent(e.target.checked)}
-                      className="mt-0.5 size-4 shrink-0 rounded border-zk-border-strong accent-zk-accent"
-                    />
-                    <div>
-                        <span className="text-[13px] font-medium text-zk-text">
-                          {isArabic ? "أنا طالب" : "I'm a student"}
-                        <span className="ms-2 font-mono-ui text-[11px] tracking-wider text-zk-accent">
-                          {isArabic ? "← $8/شهر" : "→ $8/mo"}
-                        </span>
-                      </span>
-                      <p className="mt-1 text-[11px] leading-[1.6] text-zk-text-secondary">
-                        {t.pricing.note}
-                      </p>
-                      <p className="mt-2 text-[11px] leading-[1.6] text-zk-text-secondary/70">
-                        {isArabic
-                          ? "ابدأ بالخطة الشخصية الآن، أو تحوّل إلى سعر الطالب بعد التحقق."
-                          : "Start on Personal now, or switch to the student rate once verification is complete."}
-                      </p>
-                    </div>
-                  </label>
+                <PricingSupportPanel eyebrow={isArabic ? "حد واضح" : "Clear boundary"}>
+                  <p className="text-[12px] leading-6 text-zk-text-secondary">
+                    {isArabic
+                      ? "إذا أردت حفظ العمل أو استدعاء الذاكرة، انتقل إلى Agent بحسابك."
+                      : "When the work should be saved or recalled, move into Agent with your account."}
+                  </p>
                 </PricingSupportPanel>
 
                 <div className="mt-auto pt-6">
                   <Button asChild variant="secondary" className="w-full text-[13px]">
-                    <a href={`https://app.chatzaki.com/pricing?auth=signup&plan=${isStudent ? "student" : "personal"}&interval=monthly&source=website_pricing_card`}>
-                      {isStudent
-                        ? (isArabic ? "ابدأ كطالب" : "Start as Student")
-                        : plan.cta}
+                    <a href={appHandoffUrl("/spaces", "website_pricing_chat", "chat")}>
+                      {isArabic ? "ابدأ Chat" : "Start Chat"}
                     </a>
                   </Button>
                 </div>
@@ -221,7 +206,7 @@ export function PricingSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
             </div>
           </Reveal>
 
-          {/* ─── ZAKI Beta card ─── */}
+          {/* ─── Agent card ─── */}
           <Reveal delay={100} className="flex">
             <div className={`${cardClassName} border-zk-accent/15`}>
               <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-zk-accent/[0.03] to-transparent" />
@@ -231,22 +216,22 @@ export function PricingSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
                   <div>
                     <Badge tone="warning" pulse>
                       <Sparkles className="size-3" />
-                      {isArabic ? "تجريبي مفتوح" : "Experimental · open"}
+                      {isArabic ? "استمرارية" : "Continuity"}
                     </Badge>
                     <h3 className="font-display mt-4 text-[28px] font-extrabold tracking-[-0.04em] text-zk-text md:text-[36px]">
-                      ZAKI
+                      ZAKI Agent
                     </h3>
                   </div>
                   <div className="text-end">
                     <p className="text-[12px] font-medium text-zk-text-secondary">
-                      {isArabic ? "تجريبي" : "Experimental"}
+                      {isArabic ? "الحساب" : "Account"}
                     </p>
                     <div className="mt-1">
                       <p className="font-display text-[36px] font-extrabold tracking-[-0.04em] text-zk-accent md:text-[42px]">
-                        {isArabic ? "مجاني" : "Free"}
+                        Agent
                       </p>
                       <p className="font-mono-ui text-[10px] uppercase tracking-[0.18em] text-zk-text-secondary">
-                        {isArabic ? "أثناء البيتا" : "During beta"}
+                        {isArabic ? "ذاكرة ومتابعة" : "Memory and follow-through"}
                       </p>
                     </div>
                   </div>
@@ -254,31 +239,51 @@ export function PricingSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
 
                 <p className="mt-4 text-[14px] leading-[1.75] text-zk-text-secondary">
                   {isArabic
-                    ? "زكي هو البيتا العامة لذكاء مستمر بذاكرة واستمرارية. يحتفظ بالخيط معك بين الجلسات ويُظهر مراحل عمله. التسويق العام هنا بسيط: 5 رسائل مجانية يوميًا لتجربة الاتجاه قبل أن ينضج المنتج أكثر."
-                    : "ZAKI is the public beta for persistent AI with memory and continuity. It keeps the thread with you between sessions and shows its work phases. The public offer is simple: 5 free messages per day to test the direction before the product matures further."}
+                    ? "Agent يحمل العمل عبر الجلسات. الذاكرة تظهر في Brain، والأدوات الحساسة تمر عبر موافقات واضحة."
+                    : "Agent carries work across sessions. Memory is visible in Brain, and sensitive tools run through explicit approvals."}
                 </p>
 
-                <PricingStatStrip stats={betaStats} />
-                <PricingFeatureList items={t.pricing.botBeta.bullets} />
+                <PricingStatStrip stats={agentStats} />
+                <PricingFeatureList items={agentFeatureItems} />
 
-                <PricingSupportPanel eyebrow={isArabic ? "وصول مبكر" : "Early access"}>
-                  <div className="relative mt-3">
-                    <InlineWaitlist locale={locale} />
-                  </div>
-                  <p className="mt-3 text-[11px] leading-[1.6] text-zk-text-secondary/70">
+                <PricingSupportPanel eyebrow={isArabic ? "الترقية" : "Upgrade"}>
+                  <p className="text-[12px] leading-6 text-zk-text-secondary">
                     {isArabic
-                      ? "نستخدم بريدك فقط لتحديثات بيتا زكي والوصول المبكر. بلا رسائل دعائية."
-                      : "Your email is only used for ZAKI beta updates and early-access communication. No marketing spam."}
+                      ? "استخدم Agent عندما تريد أن يستمر السياق وتظهر الذاكرة ويمكن مراجعة الأفعال."
+                      : "Use Agent when context should persist, memory should be visible, and actions need review."}
                   </p>
                 </PricingSupportPanel>
 
                 <div className="mt-auto pt-6">
                   <Button asChild className="w-full text-[13px]">
-                    <a href="/zaki-bot/#waitlist">
-                      {isArabic ? "جرّب زكي مجانًا" : "Try ZAKI free"}
+                    <a href={appHandoffUrl("/agent", "website_pricing_agent", "agent")}>
+                      {isArabic ? "افتح Agent" : "Open Agent"}
                     </a>
                   </Button>
                 </div>
+              </div>
+            </div>
+          </Reveal>
+
+          {/* ─── Future lanes card ─── */}
+          <Reveal delay={160} className="flex">
+            <div className={`${cardClassName} border-zk-border-strong`}>
+              <div className="relative flex h-full flex-col">
+                <Badge tone="warning">{isArabic ? "مقيّد" : "Gated"}</Badge>
+                <h3 className="font-display mt-4 text-[28px] font-extrabold tracking-[-0.04em] text-zk-text md:text-[36px]">
+                  {isArabic ? "المسارات القادمة" : "Future lanes"}
+                </h3>
+                <p className="mt-4 text-[14px] leading-[1.75] text-zk-text-secondary">
+                  {isArabic
+                    ? "Learn وDesign وCareer تظهر كاتجاهات منتج، لكنها ليست وصولًا عامًا حتى تتفق الواجهة والصلاحيات والاختبارات."
+                    : "Learn, Design, and Career remain product directions, not public access, until UI, entitlement, and tests agree."}
+                </p>
+                <PricingFeatureList items={futureFeatureItems} />
+                <PricingSupportPanel eyebrow={isArabic ? "تحديثات" : "Updates"}>
+                  <div className="relative mt-3">
+                    <InlineWaitlist locale={locale} />
+                  </div>
+                </PricingSupportPanel>
               </div>
             </div>
           </Reveal>

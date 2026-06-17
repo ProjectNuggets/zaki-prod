@@ -88,9 +88,9 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
     title: "Spaces vs ChatGPT for Arabic Speakers",
     intro:
       "Short answer: choose ChatGPT if you want the broadest frontier AI in the mainstream market. Choose Spaces if you want a more disciplined Arabic-English workspace for real daily work. This page exists to make that tradeoff explicit before product labels or model hype get in the way.",
-    note: "This page compares Spaces today. ZAKI itself is the public beta for persistent personal intelligence.",
+    note: "This page compares Chat today. ZAKI itself is the current Agent preview for persistent personal intelligence.",
     definition:
-      "Spaces are the live paid workspace layer in the ZAKI product ladder. ChatGPT is the mainstream general-purpose benchmark for AI chat. The real decision here is not who wins the raw-model race. It is whether you need a broad general assistant or a more structured bilingual workspace that keeps daily work cleaner.",
+      "Spaces are the free chat entry point layer in the ZAKI product ladder. ChatGPT is the mainstream general-purpose benchmark for AI chat. The real decision here is not who wins the raw-model race. It is whether you need a broad general assistant or a more structured bilingual workspace that keeps daily work cleaner.",
     table: {
       headers: ["Feature", "Spaces", "ChatGPT"],
       rows: [
@@ -119,7 +119,7 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
         },
         {
           feature: "Next-step vision",
-          values: ["Connects directly to ZAKI and the persistent-intelligence beta", "General chat product direction"],
+          values: ["Connects directly to ZAKI and the persistent-intelligence layer", "General chat product direction"],
         },
       ],
     },
@@ -132,7 +132,7 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
           "You want AI to feel like a workspace, not an endless pile of chat threads.",
           "You work across Arabic and English every day and want product fit, not just model scale.",
           "You care about clearer context separation, memory control, and lower-noise daily use.",
-          "You want a practical chat layer now with a direct path into ZAKI's persistent-intelligence beta.",
+          "You want a practical chat layer now with a direct path into ZAKI's persistent-intelligence layer.",
         ],
       },
       {
@@ -146,7 +146,7 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
       {
         title: "What comes after Spaces",
         body:
-          "ZAKI is the public beta for persistent personal intelligence: a trainable personal operator built to hold context across time, show its work phases, and close the last mile between AI answers and AI counterparts.",
+          "ZAKI is the current Agent preview for persistent personal intelligence: a trainable personal operator built to hold context across time, show its work phases, and close the last mile between AI answers and AI counterparts.",
       },
     ],
     disclaimer:
@@ -154,7 +154,7 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
     links: [
       { label: "Read the ZAKI page", href: "/zaki-bot/" },
       { label: "See the Arabic AI ranking", href: "/best-arabic-ai-assistant/" },
-      { label: "Try Spaces", href: "https://app.chatzaki.com/?auth=signup" },
+      { label: "Start Chat", href: "https://app.chatzaki.com/spaces?source=website_standalone&intent=chat" },
     ],
     seo: {
       title: "Spaces vs ChatGPT for Arabic Speakers",
@@ -273,9 +273,9 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
     disclaimer:
       "This is a product-clarity page. Spaces is the public name for the structured workspace layer of ZAKI.",
     links: [
-      { label: "Try ZAKI free", href: "https://app.chatzaki.com/?auth=signup&source=website_zaki_vs_spaces" },
+      { label: "Open Agent", href: "https://app.chatzaki.com/agent?source=website_zaki_vs_spaces&intent=agent" },
       { label: "See ZAKI", href: "/zaki-bot/" },
-      { label: "Start with Spaces", href: "https://app.chatzaki.com/?auth=signup" },
+      { label: "Start with Chat", href: "https://app.chatzaki.com/spaces?source=website_standalone&intent=chat" },
     ],
     seo: {
       title: "ZAKI vs Spaces: When to Think with ZAKI and When to Work in Spaces",
@@ -290,9 +290,9 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
     badge: "2026 Roundup",
       title: "Best Arabic AI Assistant in 2026: Chat Tools and Operators",
     intro:
-      "Short answer: the best Arabic AI tool depends on the job. Spaces are a strong choice for structured Arabic-English productivity today. ChatGPT remains broader and more mainstream. ZAKI is the public beta for users who want the next step: persistent personal intelligence instead of ordinary chat.",
+      "Short answer: the best Arabic AI tool depends on the job. Chat is a strong choice for structured Arabic-English productivity today. ChatGPT remains broader and more mainstream. ZAKI is the current Agent preview for users who want the next step: persistent personal intelligence instead of ordinary chat.",
     definition:
-      "Not every Arabic AI product belongs in one bucket. Some tools are broad chat products. Some are vertical assistants. Some are moving toward something more persistent. ZAKI's position is unusual because it combines live structured workspaces today with a public beta for a more trainable, persistent agent layer.",
+      "Not every Arabic AI product belongs in one bucket. Some tools are broad chat products. Some are vertical assistants. Some are moving toward something more persistent. ZAKI's position is unusual because it combines live structured workspaces today with a current Agent preview for a more trainable, persistent agent layer.",
     table: {
       headers: ["Tool", "Best for", "Category", "Memory / control model", "Notes"],
       rows: [
@@ -300,7 +300,7 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
           feature: "Spaces",
           values: [
             "Bilingual daily productivity and spaces-based work",
-            "Live paid chat product",
+            "Live free chat entry",
             "User-managed memory orientation",
             "Best fit if you want a cheaper, more organized daily AI layer",
           ],
@@ -349,16 +349,16 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
       {
         title: "How to read this ranking",
         items: [
-          "Spaces are strongest when the need is practical Arabic-English productivity with cleaner structure.",
+          "Chat is strongest when the need is practical Arabic-English productivity with cleaner structure.",
           "ChatGPT still wins on frontier breadth and mainstream ecosystem strength.",
           "Daleela, Labiba, and Yasmina AI make more sense when the need is vertical, embedded, or domain-specific.",
-          "ZAKI is not just another chat assistant. It is the public beta step toward persistent personal intelligence.",
+          "ZAKI is not just another chat assistant. It is the current Agent preview step toward persistent personal intelligence.",
         ],
       },
       {
         title: "Why ZAKI stands out",
         body:
-          "ZAKI is distinctive because it combines two layers in one product story: live workspaces now, and a public beta for a more secure, trainable, persistent agent layer next. That combination is aimed at closing the last mile between AI tools and real digital counterparts.",
+          "ZAKI is distinctive because it combines two layers in one product story: live workspaces now, and a current Agent preview for a more secure, trainable, persistent agent layer next. That combination is aimed at closing the last mile between AI tools and real digital counterparts.",
       },
     ],
     disclaimer:
@@ -366,12 +366,12 @@ const comparisonContent: Record<ComparisonSlug, ComparisonContent> = {
     links: [
       { label: "Read the ZAKI page", href: "/zaki-bot/" },
       { label: "Compare Spaces vs ChatGPT", href: "/vs-chatgpt/" },
-      { label: "Try Spaces", href: "https://app.chatzaki.com/?auth=signup" },
+      { label: "Start Chat", href: "https://app.chatzaki.com/spaces?source=website_standalone&intent=chat" },
     ],
     seo: {
       title: "Best Arabic AI Assistant in 2026: Chat Tools and Operators",
       description:
-        "A use-case based ranking of Arabic AI tools. Spaces are strong for structured bilingual productivity, and ZAKI is the public beta for persistent personal intelligence.",
+        "A use-case based ranking of Arabic AI tools. Chat is strong for structured bilingual productivity, and ZAKI is the current Agent preview for persistent personal intelligence.",
       imageAlt: "Arabic AI assistant comparison page",
       keywords:
         "best Arabic AI assistant, Arabic AI tools, Spaces, ZAKI, Personal AI Operator, Arabic AI comparison",
@@ -530,7 +530,7 @@ const howToContent: Record<HowToSlug, HowToContent> = {
     goodOutput:
       "A clear Arabic subject line, respectful greeting, one-paragraph context, specific ask, and polite closing. The best draft sounds natural and avoids over-translation from English.",
     links: [
-      { label: "Try Spaces", href: "https://app.chatzaki.com/?auth=signup" },
+      { label: "Start Chat", href: "https://app.chatzaki.com/spaces?source=website_standalone&intent=chat" },
       { label: "Read ZAKI vs Spaces", href: "/zaki-vs-spaces/" },
       { label: "Translate dialects to English", href: "/how-to/translate-dialects-arabic-english/" },
     ],
@@ -572,7 +572,7 @@ const howToContent: Record<HowToSlug, HowToContent> = {
     goodOutput:
       "The English result reads naturally, while a short note explains any phrase that does not translate literally. You keep meaning, not just vocabulary.",
     links: [
-      { label: "Try Spaces", href: "https://app.chatzaki.com/?auth=signup" },
+      { label: "Start Chat", href: "https://app.chatzaki.com/spaces?source=website_standalone&intent=chat" },
       { label: "Read ZAKI vs Spaces", href: "/zaki-vs-spaces/" },
       { label: "Create Arabic social content", href: "/how-to/create-social-media-content-arabic/" },
     ],
@@ -614,7 +614,7 @@ const howToContent: Record<HowToSlug, HowToContent> = {
     goodOutput:
       "Short hooks, a clear value proposition, and phrasing that matches the platform. The best AI-assisted caption feels written for the region, not translated into it.",
     links: [
-      { label: "Try Spaces", href: "https://app.chatzaki.com/?auth=signup" },
+      { label: "Start Chat", href: "https://app.chatzaki.com/spaces?source=website_standalone&intent=chat" },
       { label: "Read ZAKI vs Spaces", href: "/zaki-vs-spaces/" },
       { label: "Write Arabic emails", href: "/how-to/write-arabic-emails-ai/" },
     ],
@@ -664,8 +664,8 @@ const howToContent: Record<HowToSlug, HowToContent> = {
     goodOutput:
       "A clear split between relationship-level thinking and execution: ZAKI helps define goals, priorities, and next steps, then points to a Space where the real drafting, research, and task work can stay organized.",
     links: [
-      { label: "Try ZAKI free", href: "https://app.chatzaki.com/?auth=signup&source=website_how_zaki_and_spaces_work" },
-      { label: "Start with Spaces", href: "https://app.chatzaki.com/?auth=signup" },
+      { label: "Open Agent", href: "https://app.chatzaki.com/agent?source=website_how_zaki_and_spaces_work&intent=agent" },
+      { label: "Start with Chat", href: "https://app.chatzaki.com/spaces?source=website_standalone&intent=chat" },
       { label: "Read ZAKI vs Spaces", href: "/zaki-vs-spaces/" },
     ],
     seo: {
@@ -681,7 +681,7 @@ const howToContent: Record<HowToSlug, HowToContent> = {
     badge: "How To",
     title: "What to Use Spaces For",
     intro:
-      "Short answer: use Spaces when the work needs one dedicated context, not one endless mixed thread. This page exists to make the live product practical by showing where Spaces are strongest.",
+      "Short answer: use Spaces when the work needs one dedicated context, not one endless mixed thread. This page exists to make the live product practical by showing where Chat is strongest.",
     steps: [
       {
         title: "Use Spaces for writing and drafting.",
@@ -714,7 +714,7 @@ const howToContent: Record<HowToSlug, HowToContent> = {
     goodOutput:
       "Clear project separation, less thread chaos, and work that is easier to reopen later. The best use of Spaces feels like a calmer AI workspace, not a bigger pile of chat.",
     links: [
-      { label: "Try Spaces", href: "https://app.chatzaki.com/?auth=signup" },
+      { label: "Start Chat", href: "https://app.chatzaki.com/spaces?source=website_standalone&intent=chat" },
       { label: "Read ZAKI vs Spaces", href: "/zaki-vs-spaces/" },
       { label: "What to use ZAKI for", href: "/how-to/what-to-use-zaki-for/" },
     ],
@@ -878,7 +878,7 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
           body:
             "We use the following third-party processors to deliver the service. Material changes to this list are reflected in this Policy and emailed to active accounts at least 14 days before they take effect.",
           items: [
-            "Stripe, Inc. (US): payment processing for paid tiers. Shared: email, billing details, transaction metadata. Stripe stores card data; ZAKI never sees card numbers.",
+            "Stripe, Inc. (US): payment processing for billing tiers. Shared: email, billing details, transaction metadata. Stripe stores card data; ZAKI never sees card numbers.",
             "Cloudflare, Inc. (US): DDoS protection, CDN, edge routing. Shared: request IPs, headers, request paths. No conversation contents.",
             "Anthropic, PBC (US): model inference for the Claude family when selected. Shared: conversation contents at the time of inference.",
             "OpenAI, OpenAI LLC (US): model inference when selected or used as a fallback. Shared: conversation contents at the time of inference.",

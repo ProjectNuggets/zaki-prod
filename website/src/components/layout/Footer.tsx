@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { appHandoffUrl } from "../../lib/appHandoff";
 import type { Locale } from "../../lib/content";
 
 export function Footer({ locale }: { locale: Locale }) {
@@ -26,7 +27,7 @@ export function Footer({ locale }: { locale: Locale }) {
             {isArabic ? "المنتج" : "Product"}
           </p>
           <div className="mt-4 flex flex-col gap-2.5 text-sm text-zk-text-secondary">
-            <a href="https://app.chatzaki.com/?auth=signup&source=website_footer" className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">Spaces</a>
+            <a href={appHandoffUrl("/spaces", "website_footer", "chat")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "ZAKI Chat" : "ZAKI Chat"}</a>
             <Link to={isArabic ? "/ar/zaki-bot/" : "/zaki-bot/"} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "زكي Agent" : "ZAKI Agent"}</Link>
             <Link to={isArabic ? "/ar/story/" : "/story/"} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "لماذا زكي" : "Why ZAKI"}</Link>
             <Link to={isArabic ? "/ar/faq/" : "/faq/"} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "الأسئلة" : "FAQ"}</Link>

@@ -4,6 +4,7 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Reveal } from "../components/Reveal";
+import { appHandoffUrl } from "../lib/appHandoff";
 import { getContactContent } from "../lib/routeContent";
 import type { Locale } from "../lib/content";
 
@@ -31,7 +32,7 @@ export function ContactPage({ locale }: { locale: Locale }) {
                 </a>
               </Button>
               <Button asChild variant="secondary">
-                <a href="https://app.chatzaki.com/?auth=login">{content.appLabel}</a>
+                <a href={appHandoffUrl("/", "website_contact", "dashboard")}>{content.appLabel}</a>
               </Button>
             </div>
           </Reveal>
@@ -83,4 +84,3 @@ export function ContactPage({ locale }: { locale: Locale }) {
     </SiteShell>
   );
 }
-

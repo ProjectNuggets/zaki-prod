@@ -7,16 +7,17 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "..
 import { WaitlistForm } from "../components/WaitlistForm";
 import { Reveal } from "../components/Reveal";
 
+import { appHandoffUrl } from "../lib/appHandoff";
 import { getContent, type Locale } from "../lib/content";
 
 export function BotPage({ locale }: { locale: Locale }) {
   const t = getContent(locale);
   const isArabic = locale === "ar";
   const runtimeFacts = [
-    { label: isArabic ? "المجاني" : "Free beta", value: isArabic ? "5 رسائل / يوم" : "5 msgs / day" },
-    { label: isArabic ? "الحالة" : "State", value: isArabic ? "بيتا عامة" : "Public beta" },
+    { label: isArabic ? "المدخل" : "Entry", value: isArabic ? "Chat مجاني" : "Free Chat" },
+    { label: isArabic ? "الحالة" : "State", value: isArabic ? "Agent أساسي" : "Core Agent" },
     { label: isArabic ? "الأنسب لـ" : "Best for", value: isArabic ? "الخيط المستمر" : "Ongoing threads" },
-    { label: isArabic ? "مع من يعمل" : "Works with", value: "Spaces" },
+    { label: isArabic ? "الذاكرة" : "Memory", value: "Brain" },
   ];
 
   return (
@@ -27,31 +28,31 @@ export function BotPage({ locale }: { locale: Locale }) {
 
         <div className="mx-auto grid max-w-[1240px] gap-10 md:grid-cols-[1.2fr_0.8fr] md:items-start">
           <Reveal>
-            <Badge tone="warning" pulse>{isArabic ? "بيتا عامة تجريبية" : "Experimental public beta"}</Badge>
+            <Badge tone="warning" pulse>{isArabic ? "Agent مع ذاكرة" : "Agent with memory"}</Badge>
             <h1 className="font-display mt-6 max-w-[12ch] text-[40px] font-extrabold leading-[0.92] tracking-[-0.06em] text-zk-text md:text-[72px]">
               {isArabic ? "معظم الذكاء الاصطناعي ينساك. زكي لا يفعل." : "Most AI forgets you. ZAKI doesn't."}
             </h1>
             <p className="mt-6 max-w-[58ch] text-sm leading-7 text-zk-text-secondary md:text-base md:leading-8">
               {isArabic
-                ? "زكي هو AI مستمر بذاكرة واستمرارية. يحتفظ بالخيط معك بدل أن يبدأ من الصفر كل جلسة. وعندما يحتاج العمل إلى تعليماته وملفاته وسياقه الخاص، تنتقل إلى Spaces."
-                : "ZAKI is persistent AI with memory and continuity. It keeps the thread with you instead of starting over every session. When the work needs its own instructions, documents, and clean context, you move into Spaces."}
+                ? "ZAKI Agent هو AI مستمر بذاكرة واستمرارية. يحتفظ بالخيط معك بدل أن يبدأ من الصفر كل جلسة. وعندما يحتاج العمل إلى متابعة، يعطيه Agent وBrain مكانًا واضحًا."
+                : "ZAKI Agent is persistent AI with memory and continuity. It keeps the thread with you instead of starting over every session. When the work should continue, Agent and Brain give it a visible home."}
             </p>
             <p className="mt-4 text-sm leading-7 text-zk-text-secondary">
               {isArabic
-                ? "زكي مُعلن كبيتا عامة مع 5 رسائل مجانية يوميًا. Spaces تبقى طبقة العمل المدفوعة المتاحة الآن مقابل 13 دولارًا شهريًا."
-                : "Public marketing for ZAKI is 5 free messages per day during beta. Spaces remain the live paid workspace layer at $13/month."}
+                ? "ابدأ من Chat مجانًا. عندما يصبح العمل مهمًا، افتح Agent للاستمرارية وراجع الذاكرة في Brain."
+                : "Start from free Chat. When the work matters, open Agent for continuity and review memory in Brain."}
             </p>
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <Button asChild>
-                <a href="https://app.chatzaki.com/?auth=signup&source=website_bot_page">{isArabic ? "جرّب زكي مجانًا" : "Try ZAKI free"}</a>
+                <a href={appHandoffUrl("/agent", "website_bot_page", "agent")}>{isArabic ? "افتح Agent" : "Open Agent"}</a>
               </Button>
               <Button asChild variant="bot">
                 <a href="/zaki-vs-spaces/">
                   {isArabic ? "تعرّف على الفرق" : "See ZAKI vs Spaces"}
                 </a>
               </Button>
-              <a href="https://app.chatzaki.com/pricing?auth=signup&plan=personal&interval=monthly&source=website_bot_page_spaces" className="inline-flex items-center gap-2 text-sm font-medium text-zk-text transition-colors hover:text-zk-accent">
-                {isArabic ? "ابدأ بـ Spaces" : "Start with Spaces"}
+              <a href={appHandoffUrl("/spaces", "website_bot_page_chat", "chat")} className="inline-flex items-center gap-2 text-sm font-medium text-zk-text transition-colors hover:text-zk-accent">
+                {isArabic ? "ابدأ Chat" : "Start with Chat"}
                 <ArrowUpRight className="size-4" />
               </a>
             </div>
@@ -69,7 +70,7 @@ export function BotPage({ locale }: { locale: Locale }) {
                 ))}
               </div>
               <p className="font-mono-ui mt-5 text-[10px] uppercase tracking-[0.3em] text-zk-accent">
-                {isArabic ? "مشغّل شخصي / بيتا قابلة للتدريب" : "personal operator / trainable beta"}
+                {isArabic ? "مشغّل شخصي / معاينة قابلة للتدريب" : "personal operator / trainable preview"}
               </p>
             </Card>
           </Reveal>
@@ -83,12 +84,12 @@ export function BotPage({ locale }: { locale: Locale }) {
             { icon: Bot, title: isArabic ? "ما هو" : "What it is", body: t.botProduct.intro },
             {
               icon: Orbit,
-              title: isArabic ? "كيف يعمل مع Spaces" : "How it works with Spaces",
+              title: isArabic ? "كيف يعمل مع Chat وBrain" : "How it works with Chat and Brain",
               body: isArabic
-                ? "زكي يعتني بطبقة الاستمرارية والعلاقة طويلة المدى. وعندما يصبح العمل بحاجة إلى كتابة أو بحث أو تنفيذ منظم، تنتقل إلى Spaces كي يبقى كل مشروع في سياقه الصحيح."
-                : "ZAKI handles the continuity layer and the long-running relationship. When the job turns into writing, research, or organized execution, you move into Spaces so each project keeps its own clean context.",
+                ? "Chat يعطيك بداية سريعة. Agent يحمل الاستمرارية والعلاقة طويلة المدى. Brain يعرض ما يعرفه ZAKI وما يحتاج مراجعة."
+                : "Chat gives you a fast start. Agent carries the long-running relationship. Brain shows what ZAKI knows and what needs review.",
             },
-            { icon: Cpu, title: isArabic ? "لماذا هو تجريبي" : "Why it is experimental", body: t.beta.warning },
+            { icon: Cpu, title: isArabic ? "لماذا المسارات القادمة مقيّدة" : "Why future lanes are gated", body: t.beta.warning },
           ].map((item, index) => (
             <Reveal key={item.title} delay={index * 70}>
               <Card className="group relative flex h-full flex-col overflow-hidden">
@@ -115,7 +116,7 @@ export function BotPage({ locale }: { locale: Locale }) {
               <ul className="mt-6 space-y-3 text-sm leading-7 text-zk-text">
                 {[
                   ...t.botProduct.bullets,
-                  isArabic ? "5 رسائل مجانية يوميًا" : "5 free messages per day",
+                  isArabic ? "Brain يجعل الذاكرة مرئية وقابلة للمراجعة" : "Brain makes memory visible and reviewable",
                 ].map((bullet) => (
                   <li key={bullet} className="rounded-xl border border-zk-border-strong bg-white/[0.03] px-4 py-3 transition-colors hover:bg-white/[0.06]">
                     {bullet}
@@ -145,19 +146,19 @@ export function BotPage({ locale }: { locale: Locale }) {
             </Card>
           </Reveal>
 
-          {/* Waitlist — premium conversion surface */}
+              {/* Updates — future product conversion surface */}
           <Reveal delay={80}>
             <Card className="flex h-full flex-col" id="waitlist">
               <p className="font-mono-ui text-xs uppercase tracking-[0.24em] text-zk-accent">
-                {isArabic ? "وصول مبكر" : "Early access"}
+                {isArabic ? "تحديثات المنتجات القادمة" : "Future product updates"}
               </p>
               <h2 className="font-display mt-4 text-[28px] font-extrabold tracking-[-0.04em] text-zk-text md:text-[34px]">
-                {isArabic ? "جرّب زكي في البيتا" : "Try ZAKI during beta"}
+                {isArabic ? "تابع Learn وDesign وCareer" : "Follow Learn, Design, and Career"}
               </h2>
               <p className="mt-3 max-w-[44ch] text-sm leading-7 text-zk-text-secondary">
                 {isArabic
-                  ? "البيتا تشمل 5 رسائل مجانية يوميًا بينما نتعلّم ما ينجح. وإذا كنت تحتاج مساحة عمل منظّمة اليوم، فطبقة Spaces المدفوعة متاحة الآن."
-                  : "The beta includes 5 free messages per day while we learn what works. If you need a structured workspace today, the paid Spaces layer is already live."}
+                  ? "هذه المسارات ليست وصولًا عامًا بعد. اترك بريدك لتحديثات الوصول المبكر بينما تبقى البداية اليوم في Chat وAgent."
+                  : "These lanes are not public access yet. Leave an email for early-access updates while today's start remains Chat and Agent."}
               </p>
 
               <div className="mt-5 flex-1">

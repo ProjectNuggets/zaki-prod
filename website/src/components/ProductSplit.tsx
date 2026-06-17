@@ -1,4 +1,5 @@
 import type { Locale, WebsiteContent } from "../lib/content";
+import { appHandoffUrl } from "../lib/appHandoff";
 import { Button } from "./ui/button";
 import { Reveal } from "./Reveal";
 
@@ -8,29 +9,29 @@ export function ProductSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
     ? [
         {
           label: "ZAKI",
-          body: "ذكاء مستمر بذاكرة واستمرارية عندما تريد AI يتذكرك.",
+          body: "Agent للاستمرارية والذاكرة والمتابعة عندما يصبح العمل مهمًا.",
         },
         {
-          label: "Spaces",
-          body: "مساحات عمل منظّمة. كل مساحة يمكن أن تحمل تعليماتها وملفاتها الخاصة.",
+          label: "Chat",
+          body: "دردشة مجانية وسريعة للمسودات والترجمة والبحث بدون ذاكرة دائمة.",
         },
         {
           label: "معًا",
-          body: "ابدأ مع زكي عندما يكون التفكير ما زال مفتوحًا، ثم انتقل إلى Spaces عندما يبدأ التنفيذ.",
+          body: "ابدأ في Chat. انتقل إلى Agent عندما تحتاج أن يتذكر ZAKI ويتابع.",
         },
       ]
     : [
         {
           label: "ZAKI",
-          body: "Persistent AI with memory and continuity when you want AI that remembers you.",
+          body: "Agent for continuity, memory, and follow-through when the work matters.",
         },
         {
-          label: "Spaces",
-          body: "Structured workspaces. Each Space can carry its own instructions and documents.",
+          label: "Chat",
+          body: "Free, fast chat for drafts, translation, research, and planning without durable memory.",
         },
         {
           label: "Together",
-          body: "Start with ZAKI while the thinking is still open, then move into Spaces when the work turns into execution.",
+          body: "Start in Chat. Move to Agent when ZAKI needs to remember and continue the work.",
         },
       ];
 
@@ -40,17 +41,17 @@ export function ProductSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
         <Reveal>
           <div className="mb-10 max-w-[48ch]">
             <p className="font-mono-ui text-[11px] uppercase tracking-[0.28em] text-zk-accent">
-              {isArabic ? "زكي مقابل Spaces" : "ZAKI vs Spaces"}
+              {isArabic ? "Agent مقابل Chat" : "Agent vs Chat"}
             </p>
             <h2 className="font-display mt-4 text-[28px] font-extrabold leading-[1.08] tracking-[-0.04em] text-zk-text md:text-[44px]">
               {isArabic
-                ? "Spaces للعمل المنظّم. وزكي للاستمرارية الشخصية."
-                : "Spaces for structured work. ZAKI for personal continuity."}
+                ? "Chat للبدء. Agent للاستمرارية الشخصية."
+                : "Chat to start. Agent for personal continuity."}
             </h2>
             <p className="mt-4 text-[15px] leading-[1.8] text-zk-text-secondary">
               {isArabic
-                ? "الفرق بسيط: استخدم زكي عندما تريد AI لا يبدأ من الصفر كل مرة. استخدم Spaces عندما يحتاج المشروع إلى تعليماته وملفاته وخيوطه داخل سياق واحد."
-                : "The split is simple: use ZAKI when you want AI that does not reset every time. Use Spaces when a project needs its own instructions, documents, and threads inside one shared context."}
+                ? "الفرق بسيط: استخدم Chat عندما تريد إنجازًا سريعًا بلا تسجيل. استخدم Agent عندما تريد ذاكرة ومتابعة وأدوات بإذن."
+                : "The split is simple: use Chat when you need fast work without signing in. Use Agent when you need memory, follow-through, and permissioned tools."}
             </p>
           </div>
         </Reveal>
@@ -72,27 +73,27 @@ export function ProductSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
         </Reveal>
 
         <div className="grid gap-6 md:grid-cols-2">
-          {/* Spaces */}
+          {/* Chat */}
           <Reveal>
             <div className="flex h-full flex-col rounded-2xl border border-zk-border-strong bg-zk-surface p-7 shadow-[0_2px_4px_rgba(0,0,0,0.02),0_16px_48px_rgba(17,10,6,0.06)] md:p-9">
               <p className="font-mono-ui text-[10px] uppercase tracking-[0.28em] text-zk-text-secondary">
                 {isArabic ? "يعمل الآن" : "Live now"}
               </p>
               <h3 className="font-display mt-4 text-[28px] font-extrabold tracking-[-0.04em] text-zk-text md:text-[36px]">
-                Spaces
+                ZAKI Chat
               </h3>
               <p className="mt-5 max-w-[40ch] text-[15px] leading-[1.8] text-zk-text-secondary">
                 {isArabic
-                  ? "مساحات عمل منظّمة يمكنك استخدامها الآن. كل مساحة يمكن أن تحمل تعليماتها وملفاتها الخاصة، والخيوط داخلها تشترك في ذلك السياق. هذا هو المنتج المدفوع المباشر."
-                  : "Structured AI workspaces you can use right now. Each Space can hold its own instructions and documents, and threads inside that Space share the same context. This is the live paid product."}
+                  ? "دردشة مجانية يمكنك استخدامها الآن للكتابة والترجمة والبحث والتخطيط. لا تحفظ ذاكرة دائمة حتى تسجّل الدخول."
+                  : "Free chat you can use now for writing, translation, research, and planning. It does not keep durable memory until you sign in."}
               </p>
               <div className="mt-auto flex items-baseline justify-between pt-8">
                 <p className="font-display text-[32px] font-extrabold tracking-[-0.04em] text-zk-text">
-                  $13<span className="ms-1 font-mono-ui text-[11px] font-normal uppercase tracking-[0.16em] text-zk-text-secondary">{isArabic ? "/شهر" : "/mo"}</span>
+                  $0<span className="ms-1 font-mono-ui text-[11px] font-normal uppercase tracking-[0.16em] text-zk-text-secondary">{isArabic ? "للبدء" : "to start"}</span>
                 </p>
                 <Button asChild variant="secondary" className="text-[13px]">
-                  <a href="https://app.chatzaki.com/pricing?auth=signup&plan=personal&interval=monthly&source=website_product_split">
-                    {isArabic ? "ابدأ بـ Spaces" : "Start with Spaces"}
+                  <a href={appHandoffUrl("/spaces", "website_product_split_chat", "chat")}>
+                    {isArabic ? "ابدأ Chat" : "Start Chat"}
                   </a>
                 </Button>
               </div>
@@ -106,28 +107,28 @@ export function ProductSplit({ locale, t }: { locale: Locale; t: WebsiteContent 
               <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-zk-accent/[0.03] to-transparent" />
               <div className="relative flex h-full flex-col">
                 <p className="font-mono-ui text-[10px] uppercase tracking-[0.28em] text-zk-accent">
-                  {isArabic ? "تجريبي مجاني" : "Experimental · free"}
+                  {isArabic ? "استمرارية الحساب" : "Account continuity"}
                 </p>
                 <h3 className="font-display mt-4 text-[28px] font-extrabold tracking-[-0.04em] text-zk-text md:text-[36px]">
                   ZAKI
                 </h3>
               <p className="mt-5 max-w-[40ch] text-[15px] leading-[1.8] text-zk-text-secondary">
                 {isArabic
-                   ? "زكي هو طبقة الذكاء المستمر: ذاكرة واستمرارية وعلاقة لا تعود للصفر كل جلسة. استخدمه عندما تريد AI يتذكرك، ثم انتقل إلى Spaces عندما يحتاج العمل إلى تنفيذ منظّم."
-                   : "ZAKI is the continuity layer: memory, recall, and a relationship that does not reset every session. Use it when you want AI that remembers you, then move into Spaces when the work needs structure."}
+                  ? "ZAKI Agent هو طبقة الاستمرارية: ذاكرة واسترجاع وعلاقة لا تعود للصفر كل جلسة. استخدمه عندما تريد AI يتذكرك ويتابع."
+                  : "ZAKI Agent is the continuity layer: memory, recall, and a relationship that does not reset every session. Use it when you want AI that remembers and follows through."}
               </p>
                 <div className="mt-auto flex items-baseline justify-between pt-8">
                   <div>
                     <p className="font-display text-[32px] font-extrabold tracking-[-0.04em] text-zk-accent">
-                      {isArabic ? "5 مجانًا" : "5 free"}
+                      {isArabic ? "Agent" : "Agent"}
                     </p>
                     <p className="font-mono-ui text-[10px] uppercase tracking-[0.16em] text-zk-text-secondary">
-                      {isArabic ? "رسائل / يوم" : "msgs / day"}
+                      {isArabic ? "ذاكرة ومتابعة" : "memory and follow-through"}
                     </p>
                   </div>
                   <Button asChild className="text-[13px]">
-                    <a href={isArabic ? "/ar/zaki-bot/#waitlist" : "/zaki-bot/#waitlist"}>
-                      {isArabic ? "جرّب زكي" : "Try ZAKI"}
+                    <a href={appHandoffUrl("/agent", "website_product_split_agent", "agent")}>
+                      {isArabic ? "افتح Agent" : "Open Agent"}
                     </a>
                   </Button>
                 </div>

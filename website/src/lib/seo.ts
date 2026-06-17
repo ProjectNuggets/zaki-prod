@@ -199,8 +199,8 @@ export function getRouteSeo(pathname: string): RouteSeo {
   if (route === "/zaki-bot/" || route === "/ar/zaki-bot/") {
     const description =
       locale === "ar"
-        ? "زكي هو البيتا العامة لذكاء مستمر بذاكرة لكل مستخدم ومراحل عمل مرئية، مع 5 رسائل مجانية يوميًا أثناء البيتا."
-        : "ZAKI is the public beta for persistent AI with per-user memory, visible work phases, and 5 free messages per day during beta.";
+        ? "زكي هو البيتا العامة لذكاء مستمر بذاكرة لكل مستخدم ومراحل عمل مرئية، مع ذاكرة ومتابعة عبر Agent أثناء البيتا."
+        : "ZAKI is the current Agent preview for persistent AI with per-user memory, visible work phases, and account memory and follow-through through Agent.";
     return {
       title:
         locale === "ar"
@@ -210,13 +210,13 @@ export function getRouteSeo(pathname: string): RouteSeo {
       canonical: locale === "ar" ? `${SITE_URL}/ar/zaki-bot/` : `${SITE_URL}/zaki-bot/`,
       lang: locale,
       dir,
-      imageAlt: locale === "ar" ? "صفحة زكي التجريبية" : "ZAKI experimental beta page",
+      imageAlt: locale === "ar" ? "صفحة زكي التجريبية" : "ZAKI Agent page",
       localeTag,
       altLocaleTag,
       keywords:
         locale === "ar"
-          ? "زكي, ZAKI, مشغّل ذكاء شخصي, بيتا زكي, مساعد ذكاء شخصي"
-          : "ZAKI, Personal AI Operator, ZAKI beta, persistent intelligence, smooth operator",
+          ? "زكي, ZAKI, مشغّل ذكاء شخصي, تحديثات زكي, مساعد ذكاء شخصي"
+          : "ZAKI, Personal AI Operator, ZAKI Agent, persistent intelligence, smooth operator",
       schema: [
         ...buildCommonSchema(locale, description),
         {
@@ -238,12 +238,12 @@ export function getRouteSeo(pathname: string): RouteSeo {
     const description =
       locale === "ar"
         ? "اعرف الفرق بين زكي وSpaces، ما الذي تتضمنه البيتا العامة، ولماذا هي تجريبية، ومتى تبدأ الاشتراكات."
-        : "Learn the difference between ZAKI and Spaces, what the public beta includes, why it is experimental, and when subscriptions arrive.";
+        : "Learn the difference between ZAKI and Spaces, what the current Agent preview includes, why it is experimental, and when subscriptions arrive.";
     return {
       title:
         locale === "ar"
           ? "الأسئلة الشائعة | زكي وSpaces"
-          : "ZAKI FAQ | Spaces, Beta, and Personal AI",
+          : "ZAKI FAQ | Chat, Agent, and Personal AI",
       description,
       canonical: locale === "ar" ? `${SITE_URL}/ar/faq/` : `${SITE_URL}/faq/`,
       lang: locale,
@@ -253,8 +253,8 @@ export function getRouteSeo(pathname: string): RouteSeo {
       altLocaleTag,
       keywords:
         locale === "ar"
-          ? "الأسئلة الشائعة, زكي, Spaces, بيتا زكي"
-          : "ZAKI FAQ, Spaces, ZAKI beta, Personal AI FAQ",
+          ? "الأسئلة الشائعة, زكي, Spaces, تحديثات زكي"
+          : "ZAKI FAQ, Spaces, ZAKI Agent, Personal AI FAQ",
       schema: [...buildCommonSchema(locale, description), faqSchema],
       alternates,
       updatedAt: SEO_UPDATED_AT,
@@ -265,7 +265,7 @@ export function getRouteSeo(pathname: string): RouteSeo {
     const description =
       locale === "ar"
         ? "لماذا يوجد زكي: كيف يجمع بين Spaces كمساحات عمل منظّمة وبين زكي كوكيل ذكاء شخصي مستمر يتشكل علنًا."
-        : "Why ZAKI exists: combining Spaces as structured workspaces with ZAKI as a public beta for persistent personal intelligence.";
+        : "Why ZAKI exists: combining Spaces as structured workspaces with ZAKI as a current Agent preview for persistent personal intelligence.";
     const canonical = toAbsoluteUrl(route);
     return {
       title:
@@ -492,23 +492,23 @@ export function getRouteSeo(pathname: string): RouteSeo {
         offers: [
           {
             "@type": "Offer",
-            category: "Student",
-            price: "8",
+            category: "Chat",
+            price: "0",
             priceCurrency: "USD",
-            url: `${APP_URL}/pricing?auth=signup`,
+            url: `${APP_URL}/?source=website_schema&intent=dashboard`,
           },
           {
             "@type": "Offer",
-            category: "Personal",
-            price: "13",
+            category: "Agent",
+            price: "0",
             priceCurrency: "USD",
-            url: `${APP_URL}/pricing?auth=signup`,
+            url: `${APP_URL}/?source=website_schema&intent=dashboard`,
           },
         ],
         featureList: [
           locale === "ar" ? "Spaces متاحة الآن" : "Spaces are live now",
-          locale === "ar" ? "زكي بيتا عامة تجريبية" : "ZAKI experimental public beta",
-          locale === "ar" ? "5 رسائل مجانية يوميًا" : "5 free messages per day",
+          locale === "ar" ? "ZAKI Agent بذاكرة واستمرارية" : "ZAKI experimental current Agent preview",
+          locale === "ar" ? "ذاكرة ومتابعة عبر Agent" : "account memory and follow-through",
           locale === "ar" ? "ذاكرة وتحكم أوضح" : "Clearer memory and control",
         ],
       },
