@@ -200,4 +200,66 @@ describe("platform policy", () => {
       "pro_max"
     );
   });
+
+  // Regression: a paying Pro/Pro MAX account whose commercial SKU is the
+  // collapsed `legacy_personal` alias must STILL display its real ladder tier.
+  // Before the fix the commercial alias won outright and a €/$ Pro subscriber
+  // showed "Personal" in the dashboard status strip (meterStatus.plan.label).
+  it("keeps the paid ladder tier when the commercial alias would under-state it", () => {
+    expect(
+      resolvePlatformPlanForCommercialState({
+        commercialPlanId: "legacy_personal",
+        effectiveTier: "pro",
+        premium: true,
+      })
+    ).toBe("pro");
+    expect(
+      resolvePlatformPlanForCommercialState({
+        commercialPlanId: "legacy_personal",
+        effectiveTier: "pro_max",
+        premium: true,
+      })
+    ).toBe("pro_max");
+    // A genuine Personal subscriber is unchanged.
+    expect(
+      resolvePlatformPlanForCommercialState({
+        commercialPlanId: "legacy_personal",
+        effectiveTier: "personal",
+        premium: true,
+      })
+    ).toBe("personal");
+    // `complete` legitimately UP-grades personal → pro; the alias still wins
+    // when it is the HIGHER of the two.
+    expect(
+      resolvePlatformPlanForCommercialState({
+        commercialPlanId: "complete",
+        effectiveTier: "personal",
+        premium: true,
+      })
+    ).toBe("pro");
+  });
+
+  it("labels a Pro subscriber 'Pro' (not 'Personal') through the strip's plan builder", () => {
+    const proSummary = buildPlatformEntitlementSummary({
+      commercialPlanId: "legacy_personal",
+      effectiveTier: "pro",
+      source: "subscription",
+      premium: true,
+      env: {},
+    });
+    expect(proSummary.plan).toEqual(
+      expect.objectContaining({ id: "pro", label: "Pro", premium: true })
+    );
+
+    const proMaxSummary = buildPlatformEntitlementSummary({
+      commercialPlanId: "legacy_personal",
+      effectiveTier: "pro_max",
+      source: "subscription",
+      premium: true,
+      env: {},
+    });
+    expect(proMaxSummary.plan).toEqual(
+      expect.objectContaining({ id: "pro_max", label: "Pro MAX", premium: true })
+    );
+  });
 });

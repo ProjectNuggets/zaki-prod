@@ -11,8 +11,9 @@ import {
 describe("mapPlanTier", () => {
   it.each([
     ["free", "free"],
-    ["pro", "pro"],
     ["personal", "pro"],
+    ["pro", "pro"],
+    ["pro_max", "pro"],
     ["student", "pro"],
     ["agent", "pro"],
     ["learn", "pro"],

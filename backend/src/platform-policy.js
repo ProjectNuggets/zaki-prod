@@ -462,16 +462,40 @@ export function buildPlatformPlanPolicy({ env = process.env } = {}) {
   };
 }
 
+// Higher of two ladder plans (free < personal < pro < pro_max). Used so the
+// DISPLAYED plan never under-states what the customer actually pays for.
+function higherLadderPlan(planA, planB) {
+  const rankA = PLATFORM_PLAN_LADDER.indexOf(planA);
+  const rankB = PLATFORM_PLAN_LADDER.indexOf(planB);
+  return rankB > rankA ? planB : planA;
+}
+
 export function resolvePlatformPlanForCommercialState({
   commercialPlanId = "",
   effectiveTier = "",
   premium = false,
 } = {}) {
   const normalizedCommercialPlanId = normalizeId(commercialPlanId);
+  // The ladder tier from the live entitlement (personal/pro/pro_max). On a paid
+  // subscription this is the SOURCE OF TRUTH for the plan badge.
+  const ladderTier = premium
+    ? normalizePlatformPlanId(effectiveTier, PLATFORM_PLAN_IDS.PERSONAL)
+    : null;
+
   if (normalizedCommercialPlanId) {
-    return normalizePlatformPlanId(normalizedCommercialPlanId);
+    // Bug fix (PLAN PERSONAL on a Pro account): commercial SKUs collapse the
+    // ladder — `legacy_personal` aliases to `personal` even when the customer's
+    // real tier is `pro`/`pro_max`. The commercial alias is about PRODUCT access,
+    // not the plan badge, so it must never DROP the displayed tier below the live
+    // ladder tier. Take the higher of the two so:
+    //   - complete (→pro) + personal effectiveTier   → pro     (unchanged)
+    //   - legacy_personal (→personal) + pro tier      → pro     (the fix)
+    //   - legacy_personal (→personal) + pro_max tier  → pro_max (the fix)
+    const commercialPlan = normalizePlatformPlanId(normalizedCommercialPlanId);
+    if (premium && ladderTier) return higherLadderPlan(commercialPlan, ladderTier);
+    return commercialPlan;
   }
-  if (premium) return normalizePlatformPlanId(effectiveTier, PLATFORM_PLAN_IDS.PERSONAL);
+  if (premium && ladderTier) return ladderTier;
   return PLATFORM_PLAN_IDS.FREE;
 }
 

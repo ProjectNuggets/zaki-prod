@@ -439,4 +439,39 @@ describe("thread auto-title", () => {
       })
     );
   });
+
+  it("returns a generic 500 code and does not echo raw error detail to the client", async () => {
+    const secret = "ENOTFOUND nova-internal.svc.cluster.local:8080 leaked-secret";
+    const requireWorkspaceAccess = jest.fn(async () => {
+      throw new Error(secret);
+    });
+    const consoleErrorSpy = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const handler = createThreadAutoTitleHandler({
+      requireWorkspaceAccess,
+      novaAdminRequest: jest.fn(),
+      chatFn: jest.fn(),
+    });
+    const req = {
+      params: { threadSlug: "thread-1" },
+      body: { userMessage: "Hello", assistantMessage: "Hi there" },
+    };
+    const res = createMockRes();
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(500);
+    // Stable, generic code only — no raw upstream detail.
+    expect(res.jsonBody).toEqual({ error: "auto_title_failed" });
+    expect(JSON.stringify(res.jsonBody)).not.toContain(secret);
+    expect(JSON.stringify(res.jsonBody)).not.toContain("nova-internal");
+    // The raw detail is still captured server-side for operators.
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[Workspace] Thread auto-title error:",
+      expect.objectContaining({ message: secret })
+    );
+
+    consoleErrorSpy.mockRestore();
+  });
 });

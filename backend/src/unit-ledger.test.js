@@ -161,12 +161,12 @@ describe("unit-ledger: reserveUnits", () => {
 });
 
 describe("unit-ledger: ensureWallet (provisioning)", () => {
-  it("provisions allowances from the plan (personal → weekly 500 / burst 100)", async () => {
+  it("provisions allowances from the plan (personal -> weekly 1000 / burst 200)", async () => {
     const { client, calls } = makeClient({});
     const w = await ensureWallet({ userId: 7, planId: "personal", env: {} }, client);
     const ins = calls.find((c) => /INSERT INTO zaki_unit_wallets/.test(c.text));
-    expect(ins.params).toEqual([7, "personal", 500, 100, 5]); // [userId, plan, weekly, burst, windowHours]
-    expect(w).toMatchObject({ weekly_allowance_units: 500 });
+    expect(ins.params).toEqual([7, "personal", 1000, 200, 5]); // [userId, plan, weekly, burst, windowHours]
+    expect(w).toMatchObject({ weekly_allowance_units: 1000 });
   });
 
   it("normalizes legacy/unknown plans (bogus → free defaults)", async () => {
@@ -176,11 +176,11 @@ describe("unit-ledger: ensureWallet (provisioning)", () => {
     expect(ins.params).toEqual([7, "free", 100, 40, 5]);
   });
 
-  it("maps a paid tier (pro → weekly 1500 / burst 300)", async () => {
+  it("maps a paid tier (pro -> weekly 3000 / burst 600)", async () => {
     const { client, calls } = makeClient({});
     await ensureWallet({ userId: 9, planId: "pro", env: {} }, client);
     const ins = calls.find((c) => /INSERT INTO zaki_unit_wallets/.test(c.text));
-    expect(ins.params).toEqual([9, "pro", 1500, 300, 5]);
+    expect(ins.params).toEqual([9, "pro", 3000, 600, 5]);
   });
 });
 

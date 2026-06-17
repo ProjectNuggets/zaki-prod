@@ -456,32 +456,46 @@ function ProductTaskStrip({
   );
 }
 
+// A paid ladder tier (personal/pro/pro_max) does NOT get "free" credit — only
+// the free/anonymous tier does. Anything that is not explicitly the `free`
+// platform tier is treated as paid for labelling purposes.
+function isPaidPlanTier(planTier?: string | null) {
+  const tier = String(planTier || "").trim().toLowerCase();
+  return tier.length > 0 && tier !== "free";
+}
+
 function CreditMeter({
   t,
   loading,
   weeklyStats,
   weeklyReset,
   exhausted,
+  planTier,
 }: {
   t: TranslateFn;
   loading: boolean;
   weeklyStats: WindowStats;
   weeklyReset: string | null;
   exhausted: boolean;
+  planTier?: string | null;
 }) {
   const remaining = formatNumber(weeklyStats.remaining);
   const limit = formatNumber(weeklyStats.limit);
+  // Paid accounts read "Weekly credit"; free/anonymous keep "Weekly free credit".
+  const creditLabel = isPaidPlanTier(planTier)
+    ? t("zakiDashboard.command.weeklyCredit", {
+        defaultValue: "Weekly credit",
+      })
+    : t("zakiDashboard.command.weeklyFreeCredit", {
+        defaultValue: "Weekly free credit",
+      });
   return (
     <div
       className="zaki-dashboard-command__meter"
       data-testid="zaki-dashboard-command-meter"
     >
       <div className="zaki-dashboard-command__meter-top">
-        <span>
-          {t("zakiDashboard.command.weeklyFreeCredit", {
-            defaultValue: "Weekly free credit",
-          })}
-        </span>
+        <span>{creditLabel}</span>
         <strong>
           <span>{loading ? t("zakiDashboard.meter.loading") : remaining}</span>
           {!loading ? <em> / {limit}</em> : null}
@@ -1477,6 +1491,7 @@ export function ZakiDashboard({
                   weeklyStats={weeklyStats}
                   weeklyReset={weeklyReset}
                   exhausted={commandBlockedByUsage}
+                  planTier={meterStatus?.plan?.tier}
                 />
                 <div className="zaki-dashboard-command__actions">
                   <p className="zaki-dashboard-command__helper" role="status" aria-live="polite">

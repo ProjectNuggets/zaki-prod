@@ -71,6 +71,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.entry.signIn": "Sign in",
     "zakiDashboard.entry.signUp": "Sign up",
     "zakiDashboard.command.weeklyFreeCredit": "Weekly free credit",
+    "zakiDashboard.command.weeklyCredit": "Weekly credit",
     "zakiDashboard.command.bestFor": "Best for",
     "zakiDashboard.command.memoryScope": "Memory scope",
     "zakiDashboard.command.selectedProduct": "{{product}} overview",
@@ -496,6 +497,28 @@ describe("ZakiDashboard", () => {
     expect(screen.getByTestId("zaki-dashboard-product-hint")).toHaveTextContent("Planning, follow-through");
     expect(screen.queryByTestId("zaki-dashboard-products")).not.toBeInTheDocument();
     expect(screen.queryByText("ZAKI CLI")).not.toBeInTheDocument();
+  });
+
+  it("labels the credit meter 'Weekly credit' (not 'free') for a paid Pro account", () => {
+    renderDashboard();
+
+    const meter = screen.getByTestId("zaki-dashboard-command-meter");
+    expect(meter).toHaveTextContent("Weekly credit");
+    expect(meter).not.toHaveTextContent("Weekly free credit");
+  });
+
+  it("keeps the credit meter 'Weekly free credit' for an anonymous/free session", () => {
+    useAuthStore.setState({
+      token: null,
+      user: null,
+      isHydrating: false,
+      isLoading: false,
+    });
+
+    renderDashboard();
+
+    const meter = screen.getByTestId("zaki-dashboard-command-meter");
+    expect(meter).toHaveTextContent("Weekly free credit");
   });
 
   it("orders command products for signed-in users by launch workflow", () => {

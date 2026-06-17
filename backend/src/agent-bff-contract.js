@@ -16,13 +16,50 @@
 //                   sends a stable `approval_id`, so re-POSTing the same
 //                   approval is safe; non-idempotent routes (compact, mode,
 //                   cancel, ...) must leave this false.
+// - softEmptyOnMissing:
+//                   ONLY for the three READ-ONLY agent-panel reads
+//                   (plan / todos / context). The nullalis engine does not
+//                   implement /plan or /todos yet (deferred post-launch) so it
+//                   mis-parses those reads and 400s with `invalid_session_key`;
+//                   /context legitimately 404s when the thread has no active
+//                   run. Surfacing those raw upstream errors leaks
+//                     "Run plan unavailable: invalid_session_key"
+//                     "Checklist unavailable: invalid_session_key"
+//                   into the inspector panel. When set, the proxy converts a
+//                   `400 invalid_session_key` or any `404` into HTTP 200 + this
+//                   idle payload (a clean "no active run" shape the FE already
+//                   renders). Every OTHER status/body (200, 403
+//                   session_not_owned, 500, 503, other 400s) passes through
+//                   UNCHANGED. Mutating routes never set this.
+
+// Idle ("no active run") payloads, shaped to exactly what the frontend treats
+// as empty. Kept as named exports so the proxy, the route table, and the
+// contract test all reference a single source of truth.
+//   plan    — src/lib/api.ts AgentSessionPlanResponse; AgentInspectorRail derives
+//             `activePlan = data.active ? data.plan : null`, so active:false →
+//             "inactive" empty state.
+export const AGENT_SESSION_IDLE_PLAN_PAYLOAD = Object.freeze({ active: false, plan: null });
+//   todos   — src/lib/api.ts AgentSessionTodosResponse; AgentInspectorRail derives
+//             `activeTodoList` from `lists` (empty → no list), rendering
+//             "No durable checklist exists for this session yet."
+export const AGENT_SESSION_IDLE_TODOS_PAYLOAD = Object.freeze({ lists: [], current_list_id: null });
+//   context — src/lib/api.ts AgentSessionContext; PowerUserSheet + src/lib/agentContext.ts
+//             treat `active:false` / `code:no_active_session` as the idle state
+//             (report:null), and ChatArea clears its meter via the same code.
+export const AGENT_SESSION_IDLE_CONTEXT_PAYLOAD = Object.freeze({
+  active: false,
+  runtime: false,
+  code: "no_active_session",
+  report: null,
+});
+
 export const AGENT_SESSION_BFF_ROUTES = Object.freeze([
   { method: "get",    path: "/api/agent/sessions/:sessionKey",          upstreamSuffix: "",         json: false },
   { method: "post",   path: "/api/agent/sessions/:sessionKey/compact",  upstreamSuffix: "/compact", json: false },
-  { method: "get",    path: "/api/agent/sessions/:sessionKey/context",  upstreamSuffix: "/context", json: false },
-  { method: "get",    path: "/api/agent/sessions/:sessionKey/todos",    upstreamSuffix: "/todos",   json: false },
+  { method: "get",    path: "/api/agent/sessions/:sessionKey/context",  upstreamSuffix: "/context", json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_CONTEXT_PAYLOAD },
+  { method: "get",    path: "/api/agent/sessions/:sessionKey/todos",    upstreamSuffix: "/todos",   json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_TODOS_PAYLOAD },
   { method: "patch",  path: "/api/agent/sessions/:sessionKey/todos/:listId/items/:itemId", upstreamSuffix: "/todos/:listId/items/:itemId", json: true },
-  { method: "get",    path: "/api/agent/sessions/:sessionKey/plan",     upstreamSuffix: "/plan",    json: false },
+  { method: "get",    path: "/api/agent/sessions/:sessionKey/plan",     upstreamSuffix: "/plan",    json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_PLAN_PAYLOAD },
   { method: "get",    path: "/api/agent/sessions/:sessionKey/export",   upstreamSuffix: "/export",  json: false },
   { method: "get",    path: "/api/agent/sessions/:sessionKey/history",  upstreamSuffix: "/history", json: false },
   { method: "post",   path: "/api/agent/sessions/:sessionKey/mode",     upstreamSuffix: "/mode",    json: true  },
@@ -395,6 +432,34 @@ export function registerBotBffAliases(app, handlers) {
   app.get("/v1/me/bot/usage", requireAgentContext, usageHandler);
 }
 
+// Decides whether an upstream response on a soft-empty read (plan/todos/context)
+// should be collapsed into an HTTP 200 + idle payload. Returns
+//   { soft: true, payload }  → reply 200 with `payload` (FE renders "no run")
+//   { soft: false }          → forward the upstream status/body verbatim
+//
+// Narrowly scoped on purpose: ONLY upstream `404` (a legitimate "no active run"
+// for /context) or `400` whose body indicates `invalid_session_key` (the
+// engine's mis-parse of the unimplemented /plan + /todos reads) are softened.
+// Any other status (200, 403 session_not_owned, 409, 422, 500, 502, 503) and
+// any other 400 body (e.g. session_not_owned, invalid_title) pass through. When
+// no `softEmptyPayload` is configured (every mutating route) this never softens.
+export function resolveSoftEmptyAgentResponse(softEmptyPayload, upstreamStatus, upstreamBodyText) {
+  if (!softEmptyPayload || typeof softEmptyPayload !== "object") {
+    return { soft: false };
+  }
+  const status = Number(upstreamStatus);
+  if (status === 404) {
+    return { soft: true, payload: softEmptyPayload };
+  }
+  if (status === 400) {
+    const body = String(upstreamBodyText || "").toLowerCase();
+    if (body.includes("invalid_session_key")) {
+      return { soft: true, payload: softEmptyPayload };
+    }
+  }
+  return { soft: false };
+}
+
 // Registers every `/api/agent/sessions/:sessionKey/...` proxy entry from
 // `AGENT_SESSION_BFF_ROUTES` on the express app. Keeping registration here lets
 // the contract test cover wiring directly and prevents drift between the
@@ -408,7 +473,9 @@ export function registerBotBffAliases(app, handlers) {
 export function registerAgentSessionBffRoutes(app, handlers) {
   const { requireAgentContext, agentJson1mb, makeSessionProxyHandler } = handlers;
   for (const route of AGENT_SESSION_BFF_ROUTES) {
-    const proxyOptions = route.retry ? { retry: true } : {};
+    const proxyOptions = {};
+    if (route.retry) proxyOptions.retry = true;
+    if (route.softEmptyOnMissing) proxyOptions.softEmptyOnMissing = route.softEmptyOnMissing;
     const proxyHandler = makeSessionProxyHandler(
       (userId, req) => {
         const suffix = route.upstreamSuffix.replace(/:([A-Za-z0-9_]+)/g, (_, name) =>

@@ -104,10 +104,16 @@ describe("daily quota helpers", () => {
     );
   });
 
-  it("treats active paid plans or active access code as unlimited", () => {
-    expect(isUnlimitedUser({ tier: "student", status: "active", accessActive: false })).toBe(true);
-    expect(isUnlimitedUser({ tier: "free", status: "inactive", accessActive: true })).toBe(true);
-    expect(isUnlimitedUser({ tier: "free", status: "inactive", accessActive: false })).toBe(false);
+  it("treats only an active access-code/bypass as unlimited — NEVER a paid tier (Bug 1)", () => {
+    // Unmetered chat is a bypass/access-code grant, decoupled from tier. Paid
+    // subscriptions (personal/pro/pro_max/student) are metered; tying unlimited
+    // to the tier was the second revenue-leak path through buildUserQuotaContext.
+    expect(isUnlimitedUser({ accessActive: true })).toBe(true);
+    expect(isUnlimitedUser({ accessActive: false })).toBe(false);
+    expect(isUnlimitedUser({ tier: "student", status: "active", accessActive: false })).toBe(false);
+    expect(isUnlimitedUser({ tier: "personal", status: "active", accessActive: false })).toBe(false);
+    expect(isUnlimitedUser({ tier: "pro", status: "active", accessActive: false })).toBe(false);
+    expect(isUnlimitedUser({ tier: "pro_max", status: "active", accessActive: false })).toBe(false);
   });
 
   it("supports a local unlimited quota bypass by email outside production", () => {

@@ -295,7 +295,9 @@ export function createThreadAutoTitleHandler({
       });
     } catch (error) {
       console.error("[Workspace] Thread auto-title error:", error);
-      res.status(500).json({ error: error?.message || "Unable to auto-title thread." });
+      // Do not echo raw error detail to clients (info-disclosure). Detail stays
+      // server-side in the console.error above; clients get a stable code.
+      res.status(500).json({ error: "auto_title_failed" });
     }
   };
 }
