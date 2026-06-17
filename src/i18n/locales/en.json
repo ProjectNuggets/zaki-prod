@@ -160,6 +160,12 @@
       },
       "resetsAt": "Resets {{reset}}",
       "resetPending": "Reset pending",
+      "launchState": {
+        "public_app": "Launch: public app",
+        "private_beta": "Launch: private beta",
+        "waitlist": "Launch: waitlist",
+        "hidden": "Launch: hidden"
+      },
       "helper": "This is the platform usage view. Agent-specific runtime usage remains inside Agent settings."
     },
     "productsAccess": {
@@ -2138,8 +2144,23 @@
       "body": "{{product}} is visible in the ZAKI family, but public V1 is focused on Dashboard, Agent, Chat, Brain, and Settings first.",
       "action": "Open dashboard"
     },
+    "privateBeta": {
+      "badge": "Private beta",
+      "heading": "This product is in private beta",
+      "body": "{{product}} is gated while route access, entitlement, memory boundaries, and signed-in E2E coverage are finalized together.",
+      "action": "Open dashboard"
+    },
+    "waitlist": {
+      "badge": "Waitlist",
+      "heading": "This product is on the waitlist",
+      "body": "{{product}} is visible as a future ZAKI surface, but it is not a public app product or paid plan yet.",
+      "action": "Open dashboard"
+    },
     "status": {
       "checking": "Checking access",
+      "comingSoon": "Launch state: coming soon",
+      "privateBeta": "Launch state: private beta",
+      "waitlist": "Launch state: waitlist",
       "state": "State: {{state}}",
       "hidden": "Not exposed"
     },
@@ -2153,7 +2174,9 @@
       "memory": "Memory boundary",
       "memoryValue": "Kept separate until explicitly launched",
       "next": "Next step",
-      "comingSoonValue": "Start today with Chat, Agent, or Brain from the dashboard."
+      "comingSoonValue": "Start today with Chat, Agent, or Brain from the dashboard.",
+      "privateBetaValue": "Use Chat, Agent, or Brain today. Beta access stays gated until the full product contract is ready.",
+      "waitlistValue": "Visit the product page for context, or start with Chat, Agent, or Brain today."
     }
   },
   "task": {

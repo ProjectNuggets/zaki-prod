@@ -10,26 +10,43 @@ jest.mock("react-i18next", () => ({
   }),
 }));
 
-function renderGate(productId: "design" | "hire" | "learning", title: string) {
+function renderGate(
+  productId: "design" | "hire" | "learning",
+  title: string,
+  mode: "coming_soon" | "private_beta" | "waitlist"
+) {
   return render(
     <MemoryRouter>
-      <ProductAccessGate productId={productId} title={title} mode="coming_soon" />
+      <ProductAccessGate productId={productId} title={title} mode={mode} />
     </MemoryRouter>
   );
 }
 
 describe("ProductAccessGate", () => {
-  it("keeps enabled registry products gated as coming soon", () => {
-    renderGate("design", "ZAKI Design");
+  it("labels private beta products separately from coming soon", () => {
+    renderGate("learning", "ZAKI Learn", "private_beta");
+
+    expect(screen.getByTestId("product-gate-learning")).toHaveAttribute(
+      "data-product-gate",
+      "private_beta"
+    );
+    expect(screen.getByRole("heading", { name: "This product is in private beta" })).toBeInTheDocument();
+    expect(screen.getByText("Private beta")).toBeInTheDocument();
+    expect(screen.getByText("Launch state: private beta")).toBeInTheDocument();
+    expect(screen.getByText("Dashboard, Agent, Chat, Brain, Settings")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open dashboard/ })).toHaveAttribute("href", "/");
+  });
+
+  it("labels waitlist products without exposing app access", () => {
+    renderGate("design", "ZAKI Design", "waitlist");
 
     expect(screen.getByTestId("product-gate-design")).toHaveAttribute(
       "data-product-gate",
-      "coming_soon"
+      "waitlist"
     );
-    expect(screen.getByRole("heading", { name: "This product is coming soon" })).toBeInTheDocument();
-    expect(screen.getByText("Coming soon")).toBeInTheDocument();
-    expect(screen.getByText("Launch state: coming soon")).toBeInTheDocument();
-    expect(screen.getByText("Dashboard, Agent, Chat, Brain, Settings")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "This product is on the waitlist" })).toBeInTheDocument();
+    expect(screen.getByText("Waitlist")).toBeInTheDocument();
+    expect(screen.getByText("Launch state: waitlist")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open dashboard/ })).toHaveAttribute("href", "/");
   });
 });

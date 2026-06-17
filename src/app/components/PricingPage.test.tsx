@@ -437,20 +437,23 @@ describe("PricingPage", () => {
     expect(checkoutMutateAsync).not.toHaveBeenCalled();
   });
 
-  it("ignores legacy Complete checkout autostart intents", async () => {
-    render(
-      <MemoryRouter initialEntries={["/pricing?plan=complete&interval=monthly&autostart=1"]}>
-        <Routes>
-          <Route path="/pricing" element={<PricingPage />} />
-        </Routes>
-      </MemoryRouter>
-    );
+  it.each(["complete", "learn", "hire", "design"])(
+    "ignores non-public checkout autostart intents for %s",
+    async (plan) => {
+      render(
+        <MemoryRouter initialEntries={[`/pricing?plan=${plan}&interval=monthly&autostart=1`]}>
+          <Routes>
+            <Route path="/pricing" element={<PricingPage />} />
+          </Routes>
+        </MemoryRouter>
+      );
 
-    await waitFor(() => {
-      expect(screen.getByText("Coming next")).toBeInTheDocument();
-    });
-    expect(checkoutMutateAsync).not.toHaveBeenCalled();
-  });
+      await waitFor(() => {
+        expect(screen.getByText("Coming next")).toBeInTheDocument();
+      });
+      expect(checkoutMutateAsync).not.toHaveBeenCalled();
+    }
+  );
 
   it("starts access-code purchase checkout from pricing card", async () => {
     render(

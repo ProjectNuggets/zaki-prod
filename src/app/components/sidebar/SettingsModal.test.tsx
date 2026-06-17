@@ -1163,6 +1163,10 @@ describe("SettingsPage", () => {
     }
 
     expect(within(screen.getByTestId("settings-billing")).getByText("ZAKI Hire")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-billing")).getAllByText("Launch: public app").length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId("settings-billing")).getAllByText("Launch: private beta").length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId("settings-billing")).getByText("Launch: waitlist")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-billing")).queryByText("ZAKI CLI")).not.toBeInTheDocument();
     expect(within(screen.getByTestId("settings-billing")).getByText("Extra usage units")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-billing")).getByTestId("settings-weekly-meter")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-billing")).getByTestId("settings-burst-meter")).toBeInTheDocument();
