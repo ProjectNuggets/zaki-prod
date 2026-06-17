@@ -6,11 +6,9 @@
 //      component. It reliably encodes public-vs-gated: Agent/Chat/Brain
 //      are interactive; Learn/Hire are private beta; Design is disabled until its
 //      backend is configured. These assertions are safe today.
-//   2. SCAFFOLDED (skips if not reached): the dashboard renders explicit text
-//      tags ("Private beta" / "Waitlist" / "Control plane") via getProductTag.
-//      Dashboard reachability is still stabilizing, so this asserts only when
-//      the product grid actually renders and otherwise records a skip rather
-//      than a brittle failure.
+//   2. Dashboard command strip: the app front door exposes public launch
+//      surfaces while Learn/Hire/Design stay visible as beta/waitlist context,
+//      not generally available app surfaces.
 
 import { expect, test } from "@playwright/test";
 import { RELEASE_VIEWPORTS, signInForRelease } from "./support/release-harness";
@@ -41,24 +39,26 @@ test.describe("ZAKI V1 product visibility", () => {
     await expect(rail.getByTitle(/^Design/i)).toBeDisabled();
   });
 
-  test("dashboard product tags (scaffold — skips until dashboard grid stabilizes)", async ({ page }) => {
+  test("dashboard command strip keeps beta and waitlist products contextual", async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.locator(".zaki-app-v2")).toBeVisible({ timeout: 20_000 });
 
-    // Detect whether the dashboard product grid actually rendered. The "Live"
-    // tag is emitted for every enabled public product, so it is a reliable
-    // presence probe for the grid. Wait (bounded) for the registry-driven grid
-    // to settle before counting, otherwise we'd false-skip on a slow query.
-    const liveTag = page.getByText("Live", { exact: true }).first();
-    await liveTag.waitFor({ state: "visible", timeout: 8_000 }).catch(() => {});
-    const liveTagCount = await liveTag.count();
+    const strip = page.getByTestId("zaki-dashboard-command-strip");
+    const hint = page.getByTestId("zaki-dashboard-product-hint");
+    await expect(strip).toBeVisible({ timeout: 20_000 });
 
-    test.skip(liveTagCount === 0, "Dashboard product grid not reached — strict tag assertions deferred (Wave 2).");
+    for (const label of ["Chat", "Agent", "Brain"]) {
+      await expect(strip.getByRole("tab", { name: label })).toBeVisible();
+    }
 
-    // Beta + waitlist + control-plane tags are deterministic from the registry.
-    await expect(page.getByText("Private beta", { exact: true }).first()).toBeVisible();
-    await expect(page.getByText("Waitlist", { exact: true }).first()).toBeVisible();
-    await expect(page.getByText("Control plane", { exact: true }).first()).toBeVisible();
+    await strip.getByRole("tab", { name: "Learn" }).click();
+    await expect(hint.locator("p").filter({ hasText: /Learn is coming soon/i })).toBeVisible();
+
+    await strip.getByRole("tab", { name: "Design" }).click();
+    await expect(hint.locator("p").filter({ hasText: /Design is coming soon/i })).toBeVisible();
+
+    await strip.getByRole("tab", { name: "Career" }).click();
+    await expect(hint.locator("p").filter({ hasText: /Career is coming soon/i })).toBeVisible();
   });
 
   test("direct beta and waitlist routes render gates instead of product surfaces", async ({ page }) => {
