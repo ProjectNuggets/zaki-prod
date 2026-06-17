@@ -285,6 +285,18 @@ describe("LoginScreen legal consent", () => {
       "",
       "/?auth=login&next=%2Fsettings%23settings-memory-data"
     );
+    window.sessionStorage.setItem(
+      PENDING_INTENT_KEY,
+      JSON.stringify({
+        productId: "design",
+        taskKind: "brief",
+        prompt: "Old design intent",
+        source: "dashboard",
+        returnTo: "/design",
+        anonymousWorkId: "work-stale",
+        createdAt: "2026-06-15T00:00:00.000Z",
+      })
+    );
 
     renderLoginScreen();
     await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
@@ -300,6 +312,7 @@ describe("LoginScreen legal consent", () => {
       expect(window.location.pathname).toBe("/settings");
       expect(window.location.hash).toBe("#settings-memory-data");
     });
+    expect(window.sessionStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
   });
 
   it("uses the same preserved-work target for Google OAuth", async () => {
@@ -351,7 +364,7 @@ describe("LoginScreen legal consent", () => {
     await waitFor(() => {
       expect(window.location.pathname).toBe("/design");
     });
-    expect(window.sessionStorage.getItem(PENDING_INTENT_KEY)).toBeTruthy();
+    expect(window.sessionStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
   });
 
   it("keeps explicit pricing-intent auth on pricing after login", async () => {

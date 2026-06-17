@@ -15,7 +15,7 @@ import {
   buildGoogleOAuthStartUrl,
   fetchGoogleOAuthStatus,
 } from "@/lib/api";
-import { readPendingIntent } from "@/lib/pendingIntent";
+import { clearPendingIntent, readPendingIntent } from "@/lib/pendingIntent";
 import { useAuthStore } from "@/stores";
 
 const LEGAL_POLICY_VERSION_FALLBACK = "2026-02-17.v2";
@@ -623,6 +623,7 @@ export function LoginScreen() {
       setLoginAccessCode("");
       setShowLoginAccessCode(false);
       const returnTo = getPostLoginReturnTo(location);
+      clearPendingIntent();
       if (returnTo) {
         navigate(returnTo, { replace: true });
       }
