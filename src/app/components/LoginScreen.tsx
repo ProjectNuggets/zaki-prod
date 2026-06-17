@@ -18,7 +18,7 @@ import {
 import { clearPendingIntent, readPendingIntent } from "@/lib/pendingIntent";
 import { useAuthStore } from "@/stores";
 
-const LEGAL_POLICY_VERSION_FALLBACK = "2026-02-17.v2";
+const LEGAL_POLICY_VERSION_FALLBACK = "2026-06-17.v2";
 const PRICING_INTENT_SOURCES = new Set([
   "website_pricing",
   "website_product_agent",
@@ -35,6 +35,8 @@ const PRICING_INTENT_SOURCES = new Set([
   "billing_success",
   "access_expired",
 ]);
+
+type AuthMode = "login" | "signup" | "reset-request" | "reset-confirm";
 
 export function hasExplicitPricingIntent(input: {
   pathname: string;
@@ -83,18 +85,25 @@ function getPostLoginReturnTo(location: ReturnType<typeof useLocation>) {
   ) {
     return "/";
   }
-  const pendingIntent = readPendingIntent();
-  const pendingReturnTo = getSafeRelativeReturnTo(pendingIntent?.returnTo ?? null);
-  if (pendingReturnTo) return pendingReturnTo;
   return "";
 }
 
 const AUTH_COPY = {
   en: {
     title: {
-      signup: "Create your account",
+      signup: "Create a ZAKI account",
       resetRequest: "Reset your password",
       resetConfirm: "Set a new password",
+      login: "Sign in to ZAKI",
+    },
+    chrome: {
+      product: "ZAKI",
+      descriptor: "Secure workspace access",
+    },
+    eyebrow: {
+      signup: "Start",
+      resetRequest: "Reset",
+      resetConfirm: "New password",
       login: "Welcome back",
     },
     fields: {
@@ -122,9 +131,6 @@ const AUTH_COPY = {
       link: "Terms, Privacy & Compliance",
     },
     actions: {
-      tabSignIn: "Sign in",
-      tabCreate: "Create",
-      tabReset: "Reset",
       forgotPassword: "Forgot password?",
       createAccount: "Create account",
       creatingAccount: "Creating account...",
@@ -143,14 +149,14 @@ const AUTH_COPY = {
       hideActivationCode: "Hide activation code",
     },
     subtitles: {
-      login: "Sign in to continue your chats and spaces.",
-      signup: "Create your account to start with ZAKI.",
-      resetRequest: "We will email you a secure reset link.",
-      resetConfirm: "Set a new password to regain access.",
+      login: "Use your email or Google account to continue.",
+      signup: "Create one account for Agent, Spaces, Brain, and billing.",
+      resetRequest: "Enter the account email and we will send a secure reset link.",
+      resetConfirm: "Choose a new password for this account.",
     },
     preservedWork: {
-      title: "We kept your work.",
-      body: "Sign in or create an account and ZAKI will take you back to the prompt you started.",
+      title: "Return saved.",
+      body: "After authentication, ZAKI will bring you back to {{target}}.",
     },
     aria: {
       hidePassword: "Hide password",
@@ -188,9 +194,19 @@ const AUTH_COPY = {
   },
   ar: {
     title: {
-      signup: "أنشئ حسابك",
+      signup: "أنشئ حساب ZAKI",
       resetRequest: "إعادة تعيين كلمة المرور",
       resetConfirm: "عيّن كلمة مرور جديدة",
+      login: "تسجيل الدخول إلى ZAKI",
+    },
+    chrome: {
+      product: "ZAKI",
+      descriptor: "دخول آمن إلى مساحة العمل",
+    },
+    eyebrow: {
+      signup: "ابدأ",
+      resetRequest: "استعادة",
+      resetConfirm: "كلمة مرور جديدة",
       login: "مرحبًا بعودتك",
     },
     fields: {
@@ -205,11 +221,11 @@ const AUTH_COPY = {
     },
     placeholders: {
       fullName: "الاسم الكامل",
-      email: "البريد الإلكتروني",
-      password: "كلمة المرور",
-      confirmPassword: "تأكيد كلمة المرور",
-      newPassword: "كلمة المرور الجديدة",
-      confirmNewPassword: "تأكيد كلمة المرور الجديدة",
+      email: "you@company.com",
+      password: "أدخل كلمة المرور",
+      confirmPassword: "أعد إدخال كلمة المرور",
+      newPassword: "أدخل كلمة مرور جديدة",
+      confirmNewPassword: "أعد إدخال كلمة المرور الجديدة",
       accessCode: "رمز التفعيل",
     },
     resetHint: "أدخل كلمة المرور الجديدة أدناه.",
@@ -218,9 +234,6 @@ const AUTH_COPY = {
       link: "الشروط والخصوصية والامتثال",
     },
     actions: {
-      tabSignIn: "دخول",
-      tabCreate: "إنشاء",
-      tabReset: "استعادة",
       forgotPassword: "هل نسيت كلمة المرور؟",
       createAccount: "إنشاء الحساب",
       creatingAccount: "جارٍ إنشاء الحساب...",
@@ -239,14 +252,14 @@ const AUTH_COPY = {
       hideActivationCode: "إخفاء رمز التفعيل",
     },
     subtitles: {
-      login: "سجّل الدخول لمتابعة محادثاتك ومساحاتك.",
-      signup: "أنشئ حسابك للبدء مع ZAKI.",
-      resetRequest: "سنرسل لك رابطًا آمنًا لإعادة تعيين كلمة المرور.",
-      resetConfirm: "عيّن كلمة مرور جديدة لاستعادة الوصول.",
+      login: "استخدم بريدك أو حساب Google للمتابعة.",
+      signup: "حساب واحد لـ Agent والمساحات والذاكرة والفوترة.",
+      resetRequest: "أدخل بريد الحساب وسنرسل لك رابطًا آمنًا لإعادة التعيين.",
+      resetConfirm: "اختر كلمة مرور جديدة لهذا الحساب.",
     },
     preservedWork: {
-      title: "احتفظنا بعملك.",
-      body: "سجّل الدخول أو أنشئ حسابًا وسيعيدك ZAKI إلى الطلب الذي بدأت منه.",
+      title: "تم حفظ وجهة الرجوع.",
+      body: "بعد التحقق من الهوية، سيعيدك ZAKI إلى {{target}}.",
     },
     aria: {
       hidePassword: "إخفاء كلمة المرور",
@@ -309,9 +322,7 @@ export function LoginScreen() {
       ? new URLSearchParams(window.location.search).get("token") || ""
       : "";
   const [resetToken, setResetToken] = useState(initialToken);
-  const [mode, setMode] = useState<"login" | "signup" | "reset-request" | "reset-confirm">(
-    initialToken ? "reset-confirm" : "login"
-  );
+  const [mode, setMode] = useState<AuthMode>(initialToken ? "reset-confirm" : "login");
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
@@ -335,7 +346,7 @@ export function LoginScreen() {
   const hasPreservedWork = Boolean(postLoginReturnTo);
 
   const setModeClean = useCallback(
-    (nextMode: "login" | "signup" | "reset-request" | "reset-confirm") => {
+    (nextMode: AuthMode) => {
       setMode(nextMode);
       setError("");
       setNotice("");
@@ -628,7 +639,7 @@ export function LoginScreen() {
       );
       const pendingIntent = readPendingIntent();
       const pendingReturnTo = getSafeRelativeReturnTo(pendingIntent?.returnTo ?? null);
-      if (explicitNext && pendingReturnTo && explicitNext !== pendingReturnTo) {
+      if (pendingReturnTo && (!explicitNext || explicitNext !== pendingReturnTo)) {
         clearPendingIntent();
       }
       if (returnTo) {
@@ -647,118 +658,101 @@ export function LoginScreen() {
     }
   };
 
+  const modeCopyKey: "login" | "signup" | "resetRequest" | "resetConfirm" =
+    mode === "reset-request"
+      ? "resetRequest"
+      : mode === "reset-confirm"
+        ? "resetConfirm"
+        : mode;
+  const modeTitle = copy.title[modeCopyKey];
+  const modeSubtitle = copy.subtitles[modeCopyKey];
+  const modeEyebrow = copy.eyebrow[modeCopyKey];
+  const preservedWorkBody = copy.preservedWork.body.replace(
+    "{{target}}",
+    postLoginReturnTo
+  );
+  const submitDisabled =
+    isLoading ||
+    ((mode === "login" || mode === "signup" || mode === "reset-request") &&
+      email.trim().length === 0) ||
+    ((mode === "login" || mode === "signup") && password.length === 0) ||
+    (mode === "signup" &&
+      (!fullName.trim() ||
+        !dateOfBirth.trim() ||
+        confirmPassword.length === 0 ||
+        !signupLegalConsent)) ||
+    (mode === "reset-confirm" &&
+      (resetPassword.length === 0 || resetConfirm.length === 0));
+  const submitLabel = isLoading
+    ? mode === "signup"
+      ? copy.actions.creatingAccount
+      : mode === "reset-request"
+        ? copy.actions.sendingResetLink
+        : mode === "reset-confirm"
+          ? copy.actions.updatingPassword
+          : copy.actions.signingIn
+    : mode === "signup"
+      ? copy.actions.createAccount
+      : mode === "reset-request"
+        ? copy.actions.sendResetLink
+        : mode === "reset-confirm"
+          ? copy.actions.updatePassword
+          : copy.actions.signIn;
+
   return (
     <div
       dir={isRtl ? "rtl" : "ltr"}
       lang={locale}
-      className="min-h-screen bg-white dark:bg-[#0c0a09] flex items-center justify-center px-4 font-body"
+      className="zaki-app-v2 zaki-auth-v2"
     >
-      <div className={`w-full max-w-md rounded-zaki-2xl border border-zaki-strong bg-zaki-raised shadow-zaki-xl p-8 dark:bg-[#141210] dark:border-[rgba(240,236,230,0.1)] dark:shadow-[0px_30px_80px_rgba(0,0,0,0.55)] ${isRtl ? "text-right" : "text-left"}`}>
-        <div className="flex items-center">
-          <LogoArabicRed />
-        </div>
-        <h1 className="mt-3 font-display text-2xl font-bold text-zaki-primary dark:text-[#efe6d9]">
-          {mode === "signup"
-            ? copy.title.signup
-            : mode === "reset-request"
-              ? copy.title.resetRequest
-              : mode === "reset-confirm"
-                ? copy.title.resetConfirm
-                : copy.title.login}
-        </h1>
-        <p className="mt-1 text-sm text-zaki-secondary dark:text-[#c9b8a4]">
-          {mode === "signup"
-            ? copy.subtitles.signup
-            : mode === "reset-request"
-              ? copy.subtitles.resetRequest
-              : mode === "reset-confirm"
-                ? copy.subtitles.resetConfirm
-                : copy.subtitles.login}
-        </p>
-
-        {mode !== "reset-confirm" ? (
-          <div
-            role="tablist"
-            aria-label={isRtl ? "تبديل نمط الدخول" : "Authentication mode"}
-            className="mt-5 grid grid-cols-3 gap-1 rounded-full border border-zaki bg-zaki-base p-1 dark:bg-[#1a1714] dark:border-[rgba(240,236,230,0.08)]"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === "login"}
-              onClick={() => setModeClean("login")}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                mode === "login"
-                  ? "bg-zaki-elevated text-zaki-primary shadow-sm dark:bg-[#141210] dark:text-[#efe6d9]"
-                  : "text-zaki-muted hover:text-zaki-secondary dark:text-[#a79079] dark:hover:text-[#efe6d9]"
-              }`}
-            >
-              {copy.actions.tabSignIn}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === "signup"}
-              onClick={() => setModeClean("signup")}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                mode === "signup"
-                  ? "bg-zaki-elevated text-zaki-primary shadow-sm dark:bg-[#141210] dark:text-[#efe6d9]"
-                  : "text-zaki-muted hover:text-zaki-secondary dark:text-[#a79079] dark:hover:text-[#efe6d9]"
-              }`}
-            >
-              {copy.actions.tabCreate}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === "reset-request"}
-              onClick={() => setModeClean("reset-request")}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
-                mode === "reset-request"
-                  ? "bg-zaki-elevated text-zaki-primary shadow-sm dark:bg-[#141210] dark:text-[#efe6d9]"
-                  : "text-zaki-muted hover:text-zaki-secondary dark:text-[#a79079] dark:hover:text-[#efe6d9]"
-              }`}
-            >
-              {copy.actions.tabReset}
-            </button>
+      <header className="zaki-auth-v2__topbar">
+        <div className="zaki-auth-v2__brand">
+          <LogoArabicRed className="zaki-auth-v2__logo" />
+          <div>
+            <strong>{copy.chrome.product}</strong>
+            <span>{copy.chrome.descriptor}</span>
           </div>
-        ) : null}
+        </div>
+      </header>
 
-        {(mode === "login" || mode === "signup") ? (
-          <button
-            type="button"
-            className="mt-5 flex w-full items-center justify-center gap-2 rounded-zaki-md border border-zaki-strong bg-white px-3 py-2.5 text-sm font-semibold text-zaki-primary transition hover:bg-zaki-hover dark:border-[rgba(240,236,230,0.12)] dark:bg-[#1a1714] dark:text-[#efe6d9] dark:hover:bg-[#211c17]"
-            disabled={!googleOAuthEnabled}
-            title={!googleOAuthEnabled ? copy.actions.googleUnavailable : undefined}
-            onClick={() => {
-              if (!googleOAuthEnabled) return;
-              window.location.href = buildGoogleOAuthStartUrl(postLoginReturnTo || "/");
-            }}
-          >
-            <span className="flex size-5 items-center justify-center rounded-full border border-zaki-subtle bg-white text-xs font-bold text-[#4285f4]">
-              G
-            </span>
-            {copy.actions.continueWithGoogle}
-          </button>
-        ) : null}
+      <main className="zaki-auth-v2__frame">
+        <section className="zaki-auth-v2__panel" aria-labelledby="zaki-auth-title">
+          <div className="zaki-auth-v2__panel-head">
+            <span className="zaki-auth-v2__eyebrow">{modeEyebrow}</span>
+            <h1 id="zaki-auth-title">{modeTitle}</h1>
+            <p>{modeSubtitle}</p>
+            {hasPreservedWork && (mode === "login" || mode === "signup") ? (
+              <div className="zaki-auth-v2__callout zaki-auth-v2__callout--compact">
+                <strong>{copy.preservedWork.title}</strong>
+                <span>{preservedWorkBody}</span>
+              </div>
+            ) : null}
+          </div>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          {hasPreservedWork && (mode === "login" || mode === "signup") ? (
-            <div className="rounded-zaki-md border border-zaki bg-zaki-base px-3 py-2 text-xs text-zaki-secondary dark:bg-[#1a1714] dark:border-[rgba(240,236,230,0.08)] dark:text-[#c9b8a4]">
-              <strong className="block text-zaki-primary dark:text-[#efe6d9]">
-                {copy.preservedWork.title}
-              </strong>
-              <span>{copy.preservedWork.body}</span>
+          {(mode === "login" || mode === "signup") && googleOAuthEnabled ? (
+            <div className="zaki-auth-v2__oauth-wrap">
+              <button
+                type="button"
+                className="zaki-auth-v2__oauth"
+                onClick={() => {
+                  window.location.href = buildGoogleOAuthStartUrl(postLoginReturnTo || "/");
+                }}
+              >
+                <span aria-hidden>G</span>
+                {copy.actions.continueWithGoogle}
+              </button>
             </div>
           ) : null}
+
+          <form onSubmit={handleSubmit} className="zaki-auth-v2__form">
           {mode === "reset-confirm" && (
-            <div className="rounded-zaki-md border border-zaki bg-zaki-base px-3 py-2 text-xs text-zaki-secondary dark:bg-[#1a1714] dark:border-[rgba(240,236,230,0.08)] dark:text-[#c9b8a4]">
+            <div className="zaki-auth-v2__callout">
               {copy.resetHint}
             </div>
           )}
           {mode === "signup" && (
-            <label className="flex flex-col gap-2 text-xs font-medium uppercase tracking-wider text-zaki-secondary dark:text-[#c9b8a4]">
-              {copy.fields.fullName}
+            <label className="zaki-auth-v2__field">
+              <span>{copy.fields.fullName}</span>
               <input
                 type="text"
                 value={fullName}
@@ -767,18 +761,19 @@ export function LoginScreen() {
                   clearFieldError("fullName");
                 }}
                 placeholder={copy.placeholders.fullName}
-                className="rounded-zaki-md border border-zaki-strong bg-zaki-hover px-3 py-2.5 text-sm normal-case tracking-normal text-zaki-primary placeholder:text-zaki-muted outline-none transition focus:border-zaki-accent focus:ring-2 focus:ring-[color:var(--zaki-accent)]/20 dark:border-[rgba(240,236,230,0.1)] dark:bg-[#1a1714] dark:text-[#efe6d9] dark:placeholder:text-[#8e7b66]"
+                id="signup-name"
+                name="name"
                 autoComplete="name"
                 required
               />
               {fieldErrors.fullName ? (
-                <span className="text-[11px] font-medium normal-case tracking-normal text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.fullName}</span>
+                <em className="zaki-auth-v2__field-error">{fieldErrors.fullName}</em>
               ) : null}
             </label>
           )}
           {mode === "signup" && (
-            <label className="flex flex-col gap-2 text-xs font-medium uppercase tracking-wider text-zaki-secondary dark:text-[#c9b8a4]">
-              {copy.fields.dateOfBirth}
+            <label className="zaki-auth-v2__field">
+              <span>{copy.fields.dateOfBirth}</span>
               <input
                 type="date"
                 value={dateOfBirth}
@@ -786,42 +781,44 @@ export function LoginScreen() {
                   setDateOfBirth(event.target.value);
                   clearFieldError("dateOfBirth");
                 }}
-                className="rounded-zaki-md border border-zaki-strong bg-zaki-hover px-3 py-2.5 text-sm normal-case tracking-normal text-zaki-primary outline-none transition focus:border-zaki-accent focus:ring-2 focus:ring-[color:var(--zaki-accent)]/20 dark:border-[rgba(240,236,230,0.1)] dark:bg-[#1a1714] dark:text-[#efe6d9]"
+                id="signup-bday"
+                name="bday"
                 autoComplete="bday"
                 required
               />
               {fieldErrors.dateOfBirth ? (
-                <span className="text-[11px] font-medium normal-case tracking-normal text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.dateOfBirth}</span>
+                <em className="zaki-auth-v2__field-error">{fieldErrors.dateOfBirth}</em>
               ) : null}
             </label>
           )}
           {(mode === "login" ||
             mode === "signup" ||
             mode === "reset-request") && (
-            <label className="flex flex-col gap-2 text-xs font-medium uppercase tracking-wider text-zaki-secondary dark:text-[#c9b8a4]">
-              {copy.fields.email}
+            <label className="zaki-auth-v2__field">
+              <span>{copy.fields.email}</span>
               <input
-                type="text"
+                type="email"
                 value={email}
                 onChange={(event) => {
                   setEmail(event.target.value);
                   clearFieldError("email");
                 }}
                 placeholder={copy.placeholders.email}
-                className="rounded-zaki-md border border-zaki-strong bg-zaki-hover px-3 py-2.5 text-sm normal-case tracking-normal text-zaki-primary placeholder:text-zaki-muted outline-none transition focus:border-zaki-accent focus:ring-2 focus:ring-[color:var(--zaki-accent)]/20 dark:border-[rgba(240,236,230,0.1)] dark:bg-[#1a1714] dark:text-[#efe6d9] dark:placeholder:text-[#8e7b66]"
-                autoComplete="email"
+                id={mode === "signup" ? "signup-email" : "login-email"}
+                name={mode === "signup" ? "email" : "username"}
+                autoComplete={mode === "login" ? "username" : "email"}
                 required
               />
               {fieldErrors.email ? (
-                <span className="text-[11px] font-medium normal-case tracking-normal text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.email}</span>
+                <em className="zaki-auth-v2__field-error">{fieldErrors.email}</em>
               ) : null}
             </label>
           )}
 
           {(mode === "login" || mode === "signup") && (
-            <label className="flex flex-col gap-2 text-xs font-medium uppercase tracking-wider text-zaki-secondary dark:text-[#c9b8a4]">
-              {copy.fields.password}
-              <div className="relative">
+            <label className="zaki-auth-v2__field">
+              <span>{copy.fields.password}</span>
+              <div className="zaki-auth-v2__password-field">
                 <input
                   type={showPassword ? "text" : "password"}
                   value={password}
@@ -830,93 +827,33 @@ export function LoginScreen() {
                     clearFieldError("password");
                   }}
                   placeholder={copy.placeholders.password}
-                  className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-hover px-3 py-2.5 pr-12 text-sm normal-case tracking-normal text-zaki-primary placeholder:text-zaki-muted outline-none transition focus:border-zaki-accent focus:ring-2 focus:ring-[color:var(--zaki-accent)]/20 dark:border-[rgba(240,236,230,0.1)] dark:bg-[#1a1714] dark:text-[#efe6d9] dark:placeholder:text-[#8e7b66]"
+                  id={mode === "signup" ? "signup-password" : "login-password"}
+                  name={mode === "signup" ? "new-password" : "current-password"}
                   autoComplete={mode === "signup" ? "new-password" : "current-password"}
                   required
                 />
                 <button
                   type="button"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zaki-muted hover:text-zaki-secondary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
+                  className="zaki-auth-v2__password-toggle"
                   onClick={() => setShowPassword((prev) => !prev)}
                   aria-label={showPassword ? copy.aria.hidePassword : copy.aria.showPassword}
                 >
                   {showPassword ? (
-                    <EyeOff className="size-4" />
+                    <EyeOff aria-hidden className="zaki-auth-v2__password-icon" />
                   ) : (
-                    <Eye className="size-4" />
+                    <Eye aria-hidden className="zaki-auth-v2__password-icon" />
                   )}
                 </button>
               </div>
               {fieldErrors.password ? (
-                <span className="text-[11px] font-medium normal-case tracking-normal text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.password}</span>
+                <em className="zaki-auth-v2__field-error">{fieldErrors.password}</em>
               ) : null}
             </label>
           )}
 
           {mode === "signup" && (
-            <label className="flex items-start gap-3 rounded-zaki-md border border-zaki bg-zaki-base px-3 py-3 text-xs font-medium text-zaki-secondary dark:bg-[#1a1714] dark:border-[rgba(240,236,230,0.08)] dark:text-[#c9b8a4]">
-              <input
-                type="checkbox"
-                checked={signupLegalConsent}
-                onChange={(event) => setSignupLegalConsent(event.target.checked)}
-                className="mt-0.5 size-4 rounded border border-zaki-strong bg-white accent-zaki-brand dark:border-[rgba(240,236,230,0.15)] dark:bg-[#0c0a09]"
-                required
-              />
-              <span className="leading-relaxed">
-                {copy.consent.prefix}{" "}
-                <a
-                  href="/terms"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-semibold text-zaki-brand hover:underline"
-                >
-                  {copy.consent.link}
-                </a>
-                .
-              </span>
-            </label>
-          )}
-
-          {mode === "login" ? (
-            <>
-              <button
-                type="button"
-                className="block text-left text-sm text-zaki-secondary hover:text-zaki-primary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
-                onClick={() => setShowLoginAccessCode((prev) => !prev)}
-              >
-                {showLoginAccessCode ? copy.actions.hideActivationCode : copy.actions.showActivationCode}
-              </button>
-              {showLoginAccessCode ? (
-                <label className="flex flex-col gap-2 text-xs font-medium uppercase tracking-wider text-zaki-secondary dark:text-[#c9b8a4]">
-                  {copy.fields.accessCode}
-                  <input
-                    type="text"
-                    value={loginAccessCode}
-                    onChange={(event) => setLoginAccessCode(event.target.value)}
-                    placeholder={copy.placeholders.accessCode}
-                    className="rounded-zaki-md border border-zaki-strong bg-zaki-hover px-3 py-2.5 text-sm normal-case tracking-normal text-zaki-primary placeholder:text-zaki-muted outline-none transition focus:border-zaki-accent focus:ring-2 focus:ring-[color:var(--zaki-accent)]/20 dark:border-[rgba(240,236,230,0.1)] dark:bg-[#1a1714] dark:text-[#efe6d9] dark:placeholder:text-[#8e7b66]"
-                    autoComplete="off"
-                  />
-                </label>
-              ) : null}
-            </>
-          ) : null}
-
-          {mode === "login" && (
-            <button
-              type="button"
-              className="block text-left text-sm text-zaki-secondary hover:text-zaki-primary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
-              onClick={() => {
-                setModeClean("reset-request");
-              }}
-            >
-              {copy.actions.forgotPassword}
-            </button>
-          )}
-
-          {mode === "signup" && (
-            <label className="flex flex-col gap-2 text-xs font-medium uppercase tracking-wider text-zaki-secondary dark:text-[#c9b8a4]">
-              {copy.fields.confirmPassword}
+            <label className="zaki-auth-v2__field">
+              <span>{copy.fields.confirmPassword}</span>
               <input
                 type={showPassword ? "text" : "password"}
                 value={confirmPassword}
@@ -925,20 +862,75 @@ export function LoginScreen() {
                   clearFieldError("confirmPassword");
                 }}
                 placeholder={copy.placeholders.confirmPassword}
-                className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-hover px-3 py-2.5 text-sm normal-case tracking-normal text-zaki-primary placeholder:text-zaki-muted outline-none transition focus:border-zaki-accent focus:ring-2 focus:ring-[color:var(--zaki-accent)]/20 dark:border-[rgba(240,236,230,0.1)] dark:bg-[#1a1714] dark:text-[#efe6d9] dark:placeholder:text-[#8e7b66]"
+                id="signup-password-confirm"
+                name="new-password-confirm"
                 autoComplete="new-password"
                 required
               />
               {fieldErrors.confirmPassword ? (
-                <span className="text-[11px] font-medium normal-case tracking-normal text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.confirmPassword}</span>
+                <em className="zaki-auth-v2__field-error">{fieldErrors.confirmPassword}</em>
               ) : null}
             </label>
           )}
 
+          {mode === "signup" && (
+            <label className="zaki-auth-v2__consent">
+              <input
+                type="checkbox"
+                checked={signupLegalConsent}
+                onChange={(event) => setSignupLegalConsent(event.target.checked)}
+                required
+              />
+              <span>
+                {copy.consent.prefix}{" "}
+                <a href={isRtl ? "/ar/terms?from=signup" : "/terms?from=signup"}>
+                  {copy.consent.link}
+                </a>
+                .
+              </span>
+            </label>
+          )}
+
+          {mode === "login" ? (
+            <div className="zaki-auth-v2__inline-actions">
+              <button
+                type="button"
+                className="zaki-auth-v2__link-button"
+                onClick={() => setShowLoginAccessCode((prev) => !prev)}
+              >
+                {showLoginAccessCode ? copy.actions.hideActivationCode : copy.actions.showActivationCode}
+              </button>
+              <button
+                type="button"
+                className="zaki-auth-v2__link-button"
+                onClick={() => {
+                  setModeClean("reset-request");
+                }}
+              >
+                {copy.actions.forgotPassword}
+              </button>
+            </div>
+          ) : null}
+
+          {mode === "login" && showLoginAccessCode ? (
+            <label className="zaki-auth-v2__field">
+              <span>{copy.fields.accessCode}</span>
+              <input
+                type="text"
+                value={loginAccessCode}
+                onChange={(event) => setLoginAccessCode(event.target.value)}
+                placeholder={copy.placeholders.accessCode}
+                id="login-access-code"
+                name="access-code"
+                autoComplete="off"
+              />
+            </label>
+          ) : null}
+
           {mode === "reset-confirm" && (
             <>
-              <label className="flex flex-col gap-2 text-xs font-medium uppercase tracking-wider text-zaki-secondary dark:text-[#c9b8a4]">
-                {copy.fields.newPassword}
+              <label className="zaki-auth-v2__field">
+                <span>{copy.fields.newPassword}</span>
                 <input
                   type={showPassword ? "text" : "password"}
                   value={resetPassword}
@@ -947,16 +939,17 @@ export function LoginScreen() {
                     clearFieldError("resetPassword");
                   }}
                   placeholder={copy.placeholders.newPassword}
-                  className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-hover px-3 py-2.5 text-sm normal-case tracking-normal text-zaki-primary placeholder:text-zaki-muted outline-none transition focus:border-zaki-accent focus:ring-2 focus:ring-[color:var(--zaki-accent)]/20 dark:border-[rgba(240,236,230,0.1)] dark:bg-[#1a1714] dark:text-[#efe6d9] dark:placeholder:text-[#8e7b66]"
+                  id="reset-password"
+                  name="new-password"
                   autoComplete="new-password"
                   required
                 />
                 {fieldErrors.resetPassword ? (
-                  <span className="text-[11px] font-medium normal-case tracking-normal text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.resetPassword}</span>
+                  <em className="zaki-auth-v2__field-error">{fieldErrors.resetPassword}</em>
                 ) : null}
               </label>
-              <label className="flex flex-col gap-2 text-xs font-medium uppercase tracking-wider text-zaki-secondary dark:text-[#c9b8a4]">
-                {copy.fields.confirmNewPassword}
+              <label className="zaki-auth-v2__field">
+                <span>{copy.fields.confirmNewPassword}</span>
                 <input
                   type={showPassword ? "text" : "password"}
                   value={resetConfirm}
@@ -965,82 +958,59 @@ export function LoginScreen() {
                     clearFieldError("resetConfirm");
                   }}
                   placeholder={copy.placeholders.confirmNewPassword}
-                  className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-hover px-3 py-2.5 text-sm normal-case tracking-normal text-zaki-primary placeholder:text-zaki-muted outline-none transition focus:border-zaki-accent focus:ring-2 focus:ring-[color:var(--zaki-accent)]/20 dark:border-[rgba(240,236,230,0.1)] dark:bg-[#1a1714] dark:text-[#efe6d9] dark:placeholder:text-[#8e7b66]"
+                  id="reset-password-confirm"
+                  name="new-password-confirm"
                   autoComplete="new-password"
                   required
                 />
                 {fieldErrors.resetConfirm ? (
-                  <span className="text-[11px] font-medium normal-case tracking-normal text-zaki-brand dark:text-[#ffb4aa]">{fieldErrors.resetConfirm}</span>
+                  <em className="zaki-auth-v2__field-error">{fieldErrors.resetConfirm}</em>
                 ) : null}
               </label>
             </>
           )}
 
           {notice && (
-            <div className="rounded-zaki-md border border-zaki bg-zaki-success px-3 py-2 text-xs text-zaki-success dark:bg-[rgba(33,145,113,0.2)] dark:border-[#1d3b30] dark:text-[#e9fff8]">
+            <div className="zaki-auth-v2__notice zaki-auth-v2__notice--success" role="status">
               {notice}
             </div>
           )}
-          {error && (
-            <div className="rounded-zaki-md border border-zaki bg-zaki-error px-3 py-2 text-xs text-zaki-brand dark:bg-[rgba(241,2,2,0.18)] dark:border-[#3a1f1b] dark:text-[#ffe7e2]">
+          {error && Object.keys(fieldErrors).length === 0 && (
+            <div className="zaki-auth-v2__notice zaki-auth-v2__notice--error" role="alert">
               {error}
             </div>
           )}
 
           <button
             type="submit"
-            disabled={
-              isLoading ||
-              ((mode === "login" || mode === "signup") && password.length === 0) ||
-              (mode === "signup" && !signupLegalConsent) ||
-              (mode === "signup" && confirmPassword.length === 0) ||
-              (mode === "reset-confirm" &&
-                (resetPassword.length === 0 || resetConfirm.length === 0))
-            }
-            className="w-full rounded-full bg-zaki-brand py-2.5 text-sm font-medium text-white shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(241,2,2,0.3)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+            disabled={submitDisabled}
+            className="zaki-auth-v2__submit"
           >
-            {isLoading
-              ? mode === "signup"
-                ? copy.actions.creatingAccount
-                : mode === "reset-request"
-                  ? copy.actions.sendingResetLink
-                  : mode === "reset-confirm"
-                    ? copy.actions.updatingPassword
-                    : copy.actions.signingIn
-              : mode === "signup"
-                ? copy.actions.createAccount
-                : mode === "reset-request"
-                  ? copy.actions.sendResetLink
-                  : mode === "reset-confirm"
-                    ? copy.actions.updatePassword
-                    : copy.actions.signIn}
+            {submitLabel}
           </button>
         </form>
 
-        <button
-          type="button"
-          className="mt-4 text-sm text-zaki-secondary hover:text-zaki-primary dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]"
-          onClick={() => {
-            if (mode === "signup") {
-              setModeClean("login");
-            } else if (mode === "login") {
-              setModeClean("signup");
-            } else {
-              setModeClean("login");
-            }
-          }}
-        >
-          {mode === "signup"
-            ? copy.actions.haveAccount
-            : mode === "login"
-              ? copy.actions.newHere
-              : copy.actions.backToSignIn}
-        </button>
-
-        <div className="mt-4 text-xs text-zaki-muted dark:text-[#9f8f7c]">
-          {isRtl ? "تسجيل دخول آمن . بنية تحتية موثوقة . امتثال قانوني" : "Secure sign-in . Trusted infrastructure . Legal compliance"}
-        </div>
-      </div>
+          <button
+            type="button"
+            className="zaki-auth-v2__switch"
+            onClick={() => {
+              if (mode === "signup") {
+                setModeClean("login");
+              } else if (mode === "login") {
+                setModeClean("signup");
+              } else {
+                setModeClean("login");
+              }
+            }}
+          >
+            {mode === "signup"
+              ? copy.actions.haveAccount
+              : mode === "login"
+                ? copy.actions.newHere
+                : copy.actions.backToSignIn}
+          </button>
+        </section>
+      </main>
     </div>
   );
 }

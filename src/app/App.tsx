@@ -22,7 +22,7 @@ import {
 import { useAuthStore, useUIStore, useNavigationStore } from "@/stores";
 import { ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID } from "@/lib/zakiBot";
 
-const LEGAL_POLICY_VERSION_FALLBACK = "2026-02-17.v2";
+const LEGAL_POLICY_VERSION_FALLBACK = "2026-06-17.v2";
 const LegalPage = lazy(() =>
   import("./components/LegalPage").then((m) => ({ default: m.LegalPage }))
 );

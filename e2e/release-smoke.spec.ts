@@ -10,11 +10,11 @@ import { expect, test, type Page } from "@playwright/test";
 import { RELEASE_ROUTES, signInForRelease } from "./support/release-harness";
 
 const ERROR_BOUNDARY_TEXT = "Something went wrong";
-const LOGIN_HEADINGS = [/Welcome back/i, /Create your account/i, /Sign in to ZAKI/i];
+const LOGIN_HEADINGS = [/Sign in to ZAKI/i, /Create a ZAKI account/i, /Reset your password/i];
 
 async function assertMounted(page: Page) {
   // App shell present (App.tsx root) — proves we are past hydration + login.
-  await expect(page.locator(".zaki-app-v2")).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator(".zaki-app.zaki-app-v2")).toBeVisible({ timeout: 20_000 });
   // ErrorBoundary fallback must not be showing.
   await expect(page.getByText(ERROR_BOUNDARY_TEXT)).toHaveCount(0);
   // We must not be stuck on the login screen.
@@ -60,7 +60,8 @@ test.describe("ZAKI V1 release smoke (signed-in)", () => {
     await expect(page.getByText(ERROR_BOUNDARY_TEXT)).toHaveCount(0);
     // ...and we must fall back to login, not the signed-in shell. Access
     // tokens are memory-only, so a 502 refresh yields a logged-out app.
-    await expect(page.getByRole("tablist")).toBeVisible({ timeout: 20_000 });
-    await expect(page.locator(".zaki-app-v2")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Sign in to ZAKI" })).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator(".zaki-auth-v2")).toBeVisible();
+    await expect(page.locator(".zaki-app.zaki-app-v2")).toHaveCount(0);
   });
 });

@@ -162,9 +162,9 @@ test("user can sign in on pricing route and complete provider-selected checkout"
     "/pricing?auth=signup&plan=agent&interval=monthly&autostart=1&source=website_pricing"
   );
 
-  await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();
-  await page.getByRole("tab", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Create a ZAKI account" })).toBeVisible();
+  await page.getByRole("button", { name: "Have an account? Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Sign in to ZAKI" })).toBeVisible();
 
   await page.getByPlaceholder("Email address").fill("user@example.com");
   await page.getByPlaceholder("Password").fill("Password123");

@@ -750,6 +750,436 @@ button.v2-status-strip__item:focus-visible {
   color: var(--v2-ink-4);
 }
 
+.zaki-auth-v2 {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--v2-bg-sunken);
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.zaki-auth-v2__topbar {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+}
+
+.zaki-auth-v2__brand {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.zaki-auth-v2__logo {
+  width: 34px;
+  height: 24px;
+  flex: 0 0 auto;
+}
+
+.zaki-auth-v2__brand div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.zaki-auth-v2__brand strong,
+.zaki-auth-v2__eyebrow,
+.zaki-auth-v2__field > span,
+.zaki-auth-v2__link-button,
+.zaki-auth-v2__submit,
+.zaki-auth-v2__switch {
+  letter-spacing: var(--v2-tracking-wider);
+  text-transform: uppercase;
+}
+
+.zaki-auth-v2__brand strong {
+  color: var(--v2-ink-1);
+  font-size: var(--v2-text-xs);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.zaki-auth-v2__brand span {
+  color: var(--v2-ink-3);
+  font-size: var(--v2-text-2xs);
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zaki-auth-v2__frame {
+  width: min(100%, 472px);
+  flex: 1;
+  display: grid;
+  align-items: center;
+  margin: 0 auto;
+  padding: 24px 16px 56px;
+}
+
+.zaki-auth-v2__panel {
+  overflow: hidden;
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: var(--v2-r-2);
+  background: var(--v2-bg);
+}
+
+.zaki-auth-v2__panel-head {
+  display: grid;
+  gap: 10px;
+  padding: 28px 24px 18px;
+}
+
+.zaki-auth-v2__eyebrow {
+  color: var(--v2-accent);
+  font-size: var(--v2-text-2xs);
+  line-height: 1;
+}
+
+.zaki-auth-v2__panel-head h1 {
+  margin: 0;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: var(--v2-leading-tight);
+  text-wrap: balance;
+}
+
+.zaki-auth-v2__panel-head p {
+  max-width: 44ch;
+  margin: 0;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-prose);
+  font-size: var(--v2-text-sm);
+  line-height: var(--v2-leading-prose);
+  text-wrap: pretty;
+}
+
+.zaki-auth-v2__oauth-wrap {
+  padding: 4px 24px 0;
+}
+
+.zaki-auth-v2__oauth {
+  min-height: var(--v2-control-h-lg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: var(--v2-r-1);
+  background: var(--v2-bg-raised);
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-sm);
+  cursor: pointer;
+  transition-property: background, border-color, scale;
+  transition-duration: var(--v2-dur-trans);
+  transition-timing-function: var(--v2-ease-out);
+}
+
+.zaki-auth-v2__oauth:hover {
+  border-color: var(--v2-hairline-strong);
+  background: var(--v2-hover);
+}
+
+.zaki-auth-v2__oauth:active {
+  scale: 0.96;
+}
+
+.zaki-auth-v2__oauth span {
+  width: 20px;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg);
+  color: var(--v2-accent);
+  font-size: var(--v2-text-xs);
+  font-weight: 600;
+}
+
+.zaki-auth-v2__form {
+  display: grid;
+  gap: 14px;
+  padding: 20px 24px 22px;
+}
+
+.zaki-auth-v2__field {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.zaki-auth-v2__field > span {
+  color: var(--v2-ink-3);
+  font-size: var(--v2-text-2xs);
+  line-height: 1;
+}
+
+.zaki-auth-v2__field input,
+.zaki-auth-v2__password-field input {
+  width: 100%;
+  min-height: var(--v2-control-h-lg);
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: var(--v2-r-1);
+  background: var(--v2-bg-sunken);
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-sm);
+  letter-spacing: 0;
+  outline: none;
+  padding: 0 12px;
+  transition-property: background, border-color;
+  transition-duration: var(--v2-dur-trans);
+  transition-timing-function: var(--v2-ease-out);
+}
+
+.zaki-auth-v2__field input::placeholder,
+.zaki-auth-v2__password-field input::placeholder {
+  color: var(--v2-ink-5);
+}
+
+.zaki-auth-v2__field input:focus,
+.zaki-auth-v2__password-field input:focus {
+  border-color: var(--v2-accent);
+  background: var(--v2-bg);
+}
+
+.zaki-auth-v2__password-field {
+  position: relative;
+}
+
+.zaki-auth-v2__password-field input {
+  padding-inline-end: 44px;
+}
+
+.zaki-auth-v2__password-toggle {
+  position: absolute;
+  inset-block: 4px;
+  inset-inline-end: 4px;
+  width: 36px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--v2-r-1);
+  background: transparent;
+  color: var(--v2-ink-3);
+  cursor: pointer;
+  transition-property: color, border-color, background;
+  transition-duration: var(--v2-dur-trans);
+  transition-timing-function: var(--v2-ease-out);
+}
+
+.zaki-auth-v2__password-toggle:hover {
+  border-color: var(--v2-hairline);
+  background: var(--v2-hover);
+  color: var(--v2-ink-1);
+}
+
+.zaki-auth-v2__password-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.zaki-auth-v2__field-error {
+  color: var(--v2-danger);
+  font-family: var(--v2-font-prose);
+  font-size: var(--v2-text-xs);
+  font-style: normal;
+  line-height: var(--v2-leading-normal);
+}
+
+.zaki-auth-v2__consent,
+.zaki-auth-v2__callout,
+.zaki-auth-v2__notice {
+  border: 1px solid var(--v2-hairline);
+  border-radius: var(--v2-r-1);
+  background: var(--v2-bg-raised);
+}
+
+.zaki-auth-v2__callout {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-prose);
+  font-size: var(--v2-text-sm);
+  line-height: var(--v2-leading-normal);
+}
+
+.zaki-auth-v2__callout--compact {
+  margin-top: 4px;
+}
+
+.zaki-auth-v2__callout strong {
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-xs);
+  font-weight: 500;
+  letter-spacing: var(--v2-tracking-wider);
+  text-transform: uppercase;
+}
+
+.zaki-auth-v2__consent {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 12px;
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-prose);
+  font-size: var(--v2-text-sm);
+  line-height: var(--v2-leading-normal);
+}
+
+.zaki-auth-v2__consent input {
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  accent-color: var(--v2-accent);
+}
+
+.zaki-auth-v2__consent a {
+  color: var(--v2-accent);
+  text-decoration: none;
+}
+
+.zaki-auth-v2__consent a:hover {
+  text-decoration: underline;
+}
+
+.zaki-auth-v2__inline-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.zaki-auth-v2__link-button,
+.zaki-auth-v2__switch {
+  border: 0;
+  background: transparent;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-2xs);
+  line-height: 1.2;
+  cursor: pointer;
+  padding: 0;
+  text-align: start;
+  transition-property: color;
+  transition-duration: var(--v2-dur-trans);
+  transition-timing-function: var(--v2-ease-out);
+}
+
+.zaki-auth-v2__link-button:hover,
+.zaki-auth-v2__switch:hover {
+  color: var(--v2-ink-1);
+}
+
+.zaki-auth-v2__notice {
+  padding: 12px;
+  font-family: var(--v2-font-prose);
+  font-size: var(--v2-text-sm);
+  line-height: var(--v2-leading-normal);
+}
+
+.zaki-auth-v2__notice--success {
+  border-color: rgba(33, 145, 111, 0.4);
+  background: var(--v2-success-faint);
+  color: var(--v2-success);
+}
+
+.zaki-auth-v2__notice--error {
+  border-color: var(--v2-accent-hairline);
+  background: var(--v2-danger-faint);
+  color: var(--v2-danger);
+}
+
+.zaki-auth-v2__submit {
+  min-height: var(--v2-control-h-lg);
+  border: 1px solid var(--v2-accent);
+  border-radius: var(--v2-r-1);
+  background: var(--v2-accent);
+  color: var(--v2-ink-on-accent);
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-xs);
+  line-height: 1;
+  cursor: pointer;
+  transition-property: background, border-color, color, scale;
+  transition-duration: var(--v2-dur-trans);
+  transition-timing-function: var(--v2-ease-out);
+}
+
+.zaki-auth-v2__submit:hover {
+  border-color: var(--v2-accent-hover);
+  background: var(--v2-accent-hover);
+}
+
+.zaki-auth-v2__submit:active {
+  scale: 0.96;
+}
+
+.zaki-auth-v2__submit:disabled {
+  border-color: var(--v2-hairline);
+  background: var(--v2-bg-sunken);
+  color: var(--v2-ink-4);
+  cursor: not-allowed;
+  scale: 1;
+}
+
+.zaki-auth-v2__switch {
+  display: block;
+  width: calc(100% - 48px);
+  min-height: 40px;
+  margin: 0 24px 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--v2-hairline);
+}
+
+@media (max-width: 540px) {
+  .zaki-auth-v2__topbar {
+    min-height: auto;
+    padding: 16px 16px 4px;
+  }
+
+  .zaki-auth-v2__frame {
+    align-items: start;
+    padding: 16px;
+  }
+
+  .zaki-auth-v2__panel-head {
+    padding: 24px 16px 16px;
+  }
+
+  .zaki-auth-v2__panel-head h1 {
+    font-size: 27px;
+  }
+
+  .zaki-auth-v2__oauth-wrap,
+  .zaki-auth-v2__form {
+    padding-inline: 16px;
+  }
+
+  .zaki-auth-v2__inline-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .zaki-auth-v2__switch {
+    width: calc(100% - 32px);
+    margin-inline: 16px;
+  }
+}
+
 .v2-metric-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -131,6 +131,8 @@ describe("LoginScreen legal consent", () => {
     renderLoginScreen();
     await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
 
+    expect(await screen.findByRole("heading", { name: "Create a ZAKI account" })).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Create account" })).toBeInTheDocument();
   });
 
@@ -179,6 +181,10 @@ describe("LoginScreen legal consent", () => {
     await user.type(screen.getByPlaceholderText("Password"), "Password123");
     await user.type(screen.getByPlaceholderText("Confirm password"), "Password123");
 
+    const legalLink = screen.getByRole("link", { name: "Terms, Privacy & Compliance" });
+    expect(legalLink).toHaveAttribute("href", "/terms?from=signup");
+    expect(legalLink).not.toHaveAttribute("target");
+
     const createButton = screen.getByRole("button", { name: "Create account" });
     expect(createButton).toBeDisabled();
 
@@ -196,6 +202,24 @@ describe("LoginScreen legal consent", () => {
         legalPolicyVersion: policyVersion,
       });
     });
+  });
+
+  it("blocks signup when confirmation password does not match", async () => {
+    const user = userEvent.setup();
+    renderLoginScreen();
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("button", { name: "New here? Create an account" }));
+    await user.type(screen.getByPlaceholderText("Full name"), "User Name");
+    await user.type(screen.getByLabelText("Date of birth"), "1995-01-15");
+    await user.type(screen.getByPlaceholderText("Email address"), "signup@example.com");
+    await user.type(screen.getByPlaceholderText("Password"), "Password123");
+    await user.type(screen.getByPlaceholderText("Confirm password"), "Password456");
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+
+    expect(await screen.findByText("Passwords do not match.")).toBeInTheDocument();
+    expect(requestPublicSignup).not.toHaveBeenCalled();
   });
 
   it("submits a reset-link request and shows the reset notice", async () => {
@@ -242,7 +266,7 @@ describe("LoginScreen legal consent", () => {
     renderLoginScreen();
     await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
 
-    await user.click(screen.getByRole("tab", { name: "Sign in" }));
+    await user.click(screen.getByRole("button", { name: "Have an account? Sign in" }));
     await user.type(screen.getByPlaceholderText("Email address"), "user@example.com");
     await user.type(screen.getByPlaceholderText("Password"), "Password123");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
@@ -328,7 +352,7 @@ describe("LoginScreen legal consent", () => {
     renderLoginScreen();
     await waitFor(() => expect(fetchGoogleOAuthStatus).toHaveBeenCalled());
 
-    expect(await screen.findByText("We kept your work.")).toBeInTheDocument();
+    expect(await screen.findByText("Return saved.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Continue with Google/ }));
 
     expect(buildGoogleOAuthStartUrl).toHaveBeenCalledWith(
@@ -336,18 +360,18 @@ describe("LoginScreen legal consent", () => {
     );
   });
 
-  it("uses pending dashboard intent as the post-login fallback route", async () => {
+  it("ignores stale pending intent on ordinary login and stays on the dashboard", async () => {
     const user = userEvent.setup();
     window.history.replaceState({}, "", "/?auth=login");
     window.localStorage.setItem(
       PENDING_INTENT_KEY,
       JSON.stringify({
-        productId: "design",
-        taskKind: "brief",
-        prompt: "Create a design brief",
+        productId: "spaces",
+        taskKind: "chat",
+        prompt: "Old chat intent",
         source: "dashboard",
-        returnTo: "/products/design",
-        anonymousWorkId: "work-1",
+        returnTo: "/spaces",
+        anonymousWorkId: "work-stale",
         createdAt: new Date().toISOString(),
       })
     );
@@ -363,9 +387,9 @@ describe("LoginScreen legal consent", () => {
       expect(setToken).toHaveBeenCalledWith("token-123");
     });
     await waitFor(() => {
-      expect(window.location.pathname).toBe("/products/design");
+      expect(window.location.pathname).toBe("/");
     });
-    expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeTruthy();
+    expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
     expect(window.sessionStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
   });
 
@@ -376,7 +400,7 @@ describe("LoginScreen legal consent", () => {
     renderLoginScreen();
     await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
 
-    await user.click(screen.getByRole("tab", { name: "Sign in" }));
+    await user.click(screen.getByRole("button", { name: "Have an account? Sign in" }));
     await user.type(screen.getByPlaceholderText("Email address"), "user@example.com");
     await user.type(screen.getByPlaceholderText("Password"), "Password123");
     await user.click(screen.getByRole("button", { name: "Sign in" }));

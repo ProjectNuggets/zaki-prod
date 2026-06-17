@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { Link, useLocation } from "react-router-dom";
+
+const LEGAL_POLICY_VERSION = "2026-06-17.v2";
 
 function LegalSection({
   title,
@@ -9,11 +12,11 @@ function LegalSection({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-zaki-subtle bg-white/85 px-5 py-5 shadow-[0px_12px_28px_rgba(15,15,15,0.05)] dark:border-[#2c221a] dark:bg-[#16110d]">
-      <h2 className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary text-start">
+    <section className="border border-zaki-subtle bg-white/90 px-4 py-4 shadow-[0px_1px_0px_rgba(15,15,15,0.04)] dark:border-[#2c221a] dark:bg-[#16110d]">
+      <h2 className="font-mono-ui text-[12px] font-semibold uppercase tracking-[0.12em] text-zaki-primary dark:text-zaki-dark-primary text-start">
         {title}
       </h2>
-      <div className="mt-2 space-y-2 text-sm text-zaki-secondary dark:text-zaki-dark-subtle text-start leading-relaxed">
+      <div className="mt-2 space-y-2 text-sm text-zaki-secondary dark:text-zaki-dark-subtle text-start leading-6">
         {children}
       </div>
     </section>
@@ -38,6 +41,11 @@ type LegalLocaleCopy = {
     language: string;
     languageValue: string;
     contact: string;
+  };
+  returnTo: {
+    signup: string;
+    login: string;
+    zaki: string;
   };
   note: string;
   sections: LegalSectionEntry[];
@@ -70,16 +78,21 @@ const LEGAL_COPY: Record<"en" | "ar", LegalLocaleCopy> = {
       },
     },
     effectiveDateLabel: "Effective date",
-    effectiveDateValue: "February 17, 2026",
+    effectiveDateValue: "June 17, 2026",
     intro: [
-      "This page defines the baseline legal terms for ZAKI v0.1. By creating an account or using ZAKI, you agree to these terms.",
-      "ZAKI is operated by Nova Nuggets L.L.C (established 2025), headquartered in Dubai, UAE, and operated on European-hosted infrastructure with GDPR-aligned controls.",
+      "These terms apply to the current ZAKI web app, including Agent, Chat/Spaces, Brain, account settings, billing, usage, and connected browser workflows. By creating an account or using ZAKI, you agree to these terms.",
+      "ZAKI is operated by Nova Nuggets L.L.C (established 2025), headquartered in Dubai, UAE. Public product access currently covers Agent, Chat/Spaces, and Brain; Learn and Hire may be private beta; Design, CLI, local app, and additional extensions are waitlist or pre-release unless your account explicitly includes them.",
     ],
     meta: {
       policyVersion: "Policy version",
       language: "Language",
       languageValue: "English",
       contact: "Contact",
+    },
+    returnTo: {
+      signup: "Back to signup",
+      login: "Back to sign in",
+      zaki: "Back to ZAKI",
     },
     note:
       "If you do not agree with these terms, do not use the service. Material updates are published here with a new effective date.",
@@ -89,7 +102,7 @@ const LEGAL_COPY: Record<"en" | "ar", LegalLocaleCopy> = {
         paragraphs: [
           "You must be legally able to enter a contract and use ZAKI in your jurisdiction.",
           "You are responsible for safeguarding your account credentials and for all activity under your account.",
-          "You must provide accurate signup details and keep your email and billing details current.",
+          "You must provide accurate signup details, including date of birth where requested for eligibility and safety controls, and keep your email and billing details current.",
         ],
       },
       {
@@ -101,22 +114,24 @@ const LEGAL_COPY: Record<"en" | "ar", LegalLocaleCopy> = {
         bullets: [
           "Illegal activity, fraud, harassment, threats, or infringement of third-party rights.",
           "Uploading malicious code, reverse engineering, or attempting unauthorized access.",
-          "Automated abuse, scraping, or activity that degrades reliability for other users.",
+          "Automated abuse, scraping, credential collection, spam, or activity that degrades reliability for other users.",
+          "Using Agent, browser automation, uploads, memory, or integrations to access systems or data you do not have permission to use.",
         ],
       },
       {
         title: "3) AI output and disclaimer",
         paragraphs: [
           "ZAKI uses AI models and may produce incomplete, inaccurate, or outdated output. You must independently review important results.",
-          "ZAKI and TYP are operated by Nova Nuggets. Depending on request type, inference is processed through third-party inference processors. ZAKI does not provide legal, medical, tax, financial, or other licensed professional advice.",
+          "Agent can draft, reason, navigate, call tools, and prepare artifacts, but you remain responsible for approving instructions, reviewing outputs, and deciding whether to use any result.",
+          "ZAKI does not provide legal, medical, tax, financial, or other licensed professional advice. Do not rely on AI output as the sole basis for high-stakes decisions.",
         ],
       },
       {
         title: "4) Billing, access codes, and plan status",
         paragraphs: [
-          "Access codes and paid plans grant time-limited usage rights under the plan terms shown in the app.",
-          "Expired or invalid access codes may restrict chat features until a valid entitlement is restored.",
-          "You can manage subscription status and account lifecycle controls in Settings, including cancellation and account deletion.",
+          "Access codes, trials, beta invitations, and paid plans grant usage rights under the plan terms shown in the app.",
+          "Usage meters, feature gates, model availability, and rate limits may vary by plan, beta status, region, and operational constraints.",
+          "You can manage subscription status, usage, product access, and account lifecycle controls in Settings, including cancellation and account deletion where available.",
         ],
       },
       {
@@ -125,14 +140,15 @@ const LEGAL_COPY: Record<"en" | "ar", LegalLocaleCopy> = {
           "We are committed to GDPR compliance and process personal data needed to operate and secure ZAKI in line with GDPR principles.",
           "We believe AI should be personal, and personal means private by default. We process only what is necessary for product operation, reliability, and improvement.",
           "Data categories include:",
-          "We use this data for service delivery, reliability, security, support, compliance, product improvement, and fraud prevention, including improving cultural relevance so the Arab world has its own voice in the AI era.",
-          "Service chain and roles: ZAKI -> TYP -> third-party inference processors. ZAKI and TYP are our systems. Third-party processors are used for inference processing. We send only the data needed to fulfill the request.",
+          "We use this data for service delivery, reliability, security, support, compliance, product improvement, entitlement management, abuse prevention, and fraud prevention.",
+          "Depending on the feature, ZAKI may use third-party subprocessors for infrastructure, authentication, payment processing, email delivery, analytics, or AI inference. We send only the data needed to fulfill the request or operate the service.",
           "Legal bases may include performance of contract, legitimate interests, legal obligations, and consent where applicable.",
         ],
         bullets: [
           "Account data (email, profile, auth/session metadata).",
-          "User content (chat prompts, responses, memory context, uploaded references).",
-          "Operational data (diagnostics, abuse-prevention signals, and service logs).",
+          "User content (chat prompts, responses, memory context, uploaded references, generated artifacts, and files you attach).",
+          "Agent and browser workflow data (tool calls, approvals, run logs, browser device status, and integration metadata).",
+          "Operational data (diagnostics, usage meters, abuse-prevention signals, and service logs).",
           "Billing metadata required for entitlement and payment reconciliation.",
         ],
       },
@@ -153,9 +169,10 @@ const LEGAL_COPY: Record<"en" | "ar", LegalLocaleCopy> = {
         ],
       },
       {
-        title: "7) Retention and deletion",
+        title: "7) Retention, deletion, and memory controls",
         paragraphs: [
           "We keep data for as long as needed to provide the service and meet legal, tax, fraud prevention, and security obligations.",
+          "ZAKI may retain memory, Brain entries, agent traces, artifacts, and settings so the product can remain useful across sessions. You can manage memory and privacy controls in Settings where available.",
           "You can request access, correction, export, or deletion of your data. Deleting your account permanently removes account access and triggers data deletion workflows, subject to required legal retention.",
         ],
       },
@@ -167,10 +184,10 @@ const LEGAL_COPY: Record<"en" | "ar", LegalLocaleCopy> = {
         ],
       },
       {
-        title: "9) Third-party AI models and open-source licensing",
+        title: "9) Third-party services, AI models, and open-source licensing",
         paragraphs: [
-          "We currently configure inference models based on provider catalogs that include open-source license metadata at deployment time.",
-          "Model availability and license metadata can change over time. We may update model routing and notices as needed for compliance and reliability.",
+          "ZAKI may route requests through third-party model providers, browser infrastructure, payment providers, email providers, hosting vendors, and open-source components.",
+          "Model availability, provider terms, and license metadata can change over time. We may update routing, features, and notices as needed for compliance, safety, cost, and reliability.",
           "You remain responsible for reviewing outputs before use in legal, financial, medical, safety-critical, or other high-stakes decisions.",
         ],
       },
@@ -231,16 +248,21 @@ const LEGAL_COPY: Record<"en" | "ar", LegalLocaleCopy> = {
       },
     },
     effectiveDateLabel: "تاريخ النفاذ",
-    effectiveDateValue: "17 فبراير 2026",
+    effectiveDateValue: "17 يونيو 2026",
     intro: [
-      "توضح هذه الصفحة الشروط القانونية الأساسية لـ ZAKI v0.1. عند إنشاء حساب أو استخدام ZAKI فأنت توافق على هذه الشروط.",
-      "تُدار ZAKI بواسطة Nova Nuggets L.L.C (تأسست عام 2025) ومقرها دبي، الإمارات العربية المتحدة، وتعمل على بنية تحتية مستضافة في أوروبا مع ضوابط متوافقة مع GDPR.",
+      "تنطبق هذه الشروط على تطبيق ZAKI الحالي، بما في ذلك Agent والدردشة/المساحات وBrain والإعدادات والفوترة والاستخدام وسير عمل المتصفح المتصل. عند إنشاء حساب أو استخدام ZAKI فأنت توافق على هذه الشروط.",
+      "تُدار ZAKI بواسطة Nova Nuggets L.L.C (تأسست عام 2025) ومقرها دبي، الإمارات العربية المتحدة. يشمل الوصول العام الحالي Agent والدردشة/المساحات وBrain؛ وقد تكون Learn وHire في بيتا خاصة؛ وتظل Design وCLI والتطبيق المحلي والإضافات الأخرى في قائمة الانتظار أو مرحلة ما قبل الإطلاق ما لم يفعّلها حسابك صراحة.",
     ],
     meta: {
       policyVersion: "إصدار السياسة",
       language: "اللغة",
       languageValue: "العربية",
       contact: "التواصل",
+    },
+    returnTo: {
+      signup: "العودة إلى إنشاء الحساب",
+      login: "العودة إلى تسجيل الدخول",
+      zaki: "العودة إلى ZAKI",
     },
     note:
       "إذا كنت لا توافق على هذه الشروط، فلا تستخدم الخدمة. يتم نشر أي تحديثات جوهرية هنا مع تاريخ نفاذ جديد.",
@@ -250,7 +272,7 @@ const LEGAL_COPY: Record<"en" | "ar", LegalLocaleCopy> = {
         paragraphs: [
           "يجب أن تكون مؤهلًا قانونيًا لإبرام عقد واستخدام ZAKI في نطاقك القضائي.",
           "أنت مسؤول عن حماية بيانات الدخول إلى حسابك وعن كل نشاط يتم عبره.",
-          "يجب أن تقدم بيانات تسجيل دقيقة وأن تُبقي بريدك الإلكتروني وبيانات الفوترة محدثة.",
+          "يجب أن تقدم بيانات تسجيل دقيقة، بما في ذلك تاريخ الميلاد عند طلبه لأغراض الأهلية والسلامة، وأن تُبقي بريدك الإلكتروني وبيانات الفوترة محدثة.",
         ],
       },
       {
@@ -262,22 +284,24 @@ const LEGAL_COPY: Record<"en" | "ar", LegalLocaleCopy> = {
         bullets: [
           "الأنشطة غير القانونية أو الاحتيال أو المضايقة أو التهديد أو انتهاك حقوق الغير.",
           "رفع برمجيات خبيثة أو الهندسة العكسية أو محاولة الوصول غير المصرح به.",
-          "الإساءة الآلية أو الكشط أو أي نشاط يضعف موثوقية الخدمة للمستخدمين الآخرين.",
+          "الإساءة الآلية أو الكشط أو جمع بيانات الاعتماد أو الرسائل المزعجة أو أي نشاط يضعف موثوقية الخدمة للمستخدمين الآخرين.",
+          "استخدام Agent أو أتمتة المتصفح أو الملفات أو الذاكرة أو التكاملات للوصول إلى أنظمة أو بيانات لا تملك إذنًا باستخدامها.",
         ],
       },
       {
         title: "3) مخرجات الذكاء الاصطناعي وإخلاء المسؤولية",
         paragraphs: [
           "يستخدم ZAKI نماذج ذكاء اصطناعي وقد ينتج مخرجات غير مكتملة أو غير دقيقة أو قديمة. يجب عليك مراجعة النتائج المهمة بشكل مستقل.",
-          "تُدار ZAKI وTYP بواسطة Nova Nuggets. وبحسب نوع الطلب قد تتم المعالجة عبر مزودي استدلال خارجيين. لا يقدم ZAKI نصيحة قانونية أو طبية أو ضريبية أو مالية أو أي نصيحة مهنية مرخصة.",
+          "يمكن لـ Agent الصياغة والتفكير والتنقل واستدعاء الأدوات وتجهيز الملفات، لكنك تظل مسؤولًا عن اعتماد التعليمات ومراجعة المخرجات وتحديد ما إذا كنت ستستخدم أي نتيجة.",
+          "لا يقدم ZAKI نصيحة قانونية أو طبية أو ضريبية أو مالية أو أي نصيحة مهنية مرخصة. لا تعتمد على مخرجات الذكاء الاصطناعي كأساس وحيد للقرارات عالية المخاطر.",
         ],
       },
       {
         title: "4) الفوترة ورموز الوصول وحالة الخطة",
         paragraphs: [
-          "توفر الخطط المدفوعة ورموز الوصول حقوق استخدام محددة المدة وفق الشروط الظاهرة داخل التطبيق.",
-          "قد تؤدي رموز الوصول المنتهية أو غير الصالحة إلى تقييد ميزات الدردشة حتى يتم استعادة استحقاق صالح.",
-          "يمكنك إدارة حالة الاشتراك وعناصر دورة حياة الحساب من الإعدادات، بما في ذلك الإلغاء وحذف الحساب.",
+          "توفر رموز الوصول والتجارب ودعوات البيتا والخطط المدفوعة حقوق استخدام وفق الشروط الظاهرة داخل التطبيق.",
+          "قد تختلف عدادات الاستخدام وبوابات الميزات وتوفر النماذج وحدود المعدل بحسب الخطة وحالة البيتا والمنطقة والقيود التشغيلية.",
+          "يمكنك إدارة حالة الاشتراك والاستخدام والوصول إلى المنتجات وعناصر دورة حياة الحساب من الإعدادات، بما في ذلك الإلغاء وحذف الحساب حيثما توفر ذلك.",
         ],
       },
       {
@@ -286,14 +310,15 @@ const LEGAL_COPY: Record<"en" | "ar", LegalLocaleCopy> = {
           "نلتزم بالامتثال لـ GDPR ونعالج البيانات الشخصية اللازمة لتشغيل ZAKI وتأمينه بما يتماشى مع مبادئ اللائحة.",
           "نحن نؤمن بأن الذكاء الاصطناعي يجب أن يكون شخصيًا، والشخصي يعني الخصوصية افتراضيًا. نعالج فقط ما هو ضروري لتشغيل المنتج وموثوقيته وتطويره.",
           "تشمل فئات البيانات:",
-          "نستخدم هذه البيانات لتقديم الخدمة والموثوقية والأمان والدعم والامتثال وتحسين المنتج ومنع الاحتيال، بما في ذلك تحسين الملاءمة الثقافية حتى يكون للعالم العربي صوته الخاص في عصر الذكاء الاصطناعي.",
-          "سلسلة الخدمة والأدوار: ZAKI -> TYP -> مزودو استدلال خارجيون. ZAKI وTYP أنظمتنا الداخلية. ويجري استخدام مزودي الجهات الثالثة فقط لمعالجة الاستدلال وبالحد الأدنى اللازم للطلب.",
+          "نستخدم هذه البيانات لتقديم الخدمة والموثوقية والأمان والدعم والامتثال وتحسين المنتج وإدارة الاستحقاقات ومنع الإساءة والاحتيال.",
+          "بحسب الميزة، قد يستخدم ZAKI جهات معالجة فرعية للبنية التحتية والمصادقة والمدفوعات والبريد والتحليلات أو استدلال الذكاء الاصطناعي. نرسل فقط البيانات اللازمة لتلبية الطلب أو تشغيل الخدمة.",
           "قد تشمل الأسس القانونية تنفيذ العقد أو المصالح المشروعة أو الالتزامات القانونية أو الموافقة حيث ينطبق ذلك.",
         ],
         bullets: [
           "بيانات الحساب (البريد الإلكتروني والملف الشخصي وبيانات الجلسة والمصادقة).",
-          "محتوى المستخدم (الرسائل والردود وسياق الذاكرة والمراجع المرفوعة).",
-          "البيانات التشغيلية (التشخيص وإشارات منع الإساءة وسجلات الخدمة).",
+          "محتوى المستخدم (الرسائل والردود وسياق الذاكرة والمراجع المرفوعة والملفات الناتجة والملفات التي ترفقها).",
+          "بيانات سير عمل Agent والمتصفح (استدعاءات الأدوات والموافقات وسجلات التشغيل وحالة جهاز المتصفح وبيانات التكامل).",
+          "البيانات التشغيلية (التشخيص وعدادات الاستخدام وإشارات منع الإساءة وسجلات الخدمة).",
           "بيانات الفوترة اللازمة لمواءمة الاستحقاق وتسوية المدفوعات.",
         ],
       },
@@ -314,9 +339,10 @@ const LEGAL_COPY: Record<"en" | "ar", LegalLocaleCopy> = {
         ],
       },
       {
-        title: "7) الاحتفاظ والحذف",
+        title: "7) الاحتفاظ والحذف وضوابط الذاكرة",
         paragraphs: [
           "نحتفظ بالبيانات طالما كان ذلك ضروريًا لتقديم الخدمة والامتثال للالتزامات القانونية والضريبية والأمنية ومنع الاحتيال.",
+          "قد يحتفظ ZAKI بالذاكرة وإدخالات Brain وآثار Agent والملفات والإعدادات حتى يبقى المنتج مفيدًا عبر الجلسات. يمكنك إدارة ضوابط الذاكرة والخصوصية من الإعدادات حيثما توفر ذلك.",
           "يمكنك طلب الوصول أو التصحيح أو التصدير أو الحذف. ويؤدي حذف الحساب إلى إزالة الوصول بشكل دائم وتشغيل مسارات حذف البيانات مع مراعاة أي احتفاظ قانوني مطلوب.",
         ],
       },
@@ -328,10 +354,10 @@ const LEGAL_COPY: Record<"en" | "ar", LegalLocaleCopy> = {
         ],
       },
       {
-        title: "9) نماذج الذكاء الاصطناعي الخارجية ورخص المصادر المفتوحة",
+        title: "9) الخدمات الخارجية ونماذج الذكاء الاصطناعي ورخص المصادر المفتوحة",
         paragraphs: [
-          "نضبط حاليًا نماذج الاستدلال اعتمادًا على كتالوجات مزودين تتضمن بيانات وصفية عن رخص المصادر المفتوحة وقت النشر.",
-          "قد يتغير توفر النماذج وبيانات الرخص بمرور الوقت. وقد نحدّث التوجيه والتنبيهات حسب الحاجة للامتثال والموثوقية.",
+          "قد يوجه ZAKI الطلبات عبر مزودي نماذج خارجيين وبنية متصفح ومدفوعات وبريد واستضافة ومكونات مفتوحة المصدر.",
+          "قد يتغير توفر النماذج وشروط المزودين وبيانات الرخص بمرور الوقت. وقد نحدّث التوجيه والميزات والتنبيهات حسب الحاجة للامتثال والسلامة والتكلفة والموثوقية.",
           "تظل مسؤولًا عن مراجعة المخرجات قبل استخدامها في القرارات القانونية أو المالية أو الطبية أو الحساسة أو عالية المخاطر.",
         ],
       },
@@ -397,66 +423,122 @@ function getSectionsForSlug(sections: LegalSectionEntry[], slug: LegalSlug) {
   });
 }
 
+function getLegalReturnTarget({
+  copy,
+  locale,
+  search,
+}: {
+  copy: LegalLocaleCopy;
+  locale: "en" | "ar";
+  search: string;
+}) {
+  const params = new URLSearchParams(search);
+  const returnTo = String(params.get("returnTo") || "").trim();
+  const from = String(params.get("from") || "").trim().toLowerCase();
+  const safeReturnTo =
+    returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "";
+
+  if (safeReturnTo) {
+    return { href: safeReturnTo, label: copy.returnTo.zaki };
+  }
+  if (from === "signup" || from === "auth") {
+    return { href: "/?auth=signup", label: copy.returnTo.signup };
+  }
+  if (from === "login") {
+    return { href: "/?auth=login", label: copy.returnTo.login };
+  }
+  return { href: locale === "ar" ? "/ar" : "/", label: copy.returnTo.zaki };
+}
+
+function getDisplaySectionTitle(title: string, index: number, slug: LegalSlug) {
+  if (slug === "compliance") return title;
+  const label = title.replace(/^\d+\)\s*/, "");
+  return `${index + 1}) ${label}`;
+}
+
 export function LegalPage({ slug = "compliance" }: { slug?: LegalSlug }) {
   const { i18n } = useTranslation();
+  const location = useLocation();
   const locale = i18n.language?.toLowerCase().startsWith("ar") ? "ar" : "en";
   const isRtl = locale === "ar";
   const copy = LEGAL_COPY[locale];
   const documentCopy = copy.documents[slug];
   const sections = getSectionsForSlug(copy.sections, slug);
   const legalEmail = "support@chatzaki.com";
+  const returnTarget = getLegalReturnTarget({
+    copy,
+    locale,
+    search: location.search,
+  });
 
   return (
     <div
-      className="h-full overflow-y-auto zaki-scrollbar-fade px-6 py-10"
+      className="h-full overflow-y-auto zaki-scrollbar-fade bg-[var(--v2-bg)] px-4 py-6 sm:px-6 sm:py-8"
       dir={isRtl ? "rtl" : "ltr"}
       lang={locale}
     >
-      <div className="mx-auto w-full max-w-5xl">
-        <div className="overflow-hidden rounded-[28px] border border-zaki-subtle bg-[linear-gradient(180deg,#fffdf9_0%,#fff8ef_62%,#f6ecdf_100%)] shadow-[0px_24px_56px_rgba(15,15,15,0.1)] dark:border-[#2c221a] dark:bg-[linear-gradient(165deg,#1b140f_0%,#120f0c_58%,#0d0a08_100%)]">
-          <div className="border-b border-zaki-subtle bg-[linear-gradient(130deg,#fff8ef_0%,#f4e8d9_70%,#eddcc8_100%)] px-7 py-7 dark:border-[#2c221a] dark:bg-[linear-gradient(130deg,#261d16_0%,#1a1410_65%,#130f0c_100%)]">
-            <div className="inline-flex items-center rounded-full border border-zaki-subtle bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-zaki-muted dark:border-[#2c221a] dark:bg-[#201912] dark:text-zaki-dark-muted">
+      <div className="mx-auto w-full max-w-4xl">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <Link
+            className="inline-flex min-h-9 items-center border border-zaki-subtle bg-white px-3 py-2 font-mono-ui text-[11px] font-semibold uppercase tracking-[0.12em] text-zaki-secondary transition-colors hover:border-zaki-brand hover:text-zaki-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zaki-brand/30 dark:border-[#2c221a] dark:bg-[#16110d] dark:text-zaki-dark-subtle"
+            to={returnTarget.href}
+          >
+            {returnTarget.label}
+          </Link>
+          <span className="hidden font-mono-ui text-[11px] uppercase tracking-[0.12em] text-zaki-muted sm:inline">
+            {copy.effectiveDateLabel}: {copy.effectiveDateValue}
+          </span>
+        </div>
+
+        <div className="overflow-hidden border border-zaki-subtle bg-white shadow-[0px_16px_44px_rgba(15,15,15,0.07)] dark:border-[#2c221a] dark:bg-[#120f0c]">
+          <div className="border-b border-zaki-subtle bg-white px-5 py-6 dark:border-[#2c221a] dark:bg-[#16110d] sm:px-6">
+            <div className="inline-flex items-center border border-zaki-subtle bg-zaki-hover px-2.5 py-1 font-mono-ui text-[10px] font-semibold uppercase tracking-[0.16em] text-zaki-muted dark:border-[#2c221a] dark:bg-[#201912] dark:text-zaki-dark-muted">
               {documentCopy.badge}
             </div>
-            <h1 className="mt-3 text-3xl font-semibold text-zaki-primary dark:text-zaki-dark-primary text-start">
+            <h1 className="mt-3 font-mono-ui text-2xl font-semibold uppercase tracking-[0.08em] text-zaki-primary dark:text-zaki-dark-primary text-start sm:text-3xl">
               {documentCopy.title}
             </h1>
-            <p className="mt-2 text-xs text-zaki-muted text-start">
+            <p className="mt-2 font-mono-ui text-[11px] uppercase tracking-[0.12em] text-zaki-muted text-start sm:hidden">
               {copy.effectiveDateLabel}: {copy.effectiveDateValue}
             </p>
             {copy.intro.map((paragraph) => (
               <p
                 key={paragraph}
-                className="mt-3 text-sm text-zaki-secondary dark:text-zaki-dark-subtle text-start max-w-3xl"
+                className="mt-3 max-w-3xl text-sm leading-6 text-zaki-secondary dark:text-zaki-dark-subtle text-start"
               >
                 {paragraph}
               </p>
             ))}
             <div className="mt-5 grid gap-2 sm:grid-cols-3">
-              <div className="rounded-xl border border-zaki-subtle bg-white/75 px-3 py-2 text-xs text-zaki-secondary dark:border-[#2c221a] dark:bg-[#1f1914] dark:text-zaki-dark-subtle">
-                {copy.meta.policyVersion}: <span className="font-semibold text-zaki-primary dark:text-zaki-dark-primary">2026-02-17.v2</span>
+              <div className="border border-zaki-subtle bg-zaki-hover px-3 py-2 font-mono-ui text-[11px] text-zaki-secondary dark:border-[#2c221a] dark:bg-[#1f1914] dark:text-zaki-dark-subtle">
+                {copy.meta.policyVersion}: <span className="font-semibold text-zaki-primary dark:text-zaki-dark-primary">{LEGAL_POLICY_VERSION}</span>
               </div>
-              <div className="rounded-xl border border-zaki-subtle bg-white/75 px-3 py-2 text-xs text-zaki-secondary dark:border-[#2c221a] dark:bg-[#1f1914] dark:text-zaki-dark-subtle">
+              <div className="border border-zaki-subtle bg-zaki-hover px-3 py-2 font-mono-ui text-[11px] text-zaki-secondary dark:border-[#2c221a] dark:bg-[#1f1914] dark:text-zaki-dark-subtle">
                 {copy.meta.language}: <span className="font-semibold text-zaki-primary dark:text-zaki-dark-primary">{copy.meta.languageValue}</span>
               </div>
-              <div className="rounded-xl border border-zaki-subtle bg-white/75 px-3 py-2 text-xs text-zaki-secondary dark:border-[#2c221a] dark:bg-[#1f1914] dark:text-zaki-dark-subtle">
+              <div className="border border-zaki-subtle bg-zaki-hover px-3 py-2 font-mono-ui text-[11px] text-zaki-secondary dark:border-[#2c221a] dark:bg-[#1f1914] dark:text-zaki-dark-subtle">
                 {copy.meta.contact}: <span className="font-semibold text-zaki-primary dark:text-zaki-dark-primary">{legalEmail}</span>
               </div>
             </div>
           </div>
 
-          <div className="space-y-4 px-6 py-6">
-            <div className="rounded-2xl border border-zaki-subtle bg-zaki-hover/60 px-4 py-4 dark:border-[#2c221a] dark:bg-[#17120f]">
-              <p className="text-xs text-zaki-muted text-start">{documentCopy.note}</p>
+          <div className="space-y-3 px-4 py-4 sm:px-5 sm:py-5">
+            <div className="border border-zaki-subtle bg-zaki-hover px-4 py-3 dark:border-[#2c221a] dark:bg-[#17120f]">
+              <p className="font-mono-ui text-[11px] uppercase leading-5 tracking-[0.08em] text-zaki-muted text-start">
+                {documentCopy.note}
+              </p>
             </div>
 
-            {sections.map((section) => (
-              <LegalSection key={section.title} title={section.title}>
+            {sections.map((section, index) => (
+              <LegalSection
+                key={section.title}
+                title={getDisplaySectionTitle(section.title, index, slug)}
+              >
                 {section.paragraphs.map((paragraph) => (
                   <p key={paragraph}>{paragraph}</p>
                 ))}
                 {Array.isArray(section.bullets) && section.bullets.length > 0 ? (
-                  <ul className="list-disc space-y-1 pl-5 marker:text-zaki-brand">
+                  <ul className="list-disc space-y-1 pl-5 marker:text-zaki-brand rtl:pr-5 rtl:pl-0">
                     {section.bullets.map((bullet) => (
                       <li key={bullet}>{bullet}</li>
                     ))}
