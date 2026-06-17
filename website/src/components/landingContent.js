@@ -36,7 +36,7 @@ export const content = {
     productSplit: {
       heading: "Three stages. One product ladder.",
       subheading:
-        "Chat is live now. Agent and Brain carry continuity. Learn, Design, and Career stay gated until their flows are ready.",
+        "Chat is live now. Agent and Brain carry continuity. Learn and Hire stay private beta, and Design stays waitlist until their flows are ready.",
       cards: [
         {
           stage: "Surface 1",
@@ -50,7 +50,7 @@ export const content = {
             "User-controlled memory and stronger data discipline",
           ],
           ctaLabel: "Start Chat",
-          ctaHref: "https://app.chatzaki.com/spaces?source=website_chat_live&intent=chat",
+          ctaHref: "https://chatzaki.ai/spaces?source=website_chat_live&intent=chat",
         },
         {
           stage: "Surface 2",
@@ -64,28 +64,28 @@ export const content = {
             "Persistent memory across sessions",
           ],
           ctaLabel: "Open Agent",
-          ctaHref: "/zaki-bot/#waitlist",
+          ctaHref: "/product/#waitlist",
         },
         {
           stage: "Future lanes",
           title: "Future ZAKI lanes",
           badge: "Coming later",
           description:
-            "Future lanes arrive after release gates: deeper controls, stronger reliability, and complete product coverage.",
+            "Future lanes arrive after release gates: clearer controls, stronger reliability, and truthful product coverage.",
           bullets: [
             "Subscriptions start after the current Agent preview phase",
             "Future lanes are shaped by real usage and release gates",
             "This is where the product becomes deeper and more reliable",
           ],
           ctaLabel: "See the vision",
-          ctaHref: "/zaki-bot/",
+          ctaHref: "/product/",
         },
       ],
     },
     beta: {
       heading: "Current access: what to expect",
       warning:
-        "ZAKI is experimental by design. It is the current Agent preview for persistent AI with memory and continuity, not a finished autonomous product.",
+        "ZAKI is V1 by design. Agent, Chat, and Brain are public; beta and waitlist lanes stay clearly marked until their contracts are complete.",
       bullets: [
         "Agent preview is open now with account memory and follow-through",
         "Chat starts free. Agent and Brain handle continuity once you sign in",
@@ -148,10 +148,10 @@ export const content = {
         "Memory with full user control"
       ],
       cta: "Open Agent",
-      secondary: "Jump to plans below to choose Student or Personal.",
+      secondary: "Jump to plans below to choose the right public access path.",
       campaignLabel: "Coming soon: gated product lanes",
       campaignTeaser:
-        "Updates for Learn, Design, and Career as they move from gated lanes toward launch-ready surfaces.",
+        "Updates for Learn, Design, and Hire as they move from gated lanes toward launch-ready surfaces.",
       instagramNote:
         "Want a free access code?\nDM us on Instagram after follow + share to request access codes:",
     },
@@ -200,17 +200,17 @@ export const content = {
         {
           name: "Draft professional emails fast",
           text: "Ask ZAKI to draft a formal email, then refine the tone based on the recipient, industry, and urgency. Works in Arabic, English, or both.",
-          link: "/how-to/write-arabic-emails-ai/",
+          link: "/use-cases/",
         },
         {
           name: "Translate between Arabic and English naturally",
           text: "Paste any Arabic dialect or English text and get a natural translation that preserves meaning, tone, and context. Not word-by-word output.",
-          link: "/how-to/translate-dialects-arabic-english/",
+          link: "/use-cases/",
         },
         {
           name: "Create social media content",
           text: "Generate captions, posts, or threads with clear brand voice. ZAKI handles Arabic, English, or mixed-language content naturally.",
-          link: "/how-to/create-social-media-content-arabic/",
+          link: "/use-cases/",
         },
       ],
       howToLinkLabel: "Read guide",
@@ -225,7 +225,7 @@ export const content = {
       },
       slides: [
         {
-          id: "week-two-zaki-bot-beta",
+          id: "week-two-zaki-agent-beta",
           tag: "launch",
           title: "ZAKI Agent is now open",
           description:
@@ -235,7 +235,7 @@ export const content = {
           status: "done",
           link: {
             label: "Open ZAKI app",
-            url: "https://app.chatzaki.com",
+            url: "https://chatzaki.ai",
           },
         },
         {
@@ -523,7 +523,7 @@ export const content = {
           "Account continuity through Agent and visible memory through Brain.",
         ],
         cta: "Open Agent",
-        href: "/zaki-bot/#waitlist",
+        href: "/product/#waitlist",
       },
       botPremium: {
         heading: "Future ZAKI lanes",
@@ -536,7 +536,7 @@ export const content = {
           "Backend, entitlement, UI, and E2E aligned",
         ],
         cta: "See the roadmap",
-        href: "/zaki-bot/",
+        href: "/product/",
       },
     },
     faq: {
@@ -668,7 +668,7 @@ export const content = {
             "تحكم أوضح في الذاكرة والبيانات",
           ],
           ctaLabel: "جرّب Spaces",
-          ctaHref: "https://app.chatzaki.com/spaces?source=website_chat_live&intent=chat",
+          ctaHref: "https://chatzaki.ai/spaces?source=website_chat_live&intent=chat",
         },
         {
           stage: "المرحلة 2",
@@ -682,7 +682,7 @@ export const content = {
             "ذاكرة مستمرة عبر الجلسات",
           ],
           ctaLabel: "انضم إلى البيتا",
-          ctaHref: "/zaki-bot/#waitlist",
+          ctaHref: "/product/#waitlist",
         },
         {
           stage: "المرحلة 3",
@@ -696,7 +696,7 @@ export const content = {
             "هنا يصبح المنتج أعمق وأكثر اعتمادية",
           ],
           ctaLabel: "شاهد الرؤية",
-          ctaHref: "/zaki-bot/",
+          ctaHref: "/product/",
         },
       ],
     },
@@ -766,7 +766,7 @@ export const content = {
         "ذاكرة تحت تحكمك الكامل"
       ],
       cta: "🚀 اشترك الآن",
-      secondary: "انزل للخطط بالأسفل واختر Student أو Personal.",
+      secondary: "انزل للأسفل واختر مسار الوصول العام المناسب.",
       campaignLabel: "✨ قريبًا: دائرة زكي المقرّبة",
       campaignTeaser:
         "حملة محدودة للداعمين الأوائل ممن يؤمنون أن الذكاء الاصطناعي يجب أن يكون شخصيًا، واعيًا ثقافيًا، وتحت تحكم المستخدم بالكامل. 🧠🌍🔐",
@@ -818,17 +818,17 @@ export const content = {
         {
           name: "كتابة إيميلات مهنية بالعربية",
           text: "اطلب من زكي صياغة رسالة عربية رسمية ثم عدّل النبرة بحسب المستلم، والقطاع، ودرجة الاستعجال.",
-          link: "/how-to/write-arabic-emails-ai/",
+          link: "/use-cases/",
         },
         {
           name: "ترجمة اللهجات إلى الإنجليزية",
           text: "ألصق نصًا باللهجة الشامية أو الخليجية أو المصرية واطلب ترجمة إنجليزية طبيعية تحافظ على المعنى والسياق.",
-          link: "/how-to/translate-dialects-arabic-english/",
+          link: "/use-cases/",
         },
         {
           name: "إنشاء محتوى عربي للسوشال ميديا",
           text: "أنشئ كابشنات إنستغرام أو منشورات لينكدإن أو سلاسل X بالعربية بصياغة محلية وصوت علامة أوضح.",
-          link: "/how-to/create-social-media-content-arabic/",
+          link: "/use-cases/",
         },
       ],
       howToLinkLabel: "اقرأ الدليل",
@@ -843,7 +843,7 @@ export const content = {
       },
       slides: [
         {
-          id: "week-two-zaki-bot-beta",
+          id: "week-two-zaki-agent-beta",
           tag: "launch",
           title: "تحديثات زكي العامة أصبحت مفتوحة",
           description:
@@ -853,7 +853,7 @@ export const content = {
           status: "done",
           link: {
             label: "افتح تطبيق زكي",
-            url: "https://app.chatzaki.com",
+            url: "https://chatzaki.ai",
           },
         },
         {
@@ -1141,7 +1141,7 @@ export const content = {
           "مجاني الآن. الاشتراكات تبدأ بعد البيتا.",
         ],
         cta: "انضم إلى البيتا",
-        href: "/zaki-bot/#waitlist",
+        href: "/product/#waitlist",
       },
       botPremium: {
         heading: "زكي المميز",
@@ -1154,7 +1154,7 @@ export const content = {
           "المنتج الكامل",
         ],
         cta: "شاهد خارطة الطريق",
-        href: "/zaki-bot/",
+        href: "/product/",
       },
     },
     faq: {

@@ -89,6 +89,7 @@ import {
   createAgentStreamMeterMetrics,
   estimateAgentMeterUnits,
   reserveAgentChatUnits,
+  resolveAgentReserveUnits,
   settleAgentChatUnits,
   updateAgentStreamMeterMetrics,
 } from "./agent-metering.js";
@@ -345,6 +346,7 @@ import {
   buildPlatformEntitlementSummary,
   buildPlatformMeterPolicy,
   buildPlatformProductRegistry,
+  normalizePlatformPlanId,
 } from "./platform-policy.js";
 import {
   CENTRAL_METER_CONTRACT_VERSION,
@@ -412,6 +414,18 @@ import {
   resolveAnonymousMeterId,
   resolveAnonymousSpacesId,
 } from "./anonymous-spaces-identity.js";
+import {
+  buildAnonymousDeviceSignalHash,
+  cleanupAnonymousDeviceUsage,
+  consumeAnonymousDeviceQuota,
+} from "./anonymous-abuse-guard.js";
+import {
+  cleanupExpiredRateLimitHits,
+  createPersistentRateLimit,
+  getCloudflareAwareClientIp,
+} from "./security-rate-limit.js";
+import { cleanupExpiredLoginFailures } from "./login-throttle.js";
+import { createTurnstileMiddleware } from "./turnstile.js";
 
 // Load checked-in/default env first, then ignored local overrides.
 const envCandidates = [
@@ -730,6 +744,46 @@ const ZAKI_AGENT_SURFACE = "zaki_agent";
 const DEFAULT_AGENT_ROUTE_LIMIT_PER_MINUTE = Math.max(
   1,
   Number(process.env.ZAKI_AGENT_RATE_LIMIT_PER_MINUTE || 60)
+);
+const AUTH_ROUTE_RATE_LIMIT_WINDOW_MS = Math.max(
+  1_000,
+  Number(process.env.ZAKI_AUTH_RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000)
+);
+const AUTH_ROUTE_RATE_LIMIT_MAX = Math.max(
+  1,
+  Number(process.env.ZAKI_AUTH_RATE_LIMIT_MAX || 120)
+);
+const SIGNUP_RATE_LIMIT_WINDOW_MS = Math.max(
+  1_000,
+  Number(process.env.ZAKI_SIGNUP_RATE_LIMIT_WINDOW_MS || 60 * 60 * 1000)
+);
+const SIGNUP_RATE_LIMIT_MAX = Math.max(
+  1,
+  Number(process.env.ZAKI_SIGNUP_RATE_LIMIT_MAX || 10)
+);
+const LOGIN_ROUTE_RATE_LIMIT_WINDOW_MS = Math.max(
+  1_000,
+  Number(process.env.ZAKI_LOGIN_ROUTE_RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000)
+);
+const LOGIN_ROUTE_RATE_LIMIT_MAX = Math.max(
+  1,
+  Number(process.env.ZAKI_LOGIN_ROUTE_RATE_LIMIT_MAX || 60)
+);
+const ANONYMOUS_TURN_RATE_LIMIT_WINDOW_MS = Math.max(
+  1_000,
+  Number(process.env.ZAKI_ANONYMOUS_TURN_RATE_LIMIT_WINDOW_MS || 60 * 1000)
+);
+const ANONYMOUS_TURN_RATE_LIMIT_MAX = Math.max(
+  1,
+  Number(process.env.ZAKI_ANONYMOUS_TURN_RATE_LIMIT_MAX || 20)
+);
+const ANONYMOUS_DEVICE_DAILY_PROMPT_LIMIT = Math.max(
+  1,
+  Number(
+    process.env.ZAKI_ANONYMOUS_DEVICE_DAILY_PROMPT_LIMIT ||
+      process.env.ZAKI_ANONYMOUS_SPACES_DAILY_PROMPT_LIMIT ||
+      DEFAULT_ANONYMOUS_SPACES_DAILY_PROMPT_LIMIT
+  )
 );
 const RATE_LIMITS_RUNTIME_SETTINGS_KEY = "rate_limits";
 const RATE_LIMITS_RUNTIME_SETTINGS_VERSION = 1;
@@ -2320,8 +2374,31 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-// Rate limiting removed — IP-based limiters were broken under Cloudflare (all users share one IP).
-// Replacement: Cloudflare WAF + CF-Connecting-IP solution (planned).
+const authRouteRateLimiter = createPersistentRateLimit({
+  dbQuery,
+  prefix: "auth",
+  windowMs: AUTH_ROUTE_RATE_LIMIT_WINDOW_MS,
+  limit: AUTH_ROUTE_RATE_LIMIT_MAX,
+});
+const signupRateLimiter = createPersistentRateLimit({
+  dbQuery,
+  prefix: "signup",
+  windowMs: SIGNUP_RATE_LIMIT_WINDOW_MS,
+  limit: SIGNUP_RATE_LIMIT_MAX,
+});
+const loginRouteRateLimiter = createPersistentRateLimit({
+  dbQuery,
+  prefix: "login",
+  windowMs: LOGIN_ROUTE_RATE_LIMIT_WINDOW_MS,
+  limit: LOGIN_ROUTE_RATE_LIMIT_MAX,
+});
+const anonymousTurnRateLimiter = createPersistentRateLimit({
+  dbQuery,
+  prefix: "anon-turn",
+  windowMs: ANONYMOUS_TURN_RATE_LIMIT_WINDOW_MS,
+  limit: ANONYMOUS_TURN_RATE_LIMIT_MAX,
+});
+const signupTurnstileMiddleware = createTurnstileMiddleware();
 
 const memoryReadPathMatchers = [
   /^\/api\/memory\/health\/?$/u,
@@ -3300,7 +3377,7 @@ app.get("/ready", async (_, res) => {
 });
 
 // ZAKI auth endpoints (OATH-03, OATH-07, OATH-08, OATH-11)
-app.use("/api/auth", express.json({ limit: "16kb" }), buildAuthRouter());
+app.use("/api/auth", authRouteRateLimiter, express.json({ limit: "16kb" }), buildAuthRouter());
 
 // =============================================================================
 // INPUT VALIDATION SCHEMAS
@@ -5937,8 +6014,8 @@ const signupHandler = async (req, res) => {
   }
 };
 
-app.post("/signup", signupHandler);
-app.post("/api/signup", signupHandler);
+app.post("/signup", signupRateLimiter, signupTurnstileMiddleware, signupHandler);
+app.post("/api/signup", signupRateLimiter, signupTurnstileMiddleware, signupHandler);
 
 const passwordResetRequestHandler = async (req, res) => {
   try {
@@ -6122,8 +6199,8 @@ app.post(
   passwordResetConfirmHandler
 );
 
-app.post("/login", zakiLoginHandler);
-app.post("/api/login", zakiLoginHandler);
+app.post("/login", loginRouteRateLimiter, zakiLoginHandler);
+app.post("/api/login", loginRouteRateLimiter, zakiLoginHandler);
 
 app.get("/api/legal/consent-status", async (req, res) => {
   try {
@@ -6742,6 +6819,7 @@ async function buildMeterResponsePayload(identity, platform, registry, policy) {
     platform,
     meterSnapshot,
     productRegistry: registry,
+    agentRequiredUnits: resolveAgentReserveUnits(process.env),
   });
 }
 
@@ -9115,7 +9193,7 @@ function buildAnonymousQuotaHash(req, res) {
   const rawId = secret
     ? resolveAnonymousSpacesId(req, res, secret)
     : [
-        req.ip || "",
+        getCloudflareAwareClientIp(req),
         req.headers["x-forwarded-for"] || "",
         req.headers["user-agent"] || "",
       ].join("|");
@@ -10361,6 +10439,30 @@ const anonymousStreamChatHandler = async (req, res) => {
       return;
     }
 
+    const deviceQuota = await consumeAnonymousDeviceQuota({
+      dbQuery,
+      dbGet,
+      deviceSignalHash: buildAnonymousDeviceSignalHash(req, {
+        secret: ANONYMOUS_SPACES_ID_SECRET || GOOGLE_OAUTH_STATE_SECRET || meterSigningSecret(),
+      }),
+      bucket: `${ANONYMOUS_SPACES_QUOTA_CONFIG.bucket}_device`,
+      limit: ANONYMOUS_DEVICE_DAILY_PROMPT_LIMIT,
+    });
+    if (!deviceQuota.allowed) {
+      setPromptQuotaHeaders(res, {
+        ...deviceQuota,
+        bucket: `${ANONYMOUS_SPACES_QUOTA_CONFIG.bucket}_device`,
+        surface: APP_CHAT_SURFACE,
+      });
+      return res.status(429).json(
+        buildDailyLimitExceededPayload({
+          limit: ANONYMOUS_DEVICE_DAILY_PROMPT_LIMIT,
+          resetAt: deviceQuota.resetAt,
+          surface: APP_CHAT_SURFACE,
+        })
+      );
+    }
+
     const consumed = await consumeAnonymousDailyPromptQuota({
       dbQuery,
       dbGet,
@@ -10448,6 +10550,7 @@ const anonymousStreamChatHandler = async (req, res) => {
 
 app.post(
   "/api/anonymous/workspace/:slug/thread/:threadSlug/stream-chat",
+  anonymousTurnRateLimiter,
   express.json({ limit: "5mb" }),
   anonymousStreamChatHandler
 );
@@ -10933,11 +11036,16 @@ app.get("/api/spaces/:spaceId/files/:storageFilename", async (req, res) => {
 function buildAgentMeterIdentity(authContext) {
   const zakiUser = authContext?.zakiUser || authContext;
   if (!zakiUser?.id) return null;
+  const effective = resolveEffectivePlatformEntitlement(zakiUser);
+  const effectivePlanId = normalizePlatformPlanId(
+    effective?.commercial?.planId || effective?.tier || zakiUser.plan_tier || "free"
+  );
   return {
     type: "user",
     tenantId: "default",
     userId: zakiUser.id,
     zakiUser,
+    effectivePlanId,
     anonymousSessionId: null,
     anonymousKeyHash: null,
   };
@@ -10980,6 +11088,20 @@ function buildAgentMeterDenialPayload(result, requestId) {
     message: result?.message || "Agent usage is not currently available.",
     product: result?.product || "agent",
     productState: result?.productState || null,
+    constraint: result?.constraint || null,
+    requiredUnits:
+      typeof result?.requiredUnits === "number" ? result.requiredUnits : null,
+    effectiveRemaining:
+      typeof result?.effectiveRemaining === "number" ? result.effectiveRemaining : null,
+    weeklyRemaining:
+      typeof result?.weeklyRemaining === "number" ? result.weeklyRemaining : null,
+    rollingRemaining:
+      typeof result?.rollingRemaining === "number" ? result.rollingRemaining : null,
+    topupUnits:
+      typeof result?.topupUnits === "number" ? result.topupUnits : null,
+    shortfall:
+      typeof result?.shortfall === "number" ? result.shortfall : null,
+    resetAt: result?.resetAt || null,
     meter: result?.meter || null,
     requestId,
   };
@@ -11010,7 +11132,35 @@ async function requireAgentWalletReserveForChat(req, res, { identity, action, re
   if (decision.outcome === "denied" || decision.outcome === "duplicate") {
     // C1: "duplicate" = the idempotency key matched an existing hold (in-flight retry OR replay of a
     // completed turn). Refuse (409) so we NEVER run a fresh free/unmetered engine turn for a reused key.
-    const denial = decision.denial || {};
+    let denial = decision.denial || {};
+    if (decision.outcome === "denied" && identity) {
+      try {
+        const platform = buildPlatformForMeterIdentity(identity);
+        const registry = buildPlatformProductRegistry();
+        const policy = buildPlatformMeterPolicy({ env: process.env });
+        const meter = await buildMeterResponsePayload(identity, platform, registry, policy);
+        const agentAvailability = meter?.availableNow?.agent || null;
+        denial = {
+          ...denial,
+          meter,
+          resetAt: denial.resetAt || agentAvailability?.resetAt || null,
+          effectiveRemaining:
+            typeof denial.effectiveRemaining === "number"
+              ? denial.effectiveRemaining
+              : agentAvailability?.effectiveRemaining,
+          requiredUnits:
+            typeof denial.requiredUnits === "number"
+              ? denial.requiredUnits
+              : agentAvailability?.requiredReserveUnits,
+          constraint: denial.constraint || agentAvailability?.constraint || null,
+        };
+      } catch (error) {
+        console.warn("[Agent] Meter denial snapshot failed:", {
+          requestId: reqId,
+          error: error?.message || "meter_snapshot_failed",
+        });
+      }
+    }
     res
       .status(denial.status || 403)
       .json(buildAgentMeterDenialPayload({ ...denial, action: decision.action }, reqId));
@@ -19804,13 +19954,24 @@ server.listen(PORT, () => {
   // Session cleanup: purge expired/revoked rows older than 7 days.
   // Run once 30s after startup (let the DB pool warm up), then every 6 hours.
   const SESSION_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+  const runSecurityCounterCleanup = async () => {
+    await cleanupExpiredRateLimitHits({ dbQuery });
+    await cleanupExpiredLoginFailures({ dbQuery });
+    await cleanupAnonymousDeviceUsage({ dbQuery });
+  };
   setTimeout(() => {
     cleanupExpiredSessions().catch((err) =>
       console.warn("[ZakiAuth] session cleanup failed:", err?.message)
     );
+    runSecurityCounterCleanup().catch((err) =>
+      console.warn("[Security] counter cleanup failed:", err?.message)
+    );
     setInterval(() => {
       cleanupExpiredSessions().catch((err) =>
         console.warn("[ZakiAuth] session cleanup failed:", err?.message)
+      );
+      runSecurityCounterCleanup().catch((err) =>
+        console.warn("[Security] counter cleanup failed:", err?.message)
       );
     }, SESSION_CLEANUP_INTERVAL_MS);
   }, 30_000);

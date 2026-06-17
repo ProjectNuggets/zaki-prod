@@ -1057,6 +1057,14 @@ button.v2-status-strip__item:focus-visible {
   text-decoration: underline;
 }
 
+.zaki-auth-v2__turnstile {
+  min-height: 65px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
 .zaki-auth-v2__inline-actions {
   display: flex;
   align-items: center;
@@ -2781,6 +2789,69 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   background: var(--v2-bg);
 }
 
+@media (max-width: 430px) {
+  .zaki-pricing-page {
+    padding: 18px 12px 72px !important;
+  }
+
+  .zaki-pricing-page h1 {
+    font-size: 1.55rem;
+    line-height: 1.15;
+  }
+
+  .zaki-pricing-page :where(p, li) {
+    overflow-wrap: anywhere;
+  }
+
+  .zaki-pricing-page__hero-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .zaki-pricing-page__hero-actions .zaki-btn,
+  .zaki-pricing-page__plan .zaki-btn,
+  .zaki-pricing-page__access .zaki-btn,
+  .zaki-pricing-page__provider-modal .zaki-btn {
+    width: 100%;
+    min-height: 42px;
+  }
+
+  .zaki-pricing-page__plan,
+  .zaki-pricing-page__access {
+    border-radius: var(--v2-r-2) !important;
+    padding: 16px !important;
+  }
+
+  .zaki-pricing-page__plan > div:first-child,
+  .zaki-pricing-page__access > div:first-child,
+  .zaki-pricing-page__access-purchase,
+  .zaki-pricing-page__purchase-actions,
+  .zaki-pricing-page__provider-modal button > div:first-child {
+    display: flex;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .zaki-pricing-page__plan span,
+  .zaki-pricing-page__access span,
+  .zaki-pricing-page__highlights span {
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  .zaki-pricing-page__purchase-actions > * {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .zaki-pricing-page__provider-modal {
+    max-height: calc(100dvh - 24px);
+    padding: 16px !important;
+    border-radius: var(--v2-r-2) !important;
+  }
+}
+
 .zaki-settings-v2 {
   height: 100%;
   min-height: 0;
@@ -4135,6 +4206,89 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   }
 }
 
+@media (max-width: 430px) {
+  .zaki-settings-v2 {
+    overflow-x: hidden;
+  }
+
+  .zaki-settings-v2__main {
+    padding: 20px 12px 76px;
+  }
+
+  .v2-settings-nav__list {
+    gap: 3px;
+    padding: 7px 8px;
+  }
+
+  .v2-settings-nav__list a {
+    flex-basis: 128px;
+    min-height: 42px;
+  }
+
+  .v2-settings-block {
+    margin-bottom: 28px;
+  }
+
+  .v2-settings-block__head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .v2-settings-row {
+    gap: 10px;
+    padding: 13px 0;
+  }
+
+  .zaki-settings-v2__billing-hero,
+  .zaki-settings-v2__billing-meter,
+  .zaki-settings-v2__product-row--editable,
+  .zaki-settings-v2__product-row--governance,
+  .zaki-settings-v2__edit-tray,
+  .zaki-settings-v2__provider-edit,
+  .zaki-settings-v2__agent-model {
+    padding: 12px;
+  }
+
+  .zaki-settings-v2__billing-wallet,
+  .zaki-settings-v2__product-row dl,
+  .zaki-settings-v2__model-table,
+  .zaki-settings-v2__usage-details,
+  .zaki-settings-v2__advanced-details,
+  .zaki-settings-v2__channel-summary-grid {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .zaki-settings-v2__agent-model header,
+  .zaki-settings-v2__agent-model-active,
+  .zaki-settings-v2__tray-head,
+  .zaki-settings-v2__binding-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .zaki-settings-v2__field-grid,
+  .zaki-settings-v2__control-stack {
+    width: 100%;
+  }
+
+  .zaki-settings-v2__actions--with-note .v2-btn,
+  .zaki-settings-v2__binding-row .v2-btn,
+  .zaki-settings-v2__tray-head .v2-btn {
+    width: 100%;
+  }
+
+  .zaki-settings-v2__model-table > div {
+    gap: 6px;
+    padding: 9px;
+  }
+
+  .zaki-settings-v2__model-table-head {
+    display: none !important;
+  }
+}
+
 .zaki-brain-v2 {
   height: 100%;
   min-height: 0;
@@ -5023,6 +5177,114 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
   .zaki-brain-v2__canvas-frame {
     min-height: 500px;
+  }
+}
+
+@media (max-width: 430px) {
+  .zaki-brain-v2 {
+    overflow-x: hidden;
+    background-size: 24px 24px;
+  }
+
+  .zaki-brain-v2__wrap {
+    padding: 18px 10px 0;
+  }
+
+  .zaki-brain-v2__hero {
+    gap: 14px;
+    padding-bottom: 16px;
+    margin-bottom: 14px;
+  }
+
+  .zaki-brain-v2__hero h1 {
+    font-size: 28px;
+    line-height: 1.08;
+  }
+
+  .zaki-brain-v2__hero-meta {
+    gap: 8px;
+  }
+
+  .zaki-brain-v2__governance-link {
+    width: 100%;
+    justify-content: center;
+    min-height: 38px;
+  }
+
+  .zaki-brain-v2 .v2-tabs {
+    overflow-x: auto;
+    scroll-padding-inline: 10px;
+  }
+
+  .zaki-brain-v2 .v2-tabs button {
+    flex: 0 0 auto;
+    min-width: 116px;
+  }
+
+  .zaki-brain-v2__home-slot,
+  .zaki-brain-v2__timeline {
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .zaki-brain-home {
+    gap: 20px;
+  }
+
+  .zaki-brain-home__cards {
+    grid-template-columns: 1fr;
+  }
+
+  .zaki-brain-home__card {
+    padding: 12px;
+  }
+
+  .zaki-brain-home__card-title,
+  .zaki-brain-home__feed-label {
+    white-space: normal;
+  }
+
+  .zaki-brain-home__member,
+  .zaki-brain-home__feed-item {
+    align-items: flex-start;
+    min-height: 40px;
+  }
+
+  .zaki-brain-v2__timeline {
+    padding-bottom: 76px;
+  }
+
+  .zaki-brain-v2__timeline :where(section, ul, li, h3, p, div) {
+    max-width: 100%;
+  }
+
+  .zaki-brain-v2__timeline h3 {
+    position: static;
+    margin-right: 0;
+    margin-left: 0;
+  }
+
+  .zaki-brain-v2__timeline input[type="range"] {
+    min-height: 32px;
+  }
+
+  .zaki-brain-v2__graph-shell {
+    padding: 10px 0 76px;
+  }
+
+  .zaki-brain-v2__canvas-frame {
+    min-height: 430px;
+  }
+
+  .zaki-galaxy-card {
+    right: 10px;
+    left: 10px;
+    bottom: 10px;
+  }
+
+  .zaki-galaxy-card--detail {
+    width: 100%;
+    max-height: min(62vh, 520px);
   }
 }
 
@@ -7859,6 +8121,122 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   }
 }
 
+@media (max-width: 430px) {
+  .zaki-app-v2 .zaki-agent-v2 {
+    overflow-x: hidden;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2__surface > .v2-status-strip {
+    min-height: 32px;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding: 6px 10px;
+    scroll-padding-inline: 10px;
+    white-space: nowrap;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2__workspace,
+  .zaki-app-v2 .zaki-agent-v2__scroll,
+  .zaki-app-v2 .zaki-agent-v2 .zaki-chat-thread,
+  .zaki-app-v2 .zaki-agent-v2 .zaki-message-row,
+  .zaki-app-v2 .zaki-agent-v2 .zaki-message-stack,
+  .zaki-app-v2 .zaki-agent-v2 .zaki-message-content,
+  .zaki-app-v2 .zaki-agent-v2 .zaki-agent-lane,
+  .zaki-app-v2 .zaki-agent-v2 .zaki-agent-lane__body,
+  .zaki-app-v2 .zaki-agent-v2 .zaki-agent-timeline {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-chat-thread {
+    width: 100%;
+    padding: 14px 10px 12px;
+    gap: 18px;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-message-row--assistant,
+  .zaki-app-v2 .zaki-agent-v2 .zaki-agent-lane {
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 9px;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-message-avatar,
+  .zaki-app-v2 .zaki-agent-v2 .zaki-agent-lane__rune {
+    width: 24px;
+    height: 24px;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-message-content,
+  .zaki-app-v2 .zaki-agent-v2 .zaki-assistant-bubble,
+  .zaki-app-v2 .zaki-agent-v2 .zaki-user-bubble {
+    overflow-wrap: anywhere;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-evidence {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-input-float {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-input-shell {
+    max-width: 100%;
+    padding: 7px 8px calc(9px + var(--zaki-visual-viewport-bottom, 0px));
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-input-field {
+    max-height: min(34dvh, 150px);
+    font-size: 13px;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-input-row {
+    gap: 2px;
+    padding: 5px 6px;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-turn-controls {
+    flex: 1 1 auto;
+    max-width: calc(100vw - 112px);
+    scroll-padding-inline: 4px;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-input-row .zaki-turn-chip {
+    max-width: 94px;
+    padding: 0 5px;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-input-row button.zaki-send-button--agent {
+    width: 38px !important;
+    flex-basis: 38px;
+    min-width: 38px;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-input-row .zaki-context-text-meter__label,
+  .zaki-app-v2 .zaki-agent-v2 .zaki-turn-separator {
+    display: none;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-input-row .zaki-composer-menu {
+    right: 10px;
+    bottom: 80px;
+    left: 10px !important;
+    max-height: min(420px, calc(100dvh - 140px));
+  }
+
+  .zaki-agent-mobile-inspector__sheet {
+    max-height: calc(100dvh - 32px);
+    min-height: min(520px, calc(100dvh - 32px));
+  }
+
+  .zaki-agent-mobile-inspector .zaki-agent-inspector__tabs button {
+    min-width: 78px;
+  }
+}
+
 .zaki-approval-card {
   width: 100%;
   margin: 0;
@@ -8136,12 +8514,12 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   .zaki-approval-card__actions {
     display: grid;
     width: 100%;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(94px, 1fr));
   }
 
   .zaki-approval-card__button {
     min-width: 0;
-    padding: 0 4px;
+    padding: 0 6px;
   }
 }
 
@@ -13232,5 +13610,157 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
   .zaki-dashboard-command__helper {
     min-height: auto;
+  }
+}
+
+@media (max-width: 430px) {
+  .zaki-dashboard-v2,
+  .zaki-dashboard-v2--productized {
+    overflow-x: hidden;
+  }
+
+  .zaki-dashboard-v2 .v2-status-strip {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding: 7px 10px;
+    scroll-padding-inline: 10px;
+    white-space: nowrap;
+  }
+
+  .zaki-dashboard-v2__wrap {
+    width: 100%;
+    padding: 14px 10px 76px;
+  }
+
+  .zaki-dashboard-v2__entry {
+    gap: 16px;
+  }
+
+  .zaki-dashboard-command__greeting .zaki-dashboard-v2__eyebrow {
+    font-size: 9px;
+    letter-spacing: 0.1em;
+  }
+
+  .zaki-dashboard-v2__eyebrow::before {
+    width: 20px;
+  }
+
+  .zaki-dashboard-command__title {
+    max-width: 100%;
+    font-size: 27px;
+    line-height: 1.08;
+    overflow-wrap: anywhere;
+  }
+
+  .zaki-dashboard-command__title-signal {
+    max-width: 100%;
+  }
+
+  .zaki-dashboard-command__title-signal::after {
+    content: none;
+  }
+
+  .zaki-dashboard-command__entry-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .zaki-dashboard-command__entry-actions button {
+    min-width: 0;
+    min-height: 34px;
+    white-space: nowrap;
+  }
+
+  .zaki-dashboard-command__entry-action--accent {
+    grid-column: span 2;
+  }
+
+  .zaki-dashboard-command__memory-bridge,
+  .zaki-dashboard-command__resume,
+  .zaki-dashboard-command__composer,
+  .zaki-dashboard-command__hint {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .zaki-dashboard-command__strip {
+    display: flex;
+    overflow-x: auto;
+    border-color: var(--v2-hairline-strong);
+    scroll-padding-inline: 1px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .zaki-dashboard-command__product,
+  .zaki-dashboard-command__product:nth-child(2n),
+  .zaki-dashboard-command__product:nth-child(3n) {
+    flex: 0 0 112px;
+    border-right: 1px solid var(--v2-hairline);
+    border-bottom: 0;
+    padding: 0 8px;
+  }
+
+  .zaki-dashboard-command__product:last-child {
+    border-right: 0;
+  }
+
+  .zaki-dashboard-command__product-name {
+    max-width: 58px;
+  }
+
+  .zaki-dashboard-command__product-marker {
+    display: none;
+  }
+
+  .zaki-dashboard-command__textarea {
+    min-height: 92px;
+    max-height: 42dvh;
+    padding: 12px;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .zaki-dashboard-command__hint-top {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .zaki-dashboard-command__hint-name h2 {
+    font-size: 14px;
+  }
+
+  .zaki-dashboard-command__foot {
+    padding: 10px 12px;
+  }
+
+  .zaki-dashboard-command__meter-top {
+    gap: 4px;
+  }
+
+  .zaki-dashboard-command__meter-top strong {
+    white-space: normal;
+  }
+
+  .zaki-dashboard-command__actions .v2-btn,
+  .zaki-dashboard-command__credit-guard .v2-btn {
+    flex-basis: 100%;
+    width: 100%;
+  }
+
+  .zaki-dashboard-command__links {
+    gap: 10px;
+  }
+
+  .zaki-dashboard-command__links button {
+    min-height: 32px;
+  }
+
+  .zaki-dashboard-intro {
+    padding: 10px;
+  }
+
+  .zaki-dashboard-intro__panel {
+    max-height: calc(100dvh - 20px);
   }
 }

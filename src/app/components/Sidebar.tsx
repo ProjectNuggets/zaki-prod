@@ -2263,7 +2263,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
 	              )}
 	              onClick={() => {
 	                setProfileMenuOpen(false);
-	                navigate("/legal");
+	                window.open("https://chatzaki.com/compliance", "_blank", "noopener,noreferrer");
 	              }}
 	            >
 	              {t("sidebar.profile.terms", { version: APP_VERSION })}

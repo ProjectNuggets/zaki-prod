@@ -16,6 +16,8 @@ export const PLATFORM_PLAN_LADDER = Object.freeze([
   PLATFORM_PLAN_IDS.PRO_MAX,
 ]);
 
+import { resolveAgentReserveUnits } from "./agent-reserve-policy.js";
+
 export const ZAKI_PRODUCT_IDS = Object.freeze({
   SPACES: "spaces",
   AGENT: "agent",
@@ -252,7 +254,7 @@ const DEFAULT_WEEKLY_ALLOWANCE_UNITS = Object.freeze({
 });
 
 const DEFAULT_ROLLING_ALLOWANCE_UNITS = Object.freeze({
-  [PLATFORM_PLAN_IDS.FREE]: 20,
+  [PLATFORM_PLAN_IDS.FREE]: 40,
   [PLATFORM_PLAN_IDS.PERSONAL]: 100,
   [PLATFORM_PLAN_IDS.PRO]: 300,
   [PLATFORM_PLAN_IDS.PRO_MAX]: 1000,
@@ -389,6 +391,7 @@ export function buildPlatformPlanPolicy({ env = process.env } = {}) {
     env?.ZAKI_PLATFORM_BURST_WINDOW_HOURS,
     5
   );
+  const agentReserveFloor = resolveAgentReserveUnits(env);
 
   const weeklyAllowanceByPlan = {
     [PLATFORM_PLAN_IDS.FREE]: parsePositiveIntegerWithDefault(
@@ -426,6 +429,12 @@ export function buildPlatformPlanPolicy({ env = process.env } = {}) {
       DEFAULT_ROLLING_ALLOWANCE_UNITS[PLATFORM_PLAN_IDS.PRO_MAX]
     ),
   };
+  for (const planId of PLATFORM_PLAN_LADDER) {
+    rollingAllowanceByPlan[planId] = Math.max(
+      rollingAllowanceByPlan[planId],
+      agentReserveFloor
+    );
+  }
 
   const products = buildPlatformProductCatalog();
 

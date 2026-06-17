@@ -24,6 +24,13 @@ export type PendingIntentInput = Partial<Omit<PendingIntent, "createdAt">> & {
   prompt: string;
 };
 
+const WEBSITE_INTENT_PRODUCTS: Record<string, AnonymousWorkProductId> = {
+  agent: "agent",
+  anonymous_command: "spaces",
+  chat: "spaces",
+  memory: "brain",
+};
+
 function getStorage() {
   if (typeof window === "undefined") return null;
   try {
@@ -64,6 +71,42 @@ function sanitizeReturnTo(value: unknown, productId: AnonymousWorkProductId) {
 
 export function buildProductReturnTo(productId: AnonymousWorkProductId) {
   return getProductActivationRoute(productId) || "/";
+}
+
+function inferProductFromRoute(pathname: string): AnonymousWorkProductId | null {
+  const normalized = String(pathname || "").replace(/\/+$/, "") || "/";
+  if (normalized === "/agent") return "agent";
+  if (normalized === "/spaces" || normalized.startsWith("/spaces/")) return "spaces";
+  if (normalized === "/brain") return "brain";
+  if (normalized === "/learn") return "learning";
+  if (normalized === "/design") return "design";
+  if (normalized === "/hire") return "hire";
+  return null;
+}
+
+export function consumeWebsiteCommandIntentFromUrl(input: {
+  pathname: string;
+  search: string;
+}) {
+  const params = new URLSearchParams(input.search || "");
+  const source = sanitizeText(params.get("source"), MAX_SOURCE_LENGTH);
+  const prompt = sanitizeText(params.get("prompt"), MAX_PROMPT_LENGTH);
+  if (!prompt || !source.startsWith("website_")) return null;
+
+  const intent = sanitizeText(params.get("intent"), MAX_TASK_KIND_LENGTH).toLowerCase();
+  const productId =
+    WEBSITE_INTENT_PRODUCTS[intent] ||
+    normalizeProductId(params.get("product")) ||
+    inferProductFromRoute(input.pathname);
+  if (!productId) return null;
+
+  return writePendingIntent({
+    productId,
+    taskKind: intent || "website_command",
+    prompt,
+    source,
+    returnTo: buildProductReturnTo(productId),
+  });
 }
 
 export function readPendingIntent(): PendingIntent | null {

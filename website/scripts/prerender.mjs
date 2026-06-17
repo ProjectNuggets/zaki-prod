@@ -138,6 +138,10 @@ for (const route of routes) {
   const routeDir = route === "/" ? distDir : resolve(distDir, route.slice(1));
   mkdirSync(routeDir, { recursive: true });
   writeFileSync(resolve(routeDir, "index.html"), html);
+  if (route !== "/") {
+    const flatPath = route.replace(/\/$/, "");
+    writeFileSync(resolve(distDir, `${flatPath.slice(1)}.html`), html);
+  }
 }
 
 writeFileSync(resolve(distDir, "sitemap.xml"), buildSitemapXml(routes));

@@ -21,7 +21,7 @@ export function BotPage({ locale }: { locale: Locale }) {
   ];
 
   return (
-    <SiteShell locale={locale} route="bot">
+    <SiteShell locale={locale} route="product">
       {/* ═══ HERO ═══ */}
       <section className="relative overflow-hidden px-4 pb-16 pt-[8vh] md:px-8 md:pb-24 md:pt-[10vh]">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_20%_0%,rgba(241,2,2,0.10),transparent_50%)]" />
@@ -47,7 +47,7 @@ export function BotPage({ locale }: { locale: Locale }) {
                 <a href={appHandoffUrl("/agent", "website_bot_page", "agent")}>{isArabic ? "افتح Agent" : "Open Agent"}</a>
               </Button>
               <Button asChild variant="bot">
-                <a href="/zaki-vs-spaces/">
+                <a href="/product/">
                   {isArabic ? "تعرّف على الفرق" : "See ZAKI vs Spaces"}
                 </a>
               </Button>
@@ -153,7 +153,7 @@ export function BotPage({ locale }: { locale: Locale }) {
                 {isArabic ? "تحديثات المنتجات القادمة" : "Future product updates"}
               </p>
               <h2 className="font-display mt-4 text-[28px] font-extrabold tracking-[-0.04em] text-zk-text md:text-[34px]">
-                {isArabic ? "تابع Learn وDesign وCareer" : "Follow Learn, Design, and Career"}
+                {isArabic ? "تابع Learn وDesign وHire" : "Follow Learn, Design, and Hire"}
               </h2>
               <p className="mt-3 max-w-[44ch] text-sm leading-7 text-zk-text-secondary">
                 {isArabic

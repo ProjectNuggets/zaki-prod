@@ -218,7 +218,7 @@ export function ChatDemo({ locale, className }: ChatDemoProps) {
         </div>
         <div className="mx-auto flex items-center gap-1.5 rounded-md bg-zk-bg/60 px-3 py-1 font-mono-ui text-xs text-zk-text-tertiary">
           <LockIcon className="size-3" />
-          <span>app.chatzaki.com</span>
+          <span>chatzaki.ai</span>
         </div>
       </div>
 

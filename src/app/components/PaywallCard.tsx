@@ -19,6 +19,9 @@ export interface PaywallCardProps {
   state: PaywallState;
   planLabel?: string;
   remaining?: number;
+  effectiveRemaining?: number;
+  requiredUnits?: number;
+  constraint?: string | null;
   resetAt?: string | null;
   message: string;
   onSeePlans: () => void;
@@ -36,17 +39,29 @@ export function PaywallCard({
   state,
   planLabel,
   remaining,
+  effectiveRemaining,
+  requiredUnits,
+  constraint,
   resetAt,
   message,
   onSeePlans,
   onDismiss,
 }: PaywallCardProps) {
   const headline =
-    state === "out_of_usage" ? "You're out of usage" : "Your plan is inactive";
+    state === "out_of_usage" && constraint === "rolling"
+      ? "Current capacity window is low"
+      : state === "out_of_usage"
+        ? "You're out of usage"
+        : "Your plan is inactive";
   const reset = formatReset(resetAt);
+  const shownRemaining =
+    typeof effectiveRemaining === "number" ? effectiveRemaining : remaining;
   // Show structured detail line when we have plan data; else fall back to the
   // verbatim server denial message.
-  const hasDetail = Boolean(planLabel) || typeof remaining === "number";
+  const hasDetail =
+    Boolean(planLabel) ||
+    typeof shownRemaining === "number" ||
+    typeof requiredUnits === "number";
 
   return (
     <div className="zaki-approval-card" role="region" aria-label="Upgrade required">
@@ -76,8 +91,14 @@ export function PaywallCard({
             {hasDetail ? (
               <>
                 {planLabel ? <span>Plan: {planLabel}</span> : null}
-                {typeof remaining === "number" ? (
-                  <span>{planLabel ? " · " : ""}{remaining} left</span>
+                {typeof shownRemaining === "number" ? (
+                  <span>{planLabel ? " · " : ""}{shownRemaining} available now</span>
+                ) : null}
+                {typeof requiredUnits === "number" ? (
+                  <span>
+                    {planLabel || typeof shownRemaining === "number" ? " · " : ""}
+                    {requiredUnits} needed
+                  </span>
                 ) : null}
                 {state === "out_of_usage" && reset ? (
                   <span> · resets {reset}</span>

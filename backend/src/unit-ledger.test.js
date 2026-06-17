@@ -173,7 +173,7 @@ describe("unit-ledger: ensureWallet (provisioning)", () => {
     const { client, calls } = makeClient({});
     await ensureWallet({ userId: 7, planId: "bogus", env: {} }, client);
     const ins = calls.find((c) => /INSERT INTO zaki_unit_wallets/.test(c.text));
-    expect(ins.params).toEqual([7, "free", 100, 20, 5]);
+    expect(ins.params).toEqual([7, "free", 100, 40, 5]);
   });
 
   it("maps a paid tier (pro → weekly 1500 / burst 300)", async () => {

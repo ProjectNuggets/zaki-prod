@@ -4,6 +4,7 @@ import App from "./App";
 import { getRouteSeo } from "./lib/seo";
 import { getPrerenderRoutes, resolveRenderablePath, routeRegistry } from "./lib/routeRegistry";
 import "./styles/global.css";
+import "./styles/v3.css";
 
 export function renderRoute(pathname = "/") {
   const normalizedPath = resolveRenderablePath(pathname);

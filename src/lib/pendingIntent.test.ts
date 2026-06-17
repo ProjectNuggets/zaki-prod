@@ -3,6 +3,7 @@ import {
   PENDING_INTENT_KEY,
   buildProductReturnTo,
   clearPendingIntent,
+  consumeWebsiteCommandIntentFromUrl,
   readPendingIntent,
   writePendingIntent,
 } from "./pendingIntent";
@@ -23,11 +24,11 @@ describe("pending intent", () => {
       taskKind: "brief",
       prompt: "Create a landing page direction",
       source: "dashboard",
-      returnTo: "/products/design",
+      returnTo: "/design",
       anonymousWorkId: "work-1",
     });
 
-    expect(intent?.returnTo).toBe("/products/design");
+    expect(intent?.returnTo).toBe("/design");
     expect(window.localStorage.getItem(PENDING_INTENT_KEY)).not.toBeNull();
     expect(window.sessionStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
     expect(readPendingIntent()).toMatchObject({
@@ -46,7 +47,7 @@ describe("pending intent", () => {
       returnTo: "https://evil.example/hire",
     });
 
-    expect(readPendingIntent()?.returnTo).toBe("/products/hire");
+    expect(readPendingIntent()?.returnTo).toBe("/hire");
 
     window.localStorage.setItem(
       PENDING_INTENT_KEY,
@@ -88,8 +89,51 @@ describe("pending intent", () => {
 
   it("builds canonical product return routes", () => {
     expect(buildProductReturnTo("agent")).toBe("/agent");
-    expect(buildProductReturnTo("learning")).toBe("/products/learn");
-    expect(buildProductReturnTo("design")).toBe("/products/design");
+    expect(buildProductReturnTo("learning")).toBe("/learn");
+    expect(buildProductReturnTo("design")).toBe("/design");
     expect(buildProductReturnTo("spaces")).toBe("/spaces");
+  });
+
+  it("consumes website command query params into a replayable pending intent", () => {
+    const intent = consumeWebsiteCommandIntentFromUrl({
+      pathname: "/agent",
+      search:
+        "?source=website_home_command&intent=agent&prompt=Plan%20my%20launch",
+    });
+
+    expect(intent).toMatchObject({
+      productId: "agent",
+      taskKind: "agent",
+      prompt: "Plan my launch",
+      source: "website_home_command",
+      returnTo: "/agent",
+    });
+    expect(readPendingIntent()).toMatchObject({
+      productId: "agent",
+      prompt: "Plan my launch",
+    });
+  });
+
+  it("maps anonymous website command intent to Chat and ignores non-website sources", () => {
+    expect(
+      consumeWebsiteCommandIntentFromUrl({
+        pathname: "/",
+        search:
+          "?source=website_home_command&intent=anonymous_command&prompt=Draft%20this",
+      })
+    ).toMatchObject({
+      productId: "spaces",
+      returnTo: "/spaces",
+    });
+
+    clearPendingIntent();
+
+    expect(
+      consumeWebsiteCommandIntentFromUrl({
+        pathname: "/agent",
+        search: "?source=dashboard&intent=agent&prompt=Ignore%20me",
+      })
+    ).toBeNull();
+    expect(readPendingIntent()).toBeNull();
   });
 });
