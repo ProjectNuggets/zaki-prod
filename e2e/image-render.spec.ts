@@ -109,6 +109,16 @@ async function mockAppShell(page: Page, assistantContent: string = ASSISTANT_CON
     }),
   );
 
+  await page.route("**/workspace/*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        workspace: { id: 1, slug: "zaky", name: "ZAKI", description: "E2E" },
+      }),
+    }),
+  );
+
   await page.route("**/workspace/*/thread/*/chats", (route) =>
     route.fulfill({
       status: 200,
@@ -127,6 +137,28 @@ async function mockAppShell(page: Page, assistantContent: string = ASSISTANT_CON
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ type: "done", textResponse: "ok" }),
+    }),
+  );
+
+  await page.route("**/api/agent/sessions", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ sessions: [] }),
+    }),
+  );
+
+  await page.route("**/api/meter/status", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        identity: { type: "user", userId: "e2e@example.com" },
+        plan: { tier: "free", label: "Free" },
+        rolling: { windowHours: 5, limit: 10, used: 1, remaining: 9 },
+        weekly: { limit: 100, used: 3, remaining: 97 },
+      }),
     }),
   );
 

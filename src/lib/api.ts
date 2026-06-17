@@ -144,14 +144,18 @@ export function buildApiUrl(path: string) {
 
 export function buildLoginRedirectUrl(returnTo?: string) {
   const url = new URL("/?auth=login", "https://zaki.local");
-  const currentLocation =
-    typeof window !== "undefined"
-      ? `${window.location.pathname || "/"}${window.location.search || ""}${
-          window.location.hash || ""
-        }`
-      : "";
-  const rawReturnTo =
-    returnTo || currentLocation;
+  let currentLocation = "";
+  if (typeof window !== "undefined") {
+    const currentSearch = new URLSearchParams(window.location.search || "");
+    const currentNext = currentSearch.get("next");
+    currentLocation =
+      currentSearch.has("auth") && currentNext
+        ? currentNext
+        : `${window.location.pathname || "/"}${window.location.search || ""}${
+            window.location.hash || ""
+          }`;
+  }
+  const rawReturnTo = returnTo || currentLocation;
   const normalizedReturnTo = String(rawReturnTo || "").trim();
   if (
     normalizedReturnTo &&

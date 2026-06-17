@@ -277,6 +277,19 @@ describe("session-dead 401 redirect target", () => {
     expect(buildLoginRedirectUrl("//evil.example/settings")).toBe("/?auth=login");
   });
 
+  it("does not nest next when already on the login screen", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/?auth=login&next=%2Fspaces%2Fzaky%2Fthreads%2Ft-1"
+    );
+    const { buildLoginRedirectUrl } = await import("@/lib/api");
+
+    expect(buildLoginRedirectUrl()).toBe(
+      "/?auth=login&next=%2Fspaces%2Fzaky%2Fthreads%2Ft-1"
+    );
+  });
+
   it("apiRequest: retry-also-401 logs the dead session out", async () => {
     _storeToken = "expired-token";
     mockFetch

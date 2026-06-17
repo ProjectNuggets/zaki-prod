@@ -347,7 +347,9 @@ describe("PricingPage", () => {
     expect(screen.getByText("Chat Free")).toBeInTheDocument();
     expect(screen.getByText("ZAKI Agent")).toBeInTheDocument();
     expect(screen.getByText("ZAKI Brain")).toBeInTheDocument();
+    expect(screen.getByText("Included")).toBeInTheDocument();
     expect(screen.getByText("Coming next")).toBeInTheDocument();
+    expect(screen.getByText("Soon")).toBeInTheDocument();
     expect(screen.queryByText("ZAKI Learn")).not.toBeInTheDocument();
     expect(screen.queryByText("ZAKI Complete")).not.toBeInTheDocument();
     expect(screen.queryByText("$19 / month")).not.toBeInTheDocument();

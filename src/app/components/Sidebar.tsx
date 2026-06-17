@@ -193,12 +193,14 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
     goToZakiHome,
   } = useNavigation();
   const { sidebarMode, zakiSessionKey: storedZakiSessionKey } = useNavigationStore();
+  const zakiSessionsEnabled =
+    Boolean(user) && sidebarMode === "zaki" && isZakiBotSpaceId(activeSpaceId);
   const {
     data: zakiSessions = [],
     isLoading: zakiSessionsLoading,
     isError: zakiSessionsError,
     refetch: refetchZakiSessions,
-  } = useZakiSessions(Boolean(user) && sidebarMode === "zaki");
+  } = useZakiSessions(zakiSessionsEnabled);
   const activeSessionKey =
     isZakiBotSpaceId(activeSpaceId) && (activeZakiSessionKey || storedZakiSessionKey)
       ? normalizeZakiSessionKey(activeZakiSessionKey || storedZakiSessionKey || "")

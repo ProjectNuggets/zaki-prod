@@ -132,16 +132,19 @@ test("pricing page displays the commercial plan prices and gift-code purchase", 
 
   await page.goto("/pricing");
 
-  // V1 commercial plans replaced the legacy student/personal + toggle model:
-  // three paid products (Agent / Learn / Complete) each priced per month, plus a
-  // whole-app access-code purchase. Prices fall back to the bundled i18n catalog
-  // because billing/config supplies no pricingCatalog override.
+  // V1 public pricing sells Agent only. Brain is included with account
+  // continuity, and Learn/Design/Career stay parked until their flows are safe.
   await expect(
     page.getByRole("heading", { name: "Choose how ZAKI should keep working with you" })
   ).toBeVisible();
+  await expect(page.getByText("Chat Free", { exact: true })).toBeVisible();
+  await expect(page.getByText("ZAKI Agent", { exact: true })).toBeVisible();
   await expect(page.getByText("$29 / month", { exact: true })).toBeVisible();
-  await expect(page.getByText("$19 / month", { exact: true })).toBeVisible();
-  await expect(page.getByText("$39 / month", { exact: true })).toBeVisible();
+  await expect(page.getByText("ZAKI Brain", { exact: true })).toBeVisible();
+  await expect(page.getByText("Included", { exact: true })).toBeVisible();
+  await expect(page.getByText("Coming next", { exact: true })).toBeVisible();
+  await expect(page.getByText("$19 / month", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("$39 / month", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Buy an access code", { exact: true })).toBeVisible();
   await expect(page.getByText("$15 one-time", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Buy access code" })).toBeVisible();

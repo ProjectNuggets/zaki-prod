@@ -541,7 +541,7 @@ export function PricingPage() {
             }) as string[];
             const priceLabel = card.plan
               ? getPlanPriceLabel(card.plan)
-              : t("pricingPage.plans.free.price");
+              : t(`pricingPage.plans.${card.translationKey}.price`);
             return (
               <div
                 key={card.id}
