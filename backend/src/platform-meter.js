@@ -31,6 +31,39 @@ function remainingUnits(limit, used) {
   return typeof limit === "number" ? roundUnits(Math.max(0, limit - used)) : null;
 }
 
+function emptyMeterUsage() {
+  return { weightedUnits: 0, receipts: 0 };
+}
+
+function emptyProductUsage() {
+  return { used: 0, receipts: 0 };
+}
+
+function normalizeUsageWindowRow(row = {}) {
+  return {
+    weightedUnits: roundUnits(row?.weighted_units),
+    receipts: Math.max(0, Math.floor(Number(row?.receipts || 0))),
+  };
+}
+
+function normalizeProductWindowRows(rows = []) {
+  return Object.fromEntries(
+    (Array.isArray(rows) ? rows : []).map((row) => [
+      String(row?.product_id || ""),
+      {
+        used: roundUnits(row?.weighted_units),
+        receipts: Math.max(0, Math.floor(Number(row?.receipts || 0))),
+      },
+    ]).filter(([productId]) => productId)
+  );
+}
+
+function chooseProductWindow(primary, fallback) {
+  const hasPrimary = primary && Number(primary.used || 0) > 0;
+  if (hasPrimary) return primary;
+  return fallback || emptyProductUsage();
+}
+
 export function hashAnonymousSessionId(value) {
   const normalized = String(value || "").trim();
   if (!normalized) return "";
@@ -154,6 +187,7 @@ export function walletToWeeklyWindow(wallet = {}) {
     recurringRemaining: roundUnits(weeklyRemaining),
     topupUnits: roundUnits(topup),
     remaining: roundUnits(weeklyRemaining + topup),
+    source: "wallet_unit_ledger",
     startedAt: pendingFirstUse ? null : anchorAtIso,
     resetAt: resetAtIso,
   };
@@ -218,10 +252,46 @@ async function readMeterWindow({
     `,
     [tenantId, identityValue, startedAtIso, endedAtIso]
   );
-  return {
-    weightedUnits: roundUnits(row?.weighted_units),
-    receipts: Math.max(0, Math.floor(Number(row?.receipts || 0))),
-  };
+  return normalizeUsageWindowRow(row);
+}
+
+async function readHoldWindow({
+  dbGet,
+  identity,
+  startedAtIso,
+  endedAtIso,
+}) {
+  if (typeof dbGet !== "function" || identity?.type !== "user" || !identity.userId) {
+    return emptyMeterUsage();
+  }
+  const tenantId = String(identity?.tenantId || "default").trim() || "default";
+  const row = await dbGet(
+    `
+      SELECT
+        COALESCE(SUM(
+          CASE
+            WHEN state = 'reserved' THEN reserved_units
+            WHEN state = 'settled' THEN COALESCE(settled_units, 0)
+            ELSE 0
+          END
+        ), 0)::float8 AS weighted_units,
+        COALESCE(SUM(
+          CASE
+            WHEN state = 'reserved' AND COALESCE(reserved_units, 0) > 0 THEN 1
+            WHEN state = 'settled' AND COALESCE(settled_units, 0) > 0 THEN 1
+            ELSE 0
+          END
+        ), 0)::int AS receipts
+      FROM zaki_meter_holds
+      WHERE tenant_id = $1
+        AND user_id = $2
+        AND state IN ('reserved', 'settled')
+        AND reserved_at >= $3::timestamptz
+        AND reserved_at < $4::timestamptz
+    `,
+    [tenantId, identity.userId, startedAtIso, endedAtIso]
+  );
+  return normalizeUsageWindowRow(row);
 }
 
 async function readMeterProductWindow({
@@ -254,15 +324,46 @@ async function readMeterProductWindow({
     `,
     [tenantId, identityValue, startedAtIso, endedAtIso]
   );
-  return Object.fromEntries(
-    (Array.isArray(rows) ? rows : []).map((row) => [
-      String(row?.product_id || ""),
-      {
-        used: roundUnits(row?.weighted_units),
-        receipts: Math.max(0, Math.floor(Number(row?.receipts || 0))),
-      },
-    ]).filter(([productId]) => productId)
+  return normalizeProductWindowRows(rows);
+}
+
+async function readHoldProductWindow({
+  dbAll,
+  identity,
+  startedAtIso,
+  endedAtIso,
+}) {
+  if (typeof dbAll !== "function" || identity?.type !== "user" || !identity.userId) return {};
+  const tenantId = String(identity?.tenantId || "default").trim() || "default";
+  const rows = await dbAll(
+    `
+      SELECT
+        product_id,
+        COALESCE(SUM(
+          CASE
+            WHEN state = 'reserved' THEN reserved_units
+            WHEN state = 'settled' THEN COALESCE(settled_units, 0)
+            ELSE 0
+          END
+        ), 0)::float8 AS weighted_units,
+        COALESCE(SUM(
+          CASE
+            WHEN state = 'reserved' AND COALESCE(reserved_units, 0) > 0 THEN 1
+            WHEN state = 'settled' AND COALESCE(settled_units, 0) > 0 THEN 1
+            ELSE 0
+          END
+        ), 0)::int AS receipts
+      FROM zaki_meter_holds
+      WHERE tenant_id = $1
+        AND user_id = $2
+        AND state IN ('reserved', 'settled')
+        AND reserved_at >= $3::timestamptz
+        AND reserved_at < $4::timestamptz
+      GROUP BY product_id
+    `,
+    [tenantId, identity.userId, startedAtIso, endedAtIso]
   );
+  return normalizeProductWindowRows(rows);
 }
 
 export async function readMeterSnapshotForIdentity({
@@ -273,11 +374,11 @@ export async function readMeterSnapshotForIdentity({
   wallet = null,
   nowDate = new Date(),
 } = {}) {
-  // An authenticated ZAKI user with a real unit wallet: the wallet (the ENFORCEMENT ledger the
-  // spaces chat gate debits) is the source of truth for the DISPLAY weekly window. Spaces chat
-  // never writes a receipt, so the receipts-based weekly would always read used:0 / remaining:limit.
-  // Anonymous identities and the agent/learning/design surfaces have no wallet here and keep the
-  // existing receipts-based path unchanged.
+  // An authenticated ZAKI user with a real unit wallet: the wallet/hold ledger (the ENFORCEMENT
+  // ledger the chat gates debit) is the source of truth for DISPLAY weekly, rolling, and product
+  // attribution. Spaces/Agent wallet turns do not write zaki_meter_receipts, so receipt-only display
+  // would show stale 0 usage while the enforcement ledger is actually debited. Anonymous identities
+  // and users without a wallet keep the existing receipt path unchanged.
   const useWalletWeekly = identity?.type === "user" && wallet != null;
   const now = toDate(nowDate);
   const rollingHours = Math.max(1, Number(platform?.usage?.burstWindowHours || 5));
@@ -296,6 +397,9 @@ export async function readMeterSnapshotForIdentity({
   });
   const rollingStartedAtIso = toIso(rollingStartedAt);
   const nowIso = toIso(now);
+  const walletWeekly = useWalletWeekly ? walletToWeeklyWindow(wallet) : null;
+  const weeklyProductStartedAtIso =
+    walletWeekly?.startedAt || weeklyWindow.queryStartedAt;
   const rollingLimit =
     typeof platform?.usage?.rollingAllowanceUnits === "number"
       ? platform.usage.rollingAllowanceUnits
@@ -304,12 +408,19 @@ export async function readMeterSnapshotForIdentity({
     typeof platform?.usage?.weeklyAllowanceUnits === "number"
       ? platform.usage.weeklyAllowanceUnits
       : null;
-  const rollingUsage = await readMeterWindow({
-    dbGet,
-    identity,
-    startedAtIso: rollingStartedAtIso,
-    endedAtIso: nowIso,
-  });
+  const rollingUsage = useWalletWeekly
+    ? await readHoldWindow({
+        dbGet,
+        identity,
+        startedAtIso: rollingStartedAtIso,
+        endedAtIso: nowIso,
+      })
+    : await readMeterWindow({
+        dbGet,
+        identity,
+        startedAtIso: rollingStartedAtIso,
+        endedAtIso: nowIso,
+      });
   const weeklyUsage =
     useWalletWeekly || weeklyWindow.pendingFirstUse
       ? { weightedUnits: 0, receipts: 0 }
@@ -319,13 +430,13 @@ export async function readMeterSnapshotForIdentity({
           startedAtIso: weeklyWindow.queryStartedAt,
           endedAtIso: weeklyWindow.queryEndedAt,
         });
-  const rollingProducts = await readMeterProductWindow({
+  const receiptRollingProducts = await readMeterProductWindow({
     dbAll,
     identity,
     startedAtIso: rollingStartedAtIso,
     endedAtIso: nowIso,
   });
-  const weeklyProducts = weeklyWindow.pendingFirstUse
+  const receiptWeeklyProducts = weeklyWindow.pendingFirstUse
     ? {}
     : await readMeterProductWindow({
         dbAll,
@@ -333,9 +444,27 @@ export async function readMeterSnapshotForIdentity({
         startedAtIso: weeklyWindow.queryStartedAt,
         endedAtIso: weeklyWindow.queryEndedAt,
       });
+  const holdRollingProducts = useWalletWeekly
+    ? await readHoldProductWindow({
+        dbAll,
+        identity,
+        startedAtIso: rollingStartedAtIso,
+        endedAtIso: nowIso,
+      })
+    : {};
+  const holdWeeklyProducts = useWalletWeekly || weeklyWindow.pendingFirstUse
+    ? await readHoldProductWindow({
+        dbAll,
+        identity,
+        startedAtIso: weeklyProductStartedAtIso,
+        endedAtIso: nowIso,
+      })
+    : {};
   const productIds = new Set([
-    ...Object.keys(rollingProducts),
-    ...Object.keys(weeklyProducts),
+    ...Object.keys(receiptRollingProducts),
+    ...Object.keys(receiptWeeklyProducts),
+    ...Object.keys(holdRollingProducts),
+    ...Object.keys(holdWeeklyProducts),
   ]);
 
   // Receipts-based weekly window (the legitimate path for anonymous identities and the
@@ -354,6 +483,7 @@ export async function readMeterSnapshotForIdentity({
     receipts: weeklyUsage.receipts,
     limit: weeklyLimit,
     remaining: remainingUnits(weeklyLimit, weeklyUsage.weightedUnits),
+    source: "central_meter_receipts",
     startedAt: weeklyWindow.startedAt,
     resetAt: weeklyWindow.resetAt,
   };
@@ -369,16 +499,23 @@ export async function readMeterSnapshotForIdentity({
       receipts: rollingUsage.receipts,
       limit: rollingLimit,
       remaining: remainingUnits(rollingLimit, rollingUsage.weightedUnits),
+      source: useWalletWeekly ? "wallet_unit_ledger" : "central_meter_receipts",
       startedAt: rollingStartedAtIso,
       resetAt: nowIso,
     },
-    weekly: useWalletWeekly ? walletToWeeklyWindow(wallet) : receiptsWeekly,
+    weekly: walletWeekly || receiptsWeekly,
     products: Object.fromEntries(
       [...productIds].map((productId) => [
         productId,
         {
-          rolling: rollingProducts[productId] || { used: 0, receipts: 0 },
-          weekly: weeklyProducts[productId] || { used: 0, receipts: 0 },
+          rolling: chooseProductWindow(
+            holdRollingProducts[productId],
+            receiptRollingProducts[productId]
+          ),
+          weekly: chooseProductWindow(
+            holdWeeklyProducts[productId],
+            receiptWeeklyProducts[productId]
+          ),
         },
       ])
     ),

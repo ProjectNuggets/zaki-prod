@@ -248,6 +248,44 @@ describe("platform usage summary", () => {
     );
   });
 
+  it("preserves wallet-ledger provenance when the weekly meter is wallet-backed", async () => {
+    const summary = await buildPlatformUsageSummary({
+      zakiUser: { id: 42 },
+      platform: buildPlatform(),
+      meterSnapshot: {
+        weekly: {
+          source: "wallet_unit_ledger",
+          period: "entitlement_week",
+          resetPolicy: "fixed_7_day_no_rollover",
+          rollover: false,
+          limit: 500,
+          used: 20,
+          remaining: 480,
+          startedAt: "2026-06-01T00:00:00.000Z",
+          resetAt: "2026-06-08T00:00:00.000Z",
+        },
+      },
+      resolveQuotaForSurface: jest.fn(async (surface) => ({
+        success: true,
+        surface,
+        bucket: surface,
+        period: "week",
+        limit: 10,
+        used: 1,
+        remaining: 9,
+      })),
+    });
+
+    expect(summary.allowance.ledgerMode).toBe("wallet_unit_ledger");
+    expect(summary.allowance.weekly).toEqual(
+      expect.objectContaining({
+        source: "wallet_unit_ledger",
+        used: 20,
+        remaining: 480,
+      })
+    );
+  });
+
   it("requires canonical user and platform context", async () => {
     await expect(
       buildPlatformUsageSummary({

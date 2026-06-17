@@ -103,11 +103,120 @@ describe("readMeterSnapshotForIdentity wallet override", () => {
         limit: 100,
         used: 100,
         remaining: 0,
+        source: "wallet_unit_ledger",
         pendingFirstUse: false,
         anchorAt: "2026-06-01T00:00:00.000Z",
         resetAt: "2026-06-08T00:00:00.000Z",
       })
     );
+  });
+
+  it("sources rolling and product windows from wallet holds when a wallet is present", async () => {
+    const dbGet = jest
+      .fn()
+      .mockResolvedValueOnce({ anchor_at: "2026-05-20T00:00:00.000Z" })
+      .mockResolvedValueOnce({ weighted_units: 4, receipts: 2 });
+    const dbAll = jest
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { product_id: "agent", weighted_units: 3, receipts: 1 },
+        { product_id: "spaces", weighted_units: 1, receipts: 1 },
+      ])
+      .mockResolvedValueOnce([
+        { product_id: "agent", weighted_units: 5, receipts: 2 },
+        { product_id: "spaces", weighted_units: 8, receipts: 3 },
+      ]);
+
+    const snapshot = await readMeterSnapshotForIdentity({
+      dbGet,
+      dbAll,
+      identity: { type: "user", tenantId: "tenant-a", userId: 42 },
+      platform: {
+        plan: { id: "pro", label: "Pro" },
+        usage: {
+          burstWindowHours: 5,
+          rollingAllowanceUnits: 20,
+          weeklyAllowanceUnits: 100,
+        },
+      },
+      wallet: {
+        plan_id: "pro",
+        weekly_allowance_units: 100,
+        weekly_used_units: 13,
+        weekly_anchor_at: "2026-06-01T00:00:00.000Z",
+        weekly_reset_at: "2026-06-08T00:00:00.000Z",
+        topup_units: 0,
+      },
+      nowDate: new Date("2026-06-03T10:00:00.000Z"),
+    });
+
+    expect(snapshot.rolling).toEqual(
+      expect.objectContaining({
+        used: 4,
+        receipts: 2,
+        remaining: 16,
+        source: "wallet_unit_ledger",
+      })
+    );
+    expect(snapshot.products).toEqual({
+      agent: {
+        rolling: { used: 3, receipts: 1 },
+        weekly: { used: 5, receipts: 2 },
+      },
+      spaces: {
+        rolling: { used: 1, receipts: 1 },
+        weekly: { used: 8, receipts: 3 },
+      },
+    });
+    expect(dbAll.mock.calls[3][1]).toEqual([
+      "tenant-a",
+      42,
+      "2026-06-01T00:00:00.000Z",
+      "2026-06-03T10:00:00.000Z",
+    ]);
+  });
+
+  it("does not let zero-unit hold rows hide receipt-backed product usage", async () => {
+    const dbGet = jest
+      .fn()
+      .mockResolvedValueOnce({ anchor_at: "2026-05-20T00:00:00.000Z" })
+      .mockResolvedValueOnce({ weighted_units: 0, receipts: 0 });
+    const dbAll = jest
+      .fn()
+      .mockResolvedValueOnce([{ product_id: "agent", weighted_units: 9, receipts: 1 }])
+      .mockResolvedValueOnce([{ product_id: "agent", weighted_units: 9, receipts: 1 }])
+      .mockResolvedValueOnce([{ product_id: "agent", weighted_units: 0, receipts: 1 }])
+      .mockResolvedValueOnce([{ product_id: "agent", weighted_units: 0, receipts: 1 }]);
+
+    const snapshot = await readMeterSnapshotForIdentity({
+      dbGet,
+      dbAll,
+      identity: { type: "user", tenantId: "tenant-a", userId: 42 },
+      platform: {
+        plan: { id: "pro", label: "Pro" },
+        usage: {
+          burstWindowHours: 5,
+          rollingAllowanceUnits: 20,
+          weeklyAllowanceUnits: 100,
+        },
+      },
+      wallet: {
+        plan_id: "pro",
+        weekly_allowance_units: 100,
+        weekly_used_units: 9,
+        weekly_anchor_at: "2026-06-01T00:00:00.000Z",
+        weekly_reset_at: "2026-06-08T00:00:00.000Z",
+        topup_units: 0,
+      },
+      nowDate: new Date("2026-06-03T10:00:00.000Z"),
+    });
+
+    expect(snapshot.products.agent).toEqual({
+      rolling: { used: 9, receipts: 1 },
+      weekly: { used: 9, receipts: 1 },
+    });
   });
 
   it("falls back to the receipts-based weekly window when there is no wallet", async () => {

@@ -2040,6 +2040,7 @@ export function SettingsPage() {
                           t("settingsModal.usage.pending");
                         const resetLabel = formatUsageReset(meterProduct?.weekly?.resetAt);
                         const weekly = meterProduct?.weekly ?? null;
+                        const hasProductLimit = typeof weekly?.limit === "number";
                         return (
                           <div key={product.productId} className="zaki-settings-v2__usage-row">
                             <div>
@@ -2049,13 +2050,15 @@ export function SettingsPage() {
                             </div>
                             <div className="zaki-settings-v2__usage-row-meter">
                               <span>{summaryLabel}</span>
-                              <div
-                                className="zaki-settings-v2__meter-track"
-                                style={getMeterBarStyle(weekly?.used, weekly?.limit)}
-                                aria-hidden="true"
-                              >
-                                <span />
-                              </div>
+                              {hasProductLimit ? (
+                                <div
+                                  className="zaki-settings-v2__meter-track"
+                                  style={getMeterBarStyle(weekly?.used, weekly?.limit)}
+                                  aria-hidden="true"
+                                >
+                                  <span />
+                                </div>
+                              ) : null}
                             </div>
                             <small>
                               {resetLabel
@@ -2068,6 +2071,7 @@ export function SettingsPage() {
                     : legacyUsageProducts.map((product) => {
                         const quota = product?.quota;
                         const resetLabel = formatUsageReset(quota?.resetAt);
+                        const hasProductLimit = typeof quota?.limit === "number";
                         return (
                           <div key={product?.productId} className="zaki-settings-v2__usage-row">
                             <div>
@@ -2077,13 +2081,15 @@ export function SettingsPage() {
                             </div>
                             <div className="zaki-settings-v2__usage-row-meter">
                               <span>{getQuotaSummaryLabel(t, quota)}</span>
-                              <div
-                                className="zaki-settings-v2__meter-track"
-                                style={getMeterBarStyle(quota?.used, quota?.limit)}
-                                aria-hidden="true"
-                              >
-                                <span />
-                              </div>
+                              {hasProductLimit ? (
+                                <div
+                                  className="zaki-settings-v2__meter-track"
+                                  style={getMeterBarStyle(quota?.used, quota?.limit)}
+                                  aria-hidden="true"
+                                >
+                                  <span />
+                                </div>
+                              ) : null}
                             </div>
                             <small>
                               {resetLabel

@@ -1465,6 +1465,7 @@ export type MeterWindowSnapshot = {
   recurringRemaining?: number | null;
   topupUnits?: number | null;
   remaining?: number | null;
+  source?: "wallet_unit_ledger" | "central_meter_receipts" | string;
   startedAt?: string | null;
   resetAt?: string | null;
 };
@@ -1538,7 +1539,7 @@ export type PlatformUsageSummary = {
   };
   allowance?: {
     model?: "shared_weekly_allowance" | string;
-    ledgerMode?: "legacy_surface_counters" | "central_meter_receipts" | string;
+    ledgerMode?: "legacy_surface_counters" | "central_meter_receipts" | "wallet_unit_ledger" | string;
     weekly?: {
       configured?: boolean;
       limit?: number | null;
@@ -1555,7 +1556,7 @@ export type PlatformUsageSummary = {
       resetPolicy?: string | null;
       rollover?: boolean | null;
       unusedUnitsExpireAt?: string | null;
-      source?: string;
+      source?: "wallet_unit_ledger" | "central_meter_receipts" | string;
     };
     burst?: {
       windowHours?: number;

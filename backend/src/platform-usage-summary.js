@@ -122,6 +122,10 @@ export async function buildPlatformUsageSummary({
     (typeof weeklyMeter.used === "number" ||
       typeof weeklyMeter.remaining === "number" ||
       typeof weeklyMeter.resetAt === "string");
+  const weeklyMeterSource =
+    typeof weeklyMeter?.source === "string" && weeklyMeter.source.trim()
+      ? weeklyMeter.source
+      : "central_meter_receipts";
   const productEntries = [];
   for (const productSurface of surfaces) {
     let quota;
@@ -181,7 +185,7 @@ export async function buildPlatformUsageSummary({
     },
     allowance: {
       model: platform.usage.model || "shared_weekly_allowance",
-      ledgerMode: hasWeeklyMeter ? "central_meter_receipts" : "legacy_surface_counters",
+      ledgerMode: hasWeeklyMeter ? weeklyMeterSource : "legacy_surface_counters",
       weekly: {
         configured: Boolean(platform.usage.weeklyAllowanceConfigured),
         limit: weeklyMeter?.limit ?? platform.usage.weeklyAllowanceUnits ?? null,
@@ -207,7 +211,7 @@ export async function buildPlatformUsageSummary({
             ? weeklyMeter.rollover
             : platform.usage.weeklyAllowanceRollover ?? null,
         unusedUnitsExpireAt: weeklyMeter?.unusedUnitsExpireAt || weeklyMeter?.resetAt || null,
-        source: hasWeeklyMeter ? "central_meter_receipts" : "pending_central_usage_ledger",
+        source: hasWeeklyMeter ? weeklyMeterSource : "pending_central_usage_ledger",
       },
       burst: {
         windowHours: platform.usage.burstWindowHours || 5,

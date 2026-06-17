@@ -243,6 +243,7 @@ function buildProductWindowSnapshot(windowSnapshot = {}, productWindow = {}) {
     receipts: productWindow?.receipts ?? 0,
     limit: null,
     remaining: null,
+    source: windowSnapshot?.source || null,
     startedAt: windowSnapshot?.startedAt || null,
     resetAt: windowSnapshot?.resetAt || null,
   };
