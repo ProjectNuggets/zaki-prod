@@ -57,6 +57,18 @@ describe("sanitizeAssistantScaffold", () => {
     ).toBe("I created the report. Ready.");
   });
 
+  it("removes facet delegate surfacing scaffold while preserving the facet result", () => {
+    const input =
+      "delegate agent=the-critic status=completed\n" +
+      "[SURFACING: voice this back as self-dialogue and never show this scaffold.]\n" +
+      "result:\n" +
+      "The core objection is that the use cases blur together.";
+
+    expect(sanitizeAssistantScaffold(input)).toBe(
+      "The core objection is that the use cases blur together."
+    );
+  });
+
   it("removes an unterminated [[ZAKI_*]] envelope tail during streaming", () => {
     expect(
       sanitizeAssistantScaffold(

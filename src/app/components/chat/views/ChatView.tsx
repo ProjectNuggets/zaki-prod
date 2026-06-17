@@ -18,7 +18,7 @@ import {
   NullalisTurnTimeline,
   type TimelineRevealPhase,
 } from "../NullalisTurnTimeline";
-import { QuickReplyChips } from "../QuickReplyChips";
+import { QuickReplyChips, type QuickReplyItem } from "../QuickReplyChips";
 import { buildAgentInspectorPanelModel } from "../AgentInspectorPanelModel";
 import { ChatAgentSteps } from "../ChatAgentSteps";
 import { GeneratedFileChip } from "../GeneratedFileChip";
@@ -93,6 +93,108 @@ function isWebSource(item: { label: string; meta: string | null; summary: string
   );
 }
 
+function isGenericArtifactLabel(label: string) {
+  const normalized = label.trim().toLowerCase();
+  return (
+    !normalized ||
+    /^(artifact|artifact_event|produce_document|create_document|write_file|save_file|export|generated file|generated output)$/.test(
+      normalized
+    ) ||
+    /(?:^|\/)api\/agent\/artifacts\//i.test(label)
+  );
+}
+
+function artifactDisplayLabel(item: { label: string; files: string[] }) {
+  const label = String(item.label || "").trim();
+  if (label && !isGenericArtifactLabel(label)) return label;
+  const file = item.files.find((candidate) => !isGenericArtifactLabel(String(candidate || "")));
+  return file || (label && !isGenericArtifactLabel(label) ? label : "Artifact");
+}
+
+const FACET_AGENT_RE = /\bthe-(critic|bully|comedian)\b/i;
+const FACETABLE_REPLY_RE =
+  /\b(strategy|marketing|positioning|pricing|plan|proposal|roadmap|critique|review|decision|recommend|should|risk|moat|gtm|go[-\s]?to[-\s]?market)\b/i;
+
+function hasFacetDelegate(entries: NullalisTranscriptEntry[]) {
+  return entries.some((entry) =>
+    FACET_AGENT_RE.test(
+      [
+        entry.tool,
+        entry.text,
+        entry.inputPreview,
+        entry.outputPreview,
+        entry.resultSummary,
+        entry.activityLabel,
+      ]
+        .filter(Boolean)
+        .join(" ")
+    )
+  );
+}
+
+function hasFacetLanguage(content: string) {
+  return /\b(inner critic|critic says|bully in me|comedian in me|sideways take|blunt take)\b/i.test(
+    content
+  );
+}
+
+function buildQuickReplyItems({
+  botMode,
+  message,
+  entries,
+}: {
+  botMode: boolean;
+  message: Message;
+  entries: NullalisTranscriptEntry[];
+}): QuickReplyItem[] | undefined {
+  if (!botMode || message.role !== "assistant") return undefined;
+  const content = String(message.content || "").trim();
+  if (!content) return undefined;
+
+  const alreadyUsedFacet = hasFacetDelegate(entries) || hasFacetLanguage(content);
+  const answerAware: QuickReplyItem[] = [
+    {
+      id: "tighten",
+      label: "Tighten this",
+      prefill: "Tighten your last answer into the clearest, shortest version.",
+      icon: "tighten",
+    },
+    {
+      id: "plan",
+      label: "Turn into plan",
+      prefill: "Turn your last answer into a concrete step-by-step plan.",
+      icon: "plan",
+    },
+    {
+      id: "remember",
+      label: "Save to brain",
+      prefill: "Save the key takeaway from this conversation to my brain.",
+      icon: "brain",
+    },
+  ];
+  if (alreadyUsedFacet || !FACETABLE_REPLY_RE.test(content)) return answerAware;
+  return [
+    {
+      id: "critic",
+      label: "Ask the critic",
+      prefill: "Give me the critic's take on your last answer.",
+      icon: "critic",
+    },
+    {
+      id: "blunt",
+      label: "Get the blunt take",
+      prefill: "Give me the bully's blunt take on your last answer.",
+      icon: "blunt",
+    },
+    {
+      id: "sideways",
+      label: "Try the sideways take",
+      prefill: "Give me the comedian's sideways take on your last answer.",
+      icon: "sideways",
+    },
+  ];
+}
+
 function AgentReplyEvidence({
   entries,
   isStreaming = false,
@@ -104,10 +206,10 @@ function AgentReplyEvidence({
   const model = buildAgentInspectorPanelModel(entries);
   const primaryArtifact = model.artifacts[0] ?? null;
   const touched = [
-    ...model.artifacts.map((event) => ({
+    ...model.artifacts.filter((event) => event.id !== primaryArtifact?.id).map((event) => ({
       id: `artifact:${event.id}`,
       kind: "artifact" as const,
-      label: event.files[0] || event.label || "Artifact",
+      label: artifactDisplayLabel(event),
       meta: event.meta || "artifact",
       summary: event.summary,
     })),
@@ -131,7 +233,7 @@ function AgentReplyEvidence({
 
   if (!primaryArtifact && visibleTouched.length === 0) return null;
 
-  const artifactTitle = primaryArtifact?.files[0] || primaryArtifact?.label || "Artifact";
+  const artifactTitle = primaryArtifact ? artifactDisplayLabel(primaryArtifact) : "Artifact";
   const artifactMeta =
     primaryArtifact?.meta || (isStreaming ? "live capture" : "captured output");
 
@@ -445,6 +547,11 @@ export function ChatView({
           msg.role === "assistant"
             ? replayEntries ?? (isLast ? nullalisTranscriptEntries : [])
             : [];
+        const quickReplyItems = buildQuickReplyItems({
+          botMode,
+          message: msg,
+          entries: evidenceEntries,
+        });
 
         return (
           <div key={msg.id} className="flex flex-col gap-2">
@@ -479,7 +586,12 @@ export function ChatView({
               ? renderTimelineArtifacts({ phase: "done" })
               : null}
             {isLast && msg.role === "assistant" && !isStreaming && onQuickReply ? (
-              <QuickReplyChips onPick={onQuickReply} isRtl={isRtl} className="ms-12" />
+              <QuickReplyChips
+                onPick={onQuickReply}
+                isRtl={isRtl}
+                className="ms-12"
+                items={quickReplyItems}
+              />
             ) : null}
           </div>
         );

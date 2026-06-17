@@ -16,30 +16,74 @@
 //
 // i18n: zakiControls.quickReplies.{deeper,angle,remember}.{label,prefill}.
 
-import { ArrowRight, RotateCcw, Brain } from "lucide-react";
+import {
+  ArrowRight,
+  Brain,
+  FileCheck2,
+  MessageSquareQuote,
+  RotateCcw,
+  Scissors,
+  Smile,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 export type QuickReplyKind = "deeper" | "angle" | "remember";
+export type QuickReplyIcon =
+  | "arrow"
+  | "brain"
+  | "critic"
+  | "blunt"
+  | "plan"
+  | "tighten"
+  | "sideways";
+export type QuickReplyItem = {
+  id: string;
+  label: string;
+  prefill: string;
+  icon?: QuickReplyIcon;
+};
 
 const KINDS: readonly QuickReplyKind[] = ["deeper", "angle", "remember"];
 
-const ICONS: Record<QuickReplyKind, React.ComponentType<{ className?: string }>> = {
-  deeper: ArrowRight,
-  angle: RotateCcw,
-  remember: Brain,
+const ICONS: Record<QuickReplyIcon, React.ComponentType<{ className?: string }>> = {
+  arrow: ArrowRight,
+  brain: Brain,
+  critic: MessageSquareQuote,
+  blunt: RotateCcw,
+  plan: FileCheck2,
+  tighten: Scissors,
+  sideways: Smile,
 };
+
+const DEFAULT_ICONS: Record<QuickReplyKind, QuickReplyIcon> = {
+  deeper: "arrow",
+  angle: "blunt",
+  remember: "brain",
+};
+
+function fallbackItems(t: ReturnType<typeof useTranslation>["t"]): QuickReplyItem[] {
+  return KINDS.map((kind) => ({
+    id: kind,
+    label: t(`zakiControls.quickReplies.${kind}.label`),
+    prefill: t(`zakiControls.quickReplies.${kind}.prefill`),
+    icon: DEFAULT_ICONS[kind],
+  }));
+}
 
 export function QuickReplyChips({
   onPick,
   isRtl = false,
   className,
+  items,
 }: {
   onPick: (prefill: string) => void;
   isRtl?: boolean;
   className?: string;
+  items?: QuickReplyItem[];
 }) {
   const { t } = useTranslation();
+  const visibleItems = items && items.length > 0 ? items : fallbackItems(t);
   return (
     <div
       role="group"
@@ -51,23 +95,21 @@ export function QuickReplyChips({
       )}
       data-testid="quick-reply-chips"
     >
-      {KINDS.map((kind) => {
-        const Icon = ICONS[kind];
-        const label = t(`zakiControls.quickReplies.${kind}.label`);
-        const prefill = t(`zakiControls.quickReplies.${kind}.prefill`);
+      {visibleItems.map((item) => {
+        const Icon = ICONS[item.icon || "arrow"];
         return (
           <button
-            key={kind}
+            key={item.id}
             type="button"
-            onClick={() => onPick(prefill)}
-            data-testid={`quick-reply-${kind}`}
+            onClick={() => onPick(item.prefill)}
+            data-testid={`quick-reply-${item.id}`}
             className={cn(
               "zaki-quick-reply v2-btn v2-btn--sm inline-flex min-h-0 items-center gap-1.5 px-2.5 py-1 text-[11px] normal-case tracking-[0.02em]",
               isRtl && "flex-row-reverse"
             )}
           >
             <Icon className="size-3.5 shrink-0" aria-hidden />
-            <span>{label}</span>
+            <span>{item.label}</span>
           </button>
         );
       })}

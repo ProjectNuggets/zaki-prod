@@ -1964,20 +1964,38 @@ describe("ChatArea Component", () => {
     navState.threadId = "main";
 
     await renderChatAreaAndWaitForEffects();
+    const returnFocusTarget = document.createElement("button");
+    returnFocusTarget.type = "button";
+    returnFocusTarget.textContent = "Open mobile inspector";
+    document.body.appendChild(returnFocusTarget);
+    returnFocusTarget.focus();
 
     expect(screen.queryByTestId("agent-mobile-inspector")).not.toBeInTheDocument();
     act(() => {
       window.dispatchEvent(new CustomEvent("zaki:open-agent-mobile-inspector"));
     });
 
+    const inspector = await screen.findByTestId("agent-mobile-inspector");
+
+    const closeButton = within(inspector).getByRole("button", {
+      name: "agent.mobilePanel.closeAria",
+    });
     await waitFor(() => {
-      expect(screen.getByTestId("agent-mobile-inspector")).toBeInTheDocument();
+      expect(closeButton).toHaveFocus();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "agent.mobilePanel.closeAria" }));
+    fireEvent.keyDown(closeButton, { key: "Tab", shiftKey: true });
+    expect(inspector.contains(document.activeElement)).toBe(true);
+    expect(returnFocusTarget).not.toHaveFocus();
+
+    fireEvent.keyDown(inspector, { key: "Escape" });
     await waitFor(() => {
       expect(screen.queryByTestId("agent-mobile-inspector")).not.toBeInTheDocument();
     });
+    await waitFor(() => {
+      expect(returnFocusTarget).toHaveFocus();
+    });
+    returnFocusTarget.remove();
   });
 
   it("keeps backend-backed browser controls in the Agent inspector", async () => {

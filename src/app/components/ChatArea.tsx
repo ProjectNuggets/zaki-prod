@@ -170,6 +170,8 @@ export { resolveContextGaugePercent };
 const POWER_USER_PENDING_TAB_KEY = "zaki:pendingPowerUserTab";
 const AGENT_INSPECTOR_OPEN_KEY = "zaki:agentInspectorOpen";
 const AGENT_FOCUS_MODE_KEY = "zaki:agentFocusMode";
+const MOBILE_INSPECTOR_FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 function normalizeAgentInspectorEventTab(value: unknown): AgentInspectorTab {
   if (value === "browser") return "browser";
@@ -3078,6 +3080,9 @@ export function ChatArea() {
   const [agentInspectorTabRequest, setAgentInspectorTabRequest] =
     useState<AgentInspectorTabRequest | null>(null);
   const [agentMobileInspectorOpen, setAgentMobileInspectorOpen] = useState(false);
+  const agentMobileInspectorRef = useRef<HTMLDivElement | null>(null);
+  const agentMobileInspectorCloseRef = useRef<HTMLButtonElement | null>(null);
+  const agentMobileInspectorReturnFocusRef = useRef<HTMLElement | null>(null);
   const [agentFocusMode, setAgentFocusMode] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem(AGENT_FOCUS_MODE_KEY) === "true";
@@ -8044,6 +8049,9 @@ export function ChatArea() {
   useEffect(() => {
     const handleOpenMobileInspector = () => {
       if (!isAgentSurface) return;
+      if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+        agentMobileInspectorReturnFocusRef.current = document.activeElement;
+      }
       setAgentMobileInspectorOpen(true);
     };
     window.addEventListener("zaki:open-agent-mobile-inspector", handleOpenMobileInspector);
@@ -8112,6 +8120,108 @@ export function ChatArea() {
     return () => {
       document.body.classList.remove("zaki-agent-mobile-inspector-active");
     };
+  }, [agentFocusMode, agentMobileInspectorOpen, isAgentSurface]);
+
+  useEffect(() => {
+    const isOpen = isAgentSurface && agentMobileInspectorOpen && !agentFocusMode;
+    if (!isOpen || typeof document === "undefined" || typeof window === "undefined") {
+      return;
+    }
+
+    const dialog = agentMobileInspectorRef.current;
+    if (!dialog) return;
+
+    if (
+      !agentMobileInspectorReturnFocusRef.current &&
+      document.activeElement instanceof HTMLElement &&
+      !dialog.contains(document.activeElement)
+    ) {
+      agentMobileInspectorReturnFocusRef.current = document.activeElement;
+    }
+
+    const getFocusableElements = () =>
+      Array.from(
+        dialog.querySelectorAll<HTMLElement>(MOBILE_INSPECTOR_FOCUSABLE_SELECTOR)
+      ).filter(
+        (element) =>
+          element.tabIndex !== -1 &&
+          !element.hasAttribute("disabled") &&
+          element.getAttribute("aria-hidden") !== "true"
+      );
+
+    const focusInitialTarget = () => {
+      const initialTarget =
+        agentMobileInspectorCloseRef.current ?? getFocusableElements()[0] ?? dialog;
+      initialTarget.focus({ preventScroll: true });
+    };
+    focusInitialTarget();
+    const focusFrame = window.requestAnimationFrame(focusInitialTarget);
+
+    const handleDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        setAgentMobileInspectorOpen(false);
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const focusableElements = getFocusableElements();
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        return;
+      }
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+      if (!firstElement || !lastElement) {
+        event.preventDefault();
+        return;
+      }
+      const activeElement = document.activeElement;
+
+      if (!activeElement || !dialog.contains(activeElement)) {
+        event.preventDefault();
+        firstElement.focus({ preventScroll: true });
+        return;
+      }
+
+      if (event.shiftKey && activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus({ preventScroll: true });
+        return;
+      }
+
+      if (!event.shiftKey && activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus({ preventScroll: true });
+      }
+    };
+
+    dialog.addEventListener("keydown", handleDialogKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      dialog.removeEventListener("keydown", handleDialogKeyDown);
+    };
+  }, [agentFocusMode, agentMobileInspectorOpen, isAgentSurface]);
+
+  useEffect(() => {
+    const isOpen = isAgentSurface && agentMobileInspectorOpen && !agentFocusMode;
+    if (isOpen || typeof document === "undefined" || typeof window === "undefined") {
+      return;
+    }
+
+    const returnTarget = agentMobileInspectorReturnFocusRef.current;
+    agentMobileInspectorReturnFocusRef.current = null;
+    if (!returnTarget || !document.contains(returnTarget)) return;
+
+    returnTarget.focus({ preventScroll: true });
+    const focusFrame = window.requestAnimationFrame(() => {
+      if (document.activeElement === returnTarget) return;
+      returnTarget.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(focusFrame);
   }, [agentFocusMode, agentMobileInspectorOpen, isAgentSurface]);
 
   useEffect(() => {
@@ -9239,6 +9349,7 @@ export function ChatArea() {
 
       {isAgentSurface && agentMobileInspectorOpen && !agentFocusMode ? (
         <div
+          ref={agentMobileInspectorRef}
           className="zaki-agent-mobile-inspector"
           role="dialog"
           aria-modal="true"
@@ -9252,6 +9363,7 @@ export function ChatArea() {
             aria-label={t("agent.mobilePanel.closeBackdropAria", {
               defaultValue: "Close agent panel",
             })}
+            tabIndex={-1}
           />
           <section className="zaki-agent-mobile-inspector__sheet">
             <div className="zaki-agent-mobile-inspector__handle" aria-hidden />
@@ -9261,6 +9373,7 @@ export function ChatArea() {
                 <strong>{t("agent.mobilePanel.title", { defaultValue: "Inspector" })}</strong>
               </div>
               <button
+                ref={agentMobileInspectorCloseRef}
                 type="button"
                 onClick={() => setAgentMobileInspectorOpen(false)}
                 aria-label={t("agent.mobilePanel.closeAria", {
