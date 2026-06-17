@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
 import { useBrainCompose } from "@/queries";
 import type { BrainGraphNode } from "@/lib/api";
+import { useOnlineStatus } from "@/hooks";
 
 interface Props {
   userId: string;
@@ -22,6 +23,7 @@ export function BrainComposeModal({
 }: Props) {
   const { t } = useTranslation();
   const compose = useBrainCompose(userId);
+  const isOnline = useOnlineStatus();
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [title, setTitle] = useState("");
@@ -62,6 +64,12 @@ export function BrainComposeModal({
 
   async function handleSubmit() {
     setError(null);
+    if (!isOnline) {
+      setError(t("brain.compose.offline", {
+        defaultValue: "You are offline. Keep this draft open and submit when the connection returns.",
+      }));
+      return;
+    }
     try {
       await compose.mutateAsync({
         title: title.trim(),
@@ -83,6 +91,7 @@ export function BrainComposeModal({
     title.trim().length > 0 &&
     content.trim().length > 0 &&
     selectedNodes.length >= 2 &&
+    isOnline &&
     !compose.isPending;
 
   // Audit (2026-05-07) — Compose surface relocated from full-width
@@ -163,6 +172,14 @@ export function BrainComposeModal({
             {error && (
               <div className="mt-2 text-xs text-zaki-error">{error}</div>
             )}
+            {!isOnline && !error ? (
+              <div className="mt-2 text-xs text-white/50" role="status">
+                {t("brain.compose.offline", {
+                  defaultValue:
+                    "You are offline. Keep this draft open and submit when the connection returns.",
+                })}
+              </div>
+            ) : null}
           </div>
 
           <div className="flex shrink-0 items-center justify-between gap-2 border-t border-white/10 px-4 py-3">

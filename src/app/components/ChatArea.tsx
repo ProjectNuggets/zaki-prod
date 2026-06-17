@@ -1,7 +1,6 @@
 import { BackgroundPattern } from "./BackgroundPattern";
 import { InputArea, type InputAreaHandle, type InputAreaSendOptions } from "./InputArea";
 import { AgentSessionRail } from "@/app/components/agent/AgentSessionRail";
-import { SandboxBadge } from "@/app/components/agent/SandboxBadge";
 import { Share2, MoreVertical, Download, Brain, ChevronDown } from "lucide-react";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -9,6 +8,7 @@ import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { useOnlineStatus } from "@/hooks";
 import {
   autoTitleThread,
   autoTitleAgentSession,
@@ -136,13 +136,9 @@ import { useZakiSessions, zakiSessionKeys } from "@/queries/useZakiSessions";
 import { buildZakiSessionRepairTitle, prepareAutoTitleExchange } from "@/lib/sessionAutoTitle";
 import { useMessageReactions } from "@/queries/useMessageReactions";
 import { MemoryCaptureToast } from "./memory/MemoryCaptureToast";
-import { ZakiExperimentalNotice } from "./ZakiExperimentalNotice";
 import { PaywallCard, classifyBillingDenial, type PaywallState } from "./PaywallCard";
 import { MemoryImportSheet } from "./onboarding/MemoryImportSheet";
-import { OnboardingTour } from "./onboarding/OnboardingTour";
 import { AgentArtifactCanvas } from "./agent/AgentArtifactCanvas";
-import { useOnboardingProgress } from "@/queries/useOnboardingProgress";
-import { useBrainGraph } from "@/queries/useBrainGraph";
 import {
   createZakiBotThread,
   isZakiBotSpaceId,
@@ -175,6 +171,8 @@ export { resolveContextGaugePercent };
 const POWER_USER_PENDING_TAB_KEY = "zaki:pendingPowerUserTab";
 const AGENT_INSPECTOR_OPEN_KEY = "zaki:agentInspectorOpen";
 const AGENT_FOCUS_MODE_KEY = "zaki:agentFocusMode";
+const MOBILE_INSPECTOR_FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 function normalizeAgentInspectorEventTab(value: unknown): AgentInspectorTab {
   if (value === "browser") return "browser";
@@ -2901,6 +2899,7 @@ export function ChatArea() {
   const queryClient = useQueryClient();
   const { i18n, t } = useTranslation();
   const navigate = useNavigate();
+  const isOnline = useOnlineStatus();
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
   const chatCopy = {
     spaceFallback: isRtl ? "مساحة" : "Space",
@@ -3082,6 +3081,9 @@ export function ChatArea() {
   const [agentInspectorTabRequest, setAgentInspectorTabRequest] =
     useState<AgentInspectorTabRequest | null>(null);
   const [agentMobileInspectorOpen, setAgentMobileInspectorOpen] = useState(false);
+  const agentMobileInspectorRef = useRef<HTMLDivElement | null>(null);
+  const agentMobileInspectorCloseRef = useRef<HTMLButtonElement | null>(null);
+  const agentMobileInspectorReturnFocusRef = useRef<HTMLElement | null>(null);
   const [agentFocusMode, setAgentFocusMode] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem(AGENT_FOCUS_MODE_KEY) === "true";
@@ -3207,38 +3209,11 @@ export function ChatArea() {
     return String(authUser?.username || fallbackEmail).trim().toLowerCase();
   }, [authUser]);
   const isAuthReady = !authLoading && Boolean(authUserId);
-  // Onboarding stage progress lives per-user in localStorage; the hook
-  // resolves the next pending stage for us. The old welcome hero has
-  // been retired so the dashboard can stay a commercial command center.
-  const { progress: onboardingProgress, setStage: setOnboardingStage, reset: resetOnboarding } =
-    useOnboardingProgress(authUserId);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handler = () => resetOnboarding();
-    window.addEventListener("zaki:reset-onboarding", handler);
-    return () => window.removeEventListener("zaki:reset-onboarding", handler);
-  }, [resetOnboarding]);
-  // Brain memory count drives the brain_panel stage gate — we only
-  // surface "open your brain" once ZAKI has actually saved a few facts
-  // worth showing.
-  const onboardingBrainGraph = useBrainGraph(authUserId || "", undefined, {
-    enabled: showZakiHome,
-  });
-  const onboardingBrainCount =
-    onboardingBrainGraph.data?.total_nodes_in_corpus ?? 0;
   // Billing state — read here so the paywall card can surface plan/usage data
   // without an extra fetch when the error handler fires.
   const { data: entitlementsResult } = useEntitlements();
   const { data: meterResult } = useMeterStatus();
   const [memoryImportOpen, setMemoryImportOpen] = useState(false);
-  // Legacy holdover: ZakiExperimentalNotice still keys off this flag.
-  // The welcome hero is retired, so it remains complete for the bot surface.
-  const [zakiBootstrapCompleted, setZakiBootstrapCompleted] = useState(true);
-  useEffect(() => {
-    if (!authUserId || onboardingProgress.welcome !== "pending") return;
-    setOnboardingStage("welcome", "done");
-    setZakiBootstrapCompleted(true);
-  }, [authUserId, onboardingProgress.welcome, setOnboardingStage]);
   const [activationProgress, setActivationProgress] = useState<ActivationProgress>({
     firstMessageSent: false,
     firstMemorySaved: false,
@@ -3547,16 +3522,8 @@ export function ChatArea() {
       cancelled = true;
     };
   }, [isZakiBotActiveSpace, setZakiSandboxState]);
-  const headerSpaceName = activeSpace?.title || chatCopy.spaceFallback;
   const headerThreadName = activeThread?.label || chatCopy.newChat;
 
-  useEffect(() => {
-    if (!isZakiBotActiveSpace || !authUserId) {
-      setZakiBootstrapCompleted(true);
-      return;
-    }
-    setZakiBootstrapCompleted(true);
-  }, [authUserId, isZakiBotActiveSpace]);
   const zakiBotQuotaInfo =
     isZakiBotActiveSpace &&
     freeDailyQuota &&
@@ -3592,6 +3559,7 @@ export function ChatArea() {
   const isZakiBotSendLocked = Boolean(
     zakiBotQuotaInfo && zakiBotQuotaInfo.remaining <= 0
   );
+  const isComposerSendLocked = !isOnline || isZakiBotSendLocked;
   const latestAssistantMessageContent = useMemo(() => {
     const latestAssistant = [...messages]
       .reverse()
@@ -7311,6 +7279,12 @@ export function ChatArea() {
       toast.error("Message is empty");
       return;
     }
+    if (!isOnline) {
+      toast.error(t("input.offlineToast", {
+        defaultValue: "You are offline. Your draft will stay here until the connection returns.",
+      }));
+      return;
+    }
     if (isStreaming) return;
     if (!authUserId && files.length > 0) {
       toast.error("Sign in to upload files to Spaces.");
@@ -7731,12 +7705,14 @@ export function ChatArea() {
     goToThread,
     hydrateActiveSessionDetail,
     isRtl,
+    isOnline,
     isStreaming,
     navigate,
     primarySpace?.id,
     queryClient,
     setSessionContextPressure,
     streamChatMessage,
+    t,
     maybeAutoTitleThread,
     updateAssistantError,
   ]);
@@ -8128,6 +8104,9 @@ export function ChatArea() {
   useEffect(() => {
     const handleOpenMobileInspector = () => {
       if (!isAgentSurface) return;
+      if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+        agentMobileInspectorReturnFocusRef.current = document.activeElement;
+      }
       setAgentMobileInspectorOpen(true);
     };
     window.addEventListener("zaki:open-agent-mobile-inspector", handleOpenMobileInspector);
@@ -8196,6 +8175,108 @@ export function ChatArea() {
     return () => {
       document.body.classList.remove("zaki-agent-mobile-inspector-active");
     };
+  }, [agentFocusMode, agentMobileInspectorOpen, isAgentSurface]);
+
+  useEffect(() => {
+    const isOpen = isAgentSurface && agentMobileInspectorOpen && !agentFocusMode;
+    if (!isOpen || typeof document === "undefined" || typeof window === "undefined") {
+      return;
+    }
+
+    const dialog = agentMobileInspectorRef.current;
+    if (!dialog) return;
+
+    if (
+      !agentMobileInspectorReturnFocusRef.current &&
+      document.activeElement instanceof HTMLElement &&
+      !dialog.contains(document.activeElement)
+    ) {
+      agentMobileInspectorReturnFocusRef.current = document.activeElement;
+    }
+
+    const getFocusableElements = () =>
+      Array.from(
+        dialog.querySelectorAll<HTMLElement>(MOBILE_INSPECTOR_FOCUSABLE_SELECTOR)
+      ).filter(
+        (element) =>
+          element.tabIndex !== -1 &&
+          !element.hasAttribute("disabled") &&
+          element.getAttribute("aria-hidden") !== "true"
+      );
+
+    const focusInitialTarget = () => {
+      const initialTarget =
+        agentMobileInspectorCloseRef.current ?? getFocusableElements()[0] ?? dialog;
+      initialTarget.focus({ preventScroll: true });
+    };
+    focusInitialTarget();
+    const focusFrame = window.requestAnimationFrame(focusInitialTarget);
+
+    const handleDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        setAgentMobileInspectorOpen(false);
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const focusableElements = getFocusableElements();
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        return;
+      }
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+      if (!firstElement || !lastElement) {
+        event.preventDefault();
+        return;
+      }
+      const activeElement = document.activeElement;
+
+      if (!activeElement || !dialog.contains(activeElement)) {
+        event.preventDefault();
+        firstElement.focus({ preventScroll: true });
+        return;
+      }
+
+      if (event.shiftKey && activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus({ preventScroll: true });
+        return;
+      }
+
+      if (!event.shiftKey && activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus({ preventScroll: true });
+      }
+    };
+
+    dialog.addEventListener("keydown", handleDialogKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      dialog.removeEventListener("keydown", handleDialogKeyDown);
+    };
+  }, [agentFocusMode, agentMobileInspectorOpen, isAgentSurface]);
+
+  useEffect(() => {
+    const isOpen = isAgentSurface && agentMobileInspectorOpen && !agentFocusMode;
+    if (isOpen || typeof document === "undefined" || typeof window === "undefined") {
+      return;
+    }
+
+    const returnTarget = agentMobileInspectorReturnFocusRef.current;
+    agentMobileInspectorReturnFocusRef.current = null;
+    if (!returnTarget || !document.contains(returnTarget)) return;
+
+    returnTarget.focus({ preventScroll: true });
+    const focusFrame = window.requestAnimationFrame(() => {
+      if (document.activeElement === returnTarget) return;
+      returnTarget.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(focusFrame);
   }, [agentFocusMode, agentMobileInspectorOpen, isAgentSurface]);
 
   useEffect(() => {
@@ -8681,6 +8762,8 @@ export function ChatArea() {
         return (
           <ZakiDashboard
             onSendExample={(example) => handleSend(example, [])}
+            onOpenMemoryImport={() => setMemoryImportOpen(true)}
+            onOpenSession={selectAgentSession}
           />
         );
       }
@@ -8795,7 +8878,7 @@ export function ChatArea() {
           // S1 — one-click follow-up. Route through the composer handle
           // (not handleSend directly) so the per-turn toggles, drafts,
           // and attachments all reset uniformly with a normal send.
-          if (isZakiBotSendLocked) return;
+          if (isComposerSendLocked) return;
           composerHandleRef.current?.submitWith(prefill);
         }}
         onOpenAgentArtifacts={
@@ -9015,28 +9098,14 @@ export function ChatArea() {
               isAgentSurface ? "zaki-agent-v2__chat" : "flex h-full flex-col"
             )}
           >
-          {/* Header / Breadcrumb */}
+          {/* Conversation actions */}
           {!isAgentSurface && !showZakiHome && !showSpacesView ? (
             <div
-              className="px-6 py-4 flex items-center gap-2"
+              className="pointer-events-none absolute right-3 top-3 z-30 flex items-center justify-end md:right-6 md:top-4"
               dir="ltr"
             >
-              <span
-                className="zaki-subheader-pill"
-                dir={isRtl ? "rtl" : "ltr"}
-                title={`${headerSpaceName} / ${headerThreadName}`}
-              >
-                {headerSpaceName}
-                <span className="text-zaki-muted">/</span>
-                {headerThreadName}
-              </span>
-              <SandboxBadge
-                active={isZakiBotActiveSpace}
-                sandbox={sandboxState}
-                className="ml-2"
-              />
               <div
-                className="zaki-agent-head-actions relative z-30 ml-auto flex items-center gap-2"
+                className="zaki-agent-head-actions pointer-events-auto relative z-30 flex items-center gap-2"
                 ref={menuRef}
               >
                 <button
@@ -9185,11 +9254,6 @@ export function ChatArea() {
               className="zaki-input-float relative z-20"
               style={{ transform: `translateY(${inputOffset}px)` }}
             >
-              {!isAgentSurface ? (
-                <ZakiExperimentalNotice
-                  active={isZakiBotActiveSpace && zakiBootstrapCompleted}
-                />
-              ) : null}
               {/* Single source of truth for ApprovalRequiredCard. The
                   timeline copy was dropped in 18328cd so the decided
                   state has one owner. Surfaces directly above the
@@ -9232,7 +9296,7 @@ export function ChatArea() {
                 // Upgrade/plan affordance belongs to the Dashboard, not the
                 // chat composer — the bar above the input was visual noise.
                 showUpgradeStrip={false}
-                sendLocked={isZakiBotSendLocked}
+                sendLocked={isComposerSendLocked}
                 zakiBotMode={isZakiBotActiveSpace}
                 zakiDefaultAutonomy={agentDefaultAutonomy}
                 zakiDefaultReasoningEffort={agentDefaultReasoningEffort}
@@ -9340,6 +9404,7 @@ export function ChatArea() {
 
       {isAgentSurface && agentMobileInspectorOpen && !agentFocusMode ? (
         <div
+          ref={agentMobileInspectorRef}
           className="zaki-agent-mobile-inspector"
           role="dialog"
           aria-modal="true"
@@ -9353,6 +9418,7 @@ export function ChatArea() {
             aria-label={t("agent.mobilePanel.closeBackdropAria", {
               defaultValue: "Close agent panel",
             })}
+            tabIndex={-1}
           />
           <section className="zaki-agent-mobile-inspector__sheet">
             <div className="zaki-agent-mobile-inspector__handle" aria-hidden />
@@ -9362,6 +9428,7 @@ export function ChatArea() {
                 <strong>{t("agent.mobilePanel.title", { defaultValue: "Inspector" })}</strong>
               </div>
               <button
+                ref={agentMobileInspectorCloseRef}
                 type="button"
                 onClick={() => setAgentMobileInspectorOpen(false)}
                 aria-label={t("agent.mobilePanel.closeAria", {
@@ -9408,30 +9475,9 @@ export function ChatArea() {
         isOpen={memoryImportOpen}
         onClose={() => setMemoryImportOpen(false)}
         onImport={async (dump) => {
-          setOnboardingStage("welcome", "done");
-          setZakiBootstrapCompleted(true);
           handleSend(dump, []);
         }}
       />
-
-      {sidebarMode === "zaki" && !showZakiHome ? (
-        <OnboardingTour
-          progress={onboardingProgress}
-          setStage={setOnboardingStage}
-          gates={{
-            // The Agent workbench is an execution surface, not a tour
-            // surface. Generic composer onboarding blocks the V2 command
-            // center and belongs in dashboard/settings onboarding instead.
-            plusMenuEligible: false,
-            compactionArmed: false,
-            // Brain panel tooltip anchors at the dashboard's brain
-            // entry. Only fire when both the anchor is in the DOM
-            // (showZakiHome === true) and the user has enough memories
-            // to make the nudge meaningful.
-            brainPanelEligible: showZakiHome && onboardingBrainCount >= 5,
-          }}
-        />
-      ) : null}
 
       <CreateSpaceModal
         isOpen={createSpaceOpen}

@@ -53,7 +53,6 @@ import {
   provisionAgent,
   setAgentSessionMode,
 } from "@/lib/api";
-import { ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY } from "./ZakiExperimentalNotice";
 import { PENDING_INTENT_KEY } from "@/lib/pendingIntent";
 import { ANONYMOUS_WORK_LEDGER_KEY } from "@/lib/anonymousWork";
 
@@ -1537,8 +1536,7 @@ describe("ChatArea Component", () => {
 
     await renderChatAreaAndWaitForEffects();
 
-    expect(screen.queryByText("zakiExperimentalNotice.title")).not.toBeInTheDocument();
-    window.sessionStorage.setItem(ZAKI_EXPERIMENTAL_NOTICE_SESSION_KEY, "1");
+    expect(screen.queryByText(/experimental/i)).not.toBeInTheDocument();
   });
 
   it("keeps signed-in users on the V2 Agent thread without the legacy bootstrap card", async () => {
@@ -1556,7 +1554,7 @@ describe("ChatArea Component", () => {
     await renderChatAreaAndWaitForEffects();
 
     expect(screen.queryByText("zakiBootstrapCard.title")).not.toBeInTheDocument();
-    expect(screen.queryByText("zakiExperimentalNotice.title")).not.toBeInTheDocument();
+    expect(screen.queryByText(/experimental/i)).not.toBeInTheDocument();
   });
 
   it("replays a matching post-auth Agent intent into the composer and focuses it", async () => {
@@ -2030,7 +2028,8 @@ describe("ChatArea Component", () => {
 
     await renderChatAreaAndWaitForEffects();
 
-    expect(screen.getByText("zakiAgent.empty.kicker")).toBeInTheDocument();
+    expect(screen.queryByText("zakiAgent.empty.kicker")).not.toBeInTheDocument();
+    expect(screen.getByTestId("zaki-composer-mode")).toBeInTheDocument();
   });
 
   it("opens the canonical Agent inspector from the global controls event", async () => {
@@ -2062,20 +2061,38 @@ describe("ChatArea Component", () => {
     navState.threadId = "main";
 
     await renderChatAreaAndWaitForEffects();
+    const returnFocusTarget = document.createElement("button");
+    returnFocusTarget.type = "button";
+    returnFocusTarget.textContent = "Open mobile inspector";
+    document.body.appendChild(returnFocusTarget);
+    returnFocusTarget.focus();
 
     expect(screen.queryByTestId("agent-mobile-inspector")).not.toBeInTheDocument();
     act(() => {
       window.dispatchEvent(new CustomEvent("zaki:open-agent-mobile-inspector"));
     });
 
+    const inspector = await screen.findByTestId("agent-mobile-inspector");
+
+    const closeButton = within(inspector).getByRole("button", {
+      name: "agent.mobilePanel.closeAria",
+    });
     await waitFor(() => {
-      expect(screen.getByTestId("agent-mobile-inspector")).toBeInTheDocument();
+      expect(closeButton).toHaveFocus();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "agent.mobilePanel.closeAria" }));
+    fireEvent.keyDown(closeButton, { key: "Tab", shiftKey: true });
+    expect(inspector.contains(document.activeElement)).toBe(true);
+    expect(returnFocusTarget).not.toHaveFocus();
+
+    fireEvent.keyDown(inspector, { key: "Escape" });
     await waitFor(() => {
       expect(screen.queryByTestId("agent-mobile-inspector")).not.toBeInTheDocument();
     });
+    await waitFor(() => {
+      expect(returnFocusTarget).toHaveFocus();
+    });
+    returnFocusTarget.remove();
   });
 
   it("keeps backend-backed browser controls in the Agent inspector", async () => {

@@ -160,6 +160,12 @@
       },
       "resetsAt": "Resets {{reset}}",
       "resetPending": "Reset pending",
+      "launchState": {
+        "public_app": "Launch: public app",
+        "private_beta": "Launch: private beta",
+        "waitlist": "Launch: waitlist",
+        "hidden": "Launch: hidden"
+      },
       "helper": "This is the platform usage view. Agent-specific runtime usage remains inside Agent settings."
     },
     "productsAccess": {
@@ -699,6 +705,8 @@
       "manualHint": "Manually confirm each memory"
     },
     "sendAria": "Send message",
+    "sendLabel": "SEND",
+    "offlineToast": "You are offline. Your draft will stay here until the connection returns.",
     "stopAria": "Stop generating",
     "menu": {
       "addOptions": "Add options",
@@ -761,18 +769,6 @@
         "Turn this into a checklist"
       ],
     "dropFile": "Drop to attach"
-  },
-  "zakiExperimentalNotice": {
-    "eyebrow": "Experimental",
-    "title": "ZAKI is still evolving.",
-    "intro": "Use it like a capable operator: ask clearly, give context, and expect it to help plan, draft, research, and move work forward.",
-    "capability": "ZAKI can use vetted tools and skills when a task needs more than a plain text reply.",
-    "footer": "Important outputs should still be reviewed, especially when the task is high-stakes or time-sensitive.",
-    "dismissAria": "Dismiss ZAKI experimental notice",
-    "actions": {
-      "continue": "Continue",
-      "learnMore": "Learn more"
-    }
   },
   "zakiBootstrapCard": {
     "eyebrow": "Start here",
@@ -1830,6 +1826,7 @@
       "submitting": "Synthesizing…",
       "cancel": "Cancel",
       "youSynthesized": "You synthesized",
+      "offline": "You are offline. Keep this draft open and submit when the connection returns.",
       "errorGeneric": "Could not synthesize. Try again."
     },
     "dashboard": {
@@ -1870,6 +1867,7 @@
     },
     "status": {
       "online": "Online",
+      "offline": "Offline",
       "syncing": "Syncing",
       "plan": "Plan",
       "weeklyReset": "Weekly reset",
@@ -1882,7 +1880,7 @@
       "openChat": "Open Chat"
     },
     "entry": {
-      "website": "V1 website",
+      "website": "Website",
       "signIn": "Sign in",
       "signUp": "Sign up"
     },
@@ -1902,6 +1900,7 @@
       "placeholder": "Ask {{product}} to start from your prompt...",
       "saveWork": "Save this work",
       "emptyHelper": "Type a prompt to start.",
+      "offlineHelper": "You are offline. We kept this draft here and will send when you reconnect.",
       "creditHelper": "Credits are used when ZAKI responds.",
       "comingSoonHelper": "{{product}} is coming soon. Pick Chat, Agent, or Brain to start now.",
       "submitPreviewSave": "Preview first",
@@ -1973,8 +1972,8 @@
     },
     "links": {
       "howItWorks": "How it works",
-      "waysToBuy": "V1: Ways to buy",
-      "fullPalette": "V1: Product palette"
+      "waysToBuy": "Plans",
+      "fullPalette": "Product overview"
     },
     "intro": {
       "kicker": "First run",
@@ -1984,7 +1983,7 @@
       "slides": {
         "what": {
           "title": "What is ZAKI?",
-          "body": "One command entry for chat, Agent, Brain, Learn, Design, and Career. Start with the outcome; ZAKI routes it.",
+          "body": "One command center for Chat, Agent, Brain, and future products. Start with the outcome; ZAKI routes the work.",
           "bullets": {
             "command": "Write the work once.",
             "route": "Choose the product lane above the prompt.",
@@ -1992,8 +1991,8 @@
           }
         },
         "buy": {
-          "title": "Use it your way",
-          "body": "Guest credits let you try now. Sign in when you want work and history across devices. Upgrade when you need more capacity.",
+          "title": "Activate the loop",
+          "body": "Guest credits let you try now. Create an account when you want work, memory, files, and history to follow you.",
           "bullets": {
             "guest": "Guest: start immediately with weekly credits.",
             "account": "Account: save work, memory, files, and history.",
@@ -2001,19 +2000,22 @@
           }
         },
         "palette": {
-          "title": "V1 website and product palette",
-          "body": "The current website stays behind this dashboard as V1 while the V2 website is rebuilt. Use it for the story, pricing, and product pages.",
+          "title": "Visit the website when you want the full story",
+          "body": "The app is the working surface. The website is the narrative layer for story, pricing, product pages, and public context.",
           "bullets": {
             "chat": "Chat, Agent, and Brain are the launch core.",
             "preview": "Design, Learn, and Career start as truthful previews or gates.",
-            "website": "Visit V1 when you want the full website."
+            "website": "Visit the website when you want the broader product story."
           }
         }
       },
       "back": "Back",
       "next": "Next",
-      "startTyping": "Start typing",
-      "visitWebsite": "Visit V1 website"
+      "startTyping": "Enter dashboard",
+      "visitWebsite": "Visit website",
+      "startFreeChat": "Start free chat",
+      "createAccount": "Create account",
+      "openWebsite": "Open website"
     },
     "anonymousWork": {
       "title": "Continue what you started",
@@ -2099,6 +2101,14 @@
       "scopeCount": "{{count}} scopes",
       "productUnit": "products"
     },
+    "memoryBridge": {
+      "ariaLabel": "Memory import",
+      "kicker": "Memory bridge",
+      "title": "Bring your memory from ChatGPT/Claude",
+      "copy": "Paste a structured export once so ZAKI starts with the facts and preferences you already taught another assistant.",
+      "action": "Bring your memory from ChatGPT/Claude",
+      "dismiss": "Not now"
+    },
     "activeWork": {
       "title": "Active work · Agent",
       "source": "Runtime",
@@ -2109,7 +2119,8 @@
       "liveSession": "{{title}} · streaming",
       "recentSession": "{{title}} · recent",
       "sessionMeta": "{{messages}} messages · {{mode}}",
-      "noMode": "standard"
+      "noMode": "standard",
+      "openSessionAria": "Open Agent session {{title}}"
     },
     "commercial": {
       "title": "Commercial release spine is central: plan, meter, memory, products, and settings.",
@@ -2133,8 +2144,23 @@
       "body": "{{product}} is visible in the ZAKI family, but public V1 is focused on Dashboard, Agent, Chat, Brain, and Settings first.",
       "action": "Open dashboard"
     },
+    "privateBeta": {
+      "badge": "Private beta",
+      "heading": "This product is in private beta",
+      "body": "{{product}} is gated while route access, entitlement, memory boundaries, and signed-in E2E coverage are finalized together.",
+      "action": "Open dashboard"
+    },
+    "waitlist": {
+      "badge": "Waitlist",
+      "heading": "This product is on the waitlist",
+      "body": "{{product}} is visible as a future ZAKI surface, but it is not a public app product or paid plan yet.",
+      "action": "Open dashboard"
+    },
     "status": {
       "checking": "Checking access",
+      "comingSoon": "Launch state: coming soon",
+      "privateBeta": "Launch state: private beta",
+      "waitlist": "Launch state: waitlist",
       "state": "State: {{state}}",
       "hidden": "Not exposed"
     },
@@ -2148,7 +2174,9 @@
       "memory": "Memory boundary",
       "memoryValue": "Kept separate until explicitly launched",
       "next": "Next step",
-      "comingSoonValue": "Start today with Chat, Agent, or Brain from the dashboard."
+      "comingSoonValue": "Start today with Chat, Agent, or Brain from the dashboard.",
+      "privateBetaValue": "Use Chat, Agent, or Brain today. Beta access stays gated until the full product contract is ready.",
+      "waitlistValue": "Visit the product page for context, or start with Chat, Agent, or Brain today."
     }
   },
   "task": {
@@ -2159,6 +2187,12 @@
   "common": {
     "dismiss": "Dismiss",
     "cancel": "Cancel"
+  },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "body": "We encountered an unexpected error. Your work is preserved where the service has already saved it.",
+    "tryAgain": "Try again",
+    "goHome": "Go home"
   },
   "scheduleFollowUp": {
     "title": "Schedule a follow-up",

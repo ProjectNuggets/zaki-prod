@@ -1,9 +1,9 @@
 import { Check, ArrowRight } from "lucide-react";
 import type { Locale } from "../lib/content";
+import { appHandoffUrl } from "../lib/appHandoff";
 import { Reveal } from "./Reveal";
 import { BorderBeam } from "./ui/border-beam";
 import { ShimmerButton } from "./ui/shimmer-button";
-import { useState } from "react";
 
 function FeatureItem({ children }: { children: React.ReactNode }) {
   return (
@@ -16,8 +16,6 @@ function FeatureItem({ children }: { children: React.ReactNode }) {
 
 export function ProductCards({ locale }: { locale: Locale }) {
   const isArabic = locale === "ar";
-  const [isStudent, setIsStudent] = useState(false);
-  const spacesPrice = isStudent ? "$8" : "$13";
 
   return (
     <section className="px-5 py-24 md:px-8">
@@ -31,17 +29,17 @@ export function ProductCards({ locale }: { locale: Locale }) {
           </h2>
           <p className="mx-auto mt-4 max-w-[48ch] text-center text-sm leading-6 text-zk-text-secondary">
             {isArabic
-              ? "Spaces للعمل المنظّم اليوم. زكي Agent للذكاء الشخصي المستمر."
-              : "Spaces for structured work today. ZAKI Agent for persistent personal intelligence."}
+              ? "Chat للبدء فورًا. Agent للاستمرارية والذاكرة عندما يصبح العمل مهمًا."
+              : "Chat to start immediately. Agent for continuity and memory when the work matters."}
           </p>
         </Reveal>
 
         <div className="mt-12 grid gap-6 md:grid-cols-2">
-          {/* Spaces card */}
+          {/* Chat card */}
           <Reveal delay={60}>
             <div className="relative flex h-full flex-col rounded-2xl border border-zk-border bg-zk-surface p-7">
               <div className="flex items-center gap-2">
-                <span className="font-display text-xl font-bold text-zk-text">Spaces</span>
+                <span className="font-display text-xl font-bold text-zk-text">ZAKI Chat</span>
                 <span className="rounded-full bg-zk-success/10 px-2.5 py-0.5 text-[11px] font-medium text-zk-success">
                   {isArabic ? "مباشر" : "Live"}
                 </span>
@@ -49,39 +47,28 @@ export function ProductCards({ locale }: { locale: Locale }) {
 
               <p className="mt-2 text-sm text-zk-text-secondary">
                 {isArabic
-                  ? "مساحات عمل ذكاء اصطناعي منظمة للإنتاجية اليومية."
-                  : "Structured AI workspaces for daily productivity."}
+                  ? "مدخل مجاني وسريع للمسودات والترجمة والبحث والتخطيط."
+                  : "A free, fast entry point for drafts, translation, research, and planning."}
               </p>
 
               <div className="mt-6 flex items-baseline gap-1">
-                <span className="text-4xl font-bold text-zk-text">{spacesPrice}</span>
-                <span className="text-sm text-zk-text-tertiary">/{isArabic ? "شهر" : "mo"}</span>
+                <span className="text-4xl font-bold text-zk-text">$0</span>
+                <span className="text-sm text-zk-text-tertiary">{isArabic ? "للبدء" : "to start"}</span>
               </div>
 
-              <button
-                onClick={() => setIsStudent(!isStudent)}
-                className="mt-2 inline-flex items-center gap-2 text-xs text-zk-text-tertiary transition-colors hover:text-zk-text-secondary"
-              >
-                <span className={`inline-flex size-3.5 items-center justify-center rounded border transition-colors ${isStudent ? "border-zk-accent bg-zk-accent" : "border-zk-border-strong"}`}>
-                  {isStudent && <Check className="size-2.5 text-white" strokeWidth={3} />}
-                </span>
-                {isArabic ? "طالب (.edu)" : "I'm a student (.edu)"}
-              </button>
-
               <ul className="mt-6 flex flex-col gap-3">
-                <FeatureItem>{isArabic ? "محادثات غير محدودة" : "Unlimited conversations"}</FeatureItem>
-                <FeatureItem>{isArabic ? "نماذج متميزة" : "Premium AI models"}</FeatureItem>
-                <FeatureItem>{isArabic ? "تعليمات رئيسية لكل مساحة" : "Master prompt per space"}</FeatureItem>
-                <FeatureItem>{isArabic ? "مستندات مشتركة مرفقة" : "Shared document embeds"}</FeatureItem>
-                <FeatureItem>{isArabic ? "عربي + إنجليزي" : "Arabic + English"}</FeatureItem>
+                <FeatureItem>{isArabic ? "10 رسائل يوميًا للمستخدم المجهول" : "10 anonymous messages per day"}</FeatureItem>
+                <FeatureItem>{isArabic ? "بلا ذاكرة دائمة حتى تسجّل الدخول" : "No durable memory until you sign in"}</FeatureItem>
+                <FeatureItem>{isArabic ? "مناسب للعربية والإنجليزية" : "Built for Arabic and English work"}</FeatureItem>
+                <FeatureItem>{isArabic ? "انتقل إلى Agent عندما تحتاج متابعة" : "Move to Agent when you need follow-through"}</FeatureItem>
               </ul>
 
               <div className="mt-auto pt-6">
                 <a
-                  href={`https://app.chatzaki.com/pricing?auth=signup&plan=personal&interval=monthly&source=website_home_pricing`}
+                  href={appHandoffUrl("/spaces", "website_home_chat_card", "chat")}
                   className="flex w-full items-center justify-center gap-2 rounded-full border border-zk-border-strong bg-zk-surface-hover py-3 text-sm font-medium text-zk-text transition-all duration-300 hover:-translate-y-0.5 hover:border-zk-text-ghost hover:bg-zk-surface-active"
                 >
-                  {isArabic ? "ابدأ الآن" : "Start now"}
+                  {isArabic ? "ابدأ Chat" : "Start Chat"}
                   <ArrowRight className="size-3.5" />
                 </a>
               </div>
@@ -97,7 +84,7 @@ export function ProductCards({ locale }: { locale: Locale }) {
                 <span className="font-logo text-xl text-zk-accent">ZAKI</span>
                 <span className="font-display text-xl font-bold text-zk-text">Agent</span>
                 <span className="rounded-full bg-zk-accent/10 px-2.5 py-0.5 text-[11px] font-medium text-zk-accent">
-                  {isArabic ? "تجريبي" : "Beta"}
+                  {isArabic ? "أساسي" : "Core"}
                 </span>
               </div>
 
@@ -108,12 +95,12 @@ export function ProductCards({ locale }: { locale: Locale }) {
               </p>
 
               <div className="mt-6 flex items-baseline gap-1">
-                <span className="text-4xl font-bold text-zk-text">{isArabic ? "مجاني" : "Free"}</span>
-                <span className="text-sm text-zk-text-tertiary">{isArabic ? "أثناء البيتا" : "during beta"}</span>
+                <span className="text-4xl font-bold text-zk-text">{isArabic ? "حساب" : "Account"}</span>
+                <span className="text-sm text-zk-text-tertiary">{isArabic ? "مطلوب" : "required"}</span>
               </div>
 
               <p className="mt-2 text-xs text-zk-text-tertiary">
-                {isArabic ? "5 رسائل كل 24 ساعة" : "5 messages every 24 hours"}
+                {isArabic ? "ذاكرة ومتابعة وموافقات أدوات" : "Memory, follow-through, and tool approvals"}
               </p>
 
               <ul className="mt-6 flex flex-col gap-3">
@@ -125,9 +112,9 @@ export function ProductCards({ locale }: { locale: Locale }) {
               </ul>
 
               <div className="mt-auto pt-6">
-                <a href="https://app.chatzaki.com/?auth=signup&source=website_home_agent">
+                <a href={appHandoffUrl("/agent", "website_home_agent_card", "agent")}>
                   <ShimmerButton className="w-full">
-                    {isArabic ? "جرّب البيتا" : "Try the beta"}
+                    {isArabic ? "افتح Agent" : "Open Agent"}
                     <ArrowRight className="size-3.5" />
                   </ShimmerButton>
                 </a>

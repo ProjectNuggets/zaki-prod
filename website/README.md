@@ -2,6 +2,12 @@
 
 Standalone marketing website for `chatzaki.com`.
 
+Status: secondary marketing shell. The canonical product visibility and
+activation truth lives in the app-integrated website routes under
+`src/app/components/WebsitePage.tsx`. This package keeps its distinct marketing
+visual system, but it must not reintroduce old beta, student-pricing, or paid
+Spaces claims.
+
 ## Stack
 
 - Vite + React
@@ -51,7 +57,15 @@ Deploy `website/dist` as static hosting.
 
 ## App handoff
 
-All login/signup CTAs route to:
+All app CTAs carry an explicit app handoff contract:
 
-- `https://app.chatzaki.com/?auth=login`
-- `https://app.chatzaki.com/?auth=signup`
+- `https://app.chatzaki.com/?source=website_standalone&intent=dashboard`
+- `https://app.chatzaki.com/spaces?source=website_standalone&intent=chat`
+- `https://app.chatzaki.com/agent?source=website_standalone&intent=agent`
+
+Current product truth:
+
+- Chat/Spaces is the free entry point.
+- Agent and Brain are the signed-in continuity and memory surfaces.
+- Learn and Hire remain gated.
+- Design remains waitlist/early access.

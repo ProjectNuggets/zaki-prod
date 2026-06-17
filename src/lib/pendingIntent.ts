@@ -1,5 +1,5 @@
 import type { AnonymousWorkProductId } from "./anonymousWork";
-import { getCanonicalAppProductRoute } from "./productRoutes";
+import { getProductActivationRoute } from "./productRoutes";
 
 export const PENDING_INTENT_KEY = "zaki:pending-intent:v1";
 
@@ -57,13 +57,13 @@ function normalizeProductId(value: unknown): AnonymousWorkProductId | null {
 }
 
 function sanitizeReturnTo(value: unknown, productId: AnonymousWorkProductId) {
-  const fallback = getCanonicalAppProductRoute(productId) || "/";
+  const fallback = getProductActivationRoute(productId) || "/";
   const route = sanitizeText(value, 240);
   return route.startsWith("/") && !route.startsWith("//") ? route : fallback;
 }
 
 export function buildProductReturnTo(productId: AnonymousWorkProductId) {
-  return getCanonicalAppProductRoute(productId) || "/";
+  return getProductActivationRoute(productId) || "/";
 }
 
 export function readPendingIntent(): PendingIntent | null {

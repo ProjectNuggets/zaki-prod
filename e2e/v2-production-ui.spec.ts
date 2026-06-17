@@ -37,8 +37,11 @@ test.describe("V2 production-final app surfaces", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
     await expect(page.getByTestId("zaki-command-center")).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId("zaki-dashboard-products")).toBeVisible();
-    await expect(page.getByTestId("zaki-dashboard-meter")).toBeVisible();
+    await expect(page.getByTestId("zaki-dashboard-command-strip")).toBeVisible();
+    await expect(page.getByTestId("zaki-dashboard-command-meter")).toBeVisible();
+    await expect(page.getByTestId("zaki-dashboard-product-hint")).toBeVisible();
+    await expect(page.getByTestId("zaki-dashboard-command")).toBeVisible();
+    await expect(page.getByTestId("zaki-dashboard-products")).toHaveCount(0);
     await attachViewportShot(page, testInfo, "dashboard-1440x1000");
   });
 
@@ -56,7 +59,7 @@ test.describe("V2 production-final app surfaces", () => {
     await openInspectorIfNeeded(page);
     const inspector = page.locator(".zaki-agent-inspector").first();
     await expect(inspector).toBeVisible();
-    for (const label of ["Plan", "Cron", "Evidence", "Artifacts", "Browser", "Trace"]) {
+    for (const label of ["Plan", "Cron", "Sources", "Artifacts", "Browser", "Trace"]) {
       await expect(inspector.getByRole("tab", { name: new RegExp(label, "i") })).toBeVisible();
     }
     await expect(page.getByTestId("agent-narration-box")).toBeVisible();
@@ -80,7 +83,9 @@ test.describe("V2 production-final app surfaces", () => {
     await page.goto("/spaces", { waitUntil: "domcontentloaded" });
 
     await expect(page.locator(".zaki-app-v2")).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByText("Release QA workspace")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("zaki-spaces-shell")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("Workspaces for focused, ongoing work.")).toBeVisible();
+    await expect(page.getByText("Start a blank workspace with a custom master prompt.")).toBeVisible();
     await attachViewportShot(page, testInfo, "spaces-1440x1000");
   });
 
@@ -106,17 +111,23 @@ test.describe("V2 production-final app surfaces", () => {
     for (const testId of [
       "settings-account",
       "settings-billing",
-      "settings-products-access",
       "settings-platform-usage",
+      "settings-agent",
       "settings-channels",
       "settings-secrets",
-      "settings-providers",
       "settings-devices",
       "settings-memory-data",
-      "settings-developer-access",
+      "settings-memory-governance",
       "settings-privacy",
     ]) {
       await expect(page.getByTestId(testId)).toBeVisible({ timeout: 20_000 });
+    }
+    for (const removedTestId of [
+      "settings-products-access",
+      "settings-providers",
+      "settings-developer-access",
+    ]) {
+      await expect(page.getByTestId(removedTestId)).toHaveCount(0);
     }
     await expect(page.getByTestId("settings-channels").getByText("Telegram", { exact: true })).toBeVisible();
     await expect(page.getByTestId("settings-channels").getByText("Slack", { exact: true }).first()).toBeVisible();
@@ -124,6 +135,7 @@ test.describe("V2 production-final app surfaces", () => {
     await expect(page.getByTestId("settings-channels").getByText("Email", { exact: true }).first()).toBeVisible();
     await expect(page.getByTestId("settings-secrets").getByText("telegram_bot_token")).toBeVisible();
     await expect(page.getByTestId("settings-secrets").getByText(/xoxb-|Discord bot token|IMAP password/i)).toHaveCount(0);
+    await expect(page.getByTestId("settings-billing").getByText("ZAKI CLI")).toHaveCount(0);
     await attachViewportShot(page, testInfo, "settings-1440x1000");
   });
 
@@ -139,23 +151,25 @@ test.describe("V2 production-final app surfaces", () => {
     { path: "/products/agent", target: /\/agent$/, signal: ".zaki-agent-v2" },
     { path: "/ar/products/agent", target: /\/agent$/, signal: ".zaki-agent-v2" },
     { path: "/zaki-bot", target: /\/agent$/, signal: ".zaki-agent-v2" },
-    { path: "/products/spaces", target: /\/spaces$/, text: "Release QA workspace" },
-    { path: "/products/learn", target: /\/learn$/, testId: "product-gate-learning" },
-    { path: "/products/hire", target: /\/hire$/, testId: "product-gate-hire" },
-    { path: "/products/design", target: /\/design$/, testId: "product-gate-design" },
+    { path: "/products/spaces", target: /\/spaces$/, testId: "zaki-spaces-shell" },
+    { path: "/products/learn", target: /\/products\/learn$/, heading: "ZAKI Learn" },
+    { path: "/products/hire", target: /\/products\/hire$/, heading: "ZAKI Career" },
+    { path: "/products/design", target: /\/products\/design$/, heading: "ZAKI Design" },
   ] as const) {
-    test(`signed-in product marketing path ${route.path} resolves to app surface`, async ({ page }) => {
+    test(`signed-in product marketing path ${route.path} resolves to truthful surface`, async ({ page }) => {
       await page.setViewportSize(RELEASE_VIEWPORTS.desktop);
       await page.goto(route.path, { waitUntil: "domcontentloaded" });
       await expect(page).toHaveURL(route.target, { timeout: 20_000 });
       if ("signal" in route) {
         await expect(page.locator(route.signal).first()).toBeVisible({ timeout: 20_000 });
       }
-      if ("text" in route) {
-        await expect(page.getByText(route.text)).toBeVisible({ timeout: 20_000 });
-      }
       if ("testId" in route) {
         await expect(page.getByTestId(route.testId)).toBeVisible({ timeout: 20_000 });
+      }
+      if ("heading" in route) {
+        await expect(page.getByRole("heading", { name: route.heading })).toBeVisible({ timeout: 20_000 });
+        await expect(page.getByRole("link", { name: /Open dashboard/i })).toBeVisible();
+        await expect(page.locator('[data-product-gate]')).toHaveCount(0);
       }
     });
   }

@@ -51,8 +51,8 @@ export function WaitlistForm({ locale, source = "website_bot" }: { locale: Local
           ? "هذا البريد مسجل بالفعل. سنبقيك على اطلاع."
           : "This email is already registered. We'll keep you updated."
         : isArabic
-          ? "تم تسجيلك. سنرسل لك تحديثات بيتا زكي."
-          : "You're in. We'll send you ZAKI beta updates.",
+          ? "تم تسجيلك. سنرسل لك تحديثات تحديثات زكي."
+          : "You're in. We'll send you ZAKI Agent updates.",
     });
   }
 
@@ -113,12 +113,12 @@ export function WaitlistForm({ locale, source = "website_bot" }: { locale: Local
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <p className={`text-sm leading-6 ${mutedClasses}`}>
           <span className={`font-mono-ui text-[11px] uppercase tracking-[0.2em] ${accentClasses}`}>
-            {isArabic ? "5 رسائل مجانية / يوم" : "5 free messages / day"}
+            {isArabic ? "تحديثات الوصول القادم" : "future access updates"}
           </span>
           <span className="mt-1.5 block text-xs leading-5">
             {isArabic
-              ? "نستخدم هذه البيانات فقط للتواصل حول بيتا زكي."
-              : "We use this only to contact you about ZAKI beta access."}
+              ? "نستخدم هذه البيانات فقط للتواصل حول تحديثات زكي."
+              : "We use this only to contact you about ZAKI Agent access."}
           </span>
         </p>
         <Button type="submit" disabled={isLocked} className="shrink-0">
@@ -126,7 +126,7 @@ export function WaitlistForm({ locale, source = "website_bot" }: { locale: Local
             ? isArabic ? "جارٍ التسجيل..." : "Submitting..."
             : status.kind === "success"
               ? isArabic ? "تم التسجيل ✓" : "Registered ✓"
-              : isArabic ? "انضم إلى بيتا زكي" : "Join ZAKI Beta"}
+              : isArabic ? "تابع تحديثات زكي" : "Get ZAKI updates"}
         </Button>
       </div>
       {status.kind === "error" || status.kind === "success" ? (

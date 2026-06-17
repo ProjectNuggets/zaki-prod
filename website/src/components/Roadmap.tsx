@@ -54,7 +54,7 @@ export function Roadmap({ locale }: { locale: Locale }) {
             {isArabic ? "ما نبنيه" : "What we're building"}
           </p>
           <h2 className="font-display mt-3 text-center text-3xl font-extrabold leading-tight tracking-[-0.03em] text-zk-text md:text-4xl">
-            {isArabic ? "زكي في البيتا العامة. إليك ما نعمل عليه." : "ZAKI is in public beta. Here's what we're building."}
+            {isArabic ? "زكي في البيتا العامة. إليك ما نعمل عليه." : "ZAKI is in current Agent preview. Here's what we're building."}
           </h2>
         </Reveal>
 

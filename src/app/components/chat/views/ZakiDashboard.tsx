@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -33,10 +34,12 @@ import {
   type V2BadgeTone,
 } from "@/app/components/v2";
 import type {
+  AgentSession,
   MeterWindowSnapshot,
 } from "@/lib/api";
 import { useAuthStore } from "@/stores";
 import { cn } from "@/lib/utils";
+import { formatZakiSessionLabel } from "@/lib/zakiSessions";
 import {
   buildAnonymousWorkTitle,
   clearAnonymousWorkLedger,
@@ -46,9 +49,12 @@ import {
   type AnonymousWorkProductId,
 } from "@/lib/anonymousWork";
 import { buildProductReturnTo, writePendingIntent } from "@/lib/pendingIntent";
+import { useOnlineStatus } from "@/hooks";
 
 interface ZakiDashboardProps {
   onSendExample: (example: string) => void;
+  onOpenMemoryImport?: () => void;
+  onOpenSession?: (sessionKey: string) => void;
 }
 
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string;
@@ -82,9 +88,10 @@ const ANONYMOUS_COMMAND_PRODUCT_ORDER: AnonymousWorkProductId[] = [
 
 const SIGNED_IN_COMMAND_PRODUCT_ORDER = COMMAND_PRODUCT_ORDER;
 const DASHBOARD_INTRO_DISMISSED_KEY = "zaki:dashboard-v2-intro-dismissed";
-const WEBSITE_V1_STORY_ROUTE = "/story";
-const WEBSITE_V1_PRICING_ROUTE = "/pricing";
-const WEBSITE_V1_PRODUCTS_ROUTE = "/products/agent";
+const MEMORY_BRIDGE_OFFER_KEY_PREFIX = "zaki:memory-bridge-offered";
+const WEBSITE_STORY_ROUTE = "/story";
+const WEBSITE_PRICING_ROUTE = "/pricing";
+const WEBSITE_PRODUCTS_ROUTE = "/products/agent";
 const COMING_SOON_PRODUCT_IDS = new Set<AnonymousWorkProductId>([
   "design",
   "learning",
@@ -139,6 +146,28 @@ function formatTime(value?: string | number | null) {
   return date.toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
+  });
+}
+
+function getMemoryBridgeOfferKey(user: unknown) {
+  const record =
+    typeof user === "object" && user !== null
+      ? (user as Record<string, unknown>)
+      : {};
+  const raw =
+    record.id ??
+    record.userId ??
+    record.username ??
+    record.email ??
+    "signed-in";
+  return `${MEMORY_BRIDGE_OFFER_KEY_PREFIX}:${String(raw).trim() || "signed-in"}`;
+}
+
+function getSessionTitle(session: AgentSession) {
+  return formatZakiSessionLabel({
+    sessionKey: session.session_key,
+    title: session.title,
+    createdAt: session.created_at ?? session.last_active,
   });
 }
 
@@ -513,11 +542,15 @@ function DashboardIntroModal({
   t,
   open,
   onClose,
+  onStartWork,
+  onCreateAccount,
   onVisitWebsite,
 }: {
   t: TranslateFn;
   open: boolean;
   onClose: () => void;
+  onStartWork: () => void;
+  onCreateAccount: () => void;
   onVisitWebsite: () => void;
 }) {
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
@@ -531,7 +564,7 @@ function DashboardIntroModal({
       }),
       body: t("zakiDashboard.intro.slides.what.body", {
         defaultValue:
-          "One command entry for chat, Agent, Brain, Learn, Design, and Career. Start with the outcome; ZAKI routes it.",
+          "One command center for Chat, Agent, Brain, and future products. Start with the outcome; ZAKI routes the work.",
       }),
       bullets: [
         t("zakiDashboard.intro.slides.what.bullets.command", {
@@ -549,11 +582,11 @@ function DashboardIntroModal({
       id: "buy",
       step: "02",
       title: t("zakiDashboard.intro.slides.buy.title", {
-        defaultValue: "Use it your way",
+        defaultValue: "Activate the loop",
       }),
       body: t("zakiDashboard.intro.slides.buy.body", {
         defaultValue:
-          "Guest credits let you try now. Sign in when you want work and history across devices. Upgrade when you need more capacity.",
+          "Guest credits let you try now. Create an account when you want work, memory, files, and history to follow you.",
       }),
       bullets: [
         t("zakiDashboard.intro.slides.buy.bullets.guest", {
@@ -571,11 +604,11 @@ function DashboardIntroModal({
       id: "palette",
       step: "03",
       title: t("zakiDashboard.intro.slides.palette.title", {
-        defaultValue: "V1 website and product palette",
+        defaultValue: "Visit the website when you want the full story",
       }),
       body: t("zakiDashboard.intro.slides.palette.body", {
         defaultValue:
-          "The current website stays behind this dashboard as V1 while the V2 website is rebuilt. Use it for the story, pricing, and product pages.",
+          "The app is the working surface. The website is the narrative layer for story, pricing, product pages, and public context.",
       }),
       bullets: [
         t("zakiDashboard.intro.slides.palette.bullets.chat", {
@@ -585,7 +618,7 @@ function DashboardIntroModal({
           defaultValue: "Design, Learn, and Career start as truthful previews or gates.",
         }),
         t("zakiDashboard.intro.slides.palette.bullets.website", {
-          defaultValue: "Visit V1 when you want the full website.",
+          defaultValue: "Visit the website when you want the broader product story.",
         }),
       ],
     },
@@ -641,6 +674,29 @@ function DashboardIntroModal({
               <li key={bullet}>{bullet}</li>
             ))}
           </ul>
+          {activeSlide.id === "buy" ? (
+            <div className="zaki-dashboard-intro__slide-actions">
+              <V2Button type="button" onClick={onStartWork}>
+                {t("zakiDashboard.intro.startFreeChat", {
+                  defaultValue: "Start free chat",
+                })}
+              </V2Button>
+              <V2Button type="button" variant="ghost" onClick={onCreateAccount}>
+                {t("zakiDashboard.intro.createAccount", {
+                  defaultValue: "Create account",
+                })}
+              </V2Button>
+            </div>
+          ) : null}
+          {activeSlide.id === "palette" ? (
+            <div className="zaki-dashboard-intro__slide-actions">
+              <V2Button type="button" variant="ghost" onClick={onVisitWebsite}>
+                {t("zakiDashboard.intro.openWebsite", {
+                  defaultValue: "Open website",
+                })}
+              </V2Button>
+            </div>
+          ) : null}
         </article>
         <div className="zaki-dashboard-intro__foot">
           <div className="zaki-dashboard-intro__dots" aria-label={t("zakiDashboard.intro.progress", { defaultValue: "Intro slides" })}>
@@ -670,19 +726,19 @@ function DashboardIntroModal({
             </V2Button>
             {isLastSlide ? (
               <V2Button type="button" variant="ghost" onClick={onVisitWebsite}>
-                {t("zakiDashboard.intro.visitWebsite", { defaultValue: "Visit V1 website" })}
+                {t("zakiDashboard.intro.visitWebsite", { defaultValue: "Visit website" })}
               </V2Button>
             ) : null}
             <V2Button
               type="button"
               onClick={
                 isLastSlide
-                  ? onClose
+                  ? onStartWork
                   : () => setActiveSlideIndex((current) => Math.min(slides.length - 1, current + 1))
               }
             >
               {isLastSlide
-                ? t("zakiDashboard.intro.startTyping", { defaultValue: "Start typing" })
+                ? t("zakiDashboard.intro.startTyping", { defaultValue: "Enter dashboard" })
                 : t("zakiDashboard.intro.next", { defaultValue: "Next" })}
             </V2Button>
           </div>
@@ -767,11 +823,16 @@ function ReturningWorkStrip({
 
 export function ZakiDashboard({
   onSendExample,
+  onOpenMemoryImport,
+  onOpenSession,
 }: ZakiDashboardProps) {
   const { i18n, t } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const navigate = useNavigate();
+  const isOnline = useOnlineStatus();
   const token = useAuthStore((state) => state.token);
+  const authUser = useAuthStore((state) => state.user);
+  const commandInputRef = useRef<HTMLTextAreaElement | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<AnonymousWorkProductId>(
     token ? "agent" : "spaces"
   );
@@ -779,6 +840,7 @@ export function ZakiDashboard({
   const [anonymousWorkItems, setAnonymousWorkItems] = useState<AnonymousWorkItem[]>([]);
   const [anonymousWorkClaimed, setAnonymousWorkClaimed] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
+  const [memoryBridgeSeen, setMemoryBridgeSeen] = useState(false);
   const [titleSignalIndex, setTitleSignalIndex] = useState(0);
   const { isLoading: productRegistryLoading } = useProductRegistry();
   const { data: meterStatusResult, isLoading: meterStatusLoading } =
@@ -841,13 +903,26 @@ export function ZakiDashboard({
     setShowIntro(window.localStorage.getItem(DASHBOARD_INTRO_DISMISSED_KEY) !== "1");
   }, [token]);
 
+  const memoryBridgeOfferKey = getMemoryBridgeOfferKey(authUser);
+
+  useEffect(() => {
+    if (!token || typeof window === "undefined") {
+      setMemoryBridgeSeen(false);
+      return;
+    }
+    setMemoryBridgeSeen(window.localStorage.getItem(memoryBridgeOfferKey) === "1");
+  }, [memoryBridgeOfferKey, token]);
+
   const weeklyStats = getWindowStats(meterStatus?.weekly);
   const weeklyReset = formatReset(meterStatus?.weekly?.resetAt);
   const liveAgentSession = zakiSessions?.find(
     (session) => session.live || (session.pending_approval_count ?? 0) > 0
   );
+  const recentAgentSessions = (zakiSessions ?? []).slice(0, 3);
   const statusLabel =
-    productRegistryLoading || meterLoading
+    !isOnline
+      ? t("zakiDashboard.status.offline", { defaultValue: "Offline" })
+      : productRegistryLoading || meterLoading
       ? t("zakiDashboard.status.syncing")
       : t("zakiDashboard.status.online");
   const selectedCommandName = getCommandProductName(t, selectedProductId);
@@ -875,12 +950,16 @@ export function ZakiDashboard({
   const creditsExhausted =
     !meterLoading && typeof weeklyStats.remaining === "number" && weeklyStats.remaining <= 0;
   const isCommandSubmitDisabled =
-    selectedCommandPrompt.length === 0 || meterLoading || creditsExhausted;
+    !isOnline || selectedCommandPrompt.length === 0 || meterLoading || creditsExhausted;
   const commandHelperText = selectedProductComingSoon
     ? t("zakiDashboard.command.comingSoonHelper", {
         product: selectedCommandName,
         defaultValue: "{{product}} is coming soon. Pick Chat, Agent, or Brain to start now.",
       })
+    : !isOnline
+      ? t("zakiDashboard.command.offlineHelper", {
+          defaultValue: "You are offline. We kept this draft here and will send when you reconnect.",
+        })
     : selectedCommandPrompt
       ? t("zakiDashboard.command.creditHelper", {
           defaultValue: "Credits are used when ZAKI responds.",
@@ -940,6 +1019,18 @@ export function ZakiDashboard({
   const openIntro = useCallback(() => {
     setShowIntro(true);
   }, []);
+
+  const markMemoryBridgeSeen = useCallback(() => {
+    setMemoryBridgeSeen(true);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(memoryBridgeOfferKey, "1");
+    }
+  }, [memoryBridgeOfferKey]);
+
+  const openMemoryBridge = useCallback(() => {
+    markMemoryBridgeSeen();
+    onOpenMemoryImport?.();
+  }, [markMemoryBridgeSeen, onOpenMemoryImport]);
 
   const writeDashboardIntent = useCallback(
     (productId: AnonymousWorkProductId, prompt: string, anonymousWorkId?: string | null) => {
@@ -1010,6 +1101,19 @@ export function ZakiDashboard({
       selectedProductId,
     ]
   );
+
+  const startWorkFromIntro = useCallback(() => {
+    dismissIntro();
+    if (typeof window === "undefined") return;
+    window.setTimeout(() => {
+      commandInputRef.current?.focus();
+    }, 0);
+  }, [dismissIntro]);
+
+  const createAccountFromIntro = useCallback(() => {
+    dismissIntro();
+    handleAuthEntry("signup");
+  }, [dismissIntro, handleAuthEntry]);
 
   const handleCommandSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
@@ -1091,8 +1195,8 @@ export function ZakiDashboard({
           {
             id: "online",
             label: statusLabel,
-            active: true,
-            tone: productRegistryLoading || meterLoading ? "warn" : "success",
+            active: isOnline,
+            tone: !isOnline ? "warn" : productRegistryLoading || meterLoading ? "warn" : "success",
           },
           {
             id: "plan",
@@ -1153,9 +1257,9 @@ export function ZakiDashboard({
             </h1>
             <p>{introCopy}</p>
             <div className="zaki-dashboard-command__entry-actions">
-              <button type="button" onClick={() => navigate(WEBSITE_V1_STORY_ROUTE)}>
+              <button type="button" onClick={() => navigate(WEBSITE_STORY_ROUTE)}>
                 <span aria-hidden="true">?</span>
-                {t("zakiDashboard.entry.website", { defaultValue: "V1 website" })}
+                {t("zakiDashboard.entry.website", { defaultValue: "Website" })}
               </button>
               {!token ? (
                 <>
@@ -1173,6 +1277,119 @@ export function ZakiDashboard({
               ) : null}
             </div>
           </div>
+
+          {token && onOpenMemoryImport && !memoryBridgeSeen ? (
+            <section
+              className="zaki-dashboard-command__memory-bridge"
+              aria-label={t("zakiDashboard.memoryBridge.ariaLabel", {
+                defaultValue: "Memory import",
+              })}
+            >
+              <div>
+                <span>
+                  {t("zakiDashboard.memoryBridge.kicker", {
+                    defaultValue: "Memory bridge",
+                  })}
+                </span>
+                <strong>
+                  {t("zakiDashboard.memoryBridge.title", {
+                    defaultValue: "Bring your memory from ChatGPT/Claude",
+                  })}
+                </strong>
+                <p>
+                  {t("zakiDashboard.memoryBridge.copy", {
+                    defaultValue:
+                      "Paste a structured export once so ZAKI starts with the facts and preferences you already taught another assistant.",
+                  })}
+                </p>
+              </div>
+              <div>
+                <button type="button" onClick={openMemoryBridge}>
+                  {t("zakiDashboard.memoryBridge.action", {
+                    defaultValue: "Bring your memory from ChatGPT/Claude",
+                  })}
+                </button>
+                <button type="button" onClick={markMemoryBridgeSeen}>
+                  {t("zakiDashboard.memoryBridge.dismiss", {
+                    defaultValue: "Not now",
+                  })}
+                </button>
+              </div>
+            </section>
+          ) : null}
+
+          {token && recentAgentSessions.length > 0 ? (
+            <section
+              className="zaki-dashboard-command__resume"
+              aria-labelledby="zaki-dashboard-resume-title"
+            >
+              <div className="zaki-dashboard-command__resume-head">
+                <div>
+                  <span>
+                    {t("zakiDashboard.activeWork.source", {
+                      defaultValue: "Runtime",
+                    })}
+                  </span>
+                  <h2 id="zaki-dashboard-resume-title">
+                    {t("zakiDashboard.activeWork.title", {
+                      defaultValue: "Active work · Agent",
+                    })}
+                  </h2>
+                </div>
+              </div>
+              <div className="zaki-dashboard-command__resume-list">
+                {recentAgentSessions.map((session) => {
+                  const title = getSessionTitle(session);
+                  const pendingCount = session.pending_approval_count ?? 0;
+                  const stateLabel =
+                    pendingCount > 0
+                      ? t("zakiDashboard.activeWork.pendingApproval", {
+                          title,
+                          count: pendingCount,
+                          defaultValue: "{{title}} · {{count}} approval waiting",
+                        })
+                      : session.live
+                        ? t("zakiDashboard.activeWork.liveSession", {
+                            title,
+                            defaultValue: "{{title}} · streaming",
+                          })
+                        : t("zakiDashboard.activeWork.recentSession", {
+                            title,
+                            defaultValue: "{{title}} · recent",
+                          });
+                  return (
+                    <button
+                      key={session.session_key}
+                      type="button"
+                      className="zaki-dashboard-command__resume-row"
+                      onClick={() => onOpenSession?.(session.session_key)}
+                      aria-label={t("zakiDashboard.activeWork.openSessionAria", {
+                        title,
+                        defaultValue: "Open Agent session {{title}}",
+                      })}
+                    >
+                      <span className="zaki-dashboard-command__resume-main">
+                        <strong>{title}</strong>
+                        <span>{stateLabel}</span>
+                      </span>
+                      <span className="zaki-dashboard-command__resume-meta">
+                        {t("zakiDashboard.activeWork.sessionMeta", {
+                          messages: session.message_count ?? 0,
+                          mode:
+                            session.mode ||
+                            t("zakiDashboard.activeWork.noMode", {
+                              defaultValue: "standard",
+                            }),
+                          defaultValue: "{{messages}} messages · {{mode}}",
+                        })}
+                      </span>
+                      <time>{formatTime(session.last_active)}</time>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
 
           <form
             className="zaki-dashboard-command"
@@ -1199,6 +1416,7 @@ export function ZakiDashboard({
               </label>
               <textarea
                 id="zaki-dashboard-command-input"
+                ref={commandInputRef}
                 className="zaki-dashboard-command__textarea"
                 rows={5}
                 value={commandText}
@@ -1289,7 +1507,7 @@ export function ZakiDashboard({
                   <V2Button
                     type="button"
                     size="sm"
-                    onClick={() => navigate(WEBSITE_V1_PRICING_ROUTE)}
+                    onClick={() => navigate(WEBSITE_PRICING_ROUTE)}
                   >
                     <Gauge className="size-3.5" aria-hidden="true" />
                     {t("zakiDashboard.command.viewPlans", {
@@ -1316,13 +1534,13 @@ export function ZakiDashboard({
               <span aria-hidden="true">-&gt;</span>
               {t("zakiDashboard.links.howItWorks", { defaultValue: "How it works" })}
             </button>
-            <button type="button" onClick={() => navigate(WEBSITE_V1_PRICING_ROUTE)}>
+            <button type="button" onClick={() => navigate(WEBSITE_PRICING_ROUTE)}>
               <span aria-hidden="true">-&gt;</span>
-              {t("zakiDashboard.links.waysToBuy", { defaultValue: "V1: Ways to buy" })}
+              {t("zakiDashboard.links.waysToBuy", { defaultValue: "Plans" })}
             </button>
-            <button type="button" onClick={() => navigate(WEBSITE_V1_PRODUCTS_ROUTE)}>
+            <button type="button" onClick={() => navigate(WEBSITE_PRODUCTS_ROUTE)}>
               <span aria-hidden="true">-&gt;</span>
-              {t("zakiDashboard.links.fullPalette", { defaultValue: "V1: Product palette" })}
+              {t("zakiDashboard.links.fullPalette", { defaultValue: "Product overview" })}
             </button>
           </nav>
         </section>
@@ -1331,9 +1549,11 @@ export function ZakiDashboard({
           t={t}
           open={showIntro}
           onClose={dismissIntro}
+          onStartWork={startWorkFromIntro}
+          onCreateAccount={createAccountFromIntro}
           onVisitWebsite={() => {
             dismissIntro();
-            navigate(WEBSITE_V1_STORY_ROUTE);
+            navigate(WEBSITE_STORY_ROUTE);
           }}
         />
       </div>

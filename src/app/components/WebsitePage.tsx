@@ -36,6 +36,15 @@ type Product = {
   sections: Array<{ title: string; body: string }>;
 };
 
+function websiteAppPath(path: string, source: string, intent: string) {
+  const [pathname, query = ""] = path.split("?");
+  const params = new URLSearchParams(query);
+  params.set("source", source);
+  params.set("intent", intent);
+  const search = params.toString();
+  return `${pathname}${search ? `?${search}` : ""}`;
+}
+
 const PRODUCTS_EN: Product[] = [
   {
     slug: "spaces",
@@ -48,7 +57,7 @@ const PRODUCTS_EN: Product[] = [
     icon: LayoutGrid,
     accent: "bg-[#e9f5f1] text-[#1f6c54] border-[#b7ded0]",
     cta: "Start chat",
-    href: "/spaces",
+    href: websiteAppPath("/spaces", "website_product_spaces", "chat"),
     points: [
       "Anonymous daily quota: 10 messages per day.",
       "No durable memory while anonymous.",
@@ -83,7 +92,7 @@ const PRODUCTS_EN: Product[] = [
     icon: Bot,
     accent: "bg-[#eef0fb] text-[#384987] border-[#c8d0f2]",
     cta: "Choose Agent",
-    href: "/pricing?plan=agent&autostart=1&source=website_product_agent",
+    href: websiteAppPath("/agent", "website_product_agent", "agent"),
     points: [
       "10 free preview messages each week.",
       "Paid plan unlocks the Agent product.",
@@ -118,7 +127,7 @@ const PRODUCTS_EN: Product[] = [
     icon: Brain,
     accent: "bg-[#eef7ff] text-[#235a7c] border-[#b9d8eb]",
     cta: "Open Brain",
-    href: "/brain",
+    href: websiteAppPath("/brain", "website_product_brain", "memory"),
     points: [
       "Canonical personal memory surface.",
       "Works with signed-in account continuity.",
@@ -153,7 +162,7 @@ const PRODUCTS_EN: Product[] = [
     icon: GraduationCap,
     accent: "bg-[#fff4d8] text-[#765716] border-[#efd27d]",
     cta: "Open dashboard",
-    href: "/",
+    href: websiteAppPath("/", "website_product_learn", "dashboard"),
     points: [
       "Coming soon, not sold as public access.",
       "Use Chat or Agent today.",
@@ -188,7 +197,7 @@ const PRODUCTS_EN: Product[] = [
     icon: Palette,
     accent: "bg-[#fdebe6] text-[#9b3f2c] border-[#edb4a6]",
     cta: "Open dashboard",
-    href: "/",
+    href: websiteAppPath("/", "website_product_design", "dashboard"),
     points: [
       "Coming soon, not public project access.",
       "Static briefs can start in Chat or Agent.",
@@ -223,7 +232,7 @@ const PRODUCTS_EN: Product[] = [
     icon: BriefcaseBusiness,
     accent: "bg-[#f2f0fb] text-[#594b8a] border-[#d0c8ef]",
     cta: "Open dashboard",
-    href: "/",
+    href: websiteAppPath("/", "website_product_hire", "dashboard"),
     points: [
       "Coming soon, not candidate workflow access.",
       "Use Chat for CV copy today.",
@@ -261,7 +270,7 @@ const PRODUCTS_AR: Product[] = [
     icon: LayoutGrid,
     accent: "bg-[#e9f5f1] text-[#1f6c54] border-[#b7ded0]",
     cta: "ابدأ الدردشة",
-    href: "/spaces",
+    href: websiteAppPath("/spaces", "website_product_spaces_ar", "chat"),
     points: [
       "10 رسائل يوميًا للمستخدم المجهول.",
       "لا توجد ذاكرة دائمة بدون حساب.",
@@ -296,7 +305,7 @@ const PRODUCTS_AR: Product[] = [
     icon: Bot,
     accent: "bg-[#eef0fb] text-[#384987] border-[#c8d0f2]",
     cta: "اختر Agent",
-    href: "/pricing?plan=agent&autostart=1&source=website_product_agent_ar",
+    href: websiteAppPath("/agent", "website_product_agent_ar", "agent"),
     points: [
       "10 رسائل تجربة كل أسبوع.",
       "الخطة المدفوعة تفتح منتج Agent.",
@@ -331,7 +340,7 @@ const PRODUCTS_AR: Product[] = [
     icon: Brain,
     accent: "bg-[#eef7ff] text-[#235a7c] border-[#b9d8eb]",
     cta: "افتح Brain",
-    href: "/brain",
+    href: websiteAppPath("/brain", "website_product_brain_ar", "memory"),
     points: [
       "سطح الذاكرة الشخصية المركزي.",
       "يعمل مع استمرارية الحساب بعد تسجيل الدخول.",
@@ -366,7 +375,7 @@ const PRODUCTS_AR: Product[] = [
     icon: GraduationCap,
     accent: "bg-[#fff4d8] text-[#765716] border-[#efd27d]",
     cta: "افتح لوحة التحكم",
-    href: "/",
+    href: websiteAppPath("/", "website_product_learn_ar", "dashboard"),
     points: [
       "قريبًا، وليس وصولًا عامًا مدفوعًا.",
       "استخدم Chat أو Agent اليوم.",
@@ -401,7 +410,7 @@ const PRODUCTS_AR: Product[] = [
     icon: Palette,
     accent: "bg-[#fdebe6] text-[#9b3f2c] border-[#edb4a6]",
     cta: "افتح لوحة التحكم",
-    href: "/",
+    href: websiteAppPath("/", "website_product_design_ar", "dashboard"),
     points: [
       "قريبًا، وليس وصولًا عامًا للمشاريع.",
       "يمكن بدء الموجزات في Chat أو Agent.",
@@ -436,7 +445,7 @@ const PRODUCTS_AR: Product[] = [
     icon: BriefcaseBusiness,
     accent: "bg-[#f2f0fb] text-[#594b8a] border-[#d0c8ef]",
     cta: "افتح لوحة التحكم",
-    href: "/",
+    href: websiteAppPath("/", "website_product_hire_ar", "dashboard"),
     points: [
       "قريبًا، وليس وصولًا لسير مرشحين.",
       "استخدم Chat لتحسين نص السيرة اليوم.",
@@ -526,7 +535,7 @@ function DirectionalArrow({
 function WebsiteNav({ locale = "en" }: { locale?: WebsiteLocale }) {
   const navLinks = [
     { label: locale === "ar" ? "المنتجات" : "Products", to: locale === "ar" ? "/ar" : "/" },
-    { label: locale === "ar" ? "الأسعار" : "Pricing", to: "/pricing" },
+    { label: locale === "ar" ? "الأسعار" : "Pricing", to: websiteAppPath("/pricing", "website_nav", "plans") },
     { label: locale === "ar" ? "القصة" : "Story", to: localizeMarketingPath("/story", locale) },
   ];
 
@@ -546,13 +555,13 @@ function WebsiteNav({ locale = "en" }: { locale?: WebsiteLocale }) {
         </nav>
         <div className="flex items-center gap-2">
           <Link
-            to="/spaces"
+            to={websiteAppPath("/spaces", "website_nav", "chat")}
             className={cn("hidden rounded-zaki-md border border-zaki-strong px-3 py-2 text-sm font-semibold text-zaki-secondary hover:text-zaki-primary sm:inline-flex dark:border-[#2a2018] dark:text-[#c9b8a4] dark:hover:text-[#efe6d9]", linkFocusClass)}
           >
             {locale === "ar" ? "ابدأ Chat" : "Start chat"}
           </Link>
           <Link
-            to="/pricing?source=website_nav"
+            to={websiteAppPath("/pricing", "website_nav", "plans")}
             className={cn("inline-flex items-center gap-2 rounded-zaki-md bg-[#231a13] px-3 py-2 text-sm font-semibold text-white hover:bg-[#3a2a1f] dark:bg-[#efe6d9] dark:text-[#0c0a09] dark:hover:bg-white", linkFocusClass)}
           >
             {locale === "ar" ? "الخطط" : "Plans"}
@@ -601,7 +610,7 @@ function WebsiteFooter({ locale = "en" }: { locale?: WebsiteLocale }) {
           <Link to={localizeMarketingPath("/contact", locale)} className={cn("rounded-zaki-sm hover:text-zaki-primary dark:hover:text-[#efe6d9]", linkFocusClass)}>{locale === "ar" ? "تواصل" : "Contact"}</Link>
           <Link to="/legal" className={cn("rounded-zaki-sm hover:text-zaki-primary dark:hover:text-[#efe6d9]", linkFocusClass)}>{locale === "ar" ? "القانوني" : "Legal"}</Link>
           <Link to="/help" className={cn("rounded-zaki-sm hover:text-zaki-primary dark:hover:text-[#efe6d9]", linkFocusClass)}>{locale === "ar" ? "المساعدة" : "Help"}</Link>
-          <Link to="/pricing" className={cn("rounded-zaki-sm hover:text-zaki-primary dark:hover:text-[#efe6d9]", linkFocusClass)}>{locale === "ar" ? "الأسعار" : "Pricing"}</Link>
+          <Link to={websiteAppPath("/pricing", "website_footer", "plans")} className={cn("rounded-zaki-sm hover:text-zaki-primary dark:hover:text-[#efe6d9]", linkFocusClass)}>{locale === "ar" ? "الأسعار" : "Pricing"}</Link>
         </div>
       </div>
     </footer>
@@ -824,14 +833,14 @@ export function WebsiteHomePage({ locale = "en" }: { locale?: WebsiteLocale }) {
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
               <Link
-                to="/spaces"
+                to={websiteAppPath("/spaces", "website_hero", "chat")}
                 className={cn("inline-flex items-center justify-center gap-2 rounded-zaki-md bg-[#e10600] px-5 py-3 text-sm font-semibold text-white hover:bg-[#b90505]", linkFocusClass)}
               >
                 {isArabic ? "ابدأ Chat مجانًا" : "Start free chat"}
                 <DirectionalArrow locale={locale} className="size-4" />
               </Link>
               <Link
-                to="/pricing?source=website_hero"
+                to={websiteAppPath("/pricing", "website_hero", "plans")}
                 className={cn("inline-flex items-center justify-center gap-2 rounded-zaki-md border border-zaki-strong bg-white px-5 py-3 text-sm font-semibold text-zaki-primary hover:bg-zaki-hover dark:border-[#2a2018] dark:bg-[#14100d] dark:text-[#efe6d9] dark:hover:bg-[#1d1712]", linkFocusClass)}
               >
                 {isArabic ? "شاهد الخطط" : "See plans"}
@@ -977,10 +986,10 @@ export function WebsiteHomePage({ locale = "en" }: { locale?: WebsiteLocale }) {
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             {([
-              ["Chat", "/marketing/spaces-preview.png", localizeProductPath("spaces", locale), 1280, 900],
-              ["Agent", "/marketing/agent-preview.png", localizeProductPath("agent", locale), 1280, 800],
-              ["Brain", "/marketing/agent-preview.png", localizeProductPath("brain", locale), 1280, 800],
-              ["Pricing", "/marketing/pricing-preview.png", "/pricing", 1360, 920],
+              ["Chat", "/marketing/spaces-preview.png", websiteAppPath("/spaces", "website_surface_chat", "chat"), 1280, 900],
+              ["Agent", "/marketing/agent-preview.png", websiteAppPath("/agent", "website_surface_agent", "agent"), 1280, 800],
+              ["Brain", "/marketing/agent-preview.png", websiteAppPath("/brain", "website_surface_brain", "memory"), 1280, 800],
+              ["Pricing", "/marketing/pricing-preview.png", websiteAppPath("/pricing", "website_surface_pricing", "plans"), 1360, 920],
             ] satisfies Array<[string, string, string, number, number]>).map(([label, src, href, width, height]) => (
               <Link key={label} to={href} className={cn("group overflow-hidden rounded-zaki-2xl border border-[#eadfce] bg-white shadow-zaki-sm transition hover:-translate-y-0.5 hover:shadow-zaki-lg dark:border-[#2a2018] dark:bg-[#14100d]", linkFocusClass)}>
                 <img
@@ -1063,11 +1072,11 @@ export function WebsiteHomePage({ locale = "en" }: { locale?: WebsiteLocale }) {
             <h2 className="mt-2 text-3xl font-semibold">{isArabic ? "ابدأ بـ Chat مجانًا. ترقَّ عندما تريد أن يتذكر ZAKI العمل ويتابعه." : "Start with free Chat. Upgrade when you want ZAKI to remember and continue the work."}</h2>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Link to="/spaces" className={cn("inline-flex items-center justify-center gap-2 rounded-zaki-md bg-white px-5 py-3 text-sm font-semibold text-[#231a13] hover:bg-[#fff3e8]", linkFocusClass)}>
+            <Link to={websiteAppPath("/spaces", "website_final_cta", "chat")} className={cn("inline-flex items-center justify-center gap-2 rounded-zaki-md bg-white px-5 py-3 text-sm font-semibold text-[#231a13] hover:bg-[#fff3e8]", linkFocusClass)}>
               {isArabic ? "ابدأ Chat مجانًا" : "Start free chat"}
               <DirectionalArrow locale={locale} className="size-4" />
             </Link>
-            <Link to="/pricing" className={cn("inline-flex items-center justify-center rounded-zaki-md border border-white/25 px-5 py-3 text-sm font-semibold text-white hover:bg-white/10", linkFocusClass)}>
+            <Link to={websiteAppPath("/pricing", "website_final_cta", "plans")} className={cn("inline-flex items-center justify-center rounded-zaki-md border border-white/25 px-5 py-3 text-sm font-semibold text-white hover:bg-white/10", linkFocusClass)}>
               {isArabic ? "قارن الخطط" : "Compare plans"}
             </Link>
           </div>
@@ -1115,7 +1124,7 @@ export function WebsiteProductPage({ locale = "en" }: { locale?: WebsiteLocale }
                 <DirectionalArrow locale={locale} className="size-4" />
               </Link>
               <Link
-                to="/pricing"
+                to={websiteAppPath("/pricing", `website_product_${product.slug}`, "plans")}
                 className={cn("inline-flex items-center justify-center rounded-zaki-md border border-zaki-strong bg-white px-5 py-3 text-sm font-semibold text-zaki-primary hover:bg-zaki-hover dark:border-[#2a2018] dark:bg-[#14100d] dark:text-[#efe6d9]", linkFocusClass)}
               >
                 {isArabic ? "قارن الخطط" : "Compare plans"}
@@ -1182,7 +1191,7 @@ export function WebsiteProductPage({ locale = "en" }: { locale?: WebsiteLocale }
             </h2>
           </div>
           <Link
-            to="/pricing"
+            to={websiteAppPath("/pricing", `website_product_${product.slug}_footer`, "plans")}
             className={cn("inline-flex items-center justify-center gap-2 rounded-zaki-md bg-[#e10600] px-5 py-3 text-sm font-semibold text-white hover:bg-[#b90505]", linkFocusClass)}
           >
             {isArabic ? "عرض الأسعار" : "View pricing"}

@@ -559,7 +559,7 @@ export function isInternalAgentReplyContent(
 }
 
 export function displaySafeRuntimePreview(value: string | null | undefined): string | null {
-  const text = String(value || "").replace(/\s+/g, " ").trim();
+  const text = sanitizeAssistantScaffold(String(value || "")).replace(/\s+/g, " ").trim();
   if (!text) return null;
   const parsed = tryParseJson(text);
   if (parsed !== null) {

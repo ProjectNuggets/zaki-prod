@@ -11,12 +11,12 @@ export const content = {
     hero: {
       title: "Spaces for work. ZAKI for continuity.",
       subtitle:
-        "Spaces give you structured productivity today. ZAKI is the public beta for persistent personal intelligence: memory continuity, visible work phases, and context that carries forward.",
+        "Chat gives you useful work immediately. ZAKI Agent adds continuity: memory, visible work phases, and context that carries forward.",
       betaLine:
-        "ZAKI beta is now open. Early access includes 5 free messages per day for experimentation.",
-      hint: "Spaces are live. ZAKI beta is open.",
-      cta: "Join the Beta",
-      pricingCta: "Try Spaces",
+        "Start in free Chat today. Use Agent when the work needs account continuity and memory.",
+      hint: "Spaces are live. ZAKI Agent is ready.",
+      cta: "Open Agent",
+      pricingCta: "Start Chat",
       tertiaryCta: "What is ZAKI?",
       placeholder: "How can I help you today?",
       rotatingPrompts: [
@@ -36,45 +36,45 @@ export const content = {
     productSplit: {
       heading: "Three stages. One product ladder.",
       subheading:
-        "Spaces are live now. ZAKI public beta is open. The premium experience comes later, after we learn from the beta.",
+        "Chat is live now. Agent and Brain carry continuity. Learn, Design, and Career stay gated until their flows are ready.",
       cards: [
         {
-          stage: "Stage 1",
+          stage: "Surface 1",
           title: "Spaces",
           badge: "Live now",
           description:
-            "A paid, spaces-based AI workspace built for organized daily productivity. Structured, controlled, and ready to use today.",
+            "A free chat surface for organized daily productivity. Fast, controlled, and ready to use today.",
           bullets: [
-            "Unlimited chat access with a paid subscription",
+            "Free daily Chat access to start",
             "Dedicated spaces keep work, research, and planning separated cleanly",
             "User-controlled memory and stronger data discipline",
           ],
-          ctaLabel: "Try Spaces",
-          ctaHref: "https://app.chatzaki.com/pricing?auth=signup&plan=personal&interval=monthly&source=website_chat_live",
+          ctaLabel: "Start Chat",
+          ctaHref: "https://app.chatzaki.com/spaces?source=website_chat_live&intent=chat",
         },
         {
-          stage: "Stage 2",
-          title: "ZAKI Public Beta",
-          badge: "Open beta",
+          stage: "Surface 2",
+          title: "ZAKI Agent",
+          badge: "Account continuity",
           description:
             "Persistent AI with memory continuity and visible work phases. The first public step beyond ordinary stateless chat.",
           bullets: [
-            "5 free messages per day during beta",
+            "account memory and follow-through through Agent",
             "Experimental, limited, and intentionally early",
             "Persistent memory across sessions",
           ],
-          ctaLabel: "Join the Beta",
-          ctaHref: "/zaki-bot/#beta",
+          ctaLabel: "Open Agent",
+          ctaHref: "/zaki-bot/#waitlist",
         },
         {
-          stage: "Stage 3",
-          title: "ZAKI Premium",
+          stage: "Future lanes",
+          title: "Future ZAKI lanes",
           badge: "Coming later",
           description:
-            "The fuller product arrives after beta learning: deeper controls, stronger reliability, and a more complete personal operator experience.",
+            "Future lanes arrive after release gates: deeper controls, stronger reliability, and complete product coverage.",
           bullets: [
-            "Subscriptions start after the public beta phase",
-            "The premium version is shaped by real beta usage",
+            "Subscriptions start after the current Agent preview phase",
+            "Future lanes are shaped by real usage and release gates",
             "This is where the product becomes deeper and more reliable",
           ],
           ctaLabel: "See the vision",
@@ -83,22 +83,22 @@ export const content = {
       ],
     },
     beta: {
-      heading: "Public Beta: What to expect",
+      heading: "Current access: what to expect",
       warning:
-        "ZAKI is experimental by design. It is the public beta for persistent AI with memory and continuity, not a finished autonomous product.",
+        "ZAKI is experimental by design. It is the current Agent preview for persistent AI with memory and continuity, not a finished autonomous product.",
       bullets: [
-        "Public beta is open now with 5 free messages per day",
-        "Free during beta. Spaces stays the live paid workspace at $13/month",
+        "Agent preview is open now with account memory and follow-through",
+        "Chat starts free. Agent and Brain handle continuity once you sign in",
         "This is where we test the next product shape in public",
-        "Real usage here shapes the later premium product",
+        "Release usage shapes the next gated product lanes",
       ],
-      primaryCta: "Join the beta",
+      primaryCta: "Open Agent",
       secondaryCta: "Read about ZAKI",
     },
     chatProduct: {
       heading: "Why Spaces matter",
       intro:
-        "Spaces are the practical layer: a paid AI workspace built for everyday use, not benchmark headlines.",
+        "Chat is the practical layer: a free AI workspace built for everyday use, not benchmark headlines.",
       bullets: [
         "It does not claim to outperform the latest GPT or Claude models on raw capability.",
         "It is more affordable, more organized, and more controlled for everyday work.",
@@ -116,7 +116,7 @@ export const content = {
         "Persistent thread with memory and recall",
         "Visible process phases while it works",
         "Built for an ongoing relationship, not one-off prompts",
-        "Public beta with 5 free messages per day",
+        "Agent preview with account memory and follow-through",
       ],
       bridgeLine:
         "Most AI still resets the relationship every time you start over. ZAKI is testing what happens when context carries forward instead: not just from prompt to prompt, but across time, channels, and recurring work.",
@@ -136,7 +136,7 @@ export const content = {
       badge: "🎉 ZAKI is live",
       heading: "Start your relationship with ZAKI today",
       description:
-        "ZAKI is now live. Subscribe and start building a personal, memory-aware workflow that evolves with you.",
+        "ZAKI is live. Start in Chat, then use Agent when memory and follow-through matter.",
       socialProof: {
         label: "300+ early users joined in week one",
         hoverLabel: "Join the early community shaping ZAKI before full rollout.",
@@ -147,11 +147,11 @@ export const content = {
         "Structured workspaces for real productivity",
         "Memory with full user control"
       ],
-      cta: "🚀 Subscribe now",
+      cta: "Open Agent",
       secondary: "Jump to plans below to choose Student or Personal.",
-      campaignLabel: "✨ Coming soon: ZAKI Inner Circle",
+      campaignLabel: "Coming soon: gated product lanes",
       campaignTeaser:
-        "A limited campaign for early supporters who believe AI should be personal, structured, and always user-controlled. 🧠🔐",
+        "Updates for Learn, Design, and Career as they move from gated lanes toward launch-ready surfaces.",
       instagramNote:
         "Want a free access code?\nDM us on Instagram after follow + share to request access codes:",
     },
@@ -178,12 +178,12 @@ export const content = {
     geo: {
       definitionHeading: "What is ZAKI, exactly?",
       definitionText:
-        "ZAKI is the persistent AI layer. Spaces are the live paid workspaces for structured daily execution. Use ZAKI for continuity. Use Spaces for organized work.",
+        "ZAKI is the persistent AI layer. Spaces are the free chat entry points for structured daily execution. Use ZAKI for continuity. Use Spaces for organized work.",
       statsHeading: "Why people choose ZAKI",
       statsSource: "The product ladder behind the brand.",
       stats: [
         "Spaces are live now for organized daily use",
-        "Public beta is now open with 5 free messages per day",
+        "Agent preview is now open with account memory and follow-through",
         "Memory and personalization stay under clearer user control",
         "Persistence and runtime continuity are built in"
       ],
@@ -227,7 +227,7 @@ export const content = {
         {
           id: "week-two-zaki-bot-beta",
           tag: "launch",
-          title: "ZAKI public beta is now open",
+          title: "ZAKI Agent is now open",
           description:
             "The first public version of ZAKI is live with one persistent operator thread per user and visible work phases during execution.",
           dateLabel: "Current release",
@@ -243,7 +243,7 @@ export const content = {
           tag: "milestone",
           title: "Multi-user hardening and quota controls",
           description:
-            "The beta now runs with stronger per-user isolation, safer stream handling, and daily quota controls that keep the public release disciplined.",
+            "The release now runs with stronger per-user isolation, safer stream handling, and quota controls that keep the public surface disciplined.",
           dateLabel: "Current release",
           emoji: "🛡️",
           status: "done",
@@ -323,7 +323,7 @@ export const content = {
           tag: "next",
           title: "Next up: deeper controls",
           description:
-            "Next, we deepen the beta with better channel controls, stronger reliability loops, and clearer operator guardrails.",
+            "Next, we deepen the release with better channel controls, stronger reliability loops, and clearer operator guardrails.",
           dateLabel: "Next phase",
           emoji: "🛣️",
           status: "next",
@@ -463,37 +463,37 @@ export const content = {
       note: "ZAKI goes further, but Spaces already cover the daily-use layer.",
     },
     pricing: {
-      heading: "Start with Spaces. Try ZAKI free.",
+      heading: "Start with Chat. Try ZAKI free.",
       subheading:
-        "Spaces is the live paid workspace at $13/month. ZAKI is the public beta for persistent AI with memory and continuity, with 5 free messages per day during beta.",
+        "Chat is the free entry point. ZAKI Agent and Brain provide account continuity, memory, and follow-through.",
       interval: {
         monthly: "Monthly",
         yearly: "Yearly",
       },
       plans: [
         {
-          tier: "student",
-          label: "Student",
-          priceMonthly: "$8 / month",
-          priceYearly: "$96 / year",
+          tier: "chat",
+          label: "Chat",
+          priceMonthly: "$0 to start",
+          priceYearly: "No signup required",
           blurb: "For focused studying, clearer writing, and better support across coursework.",
           features: [
-            "Premium models for better answers",
-            "Priority responses during busy hours",
-            "Stronger help with notes, drafts, and study sessions"
+            "Free Chat for immediate work",
+            "Anonymous daily quota",
+            "No durable memory until sign-in"
           ],
-          cta: "Choose Student",
+          cta: "Start Chat",
         },
         {
           tier: "personal",
           label: "Personal",
-          priceMonthly: "$13 / month",
-          priceYearly: "$150 / year",
+          priceMonthly: "Account required",
+          priceYearly: "Plan access",
           blurb: "For everyday work and life when you want ZAKI to feel like your assistant.",
           features: [
-            "Premium models with richer reasoning",
-            "Priority responses and stronger context",
-            "More personal memory and assistant-style support"
+            "Agent memory and follow-through",
+            "Brain memory review surface",
+            "Tool approvals for sensitive actions"
           ],
           cta: "Choose Personal",
         },
@@ -510,30 +510,30 @@ export const content = {
         ],
         cta: "Buy 1-month gift code",
       },
-      note: "Student requires a .edu email or manual verification with proof of enrollment.",
+      note: "Start in Chat for free. Move to Agent when work needs account continuity.",
       botBeta: {
-        heading: "ZAKI Public Beta",
-        badge: "Open beta",
+        heading: "ZAKI Agent",
+        badge: "Account continuity",
         description:
-          "ZAKI keeps context between sessions, shows its work phases, and maintains per-user memory. The beta is intentionally limited to 5 free messages per day so users can test the direction without mistaking it for the finished product.",
+          "ZAKI Agent keeps context between sessions, shows its work phases, and maintains per-user memory. Future lanes stay gated until backend, entitlement, UI, and E2E agree.",
         bullets: [
-          "5 free messages per day",
+          "account memory and follow-through",
           "Persistent memory that carries across sessions",
           "Visible work phases so you see what ZAKI is doing",
-          "Free now. Paid subscriptions start after beta.",
+          "Account continuity through Agent and visible memory through Brain.",
         ],
-        cta: "Join the Beta",
-        href: "/zaki-bot/#beta",
+        cta: "Open Agent",
+        href: "/zaki-bot/#waitlist",
       },
       botPremium: {
-        heading: "ZAKI Premium",
+        heading: "Future ZAKI lanes",
         badge: "Later",
         description:
-          "The premium product follows the beta. That version brings subscriptions, deeper controls, and a more complete experience.",
+          "Future lanes follow release gates. They bring deeper controls only when backend, entitlement, UI, and tests agree.",
         bullets: [
-          "Subscriptions later",
-          "Shaped by beta learning",
-          "Fuller product",
+          "Access expands after release gates",
+          "Shaped by production usage",
+          "Backend, entitlement, UI, and E2E aligned",
         ],
         cta: "See the roadmap",
         href: "/zaki-bot/",
@@ -546,7 +546,7 @@ export const content = {
         {
           question: "What is ZAKI?",
           answer:
-            "ZAKI is the persistent AI layer. It remembers useful context and keeps an ongoing thread with you over time. Spaces are the live paid workspaces for structured daily execution, and ZAKI is the public beta for the continuity layer behind that work.",
+            "ZAKI is the persistent AI layer. It remembers useful context and keeps an ongoing thread with you over time. Spaces are the free chat entry points for structured daily execution, and ZAKI is the current Agent preview for the continuity layer behind that work.",
         },
         {
           question: "What is the difference between ZAKI and Spaces?",
@@ -569,24 +569,24 @@ export const content = {
             "Use ZAKI when you want continuity, planning, memory, and an ongoing thread that carries across time. Use Spaces when the work needs its own instructions, documents, and shared project context.",
         },
         {
-          question: "Is the ZAKI beta live?",
+          question: "Is ZAKI Agent live?",
           answer:
-            "Yes. The public beta is open now with 5 free messages per day. It is not the final premium product. It is the first public experimental release.",
+            "Yes. The current Agent preview is open now with account memory and follow-through. It is not the final premium product. It is the first public experimental release.",
         },
         {
           question: "Why is ZAKI experimental?",
           answer:
-            "Because it is testing a new product shape: a Personal AI Operator with persistence and continuity, not just a prompt-response session. The beta exists to show what is possible and to learn from real usage.",
+            "Because Agent is the continuity surface: a Personal AI Operator with persistence and memory, not just a prompt-response session.",
         },
         {
-          question: "How many messages are included in the beta?",
+          question: "How does free Chat access work?",
           answer:
-            "The public beta includes 5 free messages per day for experimentation.",
+            "The current Agent preview includes account memory and follow-through for experimentation.",
         },
         {
-          question: "Is the beta free?",
+          question: "Is Chat free?",
           answer:
-            "Yes. The public beta is free and limited. Premium subscriptions come later, after the beta phase.",
+            "Yes. Chat starts free and limited. Agent adds account continuity when the work should persist.",
         },
         {
           question: "Does ZAKI claim to outperform ChatGPT or Claude?",
@@ -599,13 +599,13 @@ export const content = {
             "ZAKI's private runtime provides the memory continuity, process visibility, trainability, and agentic discipline that let ZAKI behave more like a persistent digital counterpart than an ordinary chat session.",
         },
         {
-          question: "When will premium subscriptions start?",
+          question: "When will broader access open?",
           answer:
-            "After the public beta phase. The premium product comes later, once the beta has shown where the product should deepen.",
+            "Broader access opens only after product, entitlement, backend, UI, and E2E readiness agree.",
         },
         {
-          question: "Why should I care about the beta now?",
-          answer: "Because this is the first public look at the next product shape. The beta is where users can test what persistent personal intelligence feels like before the fuller premium product arrives.",
+          question: "Why should I care about Agent now?",
+          answer: "Because the public app should promise only what is wired. Users can start with Chat and use Agent for continuity while future lanes mature.",
         },
       ],
     },
@@ -631,8 +631,8 @@ export const content = {
       subtitle:
         "Spaces تمنحك إنتاجية منظمة اليوم. وزكي هو البيتا العامة لذكاء شخصي مستمر بذاكرة متواصلة، ومراحل عمل مرئية، وسياق يمتد مع الوقت.",
       betaLine:
-        "بيتا زكي مفتوحة الآن. الوصول المبكر يتضمن 5 رسائل مجانية يوميًا للتجربة.",
-      hint: "Spaces متاحة الآن. بيتا زكي مفتوحة.",
+        "تحديثات زكي مفتوحة الآن. الوصول المبكر يتضمن ذاكرة ومتابعة عبر Agent للتجربة.",
+      hint: "Spaces متاحة الآن. تحديثات زكي مفتوحة.",
       cta: "انضم إلى البيتا",
       pricingCta: "جرّب Spaces",
       tertiaryCta: "ما هو زكي؟",
@@ -668,21 +668,21 @@ export const content = {
             "تحكم أوضح في الذاكرة والبيانات",
           ],
           ctaLabel: "جرّب Spaces",
-          ctaHref: "https://app.chatzaki.com/pricing?auth=signup&plan=personal&interval=monthly&source=website_chat_live",
+          ctaHref: "https://app.chatzaki.com/spaces?source=website_chat_live&intent=chat",
         },
         {
           stage: "المرحلة 2",
-          title: "بيتا زكي العامة",
+          title: "تحديثات زكي العامة",
           badge: "بيتا مفتوحة",
           description:
             "ذكاء مستمر تجريبي بذاكرة ومراحل عمل مرئية. أول خطوة علنية تتجاوز شكل الدردشة عديمة الذاكرة.",
           bullets: [
-            "5 رسائل مجانية يوميًا أثناء البيتا",
+            "ذاكرة ومتابعة عبر Agent أثناء البيتا",
             "تجريبي ومحدود ومبكر عن قصد",
             "ذاكرة مستمرة عبر الجلسات",
           ],
           ctaLabel: "انضم إلى البيتا",
-          ctaHref: "/zaki-bot/#beta",
+          ctaHref: "/zaki-bot/#waitlist",
         },
         {
           stage: "المرحلة 3",
@@ -705,7 +705,7 @@ export const content = {
       warning:
         "زكي تجريبي بالتصميم. إنه البيتا العامة لذكاء مستمر بذاكرة واستمرارية، وليس منتجًا ذاتي التشغيل مكتملًا.",
       bullets: [
-        "البيتا العامة مفتوحة الآن مع 5 رسائل مجانية يوميًا",
+        "البيتا العامة مفتوحة الآن مع ذاكرة ومتابعة عبر Agent",
         "زكي مجاني في البيتا، بينما تبقى Spaces طبقة العمل المدفوعة مقابل 13 دولارًا شهريًا",
         "هذا ليس المنتج النهائي، بل أرض الاختبار",
         "ملاحظاتك تشكّل النسخة المميزة القادمة مباشرة",
@@ -734,7 +734,7 @@ export const content = {
         "خيط مستمر مع ذاكرة واسترجاع",
         "مراحل عمل مرئية أثناء التنفيذ",
         "مبني لعلاقة مستمرة لا لطلبات منفصلة فقط",
-        "البيتا العامة تتضمن 5 رسائل مجانية يوميًا",
+        "البيتا العامة تتضمن ذاكرة ومتابعة عبر Agent",
       ],
       bridgeLine:
         "معظم الذكاء الاصطناعي ينساك لحظة انتهاء الجلسة. زكي يختبر ماذا يحدث عندما لا يضيع السياق مع الوقت، لا بين Prompt وآخر فقط، بل عبر الوقت والقنوات والعمل المتكرر.",
@@ -801,7 +801,7 @@ export const content = {
       statsSource: "السلّم الذي يقف خلف العلامة.",
       stats: [
         "Spaces متاحة الآن للاستخدام اليومي المنظّم",
-        "البيتا العامة مفتوحة الآن مع 5 رسائل مجانية يوميًا",
+        "البيتا العامة مفتوحة الآن مع ذاكرة ومتابعة عبر Agent",
         "الذاكرة والتخصيص تحت تحكم أوضح للمستخدم",
         "الاستمرارية والانضباط التشغيلي مدمجان في البنية"
       ],
@@ -845,7 +845,7 @@ export const content = {
         {
           id: "week-two-zaki-bot-beta",
           tag: "launch",
-          title: "بيتا زكي العامة أصبحت مفتوحة",
+          title: "تحديثات زكي العامة أصبحت مفتوحة",
           description:
             "أول نسخة علنية من زكي أصبحت متاحة: خيط تشغيلي ثابت لكل مستخدم ومراحل عمل مرئية أثناء التنفيذ.",
           dateLabel: "الإصدار الحالي",
@@ -941,7 +941,7 @@ export const content = {
           tag: "next",
           title: "القادم: تعميق تحكم زكي",
           description:
-            "المرحلة القادمة توسّع بيتا زكي بضوابط قنوات أعمق، وحلقات اعتمادية أقوى، وحوكمة تشغيل أوضح.",
+            "المرحلة القادمة توسّع تحديثات زكي بضوابط قنوات أعمق، وحلقات اعتمادية أقوى، وحوكمة تشغيل أوضح.",
           dateLabel: "المرحلة التالية",
           emoji: "🛣️",
           status: "next",
@@ -1083,14 +1083,14 @@ export const content = {
     pricing: {
       heading: "ابدأ بـ Spaces. وجرّب زكي مجانًا.",
       subheading:
-        "Spaces هي طبقة العمل المدفوعة المتاحة الآن مقابل 13 دولارًا شهريًا. وزكي هو البيتا العامة لذكاء مستمر بذاكرة واستمرارية، مع 5 رسائل مجانية يوميًا أثناء البيتا.",
+        "Spaces هي طبقة العمل المدفوعة المتاحة الآن مقابل 13 دولارًا شهريًا. وزكي هو البيتا العامة لذكاء مستمر بذاكرة واستمرارية، مع ذاكرة ومتابعة عبر Agent أثناء البيتا.",
       interval: {
         monthly: "شهري",
         yearly: "سنوي",
       },
       plans: [
         {
-          tier: "student",
+          tier: "chat",
           label: "طالب",
           priceMonthly: "$8 / شهر",
           priceYearly: "$96 / سنة",
@@ -1130,18 +1130,18 @@ export const content = {
       },
       note: "خطة الطالب تتطلب بريد .edu أو تحققًا يدويًا مع إثبات دراسة.",
       botBeta: {
-        heading: "بيتا زكي العامة",
+        heading: "تحديثات زكي العامة",
         badge: "بيتا مفتوحة",
         description:
-          "زكي يحتفظ بالسياق بين الجلسات، ويُظهر مراحل عمله، ويحتفظ بذاكرة لكل مستخدم. البيتا محدودة عمدًا بـ 5 رسائل مجانية يوميًا حتى يختبر المستخدم الاتجاه دون أن يخلط بينه وبين المنتج النهائي.",
+          "زكي يحتفظ بالسياق بين الجلسات، ويُظهر مراحل عمله، ويحتفظ بذاكرة لكل مستخدم. البيتا محدودة عمدًا بـ ذاكرة ومتابعة عبر Agent حتى يختبر المستخدم الاتجاه دون أن يخلط بينه وبين المنتج النهائي.",
         bullets: [
-          "5 رسائل مجانية يوميًا",
+          "ذاكرة ومتابعة عبر Agent",
           "ذاكرة مستمرة تنتقل بين الجلسات",
           "مراحل عمل مرئية تشاهد فيها ما يفعله زكي",
           "مجاني الآن. الاشتراكات تبدأ بعد البيتا.",
         ],
         cta: "انضم إلى البيتا",
-        href: "/zaki-bot/#beta",
+        href: "/zaki-bot/#waitlist",
       },
       botPremium: {
         heading: "زكي المميز",
@@ -1187,9 +1187,9 @@ export const content = {
             "استخدم زكي عندما تحتاج إلى الاستمرارية والتخطيط والذاكرة وخيط ممتد عبر الوقت. واستخدم Spaces عندما يحتاج العمل إلى تعليماته وملفاته وسياقه المشترك داخل مشروع واضح.",
         },
         {
-          question: "هل بيتا زكي متاحة الآن؟",
+          question: "هل تحديثات زكي متاحة الآن؟",
           answer:
-            "نعم. البيتا العامة مفتوحة الآن بـ 5 رسائل مجانية يوميًا. وهي ليست المنتج المميز النهائي، بل أول إصدار علني تجريبي.",
+            "نعم. البيتا العامة مفتوحة الآن بـ ذاكرة ومتابعة عبر Agent. وهي ليست المنتج المميز النهائي، بل أول إصدار علني تجريبي.",
         },
         {
           question: "لماذا زكي تجريبي؟",
@@ -1199,7 +1199,7 @@ export const content = {
         {
           question: "كم عدد الرسائل المجانية في البيتا؟",
           answer:
-            "البيتا العامة تتضمن 5 رسائل مجانية يوميًا للتجربة.",
+            "البيتا العامة تتضمن ذاكرة ومتابعة عبر Agent للتجربة.",
         },
         {
           question: "هل البيتا مجانية؟",

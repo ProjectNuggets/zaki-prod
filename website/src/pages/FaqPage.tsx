@@ -20,7 +20,7 @@ export function FaqPage({ locale }: { locale: Locale }) {
             <p className="mt-6 max-w-[60ch] text-sm leading-7 text-zk-text-secondary md:text-base md:leading-8">
               {isArabic
                 ? "تشرح هذه الصفحة الفرق بين زكي وSpaces، وما الذي تتضمنه البيتا العامة، وما الذي لا تعد به بعد، ومتى تبدأ الاشتراكات."
-                : "This page explains the difference between ZAKI and Spaces, what the public beta includes, what it does not promise yet, and when subscriptions begin."}
+                : "This page explains the difference between ZAKI and Spaces, what the current Agent preview includes, what it does not promise yet, and when subscriptions begin."}
             </p>
           </Reveal>
           <Reveal delay={80} className="mt-8">

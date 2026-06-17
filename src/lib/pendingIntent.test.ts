@@ -23,11 +23,11 @@ describe("pending intent", () => {
       taskKind: "brief",
       prompt: "Create a landing page direction",
       source: "dashboard",
-      returnTo: "/design",
+      returnTo: "/products/design",
       anonymousWorkId: "work-1",
     });
 
-    expect(intent?.returnTo).toBe("/design");
+    expect(intent?.returnTo).toBe("/products/design");
     expect(window.localStorage.getItem(PENDING_INTENT_KEY)).not.toBeNull();
     expect(window.sessionStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
     expect(readPendingIntent()).toMatchObject({
@@ -46,7 +46,7 @@ describe("pending intent", () => {
       returnTo: "https://evil.example/hire",
     });
 
-    expect(readPendingIntent()?.returnTo).toBe("/hire");
+    expect(readPendingIntent()?.returnTo).toBe("/products/hire");
 
     window.localStorage.setItem(
       PENDING_INTENT_KEY,
@@ -88,7 +88,8 @@ describe("pending intent", () => {
 
   it("builds canonical product return routes", () => {
     expect(buildProductReturnTo("agent")).toBe("/agent");
-    expect(buildProductReturnTo("learning")).toBe("/learn");
+    expect(buildProductReturnTo("learning")).toBe("/products/learn");
+    expect(buildProductReturnTo("design")).toBe("/products/design");
     expect(buildProductReturnTo("spaces")).toBe("/spaces");
   });
 });

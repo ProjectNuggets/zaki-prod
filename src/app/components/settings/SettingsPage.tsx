@@ -78,6 +78,10 @@ import {
   type AgentDefaultReasoningEffort,
 } from "@/lib/agentSettingsDefaults";
 import { trackProductEvent } from "@/lib/productTelemetry";
+import {
+  getProductLaunchState,
+  type ProductLaunchState,
+} from "@/lib/productRoutes";
 import { useAuthStore, useUIStore } from "@/stores";
 import { TypeToConfirmDialog } from "@/app/components/ui/zaki";
 import { V2Badge, V2Button, V2StatusStrip } from "@/app/components/v2";
@@ -380,6 +384,23 @@ function getUsageLifecycleLabel(
   return t("settingsModal.usage.lifecycleLabel", {
     defaultValue: `Lifecycle: ${lifecycleLabel}`,
     lifecycle: lifecycleLabel,
+  });
+}
+
+function getUsageLaunchStateLabel(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  productId?: string
+) {
+  const launchState = getProductLaunchState(productId);
+  if (launchState === "unknown") return null;
+  const fallback: Record<Exclude<ProductLaunchState, "unknown">, string> = {
+    public_app: "Launch: public app",
+    private_beta: "Launch: private beta",
+    waitlist: "Launch: waitlist",
+    hidden: "Launch: hidden",
+  };
+  return t(`settingsModal.usage.launchState.${launchState}`, {
+    defaultValue: fallback[launchState],
   });
 }
 
@@ -2024,6 +2045,7 @@ export function SettingsPage() {
                             <div>
                               <strong>{product.label}</strong>
                               <small>{getUsageLifecycleLabel(t, product.lifecycle)}</small>
+                              <small>{getUsageLaunchStateLabel(t, product.productId)}</small>
                             </div>
                             <div className="zaki-settings-v2__usage-row-meter">
                               <span>{summaryLabel}</span>
@@ -2051,6 +2073,7 @@ export function SettingsPage() {
                             <div>
                               <strong>{product?.label}</strong>
                               <small>{getUsageLifecycleLabel(t, product?.lifecycle || "current")}</small>
+                              <small>{getUsageLaunchStateLabel(t, product?.productId)}</small>
                             </div>
                             <div className="zaki-settings-v2__usage-row-meter">
                               <span>{getQuotaSummaryLabel(t, quota)}</span>
@@ -2305,7 +2328,7 @@ export function SettingsPage() {
                 })}
                 description={t("settingsModal.agentSettings.proactiveUpdates.helper", {
                   defaultValue:
-                    "Allow Nullalis to send outbound updates where a connected channel and approval policy permit it.",
+                    "Paused for launch while scheduled return delivery is hardened.",
                 })}
               >
                 <input
@@ -2314,13 +2337,9 @@ export function SettingsPage() {
                   aria-label={t("settingsModal.agentSettings.proactiveUpdates.name", {
                     defaultValue: "Proactive updates",
                   })}
-                  checked={agentSettingsDraft.proactive_updates}
-                  disabled={agentSettingsLoading || agentSettingsSaving}
-                  onChange={(event) => {
-                    const proactive_updates = event.target.checked;
-                    setAgentSettingsDraft((current) => ({ ...current, proactive_updates }));
-                    void patchAgentSettings({ proactive_updates });
-                  }}
+                  checked={false}
+                  disabled
+                  onChange={() => undefined}
                 />
               </V2SettingsRow>
               <V2SettingsRow

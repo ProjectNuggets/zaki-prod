@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@jest/globals";
 import {
+  displaySafeRuntimePreview,
   isInternalAgentReplyContent,
   normalizeAssistantDisplayText,
 } from "./agentReplyPresentation";
@@ -195,5 +196,20 @@ describe("Agent reply presentation", () => {
     expect(text).not.toMatch(/Layer 0/);
     expect(text).not.toMatch(/ZAKI_MEMORY_CONTEXT/);
     expect(text).not.toContain("private");
+  });
+
+  it("keeps facet delegate scaffolding out of rendered replies and runtime previews", () => {
+    const raw =
+      "delegate agent=the-bully status=completed\n" +
+      "[SURFACING: this reply is a facet of your own judgment.]\n" +
+      "result:\n" +
+      "The plan is soft because it avoids choosing a buyer.";
+
+    expect(normalizeAssistantDisplayText(raw, { agentReply: true })).toBe(
+      "The plan is soft because it avoids choosing a buyer."
+    );
+    expect(displaySafeRuntimePreview(raw)).toBe(
+      "The plan is soft because it avoids choosing a buyer."
+    );
   });
 });

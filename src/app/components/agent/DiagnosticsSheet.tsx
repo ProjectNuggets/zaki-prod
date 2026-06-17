@@ -32,7 +32,6 @@ type DiagnosticsData = {
   fallback_provider_count?: number | null;
   effective_config_source?: string;
   telegram_connected_normalized?: boolean | null;
-  heartbeat_enabled_normalized?: boolean | null;
   onboarding_ready_normalized?: boolean | null;
   client_ready_status?: string | null;
   upstreamHealth?: { ok?: boolean; latencyMs?: number | null };
@@ -183,10 +182,6 @@ export function DiagnosticsSheet({ isOpen, onClose }: Props) {
                   <Row
                     label="Telegram"
                     value={<StatusDot ok={data.telegram_connected_normalized} />}
-                  />
-                  <Row
-                    label="Heartbeat"
-                    value={<StatusDot ok={data.heartbeat_enabled_normalized} />}
                   />
                   <Row
                     label="Onboarding"

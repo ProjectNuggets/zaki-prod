@@ -264,6 +264,9 @@ describe("ChatView", () => {
     expect(
       within(screen.getByTestId("agent-reply-touched")).getByText("website")
     ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("agent-reply-touched")).queryByText("launch-brief.md")
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /open in panel/i }));
     fireEvent.click(
@@ -274,5 +277,73 @@ describe("ChatView", () => {
 
     expect(openArtifacts).toHaveBeenCalledTimes(1);
     expect(openSources).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers facet quick actions for strategy-shaped agent replies", () => {
+    const onQuickReply = jest.fn();
+
+    render(
+      <ChatView
+        messages={[
+          { id: "user-1", role: "user", content: "Review this GTM strategy." },
+          {
+            id: "assistant-1",
+            role: "assistant",
+            content: "The strategy needs a sharper beachhead, clearer pricing, and a lower-risk GTM plan.",
+          },
+        ]}
+        isHistoryLoading={false}
+        isStreaming={false}
+        botMode
+        firstMessageTransition={false}
+        onQuickReply={onQuickReply}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: /Ask the critic/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Get the blunt take/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Try the sideways take/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Ask the critic/i }));
+    expect(onQuickReply).toHaveBeenCalledWith("Give me the critic's take on your last answer.");
+  });
+
+  it("switches to answer actions after a facet turn", () => {
+    render(
+      <ChatView
+        messages={[
+          { id: "user-1", role: "user", content: "Use the critic." },
+          {
+            id: "assistant-1",
+            role: "assistant",
+            content: "My inner critic says the plan is too generic. My synthesis: narrow the launch.",
+          },
+        ]}
+        replayTimelines={{
+          "assistant-1": [
+            {
+              id: "delegate-1",
+              kind: "tool",
+              tool: "delegate",
+              text: "Using delegate",
+              timestamp: 1,
+              inputPreview: '{"agent":"the-critic"}',
+              outputPreview: "delegate agent=the-critic status=completed\nresult:\nThe plan is too generic.",
+              resultState: "done",
+            },
+          ],
+        }}
+        isHistoryLoading={false}
+        isStreaming={false}
+        botMode
+        firstMessageTransition={false}
+        onQuickReply={jest.fn()}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: /Tighten this/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Turn into plan/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Save to brain/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Ask the critic/i })).not.toBeInTheDocument();
   });
 });

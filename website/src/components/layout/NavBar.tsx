@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { Locale } from "../../lib/content";
+import { appHandoffUrl } from "../../lib/appHandoff";
 import { getLocaleSwitchPath } from "../../lib/routeRegistry";
 import { Menu, Terminal, X } from "lucide-react";
 
@@ -101,7 +102,7 @@ export function NavBar({ locale }: { locale: Locale }) {
           </Link>
 
           <a
-            href="https://app.chatzaki.com/?source=website_nav_command"
+            href={appHandoffUrl("/", "website_nav_command", "dashboard")}
             className="ms-1 inline-flex min-h-8 items-center gap-2 border border-zk-accent bg-zk-accent px-3 text-[10px] uppercase tracking-[0.14em] text-white transition-colors duration-200 hover:bg-zk-accent-hover"
           >
             <Terminal className="size-3.5" strokeWidth={1.5} />
@@ -148,7 +149,7 @@ export function NavBar({ locale }: { locale: Locale }) {
             </Link>
           ))}
           <a
-            href="https://app.chatzaki.com/?source=website_nav_mobile_command"
+            href={appHandoffUrl("/", "website_nav_mobile_command", "dashboard")}
             className="mt-3 flex min-h-11 items-center justify-center gap-2 border border-zk-accent bg-zk-accent px-4 text-[11px] uppercase tracking-[0.14em] text-white transition-colors duration-200 hover:bg-zk-accent-hover"
           >
             <Terminal className="size-3.5" strokeWidth={1.5} />

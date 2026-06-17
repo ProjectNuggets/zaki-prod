@@ -34,6 +34,15 @@ const REFLECTION_RE =
   /<\s*reflection\b[^>]*>[\s\S]*?<\s*\/\s*reflection\s*>/gi;
 const REFLECTION_TAIL_RE = /<\s*reflection\b[\s\S]*$/i;
 
+// Delegate facets return an internal surfacing hint to the main model. It can
+// appear in tool previews or leaked raw delegate frames, but it is never
+// end-user copy.
+const FACET_SURFACING_RE = /\[\s*SURFACING:[\s\S]*?\]\s*/gi;
+const FACET_SURFACING_TAIL_RE = /\[\s*SURFACING:[\s\S]*$/i;
+const DELEGATE_RESULT_HEADER_RE =
+  /(^|\n)\s*delegate\s+agent=[^\n]*\s+status=completed\s*\n(?:\s*result:\s*\n?)?/gi;
+const DELEGATE_RESULT_LABEL_RE = /(^|\n)\s*result:\s*\n/gi;
+
 // Strong signals that a chunk carries the leaked system prompt. Section-stripping only fires
 // when one of these is present, so a legitimate lone "## Safety" answer heading is never removed.
 const DISTINCTIVE_SCAFFOLD_RE =
@@ -80,6 +89,11 @@ export function sanitizeAssistantScaffold(raw: string): string {
     .replace(MEMORY_FOR_TURN_RE, "")
     .replace(MEMORY_FOR_TURN_TAIL_RE, "");
   text = text.replace(REFLECTION_RE, "").replace(REFLECTION_TAIL_RE, "");
+  text = text
+    .replace(FACET_SURFACING_RE, "")
+    .replace(FACET_SURFACING_TAIL_RE, "")
+    .replace(DELEGATE_RESULT_HEADER_RE, "$1")
+    .replace(DELEGATE_RESULT_LABEL_RE, "$1");
   if (leaked) text = stripStablePromptSections(text);
   return text.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }

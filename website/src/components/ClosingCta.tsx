@@ -1,4 +1,5 @@
 import type { Locale } from "../lib/content";
+import { appHandoffUrl } from "../lib/appHandoff";
 import { ShimmerButton } from "./ui/shimmer-button";
 import { useEffect, useRef, useState } from "react";
 
@@ -89,7 +90,7 @@ export function ClosingCta({ locale }: { locale: Locale }) {
             transform: visible ? "translateY(0)" : "translateY(12px)",
           }}
         >
-          <a href="https://app.chatzaki.com/?auth=signup&source=website_home_cta">
+          <a href={appHandoffUrl("/agent", "website_home_cta", "agent")}>
             <ShimmerButton>
               {isArabic ? "قابل وكيلك" : "Meet your agent"}
             </ShimmerButton>

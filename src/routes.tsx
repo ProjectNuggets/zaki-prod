@@ -230,15 +230,15 @@ export const router = createBrowserRouter([
       },
       {
         path: 'privacy',
-        element: <Navigate to="/legal" replace />,
+        element: routeSuspense(<LegalPage slug="privacy" />),
       },
       {
         path: 'terms',
-        element: <Navigate to="/legal" replace />,
+        element: routeSuspense(<LegalPage slug="terms" />),
       },
       {
         path: 'compliance',
-        element: <Navigate to="/legal" replace />,
+        element: routeSuspense(<LegalPage slug="compliance" />),
       },
       {
         path: 'ar',
@@ -270,15 +270,15 @@ export const router = createBrowserRouter([
       },
       {
         path: 'ar/privacy',
-        element: <Navigate to="/legal" replace />,
+        element: routeSuspense(<LegalPage slug="privacy" />),
       },
       {
         path: 'ar/terms',
-        element: <Navigate to="/legal" replace />,
+        element: routeSuspense(<LegalPage slug="terms" />),
       },
       {
         path: 'ar/compliance',
-        element: <Navigate to="/legal" replace />,
+        element: routeSuspense(<LegalPage slug="compliance" />),
       },
       {
         path: 'help',
@@ -314,7 +314,7 @@ export const router = createBrowserRouter([
           <ProductAccessGate
             productId="learning"
             title="ZAKI Learn"
-            mode="coming_soon"
+            mode="private_beta"
           />
         ),
       },
@@ -324,7 +324,7 @@ export const router = createBrowserRouter([
           <ProductAccessGate
             productId="hire"
             title="ZAKI Career"
-            mode="coming_soon"
+            mode="private_beta"
           />
         ),
       },
@@ -334,7 +334,7 @@ export const router = createBrowserRouter([
           <ProductAccessGate
             productId="design"
             title="ZAKI Design"
-            mode="coming_soon"
+            mode="waitlist"
           />
         ),
       },

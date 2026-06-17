@@ -7,6 +7,10 @@ import App from "./App";
 import { useAuthStore } from "@/stores/authStore";
 
 jest.mock("react-i18next", () => ({
+  initReactI18next: {
+    type: "3rdParty",
+    init: () => undefined,
+  },
   useTranslation: () => ({
     t: (key: string) => key,
     i18n: { language: "en", dir: () => "ltr" },
@@ -24,7 +28,9 @@ function renderAppAt(path: string) {
           <Route path="/" element={<App />}>
             <Route index element={<div>public home</div>} />
             <Route path="spaces" element={<div>anonymous spaces</div>} />
+            <Route path="learn" element={<div>learn workspace</div>} />
             <Route path="hire" element={<div>hire workspace</div>} />
+            <Route path="design" element={<div>design workspace</div>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -109,16 +115,20 @@ describe("App route hydration", () => {
     expect(screen.queryByText("public home")).not.toBeInTheDocument();
   });
 
-  it("lets coming-soon product gates render without an auth cliff", async () => {
+  it.each([
+    ["/learn", "learn workspace"],
+    ["/hire", "hire workspace"],
+    ["/design", "design workspace"],
+  ])("lets gated product routes render without an auth cliff at %s", async (path, label) => {
     fetchMock.mockResolvedValue({
       ok: false,
       status: 401,
       json: async () => ({}),
     } as Response);
 
-    renderAppAt("/hire");
+    renderAppAt(path);
 
-    expect(await screen.findByText("hire workspace")).toBeInTheDocument();
+    expect(await screen.findByText(label)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /continue/i })).not.toBeInTheDocument();
   });
 });

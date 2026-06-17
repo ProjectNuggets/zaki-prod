@@ -379,6 +379,28 @@ export function InputArea({
   });
 
   useEffect(() => {
+    if (typeof window === "undefined" || !window.visualViewport) return;
+    const root = document.documentElement;
+    const updateKeyboardInset = () => {
+      const viewport = window.visualViewport;
+      if (!viewport) return;
+      const overlap = Math.max(
+        0,
+        window.innerHeight - viewport.height - viewport.offsetTop
+      );
+      root.style.setProperty("--zaki-visual-viewport-bottom", `${Math.round(overlap)}px`);
+    };
+    updateKeyboardInset();
+    window.visualViewport.addEventListener("resize", updateKeyboardInset);
+    window.visualViewport.addEventListener("scroll", updateKeyboardInset);
+    return () => {
+      window.visualViewport?.removeEventListener("resize", updateKeyboardInset);
+      window.visualViewport?.removeEventListener("scroll", updateKeyboardInset);
+      root.style.removeProperty("--zaki-visual-viewport-bottom");
+    };
+  }, []);
+
+  useEffect(() => {
     if (!zakiBotMode || zakiAutonomyTouchedRef.current) return;
     setZakiAutonomy(zakiDefaultAutonomy);
   }, [zakiBotMode, zakiDefaultAutonomy]);
@@ -2004,7 +2026,7 @@ export function InputArea({
               <X className="size-4 text-white" />
             ) : zakiBotMode ? (
               <>
-                <span>SEND</span>
+                <span>{t("input.sendLabel", { defaultValue: "SEND" })}</span>
                 <span className="zaki-send-button__kbd">⌘↵</span>
               </>
             ) : (

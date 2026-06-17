@@ -1,5 +1,6 @@
 import { ArrowRight, CircleDot, LockKeyhole, SendHorizontal } from "lucide-react";
 import type { Locale } from "../lib/content";
+import { appHandoffUrl } from "../lib/appHandoff";
 import { Reveal } from "./Reveal";
 
 const productLanes = {
@@ -7,9 +8,9 @@ const productLanes = {
     { label: "Chat", state: "live" },
     { label: "Agent", state: "preview" },
     { label: "Brain", state: "memory" },
-    { label: "Learn", state: "beta" },
+    { label: "Learn", state: "gated" },
     { label: "Design", state: "waitlist" },
-    { label: "Hire", state: "beta" },
+    { label: "Hire", state: "gated" },
   ],
   ar: [
     { label: "الدردشة", state: "مباشر" },
@@ -24,8 +25,8 @@ const productLanes = {
 export function Hero({ locale }: { locale: Locale }) {
   const isArabic = locale === "ar";
   const lanes = productLanes[locale];
-  const appHref = "https://app.chatzaki.com/?source=website_home_command";
-  const signupHref = "https://app.chatzaki.com/?auth=signup&source=website_home_keep_work";
+  const appHref = appHandoffUrl("/", "website_home_command", "dashboard");
+  const signupHref = appHandoffUrl("/agent", "website_home_keep_work", "agent");
 
   return (
     <section className="border-b border-zk-border px-5 pb-2 pt-3 md:px-8 md:pb-8 md:pt-8">
@@ -121,7 +122,7 @@ export function Hero({ locale }: { locale: Locale }) {
                 </div>
                 <div className="grid gap-0">
                   {[
-                    [isArabic ? "المتاح الآن" : "Available now", isArabic ? "الدردشة والذاكرة" : "Chat and memory preview"],
+                    [isArabic ? "المتاح الآن" : "Available now", isArabic ? "الدردشة و Agent و Brain" : "Chat, Agent, and Brain"],
                     [isArabic ? "بعد تسجيل الدخول" : "After sign in", isArabic ? "الحفظ، الرفع، التصدير" : "Save, upload, export"],
                     [isArabic ? "مسارات مقيّدة" : "Gated lanes", isArabic ? "التعلّم، التصميم، التوظيف" : "Learn, Design, Hire"],
                   ].map(([label, value]) => (

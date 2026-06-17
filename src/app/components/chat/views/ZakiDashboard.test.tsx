@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom";
 import { describe, expect, it, jest, beforeEach } from "@jest/globals";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ZakiDashboard } from "./ZakiDashboard";
 import { useAuthStore } from "@/stores";
@@ -66,7 +66,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.verbs.hire.guest": "advance",
     "zakiDashboard.command.verbs.spaces.signed": "chat",
     "zakiDashboard.command.verbs.spaces.guest": "chat",
-    "zakiDashboard.entry.website": "V1 website",
+    "zakiDashboard.entry.website": "Website",
     "zakiDashboard.entry.signIn": "Sign in",
     "zakiDashboard.entry.signUp": "Sign up",
     "zakiDashboard.command.weeklyFreeCredit": "Weekly free credit",
@@ -120,8 +120,8 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.details.learning.memory": "Learner memory is not public yet.",
     "zakiDashboard.command.details.learning.truth": "Coming soon. Use Chat or Agent today.",
     "zakiDashboard.links.howItWorks": "How it works",
-    "zakiDashboard.links.waysToBuy": "V1: Ways to buy",
-    "zakiDashboard.links.fullPalette": "V1: Product palette",
+    "zakiDashboard.links.waysToBuy": "Plans",
+    "zakiDashboard.links.fullPalette": "Product overview",
     "zakiDashboard.intro.kicker": "First run",
     "zakiDashboard.intro.title": "Start the work first. Choose an account when it matters.",
     "zakiDashboard.intro.progress": "Intro slides",
@@ -131,20 +131,23 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.intro.slides.what.bullets.command": "Write the work once.",
     "zakiDashboard.intro.slides.what.bullets.route": "Choose the product lane.",
     "zakiDashboard.intro.slides.what.bullets.keep": "Keep local drafts.",
-    "zakiDashboard.intro.slides.buy.title": "Use it your way",
+    "zakiDashboard.intro.slides.buy.title": "Activate the loop",
     "zakiDashboard.intro.slides.buy.body": "Try weekly credits as a guest.",
     "zakiDashboard.intro.slides.buy.bullets.guest": "Guest credits.",
     "zakiDashboard.intro.slides.buy.bullets.account": "Account saves work.",
     "zakiDashboard.intro.slides.buy.bullets.plan": "Plan adds capacity.",
-    "zakiDashboard.intro.slides.palette.title": "V1 website and product palette",
-    "zakiDashboard.intro.slides.palette.body": "Current website stays behind the dashboard as V1.",
+    "zakiDashboard.intro.slides.palette.title": "Visit the website when you want the full story",
+    "zakiDashboard.intro.slides.palette.body": "The website is the narrative layer.",
     "zakiDashboard.intro.slides.palette.bullets.chat": "Launch core.",
     "zakiDashboard.intro.slides.palette.bullets.preview": "Truthful previews.",
-    "zakiDashboard.intro.slides.palette.bullets.website": "Visit V1.",
+    "zakiDashboard.intro.slides.palette.bullets.website": "Visit the website.",
     "zakiDashboard.intro.back": "Back",
     "zakiDashboard.intro.next": "Next",
-    "zakiDashboard.intro.startTyping": "Start typing",
-    "zakiDashboard.intro.visitWebsite": "Visit V1 website",
+    "zakiDashboard.intro.startTyping": "Enter dashboard",
+    "zakiDashboard.intro.visitWebsite": "Visit website",
+    "zakiDashboard.intro.startFreeChat": "Start free chat",
+    "zakiDashboard.intro.createAccount": "Create account",
+    "zakiDashboard.intro.openWebsite": "Open website",
     "zakiDashboard.anonymousWork.title": "Continue what you started",
     "zakiDashboard.anonymousWork.subtitle": "Same-browser history.",
     "zakiDashboard.anonymousWork.claimedTitle": "We kept your work",
@@ -227,6 +230,13 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.activeWork.recentSession": "{{title}} · recent",
     "zakiDashboard.activeWork.sessionMeta": "{{messages}} messages · {{mode}}",
     "zakiDashboard.activeWork.noMode": "standard",
+    "zakiDashboard.activeWork.openSessionAria": "Open Agent session {{title}}",
+    "zakiDashboard.memoryBridge.ariaLabel": "Memory import",
+    "zakiDashboard.memoryBridge.kicker": "Memory bridge",
+    "zakiDashboard.memoryBridge.title": "Bring your memory from ChatGPT/Claude",
+    "zakiDashboard.memoryBridge.copy": "Paste a structured export once.",
+    "zakiDashboard.memoryBridge.action": "Bring your memory from ChatGPT/Claude",
+    "zakiDashboard.memoryBridge.dismiss": "Not now",
     "zakiDashboard.commercial.title": "Commercial release spine is central.",
     "zakiDashboard.commercial.copy": "Meter and memory are central.",
     "zakiDashboard.commercial.plans": "See plans",
@@ -424,10 +434,13 @@ function setupQueries() {
   }));
 }
 
-function renderDashboard(onSendExample = jest.fn()) {
+function renderDashboard(
+  onSendExample = jest.fn(),
+  props: Partial<React.ComponentProps<typeof ZakiDashboard>> = {},
+) {
   return render(
     <MemoryRouter>
-      <ZakiDashboard onSendExample={onSendExample} />
+      <ZakiDashboard onSendExample={onSendExample} {...props} />
     </MemoryRouter>
   );
 }
@@ -481,6 +494,40 @@ describe("ZakiDashboard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue in Agent" }));
 
     expect(mockNavigate).toHaveBeenCalledWith("/agent");
+  });
+
+  it("offers signed-in first-run users a one-time memory bridge", () => {
+    const onOpenMemoryImport = jest.fn();
+
+    renderDashboard(jest.fn(), { onOpenMemoryImport });
+
+    fireEvent.click(screen.getByRole("button", { name: "Bring your memory from ChatGPT/Claude" }));
+
+    expect(onOpenMemoryImport).toHaveBeenCalledTimes(1);
+    expect(window.localStorage.getItem("zaki:memory-bridge-offered:42")).toBe("1");
+    expect(
+      screen.queryByRole("button", { name: "Bring your memory from ChatGPT/Claude" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not repeat the memory bridge once the signed-in user has seen it", () => {
+    window.localStorage.setItem("zaki:memory-bridge-offered:42", "1");
+
+    renderDashboard(jest.fn(), { onOpenMemoryImport: jest.fn() });
+
+    expect(
+      screen.queryByRole("button", { name: "Bring your memory from ChatGPT/Claude" })
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens recent signed-in Agent sessions from the dashboard", () => {
+    const onOpenSession = jest.fn();
+
+    renderDashboard(jest.fn(), { onOpenSession });
+
+    fireEvent.click(screen.getByRole("button", { name: /Open Agent session Investor brief/i }));
+
+    expect(onOpenSession).toHaveBeenCalledWith("agent:4821");
   });
 
   it("uses the anonymous meter contract when there is no auth token", () => {
@@ -726,13 +773,13 @@ describe("ZakiDashboard", () => {
     expect(screen.getByTestId("zaki-dashboard-intro-slide")).toHaveTextContent("What is ZAKI?");
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    fireEvent.click(screen.getByRole("button", { name: "Start typing" }));
+    fireEvent.click(screen.getByRole("button", { name: "Enter dashboard" }));
 
     expect(screen.queryByTestId("zaki-dashboard-intro")).not.toBeInTheDocument();
     expect(window.localStorage.getItem("zaki:dashboard-v2-intro-dismissed")).toBe("1");
   });
 
-  it("runs the intro as three slides and routes the V1 website action", () => {
+  it("runs the intro as three slides and routes the website action", () => {
     useAuthStore.setState({
       token: null,
       user: null,
@@ -744,16 +791,54 @@ describe("ZakiDashboard", () => {
 
     const slide = screen.getByTestId("zaki-dashboard-intro-slide");
     expect(slide).toHaveTextContent("What is ZAKI?");
-    expect(slide).not.toHaveTextContent("Use it your way");
+    expect(slide).not.toHaveTextContent("Activate the loop");
 
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    expect(slide).toHaveTextContent("Use it your way");
+    expect(slide).toHaveTextContent("Activate the loop");
 
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    expect(slide).toHaveTextContent("V1 website and product palette");
-    fireEvent.click(screen.getByRole("button", { name: "Visit V1 website" }));
+    expect(slide).toHaveTextContent("Visit the website when you want the full story");
+    fireEvent.click(screen.getByRole("button", { name: "Visit website" }));
 
     expect(mockNavigate).toHaveBeenCalledWith("/story");
+    expect(window.localStorage.getItem("zaki:dashboard-v2-intro-dismissed")).toBe("1");
+  });
+
+  it("wires the activation slide to the composer", async () => {
+    useAuthStore.setState({
+      token: null,
+      user: null,
+      isHydrating: false,
+      isLoading: false,
+    });
+
+    renderDashboard();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start free chat" }));
+
+    expect(screen.queryByTestId("zaki-dashboard-intro")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByLabelText("Describe what you want ZAKI to do")).toHaveFocus();
+    });
+    expect(window.localStorage.getItem("zaki:dashboard-v2-intro-dismissed")).toBe("1");
+  });
+
+  it("wires the activation slide to signup", () => {
+    useAuthStore.setState({
+      token: null,
+      user: null,
+      isHydrating: false,
+      isLoading: false,
+    });
+
+    renderDashboard();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+    expect(screen.queryByTestId("zaki-dashboard-intro")).not.toBeInTheDocument();
+    expect(mockNavigate).toHaveBeenCalledWith("/?auth=signup");
     expect(window.localStorage.getItem("zaki:dashboard-v2-intro-dismissed")).toBe("1");
   });
 
@@ -770,7 +855,7 @@ describe("ZakiDashboard", () => {
     window.localStorage.setItem("zaki:dashboard-v2-intro-dismissed", "1");
     renderDashboard();
 
-    fireEvent.click(screen.getByRole("button", { name: "V1 website" }));
+    fireEvent.click(screen.getByRole("button", { name: "Website" }));
     expect(mockNavigate).toHaveBeenCalledWith("/story");
     mockNavigate.mockClear();
 
@@ -779,10 +864,10 @@ describe("ZakiDashboard", () => {
     expect(mockNavigate).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "V1: Ways to buy" }));
+    fireEvent.click(screen.getByRole("button", { name: "Plans" }));
     expect(mockNavigate).toHaveBeenCalledWith("/pricing");
 
-    fireEvent.click(screen.getByRole("button", { name: "V1: Product palette" }));
+    fireEvent.click(screen.getByRole("button", { name: "Product overview" }));
     expect(mockNavigate).toHaveBeenCalledWith("/products/agent");
   });
 });

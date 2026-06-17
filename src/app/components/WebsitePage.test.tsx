@@ -27,6 +27,27 @@ describe("WebsitePage", () => {
     expect(screen.queryByText(/student/i)).not.toBeInTheDocument();
   });
 
+  it("wires website CTAs into app routes with source and intent", () => {
+    render(
+      <MemoryRouter>
+        <WebsiteHomePage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getAllByRole("link", { name: /Start free chat/i })[0]).toHaveAttribute(
+      "href",
+      "/spaces?source=website_hero&intent=chat"
+    );
+    expect(screen.getByRole("link", { name: /See plans/i })).toHaveAttribute(
+      "href",
+      "/pricing?source=website_hero&intent=plans"
+    );
+    expect(screen.getByRole("link", { name: /Chat interface preview Chat/i })).toHaveAttribute(
+      "href",
+      "/spaces?source=website_surface_chat&intent=chat"
+    );
+  });
+
   it("renders ZAKI Learn as coming soon without paid routing", () => {
     render(
       <MemoryRouter initialEntries={["/products/learn"]}>
@@ -40,7 +61,10 @@ describe("WebsitePage", () => {
     expect(screen.getAllByText("Soon").length).toBeGreaterThan(0);
     expect(screen.getByText(/Learning workflows are parked/i)).toBeInTheDocument();
     expect(screen.getByText(/not being presented as paid public access/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open dashboard/i })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: /Open dashboard/i })).toHaveAttribute(
+      "href",
+      "/?source=website_product_learn&intent=dashboard"
+    );
     expect(screen.queryByText("$19/mo")).not.toBeInTheDocument();
   });
 
@@ -55,7 +79,10 @@ describe("WebsitePage", () => {
 
     expect(screen.getByRole("heading", { name: "ZAKI Design" })).toBeInTheDocument();
     expect(screen.getByText(/Design will launch after the service/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open dashboard/i })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: /Open dashboard/i })).toHaveAttribute(
+      "href",
+      "/?source=website_product_design&intent=dashboard"
+    );
 
     unmount();
 
@@ -69,7 +96,10 @@ describe("WebsitePage", () => {
 
     expect(screen.getByRole("heading", { name: "ZAKI Career" })).toBeInTheDocument();
     expect(screen.getByText(/user-side job search/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open dashboard/i })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: /Open dashboard/i })).toHaveAttribute(
+      "href",
+      "/?source=website_product_hire&intent=dashboard"
+    );
   });
 
   it("renders the Arabic landing page with RTL layout and language routing", () => {
@@ -99,6 +129,9 @@ describe("WebsitePage", () => {
     expect(screen.getByRole("heading", { name: "ZAKI Learn" })).toBeInTheDocument();
     expect(screen.getAllByText("قريبًا").length).toBeGreaterThan(0);
     expect(screen.getByText(/مسارات التعلم متوقفة/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /افتح لوحة التحكم/i })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: /افتح لوحة التحكم/i })).toHaveAttribute(
+      "href",
+      "/?source=website_product_learn_ar&intent=dashboard"
+    );
   });
 });

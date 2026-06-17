@@ -15,6 +15,7 @@ import {
   fetchGoogleOAuthStatus,
   fetchCurrentUser,
   fetchProfile,
+  buildGoogleOAuthStartUrl,
 } from "@/lib/api";
 import { PENDING_INTENT_KEY } from "@/lib/pendingIntent";
 
@@ -285,6 +286,18 @@ describe("LoginScreen legal consent", () => {
       "",
       "/?auth=login&next=%2Fsettings%23settings-memory-data"
     );
+    window.localStorage.setItem(
+      PENDING_INTENT_KEY,
+      JSON.stringify({
+        productId: "design",
+        taskKind: "brief",
+        prompt: "Old design intent",
+        source: "dashboard",
+        returnTo: "/products/design",
+        anonymousWorkId: "work-stale",
+        createdAt: new Date().toISOString(),
+      })
+    );
 
     renderLoginScreen();
     await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
@@ -300,6 +313,27 @@ describe("LoginScreen legal consent", () => {
       expect(window.location.pathname).toBe("/settings");
       expect(window.location.hash).toBe("#settings-memory-data");
     });
+    expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
+  });
+
+  it("uses the same preserved-work target for Google OAuth", async () => {
+    const user = userEvent.setup();
+    (buildGoogleOAuthStartUrl as unknown as jest.Mock).mockReturnValueOnce("#google-start");
+    window.history.replaceState(
+      {},
+      "",
+      "/?auth=login&next=%2Fsettings%23settings-memory-data"
+    );
+
+    renderLoginScreen();
+    await waitFor(() => expect(fetchGoogleOAuthStatus).toHaveBeenCalled());
+
+    expect(await screen.findByText("We kept your work.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Continue with Google/ }));
+
+    expect(buildGoogleOAuthStartUrl).toHaveBeenCalledWith(
+      "/settings#settings-memory-data"
+    );
   });
 
   it("uses pending dashboard intent as the post-login fallback route", async () => {
@@ -312,7 +346,7 @@ describe("LoginScreen legal consent", () => {
         taskKind: "brief",
         prompt: "Create a design brief",
         source: "dashboard",
-        returnTo: "/design",
+        returnTo: "/products/design",
         anonymousWorkId: "work-1",
         createdAt: new Date().toISOString(),
       })
@@ -329,9 +363,10 @@ describe("LoginScreen legal consent", () => {
       expect(setToken).toHaveBeenCalledWith("token-123");
     });
     await waitFor(() => {
-      expect(window.location.pathname).toBe("/design");
+      expect(window.location.pathname).toBe("/products/design");
     });
     expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeTruthy();
+    expect(window.sessionStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
   });
 
   it("keeps explicit pricing-intent auth on pricing after login", async () => {
