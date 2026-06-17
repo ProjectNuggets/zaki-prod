@@ -89,6 +89,7 @@ import {
   createAgentStreamMeterMetrics,
   estimateAgentMeterUnits,
   reserveAgentChatUnits,
+  resolveAgentReserveUnits,
   settleAgentChatUnits,
   updateAgentStreamMeterMetrics,
 } from "./agent-metering.js";
@@ -345,6 +346,7 @@ import {
   buildPlatformEntitlementSummary,
   buildPlatformMeterPolicy,
   buildPlatformProductRegistry,
+  normalizePlatformPlanId,
 } from "./platform-policy.js";
 import {
   CENTRAL_METER_CONTRACT_VERSION,
@@ -6817,6 +6819,7 @@ async function buildMeterResponsePayload(identity, platform, registry, policy) {
     platform,
     meterSnapshot,
     productRegistry: registry,
+    agentRequiredUnits: resolveAgentReserveUnits(process.env),
   });
 }
 
@@ -11033,11 +11036,16 @@ app.get("/api/spaces/:spaceId/files/:storageFilename", async (req, res) => {
 function buildAgentMeterIdentity(authContext) {
   const zakiUser = authContext?.zakiUser || authContext;
   if (!zakiUser?.id) return null;
+  const effective = resolveEffectivePlatformEntitlement(zakiUser);
+  const effectivePlanId = normalizePlatformPlanId(
+    effective?.commercial?.planId || effective?.tier || zakiUser.plan_tier || "free"
+  );
   return {
     type: "user",
     tenantId: "default",
     userId: zakiUser.id,
     zakiUser,
+    effectivePlanId,
     anonymousSessionId: null,
     anonymousKeyHash: null,
   };
@@ -11080,6 +11088,20 @@ function buildAgentMeterDenialPayload(result, requestId) {
     message: result?.message || "Agent usage is not currently available.",
     product: result?.product || "agent",
     productState: result?.productState || null,
+    constraint: result?.constraint || null,
+    requiredUnits:
+      typeof result?.requiredUnits === "number" ? result.requiredUnits : null,
+    effectiveRemaining:
+      typeof result?.effectiveRemaining === "number" ? result.effectiveRemaining : null,
+    weeklyRemaining:
+      typeof result?.weeklyRemaining === "number" ? result.weeklyRemaining : null,
+    rollingRemaining:
+      typeof result?.rollingRemaining === "number" ? result.rollingRemaining : null,
+    topupUnits:
+      typeof result?.topupUnits === "number" ? result.topupUnits : null,
+    shortfall:
+      typeof result?.shortfall === "number" ? result.shortfall : null,
+    resetAt: result?.resetAt || null,
     meter: result?.meter || null,
     requestId,
   };
@@ -11110,7 +11132,35 @@ async function requireAgentWalletReserveForChat(req, res, { identity, action, re
   if (decision.outcome === "denied" || decision.outcome === "duplicate") {
     // C1: "duplicate" = the idempotency key matched an existing hold (in-flight retry OR replay of a
     // completed turn). Refuse (409) so we NEVER run a fresh free/unmetered engine turn for a reused key.
-    const denial = decision.denial || {};
+    let denial = decision.denial || {};
+    if (decision.outcome === "denied" && identity) {
+      try {
+        const platform = buildPlatformForMeterIdentity(identity);
+        const registry = buildPlatformProductRegistry();
+        const policy = buildPlatformMeterPolicy({ env: process.env });
+        const meter = await buildMeterResponsePayload(identity, platform, registry, policy);
+        const agentAvailability = meter?.availableNow?.agent || null;
+        denial = {
+          ...denial,
+          meter,
+          resetAt: denial.resetAt || agentAvailability?.resetAt || null,
+          effectiveRemaining:
+            typeof denial.effectiveRemaining === "number"
+              ? denial.effectiveRemaining
+              : agentAvailability?.effectiveRemaining,
+          requiredUnits:
+            typeof denial.requiredUnits === "number"
+              ? denial.requiredUnits
+              : agentAvailability?.requiredReserveUnits,
+          constraint: denial.constraint || agentAvailability?.constraint || null,
+        };
+      } catch (error) {
+        console.warn("[Agent] Meter denial snapshot failed:", {
+          requestId: reqId,
+          error: error?.message || "meter_snapshot_failed",
+        });
+      }
+    }
     res
       .status(denial.status || 403)
       .json(buildAgentMeterDenialPayload({ ...denial, action: decision.action }, reqId));

@@ -212,7 +212,21 @@ export async function reserveUnits(
       // the overflow through fromRecurring keeps the funding_json refund-correct at settle.
       // Live (interactive) reserves never set this flag → the 429 gate is unchanged for them.
       if (!allowOverdraw) {
-        return { ok: false, reason: "insufficient_units", shortfall: funding.shortfall, remaining: rem.remaining };
+        return {
+          ok: false,
+          reason: "insufficient_units",
+          shortfall: funding.shortfall,
+          remaining: rem.remaining,
+          requiredUnits: reservedUnits,
+          weeklyRemaining: rem.weeklyRemaining,
+          rollingRemaining: rem.burstRemaining,
+          topupUnits: rem.topupUnits,
+          effectiveRemaining: rem.remaining,
+          constraint:
+            rem.burstRemaining < rem.weeklyRemaining
+              ? "rolling"
+              : "weekly",
+        };
       }
       const need = Math.max(0, Number(reservedUnits) || 0);
       const fromTopup = Math.min(need, Number(rem.topupUnits) || 0);

@@ -6,33 +6,33 @@ type Status = "shipped" | "building" | "next";
 
 const items: { title: { en: string; ar: string }; desc: { en: string; ar: string }; status: Status }[] = [
   {
-    title: { en: "Persistent memory & self-improvement", ar: "ذاكرة مستمرة وتحسين ذاتي" },
-    desc: { en: "The agent learns from corrections, remembers preferences, and improves over time. The more you use it, the better it gets.", ar: "الوكيل يتعلم من التصحيحات، يتذكر التفضيلات، ويتحسن مع الوقت. كلما استخدمته أكثر، كان أفضل." },
+    title: { en: "Chat, Agent, and Brain", ar: "Chat وAgent وBrain" },
+    desc: { en: "The public path is live: start in Chat, continue in Agent, and inspect memory in Brain.", ar: "المسار العام متاح: ابدأ في Chat، تابع في Agent، وراجع الذاكرة في Brain." },
     status: "shipped",
   },
   {
-    title: { en: "Cron automation & scheduled jobs", ar: "أتمتة مجدولة ومهام دورية" },
-    desc: { en: "Daily summaries, monitoring, data collection. The agent works while you sleep.", ar: "ملخصات يومية، مراقبة، جمع بيانات. الوكيل يعمل وأنت نائم." },
+    title: { en: "Settings as control plane", ar: "Settings لوحة التحكم" },
+    desc: { en: "Billing, products, channels, secrets, provider readiness, browser devices, memory, and privacy route to Settings.", ar: "الدفع، المنتجات، القنوات، الأسرار، جاهزية المزودين، أجهزة المتصفح، الذاكرة، والخصوصية تعود إلى Settings." },
     status: "shipped",
   },
   {
-    title: { en: "Multi-channel presence", ar: "تواجد متعدد القنوات" },
-    desc: { en: "Telegram is live. More channels coming soon. Talk to your agent wherever you are.", ar: "تيليجرام متاح الآن. قنوات أخرى قادمة قريبًا. تحدث مع وكيلك أينما كنت." },
-    status: "shipped",
+    title: { en: "Channel hardening", ar: "تقوية القنوات" },
+    desc: { en: "Telegram is the launch channel. Slack, Discord, Email, and WhatsApp wait for self-service connect, test, and revoke contracts.", ar: "Telegram هي قناة الإطلاق. Slack وDiscord وEmail وWhatsApp تنتظر عقود الربط والاختبار والإلغاء الذاتية." },
+    status: "building",
   },
   {
-    title: { en: "Skills & procedure extraction", ar: "مهارات واستخراج إجراءات" },
-    desc: { en: "The agent extracts reusable procedures from complex tasks and retrieves them when relevant.", ar: "الوكيل يستخرج إجراءات قابلة لإعادة الاستخدام ويسترجعها عند الحاجة." },
-    status: "shipped",
+    title: { en: "Learn and Hire beta", ar: "Learn وHire بيتا" },
+    desc: { en: "These products stay private beta until entitlement, memory, usage, UI, and E2E agree.", ar: "هذه المنتجات تبقى بيتا خاصة حتى تتفق الصلاحيات والذاكرة والاستخدام والواجهة والاختبارات." },
+    status: "building",
   },
   {
-    title: { en: "Agent-to-agent communication", ar: "تواصل بين الوكلاء" },
-    desc: { en: "Agents that coordinate with each other. Delegate, hand off, and collaborate across specialized agents.", ar: "وكلاء يتنسّقون مع بعضهم. تفويض، تسليم، وتعاون بين وكلاء متخصصين." },
+    title: { en: "Design waitlist", ar: "قائمة انتظار Design" },
+    desc: { en: "Design remains early access until the service health, project flow, product registry, and tests are proven.", ar: "Design يبقى وصولًا مبكرًا حتى تثبت صحة الخدمة وتدفق المشاريع وسجل المنتجات والاختبارات." },
     status: "next",
   },
   {
-    title: { en: "Downloadable ZAKI app with CLI", ar: "تطبيق زكي قابل للتحميل مع CLI" },
-    desc: { en: "A native app and command-line interface. Run ZAKI from your terminal, your desktop, or both.", ar: "تطبيق محلي وواجهة سطر أوامر. شغّل زكي من الطرفية، سطح المكتب، أو كلاهما." },
+    title: { en: "CLI, local app, and more extensions", ar: "CLI والتطبيق المحلي والمزيد من الإضافات" },
+    desc: { en: "Future clients remain hidden from public launch copy until Developer Access and device/token management are complete.", ar: "العملاء القادمون يبقون خارج نسخة الإطلاق العامة حتى تكتمل Developer Access وإدارة الأجهزة والرموز." },
     status: "next",
   },
 ];
@@ -54,7 +54,7 @@ export function Roadmap({ locale }: { locale: Locale }) {
             {isArabic ? "ما نبنيه" : "What we're building"}
           </p>
           <h2 className="font-display mt-3 text-center text-3xl font-extrabold leading-tight tracking-[-0.03em] text-zk-text md:text-4xl">
-            {isArabic ? "زكي في البيتا العامة. إليك ما نعمل عليه." : "ZAKI is in current Agent preview. Here's what we're building."}
+            {isArabic ? "ما هو عام، وما هو مقيّد، وما ينتظر." : "What is public, what is gated, and what waits."}
           </h2>
         </Reveal>
 

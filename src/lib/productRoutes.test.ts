@@ -40,10 +40,10 @@ describe("getCanonicalAppProductRoute", () => {
   });
 
   it("keeps private beta and waitlist activation on website product pages", () => {
-    expect(getProductMarketingRoute("learning")).toBe("/products/learn");
-    expect(getProductActivationRoute("learning")).toBe("/products/learn");
-    expect(getProductActivationRoute("hire")).toBe("/products/hire");
-    expect(getProductActivationRoute("design")).toBe("/products/design");
+    expect(getProductMarketingRoute("learning")).toBe("/product");
+    expect(getProductActivationRoute("learning")).toBe("/learn");
+    expect(getProductActivationRoute("hire")).toBe("/hire");
+    expect(getProductActivationRoute("design")).toBe("/design");
     expect(getProductActivationRoute("agent")).toBe("/agent");
     expect(getProductActivationRoute("spaces")).toBe("/spaces");
     expect(getProductActivationRoute("brain")).toBe("/brain");

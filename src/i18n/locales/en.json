@@ -1221,14 +1221,14 @@
   "pricingPage": {
     "eyebrow": "Plans",
     "title": "Choose how ZAKI should keep working with you",
-    "subtitle": "Start free in Chat without an account. Pay when you want Agent continuity, account memory, and follow-through. Learn, Design, and Career stay parked until their full flows are ready.",
+    "subtitle": "Start free in Chat without an account. Pay when you want Agent continuity, account memory, and follow-through. Learn, Design, and Hire stay parked until their full flows are ready.",
     "subtitleAccessActive": "Your access code unlocks the V1 core for now. Product-specific codes come later.",
     "comparisonNote": "V1 pricing is intentionally simple: free Chat, paid Agent, Brain included with account continuity, and future products clearly marked as coming soon.",
     "highlightsTemplates": {
       "free": "Chat Free: anonymous weekly credits",
       "agent": "Agent: $29/month",
       "brain": "Brain: included",
-      "future": "Learn, Design, Career: coming soon"
+      "future": "Learn, Design, Hire: coming soon"
     },
     "currentPlan": "You’re currently on {{plan}}",
     "currentPlanSignedOut": "You’re viewing plans signed out",
@@ -1329,11 +1329,11 @@
       "future": {
         "label": "Coming next",
         "price": "Soon",
-        "blurb": "Learn, Design, and Career are visible, but not sold as public products yet.",
+        "blurb": "Learn, Design, and Hire are visible, but not sold as public products yet.",
         "features": [
           "Learn returns when learner state is safe",
           "Design launches after project creation is proven",
-          "Career stays user-side and private until ready"
+          "Hire stays user-side and private until ready"
         ],
         "cta": "Open dashboard"
       }
@@ -1706,6 +1706,9 @@
       "body": "We updated Terms, Privacy & Compliance (policy {{policyVersion}}). Please review and accept to continue using ZAKI.",
       "checkboxPrefix": "I agree to the",
       "checkboxLink": "Terms, Privacy & Compliance",
+      "termsLink": "Terms",
+      "privacyLink": "Privacy",
+      "complianceLink": "Compliance",
       "errorConsentRequired": "Please accept Terms, Privacy & Compliance to continue.",
       "errorSaveFailed": "Unable to record consent. Please try again.",
       "signOut": "Sign out",
@@ -1935,7 +1938,7 @@
         "spaces": "Ask now, draft quickly, or test the platform without setting anything up.",
         "design": "Design is coming soon. For now, use Chat to shape a brief or Agent to plan the design work.",
         "learning": "Learn is coming soon. For now, use Chat for quick study help or Agent to plan a learning path.",
-        "hire": "Career is coming soon. For now, use Chat to improve CV copy or Agent to plan your job search."
+        "hire": "Hire is coming soon. For now, use Chat to improve CV copy or Agent to plan your job search."
       },
       "details": {
         "agent": {
@@ -1965,8 +1968,8 @@
         },
         "hire": {
           "bestFor": "Finding your next role, improving your CV, comparing fit, and preparing applications.",
-          "memory": "Career pipeline memory is not public yet.",
-          "truth": "Coming soon. Use Chat or Agent today; Career opens when the private job-search flow is ready."
+          "memory": "Hire pipeline memory is not public yet.",
+          "truth": "Coming soon. Use Chat or Agent today; Hire opens when the private job-search flow is ready."
         }
       }
     },
@@ -2004,7 +2007,7 @@
           "body": "The app is the working surface. The website is the narrative layer for story, pricing, product pages, and public context.",
           "bullets": {
             "chat": "Chat, Agent, and Brain are the launch core.",
-            "preview": "Design, Learn, and Career start as truthful previews or gates.",
+            "preview": "Design, Learn, and Hire start as truthful previews or gates.",
             "website": "Visit the website when you want the broader product story."
           }
         }
@@ -2070,7 +2073,7 @@
         "spaces": "Chat",
         "brain": "Brain",
         "learning": "Learn",
-        "hire": "Career",
+        "hire": "Hire",
         "design": "Design"
       },
       "tags": {
@@ -2087,7 +2090,7 @@
         "spaces": "Workspace chat for threads, files, and focused shared context.",
         "brain": "The memory graph made visible: provenance, scopes, conflicts, and governance.",
         "learning": "Study surface for sources, notebooks, tutors, quizzes, and learner memory.",
-        "hire": "Career agent for target roles, CV positioning, fit notes, applications, and career memory.",
+        "hire": "Hire agent for target roles, CV positioning, fit notes, applications, and Hire memory.",
         "design": "Future design surface for briefs, assets, iterations, and design memory."
       }
     },

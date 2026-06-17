@@ -24,6 +24,22 @@ describe("PaywallCard", () => {
     expect(screen.getByText(/out of usage/i)).toBeInTheDocument();
     expect(screen.getByText(/Free/)).toBeInTheDocument();
   });
+  it("out_of_usage names the rolling capacity window when that is the limiter", () => {
+    render(
+      <PaywallCard
+        state="out_of_usage"
+        planLabel="Free"
+        effectiveRemaining={20}
+        requiredUnits={40}
+        constraint="rolling"
+        resetAt="2026-06-20T00:00:00Z"
+        {...base}
+      />
+    );
+    expect(screen.getByText(/current capacity window is low/i)).toBeInTheDocument();
+    expect(screen.getByText(/20 available now/i)).toBeInTheDocument();
+    expect(screen.getByText(/40 needed/i)).toBeInTheDocument();
+  });
   it("plan_inactive shows the inactive headline", () => {
     render(<PaywallCard state="plan_inactive" planLabel="Agent" {...base} />);
     expect(screen.getByText(/plan is inactive/i)).toBeInTheDocument();

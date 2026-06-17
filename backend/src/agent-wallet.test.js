@@ -32,13 +32,17 @@ describe("resolveAgentReserveUnits", () => {
     expect(resolveAgentReserveUnits({ ZAKI_AGENT_RESERVE_UNITS: "0" })).toBe(AGENT_RESERVE_UNITS_DEFAULT);
     expect(resolveAgentReserveUnits({ ZAKI_AGENT_RESERVE_UNITS: "-5" })).toBe(AGENT_RESERVE_UNITS_DEFAULT);
   });
+
+  it("ignores fractional overrides so reserve policy stays aligned with plan floors", () => {
+    expect(resolveAgentReserveUnits({ ZAKI_AGENT_RESERVE_UNITS: "40.5" })).toBe(AGENT_RESERVE_UNITS_DEFAULT);
+  });
 });
 
 describe("reserveAgentChatUnits", () => {
   it("reserves 40u against productId=agent with a 10-minute hold and returns the hold", async () => {
     const hold = { id: "hold-1", reserved_units: 40, user_id: 42 };
     const reserveUnits = jest.fn().mockResolvedValue({ ok: true, hold });
-    const ensureWallet = jest.fn();
+    const ensureWallet = jest.fn().mockResolvedValue({});
 
     const before = Date.now();
     const result = await reserveAgentChatUnits({
@@ -55,7 +59,7 @@ describe("reserveAgentChatUnits", () => {
     expect(result.outcome).toBe("allowed");
     expect(result.hold).toBe(hold);
     expect(result.idempotencyKey).toBe("agent:42:req-1");
-    expect(ensureWallet).not.toHaveBeenCalled();
+    expect(ensureWallet).toHaveBeenCalledWith({ userId: 42, planId: "pro" });
     expect(reserveUnits).toHaveBeenCalledTimes(1);
     const args = reserveUnits.mock.calls[0][0];
     expect(args.productId).toBe("agent");
@@ -86,6 +90,7 @@ describe("reserveAgentChatUnits", () => {
     });
 
     expect(ensureWallet).toHaveBeenCalledWith({ userId: 42, planId: "pro" });
+    expect(ensureWallet).toHaveBeenCalledTimes(2);
     expect(reserveUnits).toHaveBeenCalledTimes(2);
     expect(result.outcome).toBe("allowed");
     expect(result.hold).toBe(hold);
@@ -108,6 +113,26 @@ describe("reserveAgentChatUnits", () => {
     });
 
     expect(ensureWallet).toHaveBeenCalledWith({ userId: 42, planId: "free" });
+  });
+
+  it("syncs the wallet from effective entitlement before reserving", async () => {
+    const reserveUnits = jest.fn().mockResolvedValue({ ok: true, hold: { id: "h", reserved_units: 40 } });
+    const ensureWallet = jest.fn().mockResolvedValue({});
+
+    await reserveAgentChatUnits({
+      identity: identity({
+        effectivePlanId: "personal",
+        zakiUser: { id: 42, plan_tier: "free" },
+      }),
+      idempotencyKey: "agent:42:req-effective",
+      env: {},
+      reserveUnits,
+      ensureWallet,
+      deterministicGrantId,
+    });
+
+    expect(ensureWallet).toHaveBeenCalledWith({ userId: 42, planId: "personal" });
+    expect(reserveUnits).toHaveBeenCalledTimes(1);
   });
 
   // C1 money-exploit fix: a true in-flight RETRY (ledger `idempotent`, hold still reserved) must NOT
@@ -166,7 +191,18 @@ describe("reserveAgentChatUnits", () => {
   });
 
   it("denies with 429 + insufficient_units when out of units", async () => {
-    const reserveUnits = jest.fn().mockResolvedValue({ ok: false, reason: "insufficient_units", remaining: 3 });
+    const reserveUnits = jest.fn().mockResolvedValue({
+      ok: false,
+      reason: "insufficient_units",
+      remaining: 20,
+      effectiveRemaining: 20,
+      weeklyRemaining: 100,
+      rollingRemaining: 20,
+      topupUnits: 0,
+      requiredUnits: 40,
+      shortfall: 20,
+      constraint: "rolling",
+    });
     const result = await reserveAgentChatUnits({
       identity: identity(),
       idempotencyKey: "agent:42:req-5",
@@ -178,7 +214,11 @@ describe("reserveAgentChatUnits", () => {
     expect(result.outcome).toBe("denied");
     expect(result.denial.status).toBe(429);
     expect(result.denial.error).toBe("insufficient_units");
-    expect(result.denial.remaining).toBe(3);
+    expect(result.denial.remaining).toBe(20);
+    expect(result.denial.constraint).toBe("rolling");
+    expect(result.denial.requiredUnits).toBe(40);
+    expect(result.denial.effectiveRemaining).toBe(20);
+    expect(result.denial.shortfall).toBe(20);
   });
 
   it("denies with 401 when there is no authenticated user identity", async () => {

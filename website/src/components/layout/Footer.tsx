@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { appHandoffUrl } from "../../lib/appHandoff";
+import { appHandoffUrl, productHandoffUrl } from "../../lib/appHandoff";
 import type { Locale } from "../../lib/content";
 
 export function Footer({ locale }: { locale: Locale }) {
@@ -7,7 +7,7 @@ export function Footer({ locale }: { locale: Locale }) {
 
   return (
     <footer className="mt-24 border-t border-zk-border">
-      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[1.4fr_1fr_1fr_1fr_0.9fr] md:px-8">
+      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 md:grid-cols-2 lg:grid-cols-4 md:px-8">
         {/* Brand */}
         <div>
           <Link to={isArabic ? "/ar/" : "/"} className="inline-flex items-center gap-2.5">
@@ -27,35 +27,27 @@ export function Footer({ locale }: { locale: Locale }) {
             {isArabic ? "المنتج" : "Product"}
           </p>
           <div className="mt-4 flex flex-col gap-2.5 text-sm text-zk-text-secondary">
-            <a href={appHandoffUrl("/spaces", "website_footer", "chat")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "ZAKI Chat" : "ZAKI Chat"}</a>
-            <Link to={isArabic ? "/ar/zaki-bot/" : "/zaki-bot/"} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "زكي Agent" : "ZAKI Agent"}</Link>
+            <Link to={isArabic ? "/ar/product/" : "/product/"} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "نظرة المنتج" : "Product overview"}</Link>
+            <a href={productHandoffUrl("chat")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "ZAKI Chat" : "ZAKI Chat"}</a>
+            <a href={productHandoffUrl("agent")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "زكي Agent" : "ZAKI Agent"}</a>
+            <a href={productHandoffUrl("brain")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "ZAKI Brain" : "ZAKI Brain"}</a>
+            <a href={appHandoffUrl("/settings", "website_footer", "dashboard")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "Settings" : "Settings"}</a>
+            <Link to={isArabic ? "/ar/pricing/" : "/pricing/"} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "الأسعار" : "Pricing"}</Link>
             <Link to={isArabic ? "/ar/story/" : "/story/"} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "لماذا زكي" : "Why ZAKI"}</Link>
+            <Link to={isArabic ? "/ar/use-cases/" : "/use-cases/"} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "الاستخدامات" : "Use cases"}</Link>
+          </div>
+        </div>
+
+        {/* Website */}
+        <div>
+          <p className="font-mono-ui text-[11px] uppercase tracking-[0.24em] text-zk-text-tertiary">
+            {isArabic ? "الموقع" : "Website"}
+          </p>
+          <div className="mt-4 flex flex-col gap-2.5 text-sm text-zk-text-secondary">
+            <Link to={isArabic ? "/ar/use-cases/" : "/use-cases/"} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "الاستخدامات" : "Use cases"}</Link>
+            <Link to={isArabic ? "/ar/story/" : "/story/"} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "القصة" : "Story"}</Link>
             <Link to={isArabic ? "/ar/faq/" : "/faq/"} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "الأسئلة" : "FAQ"}</Link>
-          </div>
-        </div>
-
-        {/* Comparisons */}
-        <div>
-          <p className="font-mono-ui text-[11px] uppercase tracking-[0.24em] text-zk-text-tertiary">
-            {isArabic ? "مقارنات" : "Compare"}
-          </p>
-          <div className="mt-4 flex flex-col gap-2.5 text-sm text-zk-text-secondary">
-            <Link to="/zaki-vs-spaces/" className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "زكي مقابل Spaces" : "ZAKI vs Spaces"}</Link>
-            <Link to="/vs-chatgpt/" className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "Spaces مقابل ChatGPT" : "Spaces vs ChatGPT"}</Link>
-            <Link to="/zaki-vs-openclaw/" className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "زكي مقابل OpenClaw" : "ZAKI vs OpenClaw"}</Link>
-            <Link to="/best-arabic-ai-assistant/" className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "أفضل مساعد عربي" : "Best Arabic AI"}</Link>
-          </div>
-        </div>
-
-        {/* Guides */}
-        <div>
-          <p className="font-mono-ui text-[11px] uppercase tracking-[0.24em] text-zk-text-tertiary">
-            {isArabic ? "أدلة" : "Guides"}
-          </p>
-          <div className="mt-4 flex flex-col gap-2.5 text-sm text-zk-text-secondary">
-            <Link to="/how-to/how-zaki-and-spaces-work/" className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "كيف يعمل زكي وSpaces" : "How it works"}</Link>
-            <Link to="/how-to/what-to-use-spaces-for/" className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "متى تستخدم Spaces" : "Use Spaces for"}</Link>
-            <Link to="/how-to/what-to-use-zaki-for/" className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "متى تستخدم زكي" : "Use ZAKI for"}</Link>
+            <Link to={isArabic ? "/ar/contact/" : "/contact/"} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "تواصل" : "Contact"}</Link>
           </div>
         </div>
 

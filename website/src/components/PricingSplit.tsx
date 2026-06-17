@@ -78,7 +78,7 @@ function InlineWaitlist({ locale }: { locale: Locale }) {
     return (
       <p className="flex items-center gap-2 rounded-xl border border-zk-success/20 bg-zk-success/[0.06] px-4 py-3 text-sm text-zk-success">
         <Check className="size-4" />
-        {isArabic ? "تم تسجيلك في تحديثات زكي. سنرسل لك التحديثات والوصول المبكر." : "You're on the ZAKI Agent list. We'll send updates and early-access details."}
+        {isArabic ? "تم تسجيلك في تحديثات زكي. سنرسل لك التحديثات والوصول المبكر." : "You're on the ZAKI updates list. We'll send release and early-access details."}
       </p>
     );
   }
@@ -119,8 +119,8 @@ export function PricingSplit({ locale, t: _t }: { locale: Locale; t: WebsiteCont
     ? ["ذاكرة واستمرارية للحساب", "موافقات أدوات قبل الأفعال الحساسة", "متابعات وجلسات وسياق قابل للمراجعة", "Brain يعرض الذاكرة ومصدرها"]
     : ["Account memory and continuity", "Tool approvals before sensitive actions", "Follow-ups, sessions, and reviewable context", "Brain shows memory and provenance"];
   const futureFeatureItems = isArabic
-    ? ["Learn يبقى وصولًا خاصًا", "Design يبقى قائمة انتظار", "Career يبقى مسارًا مهنيًا للمستخدم", "لا وعود عامة حتى تكتمل المسارات"]
-    : ["Learn stays private access", "Design stays waitlist", "Career stays user-side job-search", "No public promises until flows are complete"];
+    ? ["Learn يبقى وصولًا خاصًا", "Design يبقى قائمة انتظار", "Hire يبقى بيتا خاصة", "لا وعود عامة حتى تكتمل المسارات"]
+    : ["Learn stays private access", "Design stays waitlist", "Hire stays private beta", "No public promises until flows are complete"];
   const chatStats = [
     { value: "$0", label: isArabic ? "للبدء" : "To start" },
     { value: "10", label: isArabic ? "رسائل / يوم" : "Msgs / day" },
@@ -150,8 +150,8 @@ export function PricingSplit({ locale, t: _t }: { locale: Locale; t: WebsiteCont
             </h2>
             <p className="mt-4 text-[15px] leading-[1.8] text-zk-text-secondary md:text-base">
               {isArabic
-                ? "الموقع لا يبيع مسارًا قديمًا. Chat هو المدخل المجاني، Agent هو سطح الاستمرارية، وLearn وDesign وCareer تبقى مقيّدة حتى تكتمل."
-                : "This site no longer sells the old ladder. Chat is the free entry point, Agent is the continuity surface, and Learn, Design, and Career remain gated until complete."}
+                ? "الموقع لا يبيع مسارًا قديمًا. Chat هو المدخل المجاني، Agent هو سطح الاستمرارية، وLearn وHire بيتا خاصة وDesign قائمة انتظار."
+                : "This site no longer sells the old ladder. Chat is the free entry point, Agent is the continuity surface, Learn and Hire stay private beta, and Design stays waitlist."}
             </p>
           </div>
         </Reveal>
@@ -159,7 +159,7 @@ export function PricingSplit({ locale, t: _t }: { locale: Locale; t: WebsiteCont
         <div className="grid items-stretch gap-5 lg:grid-cols-3">
           {/* ─── Chat card ─── */}
           <Reveal className="flex">
-            <div className={`${cardClassName} border-zk-border-strong`}>
+            <div id="future-access" className={`${cardClassName} scroll-mt-20 border-zk-border-strong`}>
               <div className="relative flex h-full flex-col">
                 <div className="flex items-start justify-between">
                   <div>
@@ -275,8 +275,8 @@ export function PricingSplit({ locale, t: _t }: { locale: Locale; t: WebsiteCont
                 </h3>
                 <p className="mt-4 text-[14px] leading-[1.75] text-zk-text-secondary">
                   {isArabic
-                    ? "Learn وDesign وCareer تظهر كاتجاهات منتج، لكنها ليست وصولًا عامًا حتى تتفق الواجهة والصلاحيات والاختبارات."
-                    : "Learn, Design, and Career remain product directions, not public access, until UI, entitlement, and tests agree."}
+                    ? "Learn وHire يبقيان بيتا خاصة، وDesign قائمة انتظار، حتى تتفق الواجهة والصلاحيات والاختبارات."
+                    : "Learn and Hire remain private beta, and Design remains waitlist, until UI, entitlement, and tests agree."}
                 </p>
                 <PricingFeatureList items={futureFeatureItems} />
                 <PricingSupportPanel eyebrow={isArabic ? "تحديثات" : "Updates"}>

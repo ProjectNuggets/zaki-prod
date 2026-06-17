@@ -45,38 +45,44 @@ export function CookieBanner({ locale }: { locale: Locale }) {
         background: "rgba(15, 13, 12, 0.96)",
         color: "#f0ece6",
         fontFamily: "inherit",
-        fontSize: "0.875rem",
-        lineHeight: 1.6,
-        padding: "0.75rem 1rem",
+        fontSize: "0.8125rem",
+        lineHeight: 1.45,
+        padding: "0.625rem 1rem",
         borderTop: "1px solid rgba(240, 236, 230, 0.12)",
         backdropFilter: "blur(8px)",
         zIndex: 60,
         direction: isArabic ? "rtl" : "ltr",
       }}
+      contentStyle={{
+        margin: "0.25rem 0",
+        flex: "1 1 28rem",
+      }}
       buttonStyle={{
-        background: "#f10202",
+        background: "#D24430",
         color: "#ffffff",
         fontSize: "0.8125rem",
         fontWeight: 600,
-        padding: "0.5rem 1rem",
-        borderRadius: "9999px",
+        padding: "0.45rem 0.875rem",
+        borderRadius: "4px",
         border: "none",
+        margin: "0.25rem 0 0.25rem 0.625rem",
       }}
       declineButtonStyle={{
         background: "transparent",
         color: "#f0ece6",
         fontSize: "0.8125rem",
         fontWeight: 500,
-        padding: "0.5rem 1rem",
-        borderRadius: "9999px",
+        padding: "0.45rem 0.875rem",
+        borderRadius: "4px",
         border: "1px solid rgba(240, 236, 230, 0.32)",
+        margin: "0.25rem 0 0.25rem 0.625rem",
       }}
     >
       <span>
         {labels.body}{" "}
         <Link
           to={privacyHref}
-          style={{ color: "#f10202", textDecoration: "underline", textUnderlineOffset: "3px" }}
+          style={{ color: "#D24430", textDecoration: "underline", textUnderlineOffset: "3px" }}
         >
           {labels.privacyLink}
         </Link>

@@ -44,19 +44,23 @@ const PRODUCT_LAUNCH_POLICIES: Record<string, ProductLaunchPolicy> = {
   },
   learning: {
     launchState: "private_beta",
-    marketingRoute: "/products/learn",
+    appRoute: "/learn",
+    marketingRoute: "/product",
   },
   learn: {
     launchState: "private_beta",
-    marketingRoute: "/products/learn",
+    appRoute: "/learn",
+    marketingRoute: "/product",
   },
   hire: {
     launchState: "private_beta",
-    marketingRoute: "/products/hire",
+    appRoute: "/hire",
+    marketingRoute: "/product",
   },
   design: {
     launchState: "waitlist",
-    marketingRoute: "/products/design",
+    appRoute: "/design",
+    marketingRoute: "/product",
   },
   cli: {
     launchState: "hidden",
@@ -88,5 +92,6 @@ export function getProductMarketingRoute(productId?: string | null) {
 }
 
 export function getProductActivationRoute(productId?: string | null) {
-  return getCanonicalAppProductRoute(productId) || getProductMarketingRoute(productId) || null;
+  const policy = getProductLaunchPolicy(productId);
+  return policy?.appRoute || policy?.marketingRoute || null;
 }

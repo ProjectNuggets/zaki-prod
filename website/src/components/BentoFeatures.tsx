@@ -6,57 +6,57 @@ import { MagicCard } from "./ui/magic-card";
 const features = [
   {
     icon: Brain,
-    title: { en: "Memory & Self-Improvement", ar: "ذاكرة وتحسين ذاتي" },
+    title: { en: "Visible memory", ar: "ذاكرة مرئية" },
     description: {
-      en: "ZAKI remembers across sessions, detects corrections, and improves over time. The more you use it, the better it gets at understanding you.",
-      ar: "زكي يتذكر عبر الجلسات، يكتشف التصحيحات، ويتحسن مع الوقت. كلما استخدمته أكثر، فهمك أفضل.",
+      en: "Agent can carry context forward, and Brain gives that memory a place to search, inspect, export, or remove.",
+      ar: "يمكن للوكيل حمل السياق للأمام، ويمنح Brain الذاكرة مكانًا للبحث والمراجعة والتصدير أو الحذف.",
     },
-    stat: { en: "Self-improving agent", ar: "وكيل يتحسن ذاتيًا" },
+    stat: { en: "Brain control plane", ar: "لوحة تحكم Brain" },
   },
   {
     icon: Shield,
-    title: { en: "Pod Isolation", ar: "عزل خاص" },
+    title: { en: "User-safe boundaries", ar: "حدود آمنة للمستخدم" },
     description: {
-      en: "Each user gets their own isolated agent pod. Your data, context, and memory never touch another user's.",
-      ar: "كل مستخدم يحصل على حاوية وكيل معزولة. بياناتك وسياقك وذاكرتك لا تمس بيانات مستخدم آخر.",
+      en: "Public product copy follows the backend truth: signed-in scope, explicit settings, named failure states, and no hidden claims.",
+      ar: "نسخة المنتج العامة تتبع حقيقة الخلفية: نطاق تسجيل دخول، إعدادات واضحة، حالات فشل مسماة، ولا وعود مخفية.",
     },
-    stat: { en: "Per-user architecture", ar: "هيكل لكل مستخدم" },
+    stat: { en: "Truthful launch state", ar: "حالة إطلاق صادقة" },
   },
   {
     icon: Zap,
-    title: { en: "Three Agent Modes", ar: "ثلاثة أوضاع للوكيل" },
+    title: { en: "Agent run controls", ar: "تحكم تشغيل Agent" },
     description: {
-      en: "Fast routes to lightweight models for speed. Deep routes to frontier models for reasoning. Balanced sits between. You pick the mode, ZAKI picks the right model across 7 providers.",
-      ar: "السريع يوجّه لنماذج خفيفة للسرعة. العميق يوجّه لنماذج متقدمة للتفكير. المتوازن بينهما. أنت تختار الوضع، وزكي يختار النموذج المناسب من 7 مزوّدين.",
+      en: "Mode, autonomy, reasoning effort, approvals, cancel, artifacts, traces, cron, and browser status sit in the workbench.",
+      ar: "الوضع، الاستقلالية، جهد التفكير، الموافقات، الإيقاف، المخرجات، الآثار، الجدولة، وحالة المتصفح داخل سطح العمل.",
     },
-    stat: { en: "Auto-routed per task", ar: "توجيه تلقائي لكل مهمة" },
+    stat: { en: "Visible execution", ar: "تنفيذ مرئي" },
   },
   {
     icon: Lock,
-    title: { en: "Encrypted Vault", ar: "خزنة مشفّرة" },
+    title: { en: "Write-only secrets", ar: "أسرار لا تُعرض بعد الحفظ" },
     description: {
-      en: "ChaCha20-Poly1305 AEAD encryption for API keys and secrets the agent uses during tool execution. Your keys, encrypted at rest.",
-      ar: "تشفير ChaCha20-Poly1305 AEAD لمفاتيح API والأسرار. مفاتيحك مشفرة أثناء التخزين.",
+      en: "Secrets can be added, rotated, and deleted without returning saved values to the browser.",
+      ar: "يمكن إضافة الأسرار وتدويرها وحذفها بدون إعادة القيم المحفوظة إلى المتصفح.",
     },
-    stat: { en: "AEAD encryption", ar: "تشفير AEAD" },
+    stat: { en: "Metadata-only reads", ar: "قراءة بيانات فقط" },
   },
   {
     icon: Timer,
     title: { en: "Cron Automation", ar: "أتمتة مجدولة" },
     description: {
-      en: "Schedule agent tasks like daily summaries, monitoring, and data collection. ZAKI creates isolated sessions with full context for each job.",
-      ar: "جدوِل مهام الوكيل مثل ملخصات يومية، مراقبة، وجمع بيانات. زكي ينشئ جلسات معزولة بسياق كامل.",
+      en: "Schedule supported Agent work, inspect run history, and keep background jobs visible instead of burying them.",
+      ar: "جدولة عمل Agent المدعوم، مراجعة تاريخ التشغيل، وإبقاء المهام الخلفية مرئية بدل دفنها.",
     },
     stat: { en: "Runs while you sleep", ar: "يعمل وأنت نائم" },
   },
   {
     icon: Layers,
-    title: { en: "25-Step Agent Loop", ar: "حلقة وكيل من 25 خطوة" },
+    title: { en: "Public, beta, waitlist", ar: "عام، بيتا، انتظار" },
     description: {
-      en: "Not single-shot Q&A. ZAKI persists through complex multi-step tasks with tool use and forced follow-through logic.",
-      ar: "ليس سؤال وجواب لمرة واحدة. زكي يستمر في المهام المعقدة متعددة الخطوات مع استخدام الأدوات.",
+      en: "Agent, Chat, and Brain are public. Learn and Hire stay beta-gated. Design stays waitlist until the service is proven.",
+      ar: "Agent وChat وBrain عامة. Learn وHire بيتا. Design قائمة انتظار حتى تثبت الخدمة.",
     },
-    stat: { en: "Forced follow-through", ar: "متابعة إجبارية" },
+    stat: { en: "No false availability", ar: "لا توفر مزيف" },
   },
 ];
 

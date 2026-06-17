@@ -9,11 +9,15 @@ import { Hero } from "../components/Hero";
 import { CredibilityStrip } from "../components/CredibilityStrip";
 import { BentoFeatures } from "../components/BentoFeatures";
 import { ProductCards } from "../components/ProductCards";
+import { JourneyMap } from "../components/JourneyMap";
 import { BuiltDifferent } from "../components/BuiltDifferent";
 import { Roadmap } from "../components/Roadmap";
 import { ClosingCta } from "../components/ClosingCta";
+import { V3HomePage } from "../components/v3/V3Website";
 
 export function HomePage({ locale }: { locale: Locale }) {
+  if (locale === "en") return <V3HomePage />;
+
   const t = getContent(locale);
   const isArabic = locale === "ar";
 
@@ -31,13 +35,16 @@ export function HomePage({ locale }: { locale: Locale }) {
       {/* 4. Two products */}
       <ProductCards locale={locale} />
 
-      {/* 5. Built different — architecture */}
+      {/* 5. End-to-end handoff paths */}
+      <JourneyMap locale={locale} />
+
+      {/* 6. Built different — architecture */}
       <BuiltDifferent locale={locale} />
 
-      {/* 6. Roadmap */}
+      {/* 7. Roadmap */}
       <Roadmap locale={locale} />
 
-      {/* 7. FAQ */}
+      {/* 8. FAQ */}
       <section className="px-5 py-24 md:px-8">
         <div className="mx-auto max-w-3xl">
           <Reveal>
@@ -61,27 +68,24 @@ export function HomePage({ locale }: { locale: Locale }) {
         </div>
       </section>
 
-      {/* 8. Closing CTA */}
+      {/* 9. Closing CTA */}
       <ClosingCta locale={locale} />
 
-      {/* 9. Read more links (SEO) */}
+      {/* 10. V2 website links */}
       <section className="border-t border-zk-border px-5 py-12 md:px-8">
         <div className="mx-auto max-w-5xl">
           <Reveal>
             <p className="font-mono-ui text-[11px] uppercase tracking-[0.24em] text-zk-text-tertiary">
-              {isArabic ? "قراءات إضافية" : "Read more"}
+              {isArabic ? "تابع في الموقع" : "Continue on the site"}
             </p>
             <div className="mt-4 flex flex-wrap gap-2.5">
               {[
                 { to: "/story", label: isArabic ? "لماذا بنينا زكي" : "Why we built ZAKI" },
-                { to: "/zaki-vs-spaces", label: isArabic ? "زكي مقابل Spaces" : "ZAKI vs Spaces" },
-                { to: "/how-to/how-zaki-and-spaces-work", label: isArabic ? "كيف يعمل زكي وSpaces" : "How ZAKI & Spaces work" },
-                { to: "/vs-chatgpt", label: isArabic ? "Spaces مقابل ChatGPT" : "Spaces vs ChatGPT" },
-                { to: "/best-arabic-ai-assistant", label: isArabic ? "أفضل مساعد عربي" : "Best Arabic AI 2026" },
-                { to: "/zaki-vs-openclaw", label: isArabic ? "زكي مقابل OpenClaw" : "ZAKI vs OpenClaw" },
-                { to: "/how-to/write-arabic-emails-ai", label: isArabic ? "كتابة إيميلات عربية بالذكاء" : "Write Arabic emails with AI" },
-                { to: "/how-to/translate-dialects-arabic-english", label: isArabic ? "ترجمة اللهجات" : "Translate Arabic dialects" },
-                { to: "/how-to/create-social-media-content-arabic", label: isArabic ? "محتوى سوشال ميديا بالعربي" : "Create Arabic social content" },
+                { to: "/product", label: isArabic ? "لوحة المنتج" : "Product overview" },
+                { to: "/use-cases", label: isArabic ? "استخدامات زكي" : "Use cases" },
+                { to: "/pricing", label: isArabic ? "الأسعار" : "Pricing" },
+                { to: "/faq", label: isArabic ? "الأسئلة" : "FAQ" },
+                { to: "/contact", label: isArabic ? "تواصل" : "Contact" },
               ].map((link) => (
                 <Link
                   key={link.to}

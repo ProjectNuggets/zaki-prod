@@ -48,7 +48,7 @@ describe("platform policy", () => {
     const defaultPolicy = buildPlatformPlanPolicy({ env: {} });
     expect(defaultPolicy.numericLimitsFinalized).toBe(true);
     expect(defaultPolicy.plans.free.weeklyAllowanceUnits).toBe(100);
-    expect(defaultPolicy.plans.free.rollingAllowanceUnits).toBe(20);
+    expect(defaultPolicy.plans.free.rollingAllowanceUnits).toBe(40);
     expect(defaultPolicy.plans.pro.weeklyAllowanceUnits).toBe(1500);
     expect(defaultPolicy.burstWindowHours).toBe(5);
 
