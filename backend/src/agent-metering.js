@@ -308,7 +308,7 @@ export function updateAgentStreamMeterMetrics(metrics, block = "") {
   return target;
 }
 
-export const DEFAULT_UNIT_COST_USD = 0.00075;
+export const DEFAULT_UNIT_COST_USD = 0.0015;
 
 export function computeAgentSettleUnits({
   costUsd = null,

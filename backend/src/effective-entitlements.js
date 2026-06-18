@@ -9,19 +9,37 @@ export const COMMERCIAL_PLAN_IDS = Object.freeze({
 });
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "past_due"]);
-const LEGACY_PAID_TIERS = new Set(["student", "personal", "pro"]);
+// V1 commercial ladder: personal / pro / pro_max are first-class paid tiers.
+// `pro` and `pro_max` MUST stay distinct here so isPaidActive(true) lights up
+// premium + the per-tier wallet — previously `pro_max` was absent (→ free
+// entitlement, Bug 3) and `pro` was folded into personal (Bug 2).
+const LEGACY_PAID_TIERS = new Set(["student", "personal", "pro", "pro_max"]);
 const COMMERCIAL_SUBSCRIPTION_PLANS = new Set(["agent", "learn", "hire", "complete"]);
 
 function normalizeRawTier(tier) {
-  const normalized = String(tier || "").trim().toLowerCase();
-  if (normalized === "pro") return "personal";
-  return normalized || "free";
+  // Pass the real tier through untouched. The historic `pro -> personal`
+  // collapse here is what made every €45 Pro subscriber resolve as Personal
+  // (Bug 2); the V1 ladder treats pro/pro_max as their own tiers.
+  return String(tier || "").trim().toLowerCase() || "free";
 }
 
-function normalizeLegacyTier(tier) {
-  const normalized = normalizeRawTier(tier);
-  if (normalized === "student" || normalized === "personal") return normalized;
-  return "free";
+// The effective tier surfaced on an ACTIVE subscription. The first-class paid
+// ladder tiers (personal/pro/pro_max) and the legacy `student` grandfather tier
+// surface their REAL tier so /api/entitlements + wallet sizing agree;
+// previously pro/pro_max fell through to `personal` (Bug 2/3). Commercial
+// product SKUs (agent/learn/hire/complete) have no ladder tier of their own and
+// grandfather onto the `personal` label, matching prior behavior.
+function resolveEffectiveLadderTier(rawTier) {
+  const normalized = normalizeRawTier(rawTier);
+  if (
+    normalized === "personal" ||
+    normalized === "pro" ||
+    normalized === "pro_max" ||
+    normalized === "student"
+  ) {
+    return normalized;
+  }
+  return "personal";
 }
 
 function normalizeStatus(status) {
@@ -78,14 +96,22 @@ function buildProductPermissions(planId, { authenticated = true } = {}) {
   const hasLearn = planId === COMMERCIAL_PLAN_IDS.LEARN || hasWholeAppAccess;
   const hasHire = planId === COMMERCIAL_PLAN_IDS.HIRE || hasWholeAppAccess;
   const hasPaidProduct = hasAgent || hasLearn || hasHire || hasWholeAppAccess;
+  // Bug 1 fix — UNMETERED Spaces chat is a bypass/super-admin grant ONLY, never
+  // a paid-subscription perk. Only the ACCESS_CODE plan (reached via the local
+  // unlimited-quota bypass / super-admin override in
+  // platform-entitlement-context, and via genuine access-code grants) is
+  // uncapped. Paid ladder tiers (personal/pro/pro_max) and the legacy/complete
+  // whole-app plans keep full PRODUCT access but stay METERED — their chat
+  // turns debit the unit wallet and 429 at the weekly cap.
+  const spacesUncapped = viaAccessCode;
 
   return {
     spaces: {
       access: true,
       authenticated: Boolean(authenticated),
       memoryEligible: Boolean(authenticated),
-      uncapped: hasWholeAppAccess,
-      quota: hasWholeAppAccess ? "uncapped" : "metered",
+      uncapped: spacesUncapped,
+      quota: spacesUncapped ? "uncapped" : "metered",
     },
     agent: {
       access: hasAgent,
@@ -153,7 +179,6 @@ export function getCommercialPlanState({
 
 export function getEffectiveEntitlementState(zakiUser, nowDate = new Date()) {
   const rawPlanTier = normalizeRawTier(zakiUser?.plan_tier || "free");
-  const legacyPlanTier = normalizeLegacyTier(rawPlanTier);
   const planStatus = normalizeStatus(zakiUser?.plan_status || "inactive");
   const access = getAccessStatus(zakiUser, nowDate);
   const subscriptionActive =
@@ -166,7 +191,7 @@ export function getEffectiveEntitlementState(zakiUser, nowDate = new Date()) {
       accessActive: access.active,
     });
     return {
-      tier: legacyPlanTier === "free" ? "personal" : legacyPlanTier,
+      tier: resolveEffectiveLadderTier(rawPlanTier),
       status: planStatus,
       source: "subscription",
       premium: true,

@@ -4,6 +4,7 @@
 // webhook must never 500 on a wallet re-sync failure — markWebhookEventProcessed
 // marks the event up front, so a throw would lose the re-provision on retry).
 import { describe, it, expect, jest, beforeAll, beforeEach } from "@jest/globals";
+import { normalizeQuotaTier } from "./chat-quota-context.js";
 
 const ensureWalletMock = jest.fn(async () => ({ user_id: 7, plan_id: "personal" }));
 
@@ -70,13 +71,12 @@ function createDependencies({ event, resolvedUser = null } = {}) {
     dbGet: jest.fn(async () => null),
     dbQuery: jest.fn(async () => ({ rowCount: 1 })),
     resolveUserByStripeCustomer: jest.fn(async () => resolvedUser),
-    resolveTier: (value) => String(value || "free").trim().toLowerCase(),
+    resolveTier: normalizeQuotaTier,
     tierByPrice: {
       price_student: "student",
       price_personal: "personal",
-      price_agent: "agent",
-      price_learn: "learn",
-      price_complete: "complete",
+      price_pro: "pro",
+      price_pro_max: "pro_max",
     },
     fulfillAccessCodePurchaseCheckoutSession: jest.fn(async () => ({ handled: false })),
   };

@@ -1,5 +1,32 @@
-import { describe, it, expect, jest } from "@jest/globals";
-import { createStripeWebhookHandler } from "./billing-stripe-webhook-handler.js";
+import { describe, it, expect, jest, beforeAll, beforeEach } from "@jest/globals";
+import { normalizeQuotaTier } from "./chat-quota-context.js";
+import { buildPlatformPlanPolicy, normalizePlatformPlanId } from "./platform-policy.js";
+
+// Mock the unit ledger so we can assert the webhook re-provisions the wallet
+// with the REAL per-tier planId. ensureWallet is a hard import inside the
+// handler module (not injected), so capturing it requires a module mock.
+const ensureWalletMock = jest.fn(async ({ planId }) => ({ user_id: 7, plan_id: planId }));
+jest.unstable_mockModule("./unit-ledger.js", () => ({
+  ensureWallet: ensureWalletMock,
+}));
+
+let createStripeWebhookHandler;
+beforeAll(async () => {
+  ({ createStripeWebhookHandler } = await import("./billing-stripe-webhook-handler.js"));
+});
+beforeEach(() => {
+  ensureWalletMock.mockClear();
+  ensureWalletMock.mockImplementation(async ({ planId }) => ({ user_id: 7, plan_id: planId }));
+});
+
+// The weekly allowance a given commercial tier resolves to once the wallet is
+// provisioned — sourced from the SAME platform policy index.js#ensureWallet
+// uses, so the assertion tracks the real allowance ladder (personal 1000 /
+// pro 3000 / pro_max 7500).
+function weeklyAllowanceForTier(tier) {
+  const policy = buildPlatformPlanPolicy({ env: {} });
+  return policy.plans[normalizePlatformPlanId(tier)].weeklyAllowanceUnits;
+}
 
 function createMockRes() {
   return {
@@ -57,13 +84,17 @@ function createDependencies({ event, constructError = null, markResult = true, r
     dbGet: jest.fn(async () => null),
     dbQuery: jest.fn(async () => ({ rowCount: 1 })),
     resolveUserByStripeCustomer: jest.fn(async () => resolvedUser),
-    resolveTier: (value) => String(value || "free").trim().toLowerCase(),
+    // Use the REAL resolveTier (canonical impl exported from chat-quota-context).
+    // The previous identity stub here masked the pro→personal collapse: it
+    // happened to match the fixed behavior, so the test passed whether or not
+    // the production resolver was buggy. Wiring the real resolver makes this
+    // test fail if `pro` ever collapses again.
+    resolveTier: normalizeQuotaTier,
     tierByPrice: {
       price_student: "student",
       price_personal: "personal",
-      price_agent: "agent",
-      price_learn: "learn",
-      price_complete: "complete",
+      price_pro: "pro",
+      price_pro_max: "pro_max",
     },
     fulfillAccessCodePurchaseCheckoutSession: jest.fn(async () => ({ handled: false })),
     fulfillTopupCheckoutSession: jest.fn(async () => ({ handled: false })),
@@ -228,45 +259,55 @@ describe("stripe webhook handler integration", () => {
   });
 
   it.each([
-    ["price_agent", "agent"],
-    ["price_learn", "learn"],
-    ["price_complete", "complete"],
-  ])("stores %s subscription events as %s entitlements", async (priceId, expectedTier) => {
-    const event = {
-      id: `evt_${expectedTier}_created`,
-      type: "customer.subscription.created",
-      created: 1766710800,
-      data: {
-        object: {
-          id: `sub_${expectedTier}`,
-          customer: `cus_${expectedTier}`,
-          status: "active",
-          cancel_at_period_end: false,
-          current_period_end: 1769302800,
-          items: { data: [{ price: { id: priceId } }] },
-          metadata: {},
+    ["price_personal", "personal", 1000],
+    ["price_pro", "pro", 3000],
+    ["price_pro_max", "pro_max", 7500],
+  ])(
+    "stores %s subscription as %s and provisions the %s-unit wallet (Bug 2)",
+    async (priceId, expectedTier, expectedWeeklyAllowance) => {
+      const event = {
+        id: `evt_${expectedTier}_created`,
+        type: "customer.subscription.created",
+        created: 1766710800,
+        data: {
+          object: {
+            id: `sub_${expectedTier}`,
+            customer: `cus_${expectedTier}`,
+            status: "active",
+            cancel_at_period_end: false,
+            current_period_end: 1769302800,
+            items: { data: [{ price: { id: priceId } }] },
+            metadata: {},
+          },
         },
-      },
-    };
-    const deps = createDependencies({
-      event,
-      markResult: true,
-      resolvedUser: {
-        id: 90,
-        email: `${expectedTier}@example.com`,
-        stripe_last_event_created_at: null,
-      },
-    });
-    const handler = createStripeWebhookHandler(deps);
+      };
+      const deps = createDependencies({
+        event,
+        markResult: true,
+        resolvedUser: {
+          id: 90,
+          email: `${expectedTier}@example.com`,
+          stripe_last_event_created_at: null,
+        },
+      });
+      const handler = createStripeWebhookHandler(deps);
 
-    const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+      const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
 
-    expect(res.statusCode).toBe(200);
-    expect(deps.dbQuery).toHaveBeenCalledWith(
-      expect.stringContaining("plan_tier = $4"),
-      expect.arrayContaining([expectedTier, "active"])
-    );
-  });
+      expect(res.statusCode).toBe(200);
+      // (a) the REAL tier is written to plan_tier — pro does NOT collapse to personal.
+      expect(deps.dbQuery).toHaveBeenCalledWith(
+        expect.stringContaining("plan_tier = $4"),
+        expect.arrayContaining([expectedTier, "active"])
+      );
+      // (b) the wallet is re-provisioned with the real per-tier planId.
+      expect(ensureWalletMock).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 90, planId: expectedTier })
+      );
+      // (c) that planId resolves to the correct weekly allowance ladder.
+      expect(weeklyAllowanceForTier(expectedTier)).toBe(expectedWeeklyAllowance);
+    }
+  );
 });
 
 describe("stripe webhook handler — S2.7 nullalis revocation", () => {

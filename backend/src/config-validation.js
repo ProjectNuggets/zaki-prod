@@ -52,9 +52,9 @@ export function validateRuntimeConfig(env = process.env) {
   const billingProvider = normalize(env.ZAKI_BILLING_PROVIDER || "stripe").toLowerCase();
   const stripePriceStudentYearly = normalize(env.STRIPE_PRICE_STUDENT_YEARLY);
   const stripePricePersonalYearly = normalize(env.STRIPE_PRICE_PERSONAL_YEARLY);
-  const stripePriceAgentMonthly = normalize(env.STRIPE_PRICE_AGENT_MONTHLY);
-  const stripePriceLearnMonthly = normalize(env.STRIPE_PRICE_LEARN_MONTHLY);
-  const stripePriceCompleteMonthly = normalize(env.STRIPE_PRICE_COMPLETE_MONTHLY);
+  const stripePricePersonalMonthly = normalize(env.STRIPE_PRICE_PERSONAL);
+  const stripePriceProMonthly = normalize(env.STRIPE_PRICE_PRO);
+  const stripePriceProMaxMonthly = normalize(env.STRIPE_PRICE_PRO_MAX);
   const stripePriceAccessCodeMonthly = normalize(env.STRIPE_PRICE_ACCESS_CODE_MONTHLY);
   const stripeBillingPortalConfiguration = normalize(env.STRIPE_BILLING_PORTAL_CONFIGURATION);
   const learningEnabled = isTruthyBoolean(env.ZAKI_LEARNING_ENABLED);
@@ -141,25 +141,25 @@ export function validateRuntimeConfig(env = process.env) {
       "STRIPE_PRICE_PERSONAL_YEARLY is not set. Personal yearly checkout will be unavailable."
     );
   }
-  if (billingProvider === "stripe" && !stripePriceAgentMonthly) {
+  if (billingProvider === "stripe" && !stripePricePersonalMonthly) {
     pushIssue(
       warnings,
-      "STRIPE_PRICE_AGENT_MONTHLY",
-      "STRIPE_PRICE_AGENT_MONTHLY is not set. ZAKI Agent checkout will be unavailable."
+      "STRIPE_PRICE_PERSONAL",
+      "STRIPE_PRICE_PERSONAL is not set. ZAKI Personal checkout will be unavailable."
     );
   }
-  if (billingProvider === "stripe" && !stripePriceLearnMonthly) {
+  if (billingProvider === "stripe" && !stripePriceProMonthly) {
     pushIssue(
       warnings,
-      "STRIPE_PRICE_LEARN_MONTHLY",
-      "STRIPE_PRICE_LEARN_MONTHLY is not set. ZAKI Learn checkout will be unavailable."
+      "STRIPE_PRICE_PRO",
+      "STRIPE_PRICE_PRO is not set. ZAKI Pro checkout will be unavailable."
     );
   }
-  if (billingProvider === "stripe" && !stripePriceCompleteMonthly) {
+  if (billingProvider === "stripe" && !stripePriceProMaxMonthly) {
     pushIssue(
       warnings,
-      "STRIPE_PRICE_COMPLETE_MONTHLY",
-      "STRIPE_PRICE_COMPLETE_MONTHLY is not set. ZAKI Complete checkout will be unavailable."
+      "STRIPE_PRICE_PRO_MAX",
+      "STRIPE_PRICE_PRO_MAX is not set. ZAKI Pro Max checkout will be unavailable."
     );
   }
   if (billingProvider === "stripe" && !stripePriceAccessCodeMonthly) {
@@ -171,15 +171,15 @@ export function validateRuntimeConfig(env = process.env) {
   }
   if (
     billingProvider === "stripe" &&
-    stripePriceAgentMonthly &&
-    stripePriceLearnMonthly &&
-    stripePriceCompleteMonthly &&
+    stripePricePersonalMonthly &&
+    stripePriceProMonthly &&
+    stripePriceProMaxMonthly &&
     !stripeBillingPortalConfiguration
   ) {
     pushIssue(
       warnings,
       "STRIPE_BILLING_PORTAL_CONFIGURATION",
-      "STRIPE_BILLING_PORTAL_CONFIGURATION is not set. Agent/Learn to Complete upgrades will be unavailable."
+      "STRIPE_BILLING_PORTAL_CONFIGURATION is not set. Personal/Pro/Pro Max plan changes will be unavailable."
     );
   }
   if (learningEnabled) {

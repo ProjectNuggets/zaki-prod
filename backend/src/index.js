@@ -46,6 +46,7 @@ import { markWebhookEventProcessed as markWebhookEventProcessedOnce } from "./bi
 import { createBillingHealthTracker } from "./billing-health.js";
 import { createBillingAlertDispatcher } from "./billing-alerts.js";
 import {
+  STRIPE_BILLING_PLANS,
   buildTopupPackCatalog,
   buildStripePricingCatalog,
   normalizeBillingInterval,
@@ -247,6 +248,7 @@ import {
   registerAgentSessionBffRoutes,
   registerBotBffAliases,
   registerTelegramDisconnectAliases,
+  resolveSoftEmptyAgentResponse,
   sanitizeAgentChannelBindingPayload,
 } from "./agent-bff-contract.js";
 import {
@@ -282,8 +284,6 @@ import {
   getQuotaResetAtUtcIso,
   getSurfaceQuotaConfig,
   getWeeklyQuotaResetAtUtcIso,
-  hasLocalUnlimitedQuotaBypass,
-  isUnlimitedUser,
   readDailyPromptUsage,
   readWeeklyPromptUsage,
   resolveQuotaSurface,
@@ -342,6 +342,10 @@ import {
   isPaidActive,
 } from "./effective-entitlements.js";
 import { resolveEffectivePlatformEntitlement } from "./platform-entitlement-context.js";
+import {
+  buildUserQuotaContext as buildQuotaContext,
+  normalizeQuotaTier,
+} from "./chat-quota-context.js";
 import {
   buildPlatformEntitlementSummary,
   buildPlatformMeterPolicy,
@@ -629,9 +633,10 @@ const STRIPE_PRICE_STUDENT = (process.env.STRIPE_PRICE_STUDENT || "").trim();
 const STRIPE_PRICE_PERSONAL = (process.env.STRIPE_PRICE_PERSONAL || "").trim();
 const STRIPE_PRICE_STUDENT_YEARLY = (process.env.STRIPE_PRICE_STUDENT_YEARLY || "").trim();
 const STRIPE_PRICE_PERSONAL_YEARLY = (process.env.STRIPE_PRICE_PERSONAL_YEARLY || "").trim();
-const STRIPE_PRICE_AGENT_MONTHLY = (process.env.STRIPE_PRICE_AGENT_MONTHLY || "").trim();
-const STRIPE_PRICE_LEARN_MONTHLY = (process.env.STRIPE_PRICE_LEARN_MONTHLY || "").trim();
-const STRIPE_PRICE_COMPLETE_MONTHLY = (process.env.STRIPE_PRICE_COMPLETE_MONTHLY || "").trim();
+// New commercial tiers. Deployed sandbox secrets use these exact names with NO
+// `_MONTHLY` suffix: STRIPE_PRICE_PERSONAL / STRIPE_PRICE_PRO / STRIPE_PRICE_PRO_MAX.
+const STRIPE_PRICE_PRO = (process.env.STRIPE_PRICE_PRO || "").trim();
+const STRIPE_PRICE_PRO_MAX = (process.env.STRIPE_PRICE_PRO_MAX || "").trim();
 const STRIPE_PRICE_ACCESS_CODE_MONTHLY = (
   process.env.STRIPE_PRICE_ACCESS_CODE_MONTHLY || ""
 ).trim();
@@ -899,9 +904,8 @@ const stripePricingCatalog = buildStripePricingCatalog({
   studentYearly: STRIPE_PRICE_STUDENT_YEARLY,
   personalMonthly: STRIPE_PRICE_PERSONAL,
   personalYearly: STRIPE_PRICE_PERSONAL_YEARLY,
-  agentMonthly: STRIPE_PRICE_AGENT_MONTHLY,
-  learnMonthly: STRIPE_PRICE_LEARN_MONTHLY,
-  completeMonthly: STRIPE_PRICE_COMPLETE_MONTHLY,
+  proMonthly: STRIPE_PRICE_PRO,
+  proMaxMonthly: STRIPE_PRICE_PRO_MAX,
 });
 const PRICE_BY_PLAN_INTERVAL = stripePricingCatalog.priceByPlanInterval;
 const PRICE_DETAILS_BY_ID = stripePricingCatalog.priceDetailsById;
@@ -1445,7 +1449,10 @@ function getCheckoutProviderOptions() {
   ];
 }
 
-const STRIPE_ONLY_COMMERCIAL_PLANS = new Set(["agent", "learn", "complete"]);
+// New commercial tiers that are only sellable through Stripe checkout. `personal`
+// is excluded here because it still has external (Paddle) and Creem checkout
+// paths configured.
+const STRIPE_ONLY_COMMERCIAL_PLANS = new Set(["pro", "pro_max"]);
 
 function billingProviderSupportsCheckoutPlan(providerKey, plan) {
   const normalizedProvider = String(providerKey || "").trim().toLowerCase();
@@ -1582,14 +1589,11 @@ function getBillingConfigStatus() {
   if (!PRICE_BY_PLAN_INTERVAL.personal.yearly) {
     missing.push("stripe_price_personal_yearly");
   }
-  if (!PRICE_BY_PLAN_INTERVAL.agent.monthly) {
-    missing.push("stripe_price_agent_monthly");
+  if (!PRICE_BY_PLAN_INTERVAL.pro.monthly) {
+    missing.push("stripe_price_pro");
   }
-  if (!PRICE_BY_PLAN_INTERVAL.learn.monthly) {
-    missing.push("stripe_price_learn_monthly");
-  }
-  if (!PRICE_BY_PLAN_INTERVAL.complete.monthly) {
-    missing.push("stripe_price_complete_monthly");
+  if (!PRICE_BY_PLAN_INTERVAL.pro_max.monthly) {
+    missing.push("stripe_price_pro_max");
   }
   if (!STRIPE_WEBHOOK_SECRET) {
     missing.push("stripe_webhook_secret");
@@ -1629,9 +1633,8 @@ async function getStripePricingDisplayCatalog() {
     ["student", "yearly", PRICE_BY_PLAN_INTERVAL.student.yearly],
     ["personal", "monthly", PRICE_BY_PLAN_INTERVAL.personal.monthly],
     ["personal", "yearly", PRICE_BY_PLAN_INTERVAL.personal.yearly],
-    ["agent", "monthly", PRICE_BY_PLAN_INTERVAL.agent.monthly],
-    ["learn", "monthly", PRICE_BY_PLAN_INTERVAL.learn.monthly],
-    ["complete", "monthly", PRICE_BY_PLAN_INTERVAL.complete.monthly],
+    ["pro", "monthly", PRICE_BY_PLAN_INTERVAL.pro.monthly],
+    ["pro_max", "monthly", PRICE_BY_PLAN_INTERVAL.pro_max.monthly],
     ["access", "monthly", STRIPE_PRICE_ACCESS_CODE_MONTHLY],
   ].filter(([, , priceId]) => String(priceId || "").trim());
 
@@ -1651,9 +1654,8 @@ async function getStripePricingDisplayCatalog() {
   const catalog = {
     student: { monthly: null, yearly: null },
     personal: { monthly: null, yearly: null },
-    agent: { monthly: null, yearly: null },
-    learn: { monthly: null, yearly: null },
-    complete: { monthly: null, yearly: null },
+    pro: { monthly: null, yearly: null },
+    pro_max: { monthly: null, yearly: null },
     access: { monthly: null },
   };
 
@@ -4153,8 +4155,15 @@ function isStudentEligible(zakiUser, email) {
 }
 
 function resolveTier(tier) {
-  if (tier === "pro") return "personal";
-  return tier || "free";
+  // V1 ladder: personal / pro / pro_max are first-class paid tiers. This used to
+  // collapse `pro -> personal`, which made every caller that WRITES plan_tier
+  // (Stripe/Creem webhooks, cancel-at-period-end) store the wrong tier — so the
+  // €45 Pro plan provisioned a 600u Personal wallet and surfaced as Personal on
+  // /api/entitlements (Bug 2). Keep the real tier; downstream sizing/labels
+  // depend on it. Wallet/policy normalization (normalizePlatformPlanId) and
+  // effective-entitlements own any further mapping. Canonical impl lives in
+  // chat-quota-context.js so tests can exercise the REAL resolver.
+  return normalizeQuotaTier(tier);
 }
 
 function normalizeRateLimitValue(value, fallback) {
@@ -4278,30 +4287,12 @@ function resolveSurfaceQuotaConfig(surface = APP_CHAT_SURFACE) {
   };
 }
 
+// The chat-metering decision lives in chat-quota-context.js (a pure, importable
+// module) so the call-site is unit-testable. The local-unlimited-quota bypass
+// and access-code grants are the ONLY unmetered paths for Spaces chat; paid
+// ladder tiers (personal/pro/pro_max) are metered. See chat-quota-context.js.
 function buildUserQuotaContext(zakiUser, { surface = APP_CHAT_SURFACE } = {}) {
-  const normalizedSurface = resolveQuotaSurface(surface);
-  const tier = resolveTier(zakiUser?.plan_tier || "free");
-  const status = zakiUser?.plan_status || "inactive";
-  const access = getAccessStatus(zakiUser);
-  const effective = resolveEffectivePlatformEntitlement(zakiUser);
-  const localUnlimitedBypass = hasLocalUnlimitedQuotaBypass(zakiUser);
-  let unlimited = localUnlimitedBypass;
-  if (!unlimited && normalizedSurface === ZAKI_BOT_SURFACE) {
-    unlimited = Boolean(effective?.products?.agent?.access);
-  } else if (!unlimited && normalizedSurface === LEARNING_SURFACE) {
-    unlimited = Boolean(effective?.products?.learn?.access);
-  } else if (!unlimited && normalizedSurface === HIRE_SURFACE) {
-    unlimited = Boolean(effective?.products?.hire?.access);
-  } else if (!unlimited) {
-    unlimited =
-      Boolean(effective?.products?.spaces?.uncapped) ||
-      isUnlimitedUser({
-        tier,
-        status,
-        accessActive: access.active,
-      });
-  }
-  return { tier, status, access, effective, surface: normalizedSurface, unlimited };
+  return buildQuotaContext(zakiUser, { surface });
 }
 
 function setPromptQuotaHeaders(res, quota) {
@@ -6644,6 +6635,12 @@ async function readMeterSnapshotForRequest(identity, platform, policy) {
   // ENFORCEMENT ledger the spaces chat gate debits) instead of the receipts ledger — spaces chat
   // never writes a receipt, so the receipts-based weekly would always read used:0/remaining:limit.
   // Anonymous identities (and users without a wallet) → wallet stays null → receipts path unchanged.
+  if (identity?.type === "user" && identity?.userId != null) {
+    await ensureWallet({
+      userId: identity.userId,
+      planId: platform?.plan?.id || identity?.zakiUser?.plan_tier || "free",
+    });
+  }
   const wallet =
     identity?.type === "user" && identity?.userId != null
       ? await readWallet(identity.userId)
@@ -7832,7 +7829,9 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
 // Billing: Stripe Checkout, Portal, Entitlements
 // -----------------------------------------------------------------------------
 const CheckoutSchema = z.object({
-  plan: z.enum(["student", "personal", "pro", "pro_max", "agent", "learn", "complete"]),
+  // Derived from the billing catalog so the accepted checkout vocabulary stays
+  // in sync with STRIPE_BILLING_PLANS (student/personal/pro/pro_max).
+  plan: z.enum(STRIPE_BILLING_PLANS),
   interval: z.enum(["monthly", "yearly"]).optional(),
   provider: z.enum(["stripe", "paddle", "external", "creem"]).optional(),
   context: z
@@ -14912,6 +14911,58 @@ async function proxyNullclawRequest(req, res, targetPath, options = {}) {
     );
   }
 
+  // Idle-state normalization for the three READ-ONLY agent-panel reads
+  // (plan/todos/context). The engine does not implement /plan or /todos yet, so
+  // it mis-parses those reads and 400s `invalid_session_key`; /context 404s when
+  // the thread has no active run. Surfacing those raw errors leaks
+  // "Run plan unavailable: invalid_session_key" / "Checklist unavailable: ..."
+  // into the inspector. Only when a route opts in via `softEmptyOnMissing` AND
+  // the upstream is exactly `404` or `400 invalid_session_key` do we reply 200
+  // with the clean idle payload the FE already renders as "no active run".
+  // Every other status/body is forwarded verbatim from the buffered text, so
+  // 200/403/500/503/other-400 behaviour is unchanged. Buffering only kicks in
+  // for the candidate error statuses, so the success path still streams.
+  if (
+    options.softEmptyOnMissing &&
+    (upstream.status === 400 || upstream.status === 404)
+  ) {
+    let bodyText = "";
+    try {
+      bodyText = await readResponseTextWithLimit(upstream, NULLCLAW_JSON_PROXY_MAX_BYTES);
+    } catch (error) {
+      // Could not safely read the small error body (size/length mismatch). Fall
+      // back to forwarding the original status with an empty body rather than
+      // guessing — never soften on an unreadable response.
+      console.error("[Agent] Soft-empty read failed:", {
+        targetPath,
+        status: upstream.status,
+        error: error?.message || String(error),
+      });
+      res.status(upstream.status);
+      copyResponseHeaders(upstream, res);
+      res.end();
+      return;
+    }
+    const decision = resolveSoftEmptyAgentResponse(
+      options.softEmptyOnMissing,
+      upstream.status,
+      bodyText
+    );
+    if (decision.soft) {
+      res.status(200);
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      return res.send(JSON.stringify(decision.payload));
+    }
+    // Not a soft-empty case (e.g. 400 session_not_owned) — forward the original
+    // status and the buffered body unchanged.
+    res.status(upstream.status);
+    copyResponseHeaders(upstream, res);
+    if (!res.getHeader("Content-Type")) {
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+    }
+    return res.send(bodyText);
+  }
+
   res.status(upstream.status);
   copyResponseHeaders(upstream, res);
   if (!upstream.body) {
@@ -19317,6 +19368,20 @@ app.get("/api/debug/sentry-test", (req, res) => {
 });
 
 // =============================================================================
+// UNKNOWN /api/* → JSON 404
+// =============================================================================
+// Any /api/... path that wasn't matched by a real route above is an unknown API
+// endpoint. Without this guard it would fall through to the catch-all proxy
+// below and be forwarded upstream, where the AnythingLLM frontend shell answers
+// 200 + vendor HTML — a vendor-disclosure leak and wrong REST semantics for an
+// API path. Return a stable JSON 404 instead. This is scoped to /api so all
+// non-/api paths still fall through to the proxy and serve the SPA unchanged.
+// MUST stay AFTER every real /api route and BEFORE the app.all("*") proxy.
+app.all(/^\/api(\/|$)/, (req, res) => {
+  res.status(404).json({ error: "not_found" });
+});
+
+// =============================================================================
 // CATCH-ALL PROXY
 // =============================================================================
 
@@ -19360,7 +19425,10 @@ app.all("*", async (req, res) => {
       finishErroredStreamResponse(res, "NOVA proxy response", error);
       return;
     }
-    res.status(500).json({ error: error?.message || "Proxy error." });
+    // Do not echo raw error detail to clients (info-disclosure). Keep the detail
+    // server-side; the client gets only a stable, generic code.
+    console.error("[NOVA] Catch-all proxy error:", error);
+    res.status(500).json({ error: "upstream_error" });
   }
 });
 

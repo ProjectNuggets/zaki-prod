@@ -26,7 +26,7 @@ function makeRow(overrides = {}) {
     model: "kimi-k2.6",
     input_tokens: 100,
     output_tokens: 50,
-    cost_usd: 0.0015, // 0.0015 / 0.00075 = 2 units
+    cost_usd: 0.0015, // 0.0015 / 0.0015 = 1 unit
     cost_available: true,
     entry_kind: "daemon",
     created_at: "2026-01-01T00:00:00.000Z",
@@ -105,9 +105,9 @@ describe("reconcileDaemonTurnUsage", () => {
     expect(deps.settleHold).toHaveBeenCalledTimes(1);
     expect(deps.recordUsageEvent).toHaveBeenCalledTimes(1);
 
-    // wallet delta = the row's real-cost units: 0.0015 / 0.00075 = 2
+    // wallet delta = the row's real-cost units: 0.0015 / 0.0015 = 1
     const reserveArgs = deps.reserveUnits.mock.calls[0][0];
-    expect(reserveArgs.reservedUnits).toBe(2);
+    expect(reserveArgs.reservedUnits).toBe(1);
     expect(reserveArgs.productId).toBe("agent");
     expect(reserveArgs.action).toBe("agent_cron_turn");
     expect(reserveArgs.reserveIdempotencyKey).toBe("reconcile:turn-abc");
@@ -115,7 +115,7 @@ describe("reconcileDaemonTurnUsage", () => {
 
     const settleArgs = deps.settleHold.mock.calls[0][0];
     expect(settleArgs.holdId).toBe("hold-x");
-    expect(settleArgs.settledUnits).toBe(2);
+    expect(settleArgs.settledUnits).toBe(1);
     expect(settleArgs.finalState).toBe("settled");
     expect(settleArgs.settleIdempotencyKey).toBe("reconcile:turn-abc:settle");
     expect(settleArgs.providerModel).toBe("kimi-k2.6");
@@ -127,7 +127,7 @@ describe("reconcileDaemonTurnUsage", () => {
     expect(usageEvent.userId).toBe(42);
     expect(usageEvent.productId).toBe("agent");
     expect(usageEvent.eventType).toBe("agent_cron_turn");
-    expect(usageEvent.usageUnits).toBe(2);
+    expect(usageEvent.usageUnits).toBe(1);
     expect(usageEvent.sourceRoute).toBe(RECONCILE_SOURCE_ROUTE);
     expect(usageEvent.metadata.entry_kind).toBe("daemon");
     expect(usageEvent.metadata.reconciled).toBe(true);

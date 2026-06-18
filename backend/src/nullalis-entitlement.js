@@ -9,9 +9,13 @@
 // taxonomy clean and keeps product branding on the product side.
 export const TIER_MAP = Object.freeze({
   free: "free",
-  pro: "pro",
+  // New commercial tiers (personal/pro/pro_max). All paid platform tiers map to
+  // nullalis "pro" — nullalis only distinguishes free vs. entitled.
   personal: "pro",
+  pro: "pro",
+  pro_max: "pro",
   student: "pro",
+  // Legacy/grandfathered tiers that may still live on existing user rows.
   agent: "pro",
   learn: "pro",
   complete: "pro",
