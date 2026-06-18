@@ -74,6 +74,8 @@ export function validateRuntimeConfig(env = process.env) {
   const googleClientSecret = normalize(env.GOOGLE_CLIENT_SECRET);
   const googleRedirectUri = normalize(env.GOOGLE_OAUTH_REDIRECT_URI);
   const googleStateSecret = normalize(env.GOOGLE_OAUTH_STATE_SECRET || env.ZAKI_JWT_SIGNING_KEY);
+  const turnstileDisabled = isTruthyBoolean(env.ZAKI_TURNSTILE_DISABLED);
+  const turnstileSecret = normalize(env.ZAKI_TURNSTILE_SECRET_KEY);
 
   const errors = [];
   const warnings = [];
@@ -443,6 +445,14 @@ export function validateRuntimeConfig(env = process.env) {
       errors,
       "ZAKI_LEGAL_POLICY_VERSION",
       "ZAKI_LEGAL_POLICY_VERSION must be explicitly set in production."
+    );
+  }
+
+  if (!turnstileDisabled && !turnstileSecret) {
+    pushIssue(
+      errors,
+      "ZAKI_TURNSTILE_SECRET_KEY",
+      "ZAKI_TURNSTILE_SECRET_KEY must be set in production unless ZAKI_TURNSTILE_DISABLED=true."
     );
   }
 

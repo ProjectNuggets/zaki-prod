@@ -1,32 +1,34 @@
 import { ArrowRight, CircleDot, LockKeyhole, SendHorizontal } from "lucide-react";
 import type { Locale } from "../lib/content";
-import { appHandoffUrl } from "../lib/appHandoff";
+import { appHandoffUrl, productHandoffUrl, websiteProductHandoffs } from "../lib/appHandoff";
 import { Reveal } from "./Reveal";
 
-const productLanes = {
-  en: [
-    { label: "Chat", state: "live" },
-    { label: "Agent", state: "preview" },
-    { label: "Brain", state: "memory" },
-    { label: "Learn", state: "gated" },
-    { label: "Design", state: "waitlist" },
-    { label: "Hire", state: "gated" },
-  ],
-  ar: [
-    { label: "الدردشة", state: "مباشر" },
-    { label: "الوكيل", state: "معاينة" },
-    { label: "الذاكرة", state: "ذاكرة" },
-    { label: "التعلّم", state: "بيتا" },
-    { label: "التصميم", state: "انتظار" },
-    { label: "التوظيف", state: "بيتا" },
-  ],
-};
+const laneLabels = {
+  chat: { en: "Chat", ar: "الدردشة" },
+  agent: { en: "Agent", ar: "الوكيل" },
+  brain: { en: "Brain", ar: "الذاكرة" },
+  learn: { en: "Learn", ar: "التعلّم" },
+  design: { en: "Design", ar: "التصميم" },
+  hire: { en: "Hire", ar: "التوظيف" },
+} as const;
+
+const localizedStatus = {
+  Live: { en: "live", ar: "مباشر" },
+  Included: { en: "included", ar: "مشمول" },
+  "Private beta": { en: "beta", ar: "بيتا" },
+  Waitlist: { en: "waitlist", ar: "انتظار" },
+} as const;
 
 export function Hero({ locale }: { locale: Locale }) {
   const isArabic = locale === "ar";
-  const lanes = productLanes[locale];
+  const lanes = websiteProductHandoffs.map((product) => ({
+    label: laneLabels[product.id][locale],
+    state:
+      localizedStatus[product.statusLabel as keyof typeof localizedStatus]?.[locale] ||
+      product.statusLabel.toLowerCase(),
+  }));
   const appHref = appHandoffUrl("/", "website_home_command", "dashboard");
-  const signupHref = appHandoffUrl("/agent", "website_home_keep_work", "agent");
+  const signupHref = productHandoffUrl("agent");
 
   return (
     <section className="border-b border-zk-border px-5 pb-2 pt-3 md:px-8 md:pb-8 md:pt-8">
@@ -53,13 +55,14 @@ export function Hero({ locale }: { locale: Locale }) {
                   </h1>
                   <p className="mt-5 max-w-[64ch] text-sm leading-7 text-zk-text-secondary md:text-base md:leading-8">
                     {isArabic
-                      ? "اختر المسار، اكتب ما تريد، واجعل زكي يحوّل المحادثة إلى عمل قابل للحفظ عند تسجيل الدخول."
-                      : "Pick a lane, write the work once, and let ZAKI turn the prompt into a run you can keep when you sign in."}
+                      ? "اختر المسار، اكتب ما تريد، واجعل زكي يحوّل المحادثة إلى عمل يمكن متابعته عند تسجيل الدخول."
+                      : "Pick a lane, write the work once, and let ZAKI carry the prompt into Chat or Agent when you sign in."}
                   </p>
 
-                  <form action="https://app.chatzaki.com/" method="get" className="mt-8 border border-zk-border-strong bg-zk-bg-raised">
+                  <form action={appHandoffUrl("/spaces").split("?")[0]} method="get" className="mt-8 border border-zk-border-strong bg-zk-bg-raised">
                     <input type="hidden" name="source" value="website_home_command" />
                     <input type="hidden" name="intent" value="anonymous_command" />
+                    <input type="hidden" name="product" value="spaces" />
                     <div className="grid grid-cols-3 border-b border-zk-border md:grid-cols-6">
                       {lanes.map((lane, index) => (
                         <button
@@ -124,7 +127,7 @@ export function Hero({ locale }: { locale: Locale }) {
                   {[
                     [isArabic ? "المتاح الآن" : "Available now", isArabic ? "الدردشة و Agent و Brain" : "Chat, Agent, and Brain"],
                     [isArabic ? "بعد تسجيل الدخول" : "After sign in", isArabic ? "الحفظ، الرفع، التصدير" : "Save, upload, export"],
-                    [isArabic ? "مسارات مقيّدة" : "Gated lanes", isArabic ? "التعلّم، التصميم، التوظيف" : "Learn, Design, Hire"],
+                    [isArabic ? "مسارات مقيّدة" : "Gated lanes", isArabic ? "Learn وHire بيتا، Design انتظار" : "Learn and Hire beta, Design waitlist"],
                   ].map(([label, value]) => (
                     <div key={label} className="grid grid-cols-[24px_1fr] gap-3 border-b border-zk-border px-4 py-4 md:px-5">
                       <CircleDot className="mt-0.5 size-3.5 text-zk-accent" strokeWidth={1.5} />

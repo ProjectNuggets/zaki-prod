@@ -118,7 +118,7 @@ export function WaitlistForm({ locale, source = "website_bot" }: { locale: Local
           <span className="mt-1.5 block text-xs leading-5">
             {isArabic
               ? "نستخدم هذه البيانات فقط للتواصل حول تحديثات زكي."
-              : "We use this only to contact you about ZAKI Agent access."}
+              : "We use this only to contact you about ZAKI product access updates."}
           </span>
         </p>
         <Button type="submit" disabled={isLocked} className="shrink-0">

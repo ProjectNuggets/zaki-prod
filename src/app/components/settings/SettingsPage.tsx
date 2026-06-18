@@ -395,7 +395,7 @@ function getUsageLaunchStateLabel(
   if (launchState === "unknown") return null;
   const fallback: Record<Exclude<ProductLaunchState, "unknown">, string> = {
     public_app: "Launch: public app",
-    private_beta: "Launch: private beta",
+    private_beta: "Launch: private access",
     waitlist: "Launch: waitlist",
     hidden: "Launch: hidden",
   };
@@ -1025,6 +1025,15 @@ export function SettingsPage() {
         : null;
   const topupBalanceUnits =
     typeof weeklyWindow.topupUnits === "number" ? weeklyWindow.topupUnits : null;
+  const agentAvailableNow = meterStatus?.availableNow?.agent ?? null;
+  const agentAvailableNowLabel =
+    typeof agentAvailableNow?.effectiveRemaining === "number"
+      ? t("settingsModal.plan.agentAvailableNowValue", {
+          available: formatUsageCount(agentAvailableNow.effectiveRemaining),
+          required: formatUsageCount(agentAvailableNow.requiredReserveUnits),
+          defaultValue: `${formatUsageCount(agentAvailableNow.effectiveRemaining)} available / ${formatUsageCount(agentAvailableNow.requiredReserveUnits)} needed`,
+        })
+      : t("settingsModal.usage.pending");
   const accessExpiryLabel = useMemo(() => {
     if (!accessExpiresAt) return null;
     const parsed = new Date(accessExpiresAt);
@@ -1997,6 +2006,10 @@ export function SettingsPage() {
                   <div>
                     <span>{t("settingsModal.plan.topupBalance", { defaultValue: "Extra units balance" })}</span>
                     <strong>{formatUsageUnits(topupBalanceUnits)}</strong>
+                  </div>
+                  <div>
+                    <span>{t("settingsModal.plan.agentAvailableNow", { defaultValue: "Agent available now" })}</span>
+                    <strong>{agentAvailableNowLabel}</strong>
                   </div>
                   <div>
                     <span>{t("settingsModal.plan.billingSource", { defaultValue: "Billing source" })}</span>

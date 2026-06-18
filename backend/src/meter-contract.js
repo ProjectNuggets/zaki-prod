@@ -6,6 +6,7 @@ import {
   PRODUCT_REGISTRY_VERSION,
   ZAKI_PRODUCT_IDS,
 } from "./platform-policy.js";
+import { buildAvailableNow } from "./meter-capacity.js";
 
 export const CENTRAL_METER_CONTRACT_VERSION = "2026-05-22.central-meter.v1";
 
@@ -254,6 +255,7 @@ export function buildMeterStatusPayload({
   platform,
   meterSnapshot,
   productRegistry,
+  agentRequiredUnits = 1,
   nowDate = new Date(),
 } = {}) {
   const products = Array.isArray(productRegistry?.products) ? productRegistry.products : [];
@@ -277,6 +279,10 @@ export function buildMeterStatusPayload({
     },
     rolling: meterSnapshot?.rolling || null,
     weekly: meterSnapshot?.weekly || null,
+    availableNow: buildAvailableNow({
+      meterSnapshot,
+      agentRequiredUnits,
+    }),
     products: Object.fromEntries(
       products.map((product) => [
         product.productId,

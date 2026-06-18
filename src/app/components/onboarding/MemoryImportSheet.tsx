@@ -27,7 +27,7 @@ Categories (output in this order):
 
 2. Identity: Name, age, location, time zone, languages, education, family, relationships, personal interests, and any accessibility or health context relevant to helping me.
 
-3. Career: Current and past roles, companies, industries, and general skill areas.
+3. Hire: Current and past roles, companies, industries, and general skill areas.
 
 4. Projects: Projects I meaningfully built or committed to. Ideally ONE entry per project. Include what it does, current status, and key decisions. Start each entry with the project name or a short descriptor.
 

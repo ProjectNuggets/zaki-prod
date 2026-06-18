@@ -182,8 +182,9 @@ describe("LoginScreen legal consent", () => {
     await user.type(screen.getByPlaceholderText("Confirm password"), "Password123");
 
     const legalLink = screen.getByRole("link", { name: "Terms, Privacy & Compliance" });
-    expect(legalLink).toHaveAttribute("href", "/terms?from=signup");
-    expect(legalLink).not.toHaveAttribute("target");
+    expect(legalLink).toHaveAttribute("href", "https://chatzaki.com/terms?from=signup");
+    expect(legalLink).toHaveAttribute("target", "_blank");
+    expect(legalLink).toHaveAttribute("rel", "noopener noreferrer");
 
     const createButton = screen.getByRole("button", { name: "Create account" });
     expect(createButton).toBeDisabled();

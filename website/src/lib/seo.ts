@@ -5,16 +5,14 @@ import {
   resolveRenderablePath,
 } from "./routeRegistry";
 import {
-  getComparisonContent,
   getContactContent,
-  getHowToContent,
   getLegalContent,
 } from "./routeContent";
 
 export const SITE_URL = "https://chatzaki.com";
-export const APP_URL = "https://app.chatzaki.com";
+export const APP_URL = "https://chatzaki.ai";
 export const DEFAULT_OG_IMAGE = `${SITE_URL}/slides/1.png`;
-export const SEO_UPDATED_AT = "2026-04-14T00:00:00Z";
+export const SEO_UPDATED_AT = "2026-06-17T00:00:00Z";
 
 export type RouteSeo = {
   title: string;
@@ -102,85 +100,6 @@ function buildWebPageSchema(name: string, url: string, locale: Locale, descripti
   };
 }
 
-function buildBreadcrumbSchema(crumbs: { name: string; url: string }[]) {
-  return {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: crumbs.map((c, i) => ({
-      "@type": "ListItem",
-      position: i + 1,
-      name: c.name,
-      item: c.url,
-    })),
-  };
-}
-
-function buildHowToSchema(slug: Parameters<typeof getHowToContent>[0], canonical: string) {
-  const content = getHowToContent(slug);
-  return {
-    "@context": "https://schema.org",
-    "@type": "HowTo",
-    name: content.title,
-    url: canonical,
-    step: content.steps.map((step, index) => ({
-      "@type": "HowToStep",
-      position: index + 1,
-      name: step.title,
-      text: step.text,
-    })),
-  };
-}
-
-function buildComparisonSchema(
-  seoKey: "vs-chatgpt" | "zaki-vs-spaces" | "best-arabic-ai-assistant" | "zaki-vs-openclaw",
-  canonical: string
-) {
-  if (seoKey === "best-arabic-ai-assistant") {
-    return {
-      "@context": "https://schema.org",
-      "@type": "ItemList",
-      name: "Best Arabic AI Assistant in 2026",
-      url: canonical,
-      itemListElement: [
-        { "@type": "ListItem", position: 1, name: "Spaces" },
-        { "@type": "ListItem", position: 2, name: "ChatGPT" },
-        { "@type": "ListItem", position: 3, name: "Daleela" },
-        { "@type": "ListItem", position: 4, name: "Labiba" },
-        { "@type": "ListItem", position: 5, name: "Yasmina AI" },
-      ],
-    };
-  }
-
-  if (seoKey === "zaki-vs-spaces") {
-    return {
-      "@context": "https://schema.org",
-      "@type": "WebPage",
-      name: "ZAKI vs Spaces",
-      url: canonical,
-      description:
-        "ZAKI is the persistent AI counterpart for planning, memory, and continuity. Spaces are the structured workspaces for focused execution.",
-    };
-  }
-
-  if (seoKey === "zaki-vs-openclaw") {
-    return {
-      "@context": "https://schema.org",
-      "@type": "WebPage",
-      name: "ZAKI vs OpenClaw",
-      url: canonical,
-      description:
-        "A technical comparison of ZAKI's underlying runtime direction and OpenClaw across memory, tooling, ACP, and operational discipline.",
-    };
-  }
-
-  return {
-    "@context": "https://schema.org",
-    "@type": "WebPage",
-    name: "Spaces vs ChatGPT Comparison",
-    url: canonical,
-  };
-}
-
 export function getRouteSeo(pathname: string): RouteSeo {
   const route = resolveRenderablePath(pathname);
   const routeDefinition = getRouteDefinition(route);
@@ -196,38 +115,83 @@ export function getRouteSeo(pathname: string): RouteSeo {
         ? "ar_AR"
         : localeTag;
 
-  if (route === "/zaki-bot/" || route === "/ar/zaki-bot/") {
+  if (route === "/product/" || route === "/ar/product/") {
     const description =
       locale === "ar"
-        ? "زكي هو البيتا العامة لذكاء مستمر بذاكرة لكل مستخدم ومراحل عمل مرئية، مع ذاكرة ومتابعة عبر Agent أثناء البيتا."
-        : "ZAKI is the current Agent preview for persistent AI with per-user memory, visible work phases, and account memory and follow-through through Agent.";
+        ? "لوحة منتج زكي V2: Chat وAgent وBrain عامة، Learn وHire بيتا خاصة، وDesign قائمة انتظار حتى تكتمل مساراتها."
+        : "ZAKI is an intelligence layer for people building their next chapter: Agent acts, Spaces keep work focused, and Brain remembers what matters.";
     return {
       title:
         locale === "ar"
-          ? "زكي | البيتا العامة لمشغّل ذكاء شخصي"
-          : "ZAKI | Personal Assistant AI & Smooth Operator",
+          ? "منتج زكي | Chat وAgent وBrain"
+          : "ZAKI Product — One login. One memory. Every surface.",
       description,
-      canonical: locale === "ar" ? `${SITE_URL}/ar/zaki-bot/` : `${SITE_URL}/zaki-bot/`,
+      canonical: locale === "ar" ? `${SITE_URL}/ar/product/` : `${SITE_URL}/product/`,
       lang: locale,
       dir,
-      imageAlt: locale === "ar" ? "صفحة زكي التجريبية" : "ZAKI Agent page",
+      imageAlt: locale === "ar" ? "صفحة منتج زكي" : "ZAKI product page",
       localeTag,
       altLocaleTag,
       keywords:
         locale === "ar"
-          ? "زكي, ZAKI, مشغّل ذكاء شخصي, تحديثات زكي, مساعد ذكاء شخصي"
-          : "ZAKI, Personal AI Operator, ZAKI Agent, persistent intelligence, smooth operator",
+          ? "زكي, منتج زكي, ZAKI Agent, ZAKI Brain, Chat"
+          : "ZAKI product, ZAKI Agent, ZAKI Brain, AI Chat, persistent intelligence",
       schema: [
         ...buildCommonSchema(locale, description),
         {
           "@context": "https://schema.org",
           "@type": "WebPage",
-          name: "ZAKI",
-          url: locale === "ar" ? `${SITE_URL}/ar/zaki-bot/` : `${SITE_URL}/zaki-bot/`,
+          name: "ZAKI Product",
+          url: locale === "ar" ? `${SITE_URL}/ar/product/` : `${SITE_URL}/product/`,
           inLanguage: locale,
           description,
         },
         faqSchema,
+      ],
+      alternates,
+      updatedAt: SEO_UPDATED_AT,
+    };
+  }
+
+  if (
+    route === "/pricing/" ||
+    route === "/ar/pricing/" ||
+    route === "/use-cases/" ||
+    route === "/ar/use-cases/"
+  ) {
+    const isPricing = route.includes("/pricing/");
+    const title = isPricing
+      ? locale === "ar"
+        ? "أسعار زكي | ابدأ مجانًا"
+        : "ZAKI Pricing | Start Free"
+        : locale === "ar"
+        ? "استخدامات زكي | Chat وAgent وBrain"
+        : "ZAKI Use Cases — Less overhead. More momentum.";
+    const description = isPricing
+      ? locale === "ar"
+        ? "ابدأ من Chat مجانًا، واستخدم Agent وBrain للاستمرارية والذاكرة عندما يحتاج العمل إلى حساب."
+        : "ZAKI pricing: Free, Personal EUR 15, Pro EUR 45, Pro MAX EUR 99. Start free and upgrade for more room, deeper memory, and priority."
+      : locale === "ar"
+        ? "استخدم زكي للكتابة والبحث والعمل ثنائي اللغة والمتابعة والذاكرة، مع بقاء Learn وHire بيتا وDesign انتظار."
+        : "How founders, adventurers, and operators use ZAKI: an agent that acts, spaces for focused work, and a memory that carries context forward.";
+    const pricingTitle =
+      locale === "ar" ? "أسعار زكي | ابدأ مجانًا" : "ZAKI Pricing — Every live product included.";
+    const canonical = toAbsoluteUrl(route);
+    return {
+      title: isPricing ? pricingTitle : title,
+      description,
+      canonical,
+      lang: locale,
+      dir,
+      imageAlt: title,
+      localeTag,
+      altLocaleTag,
+      keywords: isPricing
+        ? "ZAKI pricing, AI chat pricing, ZAKI Agent pricing"
+        : "ZAKI use cases, AI assistant use cases, bilingual AI work",
+      schema: [
+        ...buildCommonSchema(locale, description),
+        buildWebPageSchema(title, canonical, locale, description),
       ],
       alternates,
       updatedAt: SEO_UPDATED_AT,
@@ -265,13 +229,13 @@ export function getRouteSeo(pathname: string): RouteSeo {
     const description =
       locale === "ar"
         ? "لماذا يوجد زكي: كيف يجمع بين Spaces كمساحات عمل منظّمة وبين زكي كوكيل ذكاء شخصي مستمر يتشكل علنًا."
-        : "Why ZAKI exists: combining Spaces as structured workspaces with ZAKI as a current Agent preview for persistent personal intelligence.";
+        : "Why ZAKI exists: the last mile between people and AI is continuity. ZAKI started as a promise to remember, support, and show up.";
     const canonical = toAbsoluteUrl(route);
     return {
       title:
         locale === "ar"
           ? "لماذا زكي | ZAKI · ذكاء عربي أولًا"
-          : "Why ZAKI | Arabic-First AI with Product Discipline",
+          : "ZAKI Story — It started as a promise.",
       description,
       canonical,
       lang: locale,
@@ -286,114 +250,6 @@ export function getRouteSeo(pathname: string): RouteSeo {
       schema: [
         ...buildCommonSchema(locale, description),
         buildWebPageSchema("Why ZAKI", canonical, locale, description),
-      ],
-      alternates,
-      updatedAt: SEO_UPDATED_AT,
-    };
-  }
-
-  if (route === "/autism-guidance/" || route === "/ar/autism-guidance/") {
-    const description =
-      locale === "ar"
-        ? "صفحة ثنائية اللغة لإثبات مفهوم مساعد زكي للإرشاد حول التوحّد: للتثقيف، وتنظيم الملاحظات، والاستعداد للتقييم، لا للتشخيص الرسمي."
-        : "A bilingual proof-of-concept page for ZAKI's autism guidance assistant: designed for education, structured observations, and assessment preparation, not formal diagnosis.";
-    const canonical = toAbsoluteUrl(route);
-    return {
-      title:
-        locale === "ar"
-          ? "زكي | مساعد للإرشاد حول التوحّد"
-          : "ZAKI | Autism Guidance Assistant",
-      description,
-      canonical,
-      lang: locale,
-      dir,
-      imageAlt:
-        locale === "ar"
-          ? "صفحة زكي للإرشاد حول التوحّد"
-          : "ZAKI autism guidance proof-of-concept page",
-      localeTag,
-      altLocaleTag,
-      keywords:
-        locale === "ar"
-          ? "زكي, التوحّد, إرشاد التوحّد, الاستعداد للتقييم, مساعد ثنائي اللغة"
-          : "ZAKI, autism guidance, autism assessment preparation, bilingual autism assistant, autism support",
-      schema: [
-        ...buildCommonSchema(locale, description),
-        buildWebPageSchema(
-          locale === "ar" ? "زكي | مساعد للإرشاد حول التوحّد" : "ZAKI | Autism Guidance Assistant",
-          canonical,
-          locale,
-          description
-        ),
-      ],
-      alternates,
-      updatedAt: SEO_UPDATED_AT,
-    };
-  }
-
-  if (
-    route === "/vs-chatgpt/" ||
-    route === "/zaki-vs-spaces/" ||
-    route === "/best-arabic-ai-assistant/" ||
-    route === "/zaki-vs-openclaw/"
-  ) {
-    const comparisonKey =
-      route === "/vs-chatgpt/"
-        ? "vs-chatgpt"
-        : route === "/zaki-vs-spaces/"
-          ? "zaki-vs-spaces"
-          : route === "/best-arabic-ai-assistant/"
-            ? "best-arabic-ai-assistant"
-            : "zaki-vs-openclaw";
-    const content = getComparisonContent(comparisonKey);
-    const canonical = toAbsoluteUrl(route);
-    return {
-      title: content.seo.title,
-      description: content.seo.description,
-      canonical,
-      lang: "en",
-      dir: "ltr",
-      imageAlt: content.seo.imageAlt,
-      localeTag: "en_US",
-      altLocaleTag: "en_US",
-      keywords: content.seo.keywords,
-      schema: [
-        ...buildCommonSchema("en", content.seo.description),
-        buildWebPageSchema(content.title, canonical, "en", content.seo.description),
-        buildComparisonSchema(comparisonKey, canonical),
-        buildBreadcrumbSchema([
-          { name: "Home", url: SITE_URL },
-          { name: content.title, url: canonical },
-        ]),
-      ],
-      alternates,
-      updatedAt: SEO_UPDATED_AT,
-    };
-  }
-
-  if (route.startsWith("/how-to/")) {
-    const slug = route.replace(/^\/how-to\//, "").replace(/\/$/, "") as Parameters<typeof getHowToContent>[0];
-    const content = getHowToContent(slug);
-    const canonical = toAbsoluteUrl(route);
-    return {
-      title: content.seo.title,
-      description: content.seo.description,
-      canonical,
-      lang: "en",
-      dir: "ltr",
-      imageAlt: content.seo.imageAlt,
-      localeTag: "en_US",
-      altLocaleTag: "en_US",
-      keywords: content.seo.keywords,
-      schema: [
-        ...buildCommonSchema("en", content.seo.description),
-        buildWebPageSchema(content.title, canonical, "en", content.seo.description),
-        buildHowToSchema(slug, canonical),
-        buildBreadcrumbSchema([
-          { name: "Home", url: SITE_URL },
-          { name: "How To", url: `${SITE_URL}/how-to/` },
-          { name: content.title, url: canonical },
-        ]),
       ],
       alternates,
       updatedAt: SEO_UPDATED_AT,
@@ -460,13 +316,13 @@ export function getRouteSeo(pathname: string): RouteSeo {
   const description =
     locale === "ar"
       ? "زكي هو وكيل ذكاء شخصي بذاكرة مستمرة، أتمتة مجدولة، وثلاثة أوضاع تختار النموذج المناسب لمهمتك تلقائيًا. ابدأ مجانًا."
-      : "ZAKI is a personal AI agent with persistent memory, scheduled automation, and three modes that route to the right model for every task. Start free.";
+      : "ZAKI is the intelligence layer for your next chapter: one login for an agent that acts, spaces for focused work, and a memory you own.";
 
   return {
     title:
       locale === "ar"
         ? "زكي | مساعد شخصي ذكي ومشغّل سلس"
-        : "ZAKI | Personal Assistant AI & Smooth Operator",
+        : "ZAKI — Never build alone",
     description,
     canonical: locale === "ar" ? `${SITE_URL}/ar/` : `${SITE_URL}/`,
     lang: locale,

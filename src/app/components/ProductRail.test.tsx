@@ -100,7 +100,7 @@ describe("ProductRail quick settings", () => {
     renderProductRail();
 
     expect(screen.getByTitle("Learn")).toBeDisabled();
-    expect(screen.getByTitle("Hire")).toBeDisabled();
+    expect(screen.getByTitle("Career")).toBeDisabled();
     expect(screen.getByTitle("Design")).toBeDisabled();
   });
 

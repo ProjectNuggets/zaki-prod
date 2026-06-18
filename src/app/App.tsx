@@ -1,5 +1,5 @@
 import "@/styles/fonts.css";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "./components/Sidebar";
@@ -21,11 +21,9 @@ import {
 } from "@/lib/api";
 import { useAuthStore, useUIStore, useNavigationStore } from "@/stores";
 import { ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID } from "@/lib/zakiBot";
+import { consumeWebsiteCommandIntentFromUrl } from "@/lib/pendingIntent";
 
 const LEGAL_POLICY_VERSION_FALLBACK = "2026-06-17.v2";
-const LegalPage = lazy(() =>
-  import("./components/LegalPage").then((m) => ({ default: m.LegalPage }))
-);
 const PUBLIC_WEBSITE_PATHS = new Set([
   "/",
   "/pricing",
@@ -41,6 +39,7 @@ const PUBLIC_WEBSITE_PATHS = new Set([
   "/privacy",
   "/terms",
   "/compliance",
+  "/legal",
   "/ar",
   "/ar/zaki-bot",
   "/ar/story",
@@ -148,6 +147,13 @@ export default function App() {
     } else {
       store.goHome();
     }
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    consumeWebsiteCommandIntentFromUrl({
+      pathname: location.pathname,
+      search: location.search,
+    });
   }, [location.pathname, location.search]);
 
   // Sync theme to DOM
@@ -304,14 +310,6 @@ export default function App() {
     }
   };
 
-  if (!token && !isHydrating && normalizedPath === "/legal") {
-    return (
-      <Suspense fallback={<div className="min-h-screen bg-zaki-bg" aria-label="Loading legal page" />}>
-        <LegalPage />
-      </Suspense>
-    );
-  }
-
   if (!token && !isHydrating && (hasExplicitAuthIntent || !isAnonymousAllowedRoute)) {
     return <LoginScreen />;
   }
@@ -401,12 +399,30 @@ export default function App() {
               <span className="leading-relaxed">
                 {t("app.legal.checkboxPrefix")}{" "}
                 <a
-                  href="/legal"
+                  href="https://chatzaki.com/terms"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-semibold text-zaki-brand hover:underline"
                 >
-                  {t("app.legal.checkboxLink")}
+                  {t("app.legal.termsLink")}
+                </a>
+                {", "}
+                <a
+                  href="https://chatzaki.com/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-zaki-brand hover:underline"
+                >
+                  {t("app.legal.privacyLink")}
+                </a>
+                {" & "}
+                <a
+                  href="https://chatzaki.com/compliance"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-zaki-brand hover:underline"
+                >
+                  {t("app.legal.complianceLink")}
                 </a>
                 .
               </span>

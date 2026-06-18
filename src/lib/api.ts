@@ -471,6 +471,7 @@ export async function requestPublicSignup({
   dateOfBirth,
   legalConsentAccepted,
   legalPolicyVersion,
+  turnstileToken,
 }: {
   email: string;
   password: string;
@@ -478,6 +479,7 @@ export async function requestPublicSignup({
   dateOfBirth: string;
   legalConsentAccepted?: boolean;
   legalPolicyVersion?: string;
+  turnstileToken?: string | null;
 }) {
   const payload: Record<string, string | boolean> = {
     email,
@@ -490,6 +492,9 @@ export async function requestPublicSignup({
   }
   if (legalPolicyVersion) {
     payload.legalPolicyVersion = legalPolicyVersion;
+  }
+  if (turnstileToken) {
+    payload.turnstileToken = turnstileToken;
   }
 
   const response = await backendRequest("/signup", {
@@ -1485,6 +1490,19 @@ export type MeterStatusProduct = {
   };
 };
 
+export type MeterAvailableNow = {
+  requiredReserveUnits?: number | null;
+  weeklyRemaining?: number | null;
+  rollingRemaining?: number | null;
+  topupUnits?: number | null;
+  effectiveRemaining?: number | null;
+  limitingWindow?: "weekly" | "rolling" | string | null;
+  constraint?: "weekly" | "rolling" | string | null;
+  shortfall?: number | null;
+  available?: boolean;
+  resetAt?: string | null;
+};
+
 export type MeterStatusResponse = {
   success?: boolean;
   contractVersion?: string;
@@ -1504,6 +1522,9 @@ export type MeterStatusResponse = {
   };
   rolling?: MeterWindowSnapshot | null;
   weekly?: MeterWindowSnapshot | null;
+  availableNow?: {
+    agent?: MeterAvailableNow | null;
+  } | null;
   products?: Partial<Record<ProductRegistryProductId, MeterStatusProduct>>;
   error?: string | null;
 };

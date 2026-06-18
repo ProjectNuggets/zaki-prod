@@ -8,6 +8,7 @@ import { ANONYMOUS_WORK_LEDGER_KEY, upsertAnonymousWorkItem } from "@/lib/anonym
 import { PENDING_INTENT_KEY } from "@/lib/pendingIntent";
 
 const mockNavigate = jest.fn();
+const mockOpen = jest.fn();
 const mockUseProductRegistry = jest.fn();
 const mockUseMeterStatus = jest.fn();
 const mockUseAnonymousMeterStatus = jest.fn();
@@ -80,6 +81,8 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.saveWork": "Save this work",
     "zakiDashboard.command.emptyHelper": "Type a prompt to start.",
     "zakiDashboard.command.creditHelper": "Credits are used when ZAKI responds.",
+    "zakiDashboard.command.capacityWindowLow": "Current capacity window is low.",
+    "zakiDashboard.command.agentCreditsLow": "Agent needs more available credits.",
     "zakiDashboard.command.comingSoonHelper": "{{product}} is coming soon. Pick Chat, Agent, or Brain to start now.",
     "zakiDashboard.command.submitPreviewSave": "Preview first",
     "zakiDashboard.command.submitComingSoon": "{{product}} coming soon",
@@ -91,6 +94,8 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.markers.comingSoon": "Coming soon",
     "zakiDashboard.command.creditsExhaustedTitle": "Weekly credits are used.",
     "zakiDashboard.command.creditsExhaustedCopy": "Keep your prompt here, then sign up, wait for reset, or choose a plan.",
+    "zakiDashboard.command.capacityWindowTitle": "Current capacity window is low.",
+    "zakiDashboard.command.capacityWindowCopy": "Wait for the current window to refresh.",
     "zakiDashboard.command.saveAndSignup": "Save and sign up",
     "zakiDashboard.command.viewPlans": "View plans",
     "zakiDashboard.command.waitForReset": "Wait for reset",
@@ -102,7 +107,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.hints.brain": "Map pasted text.",
     "zakiDashboard.command.hints.learning": "Learn is coming soon.",
     "zakiDashboard.command.hints.design": "Design is coming soon.",
-    "zakiDashboard.command.hints.hire": "Career is coming soon.",
+    "zakiDashboard.command.hints.hire": "Career is gated.",
     "zakiDashboard.command.hints.spaces": "Chat immediately.",
     "zakiDashboard.command.details.agent.bestFor": "Planning, follow-through, tool runs, and browser work.",
     "zakiDashboard.command.details.agent.memory": "Personal brain after sign-in.",
@@ -112,7 +117,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.details.spaces.truth": "Chat runs now on free weekly credits.",
     "zakiDashboard.command.details.hire.bestFor": "Finding your next role, improving your CV, comparing fit, and preparing applications.",
     "zakiDashboard.command.details.hire.memory": "Career pipeline memory is not public yet.",
-    "zakiDashboard.command.details.hire.truth": "Coming soon. Use Chat or Agent today.",
+    "zakiDashboard.command.details.hire.truth": "Gated for private access. Use Chat or Agent today.",
     "zakiDashboard.command.details.design.bestFor": "Product direction and design project generation.",
     "zakiDashboard.command.details.design.memory": "Design project memory is not public yet.",
     "zakiDashboard.command.details.design.truth": "Coming soon. Use Chat or Agent today.",
@@ -201,7 +206,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.products.names.hire": "Career",
     "zakiDashboard.products.names.design": "Design",
     "zakiDashboard.products.tags.live": "Live",
-    "zakiDashboard.products.tags.privateBeta": "Private beta",
+    "zakiDashboard.products.tags.privateBeta": "Private access",
     "zakiDashboard.products.tags.waitlist": "Waitlist",
     "zakiDashboard.products.tags.controlPlane": "Control plane",
     "zakiDashboard.products.tags.degraded": "Degraded",
@@ -211,7 +216,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.products.descriptions.spaces": "Workspace chat.",
     "zakiDashboard.products.descriptions.brain": "Memory graph.",
     "zakiDashboard.products.descriptions.learning": "Study surface.",
-    "zakiDashboard.products.descriptions.hire": "Career search agent.",
+    "zakiDashboard.products.descriptions.hire": "Career support.",
     "zakiDashboard.products.descriptions.design": "Design surface.",
     "zakiDashboard.memory.title": "Memory scopes",
     "zakiDashboard.memory.subtitle": "Every product writes to a known memory owner.",
@@ -256,7 +261,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.productsAccess.memoryScopes.personalBrain": "Personal brain",
     "settingsModal.productsAccess.memoryScopes.workspaceMemory": "Workspace memory",
     "settingsModal.productsAccess.memoryScopes.learnerMemory": "Learner memory",
-    "settingsModal.productsAccess.memoryScopes.hireMemory": "Hire memory",
+    "settingsModal.productsAccess.memoryScopes.hireMemory": "Career memory",
     "settingsModal.productsAccess.memoryScopes.designMemory": "Design memory",
     "settingsModal.productsAccess.memoryScopes.sessionMemory": "Session memory",
   };
@@ -324,13 +329,13 @@ const registryProducts = [
   },
   {
     productId: "hire",
-    label: "ZAKI Hire",
+    label: "ZAKI Career",
     productKind: "product",
     state: "disabled",
     lifecycle: "future",
     visibleInSettings: true,
     route: "/products/hire",
-    entryPoint: "Hire",
+    entryPoint: "Career",
     memoryScope: "hire_memory",
   },
   {
@@ -384,6 +389,20 @@ const signedInMeter = {
     used: 80,
     remaining: 1420,
     resetAt: "2026-05-25T00:00:00.000Z",
+  },
+  availableNow: {
+    agent: {
+      requiredReserveUnits: 40,
+      weeklyRemaining: 1420,
+      rollingRemaining: 80,
+      topupUnits: 0,
+      effectiveRemaining: 80,
+      limitingWindow: "rolling",
+      constraint: null,
+      shortfall: 0,
+      available: true,
+      resetAt: null,
+    },
   },
   products: {
     agent: { id: "agent", state: "enabled", weekly: { used: 7, receipts: 2 } },
@@ -449,6 +468,10 @@ describe("ZakiDashboard", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     window.localStorage.clear();
+    Object.defineProperty(window, "open", {
+      configurable: true,
+      value: mockOpen,
+    });
     window.sessionStorage.clear();
     setupQueries();
     useAuthStore.setState({
@@ -494,6 +517,89 @@ describe("ZakiDashboard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue in Agent" }));
 
     expect(mockNavigate).toHaveBeenCalledWith("/agent");
+  });
+
+  it("blocks signed-in Agent submit when current capacity is below the Agent reserve", () => {
+    mockUseMeterStatus.mockReturnValue({
+      data: {
+        data: {
+          ...signedInMeter,
+          rolling: { windowHours: 5, limit: 40, used: 20, remaining: 20 },
+          weekly: { limit: 1500, used: 80, remaining: 1420 },
+          availableNow: {
+            agent: {
+              requiredReserveUnits: 40,
+              weeklyRemaining: 1420,
+              rollingRemaining: 20,
+              topupUnits: 0,
+              effectiveRemaining: 20,
+              limitingWindow: "rolling",
+              constraint: "rolling",
+              shortfall: 20,
+              available: false,
+              resetAt: "2026-05-20T12:00:00.000Z",
+            },
+          },
+        },
+      },
+      isLoading: false,
+    });
+
+    renderDashboard();
+
+    fireEvent.change(screen.getByLabelText("Describe what you want ZAKI to do"), {
+      target: { value: "Plan the launch sequence" },
+    });
+
+    expect(screen.getAllByText("Current capacity window is low.").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Continue in Agent" })).toBeDisabled();
+    expect(screen.getByText("Wait for the current window to refresh.")).toBeInTheDocument();
+  });
+
+  it("keeps signed-in Agent submit enabled when current capacity satisfies reserve", () => {
+    renderDashboard();
+
+    fireEvent.change(screen.getByLabelText("Describe what you want ZAKI to do"), {
+      target: { value: "Plan the launch sequence" },
+    });
+
+    expect(screen.getByRole("button", { name: "Continue in Agent" })).not.toBeDisabled();
+  });
+
+  it("keeps signed-in Agent submit enabled when weekly is empty but effective capacity satisfies reserve", () => {
+    mockUseMeterStatus.mockReturnValue({
+      data: {
+        data: {
+          ...signedInMeter,
+          rolling: { windowHours: 5, limit: 40, used: 0, remaining: 40 },
+          weekly: { limit: 100, used: 100, remaining: 0, topupUnits: 40 },
+          availableNow: {
+            agent: {
+              requiredReserveUnits: 40,
+              weeklyRemaining: 0,
+              rollingRemaining: 40,
+              topupUnits: 40,
+              effectiveRemaining: 40,
+              limitingWindow: "weekly",
+              constraint: null,
+              shortfall: 0,
+              available: true,
+              resetAt: null,
+            },
+          },
+        },
+      },
+      isLoading: false,
+    });
+
+    renderDashboard();
+
+    fireEvent.change(screen.getByLabelText("Describe what you want ZAKI to do"), {
+      target: { value: "Plan the launch sequence" },
+    });
+
+    expect(screen.getByRole("button", { name: "Continue in Agent" })).not.toBeDisabled();
+    expect(screen.queryByText("Weekly credits are used.")).not.toBeInTheDocument();
   });
 
   it("offers signed-in first-run users a one-time memory bridge", () => {
@@ -598,7 +704,7 @@ describe("ZakiDashboard", () => {
     });
   });
 
-  it("frames the Hire product as a user career lane", () => {
+  it("frames the Career product as a user career lane", () => {
     useAuthStore.setState({
       token: null,
       user: null,
@@ -611,9 +717,9 @@ describe("ZakiDashboard", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Career" }));
 
     const hint = screen.getByTestId("zaki-dashboard-product-hint");
-    expect(hint).toHaveTextContent("Career is coming soon.");
+    expect(hint).toHaveTextContent("Career is gated.");
     expect(hint).toHaveTextContent("improving your CV");
-    expect(hint).toHaveTextContent("Coming soon. Use Chat or Agent today.");
+    expect(hint).toHaveTextContent("Gated for private access. Use Chat or Agent today.");
     expect(screen.getByRole("button", { name: "Career coming soon" })).toBeDisabled();
     expect(hint).not.toHaveTextContent("Job descriptions");
     expect(hint).not.toHaveTextContent("Candidate");
@@ -800,7 +906,7 @@ describe("ZakiDashboard", () => {
     expect(slide).toHaveTextContent("Visit the website when you want the full story");
     fireEvent.click(screen.getByRole("button", { name: "Visit website" }));
 
-    expect(mockNavigate).toHaveBeenCalledWith("/story");
+    expect(mockOpen).toHaveBeenCalledWith("https://chatzaki.com/", "_blank", "noopener,noreferrer");
     expect(window.localStorage.getItem("zaki:dashboard-v2-intro-dismissed")).toBe("1");
   });
 
@@ -856,8 +962,9 @@ describe("ZakiDashboard", () => {
     renderDashboard();
 
     fireEvent.click(screen.getByRole("button", { name: "Website" }));
-    expect(mockNavigate).toHaveBeenCalledWith("/story");
+    expect(mockOpen).toHaveBeenCalledWith("https://chatzaki.com/", "_blank", "noopener,noreferrer");
     mockNavigate.mockClear();
+    mockOpen.mockClear();
 
     fireEvent.click(screen.getByRole("button", { name: "How it works" }));
     expect(screen.getByTestId("zaki-dashboard-intro")).toBeInTheDocument();
@@ -868,6 +975,6 @@ describe("ZakiDashboard", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/pricing");
 
     fireEvent.click(screen.getByRole("button", { name: "Product overview" }));
-    expect(mockNavigate).toHaveBeenCalledWith("/products/agent");
+    expect(mockOpen).toHaveBeenCalledWith("https://chatzaki.com/product", "_blank", "noopener,noreferrer");
   });
 });

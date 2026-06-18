@@ -2,12 +2,11 @@ import type { Locale } from "./content";
 
 export type RoutePageKind =
   | "home"
-  | "bot"
+  | "product"
+  | "pricing"
+  | "use-cases"
   | "faq"
   | "story"
-  | "autism-guidance"
-  | "comparison"
-  | "howto"
   | "legal"
   | "contact";
 
@@ -41,22 +40,58 @@ export const routeRegistry: RouteDefinition[] = [
     alternatesGroup: "home",
   },
   {
-    pathname: "/zaki-bot/",
+    pathname: "/product/",
     locale: "en",
-    pageKind: "bot",
-    seoKey: "bot",
+    pageKind: "product",
+    seoKey: "product",
     requiresAlternates: true,
     requiresSchema: true,
-    alternatesGroup: "bot",
+    alternatesGroup: "product",
   },
   {
-    pathname: "/ar/zaki-bot/",
+    pathname: "/ar/product/",
     locale: "ar",
-    pageKind: "bot",
-    seoKey: "bot",
+    pageKind: "product",
+    seoKey: "product",
     requiresAlternates: true,
     requiresSchema: true,
-    alternatesGroup: "bot",
+    alternatesGroup: "product",
+  },
+  {
+    pathname: "/pricing/",
+    locale: "en",
+    pageKind: "pricing",
+    seoKey: "pricing",
+    requiresAlternates: true,
+    requiresSchema: true,
+    alternatesGroup: "pricing",
+  },
+  {
+    pathname: "/ar/pricing/",
+    locale: "ar",
+    pageKind: "pricing",
+    seoKey: "pricing",
+    requiresAlternates: true,
+    requiresSchema: true,
+    alternatesGroup: "pricing",
+  },
+  {
+    pathname: "/use-cases/",
+    locale: "en",
+    pageKind: "use-cases",
+    seoKey: "use-cases",
+    requiresAlternates: true,
+    requiresSchema: true,
+    alternatesGroup: "use-cases",
+  },
+  {
+    pathname: "/ar/use-cases/",
+    locale: "ar",
+    pageKind: "use-cases",
+    seoKey: "use-cases",
+    requiresAlternates: true,
+    requiresSchema: true,
+    alternatesGroup: "use-cases",
   },
   {
     pathname: "/faq/",
@@ -93,104 +128,6 @@ export const routeRegistry: RouteDefinition[] = [
     requiresAlternates: true,
     requiresSchema: true,
     alternatesGroup: "story",
-  },
-  {
-    pathname: "/autism-guidance/",
-    locale: "en",
-    pageKind: "autism-guidance",
-    seoKey: "autism-guidance",
-    requiresAlternates: true,
-    requiresSchema: true,
-    alternatesGroup: "autism-guidance",
-  },
-  {
-    pathname: "/ar/autism-guidance/",
-    locale: "ar",
-    pageKind: "autism-guidance",
-    seoKey: "autism-guidance",
-    requiresAlternates: true,
-    requiresSchema: true,
-    alternatesGroup: "autism-guidance",
-  },
-  {
-    pathname: "/vs-chatgpt/",
-    locale: "en",
-    pageKind: "comparison",
-    seoKey: "vs-chatgpt",
-    requiresAlternates: false,
-    requiresSchema: true,
-  },
-  {
-    pathname: "/zaki-vs-spaces/",
-    locale: "en",
-    pageKind: "comparison",
-    seoKey: "zaki-vs-spaces",
-    requiresAlternates: false,
-    requiresSchema: true,
-  },
-  {
-    pathname: "/best-arabic-ai-assistant/",
-    locale: "en",
-    pageKind: "comparison",
-    seoKey: "best-arabic-ai-assistant",
-    requiresAlternates: false,
-    requiresSchema: true,
-  },
-  {
-    pathname: "/zaki-vs-openclaw/",
-    locale: "en",
-    pageKind: "comparison",
-    seoKey: "zaki-vs-openclaw",
-    requiresAlternates: false,
-    requiresSchema: true,
-  },
-  {
-    pathname: "/how-to/write-arabic-emails-ai/",
-    locale: "en",
-    pageKind: "howto",
-    seoKey: "howto-write-arabic-emails-ai",
-    requiresAlternates: false,
-    requiresSchema: true,
-  },
-  {
-    pathname: "/how-to/translate-dialects-arabic-english/",
-    locale: "en",
-    pageKind: "howto",
-    seoKey: "howto-translate-dialects-arabic-english",
-    requiresAlternates: false,
-    requiresSchema: true,
-  },
-  {
-    pathname: "/how-to/create-social-media-content-arabic/",
-    locale: "en",
-    pageKind: "howto",
-    seoKey: "howto-create-social-media-content-arabic",
-    requiresAlternates: false,
-    requiresSchema: true,
-  },
-  {
-    pathname: "/how-to/how-zaki-and-spaces-work/",
-    locale: "en",
-    pageKind: "howto",
-    seoKey: "howto-how-zaki-and-spaces-work",
-    requiresAlternates: false,
-    requiresSchema: true,
-  },
-  {
-    pathname: "/how-to/what-to-use-spaces-for/",
-    locale: "en",
-    pageKind: "howto",
-    seoKey: "howto-what-to-use-spaces-for",
-    requiresAlternates: false,
-    requiresSchema: true,
-  },
-  {
-    pathname: "/how-to/what-to-use-zaki-for/",
-    locale: "en",
-    pageKind: "howto",
-    seoKey: "howto-what-to-use-zaki-for",
-    requiresAlternates: false,
-    requiresSchema: true,
   },
   {
     pathname: "/contact/",

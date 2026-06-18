@@ -450,7 +450,7 @@ export function PricingPage() {
 
   return (
     <div
-      className="h-full overflow-y-auto overflow-x-hidden overscroll-y-contain zaki-scrollbar-fade px-6 py-10"
+      className="zaki-pricing-page h-full overflow-y-auto overflow-x-hidden overscroll-y-contain zaki-scrollbar-fade px-4 py-6 sm:px-6 sm:py-10"
       style={{ WebkitOverflowScrolling: "touch" }}
       dir={isRtl ? "rtl" : "ltr"}
     >
@@ -495,7 +495,7 @@ export function PricingPage() {
               {billingNotice.message}
             </div>
           )}
-          <div className="flex flex-wrap gap-3">
+          <div className="zaki-pricing-page__hero-actions flex flex-wrap gap-3">
             {hasSubscription ? (
               <button
                 type="button"
@@ -534,7 +534,7 @@ export function PricingPage() {
           )}
         </div>
 
-        <div ref={plansSectionRef} className="mt-8 grid gap-4 lg:grid-cols-4">
+        <div ref={plansSectionRef} className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {PRICING_CARDS.map((card) => {
             const features = t(`pricingPage.plans.${card.translationKey}.features`, {
               returnObjects: true,
@@ -546,7 +546,7 @@ export function PricingPage() {
               <div
                 key={card.id}
                 className={cn(
-                  "rounded-2xl border bg-white dark:bg-zaki-dark-card px-5 py-6 shadow-[0px_16px_30px_rgba(15,15,15,0.06)] flex flex-col gap-3",
+                  "zaki-pricing-page__plan rounded-2xl border bg-white dark:bg-zaki-dark-card px-5 py-6 shadow-[0px_16px_30px_rgba(15,15,15,0.06)] flex flex-col gap-3",
                   card.emphasized
                     ? "border-zaki-brand ring-1 ring-zaki-brand/20"
                     : "border-zaki-subtle"
@@ -584,7 +584,7 @@ export function PricingPage() {
           })}
         </div>
 
-        <div className="mt-6 rounded-2xl border border-zaki-subtle bg-white dark:bg-zaki-dark-card px-5 py-4 shadow-[0px_12px_24px_rgba(15,15,15,0.05)]">
+        <div className="zaki-pricing-page__access mt-6 rounded-2xl border border-zaki-subtle bg-white dark:bg-zaki-dark-card px-5 py-4 shadow-[0px_12px_24px_rgba(15,15,15,0.05)]">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
@@ -670,7 +670,7 @@ export function PricingPage() {
               id="access-code-purchase"
               ref={accessCodePurchaseCardRef}
               className={cn(
-                "flex flex-col gap-3 rounded-xl bg-[#fbf8f4] px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:bg-[#181512]",
+                "zaki-pricing-page__access-purchase flex flex-col gap-3 rounded-xl bg-[#fbf8f4] px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:bg-[#181512]",
                 highlightGiftCodeCard &&
                   "ring-2 ring-[#f10202] ring-offset-2 ring-offset-white dark:ring-offset-[#171411]"
               )}
@@ -688,7 +688,7 @@ export function PricingPage() {
               </div>
               <div
                 className={cn(
-                  "flex flex-wrap items-center gap-2 sm:flex-nowrap",
+                  "zaki-pricing-page__purchase-actions flex flex-wrap items-center gap-2 sm:flex-nowrap",
                   isRtl && "sm:flex-row-reverse sm:justify-start"
                 )}
               >
@@ -773,7 +773,7 @@ export function PricingPage() {
 
         <div
           className={cn(
-            "mt-6 flex flex-wrap gap-2 border-t border-zaki-subtle pt-4 dark:border-zaki-dark",
+            "zaki-pricing-page__highlights mt-6 flex flex-wrap gap-2 border-t border-zaki-subtle pt-4 dark:border-zaki-dark",
             isRtl ? "justify-end" : "justify-start"
           )}
         >
@@ -791,10 +791,10 @@ export function PricingPage() {
         </div>
       </div>
       {providerModalSelection && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 px-4">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 px-3">
           <div
             className={cn(
-              "w-full max-w-md max-h-[85vh] overflow-y-auto rounded-2xl border border-zaki-subtle bg-white dark:bg-zaki-dark-card p-5 shadow-[0px_18px_40px_rgba(15,15,15,0.24)]",
+              "zaki-pricing-page__provider-modal w-full max-w-md max-h-[85vh] overflow-y-auto rounded-2xl border border-zaki-subtle bg-white dark:bg-zaki-dark-card p-5 shadow-[0px_18px_40px_rgba(15,15,15,0.24)]",
               isRtl ? "text-right" : "text-left"
             )}
             dir={isRtl ? "rtl" : "ltr"}

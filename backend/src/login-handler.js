@@ -10,37 +10,14 @@
 
 import bcrypt from "bcryptjs";
 
-import { dbGet } from "./db.js";
+import { dbGet, dbQuery } from "./db.js";
+import {
+  checkEmailLoginThrottle,
+  clearEmailLoginFailures,
+  recordEmailLoginFailure,
+} from "./login-throttle.js";
 import { mintZakiSession } from "./zaki-auth.js";
 import { buildRefreshCookie } from "./zaki-session-cookie.js";
-
-const emailLoginFailures = new Map();
-const EMAIL_FAILURE_WINDOW_MS = 15 * 60 * 1000;
-const EMAIL_FAILURE_MAX = 10;
-
-function checkEmailLoginThrottle(email) {
-  const now = Date.now();
-  const entry = emailLoginFailures.get(email);
-  if (!entry || now >= entry.resetAt) return { blocked: false };
-  if (entry.count >= EMAIL_FAILURE_MAX) {
-    return { blocked: true };
-  }
-  return { blocked: false };
-}
-
-function recordEmailLoginFailure(email) {
-  const now = Date.now();
-  const entry = emailLoginFailures.get(email);
-  if (!entry || now >= entry.resetAt) {
-    emailLoginFailures.set(email, { count: 1, resetAt: now + EMAIL_FAILURE_WINDOW_MS });
-    return;
-  }
-  entry.count += 1;
-}
-
-function clearEmailLoginFailures(email) {
-  emailLoginFailures.delete(email);
-}
 
 export async function loginHandler(req, res) {
   try {
@@ -58,7 +35,7 @@ export async function loginHandler(req, res) {
     }
 
     const normalizedEmail = String(emailInput).trim().toLowerCase();
-    const throttle = checkEmailLoginThrottle(normalizedEmail);
+    const throttle = await checkEmailLoginThrottle({ dbGet, email: normalizedEmail });
     if (throttle.blocked) {
       res.status(429).json({
         valid: false,
@@ -71,7 +48,7 @@ export async function loginHandler(req, res) {
     // --- DB lookup ---
     const user = await dbGet("SELECT * FROM zaki_users WHERE email = $1", [normalizedEmail]);
     if (!user) {
-      recordEmailLoginFailure(normalizedEmail);
+      await recordEmailLoginFailure({ dbQuery, email: normalizedEmail });
       res.status(401).json({
         valid: false,
         token: null,
@@ -80,7 +57,7 @@ export async function loginHandler(req, res) {
       return;
     }
     if (!user.verified) {
-      recordEmailLoginFailure(normalizedEmail);
+      await recordEmailLoginFailure({ dbQuery, email: normalizedEmail });
       res.status(401).json({
         valid: false,
         token: null,
@@ -89,7 +66,7 @@ export async function loginHandler(req, res) {
       return;
     }
     if (!(await bcrypt.compare(String(password), user.password_hash))) {
-      recordEmailLoginFailure(normalizedEmail);
+      await recordEmailLoginFailure({ dbQuery, email: normalizedEmail });
       res.status(401).json({
         valid: false,
         token: null,
@@ -97,7 +74,7 @@ export async function loginHandler(req, res) {
       });
       return;
     }
-    clearEmailLoginFailures(normalizedEmail);
+    await clearEmailLoginFailures({ dbQuery, email: normalizedEmail });
 
     // --- mint ZAKI session ---
     const { accessToken, refreshToken } = await mintZakiSession({ id: user.id, email: user.email }, req);

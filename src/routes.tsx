@@ -1,8 +1,9 @@
-import { lazy, Suspense, type ReactNode } from 'react';
-import { createBrowserRouter, Navigate, useParams } from 'react-router-dom';
+import { lazy, Suspense, useEffect, type ReactNode } from 'react';
+import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router-dom';
 import App from './app/App';
 import { SkeletonBrainPage } from './app/components/ui/skeleton';
 import { ProductAccessGate } from './app/components/ProductAccessGate';
+import { ProductLaunchPage } from './app/components/ProductLaunchPage';
 import { useAuthStore } from './stores';
 import { getCanonicalAppProductRoute } from './lib/productRoutes';
 
@@ -12,6 +13,22 @@ function RouteFallback() {
 
 function routeSuspense(children: ReactNode) {
   return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
+}
+
+function ExternalRedirect({ to }: { to: string }) {
+  useEffect(() => {
+    window.location.assign(to);
+  }, [to]);
+
+  return <RouteFallback />;
+}
+
+function WebsiteRedirect({ to }: { to?: string }) {
+  const location = useLocation();
+  const target =
+    to ||
+    `https://chatzaki.com${location.pathname}${location.search}${location.hash}`;
+  return <ExternalRedirect to={target} />;
 }
 
 const ChatArea = lazy(() =>
@@ -42,52 +59,8 @@ const HelpPage = lazy(() =>
   import('./app/components/HelpPage').then((m) => ({ default: m.HelpPage })),
 );
 
-const LegalPage = lazy(() =>
-  import('./app/components/LegalPage').then((m) => ({ default: m.LegalPage })),
-);
-
 const SettingsPage = lazy(() =>
   import('./app/components/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })),
-);
-
-const WebsiteHomePage = lazy(() =>
-  import('./app/components/WebsitePage').then((m) => ({ default: m.WebsiteHomePage })),
-);
-
-const WebsiteProductPage = lazy(() =>
-  import('./app/components/WebsitePage').then((m) => ({ default: m.WebsiteProductPage })),
-);
-
-const WebsiteShell = lazy(() =>
-  import('./app/components/WebsitePage').then((m) => ({ default: m.WebsiteShell })),
-);
-
-const WebsiteAutismGuidancePage = lazy(() =>
-  import('./app/components/MarketingContentPages').then((m) => ({ default: m.WebsiteAutismGuidancePage })),
-);
-
-const WebsiteComparisonPage = lazy(() =>
-  import('./app/components/MarketingContentPages').then((m) => ({ default: m.WebsiteComparisonPage })),
-);
-
-const WebsiteContactPage = lazy(() =>
-  import('./app/components/MarketingContentPages').then((m) => ({ default: m.WebsiteContactPage })),
-);
-
-const WebsiteFaqPage = lazy(() =>
-  import('./app/components/MarketingContentPages').then((m) => ({ default: m.WebsiteFaqPage })),
-);
-
-const WebsiteHowToRoute = lazy(() =>
-  import('./app/components/MarketingContentPages').then((m) => ({ default: m.WebsiteHowToRoute })),
-);
-
-const WebsiteStoryPage = lazy(() =>
-  import('./app/components/MarketingContentPages').then((m) => ({ default: m.WebsiteStoryPage })),
-);
-
-const WebsiteStoryPageAr = lazy(() =>
-  import('./app/components/MarketingContentPages').then((m) => ({ default: m.WebsiteStoryPageAr })),
 );
 
 // Brain is the first lazy-loaded route: its WebGL "Galaxy" renderer (three +
@@ -106,13 +79,13 @@ function ProductRoute({ locale = "en" }: { locale?: "en" | "ar" }) {
   const { productId } = useParams();
   const appRoute = getCanonicalAppProductRoute(productId);
   if (token && appRoute) return <Navigate to={appRoute} replace />;
-  return routeSuspense(<WebsiteProductPage locale={locale} />);
+  return <ProductLaunchPage productId={productId} locale={locale} />;
 }
 
 function LegacyZakiBotRoute({ locale = "en" }: { locale?: "en" | "ar" }) {
   const token = useAuthStore((state) => state.token);
   if (token) return <Navigate to="/agent" replace />;
-  return <Navigate to={locale === "ar" ? "/ar/products/agent" : "/products/agent"} replace />;
+  return <WebsiteRedirect to={`https://chatzaki.com${locale === "ar" ? "/ar" : ""}/product`} />;
 }
 
 function InternalOperatorRoute() {
@@ -174,11 +147,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'pricing',
-        element: routeSuspense(
-          <WebsiteShell>
-            <PricingPage />
-          </WebsiteShell>
-        ),
+        element: routeSuspense(<PricingPage />),
       },
       {
         path: 'pricing/success',
@@ -194,55 +163,55 @@ export const router = createBrowserRouter([
       },
       {
         path: 'story',
-        element: routeSuspense(<WebsiteStoryPage />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'faq',
-        element: routeSuspense(<WebsiteFaqPage />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'contact',
-        element: routeSuspense(<WebsiteContactPage />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'autism-guidance',
-        element: routeSuspense(<WebsiteAutismGuidancePage />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'vs-chatgpt',
-        element: routeSuspense(<WebsiteComparisonPage slug="vs-chatgpt" />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'zaki-vs-spaces',
-        element: routeSuspense(<WebsiteComparisonPage slug="zaki-vs-spaces" />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'best-arabic-ai-assistant',
-        element: routeSuspense(<WebsiteComparisonPage slug="best-arabic-ai-assistant" />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'zaki-vs-openclaw',
-        element: routeSuspense(<WebsiteComparisonPage slug="zaki-vs-openclaw" />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'how-to/:slug',
-        element: routeSuspense(<WebsiteHowToRoute />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'privacy',
-        element: routeSuspense(<LegalPage slug="privacy" />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'terms',
-        element: routeSuspense(<LegalPage slug="terms" />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'compliance',
-        element: routeSuspense(<LegalPage slug="compliance" />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'ar',
-        element: routeSuspense(<WebsiteHomePage locale="ar" />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'ar/products/:productId',
@@ -254,31 +223,31 @@ export const router = createBrowserRouter([
       },
       {
         path: 'ar/story',
-        element: routeSuspense(<WebsiteStoryPageAr />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'ar/faq',
-        element: routeSuspense(<WebsiteFaqPage locale="ar" />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'ar/contact',
-        element: routeSuspense(<WebsiteContactPage locale="ar" />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'ar/autism-guidance',
-        element: routeSuspense(<WebsiteAutismGuidancePage locale="ar" />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'ar/privacy',
-        element: routeSuspense(<LegalPage slug="privacy" />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'ar/terms',
-        element: routeSuspense(<LegalPage slug="terms" />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'ar/compliance',
-        element: routeSuspense(<LegalPage slug="compliance" />),
+        element: <WebsiteRedirect />,
       },
       {
         path: 'help',
@@ -286,7 +255,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'legal',
-        element: routeSuspense(<LegalPage />),
+        element: <ExternalRedirect to="https://chatzaki.com/compliance" />,
       },
       {
         path: 'internal/admin-access-codes',
@@ -348,7 +317,7 @@ export const router = createBrowserRouter([
   {
     // Backward-compatible alias
     path: '/public/legal',
-    element: <Navigate to="/legal" replace />,
+    element: <ExternalRedirect to="https://chatzaki.com/compliance" />,
   },
   {
     // Catch-all redirect

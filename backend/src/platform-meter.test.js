@@ -3,8 +3,35 @@ import {
   hashAnonymousSessionId,
   readMeterSnapshotForIdentity,
 } from "./platform-meter.js";
+import { buildMeterStatusPayload } from "./meter-contract.js";
+import { buildPlatformPlanPolicy } from "./platform-policy.js";
 
 describe("platform meter", () => {
+  it("keeps the default Free rolling allowance compatible with Agent reserve-high", () => {
+    const policy = buildPlatformPlanPolicy({ env: {} });
+    expect(policy.plans.free.rollingAllowanceUnits).toBeGreaterThanOrEqual(40);
+  });
+
+  it("raises configured rolling allowances below the Agent reserve floor", () => {
+    const policy = buildPlatformPlanPolicy({
+      env: {
+        ZAKI_AGENT_RESERVE_UNITS: "60",
+        ZAKI_PLATFORM_FREE_ROLLING_ALLOWANCE_UNITS: "20",
+      },
+    });
+    expect(policy.plans.free.rollingAllowanceUnits).toBe(60);
+  });
+
+  it("uses the same integer Agent reserve floor as enforcement", () => {
+    const policy = buildPlatformPlanPolicy({
+      env: {
+        ZAKI_AGENT_RESERVE_UNITS: "40.5",
+        ZAKI_PLATFORM_FREE_ROLLING_ALLOWANCE_UNITS: "20",
+      },
+    });
+    expect(policy.plans.free.rollingAllowanceUnits).toBe(40);
+  });
+
   it("hashes anonymous session ids for durable pseudonymous metering", () => {
     expect(hashAnonymousSessionId("anon-1")).toHaveLength(64);
     expect(hashAnonymousSessionId("anon-1")).toBe(hashAnonymousSessionId("anon-1"));
@@ -248,5 +275,45 @@ describe("platform meter", () => {
       "2026-05-20T12:00:00.000Z",
       "2026-05-22T10:00:00.000Z",
     ]);
+  });
+
+  it("includes Agent available-now capacity in the public meter payload", () => {
+    const payload = buildMeterStatusPayload({
+      identity: { type: "user", tenantId: "tenant-a", userId: 42 },
+      platform: { plan: { id: "free", label: "Free" } },
+      productRegistry: { products: [] },
+      meterSnapshot: {
+        weekly: {
+          limit: 100,
+          used: 0,
+          remaining: 100,
+          recurringRemaining: 100,
+          topupUnits: 0,
+          resetAt: "2026-06-24T00:00:00.000Z",
+        },
+        rolling: {
+          limit: 20,
+          used: 0,
+          remaining: 20,
+          resetAt: "2026-06-17T15:00:00.000Z",
+        },
+      },
+      agentRequiredUnits: 40,
+    });
+
+    expect(payload.weekly.remaining).toBe(100);
+    expect(payload.rolling.remaining).toBe(20);
+    expect(payload.availableNow.agent).toEqual(
+      expect.objectContaining({
+        requiredReserveUnits: 40,
+        weeklyRemaining: 100,
+        rollingRemaining: 20,
+        effectiveRemaining: 20,
+        limitingWindow: "rolling",
+        constraint: "rolling",
+        shortfall: 20,
+        available: false,
+      })
+    );
   });
 });

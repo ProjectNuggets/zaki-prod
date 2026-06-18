@@ -12,6 +12,7 @@ export default defineConfig(({ mode }) => {
       __APP_PROD__: JSON.stringify(mode === 'production'),
       __VITE_ZAKI_BACKEND_URL__: JSON.stringify(env.VITE_ZAKI_BACKEND_URL ?? ''),
       __VITE_API_BASE_URL__: JSON.stringify(env.VITE_API_BASE_URL ?? ''),
+      __VITE_TURNSTILE_SITE_KEY__: JSON.stringify(env.VITE_TURNSTILE_SITE_KEY ?? ''),
     },
     plugins: [
       // The React and Tailwind plugins are both required for Make, even if

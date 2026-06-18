@@ -35,6 +35,7 @@ import {
 } from "@/app/components/v2";
 import type {
   AgentSession,
+  MeterAvailableNow,
   MeterWindowSnapshot,
 } from "@/lib/api";
 import { useAuthStore } from "@/stores";
@@ -89,9 +90,9 @@ const ANONYMOUS_COMMAND_PRODUCT_ORDER: AnonymousWorkProductId[] = [
 const SIGNED_IN_COMMAND_PRODUCT_ORDER = COMMAND_PRODUCT_ORDER;
 const DASHBOARD_INTRO_DISMISSED_KEY = "zaki:dashboard-v2-intro-dismissed";
 const MEMORY_BRIDGE_OFFER_KEY_PREFIX = "zaki:memory-bridge-offered";
-const WEBSITE_STORY_ROUTE = "/story";
+const WEBSITE_HOME_URL = "https://chatzaki.com/";
+const WEBSITE_PRODUCT_URL = "https://chatzaki.com/product";
 const WEBSITE_PRICING_ROUTE = "/pricing";
-const WEBSITE_PRODUCTS_ROUTE = "/products/agent";
 const COMING_SOON_PRODUCT_IDS = new Set<AnonymousWorkProductId>([
   "design",
   "learning",
@@ -136,6 +137,14 @@ function formatReset(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function openMarketingWebsite() {
+  window.open(WEBSITE_HOME_URL, "_blank", "noopener,noreferrer");
+}
+
+function openMarketingProductOverview() {
+  window.open(WEBSITE_PRODUCT_URL, "_blank", "noopener,noreferrer");
 }
 
 function formatTime(value?: string | number | null) {
@@ -185,6 +194,20 @@ function getWindowStats(window?: MeterWindowSnapshot | null): WindowStats {
   return { limit, used, remaining, remainingPercent };
 }
 
+function isAvailabilityBlocked(availability?: MeterAvailableNow | null) {
+  if (!availability) return false;
+  if (availability.available === false) return true;
+  const remaining =
+    typeof availability.effectiveRemaining === "number"
+      ? availability.effectiveRemaining
+      : null;
+  const required =
+    typeof availability.requiredReserveUnits === "number"
+      ? availability.requiredReserveUnits
+      : null;
+  return remaining != null && required != null && remaining < required;
+}
+
 function getCommandProductName(t: TranslateFn, productId: AnonymousWorkProductId) {
   return t(`zakiDashboard.products.names.${productId}`, {
     defaultValue:
@@ -204,7 +227,7 @@ function getCommandProductHint(t: TranslateFn, productId: AnonymousWorkProductId
     brain: "Paste notes, links, or raw context and see the shape of what ZAKI would remember.",
     learning: "Learn is coming soon. For now, use Chat for quick study help or Agent to plan a learning path.",
     design: "Design is coming soon. For now, use Chat to shape a brief or Agent to plan the design work.",
-    hire: "Career is coming soon. For now, use Chat to improve CV copy or Agent to plan your job search.",
+    hire: "Career is gated. For now, use Chat to improve CV copy or Agent to plan your next move.",
     spaces: "Ask now, draft quickly, or test the platform without setting anything up.",
   };
   return t(`zakiDashboard.command.hints.${productId}`, {
@@ -265,7 +288,7 @@ function getCommandProductDetails(t: TranslateFn, productId: AnonymousWorkProduc
     hire: {
       bestFor: "Finding your next role, improving your CV, comparing fit, and preparing applications.",
       memory: "Career pipeline memory is not public yet.",
-      truth: "Coming soon. Use Chat or Agent today; Career opens when the private job-search flow is ready.",
+      truth: "Gated for private access. Use Chat or Agent today; Career opens when the private career flow is ready.",
       accessTone: "warn",
     },
     spaces: {
@@ -615,7 +638,7 @@ function DashboardIntroModal({
           defaultValue: "Chat, Agent, and Brain are the launch core.",
         }),
         t("zakiDashboard.intro.slides.palette.bullets.preview", {
-          defaultValue: "Design, Learn, and Career start as truthful previews or gates.",
+          defaultValue: "Design, Learn, and Career start as truthful gates.",
         }),
         t("zakiDashboard.intro.slides.palette.bullets.website", {
           defaultValue: "Visit the website when you want the broader product story.",
@@ -915,6 +938,7 @@ export function ZakiDashboard({
 
   const weeklyStats = getWindowStats(meterStatus?.weekly);
   const weeklyReset = formatReset(meterStatus?.weekly?.resetAt);
+  const agentAvailability = meterStatus?.availableNow?.agent ?? null;
   const liveAgentSession = zakiSessions?.find(
     (session) => session.live || (session.pending_approval_count ?? 0) > 0
   );
@@ -947,10 +971,14 @@ export function ZakiDashboard({
   const showSaveWorkCta = !token && !selectedProductComingSoon && (
     selectedCommandPrompt.length > 0 || anonymousWorkItems.length > 0
   );
+  const agentCapacityBlocked =
+    selectedProductId === "agent" && !meterLoading && isAvailabilityBlocked(agentAvailability);
   const creditsExhausted =
     !meterLoading && typeof weeklyStats.remaining === "number" && weeklyStats.remaining <= 0;
+  const commandBlockedByUsage =
+    selectedProductId === "agent" ? agentCapacityBlocked : creditsExhausted;
   const isCommandSubmitDisabled =
-    !isOnline || selectedCommandPrompt.length === 0 || meterLoading || creditsExhausted;
+    !isOnline || selectedCommandPrompt.length === 0 || meterLoading || commandBlockedByUsage;
   const commandHelperText = selectedProductComingSoon
     ? t("zakiDashboard.command.comingSoonHelper", {
         product: selectedCommandName,
@@ -959,6 +987,14 @@ export function ZakiDashboard({
     : !isOnline
       ? t("zakiDashboard.command.offlineHelper", {
           defaultValue: "You are offline. We kept this draft here and will send when you reconnect.",
+        })
+    : selectedCommandPrompt && agentCapacityBlocked && agentAvailability?.constraint === "rolling"
+      ? t("zakiDashboard.command.capacityWindowLow", {
+          defaultValue: "Current capacity window is low. It refreshes as recent Agent work clears.",
+        })
+    : selectedCommandPrompt && agentCapacityBlocked
+      ? t("zakiDashboard.command.agentCreditsLow", {
+          defaultValue: "Agent needs more available credits before it can start.",
         })
     : selectedCommandPrompt
       ? t("zakiDashboard.command.creditHelper", {
@@ -1257,7 +1293,7 @@ export function ZakiDashboard({
             </h1>
             <p>{introCopy}</p>
             <div className="zaki-dashboard-command__entry-actions">
-              <button type="button" onClick={() => navigate(WEBSITE_STORY_ROUTE)}>
+              <button type="button" onClick={openMarketingWebsite}>
                 <span aria-hidden="true">?</span>
                 {t("zakiDashboard.entry.website", { defaultValue: "Website" })}
               </button>
@@ -1440,7 +1476,7 @@ export function ZakiDashboard({
                   loading={meterLoading}
                   weeklyStats={weeklyStats}
                   weeklyReset={weeklyReset}
-                  exhausted={creditsExhausted}
+                  exhausted={commandBlockedByUsage}
                 />
                 <div className="zaki-dashboard-command__actions">
                   <p className="zaki-dashboard-command__helper" role="status" aria-live="polite">
@@ -1474,22 +1510,31 @@ export function ZakiDashboard({
               </div>
             </div>
 
-            {creditsExhausted ? (
+            {commandBlockedByUsage ? (
               <div
                 className="zaki-dashboard-command__credit-guard"
                 role="status"
                 aria-live="polite"
               >
                 <strong>
-                  {t("zakiDashboard.command.creditsExhaustedTitle", {
-                    defaultValue: "Weekly credits are used.",
-                  })}
+                  {agentCapacityBlocked && agentAvailability?.constraint === "rolling"
+                    ? t("zakiDashboard.command.capacityWindowTitle", {
+                        defaultValue: "Current capacity window is low.",
+                      })
+                    : t("zakiDashboard.command.creditsExhaustedTitle", {
+                        defaultValue: "Weekly credits are used.",
+                      })}
                 </strong>
                 <span>
-                  {t("zakiDashboard.command.creditsExhaustedCopy", {
-                    defaultValue:
-                      "Keep your prompt here, then sign up, wait for reset, or choose a plan.",
-                  })}
+                  {agentCapacityBlocked
+                    ? t("zakiDashboard.command.capacityWindowCopy", {
+                        defaultValue:
+                          "Keep your prompt here, wait for the current window to refresh, or choose a plan with more capacity.",
+                      })
+                    : t("zakiDashboard.command.creditsExhaustedCopy", {
+                        defaultValue:
+                          "Keep your prompt here, then sign up, wait for reset, or choose a plan.",
+                      })}
                 </span>
                 <div>
                   {!token ? (
@@ -1538,7 +1583,7 @@ export function ZakiDashboard({
               <span aria-hidden="true">-&gt;</span>
               {t("zakiDashboard.links.waysToBuy", { defaultValue: "Plans" })}
             </button>
-            <button type="button" onClick={() => navigate(WEBSITE_PRODUCTS_ROUTE)}>
+            <button type="button" onClick={openMarketingProductOverview}>
               <span aria-hidden="true">-&gt;</span>
               {t("zakiDashboard.links.fullPalette", { defaultValue: "Product overview" })}
             </button>
@@ -1553,7 +1598,7 @@ export function ZakiDashboard({
           onCreateAccount={createAccountFromIntro}
           onVisitWebsite={() => {
             dismissIntro();
-            navigate(WEBSITE_STORY_ROUTE);
+            openMarketingWebsite();
           }}
         />
       </div>

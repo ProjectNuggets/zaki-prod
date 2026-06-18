@@ -414,7 +414,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
       "Teams, Signal, Matrix, and other adapters stay hidden until their user-safe BFF contracts are exposed.",
     "settingsModal.channels.status.configured": "Configured",
     "settingsModal.channels.status.notConfigured": "Not configured",
-    "settingsModal.channels.status.privateBeta": "Private beta",
+    "settingsModal.channels.status.privateBeta": "Private access",
     "settingsModal.channels.status.operatorManaged": "Operator managed",
     "settingsModal.channels.openAgentChannels": "Open channels",
     "settingsModal.channels.bindings.count": "{{count}} bindings",
@@ -550,13 +550,13 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.productsAccess.memoryScopes.personalBrain": "Personal brain",
     "settingsModal.productsAccess.memoryScopes.workspaceMemory": "Workspace memory",
     "settingsModal.productsAccess.memoryScopes.learnerMemory": "Learner memory",
-    "settingsModal.productsAccess.memoryScopes.hireMemory": "Hire memory",
+    "settingsModal.productsAccess.memoryScopes.hireMemory": "Career memory",
     "settingsModal.productsAccess.memoryScopes.designMemory": "Design memory",
     "settingsModal.productsAccess.memoryScopes.sessionMemory": "Session memory",
     "settingsModal.productsAccess.entryPoints.spaces": "Spaces / Chat",
     "settingsModal.productsAccess.entryPoints.agent": "Agent workbench",
     "settingsModal.productsAccess.entryPoints.learning": "Learning",
-    "settingsModal.productsAccess.entryPoints.hire": "Hire",
+    "settingsModal.productsAccess.entryPoints.hire": "Career",
     "settingsModal.productsAccess.entryPoints.design": "Design",
     "settingsModal.productsAccess.entryPoints.brain": "Memory control plane",
     "settingsModal.productsAccess.entryPoints.cli": "CLI",
@@ -743,7 +743,7 @@ jest.mock("@/queries", () => ({
           },
           hire: {
             productId: "hire",
-            label: "ZAKI Hire",
+            label: "ZAKI Career",
             available: false,
             lifecycle: "future",
             memoryScope: "hire_memory",
@@ -882,13 +882,13 @@ jest.mock("@/queries", () => ({
           },
           {
             productId: "hire",
-            label: "ZAKI Hire",
+            label: "ZAKI Career",
             productKind: "product",
             state: "disabled",
             lifecycle: "future",
             visibleInSettings: true,
             route: "/hire",
-            entryPoint: "Hire",
+            entryPoint: "Career",
             memoryScope: "hire_memory",
           },
           {
@@ -1162,9 +1162,9 @@ describe("SettingsPage", () => {
       ).toBeTruthy();
     }
 
-    expect(within(screen.getByTestId("settings-billing")).getByText("ZAKI Hire")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-billing")).getByText("ZAKI Career")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-billing")).getAllByText("Launch: public app").length).toBeGreaterThan(0);
-    expect(within(screen.getByTestId("settings-billing")).getAllByText("Launch: private beta").length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId("settings-billing")).getAllByText("Launch: private access").length).toBeGreaterThan(0);
     expect(within(screen.getByTestId("settings-billing")).getByText("Launch: waitlist")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-billing")).queryByText("ZAKI CLI")).not.toBeInTheDocument();
     expect(within(screen.getByTestId("settings-billing")).getByText("Extra usage units")).toBeInTheDocument();

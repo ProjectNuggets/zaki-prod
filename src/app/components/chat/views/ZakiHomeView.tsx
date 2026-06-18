@@ -532,7 +532,7 @@ export function ZakiHomeView({
                   isRtl ? "text-right" : "text-left"
                 )}
                 type="button"
-                onClick={() => window.open("https://www.chatzaki.com", "_blank", "noopener,noreferrer")}
+                onClick={() => window.open("https://chatzaki.com/", "_blank", "noopener,noreferrer")}
               >
                 {t("home.aboutZaki")}
               </button>
