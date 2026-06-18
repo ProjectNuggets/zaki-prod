@@ -32,6 +32,7 @@ export async function fetchNullclawPath({
   timeoutMs,
   label = "Nullclaw request",
   contentType = "application/json",
+  extraHeaders = {},
 }) {
   const { resolvedBase, resolvedToken } = assertBaseAndToken(baseUrl, internalToken);
   const normalizedPath = String(path || "").startsWith("/") ? String(path) : `/${String(path || "")}`;
@@ -42,6 +43,7 @@ export async function fetchNullclawPath({
       userId,
       requestId,
       contentType,
+      extraHeaders,
     }),
   };
   if (body !== undefined) {

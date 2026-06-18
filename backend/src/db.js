@@ -1242,6 +1242,16 @@ export async function initDb() {
   } catch (err) {
     console.warn("[DB] Unit ledger table creation failed:", err.message);
   }
+
+  // --- V1 beta cutover audit + reversible workspace archive registry ---
+  // Dynamic import keeps this DDL colocated with the service while avoiding import cycles.
+  try {
+    const { V1_CUTOVER_DDL } = await import("./v1-cutover.js");
+    await pool.query(V1_CUTOVER_DDL);
+    console.log("[DB] V1 cutover tables ready");
+  } catch (err) {
+    console.warn("[DB] V1 cutover table creation failed:", err.message);
+  }
 }
 
 export function getDb() {
