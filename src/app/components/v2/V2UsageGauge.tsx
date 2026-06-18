@@ -1,43 +1,48 @@
 import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import {
+  formatUsagePercentLabel,
+  getRoundedUsagePercent,
+  getUsagePercent,
+} from "@/lib/usageDisplay";
 
 export type V2UsageGaugeProps = HTMLAttributes<HTMLDivElement> & {
   label: ReactNode;
   used: number | null;
   limit: number | null;
+  detail?: ReactNode;
+  /**
+   * @deprecated Usage surfaces no longer render raw remaining units. Pass
+   * `detail` for unitless copy.
+   */
   remaining?: ReactNode;
   reset?: ReactNode;
+  usageLabel?: ReactNode;
+  /**
+   * @deprecated Usage surfaces keep raw unit labels internal.
+   */
   unit?: ReactNode;
 };
-
-function clampPercent(value: number) {
-  return Math.max(0, Math.min(100, value));
-}
 
 export function V2UsageGauge({
   label,
   used,
   limit,
-  remaining,
+  detail,
   reset,
-  unit,
+  usageLabel,
   className,
   ...props
 }: V2UsageGaugeProps) {
-  const hasLimit =
-    typeof limit === "number" &&
-    Number.isFinite(limit) &&
-    limit > 0 &&
-    typeof used === "number" &&
-    Number.isFinite(used);
-  const percent = hasLimit ? clampPercent((used / limit) * 100) : 0;
-  const displayUsed = typeof used === "number" && Number.isFinite(used) ? used : 0;
-  const displayLimit = typeof limit === "number" && Number.isFinite(limit) ? limit : null;
+  const percent = getUsagePercent({ used, limit });
+  const roundedPercent = getRoundedUsagePercent(percent);
+  const percentLabel = usageLabel ?? formatUsagePercentLabel(roundedPercent);
 
   return (
     <div
       className={cn("v2-usage-gauge", className)}
       style={{ "--v2-usage-percent": `${percent}%` } as CSSProperties}
+      aria-label={typeof percentLabel === "string" ? percentLabel : undefined}
       {...props}
     >
       <div className="v2-usage-gauge__head">
@@ -45,14 +50,12 @@ export function V2UsageGauge({
         {reset != null ? <span>{reset}</span> : null}
       </div>
       <div className="v2-usage-gauge__number">
-        <strong>{displayUsed.toLocaleString()}</strong>
-        {displayLimit != null ? <span>/ {displayLimit.toLocaleString()}</span> : null}
-        {unit != null ? <em>{unit}</em> : null}
+        <strong>{percentLabel}</strong>
       </div>
       <div className="v2-usage-gauge__bar" aria-hidden="true">
         <span />
       </div>
-      {remaining != null ? <div className="v2-usage-gauge__foot">{remaining}</div> : null}
+      {detail != null ? <div className="v2-usage-gauge__foot">{detail}</div> : null}
     </div>
   );
 }

@@ -50,10 +50,10 @@ jest.mock("react-i18next", () => ({
       "pricingPage.plans.free.label": "Chat Free",
       "pricingPage.plans.free.price": "$0",
       "pricingPage.plans.free.cta": "Start chat",
-      "pricingPage.plans.free.features": ["Free credits for immediate Chat use", "No durable memory while anonymous", "Upgrade when the work should continue with memory"],
+      "pricingPage.plans.free.features": ["Free weekly usage for immediate Chat use", "No durable memory while anonymous", "Upgrade when the work should continue with memory"],
       "pricingPage.plans.agent.label": "ZAKI Agent",
       "pricingPage.plans.agent.price": "$29 / month",
-      "pricingPage.plans.agent.features": ["10 free preview messages each week"],
+      "pricingPage.plans.agent.features": ["More weekly room for Agent, Chat, and Brain"],
       "pricingPage.plans.brain.label": "ZAKI Brain",
       "pricingPage.plans.brain.price": "Included",
       "pricingPage.plans.brain.cta": "Open Brain",
@@ -62,13 +62,17 @@ jest.mock("react-i18next", () => ({
       "pricingPage.plans.future.price": "Soon",
       "pricingPage.plans.future.cta": "Open dashboard",
       "pricingPage.plans.future.features": ["Learn returns when learner state is safe", "Design launches after project creation is proven", "Hire stays user-side and private until ready"],
+      "pricingPage.allowance.weekly": "{{allowance}} units/week",
     };
     return {
-      t: (key: string, options?: { returnObjects?: boolean; defaultValue?: string; plan?: string }) => {
+      t: (key: string, options?: { returnObjects?: boolean; defaultValue?: string; plan?: string; allowance?: string }) => {
         if (Object.prototype.hasOwnProperty.call(dictionary, key)) {
           const value = dictionary[key];
           if (typeof value === "string" && options?.plan) {
             return value.replace("{{plan}}", options.plan);
+          }
+          if (typeof value === "string" && options?.allowance) {
+            return value.replace("{{allowance}}", options.allowance);
           }
           return value;
         }
@@ -111,7 +115,7 @@ let entitlementsData = {
   },
 };
 
-let billingConfigData = {
+let billingConfigData: any = {
   data: {
     configured: {
       stripeEnabled: true,
@@ -125,6 +129,12 @@ let billingConfigData = {
         agent: { monthly: true, yearly: false },
         learn: { monthly: true, yearly: false },
         complete: { monthly: true, yearly: false },
+      },
+      platformPlanAllowances: {
+        free: { weeklyAllowanceUnits: 100, rollingAllowanceUnits: 40, burstWindowHours: 5 },
+        personal: { weeklyAllowanceUnits: 1000, rollingAllowanceUnits: 200, burstWindowHours: 5 },
+        pro: { weeklyAllowanceUnits: 3000, rollingAllowanceUnits: 600, burstWindowHours: 5 },
+        pro_max: { weeklyAllowanceUnits: 7500, rollingAllowanceUnits: 1500, burstWindowHours: 5 },
       },
       missing: [],
     },
@@ -218,6 +228,12 @@ describe("PricingPage", () => {
             agent: { monthly: true, yearly: false },
             learn: { monthly: true, yearly: false },
             complete: { monthly: true, yearly: false },
+          },
+          platformPlanAllowances: {
+            free: { weeklyAllowanceUnits: 100, rollingAllowanceUnits: 40, burstWindowHours: 5 },
+            personal: { weeklyAllowanceUnits: 1000, rollingAllowanceUnits: 200, burstWindowHours: 5 },
+            pro: { weeklyAllowanceUnits: 3000, rollingAllowanceUnits: 600, burstWindowHours: 5 },
+            pro_max: { weeklyAllowanceUnits: 7500, rollingAllowanceUnits: 1500, burstWindowHours: 5 },
           },
           missing: [],
         },
@@ -356,6 +372,54 @@ describe("PricingPage", () => {
     expect(screen.queryByText("$39 / month")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Choose ZAKI Learn" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Choose ZAKI Complete" })).not.toBeInTheDocument();
+  });
+
+  it("shows real weekly allowances only on the pricing cards", () => {
+    render(
+      <MemoryRouter initialEntries={["/pricing"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("100 units/week")).toBeInTheDocument();
+    expect(screen.getByText("1,000 units/week")).toBeInTheDocument();
+  });
+
+  it("uses public billing metadata for signed-out pricing allowances", () => {
+    useAuthStore.setState({
+      token: null,
+      user: null,
+      isHydrating: false,
+      isLoading: false,
+    });
+    billingConfigData = {
+      data: {
+        configured: {
+          checkoutProviders: [],
+          accessCodePurchaseEnabled: false,
+          platformPlanAllowances: {
+            free: { weeklyAllowanceUnits: 125, rollingAllowanceUnits: 40, burstWindowHours: 5 },
+            personal: { weeklyAllowanceUnits: 2500, rollingAllowanceUnits: 200, burstWindowHours: 5 },
+            pro: { weeklyAllowanceUnits: 3000, rollingAllowanceUnits: 600, burstWindowHours: 5 },
+            pro_max: { weeklyAllowanceUnits: 7500, rollingAllowanceUnits: 1500, burstWindowHours: 5 },
+          },
+          missing: [],
+        },
+      },
+    };
+
+    render(
+      <MemoryRouter initialEntries={["/pricing"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("125 units/week")).toBeInTheDocument();
+    expect(screen.getByText("2,500 units/week")).toBeInTheDocument();
   });
 
   it("keeps commercial checkout on Stripe when legacy providers are also configured", async () => {

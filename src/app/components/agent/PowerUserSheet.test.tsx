@@ -102,8 +102,14 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
   if (key === "zakiControls.powerUser.memory.noDiagnostics") {
     return `Memory doctor unavailable (${String(options?.reason ?? "")}).`;
   }
-  if (key === "zakiControls.powerUser.usage.usedUnlimited") {
-    return `${String(options?.used ?? "")} · unlimited`;
+  if (key === "zakiControls.powerUser.usage.unlimited") {
+    return "Unlimited";
+  }
+  if (key === "zakiControls.powerUser.usage.dailyPercent") {
+    return `${String(options?.percent ?? "")}% of your daily usage`;
+  }
+  if (key === "zakiControls.powerUser.usage.weeklyPercent") {
+    return `${String(options?.percent ?? "")}% of your weekly usage`;
   }
   if (key === "zakiControls.powerUser.usage.footer") {
     return `Soft-limit warning at ${String(options?.warning ?? "")}% used; near-limit at ${String(options?.near ?? "")}%. Hard stops still apply on hit.`;
@@ -853,5 +859,7 @@ describe("PowerUserSheet", () => {
     expect(
       screen.getByTestId("power-user-usage-surface-zaki_bot")
     ).toHaveAttribute("data-soft-limit-state", "normal");
+    expect(screen.getByText("90% of your daily usage")).toBeInTheDocument();
+    expect(screen.queryByText("9 / 10")).not.toBeInTheDocument();
   });
 });

@@ -72,6 +72,13 @@ import {
 } from "@/lib/api";
 import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
 import {
+  formatUsagePercentLabel,
+  getRoundedUsagePercent,
+  getUsagePercent,
+  isUsageAtCap,
+  isUsageNearCap,
+} from "@/lib/usageDisplay";
+import {
   AGENT_DEFAULT_REASONING_EFFORTS,
   assistantModeToReasoningEffort,
   reasoningEffortToAssistantMode,
@@ -274,18 +281,6 @@ const MEMORY_CAPTURE_POLICIES: MemoryPolicy[] = ["balanced", "off"];
 
 const DEFAULT_MEMORY_CAPTURE_POLICY: MemoryPolicy = "balanced";
 
-function formatUsageCount(value?: number | null) {
-  if (value == null || Number.isNaN(value)) return "—";
-  return Intl.NumberFormat().format(Math.max(0, Math.round(value)));
-}
-
-function formatUsageUnits(value?: number | null) {
-  if (value == null || Number.isNaN(value)) return "—";
-  return Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 1,
-  }).format(Math.max(0, Number(value)));
-}
-
 function normalizeSettingsPlanId(value: unknown): SettingsBillingPlanId {
   const plan = String(value || "").trim().toLowerCase();
   if (plan === "pro_max" || plan === "promax") return "pro_max";
@@ -322,24 +317,17 @@ function formatUsageReset(value?: string | null) {
 
 function getMeterWindowLabel(
   t: (key: string, options?: Record<string, unknown>) => string,
-  snapshot?: MeterWindowSnapshot | null
+  snapshot?: MeterWindowSnapshot | null,
+  key = "settingsModal.usage.usagePercent",
+  defaultFormatter = formatUsagePercentLabel
 ) {
   if (!snapshot) return null;
-  if (typeof snapshot.limit === "number" && typeof snapshot.remaining === "number") {
-    return t("settingsModal.usage.remainingOfLimit", {
-      remaining: formatUsageUnits(snapshot.remaining),
-      limit: formatUsageUnits(snapshot.limit),
-    });
-  }
   if (typeof snapshot.limit === "number" && typeof snapshot.used === "number") {
-    return t("settingsModal.usage.usedOfLimit", {
-      used: formatUsageUnits(snapshot.used),
-      limit: formatUsageUnits(snapshot.limit),
-    });
-  }
-  if (typeof snapshot.used === "number") {
-    return t("settingsModal.usage.usedUnits", {
-      used: formatUsageUnits(snapshot.used),
+    const percent = getUsagePercent({ used: snapshot.used, limit: snapshot.limit });
+    const roundedPercent = getRoundedUsagePercent(percent);
+    return t(key, {
+      percent: roundedPercent,
+      defaultValue: defaultFormatter(percent),
     });
   }
   return null;
@@ -354,16 +342,19 @@ function getQuotaSummaryLabel(
   if (quota.metered === false) return t("settingsModal.usage.memoryGoverned");
   if (quota.unlimited) {
     return t("settingsModal.usage.usedUnlimited", {
-      used: formatUsageCount(quota.used),
+      defaultValue: "Included in weekly usage",
     });
   }
-  if (typeof quota.limit === "number") {
-    return t("settingsModal.usage.usedOfLimit", {
-      used: formatUsageCount(quota.used),
-      limit: formatUsageCount(quota.limit),
+  if (typeof quota.limit === "number" && typeof quota.used === "number") {
+    const percent = getUsagePercent({ used: quota.used, limit: quota.limit });
+    return t("settingsModal.usage.productUsagePercent", {
+      percent: getRoundedUsagePercent(percent),
+      defaultValue: `${getRoundedUsagePercent(percent)}% this week`,
     });
   }
-  return t("settingsModal.usage.pending");
+  return t("settingsModal.usage.productUsageLinked", {
+    defaultValue: "Included in weekly usage",
+  });
 }
 
 function getProductLifecycleLabel(
@@ -432,21 +423,8 @@ function normalizeWeeklyWindow(
   return { limit, remaining, recurringRemaining, resetAt, topupUnits, used };
 }
 
-function getMeterPercent(used?: number | null, limit?: number | null) {
-  if (
-    typeof used !== "number" ||
-    typeof limit !== "number" ||
-    !Number.isFinite(used) ||
-    !Number.isFinite(limit) ||
-    limit <= 0
-  ) {
-    return 0;
-  }
-  return Math.max(0, Math.min(100, (used / limit) * 100));
-}
-
 function getMeterBarStyle(used?: number | null, limit?: number | null) {
-  return { "--zaki-meter-percent": `${getMeterPercent(used, limit)}%` } as CSSProperties;
+  return { "--zaki-meter-percent": `${getUsagePercent({ used, limit })}%` } as CSSProperties;
 }
 
 export function SettingsPage() {
@@ -1003,37 +981,65 @@ export function SettingsPage() {
           : t("settingsModal.plan.sources.free", { defaultValue: "Free account" });
   const allowance = platformUsage?.allowance;
   const weeklyWindow = normalizeWeeklyWindow(meterStatus?.weekly ?? null, allowance?.weekly ?? null);
+  const weeklyUsagePercent = getUsagePercent({
+    used: weeklyWindow.used,
+    limit: weeklyWindow.limit,
+  });
+  const weeklyUsagePercentRounded = getRoundedUsagePercent(weeklyUsagePercent);
   const weeklyAllowanceLabel =
     getMeterWindowLabel(t, meterStatus?.weekly) ||
-    (allowance?.weekly?.configured && typeof allowance.weekly.limit === "number"
+    (allowance?.weekly?.configured && typeof allowance.weekly.used === "number" && typeof allowance.weekly.limit === "number"
       ? t("settingsModal.usage.weeklyAllowanceValue", {
-          limit: formatUsageCount(allowance.weekly.limit),
+          percent: getRoundedUsagePercent(
+            getUsagePercent({ used: allowance.weekly.used, limit: allowance.weekly.limit })
+          ),
         })
       : t("settingsModal.usage.weeklyAllowancePending"));
   const burstWindowLabel =
-    getMeterWindowLabel(t, meterStatus?.rolling) ||
+    getMeterWindowLabel(
+      t,
+      meterStatus?.rolling,
+      "settingsModal.usage.windowUsagePercent",
+      (percent) => `${getRoundedUsagePercent(percent)}% of this capacity window`
+    ) ||
     (typeof allowance?.burst?.windowHours === "number"
       ? t("settingsModal.usage.burstWindowValue", {
-          hours: allowance.burst.windowHours,
+          percent: 0,
         })
       : t("settingsModal.usage.burstWindowPending"));
-  const recurringRemainingUnits =
-    typeof weeklyWindow.recurringRemaining === "number"
-      ? weeklyWindow.recurringRemaining
-      : typeof weeklyWindow.limit === "number" && typeof weeklyWindow.used === "number"
-        ? Math.max(0, weeklyWindow.limit - weeklyWindow.used)
-        : null;
-  const topupBalanceUnits =
-    typeof weeklyWindow.topupUnits === "number" ? weeklyWindow.topupUnits : null;
+  const weeklyRoomLabel = isUsageAtCap(weeklyUsagePercent)
+    ? t("settingsModal.usage.full", {
+        defaultValue: "Full until reset",
+      })
+    : isUsageNearCap(weeklyUsagePercent)
+      ? t("settingsModal.usage.nearCap", {
+          defaultValue: "More room available on higher plans",
+        })
+      : t("settingsModal.usage.comfortable", {
+          defaultValue: "Comfortable this week",
+        });
+  const extraCapacityLabel =
+    typeof weeklyWindow.topupUnits === "number" && weeklyWindow.topupUnits > 0
+      ? t("settingsModal.usage.extraCapacityIncluded", {
+          defaultValue: "Included in this week",
+        })
+      : t("settingsModal.usage.extraCapacityDeferred", {
+          defaultValue: "Deferred for this release",
+        });
   const agentAvailableNow = meterStatus?.availableNow?.agent ?? null;
   const agentAvailableNowLabel =
-    typeof agentAvailableNow?.effectiveRemaining === "number"
-      ? t("settingsModal.plan.agentAvailableNowValue", {
-          available: formatUsageCount(agentAvailableNow.effectiveRemaining),
-          required: formatUsageCount(agentAvailableNow.requiredReserveUnits),
-          defaultValue: `${formatUsageCount(agentAvailableNow.effectiveRemaining)} available / ${formatUsageCount(agentAvailableNow.requiredReserveUnits)} needed`,
+    agentAvailableNow?.available === false
+      ? t("settingsModal.plan.agentAvailableNowBlocked", {
+          defaultValue:
+            agentAvailableNow.constraint === "rolling"
+              ? "Current window is refreshing"
+              : "Needs more weekly room",
         })
-      : t("settingsModal.usage.pending");
+      : agentAvailableNow
+        ? t("settingsModal.plan.agentAvailableNowReady", {
+            defaultValue: "Ready",
+          })
+        : t("settingsModal.usage.pending");
   const accessExpiryLabel = useMemo(() => {
     if (!accessExpiresAt) return null;
     const parsed = new Date(accessExpiresAt);
@@ -1944,12 +1950,8 @@ export function SettingsPage() {
                     </div>
                     <dl>
                       <div>
-                        <dt>{t("settingsModal.usage.used", { defaultValue: "Used" })}</dt>
-                        <dd>{formatUsageUnits(weeklyWindow.used)}</dd>
-                      </div>
-                      <div>
-                        <dt>{t("settingsModal.usage.remaining", { defaultValue: "Remaining" })}</dt>
-                        <dd>{formatUsageUnits(weeklyWindow.remaining)}</dd>
+                        <dt>{t("settingsModal.usage.usage", { defaultValue: "Usage" })}</dt>
+                        <dd>{weeklyAllowanceLabel}</dd>
                       </div>
                       <div>
                         <dt>{t("settingsModal.usage.reset", { defaultValue: "Reset" })}</dt>
@@ -1959,6 +1961,14 @@ export function SettingsPage() {
                         </dd>
                       </div>
                     </dl>
+                    {isUsageNearCap(weeklyUsagePercent) ? (
+                      <p className="v2-body-sm">
+                        {t("settingsModal.usage.nearCapNudge", {
+                          percent: weeklyUsagePercentRounded,
+                          defaultValue: `You're at ${weeklyUsagePercentRounded}% this week — upgrade for more room.`,
+                        })}
+                      </p>
+                    ) : null}
                   </section>
                   <section
                     className="zaki-settings-v2__billing-meter"
@@ -1988,24 +1998,20 @@ export function SettingsPage() {
                         </dd>
                       </div>
                       <div>
-                        <dt>{t("settingsModal.usage.used", { defaultValue: "Used" })}</dt>
-                        <dd>{formatUsageUnits(meterStatus?.rolling?.used)}</dd>
-                      </div>
-                      <div>
-                        <dt>{t("settingsModal.usage.remaining", { defaultValue: "Remaining" })}</dt>
-                        <dd>{formatUsageUnits(meterStatus?.rolling?.remaining)}</dd>
+                        <dt>{t("settingsModal.usage.usage", { defaultValue: "Usage" })}</dt>
+                        <dd>{burstWindowLabel}</dd>
                       </div>
                     </dl>
                   </section>
                 </div>
                 <div className="zaki-settings-v2__billing-wallet">
                   <div>
-                    <span>{t("settingsModal.plan.recurringRemaining", { defaultValue: "Recurring remaining" })}</span>
-                    <strong>{formatUsageUnits(recurringRemainingUnits)}</strong>
+                    <span>{t("settingsModal.plan.recurringRemaining", { defaultValue: "Weekly room" })}</span>
+                    <strong>{weeklyRoomLabel}</strong>
                   </div>
                   <div>
-                    <span>{t("settingsModal.plan.topupBalance", { defaultValue: "Extra units balance" })}</span>
-                    <strong>{formatUsageUnits(topupBalanceUnits)}</strong>
+                    <span>{t("settingsModal.plan.topupBalance", { defaultValue: "Extra capacity" })}</span>
+                    <strong>{extraCapacityLabel}</strong>
                   </div>
                   <div>
                     <span>{t("settingsModal.plan.agentAvailableNow", { defaultValue: "Agent available now" })}</span>
@@ -2034,7 +2040,7 @@ export function SettingsPage() {
                     <p className="v2-body-sm">
                       {t("settingsModal.usage.helper", {
                         defaultValue:
-                          "Open when you want to see which ZAKI products used this week's units.",
+                          "Open when you want to see which products contributed to this week's usage.",
                       })}
                     </p>
                   </div>
@@ -2050,7 +2056,9 @@ export function SettingsPage() {
                     ? meterUsageRows.map(({ product, meterProduct }) => {
                         const summaryLabel =
                           getMeterWindowLabel(t, meterProduct?.weekly ?? null) ||
-                          t("settingsModal.usage.pending");
+                          t("settingsModal.usage.productUsageLinked", {
+                            defaultValue: "Included in weekly usage",
+                          });
                         const resetLabel = formatUsageReset(meterProduct?.weekly?.resetAt);
                         const weekly = meterProduct?.weekly ?? null;
                         const hasProductLimit = typeof weekly?.limit === "number";
@@ -2199,11 +2207,11 @@ export function SettingsPage() {
               </div>
               <div className="zaki-settings-v2__topup-strip" data-testid="settings-topup-strip">
                 <div>
-                  <strong>{t("settingsModal.plan.topups.title", { defaultValue: "Extra usage units" })}</strong>
+                  <strong>{t("settingsModal.plan.topups.title", { defaultValue: "Additional capacity" })}</strong>
                   <p className="v2-body-sm">
                     {t("settingsModal.plan.topups.deferred", {
                       defaultValue:
-                        "Top-up purchases are deferred for this release. Existing balances remain visible.",
+                        "Additional capacity purchases are deferred for this release. Pricing explains the current allowances.",
                     })}
                   </p>
                 </div>

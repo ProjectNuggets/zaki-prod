@@ -738,7 +738,10 @@ export async function fetchEntitlements() {
 }
 
 export async function fetchBillingConfig() {
-  const response = await backendAuthRequest("/api/billing/config", { method: "GET" });
+  const token = getAuthToken();
+  const response = token
+    ? await backendAuthRequest("/api/billing/config", { method: "GET" })
+    : await backendRequest("/api/billing/public-config", { method: "GET" });
   let data: {
     success?: boolean;
     configured?: {
@@ -812,6 +815,16 @@ export async function fetchBillingConfig() {
           monthly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
         };
       };
+      platformPlanAllowances?: Record<
+        "free" | "personal" | "pro" | "pro_max",
+        {
+          id?: string;
+          label?: string;
+          weeklyAllowanceUnits?: number | null;
+          rollingAllowanceUnits?: number | null;
+          burstWindowHours?: number | null;
+        }
+      >;
       missing?: string[];
     };
     error?: string | null;

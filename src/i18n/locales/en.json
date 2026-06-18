@@ -108,11 +108,11 @@
       "upgradePlan": "Upgrade to {{plan}}",
       "syncBilling": "Sync billing",
       "upgrade": "Upgrade",
-      "recurringRemaining": "Recurring remaining",
-      "topupBalance": "Extra units balance",
+      "recurringRemaining": "Weekly room",
+      "topupBalance": "Extra capacity",
       "topups": {
-        "title": "Extra usage units",
-        "deferred": "Top-up purchases are deferred for this release. Existing balances remain visible.",
+        "title": "Additional capacity",
+        "deferred": "Additional capacity purchases are deferred for this release. Pricing explains the current allowances.",
         "statusOnly": "Deferred"
       },
       "cancelSubscription": "Cancel subscription",
@@ -139,20 +139,36 @@
     },
     "usage": {
       "plan": "Plan",
-      "weeklyAllowance": "Weekly",
-      "weeklyAllowanceValue": "{{limit}} units",
+      "weeklyAllowance": "Weekly usage",
+      "weeklyAllowanceValue": "{{percent}}% of your weekly usage",
       "weeklyAllowancePending": "Policy pending",
       "burstWindow": "Burst window",
-      "burstWindowValue": "{{hours}} hours",
+      "burstWindowValue": "{{percent}}% of this capacity window",
       "burstWindowPending": "Policy pending",
-      "remainingOfLimit": "{{remaining}} / {{limit}} left",
+      "usagePercent": "{{percent}}% of your weekly usage",
+      "windowUsagePercent": "{{percent}}% of this capacity window",
+      "remainingOfLimit": "Room refreshes with your weekly usage",
       "loading": "Loading usage...",
       "pending": "Pending",
       "unavailable": "Unavailable",
       "memoryGoverned": "Memory policy",
-      "usedOfLimit": "{{used}} / {{limit}}",
-      "usedUnits": "{{used}} used",
-      "usedUnlimited": "{{used}} · unlimited",
+      "usedOfLimit": "{{percent}}% of your weekly usage",
+      "usedUnits": "{{percent}}% of your weekly usage",
+      "usedUnlimited": "Included in weekly usage",
+      "productUsage": "Weekly by product",
+      "productUsagePercent": "{{percent}}% this week",
+      "productUsageLinked": "Included in weekly usage",
+      "productCount": "{{count}} products",
+      "usage": "Usage",
+      "reset": "Reset",
+      "window": "Window",
+      "windowHours": "{{hours}}h window",
+      "full": "Full until reset",
+      "nearCap": "More room available on higher plans",
+      "comfortable": "Comfortable this week",
+      "extraCapacityIncluded": "Included in this week",
+      "extraCapacityDeferred": "Deferred for this release",
+      "nearCapNudge": "You're at {{percent}}% this week — upgrade for more room.",
       "period": {
         "day": "Daily",
         "week": "Weekly",
@@ -166,7 +182,7 @@
         "waitlist": "Launch: waitlist",
         "hidden": "Launch: hidden"
       },
-      "helper": "This is the platform usage view. Agent-specific runtime usage remains inside Agent settings."
+      "helper": "Usage is shown as a calm weekly percentage. Pricing explains the underlying allowance."
     },
     "productsAccess": {
       "subtitle": "Product availability, memory ownership, and entry surfaces stay separate from billing and usage meters.",
@@ -1087,7 +1103,9 @@
         "unavailable": "Usage unavailable.",
         "requestsToday": "Requests today",
         "requestsThisWeek": "Requests this week",
-        "usedUnlimited": "{{used}} · unlimited",
+        "dailyPercent": "{{percent}}% of your daily usage",
+        "weeklyPercent": "{{percent}}% of your weekly usage",
+        "usedUnlimited": "Unlimited",
         "resets": "Resets",
         "footer": "Soft-limit warning at {{warning}}% used; near-limit at {{near}}%. Hard stops still apply on hit."
       }
@@ -1146,6 +1164,9 @@
     "sortAlpha": "Sort: A-Z",
     "createCta": "Create new space",
     "chatsCount_one": "{{count}} chat",
+    "chatsCount_two": "{{count}} chats",
+    "chatsCount_few": "{{count}} chats",
+    "chatsCount_many": "{{count}} chats",
     "chatsCount_other": "{{count}} chats",
     "updatedRecently": "Updated recently",
     "startChat": "Start new chat",
@@ -1203,6 +1224,9 @@
       "title": "Project files",
       "fixed": "ZAKI is not a project",
       "count_one": "{{count}} file",
+      "count_two": "{{count}} files",
+      "count_few": "{{count}} files",
+      "count_many": "{{count}} files",
       "count_other": "{{count}} files",
       "upload": "Upload",
       "documentTypeFallback": "document",
@@ -1218,6 +1242,9 @@
     "threads": {
       "title": "Chats in this space",
       "total_one": "{{count}} total",
+      "total_two": "{{count}} total",
+      "total_few": "{{count}} total",
+      "total_many": "{{count}} total",
       "total_other": "{{count}} total",
       "delete": "Delete",
       "empty": "No chats yet. Start one above."
@@ -1258,7 +1285,7 @@
     "subtitleAccessActive": "Your access code unlocks the V1 core for now. Product-specific codes come later.",
     "comparisonNote": "V1 pricing is intentionally simple: free Chat, paid Agent, Brain included with account continuity, and future products clearly marked as coming soon.",
     "highlightsTemplates": {
-      "free": "Chat Free: anonymous weekly credits",
+      "free": "Chat Free: weekly usage included",
       "agent": "Agent: $29/month",
       "brain": "Brain: included",
       "future": "Learn, Design, Career: gated"
@@ -1332,7 +1359,7 @@
         "price": "$0",
         "blurb": "A focused workspace for drafts, translation, planning, and decisions before you sign up.",
         "features": [
-          "Free credits for immediate Chat use",
+          "Free weekly usage for immediate Chat use",
           "No durable memory while anonymous",
           "Upgrade when the work should continue with memory"
         ],
@@ -1343,7 +1370,7 @@
         "price": "$29 / month",
         "blurb": "The paid personal agent for work you should not have to explain twice.",
         "features": [
-          "10 free preview messages each week",
+          "More weekly room for Agent, Chat, and Brain",
           "Memory import and paid Agent access after checkout",
           "Built for recurring work, decisions, and follow-through"
         ]
@@ -1370,6 +1397,9 @@
         ],
         "cta": "Open dashboard"
       }
+    },
+    "allowance": {
+      "weekly": "{{allowance}} units/week"
     },
     "recommendedBadge": "Best value",
     "currentBadge": "Current",
@@ -1818,6 +1848,9 @@
         "source": "Source",
         "linked": "Linked memories",
         "priorVersions_one": "{{count}} prior version",
+        "priorVersions_two": "{{count}} prior versions",
+        "priorVersions_few": "{{count}} prior versions",
+        "priorVersions_many": "{{count}} prior versions",
         "priorVersions_other": "{{count}} prior versions",
         "confidence": "Confidence",
         "manageInSettings": "Forget or export in Settings"
@@ -1926,9 +1959,8 @@
       "signedTitlePrefix": "Let's ",
       "guestTitlePrefix": "Let's ",
       "signedCopy": "Choose the kind of help you need, write the outcome once, and ZAKI will open the right workspace with your context intact.",
-      "guestCopy": "Ask immediately with free weekly credits. This browser can remember drafts; sign in when you want work, memory, files, and history to follow you.",
-      "weeklyFreeCredit": "Weekly free credit",
-      "weeklyPercentLeft": "{{percent}}% left this week",
+      "guestCopy": "Ask immediately with free weekly usage. This browser can remember drafts; sign in when you want work, memory, files, and history to follow you.",
+      "weeklyFreeCredit": "Weekly usage",
       "bestFor": "Best for",
       "memoryScope": "Memory scope",
       "selectedProduct": "{{product}} overview",
@@ -1938,14 +1970,19 @@
       "saveWork": "Save this work",
       "emptyHelper": "Type a prompt to start.",
       "offlineHelper": "You are offline. We kept this draft here and will send when you reconnect.",
-      "creditHelper": "Credits are used when ZAKI responds.",
+      "creditHelper": "Weekly usage updates when ZAKI responds.",
+      "agentCreditsLow": "Agent needs more weekly room before it can start.",
+      "capacityWindowLow": "Current capacity window is refreshing as recent Agent work clears.",
       "comingSoonHelper": "{{product}} is coming soon. Pick Chat, Agent, or Brain to start now.",
       "submitPreviewSave": "Preview first",
       "submitChat": "Start chat",
       "submitOpen": "Continue in {{product}}",
       "submitComingSoon": "{{product}} coming soon",
-      "creditsExhaustedTitle": "Weekly credits are used.",
-      "creditsExhaustedCopy": "Keep your prompt here, then sign up, wait for reset, or choose a plan.",
+      "creditsExhaustedTitle": "Weekly usage is full.",
+      "creditsExhaustedCopy": "Keep your prompt here, then sign up, wait for reset, or choose a plan with more room.",
+      "capacityWindowTitle": "Current capacity window is refreshing.",
+      "capacityWindowCopy": "Keep your prompt here, wait for the current window to refresh, or choose a plan with more capacity.",
+      "nearCapNudge": "You're at {{percent}}% this week — upgrade for more room.",
       "saveAndSignup": "Save and sign up",
       "viewPlans": "View plans",
       "waitForReset": "Wait for reset",
@@ -1988,7 +2025,7 @@
         "spaces": {
           "bestFor": "Quick questions, drafting, translation, and thinking out loud. No setup.",
           "memory": "This-browser session only until you sign in.",
-          "truth": "Chat runs now on free weekly credits. Sign in when you want to keep the work."
+          "truth": "Chat runs now with free weekly usage. Sign in when you want to keep the work."
         },
         "design": {
           "bestFor": "Product direction, page structure, brand systems, and design project generation.",
@@ -2029,9 +2066,9 @@
         },
         "buy": {
           "title": "Activate the loop",
-          "body": "Guest credits let you try now. Create an account when you want work, memory, files, and history to follow you.",
+          "body": "Guest usage lets you try now. Create an account when you want work, memory, files, and history to follow you.",
           "bullets": {
-            "guest": "Guest: start immediately with weekly credits.",
+            "guest": "Guest: start immediately with weekly usage.",
             "account": "Account: save work, memory, files, and history.",
             "plan": "Plan: add capacity when your work grows."
           }
@@ -2061,7 +2098,7 @@
     },
     "hero": {
       "title": "Hi, {{name}}.",
-      "remaining": "{{remaining}} left."
+      "remaining": "Your weekly room refreshes on schedule."
     },
     "tags": {
       "plan": "Plan",
@@ -2071,17 +2108,18 @@
     "meter": {
       "label": "Platform meter",
       "plan": "Plan",
-      "weekly": "Weekly allowance",
+      "weekly": "Weekly usage",
       "rolling": "{{hours}}h window",
       "loading": "Loading",
       "pending": "Pending",
       "free": "Free",
-      "units": "units",
-      "used": "Used",
-      "remaining": "Remaining",
-      "remainingOfLimit": "{{remaining}} / {{limit}} left",
-      "usedOfLimit": "{{used}} / {{limit}} used",
-      "usedUnits": "{{used}} used",
+      "units": "usage",
+      "used": "Usage",
+      "remaining": "Room",
+      "usagePercent": "{{percent}}% of your weekly usage",
+      "remainingOfLimit": "Room refreshes with your weekly usage",
+      "usedOfLimit": "{{percent}}% of your weekly usage",
+      "usedUnits": "{{percent}}% of your weekly usage",
       "resets": "Resets {{reset}}",
       "resetPending": "Reset pending"
     },

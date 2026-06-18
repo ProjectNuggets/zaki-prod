@@ -129,10 +129,10 @@ const ZAKI_REASONING_LABELS: Record<ZakiTurnReasoningEffort, string> = {
 };
 
 const ZAKI_REASONING_COST_NOTES: Record<ZakiTurnReasoningEffort, string> = {
-  low: "Faster, lighter thinking — uses fewer credits.",
-  medium: "Balanced reasoning — moderate credit use.",
-  high: "Deep reasoning — more credits, higher quality.",
-  superpowers: "⚡ Multi-agent fan-out — burns the most credits, for your most ambitious work.",
+  low: "Faster, lighter thinking — gentle on weekly usage.",
+  medium: "Balanced reasoning — steady weekly usage.",
+  high: "Deep reasoning — more room for quality work.",
+  superpowers: "⚡ Multi-agent fan-out — best for ambitious work when you want to spend more weekly room.",
 };
 
 type ZakiArtifactPreset = {

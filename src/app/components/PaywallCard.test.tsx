@@ -19,10 +19,11 @@ describe("classifyBillingDenial", () => {
 
 describe("PaywallCard", () => {
   const base = { message: "fallback msg", onSeePlans: jest.fn(), onDismiss: jest.fn() };
-  it("out_of_usage shows the usage headline + plan/remaining/reset when provided", () => {
+  it("out_of_usage shows the usage headline + plan/reset without raw units", () => {
     render(<PaywallCard state="out_of_usage" planLabel="Free" remaining={0} resetAt="2026-06-20T00:00:00Z" {...base} />);
-    expect(screen.getByText(/out of usage/i)).toBeInTheDocument();
+    expect(screen.getByText(/weekly usage is full/i)).toBeInTheDocument();
     expect(screen.getByText(/Free/)).toBeInTheDocument();
+    expect(screen.queryByText(/0 available/i)).not.toBeInTheDocument();
   });
   it("out_of_usage names the rolling capacity window when that is the limiter", () => {
     render(
@@ -36,9 +37,10 @@ describe("PaywallCard", () => {
         {...base}
       />
     );
-    expect(screen.getByText(/current capacity window is low/i)).toBeInTheDocument();
-    expect(screen.getByText(/20 available now/i)).toBeInTheDocument();
-    expect(screen.getByText(/40 needed/i)).toBeInTheDocument();
+    expect(screen.getByText(/current capacity window needs room/i)).toBeInTheDocument();
+    expect(screen.getByText(/Current window is refreshing/i)).toBeInTheDocument();
+    expect(screen.queryByText(/20 available now/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/40 needed/i)).not.toBeInTheDocument();
   });
   it("plan_inactive shows the inactive headline", () => {
     render(<PaywallCard state="plan_inactive" planLabel="Agent" {...base} />);
