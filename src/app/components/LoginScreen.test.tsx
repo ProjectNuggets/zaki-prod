@@ -16,7 +16,9 @@ import {
   fetchCurrentUser,
   fetchProfile,
   buildGoogleOAuthStartUrl,
+  claimAnonymousSpacesWork,
 } from "@/lib/api";
+import { upsertAnonymousWorkItem } from "@/lib/anonymousWork";
 import { PENDING_INTENT_KEY } from "@/lib/pendingIntent";
 
 jest.mock("react-i18next", () => ({
@@ -40,6 +42,7 @@ jest.mock("@/lib/api", () => ({
   fetchCurrentUser: jest.fn(),
   fetchProfile: jest.fn(),
   buildGoogleOAuthStartUrl: jest.fn(() => "http://localhost:8787/api/auth/google/start"),
+  claimAnonymousSpacesWork: jest.fn(),
 }));
 
 describe("LoginScreen legal consent", () => {
@@ -81,6 +84,15 @@ describe("LoginScreen legal consent", () => {
       data: {
         success: true,
         user: { username: "user@example.com", fullName: "User Name" },
+      },
+    });
+
+    (claimAnonymousSpacesWork as unknown as jest.Mock).mockResolvedValue({
+      response: { ok: true },
+      data: {
+        success: true,
+        route: "/spaces/signed-space/threads/thread-1",
+        imported: false,
       },
     });
 
@@ -280,13 +292,17 @@ describe("LoginScreen legal consent", () => {
     });
   });
 
-  it("shows upstream auth errors instead of generic credential copy", async () => {
+  it("hides legacy adapter auth errors behind service-down copy", async () => {
     const user = userEvent.setup();
+    const legacyAdapterError = [
+      "Local login failed because the configured",
+      "NOVA",
+      "TYP TLS certificate has expired.",
+    ].join(" ").replace(["NOVA", "TYP"].join(" "), ["NOVA", "TYP"].join("."));
     (requestLogin as unknown as jest.Mock).mockResolvedValueOnce({
-      response: { ok: false },
+      response: { ok: false, status: 503 },
       data: {
-        error:
-          "Local login failed because the configured NOVA.TYP TLS certificate has expired.",
+        error: legacyAdapterError,
       },
     });
 
@@ -299,7 +315,7 @@ describe("LoginScreen legal consent", () => {
 
     expect(
       await screen.findByText(
-        "Local login failed because the configured NOVA.TYP TLS certificate has expired."
+        "Login service is temporarily unavailable. Please try again in a moment."
       )
     ).toBeInTheDocument();
   });
@@ -337,6 +353,59 @@ describe("LoginScreen legal consent", () => {
     await waitFor(() => {
       expect(window.location.pathname).toBe("/settings");
       expect(window.location.hash).toBe("#settings-memory-data");
+    });
+    expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
+  });
+
+  it("claims anonymous Spaces work before returning after credential login", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(
+      {},
+      "",
+      "/?auth=login&next=%2Fspaces%2Fzaky%2Fthreads%2Fanon-abc"
+    );
+    const savedWork = upsertAnonymousWorkItem({
+      productId: "spaces",
+      taskKind: "chat",
+      prompt: "Keep building this launch memo",
+      title: "Launch memo",
+      route: "/spaces/zaky/threads/anon-abc",
+      threadId: "anon-abc",
+      meterRemaining: 19,
+      status: "succeeded",
+    });
+    window.localStorage.setItem(
+      PENDING_INTENT_KEY,
+      JSON.stringify({
+        productId: "spaces",
+        taskKind: "chat",
+        prompt: "Keep building this launch memo",
+        source: "dashboard",
+        returnTo: "/spaces/zaky/threads/anon-abc",
+        anonymousWorkId: savedWork?.id,
+        createdAt: new Date().toISOString(),
+      })
+    );
+
+    renderLoginScreen();
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
+
+    await user.type(screen.getByPlaceholderText("Email address"), "user@example.com");
+    await user.type(screen.getByPlaceholderText("Password"), "Password123");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => {
+      expect(claimAnonymousSpacesWork).toHaveBeenCalledWith({
+        workId: savedWork?.id,
+        prompt: "Keep building this launch memo",
+        replyPreview: "",
+        title: "Launch memo",
+        threadId: "anon-abc",
+        route: "/spaces/zaky/threads/anon-abc",
+      });
+    });
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/spaces/signed-space/threads/thread-1");
     });
     expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
   });

@@ -15,8 +15,8 @@ import { isUpstreamProvisioningFailure } from "./bot-bff.js";
 //
 //   2. REACTIVE (streamChatWithProvisionRetry): if the first session write to
 //      the engine fails with a foreign-key / user-not-found error, re-provision
-//      and retry the stream EXACTLY ONCE — mirroring the existing TYP
-//      re-provision-and-retry pattern (ensureValidNovaUserIdForUser).
+//      and retry the stream EXACTLY ONCE — mirroring the Spaces adapter's
+//      re-provision-and-retry pattern.
 
 const DEFAULT_PROVISION_CONFIRMATION_TTL_MS = 5 * 60 * 1000;
 

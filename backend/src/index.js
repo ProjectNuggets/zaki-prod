@@ -393,6 +393,12 @@ import {
   requestTypChatStream,
   getTypUserSessionToken,
 } from "./typ-client.js";
+import {
+  DEFAULT_SPACES_THREAD_NAME,
+  buildSpacesProvisioningErrorPayload,
+  createSpacesTypProvisioner,
+  isAnonymousSpacesRouteTarget,
+} from "./spaces-typ-provisioning.js";
 import { buildAuthRouter } from "./auth-endpoints.js";
 import { loginHandler as zakiLoginHandler } from "./login-handler.js";
 import {
@@ -2777,6 +2783,32 @@ async function fetchNovaUserIdByUsername(username) {
   return match?.id ?? null;
 }
 
+// TYP remains a legacy Spaces execution/storage adapter. ZAKI auth never depends on it;
+// Spaces routes provision and repair the adapter user lazily when a signed-in user needs it.
+const spacesTypProvisioner = createSpacesTypProvisioner({
+  dbQuery,
+  novaAdminRequest,
+  fetchNovaUserIdByUsername,
+  fetchTypWorkspaces,
+  randomPassword: () => crypto.randomBytes(18).toString("hex"),
+});
+
+function sendSpacesProvisioningFailure(res, error, { stream = false } = {}) {
+  const payload = buildSpacesProvisioningErrorPayload(error);
+  if (stream) {
+    sendChatStreamError(res, payload.error, {
+      code: payload.code,
+      retryable: payload.retryable,
+    });
+    return;
+  }
+  res.status(payload.status || 503).json(payload);
+}
+
+function sendSpacesAdapterConfigFailure(res, message, options = {}) {
+  sendSpacesProvisioningFailure(res, new Error(message), options);
+}
+
 async function fetchSessionWorkspaceSlugs(novaUserId) {
   return fetchTypWorkspaceSlugs(novaUserId);
 }
@@ -2806,20 +2838,6 @@ async function verifyWorkspaceDeleted(novaUserId, normalizedSlug, attempts = 3) 
     }
   }
   return { success: false, status: 502, error: "Workspace still visible after delete." };
-}
-
-async function resolveNovaUserIdForZakiUser(zakiUser, email) {
-  let novaUserId = zakiUser?.nova_user_id ? Number(zakiUser.nova_user_id) : null;
-  if (!novaUserId) {
-    novaUserId = await fetchNovaUserIdByUsername(email);
-    if (novaUserId && zakiUser?.id) {
-      await dbQuery(
-        `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
-        [Number(novaUserId), new Date().toISOString(), zakiUser.id]
-      );
-    }
-  }
-  return novaUserId;
 }
 
 function normalizeWorkspaceDocument(document) {
@@ -3055,12 +3073,40 @@ async function requireWorkspaceAccess(req, res) {
     return null;
   }
 
-  let novaUserId = zakiUser.nova_user_id ? Number(zakiUser.nova_user_id) : null;
-  if (!novaUserId) {
-    novaUserId = await resolveNovaUserIdForZakiUser(zakiUser, email);
+  const requestedThreadSlug = String(req.params.threadSlug || "").trim();
+  let novaUserId;
+  if (isAnonymousSpacesRouteTarget(slug, requestedThreadSlug)) {
+    try {
+      const target = await spacesTypProvisioner.ensureDefaultSpacesWorkspace({
+        zakiUser,
+        email,
+      });
+      const remappedRoute = target.threadSlug
+        ? `/spaces/${target.workspaceSlug}/threads/${target.threadSlug}`
+        : `/spaces/${target.workspaceSlug}`;
+      res.setHeader("X-Zaki-Spaces-Route", remappedRoute);
+      return {
+        authResult,
+        email,
+        zakiUser,
+        slug: target.workspaceSlug,
+        threadSlug: target.threadSlug || requestedThreadSlug,
+        novaUserId: target.novaUserId,
+        remappedRoute,
+      };
+    } catch (error) {
+      sendSpacesProvisioningFailure(res, error);
+      return null;
+    }
   }
-  if (!novaUserId) {
-    res.status(403).json({ error: "Workspace access requires a linked TYP account." });
+
+  try {
+    novaUserId = await spacesTypProvisioner.ensureTypUserForZakiUser(zakiUser, email, {
+      validateStored: true,
+      reason: "workspace_access",
+    });
+  } catch (error) {
+    sendSpacesProvisioningFailure(res, error);
     return null;
   }
 
@@ -3081,6 +3127,8 @@ async function requireWorkspaceAccess(req, res) {
     email,
     zakiUser,
     slug,
+    threadSlug: requestedThreadSlug,
+    novaUserId,
   };
 }
 
@@ -4766,17 +4814,26 @@ const listWorkspacesHandler = async (req, res) => {
   try {
     const authResult = await requireAuthUser(req, res);
     if (!authResult) return;
-    const { zakiUser } = authResult;
+    const { email, zakiUser } = authResult;
 
-    let novaUserId = zakiUser.nova_user_id ? Number(zakiUser.nova_user_id) : null;
-    if (!novaUserId) {
-      novaUserId = await resolveNovaUserIdForZakiUser(zakiUser, zakiUser.email);
-    }
-    if (!novaUserId) {
-      res.status(403).json({
-        success: false,
-        error: "Workspace listing requires a linked TYP account.",
+    let bootstrap = null;
+    let novaUserId;
+    try {
+      novaUserId = await spacesTypProvisioner.ensureTypUserForZakiUser(zakiUser, email, {
+        validateStored: true,
+        reason: "workspace_list",
       });
+      const workspaceTarget = await spacesTypProvisioner.ensureDefaultSpacesWorkspace({
+        zakiUser,
+        email,
+      });
+      bootstrap = workspaceTarget?.created || workspaceTarget?.repaired ? workspaceTarget : null;
+      novaUserId = workspaceTarget?.novaUserId || novaUserId;
+      if (bootstrap?.workspaceSlug) {
+        await unhideWorkspaceForUser(zakiUser.id, bootstrap.workspaceSlug);
+      }
+    } catch (error) {
+      sendSpacesProvisioningFailure(res, error);
       return;
     }
 
@@ -4790,8 +4847,26 @@ const listWorkspacesHandler = async (req, res) => {
       return;
     }
 
+    const upstreamWorkspaces =
+      data.workspaces.length > 0 || !bootstrap?.workspaceSlug
+        ? data.workspaces
+        : [
+            {
+              ...(bootstrap.workspace || {}),
+              slug: bootstrap.workspaceSlug,
+              name: bootstrap.workspace?.name || "Spaces",
+              threads: [
+                bootstrap.thread || {
+                  slug: bootstrap.threadSlug,
+                  id: bootstrap.threadSlug,
+                  name: DEFAULT_SPACES_THREAD_NAME,
+                },
+              ].filter((thread) => thread?.slug || thread?.id),
+            },
+          ];
+
     const hiddenSlugs = await listHiddenWorkspaceSlugsForUser(zakiUser.id);
-    const filtered = data.workspaces.filter((workspace) => {
+    const filtered = upstreamWorkspaces.filter((workspace) => {
       const slug = String(workspace?.slug || "").trim().toLowerCase();
       return slug && (hiddenSlugs.size === 0 || !hiddenSlugs.has(slug));
     });
@@ -6232,39 +6307,8 @@ const passwordResetConfirmHandler = async (req, res) => {
       return;
     }
 
-    let novaUserId = zakiUser.nova_user_id
-      ? Number(zakiUser.nova_user_id)
-      : null;
-    if (!novaUserId) {
-      const fetchedId = await fetchNovaUserIdByUsername(zakiUser.email);
-      if (fetchedId) {
-        novaUserId = Number(fetchedId);
-        await dbQuery(
-          `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
-          [novaUserId, nowIso, zakiUser.id]
-        );
-      }
-    }
-
-    if (novaUserId) {
-      const novaResponse = await novaAdminRequest(`/v1/admin/users/${novaUserId}`, {
-        method: "POST",
-        body: JSON.stringify({ password: String(nextPassword) }),
-      });
-      const novaPayload = await novaResponse.json().catch(() => ({}));
-      if (!novaResponse.ok || novaPayload?.success === false) {
-        const errorMessage =
-          novaPayload?.error ||
-          (novaResponse.status === 401
-            ? "NOVA.TYP is not in multi-user mode."
-            : "Unable to update NOVA.TYP password.");
-        res.status(400).json({
-          success: false,
-          error: errorMessage,
-        });
-        return;
-      }
-    }
+    // TYP password sync is retired. Spaces provisions legacy adapter users lazily
+    // with random TYP-only passwords; ZAKI-native auth must not depend on TYP.
 
     await dbQuery(
       `UPDATE password_reset_tokens SET used_at = $1 WHERE id = $2`,
@@ -9424,13 +9468,7 @@ const createThreadHandler = async (req, res) => {
     const access = await requireWorkspaceAccess(req, res);
     if (!access) return;
 
-    const novaUserId = await resolveNovaUserIdForZakiUser(access.zakiUser, access.email);
-    if (!novaUserId) {
-      res.status(400).json({
-        error: "NOVA.TYP user not found. Please log out and log back in.",
-      });
-      return;
-    }
+    const novaUserId = access.novaUserId;
 
     const payload = { userId: Number(novaUserId) };
     const requestedName = String(req.body?.name || "").trim();
@@ -9471,7 +9509,7 @@ const updateThreadHandler = async (req, res) => {
     const access = await requireWorkspaceAccess(req, res);
     if (!access) return;
 
-    const threadSlug = String(req.params.threadSlug || "").trim();
+    const threadSlug = String(access.threadSlug || req.params.threadSlug || "").trim();
     const name = String(req.body?.name || "").trim();
     if (!threadSlug || !name) {
       res.status(400).json({ error: "Thread slug and name are required." });
@@ -9538,7 +9576,7 @@ const deleteThreadHandler = async (req, res) => {
     const access = await requireWorkspaceAccess(req, res);
     if (!access) return;
 
-    const threadSlug = String(req.params.threadSlug || "").trim();
+    const threadSlug = String(access.threadSlug || req.params.threadSlug || "").trim();
     if (!threadSlug) {
       res.status(400).json({ error: "Thread slug is required." });
       return;
@@ -9572,7 +9610,7 @@ const getThreadChatsHandler = async (req, res) => {
     const access = await requireWorkspaceAccess(req, res);
     if (!access) return;
 
-    const threadSlug = String(req.params.threadSlug || "").trim();
+    const threadSlug = String(access.threadSlug || req.params.threadSlug || "").trim();
     if (!threadSlug) {
       res.status(400).json({ error: "Thread slug is required." });
       return;
@@ -9771,45 +9809,6 @@ app.post(
   removeWorkspaceDocumentsHandler
 );
 
-// Re-provision a TYP user when a stored nova_user_id is stale/invalid (engine switched, TYP user
-// deleted, etc.). Finds the user by email/username on the current engine, else creates one, then
-// persists the corrected id on the ZAKI user. The TYP password is unused — ZAKI owns auth.
-async function ensureValidNovaUserIdForUser(zakiUser, email) {
-  // Provision with a stable, sanitized handle (`u<zakiUserId>`) — valid under TYP's username regex
-  // and decoupled from the email (raw emails with '+', uppercase, or a leading digit are rejected).
-  const handle = `u${Number(zakiUser?.id)}`;
-  // Existing users may have been provisioned with their email as the username — match either.
-  let id = (await fetchNovaUserIdByUsername(handle)) || (await fetchNovaUserIdByUsername(email));
-  if (!id) {
-    try {
-      const createResponse = await novaAdminRequest("/v1/admin/users/new", {
-        method: "POST",
-        body: JSON.stringify({
-          username: handle,
-          password: crypto.randomBytes(18).toString("hex"),
-          role: "default",
-        }),
-      });
-      const payload = await createResponse.json().catch(() => ({}));
-      if (createResponse.ok && payload?.user?.id) {
-        id = payload.user.id;
-      } else if (String(payload?.error || "").toLowerCase().includes("exists")) {
-        id = await fetchNovaUserIdByUsername(handle);
-      }
-    } catch (_e) {
-      /* fall through to null */
-    }
-  }
-  if (id && zakiUser?.id && Number(id) !== Number(zakiUser.nova_user_id || 0)) {
-    await dbQuery(
-      `UPDATE zaki_users SET nova_user_id = $1, updated_at = $2 WHERE id = $3`,
-      [Number(id), new Date().toISOString(), zakiUser.id]
-    );
-    zakiUser.nova_user_id = Number(id);
-  }
-  return id ? Number(id) : null;
-}
-
 const createWorkspaceHandler = async (req, res) => {
   try {
     const authResult = await requireAuthUser(req, res);
@@ -9821,15 +9820,14 @@ const createWorkspaceHandler = async (req, res) => {
       return;
     }
 
-    let novaUserId = await resolveNovaUserIdForZakiUser(zakiUser, email);
-    if (!novaUserId) {
-      // No stored/derivable id — provision one on the current engine before failing.
-      novaUserId = await ensureValidNovaUserIdForUser(zakiUser, email);
-    }
-    if (!novaUserId) {
-      res.status(400).json({
-        error: "NOVA.TYP user not found. Please log out and log back in.",
+    let novaUserId;
+    try {
+      novaUserId = await spacesTypProvisioner.ensureTypUserForZakiUser(zakiUser, email, {
+        validateStored: true,
+        reason: "workspace_create",
       });
+    } catch (error) {
+      sendSpacesProvisioningFailure(res, error);
       return;
     }
 
@@ -9867,7 +9865,16 @@ const createWorkspaceHandler = async (req, res) => {
     if (!assignResponse.ok || assignData?.success === false) {
       // Most common cause: a stale nova_user_id (engine switched / TYP user gone) →
       // "No valid user IDs provided." Re-provision the TYP user and retry once.
-      const validId = await ensureValidNovaUserIdForUser(zakiUser, email);
+      let validId = null;
+      try {
+        validId = await spacesTypProvisioner.ensureTypUserForZakiUser(zakiUser, email, {
+          forceRefresh: true,
+          reason: "workspace_assign_retry",
+        });
+      } catch (error) {
+        sendSpacesProvisioningFailure(res, error);
+        return;
+      }
       if (validId && Number(validId) !== Number(novaUserId)) {
         novaUserId = Number(validId);
         assignResponse = await assignMembership(novaUserId);
@@ -9948,13 +9955,19 @@ const deleteWorkspaceHandler = async (req, res) => {
     }
     const normalizedSlug = slug.toLowerCase();
 
-    if (!zakiUser.nova_user_id) {
-      res.status(403).json({ success: false, error: "Workspace access requires a linked TYP account." });
+    let novaUserId;
+    try {
+      novaUserId = await spacesTypProvisioner.ensureTypUserForZakiUser(zakiUser, email, {
+        validateStored: true,
+        reason: "workspace_delete",
+      });
+    } catch (error) {
+      sendSpacesProvisioningFailure(res, error);
       return;
     }
 
     // Permission scope: only allow deleting a workspace currently visible to this session user.
-    const accessCheck = await workspaceVisibleForSession(zakiUser.nova_user_id, normalizedSlug);
+    const accessCheck = await workspaceVisibleForSession(novaUserId, normalizedSlug);
     if (!accessCheck.success) {
       res.status(accessCheck.status || 502).json({
         success: false,
@@ -10021,7 +10034,7 @@ const deleteWorkspaceHandler = async (req, res) => {
     }
 
     // Strong consistency check: confirm workspace is gone for this user before reporting success.
-    const verification = await verifyWorkspaceDeleted(zakiUser.nova_user_id, normalizedSlug);
+    const verification = await verifyWorkspaceDeleted(novaUserId, normalizedSlug);
     if (!verification.success) {
       if (ZAKI_WORKSPACE_SOFT_HIDE_FALLBACK_ENABLED) {
         await hideWorkspaceForUser(
@@ -10702,6 +10715,106 @@ app.post(
   anonymousStreamChatHandler
 );
 
+function sanitizeAnonymousClaimText(value, maxLength) {
+  return String(value || "")
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+function buildAnonymousClaimThreadName(body) {
+  return (
+    sanitizeAnonymousClaimText(body?.title, 96) ||
+    sanitizeAnonymousClaimText(body?.prompt, 96) ||
+    DEFAULT_SPACES_THREAD_NAME
+  );
+}
+
+const claimAnonymousSpacesWorkHandler = async (req, res) => {
+  try {
+    const authResult = await requireAuthUser(req, res);
+    if (!authResult) return;
+    const { email, zakiUser } = authResult;
+
+    if (!zakiUser.verified) {
+      res.status(403).json({ success: false, error: "Email is not verified." });
+      return;
+    }
+
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const prompt = sanitizeAnonymousClaimText(body.prompt, 800);
+    const replyPreview = sanitizeAnonymousClaimText(body.replyPreview, 800);
+    const workId = sanitizeAnonymousClaimText(body.workId, 120) || null;
+    const sourceThreadId = sanitizeAnonymousClaimText(body.threadId, 120) || null;
+    const sourceRoute = sanitizeAnonymousClaimText(body.route, 240) || null;
+
+    if (!prompt && !replyPreview && !sourceRoute) {
+      res.status(400).json({
+        success: false,
+        error: "Saved Spaces work is required.",
+        code: "anonymous_work_required",
+      });
+      return;
+    }
+
+    let target;
+    try {
+      target = await spacesTypProvisioner.ensureDefaultSpacesWorkspace({
+        zakiUser,
+        email,
+      });
+    } catch (error) {
+      sendSpacesProvisioningFailure(res, error);
+      return;
+    }
+
+    let threadSlug = target.threadSlug || null;
+    if (!threadSlug) {
+      try {
+        const createdThread = await spacesTypProvisioner.createThreadInWorkspace({
+          workspaceSlug: target.workspaceSlug,
+          novaUserId: target.novaUserId,
+          name: buildAnonymousClaimThreadName(body),
+        });
+        threadSlug = createdThread.threadSlug || threadSlug;
+      } catch (error) {
+        console.warn("[AnonymousSpaces] Claim thread create skipped:", error?.message || error);
+      }
+    }
+
+    const route = threadSlug
+      ? `/spaces/${target.workspaceSlug}/threads/${threadSlug}`
+      : `/spaces/${target.workspaceSlug}`;
+
+    res.status(200).json({
+      success: true,
+      workspaceSlug: target.workspaceSlug,
+      threadSlug,
+      route,
+      imported: false,
+      workId,
+      sourceThreadId,
+      sourceRoute,
+      message: "Browser-saved Spaces work is ready to continue.",
+    });
+  } catch (error) {
+    console.error("[AnonymousSpaces] Claim error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Unable to continue browser-saved Spaces work.",
+      code: "anonymous_work_claim_failed",
+      retryable: true,
+    });
+  }
+};
+
+app.post(
+  "/api/spaces/anonymous-work/claim",
+  express.json({ limit: "50kb" }),
+  claimAnonymousSpacesWorkHandler
+);
+
 /**
  * Intercept stream-chat requests to inject memory context
  * Route: POST /workspace/:slug/thread/:threadSlug/stream-chat
@@ -10713,7 +10826,10 @@ const streamChatHandler = async (req, res) => {
     const apiBase = getApiBase();
     if (!apiBase) {
       console.error('[Chat] NOVA_TYP_BASE_URL not configured');
-      return res.status(500).json({ error: "NOVA_TYP_BASE_URL is not configured." });
+      sendSpacesAdapterConfigFailure(res, "NOVA_TYP_BASE_URL is not configured.", {
+        stream: String(req.headers.accept || "").includes("text/event-stream"),
+      });
+      return;
     }
 
     const authResult = await requireAuthUser(req, res);
@@ -10725,8 +10841,36 @@ const streamChatHandler = async (req, res) => {
     const zakiUser = authResult.zakiUser;
     console.log(`[Chat] User: ${userEmail}`);
 
-    if (!zakiUser.nova_user_id) {
-      return res.status(403).json({ error: "Chat requires a linked TYP account." });
+    let { slug, threadSlug } = req.params;
+    let novaUserId;
+    let remappedSpacesRoute = "";
+    try {
+      if (isAnonymousSpacesRouteTarget(slug, threadSlug)) {
+        const target = await spacesTypProvisioner.ensureDefaultSpacesWorkspace({
+          zakiUser,
+          email: userEmail,
+        });
+        novaUserId = target.novaUserId;
+        slug = target.workspaceSlug || slug;
+        threadSlug = target.threadSlug || threadSlug;
+        remappedSpacesRoute = threadSlug
+          ? `/spaces/${slug}/threads/${threadSlug}`
+          : `/spaces/${slug}`;
+      } else {
+        novaUserId = await spacesTypProvisioner.ensureTypUserForZakiUser(zakiUser, userEmail, {
+          validateStored: true,
+          reason: "chat_stream",
+        });
+      }
+      zakiUser.nova_user_id = novaUserId;
+    } catch (error) {
+      sendSpacesProvisioningFailure(res, error, {
+        stream: String(req.headers.accept || "").includes("text/event-stream"),
+      });
+      return;
+    }
+    if (remappedSpacesRoute) {
+      res.setHeader("X-Zaki-Spaces-Route", remappedSpacesRoute);
     }
 
     const requestPayload = req.body;
@@ -10790,8 +10934,6 @@ const streamChatHandler = async (req, res) => {
     // now flow through always-on memory injection + the LLM (no deterministic
     // short-circuit). The always-on identity core guarantees the stable facts
     // are present in context for these turns.
-
-    const { slug, threadSlug } = req.params;
 
     const disableResponseEnvelope = requestPayload?.disableResponseEnvelope === true;
     // Single Auto mode: every non-"query" turn routes through the agent path. Only an explicit
@@ -10963,7 +11105,7 @@ const streamChatHandler = async (req, res) => {
     let typSessionToken = null;
     if (!isAgentTurn) {
       try {
-        typSessionToken = await getTypUserSessionToken(zakiUser.nova_user_id);
+        typSessionToken = await getTypUserSessionToken(novaUserId);
       } catch (sessErr) {
         console.error("[Chat] TYP session mint failed:", sessErr?.message);
       }
@@ -10978,7 +11120,7 @@ const streamChatHandler = async (req, res) => {
     if (upstreamResponse.status === 401 && typSessionToken) {
       console.warn("[Chat] TYP 401 with cached session — re-minting and retrying once");
       try {
-        typSessionToken = await getTypUserSessionToken(zakiUser.nova_user_id, { forceRefresh: true });
+        typSessionToken = await getTypUserSessionToken(novaUserId, { forceRefresh: true });
         upstreamResponse = await requestTypChatStream(
           targetUrl,
           upstreamPayload,
@@ -11066,7 +11208,7 @@ const streamChatHandler = async (req, res) => {
       });
       try {
         if (streamMetrics?.generatedFiles?.length) {
-          await recordGeneratedFiles(dbQuery, { zakiUserId: zakiUser.nova_user_id, workspaceSlug: slug, threadSlug }, streamMetrics.generatedFiles);
+          await recordGeneratedFiles(dbQuery, { zakiUserId: novaUserId, workspaceSlug: slug, threadSlug }, streamMetrics.generatedFiles);
         }
       } catch (e) { console.warn("[GeneratedFiles] capture failed:", e.message); }
     } else {
@@ -11133,22 +11275,31 @@ app.get("/api/spaces/:spaceId/files/:storageFilename", async (req, res) => {
   try {
     const authResult = await requireAuthUser(req, res);
     if (!authResult) return;
-    const zakiUser = authResult.zakiUser;
-    if (!zakiUser?.nova_user_id) {
-      return res.status(401).json({ error: "Chat requires a linked TYP account." });
+    const { email, zakiUser } = authResult;
+    let novaUserId;
+    try {
+      novaUserId = await spacesTypProvisioner.ensureTypUserForZakiUser(zakiUser, email, {
+        validateStored: true,
+        reason: "generated_file_download",
+      });
+    } catch (error) {
+      sendSpacesProvisioningFailure(res, error);
+      return;
     }
 
     const { storageFilename } = req.params;
-    if (!await userOwnsGeneratedFile(dbQuery, storageFilename, zakiUser.nova_user_id)) {
+    if (!await userOwnsGeneratedFile(dbQuery, storageFilename, novaUserId)) {
       return res.status(404).json({ error: "not found" });
     }
 
     const apiBase = getApiBase();
     if (!apiBase) {
-      return res.status(500).json({ error: "NOVA_TYP_BASE_URL is not configured." });
+      sendSpacesAdapterConfigFailure(res, "NOVA_TYP_BASE_URL is not configured.");
+      return;
     }
     if (!NOVA_TYP_API_KEY) {
-      return res.status(500).json({ error: "NOVA_TYP_API_KEY is not configured." });
+      sendSpacesAdapterConfigFailure(res, "NOVA_TYP_API_KEY is not configured.");
+      return;
     }
 
     const upstream = await fetchWithTimeout(
@@ -11704,8 +11855,8 @@ const agentChatStreamHandler = async (req, res) => {
 
     // B4 (P1-16): server-side ensure-provisioned (reactive). If the first write
     // to the engine fails with a foreign-key / user-not-found error, re-provision
-    // and retry the stream EXACTLY ONCE — mirroring the TYP re-provision-and-retry
-    // pattern (ensureValidNovaUserIdForUser). A re-provision failure leaves the
+    // and retry the stream EXACTLY ONCE — mirroring the Spaces adapter
+    // re-provision-and-retry pattern. A re-provision failure leaves the
     // original upstream untouched so it flows through the normal failure paths.
     const requestUpstreamStream = () =>
       requestNullclawChatStream({

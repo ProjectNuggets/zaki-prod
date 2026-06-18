@@ -6031,6 +6031,11 @@ export function ChatArea() {
 
     console.log(`[Chat] Response status: ${response.status}`);
     const agentBaseHeader = response.headers.get("x-zaki-agent-base");
+    const spacesRouteHeader = response.headers.get("x-zaki-spaces-route") || "";
+    const buildStreamResult = (content: string) => ({
+      content,
+      ...(spacesRouteHeader ? { spacesRoute: spacesRouteHeader } : {}),
+    });
 
     if (!response.ok) {
       console.error(`[Chat] Stream failed: ${response.status}`);
@@ -6613,17 +6618,17 @@ export function ChatArea() {
       const agentUrl = resolveAgentUrl(data);
       if (agentUrl) {
         await streamAgentInvocation(agentUrl, threadSlug, assistantId, signal);
-        return { content: "" };
+        return buildStreamResult("");
       }
 
       const result = readPayloadChunk(data);
       if (result.agentUrl) {
         await streamAgentInvocation(result.agentUrl, threadSlug, assistantId, signal);
-        return { content: "" };
+        return buildStreamResult("");
       }
       if (result.chunk) {
         if (isZakiAgentSpace && isInternalAgentReplyContent(result.chunk, { streaming: false })) {
-          return { content: "" };
+          return buildStreamResult("");
         }
         const normalized = normalizeAssistantFormatting(message, result.chunk);
         updateAssistantContent(
@@ -6631,7 +6636,7 @@ export function ChatArea() {
           assistantId,
           normalized
         );
-        return { content: normalized };
+        return buildStreamResult(normalized);
       }
       if (result.done) {
         sawTerminalEvent = true;
@@ -6639,7 +6644,7 @@ export function ChatArea() {
       if (isZakiAgentSpace && !sawTerminalEvent && !signal?.aborted) {
         finalizeZakiBotProgress("stream_end");
       }
-      return { content: "" };
+      return buildStreamResult("");
     }
 
     if (!response.body) {
@@ -6820,7 +6825,7 @@ export function ChatArea() {
     if (finalized && finalized !== accumulated) {
       updateAssistantContent(threadSlug, assistantId, finalized);
     }
-    return { content: finalized || accumulated };
+    return buildStreamResult(finalized || accumulated);
   }, [
     appendAssistantAgentStep,
     appendAssistantGeneratedFile,
@@ -7755,10 +7760,25 @@ export function ChatArea() {
           await hydrateActiveSessionDetail(sessionKey);
         }
       }
-      void maybeAutoTitleThread(resolvedWorkspaceSlug, threadId, {
-        userMessage: trimmed,
-        assistantMessage: String(streamResult?.content || "").trim(),
-      });
+      const assistantReply = String(streamResult?.content || "").trim();
+      const remappedSpacesRoute =
+        typeof streamResult?.spacesRoute === "string" && streamResult.spacesRoute.startsWith("/spaces/")
+          ? streamResult.spacesRoute
+          : "";
+      const remappedTarget = remappedSpacesRoute.match(
+        /^\/spaces\/([^/?#]+)(?:\/threads\/([^/?#]+))?/
+      );
+      if (remappedSpacesRoute) {
+        navigate(remappedSpacesRoute, { replace: true });
+      }
+      void maybeAutoTitleThread(
+        remappedTarget?.[1] ? decodeURIComponent(remappedTarget[1]) : resolvedWorkspaceSlug,
+        remappedTarget?.[2] ? decodeURIComponent(remappedTarget[2]) : threadId,
+        {
+          userMessage: trimmed,
+          assistantMessage: assistantReply,
+        }
+      );
       if (anonymousWork) {
         const productId = isZakiBotTarget ? "agent" : "spaces";
         upsertAnonymousWorkItem({

@@ -229,11 +229,3 @@ export function upsertAnonymousWorkItem(input: AnonymousWorkInput, now = Date.no
   );
   return item;
 }
-
-export function clearAnonymousWorkLedger() {
-  try {
-    getStorage()?.removeItem(ANONYMOUS_WORK_LEDGER_KEY);
-  } catch {
-    // Best-effort local cleanup only.
-  }
-}
