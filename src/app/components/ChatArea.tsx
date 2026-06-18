@@ -53,6 +53,7 @@ import {
   type AgentTask,
   type AgentExtensionDiagnosticsResponse,
   type AgentSessionContext,
+  type MeterAvailableNow,
   type MeterStatusResponse,
 } from "@/lib/api";
 import {
@@ -259,17 +260,63 @@ type ChatDenialDetails = {
   requiredUnits?: number | null;
   effectiveRemaining?: number | null;
   resetAt?: string | null;
-  meter?: {
-    availableNow?: {
-      agent?: {
-        constraint?: string | null;
-        requiredReserveUnits?: number | null;
-        effectiveRemaining?: number | null;
-        resetAt?: string | null;
-      } | null;
-    } | null;
-  } | null;
+  meter?: MeterStatusResponse | null;
 } | null;
+
+export function isMeterAvailabilityBlocked(availability?: MeterAvailableNow | null) {
+  if (!availability) return false;
+  if (availability.available === false) return true;
+  const remaining =
+    typeof availability.effectiveRemaining === "number"
+      ? availability.effectiveRemaining
+      : null;
+  const required =
+    typeof availability.requiredReserveUnits === "number"
+      ? availability.requiredReserveUnits
+      : null;
+  return remaining != null && required != null && remaining < required;
+}
+
+export function buildAgentComposerUsageState({
+  isAgentActive,
+  availability,
+  rollingWindow,
+  isRtl = false,
+  dangerLabel,
+}: {
+  isAgentActive: boolean;
+  availability?: MeterAvailableNow | null;
+  rollingWindow?: MeterStatusResponse["rolling"];
+  isRtl?: boolean;
+  dangerLabel: string;
+}) {
+  const locked = isAgentActive && isMeterAvailabilityBlocked(availability);
+  const windowHours =
+    typeof rollingWindow?.windowHours === "number" ? rollingWindow.windowHours : 5;
+  const rollingUsagePercent = getUsagePercent({
+    used: rollingWindow?.used,
+    limit: rollingWindow?.limit,
+  });
+  const rollingUsagePercentRounded = getRoundedUsagePercent(rollingUsagePercent);
+  const badge =
+    isAgentActive && typeof rollingWindow?.limit === "number"
+      ? {
+          label:
+            locked && availability?.constraint !== "rolling"
+              ? dangerLabel
+              : isRtl
+                ? `نافذة ${windowHours} ساعات ${rollingUsagePercentRounded}% مستخدمة`
+                : `${windowHours}h window ${rollingUsagePercentRounded}% used`,
+          tone: locked
+            ? ("danger" as const)
+            : rollingUsagePercent >= 80
+              ? ("warning" as const)
+              : ("neutral" as const),
+        }
+      : null;
+
+  return { locked, badge };
+}
 
 export class ChatRequestError extends Error {
   status: number;
@@ -338,8 +385,19 @@ export function buildBillingPaywallCardData({
   const resetAt =
     error.denialDetails?.resetAt ||
     agentAvailability?.resetAt ||
+    (constraint === "rolling"
+      ? error.denialDetails?.meter?.rolling?.resetAt || meterStatus?.rolling?.resetAt
+      : null) ||
     meterStatus?.weekly?.resetAt ||
     null;
+  const rollingWindow =
+    isAgentTarget
+      ? error.denialDetails?.meter?.rolling ?? meterStatus?.rolling ?? null
+      : null;
+  const rollingWindowPercent =
+    typeof rollingWindow?.limit === "number" && typeof rollingWindow?.used === "number"
+      ? getUsagePercent({ used: rollingWindow.used, limit: rollingWindow.limit })
+      : null;
 
   return {
     state: paywallState,
@@ -348,6 +406,9 @@ export function buildBillingPaywallCardData({
     effectiveRemaining,
     requiredUnits,
     constraint,
+    rollingWindowPercent,
+    rollingWindowHours:
+      typeof rollingWindow?.windowHours === "number" ? rollingWindow.windowHours : undefined,
     resetAt,
     message: error.message,
   };
@@ -3141,6 +3202,8 @@ export function ChatArea() {
     effectiveRemaining?: number;
     requiredUnits?: number;
     constraint?: string | null;
+    rollingWindowPercent?: number | null;
+    rollingWindowHours?: number | null;
     resetAt?: string | null;
     message: string;
   } | null>(null);
@@ -3645,8 +3708,8 @@ export function ChatArea() {
   }, [isZakiBotActiveSpace, setZakiSandboxState]);
   const headerThreadName = activeThread?.label || chatCopy.newChat;
 
-  const zakiBotQuotaInfo =
-    isZakiBotActiveSpace &&
+  const legacyQuotaInfo =
+    !isZakiBotActiveSpace &&
     freeDailyQuota &&
     !freeDailyQuota.unlimited &&
     typeof freeDailyQuota.limit === "number"
@@ -3677,6 +3740,18 @@ export function ChatArea() {
     limit: meterResult?.data?.weekly?.limit,
   });
   const weeklyUsagePercentRounded = getRoundedUsagePercent(weeklyUsagePercent);
+  const agentAvailability = isZakiBotActiveSpace
+    ? meterResult?.data?.availableNow?.agent ?? null
+    : null;
+  const agentRollingWindow = isZakiBotActiveSpace ? meterResult?.data?.rolling ?? null : null;
+  const agentComposerUsageState = buildAgentComposerUsageState({
+    isAgentActive: isZakiBotActiveSpace,
+    availability: agentAvailability,
+    rollingWindow: agentRollingWindow,
+    isRtl,
+    dangerLabel: chatCopy.quotaBadgeDanger,
+  });
+  const agentCapacityBlocked = agentComposerUsageState.locked;
   const agentWeeklyLabel =
     typeof meterResult?.data?.weekly?.limit === "number"
       ? t("agent.status.weeklyUsageValue", {
@@ -3686,10 +3761,11 @@ export function ChatArea() {
       : freeDailyQuota?.unlimited
         ? t("agent.status.weeklyIncluded", { defaultValue: "Included" })
         : t("agent.status.weeklySyncing", { defaultValue: "Syncing" });
-  const isZakiBotSendLocked = Boolean(
-    zakiBotQuotaInfo && zakiBotQuotaInfo.remaining <= 0
-  );
+  const isZakiBotSendLocked = isZakiBotActiveSpace
+    ? agentCapacityBlocked
+    : Boolean(legacyQuotaInfo && legacyQuotaInfo.remaining <= 0);
   const isComposerSendLocked = !isOnline || isZakiBotSendLocked;
+  const agentQuotaBadge = agentComposerUsageState.badge;
   const latestAssistantMessageContent = useMemo(() => {
     const latestAssistant = [...messages]
       .reverse()
@@ -5634,6 +5710,10 @@ export function ChatArea() {
   }, []);
 
   const refreshUsageQuota = useCallback(async () => {
+    if (isZakiBotActiveSpace) {
+      setFreeDailyQuota(null);
+      return;
+    }
     if (!authUserId) {
       setFreeDailyQuota({
         unlimited: false,
@@ -5669,7 +5749,7 @@ export function ChatArea() {
     } catch {
       // Best-effort status sync.
     }
-  }, [authUserId, quotaSurface]);
+  }, [authUserId, isZakiBotActiveSpace, quotaSurface]);
 
   useEffect(() => {
     void refreshUsageQuota();
@@ -9444,6 +9524,8 @@ export function ChatArea() {
                     effectiveRemaining={paywallCardData.effectiveRemaining}
                     requiredUnits={paywallCardData.requiredUnits}
                     constraint={paywallCardData.constraint}
+                    rollingWindowPercent={paywallCardData.rollingWindowPercent}
+                    rollingWindowHours={paywallCardData.rollingWindowHours}
                     resetAt={paywallCardData.resetAt}
                     message={paywallCardData.message}
                     onSeePlans={() => navigate("/pricing")}
@@ -9535,22 +9617,23 @@ export function ChatArea() {
                 }
                 zakiCompactionThresholdPct={agentCompactionNudgePercent}
                 quotaBadge={
-                  zakiBotQuotaInfo
+                  agentQuotaBadge ??
+                  (legacyQuotaInfo
                     ? {
                         label:
-                          zakiBotQuotaInfo.remaining <= 0
+                          legacyQuotaInfo.remaining <= 0
                             ? chatCopy.quotaBadgeDanger
-                            : zakiBotQuotaInfo.remaining <= 2
+                            : legacyQuotaInfo.remaining <= 2
                               ? chatCopy.quotaBadgeWarning
                               : chatCopy.quotaBadgeNeutral,
                         tone:
-                          zakiBotQuotaInfo.remaining <= 0
+                          legacyQuotaInfo.remaining <= 0
                             ? "danger"
-                            : zakiBotQuotaInfo.remaining <= 2
+                            : legacyQuotaInfo.remaining <= 2
                               ? "warning"
                               : "neutral",
                       }
-                    : null
+                    : null)
                 }
               />
             </div>

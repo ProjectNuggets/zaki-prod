@@ -479,6 +479,10 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.plan.syncBilling": "Sync billing",
     "settingsModal.plan.recurringRemaining": "Weekly room",
     "settingsModal.plan.topupBalance": "Extra capacity",
+    "settingsModal.plan.agentAvailableNow": "Agent available now",
+    "settingsModal.plan.agentAvailableNowReady": "Ready",
+    "settingsModal.plan.agentAvailableNowBlocked": "Needs more weekly room",
+    "settingsModal.plan.agentAvailableNowRollingBlocked": "{{hours}}h window {{percent}}% used; next room clears {{reset}}",
     "settingsModal.plan.billingSource": "Billing source",
     "settingsModal.plan.billingHealth": "Billing health",
     "settingsModal.plan.billingConfigured": "Configured",
@@ -803,9 +807,9 @@ jest.mock("@/queries", () => ({
         plan: { tier: "pro", label: "Pro", source: "subscription" },
         rolling: {
           windowHours: 5,
-          limit: 100,
+          limit: 40,
           used: 20,
-          remaining: 80,
+          remaining: 20,
           resetAt: "2026-05-20T12:00:00.000Z",
         },
         weekly: {
@@ -815,6 +819,17 @@ jest.mock("@/queries", () => ({
           topupUnits: 500,
           remaining: 1920,
           resetAt: "2026-05-25T00:00:00.000Z",
+        },
+        availableNow: {
+          agent: {
+            available: false,
+            requiredReserveUnits: 40,
+            effectiveRemaining: 20,
+            weeklyRemaining: 1420,
+            rollingRemaining: 20,
+            constraint: "rolling",
+            resetAt: "2026-05-20T12:00:00.000Z",
+          },
         },
         products: {
           spaces: {
@@ -1339,10 +1354,12 @@ describe("SettingsPage", () => {
     expect(weeklyMeter.queryByText("Used")).not.toBeInTheDocument();
     expect(weeklyMeter.queryByText("Remaining")).not.toBeInTheDocument();
     expect(burstMeter.getByText("Burst window")).toBeInTheDocument();
-    expect(burstMeter.getAllByText("20% of this capacity window").length).toBeGreaterThan(0);
+    expect(burstMeter.getAllByText("50% of this capacity window").length).toBeGreaterThan(0);
     expect(burstMeter.queryByText("80 / 100 left")).not.toBeInTheDocument();
     expect(billing.getByText("Weekly room")).toBeInTheDocument();
     expect(billing.getByText("Extra capacity")).toBeInTheDocument();
+    expect(billing.getByText("Agent available now")).toBeInTheDocument();
+    expect(billing.getByText(/5h window 50% used; next room clears/)).toBeInTheDocument();
     expect(billing.queryByText("1,420")).not.toBeInTheDocument();
     expect(billing.queryByText("500")).not.toBeInTheDocument();
     expect(billing.getByText("Billing source")).toBeInTheDocument();

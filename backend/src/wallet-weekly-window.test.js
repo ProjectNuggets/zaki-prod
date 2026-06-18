@@ -115,7 +115,11 @@ describe("readMeterSnapshotForIdentity wallet override", () => {
     const dbGet = jest
       .fn()
       .mockResolvedValueOnce({ anchor_at: "2026-05-20T00:00:00.000Z" })
-      .mockResolvedValueOnce({ weighted_units: 4, receipts: 2 });
+      .mockResolvedValueOnce({
+        weighted_units: 4,
+        receipts: 2,
+        first_active_at: "2026-06-03T06:15:00.000Z",
+      });
     const dbAll = jest
       .fn()
       .mockResolvedValueOnce([])
@@ -157,9 +161,11 @@ describe("readMeterSnapshotForIdentity wallet override", () => {
         used: 4,
         receipts: 2,
         remaining: 16,
+        resetAt: "2026-06-03T11:15:00.000Z",
         source: "wallet_unit_ledger",
       })
     );
+    expect(dbGet.mock.calls[1][0]).toMatch(/reserved_at > \$3::timestamptz/);
     expect(snapshot.products).toEqual({
       agent: {
         rolling: { used: 3, receipts: 1 },

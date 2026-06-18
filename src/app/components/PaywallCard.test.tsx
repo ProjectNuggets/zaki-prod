@@ -33,12 +33,15 @@ describe("PaywallCard", () => {
         effectiveRemaining={20}
         requiredUnits={40}
         constraint="rolling"
+        rollingWindowPercent={100}
+        rollingWindowHours={5}
         resetAt="2026-06-20T00:00:00Z"
         {...base}
       />
     );
     expect(screen.getByText(/current capacity window needs room/i)).toBeInTheDocument();
-    expect(screen.getByText(/Current window is refreshing/i)).toBeInTheDocument();
+    expect(screen.getByText(/5-hour window is 100% used/i)).toBeInTheDocument();
+    expect(screen.getByText(/next room clears/i)).toBeInTheDocument();
     expect(screen.queryByText(/20 available now/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/40 needed/i)).not.toBeInTheDocument();
   });

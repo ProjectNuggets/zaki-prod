@@ -315,6 +315,16 @@ function formatUsageReset(value?: string | null) {
   });
 }
 
+function formatUsageClearTime(value?: string | null) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function getMeterWindowLabel(
   t: (key: string, options?: Record<string, unknown>) => string,
   snapshot?: MeterWindowSnapshot | null,
@@ -1027,14 +1037,31 @@ export function SettingsPage() {
           defaultValue: "Deferred for this release",
         });
   const agentAvailableNow = meterStatus?.availableNow?.agent ?? null;
+  const rollingWindowHours =
+    typeof meterStatus?.rolling?.windowHours === "number" ? meterStatus.rolling.windowHours : 5;
+  const rollingUsagePercentRounded = getRoundedUsagePercent(
+    getUsagePercent({
+      used: meterStatus?.rolling?.used,
+      limit: meterStatus?.rolling?.limit,
+    })
+  );
+  const rollingClearTime = formatUsageClearTime(
+    agentAvailableNow?.resetAt || meterStatus?.rolling?.resetAt
+  );
   const agentAvailableNowLabel =
     agentAvailableNow?.available === false
-      ? t("settingsModal.plan.agentAvailableNowBlocked", {
-          defaultValue:
-            agentAvailableNow.constraint === "rolling"
-              ? "Current window is refreshing"
-              : "Needs more weekly room",
-        })
+      ? agentAvailableNow.constraint === "rolling"
+        ? t("settingsModal.plan.agentAvailableNowRollingBlocked", {
+            hours: rollingWindowHours,
+            percent: rollingUsagePercentRounded,
+            reset: rollingClearTime || t("settingsModal.usage.resetPending"),
+            defaultValue: `${rollingWindowHours}h window ${rollingUsagePercentRounded}% used; next room clears ${
+              rollingClearTime || t("settingsModal.usage.resetPending")
+            }`,
+          })
+        : t("settingsModal.plan.agentAvailableNowBlocked", {
+            defaultValue: "Needs more weekly room",
+          })
       : agentAvailableNow
         ? t("settingsModal.plan.agentAvailableNowReady", {
             defaultValue: "Ready",
