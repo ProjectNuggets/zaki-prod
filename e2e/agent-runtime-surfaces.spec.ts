@@ -420,7 +420,15 @@ test.describe("Agent runtime surfaces", () => {
       }
 
       if (scenario.name === "approval") {
-        await expect(page.getByText("Approval required for extension_click")).toBeVisible();
+        // #39 reworked the approval card: the header is now a fixed "Approval
+        // required" kicker plus a human-readable intent title (extension_click
+        // classifies as a browser action → "Control the browser"), and the
+        // specific tool is surfaced in the audit meta row ("Tool · …").
+        await expect(page.getByText("Approval required", { exact: true })).toBeVisible();
+        await expect(page.getByText("Control the browser")).toBeVisible();
+        await expect(page.getByText("Tool · extension_click")).toBeVisible();
+        // Approve/Modify/Deny controls remain (accessible names are scoped to
+        // the tool, e.g. "Approve extension_click action").
         await expect(page.getByRole("button", { name: /Approve/i })).toBeVisible();
         await expect(page.getByRole("button", { name: /Modify/i })).toBeVisible();
         await expect(page.getByRole("button", { name: /Deny/i })).toBeVisible();
