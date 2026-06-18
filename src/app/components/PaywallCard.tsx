@@ -38,9 +38,6 @@ function formatReset(resetAt?: string | null): string | null {
 export function PaywallCard({
   state,
   planLabel,
-  remaining,
-  effectiveRemaining,
-  requiredUnits,
   constraint,
   resetAt,
   message,
@@ -49,19 +46,18 @@ export function PaywallCard({
 }: PaywallCardProps) {
   const headline =
     state === "out_of_usage" && constraint === "rolling"
-      ? "Current capacity window is low"
+      ? "Current capacity window needs room"
       : state === "out_of_usage"
-        ? "You're out of usage"
+        ? "Weekly usage is full"
         : "Your plan is inactive";
   const reset = formatReset(resetAt);
-  const shownRemaining =
-    typeof effectiveRemaining === "number" ? effectiveRemaining : remaining;
-  // Show structured detail line when we have plan data; else fall back to the
-  // verbatim server denial message.
-  const hasDetail =
-    Boolean(planLabel) ||
-    typeof shownRemaining === "number" ||
-    typeof requiredUnits === "number";
+  const usageDetail =
+    state === "out_of_usage" && constraint === "rolling"
+      ? "Current window is refreshing"
+      : state === "out_of_usage" && (planLabel || reset)
+        ? "Upgrade for more room"
+        : null;
+  const hasDetail = Boolean(planLabel || usageDetail || (state === "out_of_usage" && reset));
 
   return (
     <div className="zaki-approval-card" role="region" aria-label="Upgrade required">
@@ -91,17 +87,14 @@ export function PaywallCard({
             {hasDetail ? (
               <>
                 {planLabel ? <span>Plan: {planLabel}</span> : null}
-                {typeof shownRemaining === "number" ? (
-                  <span>{planLabel ? " · " : ""}{shownRemaining} available now</span>
-                ) : null}
-                {typeof requiredUnits === "number" ? (
+                {usageDetail ? (
                   <span>
-                    {planLabel || typeof shownRemaining === "number" ? " · " : ""}
-                    {requiredUnits} needed
+                    {planLabel ? " · " : ""}
+                    {usageDetail}
                   </span>
                 ) : null}
                 {state === "out_of_usage" && reset ? (
-                  <span> · resets {reset}</span>
+                  <span>{planLabel || usageDetail ? " · " : ""}resets {reset}</span>
                 ) : null}
               </>
             ) : (

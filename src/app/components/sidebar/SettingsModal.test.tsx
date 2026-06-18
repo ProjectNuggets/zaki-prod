@@ -477,8 +477,8 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.plan.tiers.pro_max": "Pro MAX",
     "settingsModal.plan.upgradePlan": "Upgrade to {{plan}}",
     "settingsModal.plan.syncBilling": "Sync billing",
-    "settingsModal.plan.recurringRemaining": "Recurring remaining",
-    "settingsModal.plan.topupBalance": "Extra units balance",
+    "settingsModal.plan.recurringRemaining": "Weekly room",
+    "settingsModal.plan.topupBalance": "Extra capacity",
     "settingsModal.plan.billingSource": "Billing source",
     "settingsModal.plan.billingHealth": "Billing health",
     "settingsModal.plan.billingConfigured": "Configured",
@@ -491,26 +491,31 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.plan.sources.subscriptionWithAccessCode": "Subscription + access code",
     "settingsModal.plan.sources.accessCode": "Access code",
     "settingsModal.plan.sources.free": "Free account",
-    "settingsModal.plan.topups.title": "Extra usage units",
+    "settingsModal.plan.topups.title": "Additional capacity",
     "settingsModal.plan.topups.deferred":
-      "Top-up purchases are deferred for this release. Existing balances remain visible.",
+      "Additional capacity purchases are deferred for this release. Pricing explains the current allowances.",
     "settingsModal.plan.topups.statusOnly": "Deferred",
     "settingsModal.plan.cancelSubscription": "Cancel subscription",
     "settingsModal.plan.upgrade": "Upgrade",
     "settingsModal.usage.plan": "Plan",
     "settingsModal.usage.weeklyAllowance": "Weekly",
-    "settingsModal.usage.weeklyAllowanceValue": "{{limit}} units",
+    "settingsModal.usage.weeklyAllowanceValue": "{{percent}}% of your weekly usage",
     "settingsModal.usage.weeklyAllowancePending": "Policy pending",
     "settingsModal.usage.burstWindow": "Burst window",
-    "settingsModal.usage.burstWindowValue": "{{hours}} hours",
-    "settingsModal.usage.remainingOfLimit": "{{remaining}} / {{limit}} left",
+    "settingsModal.usage.burstWindowValue": "{{percent}}% of this capacity window",
+    "settingsModal.usage.remainingOfLimit": "{{percent}}% of your weekly usage",
+    "settingsModal.usage.usagePercent": "{{percent}}% of your weekly usage",
+    "settingsModal.usage.windowUsagePercent": "{{percent}}% of this capacity window",
+    "settingsModal.usage.productUsagePercent": "{{percent}}% this week",
+    "settingsModal.usage.productUsageLinked": "Included in weekly usage",
+    "settingsModal.usage.nearCapNudge": "You're at {{percent}}% this week — upgrade for more room.",
     "settingsModal.usage.loading": "Loading usage...",
     "settingsModal.usage.pending": "Pending",
     "settingsModal.usage.unavailable": "Unavailable",
     "settingsModal.usage.memoryGoverned": "Memory policy",
-    "settingsModal.usage.usedOfLimit": "{{used}} / {{limit}}",
-    "settingsModal.usage.usedUnits": "{{used}} used",
-    "settingsModal.usage.usedUnlimited": "{{used}} · unlimited",
+    "settingsModal.usage.usedOfLimit": "{{percent}}% of your weekly usage",
+    "settingsModal.usage.usedUnits": "{{percent}}% of your weekly usage",
+    "settingsModal.usage.usedUnlimited": "Included in weekly usage",
     "settingsModal.usage.lifecycleLabel": "Lifecycle: {{lifecycle}}",
     "settingsModal.usage.period.day": "Daily",
     "settingsModal.usage.period.week": "Weekly",
@@ -609,6 +614,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     .replace("{{remaining}}", String(options?.remaining ?? ""))
     .replace("{{hours}}", String(options?.hours ?? ""))
     .replace("{{used}}", String(options?.used ?? ""))
+    .replace("{{percent}}", String(options?.percent ?? ""))
     .replace("{{reset}}", String(options?.reset ?? ""))
     .replace("{{count}}", String(options?.count ?? ""))
     .replace("{{class}}", String(options?.class ?? ""))
@@ -1167,7 +1173,7 @@ describe("SettingsPage", () => {
     expect(within(screen.getByTestId("settings-billing")).getAllByText("Launch: private beta").length).toBeGreaterThan(0);
     expect(within(screen.getByTestId("settings-billing")).getByText("Launch: waitlist")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-billing")).queryByText("ZAKI CLI")).not.toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-billing")).getByText("Extra usage units")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-billing")).getByText("Additional capacity")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-billing")).getByTestId("settings-weekly-meter")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-billing")).getByTestId("settings-burst-meter")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-billing")).queryByRole("button", { name: /Buy 500 units/ })).not.toBeInTheDocument();
@@ -1310,7 +1316,7 @@ describe("SettingsPage", () => {
       expect(syncBillingMutateMock).toHaveBeenCalledTimes(1);
     });
 
-    expect(billing.getByText("Extra usage units")).toBeInTheDocument();
+    expect(billing.getByText("Additional capacity")).toBeInTheDocument();
     expect(billing.getByText("Deferred")).toBeInTheDocument();
     expect(billing.queryByRole("button", { name: /Buy 500 units/ })).not.toBeInTheDocument();
 
@@ -1328,13 +1334,17 @@ describe("SettingsPage", () => {
     const burstMeter = within(billing.getByTestId("settings-burst-meter"));
 
     expect(weeklyMeter.getByText("Weekly")).toBeInTheDocument();
-    expect(weeklyMeter.getByText("1,920 / 1,500 left")).toBeInTheDocument();
-    expect(weeklyMeter.getByText("Used")).toBeInTheDocument();
-    expect(weeklyMeter.getByText("Remaining")).toBeInTheDocument();
+    expect(weeklyMeter.getAllByText("5% of your weekly usage").length).toBeGreaterThan(0);
+    expect(weeklyMeter.queryByText("1,920 / 1,500 left")).not.toBeInTheDocument();
+    expect(weeklyMeter.queryByText("Used")).not.toBeInTheDocument();
+    expect(weeklyMeter.queryByText("Remaining")).not.toBeInTheDocument();
     expect(burstMeter.getByText("Burst window")).toBeInTheDocument();
-    expect(burstMeter.getByText("80 / 100 left")).toBeInTheDocument();
-    expect(billing.getByText("Recurring remaining")).toBeInTheDocument();
-    expect(billing.getByText("Extra units balance")).toBeInTheDocument();
+    expect(burstMeter.getAllByText("20% of this capacity window").length).toBeGreaterThan(0);
+    expect(burstMeter.queryByText("80 / 100 left")).not.toBeInTheDocument();
+    expect(billing.getByText("Weekly room")).toBeInTheDocument();
+    expect(billing.getByText("Extra capacity")).toBeInTheDocument();
+    expect(billing.queryByText("1,420")).not.toBeInTheDocument();
+    expect(billing.queryByText("500")).not.toBeInTheDocument();
     expect(billing.getByText("Billing source")).toBeInTheDocument();
     expect(billing.getByText("Subscription")).toBeInTheDocument();
     expect(billing.getByText("Choose the monthly plan that keeps ZAKI available when work spikes. Payment details and billing sync stay here.")).toBeInTheDocument();
@@ -1363,7 +1373,7 @@ describe("SettingsPage", () => {
     expect(billing.queryByRole("button", { name: "Sync billing" })).not.toBeInTheDocument();
     expect(billing.queryByRole("button", { name: "Cancel subscription" })).not.toBeInTheDocument();
     expect(billing.getByText("Payment actions are unavailable in this environment.")).toBeInTheDocument();
-    expect(billing.getByText("Top-up purchases are deferred for this release. Existing balances remain visible.")).toBeInTheDocument();
+    expect(billing.getByText("Additional capacity purchases are deferred for this release. Pricing explains the current allowances.")).toBeInTheDocument();
     expect(billing.getByText("Deferred")).toBeInTheDocument();
   });
 

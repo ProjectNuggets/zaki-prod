@@ -54,7 +54,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.signedTitlePrefix": "Let's ",
     "zakiDashboard.command.guestTitlePrefix": "Let's ",
     "zakiDashboard.command.signedCopy": "Choose the kind of help you need.",
-    "zakiDashboard.command.guestCopy": "Ask immediately with free weekly credits.",
+    "zakiDashboard.command.guestCopy": "Ask immediately. ZAKI keeps weekly usage clear without making you count units.",
     "zakiDashboard.command.verbs.agent.signed": "move",
     "zakiDashboard.command.verbs.agent.guest": "plan",
     "zakiDashboard.command.verbs.brain.signed": "map",
@@ -70,19 +70,20 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.entry.website": "Website",
     "zakiDashboard.entry.signIn": "Sign in",
     "zakiDashboard.entry.signUp": "Sign up",
-    "zakiDashboard.command.weeklyFreeCredit": "Weekly free credit",
+    "zakiDashboard.command.weeklyFreeCredit": "Weekly usage",
     "zakiDashboard.command.bestFor": "Best for",
     "zakiDashboard.command.memoryScope": "Memory scope",
     "zakiDashboard.command.selectedProduct": "{{product}} overview",
-    "zakiDashboard.command.meter": "{{remaining}} weekly credits left",
+    "zakiDashboard.command.meter": "{{percent}}% of your weekly usage",
     "zakiDashboard.command.productStrip": "Choose product",
     "zakiDashboard.command.inputLabel": "Describe what you want ZAKI to do",
     "zakiDashboard.command.placeholder": "Ask {{product}} to start from your prompt...",
     "zakiDashboard.command.saveWork": "Save this work",
     "zakiDashboard.command.emptyHelper": "Type a prompt to start.",
-    "zakiDashboard.command.creditHelper": "Credits are used when ZAKI responds.",
+    "zakiDashboard.command.creditHelper": "You're fine. ZAKI will update weekly usage after it responds.",
     "zakiDashboard.command.capacityWindowLow": "Current capacity window is low.",
-    "zakiDashboard.command.agentCreditsLow": "Agent needs more available credits.",
+    "zakiDashboard.command.agentCreditsLow": "Agent needs more weekly room before it can start.",
+    "zakiDashboard.command.nearCapNudge": "You're at {{percent}}% this week — upgrade for more room.",
     "zakiDashboard.command.comingSoonHelper": "{{product}} is coming soon. Pick Chat, Agent, or Brain to start now.",
     "zakiDashboard.command.submitPreviewSave": "Preview first",
     "zakiDashboard.command.submitComingSoon": "{{product}} coming soon",
@@ -92,8 +93,8 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.markers.beta": "Beta",
     "zakiDashboard.command.markers.waitlist": "Waitlist",
     "zakiDashboard.command.markers.comingSoon": "Coming soon",
-    "zakiDashboard.command.creditsExhaustedTitle": "Weekly credits are used.",
-    "zakiDashboard.command.creditsExhaustedCopy": "Keep your prompt here, then sign up, wait for reset, or choose a plan.",
+    "zakiDashboard.command.creditsExhaustedTitle": "Weekly usage is full.",
+    "zakiDashboard.command.creditsExhaustedCopy": "Keep your prompt here, then sign up, wait for reset, or choose a plan with more room.",
     "zakiDashboard.command.capacityWindowTitle": "Current capacity window is low.",
     "zakiDashboard.command.capacityWindowCopy": "Wait for the current window to refresh.",
     "zakiDashboard.command.saveAndSignup": "Save and sign up",
@@ -114,7 +115,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.details.agent.truth": "Anonymous Agent starts as planning preview.",
     "zakiDashboard.command.details.spaces.bestFor": "Quick questions, drafting, and thinking out loud. No setup.",
     "zakiDashboard.command.details.spaces.memory": "Session only until you sign in.",
-    "zakiDashboard.command.details.spaces.truth": "Chat runs now on free weekly credits.",
+    "zakiDashboard.command.details.spaces.truth": "Chat runs now with weekly usage shown as a percentage.",
     "zakiDashboard.command.details.hire.bestFor": "Finding your next role, improving your CV, comparing fit, and preparing applications.",
     "zakiDashboard.command.details.hire.memory": "Hire pipeline memory is not public yet.",
     "zakiDashboard.command.details.hire.truth": "Coming soon. Use Chat or Agent today.",
@@ -137,8 +138,8 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.intro.slides.what.bullets.route": "Choose the product lane.",
     "zakiDashboard.intro.slides.what.bullets.keep": "Keep local drafts.",
     "zakiDashboard.intro.slides.buy.title": "Activate the loop",
-    "zakiDashboard.intro.slides.buy.body": "Try weekly credits as a guest.",
-    "zakiDashboard.intro.slides.buy.bullets.guest": "Guest credits.",
+    "zakiDashboard.intro.slides.buy.body": "Try ZAKI as a guest with a clear weekly usage meter.",
+    "zakiDashboard.intro.slides.buy.bullets.guest": "Guest: start immediately with weekly usage shown as a percentage.",
     "zakiDashboard.intro.slides.buy.bullets.account": "Account saves work.",
     "zakiDashboard.intro.slides.buy.bullets.plan": "Plan adds capacity.",
     "zakiDashboard.intro.slides.palette.title": "Visit the website when you want the full story",
@@ -175,12 +176,12 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.meter.loading": "Loading",
     "zakiDashboard.meter.pending": "Pending",
     "zakiDashboard.meter.free": "Free",
-    "zakiDashboard.meter.units": "units",
+    "zakiDashboard.meter.usagePercent": "{{percent}}% of your weekly usage",
     "zakiDashboard.meter.used": "Used",
     "zakiDashboard.meter.remaining": "Remaining",
-    "zakiDashboard.meter.remainingOfLimit": "{{remaining}} / {{limit}} left",
-    "zakiDashboard.meter.usedOfLimit": "{{used}} / {{limit}} used",
-    "zakiDashboard.meter.usedUnits": "{{used}} used",
+    "zakiDashboard.meter.remainingOfLimit": "{{percent}}% of your weekly usage",
+    "zakiDashboard.meter.usedOfLimit": "{{percent}}% of your weekly usage",
+    "zakiDashboard.meter.usedUnits": "{{percent}}% of your weekly usage",
     "zakiDashboard.meter.resets": "Resets {{reset}}",
     "zakiDashboard.meter.resetPending": "Reset pending",
     "zakiDashboard.products.title": "Products",
@@ -272,6 +273,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     .replace("{{remaining}}", String(options?.remaining ?? ""))
     .replace("{{limit}}", String(options?.limit ?? ""))
     .replace("{{used}}", String(options?.used ?? ""))
+    .replace("{{percent}}", String(options?.percent ?? ""))
     .replace("{{reset}}", String(options?.reset ?? ""))
     .replace("{{count}}", String(options?.count ?? ""))
     .replace("{{total}}", String(options?.total ?? ""))
@@ -489,7 +491,8 @@ describe("ZakiDashboard", () => {
     expect(screen.getByRole("heading", { name: "Let's move." })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Hi, Nova User. 1,420 left." })).not.toBeInTheDocument();
     expect(screen.getAllByText("Pro").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("1,420").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("5% of your weekly usage").length).toBeGreaterThan(0);
+    expect(screen.queryByText("1,420")).not.toBeInTheDocument();
     expect(screen.getAllByText("Signed-in account").length).toBeGreaterThan(0);
 
     expect(screen.getByTestId("zaki-dashboard-product-hint")).toHaveTextContent("Agent");
@@ -566,6 +569,30 @@ describe("ZakiDashboard", () => {
     expect(screen.getByRole("button", { name: "Continue in Agent" })).not.toBeDisabled();
   });
 
+  it("shows a calm upgrade nudge near the weekly cap without raw units", () => {
+    mockUseMeterStatus.mockReturnValue({
+      data: {
+        data: {
+          ...signedInMeter,
+          weekly: {
+            limit: 8000,
+            used: 6560,
+            remaining: 1440,
+            resetAt: "2026-05-25T00:00:00.000Z",
+          },
+        },
+      },
+      isLoading: false,
+    });
+
+    renderDashboard();
+
+    expect(screen.getByText("82% of your weekly usage")).toBeInTheDocument();
+    expect(screen.getByText("You're at 82% this week — upgrade for more room.")).toBeInTheDocument();
+    expect(screen.queryByText("6,560")).not.toBeInTheDocument();
+    expect(screen.queryByText("8,000")).not.toBeInTheDocument();
+  });
+
   it("keeps signed-in Agent submit enabled when weekly is empty but effective capacity satisfies reserve", () => {
     mockUseMeterStatus.mockReturnValue({
       data: {
@@ -599,7 +626,7 @@ describe("ZakiDashboard", () => {
     });
 
     expect(screen.getByRole("button", { name: "Continue in Agent" })).not.toBeDisabled();
-    expect(screen.queryByText("Weekly credits are used.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Weekly usage is full.")).not.toBeInTheDocument();
   });
 
   it("offers signed-in first-run users a one-time memory bridge", () => {
@@ -649,7 +676,8 @@ describe("ZakiDashboard", () => {
     expect(mockUseAnonymousMeterStatus).toHaveBeenCalledWith(true);
     expect(screen.getAllByText("Anonymous free session").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Free").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("97").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("3% of your weekly usage").length).toBeGreaterThan(0);
+    expect(screen.queryByText("97")).not.toBeInTheDocument();
   });
 
   it("orders command products for anonymous users around immediate chat", () => {
@@ -829,7 +857,7 @@ describe("ZakiDashboard", () => {
     expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
   });
 
-  it("keeps the prompt visible and offers choices when free credits are exhausted", () => {
+  it("keeps the prompt visible and offers choices when weekly usage is full", () => {
     useAuthStore.setState({
       token: null,
       user: null,
@@ -857,7 +885,8 @@ describe("ZakiDashboard", () => {
       target: { value: "Do not lose this exhausted-credit prompt" },
     });
 
-    expect(screen.getByText("Weekly credits are used.")).toBeInTheDocument();
+    expect(screen.getByText("Weekly usage is full.")).toBeInTheDocument();
+    expect(screen.getByText("100% of your weekly usage")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start chat" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Save and sign up" }));
 

@@ -345,6 +345,7 @@ import { resolveEffectivePlatformEntitlement } from "./platform-entitlement-cont
 import {
   buildPlatformEntitlementSummary,
   buildPlatformMeterPolicy,
+  buildPlatformPlanPolicy,
   buildPlatformProductRegistry,
   normalizePlatformPlanId,
 } from "./platform-policy.js";
@@ -7882,18 +7883,57 @@ const TopupCheckoutSchema = z.object({
 app.get("/api/billing/config", async (req, res) => {
   const authResult = await requireAuthUser(req, res);
   if (!authResult) return;
-  const configured = getBillingConfigStatus();
-  const pricingCatalog =
-    configured.provider === "stripe" ? await getStripePricingDisplayCatalog() : null;
+  const billingDisplayConfig = await buildBillingDisplayConfig();
   res.status(200).json({
     success: true,
     configured: {
-      ...configured,
-      pricingCatalog,
+      ...billingDisplayConfig.configured,
+      pricingCatalog: billingDisplayConfig.pricingCatalog,
+      platformPlanAllowances: billingDisplayConfig.platformPlanAllowances,
       topupPacks: TOPUP_PACK_CATALOG,
     },
   });
 });
+
+app.get("/api/billing/public-config", async (_req, res) => {
+  const billingDisplayConfig = await buildBillingDisplayConfig();
+  const configured = billingDisplayConfig.configured;
+  res.status(200).json({
+    success: true,
+    configured: {
+      provider: configured.provider,
+      requestedProvider: configured.requestedProvider,
+      checkoutProviders: configured.checkoutProviders,
+      pricingAvailability: configured.pricingAvailability,
+      stripeEnabled: configured.stripeEnabled,
+      checkoutEnabled: configured.checkoutEnabled,
+      accessCodePurchaseEnabled: configured.accessCodePurchaseEnabled,
+      topupCheckoutEnabled: configured.topupCheckoutEnabled,
+      pricingCatalog: billingDisplayConfig.pricingCatalog,
+      platformPlanAllowances: billingDisplayConfig.platformPlanAllowances,
+    },
+  });
+});
+
+async function buildBillingDisplayConfig() {
+  const configured = getBillingConfigStatus();
+  const pricingCatalog =
+    configured.provider === "stripe" ? await getStripePricingDisplayCatalog() : null;
+  const planPolicy = buildPlatformPlanPolicy({ env: process.env });
+  const platformPlanAllowances = Object.fromEntries(
+    Object.entries(planPolicy.plans).map(([planId, plan]) => [
+      planId,
+      {
+        id: plan.id,
+        label: plan.label,
+        weeklyAllowanceUnits: plan.weeklyAllowanceUnits,
+        rollingAllowanceUnits: plan.rollingAllowanceUnits,
+        burstWindowHours: plan.burstWindowHours,
+      },
+    ])
+  );
+  return { configured, pricingCatalog, platformPlanAllowances };
+}
 
 app.post("/api/billing/checkout", express.json({ limit: "1mb" }), async (req, res) => {
   try {

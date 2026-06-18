@@ -40,6 +40,12 @@ import type {
 } from "@/lib/api";
 import { useAuthStore } from "@/stores";
 import { cn } from "@/lib/utils";
+import {
+  formatUsagePercentLabel,
+  getRoundedUsagePercent,
+  getUsagePercent,
+  isUsageNearCap,
+} from "@/lib/usageDisplay";
 import { formatZakiSessionLabel } from "@/lib/zakiSessions";
 import {
   buildAnonymousWorkTitle,
@@ -64,7 +70,7 @@ type WindowStats = {
   limit: number | null;
   used: number | null;
   remaining: number | null;
-  remainingPercent: number;
+  usedPercent: number;
 };
 
 const SCRAMBLE_CHARS = "01/\\-_";
@@ -119,17 +125,6 @@ const COMMAND_PRODUCT_ICON: Record<AnonymousWorkProductId, LucideIcon> = {
 
 function isComingSoonProduct(productId: AnonymousWorkProductId) {
   return COMING_SOON_PRODUCT_IDS.has(productId);
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function formatNumber(value?: number | null) {
-  if (value == null || Number.isNaN(Number(value))) return "—";
-  return Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(
-    Math.max(0, Number(value))
-  );
 }
 
 function formatReset(value?: string | null) {
@@ -189,9 +184,8 @@ function getWindowStats(window?: MeterWindowSnapshot | null): WindowStats {
       : limit != null && used != null
       ? Math.max(0, limit - used)
       : null;
-  const remainingPercent =
-    limit && remaining != null ? clamp((remaining / limit) * 100, 0, 100) : 0;
-  return { limit, used, remaining, remainingPercent };
+  const usedPercent = getUsagePercent({ used, limit });
+  return { limit, used, remaining, usedPercent };
 }
 
 function isAvailabilityBlocked(availability?: MeterAvailableNow | null) {
@@ -294,7 +288,7 @@ function getCommandProductDetails(t: TranslateFn, productId: AnonymousWorkProduc
     spaces: {
       bestFor: "Quick questions, drafting, translation, and thinking out loud. No setup.",
       memory: "This-browser session only until you sign in.",
-      truth: "Chat runs now on free weekly credits. Sign in when you want to keep the work.",
+      truth: "Chat runs now with free weekly usage. Sign in when you want to keep the work.",
       accessTone: "success",
     },
   };
@@ -461,16 +455,20 @@ function CreditMeter({
   loading,
   weeklyStats,
   weeklyReset,
-  exhausted,
 }: {
   t: TranslateFn;
   loading: boolean;
   weeklyStats: WindowStats;
   weeklyReset: string | null;
-  exhausted: boolean;
 }) {
-  const remaining = formatNumber(weeklyStats.remaining);
-  const limit = formatNumber(weeklyStats.limit);
+  const roundedPercent = getRoundedUsagePercent(weeklyStats.usedPercent);
+  const usageLabel = loading
+    ? t("zakiDashboard.meter.loading")
+    : t("zakiDashboard.meter.usagePercent", {
+        percent: roundedPercent,
+        defaultValue: formatUsagePercentLabel(weeklyStats.usedPercent),
+      });
+  const nearCap = !loading && isUsageNearCap(weeklyStats.usedPercent);
   return (
     <div
       className="zaki-dashboard-command__meter"
@@ -479,33 +477,39 @@ function CreditMeter({
       <div className="zaki-dashboard-command__meter-top">
         <span>
           {t("zakiDashboard.command.weeklyFreeCredit", {
-            defaultValue: "Weekly free credit",
+            defaultValue: "Weekly usage",
           })}
         </span>
         <strong>
-          <span>{loading ? t("zakiDashboard.meter.loading") : remaining}</span>
-          {!loading ? <em> / {limit}</em> : null}
+          <span>{usageLabel}</span>
         </strong>
         <small>
           {weeklyReset
             ? t("zakiDashboard.meter.resets", { reset: weeklyReset })
             : t("zakiDashboard.meter.resetPending")}
         </small>
+        {nearCap ? (
+          <small className="zaki-dashboard-command__meter-nudge">
+            {t("zakiDashboard.command.nearCapNudge", {
+              percent: roundedPercent,
+              defaultValue: `You're at ${roundedPercent}% this week — upgrade for more room.`,
+            })}
+          </small>
+        ) : null}
       </div>
       <div
         className="zaki-dashboard-command__meter-track"
         aria-label={
           loading
             ? t("zakiDashboard.meter.loading")
-            : t("zakiDashboard.meter.remainingOfLimit", {
-                remaining,
-                limit,
+            : t("zakiDashboard.meter.usagePercent", {
+                percent: roundedPercent,
+                defaultValue: formatUsagePercentLabel(weeklyStats.usedPercent),
               })
         }
       >
         <span
-          className={cn(exhausted && "zaki-dashboard-command__meter-fill--zero")}
-          style={{ width: `${weeklyStats.remainingPercent}%` }}
+          style={{ width: `${weeklyStats.usedPercent}%` }}
         />
       </div>
     </div>
@@ -609,11 +613,11 @@ function DashboardIntroModal({
       }),
       body: t("zakiDashboard.intro.slides.buy.body", {
         defaultValue:
-          "Guest credits let you try now. Create an account when you want work, memory, files, and history to follow you.",
+          "Guest usage lets you try now. Create an account when you want work, memory, files, and history to follow you.",
       }),
       bullets: [
         t("zakiDashboard.intro.slides.buy.bullets.guest", {
-          defaultValue: "Guest: start immediately with weekly credits.",
+          defaultValue: "Guest: start immediately with weekly usage.",
         }),
         t("zakiDashboard.intro.slides.buy.bullets.account", {
           defaultValue: "Account: save work, memory, files, and history.",
@@ -990,15 +994,15 @@ export function ZakiDashboard({
         })
     : selectedCommandPrompt && agentCapacityBlocked && agentAvailability?.constraint === "rolling"
       ? t("zakiDashboard.command.capacityWindowLow", {
-          defaultValue: "Current capacity window is low. It refreshes as recent Agent work clears.",
+          defaultValue: "Current capacity window is refreshing as recent Agent work clears.",
         })
     : selectedCommandPrompt && agentCapacityBlocked
       ? t("zakiDashboard.command.agentCreditsLow", {
-          defaultValue: "Agent needs more available credits before it can start.",
+          defaultValue: "Agent needs more weekly room before it can start.",
         })
     : selectedCommandPrompt
       ? t("zakiDashboard.command.creditHelper", {
-          defaultValue: "Credits are used when ZAKI responds.",
+          defaultValue: "Weekly usage updates when ZAKI responds.",
         })
     : t("zakiDashboard.command.emptyHelper", {
         defaultValue: "Type a prompt to start.",
@@ -1017,7 +1021,7 @@ export function ZakiDashboard({
       })
     : t("zakiDashboard.command.guestCopy", {
         defaultValue:
-          "Ask immediately with free weekly credits. This browser can remember drafts; sign in when you want work, memory, files, and history to follow you.",
+          "Ask immediately with free weekly usage. This browser can remember drafts; sign in when you want work, memory, files, and history to follow you.",
       });
   const titlePrefix = token
     ? t("zakiDashboard.command.signedTitlePrefix", {
@@ -1476,7 +1480,6 @@ export function ZakiDashboard({
                   loading={meterLoading}
                   weeklyStats={weeklyStats}
                   weeklyReset={weeklyReset}
-                  exhausted={commandBlockedByUsage}
                 />
                 <div className="zaki-dashboard-command__actions">
                   <p className="zaki-dashboard-command__helper" role="status" aria-live="polite">
@@ -1519,10 +1522,10 @@ export function ZakiDashboard({
                 <strong>
                   {agentCapacityBlocked && agentAvailability?.constraint === "rolling"
                     ? t("zakiDashboard.command.capacityWindowTitle", {
-                        defaultValue: "Current capacity window is low.",
+                        defaultValue: "Current capacity window is refreshing.",
                       })
                     : t("zakiDashboard.command.creditsExhaustedTitle", {
-                        defaultValue: "Weekly credits are used.",
+                        defaultValue: "Weekly usage is full.",
                       })}
                 </strong>
                 <span>
@@ -1533,7 +1536,7 @@ export function ZakiDashboard({
                       })
                     : t("zakiDashboard.command.creditsExhaustedCopy", {
                         defaultValue:
-                          "Keep your prompt here, then sign up, wait for reset, or choose a plan.",
+                          "Keep your prompt here, then sign up, wait for reset, or choose a plan with more room.",
                       })}
                 </span>
                 <div>

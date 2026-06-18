@@ -77,6 +77,11 @@ import { toast } from "sonner";
 import { buildApiUrl, type MeterWindowSnapshot, type ProductOperationalState } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useMeterStatus } from "@/queries";
+import {
+  formatUsagePercentLabel,
+  getRoundedUsagePercent,
+  getUsagePercent,
+} from "@/lib/usageDisplay";
 import { useProductRegistry } from "@/queries/useProducts";
 import { useAuthStore } from "@/stores";
 import {
@@ -246,16 +251,16 @@ const LEARNING_PRODUCT_ID = "learning";
 
 type LearningOperationalState = ProductOperationalState | "privateBeta" | "loading" | "unknown";
 
-function formatMeterNumber(value: number | null | undefined) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "pending";
-  return value.toLocaleString();
-}
-
 function formatLearningReset(value: string | null | undefined) {
   if (!value) return "reset pending";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "reset pending";
   return `resets ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+}
+
+function formatLearningUsagePercent(used: number | null, limit: number | null) {
+  const percent = getUsagePercent({ used, limit });
+  return formatUsagePercentLabel(percent);
 }
 
 function getLearningWindow(meterWindow: MeterWindowSnapshot | null | undefined) {
@@ -866,6 +871,13 @@ export function LearningPage() {
       : "unknown";
   const productWeekly = getLearningWindow(learningMeter?.weekly ?? meterStatus.data?.data?.weekly);
   const productRolling = getLearningWindow(learningMeter?.rolling ?? meterStatus.data?.data?.rolling);
+  const productWeeklyUsageLabel = formatLearningUsagePercent(productWeekly.used, productWeekly.limit);
+  const productRollingUsageLabel =
+    productRolling.limit != null
+      ? `${getRoundedUsagePercent(
+          getUsagePercent({ used: productRolling.used, limit: productRolling.limit })
+        )}% of this capacity window`
+      : null;
   const learningWritesDisabled =
     productState === "disabled" ||
     productState === "maintenance" ||
@@ -1223,15 +1235,7 @@ export function LearningPage() {
           {
             id: "meter",
             label: "Central meter",
-            value:
-              productWeekly.limit != null
-                ? `${formatMeterNumber(productWeekly.used)} / ${formatMeterNumber(productWeekly.limit)}`
-                : "linked",
-          },
-          {
-            id: "remaining",
-            label: "Remaining",
-            value: formatMeterNumber(productWeekly.remaining),
+            value: productWeekly.limit != null ? productWeeklyUsageLabel : "linked",
           },
           {
             id: "memory",
@@ -1265,9 +1269,8 @@ export function LearningPage() {
               label="Learning usage"
               used={productWeekly.used}
               limit={productWeekly.limit}
-              remaining={`${formatMeterNumber(productWeekly.remaining)} remaining`}
+              detail={formatLearningReset(productWeekly.resetAt)}
               reset={formatLearningReset(productWeekly.resetAt)}
-              unit={productWeekly.limit != null ? "units" : "central"}
               className="hidden p-2 lg:block [&_.v2-usage-gauge__bar]:mt-2 [&_.v2-usage-gauge__foot]:mt-1 [&_.v2-usage-gauge__number]:mt-1 [&_.v2-usage-gauge__number_strong]:text-[20px]"
             />
             <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
@@ -1282,8 +1285,8 @@ export function LearningPage() {
           {learningStateBanner ? (
             <div className="mt-2 border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg-sunken)] px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--v2-ink-2)]">
               {learningStateBanner}
-              {productRolling.remaining != null
-                ? ` Rolling window: ${formatMeterNumber(productRolling.remaining)} remaining.`
+              {productRollingUsageLabel
+                ? ` ${productRollingUsageLabel}.`
                 : ""}
             </div>
           ) : null}

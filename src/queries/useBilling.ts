@@ -40,9 +40,9 @@ export function useEntitlements() {
 export function useBillingConfig() {
   const token = useAuthStore((s) => s.token);
   return useQuery({
-    queryKey: billingKeys.config,
+    queryKey: [...billingKeys.config, token ? "auth" : "public"] as const,
     queryFn: fetchBillingConfig,
-    enabled: Boolean(token),
+    enabled: true,
     staleTime: 0,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
