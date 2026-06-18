@@ -110,8 +110,9 @@ async function mockAuthAndPricing(page: Page) {
         accessCodePurchaseEnabled: true,
         checkoutProviders: [{ key: "stripe", label: "Stripe", enabled: true }],
         pricingAvailability: {
-          student: { monthly: true, yearly: true },
           personal: { monthly: true, yearly: true },
+          pro: { monthly: true, yearly: true },
+          pro_max: { monthly: true, yearly: true },
         },
       },
     });
@@ -132,19 +133,18 @@ test("pricing page displays the commercial plan prices and gift-code purchase", 
 
   await page.goto("/pricing");
 
-  // V1 public pricing sells Agent only. Brain is included with account
-  // continuity, and Learn/Design/Career stay parked until their flows are safe.
+  // V2 public pricing sells the canonical paid platform tiers only.
   await expect(
     page.getByRole("heading", { name: "Choose how ZAKI should keep working with you" })
   ).toBeVisible();
   await expect(page.getByText("Chat Free", { exact: true })).toBeVisible();
-  await expect(page.getByText("ZAKI Agent", { exact: true })).toBeVisible();
-  await expect(page.getByText("$29 / month", { exact: true })).toBeVisible();
-  await expect(page.getByText("ZAKI Brain", { exact: true })).toBeVisible();
-  await expect(page.getByText("Included", { exact: true })).toBeVisible();
-  await expect(page.getByText("Coming next", { exact: true })).toBeVisible();
-  await expect(page.getByText("$19 / month", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("$39 / month", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Personal", { exact: true })).toBeVisible();
+  await expect(page.getByText("$15 / month", { exact: true })).toBeVisible();
+  await expect(page.getByText("Pro", { exact: true })).toBeVisible();
+  await expect(page.getByText("$45 / month", { exact: true })).toBeVisible();
+  await expect(page.getByText("Pro Max", { exact: true })).toBeVisible();
+  await expect(page.getByText("$99 / month", { exact: true })).toBeVisible();
+  await expect(page.getByText("ZAKI Agent", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Buy an access code", { exact: true })).toBeVisible();
   await expect(page.getByText("$15 one-time", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Buy access code" })).toBeVisible();

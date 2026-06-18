@@ -119,19 +119,20 @@ async function mockAuthAndPricing(page: Page) {
           { key: "paddle", label: "Paddle", enabled: true },
         ],
         pricingAvailability: {
-          student: { monthly: true, yearly: true },
           personal: { monthly: true, yearly: true },
+          pro: { monthly: true, yearly: true },
+          pro_max: { monthly: true, yearly: true },
         },
       },
     });
   });
 
   await page.route("**/api/billing/checkout", async (route) => {
-    state.tier = "agent";
+    state.tier = "pro";
     state.status = "active";
     await json(route, {
       success: true,
-      url: "/pricing/success?billing=success&plan=agent&interval=monthly",
+      url: "/pricing/success?billing=success&plan=pro&interval=monthly",
     });
   });
 
@@ -157,9 +158,9 @@ test("user can sign in on pricing route and complete provider-selected checkout"
   // survives the in-pricing sign-in, then PricingPage auto-starts checkout. The
   // legacy intermediate "Choose how you want to work with ZAKI" plan-picker and
   // multi-provider modal are gone — Stripe is the only valid checkout provider
-  // for the new Agent/Learn/Complete catalog, so a single provider auto-starts.
+  // for the canonical paid tiers, so a single provider auto-starts.
   await page.goto(
-    "/pricing?auth=signup&plan=agent&interval=monthly&autostart=1&source=website_pricing"
+    "/pricing?auth=signup&plan=pro&interval=monthly&autostart=1&source=website_pricing"
   );
 
   await expect(page.getByRole("heading", { name: "Create a ZAKI account" })).toBeVisible();
@@ -174,5 +175,5 @@ test("user can sign in on pricing route and complete provider-selected checkout"
   // autostart effect drives the Stripe checkout to the success surface.
   await expect(page).toHaveURL(/\/pricing\/success\?/);
   await expect(page.getByRole("heading", { name: /You’re set, Paid User/ })).toBeVisible();
-  await expect(page.getByText("Plan: ZAKI Agent")).toBeVisible();
+  await expect(page.getByText("Plan: Pro")).toBeVisible();
 });
