@@ -2836,6 +2836,15 @@ export type AgentPendingApproval = {
   tool?: string;
   reason?: string;
   risk_level?: string;
+  intent?: string | null;
+  human_intent?: string | null;
+  params?: unknown;
+  args?: unknown;
+  arguments?: unknown;
+  allow_for_session?: boolean;
+  allowForSession?: boolean;
+  session_allow_safe?: boolean;
+  sessionAllowSafe?: boolean;
   created_at?: string | number | null;
   expires_at?: string | number | null;
 };
@@ -2917,6 +2926,7 @@ export type AgentSessionApprovalPayload = {
   approval_id?: string;
   tool?: string;
   reason?: string;
+  allow_for_session?: boolean;
 };
 
 export async function listAgentSessions() {

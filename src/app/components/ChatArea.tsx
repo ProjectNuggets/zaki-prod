@@ -2216,6 +2216,20 @@ function stringPayloadField(payload: Record<string, unknown>, ...keys: string[])
   return null;
 }
 
+function firstPayloadValue(payload: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(payload, key)) {
+      const value = payload[key];
+      if (value !== null && value !== undefined) return value;
+    }
+  }
+  return undefined;
+}
+
+function booleanPayloadField(payload: Record<string, unknown>, ...keys: string[]): boolean {
+  return keys.some((key) => payload[key] === true);
+}
+
 export function extractNullalisApprovalRequest(
   payload: Record<string, unknown>,
   now = Date.now()
@@ -2234,6 +2248,17 @@ export function extractNullalisApprovalRequest(
       : null;
   const toolCallId = stringPayloadField(payload, "tool_call_id", "toolCallId", "tool_use_id", "toolUseId");
   const runId = stringPayloadField(payload, "run_id", "runId");
+  const intent = stringPayloadField(
+    payload,
+    "intent",
+    "human_intent",
+    "humanIntent",
+    "activity_label",
+    "activityLabel",
+    "intent_summary",
+    "intentSummary"
+  );
+  const params = firstPayloadValue(payload, "params", "arguments", "args", "tool_params", "toolParams");
   const id =
     approvalId ||
     (numericId != null ? `legacy:${String(numericId)}` : null) ||
@@ -2274,6 +2299,17 @@ export function extractNullalisApprovalRequest(
       (typeof payload.riskLevel === "string" && payload.riskLevel.trim()) ||
       "unknown",
     timestamp: now,
+    intent,
+    params,
+    allowForSessionSafe: booleanPayloadField(
+      payload,
+      "allow_for_session",
+      "allowForSession",
+      "session_allow_safe",
+      "sessionAllowSafe",
+      "safe_to_allow_for_session",
+      "safeToAllowForSession"
+    ),
     inputPreview,
     effectPreview,
     command: extractNullalisCommand(payload),
@@ -7970,7 +8006,7 @@ export function ChatArea() {
     async (
       requestId: string,
       approved: boolean,
-      options?: { reason?: string; tool?: string | null }
+      options?: { reason?: string; tool?: string | null; allowForSession?: boolean }
     ) => {
       const sessionKey = activeZakiSessionKey || buildAgentSessionKey(activeThreadId || "main", agentUserId);
       if (!sessionKey) {
@@ -7989,6 +8025,7 @@ export function ChatArea() {
           tool: options?.tool ?? nullalisApprovalRequest?.tool,
           reason: approved ? undefined : options?.reason ?? "User denied from UI",
           ...(canonicalApprovalId ? { approval_id: canonicalApprovalId } : {}),
+          ...(approved && options?.allowForSession ? { allow_for_session: true } : {}),
         };
         if (approved) {
           setApprovalContinuationPendingId(requestId);
@@ -9385,6 +9422,11 @@ export function ChatArea() {
                   <ApprovalRequiredCard
                     request={nullalisApprovalRequest}
                     onApprove={handleApprovalAction ? (id) => handleApprovalAction(id, true) : undefined}
+                    onApproveForSession={
+                      handleApprovalAction
+                        ? (id) => handleApprovalAction(id, true, { allowForSession: true })
+                        : undefined
+                    }
                     onModify={handleApprovalModify}
                     onDeny={handleApprovalAction ? (id) => handleApprovalAction(id, false) : undefined}
                   />

@@ -58,6 +58,9 @@ describe("zakiSessionUiStore", () => {
         tool: "send_email",
         reason: "ok",
         risk_level: "high",
+        human_intent: "Send a digest email",
+        params: { to: "owner@example.com", subject: "Digest" },
+        session_allow_safe: true,
         created_at: 1770000000,
         expires_at: null,
       }],
@@ -73,6 +76,9 @@ describe("zakiSessionUiStore", () => {
       approvalId: "apr-7",
       numericId: 7,
       toolCallId: "call_abc",
+      intent: "Send a digest email",
+      params: { to: "owner@example.com", subject: "Digest" },
+      allowForSessionSafe: true,
       timestamp: 1770000000 * 1000,
     });
     expect(mapped.live).toBe(true);

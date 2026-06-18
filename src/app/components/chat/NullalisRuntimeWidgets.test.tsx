@@ -7,15 +7,40 @@ import type { NullalisApprovalRequest } from "./BotStatusRail";
 
 const translations: Record<string, string> = {
   "zakiControls.approval.title": "Approval required for {{tool}}",
-  "zakiControls.approval.defaultReason": "ZAKI requested approval before continuing.",
+  "zakiControls.approval.defaultReason": "Supervised mode paused before this action. Review the details, then approve once or deny.",
   "zakiControls.approval.riskLabel": "Risk:",
+  "zakiControls.approval.riskBadge": "Risk · {{risk}}",
+  "zakiControls.approval.risk.low": "low",
+  "zakiControls.approval.risk.medium": "medium",
+  "zakiControls.approval.risk.high": "high",
+  "zakiControls.approval.risk.critical": "critical",
+  "zakiControls.approval.risk.unknown": "unknown",
   "zakiControls.approval.approveAria": "Approve {{tool}} action",
+  "zakiControls.approval.approveSessionAria": "Allow {{tool}} for this session",
   "zakiControls.approval.modifyAria": "Modify {{tool}} action",
   "zakiControls.approval.denyAria": "Deny {{tool}} action",
-  "zakiControls.approval.kicker": "Approval gate",
-  "zakiControls.approval.approveBtn": "Approve",
+  "zakiControls.approval.kicker": "Approval required",
+  "zakiControls.approval.approveBtn": "Approve once",
+  "zakiControls.approval.approveSessionBtn": "Allow for this session",
   "zakiControls.approval.modifyBtn": "Modify",
   "zakiControls.approval.denyBtn": "Deny",
+  "zakiControls.approval.intent.shell": "Run a shell command",
+  "zakiControls.approval.intent.browser": "Control the browser",
+  "zakiControls.approval.intent.external": "Send something outside this chat",
+  "zakiControls.approval.intent.spend": "Use a billing or spending action",
+  "zakiControls.approval.intent.file": "Change or share a file",
+  "zakiControls.approval.intent.tool": "Run a gated tool action",
+  "zakiControls.approval.explain.external": "Supervised mode pauses before ZAKI posts or sends anything outside this thread.",
+  "zakiControls.approval.explain.browser": "Supervised mode pauses before ZAKI acts in a browser session.",
+  "zakiControls.approval.explain.spend": "Review the amount, destination, and account before approving.",
+  "zakiControls.approval.explain.file": "Review the target and effect before ZAKI changes or shares files.",
+  "zakiControls.approval.whatPreview": "What",
+  "zakiControls.approval.paramsPreview": "Params",
+  "zakiControls.approval.hiddenValue": "Hidden",
+  "zakiControls.approval.previewAria": "Approval preview",
+  "zakiControls.approval.toolLabel": "Tool",
+  "zakiControls.approval.destinationLabel": "Target",
+  "zakiControls.approval.idLabel": "ID",
   "zakiControls.approval.decidedApproved": "Approved. ZAKI is continuing...",
   "zakiControls.approval.decidedModified": "Revision requested",
   "zakiControls.approval.decidedDenied": "Denied",
@@ -24,7 +49,9 @@ const translations: Record<string, string> = {
   "zakiControls.approval.approvingState": "Approving...",
   "zakiControls.approval.retrying": "Agent restarting — retrying your approval...",
   "zakiControls.approval.retryBtn": "Retry approval",
+  "zakiControls.approval.retrySessionBtn": "Retry session approval",
   "zakiControls.approval.retryAria": "Retry approval for {{tool}}",
+  "zakiControls.approval.retrySessionAria": "Retry session approval for {{tool}}",
   "zakiControls.approval.resolveFailed": "Approval could not be resolved. Try again.",
   "contextGauge.label": "Context",
   "contextGauge.messageCount": "{{count}} messages",
@@ -62,11 +89,15 @@ describe("ApprovalRequiredCard", () => {
 
     render(<ApprovalRequiredCard request={request} />);
 
-    expect(screen.getByText("Approval gate")).toBeInTheDocument();
-    expect(screen.getByText("Approval required for extension_click")).toBeInTheDocument();
+    expect(screen.getByText("Approval required")).toBeInTheDocument();
+    expect(screen.getByText("Control the browser")).toBeInTheDocument();
+    expect(screen.getByText("Risk · high")).toBeInTheDocument();
+    expect(screen.getByText("Supervised mode pauses before ZAKI acts in a browser session.")).toBeInTheDocument();
     expect(screen.getByText("Clicks the send button in the active tab.")).toBeInTheDocument();
     expect(screen.getByText('{ selector: "#send" }')).toBeInTheDocument();
     expect(screen.getByText("extension.click #send")).toBeInTheDocument();
+    expect(screen.getByText("Tool · extension_click")).toBeInTheDocument();
+    expect(screen.getByText("Target · active-tab")).toBeInTheDocument();
 
     // The card is durable: it shows NO decision countdown and NO "expired"
     // copy. The approval stays pinned until approve/deny — never a timer.
@@ -82,6 +113,114 @@ describe("ApprovalRequiredCard", () => {
 
     expect(screen.queryByText(/to decide/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Decision overdue/)).not.toBeInTheDocument();
+  });
+
+  it("renders a human intent and key params from the engine payload without exposing sensitive values", () => {
+    render(
+      <ApprovalRequiredCard
+        request={{
+          ...request,
+          id: "approval-params",
+          approvalId: "apr-9",
+          tool: "telegram.send_message",
+          reason: "supervised_mutating_requires_approval",
+          riskLevel: "low",
+          intent: "Send the launch brief to Engineering Standup",
+          effectPreview: null,
+          inputPreview: null,
+          command: null,
+          files: [],
+          params: {
+            group: "Engineering Standup",
+            text: "Launch brief ready.",
+            api_key: "sk-live-secret",
+          },
+        }}
+      />
+    );
+
+    expect(screen.getByRole("heading", { name: "Send the launch brief to Engineering Standup" })).toBeInTheDocument();
+    expect(screen.getByText("Risk · low")).toBeInTheDocument();
+    expect(screen.getByText("group")).toBeInTheDocument();
+    expect(screen.getAllByText("Engineering Standup")[0]).toBeInTheDocument();
+    expect(screen.getByText("text")).toBeInTheDocument();
+    expect(screen.getByText("Launch brief ready.")).toBeInTheDocument();
+    expect(screen.getByText("api key")).toBeInTheDocument();
+    expect(screen.getByText("Hidden")).toBeInTheDocument();
+    expect(screen.queryByText("sk-live-secret")).not.toBeInTheDocument();
+    expect(screen.getByText("Tool · telegram.send_message")).toBeInTheDocument();
+    expect(screen.getByText("Target · Engineering Standup")).toBeInTheDocument();
+    expect(screen.getByText("ID · apr-9")).toBeInTheDocument();
+  });
+
+  it("redacts sensitive nested params and raw input previews", () => {
+    const { container } = render(
+      <ApprovalRequiredCard
+        request={{
+          ...request,
+          id: "approval-nested-secrets",
+          tool: "browser.fetch",
+          reason: "supervised_mutating_requires_approval",
+          riskLevel: "medium",
+          intent: "Fetch the account status page",
+          effectPreview: null,
+          command: null,
+          files: [],
+          params: {
+            url: "https://example.com/account",
+            headers: {
+              Authorization: "Bearer nested-secret-token",
+              "x-api-key": "sk-nested-secret",
+            },
+            body: {
+              password: "plain-password",
+            },
+          },
+          inputPreview:
+            '{"authorization":"Bearer preview-secret-token","password":"preview-password"}',
+        }}
+      />
+    );
+
+    const rendered = container.textContent || "";
+    expect(rendered).toContain("https://example.com/account");
+    expect(rendered).toContain("Hidden");
+    expect(rendered).not.toContain("nested-secret-token");
+    expect(rendered).not.toContain("sk-nested-secret");
+    expect(rendered).not.toContain("plain-password");
+    expect(rendered).not.toContain("preview-secret-token");
+    expect(rendered).not.toContain("preview-password");
+  });
+
+  it("shows the session approval action only when the engine marks it safe", async () => {
+    const onApproveForSession = jest.fn(async () => {});
+    const { rerender } = render(
+      <ApprovalRequiredCard
+        request={{ ...request, allowForSessionSafe: false }}
+        onApprove={async () => {}}
+        onApproveForSession={onApproveForSession}
+      />
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Allow extension_click for this session" })
+    ).not.toBeInTheDocument();
+
+    const safeRequest = { ...request, allowForSessionSafe: true };
+    rerender(
+      <ApprovalRequiredCard
+        request={safeRequest}
+        onApprove={async () => {}}
+        onApproveForSession={onApproveForSession}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Allow extension_click for this session" }));
+
+    await waitFor(() => {
+      expect(onApproveForSession).toHaveBeenCalledWith("approval-1", safeRequest);
+    });
+    expect(screen.getByText(/Approved\. ZAKI is continuing/)).toBeInTheDocument();
   });
 
   it("never auto-dismisses or disables actions off a past expiresAt", () => {
@@ -103,7 +242,7 @@ describe("ApprovalRequiredCard", () => {
     });
 
     // Card is still present and the actions are still enabled.
-    expect(screen.getByText("Approval required for extension_click")).toBeInTheDocument();
+    expect(screen.getByText("Control the browser")).toBeInTheDocument();
     expect(screen.queryByText(/Approval expired/)).not.toBeInTheDocument();
     expect(screen.queryByText(/to decide/)).not.toBeInTheDocument();
     expect(

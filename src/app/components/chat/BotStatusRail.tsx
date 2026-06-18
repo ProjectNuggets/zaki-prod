@@ -176,6 +176,9 @@ export type NullalisApprovalRequest = {
   reason: string;
   riskLevel: string;
   timestamp: number;
+  intent?: string | null;
+  params?: unknown;
+  allowForSessionSafe?: boolean;
   inputPreview?: string | null;
   effectPreview?: string | null;
   command?: string | null;
