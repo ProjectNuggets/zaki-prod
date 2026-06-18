@@ -792,6 +792,14 @@ export async function fetchBillingConfig() {
           monthly?: boolean;
           yearly?: boolean;
         };
+        pro?: {
+          monthly?: boolean;
+          yearly?: boolean;
+        };
+        pro_max?: {
+          monthly?: boolean;
+          yearly?: boolean;
+        };
         agent?: {
           monthly?: boolean;
           yearly?: boolean;
@@ -827,6 +835,14 @@ export async function fetchBillingConfig() {
           yearly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
         };
         personal?: {
+          monthly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+          yearly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+        };
+        pro?: {
+          monthly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+          yearly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
+        };
+        pro_max?: {
           monthly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
           yearly?: { priceId?: string; unitAmount?: number | null; currency?: string | null } | null;
         };
@@ -869,7 +885,7 @@ export async function fetchBillingConfig() {
 }
 
 export async function createCheckoutSession(
-  plan: "student" | "personal" | "agent" | "learn" | "complete",
+  plan: "student" | "personal" | "pro" | "pro_max",
   provider?: "stripe" | "paddle" | "creem",
   interval: "monthly" | "yearly" = "monthly",
   context?: {

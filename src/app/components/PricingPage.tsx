@@ -25,7 +25,7 @@ import { useAuthStore } from "@/stores";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-type CommercialPaidPlan = "agent";
+type CommercialPaidPlan = "personal" | "pro" | "pro_max";
 type CheckoutProviderKey = "stripe" | "paddle" | "creem";
 
 type BillingNotice = {
@@ -41,26 +41,30 @@ type CheckoutProvider = {
 };
 
 type PricingCard = {
-  id: "chat_free" | CommercialPaidPlan | "brain" | "future";
+  id: "chat_free" | CommercialPaidPlan;
   plan?: CommercialPaidPlan;
-  translationKey: "free" | CommercialPaidPlan | "brain" | "future";
+  translationKey: "free" | CommercialPaidPlan;
   emphasized?: boolean;
   href?: string;
 };
 
-const PAID_PLAN_IDS: CommercialPaidPlan[] = ["agent"];
+const PAID_PLAN_IDS: CommercialPaidPlan[] = ["personal", "pro", "pro_max"];
+const PLAN_RANK: Record<CommercialPaidPlan, number> = {
+  personal: 1,
+  pro: 2,
+  pro_max: 3,
+};
 
 const PRICING_CARDS: PricingCard[] = [
   { id: "chat_free", translationKey: "free", href: "/spaces" },
-  { id: "agent", plan: "agent", translationKey: "agent", emphasized: true },
-  { id: "brain", translationKey: "brain", href: "/brain" },
-  { id: "future", translationKey: "future", href: "/" },
+  { id: "personal", plan: "personal", translationKey: "personal" },
+  { id: "pro", plan: "pro", translationKey: "pro", emphasized: true },
+  { id: "pro_max", plan: "pro_max", translationKey: "pro_max" },
 ];
 
 function checkoutProviderSupportsPlan(provider: CheckoutProvider, plan: CommercialPaidPlan) {
-  // Public V1 only sells Agent from this pricing surface. Legacy provider URLs
-  // may remain configured for old plans, but they must not sell unavailable
-  // products under the wrong checkout.
+  // Public checkout is Stripe-only for the commercial platform tiers. Legacy
+  // provider URLs may remain configured, but must not receive these plan IDs.
   return provider.key === "stripe" && provider.enabled && !provider.comingSoon && Boolean(plan);
 }
 
@@ -183,8 +187,8 @@ export function PricingPage() {
     const allowancePlan =
       card.id === "chat_free"
         ? billingConfig?.platformPlanAllowances?.free
-        : card.plan === "agent"
-        ? billingConfig?.platformPlanAllowances?.personal
+        : card.plan
+        ? billingConfig?.platformPlanAllowances?.[card.plan]
         : null;
     const allowance = formatAllowanceNumber(allowancePlan?.weeklyAllowanceUnits);
     if (!allowance) return null;
@@ -241,11 +245,16 @@ export function PricingPage() {
 
   const currentPlanLabel = useMemo(() => {
     if (activeViaAccessCode) return t("pricingPage.codeActivePlanLabel");
-    if (commercialPlanId === "agent") return t("pricingPage.plans.agent.label");
-    if (commercialPlanId === "learn" || commercialPlanId === "complete" || commercialPlanId === "legacy_personal") {
+    if (PAID_PLAN_IDS.includes(commercialPlanId as CommercialPaidPlan)) {
+      return t(`pricingPage.plans.${commercialPlanId}.label`);
+    }
+    if (commercialPlanId === "agent" || commercialPlanId === "learn" || commercialPlanId === "complete" || commercialPlanId === "legacy_personal") {
       return t("pricingPage.legacyPremiumPlanLabel");
     }
-    if (currentTier === "student" || currentTier === "personal" || currentTier === "pro") {
+    if (PAID_PLAN_IDS.includes(currentTier as CommercialPaidPlan)) {
+      return t(`pricingPage.plans.${currentTier}.label`);
+    }
+    if (currentTier === "student") {
       return t("pricingPage.legacyPremiumPlanLabel");
     }
     return t("pricingPage.plans.free.label");
@@ -406,14 +415,17 @@ export function PricingPage() {
     }
 
     const current = commercialPlanId === card.plan;
-    const currentPlanIncludesCard =
+    const currentPaidPlan = PAID_PLAN_IDS.includes(commercialPlanId as CommercialPaidPlan)
+      ? (commercialPlanId as CommercialPaidPlan)
+      : PAID_PLAN_IDS.includes(currentTier as CommercialPaidPlan)
+      ? (currentTier as CommercialPaidPlan)
+      : null;
+    const currentPlanIncludesCard = Boolean(
       hasSubscription &&
-      (commercialPlanId === "complete" ||
-        commercialPlanId === "legacy_personal" ||
-        currentTier === "student" ||
-        currentTier === "personal" ||
-        currentTier === "pro") &&
-      card.plan === "agent";
+      card.plan &&
+      currentPaidPlan &&
+      PLAN_RANK[currentPaidPlan] > PLAN_RANK[card.plan]
+    );
     const checkoutPlan = card.plan;
 
     if (hasSubscription && current) {
@@ -460,9 +472,9 @@ export function PricingPage() {
 
   const pricingHighlights = [
     t("pricingPage.highlightsTemplates.free"),
-    t("pricingPage.highlightsTemplates.agent"),
-    t("pricingPage.highlightsTemplates.brain"),
-    t("pricingPage.highlightsTemplates.future"),
+    t("pricingPage.highlightsTemplates.personal"),
+    t("pricingPage.highlightsTemplates.pro"),
+    t("pricingPage.highlightsTemplates.pro_max"),
   ];
 
   return (

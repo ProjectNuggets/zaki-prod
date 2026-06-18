@@ -1291,21 +1291,21 @@
   "pricingPage": {
     "eyebrow": "Plans",
     "title": "Choose how ZAKI should keep working with you",
-    "subtitle": "Start free in Chat without an account. Pay when you want Agent continuity, account memory, and follow-through. Learn, Design, and Career stay parked until their full flows are ready.",
+    "subtitle": "Start free in Chat without an account. Upgrade when you want more room for Agent, Chat, Spaces, and Brain. Learn, Design, and Career stay parked until their full flows are ready.",
     "subtitleAccessActive": "Your access code unlocks the V1 core for now. Product-specific codes come later.",
-    "comparisonNote": "V1 pricing is intentionally simple: free Chat, paid Agent, Brain included with account continuity, and future products clearly marked as coming soon.",
+    "comparisonNote": "V1 pricing is intentionally simple: free Chat, three paid usage tiers, Brain included with account continuity, and future products clearly marked as coming soon.",
     "highlightsTemplates": {
       "free": "Chat Free: weekly usage included",
-      "agent": "Agent: $29/month",
-      "brain": "Brain: included",
-      "future": "Learn, Design, Career: gated"
+      "personal": "Personal: $15/month",
+      "pro": "Pro: $45/month",
+      "pro_max": "Pro Max: $99/month"
     },
     "currentPlan": "You’re currently on {{plan}}",
     "currentPlanSignedOut": "You’re viewing plans signed out",
     "currentPlanSignInHint": "Pick a paid plan and sign in to continue checkout.",
     "currentPlanPremium": "Manage or cancel anytime.",
     "currentPlanCodeActive": "Access code is active.",
-    "currentPlanFree": "Chat stays free. Agent unlocks after checkout.",
+    "currentPlanFree": "Chat stays free. Paid plans add more room for Agent, Chat, Spaces, and Brain.",
     "codeActivePlanLabel": "Access code",
     "legacyPremiumPlanLabel": "Legacy premium access",
     "billingNotices": {
@@ -1375,14 +1375,34 @@
         ],
         "cta": "Start chat"
       },
-      "agent": {
-        "label": "ZAKI Agent",
-        "price": "$29 / month",
-        "blurb": "The paid personal agent for work you should not have to explain twice.",
+      "personal": {
+        "label": "Personal",
+        "price": "$15 / month",
+        "blurb": "More room for daily work with Agent, Chat, Spaces, and Brain.",
         "features": [
-          "More weekly room for Agent, Chat, and Brain",
-          "Memory import and paid Agent access after checkout",
-          "Built for recurring work, decisions, and follow-through"
+          "A meaningful weekly allowance",
+          "Full account memory continuity",
+          "Everything in Free"
+        ]
+      },
+      "pro": {
+        "label": "Pro",
+        "price": "$45 / month",
+        "blurb": "Larger limits for heavier work while ZAKI keeps the context close.",
+        "features": [
+          "Larger allowance and generous burst",
+          "More room for deeper agent work",
+          "Everything in Personal"
+        ]
+      },
+      "pro_max": {
+        "label": "Pro Max",
+        "price": "$99 / month",
+        "blurb": "The highest current limits and first access when gated products are ready.",
+        "features": [
+          "Highest weekly and burst limits",
+          "Priority routing where available",
+          "Everything in Pro"
         ]
       },
       "brain": {

@@ -39,9 +39,9 @@ const productRows = [
   {
     id: "learn-hire",
     icon: Lock,
-    title: "Learn + Carrier",
+    title: "Learn + Career",
     status: "Private access",
-    body: "Visible as direction, not general access. Learn and Carrier stay gated until entitlement, memory, usage, UI, and E2E all agree.",
+    body: "Visible as direction, not general access. Learn and Career stay gated until entitlement, memory, usage, UI, and E2E all agree.",
     href: appHandoffUrl("/settings?section=products", "website_product_beta", "dashboard"),
     cta: "View access",
   },
@@ -83,7 +83,7 @@ export function ProductPage({ locale }: { locale: Locale }) {
             <div className="grid border border-zk-border-strong bg-zk-surface md:grid-cols-2">
               {[
                 ["Public", "Chat, Agent, Brain"],
-                ["Gated", "Learn, Carrier"],
+                ["Gated", "Learn, Career"],
                 ["Waitlist", "Design"],
                 ["Control", "Settings owns account configuration"],
               ].map(([label, value]) => (

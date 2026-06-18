@@ -22,22 +22,35 @@ function readSourceFiles(root: string) {
 }
 
 describe("V3 website link audit", () => {
-  it("keeps website app handoffs on chatzaki.ai and never app.chatzaki.com", () => {
+  it("keeps website app handoffs runtime-configured and never app.chatzaki.com", () => {
     const files = readSourceFiles(websiteSrc);
-    expect(files.some(([, source]) => source.includes("https://chatzaki.ai"))).toBe(true);
     for (const [path, source] of files) {
       expect(source).not.toContain("app.chatzaki.com");
       expect(source).not.toContain("zaki.app");
     }
 
     const appHandoff = readFileSync(join(websiteSrc, "lib/appHandoff.ts"), "utf8");
-    expect(appHandoff).toContain('"https://chatzaki.ai"');
+    expect(appHandoff).toContain("getWebsiteRuntimeConfig");
     expect(appHandoff).toContain('"hire_waitlist"');
-    expect(appHandoff).toContain('"ZAKI Carrier"');
+    expect(appHandoff).toContain('"ZAKI Career"');
 
     const websiteApi = readFileSync(join(websiteSrc, "lib/websiteApi.ts"), "utf8");
+    expect(websiteApi).toContain("getWebsiteRuntimeConfig");
     expect(websiteApi).toContain('"www.chatzaki.com"');
     expect(websiteApi).toContain('endsWith(".chatzaki.com")');
+    expect(websiteApi).toContain('endsWith(".chatzaki.ai")');
+    expect(websiteApi).toContain('endsWith(".chatzaki.io")');
+  });
+
+  it("keeps Website V3 checkout links on canonical billing plan ids", () => {
+    const v3Source = readFileSync(join(websiteSrc, "components/v3/V3Website.tsx"), "utf8");
+    expect(v3Source).toContain('pricingSignup("personal")');
+    expect(v3Source).toContain('pricingSignup("pro")');
+    expect(v3Source).toContain('pricingSignup("pro_max")');
+    expect(v3Source).not.toContain('pricingSignup("agent")');
+    expect(v3Source).not.toContain('pricingSignup("promax")');
+    expect(v3Source).not.toContain('pricingSignup("learn")');
+    expect(v3Source).not.toContain('pricingSignup("complete")');
   });
 
   it("keeps V3 public navigation concrete and removes mockup edit-mode UI", () => {
@@ -45,7 +58,7 @@ describe("V3 website link audit", () => {
     expect(v3Source).toContain('to="/privacy"');
     expect(v3Source).toContain('to="/terms"');
     expect(v3Source).toContain('to="/compliance"');
-    expect(v3Source).toContain("Design & Carrier");
+    expect(v3Source).toContain("Design & Career");
     expect(v3Source).not.toContain("open beta");
     expect(v3Source).not.toContain("Private beta");
     expect(v3Source).not.toContain('href="#"');

@@ -8,9 +8,10 @@ import {
   getContactContent,
   getLegalContent,
 } from "./routeContent";
+import { getWebsiteRuntimeConfig } from "./runtimeConfig";
 
-export const SITE_URL = "https://chatzaki.com";
-export const APP_URL = "https://chatzaki.ai";
+export const SITE_URL = getWebsiteRuntimeConfig().siteUrl;
+export const APP_URL = getWebsiteRuntimeConfig().appBaseUrl;
 export const DEFAULT_OG_IMAGE = `${SITE_URL}/slides/1.png`;
 export const SEO_UPDATED_AT = "2026-06-17T00:00:00Z";
 
@@ -118,7 +119,7 @@ export function getRouteSeo(pathname: string): RouteSeo {
   if (route === "/product/" || route === "/ar/product/") {
     const description =
       locale === "ar"
-        ? "لوحة منتج زكي V1: Chat وAgent وBrain عامة، Learn وCarrier وصول خاص، وDesign قائمة انتظار حتى تكتمل مساراتها."
+        ? "لوحة منتج زكي V1: Chat وAgent وBrain عامة، Learn وCareer وصول خاص، وDesign قائمة انتظار حتى تكتمل مساراتها."
         : "ZAKI is an intelligence layer for people building their next chapter: Agent acts, Spaces keep work focused, and Brain remembers what matters.";
     return {
       title:
@@ -172,7 +173,7 @@ export function getRouteSeo(pathname: string): RouteSeo {
         ? "ابدأ من Chat مجانًا، واستخدم Agent وBrain للاستمرارية والذاكرة عندما يحتاج العمل إلى حساب."
         : "ZAKI pricing: Free, Personal USD 15, Pro USD 45, Pro MAX USD 99. Start free and upgrade for more room, deeper memory, and priority."
       : locale === "ar"
-        ? "استخدم زكي للكتابة والبحث والعمل ثنائي اللغة والمتابعة والذاكرة، مع بقاء Learn وCarrier وصول خاص وDesign انتظار."
+        ? "استخدم زكي للكتابة والبحث والعمل ثنائي اللغة والمتابعة والذاكرة، مع بقاء Learn وCareer وصول خاص وDesign انتظار."
         : "How founders, adventurers, and operators use ZAKI: an agent that acts, spaces for focused work, and a memory that carries context forward.";
     const pricingTitle =
       locale === "ar" ? "أسعار زكي | ابدأ مجانًا" : "ZAKI Pricing — Every live product included.";

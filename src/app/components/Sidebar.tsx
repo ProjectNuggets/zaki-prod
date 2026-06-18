@@ -231,25 +231,33 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
   const hasSubscription = hasActiveSubscription(entitlements);
   const isPremium = effectiveEntitlement.premium;
   const activeViaAccessCode = effectiveEntitlement.source === "access_code";
+  const canonicalPaidPlan =
+    commercialPlanId === "personal" || commercialPlanId === "pro" || commercialPlanId === "pro_max"
+      ? commercialPlanId
+      : planTierRaw === "personal" || planTierRaw === "pro" || planTierRaw === "pro_max"
+        ? planTierRaw
+        : null;
+  const hasLegacyPremiumPlan =
+    commercialPlanId === "agent" ||
+    commercialPlanId === "learn" ||
+    commercialPlanId === "complete" ||
+    commercialPlanId === "legacy_personal" ||
+    planTierRaw === "student";
   const planLabel =
     activeViaAccessCode
       ? t("sidebar.profile.planBadge.codeActive")
-      : commercialPlanId === "agent"
-      ? t("pricingPage.plans.agent.label")
-      : commercialPlanId === "learn"
-      ? t("pricingPage.plans.learn.label")
-      : commercialPlanId === "complete" || commercialPlanId === "legacy_personal" || planTierRaw === "pro" || planTierRaw === "personal" || planTierRaw === "student"
-      ? t("pricingPage.plans.complete.label")
+      : canonicalPaidPlan
+      ? t(`pricingPage.plans.${canonicalPaidPlan}.label`)
+      : hasLegacyPremiumPlan
+      ? t("pricingPage.legacyPremiumPlanLabel")
       : t("sidebar.profile.planBadge.free");
   const planDisplay =
     activeViaAccessCode
       ? t("sidebar.profile.planBadge.codeActive")
-      : commercialPlanId === "agent"
-      ? t("pricingPage.plans.agent.label")
-      : commercialPlanId === "learn"
-      ? t("pricingPage.plans.learn.label")
-      : commercialPlanId === "complete" || commercialPlanId === "legacy_personal" || planTierRaw === "pro" || planTierRaw === "personal" || planTierRaw === "student"
-      ? t("pricingPage.plans.complete.label")
+      : canonicalPaidPlan
+      ? t(`pricingPage.plans.${canonicalPaidPlan}.label`)
+      : hasLegacyPremiumPlan
+      ? t("pricingPage.legacyPremiumPlanLabel")
       : t("pricingPage.plans.free.label");
   const [openMenu, setOpenMenu] = useState<{ type: "thread"; id: string } | null>(null);
   const [spaceSettingsOpen, setSpaceSettingsOpen] = useState(false);

@@ -1,4 +1,6 @@
-export const APP_BASE_URL = String(import.meta.env.VITE_APP_BASE_URL || "https://chatzaki.ai").replace(/\/+$/, "");
+import { getWebsiteRuntimeConfig } from "./runtimeConfig";
+
+export const APP_BASE_URL = getWebsiteRuntimeConfig().appBaseUrl;
 
 export type AppIntent =
   | "dashboard"
@@ -71,7 +73,7 @@ export const websiteProductHandoffs: WebsiteProductHandoff[] = [
   },
   {
     id: "hire",
-    name: "ZAKI Carrier",
+    name: "ZAKI Career",
     state: "private_beta",
     statusLabel: "Private access",
     route: "/",

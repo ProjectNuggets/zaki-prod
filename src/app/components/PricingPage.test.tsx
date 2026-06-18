@@ -24,7 +24,7 @@ jest.mock("react-i18next", () => ({
       "pricingPage.subtitleAccessActive":
         "Your access code unlocks the V1 core for now. Product-specific codes come later.",
       "pricingPage.comparisonNote":
-        "V1 pricing is intentionally simple: free Chat, paid Agent, Brain included with account continuity, and future products clearly marked as coming soon.",
+        "V1 pricing is intentionally simple: free Chat, three paid usage tiers, Brain included with account continuity, and future products clearly marked as coming soon.",
       "pricingPage.cancelSubscription": "Cancel subscription",
       "pricingPage.cancellationScheduled": "Cancellation scheduled",
       "pricingPage.cancelScheduled": "Subscription will cancel at period end.",
@@ -51,17 +51,15 @@ jest.mock("react-i18next", () => ({
       "pricingPage.plans.free.price": "$0",
       "pricingPage.plans.free.cta": "Start chat",
       "pricingPage.plans.free.features": ["Free weekly usage for immediate Chat use", "No durable memory while anonymous", "Upgrade when the work should continue with memory"],
-      "pricingPage.plans.agent.label": "ZAKI Agent",
-      "pricingPage.plans.agent.price": "$29 / month",
-      "pricingPage.plans.agent.features": ["More weekly room for Agent, Chat, and Brain"],
-      "pricingPage.plans.brain.label": "ZAKI Brain",
-      "pricingPage.plans.brain.price": "Included",
-      "pricingPage.plans.brain.cta": "Open Brain",
-      "pricingPage.plans.brain.features": ["Review what ZAKI can remember"],
-      "pricingPage.plans.future.label": "Coming next",
-      "pricingPage.plans.future.price": "Soon",
-      "pricingPage.plans.future.cta": "Open dashboard",
-      "pricingPage.plans.future.features": ["Learn returns when learner state is safe", "Design launches after project creation is proven", "Carrier stays user-side and private until ready"],
+      "pricingPage.plans.personal.label": "Personal",
+      "pricingPage.plans.personal.price": "$15 / month",
+      "pricingPage.plans.personal.features": ["More weekly room for Agent, Chat, Spaces, and Brain"],
+      "pricingPage.plans.pro.label": "Pro",
+      "pricingPage.plans.pro.price": "$45 / month",
+      "pricingPage.plans.pro.features": ["Larger allowance and generous burst"],
+      "pricingPage.plans.pro_max.label": "Pro Max",
+      "pricingPage.plans.pro_max.price": "$99 / month",
+      "pricingPage.plans.pro_max.features": ["Highest weekly and burst limits"],
       "pricingPage.allowance.weekly": "{{allowance}} units/week",
     };
     return {
@@ -126,9 +124,9 @@ let billingConfigData: any = {
       checkoutProviders: [{ key: "stripe", label: "Stripe", enabled: true }],
       accessCodePurchaseEnabled: true,
       pricingAvailability: {
-        agent: { monthly: true, yearly: false },
-        learn: { monthly: true, yearly: false },
-        complete: { monthly: true, yearly: false },
+        personal: { monthly: true, yearly: false },
+        pro: { monthly: true, yearly: false },
+        pro_max: { monthly: true, yearly: false },
       },
       platformPlanAllowances: {
         free: { weeklyAllowanceUnits: 100, rollingAllowanceUnits: 40, burstWindowHours: 5 },
@@ -225,9 +223,9 @@ describe("PricingPage", () => {
           checkoutProviders: [{ key: "stripe", label: "Stripe", enabled: true }],
           accessCodePurchaseEnabled: true,
           pricingAvailability: {
-            agent: { monthly: true, yearly: false },
-            learn: { monthly: true, yearly: false },
-            complete: { monthly: true, yearly: false },
+            personal: { monthly: true, yearly: false },
+            pro: { monthly: true, yearly: false },
+            pro_max: { monthly: true, yearly: false },
           },
           platformPlanAllowances: {
             free: { weeklyAllowanceUnits: 100, rollingAllowanceUnits: 40, burstWindowHours: 5 },
@@ -333,7 +331,7 @@ describe("PricingPage", () => {
     expect(cancelSubscriptionMutateAsync).not.toHaveBeenCalled();
   });
 
-  it("starts Agent checkout with monthly Stripe selection", async () => {
+  it("starts Pro checkout with monthly Stripe selection", async () => {
     render(
       <MemoryRouter initialEntries={["/pricing"]}>
         <Routes>
@@ -342,16 +340,16 @@ describe("PricingPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Choose ZAKI Agent" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose Pro" }));
 
     await waitFor(() => {
       expect(checkoutMutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({ plan: "agent", interval: "monthly", provider: "stripe" })
+        expect.objectContaining({ plan: "pro", interval: "monthly", provider: "stripe" })
       );
     });
   });
 
-  it("does not expose Learn or Complete checkout as public pricing options", () => {
+  it("exposes only canonical paid checkout plans", () => {
     render(
       <MemoryRouter initialEntries={["/pricing"]}>
         <Routes>
@@ -361,17 +359,18 @@ describe("PricingPage", () => {
     );
 
     expect(screen.getByText("Chat Free")).toBeInTheDocument();
-    expect(screen.getByText("ZAKI Agent")).toBeInTheDocument();
-    expect(screen.getByText("ZAKI Brain")).toBeInTheDocument();
-    expect(screen.getByText("Included")).toBeInTheDocument();
-    expect(screen.getByText("Coming next")).toBeInTheDocument();
-    expect(screen.getByText("Soon")).toBeInTheDocument();
+    expect(screen.getByText("Personal")).toBeInTheDocument();
+    expect(screen.getByText("Pro")).toBeInTheDocument();
+    expect(screen.getByText("Pro Max")).toBeInTheDocument();
     expect(screen.queryByText("ZAKI Learn")).not.toBeInTheDocument();
     expect(screen.queryByText("ZAKI Complete")).not.toBeInTheDocument();
+    expect(screen.queryByText("ZAKI Agent")).not.toBeInTheDocument();
     expect(screen.queryByText("$19 / month")).not.toBeInTheDocument();
     expect(screen.queryByText("$39 / month")).not.toBeInTheDocument();
+    expect(screen.queryByText("$29 / month")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Choose ZAKI Learn" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Choose ZAKI Complete" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Choose ZAKI Agent" })).not.toBeInTheDocument();
   });
 
   it("shows real weekly allowances only on the pricing cards", () => {
@@ -385,6 +384,8 @@ describe("PricingPage", () => {
 
     expect(screen.getByText("100 units/week")).toBeInTheDocument();
     expect(screen.getByText("1,000 units/week")).toBeInTheDocument();
+    expect(screen.getByText("3,000 units/week")).toBeInTheDocument();
+    expect(screen.getByText("7,500 units/week")).toBeInTheDocument();
   });
 
   it("uses public billing metadata for signed-out pricing allowances", () => {
@@ -437,9 +438,9 @@ describe("PricingPage", () => {
           ],
           accessCodePurchaseEnabled: true,
           pricingAvailability: {
-            agent: { monthly: true, yearly: false },
-            learn: { monthly: true, yearly: false },
-            complete: { monthly: true, yearly: false },
+            personal: { monthly: true, yearly: false },
+            pro: { monthly: true, yearly: false },
+            pro_max: { monthly: true, yearly: false },
           },
           missing: [],
         },
@@ -454,11 +455,11 @@ describe("PricingPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Choose ZAKI Agent" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose Pro" }));
 
     await waitFor(() => {
       expect(checkoutMutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({ plan: "agent", interval: "monthly", provider: "stripe" })
+        expect.objectContaining({ plan: "pro", interval: "monthly", provider: "stripe" })
       );
     });
     expect(screen.queryByText("Paddle")).not.toBeInTheDocument();
@@ -476,11 +477,11 @@ describe("PricingPage", () => {
           checkoutProviders: [{ key: "paddle", label: "Paddle", enabled: true }],
           accessCodePurchaseEnabled: false,
           pricingAvailability: {
-            agent: { monthly: false, yearly: false },
-            learn: { monthly: false, yearly: false },
-            complete: { monthly: false, yearly: false },
+            personal: { monthly: false, yearly: false },
+            pro: { monthly: false, yearly: false },
+            pro_max: { monthly: false, yearly: false },
           },
-          missing: ["stripe_price_agent_monthly"],
+          missing: ["stripe_price_pro_monthly"],
         },
       },
     };
@@ -493,7 +494,7 @@ describe("PricingPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Choose ZAKI Agent" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose Pro" }));
 
     await waitFor(() => {
       expect((toast as unknown as { error: jest.Mock }).error).toHaveBeenCalledWith(
@@ -503,7 +504,7 @@ describe("PricingPage", () => {
     expect(checkoutMutateAsync).not.toHaveBeenCalled();
   });
 
-  it.each(["complete", "learn", "hire", "design"])(
+  it.each(["agent", "complete", "learn", "hire", "design", "promax"])(
     "ignores non-public checkout autostart intents for %s",
     async (plan) => {
       render(
@@ -515,7 +516,7 @@ describe("PricingPage", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("Coming next")).toBeInTheDocument();
+        expect(screen.getByText("Pro Max")).toBeInTheDocument();
       });
       expect(checkoutMutateAsync).not.toHaveBeenCalled();
     }
@@ -570,21 +571,21 @@ describe("PricingPage", () => {
     );
 
     expect(screen.getByText("Your access code unlocks the V1 core for now. Product-specific codes come later.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Choose ZAKI Agent" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose Pro" }));
     await waitFor(() => {
       expect(checkoutMutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({ plan: "agent", interval: "monthly", provider: "stripe" })
+        expect.objectContaining({ plan: "pro", interval: "monthly", provider: "stripe" })
       );
     });
     expect(screen.queryByRole("button", { name: "Cancel subscription" })).not.toBeInTheDocument();
     expect(screen.getByText("Redeem another code to extend your access.")).toBeInTheDocument();
   });
 
-  it("lets active Agent subscribers manage the current plan without Complete upsell", async () => {
+  it("lets active Pro subscribers manage the current plan without legacy upsell", async () => {
     entitlementsData = {
       data: {
         plan: {
-          tier: "agent",
+          tier: "pro",
           status: "active",
           cancelAtPeriodEnd: false,
         },
@@ -594,13 +595,13 @@ describe("PricingPage", () => {
           campaign: null,
         },
         effective: {
-          tier: "agent",
+          tier: "pro",
           status: "active",
           source: "subscription",
           premium: true,
         },
         commercial: {
-          planId: "agent",
+          planId: "pro",
           source: "subscription",
         },
       },

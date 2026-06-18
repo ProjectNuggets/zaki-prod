@@ -121,9 +121,9 @@ type SettingsBillingPlanId =
   | "complete"
   | "pro"
   | "pro_max";
-type SettingsCheckoutPlanId = "agent";
+type SettingsCheckoutPlanId = "personal" | "pro" | "pro_max";
 
-const SETTINGS_PAID_PLAN_IDS = ["agent"] as const satisfies readonly SettingsCheckoutPlanId[];
+const SETTINGS_PAID_PLAN_IDS = ["personal", "pro", "pro_max"] as const satisfies readonly SettingsCheckoutPlanId[];
 const SETTINGS_PLAN_RANK: Record<SettingsBillingPlanId, number> = {
   free: 0,
   personal: 1,

@@ -21,7 +21,7 @@ const items: { title: { en: string; ar: string }; desc: { en: string; ar: string
     status: "building",
   },
   {
-    title: { en: "Learn and Carrier gated", ar: "Learn وCarrier بوصول مقيد" },
+    title: { en: "Learn and Career gated", ar: "Learn وCareer بوصول مقيد" },
     desc: { en: "These products stay gated until entitlement, memory, usage, UI, and E2E agree.", ar: "هذه المنتجات تبقى مقيدة حتى تتفق الصلاحيات والذاكرة والاستخدام والواجهة والاختبارات." },
     status: "building",
   },

@@ -16,6 +16,7 @@ const { renderRoute, getPrerenderRoutes, routeRegistry } = await import(pathToFi
 
 const templatePath = resolve(distDir, "index.html");
 const templateHtml = readFileSync(templatePath, "utf8");
+const SITE_URL = String(process.env.VITE_SITE_URL || "https://www.chatzaki.com").replace(/\/+$/, "");
 
 const seoStart = "<!-- SEO:START -->";
 const seoEnd = "<!-- SEO:END -->";
@@ -67,8 +68,8 @@ function buildSeoBlock({ seo, structuredData }) {
       content="${escapeHtml(seo.description)}"
     />
     <meta property="og:url" content="${escapeHtml(seo.canonical)}" />
-    <meta property="og:image" content="https://chatzaki.com/slides/1.png" />
-    <meta property="og:image:secure_url" content="https://chatzaki.com/slides/1.png" />
+    <meta property="og:image" content="${SITE_URL}/slides/1.png" />
+    <meta property="og:image:secure_url" content="${SITE_URL}/slides/1.png" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -83,7 +84,7 @@ function buildSeoBlock({ seo, structuredData }) {
       name="twitter:description"
       content="${escapeHtml(seo.description)}"
     />
-    <meta name="twitter:image" content="https://chatzaki.com/slides/1.png" />
+    <meta name="twitter:image" content="${SITE_URL}/slides/1.png" />
     <meta name="twitter:image:alt" content="${escapeHtml(seo.imageAlt)}" />
     ${jsonLdScripts}
     ${seoEnd}`;
@@ -110,7 +111,7 @@ function buildSitemapXml(routes) {
   const today = new Date().toISOString().slice(0, 10);
   const byPath = new Map(routeRegistry.map((route) => [route.pathname, route]));
   const absoluteUrl = (pathname) =>
-    pathname === "/" ? "https://chatzaki.com/" : `https://chatzaki.com${pathname}`;
+    pathname === "/" ? `${SITE_URL}/` : `${SITE_URL}${pathname}`;
 
   const body = routes
     .map((routePath) => {

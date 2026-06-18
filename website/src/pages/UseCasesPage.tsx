@@ -45,7 +45,7 @@ const useCases = [
   {
     icon: BriefcaseBusiness,
     title: "Job-search preparation",
-    body: "Carrier remains private access. Today, Chat can improve CV copy and Agent can plan the search while the full Carrier flow stays gated.",
+    body: "Career remains private access. Today, Chat can improve CV copy and Agent can plan the search while the full Career flow stays gated.",
     href: appHandoffUrl("/hire", "website_use_cases_hire_beta", "hire_waitlist"),
     cta: "View access",
   },

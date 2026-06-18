@@ -1,3 +1,5 @@
+import { appHandoffUrl } from "../lib/appHandoff";
+
 export const content = {
   en: {
     lang: "en",
@@ -50,7 +52,7 @@ export const content = {
             "User-controlled memory and stronger data discipline",
           ],
           ctaLabel: "Start Chat",
-          ctaHref: "https://chatzaki.ai/spaces?source=website_chat_live&intent=chat",
+          ctaHref: appHandoffUrl("/spaces", "website_chat_live", "chat"),
         },
         {
           stage: "Surface 2",
@@ -235,7 +237,7 @@ export const content = {
           status: "done",
           link: {
             label: "Open ZAKI app",
-            url: "https://chatzaki.ai",
+            url: appHandoffUrl("/", "website_timeline", "dashboard"),
           },
         },
         {
@@ -668,7 +670,7 @@ export const content = {
             "تحكم أوضح في الذاكرة والبيانات",
           ],
           ctaLabel: "جرّب Spaces",
-          ctaHref: "https://chatzaki.ai/spaces?source=website_chat_live&intent=chat",
+          ctaHref: appHandoffUrl("/spaces", "website_chat_live", "chat"),
         },
         {
           stage: "المرحلة 2",
@@ -853,7 +855,7 @@ export const content = {
           status: "done",
           link: {
             label: "افتح تطبيق زكي",
-            url: "https://chatzaki.ai",
+            url: appHandoffUrl("/", "website_timeline", "dashboard"),
           },
         },
         {

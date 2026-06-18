@@ -19,7 +19,7 @@ const metrics = [
     value: 2,
     suffix: "",
     label: { en: "Gated lanes", ar: "مسارات مقيدة" },
-    sublabel: { en: "Learn and Carrier", ar: "Learn وCarrier" },
+    sublabel: { en: "Learn and Career", ar: "Learn وCareer" },
   },
   {
     value: 1,

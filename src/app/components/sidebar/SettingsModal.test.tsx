@@ -1316,10 +1316,17 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(billing.getByRole("button", { name: "Manage subscription" })).toBeInTheDocument();
     });
-    expect(billing.queryByRole("button", { name: "Upgrade to Pro MAX" })).not.toBeInTheDocument();
+    expect(billing.getByRole("button", { name: "Upgrade to Pro MAX" })).toBeInTheDocument();
     expect(billing.queryByRole("button", { name: "Upgrade to Agent" })).not.toBeInTheDocument();
     expect(billing.queryByRole("button", { name: "Upgrade to Complete" })).not.toBeInTheDocument();
     expect(checkoutMutateMock).not.toHaveBeenCalled();
+
+    fireEvent.click(billing.getByRole("button", { name: "Upgrade to Pro MAX" }));
+    await waitFor(() => {
+      expect(checkoutMutateMock).toHaveBeenCalledWith(
+        expect.objectContaining({ plan: "pro_max", interval: "monthly" })
+      );
+    });
 
     fireEvent.click(billing.getByRole("button", { name: "Manage subscription" }));
     await waitFor(() => {

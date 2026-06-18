@@ -80,7 +80,7 @@ const journeys: Journey[] = [
   {
     icon: LockKeyhole,
     label: { en: "Join gated lanes", ar: "انضم للمسارات المقيّدة" },
-    status: { en: "Learn/Carrier gated, Design waitlist", ar: "Learn/Carrier مقيد، Design انتظار" },
+    status: { en: "Learn/Career gated, Design waitlist", ar: "Learn/Career مقيد، Design انتظار" },
     steps: {
       en: ["Website waitlist", "Public endpoint", "Operator review", "No public runtime claim"],
       ar: ["قائمة انتظار الموقع", "نقطة عامة", "مراجعة تشغيلية", "بدون وعد تشغيل عام"],
