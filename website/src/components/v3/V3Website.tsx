@@ -643,7 +643,7 @@ function PricingTeaser() {
           <p className="lede">Free is not a trick. Upgrade only when you want more room, deeper memory, and priority when it counts. Learn, Design, and Hire stay gated until ready.</p>
         </div>
         <PricingTiers compact />
-        <p className="pricing-foot">Prices in EUR · cancel anytime · your memory exports with you. <Link to="/pricing" style={{ color: "var(--accent)" }}>Full pricing &amp; FAQ →</Link></p>
+        <p className="pricing-foot">Prices in USD · cancel anytime · your memory exports with you. <Link to="/pricing" style={{ color: "var(--accent)" }}>Full pricing &amp; FAQ →</Link></p>
       </div>
     </section>
   );
@@ -671,10 +671,10 @@ function FinalCta({ variant = "home" }: { variant?: "home" | "subpage" }) {
 
 function PricingTiers({ compact = false }: { compact?: boolean }) {
   const tiers = [
-    ["Free", "Start the chapter", "€0", "forever", "The live product, no card: enough to feel what changes when AI remembers.", ["Agent, Chat, Spaces & Brain", "Memory continuity, you control", "Arabic & English, no card"], pricingSignup()],
-    ["Personal", "For your daily chapter", "€15", "/ month", "More room for daily work, with a memory that never starts over.", ["A meaningful weekly allowance", "Full memory continuity", "Everything in Free"], pricingSignup("personal")],
-    ["Pro", "For the bold adventure", "€45", "/ month", "Run heavier work without hitting a wall while ZAKI keeps the context close.", ["Larger allowance & generous burst", "Deeper memory & stronger caps", "Everything in Personal"], pricingSignup("pro")],
-    ["Pro MAX", "For the biggest leap", "€99", "/ month", "The most ZAKI can be: fastest, deepest, first to ready new products.", ["Highest limits & priority routing", "Deepest memory capability", "Earliest access when products are ready"], pricingSignup("promax")],
+    ["Free", "Start the chapter", "$0", "forever", "The live product, no card: enough to feel what changes when AI remembers.", ["Agent, Chat, Spaces & Brain", "Memory continuity, you control", "Arabic & English, no card"], pricingSignup()],
+    ["Personal", "For your daily chapter", "$15", "/ month", "More room for daily work, with a memory that never starts over.", ["A meaningful weekly allowance", "Full memory continuity", "Everything in Free"], pricingSignup("personal")],
+    ["Pro", "For the bold adventure", "$45", "/ month", "Run heavier work without hitting a wall while ZAKI keeps the context close.", ["Larger allowance & generous burst", "Deeper memory & stronger caps", "Everything in Personal"], pricingSignup("pro")],
+    ["Pro MAX", "For the biggest leap", "$99", "/ month", "The most ZAKI can be: fastest, deepest, first to ready new products.", ["Highest limits & priority routing", "Deepest memory capability", "Earliest access when products are ready"], pricingSignup("promax")],
   ];
   return (
     <div className="tiers four">
