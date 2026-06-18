@@ -98,15 +98,16 @@ describe("V2 component primitives", () => {
           label="Weekly allowance"
           used={3}
           limit={5}
-          remaining="2 hours left"
           reset="Resets Jun 1"
-          unit="hours"
         />
       </>
     );
 
     expect(screen.getByText("100%")).toBeInTheDocument();
-    expect(screen.getByText("2 hours left")).toBeInTheDocument();
+    expect(screen.getByText("60% of your weekly usage")).toBeInTheDocument();
+    expect(screen.getByText("Resets Jun 1")).toBeInTheDocument();
+    expect(screen.queryByText("3")).not.toBeInTheDocument();
+    expect(screen.queryByText("/ 5")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Memory" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Share" })).not.toBeDisabled();
   });

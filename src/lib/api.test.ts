@@ -414,6 +414,55 @@ describe("fetchAnonymousMeterStatus", () => {
   });
 });
 
+describe("fetchBillingConfig", () => {
+  it("uses the public pricing config endpoint when signed out", async () => {
+    _storeToken = null;
+    mockFetch.mockResolvedValueOnce(
+      makeResponse(200, {
+        success: true,
+        configured: {
+          platformPlanAllowances: {
+            free: { weeklyAllowanceUnits: 100 },
+            personal: { weeklyAllowanceUnits: 1000 },
+          },
+        },
+      })
+    );
+
+    const { fetchBillingConfig } = await import("@/lib/api");
+    const { data } = await fetchBillingConfig();
+
+    expect(data.configured?.platformPlanAllowances?.free.weeklyAllowanceUnits).toBe(100);
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/billing/public-config",
+      expect.objectContaining({
+        method: "GET",
+        credentials: "include",
+      })
+    );
+    const headers = mockFetch.mock.calls[0][1]?.headers as Headers;
+    expect(headers.has("Authorization")).toBe(false);
+  });
+
+  it("uses the authenticated billing config endpoint when signed in", async () => {
+    _storeToken = "signed-in-token";
+    mockFetch.mockResolvedValueOnce(makeResponse(200, { success: true, configured: {} }));
+
+    const { fetchBillingConfig } = await import("@/lib/api");
+    await fetchBillingConfig();
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/billing/config",
+      expect.objectContaining({
+        method: "GET",
+        credentials: "include",
+      })
+    );
+    const headers = mockFetch.mock.calls[0][1]?.headers as Headers;
+    expect(headers.get("Authorization")).toBe("Bearer signed-in-token");
+  });
+});
+
 describe("requestPublicSignup", () => {
   it("includes the Turnstile token when supplied", async () => {
     mockFetch.mockResolvedValueOnce(makeResponse(200, { success: true }));

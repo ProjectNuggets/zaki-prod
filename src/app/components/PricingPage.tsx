@@ -174,6 +174,23 @@ export function PricingPage() {
     });
   })();
 
+  const formatAllowanceNumber = (value?: number | null) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) return null;
+    return new Intl.NumberFormat(language, { maximumFractionDigits: 0 }).format(value);
+  };
+
+  const getPlanAllowanceLabel = (card: PricingCard) => {
+    const allowancePlan =
+      card.id === "chat_free"
+        ? billingConfig?.platformPlanAllowances?.free
+        : card.plan === "agent"
+        ? billingConfig?.platformPlanAllowances?.personal
+        : null;
+    const allowance = formatAllowanceNumber(allowancePlan?.weeklyAllowanceUnits);
+    if (!allowance) return null;
+    return t("pricingPage.allowance.weekly", { allowance });
+  };
+
   const checkoutProviders = useMemo<CheckoutProvider[]>(() => {
     const providerCatalog: CheckoutProvider[] = [
       { key: "stripe", label: "Stripe", enabled: false },
@@ -542,6 +559,7 @@ export function PricingPage() {
             const priceLabel = card.plan
               ? getPlanPriceLabel(card.plan)
               : t(`pricingPage.plans.${card.translationKey}.price`);
+            const allowanceLabel = getPlanAllowanceLabel(card);
             return (
               <div
                 key={card.id}
@@ -568,6 +586,11 @@ export function PricingPage() {
                 <p className="text-xs leading-5 text-zaki-secondary dark:text-zaki-dark-subtle">
                   {t(`pricingPage.plans.${card.translationKey}.blurb`)}
                 </p>
+                {allowanceLabel ? (
+                  <div className="rounded-md border border-zaki-subtle bg-zaki-hover px-3 py-2 text-xs font-medium text-zaki-primary dark:text-zaki-dark-primary">
+                    {allowanceLabel}
+                  </div>
+                ) : null}
                 <ul
                   className={cn(
                     "mt-2 flex list-disc flex-col gap-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle",

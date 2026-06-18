@@ -20,6 +20,11 @@ import {
   buildAgentContextGauge,
   resolveContextGaugePercent,
 } from "@/lib/agentContext";
+import {
+  formatUsagePercentLabel,
+  getRoundedUsagePercent,
+  getUsagePercent,
+} from "@/lib/usageDisplay";
 import { SheetShell } from "@/app/components/ui/zaki";
 import {
   downloadAgentExportFile,
@@ -1197,7 +1202,20 @@ export function PowerUserSheet({
           const pct =
             row.unlimited || !row.limit
               ? null
-              : Math.max(0, Math.min(100, (row.used / row.limit) * 100));
+              : getUsagePercent({ used: row.used, limit: row.limit });
+          const roundedPct = pct == null ? null : getRoundedUsagePercent(pct);
+          const usagePercentLabel =
+            pct == null
+              ? t("zakiControls.powerUser.usage.unlimited")
+              : row.period === "week"
+                ? t("zakiControls.powerUser.usage.weeklyPercent", {
+                    percent: roundedPct,
+                    defaultValue: formatUsagePercentLabel(pct),
+                  })
+                : t("zakiControls.powerUser.usage.dailyPercent", {
+                    percent: roundedPct,
+                    defaultValue: formatUsagePercentLabel(pct),
+                  });
           return (
             <div
               key={row.surface}
@@ -1227,11 +1245,7 @@ export function PowerUserSheet({
                         : t("zakiControls.powerUser.usage.requestsToday")}
                     </span>
                     <span className="font-mono-ui">
-                      {row.unlimited
-                        ? t("zakiControls.powerUser.usage.usedUnlimited", {
-                            used: formatCount(row.used),
-                          })
-                        : `${formatCount(row.used)} / ${formatCount(row.limit)}`}
+                      {usagePercentLabel}
                     </span>
                   </div>
                   {pct != null ? (

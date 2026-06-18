@@ -8,6 +8,11 @@ import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import {
+  formatUsagePercentLabel,
+  getRoundedUsagePercent,
+  getUsagePercent,
+} from "@/lib/usageDisplay";
 import { useOnlineStatus } from "@/hooks";
 import {
   autoTitleThread,
@@ -3063,9 +3068,9 @@ export function ChatArea() {
       isRtl
         ? `وصلت إلى حد الاستخدام المجاني اليوم. يتم إعادة التعيين يوميًا. جرّب مرة أخرى بعد ${resetLabel}.`
         : `You reached today's free limit. Free usage resets daily. Try again after ${resetLabel}.`,
-    quotaBadgeNeutral: isRtl ? "معاينة أسبوعية" : "Weekly Agent preview",
-    quotaBadgeWarning: isRtl ? "الاستخدام المجاني محدود" : "Limited free usage",
-    quotaBadgeDanger: isRtl ? "تم بلوغ حد المعاينة" : "Agent preview limit reached",
+    quotaBadgeNeutral: isRtl ? "استخدام أسبوعي" : "Weekly usage",
+    quotaBadgeWarning: isRtl ? "الاستخدام الأسبوعي يقترب من الاكتمال" : "Weekly usage is getting full",
+    quotaBadgeDanger: isRtl ? "الاستخدام الأسبوعي ممتلئ" : "Weekly usage is full",
   };
   useAuthStore(); // For auth context, values used elsewhere
   const {
@@ -3667,11 +3672,20 @@ export function ChatArea() {
     () => activeAgentTaskItems(agentTaskItems),
     [agentTaskItems]
   );
-  const agentWeeklyLabel = zakiBotQuotaInfo
-    ? `${zakiBotQuotaInfo.remaining}/${zakiBotQuotaInfo.limit}`
-    : freeDailyQuota?.unlimited
-      ? "unlimited"
-      : "metering";
+  const weeklyUsagePercent = getUsagePercent({
+    used: meterResult?.data?.weekly?.used,
+    limit: meterResult?.data?.weekly?.limit,
+  });
+  const weeklyUsagePercentRounded = getRoundedUsagePercent(weeklyUsagePercent);
+  const agentWeeklyLabel =
+    typeof meterResult?.data?.weekly?.limit === "number"
+      ? t("agent.status.weeklyUsageValue", {
+          percent: weeklyUsagePercentRounded,
+          defaultValue: formatUsagePercentLabel(weeklyUsagePercent),
+        })
+      : freeDailyQuota?.unlimited
+        ? t("agent.status.weeklyIncluded", { defaultValue: "Included" })
+        : t("agent.status.weeklySyncing", { defaultValue: "Syncing" });
   const isZakiBotSendLocked = Boolean(
     zakiBotQuotaInfo && zakiBotQuotaInfo.remaining <= 0
   );
