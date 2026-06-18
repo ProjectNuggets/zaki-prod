@@ -16,7 +16,7 @@ const { renderRoute, getPrerenderRoutes, routeRegistry } = await import(pathToFi
 
 const templatePath = resolve(distDir, "index.html");
 const templateHtml = readFileSync(templatePath, "utf8");
-const SITE_URL = String(process.env.VITE_SITE_URL || "https://www.chatzaki.com").replace(/\/+$/, "");
+const SITE_URL = String(process.env.VITE_SITE_URL || "https://chatzaki.com").replace(/\/+$/, "");
 
 const seoStart = "<!-- SEO:START -->";
 const seoEnd = "<!-- SEO:END -->";

@@ -27,12 +27,12 @@ function runtimeValue(key: keyof WebsiteRuntimeEnv, fallback: string) {
 export function getWebsiteRuntimeConfig() {
   return {
     appBaseUrl: cleanUrl(
-      runtimeValue("APP_BASE_URL", import.meta.env.VITE_APP_BASE_URL || "https://www.chatzaki.ai"),
-      "https://www.chatzaki.ai"
+      runtimeValue("APP_BASE_URL", import.meta.env.VITE_APP_BASE_URL || "https://chatzaki.ai"),
+      "https://chatzaki.ai"
     ),
     siteUrl: cleanUrl(
-      runtimeValue("SITE_URL", import.meta.env.VITE_SITE_URL || "https://www.chatzaki.com"),
-      "https://www.chatzaki.com"
+      runtimeValue("SITE_URL", import.meta.env.VITE_SITE_URL || "https://chatzaki.com"),
+      "https://chatzaki.com"
     ),
     websiteApiBaseUrl: cleanUrl(
       runtimeValue("WEBSITE_API_BASE_URL", import.meta.env.VITE_WEBSITE_API_BASE_URL || ""),
