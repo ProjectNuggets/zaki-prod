@@ -104,6 +104,13 @@ import {
   requestNullclawChatStream,
 } from "./agent-client.js";
 import {
+  V1_CUTOVER_VERSION,
+  listV1CutoverAuditEvents,
+  listV1CutoverUsers,
+  requestNullalisV1Cutover,
+  runV1CutoverBatch,
+} from "./v1-cutover.js";
+import {
   createProvisionConfirmationCache,
   ensureProvisionedBeforeChat,
   streamChatWithProvisionRetry,
@@ -3976,6 +3983,107 @@ app.get("/api/admin/telemetry/usage", async (req, res) => {
   } catch (error) {
     console.error("[admin] usage telemetry failed:", error?.message || error);
     res.status(500).json({ success: false, error: "usage_metrics_failed" });
+  }
+});
+
+async function listLegacyWorkspaceSlugsForV1Cutover(user) {
+  const row = await dbGet(`SELECT nova_user_id FROM zaki_users WHERE id = $1`, [user.id]);
+  const novaUserId = Number(row?.nova_user_id);
+  if (!Number.isSafeInteger(novaUserId) || novaUserId <= 0) {
+    return [];
+  }
+  const result = await fetchTypWorkspaceSlugs(novaUserId);
+  if (!result?.success) {
+    throw new Error(result?.error || "Unable to list beta workspaces.");
+  }
+  return Array.isArray(result.slugs) ? result.slugs : [];
+}
+
+function runEngineV1Cutover(args) {
+  return requestNullalisV1Cutover({
+    ...args,
+    baseUrl: NULLCLAW_BASE_URL,
+    internalToken: NULLCLAW_INTERNAL_TOKEN,
+    fetchWithTimeout,
+    timeoutMs: Number(process.env.V1_CUTOVER_NULLALIS_TIMEOUT_MS || 30000),
+  });
+}
+
+app.get("/api/admin/v1-cutover/events", async (req, res) => {
+  const authResult = await requireSuperAdminUser(req, res);
+  if (!authResult) return;
+  try {
+    const events = await listV1CutoverAuditEvents({
+      dbAll,
+      userId: req.query.userId,
+      cutoverVersion: req.query.cutoverVersion || V1_CUTOVER_VERSION,
+      limit: req.query.limit,
+    });
+    res.json({ success: true, events });
+  } catch (error) {
+    console.error("[admin] V1 cutover audit failed:", error?.message || error);
+    res.status(500).json({ success: false, error: "v1_cutover_audit_failed" });
+  }
+});
+
+app.post("/api/admin/v1-cutover/run", express.json({ limit: "100kb" }), async (req, res) => {
+  const authResult = await requireSuperAdminUser(req, res);
+  if (!authResult) return;
+  const body = req.body || {};
+  const cutoverVersion = body.cutoverVersion || V1_CUTOVER_VERSION;
+  const userId = body.userId || null;
+  const dryRun = body.dryRun === true;
+  const fullBatch = !userId;
+  if (fullBatch && !dryRun && body.confirm !== "V1_CUTOVER") {
+    res.status(400).json({
+      success: false,
+      error: "confirmation_required",
+      detail: "Set confirm to V1_CUTOVER to run the full cutover batch.",
+    });
+    return;
+  }
+
+  const requestId = String(req.requestId || crypto.randomUUID());
+  try {
+    if (dryRun) {
+      const users = await listV1CutoverUsers({
+        dbAll,
+        userId,
+        limit: body.limit,
+      });
+      res.json({
+        success: true,
+        dryRun: true,
+        cutoverVersion,
+        total: users.length,
+        users: users.map((user) => ({
+          id: Number(user.id),
+          email: String(user.email || "").trim().toLowerCase(),
+          planTier: user.plan_tier || "free",
+        })),
+      });
+      return;
+    }
+
+    const result = await runV1CutoverBatch({
+      actorEmail: authResult.admin.email,
+      requestId,
+      cutoverVersion,
+      userId,
+      limit: body.limit,
+      dbAll,
+      withDbTransaction,
+      listWorkspaceSlugs: listLegacyWorkspaceSlugsForV1Cutover,
+      nullalisCutover: runEngineV1Cutover,
+    });
+    res.status(result.failed > 0 ? 207 : 200).json({
+      success: result.failed === 0,
+      requestId,
+      ...result,
+    });
+  } catch (error) {
+    console.error("[admin] V1 cutover run failed:", error?.message || error);
+    res.status(500).json({ success: false, requestId, error: "v1_cutover_run_failed" });
   }
 });
 
