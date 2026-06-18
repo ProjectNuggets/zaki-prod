@@ -81,7 +81,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.saveWork": "Save this work",
     "zakiDashboard.command.emptyHelper": "Type a prompt to start.",
     "zakiDashboard.command.creditHelper": "You're fine. ZAKI will update weekly usage after it responds.",
-    "zakiDashboard.command.capacityWindowLow": "Current capacity window is low.",
+    "zakiDashboard.command.capacityWindowLow": "{{hours}}h Agent window is {{percent}}% used. Next room clears {{reset}}.",
     "zakiDashboard.command.agentCreditsLow": "Agent needs more weekly room before it can start.",
     "zakiDashboard.command.nearCapNudge": "You're at {{percent}}% this week — upgrade for more room.",
     "zakiDashboard.command.comingSoonHelper": "{{product}} is coming soon. Pick Chat, Agent, or Brain to start now.",
@@ -95,8 +95,8 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.markers.comingSoon": "Coming soon",
     "zakiDashboard.command.creditsExhaustedTitle": "Weekly usage is full.",
     "zakiDashboard.command.creditsExhaustedCopy": "Keep your prompt here, then sign up, wait for reset, or choose a plan with more room.",
-    "zakiDashboard.command.capacityWindowTitle": "Current capacity window is low.",
-    "zakiDashboard.command.capacityWindowCopy": "Wait for the current window to refresh.",
+    "zakiDashboard.command.capacityWindowTitle": "{{hours}}h Agent window is {{percent}}% used.",
+    "zakiDashboard.command.capacityWindowCopy": "Recent Agent work leaves this window at {{reset}}.",
     "zakiDashboard.command.saveAndSignup": "Save and sign up",
     "zakiDashboard.command.viewPlans": "View plans",
     "zakiDashboard.command.waitForReset": "Wait for reset",
@@ -528,7 +528,13 @@ describe("ZakiDashboard", () => {
       data: {
         data: {
           ...signedInMeter,
-          rolling: { windowHours: 5, limit: 40, used: 20, remaining: 20 },
+          rolling: {
+            windowHours: 5,
+            limit: 40,
+            used: 20,
+            remaining: 20,
+            resetAt: "2026-05-20T12:00:00.000Z",
+          },
           weekly: { limit: 1500, used: 80, remaining: 1420 },
           availableNow: {
             agent: {
@@ -555,9 +561,9 @@ describe("ZakiDashboard", () => {
       target: { value: "Plan the launch sequence" },
     });
 
-    expect(screen.getAllByText("Current capacity window is low.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/5h Agent window is 50% used/).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Continue in Agent" })).toBeDisabled();
-    expect(screen.getByText("Wait for the current window to refresh.")).toBeInTheDocument();
+    expect(screen.getByText(/Recent Agent work leaves this window at/)).toBeInTheDocument();
   });
 
   it("keeps signed-in Agent submit enabled when current capacity satisfies reserve", () => {

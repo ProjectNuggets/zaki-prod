@@ -942,6 +942,11 @@ export function ZakiDashboard({
 
   const weeklyStats = getWindowStats(meterStatus?.weekly);
   const weeklyReset = formatReset(meterStatus?.weekly?.resetAt);
+  const rollingStats = getWindowStats(meterStatus?.rolling);
+  const rollingUsagePercentRounded = getRoundedUsagePercent(rollingStats.usedPercent);
+  const rollingWindowHours =
+    typeof meterStatus?.rolling?.windowHours === "number" ? meterStatus.rolling.windowHours : 5;
+  const rollingClearTime = formatTime(meterStatus?.rolling?.resetAt);
   const agentAvailability = meterStatus?.availableNow?.agent ?? null;
   const liveAgentSession = zakiSessions?.find(
     (session) => session.live || (session.pending_approval_count ?? 0) > 0
@@ -994,7 +999,12 @@ export function ZakiDashboard({
         })
     : selectedCommandPrompt && agentCapacityBlocked && agentAvailability?.constraint === "rolling"
       ? t("zakiDashboard.command.capacityWindowLow", {
-          defaultValue: "Current capacity window is refreshing as recent Agent work clears.",
+          hours: rollingWindowHours,
+          percent: rollingUsagePercentRounded,
+          reset: rollingClearTime || t("zakiDashboard.meter.resetPending"),
+          defaultValue: `${rollingWindowHours}h capacity window is ${rollingUsagePercentRounded}% used${
+            rollingClearTime ? `; next room clears ${rollingClearTime}` : "."
+          }`,
         })
     : selectedCommandPrompt && agentCapacityBlocked
       ? t("zakiDashboard.command.agentCreditsLow", {
@@ -1522,7 +1532,9 @@ export function ZakiDashboard({
                 <strong>
                   {agentCapacityBlocked && agentAvailability?.constraint === "rolling"
                     ? t("zakiDashboard.command.capacityWindowTitle", {
-                        defaultValue: "Current capacity window is refreshing.",
+                        hours: rollingWindowHours,
+                        percent: rollingUsagePercentRounded,
+                        defaultValue: `${rollingWindowHours}h capacity window is ${rollingUsagePercentRounded}% used.`,
                       })
                     : t("zakiDashboard.command.creditsExhaustedTitle", {
                         defaultValue: "Weekly usage is full.",
@@ -1531,8 +1543,12 @@ export function ZakiDashboard({
                 <span>
                   {agentCapacityBlocked
                     ? t("zakiDashboard.command.capacityWindowCopy", {
-                        defaultValue:
-                          "Keep your prompt here, wait for the current window to refresh, or choose a plan with more capacity.",
+                        hours: rollingWindowHours,
+                        percent: rollingUsagePercentRounded,
+                        reset: rollingClearTime || t("zakiDashboard.meter.resetPending"),
+                        defaultValue: rollingClearTime
+                          ? `Keep your prompt here. Recent Agent work leaves the ${rollingWindowHours}h window at ${rollingClearTime}.`
+                          : "Keep your prompt here while recent Agent work leaves the rolling window.",
                       })
                     : t("zakiDashboard.command.creditsExhaustedCopy", {
                         defaultValue:

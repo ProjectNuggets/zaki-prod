@@ -27,6 +27,7 @@ import {
   resolveContextGaugePercent,
   ChatRequestError,
   buildBillingPaywallCardData,
+  buildAgentComposerUsageState,
   isRetryableChatError,
   resolveTurnRetryable,
   CHAT_RETRYABLE_MAX_ATTEMPTS,
@@ -555,6 +556,40 @@ describe("P1-12 chat-stream retryable classification (isRetryableChatError)", ()
     expect(isRetryableChatError(error)).toBe(false);
   });
 
+  it("adds rolling-window percentage to Agent paywall card data", () => {
+    const error = new ChatRequestError("capacity low", 429, "insufficient_units", false, {
+      constraint: "rolling",
+      requiredUnits: 40,
+      effectiveRemaining: 20,
+      meter: {
+        rolling: {
+          windowHours: 5,
+          used: 40,
+          limit: 40,
+          remaining: 0,
+          resetAt: "2026-06-20T14:00:00.000Z",
+        },
+      },
+    });
+
+    const cardData = buildBillingPaywallCardData({
+      error,
+      paywallState: "out_of_usage",
+      planLabel: "Free",
+      isAgentTarget: true,
+      meterStatus: null,
+    });
+
+    expect(cardData).toEqual(
+      expect.objectContaining({
+        constraint: "rolling",
+        rollingWindowPercent: 100,
+        rollingWindowHours: 5,
+        resetAt: "2026-06-20T14:00:00.000Z",
+      })
+    );
+  });
+
   it("does not use Agent available-now fallback for non-Agent paywall denials", () => {
     const error = new ChatRequestError("spaces quota", 429, "insufficient_units");
     const cardData = buildBillingPaywallCardData({
@@ -589,6 +624,84 @@ describe("P1-12 chat-stream retryable classification (isRetryableChatError)", ()
         resetAt: "2026-06-24T00:00:00.000Z",
       })
     );
+  });
+
+  it("locks the Agent composer and shows rolling-window percentage from central meter availability", () => {
+    const state = buildAgentComposerUsageState({
+      isAgentActive: true,
+      availability: {
+        available: false,
+        constraint: "rolling",
+        requiredReserveUnits: 40,
+        effectiveRemaining: 20,
+      },
+      rollingWindow: {
+        windowHours: 5,
+        used: 40,
+        limit: 40,
+        remaining: 0,
+      },
+      dangerLabel: "Weekly usage is full",
+    });
+
+    expect(state).toEqual({
+      locked: true,
+      badge: {
+        label: "5h window 100% used",
+        tone: "danger",
+      },
+    });
+  });
+
+  it("uses weekly-danger copy for Agent composer blocks that are not rolling-window constrained", () => {
+    const state = buildAgentComposerUsageState({
+      isAgentActive: true,
+      availability: {
+        available: false,
+        constraint: "weekly",
+        requiredReserveUnits: 40,
+        effectiveRemaining: 0,
+      },
+      rollingWindow: {
+        windowHours: 5,
+        used: 10,
+        limit: 40,
+        remaining: 30,
+      },
+      dangerLabel: "Weekly usage is full",
+    });
+
+    expect(state).toEqual({
+      locked: true,
+      badge: {
+        label: "Weekly usage is full",
+        tone: "danger",
+      },
+    });
+  });
+
+  it("does not let Agent availability lock or badge non-Agent composer surfaces", () => {
+    const state = buildAgentComposerUsageState({
+      isAgentActive: false,
+      availability: {
+        available: false,
+        constraint: "rolling",
+        requiredReserveUnits: 40,
+        effectiveRemaining: 0,
+      },
+      rollingWindow: {
+        windowHours: 5,
+        used: 40,
+        limit: 40,
+        remaining: 0,
+      },
+      dangerLabel: "Weekly usage is full",
+    });
+
+    expect(state).toEqual({
+      locked: false,
+      badge: null,
+    });
   });
 
   it("does NOT treat a plain Error or non-error value as retryable", () => {

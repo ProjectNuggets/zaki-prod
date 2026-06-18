@@ -111,6 +111,12 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
   if (key === "zakiControls.powerUser.usage.weeklyPercent") {
     return `${String(options?.percent ?? "")}% of your weekly usage`;
   }
+  if (key === "zakiControls.powerUser.usage.legacyRequestsThisWeek") {
+    return "Legacy Agent weekly quota";
+  }
+  if (key === "zakiControls.powerUser.usage.legacyWeeklyPercent") {
+    return `${String(options?.percent ?? "")}% of legacy Agent weekly quota`;
+  }
   if (key === "zakiControls.powerUser.usage.footer") {
     return `Soft-limit warning at ${String(options?.warning ?? "")}% used; near-limit at ${String(options?.near ?? "")}%. Hard stops still apply on hit.`;
   }
@@ -860,6 +866,8 @@ describe("PowerUserSheet", () => {
       screen.getByTestId("power-user-usage-surface-zaki_bot")
     ).toHaveAttribute("data-soft-limit-state", "normal");
     expect(screen.getByText("90% of your daily usage")).toBeInTheDocument();
+    expect(screen.getByText("Legacy Agent weekly quota")).toBeInTheDocument();
+    expect(screen.getByText("20% of legacy Agent weekly quota")).toBeInTheDocument();
     expect(screen.queryByText("9 / 10")).not.toBeInTheDocument();
   });
 });

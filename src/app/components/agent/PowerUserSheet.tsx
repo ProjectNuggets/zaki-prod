@@ -1199,6 +1199,7 @@ export function PowerUserSheet({
           </div>
         ) : null}
         {(usageSurfaces || []).map((row) => {
+          const isLegacyAgentQuota = row.surface === "zaki_bot";
           const pct =
             row.unlimited || !row.limit
               ? null
@@ -1207,6 +1208,11 @@ export function PowerUserSheet({
           const usagePercentLabel =
             pct == null
               ? t("zakiControls.powerUser.usage.unlimited")
+              : isLegacyAgentQuota
+                ? t("zakiControls.powerUser.usage.legacyWeeklyPercent", {
+                    percent: roundedPct,
+                    defaultValue: `${roundedPct}% of legacy Agent weekly quota`,
+                  })
               : row.period === "week"
                 ? t("zakiControls.powerUser.usage.weeklyPercent", {
                     percent: roundedPct,
@@ -1216,6 +1222,13 @@ export function PowerUserSheet({
                     percent: roundedPct,
                     defaultValue: formatUsagePercentLabel(pct),
                   });
+          const usagePeriodLabel = isLegacyAgentQuota
+            ? t("zakiControls.powerUser.usage.legacyRequestsThisWeek", {
+                defaultValue: "Legacy Agent weekly quota",
+              })
+            : row.period === "week"
+              ? t("zakiControls.powerUser.usage.requestsThisWeek")
+              : t("zakiControls.powerUser.usage.requestsToday");
           return (
             <div
               key={row.surface}
@@ -1239,11 +1252,7 @@ export function PowerUserSheet({
               ) : (
                 <>
                   <div className="flex items-center justify-between">
-                    <span className="text-zaki-secondary">
-                      {row.period === "week"
-                        ? t("zakiControls.powerUser.usage.requestsThisWeek")
-                        : t("zakiControls.powerUser.usage.requestsToday")}
-                    </span>
+                    <span className="text-zaki-secondary">{usagePeriodLabel}</span>
                     <span className="font-mono-ui">
                       {usagePercentLabel}
                     </span>

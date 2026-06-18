@@ -42,7 +42,11 @@ describe("platform meter", () => {
     const dbGet = jest
       .fn()
       .mockResolvedValueOnce({ anchor_at: "2026-05-20T12:00:00.000Z" })
-      .mockResolvedValueOnce({ weighted_units: 2.5, receipts: 2 })
+      .mockResolvedValueOnce({
+        weighted_units: 2.5,
+        receipts: 2,
+        first_active_at: "2026-05-22T06:30:00.000Z",
+      })
       .mockResolvedValueOnce({ weighted_units: 7, receipts: 5 });
 
     const snapshot = await readMeterSnapshotForIdentity({
@@ -67,7 +71,7 @@ describe("platform meter", () => {
         receipts: 2,
         limit: 20,
         remaining: 17.5,
-        resetAt: "2026-05-22T10:00:00.000Z",
+        resetAt: "2026-05-22T11:30:00.000Z",
       })
     );
     expect(snapshot.weekly).toEqual(
@@ -143,6 +147,41 @@ describe("platform meter", () => {
       "2026-05-27T00:00:00.000Z",
       "2026-05-27T00:01:00.000Z",
     ]);
+  });
+
+  it("keeps rolling reset pending when no active rolling usage exists", async () => {
+    const dbGet = jest
+      .fn()
+      .mockResolvedValueOnce({ anchor_at: "2026-05-20T00:00:00.000Z" })
+      .mockResolvedValueOnce({
+        weighted_units: 0,
+        receipts: 0,
+        first_active_at: null,
+      })
+      .mockResolvedValueOnce({ weighted_units: 0, receipts: 0 });
+
+    const snapshot = await readMeterSnapshotForIdentity({
+      dbGet,
+      identity: { type: "user", tenantId: "tenant-a", userId: 42 },
+      platform: {
+        plan: { id: "free", label: "Free" },
+        usage: {
+          burstWindowHours: 5,
+          rollingAllowanceUnits: 40,
+          weeklyAllowanceUnits: 100,
+        },
+      },
+      nowDate: new Date("2026-06-18T10:00:00.000Z"),
+    });
+
+    expect(snapshot.rolling).toEqual(
+      expect.objectContaining({
+        used: 0,
+        receipts: 0,
+        remaining: 40,
+        resetAt: null,
+      })
+    );
   });
 
   it("keeps the weekly window pending until the first metered use", async () => {

@@ -22,6 +22,8 @@ export interface PaywallCardProps {
   effectiveRemaining?: number;
   requiredUnits?: number;
   constraint?: string | null;
+  rollingWindowPercent?: number | null;
+  rollingWindowHours?: number | null;
   resetAt?: string | null;
   message: string;
   onSeePlans: () => void;
@@ -35,10 +37,19 @@ function formatReset(resetAt?: string | null): string | null {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function formatClearTime(resetAt?: string | null): string | null {
+  if (!resetAt) return null;
+  const d = new Date(resetAt);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
 export function PaywallCard({
   state,
   planLabel,
   constraint,
+  rollingWindowPercent,
+  rollingWindowHours,
   resetAt,
   message,
   onSeePlans,
@@ -50,10 +61,20 @@ export function PaywallCard({
       : state === "out_of_usage"
         ? "Weekly usage is full"
         : "Your plan is inactive";
-  const reset = formatReset(resetAt);
+  const reset = constraint === "rolling" ? formatClearTime(resetAt) : formatReset(resetAt);
+  const roundedRollingPercent =
+    typeof rollingWindowPercent === "number" && Number.isFinite(rollingWindowPercent)
+      ? Math.max(0, Math.min(100, Math.round(rollingWindowPercent)))
+      : null;
+  const windowHours =
+    typeof rollingWindowHours === "number" && Number.isFinite(rollingWindowHours)
+      ? rollingWindowHours
+      : 5;
   const usageDetail =
     state === "out_of_usage" && constraint === "rolling"
-      ? "Current window is refreshing"
+      ? roundedRollingPercent == null
+        ? "Current window is refreshing"
+        : `${windowHours}-hour window is ${roundedRollingPercent}% used`
       : state === "out_of_usage" && (planLabel || reset)
         ? "Upgrade for more room"
         : null;
@@ -94,7 +115,11 @@ export function PaywallCard({
                   </span>
                 ) : null}
                 {state === "out_of_usage" && reset ? (
-                  <span>{planLabel || usageDetail ? " · " : ""}resets {reset}</span>
+                  <span>
+                    {planLabel || usageDetail ? " · " : ""}
+                    {constraint === "rolling" ? "next room clears " : "resets "}
+                    {reset}
+                  </span>
                 ) : null}
               </>
             ) : (

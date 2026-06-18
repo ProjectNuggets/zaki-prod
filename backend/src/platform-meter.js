@@ -21,6 +21,14 @@ function toIsoOrNull(value) {
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
 }
 
+function addHoursIso(value, hours) {
+  if (value == null || value === "") return null;
+  const date = value instanceof Date ? value : new Date(value);
+  const parsedHours = Number(hours);
+  if (!Number.isFinite(date.getTime()) || !Number.isFinite(parsedHours)) return null;
+  return new Date(date.getTime() + Math.max(1, parsedHours) * MS_PER_HOUR).toISOString();
+}
+
 function roundUnits(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return 0;
@@ -32,7 +40,7 @@ function remainingUnits(limit, used) {
 }
 
 function emptyMeterUsage() {
-  return { weightedUnits: 0, receipts: 0 };
+  return { weightedUnits: 0, receipts: 0, firstActiveAt: null };
 }
 
 function emptyProductUsage() {
@@ -43,6 +51,7 @@ function normalizeUsageWindowRow(row = {}) {
   return {
     weightedUnits: roundUnits(row?.weighted_units),
     receipts: Math.max(0, Math.floor(Number(row?.receipts || 0))),
+    firstActiveAt: toIsoOrNull(row?.first_active_at),
   };
 }
 
@@ -242,7 +251,8 @@ async function readMeterWindow({
     `
       SELECT
         COALESCE(SUM(r.weighted_units), 0)::float8 AS weighted_units,
-        COUNT(r.id)::int AS receipts
+        COUNT(r.id)::int AS receipts,
+        MIN(CASE WHEN COALESCE(r.weighted_units, 0) > 0 THEN r.created_at ELSE NULL END) AS first_active_at
       FROM zaki_meter_receipts r
       JOIN zaki_meter_grants g ON g.id = r.grant_id
       WHERE g.tenant_id = $1
@@ -281,12 +291,19 @@ async function readHoldWindow({
             WHEN state = 'settled' AND COALESCE(settled_units, 0) > 0 THEN 1
             ELSE 0
           END
-        ), 0)::int AS receipts
+        ), 0)::int AS receipts,
+        MIN(
+          CASE
+            WHEN state = 'reserved' AND COALESCE(reserved_units, 0) > 0 THEN reserved_at
+            WHEN state = 'settled' AND COALESCE(settled_units, 0) > 0 THEN reserved_at
+            ELSE NULL
+          END
+        ) AS first_active_at
       FROM zaki_meter_holds
       WHERE tenant_id = $1
         AND user_id = $2
         AND state IN ('reserved', 'settled')
-        AND reserved_at >= $3::timestamptz
+        AND reserved_at > $3::timestamptz
         AND reserved_at < $4::timestamptz
     `,
     [tenantId, identity.userId, startedAtIso, endedAtIso]
@@ -357,7 +374,7 @@ async function readHoldProductWindow({
       WHERE tenant_id = $1
         AND user_id = $2
         AND state IN ('reserved', 'settled')
-        AND reserved_at >= $3::timestamptz
+        AND reserved_at > $3::timestamptz
         AND reserved_at < $4::timestamptz
       GROUP BY product_id
     `,
@@ -501,7 +518,7 @@ export async function readMeterSnapshotForIdentity({
       remaining: remainingUnits(rollingLimit, rollingUsage.weightedUnits),
       source: useWalletWeekly ? "wallet_unit_ledger" : "central_meter_receipts",
       startedAt: rollingStartedAtIso,
-      resetAt: nowIso,
+      resetAt: addHoursIso(rollingUsage.firstActiveAt, rollingHours),
     },
     weekly: walletWeekly || receiptsWeekly,
     products: Object.fromEntries(
