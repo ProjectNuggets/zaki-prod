@@ -112,7 +112,7 @@ d("agent-usage-reconcile — REAL Postgres schema contract (zaki_bot.turn_usage,
         over.model ?? "kimi-k2.6",
         over.input_tokens ?? 100,
         over.output_tokens ?? 50,
-        over.cost_usd ?? 0.0015, // 0.0015 / 0.00075 = 2 units
+        over.cost_usd ?? 0.0015, // 0.0015 / 0.0015 = 1 unit
         over.cost_available ?? true,
         over.reconciled_at ?? null,
       ]
@@ -140,15 +140,15 @@ d("agent-usage-reconcile — REAL Postgres schema contract (zaki_bot.turn_usage,
     const httpAfter = await getTurn("http-it-1");
     expect(httpAfter.reconciled_at).toBeNull();
 
-    // a real wallet debit landed (real-cost = 2 units)
+    // a real wallet debit landed (real-cost = 1 unit)
     const w = await dbGet(`SELECT weekly_used_units FROM zaki_unit_wallets WHERE user_id = $1`, [userId]);
-    expect(Number(w.weekly_used_units)).toBe(2);
+    expect(Number(w.weekly_used_units)).toBe(1);
 
     // 2) Second sweep — the cursor (reconciled_at IS NULL filter) makes it a no-op: no re-debit.
     const r2 = await reconcileDaemonTurnUsage(deps());
     expect(r2.scanned).toBe(0);
     expect(r2.debited).toBe(0);
     const w2 = await dbGet(`SELECT weekly_used_units FROM zaki_unit_wallets WHERE user_id = $1`, [userId]);
-    expect(Number(w2.weekly_used_units)).toBe(2); // unchanged — no double-debit
+    expect(Number(w2.weekly_used_units)).toBe(1); // unchanged — no double-debit
   });
 });

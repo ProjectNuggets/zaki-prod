@@ -260,7 +260,7 @@ describe("settleAgentChatUnits", () => {
     const recordUsageEvent = jest.fn().mockResolvedValue({ recorded: true });
     const dbQuery = jest.fn();
     const logStructured = jest.fn();
-    // costUsd 0.015 / unitCost 0.00075 = 20 units
+    // costUsd 0.015 / unitCost 0.0015 = 10 units
     const streamMetrics = { costUsd: 0.015, inputTokens: 100, outputTokens: 50, usageTokens: 150, toolCalls: 1, sawError: false };
 
     const result = await settleAgentChatUnits({
@@ -284,7 +284,7 @@ describe("settleAgentChatUnits", () => {
     expect(settleArgs.holdId).toBe("hold-9");
     expect(settleArgs.settleIdempotencyKey).toBe("agent:42:req-1:settle");
     expect(settleArgs.finalState).toBe("settled");
-    expect(settleArgs.settledUnits).toBe(20);
+    expect(settleArgs.settledUnits).toBe(10);
     expect(settleArgs.provider).toBe(AGENT_PROVIDER);
     expect(settleArgs.providerModel).toBe(AGENT_PROVIDER_MODEL);
     expect(settleArgs.providerCostUsdMicros).toBe(15000);
@@ -297,7 +297,7 @@ describe("settleAgentChatUnits", () => {
     expect(eventArg.productId).toBe("agent");
     expect(eventArg.surface).toBe("agent");
     expect(eventArg.eventType).toBe("agent_turn");
-    expect(eventArg.usageUnits).toBe(20);
+    expect(eventArg.usageUnits).toBe(10);
     expect(eventArg.sourceRoute).toBe("/api/agent/chat/stream");
     expect(eventArg.metadata.costSource).toBe("real");
     expect(eventArg.metadata.costOverflow).toBe(false);
@@ -333,8 +333,8 @@ describe("settleAgentChatUnits", () => {
   it("flags costOverflow when cost-units exceed the reserve (ledger caps the actual debit)", async () => {
     const settleHold = jest.fn().mockResolvedValue({ ok: true });
     const recordUsageEvent = jest.fn().mockResolvedValue({ recorded: true });
-    // costUsd 0.06 / 0.00075 = 80 units > reserved 40
-    const streamMetrics = { costUsd: 0.06, sawError: false };
+    // costUsd 0.12 / 0.0015 = 80 units > reserved 40
+    const streamMetrics = { costUsd: 0.12, sawError: false };
 
     await settleAgentChatUnits({
       hold,
