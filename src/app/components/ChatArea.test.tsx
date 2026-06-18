@@ -1938,6 +1938,82 @@ describe("ChatArea Component", () => {
     });
   });
 
+  it("sends the session approval flag when the safe session action is chosen", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    navState.zakiSessionKey = "agent:zaki-bot:user:1:thread:main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    let approvalPending = true;
+
+    (fetchAgentMe as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (fetchAgentSessionHistory as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({ messages: [] }) },
+      data: { messages: [] },
+    });
+    (fetchAgentSession as jest.Mock).mockImplementation(async () => ({
+      response: { ok: true, status: 200, json: async () => ({}), headers: new Headers() },
+      data: approvalPending
+        ? {
+            session_key: "agent:zaki-bot:user:1:thread:main",
+            live: true,
+            mode: "execute",
+            pending_approval_count: 1,
+            pending_approvals: [
+              {
+                approval_id: "approval-shell-session",
+                id: 92,
+                tool: "shell",
+                reason: "supervised_mutating_requires_approval",
+                risk_level: "low",
+                command: "pwd",
+                allow_for_session: true,
+                created_at: 1_779_904_000,
+              },
+            ],
+          }
+        : {
+            session_key: "agent:zaki-bot:user:1:thread:main",
+            live: true,
+            mode: "execute",
+            pending_approval_count: 0,
+            pending_approvals: [],
+          },
+    }));
+    (approveAgentSession as jest.Mock).mockImplementation(async () => {
+      approvalPending = false;
+      return {
+        response: { ok: true, status: 200, json: async () => ({}), headers: new Headers() },
+        data: {
+          status: "approved",
+          message: "Shell approved for this session.",
+        },
+      };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(screen.getByText("zakiControls.approval.approveSessionBtn")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText("zakiControls.approval.approveSessionBtn"));
+
+    await waitFor(() => {
+      expect(approveAgentSession).toHaveBeenCalledWith(
+        "agent:zaki-bot:user:1:thread:main",
+        expect.objectContaining({
+          approved: true,
+          tool: "shell",
+          approval_id: "approval-shell-session",
+          allow_for_session: true,
+        })
+      );
+    });
+  });
+
   it("reconciles merged history when approval succeeds without an inline continuation", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
@@ -2531,6 +2607,9 @@ describe("ChatArea Component", () => {
           approval_id: "approval-123",
           tool: "write_file",
           risk_level: "high",
+          intent: "Write the launch brief",
+          params: { path: "docs/brief.md", api_key: "hidden" },
+          allow_for_session: true,
         },
         456
       )
@@ -2540,6 +2619,9 @@ describe("ChatArea Component", () => {
       numericId: null,
       tool: "write_file",
       riskLevel: "high",
+      intent: "Write the launch brief",
+      params: { path: "docs/brief.md", api_key: "hidden" },
+      allowForSessionSafe: true,
     });
 
     expect(

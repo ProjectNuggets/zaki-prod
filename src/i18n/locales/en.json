@@ -813,15 +813,46 @@
     },
     "approval": {
       "title": "Approval required for {{tool}}",
-      "defaultReason": "ZAKI requested approval before continuing.",
+      "defaultReason": "Supervised mode paused before this action. Review the details, then approve once or deny.",
       "riskLabel": "Risk:",
+      "riskBadge": "Risk · {{risk}}",
+      "risk": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "critical": "critical",
+        "unknown": "unknown"
+      },
       "approveAria": "Approve {{tool}} action",
+      "approveSessionAria": "Allow {{tool}} for this session",
       "modifyAria": "Modify {{tool}} action",
       "denyAria": "Deny {{tool}} action",
-      "kicker": "Approval gate",
-      "approveBtn": "Approve",
+      "kicker": "Approval required",
+      "approveBtn": "Approve once",
+      "approveSessionBtn": "Allow for this session",
       "modifyBtn": "Modify",
       "denyBtn": "Deny",
+      "intent": {
+        "shell": "Run a shell command",
+        "browser": "Control the browser",
+        "external": "Send something outside this chat",
+        "spend": "Use a billing or spending action",
+        "file": "Change or share a file",
+        "tool": "Run a gated tool action"
+      },
+      "explain": {
+        "external": "Supervised mode pauses before ZAKI posts or sends anything outside this thread.",
+        "browser": "Supervised mode pauses before ZAKI acts in a browser session.",
+        "spend": "Review the amount, destination, and account before approving.",
+        "file": "Review the target and effect before ZAKI changes or shares files."
+      },
+      "whatPreview": "What",
+      "paramsPreview": "Params",
+      "hiddenValue": "Hidden",
+      "previewAria": "Approval preview",
+      "toolLabel": "Tool",
+      "destinationLabel": "Target",
+      "idLabel": "ID",
       "approvingState": "Approving...",
       "modifyingState": "Preparing...",
       "denyingState": "Denying...",
@@ -832,7 +863,9 @@
       "modifyReady": "Approval denied. Describe the change and ZAKI will retry.",
       "retrying": "Agent restarting — retrying your approval...",
       "retryBtn": "Retry approval",
-      "retryAria": "Retry approval for {{tool}}"
+      "retrySessionBtn": "Retry session approval",
+      "retryAria": "Retry approval for {{tool}}",
+      "retrySessionAria": "Retry session approval for {{tool}}"
     },
     "sidebarMenu": {
       "settings": "Settings",
@@ -1895,6 +1928,7 @@
       "signedCopy": "Choose the kind of help you need, write the outcome once, and ZAKI will open the right workspace with your context intact.",
       "guestCopy": "Ask immediately with free weekly credits. This browser can remember drafts; sign in when you want work, memory, files, and history to follow you.",
       "weeklyFreeCredit": "Weekly free credit",
+      "weeklyPercentLeft": "{{percent}}% left this week",
       "bestFor": "Best for",
       "memoryScope": "Memory scope",
       "selectedProduct": "{{product}} overview",

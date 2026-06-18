@@ -33,6 +33,9 @@ export type ZakiSessionApprovalRequest = {
   reason: string;
   riskLevel: string;
   timestamp: number;
+  intent?: string | null;
+  params?: unknown;
+  allowForSessionSafe?: boolean;
   inputPreview?: string | null;
   effectPreview?: string | null;
   command?: string | null;
@@ -114,6 +117,25 @@ export function mapAgentSessionToZakiSessionUi(session: Partial<AgentSession>): 
           tool: String(approval?.tool || "").trim(),
           reason: String(approval?.reason || "").trim(),
           riskLevel: String(approval?.risk_level || "").trim(),
+          intent:
+            typeof approval?.intent === "string" && approval.intent.trim()
+              ? approval.intent.trim()
+              : typeof approval?.human_intent === "string" && approval.human_intent.trim()
+                ? approval.human_intent.trim()
+                : null,
+          params:
+            approval && typeof approval === "object" && "params" in approval
+              ? (approval as Record<string, unknown>).params
+              : approval && typeof approval === "object" && "arguments" in approval
+                ? (approval as Record<string, unknown>).arguments
+                : approval && typeof approval === "object" && "args" in approval
+                  ? (approval as Record<string, unknown>).args
+                  : undefined,
+          allowForSessionSafe:
+            approval?.allow_for_session === true ||
+            approval?.allowForSession === true ||
+            approval?.session_allow_safe === true ||
+            approval?.sessionAllowSafe === true,
           // Sentinel: 0 means "use the existing in-store timestamp if any,
           // otherwise stamp now". hydrateSession resolves this — keeping
           // the mapper pure (no store reads) while still preserving the
