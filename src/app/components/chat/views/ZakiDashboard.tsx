@@ -125,13 +125,6 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function formatNumber(value?: number | null) {
-  if (value == null || Number.isNaN(Number(value))) return "—";
-  return Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(
-    Math.max(0, Number(value))
-  );
-}
-
 function formatReset(value?: string | null) {
   if (!value) return null;
   const date = new Date(value);
@@ -469,8 +462,7 @@ function CreditMeter({
   weeklyReset: string | null;
   exhausted: boolean;
 }) {
-  const remaining = formatNumber(weeklyStats.remaining);
-  const limit = formatNumber(weeklyStats.limit);
+  const remainingPercent = Math.round(weeklyStats.remainingPercent);
   return (
     <div
       className="zaki-dashboard-command__meter"
@@ -483,8 +475,12 @@ function CreditMeter({
           })}
         </span>
         <strong>
-          <span>{loading ? t("zakiDashboard.meter.loading") : remaining}</span>
-          {!loading ? <em> / {limit}</em> : null}
+          {loading
+            ? t("zakiDashboard.meter.loading")
+            : t("zakiDashboard.command.weeklyPercentLeft", {
+                percent: remainingPercent,
+                defaultValue: "{{percent}}% left this week",
+              })}
         </strong>
         <small>
           {weeklyReset
@@ -497,9 +493,9 @@ function CreditMeter({
         aria-label={
           loading
             ? t("zakiDashboard.meter.loading")
-            : t("zakiDashboard.meter.remainingOfLimit", {
-                remaining,
-                limit,
+            : t("zakiDashboard.command.weeklyPercentLeft", {
+                percent: remainingPercent,
+                defaultValue: "{{percent}}% left this week",
               })
         }
       >

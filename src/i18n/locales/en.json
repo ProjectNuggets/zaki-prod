@@ -1928,6 +1928,7 @@
       "signedCopy": "Choose the kind of help you need, write the outcome once, and ZAKI will open the right workspace with your context intact.",
       "guestCopy": "Ask immediately with free weekly credits. This browser can remember drafts; sign in when you want work, memory, files, and history to follow you.",
       "weeklyFreeCredit": "Weekly free credit",
+      "weeklyPercentLeft": "{{percent}}% left this week",
       "bestFor": "Best for",
       "memoryScope": "Memory scope",
       "selectedProduct": "{{product}} overview",

@@ -71,6 +71,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.entry.signIn": "Sign in",
     "zakiDashboard.entry.signUp": "Sign up",
     "zakiDashboard.command.weeklyFreeCredit": "Weekly free credit",
+    "zakiDashboard.command.weeklyPercentLeft": "{{percent}}% left this week",
     "zakiDashboard.command.bestFor": "Best for",
     "zakiDashboard.command.memoryScope": "Memory scope",
     "zakiDashboard.command.selectedProduct": "{{product}} overview",
@@ -270,6 +271,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     .replace("{{name}}", String(options?.name ?? ""))
     .replace("{{hours}}", String(options?.hours ?? ""))
     .replace("{{remaining}}", String(options?.remaining ?? ""))
+    .replace("{{percent}}", String(options?.percent ?? ""))
     .replace("{{limit}}", String(options?.limit ?? ""))
     .replace("{{used}}", String(options?.used ?? ""))
     .replace("{{reset}}", String(options?.reset ?? ""))
@@ -489,7 +491,7 @@ describe("ZakiDashboard", () => {
     expect(screen.getByRole("heading", { name: "Let's move." })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Hi, Nova User. 1,420 left." })).not.toBeInTheDocument();
     expect(screen.getAllByText("Pro").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("1,420").length).toBeGreaterThan(0);
+    expect(screen.getByText("95% left this week")).toBeInTheDocument();
     expect(screen.getAllByText("Signed-in account").length).toBeGreaterThan(0);
 
     expect(screen.getByTestId("zaki-dashboard-product-hint")).toHaveTextContent("Agent");
@@ -649,7 +651,7 @@ describe("ZakiDashboard", () => {
     expect(mockUseAnonymousMeterStatus).toHaveBeenCalledWith(true);
     expect(screen.getAllByText("Anonymous free session").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Free").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("97").length).toBeGreaterThan(0);
+    expect(screen.getByText("97% left this week")).toBeInTheDocument();
   });
 
   it("orders command products for anonymous users around immediate chat", () => {
