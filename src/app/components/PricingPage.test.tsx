@@ -61,7 +61,7 @@ jest.mock("react-i18next", () => ({
       "pricingPage.plans.future.label": "Coming next",
       "pricingPage.plans.future.price": "Soon",
       "pricingPage.plans.future.cta": "Open dashboard",
-      "pricingPage.plans.future.features": ["Learn returns when learner state is safe", "Design launches after project creation is proven", "Hire stays user-side and private until ready"],
+      "pricingPage.plans.future.features": ["Learn returns when learner state is safe", "Design launches after project creation is proven", "Carrier stays user-side and private until ready"],
       "pricingPage.allowance.weekly": "{{allowance}} units/week",
     };
     return {

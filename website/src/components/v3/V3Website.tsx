@@ -306,7 +306,7 @@ const homeProducts: ProductCard[] = [
   },
   {
     icon: GraduationCap,
-    status: "Private beta",
+    status: "Private access",
     statusTone: "soon",
     title: "Learn",
     meta: "A tutor that remembers.",
@@ -315,9 +315,9 @@ const homeProducts: ProductCard[] = [
   },
   {
     icon: BriefcaseBusiness,
-    status: "Private beta",
+    status: "Private access",
     statusTone: "soon",
-    title: "Design & Hire",
+    title: "Design & Carrier",
     meta: "For the work that scales.",
     body: "Private lanes for interfaces and career moves. Same login, same memory, released only when the full flows are ready.",
     wide: true,
@@ -394,7 +394,7 @@ export function V3HomePage() {
                 </Link>
               </div>
               <p className="hero-trust">
-                <b>Free while in open beta</b>
+                <b>V1 is free to start</b>
                 <span className="dot" /> No card. Your memory stays yours: see, edit, or delete anything.
               </p>
             </div>
@@ -640,7 +640,7 @@ function PricingTeaser() {
         <div className="sec-head center reveal">
           <span className="kicker"><span className="idx">08</span> Pricing</span>
           <h2 className="h-sec">Free today. Upgrade when ZAKI earns it.</h2>
-          <p className="lede">Free is not a trick. Upgrade only when you want more room, deeper memory, and priority when it counts. Learn, Design, and Hire stay gated until ready.</p>
+          <p className="lede">Free is not a trick. Upgrade only when you want more room, deeper memory, and priority when it counts. Learn, Design, and Carrier stay gated until ready.</p>
         </div>
         <PricingTiers compact />
         <p className="pricing-foot">Prices in USD · cancel anytime · your memory exports with you. <Link to="/pricing" style={{ color: "var(--accent)" }}>Full pricing &amp; FAQ →</Link></p>
@@ -658,7 +658,7 @@ function FinalCta({ variant = "home" }: { variant?: "home" | "subpage" }) {
         <img className="bot cta-bot" src={ctaBot} alt="ZAKI, ready" width={botSize.width} height={botSize.height} />
         <span className="kicker no-rule reveal" style={{ justifyContent: "center", display: "flex" }}>Your move</span>
         <h2 className="h-sec reveal" data-d="1" style={{ marginTop: 18 }}>Start your next chapter. ZAKI has got you.</h2>
-        <p className="lede reveal" data-d="2">Bring the vision; ZAKI brings the memory, the follow-through, and the quiet weight off your shoulders. Open beta is free for a limited time.</p>
+        <p className="lede reveal" data-d="2">Bring the vision; ZAKI brings the memory, the follow-through, and the quiet weight off your shoulders. Start free, then upgrade when you need more room.</p>
         <div className="cta-row reveal" data-d="3">
           <a className="btn btn-primary btn-lg" href={signupUrl}>Start your next chapter <ArrowIcon /></a>
           <Link className="btn btn-ghost btn-lg" to="/story">Read the story</Link>
@@ -704,16 +704,16 @@ export function V3ProductPage() {
     { icon: Star, status: "Live · all plans", statusTone: "paid", title: "Agent", meta: "In your corner.", body: "Plans, acts, and follows through with visible phases, approvals, and memory-aware context.", href: productHandoffUrl("agent"), cta: "Open Agent", featured: true },
     { icon: MessageSquare, status: "Free", statusTone: "live", title: "Chat & Spaces", meta: "Focused workspaces.", body: "Separated spaces for launches, decisions, writing, research, translation, and files.", href: productHandoffUrl("chat"), cta: "Start Chat" },
     { icon: Brain, status: "Included", statusTone: "live", title: "Brain", meta: "Your world, visible.", body: "Search, inspect, edit, export, or forget what ZAKI carries forward.", href: productHandoffUrl("brain"), cta: "Open Brain" },
-    { icon: GraduationCap, status: "Private beta", statusTone: "soon", title: "Learn", meta: "A tutor that remembers.", body: "Learning memory and practice stay gated until the learner flow is production-ready.", wide: true },
+    { icon: GraduationCap, status: "Private access", statusTone: "soon", title: "Learn", meta: "A tutor that remembers.", body: "Learning memory and practice stay gated until the learner flow is production-ready.", wide: true },
     { icon: PenTool, status: "Waitlist", statusTone: "soon", title: "Design", meta: "Ideas into interfaces.", body: "Design remains waitlist until project creation and delivery are proven.", wide: true },
-    { icon: BriefcaseBusiness, status: "Private beta", statusTone: "soon", title: "Hire", meta: "Your next move.", body: "Private career support for roles, CV positioning, fit notes, and applications.", wide: true },
+    { icon: BriefcaseBusiness, status: "Private access", statusTone: "soon", title: "Carrier", meta: "Your next move.", body: "Private career support for roles, CV positioning, fit notes, and applications.", wide: true },
   ];
   return (
     <V3Shell route="product">
       <SubHero
         label="One login · one memory · every surface"
         title="The AI that does not make you start over."
-        body="Agent, Chat, Spaces, Brain, Learn, Design, and Hire: one home, one memory. Open any live surface and it already knows your world, so the work picks up where you left off instead of from zero. That is the difference between a tool and a counterpart."
+        body="Agent, Chat, Spaces, Brain, Learn, Design, and Carrier: one home, one memory. Open any live surface and it already knows your world, so the work picks up where you left off instead of from zero. That is the difference between a tool and a counterpart."
         cta="Start your next chapter"
         ctaHref={signupUrl}
         secondary="See pricing"
@@ -726,7 +726,7 @@ export function V3ProductPage() {
           <div className="sec-head reveal">
             <span className="kicker"><span className="idx">02b</span> Full palette</span>
             <h2 className="h-sec">Six products. One login. One memory.</h2>
-            <p className="lede">Live products are available now. Learn, Design, and Hire are shown truthfully as gated lanes until their flows are ready.</p>
+            <p className="lede">Live products are available now. Learn, Design, and Carrier are shown truthfully as gated lanes until their flows are ready.</p>
           </div>
           <ProductGrid products={productRows} />
         </div>
@@ -759,7 +759,7 @@ function SubHero({ label, title, body, cta, ctaHref, secondary, secondaryHref }:
             ["Live today", "Chat · Agent · Brain", "public"],
             ["One memory", "Visible", "user controlled"],
             ["Language", "AR · EN", "mixed by default"],
-            ["Next", "Learn · Design · Hire", "gated"],
+            ["Next", "Learn · Design · Carrier", "gated"],
           ].map(([k, v, s], index) => (
             <div className="cell reveal" data-d={index} key={k}><div className="k">{k}</div><div className="v">{v} <small>{s}</small></div></div>
           ))}
@@ -774,9 +774,9 @@ function ProductOsSection() {
     [Star, "Agent", "Plans and acts for you.", "Live"],
     [MessageSquare, "Chat & Spaces", "Focused, separated work.", "Live"],
     [Brain, "Brain", "The memory you own.", "Live"],
-    [GraduationCap, "Learn", "A tutor that remembers.", "Private beta"],
+    [GraduationCap, "Learn", "A tutor that remembers.", "Private access"],
     [PenTool, "Design", "Ideas into interfaces.", "Waitlist"],
-    [BriefcaseBusiness, "Hire", "Your career lane.", "Private beta"],
+    [BriefcaseBusiness, "Carrier", "Your career lane.", "Private access"],
   ] as const;
   return (
     <section className="stage-dark sec" data-screen-label="The OS">
@@ -912,7 +912,7 @@ function RoadmapSection() {
         <div className="ladder reveal">
           {[
             ["Live now", "Agent · Chat & Spaces · Brain", "An agent that acts, focused workspaces, and a memory you control: bilingual, on web and Telegram.", "live"],
-            ["Next", "Learn and Hire", "Available only when entitlement, memory, UI, and tests agree.", "beta"],
+            ["Next", "Learn and Carrier", "Available only when entitlement, memory, UI, and tests agree.", "gated"],
             ["After that", "Design", "Held until the project flow and delivery path are ready.", ""],
             ["Always", "CLI, desktop, and extensions", "ZAKI follows you across the web and your machine through one control plane.", ""],
           ].map(([when, what, body, status]) => (
@@ -1031,7 +1031,7 @@ export function V3StoryPage() {
               <p>ZAKI started with a promise: never let go, keep getting better, and be there when things get hard.</p>
               <p className="pull">Continuity changes the relationship.</p>
               <p>So we built around memory first. The Brain is visible. The Agent shows its work. Spaces keep tasks clean. The product grows only when the operational truth is ready.</p>
-              <p id="building">ZAKI is here for founders, adventurers, dreamers, and operators starting something bold, with clear gates for Learn, Design, and Hire.</p>
+              <p id="building">ZAKI is here for founders, adventurers, dreamers, and operators starting something bold, with clear gates for Learn, Design, and Carrier.</p>
             </div>
           </div>
         </div>
@@ -1071,7 +1071,7 @@ function StoryBuildSection() {
     ["Launch", "The Agent is live", "A personal agent that plans and acts, with one persistent thread per user and visible work phases during execution.", "Done"],
     ["Milestone", "Multi-user hardening and quotas", "Stronger per-user isolation, safer streaming, and a shared weekly allowance that keeps the platform disciplined.", "Done"],
     ["Signal", "Context management matters", "The industry is converging on context management for long-running agents: exactly the memory-first architecture ZAKI was built on.", "Done"],
-    ["Next", "Learn and Hire stay gated", "Private lanes only open when entitlement, product state, memory, UI, and tests agree end to end.", "Next"],
+    ["Next", "Learn and Carrier stay gated", "Private lanes only open when entitlement, product state, memory, UI, and tests agree end to end.", "Next"],
     ["Next", "Deeper controls", "Better channel controls, stronger reliability loops, and clearer agent guardrails across the platform.", "Next"],
     ["Ongoing", "Public updates", "We keep shipping and sharing as ZAKI moves from disciplined chat toward persistent intelligence.", "Next"],
   ];
@@ -1120,7 +1120,7 @@ export function V3PricingPage() {
         <div className="wrap">
           <PricingTiers />
           <div className="gift reveal">
-            <div className="g-l"><h4>Learn, Design, and Hire are not sold as finished products yet.</h4><p>They stay gated until entitlement, memory, UI, product state, and tests agree.</p></div>
+            <div className="g-l"><h4>Learn, Design, and Carrier are not sold as finished products yet.</h4><p>They stay gated until entitlement, memory, UI, product state, and tests agree.</p></div>
             <div className="g-r"><span className="g-price">Truth first</span></div>
           </div>
         </div>
@@ -1133,7 +1133,7 @@ export function V3PricingPage() {
             {[
               ["Is Free a trial?", "No. Free is a real starting plan with no card: enough to feel what changes when ZAKI remembers."],
               ["What do paid plans add?", "More room, deeper memory capacity, priority where available, and earlier access when gated products are ready."],
-              ["What about Learn, Design, and Hire?", "They are gated until production readiness is proven end to end. We do not sell unfinished surfaces as finished products."],
+              ["What about Learn, Design, and Carrier?", "They are gated until production readiness is proven end to end. We do not sell unfinished surfaces as finished products."],
             ].map(([q, a], index) => (
               <details className="faq-item" key={q} open={index === 0}>
                 <summary className="faq-q">{q}<span className="pm" /></summary>

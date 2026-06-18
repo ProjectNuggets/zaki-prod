@@ -18,8 +18,8 @@ const metrics = [
   {
     value: 2,
     suffix: "",
-    label: { en: "Beta lanes", ar: "مسارات بيتا" },
-    sublabel: { en: "Learn and Hire", ar: "Learn وHire" },
+    label: { en: "Gated lanes", ar: "مسارات مقيدة" },
+    sublabel: { en: "Learn and Carrier", ar: "Learn وCarrier" },
   },
   {
     value: 1,
@@ -84,7 +84,7 @@ export function BuiltDifferent({ locale }: { locale: Locale }) {
               },
               {
                 title: { en: "Truthful gates", ar: "بوابات صادقة" },
-                desc: { en: "Private beta and waitlist products stay visible without implying general availability or a working runtime.", ar: "منتجات البيتا وقائمة الانتظار تبقى مرئية بدون الإيحاء بتوفر عام أو تشغيل كامل." },
+                desc: { en: "Private-access and waitlist products stay visible without implying general availability or a working runtime.", ar: "منتجات الوصول الخاص وقائمة الانتظار تبقى مرئية بدون الإيحاء بتوفر عام أو تشغيل كامل." },
               },
             ].map((item, i) => (
               <div key={i} className="rounded-xl border border-zk-border bg-zk-bg-raised p-5">

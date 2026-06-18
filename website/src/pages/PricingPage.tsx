@@ -24,7 +24,7 @@ export function PricingPage({ locale }: { locale: Locale }) {
             <p className="mt-6 max-w-[64ch] text-base leading-8 text-zk-text-secondary">
               {isArabic
                 ? "التسعير لا يبيع منتجات غير جاهزة. Chat مجاني للبدء، Agent وBrain يحملان الاستمرارية، وLearn وHire وDesign تبقى مقيّدة حسب حالة المنتج."
-                : "Pricing does not sell unfinished surfaces. Chat is free to start, Agent and Brain carry continuity, and Learn, Hire, and Design remain gated by product state."}
+                : "Pricing does not sell unfinished surfaces. Chat is free to start, Agent and Brain carry continuity, and Learn, Carrier, and Design remain gated by product state."}
             </p>
           </Reveal>
         </div>

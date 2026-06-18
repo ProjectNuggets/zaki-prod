@@ -546,7 +546,7 @@ export const content = {
         {
           question: "What is ZAKI?",
           answer:
-            "ZAKI is the persistent AI layer. It remembers useful context and keeps an ongoing thread with you over time. Spaces are the free chat entry points for structured daily execution, and ZAKI is the current Agent preview for the continuity layer behind that work.",
+            "ZAKI is the persistent intelligence layer. It remembers useful context and keeps an ongoing thread with you over time. Chat and Spaces are the fast entry points, Agent carries follow-through, and Brain keeps memory visible.",
         },
         {
           question: "What is the difference between ZAKI and Spaces?",
@@ -571,17 +571,17 @@ export const content = {
         {
           question: "Is ZAKI Agent live?",
           answer:
-            "Yes. The current Agent preview is open now with account memory and follow-through. It is not the final premium product. It is the first public experimental release.",
+            "Yes. Agent is part of V1 with account memory, visible phases, and follow-through. Some tools and future product lanes remain gated until their contracts are complete.",
         },
         {
-          question: "Why is ZAKI experimental?",
+          question: "Why are some ZAKI surfaces gated?",
           answer:
-            "Because Agent is the continuity surface: a Personal AI Operator with persistence and memory, not just a prompt-response session.",
+            "Because ZAKI only exposes a surface when product state, entitlement, memory, UI, and tests agree. Live products should be usable; future lanes should be clearly marked.",
         },
         {
           question: "How does free Chat access work?",
           answer:
-            "The current Agent preview includes account memory and follow-through for experimentation.",
+            "Chat starts free with weekly capacity. Sign in when you want account continuity, Brain memory, and Agent follow-through.",
         },
         {
           question: "Is Chat free?",
@@ -1164,7 +1164,7 @@ export const content = {
         {
           question: "ما هو زكي؟",
           answer:
-            "زكي هو طبقة الذكاء المستمر. يتذكر السياق المفيد ويحافظ على خيط مستمر معك عبر الوقت. أما Spaces فهي مساحات العمل المدفوعة المتاحة الآن للتنفيذ اليومي المنظّم، وزكي هو البيتا العامة لطبقة الاستمرارية التي تقف خلف ذلك العمل.",
+            "زكي هو طبقة الذكاء المستمر. يتذكر السياق المفيد ويحافظ على خيط مستمر معك عبر الوقت. Chat وSpaces هما المدخل السريع، وAgent يحمل المتابعة، وBrain يجعل الذاكرة مرئية.",
         },
         {
           question: "ما الفرق بين زكي وSpaces؟",
@@ -1189,22 +1189,22 @@ export const content = {
         {
           question: "هل تحديثات زكي متاحة الآن؟",
           answer:
-            "نعم. البيتا العامة مفتوحة الآن بـ ذاكرة ومتابعة عبر Agent. وهي ليست المنتج المميز النهائي، بل أول إصدار علني تجريبي.",
+            "نعم. Agent جزء من V1 مع ذاكرة حساب ومراحل عمل مرئية ومتابعة. بعض الأدوات والأسطح القادمة تبقى مقيدة حتى تكتمل عقودها.",
         },
         {
-          question: "لماذا زكي تجريبي؟",
+          question: "لماذا بعض أسطح زكي مقيدة؟",
           answer:
-            "لأنه يختبر شكلًا جديدًا للمنتج: مشغّل ذكاء شخصي مع استمرارية وذاكرة، وليس مجرد جلسة سؤال وجواب. البيتا موجودة لتُظهر ما أصبح ممكنًا ولتتعلم من الاستخدام الحقيقي.",
+            "لأن زكي لا يفتح سطحًا إلا عندما تتفق حالة المنتج والصلاحيات والذاكرة والواجهة والاختبارات. المنتجات الحية يجب أن تكون قابلة للاستخدام، والأسطح القادمة يجب أن تكون واضحة.",
         },
         {
-          question: "كم عدد الرسائل المجانية في البيتا؟",
+          question: "كيف يعمل الوصول المجاني إلى Chat؟",
           answer:
-            "البيتا العامة تتضمن ذاكرة ومتابعة عبر Agent للتجربة.",
+            "Chat يبدأ مجانًا بسعة أسبوعية. سجّل الدخول عندما تحتاج استمرارية الحساب وذاكرة Brain ومتابعة Agent.",
         },
         {
-          question: "هل البيتا مجانية؟",
+          question: "هل Chat مجاني؟",
           answer:
-            "نعم. البيتا العامة مجانية ومحدودة. الاشتراكات المميزة تأتي لاحقًا بعد مرحلة البيتا.",
+            "نعم. Chat يبدأ مجانًا وبسعة محدودة. Agent يضيف استمرارية الحساب عندما يحتاج العمل إلى متابعة.",
         },
         {
           question: "هل يدّعي زكي التفوق على ChatGPT أو Claude؟",
@@ -1219,11 +1219,11 @@ export const content = {
         {
           question: "متى تبدأ الاشتراكات المميزة؟",
           answer:
-            "بعد انتهاء مرحلة البيتا العامة. المنتج المميز يأتي لاحقًا بعد أن نتعلم من تجربة البيتا.",
+            "الخطط المدفوعة تضيف مساحة عمل أكبر وذاكرة أعمق وأولوية حيث تتوفر. الأسطح القادمة لا تُباع كمنتجات مكتملة قبل جاهزيتها.",
         },
         {
-          question: "لماذا أهتم بالبيتا الآن؟",
-          answer: "لأنها أول نظرة علنية على شكل المنتج القادم. هنا يختبر المستخدم ما الذي يمكن أن يصبح عليه الذكاء الشخصي المستمر قبل وصول النسخة الكاملة.",
+          question: "لماذا أبدأ الآن؟",
+          answer: "لأن V1 يفتح قلب التجربة: Chat وAgent وBrain مع ذاكرة واضحة ومتابعة عملية، بينما تبقى الأسطح القادمة مقيدة حتى تجهز.",
         },
       ],
     },

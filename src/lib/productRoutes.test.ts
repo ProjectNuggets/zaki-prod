@@ -39,7 +39,7 @@ describe("getCanonicalAppProductRoute", () => {
     expect(getProductLaunchState("complete")).toBe("unknown");
   });
 
-  it("keeps private beta and waitlist activation on website product pages", () => {
+  it("keeps private-access and waitlist activation on website product pages", () => {
     expect(getProductMarketingRoute("learning")).toBe("/product");
     expect(getProductActivationRoute("learning")).toBe("/learn");
     expect(getProductActivationRoute("hire")).toBe("/hire");

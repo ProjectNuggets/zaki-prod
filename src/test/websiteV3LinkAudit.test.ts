@@ -33,7 +33,7 @@ describe("V3 website link audit", () => {
     const appHandoff = readFileSync(join(websiteSrc, "lib/appHandoff.ts"), "utf8");
     expect(appHandoff).toContain('"https://chatzaki.ai"');
     expect(appHandoff).toContain('"hire_waitlist"');
-    expect(appHandoff).toContain('"ZAKI Hire"');
+    expect(appHandoff).toContain('"ZAKI Carrier"');
 
     const websiteApi = readFileSync(join(websiteSrc, "lib/websiteApi.ts"), "utf8");
     expect(websiteApi).toContain('"www.chatzaki.com"');
@@ -45,7 +45,9 @@ describe("V3 website link audit", () => {
     expect(v3Source).toContain('to="/privacy"');
     expect(v3Source).toContain('to="/terms"');
     expect(v3Source).toContain('to="/compliance"');
-    expect(v3Source).toContain("Design & Hire");
+    expect(v3Source).toContain("Design & Carrier");
+    expect(v3Source).not.toContain("open beta");
+    expect(v3Source).not.toContain("Private beta");
     expect(v3Source).not.toContain('href="#"');
     expect(v3Source).not.toContain("__edit_mode");
     expect(v3Source).not.toContain("id=\"tweaks\"");

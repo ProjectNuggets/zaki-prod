@@ -80,7 +80,7 @@ const journeys: Journey[] = [
   {
     icon: LockKeyhole,
     label: { en: "Join gated lanes", ar: "انضم للمسارات المقيّدة" },
-    status: { en: "Learn/Hire beta, Design waitlist", ar: "Learn/Hire بيتا، Design انتظار" },
+    status: { en: "Learn/Carrier gated, Design waitlist", ar: "Learn/Carrier مقيد، Design انتظار" },
     steps: {
       en: ["Website waitlist", "Public endpoint", "Operator review", "No public runtime claim"],
       ar: ["قائمة انتظار الموقع", "نقطة عامة", "مراجعة تشغيلية", "بدون وعد تشغيل عام"],
@@ -108,8 +108,8 @@ export function JourneyMap({ locale }: { locale: Locale }) {
             </div>
             <p className="max-w-[48ch] text-sm leading-7 text-zk-text-secondary">
               {isArabic
-                ? "هذا هو العقد: الموقع يشرح، التطبيق ينفذ، وSettings يتحكم. المسارات غير العامة تبقى قائمة انتظار أو بيتا."
-                : "This is the contract: the website explains, the app executes, and Settings controls. Non-public lanes stay beta or waitlist."}
+                ? "هذا هو العقد: الموقع يشرح، التطبيق ينفذ، وSettings يتحكم. المسارات غير العامة تبقى بوصول مقيد أو قائمة انتظار."
+                : "This is the contract: the website explains, the app executes, and Settings controls. Non-public lanes stay gated or waitlist."}
             </p>
           </div>
         </Reveal>

@@ -40,7 +40,7 @@ export function ClosingCta({ locale }: { locale: Locale }) {
         >
           {/* Glow behind logo */}
           <div
-            className="absolute inset-0 -m-8 rounded-full blur-[60px] transition-all duration-[800ms]"
+            className="absolute inset-0 rounded-full blur-[40px] transition-all duration-[800ms]"
             style={{
               background: "radial-gradient(circle, var(--zk-accent-muted) 0%, var(--zk-accent-glow) 60%, transparent 80%)",
               opacity: visible ? 1 : 0,

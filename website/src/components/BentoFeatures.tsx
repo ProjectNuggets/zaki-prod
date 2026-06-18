@@ -51,10 +51,10 @@ const features = [
   },
   {
     icon: Layers,
-    title: { en: "Public, beta, waitlist", ar: "عام، بيتا، انتظار" },
+    title: { en: "Public, gated, waitlist", ar: "عام، مقيد، انتظار" },
     description: {
-      en: "Agent, Chat, and Brain are public. Learn and Hire stay beta-gated. Design stays waitlist until the service is proven.",
-      ar: "Agent وChat وBrain عامة. Learn وHire بيتا. Design قائمة انتظار حتى تثبت الخدمة.",
+      en: "Agent, Chat, and Brain are public. Learn and Carrier stay gated. Design stays waitlist until the service is proven.",
+      ar: "Agent وChat وBrain عامة. Learn وCarrier مقيدة. Design قائمة انتظار حتى تثبت الخدمة.",
     },
     stat: { en: "No false availability", ar: "لا توفر مزيف" },
   },
