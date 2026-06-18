@@ -171,7 +171,7 @@ export function getRouteSeo(pathname: string): RouteSeo {
     const description = isPricing
       ? locale === "ar"
         ? "ابدأ من Chat مجانًا، واستخدم Agent وBrain للاستمرارية والذاكرة عندما يحتاج العمل إلى حساب."
-        : "ZAKI pricing: Free, Personal USD 15, Pro USD 45, Pro MAX USD 99. Start free and upgrade for more room, deeper memory, and priority."
+        : "ZAKI pricing: Free, Personal EUR 15, Pro EUR 45, Pro MAX EUR 99. Start free and upgrade for more room, deeper memory, and priority."
       : locale === "ar"
         ? "استخدم زكي للكتابة والبحث والعمل ثنائي اللغة والمتابعة والذاكرة، مع بقاء Learn وCareer وصول خاص وDesign انتظار."
         : "How founders, adventurers, and operators use ZAKI: an agent that acts, spaces for focused work, and a memory that carries context forward.";
@@ -351,14 +351,14 @@ export function getRouteSeo(pathname: string): RouteSeo {
             "@type": "Offer",
             category: "Chat",
             price: "0",
-            priceCurrency: "USD",
+            priceCurrency: "EUR",
             url: `${APP_URL}/?source=website_schema&intent=dashboard`,
           },
           {
             "@type": "Offer",
             category: "Agent",
             price: "0",
-            priceCurrency: "USD",
+            priceCurrency: "EUR",
             url: `${APP_URL}/?source=website_schema&intent=dashboard`,
           },
         ],
