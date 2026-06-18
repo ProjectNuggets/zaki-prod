@@ -12876,6 +12876,10 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   line-height: 1.5;
 }
 
+.zaki-dashboard-command__ledger-head .zaki-dashboard-command__ledger-error {
+  color: var(--v2-warn);
+}
+
 .zaki-dashboard-command__ledger-list {
   display: grid;
   gap: 1px;

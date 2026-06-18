@@ -196,7 +196,7 @@ export function createThreadAutoTitleHandler({
       const access = await requireWorkspaceAccess(req, res);
       if (!access) return;
 
-      const threadSlug = String(req.params.threadSlug || "").trim();
+      const threadSlug = String(access.threadSlug || req.params.threadSlug || "").trim();
       const fallbackUserMessage = String(req.body?.userMessage || "").trim();
       const fallbackAssistantMessage = String(req.body?.assistantMessage || "").trim();
 

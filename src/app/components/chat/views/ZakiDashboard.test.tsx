@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { ZakiDashboard } from "./ZakiDashboard";
 import { useAuthStore } from "@/stores";
 import { ANONYMOUS_WORK_LEDGER_KEY, upsertAnonymousWorkItem } from "@/lib/anonymousWork";
+import { claimAnonymousSpacesWork } from "@/lib/api";
 import { PENDING_INTENT_KEY } from "@/lib/pendingIntent";
 
 const mockNavigate = jest.fn();
@@ -27,6 +28,10 @@ jest.mock("@/queries", () => ({
   useMeterStatus: () => mockUseMeterStatus(),
   useAnonymousMeterStatus: (enabled?: boolean) => mockUseAnonymousMeterStatus(enabled),
   useZakiSessions: (enabled?: boolean) => mockUseZakiSessions(enabled),
+}));
+
+jest.mock("@/lib/api", () => ({
+  claimAnonymousSpacesWork: jest.fn(),
 }));
 
 const tMock = (key: string, options?: Record<string, unknown>) => {
@@ -159,6 +164,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.anonymousWork.claimedTitle": "We kept your work",
     "zakiDashboard.anonymousWork.claimedSubtitle": "Your recent browser work is available after sign-in.",
     "zakiDashboard.anonymousWork.save": "Save this work",
+    "zakiDashboard.anonymousWork.claimRetry": "Spaces setup is temporarily unavailable. Retry from this saved work.",
     "zakiDashboard.support.label": "Dashboard telemetry",
     "zakiDashboard.support.session": "Session",
     "zakiDashboard.support.open": "open",
@@ -476,6 +482,14 @@ describe("ZakiDashboard", () => {
       value: mockOpen,
     });
     window.sessionStorage.clear();
+    (claimAnonymousSpacesWork as unknown as jest.Mock).mockResolvedValue({
+      response: { ok: true },
+      data: {
+        success: true,
+        route: "/spaces/customer-space/threads/thread-1",
+        imported: false,
+      },
+    });
     setupQueries();
     useAuthStore.setState({
       token: "signed-in-token",
@@ -813,7 +827,7 @@ describe("ZakiDashboard", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/spaces/zaky/threads/thread-1");
   });
 
-  it("claims returning anonymous work after sign-in and clears the local ledger", () => {
+  it("keeps returning anonymous work visible after sign-in until Spaces claim succeeds", () => {
     upsertAnonymousWorkItem({
       productId: "agent",
       taskKind: "preview",
@@ -829,7 +843,68 @@ describe("ZakiDashboard", () => {
 
     expect(screen.getByTestId("zaki-anonymous-work")).toHaveTextContent("We kept your work");
     expect(screen.getByTestId("zaki-anonymous-work")).toHaveTextContent("Launch sequence");
-    expect(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY)).toBeNull();
+    expect(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY)).not.toBeNull();
+  });
+
+  it("claims signed-in Spaces ledger work before navigating to a signed-in route", async () => {
+    upsertAnonymousWorkItem({
+      productId: "spaces",
+      taskKind: "chat",
+      prompt: "Continue the anonymous strategy chat",
+      title: "Strategy chat",
+      route: "/spaces/zaky/threads/anon-123",
+      threadId: "anon-123",
+      meterRemaining: 12,
+      status: "succeeded",
+    });
+
+    renderDashboard();
+
+    fireEvent.click(screen.getByText("Strategy chat"));
+
+    await waitFor(() => {
+      expect(claimAnonymousSpacesWork).toHaveBeenCalledWith({
+        workId: expect.any(String),
+        prompt: "Continue the anonymous strategy chat",
+        replyPreview: "",
+        title: "Strategy chat",
+        threadId: "anon-123",
+        route: "/spaces/zaky/threads/anon-123",
+      });
+    });
+    expect(mockNavigate).toHaveBeenCalledWith("/spaces/customer-space/threads/thread-1");
+    expect(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY)).not.toBeNull();
+  });
+
+  it("preserves signed-in Spaces ledger work and shows retry copy when claim fails", async () => {
+    (claimAnonymousSpacesWork as unknown as jest.Mock).mockResolvedValueOnce({
+      response: { ok: false },
+      data: {
+        success: false,
+        error: "Spaces setup is temporarily unavailable. Please try again.",
+        retryable: true,
+      },
+    });
+    upsertAnonymousWorkItem({
+      productId: "spaces",
+      taskKind: "chat",
+      prompt: "Recover this chat",
+      title: "Recover chat",
+      route: "/spaces/zaky/threads/anon-456",
+      threadId: "anon-456",
+      meterRemaining: 12,
+      status: "succeeded",
+    });
+
+    renderDashboard();
+
+    fireEvent.click(screen.getByText("Recover chat"));
+
+    expect(
+      await screen.findByText("Spaces setup is temporarily unavailable. Please try again.")
+    ).toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalledWith("/spaces/zaky/threads/anon-456");
+    expect(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY)).not.toBeNull();
   });
 
   it("keeps future spokes visible but coming soon without creating auth work", () => {

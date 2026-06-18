@@ -38,6 +38,7 @@ import type {
   MeterAvailableNow,
   MeterWindowSnapshot,
 } from "@/lib/api";
+import { claimAnonymousSpacesWork } from "@/lib/api";
 import { useAuthStore } from "@/stores";
 import { cn } from "@/lib/utils";
 import {
@@ -49,7 +50,6 @@ import {
 import { formatZakiSessionLabel } from "@/lib/zakiSessions";
 import {
   buildAnonymousWorkTitle,
-  clearAnonymousWorkLedger,
   readAnonymousWorkLedger,
   upsertAnonymousWorkItem,
   type AnonymousWorkItem,
@@ -779,12 +779,14 @@ function ReturningWorkStrip({
   t,
   items,
   claimed = false,
+  claimError = null,
   onContinue,
   onSave,
 }: {
   t: TranslateFn;
   items: AnonymousWorkItem[];
   claimed?: boolean;
+  claimError?: string | null;
   onContinue: (item: AnonymousWorkItem) => void;
   onSave: (item?: AnonymousWorkItem) => void;
 }) {
@@ -812,6 +814,11 @@ function ReturningWorkStrip({
                   defaultValue: "Saved in this browser only. Sign in to keep it across devices.",
                 })}
           </p>
+          {claimError ? (
+            <p className="zaki-dashboard-command__ledger-error" role="status">
+              {claimError}
+            </p>
+          ) : null}
         </div>
         {!claimed ? (
           <V2Button type="button" onClick={() => onSave(items[0])}>
@@ -866,6 +873,7 @@ export function ZakiDashboard({
   const [commandText, setCommandText] = useState("");
   const [anonymousWorkItems, setAnonymousWorkItems] = useState<AnonymousWorkItem[]>([]);
   const [anonymousWorkClaimed, setAnonymousWorkClaimed] = useState(false);
+  const [anonymousWorkClaimError, setAnonymousWorkClaimError] = useState<string | null>(null);
   const [showIntro, setShowIntro] = useState(false);
   const [memoryBridgeSeen, setMemoryBridgeSeen] = useState(false);
   const [titleSignalIndex, setTitleSignalIndex] = useState(0);
@@ -890,17 +898,12 @@ export function ZakiDashboard({
       : t("zakiDashboard.identity.signedIn");
 
   const refreshAnonymousWork = useCallback(() => {
-    if (token) {
-      const items = readAnonymousWorkLedger().items;
-      if (items.length > 0) {
-        setAnonymousWorkItems(items);
-        setAnonymousWorkClaimed(true);
-        clearAnonymousWorkLedger();
-      }
-      return;
+    const items = readAnonymousWorkLedger().items;
+    setAnonymousWorkItems(items);
+    setAnonymousWorkClaimed(Boolean(token && items.length > 0));
+    if (!items.length || !token) {
+      setAnonymousWorkClaimError(null);
     }
-    setAnonymousWorkItems(readAnonymousWorkLedger().items);
-    setAnonymousWorkClaimed(false);
   }, [token]);
 
   useEffect(() => {
@@ -1199,15 +1202,49 @@ export function ZakiDashboard({
   );
 
   const handleContinueAnonymousWork = useCallback(
-    (item: AnonymousWorkItem) => {
+    async (item: AnonymousWorkItem) => {
       setSelectedProductId(item.productId);
       setCommandText(item.prompt);
       writeDashboardIntent(item.productId, item.prompt, item.id);
       if (item.productId === "spaces" && item.route.startsWith("/spaces")) {
+        if (token) {
+          try {
+            const { response, data } = await claimAnonymousSpacesWork({
+              workId: item.id,
+              prompt: item.prompt,
+              replyPreview: item.replyPreview,
+              title: item.title,
+              threadId: item.threadId,
+              route: item.route,
+            });
+            if (response.ok && data?.success && data.route) {
+              setAnonymousWorkClaimError(null);
+              setAnonymousWorkClaimed(true);
+              navigate(data.route);
+              return;
+            }
+            setAnonymousWorkClaimed(true);
+            setAnonymousWorkClaimError(
+              data?.error ||
+                t("zakiDashboard.anonymousWork.claimRetry", {
+                  defaultValue: "Spaces setup is temporarily unavailable. Retry from this saved work.",
+                })
+            );
+            return;
+          } catch {
+            setAnonymousWorkClaimed(true);
+            setAnonymousWorkClaimError(
+              t("zakiDashboard.anonymousWork.claimRetry", {
+                defaultValue: "Spaces setup is temporarily unavailable. Retry from this saved work.",
+              })
+            );
+            return;
+          }
+        }
         navigate(item.route);
       }
     },
-    [navigate, writeDashboardIntent]
+    [navigate, t, token, writeDashboardIntent]
   );
 
   const handleSaveAnonymousWork = useCallback(
@@ -1279,6 +1316,7 @@ export function ZakiDashboard({
               t={t}
               items={anonymousWorkItems}
               claimed={anonymousWorkClaimed}
+              claimError={anonymousWorkClaimError}
               onContinue={handleContinueAnonymousWork}
               onSave={handleSaveAnonymousWork}
             />

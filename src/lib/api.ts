@@ -305,6 +305,37 @@ export async function backendAuthRequest(
   return response;
 }
 
+export type SpacesAnonymousWorkClaimPayload = {
+  workId?: string | null;
+  prompt?: string;
+  replyPreview?: string;
+  title?: string;
+  threadId?: string | null;
+  route?: string | null;
+};
+
+export type SpacesAnonymousWorkClaimResponse = {
+  success?: boolean;
+  workspaceSlug?: string;
+  threadSlug?: string | null;
+  route?: string;
+  imported?: boolean;
+  retryable?: boolean;
+  code?: string;
+  error?: string;
+};
+
+export async function claimAnonymousSpacesWork(
+  payload: SpacesAnonymousWorkClaimPayload
+) {
+  const response = await apiRequest("/api/spaces/anonymous-work/claim", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const data = (await response.json().catch(() => ({}))) as SpacesAnonymousWorkClaimResponse;
+  return { response, data };
+}
+
 export async function captureMemory({
   message,
   threadId,

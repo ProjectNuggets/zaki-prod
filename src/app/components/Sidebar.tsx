@@ -857,7 +857,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
           
           // Special handling for 401 (permission issue)
           if (response.status === 401) {
-            throw new Error('You don\'t have permission to delete spaces. Contact admin or delete via NOVA.TYP.');
+            throw new Error('You do not have permission to delete this space.');
           }
           
           throw new Error(errorData?.error || errorData?.message || 'Delete failed');

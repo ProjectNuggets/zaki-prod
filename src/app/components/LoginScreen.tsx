@@ -14,7 +14,9 @@ import {
   fetchProfile,
   buildGoogleOAuthStartUrl,
   fetchGoogleOAuthStatus,
+  claimAnonymousSpacesWork,
 } from "@/lib/api";
+import { readAnonymousWorkLedger } from "@/lib/anonymousWork";
 import { clearPendingIntent, readPendingIntent } from "@/lib/pendingIntent";
 import { getConfiguredTurnstileSiteKey } from "@/lib/runtimeEnv";
 import { useAuthStore } from "@/stores";
@@ -110,6 +112,27 @@ function getPostLoginReturnTo(location: ReturnType<typeof useLocation>) {
     return "/";
   }
   return "";
+}
+
+function isSpacesReturnTo(value: string) {
+  return /^\/spaces(?:\/|$)/.test(value);
+}
+
+function findPendingSpacesWork(anonymousWorkId: string | null | undefined) {
+  const items = readAnonymousWorkLedger().items.filter((item) => item.productId === "spaces");
+  if (anonymousWorkId) {
+    return items.find((item) => item.id === anonymousWorkId) || items[0] || null;
+  }
+  return items[0] || null;
+}
+
+function getSafeAuthErrorMessage(message: unknown, fallback: string) {
+  const text = String(message || "").trim();
+  if (!text) return fallback;
+  if (/\bNOVA[._-]?TYP\b|\bTYP\b|NOVA_TYP_|TLS certificate|not configured/i.test(text)) {
+    return fallback;
+  }
+  return text;
 }
 
 const AUTH_COPY = {
@@ -704,7 +727,7 @@ export function LoginScreen() {
           response.status >= 500
             ? copy.errors.loginServiceDown
             : copy.errors.loginFailed;
-        setError(data?.message || data?.error || fallback);
+        setError(getSafeAuthErrorMessage(data?.message || data?.error, fallback));
         return;
       }
 
@@ -748,11 +771,45 @@ export function LoginScreen() {
       );
       const pendingIntent = readPendingIntent();
       const pendingReturnTo = getSafeRelativeReturnTo(pendingIntent?.returnTo ?? null);
-      if (pendingReturnTo && (!explicitNext || explicitNext !== pendingReturnTo)) {
+      let finalReturnTo = returnTo;
+      let shouldClearPendingIntent = Boolean(
+        pendingReturnTo && (!explicitNext || explicitNext !== pendingReturnTo)
+      );
+
+      if (
+        returnTo &&
+        pendingIntent?.productId === "spaces" &&
+        pendingReturnTo === returnTo &&
+        isSpacesReturnTo(returnTo)
+      ) {
+        const savedWork = findPendingSpacesWork(pendingIntent.anonymousWorkId);
+        try {
+          const { response: claimResponse, data: claimData } = await claimAnonymousSpacesWork({
+            workId: savedWork?.id || pendingIntent.anonymousWorkId || null,
+            prompt: savedWork?.prompt || pendingIntent.prompt || "",
+            replyPreview: savedWork?.replyPreview || "",
+            title: savedWork?.title || pendingIntent.prompt || "",
+            threadId: savedWork?.threadId || null,
+            route: savedWork?.route || returnTo,
+          });
+          if (claimResponse.ok && claimData?.success && claimData.route) {
+            finalReturnTo = claimData.route;
+            shouldClearPendingIntent = true;
+          } else {
+            finalReturnTo = "/";
+            shouldClearPendingIntent = false;
+          }
+        } catch {
+          finalReturnTo = "/";
+          shouldClearPendingIntent = false;
+        }
+      }
+
+      if (shouldClearPendingIntent) {
         clearPendingIntent();
       }
-      if (returnTo) {
-        navigate(returnTo, { replace: true });
+      if (finalReturnTo) {
+        navigate(finalReturnTo, { replace: true });
       }
     } catch (err) {
       setError(
