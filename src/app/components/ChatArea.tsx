@@ -280,42 +280,12 @@ export function isMeterAvailabilityBlocked(availability?: MeterAvailableNow | nu
 export function buildAgentComposerUsageState({
   isAgentActive,
   availability,
-  rollingWindow,
-  isRtl = false,
-  dangerLabel,
 }: {
   isAgentActive: boolean;
   availability?: MeterAvailableNow | null;
-  rollingWindow?: MeterStatusResponse["rolling"];
-  isRtl?: boolean;
-  dangerLabel: string;
 }) {
   const locked = isAgentActive && isMeterAvailabilityBlocked(availability);
-  const windowHours =
-    typeof rollingWindow?.windowHours === "number" ? rollingWindow.windowHours : 5;
-  const rollingUsagePercent = getUsagePercent({
-    used: rollingWindow?.used,
-    limit: rollingWindow?.limit,
-  });
-  const rollingUsagePercentRounded = getRoundedUsagePercent(rollingUsagePercent);
-  const badge =
-    isAgentActive && typeof rollingWindow?.limit === "number"
-      ? {
-          label:
-            locked && availability?.constraint !== "rolling"
-              ? dangerLabel
-              : isRtl
-                ? `نافذة ${windowHours} ساعات ${rollingUsagePercentRounded}% مستخدمة`
-                : `${windowHours}h window ${rollingUsagePercentRounded}% used`,
-          tone: locked
-            ? ("danger" as const)
-            : rollingUsagePercent >= 80
-              ? ("warning" as const)
-              : ("neutral" as const),
-        }
-      : null;
-
-  return { locked, badge };
+  return { locked };
 }
 
 export class ChatRequestError extends Error {
@@ -3743,13 +3713,9 @@ export function ChatArea() {
   const agentAvailability = isZakiBotActiveSpace
     ? meterResult?.data?.availableNow?.agent ?? null
     : null;
-  const agentRollingWindow = isZakiBotActiveSpace ? meterResult?.data?.rolling ?? null : null;
   const agentComposerUsageState = buildAgentComposerUsageState({
     isAgentActive: isZakiBotActiveSpace,
     availability: agentAvailability,
-    rollingWindow: agentRollingWindow,
-    isRtl,
-    dangerLabel: chatCopy.quotaBadgeDanger,
   });
   const agentCapacityBlocked = agentComposerUsageState.locked;
   const agentWeeklyLabel =
@@ -3765,7 +3731,6 @@ export function ChatArea() {
     ? agentCapacityBlocked
     : Boolean(legacyQuotaInfo && legacyQuotaInfo.remaining <= 0);
   const isComposerSendLocked = !isOnline || isZakiBotSendLocked;
-  const agentQuotaBadge = agentComposerUsageState.badge;
   const latestAssistantMessageContent = useMemo(() => {
     const latestAssistant = [...messages]
       .reverse()
@@ -9615,8 +9580,7 @@ export function ChatArea() {
                 }
                 zakiCompactionThresholdPct={agentCompactionNudgePercent}
                 quotaBadge={
-                  agentQuotaBadge ??
-                  (legacyQuotaInfo
+                  !isZakiBotActiveSpace && legacyQuotaInfo
                     ? {
                         label:
                           legacyQuotaInfo.remaining <= 0
@@ -9631,7 +9595,7 @@ export function ChatArea() {
                               ? "warning"
                               : "neutral",
                       }
-                    : null)
+                    : null
                 }
               />
             </div>

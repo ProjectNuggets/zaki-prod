@@ -626,7 +626,7 @@ describe("P1-12 chat-stream retryable classification (isRetryableChatError)", ()
     );
   });
 
-  it("locks the Agent composer and shows rolling-window percentage from central meter availability", () => {
+  it("locks the Agent composer without rendering a rolling-window composer badge", () => {
     const state = buildAgentComposerUsageState({
       isAgentActive: true,
       availability: {
@@ -635,25 +635,14 @@ describe("P1-12 chat-stream retryable classification (isRetryableChatError)", ()
         requiredReserveUnits: 40,
         effectiveRemaining: 20,
       },
-      rollingWindow: {
-        windowHours: 5,
-        used: 40,
-        limit: 40,
-        remaining: 0,
-      },
-      dangerLabel: "Weekly usage is full",
     });
 
     expect(state).toEqual({
       locked: true,
-      badge: {
-        label: "5h window 100% used",
-        tone: "danger",
-      },
     });
   });
 
-  it("uses weekly-danger copy for Agent composer blocks that are not rolling-window constrained", () => {
+  it("locks the Agent composer for weekly constraints without rendering composer usage copy", () => {
     const state = buildAgentComposerUsageState({
       isAgentActive: true,
       availability: {
@@ -662,21 +651,10 @@ describe("P1-12 chat-stream retryable classification (isRetryableChatError)", ()
         requiredReserveUnits: 40,
         effectiveRemaining: 0,
       },
-      rollingWindow: {
-        windowHours: 5,
-        used: 10,
-        limit: 40,
-        remaining: 30,
-      },
-      dangerLabel: "Weekly usage is full",
     });
 
     expect(state).toEqual({
       locked: true,
-      badge: {
-        label: "Weekly usage is full",
-        tone: "danger",
-      },
     });
   });
 
@@ -689,18 +667,10 @@ describe("P1-12 chat-stream retryable classification (isRetryableChatError)", ()
         requiredReserveUnits: 40,
         effectiveRemaining: 0,
       },
-      rollingWindow: {
-        windowHours: 5,
-        used: 40,
-        limit: 40,
-        remaining: 0,
-      },
-      dangerLabel: "Weekly usage is full",
     });
 
     expect(state).toEqual({
       locked: false,
-      badge: null,
     });
   });
 
