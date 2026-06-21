@@ -5741,81 +5741,6 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   font-family: var(--v2-font-mono);
 }
 
-.zaki-app-v2 .zaki-agent-v2 .zaki-agent-empty-v2 {
-  width: min(100%, 720px);
-  margin: clamp(48px, 12vh, 128px) auto 0;
-  padding: 0 24px;
-}
-
-.zaki-app-v2 .zaki-agent-v2 .zaki-agent-empty-v2__kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--v2-ink-3);
-  font-family: var(--v2-font-mono);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  line-height: 1.4;
-  text-transform: uppercase;
-}
-
-.zaki-app-v2 .zaki-agent-v2 .zaki-agent-empty-v2__live {
-  width: 6px;
-  height: 6px;
-  background: var(--v2-accent);
-}
-
-.zaki-app-v2 .zaki-agent-v2 .zaki-agent-empty-v2 h2 {
-  max-width: 22ch;
-  margin-top: 14px;
-  color: var(--v2-ink-1);
-  font-family: var(--v2-font-mono);
-  font-size: 28px;
-  font-weight: 600;
-  line-height: 1.15;
-}
-
-.zaki-app-v2 .zaki-agent-v2 .zaki-agent-empty-v2 p {
-  max-width: 64ch;
-  margin-top: 12px;
-  color: var(--v2-ink-2);
-  font-family: var(--v2-font-prose);
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.zaki-app-v2 .zaki-agent-v2 .zaki-agent-empty-v2__actions {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1px;
-  margin-top: 18px;
-  border: 1px solid var(--v2-hairline);
-  background: var(--v2-hairline);
-}
-
-.zaki-app-v2 .zaki-agent-v2 .zaki-agent-empty-v2__actions button {
-  display: flex;
-  min-width: 0;
-  min-height: 44px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border: 0;
-  background: var(--v2-bg);
-  color: var(--v2-ink-2);
-  padding: 10px 12px;
-  font-family: var(--v2-font-mono);
-  font-size: 11px;
-  line-height: 1.35;
-  text-align: left;
-  cursor: pointer;
-}
-
-.zaki-app-v2 .zaki-agent-v2 .zaki-agent-empty-v2__actions button:hover {
-  background: var(--v2-hover);
-  color: var(--v2-ink-1);
-}
-
 .zaki-app-v2 .zaki-agent-v2 .zaki-message-row {
   gap: 14px;
   font-family: var(--v2-font-mono);
@@ -6464,66 +6389,137 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   line-height: 1.45;
 }
 
-.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-touched {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-touched__label {
-  color: var(--v2-ink-3);
-  font-family: var(--v2-font-mono);
-  font-size: 9px;
-  letter-spacing: 0.12em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-touched__item {
-  display: inline-flex;
-  max-width: min(100%, 260px);
-  min-height: 28px;
-  align-items: center;
-  gap: 6px;
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-sources {
+  width: min(100%, 620px);
   border: 1px solid var(--v2-hairline);
-  border-radius: 0;
-  background: var(--v2-bg);
+  background: color-mix(in srgb, var(--v2-bg-sunken) 72%, transparent);
   color: var(--v2-ink-2);
-  padding: 0 8px;
   font-family: var(--v2-font-mono);
-  font-size: 10px;
-  line-height: 1;
-  text-decoration: none;
 }
 
-.zaki-app-v2 .zaki-agent-v2 button.zaki-agent-reply-touched__item {
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-sources__trigger {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  min-height: 32px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  color: var(--v2-ink-2);
   cursor: pointer;
+  font-size: 10px;
+  line-height: 1.2;
+  list-style: none;
 }
 
-.zaki-app-v2 .zaki-agent-v2 button.zaki-agent-reply-touched__item:hover {
-  border-color: var(--v2-accent-hairline);
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-sources__trigger::-webkit-details-marker {
+  display: none;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-sources__trigger:hover {
+  background: var(--v2-hover);
   color: var(--v2-ink-1);
 }
 
-.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-touched__item > span:not(.meta) {
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-sources__kicker {
+  color: var(--v2-accent);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-sources__domains {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--v2-ink-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-sources__chevron {
+  color: var(--v2-ink-4);
+  transition: transform 160ms ease;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-sources[open] .zaki-agent-reply-sources__chevron {
+  transform: rotate(90deg);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-sources__list {
+  display: grid;
+  border-top: 1px solid var(--v2-hairline);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-sources__item {
+  display: grid;
+  grid-template-columns: 22px 14px minmax(0, 1fr) auto;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-bottom: 1px solid var(--v2-hairline);
+  background: transparent;
+  color: var(--v2-ink-2);
+  padding: 8px 9px;
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.25;
+  text-align: left;
+  text-decoration: none;
+}
+
+.zaki-app-v2 .zaki-agent-v2 button.zaki-agent-reply-sources__item {
+  cursor: pointer;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-sources__item:hover {
+  background: var(--v2-hover);
+  color: var(--v2-ink-1);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-sources__index,
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-sources__item .meta {
+  color: var(--v2-ink-4);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-sources__main {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-sources__main > span,
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-sources__main > small {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-touched__item .meta {
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-sources__main > small {
   color: var(--v2-ink-3);
+  font-family: var(--v2-font-prose);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
-.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-touched__item.is-artifact {
-  border-color: var(--v2-accent-hairline);
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-sources__panel-link {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--v2-accent);
+  padding: 8px 9px;
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
 }
 
-.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-touched__item.is-web {
-  border-color: var(--v2-hairline-strong);
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-reply-sources__panel-link:hover {
+  color: var(--v2-ink-1);
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-streaming-caret {

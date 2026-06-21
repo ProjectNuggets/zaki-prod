@@ -588,52 +588,6 @@ function forgetDeletedAgentSessionKey(keys: Set<string>, sessionKey: string) {
   persistDeletedAgentSessionKeys(keys);
 }
 
-const AGENT_EMPTY_STARTERS = [
-  {
-    id: "plan",
-    label: "Plan the work",
-    prompt: "Plan the fastest path to: ",
-  },
-  {
-    id: "audit",
-    label: "Audit for launch",
-    prompt: "Audit this for production launch risk: ",
-  },
-  {
-    id: "brief",
-    label: "Research and brief",
-    prompt: "Research this and turn it into a brief: ",
-  },
-] as const;
-
-function AgentEmptyState({ onUsePrompt }: { onUsePrompt: (prompt: string) => void }) {
-  return (
-    <div className="zaki-agent-empty-v2" role="status" aria-label="Agent ready">
-      <div className="zaki-agent-empty-v2__kicker">
-        <span className="zaki-agent-empty-v2__live" aria-hidden />
-        <span>Agent ready</span>
-      </div>
-      <h2>Give Agent an outcome.</h2>
-      <p>
-        Name the result, constraints, and what it can use. Agent will plan, ask before risky
-        steps, and keep the run in this thread.
-      </p>
-      <div className="zaki-agent-empty-v2__actions" aria-label="Prompt starters">
-        {AGENT_EMPTY_STARTERS.map((starter) => (
-          <button
-            key={starter.id}
-            type="button"
-            onClick={() => onUsePrompt(starter.prompt)}
-          >
-            <span>{starter.label}</span>
-            <span aria-hidden>-&gt;</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function normalizeMessageContentKey(content: string) {
   return String(content || "").replace(/\s+/g, " ").trim();
 }
@@ -9209,11 +9163,6 @@ export function ChatArea() {
     };
   }, []);
 
-  const handleAgentEmptyPrompt = useCallback((prompt: string) => {
-    composerHandleRef.current?.setDraft(prompt);
-    window.dispatchEvent(new Event("zaki:focus-composer"));
-  }, []);
-
   // Render main content based on view
   const renderContent = () => {
     if (showSpacesView) {
@@ -9278,16 +9227,6 @@ export function ChatArea() {
           onStartChat={handleStartChat}
         />
       );
-    }
-
-    if (
-      isZakiBotActiveSpace &&
-      !isStreaming &&
-      !isHistoryLoading &&
-      !isBotHistoryLoading &&
-      messages.length === 0
-    ) {
-      return <AgentEmptyState onUsePrompt={handleAgentEmptyPrompt} />;
     }
 
     const zakiStreamingModeVariant =

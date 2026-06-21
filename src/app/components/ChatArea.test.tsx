@@ -2416,7 +2416,7 @@ describe("ChatArea Component", () => {
     });
   });
 
-  it("renders an Agent empty state for a blank thread and seeds starter prompts", async () => {
+  it("keeps a blank Agent thread body empty", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
@@ -2440,11 +2440,15 @@ describe("ChatArea Component", () => {
       },
     });
 
-    await renderChatAreaAndWaitForEffects();
+    const { container } = await renderChatAreaAndWaitForEffects();
 
-    expect(await screen.findByText("Give Agent an outcome.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Plan the work/i }));
-    expect(screen.getByRole("combobox")).toHaveValue("Plan the fastest path to: ");
+    await waitFor(() => {
+      expect(container.querySelector(".zaki-chat-thread--agent")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Give Agent an outcome.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Agent ready")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Prompt starters")).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox")).toHaveValue("");
   });
 
   it("adds a new Agent thread to the sidebar immediately", async () => {

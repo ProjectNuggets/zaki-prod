@@ -19,7 +19,10 @@ import {
   type TimelineRevealPhase,
 } from "../NullalisTurnTimeline";
 import { QuickReplyChips, type QuickReplyItem } from "../QuickReplyChips";
-import { buildAgentInspectorPanelModel } from "../AgentInspectorPanelModel";
+import {
+  buildAgentInspectorPanelModel,
+  type AgentInspectorPanelEvent,
+} from "../AgentInspectorPanelModel";
 import { ChatAgentSteps } from "../ChatAgentSteps";
 import { GeneratedFileChip } from "../GeneratedFileChip";
 
@@ -68,6 +71,15 @@ type AgentReplyEvidenceProps = {
   onOpenSources?: () => void;
 };
 
+type AgentReplySourceItem = {
+  id: string;
+  kind: "website" | "document";
+  label: string;
+  meta: string;
+  summary: string;
+  href: string | null;
+};
+
 function extractUrl(value: string | null | undefined): string | null {
   const match = String(value || "").match(/https?:\/\/[^\s)\]}>,"]+/i);
   return match?.[0] ?? null;
@@ -81,16 +93,6 @@ function websiteLabel(value: string | null | undefined): string | null {
   } catch {
     return null;
   }
-}
-
-function isWebSource(item: { label: string; meta: string | null; summary: string }) {
-  return Boolean(
-    websiteLabel(item.label) ||
-      websiteLabel(item.summary) ||
-      /\b(web_search|web_fetch|browser|search result|website|url)\b/i.test(
-        [item.label, item.meta, item.summary].filter(Boolean).join(" ")
-      )
-  );
 }
 
 function isGenericArtifactLabel(label: string) {
@@ -109,6 +111,67 @@ function artifactDisplayLabel(item: { label: string; files: string[] }) {
   if (label && !isGenericArtifactLabel(label)) return label;
   const file = item.files.find((candidate) => !isGenericArtifactLabel(String(candidate || "")));
   return file || (label && !isGenericArtifactLabel(label) ? label : "Artifact");
+}
+
+function isDocumentLikeLabel(value: string | null | undefined) {
+  const label = String(value || "").trim();
+  if (!label) return false;
+  if (/\.(md|mdx|txt|pdf|docx?|pptx?|xlsx?|csv|json|yaml|yml|html?)$/i.test(label)) {
+    return true;
+  }
+  return /(^|\/)(docs?|sources?|research|references?|briefs?)\//i.test(label);
+}
+
+function firstMeaningfulFile(files: string[]) {
+  return files.find((file) => isDocumentLikeLabel(file)) ?? files.find(Boolean) ?? null;
+}
+
+function toReplySourceItem(event: AgentInspectorPanelEvent): AgentReplySourceItem | null {
+  const href = event.href || extractUrl(event.summary) || extractUrl(event.label);
+  if (href) {
+    return {
+      id: event.id,
+      kind: "website",
+      label: websiteLabel(href) || event.label || href,
+      meta: "website",
+      summary: event.summary,
+      href,
+    };
+  }
+
+  const file = firstMeaningfulFile(event.files);
+  const label = file || event.label;
+  if (
+    !label ||
+    (event.category !== "file" &&
+      event.category !== "retrieval" &&
+      !isDocumentLikeLabel(label))
+  ) {
+    return null;
+  }
+
+  return {
+    id: event.id,
+    kind: "document",
+    label,
+    meta: event.files.length > 1 ? `${event.files.length} files` : "document",
+    summary: event.summary,
+    href: null,
+  };
+}
+
+function uniqueReplySources(events: AgentInspectorPanelEvent[]) {
+  const seen = new Set<string>();
+  const sources: AgentReplySourceItem[] = [];
+  for (const event of events) {
+    const item = toReplySourceItem(event);
+    if (!item) continue;
+    const key = `${item.kind}:${item.href || item.label}:${item.summary}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    sources.push(item);
+  }
+  return sources.slice(0, 6);
 }
 
 const FACET_AGENT_RE = /\bthe-(critic|bully|comedian)\b/i;
@@ -205,33 +268,9 @@ function AgentReplyEvidence({
 
   const model = buildAgentInspectorPanelModel(entries);
   const primaryArtifact = model.artifacts[0] ?? null;
-  const touched = [
-    ...model.artifacts.filter((event) => event.id !== primaryArtifact?.id).map((event) => ({
-      id: `artifact:${event.id}`,
-      kind: "artifact" as const,
-      label: artifactDisplayLabel(event),
-      meta: event.meta || "artifact",
-      summary: event.summary,
-    })),
-    ...model.sources.map((event) => ({
-      id: `source:${event.id}`,
-      kind: "source" as const,
-      label: event.files[0] || event.label || "Source",
-      meta: event.meta || "source",
-      summary: event.summary,
-    })),
-  ];
-  const seen = new Set<string>();
-  const visibleTouched = touched
-    .filter((item) => {
-      const key = `${item.kind}:${item.label}:${item.summary}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, 4);
+  const visibleSources = uniqueReplySources(model.sources);
 
-  if (!primaryArtifact && visibleTouched.length === 0) return null;
+  if (!primaryArtifact && visibleSources.length === 0) return null;
 
   const artifactTitle = primaryArtifact ? artifactDisplayLabel(primaryArtifact) : "Artifact";
   const artifactMeta =
@@ -272,64 +311,80 @@ function AgentReplyEvidence({
           </div>
         </div>
       ) : null}
-      {visibleTouched.length > 0 ? (
-        <div className="zaki-agent-reply-touched" data-testid="agent-reply-touched">
-          <span className="zaki-agent-reply-touched__label">
-            {visibleTouched.some((item) => item.kind === "source") ? "sources" : "files"}
-          </span>
-          {visibleTouched.map((item) => {
-            const onClick = item.kind === "artifact" ? onOpenArtifacts : onOpenSources;
-            const sourceIsWeb = item.kind === "source" && isWebSource(item);
-            const itemLabel =
-              item.kind === "source"
-                ? websiteLabel(item.label) || websiteLabel(item.summary) || item.label
-                : item.label;
-            const content = (
-              <>
-                {item.kind === "artifact" ? (
-                  <Boxes className="size-3" aria-hidden />
-                ) : sourceIsWeb ? (
-                  <Globe2 className="size-3" aria-hidden />
-                ) : (
-                  <FileText className="size-3" aria-hidden />
-                )}
-                <span>{itemLabel}</span>
-                <span className="meta">{sourceIsWeb ? "website" : item.meta}</span>
-              </>
-            );
-            return onClick ? (
+      {visibleSources.length > 0 ? (
+        <details className="zaki-agent-reply-sources" data-testid="agent-reply-sources">
+          <summary className="zaki-agent-reply-sources__trigger">
+            <span className="zaki-agent-reply-sources__kicker">sources</span>
+            <span>
+              Used {visibleSources.length} source{visibleSources.length === 1 ? "" : "s"}
+            </span>
+            <span className="zaki-agent-reply-sources__domains">
+              {visibleSources.slice(0, 2).map((item) => item.label).join(" / ")}
+            </span>
+            <span className="zaki-agent-reply-sources__chevron" aria-hidden>
+              -&gt;
+            </span>
+          </summary>
+          <div className="zaki-agent-reply-sources__list">
+            {visibleSources.map((item, index) => {
+              const sourceIsWeb = item.kind === "website";
+              const content = (
+                <>
+                  <span className="zaki-agent-reply-sources__index">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  {sourceIsWeb ? (
+                    <Globe2 className="size-3" aria-hidden />
+                  ) : (
+                    <FileText className="size-3" aria-hidden />
+                  )}
+                  <span className="zaki-agent-reply-sources__main">
+                    <span>{item.label}</span>
+                    {item.summary ? <small>{item.summary}</small> : null}
+                  </span>
+                  <span className="meta">{item.meta}</span>
+                </>
+              );
+              if (item.href) {
+                return (
+                  <a
+                    key={item.id}
+                    className="zaki-agent-reply-sources__item"
+                    href={item.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {content}
+                  </a>
+                );
+              }
+              return onOpenSources ? (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="zaki-agent-reply-sources__item"
+                  onClick={onOpenSources}
+                >
+                  {content}
+                </button>
+              ) : (
+                <span key={item.id} className="zaki-agent-reply-sources__item">
+                  {content}
+                </span>
+              );
+            })}
+            {onOpenSources ? (
               <button
-                key={item.id}
                 type="button"
-                className={cn(
-                  "zaki-agent-reply-touched__item",
-                  item.kind === "artifact"
-                    ? "is-artifact"
-                    : sourceIsWeb
-                      ? "is-source is-web"
-                      : "is-source"
-                )}
-                onClick={onClick}
+                className="zaki-agent-reply-sources__panel-link"
+                onClick={onOpenSources}
               >
-                {content}
+                Open evidence panel
+                <ExternalLink className="size-3" aria-hidden />
               </button>
-            ) : (
-              <span
-                key={item.id}
-                className={cn(
-                  "zaki-agent-reply-touched__item",
-                  item.kind === "artifact"
-                    ? "is-artifact"
-                    : sourceIsWeb
-                      ? "is-source is-web"
-                      : "is-source"
-                )}
-              >
-                {content}
-              </span>
-            );
-          })}
-        </div>
+            ) : null}
+          </div>
+        </details>
       ) : null}
     </div>
   );

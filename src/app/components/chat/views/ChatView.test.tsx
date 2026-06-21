@@ -192,7 +192,7 @@ describe("ChatView", () => {
     expect(screen.getByRole("status")).toHaveTextContent("thinking:");
   });
 
-  it("renders artifact and source evidence under agent replies with wired panel actions", () => {
+  it("renders collapsed research sources under agent replies with wired panel actions", () => {
     const openArtifacts = jest.fn();
     const openSources = jest.fn();
 
@@ -238,6 +238,15 @@ describe("ChatView", () => {
               resultSummary: "Relevant source: https://example.com/research",
               resultState: "done",
             },
+            {
+              id: "memory-1",
+              kind: "tool",
+              intent: "memory",
+              text: "Loaded durable user memory.",
+              timestamp: 4,
+              resultSummary: "User prefers short answers.",
+              resultState: "done",
+            },
           ],
         }}
         isHistoryLoading={false}
@@ -252,25 +261,30 @@ describe("ChatView", () => {
     expect(
       within(screen.getByTestId("agent-reply-artifact")).getByText("launch-brief.md")
     ).toBeInTheDocument();
+    const sources = screen.getByTestId("agent-reply-sources");
+    expect(sources).not.toHaveAttribute("open");
     expect(
-      within(screen.getByTestId("agent-reply-touched")).getByText("docs/ui-handoff.md")
+      within(sources).getByText("Used 2 sources")
     ).toBeInTheDocument();
     expect(
-      within(screen.getByTestId("agent-reply-touched")).getByText("sources")
+      within(sources).getByText("docs/ui-handoff.md")
     ).toBeInTheDocument();
     expect(
-      within(screen.getByTestId("agent-reply-touched")).getByText("example.com")
+      within(sources).getByText("example.com")
     ).toBeInTheDocument();
     expect(
-      within(screen.getByTestId("agent-reply-touched")).getByText("website")
+      within(sources).getByText("website")
     ).toBeInTheDocument();
+    expect(within(sources).queryByText("User prefers short answers.")).not.toBeInTheDocument();
     expect(
-      within(screen.getByTestId("agent-reply-touched")).queryByText("launch-brief.md")
+      within(sources).queryByText("launch-brief.md")
     ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /open in panel/i }));
+    fireEvent.click(within(sources).getByText("Used 2 sources"));
+    expect(sources).toHaveAttribute("open");
     fireEvent.click(
-      within(screen.getByTestId("agent-reply-touched")).getByRole("button", {
+      within(sources).getByRole("button", {
         name: /docs\/ui-handoff\.md/i,
       })
     );
