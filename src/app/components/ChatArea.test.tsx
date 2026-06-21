@@ -2404,6 +2404,37 @@ describe("ChatArea Component", () => {
     });
   });
 
+  it("renders an Agent empty state for a blank thread and seeds starter prompts", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    navState.zakiSessionKey = "agent:zaki-bot:user:1:thread:main";
+    authState = { user: { username: "agent@example.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+    (fetchAgentMe as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (listAgentSessions as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ sessions: [] }), headers: new Headers() },
+      data: {
+        sessions: [
+          {
+            session_key: "agent:zaki-bot:user:1:thread:main",
+            last_active: "2026-06-21T10:00:00.000Z",
+            message_count: 0,
+          },
+        ],
+      },
+    });
+
+    await renderChatAreaAndWaitForEffects();
+
+    expect(await screen.findByText("Give Agent an outcome.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Plan the work/i }));
+    expect(screen.getByRole("combobox")).toHaveValue("Plan the fastest path to: ");
+  });
+
   it("adds a new Agent thread to the sidebar immediately", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
@@ -2496,10 +2527,52 @@ describe("ChatArea Component", () => {
     await waitFor(() => {
       expect(screen.queryByText("Main")).not.toBeInTheDocument();
     });
+    expect(
+      JSON.parse(window.localStorage.getItem("zaki:agentDeletedSessionKeys") || "[]")
+    ).toContain("agent:zaki-bot:user:1:thread:main");
     expect(container.querySelectorAll(".zaki-thread-item")).toHaveLength(1);
     expect(screen.getByText("New thread")).toBeInTheDocument();
     expect(navState.threadId).toMatch(/^anon-/);
     expect(navState.zakiSessionKey).toMatch(/^agent:zaki-bot:user:1:thread:anon-/);
+  });
+
+  it("keeps a deleted active Main session hidden if the session list returns it again", async () => {
+    const mainSessionKey = "agent:zaki-bot:user:1:thread:main";
+    window.localStorage.setItem(
+      "zaki:agentDeletedSessionKeys",
+      JSON.stringify([mainSessionKey])
+    );
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    navState.zakiSessionKey = mainSessionKey;
+    authState = { user: { username: "agent@example.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+    (fetchAgentMe as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (listAgentSessions as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ sessions: [] }), headers: new Headers() },
+      data: {
+        sessions: [
+          {
+            session_key: mainSessionKey,
+            last_active: "2026-06-21T10:00:00.000Z",
+            message_count: 1,
+          },
+        ],
+      },
+    });
+
+    const { container } = await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(navState.threadId).toMatch(/^anon-/);
+    });
+    expect(screen.queryByText("Main")).not.toBeInTheDocument();
+    expect(container.querySelectorAll(".zaki-thread-item")).toHaveLength(1);
+    expect(screen.getByText("New thread")).toBeInTheDocument();
   });
 
   it("parses task progress events as structured live execution", () => {

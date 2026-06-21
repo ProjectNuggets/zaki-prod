@@ -528,6 +528,98 @@ function buildDraftAgentSession(
   };
 }
 
+const AGENT_DELETED_SESSION_KEYS_STORAGE_KEY = "zaki:agentDeletedSessionKeys";
+
+function readDeletedAgentSessionKeys() {
+  if (typeof window === "undefined") return new Set<string>();
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(AGENT_DELETED_SESSION_KEYS_STORAGE_KEY) || "[]"
+    );
+    if (!Array.isArray(parsed)) return new Set<string>();
+    return new Set(
+      parsed
+        .map((value) => normalizeZakiSessionKey(String(value || "")))
+        .filter(Boolean)
+    );
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function persistDeletedAgentSessionKeys(keys: Set<string>) {
+  if (typeof window === "undefined") return;
+  try {
+    const values = Array.from(keys).filter(Boolean).slice(-250);
+    window.localStorage.setItem(
+      AGENT_DELETED_SESSION_KEYS_STORAGE_KEY,
+      JSON.stringify(values)
+    );
+  } catch {
+    // Best-effort only. The in-memory tombstone still protects this session.
+  }
+}
+
+function rememberDeletedAgentSessionKey(keys: Set<string>, sessionKey: string) {
+  const normalized = normalizeZakiSessionKey(sessionKey);
+  if (!normalized) return;
+  keys.add(normalized);
+  persistDeletedAgentSessionKeys(keys);
+}
+
+function forgetDeletedAgentSessionKey(keys: Set<string>, sessionKey: string) {
+  const normalized = normalizeZakiSessionKey(sessionKey);
+  if (!normalized) return;
+  keys.delete(normalized);
+  persistDeletedAgentSessionKeys(keys);
+}
+
+const AGENT_EMPTY_STARTERS = [
+  {
+    id: "plan",
+    label: "Plan the work",
+    prompt: "Plan the fastest path to: ",
+  },
+  {
+    id: "audit",
+    label: "Audit for launch",
+    prompt: "Audit this for production launch risk: ",
+  },
+  {
+    id: "brief",
+    label: "Research and brief",
+    prompt: "Research this and turn it into a brief: ",
+  },
+] as const;
+
+function AgentEmptyState({ onUsePrompt }: { onUsePrompt: (prompt: string) => void }) {
+  return (
+    <div className="zaki-agent-empty-v2" role="status" aria-label="Agent ready">
+      <div className="zaki-agent-empty-v2__kicker">
+        <span className="zaki-agent-empty-v2__live" aria-hidden />
+        <span>Agent ready</span>
+      </div>
+      <h2>Give Agent an outcome.</h2>
+      <p>
+        Name the result, constraints, and what it can use. Agent will plan, ask before risky
+        steps, and keep the run in this thread.
+      </p>
+      <div className="zaki-agent-empty-v2__actions" aria-label="Prompt starters">
+        {AGENT_EMPTY_STARTERS.map((starter) => (
+          <button
+            key={starter.id}
+            type="button"
+            onClick={() => onUsePrompt(starter.prompt)}
+          >
+            <span>{starter.label}</span>
+            <span aria-hidden>-&gt;</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function normalizeMessageContentKey(content: string) {
   return String(content || "").replace(/\s+/g, " ").trim();
 }
@@ -3383,7 +3475,7 @@ export function ChatArea() {
       ? pending
       : [nullalisApprovalRequest, ...pending];
   }, [activeSessionUi?.pendingApprovals, nullalisApprovalRequest]);
-  const deletedAgentSessionKeysRef = useRef<Set<string>>(new Set());
+  const deletedAgentSessionKeysRef = useRef<Set<string>>(readDeletedAgentSessionKeys());
   const [agentDraftSessions, setAgentDraftSessions] = useState<AgentSession[]>([]);
   const zakiThreadSessions = useMemo(
     () => {
@@ -3954,7 +4046,7 @@ export function ChatArea() {
           timestamp,
           activeSessionMode
         );
-        deletedAgentSessionKeysRef.current.delete(normalizedNextSessionKey);
+        forgetDeletedAgentSessionKey(deletedAgentSessionKeysRef.current, normalizedNextSessionKey);
         ensureZakiSessionUi(normalizedNextSessionKey);
         setAgentDraftSessions((previous) => upsertAgentSession(previous, draftSession));
         queryClient.setQueryData(zakiSessionKeys.all, (previous: unknown) =>
@@ -3990,6 +4082,12 @@ export function ChatArea() {
     ]
   );
 
+  useEffect(() => {
+    if (!isAgentSurface || !normalizedActiveZakiSessionKey) return;
+    if (!deletedAgentSessionKeysRef.current.has(normalizedActiveZakiSessionKey)) return;
+    handleCreateAgentSession({ showToast: false });
+  }, [handleCreateAgentSession, isAgentSurface, normalizedActiveZakiSessionKey]);
+
   const handleDeleteAgentSession = useCallback(
     async (sessionKey: string, label: string) => {
       const normalized = normalizeZakiSessionKey(sessionKey);
@@ -3999,7 +4097,7 @@ export function ChatArea() {
         }
         const { response } = await deleteAgentSession(normalized);
         if (!response.ok && response.status !== 404) throw new Error(`delete ${response.status}`);
-        deletedAgentSessionKeysRef.current.add(normalized);
+        rememberDeletedAgentSessionKey(deletedAgentSessionKeysRef.current, normalized);
         setAgentDraftSessions((previous) =>
           removeAgentSession(previous, normalized) as AgentSession[]
         );
@@ -9085,6 +9183,11 @@ export function ChatArea() {
     };
   }, []);
 
+  const handleAgentEmptyPrompt = useCallback((prompt: string) => {
+    composerHandleRef.current?.setDraft(prompt);
+    window.dispatchEvent(new Event("zaki:focus-composer"));
+  }, []);
+
   // Render main content based on view
   const renderContent = () => {
     if (showSpacesView) {
@@ -9149,6 +9252,16 @@ export function ChatArea() {
           onStartChat={handleStartChat}
         />
       );
+    }
+
+    if (
+      isZakiBotActiveSpace &&
+      !isStreaming &&
+      !isHistoryLoading &&
+      !isBotHistoryLoading &&
+      messages.length === 0
+    ) {
+      return <AgentEmptyState onUsePrompt={handleAgentEmptyPrompt} />;
     }
 
     const zakiStreamingModeVariant =
