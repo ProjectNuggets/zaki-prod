@@ -52,7 +52,6 @@ import {
   type AgentSessionMode,
   type AgentSessionPlanResponse,
   type AgentSessionTodosResponse,
-  type AgentTaskPlanStep,
   type AgentTodoItem,
   type AgentTodoList,
   type AgentTodoStatus,
@@ -343,15 +342,6 @@ function todoActionLabel(status?: string | null) {
   return "Update";
 }
 
-function currentPlanStep(plan?: AgentSessionPlanResponse["plan"] | null): AgentTaskPlanStep | null {
-  if (!plan?.steps?.length) return null;
-  const index =
-    typeof plan.current_step === "number" && Number.isFinite(plan.current_step)
-      ? Math.max(0, Math.min(plan.steps.length - 1, Math.trunc(plan.current_step)))
-      : plan.steps.findIndex((step) => step.status === "running");
-  return plan.steps[index >= 0 ? index : 0] ?? null;
-}
-
 function traceLevel(event: { state: NullalisTranscriptEntry["resultState"]; meta: string | null }) {
   if (event.state === "failed" || event.state === "blocked") return "warn";
   if (event.state === "running") return "run";
@@ -424,11 +414,6 @@ function eventText(event: {
   return `${event.label} · ${event.summary}`;
 }
 
-function eventMetaShort(event: { meta: string | null; durationMs: number | null }) {
-  if (event.meta) return event.meta;
-  return typeof event.durationMs === "number" ? formatDurationShort(event.durationMs) : "";
-}
-
 function evidenceCategoryLabel(category: string) {
   if (category === "web") return "web";
   if (category === "file") return "file";
@@ -442,17 +427,32 @@ function evidenceCategoryLabel(category: string) {
   return "tool";
 }
 
-function frameMeta(frame: NullalisNarrationFrame | null) {
-  if (!frame) return "session scoped";
-  const bits = [
-    frame.phase.replace(/_/g, " "),
-    frame.tool,
-    frame.stepIndex != null && frame.stepTotal != null
-      ? `${frame.stepIndex + 1}/${frame.stepTotal}`
-      : null,
-    typeof frame.durationMs === "number" ? formatDurationShort(frame.durationMs) : null,
-  ].filter(Boolean);
-  return bits.join(" · ");
+function planStepVisualState(status?: string | null) {
+  if (status === "done" || status === "completed" || status === "succeeded") return "done";
+  if (status === "running" || status === "in_progress") return "live";
+  if (status === "failed" || status === "blocked" || status === "cancelled") return "blocked";
+  return "queued";
+}
+
+function planStepStatusIcon(status?: string | null) {
+  const visualState = planStepVisualState(status);
+  if (visualState === "done") {
+    return <CheckCircle2 className="zaki-agent-inspector__status-icon is-done" aria-hidden />;
+  }
+  if (visualState === "live") {
+    return <Loader2 className="zaki-agent-inspector__status-icon is-running" aria-hidden />;
+  }
+  if (visualState === "blocked") {
+    return <ShieldAlert className="zaki-agent-inspector__status-icon is-alert" aria-hidden />;
+  }
+  return <Circle className="zaki-agent-inspector__status-icon" aria-hidden />;
+}
+
+function compactPlanStepTitle(
+  step: NonNullable<NonNullable<AgentSessionPlanResponse["plan"]>["steps"]>[number],
+  index: number
+) {
+  return step.title || step.description || `Step ${index + 1}`;
 }
 
 function eventHasExtensionSignal(event: {
@@ -548,16 +548,6 @@ function isUnavailableExportError(responseStatus: number, code: string) {
   );
 }
 
-function compactJobTitle(title: string) {
-  const normalized = title.replace(/\s+/g, " ").trim();
-  if (!normalized) return "Untitled job";
-  const scheduleCut = normalized.match(/\b(?:brief|report|task|job)\s+specification\b/i);
-  const head = scheduleCut?.index && scheduleCut.index > 12
-    ? normalized.slice(0, scheduleCut.index).trim()
-    : normalized;
-  return head.length > 92 ? `${head.slice(0, 89).trim()}...` : head;
-}
-
 function normalizeAgentTraceList(data: { traces?: AgentTrace[]; items?: AgentTrace[] } | null | undefined) {
   if (!data) return [];
   if (Array.isArray(data.traces)) return data.traces;
@@ -631,13 +621,9 @@ export function AgentInspectorRail({
   sandbox,
   tasks,
   tasksLoading = false,
-  tasksError = null,
   cronJobs = [],
   cronLoading = false,
   cronError = null,
-  jobs = [],
-  jobsLoading = false,
-  jobsError = null,
   artifacts = [],
   artifactsScope = "session",
   artifactsLoading = false,
@@ -651,7 +637,6 @@ export function AgentInspectorRail({
   approvalContinuationPending = false,
   artifactCount = 0,
   contextGaugeData,
-  contextReport = null,
   usageSummary,
   browserFrame = null,
   onOpenMemory,
@@ -688,11 +673,8 @@ export function AgentInspectorRail({
   const [stoppedTaskIds, setStoppedTaskIds] = useState<Record<string, boolean>>({});
   const [todosData, setTodosData] = useState<AgentSessionTodosResponse | null>(null);
   const [todosLoading, setTodosLoading] = useState(false);
-  const [todosError, setTodosError] = useState<string | null>(null);
   const [todoBusyKey, setTodoBusyKey] = useState<string | null>(null);
   const [planData, setPlanData] = useState<AgentSessionPlanResponse | null>(null);
-  const [planLoading, setPlanLoading] = useState(false);
-  const [planError, setPlanError] = useState<string | null>(null);
   const [cronFormOpen, setCronFormOpen] = useState(false);
   const [editingCronId, setEditingCronId] = useState<string | null>(null);
   const [cronNameDraft, setCronNameDraft] = useState("");
@@ -741,23 +723,7 @@ export function AgentInspectorRail({
     () => sortedTasks.filter((task) => !isTerminalTask(task.status)),
     [sortedTasks]
   );
-  const taskHistory = useMemo(
-    () => sortedTasks.filter((task) => isTerminalTask(task.status)).slice(-5).reverse(),
-    [sortedTasks]
-  );
-  const completedTaskCount = currentTasks.filter((task) => isCompleteTask(task.status)).length;
   const runningTask = currentTasks.find((task) => task.status === "running") ?? null;
-  const hasActiveRun = isStreaming || approvalContinuationPending || Boolean(approvalRequest) || currentTasks.length > 0;
-  const weightedTaskProgress = currentTasks.reduce((total, task) => {
-    if (isCompleteTask(task.status)) return total + 1;
-    if (task.status === "running" && typeof task.progressPct === "number") {
-      return total + Math.max(0, Math.min(100, task.progressPct)) / 100;
-    }
-    return total;
-  }, 0);
-  const planPercent = currentTasks.length
-    ? Math.round((weightedTaskProgress / currentTasks.length) * 100)
-    : 0;
   const ctxPct = contextPercent(contextGaugeData);
   const hasBrowserFrame = Boolean(browserFrame?.frame?.trim());
   const sandboxLabel = sandbox?.enabled
@@ -789,9 +755,6 @@ export function AgentInspectorRail({
     hasBrowserFrame ||
     browserEntries.some(eventHasAppBrowserSignal) ||
     /\b(browser|web_fetch|web_search)\b/i.test(lastChannel ?? "");
-  const delegatedEvent = cronEntries.find((event) =>
-    /\b(subagent|spawned|background|worker)\b/i.test(`${event.label} ${event.summary}`)
-  );
   const traceWarnCount = recentTrace.filter((event) => traceLevel(event) === "warn").length;
   const traceToolCount = recentTrace.filter((event) =>
     /\b(tool|browser|file|memory|artifact|extension|playwright|cron|automation)\b/i.test(
@@ -801,58 +764,191 @@ export function AgentInspectorRail({
   const latestLatency =
     recentTrace.find((event) => typeof event.durationMs === "number")?.durationMs ?? null;
   const primaryArtifact = artifactEntries[0] ?? null;
-  const latestPlanSignal = !hasActiveRun
-    ? "No active run."
-    : approvalContinuationPending
-      ? "Approved. ZAKI is continuing..."
-      : narrationFrame?.label ||
-        runningTask?.description ||
-        recentTrace[0]?.summary ||
-        "Waiting for the next runtime event.";
-  const narrationLog = recentTrace.slice(0, 4);
+  const blockingApproval = approvalRequest && !approvalContinuationPending ? approvalRequest : null;
   const activeTodoList = useMemo(() => {
     const lists = todosData?.lists ?? [];
     if (!lists.length) return null;
     const currentId = todosData?.current_list_id;
     return lists.find((list) => list.list_id === currentId) ?? lists[0] ?? null;
   }, [todosData]);
-  const activeTodoItems = activeTodoList?.items ?? [];
-  const completedTodoCount = activeTodoItems.filter(
-    (item) => todoVisualState(item.status) === "done"
-  ).length;
-  const otherTodoLists = useMemo(
+  type PlanWorkItem =
+    | {
+        kind: "persisted-todo";
+        id: string;
+        title: string;
+        status: string;
+        visualState: ReturnType<typeof todoVisualState>;
+        metaParts: string[];
+        list: AgentTodoList;
+        item: AgentTodoItem;
+      }
+    | {
+        kind: "task";
+        id: string;
+        title: string;
+        status: NullalisTaskStatus;
+        visualState: ReturnType<typeof taskVisualState>;
+        metaParts: string[];
+        task: NullalisTaskItem;
+        readonlyTodo: boolean;
+      };
+  const persistedTodoWorkItems = useMemo<PlanWorkItem[]>(() => {
+    if (!activeTodoList?.items?.length) return [];
+    return activeTodoList.items.map((item) => ({
+      kind: "persisted-todo" as const,
+      id: `${activeTodoList.list_id}:${item.id}`,
+      title: item.title || `Item ${item.id}`,
+      status: String(item.status || "pending"),
+      visualState: todoVisualState(item.status),
+      metaParts: [
+        String(item.status || "pending").replace(/_/g, " "),
+        item.depends_on?.length ? `depends on ${item.depends_on.join(", ")}` : "",
+        item.note || "",
+      ].filter(Boolean),
+      list: activeTodoList,
+      item,
+    }));
+  }, [activeTodoList]);
+  const liveTodoWorkItems = useMemo<PlanWorkItem[]>(
     () =>
-      (todosData?.lists ?? []).filter(
-        (list) => !activeTodoList || list.list_id !== activeTodoList.list_id
-      ),
-    [activeTodoList, todosData]
+      currentTasks
+        .filter((task) => task.taskId.startsWith("todo:"))
+        .map((task) => ({
+          kind: "task" as const,
+          id: task.taskId,
+          title: task.description || task.taskId,
+          status: task.status,
+          visualState: taskVisualState(task.status),
+          metaParts: [
+            taskStatusLabel(task.status),
+            typeof task.progressPct === "number" ? `${Math.round(task.progressPct)}%` : "",
+          ].filter(Boolean),
+          task,
+          readonlyTodo: true,
+        })),
+    [currentTasks]
   );
-  const activePlan = planData?.active ? planData.plan : null;
-  const activePlanStep = currentPlanStep(activePlan);
-  const recentFailure = recentTrace.find((event) => traceLevel(event) === "warn") ?? null;
-  const nativeToolCount = contextReport?.last_turn?.native_tool_call_count ?? null;
-  const xmlToolCount = contextReport?.last_turn?.xml_fallback_call_count ?? null;
-  const boundedResultCount = contextReport?.last_turn?.bounded_result_count ?? null;
-  const promptTokens =
-    contextReport?.provider_prompt_tokens ??
-    contextReport?.provider_usage_last_turn?.prompt_tokens ??
-    null;
-  const cachedPromptTokens =
-    contextReport?.provider_cached_prompt_tokens ??
-    contextReport?.provider_usage_last_turn?.cached_prompt_tokens ??
-    null;
-  const toolMode =
-    contextReport?.last_turn_delta?.tool_mode ??
-    contextReport?.last_turn?.tool_mode ??
-    contextReport?.prompt_shape?.tool_surface ??
-    "unknown";
-  const workStatusText = activePlan
-    ? activePlan.status || "active plan"
-    : runningTask
-      ? `${Math.round(runningTask.progressPct ?? planPercent)}% live`
-      : hasActiveRun
-        ? "forming"
+  const backgroundWorkItems = useMemo<PlanWorkItem[]>(
+    () =>
+      currentTasks
+        .filter((task) => !task.taskId.startsWith("todo:"))
+        .map((task) => ({
+          kind: "task" as const,
+          id: task.taskId,
+          title: task.description || task.taskId,
+          status: task.status,
+          visualState: taskVisualState(task.status),
+          metaParts: [
+            taskStatusLabel(task.status),
+            typeof task.progressPct === "number" && task.status === "running"
+              ? `${Math.round(task.progressPct)}%`
+              : "",
+            stoppedTaskIds[task.taskId] ? "stop requested" : "",
+          ].filter(Boolean),
+          task,
+          readonlyTodo: false,
+        })),
+    [currentTasks, stoppedTaskIds]
+  );
+  const currentWorkItems = persistedTodoWorkItems.length
+    ? persistedTodoWorkItems
+    : liveTodoWorkItems.length
+      ? liveTodoWorkItems
+      : backgroundWorkItems;
+  const currentWorkSource = persistedTodoWorkItems.length
+    ? "persisted checklist"
+    : liveTodoWorkItems.length
+      ? "live checklist"
+      : backgroundWorkItems.length
+        ? "background tasks"
         : "idle";
+  const completedWorkCount = currentWorkItems.filter((item) => item.visualState === "done").length;
+  const workProgressPercent = currentWorkItems.length
+    ? Math.round(
+        (currentWorkItems.reduce((total, item) => {
+          if (item.visualState === "done") return total + 1;
+          if (
+            item.kind === "task" &&
+            item.status === "running" &&
+            typeof item.task.progressPct === "number"
+          ) {
+            return total + Math.max(0, Math.min(100, item.task.progressPct)) / 100;
+          }
+          return total;
+        }, 0) /
+          currentWorkItems.length) *
+          100
+      )
+    : 0;
+  const activePlan =
+    planData?.active && planData.plan?.steps?.length ? planData.plan : null;
+  const livePlanItems = useMemo(() => {
+    const seen = new Set<string>();
+    return transcriptEntries
+      .filter((entry) => entry.phase === "plan_step" && entry.source === "reasoning_summary")
+      .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+      .reduce<
+        Array<{
+          id: string;
+          title: string;
+          status: string;
+          meta: string;
+          visualState: ReturnType<typeof planStepVisualState>;
+        }>
+      >((items, entry) => {
+        const title = (entry.text || entry.resultSummary || entry.activityLabel || "").trim();
+        if (!title) return items;
+        const key = title.toLowerCase();
+        if (seen.has(key)) return items;
+        seen.add(key);
+        items.push({
+          id: entry.id || `plan-step:${entry.timestamp || items.length}`,
+          title,
+          status: "planned",
+          meta: "live plan hint",
+          visualState: "queued",
+        });
+        return items;
+      }, [])
+      .slice(-8);
+  }, [transcriptEntries]);
+  const plannedItems = useMemo(() => {
+    if (activePlan?.steps?.length) {
+      return activePlan.steps.map((step, index) => ({
+        id: step.id || `step-${index + 1}`,
+        title: compactPlanStepTitle(step, index),
+        status: step.status || (index === activePlan.current_step ? "running" : "pending"),
+        meta:
+          step.result_summary ||
+          step.error_summary ||
+          step.actual_tool ||
+          step.expected_tool ||
+          "runtime plan",
+        visualState: planStepVisualState(step.status),
+      }));
+    }
+    return livePlanItems;
+  }, [activePlan, livePlanItems]);
+  const planTabState: "blocked" | "working" | "planned" | "idle" = blockingApproval
+    ? "blocked"
+    : currentWorkItems.length || isStreaming || approvalContinuationPending
+      ? "working"
+      : plannedItems.length
+        ? "planned"
+        : "idle";
+  const planTabCount = blockingApproval
+    ? "!"
+    : currentWorkItems.length
+      ? currentWorkItems.length
+      : planTabState === "planned"
+        ? plannedItems.length || undefined
+        : undefined;
+  const currentWorkHeadline = approvalContinuationPending
+    ? "Approved. ZAKI is continuing."
+    : narrationFrame?.label ||
+      runningTask?.description ||
+      recentTrace[0]?.summary ||
+      "Waiting for live work updates.";
   const handleTabChange = (nextTab: AgentInspectorTab) => {
     setManualTabSelected(true);
     setTab(nextTab);
@@ -1048,15 +1144,11 @@ export function AgentInspectorRail({
   useEffect(() => {
     if (tabRequest) return;
     if (manualTabSelected) return;
-    if (approvalRequest) {
-      setTab("plan");
-      return;
-    }
     if (hasBrowserFrame) {
       setTab("browser");
       return;
     }
-    if (currentTasks.length) {
+    if (planTabState !== "idle") {
       setTab("plan");
       return;
     }
@@ -1076,32 +1168,25 @@ export function AgentInspectorRail({
       setTab("evidence");
     }
   }, [
-    approvalRequest,
     artifactSourceCount,
     browserActivity,
     cronSourceCount,
     hasBrowserFrame,
     manualTabSelected,
+    planTabState,
     sourceEntries.length,
-    currentTasks.length,
     tabRequest,
   ]);
 
   useEffect(() => {
     if (!sessionKey) {
       setTodosData(null);
-      setTodosError(null);
       setTodosLoading(false);
       setPlanData(null);
-      setPlanError(null);
-      setPlanLoading(false);
       return;
     }
     let active = true;
     setTodosLoading(true);
-    setTodosError(null);
-    setPlanLoading(true);
-    setPlanError(null);
 
     void Promise.allSettled([
       fetchAgentSessionTodos(sessionKey),
@@ -1114,11 +1199,9 @@ export function AgentInspectorRail({
           setTodosData(data);
         } else {
           setTodosData(null);
-          setTodosError(data?.error || `todos_${response.status}`);
         }
       } else {
         setTodosData(null);
-        setTodosError("todos_unavailable");
       }
 
       if (planResult.status === "fulfilled") {
@@ -1127,14 +1210,11 @@ export function AgentInspectorRail({
           setPlanData(data);
         } else {
           setPlanData(null);
-          setPlanError(data?.error || `plan_${response.status}`);
         }
       } else {
         setPlanData(null);
-        setPlanError("plan_unavailable");
       }
       setTodosLoading(false);
-      setPlanLoading(false);
     });
 
     return () => {
@@ -1450,7 +1530,7 @@ export function AgentInspectorRail({
         value={tab}
         onChange={handleTabChange}
         options={[
-          { id: "plan", label: "Plan", count: approvalRequest ? "!" : currentTasks.length || undefined },
+          { id: "plan", label: "Plan", count: planTabCount },
           { id: "cron", label: "Cron", count: cronSourceCount || undefined },
           { id: "evidence", label: "Sources", count: sourceEntries.length || undefined },
           {
@@ -1474,413 +1554,209 @@ export function AgentInspectorRail({
               <div>
                 <div className="zaki-agent-inspector__plan-title">work</div>
                 <div className="zaki-agent-inspector__plan-meta">
-                  <span className="zaki-agent-inspector__plan-progress">
-                    <span className="bar" aria-hidden>
-                      <span
-                        className="fill"
-                        style={{
-                          width: `${
-                            activeTodoItems.length
-                              ? Math.round((completedTodoCount / activeTodoItems.length) * 100)
-                              : planPercent
-                          }%`,
-                        }}
-                      />
+                  {currentWorkItems.length ? (
+                    <span className="zaki-agent-inspector__plan-progress">
+                      <span className="bar" aria-hidden>
+                        <span className="fill" style={{ width: `${workProgressPercent}%` }} />
+                      </span>
+                      <span className="num">
+                        {completedWorkCount} / {currentWorkItems.length}
+                      </span>
                     </span>
-                    <span className="num">
-                      {activeTodoItems.length
-                        ? `${completedTodoCount} / ${activeTodoItems.length}`
-                        : `${completedTaskCount} / ${currentTasks.length || 0}`}
-                    </span>
-                  </span>
+                  ) : (
+                    <span>{planTabState}</span>
+                  )}
                   <span className="sep">.</span>
-                  <span>{workStatusText}</span>
+                  <span>
+                    {currentWorkItems.length
+                      ? currentWorkSource
+                      : plannedItems.length
+                        ? `${plannedItems.length} planned`
+                        : "session scoped"}
+                  </span>
                 </div>
               </div>
             </div>
-            <section className="zaki-agent-inspector__jobs" data-testid="agent-work-checklist">
-              <div className="zaki-agent-inspector__jobs-head">
-                <span>checklist</span>
-                <span>
-                  {todosLoading
-                    ? "loading"
-                    : activeTodoItems.length
-                      ? `${completedTodoCount}/${activeTodoItems.length} done`
-                      : "none"}
-                </span>
-              </div>
-              {todosError ? (
-                <div className="v2-empty-line">Checklist unavailable: {todosError}</div>
-              ) : null}
-              {todosLoading && !activeTodoList ? (
-                <div className="v2-empty-line">Loading checklist...</div>
-              ) : null}
-              {activeTodoList ? (
-                <>
-                  <ol className="zaki-agent-inspector__plan-list">
-                    {activeTodoItems.map((item) => {
-                      const busyKey = `${activeTodoList.list_id}:${item.id}`;
-                      return (
-                        <li
-                          key={`${activeTodoList.list_id}:${item.id}`}
-                          className={cn(
-                            "zaki-agent-inspector__todo",
-                            `is-${todoVisualState(item.status)}`
-                          )}
-                        >
-                          <div className="zaki-agent-inspector__todo-mark" aria-hidden>
-                            {todoStatusIcon(item.status)}
-                          </div>
-                          <div className="zaki-agent-inspector__todo-body">
-                            <div className="zaki-agent-inspector__todo-text">
-                              {item.title || `Item ${item.id}`}
-                            </div>
-                            <div className="zaki-agent-inspector__todo-meta">
-                              <span>{String(item.status || "pending").replace(/_/g, " ")}</span>
-                              {item.depends_on?.length ? (
-                                <>
-                                  <span className="sep">.</span>
-                                  <span>depends on {item.depends_on.join(", ")}</span>
-                                </>
-                              ) : null}
-                              {item.note ? (
-                                <>
-                                  <span className="sep">.</span>
-                                  <span>{item.note}</span>
-                                </>
-                              ) : null}
-                            </div>
-                            <div className="zaki-agent-inspector__todo-actions">
-                              <button
-                                type="button"
-                                disabled={todoBusyKey === busyKey}
-                                onClick={() => void handleTodoStatusUpdate(activeTodoList, item)}
-                              >
-                                {todoBusyKey === busyKey ? "Updating" : todoActionLabel(item.status)}
-                              </button>
-                            </div>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                  {otherTodoLists.length ? (
-                    <div className="v2-empty-line">
-                      {otherTodoLists.length} older checklist{otherTodoLists.length === 1 ? "" : "s"} retained.
-                    </div>
-                  ) : null}
-                </>
-              ) : !todosLoading && !todosError ? (
-                <div className="v2-empty-line">No durable checklist exists for this session yet.</div>
-              ) : null}
-            </section>
-            <section className="zaki-agent-inspector__jobs" data-testid="agent-run-plan">
-              <div className="zaki-agent-inspector__jobs-head">
-                <span>run plan</span>
-                <span>
-                  {planLoading
-                    ? "loading"
-                    : activePlan
-                      ? `${activePlan.status || "active"} · rev ${activePlan.revision ?? 1}`
-                      : "inactive"}
-                </span>
-              </div>
-              {planError ? (
-                <div className="v2-empty-line">Run plan unavailable: {planError}</div>
-              ) : null}
-              {planLoading && !activePlan ? (
-                <div className="v2-empty-line">Loading active plan...</div>
-              ) : null}
-              {activePlan ? (
-                <div className="zaki-agent-inspector__task-detail">
-                  <dl>
-                    <div>
-                      <dt>Summary</dt>
-                      <dd>{activePlan.summary || activePlan.plan_id || "active plan"}</dd>
-                    </div>
-                    <div>
-                      <dt>Current step</dt>
-                      <dd>{activePlanStep?.title || activePlanStep?.description || "not recorded"}</dd>
-                    </div>
-                    <div>
-                      <dt>Status</dt>
-                      <dd>{activePlanStep?.status || activePlan.status || "active"}</dd>
-                    </div>
-                    <div>
-                      <dt>Expected tool</dt>
-                      <dd>{activePlanStep?.expected_tool || "not specified"}</dd>
-                    </div>
-                    <div>
-                      <dt>Actual tool</dt>
-                      <dd>{activePlanStep?.actual_tool || "not recorded"}</dd>
-                    </div>
-                    <div>
-                      <dt>Result</dt>
-                      <dd>{activePlanStep?.result_summary || activePlanStep?.error_summary || "pending"}</dd>
-                    </div>
-                  </dl>
+            {blockingApproval ? (
+              <section className="zaki-agent-inspector__jobs" data-testid="agent-plan-blocked">
+                <div className="zaki-agent-inspector__jobs-head">
+                  <span>blocked</span>
+                  <span>{blockingApproval.riskLevel || "approval"}</span>
                 </div>
-              ) : !planLoading && !planError ? (
-                <div className="v2-empty-line">No active task plan for this run.</div>
-              ) : null}
-            </section>
-            <section className="zaki-agent-inspector__jobs" data-testid="agent-work-trace-strip">
-              <div className="zaki-agent-inspector__jobs-head">
-                <span>trace</span>
-                <span>{toolMode}</span>
-              </div>
-              <dl className="zaki-agent-inspector__fact-grid">
-                <div>
-                  <dt>Native/XML</dt>
-                  <dd>
-                    {nativeToolCount ?? "--"} / {xmlToolCount ?? "--"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Bounded results</dt>
-                  <dd>{boundedResultCount ?? "--"}</dd>
-                </div>
-                <div>
-                  <dt>Prompt</dt>
-                  <dd>{formatTokens(promptTokens)}</dd>
-                </div>
-                <div>
-                  <dt>Cache</dt>
-                  <dd>{formatTokens(cachedPromptTokens)}</dd>
-                </div>
-              </dl>
-              {recentFailure ? (
                 <V2InlineRow
                   tone="warn"
                   icon={<ShieldAlert className="size-4" aria-hidden />}
-                  title={recentFailure.label}
-                  meta={recentFailure.meta || recentFailure.summary}
+                  title={`Waiting on ${blockingApproval.tool}`}
+                  meta={blockingApproval.reason || "Approval required before this run continues."}
                 />
-              ) : null}
-            </section>
-            {approvalRequest ? (
-              <V2InlineRow
-                tone="warn"
-                icon={<ShieldAlert className="size-4" aria-hidden />}
-                title={approvalRequest.tool}
-                meta={approvalRequest.riskLevel || "approval needed"}
-              />
+              </section>
             ) : null}
-            <section
-              className={cn("zaki-agent-inspector__narration", hasActiveRun && "is-live")}
-              aria-live={hasActiveRun ? "polite" : undefined}
-              data-testid="agent-narration-box"
-            >
-              <div className="zaki-agent-inspector__narration-head">
-                <span>narration</span>
-                <span>{hasActiveRun ? frameMeta(narrationFrame) : "idle"}</span>
+            <section className="zaki-agent-inspector__jobs" data-testid="agent-current-work">
+              <div className="zaki-agent-inspector__jobs-head">
+                <span>current work</span>
+                <span>
+                  {currentWorkItems.length
+                    ? `${currentWorkSource} · ${currentWorkItems.length} ${currentWorkItems.length === 1 ? "item" : "items"}`
+                    : tasksLoading || todosLoading
+                      ? "checking"
+                      : currentWorkSource}
+                </span>
               </div>
-              <strong>
-                {approvalRequest && !approvalContinuationPending
-                  ? `Waiting on ${approvalRequest.tool}`
-                  : latestPlanSignal}
-              </strong>
-              <small>
-                {approvalRequest && !approvalContinuationPending
-                  ? approvalRequest.reason || "Approval required before this run continues."
-                  : approvalContinuationPending
-                    ? "The approval was accepted. ZAKI is executing the approved action and continuation."
-                    : hasActiveRun
-                      ? "Live operational trail from the agent runtime."
-                      : "Latest operational trail for this session."}
-              </small>
-              {narrationLog.length ? (
-                <ol className="zaki-agent-inspector__narration-log">
-                  {narrationLog.map((event) => (
-                    <li key={event.id}>
-                      <span className="time">{formatClock(event.timestamp)}</span>
-                      <span className="text">{eventText(event)}</span>
-                      <span className="meta">{eventMetaShort(event)}</span>
+              {currentWorkItems.length ? (
+                <ol className="zaki-agent-inspector__plan-list">
+                  {currentWorkItems.map((workItem) => (
+                    <li
+                      key={workItem.id}
+                      data-testid="agent-task-row"
+                      className={cn("zaki-agent-inspector__todo", `is-${workItem.visualState}`)}
+                    >
+                      <div className="zaki-agent-inspector__todo-mark" aria-hidden>
+                        {workItem.kind === "persisted-todo"
+                          ? todoStatusIcon(workItem.status)
+                          : taskStatusIcon(workItem.status)}
+                      </div>
+                      <div className="zaki-agent-inspector__todo-body">
+                        <div className="zaki-agent-inspector__todo-text">{workItem.title}</div>
+                        <div className="zaki-agent-inspector__todo-meta">
+                          {workItem.metaParts.map((part, index) => (
+                            <span key={`${workItem.id}:meta:${part}`}>
+                              {index > 0 ? <span className="sep">. </span> : null}
+                              {part}
+                            </span>
+                          ))}
+                        </div>
+                        {workItem.kind === "persisted-todo" ? (
+                          <div className="zaki-agent-inspector__todo-actions">
+                            <button
+                              type="button"
+                              disabled={todoBusyKey === workItem.id}
+                              onClick={() => void handleTodoStatusUpdate(workItem.list, workItem.item)}
+                            >
+                              {todoBusyKey === workItem.id ? "Updating" : todoActionLabel(workItem.status)}
+                            </button>
+                          </div>
+                        ) : !workItem.readonlyTodo ? (
+                          <div className="zaki-agent-inspector__todo-actions">
+                            <button
+                              type="button"
+                              onClick={() => void handleExpandTask(workItem.task)}
+                              aria-expanded={expandedTaskId === workItem.task.taskId}
+                            >
+                              {expandedTaskId === workItem.task.taskId ? "Hide details" : "Details"}
+                            </button>
+                            {taskCanStop(workItem.task.status) ? (
+                              confirmStopTaskId === workItem.task.taskId ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={stoppingTaskId === workItem.task.taskId}
+                                    onClick={() => void handleStopTask(workItem.task)}
+                                  >
+                                    {stoppingTaskId === workItem.task.taskId ? "Stopping" : "Confirm stop"}
+                                  </button>
+                                  <button type="button" onClick={() => setConfirmStopTaskId(null)}>
+                                    Cancel
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={stoppingTaskId === workItem.task.taskId}
+                                  onClick={() => setConfirmStopTaskId(workItem.task.taskId)}
+                                >
+                                  Stop
+                                </button>
+                              )
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {workItem.kind === "task" && expandedTaskId === workItem.task.taskId ? (
+                          <div className="zaki-agent-inspector__task-detail" data-testid="agent-task-detail">
+                            {taskDetailLoadingId === workItem.task.taskId ? (
+                              <div className="v2-empty-line">Loading task detail...</div>
+                            ) : taskDetailErrorById[workItem.task.taskId] ? (
+                              <div className="v2-empty-line">
+                                Task detail unavailable: {taskDetailErrorById[workItem.task.taskId]}
+                              </div>
+                            ) : (
+                              <dl>
+                                <div>
+                                  <dt>Task</dt>
+                                  <dd>{taskDetailText(taskDetailById[workItem.task.taskId], "id", "task_id", "taskId") || workItem.task.taskId}</dd>
+                                </div>
+                                <div>
+                                  <dt>Session</dt>
+                                  <dd>{taskDetailText(taskDetailById[workItem.task.taskId], "session_key", "sessionKey") || "session scoped"}</dd>
+                                </div>
+                                <div>
+                                  <dt>Started</dt>
+                                  <dd>{taskDetailTime(taskDetailById[workItem.task.taskId], "started_at", "startedAt", "created_at", "createdAt") || "not recorded"}</dd>
+                                </div>
+                                <div>
+                                  <dt>Updated</dt>
+                                  <dd>{taskDetailTime(taskDetailById[workItem.task.taskId], "updated_at", "updatedAt", "completed_at", "completedAt") || formatCalendarStamp(workItem.task.updatedAt)}</dd>
+                                </div>
+                                <div>
+                                  <dt>Result</dt>
+                                  <dd>{taskDetailText(taskDetailById[workItem.task.taskId], "error", "last_error", "result", "summary") || taskStatusLabel(workItem.task.status)}</dd>
+                                </div>
+                              </dl>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
                     </li>
                   ))}
                 </ol>
-              ) : null}
-            </section>
-            {currentTasks.length ? (
-              <ol className="zaki-agent-inspector__plan-list">
-                {currentTasks.map((task) => (
-                  <li
-                    key={task.taskId}
-                    data-testid="agent-task-row"
-                    className={cn(
-                      "zaki-agent-inspector__todo",
-                      `is-${taskVisualState(task.status)}`
-                    )}
-                  >
-                    <div className="zaki-agent-inspector__todo-mark" aria-hidden>
-                      {taskStatusIcon(task.status)}
-                    </div>
-                    <div className="zaki-agent-inspector__todo-body">
-                      <div className="zaki-agent-inspector__todo-text">
-                        {task.description || task.taskId}
-                      </div>
-                      <div className="zaki-agent-inspector__todo-meta">
-                        <span>{taskStatusLabel(task.status)}</span>
-                        {typeof task.progressPct === "number" && task.status === "running" ? (
-                          <>
-                            <span className="sep">.</span>
-                            <span>{Math.round(task.progressPct)}%</span>
-                          </>
-                        ) : null}
-                        {stoppedTaskIds[task.taskId] ? (
-                          <>
-                            <span className="sep">.</span>
-                            <span>stop requested</span>
-                          </>
-                        ) : null}
-                      </div>
-                      <div className="zaki-agent-inspector__todo-actions">
-                        <button
-                          type="button"
-                          onClick={() => void handleExpandTask(task)}
-                          aria-expanded={expandedTaskId === task.taskId}
-                        >
-                          {expandedTaskId === task.taskId ? "Hide details" : "Details"}
-                        </button>
-                        {taskCanStop(task.status) ? (
-                          confirmStopTaskId === task.taskId ? (
-                            <>
-                              <button
-                                type="button"
-                                disabled={stoppingTaskId === task.taskId}
-                                onClick={() => void handleStopTask(task)}
-                              >
-                                {stoppingTaskId === task.taskId ? "Stopping" : "Confirm stop"}
-                              </button>
-                              <button type="button" onClick={() => setConfirmStopTaskId(null)}>
-                                Cancel
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={stoppingTaskId === task.taskId}
-                              onClick={() => setConfirmStopTaskId(task.taskId)}
-                            >
-                              Stop
-                            </button>
-                          )
-                        ) : null}
-                      </div>
-                      {expandedTaskId === task.taskId ? (
-                        <div className="zaki-agent-inspector__task-detail" data-testid="agent-task-detail">
-                          {taskDetailLoadingId === task.taskId ? (
-                            <div className="v2-empty-line">Loading task detail...</div>
-                          ) : taskDetailErrorById[task.taskId] ? (
-                            <div className="v2-empty-line">
-                              Task detail unavailable: {taskDetailErrorById[task.taskId]}
-                            </div>
-                          ) : (
-                            <dl>
-                              <div>
-                                <dt>Task</dt>
-                                <dd>{taskDetailText(taskDetailById[task.taskId], "id", "task_id", "taskId") || task.taskId}</dd>
-                              </div>
-                              <div>
-                                <dt>Session</dt>
-                                <dd>{taskDetailText(taskDetailById[task.taskId], "session_key", "sessionKey") || "session scoped"}</dd>
-                              </div>
-                              <div>
-                                <dt>Started</dt>
-                                <dd>{taskDetailTime(taskDetailById[task.taskId], "started_at", "startedAt", "created_at", "createdAt") || "not recorded"}</dd>
-                              </div>
-                              <div>
-                                <dt>Updated</dt>
-                                <dd>{taskDetailTime(taskDetailById[task.taskId], "updated_at", "updatedAt", "completed_at", "completedAt") || formatCalendarStamp(task.updatedAt)}</dd>
-                              </div>
-                              <div>
-                                <dt>Result</dt>
-                                <dd>{taskDetailText(taskDetailById[task.taskId], "error", "last_error", "result", "summary") || taskStatusLabel(task.status)}</dd>
-                              </div>
-                            </dl>
-                          )}
-                        </div>
-                      ) : null}
-                      {task.status === "running" && delegatedEvent ? (
-                        <div className="zaki-agent-inspector__subagent">
-                          <span className="sa-branch" aria-hidden />
-                          <span className="sa-badge">subagent</span>
-                          <span className="sa-text">{delegatedEvent.summary}</span>
-                          <span className="sa-status">{delegatedEvent.meta || "live"}</span>
-                        </div>
-                      ) : null}
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            ) : null}
-            {tasksLoading && !currentTasks.length ? (
-              <div className="v2-empty-line">Loading task ledger...</div>
-            ) : null}
-            {tasksError ? (
-              <div className="v2-empty-line">Task ledger unavailable: {tasksError}</div>
-            ) : null}
-            {!currentTasks.length && taskHistory.length ? (
-              <section className="zaki-agent-inspector__jobs" data-testid="agent-task-history">
-                <div className="zaki-agent-inspector__jobs-head">
-                  <span>task history</span>
-                  <span>{taskHistory.length} done</span>
+              ) : tasksLoading || todosLoading ? (
+                <div className="v2-empty-line">Checking active work...</div>
+              ) : planTabState === "working" ? (
+                <div className={cn("zaki-agent-inspector__live-signal", "is-live")}>
+                  <span>live run</span>
+                  <strong>{currentWorkHeadline}</strong>
+                  <small>Structured work items will appear when the runtime emits them.</small>
                 </div>
-                <ol className="zaki-agent-inspector__job-list">
-                  {taskHistory.map((task) => (
-                    <li key={task.taskId} className="zaki-agent-inspector__job-row">
-                      <div>
-                        <strong title={task.description}>{compactJobTitle(task.description || task.taskId)}</strong>
-                        <span>{taskStatusLabel(task.status)}</span>
+              ) : (
+                <div className="v2-empty-line" data-testid="agent-plan-empty">
+                  No active work for this session.
+                </div>
+              )}
+            </section>
+            {plannedItems.length ? (
+              <section className="zaki-agent-inspector__jobs" data-testid="agent-planned">
+                <div className="zaki-agent-inspector__jobs-head">
+                  <span>planned</span>
+                  <span>{activePlan ? `${plannedItems.length} steps` : `${plannedItems.length} hints`}</span>
+                </div>
+                {activePlan?.summary ? (
+                  <div className="v2-empty-line">{activePlan.summary}</div>
+                ) : null}
+                <ol className="zaki-agent-inspector__plan-list">
+                  {plannedItems.map((item) => (
+                    <li
+                      key={item.id}
+                      className={cn("zaki-agent-inspector__todo", `is-${item.visualState}`)}
+                    >
+                      <div className="zaki-agent-inspector__todo-mark" aria-hidden>
+                        {planStepStatusIcon(item.status)}
                       </div>
-                      <small>{formatCalendarStamp(task.updatedAt)}</small>
+                      <div className="zaki-agent-inspector__todo-body">
+                        <div className="zaki-agent-inspector__todo-text">{item.title}</div>
+                        <div className="zaki-agent-inspector__todo-meta">
+                          <span>{String(item.status || "planned").replace(/_/g, " ")}</span>
+                          {item.meta ? (
+                            <>
+                              <span className="sep">.</span>
+                              <span>{item.meta}</span>
+                            </>
+                          ) : null}
+                        </div>
+                      </div>
                     </li>
                   ))}
                 </ol>
               </section>
             ) : null}
-            <section className="zaki-agent-inspector__jobs" data-testid="agent-job-ledger">
-              <div className="zaki-agent-inspector__jobs-head">
-                <span>run history</span>
-                <span>
-                  {jobsLoading ? "loading" : jobs.length ? `${jobs.length} jobs` : "no jobs"}
-                </span>
-              </div>
-              {jobsLoading && !jobs.length ? (
-                <div className="v2-empty-line">Loading job ledger...</div>
-              ) : null}
-              {jobsError ? (
-                <div className="v2-empty-line">Job ledger unavailable: {jobsError}</div>
-              ) : null}
-              {jobs.length ? (
-                <ol className="zaki-agent-inspector__job-list">
-                  {jobs.slice(0, 5).map((job) => (
-                    <li key={job.id} className="zaki-agent-inspector__job-row">
-                      <div>
-                        <strong title={job.title}>{compactJobTitle(job.title)}</strong>
-                        <span>
-                          {job.status || "unknown"} · {job.schedule || "foreground run"}
-                        </span>
-                      </div>
-                      <small>
-                        next {formatCalendarStamp(job.nextRunAt)} · last{" "}
-                        {formatCalendarStamp(job.lastRunAt || job.createdAt)}
-                      </small>
-                      {job.error ? <small>{job.error}</small> : null}
-                    </li>
-                  ))}
-                </ol>
-              ) : !jobsLoading && !jobsError ? (
-                <div className="v2-empty-line">Completed and scheduled Agent jobs will appear here.</div>
-              ) : null}
-            </section>
-            <div className="zaki-agent-inspector__plan-foot">
-              <span>
-                {hasActiveRun
-                  ? "Live plan updates are attached to this run."
-                  : "No active plan. Finished backend tasks are shown as history only."}
-              </span>
-            </div>
           </V2Panel>
         ) : null}
 

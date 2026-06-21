@@ -144,7 +144,7 @@ describe("AgentInspectorRail", () => {
     expect(screen.getAllByText("Map the agent surface").length).toBeGreaterThan(0);
   });
 
-  it("renders a live narration box from Nullalis operational events", () => {
+  it("renders a minimal live work signal before structured work arrives", () => {
     renderRail({
       isStreaming: true,
       narrationFrame: {
@@ -170,14 +170,13 @@ describe("AgentInspectorRail", () => {
     });
 
     fireEvent.click(screen.getByRole("tab", { name: /Plan/i }));
-    const narration = screen.getByTestId("agent-narration-box");
-    expect(within(narration).getByText("Reading the agent handoff")).toBeInTheDocument();
-    expect(within(narration).getByText(/tool start/i)).toBeInTheDocument();
-    expect(within(narration).getAllByText(/read_file/).length).toBeGreaterThan(0);
-    expect(within(narration).getByText(/Read docs\/ui-handoff\.md/)).toBeInTheDocument();
+    const currentWork = screen.getByTestId("agent-current-work");
+    expect(within(currentWork).getByText("live run")).toBeInTheDocument();
+    expect(within(currentWork).getByText("Reading the agent handoff")).toBeInTheDocument();
+    expect(screen.queryByTestId("agent-narration-box")).not.toBeInTheDocument();
   });
 
-  it("renders checklist, run plan, and compact trace diagnostics in the Plan tab", async () => {
+  it("renders persisted checklist work and trusted plan data without diagnostics", async () => {
     fetchAgentSessionTodosMock.mockResolvedValueOnce({
       response: { ok: true },
       data: {
@@ -242,14 +241,90 @@ describe("AgentInspectorRail", () => {
       expect(screen.getByText("Wire todo endpoint")).toBeInTheDocument();
     });
 
-    expect(screen.getByTestId("agent-work-checklist")).toHaveTextContent("1/2 done");
-    expect(screen.getByText("Render checklist")).toBeInTheDocument();
-    expect(screen.getByTestId("agent-run-plan")).toHaveTextContent("Ship the right rail work panel");
-    expect(screen.getByTestId("agent-run-plan")).toHaveTextContent("browser_navigate");
-    expect(screen.getByTestId("agent-run-plan")).toHaveTextContent("browser_snapshot");
-    expect(screen.getByTestId("agent-work-trace-strip")).toHaveTextContent("native_tool_calls");
-    expect(screen.getByTestId("agent-work-trace-strip")).toHaveTextContent("3 / 1");
-    expect(screen.getByTestId("agent-work-trace-strip")).toHaveTextContent("2");
+    const currentWork = screen.getByTestId("agent-current-work");
+    expect(currentWork).toHaveTextContent("2 items");
+    expect(currentWork).toHaveTextContent("Render checklist");
+    expect(within(currentWork).getByRole("button", { name: "Complete" })).toBeInTheDocument();
+
+    const planned = screen.getByTestId("agent-planned");
+    expect(planned).toHaveTextContent("Ship the right rail work panel");
+    expect(planned).toHaveTextContent("Render run plan");
+    expect(planned).toHaveTextContent("Snapshot loaded");
+    expect(screen.queryByTestId("agent-work-trace-strip")).not.toBeInTheDocument();
+    expect(screen.queryByText("native_tool_calls")).not.toBeInTheDocument();
+  });
+
+  it("uses live todo-derived tasks as read-only current work", () => {
+    renderRail({
+      tasks: [
+        {
+          taskId: "todo:draft:item:1",
+          status: "running",
+          description: "Draft implementation checklist",
+          progressPct: 50,
+          updatedAt: 1,
+        },
+      ],
+    });
+
+    const currentWork = screen.getByTestId("agent-current-work");
+    expect(currentWork).toHaveTextContent("live checklist");
+    expect(currentWork).toHaveTextContent("Draft implementation checklist");
+    expect(currentWork).toHaveTextContent("50%");
+    expect(within(currentWork).queryByRole("button", { name: "Details" })).not.toBeInTheDocument();
+    expect(within(currentWork).queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
+  });
+
+  it("renders live plan-step hints when no persisted plan is available", () => {
+    renderRail({
+      transcriptEntries: [
+        {
+          id: "plan-step-1",
+          kind: "narration",
+          phase: "plan_step",
+          source: "reasoning_summary",
+          text: "Inspect available todo and plan signals",
+          timestamp: 1,
+        },
+        {
+          id: "plan-step-2",
+          kind: "narration",
+          phase: "plan_step",
+          source: "reasoning_summary",
+          text: "Replace low-value diagnostics with current work",
+          timestamp: 2,
+        },
+      ],
+    });
+
+    expect(screen.getByRole("tab", { name: /Plan 2/i })).toBeInTheDocument();
+    const planned = screen.getByTestId("agent-planned");
+    expect(planned).toHaveTextContent("2 hints");
+    expect(planned).toHaveTextContent("Inspect available todo and plan signals");
+    expect(planned).toHaveTextContent("Replace low-value diagnostics with current work");
+  });
+
+  it("does not badge plan hints as planned count while a live run is still forming", () => {
+    renderRail({
+      isStreaming: true,
+      transcriptEntries: [
+        {
+          id: "plan-step-live",
+          kind: "narration",
+          phase: "plan_step",
+          source: "reasoning_summary",
+          text: "Inspect plan signals while work is still forming",
+          timestamp: 1,
+        },
+      ],
+    });
+
+    expect(screen.getByRole("tab", { name: /^Plan$/i })).toBeInTheDocument();
+    const currentWork = screen.getByTestId("agent-current-work");
+    expect(within(currentWork).getByText("live run")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-planned")).toHaveTextContent(
+      "Inspect plan signals while work is still forming"
+    );
   });
 
   it("honors external tab requests from status strip and inline source links", async () => {
@@ -697,7 +772,7 @@ describe("AgentInspectorRail", () => {
     });
   });
 
-  it("renders backend task and cron ledgers as the durable source of record", () => {
+  it("renders backend task fallback and cron ledger separately", () => {
     renderRail({
       tasks: [
         {
@@ -725,8 +800,10 @@ describe("AgentInspectorRail", () => {
       ],
     });
 
-    expect(screen.getByText("Queued backend task")).toBeInTheDocument();
-    expect(screen.getByText(/Task ledger unavailable: stale_cache/)).toBeInTheDocument();
+    const currentWork = screen.getByTestId("agent-current-work");
+    expect(currentWork).toHaveTextContent("background tasks");
+    expect(currentWork).toHaveTextContent("Queued backend task");
+    expect(screen.queryByText(/Task ledger unavailable: stale_cache/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: /Cron/i }));
 
@@ -736,7 +813,7 @@ describe("AgentInspectorRail", () => {
     expect(screen.getByText(/backend ledger/)).toBeInTheDocument();
   });
 
-  it("renders V6 plan progress and delegated subagent work", () => {
+  it("falls back to active background task rows when no checklist exists", () => {
     renderRail({
       isStreaming: true,
       tasks: [
@@ -767,14 +844,15 @@ describe("AgentInspectorRail", () => {
       ],
     });
 
-    expect(screen.getByText("work")).toBeInTheDocument();
+    const currentWork = screen.getByTestId("agent-current-work");
     expect(screen.getByText("0 / 1")).toBeInTheDocument();
-    expect(screen.getAllByText("Polish the right rail").length).toBeGreaterThan(0);
-    expect(screen.getByText("subagent")).toBeInTheDocument();
-    expect(screen.getAllByText("subagent verifying trace rows against V6").length).toBeGreaterThan(0);
+    expect(currentWork).toHaveTextContent("background tasks");
+    expect(currentWork).toHaveTextContent("Polish the right rail");
+    expect(within(currentWork).getByRole("button", { name: "Details" })).toBeInTheDocument();
+    expect(screen.queryByText("subagent")).not.toBeInTheDocument();
   });
 
-  it("does not count completed historical tasks as the current plan", () => {
+  it("does not show completed historical tasks in the Plan tab", () => {
     renderRail({
       tasks: [
         {
@@ -798,13 +876,13 @@ describe("AgentInspectorRail", () => {
       ],
     });
 
-    expect(screen.getByText("0 / 0")).toBeInTheDocument();
-    expect(screen.getByText("No active run.")).toBeInTheDocument();
-    expect(screen.getByTestId("agent-task-history")).toBeInTheDocument();
-    expect(screen.getByText("Old completed task")).toBeInTheDocument();
-    expect(screen.getByText("Old failed task")).toBeInTheDocument();
-    expect(screen.getByText("Old cancelled task")).toBeInTheDocument();
-    expect(screen.getByText("No active plan. Finished backend tasks are shown as history only.")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-plan-empty")).toHaveTextContent(
+      "No active work for this session."
+    );
+    expect(screen.queryByTestId("agent-task-history")).not.toBeInTheDocument();
+    expect(screen.queryByText("Old completed task")).not.toBeInTheDocument();
+    expect(screen.queryByText("Old failed task")).not.toBeInTheDocument();
+    expect(screen.queryByText("Old cancelled task")).not.toBeInTheDocument();
   });
 
   it("shows approval continuation as an active run without requiring session.live", () => {
@@ -819,9 +897,10 @@ describe("AgentInspectorRail", () => {
       },
     });
 
-    expect(screen.getAllByText("Approved. ZAKI is continuing...").length).toBeGreaterThan(0);
-    expect(screen.getByText(/executing the approved action and continuation/i)).toBeInTheDocument();
-    expect(screen.getByText("forming")).toBeInTheDocument();
+    const currentWork = screen.getByTestId("agent-current-work");
+    expect(within(currentWork).getByText("Approved. ZAKI is continuing.")).toBeInTheDocument();
+    expect(within(currentWork).getByText(/Structured work items will appear/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("agent-plan-blocked")).not.toBeInTheDocument();
   });
 
   it("renders trace as V6 operation rows with latency and warning count", async () => {

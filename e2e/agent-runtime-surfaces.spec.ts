@@ -456,9 +456,19 @@ test.describe("Agent runtime surfaces", () => {
       }
 
       if (scenario.name === "tool-only") {
-        await expect(page.getByText("Waiting for delegated research result").first()).toBeVisible();
-        await expect(page.getByText("Task Plan").first()).toBeVisible();
-        await expect(page.getByText("55%").first()).toBeVisible();
+        const openPanelButton = page.getByRole("button", { name: /Open agent panel/i });
+        if (await openPanelButton.isVisible().catch(() => false)) {
+          await openPanelButton.click();
+        }
+        const panelDialog = page.getByRole("dialog", { name: "Agent panel" });
+        const panelScope = (await panelDialog.isVisible().catch(() => false))
+          ? panelDialog
+          : page.locator("body");
+        await expect(
+          panelScope.getByText("Waiting for delegated research result").first()
+        ).toBeVisible();
+        await expect(panelScope.getByText("current work").first()).toBeVisible();
+        await expect(panelScope.getByText("55%").first()).toBeVisible();
       }
 
       await page.screenshot({
