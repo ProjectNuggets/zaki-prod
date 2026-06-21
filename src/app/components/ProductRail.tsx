@@ -23,6 +23,7 @@ import { useNavigation } from "@/hooks/useNavigation";
 import { useAuthStore, useNavigationStore } from "@/stores";
 import { requestLogout } from "@/lib/api";
 import { toast } from "sonner";
+import { LogoArabicRed } from "./icons";
 
 type ProductRailItem = {
   id: "dashboard" | "agent" | "chat" | "brain" | "learn" | "hire" | "design";
@@ -232,7 +233,9 @@ export function ProductRail() {
         className="zaki-product-rail__mark"
         onClick={goHome}
         aria-label={t("productRail.openDashboard", { defaultValue: "Open dashboard" })}
-      />
+      >
+        <LogoArabicRed className="zaki-product-rail__brand-logo" />
+      </button>
       <div className="zaki-product-rail__sep" />
       {items.map((item) => {
         const Icon = item.icon;

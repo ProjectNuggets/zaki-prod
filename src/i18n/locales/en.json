@@ -1982,32 +1982,45 @@
     },
     "entry": {
       "website": "Website",
+      "importMemory": "Import memory",
       "signIn": "Sign in",
       "signUp": "Sign up"
     },
     "command": {
-      "signedEyebrow": "Signed in · your work can carry forward",
+      "signedEyebrow": "Signed in · context and progress stay connected",
       "guestEyebrow": "Guest session · start without setup",
       "signedTitlePrefix": "Let's ",
       "guestTitlePrefix": "Let's ",
-      "signedCopy": "Choose the kind of help you need, write the outcome once, and ZAKI will open the right workspace with your context intact.",
-      "guestCopy": "Ask immediately with free weekly usage. This browser can remember drafts; sign in when you want work, memory, files, and history to follow you.",
-      "weeklyFreeCredit": "Weekly usage",
+      "signedCopy": "Choose the lane. Name the outcome. ZAKI brings the right intelligence and carries it forward.",
+      "guestCopy": "Start in Chat now. Sign in when the work needs Agent, files, memory, or history.",
+      "weeklyFreeCredit": "Usage",
       "bestFor": "Best for",
       "memoryScope": "Memory scope",
       "selectedProduct": "{{product}} overview",
       "productStrip": "Choose product",
       "inputLabel": "Describe what you want ZAKI to do",
-      "placeholder": "Ask {{product}} to start from your prompt...",
+      "placeholders": {
+        "agent": {
+          "signed": "Describe the outcome, constraints, and where Agent should start.",
+          "guest": "Describe the outcome. Sign in to let Agent plan, use tools, and keep the run."
+        },
+        "brain": {
+          "signed": "Ask Brain to find a memory, connect facts, or clean up what ZAKI knows.",
+          "guest": "Write what you want ZAKI to remember; sign in to save it to Brain."
+        },
+        "spaces": "Ask a question, draft a reply, translate text, or compare options.",
+        "design": "Sketch the product, page, or brand direction you want to shape.",
+        "learning": "Name the topic and goal; ZAKI can make a study plan or explain the first step.",
+        "hire": "Paste a role, CV note, or career goal; ZAKI can shape the next move."
+      },
       "saveWork": "Save this work",
-      "emptyHelper": "Type a prompt to start.",
       "offlineHelper": "You are offline. We kept this draft here and will send when you reconnect.",
-      "creditHelper": "Weekly usage updates when ZAKI responds.",
+      "creditHelper": "Ready to send.",
       "authRequiredEmptyHelper": "Sign in to use {{product}}.",
       "authRequiredPromptHelper": "Sign in to continue in {{product}}. We'll keep this prompt through authentication.",
-      "agentCreditsLow": "Agent needs more weekly room before it can start.",
+      "agentCreditsLow": "Agent needs room.",
       "capacityWindowLow": "{{hours}}h Agent window is {{percent}}% used. Next room clears {{reset}}.",
-      "comingSoonHelper": "{{product}} is coming soon. Pick Chat, Agent, or Brain to start now.",
+      "comingSoonHelper": "{{product}} is coming soon. Use Chat or Agent to start now.",
       "submitSignIn": "Sign in for {{product}}",
       "submitChat": "Start chat",
       "submitOpen": "Continue in {{product}}",
@@ -2054,46 +2067,40 @@
       },
       "details": {
         "agent": {
-          "bestFor": "Turning a messy goal into a concrete plan, then executing when you allow it.",
-          "memory": {
-            "signed": "Personal Brain, files, browser lane, and session history.",
-            "guest": "Account-scoped after sign-in."
+          "headline": {
+            "signed": "If you need a messy goal turned into action, use Agent.",
+            "guest": "If you need Agent to carry work forward, sign in first."
           },
-          "truth": {
-            "signed": "Agent is live for signed-in accounts with usage and approval controls.",
-            "guest": "Agent requires sign-in. Tools, files, browser control, and durable memory are account-scoped."
+          "note": {
+            "signed": "It can plan, ask approval, use files and browser control, then keep the run in your history.",
+            "guest": "Tools, files, browser control, and durable memory are account-scoped."
           }
         },
         "brain": {
-          "bestFor": "Making notes, preferences, decisions, and project facts visible instead of hidden in chat.",
-          "memory": {
-            "signed": "Saved personal memory graph.",
-            "guest": "Account memory after sign-in."
+          "headline": {
+            "signed": "If you need to see what ZAKI remembers, use Brain.",
+            "guest": "If you need durable memory, sign in for Brain."
           },
-          "truth": {
-            "signed": "Brain is live for signed-in accounts as the memory control plane.",
-            "guest": "Brain requires sign-in because the graph is account memory."
+          "note": {
+            "signed": "Search the graph, inspect saved context, and refine account memory.",
+            "guest": "The graph belongs to your account, not this browser session."
           }
         },
         "spaces": {
-          "bestFor": "Quick questions, drafting, translation, and thinking out loud. No setup.",
-          "memory": "This-browser session only until you sign in.",
-          "truth": "Chat runs now with free weekly usage. Sign in when you want to keep the work."
+          "headline": "If you need a fast answer, draft, or translation, use Chat.",
+          "note": "No setup. Anonymous usage works until you choose to save."
         },
         "design": {
-          "bestFor": "Product direction, page structure, brand systems, and design project generation.",
-          "memory": "Design project memory is not public yet.",
-          "truth": "Coming soon. Use Chat or Agent today; full Design opens after the service and project flow are ready."
+          "headline": "If you need a design brief today, use Chat or Agent.",
+          "note": "Design stays waitlisted until the project service is ready."
         },
         "learning": {
-          "bestFor": "Study plans, source walkthroughs, questions, weak spots, and guided practice.",
-          "memory": "Learner memory is not public yet.",
-          "truth": "Coming soon. Use Chat or Agent today; Learn will return when the learner state and beta path are ready."
+          "headline": "If you need study help today, use Chat or Agent.",
+          "note": "Learn stays gated until learner state and the beta path are ready."
         },
         "hire": {
-          "bestFor": "Finding your next role, improving your CV, comparing fit, and preparing applications.",
-          "memory": "Career pipeline memory is not public yet.",
-          "truth": "Gated for private access. Use Chat or Agent today; Career opens when the private career flow is ready."
+          "headline": "If you need CV or career planning today, use Chat or Agent.",
+          "note": "Career stays gated until the private workflow is ready."
         }
       }
     },
@@ -2104,45 +2111,42 @@
     },
     "intro": {
       "kicker": "First run",
-      "title": "Start the work first. Choose an account when it matters.",
+      "title": "ZAKI is the intelligence layer for everyday work.",
       "progress": "Intro slides",
       "goToSlide": "Go to slide {{index}}",
       "slides": {
         "what": {
-          "title": "What is ZAKI?",
-          "body": "One command center for Chat, Agent, Brain, and future products. Start with the outcome; ZAKI routes the work.",
+          "title": "An intelligence layer",
+          "body": "ZAKI gives every task one surface: write the outcome once, then route it to Chat or Agent with memory underneath.",
           "bullets": {
-            "command": "Write the work once.",
-            "route": "Choose the product lane above the prompt.",
-            "keep": "Keep local drafts in this browser."
+            "command": "Chat answers and drafts now.",
+            "route": "Agent turns goals into supervised action.",
+            "keep": "Brain makes durable memory visible and manageable."
           }
         },
         "buy": {
-          "title": "Activate the loop",
-          "body": "Guest usage lets you try now. Create an account when you want work, memory, files, and history to follow you.",
+          "title": "The daily AI interface",
+          "body": "Use ZAKI for the small work and the serious work: decide, draft, research, plan, remember, and move.",
           "bullets": {
-            "guest": "Guest: start immediately with weekly usage.",
-            "account": "Account: save work, memory, files, and history.",
-            "plan": "Plan: add capacity when your work grows."
+            "guest": "Start without setup when the task is simple.",
+            "account": "Sign in when work needs files, tools, memory, or history.",
+            "plan": "Usage stays visible before you hit a wall."
           }
         },
         "palette": {
-          "title": "Visit the website when you want the full story",
-          "body": "The app is the working surface. The website is the narrative layer for story, pricing, product pages, and public context.",
+          "title": "A second digital brain",
+          "body": "ZAKI is built to make AI cumulative: facts, decisions, preferences, projects, and active runs can carry forward.",
           "bullets": {
-            "chat": "Chat, Agent, and Brain are the launch core.",
-            "preview": "Design, Learn, and Career start as truthful gates.",
-            "website": "Visit the website when you want the broader product story."
+            "chat": "Brain makes memory inspectable, not hidden in chat.",
+            "preview": "Agent can use that context when you approve action.",
+            "website": "The website explains the product; this app is where work starts."
           }
         }
       },
       "back": "Back",
       "next": "Next",
       "startTyping": "Enter dashboard",
-      "visitWebsite": "Visit website",
-      "startFreeChat": "Start free chat",
-      "createAccount": "Create account",
-      "openWebsite": "Open website"
+      "visitWebsite": "Visit website"
     },
     "anonymousWork": {
       "title": "Continue what you started",
@@ -2170,11 +2174,15 @@
       "used": "Usage",
       "remaining": "Room",
       "usagePercent": "{{percent}}% of your weekly usage",
+      "usageShort": "{{percent}}%",
       "remainingOfLimit": "Room refreshes with your weekly usage",
       "usedOfLimit": "{{percent}}% of your weekly usage",
       "usedUnits": "{{percent}}% of your weekly usage",
       "resets": "Resets {{reset}}",
-      "resetPending": "Reset pending"
+      "reset": "Reset",
+      "resetShort": "{{reset}}",
+      "resetPending": "Reset pending",
+      "resetPendingShort": "Pending"
     },
     "products": {
       "title": "Products · what you can use",
@@ -2240,12 +2248,16 @@
     "activeWork": {
       "title": "Active work · Agent",
       "source": "Runtime",
+      "carryOn": "Carry on",
       "loading": "Loading active work.",
       "empty": "No active agent work. Start from Agent when you need ZAKI to plan, execute, or review.",
       "untitled": "Untitled session",
       "pendingApproval": "{{title}} · {{count}} approval waiting",
       "liveSession": "{{title}} · streaming",
       "recentSession": "{{title}} · recent",
+      "pendingApprovalShort": "{{count}} approval waiting",
+      "liveSessionShort": "streaming",
+      "recentSessionShort": "recent",
       "sessionMeta": "{{messages}} messages · {{mode}}",
       "noMode": "standard",
       "openSessionAria": "Open Agent session {{title}}"
@@ -2262,7 +2274,7 @@
       "registry": "Product registry drives launch cards",
       "meter": "Central meter drives plan usage",
       "routing": "Routes honor product state",
-      "memory": "Memory is scoped by product"
+      "memory": "Memory is a shared layer with Brain controls"
     }
   },
   "productGate": {
@@ -2302,9 +2314,9 @@
       "memory": "Memory boundary",
       "memoryValue": "Kept separate until explicitly launched",
       "next": "Next step",
-      "comingSoonValue": "Start today with Chat, Agent, or Brain from the dashboard.",
-      "privateBetaValue": "Use Chat, Agent, or Brain today. Access stays gated until the full product contract is ready.",
-      "waitlistValue": "Visit the product page for context, or start with Chat, Agent, or Brain today."
+      "comingSoonValue": "Start today with Chat or Agent from the dashboard; use Brain to manage memory.",
+      "privateBetaValue": "Use Chat or Agent today. Brain stays focused on memory controls while access is finalized.",
+      "waitlistValue": "Visit the product page for context, or start with Chat or Agent today."
     }
   },
   "task": {
