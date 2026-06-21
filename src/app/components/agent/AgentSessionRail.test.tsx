@@ -192,6 +192,35 @@ describe("AgentSessionRail", () => {
     expect(screen.queryByText("thread-2")).not.toBeInTheDocument();
   });
 
+  it("keeps long thread names one-line while exposing the full name on hover", () => {
+    const longTitle =
+      "Analyze enterprise onboarding risks across billing, activation, memory, and agent approvals";
+    renderRail([makeSession(1, { title: longTitle })]);
+
+    const rowButton = screen.getByRole("button", { name: longTitle });
+    const visibleLabel = screen.getByText(longTitle);
+
+    expect(rowButton).toHaveAttribute("title", longTitle);
+    expect(visibleLabel).toHaveClass("truncate");
+    expect(visibleLabel).toHaveAttribute("title", longTitle);
+  });
+
+  it("normalizes generated title whitespace before rendering the rail label", () => {
+    renderRail([
+      makeSession(1, {
+        title: "Plan   launch\n\nhandoff\twith staging checks",
+      }),
+    ]);
+
+    const normalizedTitle = "Plan launch handoff with staging checks";
+
+    expect(screen.getByText(normalizedTitle)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: normalizedTitle })).toHaveAttribute(
+      "title",
+      normalizedTitle
+    );
+  });
+
   it("requests bounded title repair for visible placeholder thread sessions", async () => {
     const onRepairSessionTitles = jest.fn(async () => undefined);
     const sessions: AgentSession[] = [

@@ -47,6 +47,10 @@ function formatSessionStamp(value: AgentSession["last_active"]): string | null {
   });
 }
 
+function normalizeSessionDisplayLabel(value: string) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
 export function ZakiSessionList({
   sessions,
   isLoading,
@@ -187,7 +191,7 @@ export function ZakiSessionList({
       createdAt: session.created_at ?? session.last_active ?? null,
     });
     const overlayLabel = getOverlayLabel(normalizedSessionKey);
-    const label = overlayLabel || baseLabel;
+    const label = normalizeSessionDisplayLabel(overlayLabel || baseLabel);
     const time = formatSessionTime(session.last_active);
     const stamp = formatSessionStamp(session.last_active);
     const pendingApprovalCount =
@@ -313,12 +317,13 @@ export function ZakiSessionList({
                   isRtl && "text-right flex-row-reverse",
                 )}
                 onClick={() => onSelectSession(normalizedSessionKey)}
+                title={displayLabel}
               >
                 <div className="relative shrink-0">
                   <MessageSquare className="size-3.5 text-zaki-muted" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-zaki-secondary truncate">
+                  <div className="text-sm font-medium text-zaki-secondary truncate" title={displayLabel}>
                     {displayLabel}
                   </div>
                   {showMetaRow ? (

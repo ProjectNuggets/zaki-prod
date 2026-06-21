@@ -4580,9 +4580,10 @@ export function ChatArea() {
       sessionKey: string,
       exchange?: { userMessage: string; assistantMessage: string },
     ) => {
-      if (!sessionKey) return;
-      if (autoTitleSessionFinalizedRef.current[sessionKey]) return;
-      if (autoTitleSessionInFlightRef.current[sessionKey]) return;
+      const normalizedSessionKey = normalizeZakiSessionKey(sessionKey);
+      if (!normalizedSessionKey) return;
+      if (autoTitleSessionFinalizedRef.current[normalizedSessionKey]) return;
+      if (autoTitleSessionInFlightRef.current[normalizedSessionKey]) return;
 
       const assistantMessage = normalizeAssistantDisplayText(
         exchange?.assistantMessage ?? "",
@@ -4594,17 +4595,17 @@ export function ChatArea() {
       ]);
       if (!cleaned) return;
 
-      const attempts = autoTitleSessionAttemptsRef.current[sessionKey] ?? 0;
+      const attempts = autoTitleSessionAttemptsRef.current[normalizedSessionKey] ?? 0;
       if (attempts >= 2) {
-        autoTitleSessionFinalizedRef.current[sessionKey] = true;
+        autoTitleSessionFinalizedRef.current[normalizedSessionKey] = true;
         return;
       }
 
-      autoTitleSessionAttemptsRef.current[sessionKey] = attempts + 1;
-      autoTitleSessionInFlightRef.current[sessionKey] = true;
+      autoTitleSessionAttemptsRef.current[normalizedSessionKey] = attempts + 1;
+      autoTitleSessionInFlightRef.current[normalizedSessionKey] = true;
 
       try {
-        const { response, data } = await autoTitleAgentSession(sessionKey, {
+        const { response, data } = await autoTitleAgentSession(normalizedSessionKey, {
           userMessage: cleaned.userMessage,
           assistantMessage: cleaned.assistantMessage,
           currentLabel: "",
@@ -4613,14 +4614,14 @@ export function ChatArea() {
         if (!response.ok || !data) return;
 
         if (data.status === "updated" && data.session?.title) {
-          autoTitleSessionFinalizedRef.current[sessionKey] = true;
+          autoTitleSessionFinalizedRef.current[normalizedSessionKey] = true;
           await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
           return;
         }
 
         // BE says "already has a title" — stop retrying.
         if (data.reason === "not_default_label") {
-          autoTitleSessionFinalizedRef.current[sessionKey] = true;
+          autoTitleSessionFinalizedRef.current[normalizedSessionKey] = true;
           await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
           return;
         }
@@ -4628,12 +4629,12 @@ export function ChatArea() {
         // Don't finalize on a transient generation_failed — the BE
         // pattern lets us retry up to 2x for those.
         if (data.reason !== "generation_failed") {
-          autoTitleSessionFinalizedRef.current[sessionKey] = true;
+          autoTitleSessionFinalizedRef.current[normalizedSessionKey] = true;
         }
       } catch {
         // Best-effort only.
       } finally {
-        autoTitleSessionInFlightRef.current[sessionKey] = false;
+        autoTitleSessionInFlightRef.current[normalizedSessionKey] = false;
       }
     },
     [queryClient],
