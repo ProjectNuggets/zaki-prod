@@ -156,6 +156,7 @@ import {
 import {
   buildCanonicalZakiThreadSessionKey,
   extractThreadSlugFromSessionKey,
+  isRepairableZakiSessionTitle,
   isThreadLaneZakiSessionKey,
   normalizeZakiSessionKey,
   parseZakiSessionKey,
@@ -512,6 +513,18 @@ function removeAgentSession(previous: unknown, sessionKey: string): AgentSession
   );
 }
 
+function formatAgentDraftThreadTitle(timestamp: string): string {
+  const time = parseZakiSessionTimestampMs(timestamp);
+  if (!time) return "New thread";
+  const label = new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(time));
+  return `Started ${label}`;
+}
+
 function buildDraftAgentSession(
   sessionKey: string,
   timestamp: string,
@@ -519,6 +532,7 @@ function buildDraftAgentSession(
 ): AgentSession {
   return {
     session_key: normalizeZakiSessionKey(sessionKey),
+    title: formatAgentDraftThreadTitle(timestamp),
     created_at: timestamp,
     last_active: timestamp,
     message_count: 0,
@@ -3484,7 +3498,19 @@ export function ChatArea() {
         const normalizedSessionKey = normalizeZakiSessionKey(session.session_key);
         if (!isThreadLaneZakiSessionKey(normalizedSessionKey)) continue;
         if (deletedAgentSessionKeysRef.current.has(normalizedSessionKey)) continue;
-        byKey.set(normalizedSessionKey, { ...session, session_key: normalizedSessionKey });
+        const existing = byKey.get(normalizedSessionKey);
+        const nextSession = { ...session, session_key: normalizedSessionKey };
+        if (
+          existing?.title &&
+          isRepairableZakiSessionTitle({
+            sessionKey: normalizedSessionKey,
+            title: nextSession.title,
+            createdAt: nextSession.created_at ?? nextSession.last_active ?? null,
+          })
+        ) {
+          nextSession.title = existing.title;
+        }
+        byKey.set(normalizedSessionKey, nextSession);
       }
       return Array.from(byKey.values()).sort((a, b) => {
         const aTime = parseZakiSessionTimestampMs(a.last_active ?? a.created_at);

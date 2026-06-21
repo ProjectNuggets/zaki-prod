@@ -522,6 +522,18 @@ async function renderChatAreaAndWaitForEffects() {
   return result;
 }
 
+function getAgentRailThreadLabels(container: HTMLElement): string[] {
+  return Array.from(container.querySelectorAll(".zaki-thread-item")).map((row) => {
+    const label = row.querySelector(".truncate")?.textContent || row.textContent || "";
+    return label.trim();
+  });
+}
+
+function expectStartedThreadLabel(labels: string[]) {
+  expect(labels.some((label) => /^Started\s+.+\d/.test(label))).toBe(true);
+  expect(labels).not.toContain("New thread");
+}
+
 describe("P1-12 chat-stream retryable classification (isRetryableChatError)", () => {
   it("honors an explicit retryable:true flag from the BFF error frame", () => {
     expect(
@@ -2473,8 +2485,9 @@ describe("ChatArea Component", () => {
     await waitFor(() => {
       expect(container.querySelectorAll(".zaki-thread-item")).toHaveLength(2);
     });
-    expect(screen.getByText("Main")).toBeInTheDocument();
-    expect(screen.getByText("New thread")).toBeInTheDocument();
+    const labels = getAgentRailThreadLabels(container);
+    expect(labels).toContain("Main");
+    expectStartedThreadLabel(labels);
     expect(navState.threadId).toMatch(/^anon-/);
     expect(navState.zakiSessionKey).toMatch(/^agent:zaki-bot:user:1:thread:anon-/);
   });
@@ -2531,7 +2544,7 @@ describe("ChatArea Component", () => {
       JSON.parse(window.localStorage.getItem("zaki:agentDeletedSessionKeys") || "[]")
     ).toContain("agent:zaki-bot:user:1:thread:main");
     expect(container.querySelectorAll(".zaki-thread-item")).toHaveLength(1);
-    expect(screen.getByText("New thread")).toBeInTheDocument();
+    expectStartedThreadLabel(getAgentRailThreadLabels(container));
     expect(navState.threadId).toMatch(/^anon-/);
     expect(navState.zakiSessionKey).toMatch(/^agent:zaki-bot:user:1:thread:anon-/);
   });
@@ -2572,7 +2585,7 @@ describe("ChatArea Component", () => {
     });
     expect(screen.queryByText("Main")).not.toBeInTheDocument();
     expect(container.querySelectorAll(".zaki-thread-item")).toHaveLength(1);
-    expect(screen.getByText("New thread")).toBeInTheDocument();
+    expectStartedThreadLabel(getAgentRailThreadLabels(container));
   });
 
   it("parses task progress events as structured live execution", () => {

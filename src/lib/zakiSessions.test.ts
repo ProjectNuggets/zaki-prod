@@ -203,6 +203,23 @@ describe("zaki session helpers", () => {
     expect(out).toBe("New thread");
   });
 
+  it("keeps draft date-time titles visible while they await auto-renaming", () => {
+    const title = "Started May 30, 9:10 AM";
+    expect(
+      formatZakiSessionLabel({
+        sessionKey: "agent:zaki-bot:user:7:thread:01H92ZJVFCAFR5RV",
+        title,
+        createdAt: "2026-05-08T00:00:00Z",
+      }),
+    ).toBe(title);
+    expect(
+      isRepairableZakiSessionTitle({
+        sessionKey: "agent:zaki-bot:user:7:thread:01H92ZJVFCAFR5RV",
+        title,
+      }),
+    ).toBe(true);
+  });
+
   it("ignores internal generated ids when deriving a user-facing title", () => {
     expect(
       formatZakiSessionLabel({

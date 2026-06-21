@@ -199,7 +199,9 @@ describe("AgentSessionRail", () => {
 
     const rowButton = screen.getByRole("button", { name: longTitle });
     const visibleLabel = screen.getByText(longTitle);
+    const row = rowButton.closest(".zaki-thread-item");
 
+    expect(row).toHaveAttribute("title", longTitle);
     expect(rowButton).toHaveAttribute("title", longTitle);
     expect(visibleLabel).toHaveClass("truncate");
     expect(visibleLabel).toHaveAttribute("title", longTitle);

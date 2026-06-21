@@ -266,6 +266,7 @@ export function ZakiSessionList({
         return (
           <div
             key={normalizedSessionKey}
+            title={displayLabel}
             className={cn(
               "zaki-thread-item group relative w-full py-2 px-2.5 rounded-lg flex items-center gap-2",
               isRtl && "text-right flex-row-reverse",

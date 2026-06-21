@@ -101,6 +101,12 @@ function looksLikeDateTitle(value: string): boolean {
   return /^(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{1,2}(?:,\s*)?(?:\d{4})?(?:,\s*)?(?:\d{1,2}:\d{2}\s*(?:am|pm)?)?$/i.test(title);
 }
 
+function looksLikeDraftDateTitle(value: string): boolean {
+  const title = String(value || "").trim();
+  if (!/^started\s+/i.test(title)) return false;
+  return looksLikeDateTitle(title.replace(/^started\s+/i, ""));
+}
+
 function looksLikeInternalSessionTitle(value: string): boolean {
   const title = String(value || "").trim();
   if (!title) return false;
@@ -177,7 +183,7 @@ export function isRepairableZakiSessionTitle({
     const fallback = formatZakiSessionFallbackLabel(sessionKey, { createdAt });
     return fallback === "New thread" || fallback === "Session";
   }
-  return isPlaceholderSessionTitle(normalizedTitle);
+  return isPlaceholderSessionTitle(normalizedTitle) || looksLikeDraftDateTitle(normalizedTitle);
 }
 
 function formatShortDate(input: string | number | null | undefined): string | null {
