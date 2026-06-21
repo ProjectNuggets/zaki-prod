@@ -767,7 +767,7 @@ describe("ZakiDashboard", () => {
       isLoading: false,
     });
 
-    renderDashboard();
+    const { container } = renderDashboard();
 
     fireEvent.click(screen.getByRole("tab", { name: "Agent" }));
     fireEvent.change(screen.getByLabelText("Describe what you want ZAKI to do"), {
@@ -777,7 +777,10 @@ describe("ZakiDashboard", () => {
     expect(screen.getByTestId("zaki-dashboard-product-hint")).toHaveTextContent(
       "If you need Agent to carry work forward, sign in first."
     );
-    expect(screen.getByText("Sign in to continue in Agent. We'll keep this prompt through authentication.")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Sign in to continue in Agent. We'll keep this prompt through authentication.")
+    ).not.toBeInTheDocument();
+    expect(container.querySelector(".zaki-dashboard-command__helper")).toBeNull();
     expect(screen.queryByRole("button", { name: "Save this work" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Sign in for Agent" }));
 
@@ -1033,7 +1036,7 @@ describe("ZakiDashboard", () => {
       isLoading: false,
     });
 
-    renderDashboard();
+    const { container } = renderDashboard();
 
     for (const product of ["Design", "Learn", "Career"]) {
       fireEvent.click(screen.getByRole("tab", { name: product }));
@@ -1042,6 +1045,7 @@ describe("ZakiDashboard", () => {
       });
 
       expect(screen.getByTestId("zaki-dashboard-product-hint")).toHaveTextContent("Coming soon");
+      expect(container.querySelector(".zaki-dashboard-command__helper")).toBeNull();
       expect(screen.getByRole("button", { name: `${product} coming soon` })).toBeDisabled();
     }
 

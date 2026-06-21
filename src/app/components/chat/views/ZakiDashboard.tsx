@@ -1094,25 +1094,12 @@ export function ZakiDashboard({
     !isOnline ||
     selectedCommandPrompt.length === 0 ||
     (!selectedProductRequiresAuthBeforeRun && (meterLoading || commandBlockedByUsage));
-  const commandHelperText = selectedProductComingSoon
-      ? t("zakiDashboard.command.comingSoonHelper", {
-        product: selectedCommandName,
-        defaultValue: "{{product}} is coming soon. Use Chat or Agent to start now.",
-      })
-    : !isOnline
+  const commandHelperText = !isOnline
       ? t("zakiDashboard.command.offlineHelper", {
           defaultValue: "You are offline. We kept this draft here and will send when you reconnect.",
         })
-    : selectedProductRequiresAuthBeforeRun && selectedCommandPrompt
-      ? t("zakiDashboard.command.authRequiredPromptHelper", {
-          product: selectedCommandName,
-          defaultValue: "Sign in to continue in {{product}}. We'll keep this prompt through authentication.",
-        })
-    : selectedProductRequiresAuthBeforeRun
-      ? t("zakiDashboard.command.authRequiredEmptyHelper", {
-          product: selectedCommandName,
-          defaultValue: "Sign in to use {{product}}.",
-        })
+    : selectedProductComingSoon || selectedProductRequiresAuthBeforeRun
+      ? ""
     : selectedCommandPrompt && agentCapacityBlocked && agentAvailability?.constraint === "rolling"
       ? t("zakiDashboard.command.capacityWindowLow", {
           hours: rollingWindowHours,
