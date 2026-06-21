@@ -57,6 +57,7 @@
       "off": "Off"
     },
     "account": {
+      "signIn": "Sign in",
       "signOut": "Sign out",
       "signingOut": "Signing out",
       "signOutHelper": "End this browser session and return to sign in.",
@@ -1777,6 +1778,7 @@
     "quickSettings": {
       "title": "Quick settings",
       "eyebrow": "Quick settings",
+      "guest": "Guest",
       "account": "Account",
       "accountHelper": "Profile and sign-in",
       "plan": "Plan & usage",
@@ -2001,10 +2003,12 @@
       "emptyHelper": "Type a prompt to start.",
       "offlineHelper": "You are offline. We kept this draft here and will send when you reconnect.",
       "creditHelper": "Weekly usage updates when ZAKI responds.",
+      "authRequiredEmptyHelper": "Sign in to use {{product}}.",
+      "authRequiredPromptHelper": "Sign in to continue in {{product}}. We'll keep this prompt through authentication.",
       "agentCreditsLow": "Agent needs more weekly room before it can start.",
       "capacityWindowLow": "{{hours}}h Agent window is {{percent}}% used. Next room clears {{reset}}.",
       "comingSoonHelper": "{{product}} is coming soon. Pick Chat, Agent, or Brain to start now.",
-      "submitPreviewSave": "Preview first",
+      "submitSignIn": "Sign in for {{product}}",
       "submitChat": "Start chat",
       "submitOpen": "Continue in {{product}}",
       "submitComingSoon": "{{product}} coming soon",
@@ -2019,7 +2023,8 @@
       "waitForResetDate": "Wait for reset {{reset}}",
       "markers": {
         "free": "Free",
-        "preview": "Preview",
+        "signIn": "Sign in",
+        "live": "Live",
         "save": "Save",
         "beta": "Beta",
         "waitlist": "Waitlist",
@@ -2034,8 +2039,14 @@
         "hire": { "signed": "advance", "guest": "advance" }
       },
       "hints": {
-        "agent": "Turn a goal into a plan ZAKI can carry forward. Tools and browser control require sign-in.",
-        "brain": "Paste notes, links, or raw context and see the shape of what ZAKI would remember.",
+        "agent": {
+          "signed": "Turn a goal into a plan ZAKI can carry forward with tools, files, browser control, and memory.",
+          "guest": "Sign in to use Agent with tools, files, browser control, and durable memory."
+        },
+        "brain": {
+          "signed": "Open your memory graph to inspect, connect, and refine saved context.",
+          "guest": "Sign in to open Brain and save or read your memory graph."
+        },
         "spaces": "Ask now, draft quickly, or test the platform without setting anything up.",
         "design": "Design is coming soon. For now, use Chat to shape a brief or Agent to plan the design work.",
         "learning": "Learn is coming soon. For now, use Chat for quick study help or Agent to plan a learning path.",
@@ -2044,13 +2055,25 @@
       "details": {
         "agent": {
           "bestFor": "Turning a messy goal into a concrete plan, then executing when you allow it.",
-          "memory": "Personal Brain after sign-in.",
-          "truth": "Guest Agent is a planning preview. External tools, files, browser control, and durable memory require sign-in."
+          "memory": {
+            "signed": "Personal Brain, files, browser lane, and session history.",
+            "guest": "Account-scoped after sign-in."
+          },
+          "truth": {
+            "signed": "Agent is live for signed-in accounts with usage and approval controls.",
+            "guest": "Agent requires sign-in. Tools, files, browser control, and durable memory are account-scoped."
+          }
         },
         "brain": {
           "bestFor": "Making notes, preferences, decisions, and project facts visible instead of hidden in chat.",
-          "memory": "Browser-only preview; saved graph after sign-in.",
-          "truth": "Brain can preview structure from pasted text. Saving durable memory requires an account."
+          "memory": {
+            "signed": "Saved personal memory graph.",
+            "guest": "Account memory after sign-in."
+          },
+          "truth": {
+            "signed": "Brain is live for signed-in accounts as the memory control plane.",
+            "guest": "Brain requires sign-in because the graph is account memory."
+          }
         },
         "spaces": {
           "bestFor": "Quick questions, drafting, translation, and thinking out loud. No setup.",

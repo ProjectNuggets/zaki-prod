@@ -20,9 +20,12 @@ import { readAnonymousWorkLedger } from "@/lib/anonymousWork";
 import { clearPendingIntent, readPendingIntent } from "@/lib/pendingIntent";
 import { getConfiguredTurnstileSiteKey } from "@/lib/runtimeEnv";
 import { useAuthStore } from "@/stores";
+import { getInitialLegalPolicyVersion } from "@/lib/legalPolicy";
 
-const LEGAL_POLICY_VERSION_FALLBACK = "2026-06-17.v2";
 const TURNSTILE_SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+const DATE_OF_BIRTH_MIN_YEAR = 1900;
+const DATE_OF_BIRTH_DIGIT_LIMIT = 8;
+const DATE_OF_BIRTH_PATTERN = "\\d{4}-\\d{2}-\\d{2}";
 const PRICING_INTENT_SOURCES = new Set([
   "website_pricing",
   "website_product_agent",
@@ -64,6 +67,42 @@ function getTurnstileSiteKey() {
   return String(getConfiguredTurnstileSiteKey() || "").trim();
 }
 
+function formatDateOfBirthInput(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, DATE_OF_BIRTH_DIGIT_LIMIT);
+  if (digits.length <= 4) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
+}
+
+function dateTupleValue(year: number, month: number, day: number) {
+  return year * 10000 + month * 100 + day;
+}
+
+function isValidDateOfBirth(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < DATE_OF_BIRTH_MIN_YEAR) return false;
+
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
+    return false;
+  }
+
+  const today = new Date();
+  return (
+    dateTupleValue(year, month, day) <=
+    dateTupleValue(today.getFullYear(), today.getMonth() + 1, today.getDate())
+  );
+}
+
 export function hasExplicitPricingIntent(input: {
   pathname: string;
   searchParams: URLSearchParams;
@@ -102,6 +141,8 @@ function getPostLoginReturnTo(location: ReturnType<typeof useLocation>) {
   const searchParams = new URLSearchParams(location.search);
   const next = getSafeRelativeReturnTo(searchParams.get("next"));
   if (next) return next;
+  const directProtectedReturnTo = getDirectProtectedReturnTo(location);
+  if (directProtectedReturnTo) return directProtectedReturnTo;
   if (
     location.pathname === "/pricing" &&
     !hasExplicitPricingIntent({
@@ -112,6 +153,18 @@ function getPostLoginReturnTo(location: ReturnType<typeof useLocation>) {
     return "/";
   }
   return "";
+}
+
+function getDirectProtectedReturnTo(location: ReturnType<typeof useLocation>) {
+  const normalizedPath = String(location.pathname || "").replace(/\/+$/, "") || "/";
+  if (
+    normalizedPath !== "/agent" &&
+    normalizedPath !== "/brain" &&
+    normalizedPath !== "/settings"
+  ) {
+    return "";
+  }
+  return getSafeRelativeReturnTo(`${location.pathname}${location.search}${location.hash}`);
 }
 
 function isSpacesReturnTo(value: string) {
@@ -165,6 +218,7 @@ const AUTH_COPY = {
     },
     placeholders: {
       fullName: "Full name",
+      dateOfBirth: "YYYY-MM-DD",
       email: "Email address",
       password: "Password",
       confirmPassword: "Confirm password",
@@ -228,6 +282,7 @@ const AUTH_COPY = {
       resetFailed: "Unable to reset your password. Please request a new link.",
       fullNameRequired: "Full name is required.",
       dateOfBirthRequired: "Date of birth is required.",
+      dateOfBirthInvalid: "Enter a real birth date as YYYY-MM-DD.",
       consentRequired: "Please accept Terms, Privacy & Compliance to create an account.",
       signupFailed: "Sign up failed. Please check your details and try again.",
       loginFailed: "Login failed. Check your credentials and try again.",
@@ -269,6 +324,7 @@ const AUTH_COPY = {
     },
     placeholders: {
       fullName: "الاسم الكامل",
+      dateOfBirth: "YYYY-MM-DD",
       email: "you@company.com",
       password: "أدخل كلمة المرور",
       confirmPassword: "أعد إدخال كلمة المرور",
@@ -332,6 +388,7 @@ const AUTH_COPY = {
       resetFailed: "تعذر إعادة تعيين كلمة المرور. اطلب رابطًا جديدًا.",
       fullNameRequired: "الاسم الكامل مطلوب.",
       dateOfBirthRequired: "تاريخ الميلاد مطلوب.",
+      dateOfBirthInvalid: "أدخل تاريخ ميلاد صحيحًا بصيغة YYYY-MM-DD.",
       consentRequired: "يرجى الموافقة على الشروط والخصوصية والامتثال لإنشاء الحساب.",
       signupFailed: "فشل إنشاء الحساب. يرجى مراجعة بياناتك والمحاولة مرة أخرى.",
       loginFailed: "فشل تسجيل الدخول. تحقق من بياناتك ثم حاول مرة أخرى.",
@@ -345,17 +402,6 @@ const AUTH_COPY = {
     },
   },
 } as const;
-
-function getInitialLegalPolicyVersion() {
-  if (typeof window !== "undefined") {
-    const value = (
-      window as Window & { __ZAKI_LEGAL_POLICY_VERSION__?: string }
-    ).__ZAKI_LEGAL_POLICY_VERSION__;
-    const normalized = String(value || "").trim();
-    if (normalized) return normalized;
-  }
-  return LEGAL_POLICY_VERSION_FALLBACK;
-}
 
 export function LoginScreen() {
   const { i18n } = useTranslation();
@@ -649,14 +695,21 @@ export function LoginScreen() {
       }
 
       if (mode === "signup") {
+        const normalizedDateOfBirth = formatDateOfBirthInput(dateOfBirth);
         if (!fullName.trim()) {
           setFieldErrors({ fullName: copy.errors.fullNameRequired });
           setError(copy.errors.fullNameRequired);
           return;
         }
-        if (!dateOfBirth.trim()) {
+        if (!normalizedDateOfBirth) {
           setFieldErrors({ dateOfBirth: copy.errors.dateOfBirthRequired });
           setError(copy.errors.dateOfBirthRequired);
+          return;
+        }
+        if (!isValidDateOfBirth(normalizedDateOfBirth)) {
+          setDateOfBirth(normalizedDateOfBirth);
+          setFieldErrors({ dateOfBirth: copy.errors.dateOfBirthInvalid });
+          setError(copy.errors.dateOfBirthInvalid);
           return;
         }
         if (!email.trim()) {
@@ -687,7 +740,7 @@ export function LoginScreen() {
           email: email.trim(),
           password,
           name: fullName.trim(),
-          dateOfBirth: dateOfBirth.trim(),
+          dateOfBirth: normalizedDateOfBirth,
           legalConsentAccepted: true,
           legalPolicyVersion,
           ...(turnstileSiteKey ? { turnstileToken: turnstileToken || null } : {}),
@@ -837,6 +890,7 @@ export function LoginScreen() {
     "{{target}}",
     postLoginReturnTo
   );
+  const normalizedDateOfBirth = formatDateOfBirthInput(dateOfBirth);
   const submitDisabled =
     isLoading ||
     ((mode === "login" || mode === "signup" || mode === "reset-request") &&
@@ -844,7 +898,7 @@ export function LoginScreen() {
     ((mode === "login" || mode === "signup") && password.length === 0) ||
     (mode === "signup" &&
       (!fullName.trim() ||
-        !dateOfBirth.trim() ||
+        !isValidDateOfBirth(normalizedDateOfBirth) ||
         confirmPassword.length === 0 ||
         !signupLegalConsent ||
         (Boolean(turnstileSiteKey) && !turnstileReady))) ||
@@ -931,6 +985,7 @@ export function LoginScreen() {
                 id="signup-name"
                 name="name"
                 autoComplete="name"
+                aria-invalid={Boolean(fieldErrors.fullName)}
                 required
               />
               {fieldErrors.fullName ? (
@@ -940,21 +995,43 @@ export function LoginScreen() {
           )}
           {mode === "signup" && (
             <label className="zaki-auth-v2__field">
-              <span>{copy.fields.dateOfBirth}</span>
+              <span id="signup-bday-label">{copy.fields.dateOfBirth}</span>
               <input
-                type="date"
+                type="text"
                 value={dateOfBirth}
                 onChange={(event) => {
-                  setDateOfBirth(event.target.value);
+                  setDateOfBirth(formatDateOfBirthInput(event.target.value));
                   clearFieldError("dateOfBirth");
                 }}
+                onBlur={() => {
+                  if (dateOfBirth && !isValidDateOfBirth(formatDateOfBirthInput(dateOfBirth))) {
+                    setFieldErrors((prev) => ({
+                      ...prev,
+                      dateOfBirth: copy.errors.dateOfBirthInvalid,
+                    }));
+                  }
+                }}
+                onPaste={(event) => {
+                  event.preventDefault();
+                  setDateOfBirth(formatDateOfBirthInput(event.clipboardData.getData("text")));
+                  clearFieldError("dateOfBirth");
+                }}
+                inputMode="numeric"
+                placeholder={copy.placeholders.dateOfBirth}
+                pattern={DATE_OF_BIRTH_PATTERN}
+                maxLength={10}
                 id="signup-bday"
                 name="bday"
                 autoComplete="bday"
+                aria-labelledby="signup-bday-label"
+                aria-describedby={fieldErrors.dateOfBirth ? "signup-bday-error" : undefined}
+                aria-invalid={Boolean(fieldErrors.dateOfBirth)}
                 required
               />
               {fieldErrors.dateOfBirth ? (
-                <em className="zaki-auth-v2__field-error">{fieldErrors.dateOfBirth}</em>
+                <em id="signup-bday-error" className="zaki-auth-v2__field-error">
+                  {fieldErrors.dateOfBirth}
+                </em>
               ) : null}
             </label>
           )}
@@ -974,6 +1051,7 @@ export function LoginScreen() {
                 id={mode === "signup" ? "signup-email" : "login-email"}
                 name={mode === "signup" ? "email" : "username"}
                 autoComplete={mode === "login" ? "username" : "email"}
+                aria-invalid={Boolean(fieldErrors.email)}
                 required
               />
               {fieldErrors.email ? (
@@ -997,6 +1075,7 @@ export function LoginScreen() {
                   id={mode === "signup" ? "signup-password" : "login-password"}
                   name={mode === "signup" ? "new-password" : "current-password"}
                   autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                  aria-invalid={Boolean(fieldErrors.password)}
                   required
                 />
                 <button
@@ -1032,6 +1111,7 @@ export function LoginScreen() {
                 id="signup-password-confirm"
                 name="new-password-confirm"
                 autoComplete="new-password"
+                aria-invalid={Boolean(fieldErrors.confirmPassword)}
                 required
               />
               {fieldErrors.confirmPassword ? (
@@ -1117,6 +1197,7 @@ export function LoginScreen() {
                   id="reset-password"
                   name="new-password"
                   autoComplete="new-password"
+                  aria-invalid={Boolean(fieldErrors.resetPassword)}
                   required
                 />
                 {fieldErrors.resetPassword ? (
@@ -1136,6 +1217,7 @@ export function LoginScreen() {
                   id="reset-password-confirm"
                   name="new-password-confirm"
                   autoComplete="new-password"
+                  aria-invalid={Boolean(fieldErrors.resetConfirm)}
                   required
                 />
                 {fieldErrors.resetConfirm ? (

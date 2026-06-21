@@ -22,8 +22,8 @@ import {
 import { useAuthStore, useUIStore, useNavigationStore } from "@/stores";
 import { ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID } from "@/lib/zakiBot";
 import { consumeWebsiteCommandIntentFromUrl } from "@/lib/pendingIntent";
+import { getInitialLegalPolicyVersion } from "@/lib/legalPolicy";
 
-const LEGAL_POLICY_VERSION_FALLBACK = "2026-06-17.v2";
 const PUBLIC_WEBSITE_PATHS = new Set([
   "/",
   "/pricing",
@@ -53,15 +53,45 @@ const PUBLIC_WEBSITE_PATHS = new Set([
 
 const PUBLIC_WEBSITE_PREFIXES = ["/products/", "/how-to/", "/ar/products/", "/artifact/"];
 
-function getInitialLegalPolicyVersion() {
-  if (typeof window !== "undefined") {
-    const value = (
-      window as Window & { __ZAKI_LEGAL_POLICY_VERSION__?: string }
-    ).__ZAKI_LEGAL_POLICY_VERSION__;
-    const normalized = String(value || "").trim();
-    if (normalized) return normalized;
+function normalizePathname(pathname: string) {
+  return String(pathname || "").replace(/\/+$/, "") || "/";
+}
+
+function isGatedProductPath(pathname: string) {
+  const normalized = normalizePathname(pathname);
+  return normalized === "/learn" || normalized === "/hire" || normalized === "/design";
+}
+
+function isPublicWebsitePath(pathname: string) {
+  const normalized = normalizePathname(pathname);
+  return (
+    PUBLIC_WEBSITE_PATHS.has(normalized) ||
+    PUBLIC_WEBSITE_PREFIXES.some((prefix) => normalized.startsWith(prefix))
+  );
+}
+
+function isAnonymousAllowedPath(pathname: string) {
+  const normalized = normalizePathname(pathname);
+  return (
+    isPublicWebsitePath(normalized) ||
+    isGatedProductPath(normalized) ||
+    normalized === "/spaces" ||
+    normalized.startsWith("/spaces/") ||
+    normalized === "/pricing/success"
+  );
+}
+
+function getSafeNextPath(value: string | null) {
+  const raw = String(value || "").trim();
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "";
+  try {
+    const parsed = new URL(raw, "https://zaki.local");
+    if (parsed.origin !== "https://zaki.local") return "";
+    const normalized = normalizePathname(parsed.pathname);
+    return normalized === "/" ? "" : normalized;
+  } catch {
+    return "";
   }
-  return LEGAL_POLICY_VERSION_FALLBACK;
 }
 
 export default function App() {
@@ -69,11 +99,8 @@ export default function App() {
   const scrollTimerRef = useRef<number | null>(null);
   const scrollTargetRef = useRef<HTMLElement | null>(null);
   const { t } = useTranslation();
-  const normalizedPath = location.pathname.replace(/\/+$/, "") || "/";
-  const isGatedProductRoute =
-    normalizedPath === "/learn" ||
-    normalizedPath === "/hire" ||
-    normalizedPath === "/design";
+  const normalizedPath = normalizePathname(location.pathname);
+  const isGatedProductRoute = isGatedProductPath(normalizedPath);
   const isWorkspaceRoute = false;
   const isDashboardRoute = normalizedPath === "/";
   const isAgentRoute = normalizedPath === "/agent";
@@ -85,16 +112,11 @@ export default function App() {
     isBrainRoute ||
     isSettingsRoute ||
     isGatedProductRoute;
-  const isPublicWebsiteRoute =
-    PUBLIC_WEBSITE_PATHS.has(normalizedPath) ||
-    PUBLIC_WEBSITE_PREFIXES.some((prefix) => normalizedPath.startsWith(prefix));
-  const isAnonymousAllowedRoute =
-    isPublicWebsiteRoute ||
-    isGatedProductRoute ||
-    normalizedPath === "/spaces" ||
-    normalizedPath.startsWith("/spaces/") ||
-    normalizedPath === "/pricing/success";
-  const hasExplicitAuthIntent = new URLSearchParams(location.search).has("auth");
+  const isPublicWebsiteRoute = isPublicWebsitePath(normalizedPath);
+  const isAnonymousAllowedRoute = isAnonymousAllowedPath(normalizedPath);
+  const searchParams = new URLSearchParams(location.search);
+  const hasExplicitAuthIntent =
+    searchParams.has("auth") || Boolean(getSafeNextPath(searchParams.get("next")));
   
   // Auth state from Zustand
   const { token, user, isHydrating, setToken, setUser, setHydrating, logout } = useAuthStore();

@@ -21,7 +21,7 @@ import { SkeletonSpaceList } from "./ui/skeleton";
 import { toast } from "sonner";
 import type { PinnedFile, Space, Thread } from "@/types";
 import { MemoryViewer } from "./memory/MemoryViewer";
-import { spaceKeys, useSpaces } from "@/queries/useSpaces";
+import { SpacesLoadError, spaceKeys, useSpaces } from "@/queries/useSpaces";
 import { useEntitlements, useZakiSessions, zakiSessionKeys } from "@/queries";
 import {
   hasActiveSubscription,
@@ -546,6 +546,15 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
 
   useEffect(() => {
     if (!spacesQueryError) return;
+    if (
+      spacesQueryError instanceof SpacesLoadError &&
+      spacesQueryError.code?.startsWith("spaces_")
+    ) {
+      setSpacesError(
+        `${spacesQueryError.message || "Spaces is temporarily unavailable. Please try again."} Agent and Brain are still available.`
+      );
+      return;
+    }
     setSpacesError("Unable to load workspaces. Check your session.");
   }, [spacesQueryError]);
   

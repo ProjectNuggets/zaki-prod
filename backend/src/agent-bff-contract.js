@@ -17,24 +17,25 @@
 //                   approval is safe; non-idempotent routes (compact, mode,
 //                   cancel, ...) must leave this false.
 // - softEmptyOnMissing:
-//                   ONLY for the three READ-ONLY agent-panel reads
-//                   (plan / todos / context). The nullalis engine does not
-//                   implement /plan or /todos yet (deferred post-launch) so it
-//                   mis-parses those reads and 400s with `invalid_session_key`;
-//                   /context legitimately 404s when the thread has no active
-//                   run. Surfacing those raw upstream errors leaks
-//                     "Run plan unavailable: invalid_session_key"
-//                     "Checklist unavailable: invalid_session_key"
-//                   into the inspector panel. When set, the proxy converts a
-//                   `400 invalid_session_key` or any `404` into HTTP 200 + this
-//                   idle payload (a clean "no active run" shape the FE already
-//                   renders). Every OTHER status/body (200, 403
+//                   ONLY for opted-in read routes where missing upstream state is
+//                   a valid empty state. Agent panel reads use it for idle
+//                   sessions (detail / plan / todos / context / history); Brain
+//                   self-anchor uses it for a cold corpus. When set, the proxy
+//                   converts a `400 invalid_session_key` or any `404` into HTTP
+//                   200 + this empty payload. Every OTHER status/body (200, 403
 //                   session_not_owned, 500, 503, other 400s) passes through
 //                   UNCHANGED. Mutating routes never set this.
 
 // Idle ("no active run") payloads, shaped to exactly what the frontend treats
 // as empty. Kept as named exports so the proxy, the route table, and the
 // contract test all reference a single source of truth.
+//   detail  — src/stores/zakiSessionUiStore.ts maps these fields to "not live"
+//             with no pending approvals for a fresh session.
+export const AGENT_SESSION_IDLE_DETAIL_PAYLOAD = Object.freeze({
+  live: false,
+  pending_approval_count: 0,
+  pending_approvals: [],
+});
 //   plan    — src/lib/api.ts AgentSessionPlanResponse; AgentInspectorRail derives
 //             `activePlan = data.active ? data.plan : null`, so active:false →
 //             "inactive" empty state.
@@ -52,16 +53,19 @@ export const AGENT_SESSION_IDLE_CONTEXT_PAYLOAD = Object.freeze({
   code: "no_active_session",
   report: null,
 });
+//   history — src/lib/api.ts fetchAgentSessionHistory; ChatArea treats an empty
+//             messages array as "nothing to reconcile" for a fresh thread.
+export const AGENT_SESSION_IDLE_HISTORY_PAYLOAD = Object.freeze({ messages: [] });
 
 export const AGENT_SESSION_BFF_ROUTES = Object.freeze([
-  { method: "get",    path: "/api/agent/sessions/:sessionKey",          upstreamSuffix: "",         json: false },
+  { method: "get",    path: "/api/agent/sessions/:sessionKey",          upstreamSuffix: "",         json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_DETAIL_PAYLOAD },
   { method: "post",   path: "/api/agent/sessions/:sessionKey/compact",  upstreamSuffix: "/compact", json: false },
   { method: "get",    path: "/api/agent/sessions/:sessionKey/context",  upstreamSuffix: "/context", json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_CONTEXT_PAYLOAD },
   { method: "get",    path: "/api/agent/sessions/:sessionKey/todos",    upstreamSuffix: "/todos",   json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_TODOS_PAYLOAD },
   { method: "patch",  path: "/api/agent/sessions/:sessionKey/todos/:listId/items/:itemId", upstreamSuffix: "/todos/:listId/items/:itemId", json: true },
   { method: "get",    path: "/api/agent/sessions/:sessionKey/plan",     upstreamSuffix: "/plan",    json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_PLAN_PAYLOAD },
   { method: "get",    path: "/api/agent/sessions/:sessionKey/export",   upstreamSuffix: "/export",  json: false },
-  { method: "get",    path: "/api/agent/sessions/:sessionKey/history",  upstreamSuffix: "/history", json: false },
+  { method: "get",    path: "/api/agent/sessions/:sessionKey/history",  upstreamSuffix: "/history", json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_HISTORY_PAYLOAD },
   { method: "post",   path: "/api/agent/sessions/:sessionKey/mode",     upstreamSuffix: "/mode",    json: true  },
   { method: "post",   path: "/api/agent/sessions/:sessionKey/approve",  upstreamSuffix: "/approve", json: true,  retry: true },
   { method: "post",   path: "/api/agent/sessions/:sessionKey/cancel",   upstreamSuffix: "/cancel",  json: false },
@@ -432,7 +436,7 @@ export function registerBotBffAliases(app, handlers) {
   app.get("/v1/me/bot/usage", requireAgentContext, usageHandler);
 }
 
-// Decides whether an upstream response on a soft-empty read (plan/todos/context)
+// Decides whether an upstream response on a soft-empty read
 // should be collapsed into an HTTP 200 + idle payload. Returns
 //   { soft: true, payload }  → reply 200 with `payload` (FE renders "no run")
 //   { soft: false }          → forward the upstream status/body verbatim

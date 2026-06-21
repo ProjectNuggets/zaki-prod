@@ -65,4 +65,16 @@ describe("Spaces continuity contract", () => {
       "workspaceTarget?.created || workspaceTarget?.repaired"
     );
   });
+
+  test("workspace list normalizes adapter outages instead of returning an opaque 500", () => {
+    const source = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
+    const listHandlerSource = source.slice(
+      source.indexOf("const listWorkspacesHandler = async"),
+      source.indexOf("app.get(\"/workspaces\"")
+    );
+
+    expect(listHandlerSource).toContain("normalizeSpacesProvisioningError");
+    expect(listHandlerSource).toContain("SPACES_PROVISIONING_ERROR_CODES.UPSTREAM_UNAVAILABLE");
+    expect(listHandlerSource).toMatch(/try\s*\{\s*upstream = await fetchTypWorkspaces/);
+  });
 });

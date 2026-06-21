@@ -1,4 +1,7 @@
 import { describe, expect, it, jest } from "@jest/globals";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   AGENT_CHANNEL_BINDING_BFF_ROUTES,
   AGENT_CONTROL_CHANNEL_IDS,
@@ -8,6 +11,8 @@ import {
   AGENT_SETTINGS_CONTROL_PLANE_ROUTES,
   AGENT_SESSION_BFF_ROUTES,
   AGENT_SESSION_IDLE_CONTEXT_PAYLOAD,
+  AGENT_SESSION_IDLE_DETAIL_PAYLOAD,
+  AGENT_SESSION_IDLE_HISTORY_PAYLOAD,
   AGENT_SESSION_IDLE_PLAN_PAYLOAD,
   AGENT_SESSION_IDLE_TODOS_PAYLOAD,
   BOT_BFF_ALIAS_ROUTES,
@@ -25,6 +30,8 @@ import {
   resolveSoftEmptyAgentResponse,
   sanitizeAgentChannelBindingPayload,
 } from "./agent-bff-contract.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 describe("agent BOT BFF contract", () => {
   it("defines the reviewed Agent runtime facade surface", () => {
@@ -326,18 +333,61 @@ describe("agent BOT BFF contract", () => {
 
   it("defines the agent session BFF proxy surface (matches src/lib/api.ts)", () => {
     expect(AGENT_SESSION_BFF_ROUTES).toEqual([
-      { method: "get",    path: "/api/agent/sessions/:sessionKey",          upstreamSuffix: "",         json: false },
+      { method: "get",    path: "/api/agent/sessions/:sessionKey",          upstreamSuffix: "",         json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_DETAIL_PAYLOAD },
       { method: "post",   path: "/api/agent/sessions/:sessionKey/compact",  upstreamSuffix: "/compact", json: false },
       { method: "get",    path: "/api/agent/sessions/:sessionKey/context",  upstreamSuffix: "/context", json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_CONTEXT_PAYLOAD },
       { method: "get",    path: "/api/agent/sessions/:sessionKey/todos",    upstreamSuffix: "/todos",   json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_TODOS_PAYLOAD },
       { method: "patch",  path: "/api/agent/sessions/:sessionKey/todos/:listId/items/:itemId", upstreamSuffix: "/todos/:listId/items/:itemId", json: true },
       { method: "get",    path: "/api/agent/sessions/:sessionKey/plan",     upstreamSuffix: "/plan",    json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_PLAN_PAYLOAD },
       { method: "get",    path: "/api/agent/sessions/:sessionKey/export",   upstreamSuffix: "/export",  json: false },
-      { method: "get",    path: "/api/agent/sessions/:sessionKey/history",  upstreamSuffix: "/history", json: false },
+      { method: "get",    path: "/api/agent/sessions/:sessionKey/history",  upstreamSuffix: "/history", json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_HISTORY_PAYLOAD },
       { method: "post",   path: "/api/agent/sessions/:sessionKey/mode",     upstreamSuffix: "/mode",    json: true  },
       { method: "post",   path: "/api/agent/sessions/:sessionKey/approve",  upstreamSuffix: "/approve", json: true,  retry: true },
       { method: "post",   path: "/api/agent/sessions/:sessionKey/cancel",   upstreamSuffix: "/cancel",  json: false },
     ]);
+  });
+
+  it("soft-empties the explicit Agent session detail handler on missing sessions", () => {
+    const source = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
+    const detailHandlerSource = source.slice(
+      source.indexOf("async function agentSessionDetailHandler"),
+      source.indexOf("app.get(\"/api/agent/history\"")
+    );
+
+    expect(detailHandlerSource).toContain("AGENT_SESSION_IDLE_DETAIL_PAYLOAD");
+    expect(detailHandlerSource).toContain("resolveSoftEmptyAgentResponse");
+    expect(detailHandlerSource).toContain("await upstream.text()");
+    expect(detailHandlerSource).not.toContain("await upstream.json()");
+  });
+
+  it("runs soft-empty normalization before JSON response buffering", () => {
+    const source = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
+    const proxySource = source.slice(
+      source.indexOf("async function proxyNullclawRequest"),
+      source.indexOf("const makeAgentUserProxyHandler")
+    );
+
+    expect(proxySource.indexOf("options.softEmptyOnMissing")).toBeGreaterThanOrEqual(0);
+    expect(proxySource.indexOf('options.responseMode === "json"')).toBeGreaterThanOrEqual(0);
+    expect(proxySource.indexOf("options.softEmptyOnMissing")).toBeLessThan(
+      proxySource.indexOf('options.responseMode === "json"')
+    );
+  });
+
+  it("soft-empties Brain self-anchor for cold corpus accounts", () => {
+    const source = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
+    const brainSource = source.slice(
+      source.indexOf("const NULLCLAW_BRAIN_JSON_PROXY_OPTIONS"),
+      source.indexOf('app.post(\n  "/api/agent/brain/compose"')
+    );
+    const brainMeRouteSource = source.slice(
+      source.indexOf('"/api/agent/brain/me"'),
+      source.indexOf('app.post(\n  "/api/agent/brain/compose"')
+    );
+
+    expect(brainSource).toContain("const NULLCLAW_BRAIN_ME_JSON_PROXY_OPTIONS");
+    expect(brainSource).toContain("softEmptyOnMissing: { memory: null }");
+    expect(brainMeRouteSource).toContain("NULLCLAW_BRAIN_ME_JSON_PROXY_OPTIONS");
   });
 
   it("enables connection-class retry ONLY on the idempotent /approve route", () => {
@@ -587,7 +637,7 @@ describe("agent BOT BFF contract", () => {
       ).toEqual({});
       expect(
         proxyHandlerFor("get", "/api/agent/sessions/:sessionKey").proxyOptions
-      ).toEqual({});
+      ).toEqual({ softEmptyOnMissing: AGENT_SESSION_IDLE_DETAIL_PAYLOAD });
     });
   });
 
@@ -616,15 +666,15 @@ describe("agent BOT BFF contract", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Agent-panel idle-state normalization (plan / todos / context)
+  // Agent-panel idle-state normalization (detail / plan / todos / context / history)
   // ---------------------------------------------------------------------------
   // The nullalis engine does not implement /plan or /todos yet (deferred
   // post-launch) so it mis-parses those reads and 400s with
   // `invalid_session_key`; /context legitimately 404s when the thread has no
-  // active run. Surfacing those raw errors leaks
+  // active run, and /history 404s before the first turn exists. Surfacing those raw errors leaks
   //   "Checklist unavailable: invalid_session_key"
   //   "Run plan unavailable: invalid_session_key"
-  // into the inspector panel. For these three READ-ONLY reads the BFF converts
+  // into the inspector panel. For these idle-safe READ-ONLY reads the BFF converts
   // a `400 invalid_session_key` or any `404` into HTTP 200 + a clean idle
   // payload the FE renders as "no active run". Everything else passes through.
   describe("agent-panel idle-state normalization", () => {
@@ -640,13 +690,23 @@ describe("agent BOT BFF contract", () => {
         code: "no_active_session",
         report: null,
       });
+      expect(AGENT_SESSION_IDLE_DETAIL_PAYLOAD).toEqual({
+        live: false,
+        pending_approval_count: 0,
+        pending_approvals: [],
+      });
+      // src/lib/api.ts: fetchAgentSessionHistory → empty messages means a fresh thread.
+      expect(AGENT_SESSION_IDLE_HISTORY_PAYLOAD).toEqual({ messages: [] });
     });
 
-    it("opts only plan/todos/context reads into softEmptyOnMissing with the right payload", () => {
+    it("opts only idle-safe reads into softEmptyOnMissing with the right payload", () => {
       const byPath = Object.fromEntries(
         AGENT_SESSION_BFF_ROUTES.map((route) => [route.path, route])
       );
 
+      expect(byPath["/api/agent/sessions/:sessionKey"].softEmptyOnMissing).toEqual(
+        AGENT_SESSION_IDLE_DETAIL_PAYLOAD
+      );
       expect(byPath["/api/agent/sessions/:sessionKey/plan"].softEmptyOnMissing).toEqual(
         AGENT_SESSION_IDLE_PLAN_PAYLOAD
       );
@@ -656,6 +716,9 @@ describe("agent BOT BFF contract", () => {
       expect(byPath["/api/agent/sessions/:sessionKey/context"].softEmptyOnMissing).toEqual(
         AGENT_SESSION_IDLE_CONTEXT_PAYLOAD
       );
+      expect(byPath["/api/agent/sessions/:sessionKey/history"].softEmptyOnMissing).toEqual(
+        AGENT_SESSION_IDLE_HISTORY_PAYLOAD
+      );
 
       // Every other route — including the mutating ones and the other reads —
       // must NOT opt in, so their upstream status/body is forwarded verbatim.
@@ -663,7 +726,9 @@ describe("agent BOT BFF contract", () => {
         if (
           route.path === "/api/agent/sessions/:sessionKey/plan" ||
           route.path === "/api/agent/sessions/:sessionKey/todos" ||
-          route.path === "/api/agent/sessions/:sessionKey/context"
+          route.path === "/api/agent/sessions/:sessionKey/context" ||
+          route.path === "/api/agent/sessions/:sessionKey/history" ||
+          route.path === "/api/agent/sessions/:sessionKey"
         ) {
           continue;
         }
@@ -695,6 +760,9 @@ describe("agent BOT BFF contract", () => {
         return call[call.length - 1].proxyOptions;
       };
 
+      expect(proxyOptionsFor("get", "/api/agent/sessions/:sessionKey")).toEqual({
+        softEmptyOnMissing: AGENT_SESSION_IDLE_DETAIL_PAYLOAD,
+      });
       expect(proxyOptionsFor("get", "/api/agent/sessions/:sessionKey/plan")).toEqual({
         softEmptyOnMissing: AGENT_SESSION_IDLE_PLAN_PAYLOAD,
       });
@@ -704,11 +772,12 @@ describe("agent BOT BFF contract", () => {
       expect(proxyOptionsFor("get", "/api/agent/sessions/:sessionKey/context")).toEqual({
         softEmptyOnMissing: AGENT_SESSION_IDLE_CONTEXT_PAYLOAD,
       });
+      expect(proxyOptionsFor("get", "/api/agent/sessions/:sessionKey/history")).toEqual({
+        softEmptyOnMissing: AGENT_SESSION_IDLE_HISTORY_PAYLOAD,
+      });
 
       // The mutating + non-opted reads carry no soft-empty option.
-      expect(proxyOptionsFor("get", "/api/agent/sessions/:sessionKey")).toEqual({});
       expect(proxyOptionsFor("get", "/api/agent/sessions/:sessionKey/export")).toEqual({});
-      expect(proxyOptionsFor("get", "/api/agent/sessions/:sessionKey/history")).toEqual({});
       expect(proxyOptionsFor("post", "/api/agent/sessions/:sessionKey/compact")).toEqual({});
       expect(proxyOptionsFor("post", "/api/agent/sessions/:sessionKey/mode")).toEqual({});
       expect(proxyOptionsFor("post", "/api/agent/sessions/:sessionKey/cancel")).toEqual({});

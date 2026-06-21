@@ -14,6 +14,18 @@ import {
   ZAKI_BOT_LABEL,
 } from "@/lib/zakiBot";
 
+export class SpacesLoadError extends Error {
+  code: string | null;
+  status: number;
+
+  constructor(message: string, options: { code?: string | null; status?: number } = {}) {
+    super(message);
+    this.name = "SpacesLoadError";
+    this.code = options.code ?? null;
+    this.status = options.status ?? 0;
+  }
+}
+
 // Keys
 export const spaceKeys = {
   all: ["spaces"] as const,
@@ -56,10 +68,22 @@ function normalizeThreadLabel(label?: string) {
 }
 
 // Fetchers
-async function fetchSpaces(): Promise<Space[]> {
+export async function fetchSpaces(): Promise<Space[]> {
   const response = await apiRequest("/workspaces");
   if (!response.ok) {
-    throw new Error("Failed to load workspaces");
+    const data = await response.json().catch(() => ({})) as {
+      error?: string;
+      message?: string;
+      code?: string;
+      status?: number;
+    };
+    throw new SpacesLoadError(
+      data.error || data.message || "Failed to load workspaces",
+      {
+        code: data.code || null,
+        status: data.status || response.status,
+      }
+    );
   }
   
   const data = await response.json() as { workspaces?: WorkspaceResponse[] };

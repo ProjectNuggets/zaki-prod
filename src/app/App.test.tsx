@@ -115,6 +115,35 @@ describe("App route hydration", () => {
     expect(screen.queryByText("public home")).not.toBeInTheDocument();
   });
 
+  it.each(["/?next=%2Fagent", "/?next=%2Fspaces"])(
+    "keeps safe next handoff URLs on the auth screen at %s",
+    async (path) => {
+      fetchMock.mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: async () => ({}),
+      } as Response);
+
+      renderAppAt(path);
+
+      expect(await screen.findByRole("button", { name: /sign in/i })).toBeInTheDocument();
+      expect(screen.queryByText("public home")).not.toBeInTheDocument();
+    }
+  );
+
+  it("does not treat a root next value as an auth handoff", async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({}),
+    } as Response);
+
+    renderAppAt("/?next=%2F");
+
+    expect(await screen.findByText("public home")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /sign in/i })).not.toBeInTheDocument();
+  });
+
   it.each([
     ["/learn", "learn workspace"],
     ["/hire", "hire workspace"],

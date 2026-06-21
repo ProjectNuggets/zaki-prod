@@ -104,6 +104,10 @@ const COMING_SOON_PRODUCT_IDS = new Set<AnonymousWorkProductId>([
   "learning",
   "hire",
 ]);
+const AUTH_REQUIRED_PRODUCT_IDS = new Set<AnonymousWorkProductId>([
+  "agent",
+  "brain",
+]);
 
 const COMMAND_TASK_KIND: Record<AnonymousWorkProductId, string> = {
   agent: "plan",
@@ -125,6 +129,10 @@ const COMMAND_PRODUCT_ICON: Record<AnonymousWorkProductId, LucideIcon> = {
 
 function isComingSoonProduct(productId: AnonymousWorkProductId) {
   return COMING_SOON_PRODUCT_IDS.has(productId);
+}
+
+function isAuthRequiredProduct(productId: AnonymousWorkProductId) {
+  return AUTH_REQUIRED_PRODUCT_IDS.has(productId);
 }
 
 function formatReset(value?: string | null) {
@@ -215,16 +223,27 @@ function getCommandProductName(t: TranslateFn, productId: AnonymousWorkProductId
   });
 }
 
-function getCommandProductHint(t: TranslateFn, productId: AnonymousWorkProductId) {
+function getCommandProductHint(
+  t: TranslateFn,
+  productId: AnonymousWorkProductId,
+  signedIn: boolean
+) {
   const fallback: Record<AnonymousWorkProductId, string> = {
-    agent: "Turn a goal into a plan ZAKI can carry forward. Tools and browser control require sign-in.",
-    brain: "Paste notes, links, or raw context and see the shape of what ZAKI would remember.",
+    agent: signedIn
+      ? "Turn a goal into a plan ZAKI can carry forward with tools, files, browser control, and memory."
+      : "Sign in to use Agent with tools, files, browser control, and durable memory.",
+    brain: signedIn
+      ? "Open your memory graph to inspect, connect, and refine saved context."
+      : "Sign in to open Brain and save or read your memory graph.",
     learning: "Learn is coming soon. For now, use Chat for quick study help or Agent to plan a learning path.",
     design: "Design is coming soon. For now, use Chat to shape a brief or Agent to plan the design work.",
     hire: "Career is gated. For now, use Chat to improve CV copy or Agent to plan your next move.",
     spaces: "Ask now, draft quickly, or test the platform without setting anything up.",
   };
-  return t(`zakiDashboard.command.hints.${productId}`, {
+  const key = isAuthRequiredProduct(productId)
+    ? `zakiDashboard.command.hints.${productId}.${signedIn ? "signed" : "guest"}`
+    : `zakiDashboard.command.hints.${productId}`;
+  return t(key, {
     defaultValue: fallback[productId],
   });
 }
@@ -250,22 +269,34 @@ function getCommandProductVerb(
   );
 }
 
-function getCommandProductDetails(t: TranslateFn, productId: AnonymousWorkProductId) {
+function getCommandProductDetails(
+  t: TranslateFn,
+  productId: AnonymousWorkProductId,
+  signedIn: boolean
+) {
   const fallback: Record<
     AnonymousWorkProductId,
     { bestFor: string; memory: string; truth: string; accessTone: V2BadgeTone }
   > = {
     agent: {
       bestFor: "Turning a messy goal into a concrete plan, then executing when you allow it.",
-      memory: "Personal Brain after sign-in.",
-      truth: "Guest Agent is a planning preview. External tools, files, browser control, and durable memory require sign-in.",
-      accessTone: "accent",
+      memory: signedIn
+        ? "Personal Brain, files, browser lane, and session history."
+        : "Account-scoped after sign-in.",
+      truth: signedIn
+        ? "Agent is live for signed-in accounts with usage and approval controls."
+        : "Agent requires sign-in. Tools, files, browser control, and durable memory are account-scoped.",
+      accessTone: signedIn ? "success" : "accent",
     },
     brain: {
       bestFor: "Making notes, preferences, decisions, and project facts visible instead of hidden in chat.",
-      memory: "Browser-only preview; saved graph after sign-in.",
-      truth: "Brain can preview structure from pasted text. Saving durable memory requires an account.",
-      accessTone: "accent",
+      memory: signedIn
+        ? "Saved personal memory graph."
+        : "Account memory after sign-in.",
+      truth: signedIn
+        ? "Brain is live for signed-in accounts as the memory control plane."
+        : "Brain requires sign-in because the graph is account memory.",
+      accessTone: signedIn ? "success" : "accent",
     },
     learning: {
       bestFor: "Study plans, source walkthroughs, questions, weak spots, and guided practice.",
@@ -297,12 +328,22 @@ function getCommandProductDetails(t: TranslateFn, productId: AnonymousWorkProduc
     bestFor: t(`zakiDashboard.command.details.${productId}.bestFor`, {
       defaultValue: detail.bestFor,
     }),
-    memory: t(`zakiDashboard.command.details.${productId}.memory`, {
-      defaultValue: detail.memory,
-    }),
-    truth: t(`zakiDashboard.command.details.${productId}.truth`, {
-      defaultValue: detail.truth,
-    }),
+    memory: t(
+      isAuthRequiredProduct(productId)
+        ? `zakiDashboard.command.details.${productId}.memory.${signedIn ? "signed" : "guest"}`
+        : `zakiDashboard.command.details.${productId}.memory`,
+      {
+        defaultValue: detail.memory,
+      }
+    ),
+    truth: t(
+      isAuthRequiredProduct(productId)
+        ? `zakiDashboard.command.details.${productId}.truth.${signedIn ? "signed" : "guest"}`
+        : `zakiDashboard.command.details.${productId}.truth`,
+      {
+        defaultValue: detail.truth,
+      }
+    ),
     accessTone: detail.accessTone,
   };
 }
@@ -313,7 +354,8 @@ function getCommandProductRoute(productId: AnonymousWorkProductId) {
 
 function getCommandProductStateMarker(
   t: TranslateFn,
-  productId: AnonymousWorkProductId
+  productId: AnonymousWorkProductId,
+  signedIn: boolean
 ) {
   if (isComingSoonProduct(productId)) {
     return t("zakiDashboard.command.markers.comingSoon", { defaultValue: "Coming soon" });
@@ -321,7 +363,10 @@ function getCommandProductStateMarker(
   if (productId === "spaces") {
     return t("zakiDashboard.command.markers.free", { defaultValue: "Free" });
   }
-  return t("zakiDashboard.command.markers.preview", { defaultValue: "Preview" });
+  if (isAuthRequiredProduct(productId) && !signedIn) {
+    return t("zakiDashboard.command.markers.signIn", { defaultValue: "Sign in" });
+  }
+  return t("zakiDashboard.command.markers.live", { defaultValue: "Live" });
 }
 
 function getCommandSubmitLabel(
@@ -341,10 +386,10 @@ function getCommandSubmitLabel(
       defaultValue: "Start chat",
     });
   }
-  if (!signedIn) {
-    return t("zakiDashboard.command.submitPreviewSave", {
+  if (isAuthRequiredProduct(productId) && !signedIn) {
+    return t("zakiDashboard.command.submitSignIn", {
       product: productName,
-      defaultValue: "Preview first",
+      defaultValue: "Sign in for {{product}}",
     });
   }
   return t("zakiDashboard.command.submitOpen", {
@@ -404,11 +449,13 @@ function ProductTaskStrip({
   t,
   productOrder,
   selectedProductId,
+  signedIn,
   onSelect,
 }: {
   t: TranslateFn;
   productOrder: AnonymousWorkProductId[];
   selectedProductId: AnonymousWorkProductId;
+  signedIn: boolean;
   onSelect: (productId: AnonymousWorkProductId) => void;
 }) {
   return (
@@ -441,7 +488,7 @@ function ProductTaskStrip({
             <Icon className="size-4" aria-hidden="true" />
             <span className="zaki-dashboard-command__product-name">{productName}</span>
             <span className="zaki-dashboard-command__product-marker">
-              {getCommandProductStateMarker(t, productId)}
+              {getCommandProductStateMarker(t, productId, signedIn)}
             </span>
           </button>
         );
@@ -519,13 +566,15 @@ function CreditMeter({
 function ProductHintPanel({
   t,
   productId,
+  signedIn,
 }: {
   t: TranslateFn;
   productId: AnonymousWorkProductId;
+  signedIn: boolean;
 }) {
   const Icon = COMMAND_PRODUCT_ICON[productId];
   const productName = getCommandProductName(t, productId);
-  const details = getCommandProductDetails(t, productId);
+  const details = getCommandProductDetails(t, productId, signedIn);
   return (
     <section
       className="zaki-dashboard-command__hint"
@@ -541,11 +590,11 @@ function ProductHintPanel({
           <h2>{productName}</h2>
         </div>
         <V2Badge tone={details.accessTone}>
-          {getCommandProductStateMarker(t, productId)}
+          {getCommandProductStateMarker(t, productId, signedIn)}
         </V2Badge>
       </div>
       <div className="zaki-dashboard-command__hint-body">
-        <p>{getCommandProductHint(t, productId)}</p>
+        <p>{getCommandProductHint(t, productId, signedIn)}</p>
         <dl>
           <div>
             <dt>{t("zakiDashboard.command.bestFor", { defaultValue: "Best for" })}</dt>
@@ -965,6 +1014,8 @@ export function ZakiDashboard({
   const selectedCommandRoute = getCommandProductRoute(selectedProductId);
   const selectedCommandPrompt = commandText.trim();
   const selectedProductComingSoon = isComingSoonProduct(selectedProductId);
+  const selectedProductAuthRequired = isAuthRequiredProduct(selectedProductId);
+  const selectedProductRequiresAuthBeforeRun = !token && selectedProductAuthRequired;
   const commandProductOrder = token
     ? SIGNED_IN_COMMAND_PRODUCT_ORDER
     : ANONYMOUS_COMMAND_PRODUCT_ORDER;
@@ -980,7 +1031,7 @@ export function ZakiDashboard({
     selectedCommandPrompt.length > 0
       ? selectedTitleSignal
       : titleSignalWords[titleSignalIndex % titleSignalWords.length] || selectedTitleSignal;
-  const showSaveWorkCta = !token && !selectedProductComingSoon && (
+  const showSaveWorkCta = !token && !selectedProductComingSoon && !selectedProductAuthRequired && (
     selectedCommandPrompt.length > 0 || anonymousWorkItems.length > 0
   );
   const agentCapacityBlocked =
@@ -988,9 +1039,15 @@ export function ZakiDashboard({
   const creditsExhausted =
     !meterLoading && typeof weeklyStats.remaining === "number" && weeklyStats.remaining <= 0;
   const commandBlockedByUsage =
-    selectedProductId === "agent" ? agentCapacityBlocked : creditsExhausted;
+    selectedProductRequiresAuthBeforeRun
+      ? false
+      : selectedProductId === "agent"
+        ? agentCapacityBlocked
+        : creditsExhausted;
   const isCommandSubmitDisabled =
-    !isOnline || selectedCommandPrompt.length === 0 || meterLoading || commandBlockedByUsage;
+    !isOnline ||
+    selectedCommandPrompt.length === 0 ||
+    (!selectedProductRequiresAuthBeforeRun && (meterLoading || commandBlockedByUsage));
   const commandHelperText = selectedProductComingSoon
     ? t("zakiDashboard.command.comingSoonHelper", {
         product: selectedCommandName,
@@ -999,6 +1056,16 @@ export function ZakiDashboard({
     : !isOnline
       ? t("zakiDashboard.command.offlineHelper", {
           defaultValue: "You are offline. We kept this draft here and will send when you reconnect.",
+        })
+    : selectedProductRequiresAuthBeforeRun && selectedCommandPrompt
+      ? t("zakiDashboard.command.authRequiredPromptHelper", {
+          product: selectedCommandName,
+          defaultValue: "Sign in to continue in {{product}}. We'll keep this prompt through authentication.",
+        })
+    : selectedProductRequiresAuthBeforeRun
+      ? t("zakiDashboard.command.authRequiredEmptyHelper", {
+          product: selectedCommandName,
+          defaultValue: "Sign in to use {{product}}.",
         })
     : selectedCommandPrompt && agentCapacityBlocked && agentAvailability?.constraint === "rolling"
       ? t("zakiDashboard.command.capacityWindowLow", {
@@ -1186,6 +1253,11 @@ export function ZakiDashboard({
         return;
       }
 
+      if (!token && isAuthRequiredProduct(selectedProductId)) {
+        navigate(`/?auth=login&next=${encodeURIComponent(selectedCommandRoute)}`);
+        return;
+      }
+
       if (!token) {
         navigate(`/?auth=signup&next=${encodeURIComponent(selectedCommandRoute)}`);
         return;
@@ -1216,6 +1288,15 @@ export function ZakiDashboard({
       setSelectedProductId(item.productId);
       setCommandText(item.prompt);
       writeDashboardIntent(item.productId, item.prompt, item.id);
+      if (item.productId !== "spaces") {
+        const route = item.route || getCommandProductRoute(item.productId);
+        if (!token && isAuthRequiredProduct(item.productId)) {
+          navigate(`/?auth=login&next=${encodeURIComponent(route)}`);
+          return;
+        }
+        navigate(route);
+        return;
+      }
       if (item.productId === "spaces" && item.route.startsWith("/spaces")) {
         if (token) {
           try {
@@ -1264,7 +1345,8 @@ export function ZakiDashboard({
       if (prompt) {
         writeDashboardIntent(productId, prompt, item?.id ?? null);
       }
-      navigate(`/?auth=signup&next=${encodeURIComponent(getCommandProductRoute(productId))}`);
+      const mode = isAuthRequiredProduct(productId) ? "login" : "signup";
+      navigate(`/?auth=${mode}&next=${encodeURIComponent(getCommandProductRoute(productId))}`);
     },
     [commandText, navigate, selectedProductId, writeDashboardIntent]
   );
@@ -1488,12 +1570,14 @@ export function ZakiDashboard({
               t={t}
               productOrder={commandProductOrder}
               selectedProductId={selectedProductId}
+              signedIn={Boolean(token)}
               onSelect={setSelectedProductId}
             />
 
             <ProductHintPanel
               t={t}
               productId={selectedProductId}
+              signedIn={Boolean(token)}
             />
 
             <div className="zaki-dashboard-command__composer">

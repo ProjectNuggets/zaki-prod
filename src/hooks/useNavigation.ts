@@ -1,6 +1,10 @@
 import { useNavigate } from 'react-router-dom';
-import { useNavigationStore } from '@/stores';
+import { useAuthStore, useNavigationStore } from '@/stores';
 import { ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID } from '@/lib/zakiBot';
+
+function buildLoginRoute(returnTo: string) {
+  return `/?auth=login&next=${encodeURIComponent(returnTo)}`;
+}
 
 /**
  * Navigation hook that syncs Zustand store with React Router
@@ -11,6 +15,7 @@ import { ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID } from '@/lib/zakiBot';
 export function useNavigation() {
   const navigate = useNavigate();
   const store = useNavigationStore();
+  const token = useAuthStore((state) => state.token);
 
   const goHome = () => {
     store.goHome();
@@ -43,7 +48,7 @@ export function useNavigation() {
         threadId && threadId !== ZAKI_BOT_THREAD_ID
           ? `/agent?thread=${encodeURIComponent(threadId)}`
           : "/agent";
-      navigate(agentPath);
+      navigate(token ? agentPath : buildLoginRoute(agentPath));
       return;
     }
     navigate(`/spaces/${spaceId}/threads/${threadId}`);
@@ -51,16 +56,17 @@ export function useNavigation() {
 
   const goToZakiBot = () => {
     store.goToThread(ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID);
-    navigate("/agent");
+    navigate(token ? "/agent" : buildLoginRoute("/agent"));
   };
 
   const goToZakiSession = (sessionKey: string, threadId?: string | null) => {
     store.goToZakiSession(sessionKey, threadId ?? null);
     if (threadId) {
-      navigate(`/agent?thread=${encodeURIComponent(threadId)}`);
+      const agentPath = `/agent?thread=${encodeURIComponent(threadId)}`;
+      navigate(token ? agentPath : buildLoginRoute(agentPath));
       return;
     }
-    navigate("/agent");
+    navigate(token ? "/agent" : buildLoginRoute("/agent"));
   };
 
   const clearThread = () => {

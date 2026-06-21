@@ -1734,7 +1734,7 @@ describe("ChatArea Component", () => {
       PENDING_INTENT_KEY,
       JSON.stringify({
         productId: "agent",
-        taskKind: "preview",
+        taskKind: "plan",
         prompt: "Plan the launch checklist",
         returnTo: "/agent",
         createdAt: new Date().toISOString(),
@@ -1795,7 +1795,7 @@ describe("ChatArea Component", () => {
     expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
   });
 
-  it("captures anonymous Agent preview work before auth-gated provisioning stops the send", async () => {
+  it("captures anonymous Agent plan work before auth-gated provisioning stops the send", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
@@ -1804,15 +1804,15 @@ describe("ChatArea Component", () => {
     await renderChatAreaAndWaitForEffects();
 
     fireEvent.change(screen.getByRole("combobox"), {
-      target: { value: "Research launch tasks as an Agent preview" },
+      target: { value: "Research launch tasks as an Agent plan" },
     });
     fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
 
     const ledger = JSON.parse(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY) || "{}");
     expect(ledger.items?.[0]).toMatchObject({
       productId: "agent",
-      taskKind: "preview",
-      prompt: "Research launch tasks as an Agent preview",
+      taskKind: "plan",
+      prompt: "Research launch tasks as an Agent plan",
       route: "/agent",
       threadId: "main",
       status: "draft",

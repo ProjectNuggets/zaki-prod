@@ -4,6 +4,7 @@ import {
   buildSpacesProvisioningErrorPayload,
   createSpacesTypProvisioner,
   isAnonymousSpacesRouteTarget,
+  normalizeSpacesProvisioningError,
 } from "./spaces-typ-provisioning.js";
 
 function jsonResponse(body, status = 200) {
@@ -39,6 +40,21 @@ function makeProvisioner(overrides = {}) {
 }
 
 describe("spaces TYP provisioning", () => {
+  test("maps unavailable adapter failures to 503", () => {
+    const normalized = normalizeSpacesProvisioningError(
+      new Error("fetch failed"),
+      SPACES_PROVISIONING_ERROR_CODES.UNAVAILABLE
+    );
+
+    expect(normalized.code).toBe(SPACES_PROVISIONING_ERROR_CODES.UNAVAILABLE);
+    expect(normalized.status).toBe(503);
+    expect(buildSpacesProvisioningErrorPayload(normalized)).toMatchObject({
+      code: SPACES_PROVISIONING_ERROR_CODES.UNAVAILABLE,
+      status: 503,
+      retryable: true,
+    });
+  });
+
   test("creates and persists a stable TYP user for a signed-in ZAKI user with no nova_user_id", async () => {
     const { provisioner, novaAdminRequest, fetchNovaUserIdByUsername, dbQuery } = makeProvisioner({
       novaAdminRequest: jest.fn().mockResolvedValue(

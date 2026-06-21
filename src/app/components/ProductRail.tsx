@@ -7,6 +7,7 @@ import {
   Database,
   GraduationCap,
   LayoutGrid,
+  LogIn,
   LogOut,
   MessageSquareText,
   Palette,
@@ -14,7 +15,7 @@ import {
   Sparkles,
   UserRound,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -53,8 +54,29 @@ export function ProductRail() {
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
   const { goHome, goToSpaces, goToZakiBot } = useNavigation();
   const setSidebarMode = useNavigationStore((state) => state.setSidebarMode);
+  const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
+
+  const goToProtectedRoute = useCallback(
+    (route: string) => {
+      navigate(token ? route : `/?auth=login&next=${encodeURIComponent(route)}`);
+    },
+    [navigate, token]
+  );
+
+  const openAgent = useCallback(() => {
+    if (!token) {
+      goToProtectedRoute("/agent");
+      return;
+    }
+    goToZakiBot();
+  }, [goToProtectedRoute, goToZakiBot, token]);
+
+  const openBrain = useCallback(() => {
+    setSidebarMode("brain");
+    goToProtectedRoute("/brain");
+  }, [goToProtectedRoute, setSidebarMode]);
 
   const items: ProductRailItem[] = [
     {
@@ -71,7 +93,7 @@ export function ProductRail() {
       fallback: "Agent",
       shortcut: "⌘2",
       icon: Sparkles,
-      action: goToZakiBot,
+      action: openAgent,
     },
     {
       id: "chat",
@@ -87,10 +109,7 @@ export function ProductRail() {
       fallback: "Brain",
       shortcut: "⌘4",
       icon: Brain,
-      action: () => {
-        setSidebarMode("brain");
-        navigate("/brain");
-      },
+      action: openBrain,
     },
     {
       id: "learn",
@@ -127,34 +146,34 @@ export function ProductRail() {
         label: t("productRail.quickSettings.account", { defaultValue: "Account" }),
         description: t("productRail.quickSettings.accountHelper", { defaultValue: "Profile and sign-in" }),
         icon: UserRound,
-        action: () => navigate("/settings#settings-account"),
+        action: () => goToProtectedRoute("/settings#settings-account"),
       },
       {
         label: t("productRail.quickSettings.plan", { defaultValue: "Plan & usage" }),
         description: t("productRail.quickSettings.planHelper", { defaultValue: "Billing and meters" }),
         icon: CreditCard,
-        action: () => navigate("/settings#settings-billing"),
+        action: () => goToProtectedRoute("/settings#settings-billing"),
       },
       {
         label: t("productRail.quickSettings.agent", { defaultValue: "Agent defaults" }),
         description: t("productRail.quickSettings.agentHelper", { defaultValue: "Reasoning and autonomy" }),
         icon: Bot,
-        action: () => navigate("/settings#settings-agent"),
+        action: () => goToProtectedRoute("/settings#settings-agent"),
       },
       {
         label: t("productRail.quickSettings.channels", { defaultValue: "Channels" }),
         description: t("productRail.quickSettings.channelsHelper", { defaultValue: "Tokens and bindings" }),
         icon: Cable,
-        action: () => navigate("/settings#settings-channels"),
+        action: () => goToProtectedRoute("/settings#settings-channels"),
       },
       {
         label: t("productRail.quickSettings.memory", { defaultValue: "Memory & privacy" }),
         description: t("productRail.quickSettings.memoryHelper", { defaultValue: "Export, forget, PII" }),
         icon: Database,
-        action: () => navigate("/settings#settings-memory-data"),
+        action: () => goToProtectedRoute("/settings#settings-memory-data"),
       },
     ],
-    [navigate, t]
+    [goToProtectedRoute, t]
   );
 
   useEffect(() => {
@@ -268,7 +287,11 @@ export function ProductRail() {
           >
             <header className="zaki-product-rail__quick-head">
               <span>{t("productRail.quickSettings.eyebrow", { defaultValue: "Quick settings" })}</span>
-              <strong>{user?.fullName || user?.username || "ZAKI"}</strong>
+              <strong>
+                {token
+                  ? user?.fullName || user?.username || "ZAKI"
+                  : t("productRail.quickSettings.guest", { defaultValue: "Guest" })}
+              </strong>
             </header>
             <div className="zaki-product-rail__quick-group">
               {quickSettingsItems.map((item) => {
@@ -294,24 +317,31 @@ export function ProductRail() {
               <button type="button" role="menuitem" onClick={() => runMenuAction(goHome)}>
                 {t("productRail.dashboard", { defaultValue: "Dashboard" })}
               </button>
-              <button type="button" role="menuitem" onClick={() => runMenuAction(goToZakiBot)}>
+              <button type="button" role="menuitem" onClick={() => runMenuAction(openAgent)}>
                 {t("productRail.agent", { defaultValue: "Agent" })}
               </button>
               <button type="button" role="menuitem" onClick={() => runMenuAction(goToSpaces)}>
                 {t("productRail.chat", { defaultValue: "Chat" })}
               </button>
-              <button type="button" role="menuitem" onClick={() => runMenuAction(() => navigate("/brain"))}>
+              <button type="button" role="menuitem" onClick={() => runMenuAction(openBrain)}>
                 {t("productRail.brain", { defaultValue: "Brain" })}
               </button>
             </div>
             <div className="zaki-product-rail__quick-actions">
-              <button type="button" role="menuitem" onClick={() => runMenuAction(() => navigate("/settings"))}>
+              <button type="button" role="menuitem" onClick={() => runMenuAction(() => goToProtectedRoute("/settings"))}>
                 {t("productRail.quickSettings.allSettings", { defaultValue: "All settings" })}
               </button>
-              <button type="button" role="menuitem" onClick={() => void handleSecureLogout()} className="is-danger">
-                <LogOut className="zaki-product-rail__quick-icon" aria-hidden="true" />
-                {t("settingsModal.account.signOut", { defaultValue: "Sign out" })}
-              </button>
+              {token ? (
+                <button type="button" role="menuitem" onClick={() => void handleSecureLogout()} className="is-danger">
+                  <LogOut className="zaki-product-rail__quick-icon" aria-hidden="true" />
+                  {t("settingsModal.account.signOut", { defaultValue: "Sign out" })}
+                </button>
+              ) : (
+                <button type="button" role="menuitem" onClick={() => runMenuAction(() => goToProtectedRoute("/settings"))}>
+                  <LogIn className="zaki-product-rail__quick-icon" aria-hidden="true" />
+                  {t("settingsModal.account.signIn", { defaultValue: "Sign in" })}
+                </button>
+              )}
             </div>
           </div>
         ) : null}

@@ -49,6 +49,38 @@ describe("anonymous work ledger", () => {
     expect(ledger.items[0]?.status).toBe("succeeded");
   });
 
+  it("defaults partial anonymous work records to plan work", () => {
+    const created = upsertAnonymousWorkItem(
+      {
+        productId: "agent",
+        prompt: "Plan the launch cutover",
+        route: "/agent",
+      },
+      Date.parse("2026-06-01T10:00:00.000Z")
+    );
+
+    expect(created?.taskKind).toBe("plan");
+
+    window.localStorage.setItem(
+      ANONYMOUS_WORK_LEDGER_KEY,
+      JSON.stringify({
+        items: [
+          {
+            id: "stored",
+            productId: "agent",
+            prompt: "Plan the launch cutover",
+            route: "/agent",
+            createdAt: "2026-06-01T10:00:00.000Z",
+            updatedAt: "2026-06-01T10:00:00.000Z",
+          },
+        ],
+      })
+    );
+
+    const ledger = readAnonymousWorkLedger(Date.parse("2026-06-01T10:01:00.000Z"));
+    expect(ledger.items[0]?.taskKind).toBe("plan");
+  });
+
   it("expires old records and caps to the last 20 items", () => {
     const now = Date.parse("2026-06-15T10:00:00.000Z");
     const items: AnonymousWorkItem[] = Array.from({ length: 25 }).map((_, index) => ({

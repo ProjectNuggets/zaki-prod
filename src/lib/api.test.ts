@@ -474,7 +474,7 @@ describe("requestPublicSignup", () => {
       name: "Signup User",
       dateOfBirth: "1995-01-15",
       legalConsentAccepted: true,
-      legalPolicyVersion: "2026-06-17.v2",
+      legalPolicyVersion: "2026-02-17.v2",
       turnstileToken: "turnstile-token",
     });
 
@@ -488,7 +488,7 @@ describe("requestPublicSignup", () => {
           name: "Signup User",
           dateOfBirth: "1995-01-15",
           legalConsentAccepted: true,
-          legalPolicyVersion: "2026-06-17.v2",
+          legalPolicyVersion: "2026-02-17.v2",
           turnstileToken: "turnstile-token",
         }),
       })

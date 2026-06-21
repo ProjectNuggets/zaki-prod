@@ -909,14 +909,14 @@ button.v2-status-strip__item:focus-visible {
 
 .zaki-auth-v2__form {
   display: grid;
-  gap: 14px;
-  padding: 20px 24px 22px;
+  gap: 12px;
+  padding: 18px 24px 20px;
 }
 
 .zaki-auth-v2__field {
   min-width: 0;
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .zaki-auth-v2__field > span {
@@ -928,7 +928,7 @@ button.v2-status-strip__item:focus-visible {
 .zaki-auth-v2__field input,
 .zaki-auth-v2__password-field input {
   width: 100%;
-  min-height: var(--v2-control-h-lg);
+  min-height: var(--v2-row-h);
   border: 1px solid var(--v2-hairline-strong);
   border-radius: var(--v2-r-1);
   background: var(--v2-bg-sunken);
@@ -952,6 +952,12 @@ button.v2-status-strip__item:focus-visible {
 .zaki-auth-v2__password-field input:focus {
   border-color: var(--v2-accent);
   background: var(--v2-bg);
+}
+
+.zaki-auth-v2__field input[aria-invalid="true"],
+.zaki-auth-v2__password-field input[aria-invalid="true"] {
+  border-color: var(--v2-danger);
+  background: var(--v2-danger-faint);
 }
 
 .zaki-auth-v2__password-field {
@@ -1175,6 +1181,11 @@ button.v2-status-strip__item:focus-visible {
   .zaki-auth-v2__oauth-wrap,
   .zaki-auth-v2__form {
     padding-inline: 16px;
+  }
+
+  .zaki-auth-v2__field input,
+  .zaki-auth-v2__password-field input {
+    min-height: var(--v2-control-h-lg);
   }
 
   .zaki-auth-v2__inline-actions {

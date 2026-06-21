@@ -42,6 +42,10 @@ import {
   getRequestedResponseFormat,
 } from "./chat-proxy.js";
 import { fetchWorkspaceDocContext } from "./doc-grounding.js";
+import {
+  buildAcceptedDocumentTypesFallback,
+  normalizeAcceptedDocumentTypesPayload,
+} from "./document-accepted-types.js";
 import { markWebhookEventProcessed as markWebhookEventProcessedOnce } from "./billing-webhook-events.js";
 import { createBillingHealthTracker } from "./billing-health.js";
 import { createBillingAlertDispatcher } from "./billing-alerts.js";
@@ -246,6 +250,7 @@ import {
 import {
   AGENT_CONTROL_CHANNEL_IDS,
   AGENT_LAUNCH_CHANNELS,
+  AGENT_SESSION_IDLE_DETAIL_PAYLOAD,
   getAgentLaunchChannel,
   buildBotProvisionPayload,
   normalizeAgentArtifactExportPayload,
@@ -395,9 +400,11 @@ import {
 } from "./typ-client.js";
 import {
   DEFAULT_SPACES_THREAD_NAME,
+  SPACES_PROVISIONING_ERROR_CODES,
   buildSpacesProvisioningErrorPayload,
   createSpacesTypProvisioner,
   isAnonymousSpacesRouteTarget,
+  normalizeSpacesProvisioningError,
 } from "./spaces-typ-provisioning.js";
 import { buildAuthRouter } from "./auth-endpoints.js";
 import { loginHandler as zakiLoginHandler } from "./login-handler.js";
@@ -4837,7 +4844,19 @@ const listWorkspacesHandler = async (req, res) => {
       return;
     }
 
-    const upstream = await fetchTypWorkspaces(novaUserId);
+    let upstream;
+    try {
+      upstream = await fetchTypWorkspaces(novaUserId);
+    } catch (error) {
+      sendSpacesProvisioningFailure(
+        res,
+        normalizeSpacesProvisioningError(
+          error,
+          SPACES_PROVISIONING_ERROR_CODES.UPSTREAM_UNAVAILABLE
+        )
+      );
+      return;
+    }
     const data = await upstream.json().catch(() => ({}));
     if (!upstream.ok || !Array.isArray(data?.workspaces)) {
       res.status(upstream.status || 502).json({
@@ -9645,15 +9664,17 @@ const getAcceptedDocumentTypesHandler = async (_req, res) => {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      res.status(response.status || 400).json({
-        error: data?.error || data?.message || "Unable to load accepted file types.",
+      console.warn("[Documents] Accepted file types upstream unavailable:", {
+        status: response.status,
+        error: data?.error || data?.message || "unknown_error",
       });
+      res.status(200).json(buildAcceptedDocumentTypesFallback("upstream_unavailable"));
       return;
     }
-    res.status(200).json(data);
+    res.status(200).json(normalizeAcceptedDocumentTypesPayload(data));
   } catch (error) {
-    console.error("[Documents] Accepted file types error:", error);
-    res.status(500).json({ error: error?.message || "Unable to load accepted file types." });
+    console.warn("[Documents] Accepted file types fallback:", error);
+    res.status(200).json(buildAcceptedDocumentTypesFallback("upstream_unavailable"));
   }
 };
 
@@ -12453,7 +12474,21 @@ async function agentSessionDetailHandler(req, res) {
       userId,
       requestId,
     });
-    const upstreamData = await upstream.json().catch(() => ({}));
+    const upstreamRaw = await upstream.text().catch(() => "");
+    const softEmpty = resolveSoftEmptyAgentResponse(
+      AGENT_SESSION_IDLE_DETAIL_PAYLOAD,
+      upstream.status,
+      upstreamRaw
+    );
+    if (softEmpty.soft) {
+      return res.status(200).json(softEmpty.payload);
+    }
+    let upstreamData = {};
+    try {
+      upstreamData = upstreamRaw ? JSON.parse(upstreamRaw) : {};
+    } catch {
+      upstreamData = {};
+    }
     if (upstream.status === 401) {
       return res.status(502).json({
         error: "Agent upstream rejected the BFF credential.",
@@ -15201,26 +15236,14 @@ async function proxyNullclawRequest(req, res, targetPath, options = {}) {
     await options.onUpstreamResponse(upstream);
   }
 
-  if (options.responseMode === "json") {
-    return sendBufferedNullclawJsonResponse(
-      upstream,
-      res,
-      options.label || "Nullclaw proxy response",
-      options.transformJson || null
-    );
-  }
-
-  // Idle-state normalization for the three READ-ONLY agent-panel reads
-  // (plan/todos/context). The engine does not implement /plan or /todos yet, so
-  // it mis-parses those reads and 400s `invalid_session_key`; /context 404s when
-  // the thread has no active run. Surfacing those raw errors leaks
-  // "Run plan unavailable: invalid_session_key" / "Checklist unavailable: ..."
-  // into the inspector. Only when a route opts in via `softEmptyOnMissing` AND
-  // the upstream is exactly `404` or `400 invalid_session_key` do we reply 200
-  // with the clean idle payload the FE already renders as "no active run".
-  // Every other status/body is forwarded verbatim from the buffered text, so
-  // 200/403/500/503/other-400 behaviour is unchanged. Buffering only kicks in
-  // for the candidate error statuses, so the success path still streams.
+  // Opt-in idle/cold-read normalization. Agent panel reads use it for fresh
+  // sessions with no active run; Brain self-anchor uses it for a cold corpus.
+  // Only when a route opts in via `softEmptyOnMissing` AND the upstream is
+  // exactly `404` or `400 invalid_session_key` do we reply 200 with the empty
+  // payload the FE already knows how to render. Every other status/body is
+  // forwarded from the buffered text, so 200/403/500/503/other-400 behaviour is
+  // unchanged. Buffering only kicks in for candidate error statuses, so the
+  // success path still streams or uses the JSON proxy as configured.
   if (
     options.softEmptyOnMissing &&
     (upstream.status === 400 || upstream.status === 404)
@@ -15260,6 +15283,15 @@ async function proxyNullclawRequest(req, res, targetPath, options = {}) {
       res.setHeader("Content-Type", "application/json; charset=utf-8");
     }
     return res.send(bodyText);
+  }
+
+  if (options.responseMode === "json") {
+    return sendBufferedNullclawJsonResponse(
+      upstream,
+      res,
+      options.label || "Nullclaw proxy response",
+      options.transformJson || null
+    );
   }
 
   res.status(upstream.status);
@@ -17193,6 +17225,11 @@ const NULLCLAW_BRAIN_JSON_PROXY_OPTIONS = {
   label: "Nullclaw Brain proxy response",
 };
 
+const NULLCLAW_BRAIN_ME_JSON_PROXY_OPTIONS = {
+  ...NULLCLAW_BRAIN_JSON_PROXY_OPTIONS,
+  softEmptyOnMissing: { memory: null },
+};
+
 app.get(
   "/api/agent/brain/documents",
   requireAgentContext,
@@ -17366,7 +17403,7 @@ app.get(
   requireAgentContext,
   makeAgentUserProxyHandler(
     (userId) => `/api/v1/users/${encodeURIComponent(userId)}/brain/me`,
-    NULLCLAW_BRAIN_JSON_PROXY_OPTIONS
+    NULLCLAW_BRAIN_ME_JSON_PROXY_OPTIONS
   )
 );
 

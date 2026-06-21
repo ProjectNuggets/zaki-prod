@@ -217,6 +217,34 @@ describe("LoginScreen legal consent", () => {
     });
   });
 
+  it("formats and caps the signup birth date input", async () => {
+    const user = userEvent.setup();
+    renderLoginScreen();
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("button", { name: "New here? Create an account" }));
+
+    const birthDateInput = screen.getByLabelText("Date of birth");
+    await user.type(birthDateInput, "199501159999");
+
+    expect(birthDateInput).toHaveValue("1995-01-15");
+    expect(birthDateInput).toHaveAttribute("inputmode", "numeric");
+    expect(birthDateInput).toHaveAttribute("maxlength", "10");
+  });
+
+  it("marks impossible signup birth dates invalid", async () => {
+    const user = userEvent.setup();
+    renderLoginScreen();
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("button", { name: "New here? Create an account" }));
+    await user.type(screen.getByLabelText("Date of birth"), "19951340");
+    await user.tab();
+
+    expect(await screen.findByText("Enter a real birth date as YYYY-MM-DD.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Date of birth")).toHaveAttribute("aria-invalid", "true");
+  });
+
   it("blocks signup when confirmation password does not match", async () => {
     const user = userEvent.setup();
     renderLoginScreen();
@@ -355,6 +383,28 @@ describe("LoginScreen legal consent", () => {
       expect(window.location.hash).toBe("#settings-memory-data");
     });
     expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
+  });
+
+  it("infers protected direct routes as the post-login return target", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/agent");
+
+    renderLoginScreen();
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
+
+    expect(await screen.findByText("Return saved.")).toBeInTheDocument();
+    expect(screen.getByText("After authentication, ZAKI will bring you back to /agent.")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Email address"), "user@example.com");
+    await user.type(screen.getByPlaceholderText("Password"), "Password123");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => {
+      expect(setToken).toHaveBeenCalledWith("token-123");
+    });
+    await waitFor(() => {
+      expect(window.location.pathname).toBe("/agent");
+    });
   });
 
   it("claims anonymous Spaces work before returning after credential login", async () => {

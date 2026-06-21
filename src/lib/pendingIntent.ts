@@ -132,7 +132,7 @@ export function readPendingIntent(): PendingIntent | null {
     }
     return {
       productId,
-      taskKind: sanitizeText(raw?.taskKind, MAX_TASK_KIND_LENGTH) || "preview",
+      taskKind: sanitizeText(raw?.taskKind, MAX_TASK_KIND_LENGTH) || "plan",
       prompt,
       source: sanitizeText(raw?.source, MAX_SOURCE_LENGTH) || "dashboard",
       returnTo: sanitizeReturnTo(raw?.returnTo, productId),
@@ -153,7 +153,7 @@ export function writePendingIntent(input: PendingIntentInput) {
 
   const intent: PendingIntent = {
     productId: input.productId,
-    taskKind: sanitizeText(input.taskKind, MAX_TASK_KIND_LENGTH) || "preview",
+    taskKind: sanitizeText(input.taskKind, MAX_TASK_KIND_LENGTH) || "plan",
     prompt,
     source: sanitizeText(input.source, MAX_SOURCE_LENGTH) || "dashboard",
     returnTo: sanitizeReturnTo(input.returnTo, input.productId),

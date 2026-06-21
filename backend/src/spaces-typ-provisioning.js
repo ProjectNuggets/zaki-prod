@@ -73,7 +73,12 @@ export function normalizeSpacesProvisioningError(error, fallbackCode = SPACES_PR
     );
   }
   return new SpacesProvisioningError(fallbackCode, message, {
-    status: fallbackCode === SPACES_PROVISIONING_ERROR_CODES.UPSTREAM_UNAVAILABLE ? 502 : 500,
+    status:
+      fallbackCode === SPACES_PROVISIONING_ERROR_CODES.UPSTREAM_UNAVAILABLE
+        ? 502
+        : fallbackCode === SPACES_PROVISIONING_ERROR_CODES.UNAVAILABLE
+          ? 503
+          : 500,
     retryable: true,
     cause: error,
   });

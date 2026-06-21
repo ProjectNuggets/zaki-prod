@@ -86,14 +86,17 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.saveWork": "Save this work",
     "zakiDashboard.command.emptyHelper": "Type a prompt to start.",
     "zakiDashboard.command.creditHelper": "You're fine. ZAKI will update weekly usage after it responds.",
+    "zakiDashboard.command.authRequiredEmptyHelper": "Sign in to use {{product}}.",
+    "zakiDashboard.command.authRequiredPromptHelper": "Sign in to continue in {{product}}. We'll keep this prompt through authentication.",
     "zakiDashboard.command.capacityWindowLow": "{{hours}}h Agent window is {{percent}}% used. Next room clears {{reset}}.",
     "zakiDashboard.command.agentCreditsLow": "Agent needs more weekly room before it can start.",
     "zakiDashboard.command.nearCapNudge": "You're at {{percent}}% this week — upgrade for more room.",
     "zakiDashboard.command.comingSoonHelper": "{{product}} is coming soon. Pick Chat, Agent, or Brain to start now.",
-    "zakiDashboard.command.submitPreviewSave": "Preview first",
+    "zakiDashboard.command.submitSignIn": "Sign in for {{product}}",
     "zakiDashboard.command.submitComingSoon": "{{product}} coming soon",
     "zakiDashboard.command.markers.free": "Free",
-    "zakiDashboard.command.markers.preview": "Preview",
+    "zakiDashboard.command.markers.signIn": "Sign in",
+    "zakiDashboard.command.markers.live": "Live",
     "zakiDashboard.command.markers.save": "Save",
     "zakiDashboard.command.markers.beta": "Beta",
     "zakiDashboard.command.markers.waitlist": "Waitlist",
@@ -109,15 +112,24 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.submitChat": "Start chat",
     "zakiDashboard.command.submitOpen": "Continue in {{product}}",
     "zakiDashboard.command.submitSignup": "Save and continue",
-    "zakiDashboard.command.hints.agent": "Plan the next action.",
-    "zakiDashboard.command.hints.brain": "Map pasted text.",
+    "zakiDashboard.command.hints.agent.signed": "Plan the next action.",
+    "zakiDashboard.command.hints.agent.guest": "Sign in to use Agent.",
+    "zakiDashboard.command.hints.brain.signed": "Open saved memory.",
+    "zakiDashboard.command.hints.brain.guest": "Sign in to open Brain.",
     "zakiDashboard.command.hints.learning": "Learn is coming soon.",
     "zakiDashboard.command.hints.design": "Design is coming soon.",
     "zakiDashboard.command.hints.hire": "Career is gated.",
     "zakiDashboard.command.hints.spaces": "Chat immediately.",
     "zakiDashboard.command.details.agent.bestFor": "Planning, follow-through, tool runs, and browser work.",
-    "zakiDashboard.command.details.agent.memory": "Personal brain after sign-in.",
-    "zakiDashboard.command.details.agent.truth": "Anonymous Agent starts as planning preview.",
+    "zakiDashboard.command.details.agent.memory.signed": "Personal brain, files, browser lane, and history.",
+    "zakiDashboard.command.details.agent.memory.guest": "Account-scoped after sign-in.",
+    "zakiDashboard.command.details.agent.truth.signed": "Agent is live for signed-in accounts.",
+    "zakiDashboard.command.details.agent.truth.guest": "Agent requires sign-in.",
+    "zakiDashboard.command.details.brain.bestFor": "Memory graph work.",
+    "zakiDashboard.command.details.brain.memory.signed": "Saved personal memory graph.",
+    "zakiDashboard.command.details.brain.memory.guest": "Account memory after sign-in.",
+    "zakiDashboard.command.details.brain.truth.signed": "Brain is live for signed-in accounts.",
+    "zakiDashboard.command.details.brain.truth.guest": "Brain requires sign-in because the graph is account memory.",
     "zakiDashboard.command.details.spaces.bestFor": "Quick questions, drafting, and thinking out loud. No setup.",
     "zakiDashboard.command.details.spaces.memory": "Session only until you sign in.",
     "zakiDashboard.command.details.spaces.truth": "Chat runs now with weekly usage shown as a percentage.",
@@ -150,7 +162,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.intro.slides.palette.title": "Visit the website when you want the full story",
     "zakiDashboard.intro.slides.palette.body": "The website is the narrative layer.",
     "zakiDashboard.intro.slides.palette.bullets.chat": "Launch core.",
-    "zakiDashboard.intro.slides.palette.bullets.preview": "Truthful previews.",
+    "zakiDashboard.intro.slides.palette.bullets.preview": "Truthful gates.",
     "zakiDashboard.intro.slides.palette.bullets.website": "Visit the website.",
     "zakiDashboard.intro.back": "Back",
     "zakiDashboard.intro.next": "Next",
@@ -721,6 +733,79 @@ describe("ZakiDashboard", () => {
     expect(screen.queryByRole("button", { name: "Save this work" })).not.toBeInTheDocument();
   });
 
+  it("routes anonymous Agent command prompts through login with a preserved plan intent", () => {
+    useAuthStore.setState({
+      token: null,
+      user: null,
+      isHydrating: false,
+      isLoading: false,
+    });
+
+    renderDashboard();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Agent" }));
+    fireEvent.change(screen.getByLabelText("Describe what you want ZAKI to do"), {
+      target: { value: "Plan the cutover checklist" },
+    });
+
+    expect(screen.getByTestId("zaki-dashboard-product-hint")).toHaveTextContent("Agent requires sign-in.");
+    expect(screen.getByText("Sign in to continue in Agent. We'll keep this prompt through authentication.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save this work" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in for Agent" }));
+
+    expect(mockNavigate).toHaveBeenCalledWith("/?auth=login&next=%2Fagent");
+    const ledger = JSON.parse(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY) || "{}");
+    expect(ledger.items?.[0]).toMatchObject({
+      productId: "agent",
+      taskKind: "plan",
+      prompt: "Plan the cutover checklist",
+      route: "/agent",
+      status: "draft",
+    });
+    const intent = JSON.parse(window.localStorage.getItem(PENDING_INTENT_KEY) || "{}");
+    expect(intent).toMatchObject({
+      productId: "agent",
+      taskKind: "plan",
+      prompt: "Plan the cutover checklist",
+      returnTo: "/agent",
+    });
+  });
+
+  it("keeps anonymous Brain login available without showing a usage-upgrade guard", () => {
+    useAuthStore.setState({
+      token: null,
+      user: null,
+      isHydrating: false,
+      isLoading: false,
+    });
+    mockUseAnonymousMeterStatus.mockReturnValue({
+      data: {
+        data: {
+          success: true,
+          identity: { type: "anonymous", anonymousSessionId: "anon-empty" },
+          plan: { tier: "free", label: "Free", source: "anonymous" },
+          rolling: { windowHours: 5, limit: 10, used: 10, remaining: 0 },
+          weekly: { limit: 100, used: 100, remaining: 0 },
+          products: {},
+        },
+      },
+      isLoading: false,
+    });
+
+    renderDashboard();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Brain" }));
+    fireEvent.change(screen.getByLabelText("Describe what you want ZAKI to do"), {
+      target: { value: "Map this account memory after login" },
+    });
+
+    expect(screen.queryByText("Weekly usage is full.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign in for Brain" })).not.toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in for Brain" }));
+
+    expect(mockNavigate).toHaveBeenCalledWith("/?auth=login&next=%2Fbrain");
+  });
+
   it("preserves typed anonymous prompts when using the sign-in entry point", () => {
     useAuthStore.setState({
       token: null,
@@ -836,7 +921,7 @@ describe("ZakiDashboard", () => {
   it("keeps returning anonymous work visible after sign-in until Spaces claim succeeds", () => {
     upsertAnonymousWorkItem({
       productId: "agent",
-      taskKind: "preview",
+      taskKind: "plan",
       prompt: "Plan my launch sequence",
       title: "Launch sequence",
       route: "/agent",

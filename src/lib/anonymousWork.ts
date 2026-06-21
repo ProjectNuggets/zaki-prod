@@ -126,7 +126,7 @@ function normalizeItem(value: unknown, now = Date.now()): AnonymousWorkItem | nu
   return {
     id: sanitizeText(raw.id, 120) || makeId(),
     productId,
-    taskKind: sanitizeText(raw.taskKind, MAX_TASK_KIND_LENGTH) || "preview",
+    taskKind: sanitizeText(raw.taskKind, MAX_TASK_KIND_LENGTH) || "plan",
     prompt,
     replyPreview: sanitizeText(raw.replyPreview, MAX_REPLY_PREVIEW_LENGTH),
     route: sanitizeRoute(raw.route),
@@ -211,7 +211,7 @@ export function upsertAnonymousWorkItem(input: AnonymousWorkInput, now = Date.no
   const item: AnonymousWorkItem = {
     id,
     productId: input.productId,
-    taskKind: sanitizeText(input.taskKind, MAX_TASK_KIND_LENGTH) || existing?.taskKind || "preview",
+    taskKind: sanitizeText(input.taskKind, MAX_TASK_KIND_LENGTH) || existing?.taskKind || "plan",
     prompt,
     replyPreview: sanitizeText(input.replyPreview, MAX_REPLY_PREVIEW_LENGTH),
     route: sanitizeRoute(input.route || existing?.route || "/"),

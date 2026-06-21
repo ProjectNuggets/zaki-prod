@@ -3123,8 +3123,8 @@ export function ChatArea() {
     unableToUpload: isRtl ? "تعذر رفع الملفات." : "Unable to upload files.",
     experimentalLimitReached: (resetLabel: string) =>
       isRtl
-        ? `وصلت إلى حد المعاينة المجانية لهذا الأسبوع. تتم إعادة التعيين أسبوعيًا. جرّب مرة أخرى بعد ${resetLabel}.`
-        : `You reached this week's free Agent preview limit. Preview usage resets weekly. Try again after ${resetLabel}.`,
+        ? `وصلت إلى حد استخدام Agent المجاني لهذا الأسبوع. تتم إعادة التعيين أسبوعيًا. جرّب مرة أخرى بعد ${resetLabel}.`
+        : `You reached this week's free Agent usage limit. Usage resets weekly. Try again after ${resetLabel}.`,
     appFreeLimitReached: (resetLabel: string) =>
       isRtl
         ? `وصلت إلى حد الاستخدام المجاني اليوم. يتم إعادة التعيين يوميًا. جرّب مرة أخرى بعد ${resetLabel}.`
@@ -6101,7 +6101,6 @@ export function ChatArea() {
           ...(instructions ? { promptPrefix: `${instructions}\n\n` } : {}),
         };
 
-    console.log(`[Chat] Sending message to ${workspaceSlug}/${threadSlug}`);
     const response = await apiRequest(requestPath, {
       method: "POST",
       body: JSON.stringify(requestBody),
@@ -6109,7 +6108,6 @@ export function ChatArea() {
       skipAuth: isAnonymousSpaces,
     });
 
-    console.log(`[Chat] Response status: ${response.status}`);
     const agentBaseHeader = response.headers.get("x-zaki-agent-base");
     const spacesRouteHeader = response.headers.get("x-zaki-spaces-route") || "";
     const buildStreamResult = (content: string) => ({
@@ -7189,7 +7187,6 @@ export function ChatArea() {
       });
     } catch (err) {
       // Silent fail - not critical for chat
-      console.log("[Memory] Check failed:", err);
       setMemoryError("Memory save failed. Retry?");
     } finally {
       memoryInFlightRef.current = false;
@@ -7542,7 +7539,7 @@ export function ChatArea() {
       !authUserId
         ? upsertAnonymousWorkItem({
             productId: isZakiBotTarget ? "agent" : "spaces",
-            taskKind: isZakiBotTarget ? "preview" : "chat",
+            taskKind: isZakiBotTarget ? "plan" : "chat",
             prompt: trimmed,
             route: isZakiBotTarget
               ? "/agent"
@@ -7864,7 +7861,7 @@ export function ChatArea() {
         upsertAnonymousWorkItem({
           id: anonymousWork.id,
           productId,
-          taskKind: isZakiBotTarget ? "preview" : "chat",
+          taskKind: isZakiBotTarget ? "plan" : "chat",
           prompt: trimmed,
           replyPreview: String(streamResult?.content || "").trim(),
           route: isZakiBotTarget
@@ -7883,7 +7880,7 @@ export function ChatArea() {
         upsertAnonymousWorkItem({
           id: anonymousWork.id,
           productId,
-          taskKind: isZakiBotTarget ? "preview" : "chat",
+          taskKind: isZakiBotTarget ? "plan" : "chat",
           prompt: trimmed,
           route: isZakiBotTarget
             ? "/agent"

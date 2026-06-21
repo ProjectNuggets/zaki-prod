@@ -104,6 +104,43 @@ describe("ProductRail quick settings", () => {
     expect(screen.getByTitle("Design")).toBeDisabled();
   });
 
+  it("routes anonymous Agent and Brain rail clicks through login with return paths", () => {
+    useAuthStore.setState({
+      token: null,
+      user: null,
+      isHydrating: false,
+      isLoading: false,
+    });
+
+    const { unmount } = renderProductRail("/");
+    fireEvent.click(screen.getByTitle("Agent"));
+    expect(screen.getByTestId("location")).toHaveTextContent("/?auth=login&next=%2Fagent");
+    unmount();
+
+    renderProductRail("/");
+    fireEvent.click(screen.getByTitle("Brain"));
+    expect(screen.getByTestId("location")).toHaveTextContent("/?auth=login&next=%2Fbrain");
+  });
+
+  it("shows a sign-in action instead of sign-out in the anonymous quick settings menu", () => {
+    useAuthStore.setState({
+      token: null,
+      user: null,
+      isHydrating: false,
+      isLoading: false,
+    });
+
+    renderProductRail("/");
+
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(screen.getByRole("menu", { name: "Quick settings" })).toHaveTextContent("Guest");
+    expect(screen.queryByRole("menuitem", { name: /Sign out/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: /Sign in/ }));
+
+    expect(screen.getByTestId("location")).toHaveTextContent("/?auth=login&next=%2Fsettings");
+  });
+
   it("deep-links from quick settings to Plan & usage", () => {
     renderProductRail();
 

@@ -39,6 +39,28 @@ describe("pending intent", () => {
     });
   });
 
+  it("defaults partial handoff intents to plan work", () => {
+    const intent = writePendingIntent({
+      productId: "agent",
+      prompt: "Plan the launch cutover",
+    });
+
+    expect(intent?.taskKind).toBe("plan");
+
+    window.localStorage.setItem(
+      PENDING_INTENT_KEY,
+      JSON.stringify({
+        productId: "agent",
+        prompt: "Plan the launch cutover",
+        returnTo: "/agent",
+        createdAt: "2026-06-01T10:00:00.000Z",
+      })
+    );
+    jest.spyOn(Date, "now").mockReturnValue(Date.parse("2026-06-01T10:01:00.000Z"));
+
+    expect(readPendingIntent()?.taskKind).toBe("plan");
+  });
+
   it("sanitizes unsafe return routes and ignores malformed data", () => {
     writePendingIntent({
       productId: "hire",
