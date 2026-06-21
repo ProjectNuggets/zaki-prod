@@ -158,6 +158,8 @@ import {
   extractThreadSlugFromSessionKey,
   isThreadLaneZakiSessionKey,
   normalizeZakiSessionKey,
+  parseZakiSessionKey,
+  parseZakiSessionTimestampMs,
 } from "@/lib/zakiSessions";
 import {
   getActivationProgress,
@@ -470,6 +472,60 @@ function buildAgentSessionKey(threadSlug: string, agentUserId: string | null) {
   const safeUser = String(agentUserId || "").trim();
   if (!safeUser) return null; // not yet resolved
   return buildCanonicalZakiThreadSessionKey(safeUser, safeThread);
+}
+
+function resolveAgentSessionUserId(agentUserId: string | null, sessionKey: string | null) {
+  const safeAgentUserId = String(agentUserId || "").trim();
+  if (safeAgentUserId) return safeAgentUserId;
+  const parsed = parseZakiSessionKey(sessionKey || "");
+  return parsed.userId;
+}
+
+function upsertAgentSession(
+  previous: unknown,
+  session: AgentSession,
+): AgentSession[] {
+  const normalizedSessionKey = normalizeZakiSessionKey(session.session_key);
+  const existing = Array.isArray(previous) ? previous : [];
+  const next = [
+    { ...session, session_key: normalizedSessionKey },
+    ...existing.filter(
+      (item) => normalizeZakiSessionKey(String(item?.session_key || "")) !== normalizedSessionKey
+    ),
+  ];
+  return next.sort((a, b) => {
+    const aTime = parseZakiSessionTimestampMs(a.last_active ?? a.created_at);
+    const bTime = parseZakiSessionTimestampMs(b.last_active ?? b.created_at);
+    if (aTime !== bTime) return bTime - aTime;
+    return normalizeZakiSessionKey(a.session_key).localeCompare(
+      normalizeZakiSessionKey(b.session_key)
+    );
+  });
+}
+
+function removeAgentSession(previous: unknown, sessionKey: string): AgentSession[] | unknown {
+  if (!Array.isArray(previous)) return previous;
+  const normalizedSessionKey = normalizeZakiSessionKey(sessionKey);
+  return previous.filter(
+    (session) =>
+      normalizeZakiSessionKey(String(session?.session_key || "")) !== normalizedSessionKey
+  );
+}
+
+function buildDraftAgentSession(
+  sessionKey: string,
+  timestamp: string,
+  mode: AgentSessionMode | null | undefined,
+): AgentSession {
+  return {
+    session_key: normalizeZakiSessionKey(sessionKey),
+    created_at: timestamp,
+    last_active: timestamp,
+    message_count: 0,
+    live: false,
+    mode: mode ?? "execute",
+    pending_approval_count: 0,
+  };
 }
 
 function normalizeMessageContentKey(content: string) {
@@ -3327,9 +3383,27 @@ export function ChatArea() {
       ? pending
       : [nullalisApprovalRequest, ...pending];
   }, [activeSessionUi?.pendingApprovals, nullalisApprovalRequest]);
+  const deletedAgentSessionKeysRef = useRef<Set<string>>(new Set());
+  const [agentDraftSessions, setAgentDraftSessions] = useState<AgentSession[]>([]);
   const zakiThreadSessions = useMemo(
-    () => zakiSessions.filter((session) => isThreadLaneZakiSessionKey(session.session_key)),
-    [zakiSessions]
+    () => {
+      const byKey = new Map<string, AgentSession>();
+      for (const session of [...agentDraftSessions, ...zakiSessions]) {
+        const normalizedSessionKey = normalizeZakiSessionKey(session.session_key);
+        if (!isThreadLaneZakiSessionKey(normalizedSessionKey)) continue;
+        if (deletedAgentSessionKeysRef.current.has(normalizedSessionKey)) continue;
+        byKey.set(normalizedSessionKey, { ...session, session_key: normalizedSessionKey });
+      }
+      return Array.from(byKey.values()).sort((a, b) => {
+        const aTime = parseZakiSessionTimestampMs(a.last_active ?? a.created_at);
+        const bTime = parseZakiSessionTimestampMs(b.last_active ?? b.created_at);
+        if (aTime !== bTime) return bTime - aTime;
+        return normalizeZakiSessionKey(a.session_key).localeCompare(
+          normalizeZakiSessionKey(b.session_key)
+        );
+      });
+    },
+    [agentDraftSessions, zakiSessions]
   );
 
   // Memory state for the simplified normal-chat capture flow
@@ -3606,9 +3680,31 @@ export function ChatArea() {
     if (!isZakiBotActiveSpace || !activeThreadId || !agentUserId) return;
     const canonicalKey = buildAgentSessionKey(activeThreadId, agentUserId);
     if (!canonicalKey) return;
-    if (normalizeZakiSessionKey(zakiSessionKey || "") === canonicalKey) return;
-    setZakiSessionKey(canonicalKey);
-  }, [activeThreadId, agentUserId, isZakiBotActiveSpace, setZakiSessionKey, zakiSessionKey]);
+    const normalizedCanonicalKey = normalizeZakiSessionKey(canonicalKey);
+    if (!deletedAgentSessionKeysRef.current.has(normalizedCanonicalKey)) {
+      ensureZakiSessionUi(normalizedCanonicalKey);
+      setAgentDraftSessions((previous) =>
+        upsertAgentSession(
+          previous,
+          buildDraftAgentSession(
+            normalizedCanonicalKey,
+            new Date().toISOString(),
+            activeSessionMode
+          )
+        )
+      );
+    }
+    if (normalizeZakiSessionKey(zakiSessionKey || "") === normalizedCanonicalKey) return;
+    setZakiSessionKey(normalizedCanonicalKey);
+  }, [
+    activeSessionMode,
+    activeThreadId,
+    agentUserId,
+    ensureZakiSessionUi,
+    isZakiBotActiveSpace,
+    setZakiSessionKey,
+    zakiSessionKey,
+  ]);
 
   useEffect(() => {
     if (!normalizedActiveZakiSessionKey) return;
@@ -3839,32 +3935,79 @@ export function ChatArea() {
     [goToThread, navigate]
   );
 
-  const handleCreateAgentSession = useCallback(() => {
-    const nextThreadId = createAnonymousThreadId();
-    goToThread(ZAKI_BOT_SPACE_ID, nextThreadId, { zakiSessionKey: null });
-    setAttachments([]);
-    setNullalisApprovalRequest(null);
-    navigate(`/agent?thread=${encodeURIComponent(nextThreadId)}`);
-    toast.success(t("zakiControls.sessionList.newSessionCreated", { defaultValue: "New session started" }));
-  }, [goToThread, navigate, t]);
+  const handleCreateAgentSession = useCallback(
+    (options: { showToast?: boolean } = {}) => {
+      const nextThreadId = createAnonymousThreadId();
+      const sessionUserId = resolveAgentSessionUserId(
+        agentUserId,
+        normalizedActiveZakiSessionKey
+      );
+      const nextSessionKey = sessionUserId
+        ? buildAgentSessionKey(nextThreadId, sessionUserId)
+        : null;
+      const timestamp = new Date().toISOString();
+
+      if (nextSessionKey) {
+        const normalizedNextSessionKey = normalizeZakiSessionKey(nextSessionKey);
+        const draftSession = buildDraftAgentSession(
+          normalizedNextSessionKey,
+          timestamp,
+          activeSessionMode
+        );
+        deletedAgentSessionKeysRef.current.delete(normalizedNextSessionKey);
+        ensureZakiSessionUi(normalizedNextSessionKey);
+        setAgentDraftSessions((previous) => upsertAgentSession(previous, draftSession));
+        queryClient.setQueryData(zakiSessionKeys.all, (previous: unknown) =>
+          upsertAgentSession(previous, draftSession)
+        );
+      }
+
+      setMessagesByThread((previous) =>
+        previous[nextThreadId] ? previous : { ...previous, [nextThreadId]: [] }
+      );
+      goToThread(ZAKI_BOT_SPACE_ID, nextThreadId, { zakiSessionKey: nextSessionKey });
+      setAttachments([]);
+      setNullalisApprovalRequest(null);
+      navigate(`/agent?thread=${encodeURIComponent(nextThreadId)}`);
+      if (options.showToast !== false) {
+        toast.success(
+          t("zakiControls.sessionList.newSessionCreated", {
+            defaultValue: "New session started",
+          })
+        );
+      }
+      return { threadId: nextThreadId, sessionKey: nextSessionKey };
+    },
+    [
+      activeSessionMode,
+      agentUserId,
+      ensureZakiSessionUi,
+      goToThread,
+      navigate,
+      normalizedActiveZakiSessionKey,
+      queryClient,
+      t,
+    ]
+  );
 
   const handleDeleteAgentSession = useCallback(
     async (sessionKey: string, label: string) => {
       const normalized = normalizeZakiSessionKey(sessionKey);
       try {
-        const { response } = await deleteAgentSession(normalized);
-        if (!response.ok) throw new Error(`delete ${response.status}`);
-        queryClient.setQueryData(zakiSessionKeys.all, (previous: unknown) =>
-          Array.isArray(previous)
-            ? previous.filter(
-                (session) =>
-                  normalizeZakiSessionKey(String(session?.session_key || "")) !== normalized,
-              )
-            : previous,
-        );
-        await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
         if (normalizedActiveZakiSessionKey === normalized) {
-          handleCreateAgentSession();
+          handleCreateAgentSession({ showToast: false });
+        }
+        const { response } = await deleteAgentSession(normalized);
+        if (!response.ok && response.status !== 404) throw new Error(`delete ${response.status}`);
+        deletedAgentSessionKeysRef.current.add(normalized);
+        setAgentDraftSessions((previous) =>
+          removeAgentSession(previous, normalized) as AgentSession[]
+        );
+        queryClient.setQueryData(zakiSessionKeys.all, (previous: unknown) =>
+          removeAgentSession(previous, normalized)
+        );
+        if (response.ok) {
+          void queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
         }
         toast.success(
           t("zakiControls.sessionList.deleteSuccess", {

@@ -40,6 +40,7 @@ import {
   approveAgentSession,
   cancelAgentSession,
   captureMemory,
+  deleteAgentSession,
   fetchAgentExtensionDiagnostics,
   fetchAgentDiagnostics,
   fetchAgentMe,
@@ -2401,6 +2402,104 @@ describe("ChatArea Component", () => {
         "true"
       );
     });
+  });
+
+  it("adds a new Agent thread to the sidebar immediately", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    navState.zakiSessionKey = "agent:zaki-bot:user:1:thread:main";
+    authState = { user: { username: "agent@example.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+    (fetchAgentMe as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (listAgentSessions as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ sessions: [] }), headers: new Headers() },
+      data: {
+        sessions: [
+          {
+            session_key: "agent:zaki-bot:user:1:thread:main",
+            last_active: "2026-06-21T10:00:00.000Z",
+            message_count: 1,
+          },
+        ],
+      },
+    });
+
+    const { container } = await renderChatAreaAndWaitForEffects();
+
+    await screen.findByText("Main");
+    expect(container.querySelectorAll(".zaki-thread-item")).toHaveLength(1);
+
+    const newThreadButton = container.querySelector<HTMLButtonElement>(
+      ".zaki-agent-session-rail__new-thread"
+    );
+    expect(newThreadButton).toBeTruthy();
+    fireEvent.click(newThreadButton as HTMLButtonElement);
+
+    await waitFor(() => {
+      expect(container.querySelectorAll(".zaki-thread-item")).toHaveLength(2);
+    });
+    expect(screen.getByText("Main")).toBeInTheDocument();
+    expect(screen.getByText("New thread")).toBeInTheDocument();
+    expect(navState.threadId).toMatch(/^anon-/);
+    expect(navState.zakiSessionKey).toMatch(/^agent:zaki-bot:user:1:thread:anon-/);
+  });
+
+  it("deletes the active Main Agent thread and moves to a fresh thread", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    navState.zakiSessionKey = "agent:zaki-bot:user:1:thread:main";
+    authState = { user: { username: "agent@example.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+    (fetchAgentMe as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (listAgentSessions as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ sessions: [] }), headers: new Headers() },
+      data: {
+        sessions: [
+          {
+            session_key: "agent:zaki-bot:user:1:thread:main",
+            last_active: "2026-06-21T10:00:00.000Z",
+            message_count: 1,
+          },
+        ],
+      },
+    });
+    (deleteAgentSession as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ ok: true }), headers: new Headers() },
+      data: { ok: true },
+    });
+
+    const { container } = await renderChatAreaAndWaitForEffects();
+
+    await screen.findByText("Main");
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "zakiControls.sessionList.deleteSessionAria",
+      })
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "zakiControls.sessionList.deleteConfirmAction",
+      })
+    );
+
+    await waitFor(() => {
+      expect(deleteAgentSession).toHaveBeenCalledWith("agent:zaki-bot:user:1:thread:main");
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("Main")).not.toBeInTheDocument();
+    });
+    expect(container.querySelectorAll(".zaki-thread-item")).toHaveLength(1);
+    expect(screen.getByText("New thread")).toBeInTheDocument();
+    expect(navState.threadId).toMatch(/^anon-/);
+    expect(navState.zakiSessionKey).toMatch(/^agent:zaki-bot:user:1:thread:anon-/);
   });
 
   it("parses task progress events as structured live execution", () => {
