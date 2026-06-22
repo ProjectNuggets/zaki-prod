@@ -382,7 +382,7 @@ function AgentReplyEvidence({
                 className="zaki-agent-reply-sources__panel-link"
                 onClick={onOpenSources}
               >
-                Open evidence panel
+                Open sources panel
                 <ExternalLink className="size-3" aria-hidden />
               </button>
             ) : null}

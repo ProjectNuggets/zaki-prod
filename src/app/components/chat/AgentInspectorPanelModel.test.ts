@@ -19,11 +19,25 @@ function entry(overrides: Partial<NullalisTranscriptEntry>): NullalisTranscriptE
 }
 
 describe("AgentInspectorPanelModel", () => {
-  it("routes memory and read-like events to Evidence", () => {
+  it("routes concrete source evidence to Sources", () => {
     const memory = entry({
       id: "memory",
       intent: "memory",
       text: "Fetched durable graph memory for this user.",
+    });
+    const context = entry({
+      id: "context",
+      intent: "context",
+      tool: "retrieve_context",
+      text: "Loaded retrieved context.",
+      timestamp: 3,
+    });
+    const web = entry({
+      id: "web",
+      kind: "tool",
+      tool: "web_search",
+      resultSummary: "Used https://example.com/research as a source.",
+      timestamp: 4,
     });
     const readFile = entry({
       id: "read-file",
@@ -35,14 +49,43 @@ describe("AgentInspectorPanelModel", () => {
     });
 
     expect(isAgentSourceEntry(memory)).toBe(true);
+    expect(isAgentSourceEntry(context)).toBe(true);
+    expect(isAgentSourceEntry(web)).toBe(true);
     expect(isAgentSourceEntry(readFile)).toBe(true);
     expect(isAgentArtifactEntry(readFile)).toBe(false);
 
-    const model = buildAgentInspectorPanelModel([memory, readFile]);
-    expect(model.sources.map((event) => event.id)).toEqual(["read-file", "memory"]);
+    const model = buildAgentInspectorPanelModel([memory, context, web, readFile]);
+    expect(model.sources.map((event) => event.id)).toEqual(["web", "context", "read-file", "memory"]);
+    expect(model.sources.map((event) => event.category)).toEqual(["web", "retrieval", "file", "memory"]);
   });
 
-  it("keeps artifacts out of Evidence even when files are present", () => {
+  it("does not route source-ish trace or generic context wording to Sources", () => {
+    const trace = entry({
+      id: "trace",
+      kind: "status",
+      text: "Read context, search sources, then continue.",
+    });
+    const genericContext = entry({
+      id: "context-status",
+      kind: "tool",
+      intent: "context",
+      text: "Gathering context",
+    });
+    const runtimeInfo = entry({
+      id: "runtime-info",
+      kind: "tool",
+      intent: "context",
+      tool: "runtime_info",
+      resultSummary: "Runtime info completed.",
+    });
+
+    expect(isAgentSourceEntry(trace)).toBe(false);
+    expect(isAgentSourceEntry(genericContext)).toBe(false);
+    expect(isAgentSourceEntry(runtimeInfo)).toBe(false);
+    expect(buildAgentInspectorPanelModel([trace, genericContext, runtimeInfo]).sources).toHaveLength(0);
+  });
+
+  it("keeps artifacts out of Sources even when files are present", () => {
     const artifact = entry({
       id: "artifact",
       kind: "tool",

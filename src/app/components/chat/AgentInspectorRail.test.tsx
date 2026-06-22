@@ -65,10 +65,10 @@ describe("AgentInspectorRail", () => {
     jest.clearAllMocks();
     exportAgentArtifactMock.mockResolvedValue({
       response: { ok: true },
-      data: { download_url: "/api/agent/exports/artifact.docx" },
+      data: { download_url: "/api/agent/exports/artifact.pdf" },
     });
     downloadAgentExportFileMock.mockResolvedValue({
-      filename: "artifact.docx",
+      filename: "artifact.pdf",
       bytes: 12,
     });
     listAgentTracesMock.mockResolvedValue({
@@ -394,18 +394,31 @@ describe("AgentInspectorRail", () => {
           text: "Fetched durable graph memory for this user.",
           timestamp: 1,
         },
+        {
+          id: "context-1",
+          kind: "tool",
+          intent: "context",
+          tool: "retrieve_context",
+          text: "Loaded retrieved workspace context.",
+          timestamp: 2,
+        },
       ],
       contextGaugeData: {
-        tokenCount: 2_000,
-        contextMax: 8_000,
+        pressurePercent: 25,
+        source: "live_session",
+        confidence: "exact",
       },
     });
 
     fireEvent.click(screen.getByRole("tab", { name: /Sources/i }));
 
+    expect(screen.getByTestId("agent-sources-brief")).toHaveTextContent(
+      "memory used · 1 context hit"
+    );
     expect(screen.getByText("context source")).toBeInTheDocument();
-    expect(screen.getByText("-- pressure")).toBeInTheDocument();
+    expect(screen.getByText("25% pressure · exact")).toBeInTheDocument();
     expect(screen.getByText("Fetched durable graph memory for this user.")).toBeInTheDocument();
+    expect(screen.getByText("Loaded retrieved workspace context.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open memory graph" }));
     expect(onOpenMemory).toHaveBeenCalledTimes(1);
   });
@@ -437,13 +450,39 @@ describe("AgentInspectorRail", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: /Sources/i }));
 
+    expect(screen.getByTestId("agent-sources-brief")).toHaveTextContent("1 web · 1 file");
+    expect(screen.getByText("example.com")).toBeInTheDocument();
     expect(screen.getByText(/web source/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open source" })).toHaveAttribute(
       "href",
       "https://example.com/agent-market"
     );
     expect(screen.getByText("docs/ui-handoff.md")).toBeInTheDocument();
-    expect(screen.getByText(/\[2\] · file/i)).toBeInTheDocument();
+    expect(screen.getByText(/file · done · 1 file/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open memory graph" })).not.toBeInTheDocument();
+  });
+
+  it("keeps generic trace wording and untrusted context out of Sources", () => {
+    renderRail({
+      transcriptEntries: [
+        {
+          id: "status-1",
+          kind: "status",
+          text: "Read context, search sources, then continue.",
+          timestamp: 1,
+        },
+      ],
+      contextGaugeData: {
+        tokenCount: 2_000,
+        contextMax: 8_000,
+      },
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: /Sources/i }));
+
+    expect(screen.queryByText("Read context, search sources, then continue.")).not.toBeInTheDocument();
+    expect(screen.queryByText("context source")).not.toBeInTheDocument();
+    expect(screen.getByText(/No sources surfaced/i)).toBeInTheDocument();
   });
 
   it("routes browser control-plane links to canonical settings sections", () => {
@@ -470,7 +509,6 @@ describe("AgentInspectorRail", () => {
 
   it("separates provisional artifact activity in the right panel", () => {
     renderRail({
-      artifactCount: 1,
       transcriptEntries: [
         {
           id: "artifact-1",
@@ -485,13 +523,14 @@ describe("AgentInspectorRail", () => {
       ],
     });
 
-    expect(screen.getByText(/artifacts ·/i)).toBeInTheDocument();
-    expect(screen.getByText(/syncing/i)).toBeInTheDocument();
+    expect(screen.getByTestId("agent-artifact-brief")).toHaveTextContent("1 syncing");
+    expect(screen.getByTestId("agent-artifact-syncing")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Artifacts/i })).toHaveAttribute(
       "aria-selected",
       "true"
     );
     expect(screen.getAllByText("launch-brief.md").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /Open launch-brief/i })).not.toBeInTheDocument();
   });
 
   it("opens stored artifacts through the central artifact canvas callback", async () => {
@@ -515,10 +554,15 @@ describe("AgentInspectorRail", () => {
     );
     expect(screen.getAllByText("Stored execution report").length).toBeGreaterThan(0);
     expect(screen.getAllByText("markdown").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /Share Stored execution report/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("agent-artifact-export-html-artifact-backend-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("agent-artifact-export-docx-artifact-backend-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("agent-artifact-export-pptx-artifact-backend-1")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open Stored execution report" }));
     expect(onOpenArtifact).toHaveBeenCalledWith(
       expect.objectContaining({ id: "artifact-backend-1" })
     );
+    expect(screen.getByRole("button", { name: "Show details for Stored execution report" })).toBeInTheDocument();
   });
 
   it("exports stored artifacts from the right panel and starts an authenticated download", async () => {
@@ -534,19 +578,30 @@ describe("AgentInspectorRail", () => {
       ],
     });
 
-    fireEvent.click(screen.getByTestId("agent-artifact-export-docx-artifact-download-1"));
+    expect(screen.queryByTestId("agent-artifact-export-pdf-artifact-download-1")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show details for Downloadable report" }));
+    expect(screen.queryByTestId("agent-artifact-export-html-artifact-download-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("agent-artifact-export-docx-artifact-download-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("agent-artifact-export-pptx-artifact-download-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("agent-artifact-export-xlsx-artifact-download-1")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("agent-artifact-export-pdf-artifact-download-1"));
 
     await waitFor(() => {
-      expect(exportAgentArtifactMock).toHaveBeenCalledWith("artifact-download-1", "docx");
+      expect(exportAgentArtifactMock).toHaveBeenCalledWith("artifact-download-1", "pdf");
       expect(downloadAgentExportFileMock).toHaveBeenCalledWith(
-        "/api/agent/exports/artifact.docx",
-        "Downloadable_report.docx"
+        "/api/agent/exports/artifact.pdf",
+        "Downloadable_report.pdf"
       );
-      expect(screen.getByTestId("agent-artifact-download-docx-artifact-download-1")).toBeInTheDocument();
+      expect(screen.getByTestId("agent-artifact-download-pdf-artifact-download-1")).toBeInTheDocument();
     });
   });
 
   it("manages public artifact share links from the right panel", async () => {
+    const writeText = jest.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
     renderRail({
       artifacts: [
         {
@@ -561,7 +616,9 @@ describe("AgentInspectorRail", () => {
 
     expect(screen.getByText("v5")).toBeInTheDocument();
     expect(screen.getByText("private")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Share Sharable report" })).not.toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: "Show details for Sharable report" }));
     fireEvent.click(screen.getByRole("button", { name: "Share Sharable report" }));
 
     await waitFor(() => {
@@ -573,6 +630,9 @@ describe("AgentInspectorRail", () => {
       expect(screen.getByText("shared")).toBeInTheDocument();
     });
 
+    fireEvent.click(screen.getByRole("button", { name: "Copy link for Sharable report" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("https://share.local/artifact"));
+
     fireEvent.click(screen.getByRole("button", { name: "Stop sharing Sharable report" }));
 
     await waitFor(() => {
@@ -582,7 +642,7 @@ describe("AgentInspectorRail", () => {
     });
   });
 
-  it("exposes PPTX export from the right panel when the renderer is available", async () => {
+  it("does not expose non-PDF exports from the right panel", () => {
     renderRail({
       artifacts: [
         {
@@ -595,19 +655,15 @@ describe("AgentInspectorRail", () => {
       ],
     });
 
-    fireEvent.click(screen.getByTestId("agent-artifact-export-pptx-artifact-pptx-1"));
-
-    await waitFor(() => {
-      expect(exportAgentArtifactMock).toHaveBeenCalledWith("artifact-pptx-1", "pptx");
-      expect(downloadAgentExportFileMock).toHaveBeenCalledWith(
-        "/api/agent/exports/artifact.docx",
-        "Slide_deck.pptx"
-      );
-      expect(screen.getByTestId("agent-artifact-download-pptx-artifact-pptx-1")).toBeInTheDocument();
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Show details for Slide deck" }));
+    expect(screen.getByTestId("agent-artifact-export-pdf-artifact-pptx-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("agent-artifact-export-html-artifact-pptx-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("agent-artifact-export-docx-artifact-pptx-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("agent-artifact-export-pptx-artifact-pptx-1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("agent-artifact-export-xlsx-artifact-pptx-1")).not.toBeInTheDocument();
   });
 
-  it("labels recent artifacts when the active session has no ledger output", () => {
+  it("does not show recent artifacts as current-session deliverables", () => {
     renderRail({
       artifactsScope: "recent",
       artifacts: [
@@ -621,8 +677,9 @@ describe("AgentInspectorRail", () => {
       ],
     });
 
-    expect(screen.getByText("Recent artifacts")).toBeInTheDocument();
-    expect(screen.getByText(/this session has no ledger outputs/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: /Artifacts/i }));
+    expect(screen.queryByText("Older artifact")).not.toBeInTheDocument();
+    expect(screen.getByText("No artifacts in this session yet.")).toBeInTheDocument();
   });
 
   it("auto-routes pending approvals to the Plan panel before manual tab selection", () => {

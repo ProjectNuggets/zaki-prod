@@ -136,8 +136,25 @@ function firstUrl(entry: NullalisTranscriptEntry): string | null {
   return null;
 }
 
+function hasFiles(entry: NullalisTranscriptEntry): boolean {
+  return Boolean(entry.files?.some((file) => valueToText(file)));
+}
+
+function isWebSourceTool(tool: string): boolean {
+  return /^(web_search|web_fetch|fetch_url|citation|cite)$/i.test(tool);
+}
+
+function isFileSourceTool(tool: string): boolean {
+  return /^(read_file|read|grep|rg|ripgrep|glob|list_files)$/i.test(tool);
+}
+
+function isRetrievalSourceTool(tool: string): boolean {
+  return /^(retrieval|retrieve|retrieve_context|context_retrieval|semantic_search|memory_recall)$/i.test(tool);
+}
+
 function categoryForEntry(entry: NullalisTranscriptEntry): AgentInspectorPanelEvent["category"] {
   const text = haystack(entry);
+  const tool = normalize(entry.tool);
   if (normalize(entry.phase) === "artifact_event" || text.includes("artifact")) return "artifact";
   if (text.includes("compact") || text.includes("extraction") || text.includes("history_maintenance")) {
     return "compaction";
@@ -145,14 +162,12 @@ function categoryForEntry(entry: NullalisTranscriptEntry): AgentInspectorPanelEv
   if (text.includes("continuity") || text.includes("durable_continuity")) return "continuity";
   if (isAgentBrowserEntry(entry)) return "browser";
   if (isAgentCronEntry(entry)) return "schedule";
-  if (entry.intent === "memory" || text.includes("memory")) return "memory";
-  if (entry.files?.length || text.includes("read_file") || text.includes("grep") || text.includes("rg ")) {
-    return "file";
-  }
-  if (firstUrl(entry) || text.includes("web_search") || text.includes("web_fetch") || text.includes("citation")) {
+  if (entry.intent === "memory" || tool.startsWith("memory_")) return "memory";
+  if (firstUrl(entry) || isWebSourceTool(tool)) {
     return "web";
   }
-  if (text.includes("retrieval") || text.includes("source") || text.includes("context")) return "retrieval";
+  if (hasFiles(entry) || isFileSourceTool(tool)) return "file";
+  if (entry.intent === "context" || isRetrievalSourceTool(tool)) return "retrieval";
   return "tool";
 }
 
@@ -241,28 +256,10 @@ export function isAgentSourceEntry(entry: NullalisTranscriptEntry): boolean {
   if (isAgentBrowserEntry(entry) || isAgentCronEntry(entry) || isAgentArtifactEntry(entry)) {
     return false;
   }
-  if (entry.intent === "memory" || entry.intent === "context") return true;
-  if (
-    includesAny(entry, [
-      "memory",
-      "context",
-      "source",
-      "citation",
-      "retrieval",
-      "fetch",
-      "web_search",
-      "read_file",
-      "read ",
-      "grep",
-      "rg ",
-      "search",
-      "glob",
-      "list_files",
-    ])
-  ) {
-    return true;
-  }
-  return Boolean(entry.files?.length && includesAny(entry, ["read", "source", "context", "search"]));
+  const tool = normalize(entry.tool);
+  if (entry.intent === "memory") return true;
+  if (firstUrl(entry) || hasFiles(entry)) return true;
+  return isWebSourceTool(tool) || isFileSourceTool(tool) || isRetrievalSourceTool(tool);
 }
 
 export function buildAgentInspectorPanelModel(

@@ -3,16 +3,24 @@ import {
   normalizeAgentExportDownloadUrl,
 } from "@/lib/api";
 
-export const PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS = [
+export type AgentArtifactExportFormat =
+  | "html"
+  | "pdf"
+  | "docx"
+  | "pptx"
+  | "xlsx";
+
+const AGENT_ARTIFACT_EXPORT_FORMATS = [
   "html",
   "pdf",
   "docx",
   "pptx",
   "xlsx",
-] as const;
+] as const satisfies readonly AgentArtifactExportFormat[];
 
-export type AgentArtifactExportFormat =
-  (typeof PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS)[number];
+export const PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS = [
+  "pdf",
+] as const satisfies readonly AgentArtifactExportFormat[];
 
 export type AgentArtifactExportState = {
   status: "idle" | "exporting" | "ready" | "exported" | "failed" | "unavailable";
@@ -199,7 +207,7 @@ export function getAgentArtifactExportAvailability(
 function normalizeExportFormat(value: unknown): AgentArtifactExportFormat | null {
   if (typeof value !== "string") return null;
   const match = value.trim().toLowerCase();
-  return (PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS as readonly string[]).includes(match)
+  return (AGENT_ARTIFACT_EXPORT_FORMATS as readonly string[]).includes(match)
     ? (match as AgentArtifactExportFormat)
     : null;
 }

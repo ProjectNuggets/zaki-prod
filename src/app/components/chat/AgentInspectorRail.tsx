@@ -88,7 +88,10 @@ import type {
 } from "./BotStatusRail";
 import type { ContextGaugeData } from "./NullalisRuntimeWidgets";
 import { composeTurnTimeline } from "./NullalisTurnTimeline";
-import { buildAgentInspectorPanelModel } from "./AgentInspectorPanelModel";
+import {
+  buildAgentInspectorPanelModel,
+  type AgentInspectorPanelEvent,
+} from "./AgentInspectorPanelModel";
 
 export type AgentInspectorTab =
   | "plan"
@@ -188,6 +191,13 @@ export type AgentInspectorArtifact = {
 };
 
 type AgentArtifactScope = "session" | "recent";
+type ArtifactTabState = "loading" | "ready" | "syncing" | "empty" | "unavailable";
+
+type ArtifactRow = {
+  artifact: AgentInspectorArtifact;
+  shareUrl: string | null;
+  supportedFormats: AgentArtifactExportFormat[];
+};
 
 const APP_BROWSER_TOOLS = [
   "browser_new_session",
@@ -279,7 +289,6 @@ export type AgentInspectorRailProps = {
   narrationFrame: NullalisNarrationFrame | null;
   approvalRequest: NullalisApprovalRequest | null;
   approvalContinuationPending?: boolean;
-  artifactCount?: number;
   contextGaugeData: ContextGaugeData | null;
   contextReport?: AgentContextReport | null;
   usageSummary: ZakiUsageSummary | null;
@@ -466,6 +475,72 @@ function evidenceCategoryLabel(category: string) {
   if (category === "artifact") return "artifact";
   if (category === "schedule") return "schedule";
   return "tool";
+}
+
+type SourceRow = {
+  event: AgentInspectorPanelEvent;
+  title: string;
+  summary: string;
+  meta: string;
+};
+
+function sourceDomain(href?: string | null): string | null {
+  if (!href) return null;
+  try {
+    return new URL(href).hostname.replace(/^www\./i, "");
+  } catch {
+    return null;
+  }
+}
+
+function sourceTitle(event: AgentInspectorPanelEvent): string {
+  if (event.category === "web") return sourceDomain(event.href) || "Web source";
+  if (event.category === "file") return event.files[0] || event.label || "File source";
+  if (event.category === "memory") return "Memory";
+  if (event.category === "retrieval" || event.category === "compaction" || event.category === "continuity") {
+    return "Retrieved context";
+  }
+  return event.files[0] || event.label || "Source";
+}
+
+function sourceMeta(event: AgentInspectorPanelEvent): string {
+  return `${evidenceCategoryLabel(event.category)} · ${event.meta || formatClock(event.timestamp)}`;
+}
+
+function buildSourceRows(events: AgentInspectorPanelEvent[]): SourceRow[] {
+  return events.map((event) => ({
+    event,
+    title: sourceTitle(event),
+    summary: event.summary,
+    meta: sourceMeta(event),
+  }));
+}
+
+function pluralSource(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function sourceBrief(events: AgentInspectorPanelEvent[], hasContext: boolean): string | undefined {
+  const web = events.filter((event) => event.category === "web").length;
+  const files = events.filter((event) => event.category === "file").length;
+  const memory = events.filter((event) => event.category === "memory").length;
+  const context = events.filter((event) =>
+    event.category === "retrieval" || event.category === "compaction" || event.category === "continuity"
+  ).length;
+  const parts = [
+    web ? pluralSource(web, "web") : "",
+    files ? pluralSource(files, "file") : "",
+    memory ? (memory === 1 ? "memory used" : `${memory} memories used`) : "",
+    context ? pluralSource(context, "context hit") : "",
+    hasContext && !context ? "context sample" : "",
+  ].filter(Boolean);
+  if (parts.length) return parts.join(" · ");
+  return hasContext ? "context sample" : undefined;
+}
+
+function hasTrustedContextSample(data: ContextGaugeData | null, pressurePct: number | null): boolean {
+  if (!data) return false;
+  return pressurePct != null || data.source === "live_session" || data.confidence === "exact";
 }
 
 function planStepVisualState(status?: string | null) {
@@ -876,6 +951,36 @@ function isUnavailableExportError(responseStatus: number, code: string) {
   );
 }
 
+function supportedArtifactFormats(
+  artifact: AgentInspectorArtifact,
+  states: Partial<Record<AgentArtifactExportFormat, AgentArtifactExportState>> | undefined
+) {
+  return PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS.filter((format) => {
+    if (states?.[format]) return true;
+    return getAgentArtifactExportAvailability(artifact, format).supported;
+  });
+}
+
+function artifactBrief({
+  count,
+  shared,
+  latest,
+  syncing,
+}: {
+  count: number;
+  shared: number;
+  latest: number | null;
+  syncing: number;
+}) {
+  const parts = [
+    count ? `${count} deliverable${count === 1 ? "" : "s"}` : "",
+    shared ? `${shared} shared` : "",
+    latest ? `updated ${formatCalendarStamp(latest)}` : "",
+    syncing ? `${syncing} syncing` : "",
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : undefined;
+}
+
 function normalizeAgentTraceList(data: { traces?: AgentTrace[]; items?: AgentTrace[] } | null | undefined) {
   if (!data) return [];
   if (Array.isArray(data.traces)) return data.traces;
@@ -964,7 +1069,6 @@ export function AgentInspectorRail({
   narrationFrame,
   approvalRequest,
   approvalContinuationPending = false,
-  artifactCount = 0,
   contextGaugeData,
   usageSummary,
   browserFrame = null,
@@ -1014,6 +1118,13 @@ export function AgentInspectorRail({
   const [cronBusyId, setCronBusyId] = useState<string | null>(null);
   const [confirmCronDeleteId, setConfirmCronDeleteId] = useState<string | null>(null);
   const [expandedScheduleId, setExpandedScheduleId] = useState<string | null>(null);
+  const [expandedArtifactId, setExpandedArtifactId] = useState<string | null>(null);
+
+  const shareUrlForArtifact = (artifact: AgentInspectorArtifact) => {
+    const state = artifactShareStates[artifact.id];
+    if (state) return state.url || null;
+    return getAgentArtifactShareUrl(artifact as unknown as Record<string, unknown>) || artifact.shareUrl || null;
+  };
 
   const timelineBlocks = useMemo(
     () => composeTurnTimeline(transcriptEntries),
@@ -1035,7 +1146,6 @@ export function AgentInspectorRail({
       }),
     [artifacts]
   );
-  const primaryBackendArtifact = sortedArtifacts[0] ?? null;
   const artifactIds = useMemo(
     () => new Set(sortedArtifacts.map((artifact) => artifact.id).filter(Boolean)),
     [sortedArtifacts]
@@ -1043,7 +1153,34 @@ export function AgentInspectorRail({
   const provisionalArtifactEntries = artifactEntries.filter(
     (event) => !event.artifactId || !artifactIds.has(event.artifactId)
   );
-  const artifactSourceCount = artifactCount || artifactEntries.length || sortedArtifacts.length;
+  const artifactRows: ArtifactRow[] = artifactsScope === "recent"
+    ? []
+    : sortedArtifacts.map((artifact) => ({
+        artifact,
+        shareUrl: shareUrlForArtifact(artifact),
+        supportedFormats: supportedArtifactFormats(artifact, artifactExportStates[artifact.id]),
+      }));
+  const syncingArtifactRows = provisionalArtifactEntries;
+  const artifactLatestUpdate = artifactRows
+    .map((row) => row.artifact.updatedAt)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+    .sort((a, b) => b - a)[0] ?? null;
+  const artifactBriefText = artifactBrief({
+    count: artifactRows.length,
+    shared: artifactRows.filter((row) => Boolean(row.shareUrl)).length,
+    latest: artifactLatestUpdate,
+    syncing: syncingArtifactRows.length,
+  });
+  const artifactTabState: ArtifactTabState = artifactsLoading && !artifactRows.length && !syncingArtifactRows.length
+    ? "loading"
+    : artifactRows.length
+      ? "ready"
+      : syncingArtifactRows.length
+        ? "syncing"
+        : artifactsError
+          ? "unavailable"
+          : "empty";
+  const artifactTabCount = artifactRows.length || syncingArtifactRows.length || undefined;
   const browserEntries = panelModel.browser;
   const scheduleEvents = panelModel.cron;
   const scheduleRows = useMemo(
@@ -1087,6 +1224,15 @@ export function AgentInspectorRail({
   );
   const runningTask = currentTasks.find((task) => task.status === "running") ?? null;
   const ctxPct = contextPercent(contextGaugeData);
+  const sourceRows = useMemo(() => buildSourceRows(sourceEntries), [sourceEntries]);
+  const trustedContextSample = hasTrustedContextSample(contextGaugeData, ctxPct);
+  const hasMemorySources = sourceEntries.some((event) => event.category === "memory");
+  const sourceBriefText = sourceBrief(sourceEntries, trustedContextSample);
+  const sourcesTabState: "ready" | "context" | "empty" = sourceRows.length
+    ? "ready"
+    : trustedContextSample
+      ? "context"
+      : "empty";
   const hasBrowserFrame = Boolean(browserFrame?.frame?.trim());
   const sandboxLabel = sandbox?.enabled
     ? sandbox.backend
@@ -1125,7 +1271,6 @@ export function AgentInspectorRail({
   ).length;
   const latestLatency =
     recentTrace.find((event) => typeof event.durationMs === "number")?.durationMs ?? null;
-  const primaryArtifact = artifactEntries[0] ?? null;
   const blockingApproval = approvalRequest && !approvalContinuationPending ? approvalRequest : null;
   const activeTodoList = useMemo(() => {
     const lists = todosData?.lists ?? [];
@@ -1529,7 +1674,7 @@ export function AgentInspectorRail({
       setTab("plan");
       return;
     }
-    if (artifactSourceCount) {
+    if (artifactTabState !== "empty" && artifactTabState !== "unavailable") {
       setTab("artifacts");
       return;
     }
@@ -1541,17 +1686,17 @@ export function AgentInspectorRail({
       setTab("cron");
       return;
     }
-    if (sourceEntries.length) {
+    if (sourcesTabState !== "empty") {
       setTab("evidence");
     }
   }, [
-    artifactSourceCount,
+    artifactTabState,
     browserActivity,
     hasBrowserFrame,
     manualTabSelected,
     planTabState,
     scheduleRows.length,
-    sourceEntries.length,
+    sourcesTabState,
     tabRequest,
   ]);
 
@@ -1611,12 +1756,6 @@ export function AgentInspectorRail({
         [format]: state,
       },
     }));
-  };
-
-  const shareUrlForArtifact = (artifact: AgentInspectorArtifact) => {
-    const state = artifactShareStates[artifact.id];
-    if (state) return state.url || null;
-    return artifact.shareUrl || null;
   };
 
   useEffect(() => {
@@ -1909,11 +2048,11 @@ export function AgentInspectorRail({
         options={[
           { id: "plan", label: "Plan", count: planTabCount },
           { id: "cron", label: "Schedules", count: scheduleTabCount },
-          { id: "evidence", label: "Sources", count: sourceEntries.length || undefined },
+          { id: "evidence", label: "Sources", count: sourceRows.length || undefined },
           {
             id: "artifacts",
             label: "Artifacts",
-            count: artifactSourceCount || undefined,
+            count: artifactTabCount,
           },
           {
             id: "browser",
@@ -2440,24 +2579,27 @@ export function AgentInspectorRail({
 
         {tab === "evidence" ? (
           <V2Panel aria-label="Sources" className="zaki-agent-inspector__pane">
-            <V2PanelHead title="Sources" meta={sourceEntries.length ? "runtime audit trail" : lastChannel || "agent"} />
-            {sourceEntries.length ? (
+            <V2PanelHead title="Sources" />
+            {sourceBriefText ? (
+              <div className="zaki-agent-inspector__source-brief" data-testid="agent-sources-brief">
+                {sourceBriefText}
+              </div>
+            ) : null}
+            {sourceRows.length ? (
               <div className="zaki-agent-inspector__source-stack">
-                {sourceEntries.map((event, index) => (
-                  <article key={event.id} className="zaki-agent-inspector__source-doc">
+                {sourceRows.map((row) => (
+                  <article key={row.event.id} className="zaki-agent-inspector__source-doc">
                     <div className="zaki-agent-inspector__source-head">
-                      <span className="name">{event.files[0] || event.label}</span>
-                      <span className="meta">
-                        [{index + 1}] · {evidenceCategoryLabel(event.category)} · {event.meta || formatClock(event.timestamp)}
-                      </span>
+                      <span className="name">{row.title}</span>
+                      <span className="meta">{row.meta}</span>
                     </div>
                     <div className="zaki-agent-inspector__source-body">
-                      <span className="hl">{event.summary}</span>
-                      {event.files.length > 1 ? (
-                        <small>{event.files.slice(1).join(", ")}</small>
+                      <span className="hl">{row.summary}</span>
+                      {row.event.files.length > 1 ? (
+                        <small>{row.event.files.slice(1).join(", ")}</small>
                       ) : null}
-                      {event.href ? (
-                        <a href={event.href} target="_blank" rel="noreferrer">
+                      {row.event.href ? (
+                        <a href={row.event.href} target="_blank" rel="noreferrer">
                           Open source
                         </a>
                       ) : null}
@@ -2465,67 +2607,54 @@ export function AgentInspectorRail({
                   </article>
                 ))}
               </div>
-            ) : (
+            ) : sourcesTabState === "empty" ? (
               <div className="v2-empty-line">
                 No sources surfaced in this turn yet. Web pages, files, memory hits, and context events will appear here when the runtime emits them.
               </div>
-            )}
-            <div className="zaki-agent-inspector__evidence-context">
-              <span>context source</span>
-              <strong>{contextSourceLabel(contextGaugeData)}</strong>
-              <small>
-                {ctxPct != null
-                  ? `${Math.round(ctxPct)}% pressure${
-                      contextGaugeData?.confidence ? ` · ${contextGaugeData.confidence}` : ""
-                    }`
-                  : contextGaugeData
-                    ? "-- pressure"
-                    : "No trusted context sample"}
-              </small>
-            </div>
-            <PanelActionButton onClick={onOpenMemory} ariaLabel="Open memory graph">
-              <Brain className="size-4" aria-hidden />
-              Open memory graph
-            </PanelActionButton>
+            ) : null}
+            {trustedContextSample ? (
+              <div className="zaki-agent-inspector__evidence-context">
+                <span>context source</span>
+                <strong>{contextSourceLabel(contextGaugeData)}</strong>
+                <small>
+                  {ctxPct != null
+                    ? `${Math.round(ctxPct)}% pressure${
+                        contextGaugeData?.confidence ? ` · ${contextGaugeData.confidence}` : ""
+                      }`
+                    : "Pressure unavailable"}
+                </small>
+              </div>
+            ) : null}
+            {hasMemorySources && onOpenMemory ? (
+              <PanelActionButton onClick={onOpenMemory} ariaLabel="Open memory graph">
+                <Brain className="size-4" aria-hidden />
+                Open memory graph
+              </PanelActionButton>
+            ) : null}
           </V2Panel>
         ) : null}
 
         {tab === "artifacts" ? (
           <V2Panel aria-label="Artifacts" className="zaki-agent-inspector__pane">
-            <article className="zaki-agent-inspector__artifact-doc">
-              <header className="zaki-agent-inspector__artifact-head">
-                <div className="tag">
-                  artifacts · {sortedArtifacts.length ? (artifactsScope === "recent" ? "recent" : "session") : provisionalArtifactEntries.length ? "syncing" : "idle"}
-                </div>
-                <div className="title">
-                  {primaryBackendArtifact?.title ||
-                    primaryArtifact?.files[0] ||
-                    primaryArtifact?.label ||
-                    "No artifact activity"}
-                </div>
-                <div className="sub">
-                  {artifactsScope === "recent" && sortedArtifacts.length
-                    ? "Recent artifacts shown because this session has no ledger outputs yet"
-                    : primaryBackendArtifact?.type ||
-                      primaryArtifact?.meta ||
-                      "Documents, canvases, exports, and generated files"}
-                </div>
-              </header>
-            </article>
-            {artifactsLoading && !sortedArtifacts.length ? (
-              <div className="v2-empty-line">Loading artifact ledger...</div>
+            <V2PanelHead title="Artifacts" />
+            {artifactBriefText ? (
+              <div className="zaki-agent-inspector__artifact-brief" data-testid="agent-artifact-brief">
+                {artifactBriefText}
+              </div>
             ) : null}
-            {artifactsError ? (
-              <div className="v2-empty-line">Artifact ledger unavailable: {artifactsError}</div>
+            {artifactTabState === "loading" ? (
+              <div className="v2-empty-line">Loading artifacts...</div>
             ) : null}
-            {sortedArtifacts.length ? (
+            {artifactTabState === "unavailable" ? (
+              <div className="v2-empty-line">Artifacts are unavailable right now.</div>
+            ) : null}
+            {artifactRows.length ? (
               <div className="zaki-agent-inspector__artifact-list" data-testid="agent-artifact-list">
-                {artifactsScope === "recent" ? (
-                  <div className="zaki-agent-inspector__artifact-scope">Recent artifacts</div>
-                ) : null}
-                {sortedArtifacts.map((artifact) => {
+                {artifactRows.map((row) => {
+                  const artifact = row.artifact;
                   const shareState = artifactShareStates[artifact.id];
-                  const shareUrl = shareUrlForArtifact(artifact);
+                  const shareUrl = row.shareUrl;
+                  const isExpanded = expandedArtifactId === artifact.id;
                   return (
                     <article
                       key={artifact.id}
@@ -2556,161 +2685,168 @@ export function AgentInspectorRail({
                           <ExternalLink className="size-3.5" aria-hidden />
                           Open
                         </button>
-                        {PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS.map((format) => {
-                          const availability = getAgentArtifactExportAvailability(artifact, format);
-                          const exportState = artifactExportStates[artifact.id]?.[format];
-                          const formatLabel = getAgentArtifactExportFormatLabel(format);
-                          const label = `Download ${formatLabel}`;
-                          const unavailableReason =
-                            availability.reason || exportState?.error || `${formatLabel} export unavailable`;
-                          const exported = isExportedState(exportState);
-                          if (exported) {
-                            return (
-                              <button
-                                key={format}
-                                type="button"
-                                className="zaki-agent-inspector__artifact-action is-ready"
-                                onClick={() => void handleArtifactDownload(artifact, format, exportState.url)}
-                                data-testid={`agent-artifact-download-${format}-${artifact.id}`}
-                                aria-label={`${label} for ${artifact.title}`}
-                              >
-                                <Download className="size-3.5" aria-hidden />
-                                {formatLabel}
-                              </button>
-                            );
-                          }
-                          if (!availability.supported) {
-                            return (
-                              <button
-                                key={format}
-                                type="button"
-                                className="zaki-agent-inspector__artifact-action is-unavailable"
-                                disabled
-                                data-testid={`agent-artifact-export-${format}-${artifact.id}`}
-                                aria-label={`${formatLabel} export unavailable for ${artifact.title}`}
-                                title={unavailableReason}
-                              >
-                                <Download className="size-3.5" aria-hidden />
-                                {formatLabel} unavailable
-                              </button>
-                            );
-                          }
-                          const failedWithUrl = exportState?.status === "failed" && exportState.url;
-                          const actionText =
-                            exportState?.status === "exporting"
-                              ? "Exporting"
-                              : exportState?.status === "failed"
-                                ? failedWithUrl
-                                  ? `Retry ${formatLabel} download`
-                                  : `Retry ${formatLabel} export`
-                                : exportState?.status === "unavailable"
-                                  ? `${formatLabel} unavailable`
-                                  : label;
-                          return (
-                            <button
-                              key={format}
-                              type="button"
-                              className="zaki-agent-inspector__artifact-action"
-                              onClick={() =>
-                                failedWithUrl
-                                  ? void handleArtifactDownload(artifact, format, exportState.url || "")
-                                  : void handleArtifactExport(artifact, format)
-                              }
-                              disabled={exportState?.status === "exporting" || exportState?.status === "unavailable"}
-                              data-testid={`agent-artifact-export-${format}-${artifact.id}`}
-                              aria-label={`${actionText} for ${artifact.title}`}
-                              title={exportState?.error || undefined}
-                            >
-                              <Download className="size-3.5" aria-hidden />
-                              {actionText}
-                            </button>
-                          );
-                        })}
                         <button
                           type="button"
                           className="zaki-agent-inspector__artifact-action"
-                          onClick={() => void handleArtifactShare(artifact)}
-                          disabled={shareState?.status === "sharing"}
-                          aria-label={`Share ${artifact.title}`}
+                          onClick={() => setExpandedArtifactId(isExpanded ? null : artifact.id)}
+                          aria-expanded={isExpanded}
+                          aria-label={`${isExpanded ? "Hide" : "Show"} details for ${artifact.title}`}
                         >
-                          <Share2 className="size-3.5" aria-hidden />
-                          {shareState?.status === "sharing" ? "Sharing" : shareUrl ? "Refresh share" : "Share"}
-                        </button>
-                        {shareUrl ? (
-                          <>
-                            <a
-                              className="zaki-agent-inspector__artifact-action is-ready"
-                              href={shareUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              aria-label={`Open public share for ${artifact.title}`}
-                            >
-                              <ExternalLink className="size-3.5" aria-hidden />
-                              Public
-                            </a>
-                            <button
-                              type="button"
-                              className="zaki-agent-inspector__artifact-action"
-                              onClick={() => void handleArtifactShareRevoke(artifact)}
-                              disabled={shareState?.status === "revoking"}
-                              aria-label={`Stop sharing ${artifact.title}`}
-                            >
-                              <Link2Off className="size-3.5" aria-hidden />
-                              {shareState?.status === "revoking" ? "Stopping" : "Stop"}
-                            </button>
-                          </>
-                        ) : null}
-                        <button
-                          type="button"
-                          className="zaki-agent-inspector__artifact-action"
-                          onClick={() => void handleCopyArtifactLink(artifact)}
-                          disabled={!shareUrl && !PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS.some((format) => artifactExportStates[artifact.id]?.[format]?.url)}
-                          aria-label={`Copy link for ${artifact.title}`}
-                        >
-                          {shareUrl ? <Link2 className="size-3.5" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
-                          {shareState?.status === "copied" ? "Copied" : "Copy"}
+                          <Boxes className="size-3.5" aria-hidden />
+                          Details
                         </button>
                       </div>
-                      {shareState?.status === "failed" ? (
-                        <div className="zaki-agent-inspector__artifact-state">Share/link action failed: {shareState.error || "retry available"}</div>
-                      ) : null}
-                      {PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS.map((format) => {
-                        const exportState = artifactExportStates[artifact.id]?.[format];
-                        if (
-                          !exportState ||
-                          exportState.status === "idle" ||
-                          exportState.status === "ready" ||
-                          exportState.status === "exported" ||
-                          exportState.status === "exporting"
-                        ) return null;
-                        return (
-                          <div key={format} className="zaki-agent-inspector__artifact-state">
-                            {getAgentArtifactExportFormatLabel(format)} {exportState.status}: {exportState.error || "retry available"}
+                      {isExpanded ? (
+                        <div className="zaki-agent-inspector__artifact-details">
+                          {row.supportedFormats.length ? (
+                            <div className="zaki-agent-inspector__artifact-actions is-delivery">
+                              {row.supportedFormats.map((format) => {
+                                const exportState = artifactExportStates[artifact.id]?.[format];
+                                const formatLabel = getAgentArtifactExportFormatLabel(format);
+                                const label = `Download ${formatLabel}`;
+                                const exported = isExportedState(exportState);
+                                if (exported) {
+                                  return (
+                                    <button
+                                      key={format}
+                                      type="button"
+                                      className="zaki-agent-inspector__artifact-action is-ready"
+                                      onClick={() => void handleArtifactDownload(artifact, format, exportState.url)}
+                                      data-testid={`agent-artifact-download-${format}-${artifact.id}`}
+                                      aria-label={`${label} for ${artifact.title}`}
+                                    >
+                                      <Download className="size-3.5" aria-hidden />
+                                      {formatLabel}
+                                    </button>
+                                  );
+                                }
+                                const failedWithUrl = exportState?.status === "failed" && exportState.url;
+                                const actionText =
+                                  exportState?.status === "exporting"
+                                    ? "Exporting"
+                                    : exportState?.status === "failed"
+                                      ? failedWithUrl
+                                        ? `Retry ${formatLabel} download`
+                                        : `Retry ${formatLabel} export`
+                                      : exportState?.status === "unavailable"
+                                        ? `${formatLabel} unavailable`
+                                        : label;
+                                return (
+                                  <button
+                                    key={format}
+                                    type="button"
+                                    className="zaki-agent-inspector__artifact-action"
+                                    onClick={() =>
+                                      failedWithUrl
+                                        ? void handleArtifactDownload(artifact, format, exportState.url || "")
+                                        : void handleArtifactExport(artifact, format)
+                                    }
+                                    disabled={exportState?.status === "exporting" || exportState?.status === "unavailable"}
+                                    data-testid={`agent-artifact-export-${format}-${artifact.id}`}
+                                    aria-label={`${actionText} for ${artifact.title}`}
+                                    title={exportState?.error || undefined}
+                                  >
+                                    <Download className="size-3.5" aria-hidden />
+                                    {actionText}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                          <div className="zaki-agent-inspector__artifact-actions is-delivery">
+                            <button
+                              type="button"
+                              className="zaki-agent-inspector__artifact-action"
+                              onClick={() => void handleArtifactShare(artifact)}
+                              disabled={shareState?.status === "sharing"}
+                              aria-label={`Share ${artifact.title}`}
+                            >
+                              <Share2 className="size-3.5" aria-hidden />
+                              {shareState?.status === "sharing" ? "Sharing" : shareUrl ? "Refresh share" : "Share"}
+                            </button>
+                            {shareUrl ? (
+                              <>
+                                <a
+                                  className="zaki-agent-inspector__artifact-action is-ready"
+                                  href={shareUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  aria-label={`Open public share for ${artifact.title}`}
+                                >
+                                  <ExternalLink className="size-3.5" aria-hidden />
+                                  Public
+                                </a>
+                                <button
+                                  type="button"
+                                  className="zaki-agent-inspector__artifact-action"
+                                  onClick={() => void handleArtifactShareRevoke(artifact)}
+                                  disabled={shareState?.status === "revoking"}
+                                  aria-label={`Stop sharing ${artifact.title}`}
+                                >
+                                  <Link2Off className="size-3.5" aria-hidden />
+                                  {shareState?.status === "revoking" ? "Stopping" : "Stop"}
+                                </button>
+                              </>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="zaki-agent-inspector__artifact-action"
+                              onClick={() => void handleCopyArtifactLink(artifact)}
+                              disabled={!shareUrl && !PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS.some((format) => artifactExportStates[artifact.id]?.[format]?.url)}
+                              aria-label={`Copy link for ${artifact.title}`}
+                            >
+                              {shareUrl ? <Link2 className="size-3.5" aria-hidden /> : <Copy className="size-3.5" aria-hidden />}
+                              {shareState?.status === "copied" ? "Copied" : "Copy"}
+                            </button>
                           </div>
-                        );
-                      })}
+                          {shareState?.status === "failed" ? (
+                            <div className="zaki-agent-inspector__artifact-state">Share/link action failed: {shareState.error || "retry available"}</div>
+                          ) : null}
+                          {row.supportedFormats.map((format) => {
+                            const exportState = artifactExportStates[artifact.id]?.[format];
+                            if (
+                              !exportState ||
+                              exportState.status === "idle" ||
+                              exportState.status === "ready" ||
+                              exportState.status === "exported" ||
+                              exportState.status === "exporting"
+                            ) return null;
+                            return (
+                              <div key={format} className="zaki-agent-inspector__artifact-state">
+                                {getAgentArtifactExportFormatLabel(format)} {exportState.status}: {exportState.error || "retry available"}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : null}
                     </article>
                   );
                 })}
               </div>
             ) : null}
-            {provisionalArtifactEntries.length ? (
-              <ol className="zaki-agent-inspector__event-list">
-                {provisionalArtifactEntries.map((event) => (
-                  <li key={event.id}>
-                    <Boxes className="zaki-agent-inspector__event-icon" aria-hidden />
-                    <div>
-                      <strong>{event.label}</strong>
-                      <span>{event.summary}</span>
-                      <small>{event.meta || "Syncing with artifact ledger"}</small>
-                    </div>
-                  </li>
-                ))}
-              </ol>
+            {syncingArtifactRows.length ? (
+              <section className="zaki-agent-inspector__artifact-syncing" data-testid="agent-artifact-syncing">
+                <div className="zaki-agent-inspector__jobs-head">
+                  <span>Syncing</span>
+                  <span>{syncingArtifactRows.length} event{syncingArtifactRows.length === 1 ? "" : "s"}</span>
+                </div>
+                <ol className="zaki-agent-inspector__event-list">
+                  {syncingArtifactRows.map((event) => (
+                    <li key={event.id}>
+                      <Boxes className="zaki-agent-inspector__event-icon" aria-hidden />
+                      <div>
+                        <strong>{event.files[0] || event.label}</strong>
+                        <span>{event.summary}</span>
+                        <small>{event.meta || "Waiting for artifact record"}</small>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </section>
             ) : null}
-            {!sortedArtifacts.length && !provisionalArtifactEntries.length && !artifactsLoading ? (
+            {artifactTabState === "empty" ? (
               <div className="v2-empty-line">
-                Generated outputs will appear here as the agent creates them.
+                No artifacts in this session yet.
               </div>
             ) : null}
           </V2Panel>

@@ -119,15 +119,9 @@ describe("AgentArtifactCanvas", () => {
       );
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Export PPTX/i }));
-
-    await waitFor(() => {
-      expect(exportAgentArtifactMock).toHaveBeenCalledWith("artifact-1", "pptx");
-      expect(downloadAgentExportFileMock).toHaveBeenCalledWith(
-        "/api/agent/exports/research-report.pdf",
-        "Research_report.pptx"
-      );
-    });
+    expect(screen.queryByRole("button", { name: /Export PPTX/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Export DOCX/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Export HTML/i })).not.toBeInTheDocument();
   });
 
   it("saves canvas edits with a readable change summary", async () => {

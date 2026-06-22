@@ -98,6 +98,7 @@ import {
 } from "./chat/rendering/agentReplyPresentation";
 import { sanitizeAssistantScaffold } from "./chat/rendering/scaffoldSanitizer";
 import { agentThoughtToStep } from "./chat/rendering/agentThoughtSteps";
+import { getAgentArtifactShareUrl } from "@/app/components/agent/agentArtifactSurface";
 import {
   AgentInspectorRail,
   type AgentInspectorArtifact,
@@ -2345,7 +2346,9 @@ function normalizeAgentArtifact(item: unknown): AgentInspectorArtifact | null {
             ? record.latestVersion
         : null,
     sessionKey: recordStringValue(record, "session_key", "sessionKey", "session_id", "sessionId"),
-    shareUrl: recordStringValue(record, "public_url", "publicUrl", "share_url", "shareUrl"),
+    shareUrl:
+      getAgentArtifactShareUrl(record) ||
+      recordStringValue(record, "public_url", "publicUrl", "share_url", "shareUrl"),
     createdAt: timestampMillis(record.created_at ?? record.createdAt ?? record.created_at_ms ?? record.createdAtMs),
     updatedAt: timestampMillis(
       record.updated_at ??
@@ -5158,24 +5161,8 @@ export function ChatArea() {
         setAgentArtifactsError(error);
       } else {
         const sessionArtifacts = normalizeAgentArtifactsPayload(data);
-        if (sessionArtifacts.length || !normalizedActiveZakiSessionKey) {
-          setAgentArtifactSnapshots(sessionArtifacts);
-          setAgentArtifactScope("session");
-        } else {
-          try {
-            const recentResult = await listAgentArtifacts({ limit: 5 });
-            if (recentResult.response.ok) {
-              setAgentArtifactSnapshots(normalizeAgentArtifactsPayload(recentResult.data));
-              setAgentArtifactScope("recent");
-            } else {
-              setAgentArtifactSnapshots([]);
-              setAgentArtifactScope("session");
-            }
-          } catch {
-            setAgentArtifactSnapshots([]);
-            setAgentArtifactScope("session");
-          }
-        }
+        setAgentArtifactSnapshots(sessionArtifacts);
+        setAgentArtifactScope("session");
       }
     } else {
       setAgentArtifactSnapshots([]);
@@ -9471,7 +9458,6 @@ export function ChatArea() {
       narrationFrame={nullalisNarrationFrame}
       approvalRequest={nullalisApprovalRequest}
       approvalContinuationPending={Boolean(approvalContinuationPendingId)}
-      artifactCount={agentArtifactEventCount}
       contextGaugeData={nullalisContextGauge}
       contextReport={nullalisContextReport}
       usageSummary={zakiUsageSummary}

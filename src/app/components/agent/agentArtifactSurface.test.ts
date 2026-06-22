@@ -6,15 +6,9 @@ import {
 } from "./agentArtifactSurface";
 
 describe("agentArtifactSurface", () => {
-  it("publishes the V1 document export formats in user-facing order", () => {
-    expect(PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS).toEqual([
-      "html",
-      "pdf",
-      "docx",
-      "pptx",
-      "xlsx",
-    ]);
-    expect(getAgentArtifactExportFormatLabel("pptx")).toBe("PPTX");
+  it("publishes only PDF as a user-facing export format", () => {
+    expect(PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS).toEqual(["pdf"]);
+    expect(getAgentArtifactExportFormatLabel("pdf")).toBe("PDF");
   });
 
   it("does not infer document export support from titles", () => {
@@ -42,6 +36,18 @@ describe("agentArtifactSurface", () => {
   });
 
   it("disables formats only when explicit artifact metadata says so", () => {
+    expect(
+      getAgentArtifactExportAvailability(
+        {
+          id: "a1",
+          supported_formats: ["html"],
+        },
+        "pdf"
+      )
+    ).toEqual({
+      supported: false,
+      reason: "PDF export is not available for this artifact.",
+    });
     expect(
       getAgentArtifactExportAvailability(
         {
