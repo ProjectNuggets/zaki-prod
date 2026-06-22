@@ -273,4 +273,13 @@ describe("Agent reply presentation", () => {
     expect(display).not.toContain("canonical_user_id");
     expect(display).not.toContain("same_user_truth");
   });
+
+  it("classifies stripped reflection prompts as internal during streaming and refresh", () => {
+    const leaked =
+      "**This is your reply to the user. Not a planning document. Not a step-by-step outline. The actual reply.**\n\n" +
+      "**STEP 1 (mandatory): Surface what the tool above just returned.**";
+
+    expect(isInternalAgentReplyContent(leaked, { streaming: true })).toBe(true);
+    expect(normalizeAssistantDisplayText(leaked, { agentReply: true })).toBe("");
+  });
 });

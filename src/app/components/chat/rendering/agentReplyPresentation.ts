@@ -562,6 +562,15 @@ export function isInternalAgentReplyContent(
   content: string,
   options?: { streaming?: boolean }
 ): boolean {
+  if (
+    String(content || "").trim() &&
+    !normalizeAssistantDisplayText(content, {
+      agentReply: true,
+      streaming: options?.streaming,
+    })
+  ) {
+    return true;
+  }
   const segments = segmentAgentReplyContent(content, options);
   return segments.length > 0 && segments.every((segment) => segment.kind === "suppressed_runtime");
 }

@@ -160,4 +160,20 @@ describe("regression contract: internal system-prompt sections never appear", ()
     expect(out).toContain("cron [agent session]");
     expect(out).not.toContain("agent:zaki-bot:user");
   });
+
+  it("drops Nullalis reflection prompts that can arrive through refreshed history", () => {
+    const leaked =
+      "**This is your reply to the user. Not a planning document. Not a step-by-step outline. The actual reply.**\n\n" +
+      "**STEP 1 (mandatory): Surface what the tool above just returned.** Quote file contents, show command output, list recalled memory entries with their actual keys + content.";
+
+    expect(sanitizeAssistantScaffold(leaked)).toBe("");
+  });
+
+  it("drops tool-result reflection prompts embedded after tool output", () => {
+    const leaked =
+      "Created artifact 'Sprint Pack'.\n\n" +
+      "The user CANNOT see the `<tool_result>` block above, they see only your text. If you don't render it, it didn't happen for them.";
+
+    expect(sanitizeAssistantScaffold(leaked)).toBe("");
+  });
 });

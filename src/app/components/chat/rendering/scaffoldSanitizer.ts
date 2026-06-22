@@ -50,6 +50,13 @@ const DELEGATE_RESULT_LABEL_RE = /(^|\n)\s*result:\s*\n/gi;
 const AGENT_SESSION_KEY_RE =
   /\bagent:zaki-bot:user:[^:\s]+:(?:main|thread:[a-z0-9_.:-]+|task:[a-z0-9_.:-]+|cron:[a-z0-9_.:-]+)\b/gi;
 
+const REFLECTION_PROMPT_MARKERS = [
+  "This is your reply to the user. Not a planning document. Not a step-by-step outline. The actual reply.",
+  "STEP 1 (mandatory): Surface what the tool above just returned",
+  "The user CANNOT see the `<tool_result>` block above",
+] as const;
+const REFLECTION_PROMPT_PREFIX_RE = /^\s*\*{0,2}This is your reply to the user\b/i;
+
 // Strong signals that a chunk carries the leaked system prompt. Section-stripping only fires
 // when one of these is present, so a legitimate lone "## Safety" answer heading is never removed.
 const DISTINCTIVE_SCAFFOLD_RE =
@@ -84,9 +91,18 @@ function stripStablePromptSections(text: string): string {
   return out.join("\n");
 }
 
+function isInternalReflectionPrompt(text: string): boolean {
+  const normalized = text.replace(/\*/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  if (REFLECTION_PROMPT_PREFIX_RE.test(normalized)) return true;
+  return REFLECTION_PROMPT_MARKERS.some((marker) =>
+    normalized.includes(marker.toLowerCase())
+  );
+}
+
 export function sanitizeAssistantScaffold(raw: string): string {
   if (!raw) return raw;
   let text = String(raw);
+  if (isInternalReflectionPrompt(text)) return "";
   const leaked = DISTINCTIVE_SCAFFOLD_RE.test(text);
   text = text
     .replace(ZAKI_ENVELOPE_RE, "")
