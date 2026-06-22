@@ -21,11 +21,9 @@ export type AgentInspectorPanelModel = {
   artifacts: AgentInspectorPanelEvent[];
   browser: AgentInspectorPanelEvent[];
   cron: AgentInspectorPanelEvent[];
-  trace: AgentInspectorPanelEvent[];
 };
 
 const MAX_PANEL_EVENTS = 5;
-const MAX_TRACE_EVENTS = 7;
 
 function valueToText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -278,6 +276,5 @@ export function buildAgentInspectorPanelModel(
     artifacts: recentEvents(normalized.filter(isAgentArtifactEntry)),
     browser: recentEvents(normalized.filter(isAgentBrowserEntry)),
     cron: recentEvents(normalized.filter(isAgentCronEntry)),
-    trace: recentEvents(normalized, MAX_TRACE_EVENTS),
   };
 }

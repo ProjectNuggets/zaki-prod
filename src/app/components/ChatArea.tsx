@@ -189,7 +189,6 @@ const MOBILE_INSPECTOR_FOCUSABLE_SELECTOR =
 function normalizeAgentInspectorEventTab(value: unknown): AgentInspectorTab {
   if (value === "browser") return "browser";
   if (value === "artifacts") return "artifacts";
-  if (value === "trace") return "trace";
   if (value === "cron") return "cron";
   if (value === "sources" || value === "evidence" || value === "context" || value === "memory") {
     return "evidence";
@@ -9592,15 +9591,6 @@ export function ChatArea() {
                 id: "weekly",
                 label: t("agent.status.weekly", { defaultValue: "Weekly" }),
                 value: agentWeeklyLabel,
-              },
-              {
-                id: "trace",
-                label: t("agent.status.trace", { defaultValue: "Trace" }),
-                value: nullalisTranscriptEntries.length,
-                onClick: () => openAgentInspectorTab("trace"),
-                ariaLabel: t("agent.status.openTrace", {
-                  defaultValue: "Open trace panel",
-                }),
               },
             ]}
           />

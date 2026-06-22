@@ -11,16 +11,12 @@ jest.mock("@/lib/api", () => ({
   fetchAgentSessionPlan: jest.fn(),
   fetchAgentSessionTodos: jest.fn(),
   fetchAgentTask: jest.fn(),
-  fetchAgentTrace: jest.fn(),
-  listAgentTraces: jest.fn(),
   normalizeAgentArtifactShareUrl: (value: unknown) =>
     typeof value === "string" && value.trim() ? value.trim() : null,
   normalizeAgentExportDownloadUrl: (value: unknown) =>
     typeof value === "string" && value.trim() ? value.trim() : null,
   revokeAgentArtifactShare: jest.fn(),
-  revokeAgentTraceShare: jest.fn(),
   shareAgentArtifact: jest.fn(),
-  shareAgentTrace: jest.fn(),
   stopAgentTask: jest.fn(),
   updateAgentSessionTodoItem: jest.fn(),
   updateAgentCron: jest.fn(),
@@ -33,12 +29,8 @@ const downloadAgentExportFileMock = jest.requireMock("@/lib/api").downloadAgentE
 const fetchAgentSessionPlanMock = jest.requireMock("@/lib/api").fetchAgentSessionPlan as jest.Mock;
 const fetchAgentSessionTodosMock = jest.requireMock("@/lib/api").fetchAgentSessionTodos as jest.Mock;
 const fetchAgentTaskMock = jest.requireMock("@/lib/api").fetchAgentTask as jest.Mock;
-const fetchAgentTraceMock = jest.requireMock("@/lib/api").fetchAgentTrace as jest.Mock;
-const listAgentTracesMock = jest.requireMock("@/lib/api").listAgentTraces as jest.Mock;
 const revokeAgentArtifactShareMock = jest.requireMock("@/lib/api").revokeAgentArtifactShare as jest.Mock;
-const revokeAgentTraceShareMock = jest.requireMock("@/lib/api").revokeAgentTraceShare as jest.Mock;
 const shareAgentArtifactMock = jest.requireMock("@/lib/api").shareAgentArtifact as jest.Mock;
-const shareAgentTraceMock = jest.requireMock("@/lib/api").shareAgentTrace as jest.Mock;
 const updateAgentSessionTodoItemMock = jest.requireMock("@/lib/api").updateAgentSessionTodoItem as jest.Mock;
 const updateAgentCronMock = jest.requireMock("@/lib/api").updateAgentCron as jest.Mock;
 
@@ -71,27 +63,11 @@ describe("AgentInspectorRail", () => {
       filename: "artifact.pdf",
       bytes: 12,
     });
-    listAgentTracesMock.mockResolvedValue({
-      response: { ok: true },
-      data: { traces: [] },
-    });
-    fetchAgentTraceMock.mockResolvedValue({
-      response: { ok: true },
-      data: { run_id: "run-detail", events: [{ type: "tool_start", summary: "Read file" }] },
-    });
     shareAgentArtifactMock.mockResolvedValue({
       response: { ok: true },
       data: { public_url: "https://share.local/artifact" },
     });
     revokeAgentArtifactShareMock.mockResolvedValue({
-      response: { ok: true },
-      data: { ok: true },
-    });
-    shareAgentTraceMock.mockResolvedValue({
-      response: { ok: true },
-      data: { run_id: "run-1", share_url: "https://share.local/trace" },
-    });
-    revokeAgentTraceShareMock.mockResolvedValue({
       response: { ok: true },
       data: { ok: true },
     });
@@ -125,7 +101,7 @@ describe("AgentInspectorRail", () => {
     });
   });
 
-  it("renders the V6 execution rail as six MECE tabs", () => {
+  it("renders the V6 execution rail as five focused tabs", () => {
     const onClose = jest.fn();
     renderRail({
       onClose,
@@ -141,10 +117,11 @@ describe("AgentInspectorRail", () => {
     });
 
     const tablist = screen.getByRole("tablist", { name: "Agent panels" });
-    expect(within(tablist).getAllByRole("tab")).toHaveLength(6);
-    for (const label of ["Plan", "Schedules", "Sources", "Artifacts", "Browser", "Trace"]) {
+    expect(within(tablist).getAllByRole("tab")).toHaveLength(5);
+    for (const label of ["Plan", "Schedules", "Sources", "Artifacts", "Browser"]) {
       expect(within(tablist).getByRole("tab", { name: new RegExp(label, "i") })).toBeInTheDocument();
     }
+    expect(within(tablist).queryByRole("tab", { name: /Trace/i })).not.toBeInTheDocument();
     expect(within(tablist).getByRole("tab", { name: /Plan/i })).toHaveAttribute(
       "aria-selected",
       "true"
@@ -337,12 +314,12 @@ describe("AgentInspectorRail", () => {
     );
   });
 
-  it("honors external tab requests from status strip and inline source links", async () => {
+  it("honors external tab requests from inline source links", () => {
     const { rerender } = renderRail({
-      tabRequest: { tab: "trace", id: 1 },
+      tabRequest: { tab: "evidence", id: 1 },
       transcriptEntries: [
         {
-          id: "trace-1",
+          id: "source-1",
           kind: "tool",
           tool: "read_file",
           text: "Read docs/ui-handoff.md",
@@ -354,11 +331,10 @@ describe("AgentInspectorRail", () => {
       ],
     });
 
-    expect(screen.getByRole("tab", { name: /Trace/i })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: /Sources/i })).toHaveAttribute(
       "aria-selected",
       "true"
     );
-    await waitFor(() => expect(listAgentTracesMock).toHaveBeenCalled());
 
     rerender(
       <AgentInspectorRail
@@ -1301,98 +1277,4 @@ describe("AgentInspectorRail", () => {
     expect(screen.queryByTestId("agent-plan-blocked")).not.toBeInTheDocument();
   });
 
-  it("renders trace as V6 operation rows with latency and warning count", async () => {
-    renderRail({
-      usageSummary: {
-        usageTokens: 1200,
-        costUsd: 0.01,
-        turnWeight: 0.2,
-        sessionWeight: 0.6,
-      },
-      transcriptEntries: [
-        {
-          id: "memory-search",
-          kind: "tool",
-          tool: "memory.search",
-          text: "memory.search query",
-          resultSummary: "memory.search · q=agent inspector",
-          resultState: "done",
-          durationMs: 42,
-          timestamp: 1_800_000,
-        },
-        {
-          id: "stale-file",
-          kind: "tool",
-          tool: "file.stale",
-          text: "file.stale risks.md",
-          resultSummary: "file.stale · risks.md",
-          resultState: "blocked",
-          timestamp: 1_801_000,
-        },
-      ],
-    });
-
-    fireEvent.click(screen.getByRole("tab", { name: /Trace/i }));
-    await waitFor(() => expect(listAgentTracesMock).toHaveBeenCalled());
-
-    expect(screen.getAllByText("42ms").length).toBeGreaterThan(0);
-    expect(screen.getByText(/1 warn/)).toBeInTheDocument();
-    expect(screen.getByText("1.2k")).toBeInTheDocument();
-    expect(screen.getByText("WARN")).toBeInTheDocument();
-    expect(screen.getByText(/memory.search/)).toBeInTheDocument();
-  });
-
-  it("loads trace details and manages durable share links from the Trace tab", async () => {
-    listAgentTracesMock.mockResolvedValueOnce({
-      response: { ok: true },
-      data: {
-        traces: [
-          {
-            run_id: "run-1",
-            status: "completed",
-            started_at: 1_800_000_000_000,
-          },
-        ],
-      },
-    });
-    fetchAgentTraceMock.mockResolvedValueOnce({
-      response: { ok: true },
-      data: {
-        run_id: "run-1",
-        events: [
-          {
-            type: "tool_call",
-            ts_ms: 1_800_000_001_000,
-            summary: "Fetched source evidence",
-          },
-        ],
-      },
-    });
-
-    renderRail();
-
-    fireEvent.click(screen.getByRole("tab", { name: /Trace/i }));
-    await waitFor(() => expect(listAgentTracesMock).toHaveBeenCalledWith({ limit: 20 }));
-    expect(screen.getByText("runtime traces")).toBeInTheDocument();
-    expect(screen.getByText("run-1")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /Details/i }));
-    await waitFor(() => expect(fetchAgentTraceMock).toHaveBeenCalledWith("run-1"));
-    expect(screen.getByText("Fetched source evidence")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Share" }));
-    await waitFor(() => expect(shareAgentTraceMock).toHaveBeenCalledWith("run-1"));
-    await waitFor(() => {
-      expect(screen.getByRole("link", { name: "Open shared trace run-1" })).toHaveAttribute(
-        "href",
-        "https://share.local/trace"
-      );
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
-    await waitFor(() => expect(revokeAgentTraceShareMock).toHaveBeenCalledWith("run-1"));
-    await waitFor(() => {
-      expect(screen.queryByRole("link", { name: "Open shared trace run-1" })).not.toBeInTheDocument();
-    });
-  });
 });
