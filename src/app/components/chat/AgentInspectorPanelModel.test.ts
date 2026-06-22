@@ -109,7 +109,7 @@ describe("AgentInspectorPanelModel", () => {
     expect(model.sources).toHaveLength(0);
   });
 
-  it("uses precise browser terms and ignores ordinary page copy", () => {
+  it("uses strict browser tool signals and ignores ordinary page copy", () => {
     const browser = entry({
       id: "browser",
       kind: "tool",
@@ -121,18 +121,35 @@ describe("AgentInspectorPanelModel", () => {
       kind: "narration",
       text: "Drafted homepage page copy.",
     });
+    const genericBrowserCopy = entry({
+      id: "generic-browser",
+      kind: "status",
+      text: "Navigate the browser, take a screenshot, then mention the extension.",
+    });
 
     expect(isAgentBrowserEntry(browser)).toBe(true);
     for (const tool of [
+      "browser",
+      "browser.open",
+      "browser_open",
+      "browser_click",
       "browser_new_session",
       "browser_navigate",
       "browser_snapshot",
       "browser_exec",
       "browser_close_session",
+      "browser_take_screenshot",
+      "playwright_screenshot",
+      "mcp__playwright__browser_navigate",
+      "extension_click",
     ]) {
       expect(isAgentBrowserEntry(entry({ kind: "tool", tool }))).toBe(true);
     }
+    expect(isAgentBrowserEntry(entry({ phase: "browser_frame" }))).toBe(true);
     expect(isAgentBrowserEntry(pageCopy)).toBe(false);
+    expect(isAgentBrowserEntry(genericBrowserCopy)).toBe(false);
+    expect(isAgentBrowserEntry(entry({ kind: "tool", tool: "web_fetch" }))).toBe(false);
+    expect(isAgentBrowserEntry(entry({ kind: "tool", tool: "web_search" }))).toBe(false);
   });
 
   it("routes only strict schedule signals to Cron", () => {

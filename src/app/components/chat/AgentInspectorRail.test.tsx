@@ -485,26 +485,22 @@ describe("AgentInspectorRail", () => {
     expect(screen.getByText(/No sources surfaced/i)).toBeInTheDocument();
   });
 
-  it("routes browser control-plane links to canonical settings sections", () => {
+  it("limits Browser settings links to Devices", () => {
     const onOpenSettings = jest.fn();
     renderRail({ onOpenSettings });
 
     fireEvent.click(screen.getByRole("tab", { name: /Browser/i }));
 
+    expect(screen.getByTestId("agent-browser-connections")).toHaveTextContent("not connected");
     const links = screen.getByTestId("agent-settings-deep-links");
-    for (const label of ["Agent", "Channels", "Secrets", "Providers", "Devices", "Developer"]) {
-      expect(within(links).getByRole("button", { name: new RegExp(label, "i") })).toBeInTheDocument();
+    expect(within(links).getByRole("button", { name: "Open Devices settings" })).toBeInTheDocument();
+    for (const label of ["Agent", "Channels", "Secrets", "Providers", "Developer"]) {
+      expect(within(links).queryByRole("button", { name: new RegExp(label, "i") })).not.toBeInTheDocument();
     }
 
-    fireEvent.click(within(links).getByRole("button", { name: "Open Agent settings" }));
-    fireEvent.click(within(links).getByRole("button", { name: "Open Channels settings" }));
     fireEvent.click(within(links).getByRole("button", { name: "Open Devices settings" }));
-    fireEvent.click(within(links).getByRole("button", { name: "Open Developer Access settings" }));
 
-    expect(onOpenSettings).toHaveBeenNthCalledWith(1, "agent");
-    expect(onOpenSettings).toHaveBeenNthCalledWith(2, "channels");
-    expect(onOpenSettings).toHaveBeenNthCalledWith(3, "devices");
-    expect(onOpenSettings).toHaveBeenNthCalledWith(4, "developer-access");
+    expect(onOpenSettings).toHaveBeenCalledWith("devices");
   });
 
   it("separates provisional artifact activity in the right panel", () => {
@@ -709,7 +705,7 @@ describe("AgentInspectorRail", () => {
     expect(screen.getAllByText("supervised_mutating_requires_approval").length).toBeGreaterThan(0);
   });
 
-  it("keeps browser control in its own panel", () => {
+  it("renders compact Browser status, connections, and strict recent activity", () => {
     const onOpenExtensionSettings = jest.fn();
     renderRail({
       onOpenExtensionSettings,
@@ -748,16 +744,69 @@ describe("AgentInspectorRail", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: /Browser/i }));
 
-    expect(screen.getByText("Agent browser active")).toBeInTheDocument();
-    expect(screen.getByTestId("agent-browser-lanes")).toBeInTheDocument();
-    expect(screen.getByText("agent-browser/K8s")).toBeInTheDocument();
-    expect(screen.getByText("user browser extension")).toBeInTheDocument();
-    expect(screen.getByText("browser_new_session")).toBeInTheDocument();
-    expect(screen.getByText("extension_navigate")).toBeInTheDocument();
-    expect(screen.getByText("ok · extension_click")).toBeInTheDocument();
-    expect(screen.getAllByText("playwright").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("agent-browser-brief")).toHaveTextContent("Browser ready");
+    expect(screen.getByTestId("agent-browser-connections")).toHaveTextContent("Agent browser");
+    expect(screen.getByTestId("agent-browser-connections")).toHaveTextContent("ready · playwright");
+    expect(screen.getByTestId("agent-browser-connections")).toHaveTextContent("Browser extension");
+    expect(screen.getByTestId("agent-browser-connections")).toHaveTextContent("Last command ok · extension_click");
+    expect(screen.getByTestId("agent-browser-activity")).toHaveTextContent("Opened the checkout page.");
+    expect(screen.getByTestId("agent-browser-activity")).toHaveTextContent("Clicked the logged-in checkout button.");
+    expect(screen.queryByTestId("agent-browser-lanes")).not.toBeInTheDocument();
+    expect(screen.queryByText("agent-browser/K8s")).not.toBeInTheDocument();
+    expect(screen.queryByText("browser_new_session")).not.toBeInTheDocument();
+    expect(screen.queryByText("extension_navigate")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open Devices settings" }));
     expect(onOpenExtensionSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows failed extension states without raw diagnostics", () => {
+    const onOpenSettings = jest.fn();
+    renderRail({
+      onOpenSettings,
+      extensionDiagnostics: {
+        user_id: "1",
+        paired: true,
+        last_command_tool: "extension_click",
+        last_command_result: "timeout",
+      },
+      extensionDiagnosticsError: "upstream stack trace",
+    });
+
+    const browserTab = screen.getByRole("tab", { name: /Browser/i });
+    expect(browserTab).toHaveTextContent("!");
+    fireEvent.click(browserTab);
+
+    expect(screen.getByTestId("agent-browser-brief")).toHaveTextContent("Browser needs attention");
+    expect(screen.getByTestId("agent-browser-connections")).toHaveTextContent("The browser took too long · extension_click");
+    expect(screen.queryByText(/upstream stack trace/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open Devices settings" }));
+    expect(onOpenSettings).toHaveBeenCalledWith("devices");
+  });
+
+  it("keeps generic browser-like trace and web search out of Browser activity", () => {
+    renderRail({
+      transcriptEntries: [
+        {
+          id: "status-1",
+          kind: "status",
+          text: "Navigate the browser, take a screenshot, and mention the extension.",
+          timestamp: 1,
+        },
+        {
+          id: "web-1",
+          kind: "tool",
+          tool: "web_search",
+          resultSummary: "Searched for browser automation docs.",
+          timestamp: 2,
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: /Browser/i }));
+
+    expect(screen.getByText("No browser activity in this session.")).toBeInTheDocument();
+    expect(screen.queryByText("Searched for browser automation docs.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Navigate the browser, take a screenshot, and mention the extension.")).not.toBeInTheDocument();
   });
 
   it("renders live browser frames in the Browser tab and respects manual tab selection", async () => {
@@ -778,8 +827,8 @@ describe("AgentInspectorRail", () => {
         "true"
       );
     });
-    expect(screen.getByText("Example")).toBeInTheDocument();
-    expect(screen.getByText("https://example.com")).toBeInTheDocument();
+    expect(screen.getAllByText("Example").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("https://example.com").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("tab", { name: /Sources/i }));
     rerender(

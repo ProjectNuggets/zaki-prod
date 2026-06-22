@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Activity,
-  Bot,
   Brain,
   Boxes,
-  Cable,
   CalendarClock,
   CheckCircle2,
   Circle,
@@ -12,10 +10,8 @@ import {
   Download,
   ExternalLink,
   Globe2,
-  KeyRound,
   Link2,
   Link2Off,
-  LockKeyhole,
   Loader2,
   MonitorSmartphone,
   PanelRightClose,
@@ -23,7 +19,6 @@ import {
   Pencil,
   Play,
   Plus,
-  ServerCog,
   Share2,
   ShieldAlert,
   Trash2,
@@ -192,76 +187,13 @@ export type AgentInspectorArtifact = {
 
 type AgentArtifactScope = "session" | "recent";
 type ArtifactTabState = "loading" | "ready" | "syncing" | "empty" | "unavailable";
+type BrowserTabState = "live" | "attention" | "ready" | "idle" | "unavailable";
 
 type ArtifactRow = {
   artifact: AgentInspectorArtifact;
   shareUrl: string | null;
   supportedFormats: AgentArtifactExportFormat[];
 };
-
-const APP_BROWSER_TOOLS = [
-  "browser_new_session",
-  "browser_navigate",
-  "browser_snapshot",
-  "browser_exec",
-  "browser_close_session",
-] as const;
-const EXTENSION_BROWSER_TOOLS = [
-  "extension_navigate",
-  "extension_click",
-  "extension_type",
-  "extension_fill_form",
-  "extension_screenshot",
-  "extension_get_text",
-  "extension_get_dom",
-  "extension_wait_for",
-  "extension_scroll",
-  "extension_list_tabs",
-] as const;
-
-const AGENT_SETTINGS_LINKS: Array<{
-  section: AgentSettingsSection;
-  label: string;
-  ariaLabel: string;
-  icon: ReactNode;
-}> = [
-  {
-    section: "agent",
-    label: "Agent",
-    ariaLabel: "Open Agent settings",
-    icon: <Bot className="size-4" aria-hidden />,
-  },
-  {
-    section: "channels",
-    label: "Channels",
-    ariaLabel: "Open Channels settings",
-    icon: <Cable className="size-4" aria-hidden />,
-  },
-  {
-    section: "secrets",
-    label: "Secrets",
-    ariaLabel: "Open Secrets settings",
-    icon: <KeyRound className="size-4" aria-hidden />,
-  },
-  {
-    section: "providers",
-    label: "Providers",
-    ariaLabel: "Open Providers settings",
-    icon: <ServerCog className="size-4" aria-hidden />,
-  },
-  {
-    section: "devices",
-    label: "Devices",
-    ariaLabel: "Open Devices settings",
-    icon: <MonitorSmartphone className="size-4" aria-hidden />,
-  },
-  {
-    section: "developer-access",
-    label: "Developer",
-    ariaLabel: "Open Developer Access settings",
-    icon: <LockKeyhole className="size-4" aria-hidden />,
-  },
-];
 
 export type AgentInspectorRailProps = {
   sessionKey?: string | null;
@@ -587,9 +519,28 @@ function eventHasAppBrowserSignal(event: {
   files: string[];
 }) {
   if (eventHasExtensionSignal(event)) return false;
-  return /\b(browser_(?:new_session|navigate|snapshot|exec|close_session)|browser|web_fetch|web_search)\b/i.test(
+  return /\b(browser(?:[._](?:open|click))?|browser_(?:new_session|navigate|snapshot|exec|close_session|take_screenshot)|playwright_[\w-]+|mcp__playwright__[\w-]+)\b/i.test(
     eventText(event)
   );
+}
+
+function isExtensionFailureResult(result: string) {
+  return result === "timeout" || result === "conn_closed" || result === "oom" || result === "error_other";
+}
+
+function extensionResultLabel(result: string) {
+  if (result === "ok") return "Last command ok";
+  if (result === "timeout") return "The browser took too long";
+  if (result === "conn_closed") return "Connection closed";
+  if (result === "oom") return "Browser ran out of memory";
+  if (result === "error_other") return "Command failed";
+  return result ? `Last command ${result}` : "";
+}
+
+function browserEventNeedsAttention(event: AgentInspectorPanelEvent) {
+  const state = String(event.state || "").toLowerCase();
+  if (state === "failed" || state === "blocked" || state === "error") return true;
+  return eventHasExtensionSignal(event) && /\b(denied|failed|error|timeout|blocked)\b/i.test(eventText(event));
 }
 
 function scheduleNumber(value: number) {
@@ -1050,7 +1001,6 @@ function PanelActionButton({
 export function AgentInspectorRail({
   sessionKey = null,
   isStreaming,
-  lastChannel = null,
   sandbox,
   tasks,
   tasksLoading = false,
@@ -1181,7 +1131,7 @@ export function AgentInspectorRail({
           ? "unavailable"
           : "empty";
   const artifactTabCount = artifactRows.length || syncingArtifactRows.length || undefined;
-  const browserEntries = panelModel.browser;
+  const browserRows = panelModel.browser;
   const scheduleEvents = panelModel.cron;
   const scheduleRows = useMemo(
     () => sortScheduleRows(scheduleRowsFromSources(jobs, cronJobs)),
@@ -1239,30 +1189,70 @@ export function AgentInspectorRail({
       ? sandbox.backend
       : "enabled"
     : "off";
-  const browserActivity =
-    hasBrowserFrame ||
-    browserEntries.length > 0 ||
-    /\b(browser|extension)\b/i.test(lastChannel ?? "");
-  const extensionActivity = browserEntries.some(eventHasExtensionSignal);
+  const extensionActivity = browserRows.some(eventHasExtensionSignal);
   const extensionPaired = Boolean(extensionDiagnostics?.paired);
-  const extensionLaneActive = extensionActivity || extensionPaired;
   const extensionLastCommandResult = String(extensionDiagnostics?.last_command_result || "").trim();
   const extensionLastCommandTool = String(extensionDiagnostics?.last_command_tool || "").trim();
-  const extensionLaneStatus = extensionDiagnosticsLoading
+  const extensionAttention =
+    isExtensionFailureResult(extensionLastCommandResult) || browserRows.some(browserEventNeedsAttention);
+  const extensionStatusLabel = extensionDiagnosticsLoading
     ? "checking"
-    : extensionDiagnosticsError
-      ? "status unavailable"
-      : extensionPaired
-        ? extensionLastCommandResult
-          ? extensionLastCommandResult
-          : "paired"
+    : extensionPaired
+      ? extensionLastCommandResult
+        ? extensionResultLabel(extensionLastCommandResult)
+        : "connected"
+      : extensionDiagnosticsError
+        ? "status unavailable"
         : extensionActivity
           ? "activity detected"
-        : "not paired";
+          : "not connected";
+  const extensionStatusMeta = extensionLastCommandTool
+    ? `${extensionStatusLabel} · ${extensionLastCommandTool}`
+    : extensionStatusLabel;
   const appBrowserActivity =
     hasBrowserFrame ||
-    browserEntries.some(eventHasAppBrowserSignal) ||
-    /\b(browser|web_fetch|web_search)\b/i.test(lastChannel ?? "");
+    browserRows.some(eventHasAppBrowserSignal);
+  const agentBrowserStatus = hasBrowserFrame
+    ? "live page visible"
+    : sandbox?.enabled
+      ? `ready${sandbox.backend ? ` · ${sandbox.backend}` : ""}`
+      : appBrowserActivity
+        ? "recent activity"
+        : "off";
+  const latestBrowserRow = browserRows[0] ?? null;
+  const browserBriefTitle = hasBrowserFrame
+    ? browserFrame?.title?.trim() || browserFrame?.url?.trim() || "Live browser page"
+    : extensionAttention
+      ? "Browser needs attention"
+      : sandbox?.enabled || extensionPaired
+        ? "Browser ready"
+        : extensionDiagnosticsError
+          ? "Browser status unavailable"
+          : "No browser activity";
+  const browserBriefMeta = hasBrowserFrame
+    ? browserFrame?.url?.trim() || "Live browser frame"
+    : latestBrowserRow
+      ? eventText(latestBrowserRow)
+      : extensionStatusMeta;
+  const browserTabState: BrowserTabState = hasBrowserFrame
+    ? "live"
+    : extensionAttention
+      ? "attention"
+      : sandbox?.enabled || extensionPaired
+        ? "ready"
+        : extensionDiagnosticsError
+          ? "unavailable"
+          : "idle";
+  const browserTabCount =
+    browserTabState === "live"
+      ? "live"
+      : browserTabState === "attention"
+        ? "!"
+        : browserTabState === "ready"
+          ? "on"
+          : undefined;
+  const openBrowserDeviceSettings =
+    onOpenExtensionSettings ?? (onOpenSettings ? () => onOpenSettings("devices") : undefined);
   const traceWarnCount = recentTrace.filter((event) => traceLevel(event) === "warn").length;
   const traceToolCount = recentTrace.filter((event) =>
     /\b(tool|browser|file|memory|artifact|extension|playwright|cron|automation)\b/i.test(
@@ -1678,10 +1668,6 @@ export function AgentInspectorRail({
       setTab("artifacts");
       return;
     }
-    if (browserActivity) {
-      setTab("browser");
-      return;
-    }
     if (scheduleRows.length) {
       setTab("cron");
       return;
@@ -1691,7 +1677,6 @@ export function AgentInspectorRail({
     }
   }, [
     artifactTabState,
-    browserActivity,
     hasBrowserFrame,
     manualTabSelected,
     planTabState,
@@ -2057,7 +2042,7 @@ export function AgentInspectorRail({
           {
             id: "browser",
             label: "Browser",
-            count: browserActivity ? "live" : sandbox?.enabled ? "on" : undefined,
+            count: browserTabCount,
           },
           { id: "trace", label: "Trace", count: recentTrace.length || undefined },
         ]}
@@ -2854,103 +2839,105 @@ export function AgentInspectorRail({
 
         {tab === "browser" ? (
           <V2Panel aria-label="Browser" className="zaki-agent-inspector__pane">
-            <V2PanelHead title="Browser" meta={sandboxLabel} />
-            <BrowserViewFeedPanel
-              frame={browserFrame}
-              embedded
-              onClose={() => onCloseBrowserFrame?.()}
-            />
-            <V2InlineRow
-              tone={browserActivity || sandbox?.enabled ? "accent" : "default"}
-              icon={<Globe2 className="size-4" aria-hidden />}
-              title={browserActivity ? "Agent browser active" : "Browser lanes ready"}
-              meta="agent-browser/K8s plus user-browser extension"
-            />
-            <div className="zaki-agent-inspector__browser-lanes" data-testid="agent-browser-lanes">
-              <article className={cn("zaki-agent-inspector__browser-lane", appBrowserActivity && "is-active")}>
-                <div className="lane-kicker">agent-browser/K8s</div>
-                <div className="lane-title">
-                  {appBrowserActivity ? "watch-only browser active" : "watch-only browser"}
-                </div>
-                <p>Frame-per-action runtime view for pages ZAKI opens inside the isolated agent browser.</p>
-                <div className="lane-tools" aria-label="App browser tools">
-                  {APP_BROWSER_TOOLS.map((tool) => (
-                    <span key={tool}>{tool}</span>
-                  ))}
-                </div>
-              </article>
-              <article className={cn("zaki-agent-inspector__browser-lane", extensionLaneActive && "is-active")}>
-                <div className="lane-kicker">user browser extension</div>
-                <div className="lane-title">
-                  {extensionLaneActive ? "logged-in browser active" : "logged-in browser lane"}
-                </div>
-                <p>Paired extension lane for the user's authenticated tabs, with supervised approval gates.</p>
-                <div className="lane-tools" aria-label="User browser extension tools">
-                  {EXTENSION_BROWSER_TOOLS.slice(0, 4).map((tool) => (
-                    <span key={tool}>{tool}</span>
-                  ))}
-                  <span>+{EXTENSION_BROWSER_TOOLS.length - 4}</span>
-                </div>
-              </article>
-            </div>
-            <dl className="zaki-agent-inspector__fact-grid">
-              <div>
-                <dt>App lane</dt>
-                <dd>{sandboxLabel}</dd>
+            <V2PanelHead title="Browser" meta={browserTabState} />
+            <section className="zaki-agent-inspector__jobs" data-testid="agent-browser-brief">
+              <div className="zaki-agent-inspector__jobs-head">
+                <span>brief</span>
+                <span>{browserTabState}</span>
               </div>
-              <div>
-                <dt>Extension lane</dt>
-                <dd>
-                  {extensionLaneStatus}
-                  {extensionLastCommandTool ? ` · ${extensionLastCommandTool}` : ""}
-                </dd>
-              </div>
-            </dl>
-            {browserEntries.length ? (
-              <ol className="zaki-agent-inspector__event-list">
-                {browserEntries.map((event) => (
-                  <li key={event.id}>
-                    <Globe2 className="zaki-agent-inspector__event-icon" aria-hidden />
-                    <div>
-                      <strong>{event.label}</strong>
-                      <span>{event.summary}</span>
-                      {event.meta ? <small>{event.meta}</small> : null}
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <div className="v2-empty-line">
-                Browser traces will appear here when the agent opens or controls a page.
-              </div>
-            )}
-            {extensionDiagnosticsError ? (
-              <div className="v2-empty-line">
-                Extension diagnostics unavailable: {extensionDiagnosticsError}
-              </div>
+              <V2InlineRow
+                tone={browserTabState === "attention" ? "warn" : hasBrowserFrame ? "accent" : "default"}
+                icon={<Globe2 className="size-4" aria-hidden />}
+                title={browserBriefTitle}
+                meta={browserBriefMeta}
+              />
+              <dl className="zaki-agent-inspector__fact-grid">
+                <div>
+                  <dt>Live page</dt>
+                  <dd>{hasBrowserFrame ? browserFrame?.title?.trim() || "active" : "none"}</dd>
+                </div>
+                <div>
+                  <dt>Extension</dt>
+                  <dd>{extensionStatusLabel}</dd>
+                </div>
+                <div>
+                  <dt>Last action</dt>
+                  <dd>{latestBrowserRow ? latestBrowserRow.label : hasBrowserFrame ? "browser frame" : "none"}</dd>
+                </div>
+                <div>
+                  <dt>Agent browser</dt>
+                  <dd>{hasBrowserFrame ? "live" : sandboxLabel}</dd>
+                </div>
+              </dl>
+            </section>
+            {hasBrowserFrame ? (
+              <section className="zaki-agent-inspector__jobs" data-testid="agent-browser-live">
+                <div className="zaki-agent-inspector__jobs-head">
+                  <span>live page</span>
+                  <span>watch only</span>
+                </div>
+                <BrowserViewFeedPanel
+                  frame={browserFrame}
+                  embedded
+                  onClose={() => onCloseBrowserFrame?.()}
+                />
+              </section>
             ) : null}
-            {onOpenSettings || onOpenExtensionSettings ? (
+            <section className="zaki-agent-inspector__jobs" data-testid="agent-browser-connections">
+              <div className="zaki-agent-inspector__jobs-head">
+                <span>connections</span>
+                <span>{extensionDiagnosticsLoading ? "checking" : browserTabState}</span>
+              </div>
+              <V2InlineRow
+                tone={appBrowserActivity || sandbox?.enabled ? "accent" : "default"}
+                icon={<Globe2 className="size-4" aria-hidden />}
+                title="Agent browser"
+                meta={agentBrowserStatus}
+              />
+              <V2InlineRow
+                tone={extensionAttention ? "warn" : extensionPaired ? "success" : "default"}
+                icon={<MonitorSmartphone className="size-4" aria-hidden />}
+                title="Browser extension"
+                meta={extensionStatusMeta}
+              />
+            </section>
+            <section className="zaki-agent-inspector__jobs" data-testid="agent-browser-activity">
+              <div className="zaki-agent-inspector__jobs-head">
+                <span>recent activity</span>
+                <span>{browserRows.length ? `${browserRows.length} events` : "empty"}</span>
+              </div>
+              {browserRows.length ? (
+                <ol className="zaki-agent-inspector__event-list">
+                  {browserRows.map((event) => (
+                    <li key={event.id}>
+                      <Globe2 className="zaki-agent-inspector__event-icon" aria-hidden />
+                      <div>
+                        <strong>{event.label}</strong>
+                        <span>{event.summary}</span>
+                        {event.meta ? <small>{event.meta}</small> : null}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <div className="v2-empty-line">
+                  No browser activity in this session.
+                </div>
+              )}
+            </section>
+            {openBrowserDeviceSettings ? (
               <div
                 className="zaki-agent-inspector__settings-links"
                 data-testid="agent-settings-deep-links"
-                aria-label="Agent settings deep links"
+                aria-label="Browser settings deep links"
               >
-                {AGENT_SETTINGS_LINKS.map((link) => (
-                  <PanelActionButton
-                    key={link.section}
-                    onClick={
-                      onOpenSettings
-                        ? () => onOpenSettings(link.section)
-                        : link.section === "devices"
-                          ? onOpenExtensionSettings
-                          : undefined
-                    }
-                    ariaLabel={link.ariaLabel}
-                  >
-                    {link.icon}
-                    {link.label}
-                  </PanelActionButton>
-                ))}
+                <PanelActionButton
+                  onClick={openBrowserDeviceSettings}
+                  ariaLabel="Open Devices settings"
+                >
+                  <MonitorSmartphone className="size-4" aria-hidden />
+                  Devices
+                </PanelActionButton>
               </div>
             ) : null}
           </V2Panel>

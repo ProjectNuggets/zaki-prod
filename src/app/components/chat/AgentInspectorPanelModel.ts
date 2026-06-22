@@ -202,22 +202,27 @@ function recentEvents(entries: NullalisTranscriptEntry[], limit = MAX_PANEL_EVEN
 }
 
 export function isAgentBrowserEntry(entry: NullalisTranscriptEntry): boolean {
-  return includesAny(entry, [
-    "browser",
-    "playwright",
-    "extension",
-    "screenshot",
-    "navigate",
-    "page.goto",
-    "browser.open",
-    "browser_click",
-    "browser_new_session",
-    "browser_navigate",
-    "browser_snapshot",
-    "browser_exec",
-    "browser_close_session",
-    "browser_take_screenshot",
-  ]);
+  const tool = normalize(entry.tool);
+  if (
+    [
+      "browser",
+      "browser.open",
+      "browser_open",
+      "browser_click",
+      "browser_new_session",
+      "browser_navigate",
+      "browser_snapshot",
+      "browser_exec",
+      "browser_close_session",
+      "browser_take_screenshot",
+    ].includes(tool)
+  ) {
+    return true;
+  }
+  if (tool.startsWith("extension_") || tool.startsWith("playwright_") || tool.startsWith("mcp__playwright__")) {
+    return true;
+  }
+  return normalize(entry.phase) === "browser_frame";
 }
 
 export function isAgentCronEntry(entry: NullalisTranscriptEntry): boolean {
