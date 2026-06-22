@@ -54,7 +54,7 @@ const RUNTIME_TYPE_VALUES = new Set([
 ]);
 
 const RUNTIME_KEY_RE =
-  /(?:eventType|tool_result|tool_calls|toolCalls|tool_use_id|toolUseId|tool_call_id|toolCallId|approval_id|approvalId|input_preview|inputPreview|output_preview|outputPreview|content_preview|contentPreview|observation|arguments|payload|run_id|runId|original_bytes|originalBytes|shown_bytes|shownBytes|result_hash|resultHash)/i;
+  /(?:eventType|tool_result|tool_calls|toolCalls|tool_use_id|toolUseId|tool_call_id|toolCallId|approval_id|approvalId|input_preview|inputPreview|output_preview|outputPreview|content_preview|contentPreview|observation|arguments|payload|run_id|runId|original_bytes|originalBytes|shown_bytes|shownBytes|result_hash|resultHash|runtime_info|runtimeInfo|session_key|sessionKey|canonical_user_id|canonicalUserId|tenant_user_id|tenantUserId|tenant_numeric_user_id|tenantNumericUserId|same_user_truth|sameUserTruth|turn_origin|turnOrigin|session_lane|sessionLane)/i;
 
 const APPROVED_TOOL_EXECUTION_RE =
   /(^|\n)\s*\[Approved tool execution:[^\]]+\]\s*Output:[\s\S]*?Continue your reasoning based on this tool result\.\s*Produce the next step for the user\.?/gi;
@@ -269,6 +269,10 @@ function runtimeScore(value: unknown): number {
   if (normalizedKeys.has("observation")) score += 2;
   if (normalizedKeys.has("arguments") && (normalizedKeys.has("tool") || normalizedKeys.has("name"))) score += 2;
   if (normalizedKeys.has("payload")) score += runtimeScore(value.payload) >= 3 ? 2 : 1;
+  if (normalizedKeys.has("runtimeinfo")) {
+    const nested = pickRecordValue(value, ["runtime_info", "runtimeInfo"]);
+    score += runtimeScore(nested) >= 3 ? 3 : 2;
+  }
   if (
     normalizedKeys.has("result") &&
     (normalizedKeys.has("tool") ||
@@ -281,6 +285,10 @@ function runtimeScore(value: unknown): number {
   if (normalizedKeys.has("runid") && (normalizedKeys.has("tool") || normalizedKeys.has("eventtype"))) {
     score += 1;
   }
+  if (normalizedKeys.has("sessionkey")) score += 3;
+  if (normalizedKeys.has("canonicaluserid") || normalizedKeys.has("tenantuserid")) score += 2;
+  if (normalizedKeys.has("tenantnumericuserid") || normalizedKeys.has("sameusertruth")) score += 2;
+  if (normalizedKeys.has("turnorigin") && normalizedKeys.has("sessionlane")) score += 2;
   return score;
 }
 

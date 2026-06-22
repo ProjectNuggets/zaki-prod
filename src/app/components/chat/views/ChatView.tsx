@@ -141,6 +141,9 @@ function toReplySourceItem(event: AgentInspectorPanelEvent): AgentReplySourceIte
 
   const file = firstMeaningfulFile(event.files);
   const label = file || event.label;
+  if (!file && !isDocumentLikeLabel(label)) {
+    return null;
+  }
   if (
     !label ||
     (event.category !== "file" &&
@@ -598,6 +601,10 @@ export function ChatView({
 
         const replayEntries =
           msg.role === "assistant" ? replayTimelines?.[msg.id] : undefined;
+        const activeDoneTimeline =
+          msg.role === "assistant" && isLast && !isStreaming && !replayEntries
+            ? renderTimelineArtifacts({ phase: "done" })
+            : null;
         const evidenceEntries =
           msg.role === "assistant"
             ? replayEntries ?? (isLast ? nullalisTranscriptEntries : [])
@@ -617,7 +624,7 @@ export function ChatView({
                 isStreaming={false}
                 revealPhase="done"
               />
-            ) : null}
+            ) : activeDoneTimeline}
             {renderAgentSteps(msg)}
             <MessageBubble
               message={msg}
@@ -637,9 +644,6 @@ export function ChatView({
                 onOpenSources={onOpenAgentSources}
               />
             ) : null}
-            {isLast && msg.role === "assistant"
-              ? renderTimelineArtifacts({ phase: "done" })
-              : null}
             {isLast && msg.role === "assistant" && !isStreaming && onQuickReply ? (
               <QuickReplyChips
                 onPick={onQuickReply}

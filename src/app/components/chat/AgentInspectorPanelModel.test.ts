@@ -92,7 +92,7 @@ describe("AgentInspectorPanelModel", () => {
     expect(isAgentBrowserEntry(pageCopy)).toBe(false);
   });
 
-  it("routes tool-only and scheduled work to Cron", () => {
+  it("routes only strict schedule signals to Cron", () => {
     const spawned = entry({
       id: "spawned",
       kind: "task",
@@ -106,6 +106,20 @@ describe("AgentInspectorPanelModel", () => {
       text: "Scheduled weekly automation run.",
       timestamp: 2,
     });
+    const scheduleTool = entry({
+      id: "schedule-tool",
+      kind: "tool",
+      tool: "schedule",
+      text: "Created reminder.",
+      timestamp: 4,
+    });
+    const cronTool = entry({
+      id: "cron-tool",
+      kind: "tool",
+      tool: "cron_list",
+      text: "Listed scheduler jobs.",
+      timestamp: 5,
+    });
     const completion = entry({
       id: "completion",
       kind: "task",
@@ -114,12 +128,14 @@ describe("AgentInspectorPanelModel", () => {
       timestamp: 3,
     });
 
-    expect(isAgentCronEntry(spawned)).toBe(true);
+    expect(isAgentCronEntry(spawned)).toBe(false);
     expect(isAgentCronEntry(scheduled)).toBe(true);
-    expect(isAgentCronEntry(completion)).toBe(true);
+    expect(isAgentCronEntry(scheduleTool)).toBe(true);
+    expect(isAgentCronEntry(cronTool)).toBe(true);
+    expect(isAgentCronEntry(completion)).toBe(false);
 
-    const model = buildAgentInspectorPanelModel([spawned, scheduled, completion]);
-    expect(model.cron.map((event) => event.id)).toEqual(["completion", "scheduled", "spawned"]);
+    const model = buildAgentInspectorPanelModel([spawned, scheduled, completion, scheduleTool, cronTool]);
+    expect(model.cron.map((event) => event.id)).toEqual(["cron-tool", "schedule-tool", "scheduled"]);
   });
 
   it("never surfaces master-prompt scaffold in source chips", () => {

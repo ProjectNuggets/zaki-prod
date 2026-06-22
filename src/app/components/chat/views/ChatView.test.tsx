@@ -120,6 +120,90 @@ describe("ChatView", () => {
     expect(screen.getByText(/Worked for/)).toBeInTheDocument();
   });
 
+  it("keeps completed active narration before the final Agent reply", () => {
+    const now = Date.now();
+    render(
+      <ChatView
+        messages={[
+          { id: "user-1", role: "user", content: "Schedule a reminder." },
+          { id: "assistant-1", role: "assistant", content: "Done. I scheduled it." },
+        ]}
+        isHistoryLoading={false}
+        isStreaming={false}
+        botMode
+        turnStartedAt={now - 5000}
+        nullalisTranscriptEntries={[
+          {
+            id: "tool-1",
+            kind: "tool",
+            text: "schedule completed",
+            timestamp: now - 2000,
+            tool: "schedule",
+            inputPreview: "structured input",
+            resultState: "done",
+            source: "tool",
+          },
+        ]}
+        firstMessageTransition={false}
+      />
+    );
+
+    const timeline = screen.getByText(/Worked for/).closest(".zaki-agent-timeline");
+    const reply = screen.getByTestId("message-bubble-assistant-1");
+
+    expect(timeline).toBeInTheDocument();
+    expect(
+      Boolean(timeline && (timeline.compareDocumentPosition(reply) & Node.DOCUMENT_POSITION_FOLLOWING))
+    ).toBe(true);
+  });
+
+  it("does not render a second expandable narration trail after a completed Agent reply", () => {
+    const now = Date.now();
+    render(
+      <ChatView
+        messages={[
+          { id: "user-1", role: "user", content: "Schedule a reminder." },
+          { id: "assistant-1", role: "assistant", content: "Done. I scheduled it." },
+        ]}
+        replayTimelines={{
+          "assistant-1": [
+            {
+              id: "tool-replay-1",
+              kind: "tool",
+              text: "schedule completed",
+              timestamp: now - 1000,
+              tool: "schedule",
+              inputPreview: "structured input",
+              resultState: "done",
+              source: "tool",
+            },
+          ],
+        }}
+        nullalisTranscriptEntries={[
+          {
+            id: "tool-active-1",
+            kind: "tool",
+            text: "schedule completed",
+            timestamp: now,
+            tool: "schedule",
+            inputPreview: "structured input",
+            resultState: "done",
+            source: "tool",
+          },
+        ]}
+        isHistoryLoading={false}
+        isStreaming={false}
+        botMode
+        firstMessageTransition={false}
+        onQuickReply={jest.fn()}
+      />
+    );
+
+    const timelines = document.querySelectorAll(".zaki-agent-timeline");
+    expect(timelines).toHaveLength(1);
+    expect(screen.getAllByText(/Worked for/)).toHaveLength(1);
+  });
+
   it("renders the nullalis turn timeline with reasoning block inline", () => {
     const longReasoning =
       "I need to read the repo structure, identify the failing test, and then decide whether the fix belongs in the controller or the service layer before making changes.";
@@ -291,6 +375,53 @@ describe("ChatView", () => {
 
     expect(openArtifacts).toHaveBeenCalledTimes(1);
     expect(openSources).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not show internal context or runtime events as reply sources", () => {
+    render(
+      <ChatView
+        messages={[
+          { id: "user-1", role: "user", content: "Check runtime." },
+          { id: "assistant-1", role: "assistant", content: "Done." },
+        ]}
+        replayTimelines={{
+          "assistant-1": [
+            {
+              id: "context-1",
+              kind: "tool",
+              intent: "context",
+              text: "Gathering context",
+              timestamp: 1,
+              resultState: "done",
+            },
+            {
+              id: "runtime-1",
+              kind: "tool",
+              intent: "context",
+              tool: "runtime_info",
+              text: "Completed",
+              timestamp: 2,
+              resultSummary: "Runtime info completed.",
+              resultState: "done",
+            },
+            {
+              id: "memory-1",
+              kind: "tool",
+              intent: "memory",
+              text: "Retrieving memory",
+              timestamp: 3,
+              resultState: "done",
+            },
+          ],
+        }}
+        isHistoryLoading={false}
+        isStreaming={false}
+        botMode
+        firstMessageTransition={false}
+      />
+    );
+
+    expect(screen.queryByTestId("agent-reply-sources")).not.toBeInTheDocument();
   });
 
   it("offers facet quick actions for strategy-shaped agent replies", () => {

@@ -1679,6 +1679,106 @@ describe("ChatArea Component", () => {
     expect(screen.queryByText("[[ZAKI_MEMORY_CONTEXT_V2]]")).not.toBeInTheDocument();
   });
 
+  it("drops Agent system history and sanitizes replayed Agent chat after refresh", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    navState.zakiSessionKey = "agent:zaki-bot:user:1:thread:main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+
+    (fetchAgentMe as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (fetchAgentSessionHistory as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({ messages: [] }), headers: new Headers() },
+      data: {
+        messages: [
+          {
+            id: "system-1",
+            role: "system",
+            content:
+              "## Memory Link Types\ninternal memory taxonomy\n\n## Brain Architecture\ninternal layer map\n\n## Response Protocol\ninternal instructions",
+          },
+          {
+            id: "user-1",
+            role: "user",
+            content:
+              "<MEMORY_CONTEXT>private memory</MEMORY_CONTEXT>What should I do next?",
+          },
+          {
+            id: "assistant-1",
+            role: "assistant",
+            content:
+              'Done.\n```json\n{"runtime_info":{"session_key":"agent:zaki-bot:user:1:thread:main","canonical_user_id":"1","same_user_truth":true}}\n```',
+          },
+        ],
+      },
+    });
+
+    await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(screen.getByText("What should I do next?")).toBeInTheDocument();
+      expect(screen.getByText("Done.")).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Memory Link Types/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Brain Architecture/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Response Protocol/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/ZAKI_MEMORY_CONTEXT/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/MEMORY_CONTEXT/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/private memory/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/runtime_info/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/agent:zaki-bot:user/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/canonical_user_id/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/same_user_truth/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps existing signed-in Agent threads locked until history hydration completes", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    navState.zakiSessionKey = "agent:zaki-bot:user:1:thread:main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+
+    let resolveHistory: (
+      value: Awaited<ReturnType<typeof fetchAgentSessionHistory>>
+    ) => void = () => undefined;
+    (fetchAgentSessionHistory as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveHistory = resolve as typeof resolveHistory;
+        })
+    );
+
+    await renderChatAreaAndWaitForEffects();
+    await waitFor(() => expect(fetchAgentSessionHistory).toHaveBeenCalled());
+
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "Continue the plan" },
+    });
+
+    const sendButton = screen.getByRole("button", { name: "input.sendAria" });
+    expect(sendButton).toBeDisabled();
+
+    await act(async () => {
+      resolveHistory({
+        response: {
+          ok: true,
+          status: 200,
+          json: async () => ({ messages: [] }),
+          headers: new Headers(),
+        },
+        data: { messages: [] },
+      });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(sendButton).not.toBeDisabled());
+  });
+
   it("does not show the legacy experimental notice in the V2 Agent surface", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
@@ -2496,7 +2596,7 @@ describe("ChatArea Component", () => {
     expect(navState.zakiSessionKey).toMatch(/^agent:zaki-bot:user:1:thread:anon-/);
   });
 
-  it("deletes the active Main Agent thread and moves to a fresh thread", async () => {
+  it("deletes the active Main Agent thread and returns to the clean Agent empty state", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
@@ -2547,13 +2647,12 @@ describe("ChatArea Component", () => {
     expect(
       JSON.parse(window.localStorage.getItem("zaki:agentDeletedSessionKeys") || "[]")
     ).toContain("agent:zaki-bot:user:1:thread:main");
-    expect(container.querySelectorAll(".zaki-thread-item")).toHaveLength(1);
-    expectStartedThreadLabel(getAgentRailThreadLabels(container));
-    expect(navState.threadId).toMatch(/^anon-/);
-    expect(navState.zakiSessionKey).toMatch(/^agent:zaki-bot:user:1:thread:anon-/);
+    expect(container.querySelectorAll(".zaki-thread-item")).toHaveLength(0);
+    expect(navState.threadId).toBe("main");
+    expect(navState.zakiSessionKey).toBeNull();
   });
 
-  it("keeps a deleted active Main session hidden if the session list returns it again", async () => {
+  it("keeps a deleted active Main session hidden without creating a replacement draft", async () => {
     const mainSessionKey = "agent:zaki-bot:user:1:thread:main";
     window.localStorage.setItem(
       "zaki:agentDeletedSessionKeys",
@@ -2585,11 +2684,11 @@ describe("ChatArea Component", () => {
     const { container } = await renderChatAreaAndWaitForEffects();
 
     await waitFor(() => {
-      expect(navState.threadId).toMatch(/^anon-/);
+      expect(navState.threadId).toBe("main");
     });
     expect(screen.queryByText("Main")).not.toBeInTheDocument();
-    expect(container.querySelectorAll(".zaki-thread-item")).toHaveLength(1);
-    expectStartedThreadLabel(getAgentRailThreadLabels(container));
+    expect(container.querySelectorAll(".zaki-thread-item")).toHaveLength(0);
+    expect(navState.zakiSessionKey).toBeNull();
   });
 
   it("parses task progress events as structured live execution", () => {

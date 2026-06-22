@@ -206,24 +206,16 @@ export function isAgentBrowserEntry(entry: NullalisTranscriptEntry): boolean {
 }
 
 export function isAgentCronEntry(entry: NullalisTranscriptEntry): boolean {
-  return (
-    normalize(entry.phase) === "tool_only_turn" ||
-    normalize(entry.phase) === "tool_only_summary" ||
-    normalize(entry.phase) === "subagent_completion" ||
-    includesAny(entry, [
-      "cron",
-      "automation",
-      "scheduled",
-      "recurring",
-      "background",
-      "follow-up",
-      "follow up",
-      "subagent",
-      "delegate",
-      "spawned",
-      "wake",
-    ])
-  );
+  const tool = normalize(entry.tool);
+  if (tool === "schedule" || tool.startsWith("cron_")) return true;
+  return includesAny(entry, [
+    "cron",
+    "scheduled",
+    "recurring",
+    "schedule action",
+    "follow-up scheduled",
+    "follow up scheduled",
+  ]);
 }
 
 export function isAgentArtifactEntry(entry: NullalisTranscriptEntry): boolean {

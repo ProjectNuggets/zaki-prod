@@ -132,4 +132,32 @@ describe("regression contract: internal system-prompt sections never appear", ()
     expect(out).not.toMatch(/memory_for_turn/);
     expect(out.trim()).toBe("Answer.");
   });
+
+  it("strips persisted XML memory context envelopes", () => {
+    expect(
+      sanitizeAssistantScaffold(
+        "<MEMORY_CONTEXT>private memory</MEMORY_CONTEXT>What should I do next?"
+      )
+    ).toBe("What should I do next?");
+    expect(
+      sanitizeAssistantScaffold("Visible.<MEMORY_CONTEXT>partial private memory")
+    ).toBe("Visible.");
+  });
+
+  it("redacts Agent session keys across documented lanes", () => {
+    const out = sanitizeAssistantScaffold(
+      [
+        "main agent:zaki-bot:user:128:main",
+        "thread agent:zaki-bot:user:128:thread:main",
+        "task agent:zaki-bot:user:128:task:task-1",
+        "cron agent:zaki-bot:user:128:cron:morning-brief",
+      ].join("\n")
+    );
+
+    expect(out).toContain("main [agent session]");
+    expect(out).toContain("thread [agent session]");
+    expect(out).toContain("task [agent session]");
+    expect(out).toContain("cron [agent session]");
+    expect(out).not.toContain("agent:zaki-bot:user");
+  });
 });

@@ -239,6 +239,7 @@
   color: var(--v2-ink-1);
   font-family: var(--v2-font-mono);
   font-feature-settings: "tnum" 1, "zero" 1;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .zaki-app-v2 *,
@@ -2592,14 +2593,20 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-app-v2 .zaki-main-shell {
-  flex: 1 1 auto;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
   min-height: 0;
-  height: auto;
+  height: 100%;
+  overflow: hidden;
   padding: 0;
   background: var(--v2-bg);
 }
 
 .zaki-app-v2 .zaki-main-panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   height: 100%;
   min-height: 0;
   border: 0;
@@ -2609,8 +2616,12 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-app-v2 .zaki-main-inner {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
   background: var(--v2-bg);
 }
 
@@ -9356,6 +9367,14 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   background: var(--v2-bg-raised);
 }
 
+.zaki-agent-inspector__cron-row.is-attention {
+  background: var(--v2-accent-faint);
+}
+
+.zaki-agent-inspector__cron-row.is-paused .zaki-agent-inspector__cron-name {
+  color: var(--v2-ink-3);
+}
+
 .zaki-agent-inspector__cron-status {
   display: flex;
   justify-content: center;
@@ -9363,7 +9382,8 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-agent-inspector__cron-status .dot,
-.zaki-agent-inspector__cron-status .ring {
+.zaki-agent-inspector__cron-status .ring,
+.zaki-agent-inspector__cron-status .pause {
   width: 8px;
   height: 8px;
 }
@@ -9374,6 +9394,15 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
 .zaki-agent-inspector__cron-status .ring {
   border: 1px solid var(--v2-ink-4);
+}
+
+.zaki-agent-inspector__cron-status .pause {
+  background: linear-gradient(
+    to right,
+    var(--v2-ink-3) 0 2px,
+    transparent 2px 5px,
+    var(--v2-ink-3) 5px 8px
+  );
 }
 
 .zaki-agent-inspector__cron-main {
@@ -9398,6 +9427,43 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   overflow-wrap: anywhere;
 }
 
+.zaki-agent-inspector__cron-brief {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 10px 12px;
+  border: 1px solid var(--v2-hairline-faint);
+  background: var(--v2-hairline-faint);
+}
+
+.zaki-agent-inspector__cron-brief div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+  background: var(--v2-bg);
+}
+
+.zaki-agent-inspector__cron-brief span,
+.zaki-agent-inspector__cron-brief strong,
+.zaki-agent-inspector__cron-preview {
+  overflow-wrap: anywhere;
+  font-family: var(--v2-font-mono);
+  line-height: 1.35;
+}
+
+.zaki-agent-inspector__cron-brief span {
+  color: var(--v2-ink-4);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__cron-brief strong {
+  color: var(--v2-ink-1);
+  font-size: 10px;
+  font-weight: 500;
+}
+
 .zaki-agent-inspector__cron-form {
   display: grid;
   gap: 8px;
@@ -9416,6 +9482,36 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   font-family: var(--v2-font-mono);
   font-size: 10px;
   line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__cron-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.zaki-agent-inspector__cron-quick button {
+  min-height: 24px;
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg);
+  padding: 0 8px;
+  color: var(--v2-ink-3);
+  font-family: var(--v2-font-mono);
+  font-size: 9px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.zaki-agent-inspector__cron-quick button:hover,
+.zaki-agent-inspector__cron-quick button.is-active {
+  border-color: var(--v2-hairline-strong);
+  color: var(--v2-ink-1);
+}
+
+.zaki-agent-inspector__cron-preview {
+  color: var(--v2-ink-3);
+  font-size: 10px;
   text-transform: uppercase;
 }
 

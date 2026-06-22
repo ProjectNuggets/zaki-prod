@@ -135,6 +135,13 @@ describe("AgentSessionRail", () => {
     expect(screen.getByText("2 threads")).toBeInTheDocument();
   });
 
+  it("does not show a thread count above the unavailable session-store state", () => {
+    renderRail([makeSession(1, { title: "Recovered draft" })], null, { isError: true });
+
+    expect(screen.getByText("Sessions unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("1 thread")).not.toBeInTheDocument();
+  });
+
   it("sorts mixed Unix-second and ISO timestamps by actual recency", () => {
     const sessions: AgentSession[] = [
       makeSession(1, { title: "ISO older", last_active: "2026-05-08T10:00:00Z" }),

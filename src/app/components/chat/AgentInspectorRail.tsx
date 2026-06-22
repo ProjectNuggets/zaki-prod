@@ -58,6 +58,7 @@ import {
   type AgentTrace,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { compileSchedule, type FollowUpSchedule } from "@/queries/useAgentScheduledFollowUps";
 import type { BrowserFrame } from "@/types";
 import type { ZakiRuntimeSandbox } from "@/stores/zakiSessionUiStore";
 import {
@@ -122,18 +123,55 @@ export type AgentInspectorCronJob = {
   lastRunAt: number | null;
   lastStatus: string | null;
   failureCount: number;
+  oneShot?: boolean;
+  error?: string | null;
 };
 
 export type AgentInspectorJob = {
   id: string;
   title: string;
+  prompt?: string | null;
   status: string | null;
   schedule: string | null;
   nextRunAt: number | null;
   lastRunAt: number | null;
   createdAt: number | null;
   error?: string | null;
+  enabled?: boolean;
+  paused?: boolean;
+  lastStatus?: string | null;
+  failureCount?: number;
+  oneShot?: boolean;
 };
+
+type ScheduleQuickKey =
+  | "in1h"
+  | "in4h"
+  | "tomorrow9"
+  | "weekdays9"
+  | "weekly_mon9"
+  | "custom"
+  | "advanced";
+
+type ScheduleRow = {
+  id: string;
+  name: string;
+  prompt: string | null;
+  schedule: string | null;
+  status: string | null;
+  enabled: boolean;
+  paused: boolean;
+  nextRunAt: number | null;
+  lastRunAt: number | null;
+  lastStatus: string | null;
+  failureCount: number;
+  error: string | null;
+  oneShot: boolean;
+  editableJob: AgentInspectorCronJob | null;
+  source: "scheduler" | "editable";
+};
+
+type ScheduleTabState = "loading" | "attention" | "ready" | "empty" | "unavailable";
 
 export type AgentInspectorArtifact = {
   id: string;
@@ -476,21 +514,136 @@ function eventHasAppBrowserSignal(event: {
   );
 }
 
-function cronJobHealth(job: AgentInspectorCronJob) {
-  if (job.paused || !job.enabled) return "paused";
-  if (job.failureCount > 0 || /\b(failed|error|lost|timed_out)\b/i.test(job.lastStatus || "")) {
+function scheduleNumber(value: number) {
+  return value < 10 ? `0${value}` : String(value);
+}
+
+function defaultScheduleCustomDateTime(): string {
+  const next = new Date();
+  next.setDate(next.getDate() + 1);
+  next.setHours(9, 0, 0, 0);
+  return `${next.getFullYear()}-${scheduleNumber(next.getMonth() + 1)}-${scheduleNumber(next.getDate())}T${scheduleNumber(next.getHours())}:${scheduleNumber(next.getMinutes())}`;
+}
+
+function scheduleFromQuick(quick: ScheduleQuickKey, customDateTime: string): FollowUpSchedule | null {
+  if (quick === "in1h") return { kind: "in_minutes", minutes: 60 };
+  if (quick === "in4h") return { kind: "in_minutes", minutes: 240 };
+  if (quick === "tomorrow9") {
+    const date = new Date();
+    date.setDate(date.getDate() + 1);
+    date.setHours(9, 0, 0, 0);
+    return { kind: "at_datetime", date };
+  }
+  if (quick === "weekdays9") return { kind: "weekdays", hour: 9, minute: 0 };
+  if (quick === "weekly_mon9") return { kind: "weekly", dow: 1, hour: 9, minute: 0 };
+  if (quick === "custom") {
+    const date = customDateTime ? new Date(customDateTime) : null;
+    if (!date || Number.isNaN(date.getTime()) || date.getTime() <= Date.now()) return null;
+    return { kind: "at_datetime", date };
+  }
+  return null;
+}
+
+function schedulePreviewText(schedule: FollowUpSchedule | null) {
+  if (!schedule) return "pick a future time";
+  if (schedule.kind === "in_minutes") {
+    return formatCalendarStamp(Date.now() + schedule.minutes * 60_000);
+  }
+  if (schedule.kind === "at_datetime") return formatCalendarStamp(schedule.date.getTime());
+  if (schedule.kind === "weekdays") {
+    return `weekdays ${scheduleNumber(schedule.hour)}:${scheduleNumber(schedule.minute)}`;
+  }
+  return `mondays ${scheduleNumber(schedule.hour)}:${scheduleNumber(schedule.minute)}`;
+}
+
+function scheduleRowFromCron(job: AgentInspectorCronJob): ScheduleRow {
+  return {
+    id: job.id,
+    name: job.name,
+    prompt: job.prompt,
+    schedule: job.schedule,
+    status: job.status,
+    enabled: job.enabled,
+    paused: job.paused,
+    nextRunAt: job.nextRunAt,
+    lastRunAt: job.lastRunAt,
+    lastStatus: job.lastStatus,
+    failureCount: job.failureCount,
+    error: job.error ?? null,
+    oneShot: Boolean(job.oneShot),
+    editableJob: job,
+    source: "editable",
+  };
+}
+
+function scheduleRowFromJob(job: AgentInspectorJob, editableJob: AgentInspectorCronJob | null): ScheduleRow {
+  return {
+    id: job.id,
+    name: job.title || editableJob?.name || job.id,
+    prompt: job.prompt ?? editableJob?.prompt ?? null,
+    schedule: job.schedule ?? editableJob?.schedule ?? null,
+    status: job.status ?? editableJob?.status ?? null,
+    enabled: typeof job.enabled === "boolean" ? job.enabled : editableJob?.enabled ?? true,
+    paused: job.paused === true || editableJob?.paused === true || job.enabled === false,
+    nextRunAt: job.nextRunAt ?? editableJob?.nextRunAt ?? null,
+    lastRunAt: job.lastRunAt ?? editableJob?.lastRunAt ?? null,
+    lastStatus: job.lastStatus ?? editableJob?.lastStatus ?? null,
+    failureCount: job.failureCount ?? editableJob?.failureCount ?? 0,
+    error: job.error ?? editableJob?.error ?? null,
+    oneShot: Boolean(job.oneShot ?? editableJob?.oneShot),
+    editableJob,
+    source: "scheduler",
+  };
+}
+
+function scheduleRowsFromSources(jobs: AgentInspectorJob[], cronJobs: AgentInspectorCronJob[]) {
+  if (jobs.length) {
+    const editableById = new Map(cronJobs.map((job) => [job.id, job]));
+    return jobs.map((job) => scheduleRowFromJob(job, editableById.get(job.id) ?? null));
+  }
+  return cronJobs.map(scheduleRowFromCron);
+}
+
+function scheduleRowHealth(row: ScheduleRow) {
+  if (row.paused || !row.enabled) return "paused";
+  if (
+    row.failureCount > 0 ||
+    row.error ||
+    /\b(failed|failure|error|lost|timed_out|cancelled)\b/i.test(`${row.status || ""} ${row.lastStatus || ""}`)
+  ) {
     return "attention";
   }
-  if (/\brunning\b/i.test(job.status || "")) return "running";
+  if (/\brunning\b/i.test(row.status || "")) return "running";
   return "scheduled";
 }
 
-function cronJobHealthLabel(job: AgentInspectorCronJob) {
-  const health = cronJobHealth(job);
+function scheduleRowHealthLabel(row: ScheduleRow) {
+  const health = scheduleRowHealth(row);
   if (health === "attention") {
-    return job.failureCount > 0 ? `${job.failureCount} failures` : "attention";
+    if (row.failureCount > 0) return `${row.failureCount} failures`;
+    return row.error ? "attention" : "attention";
   }
+  if (row.oneShot && health === "scheduled") return "one-time";
   return health;
+}
+
+function scheduleRowRank(row: ScheduleRow) {
+  const health = scheduleRowHealth(row);
+  if (health === "attention") return 0;
+  if (health === "running") return 1;
+  if (health === "scheduled") return 2;
+  return 3;
+}
+
+function sortScheduleRows(rows: ScheduleRow[]) {
+  return [...rows].sort((a, b) => {
+    const rankDelta = scheduleRowRank(a) - scheduleRowRank(b);
+    if (rankDelta) return rankDelta;
+    const left = a.nextRunAt ?? Number.MAX_SAFE_INTEGER;
+    const right = b.nextRunAt ?? Number.MAX_SAFE_INTEGER;
+    if (left !== right) return left - right;
+    return a.name.localeCompare(b.name);
+  });
 }
 
 function taskCanStop(status: NullalisTaskStatus) {
@@ -624,6 +777,9 @@ export function AgentInspectorRail({
   cronJobs = [],
   cronLoading = false,
   cronError = null,
+  jobs = [],
+  jobsLoading = false,
+  jobsError = null,
   artifacts = [],
   artifactsScope = "session",
   artifactsLoading = false,
@@ -680,6 +836,8 @@ export function AgentInspectorRail({
   const [cronNameDraft, setCronNameDraft] = useState("");
   const [cronExpressionDraft, setCronExpressionDraft] = useState("0 */6 * * *");
   const [cronPromptDraft, setCronPromptDraft] = useState("");
+  const [cronQuickDraft, setCronQuickDraft] = useState<ScheduleQuickKey>("in1h");
+  const [cronCustomDateTimeDraft, setCronCustomDateTimeDraft] = useState(defaultScheduleCustomDateTime);
   const [cronBusyId, setCronBusyId] = useState<string | null>(null);
   const [confirmCronDeleteId, setConfirmCronDeleteId] = useState<string | null>(null);
 
@@ -713,8 +871,38 @@ export function AgentInspectorRail({
   );
   const artifactSourceCount = artifactCount || artifactEntries.length || sortedArtifacts.length;
   const browserEntries = panelModel.browser;
-  const cronEntries = panelModel.cron;
-  const cronSourceCount = cronJobs.length || cronEntries.length;
+  const scheduleEvents = panelModel.cron;
+  const scheduleRows = useMemo(
+    () => sortScheduleRows(scheduleRowsFromSources(jobs, cronJobs)),
+    [jobs, cronJobs]
+  );
+  const scheduleLoading = (jobsLoading || cronLoading) && !scheduleRows.length;
+  const scheduleAttentionCount = scheduleRows.filter(
+    (row) => scheduleRowHealth(row) === "attention"
+  ).length;
+  const scheduleActiveCount = scheduleRows.filter((row) => row.enabled && !row.paused).length;
+  const schedulePausedCount = scheduleRows.filter((row) => row.paused || !row.enabled).length;
+  const scheduleNextRun = scheduleRows
+    .filter((row) => row.enabled && !row.paused && row.nextRunAt)
+    .sort((a, b) => (a.nextRunAt ?? 0) - (b.nextRunAt ?? 0))[0]?.nextRunAt ?? null;
+  const scheduleLastRow = [...scheduleRows]
+    .filter((row) => row.lastRunAt || row.error || row.lastStatus)
+    .sort((a, b) => (b.lastRunAt ?? 0) - (a.lastRunAt ?? 0))[0] ?? null;
+  const scheduleTabState: ScheduleTabState = scheduleLoading
+    ? "loading"
+    : scheduleAttentionCount
+      ? "attention"
+      : scheduleRows.length
+        ? "ready"
+        : jobsError || cronError
+          ? "unavailable"
+          : "empty";
+  const scheduleTabCount =
+    scheduleTabState === "attention"
+      ? "!"
+      : scheduleRows.length
+        ? String(scheduleRows.length)
+        : undefined;
   const sortedTasks = useMemo(
     () => [...tasks].sort((a, b) => a.updatedAt - b.updatedAt),
     [tasks]
@@ -959,6 +1147,8 @@ export function AgentInspectorRail({
     setCronNameDraft("");
     setCronExpressionDraft("0 */6 * * *");
     setCronPromptDraft("");
+    setCronQuickDraft("in1h");
+    setCronCustomDateTimeDraft(defaultScheduleCustomDateTime());
     setConfirmCronDeleteId(null);
   };
 
@@ -998,7 +1188,7 @@ export function AgentInspectorRail({
       setStoppedTaskIds((current) => ({ ...current, [task.taskId]: true }));
       setConfirmStopTaskId(null);
       toast.success("Task stop requested.");
-      await refreshRuntimeLedger();
+      await refreshRuntimeSchedules();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to stop task.");
     } finally {
@@ -1056,35 +1246,45 @@ export function AgentInspectorRail({
     setCronNameDraft(job.name || "");
     setCronExpressionDraft(job.schedule || "0 */6 * * *");
     setCronPromptDraft(job.prompt || "");
+    setCronQuickDraft("advanced");
     setConfirmCronDeleteId(null);
     setCronFormOpen(true);
   };
 
-  const refreshRuntimeLedger = async () => {
+  const refreshRuntimeSchedules = async () => {
     if (!onCronChanged) return;
     try {
       await onCronChanged();
     } catch {
-      toast.error("Action completed, but the Agent ledger refresh failed.");
+      toast.error("Action completed, but schedules did not refresh.");
     }
   };
 
   const handleCronSave = async () => {
-    const expression = cronExpressionDraft.trim();
     const prompt = cronPromptDraft.trim();
-    if (!expression || !prompt) {
-      toast.error("Schedule and prompt are required.");
+    if (!prompt) {
+      toast.error("Prompt is required.");
       return;
     }
     const busy = editingCronId ? `cron-update:${editingCronId}` : "cron-create";
     setCronBusyId(busy);
     try {
-      const payload = {
+      const schedule = scheduleFromQuick(cronQuickDraft, cronCustomDateTimeDraft);
+      const advanced = editingCronId || cronQuickDraft === "advanced";
+      const compiled = advanced ? null : schedule ? compileSchedule(schedule) : null;
+      const expression = advanced ? cronExpressionDraft.trim() : compiled?.expression ?? "";
+      if (!expression) {
+        throw new Error(advanced ? "Schedule expression is required." : "Pick a future schedule.");
+      }
+      const payload: Record<string, unknown> = {
         expression,
         prompt,
         name: cronNameDraft.trim() || null,
         job_type: "agent",
       };
+      if (!editingCronId) {
+        payload.one_shot = compiled?.oneShot ?? false;
+      }
       const { response, data } = editingCronId
         ? await updateAgentCron(editingCronId, payload)
         : await createAgentCron(payload);
@@ -1094,7 +1294,7 @@ export function AgentInspectorRail({
       resetCronForm();
       setCronFormOpen(false);
       toast.success(editingCronId ? "Schedule updated." : "Schedule created.");
-      await refreshRuntimeLedger();
+      await refreshRuntimeSchedules();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Schedule action failed.");
     } finally {
@@ -1110,7 +1310,7 @@ export function AgentInspectorRail({
         throw new Error(cronActionError(data, "cron_toggle_failed"));
       }
       toast.success(job.paused ? "Schedule resumed." : "Schedule paused.");
-      await refreshRuntimeLedger();
+      await refreshRuntimeSchedules();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to update schedule.");
     } finally {
@@ -1127,7 +1327,7 @@ export function AgentInspectorRail({
       }
       setConfirmCronDeleteId(null);
       toast.success("Schedule deleted.");
-      await refreshRuntimeLedger();
+      await refreshRuntimeSchedules();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to delete schedule.");
     } finally {
@@ -1160,7 +1360,7 @@ export function AgentInspectorRail({
       setTab("browser");
       return;
     }
-    if (cronSourceCount) {
+    if (scheduleRows.length) {
       setTab("cron");
       return;
     }
@@ -1170,10 +1370,10 @@ export function AgentInspectorRail({
   }, [
     artifactSourceCount,
     browserActivity,
-    cronSourceCount,
     hasBrowserFrame,
     manualTabSelected,
     planTabState,
+    scheduleRows.length,
     sourceEntries.length,
     tabRequest,
   ]);
@@ -1531,7 +1731,7 @@ export function AgentInspectorRail({
         onChange={handleTabChange}
         options={[
           { id: "plan", label: "Plan", count: planTabCount },
-          { id: "cron", label: "Cron", count: cronSourceCount || undefined },
+          { id: "cron", label: "Schedules", count: scheduleTabCount },
           { id: "evidence", label: "Sources", count: sourceEntries.length || undefined },
           {
             id: "artifacts",
@@ -1761,32 +1961,63 @@ export function AgentInspectorRail({
         ) : null}
 
         {tab === "cron" ? (
-          <V2Panel aria-label="Cron" className="zaki-agent-inspector__pane">
+          <V2Panel aria-label="Schedules" className="zaki-agent-inspector__pane">
             <div className="zaki-agent-inspector__cron-head">
               <div>
-                <div className="zaki-agent-inspector__cron-title">schedules</div>
+                <div className="zaki-agent-inspector__cron-title">scheduled work</div>
                 <div className="zaki-agent-inspector__cron-meta">
                   <span>
-                    <span className={cn("dot", cronSourceCount || isStreaming ? "running" : "")} aria-hidden />
-                    {cronJobs.length
-                      ? `${cronJobs.length} scheduled`
-                      : cronEntries.length
-                        ? `${cronEntries.length} linked`
-                      : isStreaming
-                        ? "foreground run active"
-                        : "none active"}
+                    <span
+                      className={cn(
+                        "dot",
+                        scheduleTabState === "attention" || scheduleTabState === "ready" ? "running" : ""
+                      )}
+                      aria-hidden
+                    />
+                    {scheduleTabState === "loading"
+                      ? "loading"
+                      : scheduleRows.length
+                        ? `${scheduleActiveCount} active`
+                        : scheduleTabState}
                   </span>
                   <span className="sep">.</span>
-                  <span>{cronJobs.length ? "backend ledger" : "session scoped"}</span>
+                  <span>{scheduleRows.length} total</span>
                 </div>
               </div>
             </div>
-            {cronLoading && !cronJobs.length ? (
-              <div className="v2-empty-line">Loading schedule ledger...</div>
+
+            <div className="zaki-agent-inspector__cron-brief" data-testid="agent-schedule-brief">
+              <div>
+                <span>Total</span>
+                <strong>{scheduleRows.length}</strong>
+              </div>
+              <div>
+                <span>Paused</span>
+                <strong>{schedulePausedCount}</strong>
+              </div>
+              <div>
+                <span>Attention</span>
+                <strong>{scheduleAttentionCount}</strong>
+              </div>
+              <div>
+                <span>Next</span>
+                <strong>{formatCalendarStamp(scheduleNextRun)}</strong>
+              </div>
+              <div>
+                <span>Last</span>
+                <strong>
+                  {scheduleLastRow?.error || scheduleLastRow?.lastStatus || formatCalendarStamp(scheduleLastRow?.lastRunAt)}
+                </strong>
+              </div>
+            </div>
+
+            {scheduleLoading ? <div className="v2-empty-line">Loading schedules...</div> : null}
+            {scheduleTabState === "unavailable" ? (
+              <div className="v2-empty-line">
+                Schedules are unavailable right now. {jobsError || cronError || "Try refresh."}
+              </div>
             ) : null}
-            {cronError ? (
-              <div className="v2-empty-line">Schedule ledger unavailable: {cronError}</div>
-            ) : null}
+
             {cronFormOpen ? (
               <div className="zaki-agent-inspector__cron-form" data-testid="agent-cron-form">
                 <div className="zaki-agent-inspector__cron-form-head">
@@ -1802,18 +2033,57 @@ export function AgentInspectorRail({
                     <X className="size-3.5" aria-hidden />
                   </button>
                 </div>
+                {!editingCronId ? (
+                  <div className="zaki-agent-inspector__cron-quick" role="group" aria-label="Schedule presets">
+                    {[
+                      ["in1h", "In 1 hour"],
+                      ["in4h", "In 4 hours"],
+                      ["tomorrow9", "Tomorrow 9am"],
+                      ["weekdays9", "Weekdays 9am"],
+                      ["weekly_mon9", "Mondays 9am"],
+                      ["custom", "Custom"],
+                      ["advanced", "Advanced cron"],
+                    ].map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        className={cn(cronQuickDraft === key ? "is-active" : "")}
+                        onClick={() => setCronQuickDraft(key as ScheduleQuickKey)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {cronQuickDraft === "custom" && !editingCronId ? (
+                  <input
+                    className="zaki-agent-inspector__cron-input is-mono"
+                    type="datetime-local"
+                    value={cronCustomDateTimeDraft}
+                    aria-label="Custom schedule time"
+                    onChange={(event) => setCronCustomDateTimeDraft(event.target.value)}
+                  />
+                ) : null}
+                {!editingCronId && cronQuickDraft !== "advanced" ? (
+                  <div className="zaki-agent-inspector__cron-preview">
+                    Fires {schedulePreviewText(scheduleFromQuick(cronQuickDraft, cronCustomDateTimeDraft))}
+                  </div>
+                ) : null}
                 <input
                   className="zaki-agent-inspector__cron-input"
                   value={cronNameDraft}
                   placeholder="Name, optional"
                   onChange={(event) => setCronNameDraft(event.target.value)}
                 />
-                <input
-                  className="zaki-agent-inspector__cron-input is-mono"
-                  value={cronExpressionDraft}
-                  placeholder="0 */6 * * *"
-                  onChange={(event) => setCronExpressionDraft(event.target.value)}
-                />
+                {editingCronId || cronQuickDraft === "advanced" ? (
+                  <input
+                    className="zaki-agent-inspector__cron-input is-mono"
+                    value={cronExpressionDraft}
+                    placeholder="0 */6 * * *"
+                    aria-label="Cron expression"
+                    onChange={(event) => setCronExpressionDraft(event.target.value)}
+                  />
+                ) : null}
                 <textarea
                   className="zaki-agent-inspector__cron-input"
                   value={cronPromptDraft}
@@ -1841,117 +2111,118 @@ export function AgentInspectorRail({
                 </div>
               </div>
             ) : null}
-            {cronJobs.length ? (
-              <ol className="zaki-agent-inspector__cron-list">
-                {cronJobs.map((job) => {
-                  const health = cronJobHealth(job);
+
+            {scheduleRows.length ? (
+              <ol className="zaki-agent-inspector__cron-list" data-testid="agent-schedule-list">
+                {scheduleRows.map((row) => {
+                  const health = scheduleRowHealth(row);
+                  const editableJob = row.editableJob;
                   return (
                     <li
-                      key={job.id}
+                      key={`${row.source}:${row.id}`}
                       className={cn(
                         "zaki-agent-inspector__cron-row",
-                        health === "running" ? "is-running" : "is-scheduled"
+                        health === "running" ? "is-running" : "",
+                        health === "attention" ? "is-attention" : "",
+                        health === "paused" ? "is-paused" : ""
                       )}
                     >
                       <div className="zaki-agent-inspector__cron-status" aria-hidden>
-                        <span className={health === "running" ? "dot" : "ring"} />
+                        <span className={health === "running" ? "dot" : health === "paused" ? "pause" : "ring"} />
                       </div>
                       <div className="zaki-agent-inspector__cron-main">
-                        <div className="zaki-agent-inspector__cron-name">{job.name}</div>
+                        <div className="zaki-agent-inspector__cron-name">{row.name}</div>
                         <div className="zaki-agent-inspector__cron-sched">
-                          {job.schedule || "schedule pending"}
+                          {row.schedule || "schedule pending"}
                           {" · "}
-                          {cronJobHealthLabel(job)}
+                          {scheduleRowHealthLabel(row)}
                         </div>
-                        {job.prompt ? (
-                          <div className="zaki-agent-inspector__cron-sched">
-                            {job.prompt}
-                          </div>
+                        {row.prompt ? (
+                          <div className="zaki-agent-inspector__cron-sched">{row.prompt}</div>
                         ) : null}
                         <div className="zaki-agent-inspector__cron-sched">
-                          next {formatCalendarStamp(job.nextRunAt)} · last{" "}
-                          {formatCalendarStamp(job.lastRunAt)}
+                          next {formatCalendarStamp(row.nextRunAt)} · last {formatCalendarStamp(row.lastRunAt)}
                         </div>
-                        <div className="zaki-agent-inspector__cron-actions">
-                          {confirmCronDeleteId === job.id ? (
-                            <>
-                              <button
-                                type="button"
-                                disabled={cronBusyId === `cron-delete:${job.id}`}
-                                onClick={() => void handleCronDelete(job)}
-                              >
-                                {cronBusyId === `cron-delete:${job.id}` ? "Deleting" : "Confirm delete"}
-                              </button>
-                              <button type="button" onClick={() => setConfirmCronDeleteId(null)}>
-                                Cancel
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button type="button" onClick={() => beginCronEdit(job)}>
-                                <Pencil className="size-3.5" aria-hidden />
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                disabled={cronBusyId === `cron-toggle:${job.id}`}
-                                onClick={() => void handleCronToggle(job)}
-                              >
-                                {job.paused ? (
-                                  <Play className="size-3.5" aria-hidden />
-                                ) : (
-                                  <Pause className="size-3.5" aria-hidden />
-                                )}
-                                {job.paused ? "Resume" : "Pause"}
-                              </button>
-                              <button type="button" onClick={() => setConfirmCronDeleteId(job.id)}>
-                                <Trash2 className="size-3.5" aria-hidden />
-                                Delete
-                              </button>
-                            </>
-                          )}
-                        </div>
+                        {row.error ? (
+                          <div className="zaki-agent-inspector__cron-sched">last error {row.error}</div>
+                        ) : null}
+                        {editableJob ? (
+                          <div className="zaki-agent-inspector__cron-actions">
+                            {confirmCronDeleteId === editableJob.id ? (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={cronBusyId === `cron-delete:${editableJob.id}`}
+                                  onClick={() => void handleCronDelete(editableJob)}
+                                >
+                                  {cronBusyId === `cron-delete:${editableJob.id}` ? "Deleting" : "Confirm delete"}
+                                </button>
+                                <button type="button" onClick={() => setConfirmCronDeleteId(null)}>
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button type="button" onClick={() => beginCronEdit(editableJob)}>
+                                  <Pencil className="size-3.5" aria-hidden />
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={cronBusyId === `cron-toggle:${editableJob.id}`}
+                                  onClick={() => void handleCronToggle(editableJob)}
+                                >
+                                  {editableJob.paused ? (
+                                    <Play className="size-3.5" aria-hidden />
+                                  ) : (
+                                    <Pause className="size-3.5" aria-hidden />
+                                  )}
+                                  {editableJob.paused ? "Resume" : "Pause"}
+                                </button>
+                                <button type="button" onClick={() => setConfirmCronDeleteId(editableJob.id)}>
+                                  <Trash2 className="size-3.5" aria-hidden />
+                                  Delete
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="zaki-agent-inspector__cron-sched">read-only scheduler row</div>
+                        )}
                       </div>
                     </li>
                   );
                 })}
               </ol>
+            ) : !scheduleLoading && scheduleTabState !== "unavailable" ? (
+              <div className="v2-empty-line">No scheduled work yet.</div>
             ) : null}
-            {cronEntries.length ? (
-              <ol className="zaki-agent-inspector__cron-list">
-                {cronEntries.map((event) => (
-                  <li
-                    key={event.id}
-                    className={cn(
-                      "zaki-agent-inspector__cron-row",
-                      event.state === "running" ? "is-running" : "is-scheduled"
-                    )}
-                  >
-                    <div className="zaki-agent-inspector__cron-status" aria-hidden>
-                      <span className={event.state === "running" ? "dot" : "ring"} />
-                    </div>
-                    <div className="zaki-agent-inspector__cron-main">
-                      <div className="zaki-agent-inspector__cron-name">{event.label}</div>
-                      <div className="zaki-agent-inspector__cron-sched">
-                        {event.summary}
-                        {event.meta ? ` · ${event.meta}` : ""}
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            ) : !cronJobs.length && !cronLoading ? (
-              <div className="v2-empty-line">
-                No linked cron jobs or autonomous follow-ups in this session.
-              </div>
+
+            {scheduleEvents.length ? (
+              <section className="zaki-agent-inspector__jobs" data-testid="agent-schedule-activity">
+                <div className="zaki-agent-inspector__jobs-head">
+                  <span>Recent activity</span>
+                  <span>{scheduleEvents.length} events</span>
+                </div>
+                <ol className="zaki-agent-inspector__job-list">
+                  {scheduleEvents.map((event) => (
+                    <li key={event.id} className="zaki-agent-inspector__job-row">
+                      <strong>{event.label}</strong>
+                      <span>{event.summary}</span>
+                      {event.meta ? <small>{event.meta}</small> : null}
+                    </li>
+                  ))}
+                </ol>
+              </section>
             ) : null}
+
             <PanelActionButton onClick={beginCronCreate} ariaLabel="Create schedule">
               <Plus className="size-4" aria-hidden />
               New schedule
             </PanelActionButton>
-            <PanelActionButton onClick={() => void refreshRuntimeLedger()} ariaLabel="Refresh schedules">
+            <PanelActionButton onClick={() => void refreshRuntimeSchedules()} ariaLabel="Refresh schedules">
               <CalendarClock className="size-4" aria-hidden />
-              Refresh ledger
+              Refresh schedules
             </PanelActionButton>
           </V2Panel>
         ) : null}

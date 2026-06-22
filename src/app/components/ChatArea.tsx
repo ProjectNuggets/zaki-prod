@@ -96,6 +96,7 @@ import {
   isInternalAgentReplyContent,
   normalizeAssistantDisplayText,
 } from "./chat/rendering/agentReplyPresentation";
+import { sanitizeAssistantScaffold } from "./chat/rendering/scaffoldSanitizer";
 import { agentThoughtToStep } from "./chat/rendering/agentThoughtSteps";
 import {
   AgentInspectorRail,
@@ -2263,6 +2264,8 @@ function normalizeAgentCronJob(item: unknown, index: number): AgentInspectorCron
     lastStatus: recordStringValue(record, "last_status", "lastStatus"),
     failureCount:
       numericValue(record.consecutive_failures ?? record.consecutiveFailures ?? record.failures) ?? 0,
+    oneShot: record.one_shot === true || record.oneShot === true,
+    error: recordStringValue(record, "error", "last_error", "lastError"),
   };
 }
 
@@ -2290,15 +2293,23 @@ function normalizeAgentJob(item: unknown, index: number): AgentInspectorJob | nu
     recordStringValue(record, "title", "label", "name", "prompt", "command") ||
     recordStringValue(record, "status", "state") ||
     id;
+  const paused = record.paused === true || record.enabled === false;
   return {
     id,
     title,
+    prompt: recordStringValue(record, "prompt", "description", "summary", "command"),
     status: recordStringValue(record, "status", "state"),
-    schedule: recordStringValue(record, "schedule", "expression", "cron", "rrule", "job_type", "jobType"),
+    schedule: recordStringValue(record, "schedule", "expression", "cron", "rrule"),
     nextRunAt: timestampMillis(record.next_run_at ?? record.nextRunAt ?? record.next_run_secs ?? record.nextRunSecs),
     lastRunAt: timestampMillis(record.last_run_at ?? record.lastRunAt ?? record.completed_at ?? record.completedAt),
     createdAt: timestampMillis(record.created_at ?? record.createdAt),
     error: recordStringValue(record, "error", "last_error", "lastError"),
+    enabled: typeof record.enabled === "boolean" ? record.enabled : !paused,
+    paused,
+    lastStatus: recordStringValue(record, "last_status", "lastStatus"),
+    failureCount:
+      numericValue(record.consecutive_failures ?? record.consecutiveFailures ?? record.failures) ?? 0,
+    oneShot: record.one_shot === true || record.oneShot === true,
   };
 }
 
@@ -3313,6 +3324,9 @@ export function ChatArea() {
   const [responseFormattingConfig, setResponseFormattingConfig] =
     useState<ResponseFormattingConfig>(() => readResponseFormattingConfig());
   const historyLoadedRef = useRef<Record<string, boolean>>({});
+  const [isBotHistoryLoading, setIsBotHistoryLoading] = useState(false);
+  const [agentHistoryHydratedThreadId, setAgentHistoryHydratedThreadId] =
+    useState<string | null>(null);
   const currentTurnAssistantIdRef = useRef<string | null>(null);
   const prevIsStreamingRef = useRef(false);
   const [localTurnSnapshots, setLocalTurnSnapshots] = useState<
@@ -3452,6 +3466,13 @@ export function ChatArea() {
         const normalizedSessionKey = normalizeZakiSessionKey(session.session_key);
         if (!isThreadLaneZakiSessionKey(normalizedSessionKey)) continue;
         if (deletedAgentSessionKeysRef.current.has(normalizedSessionKey)) continue;
+        const parsedSessionKey = parseZakiSessionKey(normalizedSessionKey);
+        const isEmptyDefaultThread =
+          parsedSessionKey.threadId === ZAKI_BOT_THREAD_ID &&
+          session.message_count === 0 &&
+          session.live !== true &&
+          !session.pending_approval_count;
+        if (isEmptyDefaultThread) continue;
         const existing = byKey.get(normalizedSessionKey);
         const nextSession = { ...session, session_key: normalizedSessionKey };
         if (
@@ -3753,8 +3774,22 @@ export function ChatArea() {
     const canonicalKey = buildAgentSessionKey(activeThreadId, agentUserId);
     if (!canonicalKey) return;
     const normalizedCanonicalKey = normalizeZakiSessionKey(canonicalKey);
-    if (!deletedAgentSessionKeysRef.current.has(normalizedCanonicalKey)) {
-      ensureZakiSessionUi(normalizedCanonicalKey);
+    const hasExistingSession = zakiSessions.some(
+      (session) => normalizeZakiSessionKey(session.session_key) === normalizedCanonicalKey
+    );
+    const hasDraftSession = agentDraftSessions.some(
+      (session) => normalizeZakiSessionKey(session.session_key) === normalizedCanonicalKey
+    );
+    const isDefaultEmptyThread =
+      activeThreadId === ZAKI_BOT_THREAD_ID &&
+      !hasExistingSession &&
+      !hasDraftSession &&
+      !messagesByThread[activeThreadId]?.length;
+    if (deletedAgentSessionKeysRef.current.has(normalizedCanonicalKey)) {
+      return;
+    }
+    ensureZakiSessionUi(normalizedCanonicalKey);
+    if (!hasExistingSession && !hasDraftSession && !isDefaultEmptyThread) {
       setAgentDraftSessions((previous) =>
         upsertAgentSession(
           previous,
@@ -3771,10 +3806,13 @@ export function ChatArea() {
   }, [
     activeSessionMode,
     activeThreadId,
+    agentDraftSessions,
     agentUserId,
     ensureZakiSessionUi,
     isZakiBotActiveSpace,
+    messagesByThread,
     setZakiSessionKey,
+    zakiSessions,
     zakiSessionKey,
   ]);
 
@@ -3886,6 +3924,22 @@ export function ChatArea() {
     availability: agentAvailability,
   });
   const agentCapacityBlocked = agentComposerUsageState.locked;
+  const isExistingSignedInAgentThread =
+    isZakiBotActiveSpace && Boolean(authUserId) && Boolean(activeThreadId);
+  const isActiveAgentHistoryHydrated =
+    !isExistingSignedInAgentThread ||
+    Boolean(
+      activeThreadId &&
+        (historyLoadedRef.current[activeThreadId] ||
+          agentHistoryHydratedThreadId === activeThreadId)
+    );
+  const isAgentComposerBootstrapping =
+    isExistingSignedInAgentThread &&
+    (!isAuthReady ||
+      zakiSessionsLoading ||
+      !agentUserId ||
+      isBotHistoryLoading ||
+      !isActiveAgentHistoryHydrated);
   const agentWeeklyLabel =
     typeof meterResult?.data?.weekly?.limit === "number"
       ? t("agent.status.weeklyUsageValue", {
@@ -3896,7 +3950,7 @@ export function ChatArea() {
         ? t("agent.status.weeklyIncluded", { defaultValue: "Included" })
         : t("agent.status.weeklySyncing", { defaultValue: "Syncing" });
   const isZakiBotSendLocked = isZakiBotActiveSpace
-    ? agentCapacityBlocked
+    ? agentCapacityBlocked || isAgentComposerBootstrapping
     : Boolean(legacyQuotaInfo && legacyQuotaInfo.remaining <= 0);
   const isComposerSendLocked = !isOnline || isZakiBotSendLocked;
   const latestAssistantMessageContent = useMemo(() => {
@@ -4065,16 +4119,25 @@ export function ChatArea() {
   useEffect(() => {
     if (!isAgentSurface || !normalizedActiveZakiSessionKey) return;
     if (!deletedAgentSessionKeysRef.current.has(normalizedActiveZakiSessionKey)) return;
-    handleCreateAgentSession({ showToast: false });
-  }, [handleCreateAgentSession, isAgentSurface, normalizedActiveZakiSessionKey]);
+    const deletedThreadId = extractThreadSlugFromSessionKey(normalizedActiveZakiSessionKey);
+    if (deletedThreadId && activeThreadId !== deletedThreadId) return;
+    goToThread(ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID, { zakiSessionKey: null });
+    setZakiSessionKey(null);
+    navigate("/agent", { replace: true });
+  }, [
+    activeThreadId,
+    goToThread,
+    isAgentSurface,
+    navigate,
+    normalizedActiveZakiSessionKey,
+    setZakiSessionKey,
+  ]);
 
   const handleDeleteAgentSession = useCallback(
     async (sessionKey: string, label: string) => {
       const normalized = normalizeZakiSessionKey(sessionKey);
+      const deletingActiveSession = normalizedActiveZakiSessionKey === normalized;
       try {
-        if (normalizedActiveZakiSessionKey === normalized) {
-          handleCreateAgentSession({ showToast: false });
-        }
         const { response } = await deleteAgentSession(normalized);
         if (!response.ok && response.status !== 404) throw new Error(`delete ${response.status}`);
         rememberDeletedAgentSessionKey(deletedAgentSessionKeysRef.current, normalized);
@@ -4086,6 +4149,22 @@ export function ChatArea() {
         );
         if (response.ok) {
           void queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
+        }
+        if (deletingActiveSession) {
+          goToThread(ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID, { zakiSessionKey: null });
+          setZakiSessionKey(null);
+          const deletedThreadId = extractThreadSlugFromSessionKey(normalized);
+          setMessagesByThread((previous) => {
+            const next = { ...previous };
+            if (deletedThreadId) {
+              delete next[deletedThreadId];
+            }
+            delete next[ZAKI_BOT_THREAD_ID];
+            return next;
+          });
+          setAttachments([]);
+          setNullalisApprovalRequest(null);
+          navigate("/agent", { replace: true });
         }
         toast.success(
           t("zakiControls.sessionList.deleteSuccess", {
@@ -4101,7 +4180,7 @@ export function ChatArea() {
         );
       }
     },
-    [handleCreateAgentSession, normalizedActiveZakiSessionKey, queryClient, t]
+    [goToThread, navigate, normalizedActiveZakiSessionKey, queryClient, setZakiSessionKey, t]
   );
 
   const handleRenameAgentSession = useCallback(
@@ -4383,33 +4462,52 @@ export function ChatArea() {
     // Old format: [MEMORY CONTEXT - ...]...[USER MESSAGE]\n{actual message}
     const userMessageMarker = "[USER MESSAGE]\n";
     const memoryContextMarker = "[MEMORY CONTEXT";
-    
+
     if (content.includes(memoryContextMarker) && content.includes(userMessageMarker)) {
       const userMessageIndex = content.indexOf(userMessageMarker);
       if (userMessageIndex !== -1) {
         return content.slice(userMessageIndex + userMessageMarker.length).trim();
       }
     }
-    
+
     // New buddy format: [About this person...]...\n---\n\n{actual message}
     const buddyMarker = "[About this person";
     const separator = "\n---\n\n";
-    
+
     if (content.includes(buddyMarker) && content.includes(separator)) {
       const sepIndex = content.indexOf(separator);
       if (sepIndex !== -1) {
         return content.slice(sepIndex + separator.length).trim();
       }
     }
-    
+
     return content;
+  };
+
+  const normalizeAgentHistoryRole = (
+    role: unknown
+  ): "user" | "assistant" | null => {
+    const normalized = String(role || "").trim().toLowerCase();
+    if (normalized === "user" || normalized === "assistant") return normalized;
+    return null;
+  };
+
+  const sanitizeAgentHistoryContent = (
+    role: "user" | "assistant",
+    content: string
+  ): string => {
+    if (role === "assistant") {
+      return normalizeAssistantDisplayText(content, { agentReply: true });
+    }
+    return sanitizeAssistantScaffold(stripMemoryContext(content));
   };
 
   const mapAgentHistoryEntries = useCallback(
     (entries: Array<Record<string, unknown>> | undefined): Message[] =>
       (entries || [])
-        .map((entry, index) => {
-          const role = String(entry.role) === "assistant" ? "assistant" as const : "user" as const;
+        .map((entry, index): Message | null => {
+          const role = normalizeAgentHistoryRole(entry.role);
+          if (!role) return null;
           const content = String(entry.content || "");
           const turnEvents = Array.isArray((entry as { events?: unknown }).events)
             ? ((entry as { events?: unknown }).events as Array<{
@@ -4427,11 +4525,12 @@ export function ChatArea() {
           return {
             id: String(entry.id || `bot-history-${index}`),
             role,
-            content: role === "user" ? stripMemoryContext(content) : content,
+            content: sanitizeAgentHistoryContent(role, content),
             createdAt: messageRecordCreatedAtIso(entry),
             turnEvents,
           };
         })
+        .filter((message): message is Message => Boolean(message))
         .filter((message) => normalizeMessageContentKey(message.content)),
     []
   );
@@ -4474,6 +4573,7 @@ export function ChatArea() {
         return changed ? { ...prev, [threadId]: merged.messages } : prev;
       });
       historyLoadedRef.current[threadId] = true;
+      setAgentHistoryHydratedThreadId(threadId);
       return changed;
     },
     [mapAgentHistoryEntries, resolveAgentSessionKeyForThread]
@@ -4496,6 +4596,7 @@ export function ChatArea() {
         return changed ? { ...prev, [threadId]: merged.messages } : prev;
       });
       historyLoadedRef.current[threadId] = true;
+      setAgentHistoryHydratedThreadId(threadId);
       try {
         await reconcileAgentThreadHistory(threadId, "merged");
       } catch {
@@ -4512,7 +4613,6 @@ export function ChatArea() {
     isZakiBotActiveSpace || isAnonymousSpacesActive ? null : activeWorkspaceSlug,
     isZakiBotActiveSpace || isAnonymousSpacesActive ? null : activeThreadId
   );
-  const [isBotHistoryLoading, setIsBotHistoryLoading] = useState(false);
 
   useEffect(() => {
     spacesListRef.current = spacesList;
@@ -7804,6 +7904,8 @@ export function ChatArea() {
     }
     if (turnSessionKey) {
       const normalizedTurnSessionKey = normalizeZakiSessionKey(turnSessionKey);
+      forgetDeletedAgentSessionKey(deletedAgentSessionKeysRef.current, normalizedTurnSessionKey);
+      ensureZakiSessionUi(normalizedTurnSessionKey);
       if (activeContextSessionKeyRef.current !== normalizedTurnSessionKey) {
         setSessionContextPressure(turnSessionKey, null);
         setNullalisContextGauge(null);
@@ -8135,6 +8237,7 @@ export function ChatArea() {
     authUserId,
     checkForSavedMemories,
     clearZakiBotProgressVisuals,
+    ensureZakiSessionUi,
     ensureZakiBotProvisioned,
     finalizeZakiBotProgress,
     goToThread,
@@ -8877,6 +8980,7 @@ export function ChatArea() {
 
   // Load thread history from React Query
   useEffect(() => {
+    if (isZakiBotActiveSpace) return;
     if (!activeThreadId || !activeWorkspaceSlug) return;
     if (!historyData || historyLoadedRef.current[activeThreadId]) return;
     if (messagesByThread[activeThreadId]?.length) {
@@ -8897,7 +9001,13 @@ export function ChatArea() {
       [activeThreadId]: cleaned,
     }));
     historyLoadedRef.current[activeThreadId] = true;
-  }, [activeThreadId, activeWorkspaceSlug, historyData, messagesByThread]);
+  }, [
+    activeThreadId,
+    activeWorkspaceSlug,
+    historyData,
+    isZakiBotActiveSpace,
+    messagesByThread,
+  ]);
 
   useEffect(() => {
     if (!isZakiBotActiveSpace || !activeThreadId || !isAuthReady) {
@@ -8907,6 +9017,7 @@ export function ChatArea() {
     const shouldReconcileLoadedThread =
       !isStreaming && lastAgentHistoryReconcileThreadRef.current !== activeThreadId;
     if (historyLoadedRef.current[activeThreadId]) {
+      setAgentHistoryHydratedThreadId(activeThreadId);
       setIsBotHistoryLoading(false);
       if (shouldReconcileLoadedThread) {
         void reconcileAgentThreadHistory(activeThreadId, "merged");
@@ -8915,6 +9026,7 @@ export function ChatArea() {
     }
     if (messagesByThread[activeThreadId]?.length) {
       historyLoadedRef.current[activeThreadId] = true;
+      setAgentHistoryHydratedThreadId(activeThreadId);
       setIsBotHistoryLoading(false);
       if (shouldReconcileLoadedThread) {
         void reconcileAgentThreadHistory(activeThreadId, "merged");
@@ -8933,7 +9045,10 @@ export function ChatArea() {
         // Ensure loading clears on error
       })
       .finally(() => {
-        if (!cancelled) setIsBotHistoryLoading(false);
+        if (!cancelled) {
+          setAgentHistoryHydratedThreadId(activeThreadId);
+          setIsBotHistoryLoading(false);
+        }
       });
 
     return () => {

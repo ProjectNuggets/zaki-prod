@@ -39,6 +39,7 @@ const revokeAgentTraceShareMock = jest.requireMock("@/lib/api").revokeAgentTrace
 const shareAgentArtifactMock = jest.requireMock("@/lib/api").shareAgentArtifact as jest.Mock;
 const shareAgentTraceMock = jest.requireMock("@/lib/api").shareAgentTrace as jest.Mock;
 const updateAgentSessionTodoItemMock = jest.requireMock("@/lib/api").updateAgentSessionTodoItem as jest.Mock;
+const updateAgentCronMock = jest.requireMock("@/lib/api").updateAgentCron as jest.Mock;
 
 function renderRail(overrides: Partial<AgentInspectorRailProps> = {}) {
   const props: AgentInspectorRailProps = {
@@ -113,6 +114,10 @@ describe("AgentInspectorRail", () => {
       response: { ok: true },
       data: { job: { id: "cron-new" } },
     });
+    updateAgentCronMock.mockResolvedValue({
+      response: { ok: true },
+      data: { job: { id: "cron-updated" } },
+    });
   });
 
   it("renders the V6 execution rail as six MECE tabs", () => {
@@ -132,7 +137,7 @@ describe("AgentInspectorRail", () => {
 
     const tablist = screen.getByRole("tablist", { name: "Agent panels" });
     expect(within(tablist).getAllByRole("tab")).toHaveLength(6);
-    for (const label of ["Plan", "Cron", "Sources", "Artifacts", "Browser", "Trace"]) {
+    for (const label of ["Plan", "Schedules", "Sources", "Artifacts", "Browser", "Trace"]) {
       expect(within(tablist).getByRole("tab", { name: new RegExp(label, "i") })).toBeInTheDocument();
     }
     expect(within(tablist).getByRole("tab", { name: /Plan/i })).toHaveAttribute(
@@ -737,24 +742,13 @@ describe("AgentInspectorRail", () => {
     );
   });
 
-  it("creates schedules directly from the Cron panel", async () => {
+  it("creates schedules from quick presets and advanced cron in the Schedules tab", async () => {
     const onCronChanged = jest.fn();
-    renderRail({
-      onCronChanged,
-      transcriptEntries: [
-        {
-          id: "scheduled",
-          kind: "tool",
-          text: "Scheduled weekly automation run.",
-          resultState: "queued",
-          timestamp: 2,
-        },
-      ],
-    });
+    renderRail({ onCronChanged });
 
-    fireEvent.click(screen.getByRole("tab", { name: /Cron/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /Schedules/i }));
 
-    expect(screen.getByText("schedules")).toBeInTheDocument();
+    expect(screen.getByText("scheduled work")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Create schedule" }));
     const form = screen.getByTestId("agent-cron-form");
     fireEvent.change(within(form).getByPlaceholderText("What should ZAKI do on this schedule?"), {
@@ -764,25 +758,141 @@ describe("AgentInspectorRail", () => {
     await waitFor(() => {
       expect(createAgentCronMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          expression: "0 */6 * * *",
           prompt: "Review launch blockers every morning.",
+          job_type: "agent",
+          one_shot: true,
+          expression: expect.any(String),
         })
       );
       expect(onCronChanged).toHaveBeenCalledTimes(1);
     });
+
+    fireEvent.click(screen.getByRole("button", { name: "Create schedule" }));
+    const advancedForm = screen.getByTestId("agent-cron-form");
+    fireEvent.click(within(advancedForm).getByRole("button", { name: "Advanced cron" }));
+    fireEvent.change(within(advancedForm).getByLabelText("Cron expression"), {
+      target: { value: "0 9 * * 1" },
+    });
+    fireEvent.change(within(advancedForm).getByPlaceholderText("What should ZAKI do on this schedule?"), {
+      target: { value: "Prepare Monday brief." },
+    });
+    fireEvent.click(within(advancedForm).getByRole("button", { name: /Create schedule/i }));
+    await waitFor(() => {
+      expect(createAgentCronMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          expression: "0 9 * * 1",
+          prompt: "Prepare Monday brief.",
+          job_type: "agent",
+          one_shot: false,
+        })
+      );
+      expect(onCronChanged).toHaveBeenCalledTimes(2);
+    });
   });
 
-  it("renders backend task fallback and cron ledger separately", () => {
+  it("does not force one-shot schedules to recurring when editing", async () => {
     renderRail({
-      tasks: [
+      cronJobs: [
         {
-          taskId: "backend-task-1",
+          id: "one-shot",
+          name: "One-shot reminder",
+          schedule: "30 9 23 6 *",
+          prompt: "Remind me about launch.",
           status: "queued",
-          description: "Queued backend task",
-          updatedAt: 1,
+          enabled: true,
+          paused: false,
+          nextRunAt: 1_803_217_800_000,
+          lastRunAt: null,
+          lastStatus: null,
+          failureCount: 0,
+          oneShot: true,
         },
       ],
-      tasksError: "stale_cache",
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: /Schedules/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Edit/i }));
+    const form = screen.getByTestId("agent-cron-form");
+    fireEvent.change(within(form).getByPlaceholderText("What should ZAKI do on this schedule?"), {
+      target: { value: "Remind me about launch checklist." },
+    });
+    fireEvent.click(within(form).getByRole("button", { name: /Update schedule/i }));
+
+    await waitFor(() => {
+      expect(updateAgentCronMock).toHaveBeenCalledWith(
+        "one-shot",
+        expect.not.objectContaining({ one_shot: expect.anything() })
+      );
+    });
+  });
+
+  it("prefers scheduler jobs, merges editable cron actions, and keeps jobs-only rows read-only", () => {
+    renderRail({
+      jobs: [
+        {
+          id: "cron-1",
+          title: "Morning briefing",
+          status: "queued",
+          schedule: null,
+          prompt: "Summarize the day.",
+          nextRunAt: 1_800_000_000_000,
+          lastRunAt: null,
+          createdAt: null,
+        },
+        {
+          id: "job-only",
+          title: "Read-only scheduler row",
+          status: "queued",
+          schedule: "0 18 * * 5",
+          prompt: "Send weekly digest.",
+          nextRunAt: 1_800_100_000_000,
+          lastRunAt: null,
+          createdAt: null,
+        },
+      ],
+      cronJobs: [
+        {
+          id: "cron-1",
+          name: "Editable cron name",
+          schedule: "0 9 * * 1",
+          prompt: "Editable prompt.",
+          status: "queued",
+          enabled: true,
+          paused: false,
+          nextRunAt: 1_800_000_000_000,
+          lastRunAt: null,
+          lastStatus: null,
+          failureCount: 0,
+        },
+        {
+          id: "cron-extra",
+          name: "Cron fallback hidden while jobs exist",
+          schedule: "0 9 * * 2",
+          prompt: "Should not render when scheduler rows exist.",
+          status: "queued",
+          enabled: true,
+          paused: false,
+          nextRunAt: null,
+          lastRunAt: null,
+          lastStatus: null,
+          failureCount: 0,
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: /Schedules/i }));
+
+    const scheduleList = screen.getByTestId("agent-schedule-list");
+    expect(within(scheduleList).getByText("Morning briefing")).toBeInTheDocument();
+    expect(within(scheduleList).getByText(/0 9 \* \* 1/)).toBeInTheDocument();
+    expect(within(scheduleList).getByText("Read-only scheduler row")).toBeInTheDocument();
+    expect(screen.queryByText("Cron fallback hidden while jobs exist")).not.toBeInTheDocument();
+    expect(within(scheduleList).getByRole("button", { name: /Edit/i })).toBeInTheDocument();
+    expect(within(scheduleList).getByText("read-only scheduler row")).toBeInTheDocument();
+  });
+
+  it("falls back to editable cron rows when scheduler jobs are empty", () => {
+    renderRail({
       cronJobs: [
         {
           id: "cron-1",
@@ -800,17 +910,81 @@ describe("AgentInspectorRail", () => {
       ],
     });
 
-    const currentWork = screen.getByTestId("agent-current-work");
-    expect(currentWork).toHaveTextContent("background tasks");
-    expect(currentWork).toHaveTextContent("Queued backend task");
-    expect(screen.queryByText(/Task ledger unavailable: stale_cache/)).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("tab", { name: /Cron/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /Schedules/i }));
 
     expect(screen.getByText("Weekly investor scan")).toBeInTheDocument();
     expect(screen.getByText(/0 9 \* \* 1/)).toBeInTheDocument();
     expect(screen.getByText("Review market signals every Monday.")).toBeInTheDocument();
-    expect(screen.getByText(/backend ledger/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Pause/i })).toBeInTheDocument();
+  });
+
+  it("shows strict schedule activity without treating background work as scheduled jobs", () => {
+    renderRail({
+      transcriptEntries: [
+        {
+          id: "scheduled",
+          kind: "tool",
+          tool: "schedule",
+          text: "Scheduled weekly automation run.",
+          resultSummary: "Created weekly digest schedule.",
+          resultState: "queued",
+          timestamp: 3,
+        },
+        {
+          id: "background",
+          kind: "task",
+          phase: "tool_only_turn",
+          text: "4 tools ran and 2 background tasks spawned",
+          resultState: "running",
+          timestamp: 2,
+        },
+        {
+          id: "completion",
+          kind: "task",
+          phase: "subagent_completion",
+          text: "Completed subagent: research finished",
+          timestamp: 1,
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: /Schedules/i }));
+
+    expect(screen.getByText("No scheduled work yet.")).toBeInTheDocument();
+    const activity = screen.getByTestId("agent-schedule-activity");
+    expect(within(activity).getByText("Created weekly digest schedule.")).toBeInTheDocument();
+    expect(screen.queryByText(/background tasks spawned/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Completed subagent/)).not.toBeInTheDocument();
+  });
+
+  it("renders soft empty and unavailable schedule states", () => {
+    const { rerender } = renderRail();
+
+    fireEvent.click(screen.getByRole("tab", { name: /Schedules/i }));
+
+    expect(screen.getByText("No scheduled work yet.")).toBeInTheDocument();
+    expect(screen.queryByText(/ledger unavailable/i)).not.toBeInTheDocument();
+
+    rerender(
+      <AgentInspectorRail
+        mode="execute"
+        isStreaming={false}
+        lastChannel={null}
+        sandbox={null}
+        tasks={[]}
+        transcriptEntries={[]}
+        narrationFrame={null}
+        approvalRequest={null}
+        contextGaugeData={null}
+        usageSummary={null}
+        jobsError="network_error"
+        cronError="network_error"
+      />
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: /Schedules/i }));
+    expect(screen.getByText(/Schedules are unavailable right now/)).toBeInTheDocument();
+    expect(screen.queryByText(/Schedule ledger unavailable/i)).not.toBeInTheDocument();
   });
 
   it("falls back to active background task rows when no checklist exists", () => {

@@ -27,6 +27,11 @@ const ZAKI_MARKER_RE = /\[\[\s*\/?\s*ZAKI_[A-Z0-9_]+\s*\]\]/gi;
 const MEMORY_FOR_TURN_RE =
   /<\s*memory_for_turn\b[^>]*>[\s\S]*?<\s*\/\s*memory_for_turn\s*>/gi;
 const MEMORY_FOR_TURN_TAIL_RE = /<\s*memory_for_turn\b[\s\S]*$/i;
+// Older Agent replay rows can persist the input context as
+// <MEMORY_CONTEXT>...</MEMORY_CONTEXT>. It is engine fuel, never chat copy.
+const MEMORY_CONTEXT_RE =
+  /<\s*memory_context\b[^>]*>[\s\S]*?<\s*\/\s*memory_context\s*>/gi;
+const MEMORY_CONTEXT_TAIL_RE = /<\s*memory_context\b[\s\S]*$/i;
 
 // Raw <reflection> blocks — INTERIM neutralization (PR1). PR2 promotes reflection to a shown
 // collapsed reasoning part; until then, never render the raw tags/content verbatim.
@@ -42,11 +47,13 @@ const FACET_SURFACING_TAIL_RE = /\[\s*SURFACING:[\s\S]*$/i;
 const DELEGATE_RESULT_HEADER_RE =
   /(^|\n)\s*delegate\s+agent=[^\n]*\s+status=completed\s*\n(?:\s*result:\s*\n?)?/gi;
 const DELEGATE_RESULT_LABEL_RE = /(^|\n)\s*result:\s*\n/gi;
+const AGENT_SESSION_KEY_RE =
+  /\bagent:zaki-bot:user:[^:\s]+:(?:main|thread:[a-z0-9_.:-]+|task:[a-z0-9_.:-]+|cron:[a-z0-9_.:-]+)\b/gi;
 
 // Strong signals that a chunk carries the leaked system prompt. Section-stripping only fires
 // when one of these is present, so a legitimate lone "## Safety" answer heading is never removed.
 const DISTINCTIVE_SCAFFOLD_RE =
-  /(\bBrain Architecture\b|\bMemory Link Types\b|<\s*memory_for_turn\b|\[\[\s*ZAKI_)/i;
+  /(\bBrain Architecture\b|\bMemory Link Types\b|<\s*memory_(?:for_turn|context)\b|\[\[\s*ZAKI_)/i;
 
 const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 const MARKER_SET = new Set(STABLE_PROMPT_MARKERS.map(norm));
@@ -88,12 +95,16 @@ export function sanitizeAssistantScaffold(raw: string): string {
   text = text
     .replace(MEMORY_FOR_TURN_RE, "")
     .replace(MEMORY_FOR_TURN_TAIL_RE, "");
+  text = text
+    .replace(MEMORY_CONTEXT_RE, "")
+    .replace(MEMORY_CONTEXT_TAIL_RE, "");
   text = text.replace(REFLECTION_RE, "").replace(REFLECTION_TAIL_RE, "");
   text = text
     .replace(FACET_SURFACING_RE, "")
     .replace(FACET_SURFACING_TAIL_RE, "")
     .replace(DELEGATE_RESULT_HEADER_RE, "$1")
     .replace(DELEGATE_RESULT_LABEL_RE, "$1");
+  text = text.replace(AGENT_SESSION_KEY_RE, "[agent session]");
   if (leaked) text = stripStablePromptSections(text);
   return text.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }

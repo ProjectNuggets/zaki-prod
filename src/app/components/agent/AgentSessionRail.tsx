@@ -132,6 +132,7 @@ export function AgentSessionRail({
   const hasOverflow = filteredSessions.length > visibleLimit;
   const hasFilter = trimmedQuery.length > 0;
   const visibleCount = visibleSessions.length;
+  const showSessionSummary = !isError && realThreadSessions.length > 0;
   const sessionSummary = hasFilter
     ? t("agent.sessionRail.filteredSummary", {
         defaultValue: "{{shown}} of {{total}} matching",
@@ -219,7 +220,7 @@ export function AgentSessionRail({
             </button>
           ) : null}
         </div>
-        {realThreadSessions.length > 0 ? (
+        {showSessionSummary ? (
           <div className="zaki-agent-session-rail__summary" aria-live="polite">
             <span>{sessionSummary}</span>
             {hasFilter ? (
@@ -268,7 +269,7 @@ export function AgentSessionRail({
       </div>
 
       <div className="zaki-agent-session-rail__foot">
-        {realThreadSessions.length > 0 && hasOverflow ? (
+        {showSessionSummary && hasOverflow ? (
           <div className="zaki-agent-session-rail__meta">
             <span>{sessionSummary}</span>
             <button

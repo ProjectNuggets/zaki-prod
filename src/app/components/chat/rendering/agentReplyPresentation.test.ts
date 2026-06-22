@@ -212,4 +212,65 @@ describe("Agent reply presentation", () => {
       "The plan is soft because it avoids choosing a buyer."
     );
   });
+
+  it("redacts internal Agent session keys from final replies", () => {
+    const display = normalizeAssistantDisplayText(
+      "The active session key is agent:zaki-bot:user:128:thread:main.",
+      { agentReply: true }
+    );
+
+    expect(display).toBe("The active session key is [agent session].");
+  });
+
+  it("suppresses runtime_info identity JSON from final replies", () => {
+    const content = [
+      "runtime_info returned:",
+      "```json",
+      JSON.stringify(
+        {
+          turn_origin: "user",
+          session_key: "agent:zaki-bot:user:128:thread:main",
+          session_lane: "thread",
+          canonical_user_id: "128",
+          tenant_user_id: "128",
+          tenant_numeric_user_id: 128,
+          same_user_truth: true,
+        },
+        null,
+        2
+      ),
+      "```",
+      "Final answer and public narration are separate.",
+    ].join("\n");
+
+    const display = normalizeAssistantDisplayText(content, { agentReply: true });
+
+    expect(display).toMatch(/^runtime_info returned:/);
+    expect(display).toContain("Final answer and public narration are separate.");
+    expect(display).not.toContain("canonical_user_id");
+    expect(display).not.toContain("tenant_user_id");
+    expect(display).not.toContain("agent:zaki-bot");
+  });
+
+  it("suppresses nested runtime_info wrapper JSON from refreshed Agent history", () => {
+    const content = [
+      "Done.",
+      "```json",
+      JSON.stringify({
+        runtime_info: {
+          session_key: "agent:zaki-bot:user:1:thread:main",
+          canonical_user_id: "boss@example.com",
+          same_user_truth: true,
+        },
+      }),
+      "```",
+    ].join("\n");
+
+    const display = normalizeAssistantDisplayText(content, { agentReply: true });
+
+    expect(display).toBe("Done.");
+    expect(display).not.toContain("runtime_info");
+    expect(display).not.toContain("canonical_user_id");
+    expect(display).not.toContain("same_user_truth");
+  });
 });
