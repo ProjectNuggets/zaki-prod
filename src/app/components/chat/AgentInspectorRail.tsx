@@ -155,7 +155,10 @@ type ScheduleQuickKey =
 
 type ScheduleRow = {
   id: string;
-  name: string;
+  displayTitle: string;
+  brief: string | null;
+  cadenceLabel: string;
+  rawSchedule: string | null;
   prompt: string | null;
   schedule: string | null;
   status: string | null;
@@ -167,8 +170,8 @@ type ScheduleRow = {
   failureCount: number;
   error: string | null;
   oneShot: boolean;
-  editableJob: AgentInspectorCronJob | null;
-  source: "scheduler" | "editable";
+  editableJob: AgentInspectorCronJob;
+  runtimeJob: AgentInspectorJob | null;
 };
 
 type ScheduleTabState = "loading" | "attention" | "ready" | "empty" | "unavailable";
@@ -556,52 +559,224 @@ function schedulePreviewText(schedule: FollowUpSchedule | null) {
   return `mondays ${scheduleNumber(schedule.hour)}:${scheduleNumber(schedule.minute)}`;
 }
 
-function scheduleRowFromCron(job: AgentInspectorCronJob): ScheduleRow {
-  return {
-    id: job.id,
-    name: job.name,
-    prompt: job.prompt,
-    schedule: job.schedule,
-    status: job.status,
-    enabled: job.enabled,
-    paused: job.paused,
-    nextRunAt: job.nextRunAt,
-    lastRunAt: job.lastRunAt,
-    lastStatus: job.lastStatus,
-    failureCount: job.failureCount,
-    error: job.error ?? null,
-    oneShot: Boolean(job.oneShot),
-    editableJob: job,
-    source: "editable",
-  };
+function compactScheduleText(value?: string | null): string {
+  return String(value || "").replace(/\s+/g, " ").trim();
 }
 
-function scheduleRowFromJob(job: AgentInspectorJob, editableJob: AgentInspectorCronJob | null): ScheduleRow {
+function normalizeScheduleExpression(value?: string | null): string {
+  return compactScheduleText(value).toLowerCase();
+}
+
+function normalizeScheduleFingerprintText(value?: string | null): string {
+  return compactScheduleText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function scheduleDescriptor(value: { prompt?: string | null; name?: string | null; title?: string | null }) {
+  return compactScheduleText(value.prompt) || compactScheduleText(value.name) || compactScheduleText(value.title);
+}
+
+function scheduleFingerprint(schedule?: string | null, descriptor?: string | null): string | null {
+  const normalizedSchedule = normalizeScheduleExpression(schedule);
+  const normalizedDescriptor = normalizeScheduleFingerprintText(descriptor);
+  if (!normalizedSchedule || !normalizedDescriptor) return null;
+  return `${normalizedSchedule}::${normalizedDescriptor}`;
+}
+
+function scheduleIntentLabel(prompt?: string | null): string {
+  const haystack = normalizeScheduleFingerprintText(prompt);
+  if (/\bremind(?:er)?\b/.test(haystack)) return "Reminder";
+  if (/\breport\b/.test(haystack)) return "Scheduled report";
+  if (/\bbrief(?:ing)?\b/.test(haystack)) return "Scheduled brief";
+  if (/\bdigest\b/.test(haystack)) return "Scheduled digest";
+  if (/\b(summary|summarize)\b/.test(haystack)) return "Scheduled summary";
+  if (/\b(check|scan|audit|review)\b/.test(haystack)) return "Scheduled check";
+  return "Scheduled job";
+}
+
+function readableScheduleCase(value: string): string {
+  const letters = value.replace(/[^A-Za-z]/g, "");
+  if (letters.length < 18) return value;
+  const upper = letters.replace(/[^A-Z]/g, "").length;
+  if (upper / letters.length < 0.7) return value;
+  const lowered = value.toLowerCase();
+  return lowered.replace(/(^|[.!?]\s+)([a-z])/g, (_match, prefix: string, letter: string) =>
+    `${prefix}${letter.toUpperCase()}`
+  );
+}
+
+function truncateScheduleBrief(value: string, maxLength = 180): string {
+  if (value.length <= maxLength) return value;
+  const clipped = value.slice(0, maxLength).replace(/\s+\S*$/, "").trim();
+  return `${clipped || value.slice(0, maxLength).trim()}...`;
+}
+
+function scheduleBriefFromPrompt(prompt?: string | null): string | null {
+  let text = compactScheduleText(prompt);
+  if (!text) return null;
+
+  text = text
+    .replace(/^prepare\s+(?:the\s+)?scheduled\s+(?:report|brief)\s+now\.?\s*/i, "")
+    .replace(/\b(?:brief|report)\s+specification\s*:\s*/gi, "")
+    .replace(/\bstyle\s*:\s*/gi, "")
+    .replace(/\bformat\s*:\s*/gi, "");
+
+  const lower = text.toLowerCase();
+  const internalMarkers = [
+    " read heartbeat.md",
+    " use runtime_info",
+    " use schedule first",
+    " using read-only",
+    " read-only tools",
+    " wake policy",
+    " scheduler delivery",
+    " final output",
+    " do not call",
+    " do not create",
+    " do not update",
+    " deliver one ",
+    " then gather",
+    " workspace only",
+  ];
+  const cutIndex = internalMarkers
+    .map((marker) => lower.indexOf(marker))
+    .filter((index) => index > 12)
+    .sort((a, b) => a - b)[0];
+  if (typeof cutIndex === "number") text = text.slice(0, cutIndex);
+
+  const sentences = text.match(/[^.!?]+[.!?]?/g) || [text];
+  const useful = sentences
+    .map((sentence) => sentence.trim())
+    .filter(Boolean)
+    .filter((sentence) => {
+      const normalized = sentence.toLowerCase();
+      return !/\b(runtime_info|heartbeat\.md|scheduler|wake policy|do not|read-only tools?)\b/.test(normalized);
+    })
+    .slice(0, 2)
+    .map(readableScheduleCase)
+    .join(" ");
+  const brief = (useful || readableScheduleCase(text))
+    .replace(/\s+([.,;:])/g, "$1")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return brief ? truncateScheduleBrief(brief) : null;
+}
+
+function scheduleDisplayTitle(job: AgentInspectorCronJob): string {
+  const explicitName = compactScheduleText(job.name);
+  return explicitName || scheduleIntentLabel(job.prompt);
+}
+
+function parseCronNumber(value: string, min: number, max: number): number | null {
+  if (!/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) return null;
+  return parsed;
+}
+
+function expandCronDayOfWeek(value: string): number[] | null {
+  const normalized = value.trim();
+  if (!normalized || normalized === "*" || normalized === "?") return null;
+  const days = new Set<number>();
+  for (const segment of normalized.split(",")) {
+    const part = segment.trim();
+    if (!part) continue;
+    if (part.includes("-")) {
+      const [startRaw, endRaw] = part.split("-");
+      if (!startRaw || !endRaw) return null;
+      const start = parseCronNumber(startRaw, 0, 7);
+      const end = parseCronNumber(endRaw, 0, 7);
+      if (start == null || end == null || start > end) return null;
+      for (let day = start; day <= end; day += 1) days.add(day === 7 ? 0 : day);
+      continue;
+    }
+    const day = parseCronNumber(part, 0, 7);
+    if (day == null) return null;
+    days.add(day === 7 ? 0 : day);
+  }
+  return [...days].sort((a, b) => a - b);
+}
+
+function sameCronDays(left: number[], right: number[]) {
+  return left.length === right.length && left.every((day, index) => day === right[index]);
+}
+
+function humanizeScheduleCadence(expression: string | null, oneShot: boolean, nextRunAt: number | null): string {
+  if (oneShot && nextRunAt) return `Runs ${formatCalendarStamp(nextRunAt)}`;
+  const raw = normalizeScheduleExpression(expression);
+  if (!raw) return "Schedule pending";
+  const parts = raw.split(" ");
+  if (parts.length !== 5) return "Custom schedule";
+  const [minuteRaw, hourRaw, dayOfMonth, month, dayOfWeek] = parts;
+  if (!minuteRaw || !hourRaw || !dayOfMonth || !month || !dayOfWeek) return "Custom schedule";
+  const minute = parseCronNumber(minuteRaw, 0, 59);
+  const hour = parseCronNumber(hourRaw, 0, 23);
+  if (minute == null || hour == null) return "Custom schedule";
+  const time = `${scheduleNumber(hour)}:${scheduleNumber(minute)}`;
+  if (nextRunAt && dayOfMonth !== "*" && month !== "*") return `Runs ${formatCalendarStamp(nextRunAt)}`;
+  if (dayOfMonth !== "*" || month !== "*") return `Custom schedule at ${time}`;
+  const days = expandCronDayOfWeek(dayOfWeek);
+  if (!days) return `Every day at ${time}`;
+  if (sameCronDays(days, [1, 2, 3, 4, 5])) return `Weekdays at ${time}`;
+  const dayNames = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
+  const shortDayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  if (days.length === 1) {
+    const day = days[0];
+    return `${typeof day === "number" ? dayNames[day] || "Scheduled" : "Scheduled"} at ${time}`;
+  }
+  return `${days.map((day) => shortDayNames[day] || String(day)).join(", ")} at ${time}`;
+}
+
+function findRuntimeJobForCron(
+  cronJob: AgentInspectorCronJob,
+  jobs: AgentInspectorJob[],
+  consumedJobIds: Set<string>
+): AgentInspectorJob | null {
+  const idMatch = jobs.find((job) => job.id === cronJob.id && !consumedJobIds.has(job.id));
+  if (idMatch) {
+    consumedJobIds.add(idMatch.id);
+    return idMatch;
+  }
+  const cronFingerprint = scheduleFingerprint(cronJob.schedule, scheduleDescriptor(cronJob));
+  if (!cronFingerprint) return null;
+  const fingerprintMatch = jobs.find((job) => {
+    if (consumedJobIds.has(job.id)) return false;
+    return scheduleFingerprint(job.schedule, scheduleDescriptor(job)) === cronFingerprint;
+  });
+  if (fingerprintMatch) consumedJobIds.add(fingerprintMatch.id);
+  return fingerprintMatch ?? null;
+}
+
+function scheduleRowFromCron(job: AgentInspectorCronJob, runtimeJob: AgentInspectorJob | null): ScheduleRow {
+  const nextRunAt = runtimeJob?.nextRunAt ?? job.nextRunAt;
+  const rawSchedule = job.schedule ?? runtimeJob?.schedule ?? null;
   return {
     id: job.id,
-    name: job.title || editableJob?.name || job.id,
-    prompt: job.prompt ?? editableJob?.prompt ?? null,
-    schedule: job.schedule ?? editableJob?.schedule ?? null,
-    status: job.status ?? editableJob?.status ?? null,
-    enabled: typeof job.enabled === "boolean" ? job.enabled : editableJob?.enabled ?? true,
-    paused: job.paused === true || editableJob?.paused === true || job.enabled === false,
-    nextRunAt: job.nextRunAt ?? editableJob?.nextRunAt ?? null,
-    lastRunAt: job.lastRunAt ?? editableJob?.lastRunAt ?? null,
-    lastStatus: job.lastStatus ?? editableJob?.lastStatus ?? null,
-    failureCount: job.failureCount ?? editableJob?.failureCount ?? 0,
-    error: job.error ?? editableJob?.error ?? null,
-    oneShot: Boolean(job.oneShot ?? editableJob?.oneShot),
-    editableJob,
-    source: "scheduler",
+    displayTitle: scheduleDisplayTitle(job),
+    brief: scheduleBriefFromPrompt(job.prompt),
+    cadenceLabel: humanizeScheduleCadence(rawSchedule, Boolean(job.oneShot ?? runtimeJob?.oneShot), nextRunAt),
+    rawSchedule,
+    prompt: job.prompt,
+    schedule: rawSchedule,
+    status: runtimeJob?.status ?? job.status,
+    enabled: job.enabled,
+    paused: job.paused,
+    nextRunAt,
+    lastRunAt: runtimeJob?.lastRunAt ?? job.lastRunAt,
+    lastStatus: runtimeJob?.lastStatus ?? job.lastStatus,
+    failureCount: runtimeJob?.failureCount ?? job.failureCount,
+    error: runtimeJob?.error ?? job.error ?? null,
+    oneShot: Boolean(job.oneShot ?? runtimeJob?.oneShot),
+    editableJob: job,
+    runtimeJob,
   };
 }
 
 function scheduleRowsFromSources(jobs: AgentInspectorJob[], cronJobs: AgentInspectorCronJob[]) {
-  if (jobs.length) {
-    const editableById = new Map(cronJobs.map((job) => [job.id, job]));
-    return jobs.map((job) => scheduleRowFromJob(job, editableById.get(job.id) ?? null));
-  }
-  return cronJobs.map(scheduleRowFromCron);
+  const consumedJobIds = new Set<string>();
+  return cronJobs.map((job) => scheduleRowFromCron(job, findRuntimeJobForCron(job, jobs, consumedJobIds)));
 }
 
 function scheduleRowHealth(row: ScheduleRow) {
@@ -642,7 +817,7 @@ function sortScheduleRows(rows: ScheduleRow[]) {
     const left = a.nextRunAt ?? Number.MAX_SAFE_INTEGER;
     const right = b.nextRunAt ?? Number.MAX_SAFE_INTEGER;
     if (left !== right) return left - right;
-    return a.name.localeCompare(b.name);
+    return a.displayTitle.localeCompare(b.displayTitle);
   });
 }
 
@@ -778,8 +953,6 @@ export function AgentInspectorRail({
   cronLoading = false,
   cronError = null,
   jobs = [],
-  jobsLoading = false,
-  jobsError = null,
   artifacts = [],
   artifactsScope = "session",
   artifactsLoading = false,
@@ -840,6 +1013,7 @@ export function AgentInspectorRail({
   const [cronCustomDateTimeDraft, setCronCustomDateTimeDraft] = useState(defaultScheduleCustomDateTime);
   const [cronBusyId, setCronBusyId] = useState<string | null>(null);
   const [confirmCronDeleteId, setConfirmCronDeleteId] = useState<string | null>(null);
+  const [expandedScheduleId, setExpandedScheduleId] = useState<string | null>(null);
 
   const timelineBlocks = useMemo(
     () => composeTurnTimeline(transcriptEntries),
@@ -876,7 +1050,7 @@ export function AgentInspectorRail({
     () => sortScheduleRows(scheduleRowsFromSources(jobs, cronJobs)),
     [jobs, cronJobs]
   );
-  const scheduleLoading = (jobsLoading || cronLoading) && !scheduleRows.length;
+  const scheduleLoading = cronLoading && !scheduleRows.length;
   const scheduleAttentionCount = scheduleRows.filter(
     (row) => scheduleRowHealth(row) === "attention"
   ).length;
@@ -894,7 +1068,7 @@ export function AgentInspectorRail({
       ? "attention"
       : scheduleRows.length
         ? "ready"
-        : jobsError || cronError
+        : cronError
           ? "unavailable"
           : "empty";
   const scheduleTabCount =
@@ -1238,6 +1412,7 @@ export function AgentInspectorRail({
 
   const beginCronCreate = () => {
     resetCronForm();
+    setExpandedScheduleId(null);
     setCronFormOpen(true);
   };
 
@@ -1248,6 +1423,7 @@ export function AgentInspectorRail({
     setCronPromptDraft(job.prompt || "");
     setCronQuickDraft("advanced");
     setConfirmCronDeleteId(null);
+    setExpandedScheduleId(null);
     setCronFormOpen(true);
   };
 
@@ -1326,6 +1502,7 @@ export function AgentInspectorRail({
         throw new Error(cronActionError(data, "cron_delete_failed"));
       }
       setConfirmCronDeleteId(null);
+      setExpandedScheduleId(null);
       toast.success("Schedule deleted.");
       await refreshRuntimeSchedules();
     } catch (error) {
@@ -2014,7 +2191,7 @@ export function AgentInspectorRail({
             {scheduleLoading ? <div className="v2-empty-line">Loading schedules...</div> : null}
             {scheduleTabState === "unavailable" ? (
               <div className="v2-empty-line">
-                Schedules are unavailable right now. {jobsError || cronError || "Try refresh."}
+                Schedules are unavailable right now. {cronError || "Try refresh."}
               </div>
             ) : null}
 
@@ -2117,9 +2294,10 @@ export function AgentInspectorRail({
                 {scheduleRows.map((row) => {
                   const health = scheduleRowHealth(row);
                   const editableJob = row.editableJob;
+                  const detailsOpen = expandedScheduleId === row.id;
                   return (
                     <li
-                      key={`${row.source}:${row.id}`}
+                      key={row.id}
                       className={cn(
                         "zaki-agent-inspector__cron-row",
                         health === "running" ? "is-running" : "",
@@ -2131,14 +2309,14 @@ export function AgentInspectorRail({
                         <span className={health === "running" ? "dot" : health === "paused" ? "pause" : "ring"} />
                       </div>
                       <div className="zaki-agent-inspector__cron-main">
-                        <div className="zaki-agent-inspector__cron-name">{row.name}</div>
+                        <div className="zaki-agent-inspector__cron-name">{row.displayTitle}</div>
                         <div className="zaki-agent-inspector__cron-sched">
-                          {row.schedule || "schedule pending"}
+                          {row.cadenceLabel}
                           {" · "}
                           {scheduleRowHealthLabel(row)}
                         </div>
-                        {row.prompt ? (
-                          <div className="zaki-agent-inspector__cron-sched">{row.prompt}</div>
+                        {row.brief ? (
+                          <div className="zaki-agent-inspector__cron-briefline">{row.brief}</div>
                         ) : null}
                         <div className="zaki-agent-inspector__cron-sched">
                           next {formatCalendarStamp(row.nextRunAt)} · last {formatCalendarStamp(row.lastRunAt)}
@@ -2146,49 +2324,82 @@ export function AgentInspectorRail({
                         {row.error ? (
                           <div className="zaki-agent-inspector__cron-sched">last error {row.error}</div>
                         ) : null}
-                        {editableJob ? (
-                          <div className="zaki-agent-inspector__cron-actions">
-                            {confirmCronDeleteId === editableJob.id ? (
-                              <>
-                                <button
-                                  type="button"
-                                  disabled={cronBusyId === `cron-delete:${editableJob.id}`}
-                                  onClick={() => void handleCronDelete(editableJob)}
-                                >
-                                  {cronBusyId === `cron-delete:${editableJob.id}` ? "Deleting" : "Confirm delete"}
-                                </button>
-                                <button type="button" onClick={() => setConfirmCronDeleteId(null)}>
-                                  Cancel
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button type="button" onClick={() => beginCronEdit(editableJob)}>
-                                  <Pencil className="size-3.5" aria-hidden />
-                                  Edit
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={cronBusyId === `cron-toggle:${editableJob.id}`}
-                                  onClick={() => void handleCronToggle(editableJob)}
-                                >
-                                  {editableJob.paused ? (
-                                    <Play className="size-3.5" aria-hidden />
-                                  ) : (
-                                    <Pause className="size-3.5" aria-hidden />
-                                  )}
-                                  {editableJob.paused ? "Resume" : "Pause"}
-                                </button>
-                                <button type="button" onClick={() => setConfirmCronDeleteId(editableJob.id)}>
-                                  <Trash2 className="size-3.5" aria-hidden />
-                                  Delete
-                                </button>
-                              </>
-                            )}
+                        {detailsOpen ? (
+                          <div className="zaki-agent-inspector__cron-details" data-testid="agent-schedule-details">
+                            <dl>
+                              <div>
+                                <dt>Prompt</dt>
+                                <dd>{row.prompt || "not set"}</dd>
+                              </div>
+                              <div>
+                                <dt>Cron</dt>
+                                <dd>{row.rawSchedule || "not set"}</dd>
+                              </div>
+                              <div>
+                                <dt>Schedule id</dt>
+                                <dd>{row.id}</dd>
+                              </div>
+                              <div>
+                                <dt>Runtime job</dt>
+                                <dd>{row.runtimeJob?.id || "not matched"}</dd>
+                              </div>
+                              <div>
+                                <dt>Status</dt>
+                                <dd>{row.lastStatus || row.status || scheduleRowHealthLabel(row)}</dd>
+                              </div>
+                              <div>
+                                <dt>Last error</dt>
+                                <dd>{row.error || "none"}</dd>
+                              </div>
+                            </dl>
                           </div>
-                        ) : (
-                          <div className="zaki-agent-inspector__cron-sched">read-only scheduler row</div>
-                        )}
+                        ) : null}
+                        <div className="zaki-agent-inspector__cron-actions">
+                          {confirmCronDeleteId === editableJob.id ? (
+                            <>
+                              <button
+                                type="button"
+                                disabled={cronBusyId === `cron-delete:${editableJob.id}`}
+                                onClick={() => void handleCronDelete(editableJob)}
+                              >
+                                {cronBusyId === `cron-delete:${editableJob.id}` ? "Deleting" : "Confirm delete"}
+                              </button>
+                              <button type="button" onClick={() => setConfirmCronDeleteId(null)}>
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                aria-expanded={detailsOpen}
+                                onClick={() => setExpandedScheduleId(detailsOpen ? null : row.id)}
+                              >
+                                Details
+                              </button>
+                              <button type="button" onClick={() => beginCronEdit(editableJob)}>
+                                <Pencil className="size-3.5" aria-hidden />
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                disabled={cronBusyId === `cron-toggle:${editableJob.id}`}
+                                onClick={() => void handleCronToggle(editableJob)}
+                              >
+                                {editableJob.paused ? (
+                                  <Play className="size-3.5" aria-hidden />
+                                ) : (
+                                  <Pause className="size-3.5" aria-hidden />
+                                )}
+                                {editableJob.paused ? "Resume" : "Pause"}
+                              </button>
+                              <button type="button" onClick={() => setConfirmCronDeleteId(editableJob.id)}>
+                                <Trash2 className="size-3.5" aria-hidden />
+                                Delete
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </li>
                   );

@@ -2240,11 +2240,7 @@ function normalizeAgentCronJob(item: unknown, index: number): AgentInspectorCron
     `cron-${index}`;
   const prompt = recordStringValue(record, "prompt", "description", "summary", "command");
   const schedule = recordStringValue(record, "expression", "cron", "schedule", "rrule");
-  const name =
-    recordStringValue(record, "name", "title", "label") ||
-    prompt?.slice(0, 64) ||
-    schedule ||
-    id;
+  const name = recordStringValue(record, "name", "title", "label") || "";
   const paused = record.paused === true || record.enabled === false;
   const enabled = typeof record.enabled === "boolean" ? record.enabled : !paused;
   return {
@@ -2290,7 +2286,7 @@ function normalizeAgentJob(item: unknown, index: number): AgentInspectorJob | nu
     recordStringValue(record, "id", "job_id", "jobId", "run_id", "runId") ||
     `job-${index}`;
   const title =
-    recordStringValue(record, "title", "label", "name", "prompt", "command") ||
+    recordStringValue(record, "title", "label", "name") ||
     recordStringValue(record, "status", "state") ||
     id;
   const paused = record.paused === true || record.enabled === false;
