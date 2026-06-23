@@ -9,6 +9,7 @@ export function StoryV4() {
 
   return (
     <>
+      <style>{`.mobile-menu{position:fixed;inset:68px 0 0;opacity:0;visibility:hidden}.mobile-menu.open{opacity:1;visibility:visible}@media(min-width:901px){.mobile-menu{display:none}}.nav{position:fixed;top:0;left:0;right:0;z-index:100}`}</style>
       <div className="scroll-progress" id="scroll-progress" aria-hidden="true"></div>
       <div className="grain" aria-hidden="true"></div>
 

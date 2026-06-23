@@ -61,6 +61,7 @@ export function useZakiProductPage(cssFile: string, scriptFile: string) {
     document.body.setAttribute("data-stage", "dark");
     const links = injectLinks([
       "/zaki/styles/zaki-foundation.css",
+      "/zaki/styles/zaki-home.css",
       cssFile,
     ]);
     const scripts = loadScripts([...PAGE_SCRIPTS, scriptFile]);
