@@ -15,6 +15,7 @@ import {
   fetchAgentExtensionDevices,
   listAgentSecrets,
   pairAgentExtensionDevice,
+  purgeAgentMemoryPii,
   putAgentSecret,
   requestLogout,
   testAgentChannelControl,
@@ -1591,10 +1592,56 @@ describe("SettingsPage", () => {
     const memoryData = within(screen.getByTestId("settings-memory-data"));
     const forgetButton = memoryData.getByRole("button", { name: "Forget memory" });
     expect(forgetButton).toBeDisabled();
-    fireEvent.change(memoryData.getByPlaceholderText("memory key"), {
+    fireEvent.change(memoryData.getByLabelText("Memory key to forget"), {
       target: { value: "mem_1" },
     });
     expect(forgetButton).toBeEnabled();
+  });
+
+  it("requires an all-category PII dry run before applying purge", async () => {
+    const purgeMock = purgeAgentMemoryPii as jest.MockedFunction<typeof purgeAgentMemoryPii>;
+    purgeMock.mockClear();
+    purgeMock.mockImplementation(async ({ category, dry_run }) => {
+      const isDryRun = dry_run ?? false;
+      return {
+        response: { ok: true },
+        data: {
+          category,
+          dry_run: isDryRun,
+          candidate_count: 2,
+          deleted: isDryRun ? null : 2,
+          sample_keys: ["mem_1"],
+        },
+      };
+    });
+
+    await renderSettingsPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-memory-data")).toBeInTheDocument();
+    });
+
+    const memoryData = within(screen.getByTestId("settings-memory-data"));
+    expect(
+      memoryData.getByRole("button", { name: "Purge phone/email PII" })
+    ).toBeDisabled();
+
+    fireEvent.click(memoryData.getByRole("button", { name: "Dry run PII purge" }));
+
+    await waitFor(() => {
+      expect(purgeMock).toHaveBeenCalledWith({ category: "all", dry_run: true });
+    });
+    await waitFor(() => {
+      expect(memoryData.getByText("PII dry run: 2 candidates, 0 deleted.")).toBeInTheDocument();
+    });
+
+    const confirmButton = memoryData.getByRole("button", { name: "Confirm purge (2)" });
+    expect(confirmButton).toBeEnabled();
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => {
+      expect(purgeMock).toHaveBeenLastCalledWith({ category: "all", dry_run: false });
+    });
   });
 
   it("signs out from the Account settings section", async () => {

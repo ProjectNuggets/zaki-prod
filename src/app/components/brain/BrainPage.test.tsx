@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom";
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 // ── i18n: return defaultValue (with {{var}} interpolation) or the key ──
@@ -44,7 +44,7 @@ jest.mock("@/queries", () => ({
 
 // ── heavy / query-driven children stubbed; BrainFilterPanel stays real ──
 // BrainGalaxyView pulls in three.js (WebGL) which jsdom can't load; stub it as
-// a forwardRef so the Explore tab's ref wiring stays valid.
+// a forwardRef so the graph ref wiring stays valid.
 jest.mock("./galaxy/BrainGalaxyView", () => {
   const react = require("react");
   return {
@@ -53,8 +53,8 @@ jest.mock("./galaxy/BrainGalaxyView", () => {
     ),
   };
 });
-// BrainHome fans out to several brain queries; stub it (the Home surface has its
-// own model tests). Keeps the BrainPage suite focused on page structure.
+// BrainHome fans out to several brain queries; stub it (the overview surface has
+// its own model tests). Keeps the BrainPage suite focused on page structure.
 jest.mock("./galaxy/BrainHome", () => ({
   BrainHome: () => <div data-testid="brain-home" />,
 }));
@@ -164,22 +164,25 @@ describe("BrainPage", () => {
     expect(screen.getAllByText("Personal brain").length).toBeGreaterThan(0);
   });
 
-  it("defaults to Home (overview + timeline), with Explore as the second tab", () => {
+  it("renders the graph first and the overview below it", () => {
     mockGraph = { ...POPULATED };
     renderPage();
-    expect(screen.getByTestId("brain-home-slot")).toBeInTheDocument();
-    expect(screen.queryByTestId("brain-graph-slot")).not.toBeInTheDocument();
 
-    const tabs = screen.getAllByRole("tab");
-    fireEvent.click(tabs[1]); // Explore tab → the 3D graph shell
-    expect(screen.getByTestId("brain-graph-slot")).toBeInTheDocument();
+    const graph = screen.getByTestId("brain-graph-slot");
+    const home = screen.getByTestId("brain-home-slot");
+
+    expect(graph).toBeInTheDocument();
+    expect(home).toBeInTheDocument();
+    expect(graph.compareDocumentPosition(home) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("Graph + overview")).toBeInTheDocument();
   });
 
-  it("honors the explicit Explore URL state", () => {
+  it.each(["home", "explore", "graph"])("keeps legacy tab=%s URLs on the unified page", (tab) => {
     mockGraph = { ...POPULATED };
-    renderPage("/brain?tab=explore");
+    renderPage(`/brain?tab=${tab}`);
+
+    expect(screen.getByTestId("brain-home-slot")).toBeInTheDocument();
     expect(screen.getByTestId("brain-graph-slot")).toBeInTheDocument();
-    expect(screen.queryByTestId("brain-home-slot")).not.toBeInTheDocument();
   });
 
   it("exposes an honest account-level governance deep-link to Settings (Settings-link ready)", () => {

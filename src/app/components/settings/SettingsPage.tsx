@@ -550,6 +550,11 @@ export function SettingsPage() {
       : null;
   const languageValue = i18n.language?.toLowerCase().startsWith("ar") ? "ar" : "en";
   const normalizedEmail = useMemo(() => (user?.username || "").trim().toLowerCase(), [user?.username]);
+  const canApplyPiiPurge =
+    memoryGovernanceAvailable &&
+    lastPiiPurgeResult?.dry_run === true &&
+    lastPiiPurgeResult.category === "all" &&
+    (lastPiiPurgeResult.candidate_count ?? 0) > 0;
 
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
@@ -831,6 +836,7 @@ export function SettingsPage() {
 
   const loadMemoryGovernance = async () => {
     setMemoryGovernanceLoading(true);
+    setLastPiiPurgeResult(null);
     try {
       const { response, data } = await fetchAgentMemoryGovernance();
       if (!response.ok) throw new Error("memory_governance_unavailable");
@@ -847,6 +853,7 @@ export function SettingsPage() {
   useEffect(() => {
     let active = true;
     setMemoryGovernanceLoading(true);
+    setLastPiiPurgeResult(null);
     fetchAgentMemoryGovernance()
       .then(({ response, data }) => {
         if (!active) return;
@@ -1699,6 +1706,15 @@ export function SettingsPage() {
 
   const handlePurgePii = async (category: "phone" | "email" | "all", dryRun: boolean) => {
     if (!memoryGovernanceAvailable) return;
+    if (!dryRun && !canApplyPiiPurge) {
+      toast.error(
+        t("settingsModal.memoryData.piiDryRunRequired", {
+          defaultValue: "Run a PII dry run before applying purge.",
+        })
+      );
+      return;
+    }
+    if (dryRun) setLastPiiPurgeResult(null);
     setPiiAction(`${category}:${dryRun ? "dry" : "apply"}`);
     try {
       const { response, data } = await purgeAgentMemoryPii({
@@ -1708,8 +1724,8 @@ export function SettingsPage() {
       if (!response.ok || data?.error) {
         throw new Error(data?.message || data?.error || "memory_pii_purge_failed");
       }
-      setLastPiiPurgeResult(data);
       await loadMemoryGovernance();
+      setLastPiiPurgeResult(data);
       toast.success(
         dryRun
           ? t("settingsModal.memoryData.piiDryRunComplete", {
@@ -2911,13 +2927,18 @@ export function SettingsPage() {
                     disabled={
                       !memoryGovernanceAvailable ||
                       piiAction === "all:apply" ||
-                      (memoryGovernance?.pii?.all ?? 0) <= 0
+                      !canApplyPiiPurge
                     }
                     onClick={() => void handlePurgePii("all", false)}
                   >
-                    {t("settingsModal.memoryData.actions.applyPii", {
-                      defaultValue: "Purge phone/email PII",
-                    })}
+                    {canApplyPiiPurge
+                      ? t("settingsModal.memoryData.actions.confirmPii", {
+                          count: lastPiiPurgeResult?.candidate_count ?? 0,
+                          defaultValue: `Confirm purge (${lastPiiPurgeResult?.candidate_count ?? 0})`,
+                        })
+                      : t("settingsModal.memoryData.actions.applyPii", {
+                          defaultValue: "Purge phone/email PII",
+                        })}
                   </V2Button>
                   <V2Button
                     size="sm"
@@ -2952,6 +2973,9 @@ export function SettingsPage() {
                   <input
                     className="v2-input"
                     value={memoryForgetKey}
+                    aria-label={t("settingsModal.memoryData.forgetOne.inputLabel", {
+                      defaultValue: "Memory key to forget",
+                    })}
                     placeholder={t("settingsModal.memoryData.forgetOne.placeholder", {
                       defaultValue: "memory key",
                     })}

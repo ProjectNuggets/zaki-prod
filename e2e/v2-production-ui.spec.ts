@@ -89,19 +89,38 @@ test.describe("V2 production-final app surfaces", () => {
     await attachViewportShot(page, testInfo, "spaces-1440x1000");
   });
 
-  test("Brain lands on Home (overview + timeline) with Explore graph available", async ({ page }, testInfo) => {
+  test("Brain renders graph first with overview below", async ({ page }, testInfo) => {
     await page.setViewportSize(RELEASE_VIEWPORTS.desktop);
     await page.goto("/brain", { waitUntil: "domcontentloaded" });
 
-    // New default: the search-first Brain Home (theme overview + timeline).
-    await expect(page.getByTestId("brain-home-slot")).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId("brain-home")).toBeVisible();
-    await attachViewportShot(page, testInfo, "brain-home-1440x1000");
-
-    // The 3D graph moved to an opt-in Explore tab.
-    await page.getByRole("tab", { name: "Explore" }).click();
+    await expect(page.getByTestId("brain-graph-slot")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("brain-graph-canvas-wrap")).toBeVisible({ timeout: 20_000 });
-    await attachViewportShot(page, testInfo, "brain-explore-1440x1000");
+    await expect(page.getByTestId("brain-home-slot")).toBeVisible();
+    const positions = await page.evaluate(() => {
+      const graph = document.querySelector('[data-testid="brain-graph-slot"]');
+      const home = document.querySelector('[data-testid="brain-home-slot"]');
+      return {
+        graphTop: graph?.getBoundingClientRect().top ?? 0,
+        homeTop: home?.getBoundingClientRect().top ?? 0,
+      };
+    });
+    expect(positions.graphTop).toBeLessThan(positions.homeTop);
+    await attachViewportShot(page, testInfo, "brain-graph-1440x1000");
+
+    await page.getByTestId("brain-home-slot").scrollIntoViewIfNeeded();
+    await expect(page.getByTestId("brain-home")).toBeVisible();
+    await attachViewportShot(page, testInfo, "brain-overview-1440x1000");
+  });
+
+  test("Brain mobile keeps graph controls reachable and overview scrollable", async ({ page }, testInfo) => {
+    await page.setViewportSize(RELEASE_VIEWPORTS.mobile);
+    await page.goto("/brain", { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByTestId("brain-graph-slot")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("brain-controls-toggle")).toBeVisible();
+    await page.getByTestId("brain-home-slot").scrollIntoViewIfNeeded();
+    await expect(page.getByTestId("brain-home")).toBeVisible();
+    await attachViewportShot(page, testInfo, "brain-390x844");
   });
 
   test("Settings exposes the final control-plane sections without secrets", async ({ page }, testInfo) => {

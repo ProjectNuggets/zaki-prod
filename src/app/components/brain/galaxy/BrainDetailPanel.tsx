@@ -14,6 +14,7 @@ export interface BrainDetailPanelProps {
 export function BrainDetailPanel({ userId, memoryKey, onClose }: BrainDetailPanelProps) {
   const { data, isLoading, isError } = useBrainMemory(userId, memoryKey);
   if (!memoryKey) return null;
+  const stableKey = data?.key ?? data?.id ?? memoryKey;
 
   return (
     <aside className="zaki-galaxy-detail" data-testid="brain-galaxy-detail" aria-label="Memory detail">
@@ -55,6 +56,16 @@ export function BrainDetailPanel({ userId, memoryKey, onClose }: BrainDetailPane
               <span className="zaki-galaxy-detail__badge">superseded</span>
             ) : null}
           </div>
+
+          <section className="zaki-galaxy-detail__section">
+            <span className="zaki-galaxy-detail__label">Memory key</span>
+            <div className="zaki-galaxy-detail__key-row">
+              <code>{stableKey}</code>
+              <button type="button" onClick={() => copyMemoryKey(stableKey)}>
+                Copy
+              </button>
+            </div>
+          </section>
 
           {data.content && data.content !== data.summary ? (
             <section className="zaki-galaxy-detail__section">
@@ -112,6 +123,12 @@ function confidenceLabel(score: number | undefined): string | null {
   if (score >= 0.8) return "high confidence";
   if (score >= 0.5) return "medium confidence";
   return "low confidence";
+}
+
+function copyMemoryKey(key: string) {
+  if (typeof navigator === "undefined") return;
+  const result = navigator.clipboard?.writeText(key);
+  if (result) void result.catch(() => undefined);
 }
 
 function formatAge(ts: number): string {

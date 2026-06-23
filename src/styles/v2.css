@@ -4711,6 +4711,9 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   max-width: 1100px;
   padding: 0 16px 48px;
 }
+.zaki-brain-v2__graph-shell + .zaki-brain-v2__home-slot {
+  padding-top: 18px;
+}
 .zaki-brain-v2__unavailable {
   display: grid;
   gap: 16px;
@@ -4979,6 +4982,37 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   gap: 6px;
   font-size: 10px;
   color: var(--v2-ink-3);
+}
+.zaki-galaxy-detail__key-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.zaki-galaxy-detail__key-row code {
+  min-width: 0;
+  padding: 6px 8px;
+  overflow: hidden;
+  color: var(--v2-ink-2);
+  background: var(--v2-bg-raised);
+  border: 1px solid var(--v2-hairline);
+  text-overflow: ellipsis;
+  user-select: all;
+  white-space: nowrap;
+}
+.zaki-galaxy-detail__key-row button {
+  min-height: 28px;
+  padding: 0 9px;
+  color: var(--v2-ink-1);
+  background: transparent;
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: var(--v2-r-1);
+  cursor: pointer;
+}
+.zaki-galaxy-detail__key-row button:hover,
+.zaki-galaxy-detail__key-row button:focus-visible {
+  border-color: var(--v2-accent);
+  color: var(--v2-accent);
 }
 .zaki-galaxy-detail__badge {
   padding: 1px 6px;

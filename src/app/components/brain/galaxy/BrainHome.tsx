@@ -6,10 +6,9 @@ import { BrainDetailPanel } from "./BrainDetailPanel";
 import { BrainTimelineView } from "../BrainTimelineView";
 
 // Brain Home — the search-first landing surface (replaces the graph as the
-// default view). Research: a force-graph is decorative at thousands of nodes;
-// daily value comes from a clear, observable overview. So we lead with theme
-// cards (counts + samples) and the timeline ("what ZAKI learned") in one
-// surface, with search as the front door. The galaxy lives behind "Explore".
+// overview). Research: a force-graph is decorative at thousands of nodes;
+// daily value comes from a clear, observable overview. Themes and timeline
+// live below the graph so overview clicks can focus the corresponding node.
 
 const INTERNAL_CODENAME = /\b(nullalis|null[\s_-]?alis|panther|neptune)\b/i;
 // Overview stays bounded (progressive disclosure) — showing all 250+ clusters
@@ -35,9 +34,10 @@ export interface BrainHomeProps {
   /** The page's single graph query result — shared, so Home doesn't refetch. */
   graph: BrainGraphResponse | undefined;
   graphLoading: boolean;
+  onPickMemoryKey?: (key: string) => void;
 }
 
-export function BrainHome({ userId, graph, graphLoading }: BrainHomeProps) {
+export function BrainHome({ userId, graph, graphLoading, onPickMemoryKey }: BrainHomeProps) {
   const communities = useBrainCommunities(userId);
 
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -90,7 +90,7 @@ export function BrainHome({ userId, graph, graphLoading }: BrainHomeProps) {
     return [...named, ...unnamed];
   }, [communities.data, membersByCommunity]);
 
-  // Bounded overview (progressive disclosure). The galaxy's "Explore everything"
+  // Bounded overview (progressive disclosure). The graph's "Explore everything"
   // reaches the rest. (A search box used to live here, but it only matched the
   // loaded theme titles — not the full memory corpus — so it was removed rather
   // than imply a coverage it didn't have. Real full-text search is a backend
@@ -148,7 +148,11 @@ export function BrainHome({ userId, graph, graphLoading }: BrainHomeProps) {
                           <button
                             type="button"
                             className="zaki-brain-home__member"
-                            onClick={() => setOpenKey(m.key ?? m.id)}
+                            onClick={() => {
+                              const key = m.key ?? m.id;
+                              if (onPickMemoryKey) onPickMemoryKey(key);
+                              else setOpenKey(key);
+                            }}
                           >
                             {labelOf(m)}
                           </button>
@@ -163,16 +167,16 @@ export function BrainHome({ userId, graph, graphLoading }: BrainHomeProps) {
         )}
         {hiddenCount > 0 && (
           <p className="zaki-brain-home__muted">
-            + {hiddenCount} more {hiddenCount === 1 ? "theme" : "themes"} — open Explore to see them all.
+            + {hiddenCount} more {hiddenCount === 1 ? "theme" : "themes"} — use the graph above to see them all.
           </p>
         )}
       </section>
 
       <section className="zaki-brain-home__section" aria-label="Timeline">
         <h2 className="zaki-brain-home__heading">Timeline</h2>
-        {/* Home and Timeline are the same idea ("what ZAKI knows / learned"),
-            so the full timeline lives here rather than in a separate tab. */}
-        <BrainTimelineView userId={userId} />
+        {/* Overview and Timeline are the same idea ("what ZAKI knows / learned"),
+            so the full timeline lives here below the graph. */}
+        <BrainTimelineView userId={userId} onPick={onPickMemoryKey} />
       </section>
 
       {openKey && (

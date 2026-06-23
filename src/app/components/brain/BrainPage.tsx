@@ -29,10 +29,7 @@ import {
   type ColorPreset,
   type RecencyBucket,
 } from "./brainColors";
-import { V2StatusStrip, V2Tabs } from "@/app/components/v2";
-
-// Two surfaces: Home (overview + timeline) and Explore (the 3D graph).
-type BrainTab = "home" | "explore";
+import { V2StatusStrip } from "@/app/components/v2";
 
 // V1.11 (2026-05-07) — Brain page UX rework. Pre-V1.11 the graph tab
 // rendered three always-visible columns (filter panel, canvas, side
@@ -89,20 +86,14 @@ export function BrainPage() {
   // same view. State changes write back to the URL via setSearchParams
   // with replace:true so we don't pollute history.
   //
-  // Two surfaces: Home (overview + timeline merged) and Explore (the graph).
-  // legacy ?tab=graph/timeline deep-links resolve to Explore/Home.
-  const initialTab: BrainTab = (() => {
-    const requested = searchParams.get("tab");
-    if (requested === "explore" || requested === "graph") return "explore";
-    return "home";
-  })();
+  // Legacy ?tab=home/explore/graph links are accepted by ignoring the tab
+  // param; Brain now ships as one graph-first overview page.
   const initialPanel: ActivePanel = (() => {
     const p = searchParams.get("panel");
     return p === "filters" || p === "clusters" || p === "orphans" ? p : null;
   })();
   const initialQ = searchParams.get("q") ?? "";
 
-  const [tab, setTab] = useState<BrainTab>(initialTab);
   const [degradedDismissed, setDegradedDismissed] = useState(false);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   // V1.11 (2026-05-07) — explicit compose-modal toggle. Pre-V1.11 the modal
@@ -121,6 +112,7 @@ export function BrainPage() {
   // null = canvas-only (default); set by clicking a corner icon.
   const [activePanel, setActivePanel] = useState<ActivePanel>(initialPanel);
   const isNarrow = useBrainNarrow();
+  const graphSectionRef = useRef<HTMLDivElement | null>(null);
 
   // Debounce search input into filters.search
   useEffect(() => {
@@ -128,23 +120,21 @@ export function BrainPage() {
     return () => window.clearTimeout(id);
   }, [searchQuery]);
 
-  // State -> URL sync. Home is the default tab (implicit); Explore gets a
-  // marker. replace:true keeps the back button useful.
+  // State -> URL sync. Preserve q + panel; legacy tab params are ignored but
+  // left alone so old shared links keep loading the unified page.
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
-    if (tab !== "home") next.set("tab", tab); else next.delete("tab");
     if (debouncedSearch) next.set("q", debouncedSearch); else next.delete("q");
     if (activePanel) next.set("panel", activePanel); else next.delete("panel");
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, debouncedSearch, activePanel]);
+  }, [debouncedSearch, activePanel]);
 
-  // Keyboard shortcut on the Explore tab: "/" focuses search. (Hold Shift +
+  // Keyboard shortcut in the graph section: "/" focuses search. (Hold Shift +
   // drag to spin the 3D graph — handled in the engine.)
   useEffect(() => {
-    if (tab !== "explore") return;
     const handler = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const inEditable =
@@ -158,7 +148,7 @@ export function BrainPage() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [tab]);
+  }, []);
 
   const effectiveFilters = useMemo<BrainFilters>(
     () => ({ ...filters, search: debouncedSearch }),
@@ -241,14 +231,15 @@ export function BrainPage() {
     if (n.key) nodeIdByKey.set(n.key, n.id);
   }
 
-  // Clicking a memory in the time scrubber takes you to it: open the full galaxy
-  // (so the node is actually on screen) and focus it — that seeds the ember and
-  // opens the detail card. (Previously this only mutated the URL: a dead click.)
+  // Clicking a memory in the time scrubber or overview takes you to it: focus
+  // the node, show the full galaxy, and scroll the graph into view.
   const handlePickKey = (key: string) => {
     const id = nodeIdByKey.get(key) ?? key;
-    setTab("explore");
     setGalaxyScope({ kind: "all" });
     setGalaxyFocusId(id);
+    window.requestAnimationFrame(() => {
+      graphSectionRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
   };
 
   return (
@@ -284,7 +275,7 @@ export function BrainPage() {
             label: t("brain.status.view", { defaultValue: "View" }),
             value: brainUnavailable
               ? t("brain.status.unavailable", { defaultValue: "Unavailable" })
-              : tab,
+              : t("brain.status.graphOverview", { defaultValue: "Graph + overview" }),
           },
           {
             id: "health",
@@ -338,30 +329,11 @@ export function BrainPage() {
 
         {!brainUnavailable ? <BrainInsightsStrip userId={userId} total={totalNodes} /> : null}
 
-        {!brainUnavailable ? (
-          <V2Tabs
-            ariaLabel={t("brain.tabs.ariaLabel", { defaultValue: "Brain views" })}
-            value={tab}
-            onChange={setTab}
-            fullWidth
-            options={[
-              { id: "home", label: t("brain.tabs.home", { defaultValue: "Home" }) },
-              { id: "explore", label: t("brain.tabs.explore", { defaultValue: "Explore" }) },
-            ]}
-          />
-        ) : null}
       </div>
 
-      {brainUnavailable ? null : tab === "home" ? (
-        <div className="zaki-brain-v2__home-slot" data-testid="brain-home-slot">
-          <BrainHome
-            userId={userId}
-            graph={initialGraphQuery.data}
-            graphLoading={initialGraphQuery.isLoading}
-          />
-        </div>
-      ) : (
-        /*
+      {brainUnavailable ? null : (
+        <>
+        {/*
           V1.11 (2026-05-07) — Graph row goes wide. Pre-V1.11 the graph
           slot was constrained by `mx-auto max-w-7xl` (1280px), which
           squeezed the canvas between the filter panel (288px) and the
@@ -370,10 +342,14 @@ export function BrainPage() {
           brain page; it deserves the spotlight. Now: max-w-screen-2xl
           (1536px) gives substantially more horizontal room while still
           preventing the layout from spreading uncomfortably wide on
-          ultra-wide monitors. Header + tabs above remain max-w-7xl —
+          ultra-wide monitors. Header above remains max-w-7xl —
           they don't need the extra width.
-        */
-        <div data-testid="brain-graph-slot" className="zaki-brain-v2__graph-shell">
+        */}
+        <div
+          ref={graphSectionRef}
+          data-testid="brain-graph-slot"
+          className="zaki-brain-v2__graph-shell"
+        >
           <aside className="zaki-brain-v2__filters-rail" aria-label={t("brain.panel.filters", { defaultValue: "Filters" })}>
             <BrainDisplayPanel
               view={galaxyView}
@@ -627,6 +603,15 @@ export function BrainPage() {
           ) : null}
           </section>
         </div>
+        <div className="zaki-brain-v2__home-slot" data-testid="brain-home-slot">
+          <BrainHome
+            userId={userId}
+            graph={initialGraphQuery.data}
+            graphLoading={initialGraphQuery.isLoading}
+            onPickMemoryKey={handlePickKey}
+          />
+        </div>
+        </>
       )}
     </div>
   );

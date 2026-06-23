@@ -156,6 +156,8 @@ describe("agent BOT BFF contract", () => {
         { method: "post", path: "/api/agent/extension/devices/:deviceId/revoke" },
         { method: "get", path: "/api/agent/memory/governance" },
         { method: "post", path: "/api/agent/memory/purge-pii" },
+        { method: "post", path: "/api/agent/memory/forget" },
+        { method: "get", path: "/api/agent/memory/export" },
       ])
     );
   });

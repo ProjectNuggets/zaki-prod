@@ -84,13 +84,20 @@ export const GalaxyRenderer = forwardRef<GalaxyHandle, GalaxyRendererProps>(func
       <div
         className={className}
         data-testid="brain-graph-canvas-wrap"
-        style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", padding: 24 }}
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "grid",
+          justifyItems: "center",
+          alignItems: "start",
+          padding: "72px 24px 24px",
+        }}
       >
         <div className="zaki-galaxy-fallback" role="status">
-          <p className="zaki-galaxy-fallback__title">The 3D Explore view needs WebGL</p>
+          <p className="zaki-galaxy-fallback__title">The 3D graph needs WebGL</p>
           <p className="zaki-galaxy-fallback__body">
             Your browser or device doesn’t have WebGL (3D graphics) available. Everything else —
-            your themes, timeline, and memories — is on the <strong>Home</strong> tab.
+            your themes, timeline, and memories — is in the overview below.
           </p>
         </div>
       </div>

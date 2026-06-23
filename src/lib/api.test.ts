@@ -743,7 +743,9 @@ describe("agent runtime API clients", () => {
           deleted: null,
           sample_keys: ["mem_1"],
         })
-      );
+      )
+      .mockResolvedValueOnce(makeResponse(200, { key: "mem_1", forgotten: true }))
+      .mockResolvedValueOnce(makeResponse(200, { user_id: "42", count: 1, memories: [] }));
 
     const {
       fetchAgentProviderProfiles,
@@ -755,6 +757,8 @@ describe("agent runtime API clients", () => {
       revokeAgentExtensionDevice,
       fetchAgentMemoryGovernance,
       purgeAgentMemoryPii,
+      forgetAgentMemory,
+      exportAgentMemory,
     } = await import("@/lib/api");
 
     await fetchAgentProviderProfiles();
@@ -773,6 +777,8 @@ describe("agent runtime API clients", () => {
     await revokeAgentExtensionDevice("dev_1");
     await fetchAgentMemoryGovernance();
     await purgeAgentMemoryPii({ category: "all", dry_run: true });
+    await forgetAgentMemory("mem_1");
+    await exportAgentMemory();
 
     expect(mockFetch).toHaveBeenNthCalledWith(
       1,
@@ -821,6 +827,19 @@ describe("agent runtime API clients", () => {
         method: "POST",
         body: JSON.stringify({ category: "all", dry_run: true }),
       })
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      10,
+      "http://test.local/api/agent/memory/forget",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ key: "mem_1" }),
+      })
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      11,
+      "http://test.local/api/agent/memory/export",
+      expect.objectContaining({ method: "GET" })
     );
   });
 

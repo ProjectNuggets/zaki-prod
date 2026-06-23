@@ -5,6 +5,7 @@ import type { BrainTimelineEntry } from "@/lib/api";
 
 interface Props {
   userId: string;
+  onPick?: (key: string) => void;
 }
 
 // S5: One year window for the time-travel slider.
@@ -15,7 +16,7 @@ function nowSecs() {
   return Math.floor(Date.now() / 1000);
 }
 
-export function BrainTimelineView({ userId }: Props) {
+export function BrainTimelineView({ userId, onPick }: Props) {
   const { t } = useTranslation();
 
   // S5: slider state. undefined = no `to` filter (show full / latest)
@@ -176,7 +177,7 @@ export function BrainTimelineView({ userId }: Props) {
           </h3>
           <ul className="mt-2 space-y-2">
             {group.entries.map((entry) => (
-              <TimelineEntryRow key={entry.id} entry={entry} t={t} />
+              <TimelineEntryRow key={entry.id} entry={entry} t={t} onPick={onPick} />
             ))}
           </ul>
         </section>
@@ -199,9 +200,10 @@ export function BrainTimelineView({ userId }: Props) {
 interface RowProps {
   entry: BrainTimelineEntry;
   t: ReturnType<typeof useTranslation>["t"];
+  onPick?: (key: string) => void;
 }
 
-function TimelineEntryRow({ entry, t }: RowProps) {
+function TimelineEntryRow({ entry, t, onPick }: RowProps) {
   const isDeprecated = entry.valid_to !== null;
   const kindLabel =
     entry.kind === "core" || entry.kind === "daily" || entry.kind === "conversation"
@@ -222,7 +224,17 @@ function TimelineEntryRow({ entry, t }: RowProps) {
           </span>
         )}
       </div>
-      <p className="mt-1 text-sm text-zaki-text">{entry.summary}</p>
+      {onPick ? (
+        <button
+          type="button"
+          className="mt-1 block w-full rounded-[2px] text-left text-sm text-zaki-text hover:text-zaki-brand focus:outline-none focus:ring-2 focus:ring-zaki-brand-40"
+          onClick={() => onPick(entry.key ?? entry.id)}
+        >
+          {entry.summary}
+        </button>
+      ) : (
+        <p className="mt-1 text-sm text-zaki-text">{entry.summary}</p>
+      )}
     </li>
   );
 }
