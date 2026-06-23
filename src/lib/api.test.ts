@@ -336,11 +336,45 @@ describe("session-dead 401 redirect target", () => {
     );
   });
 
+  it("backendAuthRequest: retry-also-401 logs the dead session out", async () => {
+    _storeToken = "expired-token";
+    mockFetch
+      .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
+      .mockResolvedValueOnce(makeResponse(200, { token: "new-token" }))
+      .mockResolvedValueOnce(makeResponse(401, { error: "Still unauthorized" }));
+
+    const { backendAuthRequest } = await import("@/lib/api");
+    await backendAuthRequest("/api/profile", { method: "GET" });
+
+    expect(mockLogout).toHaveBeenCalled();
+    expect(mockLoginRedirect).toHaveBeenCalledWith(
+      "/?auth=login&next=%2Fsettings%23settings-memory-data"
+    );
+  });
+
   it("backendAuthRequest can keep passive 401s local without logging out or redirecting", async () => {
     _storeToken = "expired-token";
     mockFetch
       .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
       .mockResolvedValueOnce(makeResponse(401, { error: "Refresh also failed" }));
+
+    const { backendAuthRequest } = await import("@/lib/api");
+    const response = await backendAuthRequest("/api/agent/sessions", {
+      method: "GET",
+      redirectOnAuthFailure: false,
+    });
+
+    expect(response.status).toBe(401);
+    expect(mockLogout).not.toHaveBeenCalled();
+    expect(mockLoginRedirect).not.toHaveBeenCalled();
+  });
+
+  it("backendAuthRequest can keep passive retry 401s local without logging out or redirecting", async () => {
+    _storeToken = "expired-token";
+    mockFetch
+      .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
+      .mockResolvedValueOnce(makeResponse(200, { token: "new-token" }))
+      .mockResolvedValueOnce(makeResponse(401, { error: "Still unauthorized" }));
 
     const { backendAuthRequest } = await import("@/lib/api");
     const response = await backendAuthRequest("/api/agent/sessions", {
@@ -361,7 +395,7 @@ describe("session-dead 401 redirect target", () => {
     const source = fs.readFileSync(path.join(__dirname, "api.ts"), "utf8");
 
     const loginRedirects = source.match(/redirectToLogin\(\);/g) ?? [];
-    expect(loginRedirects.length).toBe(3);
+    expect(loginRedirects.length).toBe(4);
 
     // No dead-session logout branch may navigate to the bare marketing homepage.
     expect(source).not.toMatch(/window\.location\.href\s*=\s*"\/";/);

@@ -298,7 +298,15 @@ export async function backendAuthRequest(
     if (newToken) {
       const retryHeaders = new Headers(headers ?? {});
       retryHeaders.set("Authorization", `Bearer ${newToken}`);
-      return backendRequest(path, { ...rest, headers: retryHeaders });
+      const retryResponse = await backendRequest(path, { ...rest, headers: retryHeaders });
+      if (retryResponse.status === 401) {
+        if (!redirectOnAuthFailure) return retryResponse;
+        if (typeof window !== "undefined") {
+          useAuthStore.getState().logout();
+          redirectToLogin();
+        }
+      }
+      return retryResponse;
     }
     if (!redirectOnAuthFailure) return response;
     if (typeof window !== "undefined") {
