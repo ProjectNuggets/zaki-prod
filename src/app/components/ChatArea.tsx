@@ -93,6 +93,11 @@ import {
   type ContextGaugeData,
 } from "./chat";
 import {
+  buildAgentQuickReplyItems,
+  QuickReplyChips,
+  type QuickReplyItem,
+} from "./chat/QuickReplyChips";
+import {
   isInternalAgentReplyContent,
   normalizeAssistantDisplayText,
 } from "./chat/rendering/agentReplyPresentation";
@@ -104,10 +109,10 @@ import {
   type AgentInspectorArtifact,
   type AgentInspectorCronJob,
   type AgentInspectorJob,
-  type AgentSettingsSection,
   type AgentInspectorTab,
   type AgentInspectorTabRequest,
 } from "./chat/AgentInspectorRail";
+import { BrowserViewFeedPanel } from "./chat/BrowserViewFeedPanel";
 import { ZakiDashboard } from "./chat/views/ZakiDashboard";
 import { V2StatusStrip } from "@/app/components/v2";
 import type { BotToolCall } from "./chat/BotToolCallBlock";
@@ -183,17 +188,13 @@ export { resolveContextGaugePercent };
 const POWER_USER_PENDING_TAB_KEY = "zaki:pendingPowerUserTab";
 const AGENT_INSPECTOR_OPEN_KEY = "zaki:agentInspectorOpen";
 const AGENT_FOCUS_MODE_KEY = "zaki:agentFocusMode";
+const AGENT_MOBILE_PANEL_QUERY = "(max-width: 1279px)";
 const MOBILE_INSPECTOR_FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 function normalizeAgentInspectorEventTab(value: unknown): AgentInspectorTab {
-  if (value === "browser") return "browser";
-  if (value === "artifacts") return "artifacts";
   if (value === "cron") return "cron";
-  if (value === "sources" || value === "evidence" || value === "context" || value === "memory") {
-    return "evidence";
-  }
-  return "plan";
+  return "artifacts";
 }
 
 function takePendingInspectorTab(): AgentInspectorTab | null {
@@ -3252,6 +3253,8 @@ export function ChatArea() {
   const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>({});
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [composerQuickReplyTriggerId, setComposerQuickReplyTriggerId] = useState<string | null>(null);
+  const [composerQuickReplyVisible, setComposerQuickReplyVisible] = useState(false);
   const [turnStartedAt, setTurnStartedAt] = useState<number | null>(null);
   const [turnDurationMs, setTurnDurationMs] = useState<number | null>(null);
   const [streamingIndicatorMode, setStreamingIndicatorMode] = useState<"thinking" | "researching" | "writing">("thinking");
@@ -3270,8 +3273,8 @@ export function ChatArea() {
   >([]);
   const [nullalisTaskItems, setNullalisTaskItems] = useState<NullalisTaskItem[]>([]);
   const [agentTaskSnapshots, setAgentTaskSnapshots] = useState<NullalisTaskItem[]>([]);
-  const [agentTasksLoading, setAgentTasksLoading] = useState(false);
-  const [agentTasksError, setAgentTasksError] = useState<string | null>(null);
+  const [, setAgentTasksLoading] = useState(false);
+  const [, setAgentTasksError] = useState<string | null>(null);
   const [agentCronJobs, setAgentCronJobs] = useState<AgentInspectorCronJob[]>([]);
   const [agentCronLoading, setAgentCronLoading] = useState(false);
   const [agentCronError, setAgentCronError] = useState<string | null>(null);
@@ -3282,10 +3285,10 @@ export function ChatArea() {
   const [agentArtifactScope, setAgentArtifactScope] = useState<"session" | "recent">("session");
   const [agentArtifactsLoading, setAgentArtifactsLoading] = useState(false);
   const [agentArtifactsError, setAgentArtifactsError] = useState<string | null>(null);
-  const [agentExtensionDiagnostics, setAgentExtensionDiagnostics] =
+  const [, setAgentExtensionDiagnostics] =
     useState<AgentExtensionDiagnosticsResponse | null>(null);
-  const [agentExtensionDiagnosticsLoading, setAgentExtensionDiagnosticsLoading] = useState(false);
-  const [agentExtensionDiagnosticsError, setAgentExtensionDiagnosticsError] = useState<string | null>(null);
+  const [, setAgentExtensionDiagnosticsLoading] = useState(false);
+  const [, setAgentExtensionDiagnosticsError] = useState<string | null>(null);
   const [nullalisApprovalRequest, setNullalisApprovalRequest] =
     useState<NullalisApprovalRequest | null>(null);
   // Paywall card: shown when a billing denial fires (insufficient_units /
@@ -3302,11 +3305,11 @@ export function ChatArea() {
     resetAt?: string | null;
     message: string;
   } | null>(null);
-  const [approvalContinuationPendingId, setApprovalContinuationPendingId] = useState<string | null>(null);
+  const [, setApprovalContinuationPendingId] = useState<string | null>(null);
   const [agentArtifactEventCount, setAgentArtifactEventCount] = useState(0);
   const [nullalisContextGauge, setNullalisContextGauge] =
     useState<ContextGaugeData | null>(null);
-  const [nullalisContextReport, setNullalisContextReport] =
+  const [, setNullalisContextReport] =
     useState<AgentSessionContext | null>(null);
   const [zakiUsageSummary, setZakiUsageSummary] = useState<ZakiUsageSummary | null>(null);
   const [freeDailyQuota, setFreeDailyQuota] = useState<{
@@ -3363,6 +3366,7 @@ export function ChatArea() {
   const [agentInspectorTabRequest, setAgentInspectorTabRequest] =
     useState<AgentInspectorTabRequest | null>(null);
   const [agentMobileInspectorOpen, setAgentMobileInspectorOpen] = useState(false);
+  const [agentMobileViewport, setAgentMobileViewport] = useState(false);
   const agentMobileInspectorRef = useRef<HTMLDivElement | null>(null);
   const agentMobileInspectorCloseRef = useRef<HTMLButtonElement | null>(null);
   const agentMobileInspectorReturnFocusRef = useRef<HTMLElement | null>(null);
@@ -3438,6 +3442,23 @@ export function ChatArea() {
   const setSessionBrowserFrame = useZakiSessionUiStore((state) => state.setBrowserFrame);
   const setZakiSandboxState = useZakiSessionUiStore((state) => state.setSandbox);
   const sandboxState = useZakiSessionUiStore((s) => s.sandbox);
+  const liveBrowserFrame = activeSessionUi?.browserFrame ?? null;
+  const hasLiveBrowserFrame = Boolean(liveBrowserFrame?.frame?.trim());
+  const closeLiveBrowserFrame = useCallback(() => {
+    const sessionKey =
+      activeZakiSessionKey ||
+      buildAgentSessionKey(activeThreadId || "main", agentUserId);
+    if (sessionKey) {
+      setSessionBrowserFrame(sessionKey, null);
+    }
+  }, [activeThreadId, activeZakiSessionKey, agentUserId, setSessionBrowserFrame]);
+  const closeAgentMobilePanel = useCallback(() => {
+    if (hasLiveBrowserFrame && !agentMobileInspectorOpen) {
+      closeLiveBrowserFrame();
+      return;
+    }
+    setAgentMobileInspectorOpen(false);
+  }, [agentMobileInspectorOpen, closeLiveBrowserFrame, hasLiveBrowserFrame]);
   const activeSessionMode =
     activeSessionUi?.mode ??
     (activeSessionRecord?.mode === "plan" ||
@@ -3657,6 +3678,8 @@ export function ChatArea() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const botAttachmentPickRef = useRef(false);
   const scrollRafRef = useRef<number | null>(null);
+  const composerQuickReplyRevealTimerRef = useRef<number | null>(null);
+  const composerQuickReplyHideTimerRef = useRef<number | null>(null);
   const spacesListRef = useRef<Space[]>([]);
   const autoTitleAttemptsRef = useRef<Record<string, number>>({});
   const autoTitleFinalizedRef = useRef<Record<string, boolean>>({});
@@ -3698,6 +3721,12 @@ export function ChatArea() {
     : 0;
   const isAgentSurface =
     isZakiBotActiveSpace && !showZakiHome && !showAbout && !showSpacesView && !showSpaceDetail;
+  const isAgentMobilePanelOpen = Boolean(
+    isAgentSurface &&
+      agentMobileViewport &&
+      (agentMobileInspectorOpen || hasLiveBrowserFrame) &&
+      !agentFocusMode
+  );
   const isAnonymousSpacesActive = !authUserId && !isZakiBotActiveSpace;
   const quotaSurface: UsageQuotaSurface = isZakiBotActiveSpace ? "zaki_bot" : "app_chat";
   const activeSpace =
@@ -3723,7 +3752,7 @@ export function ChatArea() {
   useEffect(() => {
     if (!isAuthReady || !isZakiBotActiveSpace) return;
     let cancelled = false;
-    void fetchAgentMe()
+    void fetchAgentMe({ redirectOnAuthFailure: false })
       .then(({ data }) => {
         if (!cancelled && data?.userId) {
           setAgentUserId(data.userId);
@@ -3957,6 +3986,86 @@ export function ChatArea() {
       .find((message) => message.role === "assistant");
     return String(latestAssistant?.content || "");
   }, [messages]);
+  const latestReplyMessage = messages[messages.length - 1];
+  const latestAssistantForQuickReply =
+    latestReplyMessage?.role === "assistant" &&
+    String(latestReplyMessage.content || "").trim()
+      ? latestReplyMessage
+      : null;
+  const composerQuickReplyItems = useMemo<QuickReplyItem[] | undefined>(() => {
+    if (!isZakiBotActiveSpace || !latestAssistantForQuickReply) return undefined;
+
+    const snapshot = localTurnSnapshots[latestAssistantForQuickReply.id];
+    const turnEvents = (latestAssistantForQuickReply as {
+      turnEvents?: Array<{ eventType: string; payload: Record<string, unknown>; ts?: number }>;
+    }).turnEvents;
+    const entries = snapshot?.length
+      ? snapshot
+      : Array.isArray(turnEvents)
+        ? turnEvents
+          .map((event) =>
+            extractNullalisTranscriptEntry(
+              event.eventType,
+              event.payload ?? {},
+              typeof event.ts === "number" ? event.ts : Date.now()
+            )
+          )
+          .filter((entry): entry is NullalisTranscriptEntry => Boolean(entry))
+        : nullalisTranscriptEntries;
+
+    return buildAgentQuickReplyItems({
+      message: latestAssistantForQuickReply,
+      entries,
+    });
+  }, [
+    isZakiBotActiveSpace,
+    latestAssistantForQuickReply,
+    localTurnSnapshots,
+    nullalisTranscriptEntries,
+  ]);
+  const showComposerQuickReplies =
+    isZakiBotActiveSpace &&
+    Boolean(latestAssistantForQuickReply) &&
+    !isStreaming &&
+    composerQuickReplyTriggerId === latestAssistantForQuickReply?.id &&
+    Boolean(composerQuickReplyItems?.length);
+  const handleQuickReply = useCallback(
+    (prefill: string) => {
+      if (isComposerSendLocked) return;
+      composerHandleRef.current?.submitWith(prefill);
+    },
+    [isComposerSendLocked]
+  );
+  useEffect(() => {
+    if (composerQuickReplyRevealTimerRef.current) {
+      window.clearTimeout(composerQuickReplyRevealTimerRef.current);
+      composerQuickReplyRevealTimerRef.current = null;
+    }
+    if (composerQuickReplyHideTimerRef.current) {
+      window.clearTimeout(composerQuickReplyHideTimerRef.current);
+      composerQuickReplyHideTimerRef.current = null;
+    }
+    setComposerQuickReplyVisible(false);
+    if (!composerQuickReplyTriggerId) return;
+
+    composerQuickReplyRevealTimerRef.current = window.setTimeout(() => {
+      setComposerQuickReplyVisible(true);
+    }, 1000);
+    composerQuickReplyHideTimerRef.current = window.setTimeout(() => {
+      setComposerQuickReplyVisible(false);
+    }, 6000);
+
+    return () => {
+      if (composerQuickReplyRevealTimerRef.current) {
+        window.clearTimeout(composerQuickReplyRevealTimerRef.current);
+        composerQuickReplyRevealTimerRef.current = null;
+      }
+      if (composerQuickReplyHideTimerRef.current) {
+        window.clearTimeout(composerQuickReplyHideTimerRef.current);
+        composerQuickReplyHideTimerRef.current = null;
+      }
+    };
+  }, [composerQuickReplyTriggerId]);
   const zakiBotProcessSnapshot = useMemo<ZakiProcessSnapshot>(() => {
     return buildZakiProcessSnapshot({
       statusEvents: zakiBotStatusEvents,
@@ -4899,6 +5008,17 @@ export function ChatArea() {
 
         if (data.status === "updated" && data.session?.title) {
           autoTitleSessionFinalizedRef.current[normalizedSessionKey] = true;
+          const title = String(data.session.title || "").trim();
+          if (title) {
+            const applyTitle = (session: AgentSession): AgentSession =>
+              normalizeZakiSessionKey(session.session_key) === normalizedSessionKey
+                ? { ...session, title }
+                : session;
+            setAgentDraftSessions((previous) => previous.map(applyTitle));
+            queryClient.setQueryData(zakiSessionKeys.all, (previous: unknown) =>
+              Array.isArray(previous) ? previous.map(applyTitle) : previous
+            );
+          }
           await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
           return;
         }
@@ -5065,14 +5185,15 @@ export function ChatArea() {
     setAgentExtensionDiagnosticsError(null);
 
     const [taskResult, cronResult, jobResult, artifactResult, extensionResult] = await Promise.allSettled([
-      listAgentTasks({ limit: 24 }),
-      listAgentCron(),
-      listAgentJobs({ limit: 12 }),
+      listAgentTasks({ limit: 24, redirectOnAuthFailure: false }),
+      listAgentCron({ redirectOnAuthFailure: false }),
+      listAgentJobs({ limit: 12, redirectOnAuthFailure: false }),
       listAgentArtifacts({
         limit: 12,
         session_key: normalizedActiveZakiSessionKey || undefined,
+        redirectOnAuthFailure: false,
       }),
-      fetchAgentExtensionDiagnostics(),
+      fetchAgentExtensionDiagnostics({ redirectOnAuthFailure: false }),
     ]);
 
     if (taskResult.status === "fulfilled") {
@@ -5199,7 +5320,9 @@ export function ChatArea() {
       if (!artifactId) return;
 
       try {
-        const { response, data } = await fetchAgentArtifact(artifactId);
+        const { response, data } = await fetchAgentArtifact(artifactId, {
+          redirectOnAuthFailure: false,
+        });
         if (!response.ok) return;
         const artifact =
           normalizeAgentArtifact(data) ||
@@ -7257,7 +7380,7 @@ export function ChatArea() {
     const mobile =
       typeof window !== "undefined" &&
       typeof window.matchMedia === "function" &&
-      window.matchMedia("(max-width: 767px)").matches;
+      window.matchMedia(AGENT_MOBILE_PANEL_QUERY).matches;
     setAgentFocusMode(false);
     if (mobile) {
       setAgentMobileInspectorOpen(true);
@@ -7305,16 +7428,6 @@ export function ChatArea() {
       window.removeEventListener("zaki:agent-export", handleAgentExport);
     };
   }, [handleExport, handleShare, isAgentSurface, openAgentMemorySurface]);
-
-  const openAgentSettingsSection = useCallback((section: AgentSettingsSection) => {
-    setAgentMobileInspectorOpen(false);
-    setAgentInspectorOpen(false);
-    navigate(`/settings#settings-${section}`);
-  }, [navigate]);
-
-  const openAgentExtensionSettings = useCallback(() => {
-    openAgentSettingsSection("devices");
-  }, [openAgentSettingsSection]);
 
   const maybeShowSessionSummaryCue = useCallback(
     async (threadId?: string | null) => {
@@ -7788,6 +7901,8 @@ export function ChatArea() {
       return;
     }
     if (isStreaming) return;
+    setComposerQuickReplyTriggerId(null);
+    setComposerQuickReplyVisible(false);
     if (!authUserId && files.length > 0) {
       toast.error("Sign in to upload files to Spaces.");
       return;
@@ -7878,8 +7993,15 @@ export function ChatArea() {
       });
     }
 
+    const turnAgentUserId = isZakiBotTarget
+      ? agentUserId ||
+        resolveAgentSessionUserId(agentUserId, activeZakiSessionKey || zakiSessionKey || null) ||
+        (typeof window !== "undefined"
+          ? window.sessionStorage.getItem("zaki:agentUserId")
+          : null)
+      : null;
     const turnSessionKey =
-      isZakiBotTarget && agentUserId ? buildAgentSessionKey(threadId, agentUserId) : null;
+      isZakiBotTarget && turnAgentUserId ? buildAgentSessionKey(threadId, turnAgentUserId) : null;
     if (generatedZakiThread) {
       goToThread(ZAKI_BOT_SPACE_ID, threadId, { zakiSessionKey: turnSessionKey });
       navigate(`/agent?thread=${encodeURIComponent(threadId)}`);
@@ -8101,14 +8223,23 @@ export function ChatArea() {
           }
         }
       }
-      if (isZakiBotTarget && agentUserId) {
-        const sessionKey = buildAgentSessionKey(threadId, agentUserId);
+      const assistantReply = String(streamResult?.content || "").trim();
+      if (isZakiBotTarget && assistantReply) {
+        setComposerQuickReplyTriggerId(assistantMessageId);
+      }
+      if (isZakiBotTarget && turnSessionKey) {
+        void maybeAutoTitleSession(turnSessionKey, {
+          userMessage: trimmed,
+          assistantMessage: assistantReply,
+        });
+      }
+      if (isZakiBotTarget && turnAgentUserId) {
+        const sessionKey = buildAgentSessionKey(threadId, turnAgentUserId);
         if (sessionKey) {
           await queryClient.invalidateQueries({ queryKey: zakiSessionKeys.all });
           await hydrateActiveSessionDetail(sessionKey);
         }
       }
-      const assistantReply = String(streamResult?.content || "").trim();
       const remappedSpacesRoute =
         typeof streamResult?.spacesRoute === "string" && streamResult.spacesRoute.startsWith("/spaces/")
           ? streamResult.spacesRoute
@@ -8119,14 +8250,16 @@ export function ChatArea() {
       if (remappedSpacesRoute) {
         navigate(remappedSpacesRoute, { replace: true });
       }
-      void maybeAutoTitleThread(
-        remappedTarget?.[1] ? decodeURIComponent(remappedTarget[1]) : resolvedWorkspaceSlug,
-        remappedTarget?.[2] ? decodeURIComponent(remappedTarget[2]) : threadId,
-        {
-          userMessage: trimmed,
-          assistantMessage: assistantReply,
-        }
-      );
+      if (!isZakiBotTarget) {
+        void maybeAutoTitleThread(
+          remappedTarget?.[1] ? decodeURIComponent(remappedTarget[1]) : resolvedWorkspaceSlug,
+          remappedTarget?.[2] ? decodeURIComponent(remappedTarget[2]) : threadId,
+          {
+            userMessage: trimmed,
+            assistantMessage: assistantReply,
+          }
+        );
+      }
       if (anonymousWork) {
         const productId = isZakiBotTarget ? "agent" : "spaces";
         upsertAnonymousWorkItem({
@@ -8213,6 +8346,7 @@ export function ChatArea() {
     }
   }, [
     activeThreadId,
+    activeZakiSessionKey,
     activeWorkspaceSlug,
     activationProgress.firstMessageSent,
     agentUserId,
@@ -8233,8 +8367,10 @@ export function ChatArea() {
     setSessionContextPressure,
     streamChatMessage,
     t,
+    maybeAutoTitleSession,
     maybeAutoTitleThread,
     updateAssistantError,
+    zakiSessionKey,
   ]);
 
   useEffect(() => {
@@ -8690,10 +8826,19 @@ export function ChatArea() {
   }, [agentFocusMode, isAgentSurface]);
 
   useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia(AGENT_MOBILE_PANEL_QUERY);
+    const sync = () => setAgentMobileViewport(query.matches);
+    sync();
+    query.addEventListener?.("change", sync);
+    return () => query.removeEventListener?.("change", sync);
+  }, []);
+
+  useEffect(() => {
     if (typeof document === "undefined") return;
     document.body.classList.toggle(
       "zaki-agent-mobile-inspector-active",
-      isAgentSurface && agentMobileInspectorOpen && !agentFocusMode
+      isAgentMobilePanelOpen
     );
     if (!isAgentSurface) {
       setAgentMobileInspectorOpen(false);
@@ -8701,11 +8846,10 @@ export function ChatArea() {
     return () => {
       document.body.classList.remove("zaki-agent-mobile-inspector-active");
     };
-  }, [agentFocusMode, agentMobileInspectorOpen, isAgentSurface]);
+  }, [isAgentMobilePanelOpen, isAgentSurface]);
 
   useEffect(() => {
-    const isOpen = isAgentSurface && agentMobileInspectorOpen && !agentFocusMode;
-    if (!isOpen || typeof document === "undefined" || typeof window === "undefined") {
+    if (!isAgentMobilePanelOpen || typeof document === "undefined" || typeof window === "undefined") {
       return;
     }
 
@@ -8742,7 +8886,7 @@ export function ChatArea() {
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
-        setAgentMobileInspectorOpen(false);
+        closeAgentMobilePanel();
         return;
       }
 
@@ -8785,11 +8929,10 @@ export function ChatArea() {
       window.cancelAnimationFrame(focusFrame);
       dialog.removeEventListener("keydown", handleDialogKeyDown);
     };
-  }, [agentFocusMode, agentMobileInspectorOpen, isAgentSurface]);
+  }, [closeAgentMobilePanel, isAgentMobilePanelOpen]);
 
   useEffect(() => {
-    const isOpen = isAgentSurface && agentMobileInspectorOpen && !agentFocusMode;
-    if (isOpen || typeof document === "undefined" || typeof window === "undefined") {
+    if (isAgentMobilePanelOpen || typeof document === "undefined" || typeof window === "undefined") {
       return;
     }
 
@@ -8803,7 +8946,7 @@ export function ChatArea() {
       returnTarget.focus({ preventScroll: true });
     });
     return () => window.cancelAnimationFrame(focusFrame);
-  }, [agentFocusMode, agentMobileInspectorOpen, isAgentSurface]);
+  }, [isAgentMobilePanelOpen]);
 
   useEffect(() => {
     if (!isAgentSurface) return;
@@ -9412,34 +9555,12 @@ export function ChatArea() {
         onThumbsUpMessage={handleThumbsUpMessage}
         onThumbsDownMessage={handleThumbsDownMessage}
         getReaction={getReaction}
-        onQuickReply={(prefill) => {
-          // S1 — one-click follow-up. Route through the composer handle
-          // (not handleSend directly) so the per-turn toggles, drafts,
-          // and attachments all reset uniformly with a normal send.
-          if (isComposerSendLocked) return;
-          composerHandleRef.current?.submitWith(prefill);
-        }}
-        onOpenAgentArtifacts={
-          isZakiBotActiveSpace ? () => openAgentInspectorTab("artifacts") : undefined
-        }
-        onOpenAgentSources={
-          isZakiBotActiveSpace ? () => openAgentInspectorTab("evidence") : undefined
-        }
-        isRtl={isRtl}
       />
     );
   };
 
   const renderAgentInspectorRail = (options?: { mobile?: boolean }) => isAgentSurface ? (
     <AgentInspectorRail
-      sessionKey={normalizedActiveZakiSessionKey}
-      mode={activeSessionMode ?? "execute"}
-      isStreaming={isStreaming}
-      lastChannel={activeSessionUi?.lastChannel ?? activeSessionRecord?.last_channel ?? null}
-      sandbox={sandboxState}
-      tasks={agentTaskItems}
-      tasksLoading={agentTasksLoading}
-      tasksError={agentTasksError}
       cronJobs={agentCronJobs}
       cronLoading={agentCronLoading}
       cronError={agentCronError}
@@ -9450,30 +9571,9 @@ export function ChatArea() {
       artifactsScope={agentArtifactScope}
       artifactsLoading={agentArtifactsLoading}
       artifactsError={agentArtifactsError}
-      extensionDiagnostics={agentExtensionDiagnostics}
-      extensionDiagnosticsLoading={agentExtensionDiagnosticsLoading}
-      extensionDiagnosticsError={agentExtensionDiagnosticsError}
       transcriptEntries={nullalisTranscriptEntries}
-      narrationFrame={nullalisNarrationFrame}
-      approvalRequest={nullalisApprovalRequest}
-      approvalContinuationPending={Boolean(approvalContinuationPendingId)}
-      contextGaugeData={nullalisContextGauge}
-      contextReport={nullalisContextReport}
-      usageSummary={zakiUsageSummary}
-      browserFrame={activeSessionUi?.browserFrame ?? null}
-      onOpenMemory={openAgentMemorySurface}
       onCronChanged={refreshAgentRuntimePanelData}
-      onOpenExtensionSettings={openAgentExtensionSettings}
-      onOpenSettings={openAgentSettingsSection}
       onOpenArtifact={openAgentArtifactCanvas}
-      onCloseBrowserFrame={() => {
-        const sessionKey =
-          activeZakiSessionKey ||
-          buildAgentSessionKey(activeThreadId || "main", agentUserId);
-        if (sessionKey) {
-          setSessionBrowserFrame(sessionKey, null);
-        }
-      }}
       tabRequest={agentInspectorTabRequest}
       onClose={
         options?.mobile
@@ -9483,14 +9583,44 @@ export function ChatArea() {
     />
   ) : null;
 
+  const renderLiveBrowserPanel = (options?: { mobile?: boolean }) => {
+    if (!isAgentSurface || !liveBrowserFrame || !hasLiveBrowserFrame) return null;
+    return (
+      <section
+        className={cn(
+          "zaki-agent-live-browser",
+          options?.mobile && "zaki-agent-live-browser--mobile"
+        )}
+        aria-label="Live browser"
+        data-testid="agent-live-browser-panel"
+      >
+        <div className="zaki-agent-live-browser__head">
+          <span>Browser</span>
+          <strong>{liveBrowserFrame.title?.trim() || liveBrowserFrame.url?.trim() || "Live page"}</strong>
+        </div>
+        <BrowserViewFeedPanel
+          frame={liveBrowserFrame}
+          embedded
+          onClose={closeLiveBrowserFrame}
+        />
+      </section>
+    );
+  };
+
   return (
     <div
       ref={containerRef}
       className={cn(
         "zaki-chat flex-1 relative flex min-h-0 flex-col h-full bg-transparent overflow-x-hidden",
         isAgentSurface && "zaki-agent-v2",
-        isAgentSurface && agentInspectorOpen && "zaki-agent-v2--inspector",
-        isAgentSurface && !agentInspectorOpen && "zaki-agent-v2--inspector-collapsed",
+        isAgentSurface &&
+          (agentInspectorOpen || hasLiveBrowserFrame) &&
+          !agentFocusMode &&
+          "zaki-agent-v2--inspector",
+        isAgentSurface &&
+          !agentInspectorOpen &&
+          !hasLiveBrowserFrame &&
+          "zaki-agent-v2--inspector-collapsed",
         isAgentSurface && agentFocusMode && "zaki-agent-v2--focus"
       )}
       data-agent-surface={isAgentSurface ? "true" : undefined}
@@ -9819,6 +9949,19 @@ export function ChatArea() {
                   />
                 </div>
               ) : null}
+              {showComposerQuickReplies ? (
+                <div
+                  className="zaki-composer-quick-replies mx-auto w-full max-w-[900px] px-6"
+                  data-visible={composerQuickReplyVisible ? "true" : "false"}
+                >
+                  <QuickReplyChips
+                    onPick={handleQuickReply}
+                    isRtl={isRtl}
+                    items={composerQuickReplyItems}
+                    disabled={!composerQuickReplyVisible}
+                  />
+                </div>
+              ) : null}
               <InputArea
                 composerHandleRef={composerHandleRef}
                 onSend={handleSend}
@@ -9867,13 +10010,16 @@ export function ChatArea() {
                     : null
                 }
                 onOpenZakiApprovals={
-                  isZakiBotActiveSpace
-                    ? () => openAgentInspectorTab("plan")
-                    : undefined
+                  undefined
                 }
                 onOpenZakiBrowser={
-                  isZakiBotActiveSpace
-                    ? () => openAgentInspectorTab("browser")
+                  isZakiBotActiveSpace && hasLiveBrowserFrame
+                    ? () => {
+                        setAgentFocusMode(false);
+                        if (agentMobileViewport) {
+                          setAgentMobileInspectorOpen(true);
+                        }
+                      }
                     : undefined
                 }
                 onOpenZakiArtifacts={
@@ -9934,13 +10080,16 @@ export function ChatArea() {
             }}
           />
           </section>
-          {isAgentSurface && agentInspectorOpen && !agentFocusMode ? (
-            renderAgentInspectorRail()
+          {isAgentSurface && (agentInspectorOpen || hasLiveBrowserFrame) && !agentFocusMode ? (
+            <div className="zaki-agent-v2__side-stack" aria-label="Agent side panels">
+              {renderLiveBrowserPanel()}
+              {agentInspectorOpen ? renderAgentInspectorRail() : null}
+            </div>
           ) : null}
         </div>
       </div>
 
-      {isAgentSurface && agentMobileInspectorOpen && !agentFocusMode ? (
+      {isAgentMobilePanelOpen ? (
         <div
           ref={agentMobileInspectorRef}
           className="zaki-agent-mobile-inspector"
@@ -9952,7 +10101,7 @@ export function ChatArea() {
           <button
             type="button"
             className="zaki-agent-mobile-inspector__backdrop"
-            onClick={() => setAgentMobileInspectorOpen(false)}
+            onClick={closeAgentMobilePanel}
             aria-label={t("agent.mobilePanel.closeBackdropAria", {
               defaultValue: "Close agent panel",
             })}
@@ -9968,7 +10117,7 @@ export function ChatArea() {
               <button
                 ref={agentMobileInspectorCloseRef}
                 type="button"
-                onClick={() => setAgentMobileInspectorOpen(false)}
+                onClick={closeAgentMobilePanel}
                 aria-label={t("agent.mobilePanel.closeAria", {
                   defaultValue: "Close agent panel",
                 })}
@@ -9976,7 +10125,8 @@ export function ChatArea() {
                 {t("agent.mobilePanel.close", { defaultValue: "Close" })}
               </button>
             </header>
-            {renderAgentInspectorRail({ mobile: true })}
+            {renderLiveBrowserPanel({ mobile: true })}
+            {agentMobileInspectorOpen ? renderAgentInspectorRail({ mobile: true }) : null}
           </section>
         </div>
       ) : null}

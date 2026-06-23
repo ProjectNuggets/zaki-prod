@@ -37,6 +37,7 @@ import { useNavigationStore, useAuthStore, useZakiSessionUiStore } from "@/store
 import { useMessages } from "@/queries/useThreads";
 import {
   apiRequest,
+  autoTitleAgentSession,
   approveAgentSession,
   cancelAgentSession,
   captureMemory,
@@ -65,6 +66,27 @@ jest.mock("@/lib/api", () => ({
     status: 200,
     json: async () => ({}),
     headers: new Headers(),
+  })),
+  autoTitleAgentSession: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        status: "updated",
+        session: {
+          key: "agent:zaki-bot:user:1:thread:anon-title",
+          title: "Launch checklist",
+        },
+      }),
+      headers: new Headers(),
+    },
+    data: {
+      status: "updated",
+      session: {
+        key: "agent:zaki-bot:user:1:thread:anon-title",
+        title: "Launch checklist",
+      },
+    },
   })),
   provisionAgent: jest.fn(async () => ({
     response: {
@@ -492,12 +514,35 @@ type TestZakiSessionUiState = {
       }>;
       lastChannel: string | null;
       contextPressurePercent: number | null;
+      browserFrame?: {
+        title?: string | null;
+        url?: string | null;
+        frame?: string | null;
+        mimeType?: string | null;
+      } | null;
     }
   >;
   sandbox: { enabled: boolean; backend: string | null } | null;
 };
 
 const originalConsoleError = console.error;
+
+function mockMatchMedia(matches: boolean) {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: jest.fn((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      addListener: jest.fn(),
+      removeListener: jest.fn(),
+      dispatchEvent: jest.fn(),
+    })),
+  });
+}
 
 function renderChatArea() {
   const queryClient = new QueryClient({
@@ -520,6 +565,10 @@ async function renderChatAreaAndWaitForEffects() {
   const result = renderChatArea();
   await waitFor(() => expect(apiRequest).toHaveBeenCalledWith("/api/documents/accepted-file-types"));
   return result;
+}
+
+async function waitMs(ms: number) {
+  await new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function getAgentRailThreadLabels(container: HTMLElement): string[] {
@@ -779,6 +828,7 @@ describe("ChatArea Component", () => {
     cancelAnimationFrameSpy = jest
       .spyOn(window, "cancelAnimationFrame")
       .mockImplementation(() => undefined);
+    mockMatchMedia(false);
     (apiRequest as jest.Mock).mockReset();
     (apiRequest as jest.Mock).mockImplementation(async () => ({
       ok: true,
@@ -786,6 +836,7 @@ describe("ChatArea Component", () => {
       json: async () => ({}),
       headers: new Headers(),
     }));
+    (autoTitleAgentSession as jest.Mock).mockClear();
     (fetchAgentSessionHistory as jest.Mock).mockReset();
     (fetchAgentSessionHistory as jest.Mock).mockImplementation(async () => ({
       response: {
@@ -922,6 +973,7 @@ describe("ChatArea Component", () => {
           decrementApprovalCount: (sessionKey: string) => void;
           setLastChannel: (sessionKey: string, channel: string | null) => void;
           setContextPressure: (sessionKey: string, pressure: number | null) => void;
+          setBrowserFrame: (sessionKey: string, frame: unknown) => void;
           setSandbox: (sandbox: TestZakiSessionUiState["sandbox"]) => void;
         }) => unknown
       ) => {
@@ -967,6 +1019,11 @@ describe("ChatArea Component", () => {
             ensureSession(sessionKey);
             zakiSessionUiState.sessions[sessionKey].contextPressurePercent = pressure;
           },
+          setBrowserFrame: (sessionKey: string, frame: unknown) => {
+            ensureSession(sessionKey);
+            zakiSessionUiState.sessions[sessionKey].browserFrame =
+              frame as TestZakiSessionUiState["sessions"][string]["browserFrame"];
+          },
           setSandbox: (sandbox: TestZakiSessionUiState["sandbox"]) => {
             zakiSessionUiState.sandbox = sandbox;
           },
@@ -979,6 +1036,7 @@ describe("ChatArea Component", () => {
   });
 
   afterEach(async () => {
+    jest.useRealTimers();
     requestAnimationFrameSpy?.mockRestore();
     cancelAnimationFrameSpy?.mockRestore();
     consoleErrorSpy?.mockRestore();
@@ -1370,6 +1428,86 @@ describe("ChatArea Component", () => {
     expect(body).not.toHaveProperty("session_timeout_minutes");
   });
 
+  it("auto-titles an Agent session from the completed turn", async () => {
+    const sessionKey = "agent:zaki-bot:user:1:thread:anon-title";
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "anon-title";
+    navState.zakiSessionKey = sessionKey;
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+    (fetchAgentMe as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (listAgentSessions as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ sessions: [] }), headers: new Headers() },
+      data: {
+        sessions: [
+          {
+            session_key: sessionKey,
+            title: "Started Jun 22, 1:42 PM",
+            message_count: 0,
+            last_active: "2026-06-22T11:42:00.000Z",
+          },
+        ],
+      },
+    });
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/agent/chat/stream") {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: async () => ({ type: "done", message: "Here is the launch checklist." }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+        headers: new Headers(),
+      };
+    });
+    (autoTitleAgentSession as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, headers: new Headers() },
+      data: {
+        status: "updated",
+        session: { key: sessionKey, title: "Launch checklist" },
+      },
+    });
+
+    await renderChatAreaAndWaitForEffects();
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "plan my launch checklist" },
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "input.sendAria" })).not.toBeDisabled();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    await waitFor(() => {
+      expect(apiRequest).toHaveBeenCalledWith(
+        "/api/agent/chat/stream",
+        expect.objectContaining({
+          body: expect.any(String),
+        })
+      );
+    });
+    await waitFor(() => {
+      expect(autoTitleAgentSession).toHaveBeenCalledWith(sessionKey, {
+        userMessage: "plan my launch checklist",
+        assistantMessage: "Here is the launch checklist.",
+        currentLabel: "",
+      });
+    });
+    expect(
+      (apiRequest as jest.Mock).mock.calls.some(([path]) =>
+        String(path).includes("/auto-title")
+      )
+    ).toBe(false);
+  });
+
   it("does not fall back to diagnostics context when session context is unavailable", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
@@ -1514,6 +1652,108 @@ describe("ChatArea Component", () => {
       nowSpy.mockRestore();
     }
   });
+
+  it("reveals Agent composer suggestions after a reply, then hides them again", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    navState.zakiSessionKey = "agent:zaki-bot:user:1:thread:main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+    (fetchAgentMe as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (fetchAgentSessionContext as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, headers: new Headers() },
+      data: { history_len: 1, context_pressure_percent: 2 },
+    });
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/agent/chat/stream") {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: async () => ({
+            type: "done",
+            message: "The GTM strategy needs sharper positioning and pricing.",
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({}), headers: new Headers() };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "review the GTM strategy" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    await screen.findByText(/GTM strategy needs sharper/i);
+    const strip = screen
+      .getByTestId("quick-reply-chips")
+      .closest(".zaki-composer-quick-replies");
+    const criticButton = screen.getByRole("button", { name: /Ask the critic/i });
+
+    expect(strip).toHaveAttribute("data-visible", "false");
+    expect(criticButton).toBeDisabled();
+
+    await waitMs(1100);
+    expect(strip).toHaveAttribute("data-visible", "true");
+    expect(criticButton).not.toBeDisabled();
+
+    await waitMs(5000);
+    expect(strip).toHaveAttribute("data-visible", "false");
+    expect(criticButton).toBeDisabled();
+  }, 12_000);
+
+  it("submits a visible Agent suggestion through the composer", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    navState.zakiSessionKey = "agent:zaki-bot:user:1:thread:main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+    (fetchAgentMe as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (fetchAgentSessionContext as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, headers: new Headers() },
+      data: { history_len: 1, context_pressure_percent: 2 },
+    });
+    const streamBodies: string[] = [];
+    (apiRequest as jest.Mock).mockImplementation(async (path: string, options?: { body?: string }) => {
+      if (path === "/api/agent/chat/stream") {
+        streamBodies.push(String(options?.body || ""));
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: async () => ({
+            type: "done",
+            message:
+              streamBodies.length === 1
+                ? "The GTM strategy needs sharper positioning and pricing."
+                : "Critic pass complete.",
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({}), headers: new Headers() };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "review the GTM strategy" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    await waitFor(() => expect(streamBodies).toHaveLength(1));
+    await waitMs(1100);
+    fireEvent.click(screen.getByRole("button", { name: /Ask the critic/i }));
+    await waitFor(() => expect(streamBodies).toHaveLength(2));
+    expect(streamBodies[1]).toContain("Give me the critic's take on your last answer.");
+  }, 8_000);
 
   // P1-12 follow-up (Wave A): the chat POST has no idempotency/turn key, so a
   // retryable error frame auto-replays the SAME turn. These two tests pin the
@@ -2374,7 +2614,7 @@ describe("ChatArea Component", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: /Plan/i })).toHaveAttribute(
+      expect(screen.getByRole("tab", { name: /Artifacts/i })).toHaveAttribute(
         "aria-selected",
         "true"
       );
@@ -2382,6 +2622,7 @@ describe("ChatArea Component", () => {
   });
 
   it("opens and closes the Agent mobile inspector from the mobile panel event", async () => {
+    mockMatchMedia(true);
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
@@ -2421,25 +2662,36 @@ describe("ChatArea Component", () => {
     returnFocusTarget.remove();
   });
 
-  it("keeps backend-backed browser controls in the Agent inspector", async () => {
+  it("renders the live browser panel only for a real browser frame", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
+    navState.zakiSessionKey = "agent:zaki-bot:user:1:thread:main";
+    authState = { user: { username: "agent@example.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+    zakiSessionUiState.sessions["agent:zaki-bot:user:1:thread:main"] = {
+      mode: "execute",
+      live: false,
+      approvalCount: 0,
+      pendingApprovals: [],
+      lastChannel: "Web",
+      contextPressurePercent: null,
+      browserFrame: {
+        title: "Example page",
+        url: "https://example.com",
+        frame: "iVBORw0KGgo=",
+        mimeType: "image/png",
+      },
+    };
 
     await renderChatAreaAndWaitForEffects();
 
-    act(() => {
-      window.dispatchEvent(new CustomEvent("zaki:open-agent-mobile-inspector"));
-    });
-
-    const inspector = await screen.findByTestId("agent-mobile-inspector");
-    fireEvent.click(within(inspector).getByRole("tab", { name: /Browser/i }));
-
-    expect(within(inspector).getByRole("tab", { name: /Browser/i })).toHaveAttribute(
-      "aria-selected",
-      "true"
-    );
-    expect(screen.queryByTestId("power-user-tab-browser")).not.toBeInTheDocument();
+    const livePanels = screen.getAllByTestId("agent-live-browser-panel");
+    expect(livePanels.length).toBeGreaterThan(0);
+    for (const panel of livePanels) {
+      expect(panel).toHaveTextContent("Example page");
+    }
+    expect(screen.queryByRole("tab", { name: /Browser/i })).not.toBeInTheDocument();
   });
 
   it("opens a pending Agent controls tab after route handoff", async () => {
@@ -2451,7 +2703,7 @@ describe("ChatArea Component", () => {
     await renderChatAreaAndWaitForEffects();
 
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: /Plan/i })).toHaveAttribute(
+      expect(screen.getByRole("tab", { name: /Artifacts/i })).toHaveAttribute(
         "aria-selected",
         "true"
       );
@@ -2481,7 +2733,7 @@ describe("ChatArea Component", () => {
       );
     });
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: /Plan/i })).toHaveAttribute(
+      expect(screen.getByRole("tab", { name: /Artifacts/i })).toHaveAttribute(
         "aria-selected",
         "true"
       );
@@ -2495,11 +2747,12 @@ describe("ChatArea Component", () => {
       );
     });
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: /Browser/i })).toHaveAttribute(
+      expect(screen.getByRole("tab", { name: /Artifacts/i })).toHaveAttribute(
         "aria-selected",
         "true"
       );
     });
+    expect(screen.queryByRole("tab", { name: /Browser/i })).not.toBeInTheDocument();
 
     act(() => {
       window.dispatchEvent(

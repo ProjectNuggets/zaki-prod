@@ -336,6 +336,23 @@ describe("session-dead 401 redirect target", () => {
     );
   });
 
+  it("backendAuthRequest can keep passive 401s local without logging out or redirecting", async () => {
+    _storeToken = "expired-token";
+    mockFetch
+      .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
+      .mockResolvedValueOnce(makeResponse(401, { error: "Refresh also failed" }));
+
+    const { backendAuthRequest } = await import("@/lib/api");
+    const response = await backendAuthRequest("/api/agent/sessions", {
+      method: "GET",
+      redirectOnAuthFailure: false,
+    });
+
+    expect(response.status).toBe(401);
+    expect(mockLogout).not.toHaveBeenCalled();
+    expect(mockLoginRedirect).not.toHaveBeenCalled();
+  });
+
   it("every dead-session logout branch uses the canonical login redirect helper, never bare /", () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const fs = require("fs") as typeof import("fs");

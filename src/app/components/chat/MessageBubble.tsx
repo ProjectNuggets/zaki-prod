@@ -82,8 +82,8 @@ export function MessageBubble({
   const [showWhy, setShowWhy] = useState(showWhyDefault);
   const memorySources = message.memorySources || [];
   const [forgottenIds, setForgottenIds] = useState<Set<string>>(() => new Set<string>());
-  const visibleSources = memorySources.filter((source) => !forgottenIds.has(source.id));
-  const docSources = message.docSources || [];
+  const visibleSources = botMode ? [] : memorySources.filter((source) => !forgottenIds.has(source.id));
+  const docSources = botMode ? [] : message.docSources || [];
   const { t, i18n } = useTranslation();
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const agentRune = isStreaming ? "▸" : isAssistantError ? "!" : "✓";

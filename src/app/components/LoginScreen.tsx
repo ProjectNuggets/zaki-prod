@@ -255,10 +255,6 @@ const AUTH_COPY = {
       resetRequest: "Enter the account email and we will send a secure reset link.",
       resetConfirm: "Choose a new password for this account.",
     },
-    preservedWork: {
-      title: "Return saved.",
-      body: "After authentication, ZAKI will bring you back to {{target}}.",
-    },
     aria: {
       hidePassword: "Hide password",
       showPassword: "Show password",
@@ -361,10 +357,6 @@ const AUTH_COPY = {
       resetRequest: "أدخل بريد الحساب وسنرسل لك رابطًا آمنًا لإعادة التعيين.",
       resetConfirm: "اختر كلمة مرور جديدة لهذا الحساب.",
     },
-    preservedWork: {
-      title: "تم حفظ وجهة الرجوع.",
-      body: "بعد التحقق من الهوية، سيعيدك ZAKI إلى {{target}}.",
-    },
     aria: {
       hidePassword: "إخفاء كلمة المرور",
       showPassword: "إظهار كلمة المرور",
@@ -443,7 +435,6 @@ export function LoginScreen() {
   const turnstileWidgetIdRef = useRef<string | null>(null);
   const turnstileSiteKey = getTurnstileSiteKey();
   const postLoginReturnTo = getPostLoginReturnTo(location);
-  const hasPreservedWork = Boolean(postLoginReturnTo);
 
   const setModeClean = useCallback(
     (nextMode: AuthMode) => {
@@ -886,10 +877,6 @@ export function LoginScreen() {
   const modeTitle = copy.title[modeCopyKey];
   const modeSubtitle = copy.subtitles[modeCopyKey];
   const modeEyebrow = copy.eyebrow[modeCopyKey];
-  const preservedWorkBody = copy.preservedWork.body.replace(
-    "{{target}}",
-    postLoginReturnTo
-  );
   const normalizedDateOfBirth = formatDateOfBirthInput(dateOfBirth);
   const submitDisabled =
     isLoading ||
@@ -942,12 +929,6 @@ export function LoginScreen() {
             <span className="zaki-auth-v2__eyebrow">{modeEyebrow}</span>
             <h1 id="zaki-auth-title">{modeTitle}</h1>
             <p>{modeSubtitle}</p>
-            {hasPreservedWork && (mode === "login" || mode === "signup") ? (
-              <div className="zaki-auth-v2__callout zaki-auth-v2__callout--compact">
-                <strong>{copy.preservedWork.title}</strong>
-                <span>{preservedWorkBody}</span>
-              </div>
-            ) : null}
           </div>
 
           {(mode === "login" || mode === "signup") && googleOAuthEnabled ? (

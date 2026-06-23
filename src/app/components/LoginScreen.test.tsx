@@ -392,8 +392,8 @@ describe("LoginScreen legal consent", () => {
     renderLoginScreen();
     await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
 
-    expect(await screen.findByText("Return saved.")).toBeInTheDocument();
-    expect(screen.getByText("After authentication, ZAKI will bring you back to /agent.")).toBeInTheDocument();
+    expect(screen.queryByText("Return saved.")).not.toBeInTheDocument();
+    expect(screen.queryByText(/After authentication/i)).not.toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText("Email address"), "user@example.com");
     await user.type(screen.getByPlaceholderText("Password"), "Password123");
@@ -472,7 +472,7 @@ describe("LoginScreen legal consent", () => {
     renderLoginScreen();
     await waitFor(() => expect(fetchGoogleOAuthStatus).toHaveBeenCalled());
 
-    expect(await screen.findByText("Return saved.")).toBeInTheDocument();
+    expect(screen.queryByText("Return saved.")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Continue with Google/ }));
 
     expect(buildGoogleOAuthStartUrl).toHaveBeenCalledWith(

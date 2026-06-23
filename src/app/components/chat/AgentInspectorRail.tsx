@@ -1,25 +1,18 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  Brain,
   Boxes,
   CalendarClock,
-  CheckCircle2,
-  Circle,
   Copy,
   Download,
   ExternalLink,
-  Globe2,
   Link2,
   Link2Off,
-  Loader2,
-  MonitorSmartphone,
   PanelRightClose,
   Pause,
   Pencil,
   Play,
   Plus,
   Share2,
-  ShieldAlert,
   Trash2,
   X,
 } from "lucide-react";
@@ -29,27 +22,12 @@ import {
   deleteAgentCron,
   downloadAgentExportFile,
   exportAgentArtifact,
-  fetchAgentSessionPlan,
-  fetchAgentSessionTodos,
-  fetchAgentTask,
   revokeAgentArtifactShare,
   shareAgentArtifact,
-  stopAgentTask,
-  updateAgentSessionTodoItem,
   updateAgentCron,
-  type AgentContextReport,
-  type AgentExtensionDiagnosticsResponse,
-  type AgentSessionMode,
-  type AgentSessionPlanResponse,
-  type AgentSessionTodosResponse,
-  type AgentTodoItem,
-  type AgentTodoList,
-  type AgentTodoStatus,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { compileSchedule, type FollowUpSchedule } from "@/queries/useAgentScheduledFollowUps";
-import type { BrowserFrame } from "@/types";
-import type { ZakiRuntimeSandbox } from "@/stores/zakiSessionUiStore";
 import {
   getAgentArtifactExportAvailability,
   getAgentArtifactExportDownloadUrl,
@@ -59,47 +37,16 @@ import {
   type AgentArtifactExportFormat,
   type AgentArtifactExportState,
 } from "@/app/components/agent/agentArtifactSurface";
-import {
-  V2InlineRow,
-  V2Panel,
-  V2PanelHead,
-  V2Tabs,
-} from "@/app/components/v2";
-import { resolveContextGaugePercent } from "@/lib/agentContext";
-import { BrowserViewFeedPanel } from "./BrowserViewFeedPanel";
-import type {
-  NullalisApprovalRequest,
-  NullalisNarrationFrame,
-  NullalisTaskItem,
-  NullalisTaskStatus,
-  NullalisTranscriptEntry,
-  ZakiUsageSummary,
-} from "./BotStatusRail";
-import type { ContextGaugeData } from "./NullalisRuntimeWidgets";
-import {
-  buildAgentInspectorPanelModel,
-  type AgentInspectorPanelEvent,
-} from "./AgentInspectorPanelModel";
+import { V2Panel, V2PanelHead, V2Tabs } from "@/app/components/v2";
+import type { NullalisTranscriptEntry } from "./BotStatusRail";
+import { buildAgentInspectorPanelModel } from "./AgentInspectorPanelModel";
 
-export type AgentInspectorTab =
-  | "plan"
-  | "cron"
-  | "evidence"
-  | "artifacts"
-  | "browser";
+export type AgentInspectorTab = "artifacts" | "cron";
 
 export type AgentInspectorTabRequest = {
   tab: AgentInspectorTab;
   id: number;
 };
-
-export type AgentSettingsSection =
-  | "agent"
-  | "channels"
-  | "secrets"
-  | "providers"
-  | "devices"
-  | "developer-access";
 
 export type AgentInspectorCronJob = {
   id: string;
@@ -179,7 +126,6 @@ export type AgentInspectorArtifact = {
 
 type AgentArtifactScope = "session" | "recent";
 type ArtifactTabState = "loading" | "ready" | "syncing" | "empty" | "unavailable";
-type BrowserTabState = "live" | "attention" | "ready" | "idle" | "unavailable";
 
 type ArtifactRow = {
   artifact: AgentInspectorArtifact;
@@ -188,14 +134,6 @@ type ArtifactRow = {
 };
 
 export type AgentInspectorRailProps = {
-  sessionKey?: string | null;
-  mode: AgentSessionMode | null;
-  isStreaming: boolean;
-  lastChannel?: string | null;
-  sandbox: ZakiRuntimeSandbox | null;
-  tasks: NullalisTaskItem[];
-  tasksLoading?: boolean;
-  tasksError?: string | null;
   cronJobs?: AgentInspectorCronJob[];
   cronLoading?: boolean;
   cronError?: string | null;
@@ -206,122 +144,12 @@ export type AgentInspectorRailProps = {
   artifactsScope?: AgentArtifactScope;
   artifactsLoading?: boolean;
   artifactsError?: string | null;
-  extensionDiagnostics?: AgentExtensionDiagnosticsResponse | null;
-  extensionDiagnosticsLoading?: boolean;
-  extensionDiagnosticsError?: string | null;
   transcriptEntries: NullalisTranscriptEntry[];
-  narrationFrame: NullalisNarrationFrame | null;
-  approvalRequest: NullalisApprovalRequest | null;
-  approvalContinuationPending?: boolean;
-  contextGaugeData: ContextGaugeData | null;
-  contextReport?: AgentContextReport | null;
-  usageSummary: ZakiUsageSummary | null;
-  browserFrame?: BrowserFrame | null;
-  onOpenMemory?: () => void;
   onCronChanged?: () => void | Promise<void>;
-  onOpenExtensionSettings?: () => void;
-  onOpenSettings?: (section: AgentSettingsSection) => void;
   onOpenArtifact?: (artifact: AgentInspectorArtifact) => void;
-  onCloseBrowserFrame?: () => void;
   tabRequest?: AgentInspectorTabRequest | null;
   onClose?: () => void;
 };
-
-function taskStatusLabel(status: NullalisTaskStatus) {
-  if (status === "succeeded") return "done";
-  return status;
-}
-
-function taskStatusIcon(status: NullalisTaskStatus) {
-  if (status === "done" || status === "succeeded") {
-    return <CheckCircle2 className="zaki-agent-inspector__status-icon is-done" aria-hidden />;
-  }
-  if (status === "running") {
-    return <Loader2 className="zaki-agent-inspector__status-icon is-running" aria-hidden />;
-  }
-  if (status === "failed" || status === "blocked" || status === "cancelled") {
-    return <ShieldAlert className="zaki-agent-inspector__status-icon is-alert" aria-hidden />;
-  }
-  return <Circle className="zaki-agent-inspector__status-icon" aria-hidden />;
-}
-
-function contextPercent(data: ContextGaugeData | null): number | null {
-  return resolveContextGaugePercent(data);
-}
-
-function contextSourceLabel(data: ContextGaugeData | null): string {
-  if (!data) return "No sample";
-  if (data.source === "live_session") return "Live session";
-  if (data.source === "diagnostics_fallback") return "Diagnostics fallback";
-  if (data.source === "inactive_session") return "Inactive session";
-  return "Unknown";
-}
-
-function isCompleteTask(status: NullalisTaskStatus) {
-  return status === "done" || status === "succeeded";
-}
-
-function isTerminalTask(status: NullalisTaskStatus) {
-  return isCompleteTask(status) || status === "failed" || status === "cancelled";
-}
-
-function taskVisualState(status: NullalisTaskStatus) {
-  if (isCompleteTask(status)) return "done";
-  if (status === "running") return "live";
-  if (status === "failed" || status === "blocked" || status === "cancelled") return "blocked";
-  return "queued";
-}
-
-function todoVisualState(status?: string | null) {
-  if (status === "completed" || status === "done" || status === "succeeded") return "done";
-  if (status === "in_progress" || status === "running") return "live";
-  if (status === "blocked" || status === "failed" || status === "cancelled") return "blocked";
-  return "queued";
-}
-
-function todoStatusIcon(status?: string | null) {
-  const visualState = todoVisualState(status);
-  if (visualState === "done") {
-    return <CheckCircle2 className="zaki-agent-inspector__status-icon is-done" aria-hidden />;
-  }
-  if (visualState === "live") {
-    return <Loader2 className="zaki-agent-inspector__status-icon is-running" aria-hidden />;
-  }
-  if (visualState === "blocked") {
-    return <ShieldAlert className="zaki-agent-inspector__status-icon is-alert" aria-hidden />;
-  }
-  return <Circle className="zaki-agent-inspector__status-icon" aria-hidden />;
-}
-
-function nextTodoStatus(status?: string | null): AgentTodoStatus {
-  if (status === "pending") return "in_progress";
-  if (status === "in_progress") return "completed";
-  if (status === "completed") return "pending";
-  if (status === "blocked") return "in_progress";
-  return "in_progress";
-}
-
-function todoActionLabel(status?: string | null) {
-  if (status === "pending") return "Start";
-  if (status === "in_progress") return "Complete";
-  if (status === "completed") return "Reopen";
-  if (status === "blocked") return "Resume";
-  return "Update";
-}
-
-function formatClock(timestamp: number): string {
-  if (!timestamp) return "--:--:--";
-  try {
-    return new Intl.DateTimeFormat("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    }).format(new Date(timestamp));
-  } catch {
-    return "--:--:--";
-  }
-}
 
 function formatCalendarStamp(timestamp?: number | null): string {
   if (!timestamp) return "not scheduled";
@@ -336,165 +164,6 @@ function formatCalendarStamp(timestamp?: number | null): string {
   } catch {
     return "not scheduled";
   }
-}
-
-function eventText(event: {
-  label: string;
-  summary: string;
-  command: string | null;
-  files: string[];
-}) {
-  const file = event.files[0];
-  if (event.command) return `${event.label} · ${event.command}`;
-  if (file) return `${event.label} · ${file}`;
-  return `${event.label} · ${event.summary}`;
-}
-
-function evidenceCategoryLabel(category: string) {
-  if (category === "web") return "web";
-  if (category === "file") return "file";
-  if (category === "memory") return "memory";
-  if (category === "retrieval") return "retrieval";
-  if (category === "compaction") return "context";
-  if (category === "continuity") return "continuity";
-  if (category === "browser") return "browser";
-  if (category === "artifact") return "artifact";
-  if (category === "schedule") return "schedule";
-  return "tool";
-}
-
-type SourceRow = {
-  event: AgentInspectorPanelEvent;
-  title: string;
-  summary: string;
-  meta: string;
-};
-
-function sourceDomain(href?: string | null): string | null {
-  if (!href) return null;
-  try {
-    return new URL(href).hostname.replace(/^www\./i, "");
-  } catch {
-    return null;
-  }
-}
-
-function sourceTitle(event: AgentInspectorPanelEvent): string {
-  if (event.category === "web") return sourceDomain(event.href) || "Web source";
-  if (event.category === "file") return event.files[0] || event.label || "File source";
-  if (event.category === "memory") return "Memory";
-  if (event.category === "retrieval" || event.category === "compaction" || event.category === "continuity") {
-    return "Retrieved context";
-  }
-  return event.files[0] || event.label || "Source";
-}
-
-function sourceMeta(event: AgentInspectorPanelEvent): string {
-  return `${evidenceCategoryLabel(event.category)} · ${event.meta || formatClock(event.timestamp)}`;
-}
-
-function buildSourceRows(events: AgentInspectorPanelEvent[]): SourceRow[] {
-  return events.map((event) => ({
-    event,
-    title: sourceTitle(event),
-    summary: event.summary,
-    meta: sourceMeta(event),
-  }));
-}
-
-function pluralSource(count: number, singular: string, plural = `${singular}s`) {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
-
-function sourceBrief(events: AgentInspectorPanelEvent[], hasContext: boolean): string | undefined {
-  const web = events.filter((event) => event.category === "web").length;
-  const files = events.filter((event) => event.category === "file").length;
-  const memory = events.filter((event) => event.category === "memory").length;
-  const context = events.filter((event) =>
-    event.category === "retrieval" || event.category === "compaction" || event.category === "continuity"
-  ).length;
-  const parts = [
-    web ? pluralSource(web, "web") : "",
-    files ? pluralSource(files, "file") : "",
-    memory ? (memory === 1 ? "memory used" : `${memory} memories used`) : "",
-    context ? pluralSource(context, "context hit") : "",
-    hasContext && !context ? "context sample" : "",
-  ].filter(Boolean);
-  if (parts.length) return parts.join(" · ");
-  return hasContext ? "context sample" : undefined;
-}
-
-function hasTrustedContextSample(data: ContextGaugeData | null, pressurePct: number | null): boolean {
-  if (!data) return false;
-  return pressurePct != null || data.source === "live_session" || data.confidence === "exact";
-}
-
-function planStepVisualState(status?: string | null) {
-  if (status === "done" || status === "completed" || status === "succeeded") return "done";
-  if (status === "running" || status === "in_progress") return "live";
-  if (status === "failed" || status === "blocked" || status === "cancelled") return "blocked";
-  return "queued";
-}
-
-function planStepStatusIcon(status?: string | null) {
-  const visualState = planStepVisualState(status);
-  if (visualState === "done") {
-    return <CheckCircle2 className="zaki-agent-inspector__status-icon is-done" aria-hidden />;
-  }
-  if (visualState === "live") {
-    return <Loader2 className="zaki-agent-inspector__status-icon is-running" aria-hidden />;
-  }
-  if (visualState === "blocked") {
-    return <ShieldAlert className="zaki-agent-inspector__status-icon is-alert" aria-hidden />;
-  }
-  return <Circle className="zaki-agent-inspector__status-icon" aria-hidden />;
-}
-
-function compactPlanStepTitle(
-  step: NonNullable<NonNullable<AgentSessionPlanResponse["plan"]>["steps"]>[number],
-  index: number
-) {
-  return step.title || step.description || `Step ${index + 1}`;
-}
-
-function eventHasExtensionSignal(event: {
-  label: string;
-  summary: string;
-  command: string | null;
-  files: string[];
-}) {
-  return /\bextension[_\w]*\b/i.test(eventText(event));
-}
-
-function eventHasAppBrowserSignal(event: {
-  label: string;
-  summary: string;
-  command: string | null;
-  files: string[];
-}) {
-  if (eventHasExtensionSignal(event)) return false;
-  return /\b(browser(?:[._](?:open|click))?|browser_(?:new_session|navigate|snapshot|exec|close_session|take_screenshot)|playwright_[\w-]+|mcp__playwright__[\w-]+)\b/i.test(
-    eventText(event)
-  );
-}
-
-function isExtensionFailureResult(result: string) {
-  return result === "timeout" || result === "conn_closed" || result === "oom" || result === "error_other";
-}
-
-function extensionResultLabel(result: string) {
-  if (result === "ok") return "Last command ok";
-  if (result === "timeout") return "The browser took too long";
-  if (result === "conn_closed") return "Connection closed";
-  if (result === "oom") return "Browser ran out of memory";
-  if (result === "error_other") return "Command failed";
-  return result ? `Last command ${result}` : "";
-}
-
-function browserEventNeedsAttention(event: AgentInspectorPanelEvent) {
-  const state = String(event.state || "").toLowerCase();
-  if (state === "failed" || state === "blocked" || state === "error") return true;
-  return eventHasExtensionSignal(event) && /\b(denied|failed|error|timeout|blocked)\b/i.test(eventText(event));
 }
 
 function scheduleNumber(value: number) {
@@ -801,30 +470,6 @@ function sortScheduleRows(rows: ScheduleRow[]) {
   });
 }
 
-function taskCanStop(status: NullalisTaskStatus) {
-  return status === "running" || status === "queued" || status === "deferred";
-}
-
-function taskDetailText(detail: Record<string, unknown> | null | undefined, ...keys: string[]) {
-  if (!detail) return null;
-  for (const key of keys) {
-    const value = detail[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-    if (typeof value === "number" || typeof value === "boolean") return String(value);
-  }
-  return null;
-}
-
-function taskDetailTime(detail: Record<string, unknown> | null | undefined, ...keys: string[]) {
-  const value = detail ? keys.map((key) => detail[key]).find((candidate) => candidate != null) : null;
-  if (typeof value === "number") return formatCalendarStamp(value < 10_000_000_000 ? value * 1000 : value);
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Date.parse(value);
-    return Number.isFinite(parsed) ? formatCalendarStamp(parsed) : value;
-  }
-  return null;
-}
-
 function cronActionError(data: unknown, fallback: string) {
   if (data && typeof data === "object") {
     const record = data as Record<string, unknown>;
@@ -909,11 +554,6 @@ function PanelActionButton({
 }
 
 export function AgentInspectorRail({
-  sessionKey = null,
-  isStreaming,
-  sandbox,
-  tasks,
-  tasksLoading = false,
   cronJobs = [],
   cronLoading = false,
   cronError = null,
@@ -922,43 +562,19 @@ export function AgentInspectorRail({
   artifactsScope = "session",
   artifactsLoading = false,
   artifactsError = null,
-  extensionDiagnostics = null,
-  extensionDiagnosticsLoading = false,
-  extensionDiagnosticsError = null,
   transcriptEntries,
-  narrationFrame,
-  approvalRequest,
-  approvalContinuationPending = false,
-  contextGaugeData,
-  browserFrame = null,
-  onOpenMemory,
   onCronChanged,
-  onOpenExtensionSettings,
-  onOpenSettings,
   onOpenArtifact,
-  onCloseBrowserFrame,
   tabRequest = null,
   onClose,
 }: AgentInspectorRailProps) {
-  const [tab, setTab] = useState<AgentInspectorTab>("plan");
-  const [manualTabSelected, setManualTabSelected] = useState(false);
+  const [tab, setTab] = useState<AgentInspectorTab>("artifacts");
   const [artifactExportStates, setArtifactExportStates] = useState<
     Record<string, Partial<Record<AgentArtifactExportFormat, AgentArtifactExportState>>>
   >({});
   const [artifactShareStates, setArtifactShareStates] = useState<
     Record<string, { status: "idle" | "sharing" | "ready" | "revoking" | "failed" | "copied"; url?: string | null; error?: string | null }>
   >({});
-  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
-  const [taskDetailById, setTaskDetailById] = useState<Record<string, Record<string, unknown> | null>>({});
-  const [taskDetailLoadingId, setTaskDetailLoadingId] = useState<string | null>(null);
-  const [taskDetailErrorById, setTaskDetailErrorById] = useState<Record<string, string | null>>({});
-  const [confirmStopTaskId, setConfirmStopTaskId] = useState<string | null>(null);
-  const [stoppingTaskId, setStoppingTaskId] = useState<string | null>(null);
-  const [stoppedTaskIds, setStoppedTaskIds] = useState<Record<string, boolean>>({});
-  const [todosData, setTodosData] = useState<AgentSessionTodosResponse | null>(null);
-  const [todosLoading, setTodosLoading] = useState(false);
-  const [todoBusyKey, setTodoBusyKey] = useState<string | null>(null);
-  const [planData, setPlanData] = useState<AgentSessionPlanResponse | null>(null);
   const [cronFormOpen, setCronFormOpen] = useState(false);
   const [editingCronId, setEditingCronId] = useState<string | null>(null);
   const [cronNameDraft, setCronNameDraft] = useState("");
@@ -981,7 +597,6 @@ export function AgentInspectorRail({
     () => buildAgentInspectorPanelModel(transcriptEntries),
     [transcriptEntries]
   );
-  const sourceEntries = panelModel.sources;
   const artifactEntries = panelModel.artifacts;
   const sortedArtifacts = useMemo(
     () =>
@@ -1027,7 +642,6 @@ export function AgentInspectorRail({
           ? "unavailable"
           : "empty";
   const artifactTabCount = artifactRows.length || syncingArtifactRows.length || undefined;
-  const browserRows = panelModel.browser;
   const scheduleEvents = panelModel.cron;
   const scheduleRows = useMemo(
     () => sortScheduleRows(scheduleRowsFromSources(jobs, cronJobs)),
@@ -1060,281 +674,7 @@ export function AgentInspectorRail({
       : scheduleRows.length
         ? String(scheduleRows.length)
         : undefined;
-  const sortedTasks = useMemo(
-    () => [...tasks].sort((a, b) => a.updatedAt - b.updatedAt),
-    [tasks]
-  );
-  const currentTasks = useMemo(
-    () => sortedTasks.filter((task) => !isTerminalTask(task.status)),
-    [sortedTasks]
-  );
-  const runningTask = currentTasks.find((task) => task.status === "running") ?? null;
-  const ctxPct = contextPercent(contextGaugeData);
-  const sourceRows = useMemo(() => buildSourceRows(sourceEntries), [sourceEntries]);
-  const trustedContextSample = hasTrustedContextSample(contextGaugeData, ctxPct);
-  const hasMemorySources = sourceEntries.some((event) => event.category === "memory");
-  const sourceBriefText = sourceBrief(sourceEntries, trustedContextSample);
-  const sourcesTabState: "ready" | "context" | "empty" = sourceRows.length
-    ? "ready"
-    : trustedContextSample
-      ? "context"
-      : "empty";
-  const hasBrowserFrame = Boolean(browserFrame?.frame?.trim());
-  const sandboxLabel = sandbox?.enabled
-    ? sandbox.backend
-      ? sandbox.backend
-      : "enabled"
-    : "off";
-  const extensionActivity = browserRows.some(eventHasExtensionSignal);
-  const extensionPaired = Boolean(extensionDiagnostics?.paired);
-  const extensionLastCommandResult = String(extensionDiagnostics?.last_command_result || "").trim();
-  const extensionLastCommandTool = String(extensionDiagnostics?.last_command_tool || "").trim();
-  const extensionAttention =
-    isExtensionFailureResult(extensionLastCommandResult) || browserRows.some(browserEventNeedsAttention);
-  const extensionStatusLabel = extensionDiagnosticsLoading
-    ? "checking"
-    : extensionPaired
-      ? extensionLastCommandResult
-        ? extensionResultLabel(extensionLastCommandResult)
-        : "connected"
-      : extensionDiagnosticsError
-        ? "status unavailable"
-        : extensionActivity
-          ? "activity detected"
-          : "not connected";
-  const extensionStatusMeta = extensionLastCommandTool
-    ? `${extensionStatusLabel} · ${extensionLastCommandTool}`
-    : extensionStatusLabel;
-  const appBrowserActivity =
-    hasBrowserFrame ||
-    browserRows.some(eventHasAppBrowserSignal);
-  const agentBrowserStatus = hasBrowserFrame
-    ? "live page visible"
-    : sandbox?.enabled
-      ? `ready${sandbox.backend ? ` · ${sandbox.backend}` : ""}`
-      : appBrowserActivity
-        ? "recent activity"
-        : "off";
-  const latestBrowserRow = browserRows[0] ?? null;
-  const browserBriefTitle = hasBrowserFrame
-    ? browserFrame?.title?.trim() || browserFrame?.url?.trim() || "Live browser page"
-    : extensionAttention
-      ? "Browser needs attention"
-      : sandbox?.enabled || extensionPaired
-        ? "Browser ready"
-        : extensionDiagnosticsError
-          ? "Browser status unavailable"
-          : "No browser activity";
-  const browserBriefMeta = hasBrowserFrame
-    ? browserFrame?.url?.trim() || "Live browser frame"
-    : latestBrowserRow
-      ? eventText(latestBrowserRow)
-      : extensionStatusMeta;
-  const browserTabState: BrowserTabState = hasBrowserFrame
-    ? "live"
-    : extensionAttention
-      ? "attention"
-      : sandbox?.enabled || extensionPaired
-        ? "ready"
-        : extensionDiagnosticsError
-          ? "unavailable"
-          : "idle";
-  const browserTabCount =
-    browserTabState === "live"
-      ? "live"
-      : browserTabState === "attention"
-        ? "!"
-        : browserTabState === "ready"
-          ? "on"
-          : undefined;
-  const openBrowserDeviceSettings =
-    onOpenExtensionSettings ?? (onOpenSettings ? () => onOpenSettings("devices") : undefined);
-  const blockingApproval = approvalRequest && !approvalContinuationPending ? approvalRequest : null;
-  const activeTodoList = useMemo(() => {
-    const lists = todosData?.lists ?? [];
-    if (!lists.length) return null;
-    const currentId = todosData?.current_list_id;
-    return lists.find((list) => list.list_id === currentId) ?? lists[0] ?? null;
-  }, [todosData]);
-  type PlanWorkItem =
-    | {
-        kind: "persisted-todo";
-        id: string;
-        title: string;
-        status: string;
-        visualState: ReturnType<typeof todoVisualState>;
-        metaParts: string[];
-        list: AgentTodoList;
-        item: AgentTodoItem;
-      }
-    | {
-        kind: "task";
-        id: string;
-        title: string;
-        status: NullalisTaskStatus;
-        visualState: ReturnType<typeof taskVisualState>;
-        metaParts: string[];
-        task: NullalisTaskItem;
-        readonlyTodo: boolean;
-      };
-  const persistedTodoWorkItems = useMemo<PlanWorkItem[]>(() => {
-    if (!activeTodoList?.items?.length) return [];
-    return activeTodoList.items.map((item) => ({
-      kind: "persisted-todo" as const,
-      id: `${activeTodoList.list_id}:${item.id}`,
-      title: item.title || `Item ${item.id}`,
-      status: String(item.status || "pending"),
-      visualState: todoVisualState(item.status),
-      metaParts: [
-        String(item.status || "pending").replace(/_/g, " "),
-        item.depends_on?.length ? `depends on ${item.depends_on.join(", ")}` : "",
-        item.note || "",
-      ].filter(Boolean),
-      list: activeTodoList,
-      item,
-    }));
-  }, [activeTodoList]);
-  const liveTodoWorkItems = useMemo<PlanWorkItem[]>(
-    () =>
-      currentTasks
-        .filter((task) => task.taskId.startsWith("todo:"))
-        .map((task) => ({
-          kind: "task" as const,
-          id: task.taskId,
-          title: task.description || task.taskId,
-          status: task.status,
-          visualState: taskVisualState(task.status),
-          metaParts: [
-            taskStatusLabel(task.status),
-            typeof task.progressPct === "number" ? `${Math.round(task.progressPct)}%` : "",
-          ].filter(Boolean),
-          task,
-          readonlyTodo: true,
-        })),
-    [currentTasks]
-  );
-  const backgroundWorkItems = useMemo<PlanWorkItem[]>(
-    () =>
-      currentTasks
-        .filter((task) => !task.taskId.startsWith("todo:"))
-        .map((task) => ({
-          kind: "task" as const,
-          id: task.taskId,
-          title: task.description || task.taskId,
-          status: task.status,
-          visualState: taskVisualState(task.status),
-          metaParts: [
-            taskStatusLabel(task.status),
-            typeof task.progressPct === "number" && task.status === "running"
-              ? `${Math.round(task.progressPct)}%`
-              : "",
-            stoppedTaskIds[task.taskId] ? "stop requested" : "",
-          ].filter(Boolean),
-          task,
-          readonlyTodo: false,
-        })),
-    [currentTasks, stoppedTaskIds]
-  );
-  const currentWorkItems = persistedTodoWorkItems.length
-    ? persistedTodoWorkItems
-    : liveTodoWorkItems.length
-      ? liveTodoWorkItems
-      : backgroundWorkItems;
-  const currentWorkSource = persistedTodoWorkItems.length
-    ? "persisted checklist"
-    : liveTodoWorkItems.length
-      ? "live checklist"
-      : backgroundWorkItems.length
-        ? "background tasks"
-        : "idle";
-  const completedWorkCount = currentWorkItems.filter((item) => item.visualState === "done").length;
-  const workProgressPercent = currentWorkItems.length
-    ? Math.round(
-        (currentWorkItems.reduce((total, item) => {
-          if (item.visualState === "done") return total + 1;
-          if (
-            item.kind === "task" &&
-            item.status === "running" &&
-            typeof item.task.progressPct === "number"
-          ) {
-            return total + Math.max(0, Math.min(100, item.task.progressPct)) / 100;
-          }
-          return total;
-        }, 0) /
-          currentWorkItems.length) *
-          100
-      )
-    : 0;
-  const activePlan =
-    planData?.active && planData.plan?.steps?.length ? planData.plan : null;
-  const livePlanItems = useMemo(() => {
-    const seen = new Set<string>();
-    return transcriptEntries
-      .filter((entry) => entry.phase === "plan_step" && entry.source === "reasoning_summary")
-      .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
-      .reduce<
-        Array<{
-          id: string;
-          title: string;
-          status: string;
-          meta: string;
-          visualState: ReturnType<typeof planStepVisualState>;
-        }>
-      >((items, entry) => {
-        const title = (entry.text || entry.resultSummary || entry.activityLabel || "").trim();
-        if (!title) return items;
-        const key = title.toLowerCase();
-        if (seen.has(key)) return items;
-        seen.add(key);
-        items.push({
-          id: entry.id || `plan-step:${entry.timestamp || items.length}`,
-          title,
-          status: "planned",
-          meta: "live plan hint",
-          visualState: "queued",
-        });
-        return items;
-      }, [])
-      .slice(-8);
-  }, [transcriptEntries]);
-  const plannedItems = useMemo(() => {
-    if (activePlan?.steps?.length) {
-      return activePlan.steps.map((step, index) => ({
-        id: step.id || `step-${index + 1}`,
-        title: compactPlanStepTitle(step, index),
-        status: step.status || (index === activePlan.current_step ? "running" : "pending"),
-        meta:
-          step.result_summary ||
-          step.error_summary ||
-          step.actual_tool ||
-          step.expected_tool ||
-          "runtime plan",
-        visualState: planStepVisualState(step.status),
-      }));
-    }
-    return livePlanItems;
-  }, [activePlan, livePlanItems]);
-  const planTabState: "blocked" | "working" | "planned" | "idle" = blockingApproval
-    ? "blocked"
-    : currentWorkItems.length || isStreaming || approvalContinuationPending
-      ? "working"
-      : plannedItems.length
-        ? "planned"
-        : "idle";
-  const planTabCount = blockingApproval
-    ? "!"
-    : currentWorkItems.length
-      ? currentWorkItems.length
-      : planTabState === "planned"
-        ? plannedItems.length || undefined
-        : undefined;
-  const currentWorkHeadline = approvalContinuationPending
-    ? "Approved. ZAKI is continuing."
-    : narrationFrame?.label ||
-      runningTask?.description ||
-      "Waiting for live work updates.";
   const handleTabChange = (nextTab: AgentInspectorTab) => {
-    setManualTabSelected(true);
     setTab(nextTab);
   };
 
@@ -1346,90 +686,6 @@ export function AgentInspectorRail({
     setCronQuickDraft("in1h");
     setCronCustomDateTimeDraft(defaultScheduleCustomDateTime());
     setConfirmCronDeleteId(null);
-  };
-
-  const handleExpandTask = async (task: NullalisTaskItem) => {
-    const nextId = expandedTaskId === task.taskId ? null : task.taskId;
-    setExpandedTaskId(nextId);
-    setConfirmStopTaskId(null);
-    if (!nextId || taskDetailById[nextId] || taskDetailLoadingId === nextId) return;
-    setTaskDetailLoadingId(nextId);
-    setTaskDetailErrorById((current) => ({ ...current, [nextId]: null }));
-    try {
-      const { response, data } = await fetchAgentTask(nextId);
-      if (!response.ok) {
-        throw new Error(cronActionError(data, `task_${response.status}`));
-      }
-      setTaskDetailById((current) => ({
-        ...current,
-        [nextId]: data && typeof data === "object" ? (data as Record<string, unknown>) : null,
-      }));
-    } catch (error) {
-      setTaskDetailErrorById((current) => ({
-        ...current,
-        [nextId]: error instanceof Error ? error.message : "task_detail_unavailable",
-      }));
-    } finally {
-      setTaskDetailLoadingId(null);
-    }
-  };
-
-  const handleStopTask = async (task: NullalisTaskItem) => {
-    setStoppingTaskId(task.taskId);
-    try {
-      const { response, data } = await stopAgentTask(task.taskId);
-      if (!response.ok || data?.error) {
-        throw new Error(data?.error || `task_stop_${response.status}`);
-      }
-      setStoppedTaskIds((current) => ({ ...current, [task.taskId]: true }));
-      setConfirmStopTaskId(null);
-      toast.success("Task stop requested.");
-      await refreshRuntimeSchedules();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to stop task.");
-    } finally {
-      setStoppingTaskId(null);
-    }
-  };
-
-  const handleTodoStatusUpdate = async (list: AgentTodoList, item: AgentTodoItem) => {
-    if (!sessionKey) return;
-    const nextStatus = nextTodoStatus(item.status);
-    const busyKey = `${list.list_id}:${item.id}`;
-    setTodoBusyKey(busyKey);
-    try {
-      const { response, data } = await updateAgentSessionTodoItem(
-        sessionKey,
-        list.list_id,
-        item.id,
-        { status: nextStatus }
-      );
-      if (!response.ok || data?.error || !data?.list) {
-        throw new Error(data?.error || `todo_update_${response.status}`);
-      }
-      setTodosData((current) => {
-        const replacement = data.list as AgentTodoList;
-        const existing = current?.lists ?? [];
-        const nextLists = existing.length
-          ? existing.map((candidate) =>
-              candidate.list_id === replacement.list_id ? replacement : candidate
-            )
-          : [replacement];
-        if (!nextLists.some((candidate) => candidate.list_id === replacement.list_id)) {
-          nextLists.unshift(replacement);
-        }
-        return {
-          session_key: data.session_key || current?.session_key || sessionKey,
-          current_list_id: data.current_list_id ?? current?.current_list_id ?? replacement.list_id,
-          lists: nextLists,
-        };
-      });
-      toast.success("Checklist updated.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Checklist update failed.");
-    } finally {
-      setTodoBusyKey(null);
-    }
   };
 
   const beginCronCreate = () => {
@@ -1536,85 +792,8 @@ export function AgentInspectorRail({
 
   useEffect(() => {
     if (!tabRequest) return;
-    setManualTabSelected(true);
-    setTab(tabRequest.tab);
+    setTab(tabRequest.tab === "cron" ? "cron" : "artifacts");
   }, [tabRequest?.id, tabRequest?.tab]);
-
-  useEffect(() => {
-    if (tabRequest) return;
-    if (manualTabSelected) return;
-    if (hasBrowserFrame) {
-      setTab("browser");
-      return;
-    }
-    if (planTabState !== "idle") {
-      setTab("plan");
-      return;
-    }
-    if (artifactTabState !== "empty" && artifactTabState !== "unavailable") {
-      setTab("artifacts");
-      return;
-    }
-    if (scheduleRows.length) {
-      setTab("cron");
-      return;
-    }
-    if (sourcesTabState !== "empty") {
-      setTab("evidence");
-    }
-  }, [
-    artifactTabState,
-    hasBrowserFrame,
-    manualTabSelected,
-    planTabState,
-    scheduleRows.length,
-    sourcesTabState,
-    tabRequest,
-  ]);
-
-  useEffect(() => {
-    if (!sessionKey) {
-      setTodosData(null);
-      setTodosLoading(false);
-      setPlanData(null);
-      return;
-    }
-    let active = true;
-    setTodosLoading(true);
-
-    void Promise.allSettled([
-      fetchAgentSessionTodos(sessionKey),
-      fetchAgentSessionPlan(sessionKey),
-    ]).then(([todosResult, planResult]) => {
-      if (!active) return;
-      if (todosResult.status === "fulfilled") {
-        const { response, data } = todosResult.value;
-        if (response.ok) {
-          setTodosData(data);
-        } else {
-          setTodosData(null);
-        }
-      } else {
-        setTodosData(null);
-      }
-
-      if (planResult.status === "fulfilled") {
-        const { response, data } = planResult.value;
-        if (response.ok) {
-          setPlanData(data);
-        } else {
-          setPlanData(null);
-        }
-      } else {
-        setPlanData(null);
-      }
-      setTodosLoading(false);
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [sessionKey, isStreaming]);
 
   const setArtifactExportState = (
     artifactId: string,
@@ -1793,7 +972,7 @@ export function AgentInspectorRail({
       <div className="zaki-agent-inspector__topline">
         <div>
           <span>Agent panel</span>
-          <strong>{isStreaming ? "Live" : "Ready"}</strong>
+          <strong>Ready</strong>
         </div>
         {onClose ? (
           <button
@@ -1809,241 +988,22 @@ export function AgentInspectorRail({
       </div>
       <V2Tabs
         fullWidth
-        columns={3}
+        columns={2}
         className="zaki-agent-inspector__tabs"
         ariaLabel="Agent panels"
         value={tab}
         onChange={handleTabChange}
         options={[
-          { id: "plan", label: "Plan", count: planTabCount },
-          { id: "cron", label: "Schedules", count: scheduleTabCount },
-          { id: "evidence", label: "Sources", count: sourceRows.length || undefined },
           {
             id: "artifacts",
             label: "Artifacts",
             count: artifactTabCount,
           },
-          {
-            id: "browser",
-            label: "Browser",
-            count: browserTabCount,
-          },
+          { id: "cron", label: "Schedules", count: scheduleTabCount },
         ]}
       />
 
       <div className="zaki-agent-inspector__body">
-        {tab === "plan" ? (
-          <V2Panel aria-label="Plan" className="zaki-agent-inspector__pane">
-            <div className="zaki-agent-inspector__plan-head">
-              <div>
-                <div className="zaki-agent-inspector__plan-title">work</div>
-                <div className="zaki-agent-inspector__plan-meta">
-                  {currentWorkItems.length ? (
-                    <span className="zaki-agent-inspector__plan-progress">
-                      <span className="bar" aria-hidden>
-                        <span className="fill" style={{ width: `${workProgressPercent}%` }} />
-                      </span>
-                      <span className="num">
-                        {completedWorkCount} / {currentWorkItems.length}
-                      </span>
-                    </span>
-                  ) : (
-                    <span>{planTabState}</span>
-                  )}
-                  <span className="sep">.</span>
-                  <span>
-                    {currentWorkItems.length
-                      ? currentWorkSource
-                      : plannedItems.length
-                        ? `${plannedItems.length} planned`
-                        : "session scoped"}
-                  </span>
-                </div>
-              </div>
-            </div>
-            {blockingApproval ? (
-              <section className="zaki-agent-inspector__jobs" data-testid="agent-plan-blocked">
-                <div className="zaki-agent-inspector__jobs-head">
-                  <span>blocked</span>
-                  <span>{blockingApproval.riskLevel || "approval"}</span>
-                </div>
-                <V2InlineRow
-                  tone="warn"
-                  icon={<ShieldAlert className="size-4" aria-hidden />}
-                  title={`Waiting on ${blockingApproval.tool}`}
-                  meta={blockingApproval.reason || "Approval required before this run continues."}
-                />
-              </section>
-            ) : null}
-            <section className="zaki-agent-inspector__jobs" data-testid="agent-current-work">
-              <div className="zaki-agent-inspector__jobs-head">
-                <span>current work</span>
-                <span>
-                  {currentWorkItems.length
-                    ? `${currentWorkSource} · ${currentWorkItems.length} ${currentWorkItems.length === 1 ? "item" : "items"}`
-                    : tasksLoading || todosLoading
-                      ? "checking"
-                      : currentWorkSource}
-                </span>
-              </div>
-              {currentWorkItems.length ? (
-                <ol className="zaki-agent-inspector__plan-list">
-                  {currentWorkItems.map((workItem) => (
-                    <li
-                      key={workItem.id}
-                      data-testid="agent-task-row"
-                      className={cn("zaki-agent-inspector__todo", `is-${workItem.visualState}`)}
-                    >
-                      <div className="zaki-agent-inspector__todo-mark" aria-hidden>
-                        {workItem.kind === "persisted-todo"
-                          ? todoStatusIcon(workItem.status)
-                          : taskStatusIcon(workItem.status)}
-                      </div>
-                      <div className="zaki-agent-inspector__todo-body">
-                        <div className="zaki-agent-inspector__todo-text">{workItem.title}</div>
-                        <div className="zaki-agent-inspector__todo-meta">
-                          {workItem.metaParts.map((part, index) => (
-                            <span key={`${workItem.id}:meta:${part}`}>
-                              {index > 0 ? <span className="sep">. </span> : null}
-                              {part}
-                            </span>
-                          ))}
-                        </div>
-                        {workItem.kind === "persisted-todo" ? (
-                          <div className="zaki-agent-inspector__todo-actions">
-                            <button
-                              type="button"
-                              disabled={todoBusyKey === workItem.id}
-                              onClick={() => void handleTodoStatusUpdate(workItem.list, workItem.item)}
-                            >
-                              {todoBusyKey === workItem.id ? "Updating" : todoActionLabel(workItem.status)}
-                            </button>
-                          </div>
-                        ) : !workItem.readonlyTodo ? (
-                          <div className="zaki-agent-inspector__todo-actions">
-                            <button
-                              type="button"
-                              onClick={() => void handleExpandTask(workItem.task)}
-                              aria-expanded={expandedTaskId === workItem.task.taskId}
-                            >
-                              {expandedTaskId === workItem.task.taskId ? "Hide details" : "Details"}
-                            </button>
-                            {taskCanStop(workItem.task.status) ? (
-                              confirmStopTaskId === workItem.task.taskId ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    disabled={stoppingTaskId === workItem.task.taskId}
-                                    onClick={() => void handleStopTask(workItem.task)}
-                                  >
-                                    {stoppingTaskId === workItem.task.taskId ? "Stopping" : "Confirm stop"}
-                                  </button>
-                                  <button type="button" onClick={() => setConfirmStopTaskId(null)}>
-                                    Cancel
-                                  </button>
-                                </>
-                              ) : (
-                                <button
-                                  type="button"
-                                  disabled={stoppingTaskId === workItem.task.taskId}
-                                  onClick={() => setConfirmStopTaskId(workItem.task.taskId)}
-                                >
-                                  Stop
-                                </button>
-                              )
-                            ) : null}
-                          </div>
-                        ) : null}
-                        {workItem.kind === "task" && expandedTaskId === workItem.task.taskId ? (
-                          <div className="zaki-agent-inspector__task-detail" data-testid="agent-task-detail">
-                            {taskDetailLoadingId === workItem.task.taskId ? (
-                              <div className="v2-empty-line">Loading task detail...</div>
-                            ) : taskDetailErrorById[workItem.task.taskId] ? (
-                              <div className="v2-empty-line">
-                                Task detail unavailable: {taskDetailErrorById[workItem.task.taskId]}
-                              </div>
-                            ) : (
-                              <dl>
-                                <div>
-                                  <dt>Task</dt>
-                                  <dd>{taskDetailText(taskDetailById[workItem.task.taskId], "id", "task_id", "taskId") || workItem.task.taskId}</dd>
-                                </div>
-                                <div>
-                                  <dt>Session</dt>
-                                  <dd>{taskDetailText(taskDetailById[workItem.task.taskId], "session_key", "sessionKey") || "session scoped"}</dd>
-                                </div>
-                                <div>
-                                  <dt>Started</dt>
-                                  <dd>{taskDetailTime(taskDetailById[workItem.task.taskId], "started_at", "startedAt", "created_at", "createdAt") || "not recorded"}</dd>
-                                </div>
-                                <div>
-                                  <dt>Updated</dt>
-                                  <dd>{taskDetailTime(taskDetailById[workItem.task.taskId], "updated_at", "updatedAt", "completed_at", "completedAt") || formatCalendarStamp(workItem.task.updatedAt)}</dd>
-                                </div>
-                                <div>
-                                  <dt>Result</dt>
-                                  <dd>{taskDetailText(taskDetailById[workItem.task.taskId], "error", "last_error", "result", "summary") || taskStatusLabel(workItem.task.status)}</dd>
-                                </div>
-                              </dl>
-                            )}
-                          </div>
-                        ) : null}
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              ) : tasksLoading || todosLoading ? (
-                <div className="v2-empty-line">Checking active work...</div>
-              ) : planTabState === "working" ? (
-                <div className={cn("zaki-agent-inspector__live-signal", "is-live")}>
-                  <span>live run</span>
-                  <strong>{currentWorkHeadline}</strong>
-                  <small>Structured work items will appear when the runtime emits them.</small>
-                </div>
-              ) : (
-                <div className="v2-empty-line" data-testid="agent-plan-empty">
-                  No active work for this session.
-                </div>
-              )}
-            </section>
-            {plannedItems.length ? (
-              <section className="zaki-agent-inspector__jobs" data-testid="agent-planned">
-                <div className="zaki-agent-inspector__jobs-head">
-                  <span>planned</span>
-                  <span>{activePlan ? `${plannedItems.length} steps` : `${plannedItems.length} hints`}</span>
-                </div>
-                {activePlan?.summary ? (
-                  <div className="v2-empty-line">{activePlan.summary}</div>
-                ) : null}
-                <ol className="zaki-agent-inspector__plan-list">
-                  {plannedItems.map((item) => (
-                    <li
-                      key={item.id}
-                      className={cn("zaki-agent-inspector__todo", `is-${item.visualState}`)}
-                    >
-                      <div className="zaki-agent-inspector__todo-mark" aria-hidden>
-                        {planStepStatusIcon(item.status)}
-                      </div>
-                      <div className="zaki-agent-inspector__todo-body">
-                        <div className="zaki-agent-inspector__todo-text">{item.title}</div>
-                        <div className="zaki-agent-inspector__todo-meta">
-                          <span>{String(item.status || "planned").replace(/_/g, " ")}</span>
-                          {item.meta ? (
-                            <>
-                              <span className="sep">.</span>
-                              <span>{item.meta}</span>
-                            </>
-                          ) : null}
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              </section>
-            ) : null}
-          </V2Panel>
-        ) : null}
-
         {tab === "cron" ? (
           <V2Panel aria-label="Schedules" className="zaki-agent-inspector__pane">
             <div className="zaki-agent-inspector__cron-head">
@@ -2345,63 +1305,6 @@ export function AgentInspectorRail({
           </V2Panel>
         ) : null}
 
-        {tab === "evidence" ? (
-          <V2Panel aria-label="Sources" className="zaki-agent-inspector__pane">
-            <V2PanelHead title="Sources" />
-            {sourceBriefText ? (
-              <div className="zaki-agent-inspector__source-brief" data-testid="agent-sources-brief">
-                {sourceBriefText}
-              </div>
-            ) : null}
-            {sourceRows.length ? (
-              <div className="zaki-agent-inspector__source-stack">
-                {sourceRows.map((row) => (
-                  <article key={row.event.id} className="zaki-agent-inspector__source-doc">
-                    <div className="zaki-agent-inspector__source-head">
-                      <span className="name">{row.title}</span>
-                      <span className="meta">{row.meta}</span>
-                    </div>
-                    <div className="zaki-agent-inspector__source-body">
-                      <span className="hl">{row.summary}</span>
-                      {row.event.files.length > 1 ? (
-                        <small>{row.event.files.slice(1).join(", ")}</small>
-                      ) : null}
-                      {row.event.href ? (
-                        <a href={row.event.href} target="_blank" rel="noreferrer">
-                          Open source
-                        </a>
-                      ) : null}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : sourcesTabState === "empty" ? (
-              <div className="v2-empty-line">
-                No sources surfaced in this turn yet. Web pages, files, memory hits, and context events will appear here when the runtime emits them.
-              </div>
-            ) : null}
-            {trustedContextSample ? (
-              <div className="zaki-agent-inspector__evidence-context">
-                <span>context source</span>
-                <strong>{contextSourceLabel(contextGaugeData)}</strong>
-                <small>
-                  {ctxPct != null
-                    ? `${Math.round(ctxPct)}% pressure${
-                        contextGaugeData?.confidence ? ` · ${contextGaugeData.confidence}` : ""
-                      }`
-                    : "Pressure unavailable"}
-                </small>
-              </div>
-            ) : null}
-            {hasMemorySources && onOpenMemory ? (
-              <PanelActionButton onClick={onOpenMemory} ariaLabel="Open memory graph">
-                <Brain className="size-4" aria-hidden />
-                Open memory graph
-              </PanelActionButton>
-            ) : null}
-          </V2Panel>
-        ) : null}
-
         {tab === "artifacts" ? (
           <V2Panel aria-label="Artifacts" className="zaki-agent-inspector__pane">
             <V2PanelHead title="Artifacts" />
@@ -2615,112 +1518,6 @@ export function AgentInspectorRail({
             {artifactTabState === "empty" ? (
               <div className="v2-empty-line">
                 No artifacts in this session yet.
-              </div>
-            ) : null}
-          </V2Panel>
-        ) : null}
-
-        {tab === "browser" ? (
-          <V2Panel aria-label="Browser" className="zaki-agent-inspector__pane">
-            <V2PanelHead title="Browser" meta={browserTabState} />
-            <section className="zaki-agent-inspector__jobs" data-testid="agent-browser-brief">
-              <div className="zaki-agent-inspector__jobs-head">
-                <span>brief</span>
-                <span>{browserTabState}</span>
-              </div>
-              <V2InlineRow
-                tone={browserTabState === "attention" ? "warn" : hasBrowserFrame ? "accent" : "default"}
-                icon={<Globe2 className="size-4" aria-hidden />}
-                title={browserBriefTitle}
-                meta={browserBriefMeta}
-              />
-              <dl className="zaki-agent-inspector__fact-grid">
-                <div>
-                  <dt>Live page</dt>
-                  <dd>{hasBrowserFrame ? browserFrame?.title?.trim() || "active" : "none"}</dd>
-                </div>
-                <div>
-                  <dt>Extension</dt>
-                  <dd>{extensionStatusLabel}</dd>
-                </div>
-                <div>
-                  <dt>Last action</dt>
-                  <dd>{latestBrowserRow ? latestBrowserRow.label : hasBrowserFrame ? "browser frame" : "none"}</dd>
-                </div>
-                <div>
-                  <dt>Agent browser</dt>
-                  <dd>{hasBrowserFrame ? "live" : sandboxLabel}</dd>
-                </div>
-              </dl>
-            </section>
-            {hasBrowserFrame ? (
-              <section className="zaki-agent-inspector__jobs" data-testid="agent-browser-live">
-                <div className="zaki-agent-inspector__jobs-head">
-                  <span>live page</span>
-                  <span>watch only</span>
-                </div>
-                <BrowserViewFeedPanel
-                  frame={browserFrame}
-                  embedded
-                  onClose={() => onCloseBrowserFrame?.()}
-                />
-              </section>
-            ) : null}
-            <section className="zaki-agent-inspector__jobs" data-testid="agent-browser-connections">
-              <div className="zaki-agent-inspector__jobs-head">
-                <span>connections</span>
-                <span>{extensionDiagnosticsLoading ? "checking" : browserTabState}</span>
-              </div>
-              <V2InlineRow
-                tone={appBrowserActivity || sandbox?.enabled ? "accent" : "default"}
-                icon={<Globe2 className="size-4" aria-hidden />}
-                title="Agent browser"
-                meta={agentBrowserStatus}
-              />
-              <V2InlineRow
-                tone={extensionAttention ? "warn" : extensionPaired ? "success" : "default"}
-                icon={<MonitorSmartphone className="size-4" aria-hidden />}
-                title="Browser extension"
-                meta={extensionStatusMeta}
-              />
-            </section>
-            <section className="zaki-agent-inspector__jobs" data-testid="agent-browser-activity">
-              <div className="zaki-agent-inspector__jobs-head">
-                <span>recent activity</span>
-                <span>{browserRows.length ? `${browserRows.length} events` : "empty"}</span>
-              </div>
-              {browserRows.length ? (
-                <ol className="zaki-agent-inspector__event-list">
-                  {browserRows.map((event) => (
-                    <li key={event.id}>
-                      <Globe2 className="zaki-agent-inspector__event-icon" aria-hidden />
-                      <div>
-                        <strong>{event.label}</strong>
-                        <span>{event.summary}</span>
-                        {event.meta ? <small>{event.meta}</small> : null}
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <div className="v2-empty-line">
-                  No browser activity in this session.
-                </div>
-              )}
-            </section>
-            {openBrowserDeviceSettings ? (
-              <div
-                className="zaki-agent-inspector__settings-links"
-                data-testid="agent-settings-deep-links"
-                aria-label="Browser settings deep links"
-              >
-                <PanelActionButton
-                  onClick={openBrowserDeviceSettings}
-                  ariaLabel="Open Devices settings"
-                >
-                  <MonitorSmartphone className="size-4" aria-hidden />
-                  Devices
-                </PanelActionButton>
               </div>
             ) : null}
           </V2Panel>

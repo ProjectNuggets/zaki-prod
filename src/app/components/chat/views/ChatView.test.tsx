@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom";
 import { describe, expect, it, jest } from "@jest/globals";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 
 jest.mock("../index", () => ({
   MessageBubble: ({
@@ -195,7 +195,6 @@ describe("ChatView", () => {
         isStreaming={false}
         botMode
         firstMessageTransition={false}
-        onQuickReply={jest.fn()}
       />
     );
 
@@ -276,10 +275,7 @@ describe("ChatView", () => {
     expect(screen.getByRole("status")).toHaveTextContent("thinking:");
   });
 
-  it("renders collapsed research sources under agent replies with wired panel actions", () => {
-    const openArtifacts = jest.fn();
-    const openSources = jest.fn();
-
+  it("keeps artifact, source, and memory evidence out of the Agent reply footer", () => {
     render(
       <ChatView
         messages={[
@@ -337,44 +333,12 @@ describe("ChatView", () => {
         isStreaming={false}
         botMode
         firstMessageTransition={false}
-        onOpenAgentArtifacts={openArtifacts}
-        onOpenAgentSources={openSources}
       />
     );
 
-    expect(
-      within(screen.getByTestId("agent-reply-artifact")).getByText("launch-brief.md")
-    ).toBeInTheDocument();
-    const sources = screen.getByTestId("agent-reply-sources");
-    expect(sources).not.toHaveAttribute("open");
-    expect(
-      within(sources).getByText("Used 2 sources")
-    ).toBeInTheDocument();
-    expect(
-      within(sources).getByText("docs/ui-handoff.md")
-    ).toBeInTheDocument();
-    expect(
-      within(sources).getByText("example.com")
-    ).toBeInTheDocument();
-    expect(
-      within(sources).getByText("website")
-    ).toBeInTheDocument();
-    expect(within(sources).queryByText("User prefers short answers.")).not.toBeInTheDocument();
-    expect(
-      within(sources).queryByText("launch-brief.md")
-    ).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /open in panel/i }));
-    fireEvent.click(within(sources).getByText("Used 2 sources"));
-    expect(sources).toHaveAttribute("open");
-    fireEvent.click(
-      within(sources).getByRole("button", {
-        name: /docs\/ui-handoff\.md/i,
-      })
-    );
-
-    expect(openArtifacts).toHaveBeenCalledTimes(1);
-    expect(openSources).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("message-bubble-assistant-1")).toHaveTextContent("Done.");
+    expect(screen.queryByTestId("agent-reply-artifact")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("agent-reply-sources")).not.toBeInTheDocument();
   });
 
   it("does not show internal context or runtime events as reply sources", () => {
@@ -424,9 +388,7 @@ describe("ChatView", () => {
     expect(screen.queryByTestId("agent-reply-sources")).not.toBeInTheDocument();
   });
 
-  it("offers facet quick actions for strategy-shaped agent replies", () => {
-    const onQuickReply = jest.fn();
-
+  it("does not render quick replies inside the transcript", () => {
     render(
       <ChatView
         messages={[
@@ -441,54 +403,9 @@ describe("ChatView", () => {
         isStreaming={false}
         botMode
         firstMessageTransition={false}
-        onQuickReply={onQuickReply}
       />
     );
 
-    expect(screen.getByRole("button", { name: /Ask the critic/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Get the blunt take/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Try the sideways take/i })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /Ask the critic/i }));
-    expect(onQuickReply).toHaveBeenCalledWith("Give me the critic's take on your last answer.");
-  });
-
-  it("switches to answer actions after a facet turn", () => {
-    render(
-      <ChatView
-        messages={[
-          { id: "user-1", role: "user", content: "Use the critic." },
-          {
-            id: "assistant-1",
-            role: "assistant",
-            content: "My inner critic says the plan is too generic. My synthesis: narrow the launch.",
-          },
-        ]}
-        replayTimelines={{
-          "assistant-1": [
-            {
-              id: "delegate-1",
-              kind: "tool",
-              tool: "delegate",
-              text: "Using delegate",
-              timestamp: 1,
-              inputPreview: '{"agent":"the-critic"}',
-              outputPreview: "delegate agent=the-critic status=completed\nresult:\nThe plan is too generic.",
-              resultState: "done",
-            },
-          ],
-        }}
-        isHistoryLoading={false}
-        isStreaming={false}
-        botMode
-        firstMessageTransition={false}
-        onQuickReply={jest.fn()}
-      />
-    );
-
-    expect(screen.getByRole("button", { name: /Tighten this/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Turn into plan/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Save to brain/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Ask the critic/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("quick-reply-chips")).not.toBeInTheDocument();
   });
 });

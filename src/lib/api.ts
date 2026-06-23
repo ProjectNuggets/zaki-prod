@@ -55,6 +55,7 @@ export type MemoryActivity = {
 
 type ApiRequestOptions = RequestInit & {
   skipAuth?: boolean;
+  redirectOnAuthFailure?: boolean;
 };
 
 export function getApiBase() {
@@ -203,7 +204,7 @@ export async function apiRequest(
   options: ApiRequestOptions = {},
   _isRetry = false  // internal flag — prevents refresh loop
 ): Promise<Response> {
-  const { skipAuth, headers, body, ...rest } = options;
+  const { skipAuth, redirectOnAuthFailure = true, headers, body, ...rest } = options;
   const requestHeaders = new Headers(headers ?? {});
   const token = getAuthToken();
 
@@ -235,12 +236,14 @@ export async function apiRequest(
       const retryResponse = await apiRequest(path, options, true);
       // WR-01: if the retry also returns 401, the token is invalid — log out.
       if (retryResponse.status === 401 && typeof window !== "undefined") {
+        if (!redirectOnAuthFailure) return retryResponse;
         useAuthStore.getState().logout();
         redirectToLogin();
       }
       return retryResponse;
     }
     // Refresh failed — redirect to login
+    if (!redirectOnAuthFailure) return response;
     if (typeof window !== "undefined") {
       useAuthStore.getState().logout();
       redirectToLogin();
@@ -282,7 +285,7 @@ export async function backendAuthRequest(
   path: string,
   options: ApiRequestOptions = {}
 ): Promise<Response> {
-  const { headers, ...rest } = options;
+  const { redirectOnAuthFailure = true, headers, ...rest } = options;
   const requestHeaders = new Headers(headers ?? {});
   const token = getAuthToken();
   if (token && !requestHeaders.has("Authorization")) {
@@ -297,6 +300,7 @@ export async function backendAuthRequest(
       retryHeaders.set("Authorization", `Bearer ${newToken}`);
       return backendRequest(path, { ...rest, headers: retryHeaders });
     }
+    if (!redirectOnAuthFailure) return response;
     if (typeof window !== "undefined") {
       useAuthStore.getState().logout();
       redirectToLogin();
@@ -2491,8 +2495,11 @@ export async function synthesizeSpeech(
   return { response, data };
 }
 
-export async function fetchAgentMe() {
-  const response = await backendAuthRequest("/api/agent/me", { method: "GET" });
+export async function fetchAgentMe(options?: Pick<ApiRequestOptions, "redirectOnAuthFailure">) {
+  const response = await backendAuthRequest("/api/agent/me", {
+    method: "GET",
+    redirectOnAuthFailure: options?.redirectOnAuthFailure,
+  });
   const data = await parseApiJson<{ userId: string }>(response);
   return { response, data };
 }
@@ -2512,8 +2519,11 @@ export async function updateAgentHeartbeat(payload: { enabled: boolean }) {
   return { response, data };
 }
 
-export async function listAgentCron() {
-  const response = await backendAuthRequest("/api/agent/cron", { method: "GET" });
+export async function listAgentCron(options?: Pick<ApiRequestOptions, "redirectOnAuthFailure">) {
+  const response = await backendAuthRequest("/api/agent/cron", {
+    method: "GET",
+    redirectOnAuthFailure: options?.redirectOnAuthFailure,
+  });
   const data = await parseApiJson<Record<string, unknown>>(response);
   return { response, data };
 }
@@ -2990,7 +3000,10 @@ export type AgentSessionApprovalPayload = {
 };
 
 export async function listAgentSessions() {
-  const response = await backendAuthRequest("/api/agent/sessions", { method: "GET" });
+  const response = await backendAuthRequest("/api/agent/sessions", {
+    method: "GET",
+    redirectOnAuthFailure: false,
+  });
   const data = await parseApiJson<{ sessions: AgentSession[] }>(response);
   return { response, data };
 }
@@ -3000,6 +3013,7 @@ export async function fetchAgentSession(sessionKey: string) {
   const encoded = encodeURIComponent(sessionKey);
   const response = await backendAuthRequest(`/api/agent/sessions/${encoded}`, {
     method: "GET",
+    redirectOnAuthFailure: false,
   });
   const data = await parseApiJson<AgentSession>(response);
   return { response, data };
@@ -3032,6 +3046,7 @@ export async function fetchAgentSessionContext(sessionKey: string) {
   const encoded = encodeURIComponent(sessionKey);
   const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/context`, {
     method: "GET",
+    redirectOnAuthFailure: false,
   });
   const data = await parseApiJson<AgentSessionContext>(response);
   return { response, data };
@@ -3042,6 +3057,7 @@ export async function fetchAgentSessionTodos(sessionKey: string) {
   const encoded = encodeURIComponent(sessionKey);
   const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/todos`, {
     method: "GET",
+    redirectOnAuthFailure: false,
   });
   const data = await parseApiJson<AgentSessionTodosResponse>(response);
   return { response, data };
@@ -3078,6 +3094,7 @@ export async function fetchAgentSessionPlan(sessionKey: string) {
   const encoded = encodeURIComponent(sessionKey);
   const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/plan`, {
     method: "GET",
+    redirectOnAuthFailure: false,
   });
   const data = await parseApiJson<AgentSessionPlanResponse>(response);
   return { response, data };
@@ -3098,6 +3115,7 @@ export async function fetchAgentSessionHistory(sessionKey: string) {
   const encoded = encodeURIComponent(sessionKey);
   const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/history`, {
     method: "GET",
+    redirectOnAuthFailure: false,
   });
   const data = await parseApiJson<{ messages: Record<string, unknown>[] }>(response);
   return { response, data };
@@ -3139,9 +3157,12 @@ export async function fetchMemoryDoctor() {
   return { response, data };
 }
 
-export async function fetchAgentExtensionDiagnostics() {
+export async function fetchAgentExtensionDiagnostics(
+  options?: Pick<ApiRequestOptions, "redirectOnAuthFailure">
+) {
   const response = await backendAuthRequest("/api/agent/diagnostics/extension", {
     method: "GET",
+    redirectOnAuthFailure: options?.redirectOnAuthFailure,
   });
   const data = await parseApiJson<AgentExtensionDiagnosticsResponse>(response);
   return { response, data };
@@ -3255,6 +3276,7 @@ export async function listAgentTasks(opts?: {
   status?: string;
   limit?: number;
   cursor?: string;
+  redirectOnAuthFailure?: boolean;
 }) {
   const response = await backendAuthRequest(
     appendBrainQueryParams("/api/agent/tasks", {
@@ -3262,7 +3284,7 @@ export async function listAgentTasks(opts?: {
       limit: opts?.limit,
       cursor: opts?.cursor,
     }),
-    { method: "GET" }
+    { method: "GET", redirectOnAuthFailure: opts?.redirectOnAuthFailure }
   );
   const data = await parseApiJson<{ tasks?: AgentTask[]; items?: AgentTask[] }>(response);
   return { response, data };
@@ -3289,6 +3311,7 @@ export async function listAgentJobs(opts?: {
   status?: string;
   limit?: number;
   cursor?: string;
+  redirectOnAuthFailure?: boolean;
 }) {
   const response = await backendAuthRequest(
     appendBrainQueryParams("/api/agent/jobs", {
@@ -3296,7 +3319,7 @@ export async function listAgentJobs(opts?: {
       limit: opts?.limit,
       cursor: opts?.cursor,
     }),
-    { method: "GET" }
+    { method: "GET", redirectOnAuthFailure: opts?.redirectOnAuthFailure }
   );
   const data = await parseApiJson<{ jobs?: AgentJob[]; items?: AgentJob[] }>(response);
   return { response, data };
@@ -3355,6 +3378,7 @@ export async function listAgentArtifacts(opts?: {
   limit?: number;
   cursor?: string;
   session_key?: string;
+  redirectOnAuthFailure?: boolean;
 }) {
   const response = await backendAuthRequest(
     appendBrainQueryParams("/api/agent/artifacts", {
@@ -3362,7 +3386,7 @@ export async function listAgentArtifacts(opts?: {
       cursor: opts?.cursor,
       session_key: opts?.session_key,
     }),
-    { method: "GET" }
+    { method: "GET", redirectOnAuthFailure: opts?.redirectOnAuthFailure }
   );
   const data = await parseApiJson<{ artifacts?: AgentArtifact[]; items?: AgentArtifact[] }>(
     response
@@ -3370,10 +3394,13 @@ export async function listAgentArtifacts(opts?: {
   return { response, data };
 }
 
-export async function fetchAgentArtifact(artifactId: string) {
+export async function fetchAgentArtifact(
+  artifactId: string,
+  options?: Pick<ApiRequestOptions, "redirectOnAuthFailure">
+) {
   const response = await backendAuthRequest(
     `/api/agent/artifacts/${encodeURIComponent(artifactId)}`,
-    { method: "GET" }
+    { method: "GET", redirectOnAuthFailure: options?.redirectOnAuthFailure }
   );
   const data = await parseApiJson<AgentArtifact>(response);
   return { response, data };

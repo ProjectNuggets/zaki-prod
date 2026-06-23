@@ -182,6 +182,23 @@ describe("MessageBubble source chip", () => {
     expect(screen.getByText(/used .*memor|memor.*used/i)).toBeInTheDocument();
   });
 
+  it("keeps memory and document chips out of Agent replies", () => {
+    const message: Message = {
+      id: "agent-memory-1",
+      role: "assistant",
+      content: "Done.",
+      memorySources: [{ id: "a", content: "Lives in Riyadh", type: "fact" }],
+      docSources: [{ id: "d1", title: "contract.pdf", snippet: "Payment is net-30." }],
+    };
+
+    render(<MessageBubble message={message} botMode showWhy animate={false} />);
+
+    expect(screen.getByText("Done.")).toBeInTheDocument();
+    expect(screen.queryByText(/used .*memor|memor.*used/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Lives in Riyadh")).not.toBeInTheDocument();
+    expect(screen.queryByText("contract.pdf")).not.toBeInTheDocument();
+  });
+
   it("offers a don't-use (delete) action on a used memory", async () => {
     const api = await import("@/lib/api");
     render(
