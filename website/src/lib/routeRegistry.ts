@@ -2,6 +2,8 @@ import type { Locale } from "./content";
 
 export type RoutePageKind =
   | "home"
+  | "agent"
+  | "spaces"
   | "product"
   | "pricing"
   | "use-cases"
@@ -29,6 +31,22 @@ export const routeRegistry: RouteDefinition[] = [
     requiresAlternates: true,
     requiresSchema: true,
     alternatesGroup: "home",
+  },
+  {
+    pathname: "/agent/",
+    locale: "en",
+    pageKind: "agent",
+    seoKey: "agent",
+    requiresAlternates: false,
+    requiresSchema: false,
+  },
+  {
+    pathname: "/spaces/",
+    locale: "en",
+    pageKind: "spaces",
+    seoKey: "spaces",
+    requiresAlternates: false,
+    requiresSchema: false,
   },
   {
     pathname: "/ar/",

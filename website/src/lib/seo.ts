@@ -116,6 +116,42 @@ export function getRouteSeo(pathname: string): RouteSeo {
         ? "ar_AR"
         : localeTag;
 
+  if (route === "/agent/") {
+    const description = "ZAKI Agent delegates the whole task — it plans, acts, and follows through. Funny, loyal, and it never sends without you.";
+    return {
+      title: "ZAKI Agent — Never do it alone.",
+      description,
+      canonical: `${SITE_URL}/agent/`,
+      lang: "en",
+      dir: "ltr",
+      imageAlt: "ZAKI Agent in action",
+      localeTag: "en_US",
+      altLocaleTag: "en_US",
+      keywords: "ZAKI Agent, AI agent, task automation, personal AI assistant",
+      schema: [...buildCommonSchema("en", description)],
+      alternates: { en: `${SITE_URL}/agent/`, "x-default": `${SITE_URL}/agent/` },
+      updatedAt: SEO_UPDATED_AT,
+    };
+  }
+
+  if (route === "/spaces/") {
+    const description = "ZAKI Spaces keeps every project in its own world — its own threads, docs, and memory. One mind across all of them, and it never mixes them up.";
+    return {
+      title: "ZAKI Spaces — A world for everything you're working on.",
+      description,
+      canonical: `${SITE_URL}/spaces/`,
+      lang: "en",
+      dir: "ltr",
+      imageAlt: "ZAKI Spaces context isolation",
+      localeTag: "en_US",
+      altLocaleTag: "en_US",
+      keywords: "ZAKI Spaces, AI workspace, context isolation, shared AI",
+      schema: [...buildCommonSchema("en", description)],
+      alternates: { en: `${SITE_URL}/spaces/`, "x-default": `${SITE_URL}/spaces/` },
+      updatedAt: SEO_UPDATED_AT,
+    };
+  }
+
   if (route === "/product/" || route === "/ar/product/") {
     const description =
       locale === "ar"

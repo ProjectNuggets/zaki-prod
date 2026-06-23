@@ -2,8 +2,12 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { HomePage } from "./pages/Home";
 import { FaqPage } from "./pages/FaqPage";
 import { StoryPage } from "./pages/StoryPage";
+import { StoryV4 } from "./pages/StoryV4";
 import { ProductPage } from "./pages/ProductPage";
 import { PricingPage } from "./pages/PricingPage";
+import { PricingV4 } from "./pages/PricingV4";
+import { AgentPage } from "./pages/AgentPage";
+import { SpacesPage } from "./pages/SpacesPage";
 import { UseCasesPage } from "./pages/UseCasesPage";
 import { ContactPage } from "./pages/ContactPage";
 import { LegalPage } from "./pages/LegalPage";
@@ -13,15 +17,17 @@ export function AppRoutes() {
     <Routes>
       <Route path="/" element={<HomePage locale="en" />} />
       <Route path="/ar" element={<HomePage locale="ar" />} />
+      <Route path="/agent" element={<AgentPage />} />
+      <Route path="/spaces" element={<SpacesPage />} />
       <Route path="/product" element={<ProductPage locale="en" />} />
       <Route path="/ar/product" element={<ProductPage locale="ar" />} />
-      <Route path="/pricing" element={<PricingPage locale="en" />} />
+      <Route path="/pricing" element={<PricingV4 />} />
       <Route path="/ar/pricing" element={<PricingPage locale="ar" />} />
       <Route path="/use-cases" element={<UseCasesPage locale="en" />} />
       <Route path="/ar/use-cases" element={<UseCasesPage locale="ar" />} />
       <Route path="/zaki-bot" element={<Navigate to="/product" replace />} />
       <Route path="/ar/zaki-bot" element={<Navigate to="/ar/product" replace />} />
-      <Route path="/story" element={<StoryPage locale="en" />} />
+      <Route path="/story" element={<StoryV4 />} />
       <Route path="/ar/story" element={<StoryPage locale="ar" />} />
       <Route path="/autism-guidance" element={<Navigate to="/use-cases" replace />} />
       <Route path="/ar/autism-guidance" element={<Navigate to="/ar/use-cases" replace />} />

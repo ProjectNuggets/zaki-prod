@@ -1,0 +1,192 @@
+/* ============================================================
+   ZAKI — Brand Foundation
+   The intelligence layer for your life.
+   Tokens lifted faithfully from zaki-prod/src/styles/tokens.css
+   (Kreyatif Studio brand guidelines). Red #f10202 used surgically,
+   teal #219171 as the interactive accent, warm-desert neutrals,
+   Cabinet Grotesk display / Plus Jakarta body / DM Mono labels.
+   ============================================================ */
+
+/* ---------- FONTS ---------- */
+@font-face{font-family:'Cabinet Grotesk';src:url('../fonts/CabinetGrotesk-Bold.woff2') format('woff2');font-weight:700;font-style:normal;font-display:swap;}
+@font-face{font-family:'Cabinet Grotesk';src:url('../fonts/CabinetGrotesk-Extrabold.woff2') format('woff2');font-weight:800;font-style:normal;font-display:swap;}
+@font-face{font-family:'Plus Jakarta Sans';src:url('../fonts/plus-jakarta-sans-latin-400-normal.woff2') format('woff2');font-weight:400;font-style:normal;font-display:swap;}
+@font-face{font-family:'Plus Jakarta Sans';src:url('../fonts/plus-jakarta-sans-latin-500-normal.woff2') format('woff2');font-weight:500;font-style:normal;font-display:swap;}
+@font-face{font-family:'DM Mono';src:url('../fonts/dm-mono-latin-400-normal.woff2') format('woff2');font-weight:400;font-style:normal;font-display:swap;}
+@font-face{font-family:'Zain';src:url('../fonts/zain-arabic-400.woff2') format('woff2');font-weight:400;font-style:normal;font-display:swap;unicode-range:U+0600-06FF,U+0750-077F,U+08A0-08FF,U+FB50-FDFF,U+FE70-FEFF;}
+@font-face{font-family:'Zain';src:url('../fonts/zain-arabic-700.woff2') format('woff2');font-weight:700;font-style:normal;font-display:swap;unicode-range:U+0600-06FF,U+0750-077F,U+08A0-08FF,U+FB50-FDFF,U+FE70-FEFF;}
+
+:root{
+  /* Brand red — surgical use */
+  --red-500:#FA2E2E;
+  --red-700:#f10202;   /* brand primary */
+  --red-800:#D50202;
+  --red-900:#B80202;
+  --brand:var(--red-700);
+  --brand-hover:var(--red-800);
+  --brand-12:rgba(241,2,2,.12);
+  --brand-20:rgba(241,2,2,.20);
+  --brand-30:rgba(241,2,2,.30);
+
+  /* Teal — interactive accent / focus / "memory" */
+  --teal-400:#60E2C5;
+  --teal-700:#29C39A;
+  --teal-900:#219171;  /* brand secondary */
+  --teal:var(--teal-900);
+  --teal-bright:var(--teal-700);
+  --teal-12:rgba(33,145,113,.12);
+  --teal-20:rgba(33,145,113,.20);
+
+  /* Warm-desert neutrals */
+  --n-100:#F8F2E9;
+  --n-200:#EFE3D2;
+  --n-300:#E5D3BD;
+  --n-900:#88735A;
+  --n-1100:#655543;
+  --n-1500:#1F1A14;
+  --n-1600:#0D0B09;
+
+  /* Type families */
+  --f-display:'Cabinet Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --f-body:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --f-mono:'DM Mono','SF Mono','Fira Code',ui-monospace,monospace;
+  --f-arabic:'Zain','Plus Jakarta Sans',sans-serif;
+
+  /* Layout */
+  --maxw:1240px;
+  --gutter:clamp(20px,5vw,64px);
+  --radius-sm:8px;
+  --radius:14px;
+  --radius-lg:20px;
+  --radius-xl:24px;
+
+  /* Motion */
+  --ease:cubic-bezier(.22,1,.36,1);
+  --ease-io:cubic-bezier(.65,.05,.36,1);
+  --t-fast:180ms;
+  --t-base:520ms;
+  --t-slow:900ms;
+}
+
+/* ---------- STAGES (dark / light grounds) ---------- */
+.stage-dark{
+  --bg:#0C0A09; --raised:#141210; --raised-2:#1A1714; --sunken:#070605;
+  --ink-1:#F4EFE7; --ink-2:#C2BAAE; --ink-3:#8B8378; --ink-4:#5E574E;
+  --hair:rgba(244,239,231,.10); --hair-strong:rgba(244,239,231,.20); --hair-faint:rgba(244,239,231,.055);
+  --hover:rgba(244,239,231,.05); --dot:rgba(244,239,231,.09);
+  --on-inverse:#0C0A09;
+  background:var(--bg); color:var(--ink-1);
+}
+.stage-light{
+  --bg:#F8F2E9; --raised:#FFFFFF; --raised-2:#FCF8F2; --sunken:#EFE3D2;
+  --ink-1:#1F1A14; --ink-2:#564737; --ink-3:#88735A; --ink-4:#A8997F;
+  --hair:rgba(31,26,20,.12); --hair-strong:rgba(31,26,20,.22); --hair-faint:rgba(31,26,20,.06);
+  --hover:rgba(31,26,20,.04); --dot:rgba(31,26,20,.10);
+  --on-inverse:#F4EFE7;
+  background:var(--bg); color:var(--ink-1);
+}
+
+/* ---------- RESET ---------- */
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%;}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto;}}
+body{
+  font-family:var(--f-body);background:#0C0A09;color:#F4EFE7;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  overflow-x:hidden;
+}
+img,svg{display:block;max-width:100%;}
+a{color:inherit;text-decoration:none;}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
+::selection{background:var(--teal-20);color:inherit;}
+:focus-visible{outline:2px solid var(--teal-bright);outline-offset:3px;border-radius:3px;}
+
+/* ---------- TYPE PRIMITIVES ---------- */
+.kicker{
+  display:inline-flex;align-items:center;gap:12px;
+  font-family:var(--f-mono);font-size:11px;line-height:1;
+  text-transform:uppercase;letter-spacing:.2em;color:var(--ink-3);
+}
+.kicker::before{content:'';width:24px;height:1px;background:var(--brand);flex:none;}
+.kicker .ix{color:var(--brand);}
+.kicker.center{justify-content:center;}
+
+.display{
+  font-family:var(--f-display);font-weight:800;
+  font-size:clamp(38px,5.4vw,68px);line-height:1.0;letter-spacing:-0.035em;
+  color:var(--ink-1);text-wrap:balance;
+}
+.display-xl{
+  font-family:var(--f-display);font-weight:800;
+  font-size:clamp(50px,8.6vw,104px);line-height:.94;letter-spacing:-0.045em;
+  color:var(--ink-1);text-wrap:balance;
+}
+.lede{
+  font-family:var(--f-body);font-weight:400;color:var(--ink-2);
+  font-size:clamp(17px,1.55vw,21px);line-height:1.6;text-wrap:pretty;
+}
+em.hl{font-style:normal;color:var(--brand);}
+em.hlt{font-style:normal;color:var(--teal-bright);}
+
+/* ---------- BUTTONS ---------- */
+.btn{
+  --bh:50px;
+  display:inline-flex;align-items:center;justify-content:center;gap:9px;
+  height:var(--bh);padding:0 22px;border-radius:999px;
+  font-family:var(--f-body);font-size:14.5px;font-weight:500;letter-spacing:.005em;
+  border:1px solid transparent;white-space:nowrap;
+  transition:transform var(--t-fast) var(--ease),background var(--t-fast) var(--ease),
+             border-color var(--t-fast) var(--ease),box-shadow var(--t-fast) var(--ease),color var(--t-fast) var(--ease);
+}
+.btn svg{width:16px;height:16px;flex:none;}
+.btn-primary{
+  background:var(--brand);color:#fff;
+  box-shadow:0 1px 2px rgba(0,0,0,.18),0 12px 30px -12px rgba(241,2,2,.55);
+}
+.btn-primary:hover{background:var(--brand-hover);transform:translateY(-1px);
+  box-shadow:0 1px 2px rgba(0,0,0,.18),0 18px 42px -12px rgba(241,2,2,.7);}
+.btn-primary:active{transform:translateY(0) scale(.985);}
+.btn-ghost{background:transparent;color:var(--ink-1);border-color:var(--hair-strong);}
+.btn-ghost:hover{background:var(--hover);border-color:var(--ink-3);transform:translateY(-1px);}
+.btn-sm{--bh:38px;padding:0 15px;font-size:13px;}
+.btn-lg{--bh:56px;padding:0 28px;font-size:15.5px;}
+.btn-block{width:100%;}
+
+/* ---------- LAYOUT ---------- */
+.wrap{max-width:var(--maxw);margin:0 auto;padding-inline:var(--gutter);}
+.chapter{position:relative;padding-block:clamp(84px,11vw,150px);}
+.sec-head{max-width:760px;}
+.sec-head .display{margin-top:18px;}
+.sec-head .lede{margin-top:20px;max-width:60ch;}
+
+/* hairline divider */
+.rule{height:1px;background:var(--hair);border:0;}
+
+/* pill tag */
+.tag{
+  display:inline-flex;align-items:center;gap:7px;
+  font-family:var(--f-mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  padding:5px 11px;border-radius:999px;border:1px solid var(--hair-strong);color:var(--ink-2);
+}
+.tag .dot{width:6px;height:6px;border-radius:50%;background:var(--teal-bright);}
+.tag.brand .dot{background:var(--brand);}
+.tag.live .dot{background:var(--teal-bright);box-shadow:0 0 0 3px var(--teal-12);}
+
+/* status badge */
+.status{font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  padding:3px 8px;border-radius:5px;border:1px solid var(--hair-strong);color:var(--ink-3);}
+.status.beta{color:var(--teal-bright);border-color:var(--teal-20);}
+.status.live{color:var(--teal-bright);border-color:var(--teal-20);}
+.status.soon{color:var(--ink-3);}
+
+/* reveal base (motion layer adds transitions) */
+.reveal{opacity:0;transform:translateY(20px);}
+.is-ready .reveal{transition:opacity var(--t-base) var(--ease),transform var(--t-base) var(--ease);}
+.reveal.in{opacity:1;transform:none;}
+@media (prefers-reduced-motion:reduce){
+  .reveal{opacity:1!important;transform:none!important;}
+}
+/* failsafe: when JS detects a throttled frame that froze transitions,
+   it sets .no-anim on <html> — kill transitions so end-states apply instantly */
+.no-anim *,.no-anim *::before,.no-anim *::after{transition:none!important;animation:none!important;}
+.no-anim .reveal{opacity:1!important;transform:none!important;}

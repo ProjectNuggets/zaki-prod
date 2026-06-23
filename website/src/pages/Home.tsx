@@ -13,10 +13,10 @@ import { JourneyMap } from "../components/JourneyMap";
 import { BuiltDifferent } from "../components/BuiltDifferent";
 import { Roadmap } from "../components/Roadmap";
 import { ClosingCta } from "../components/ClosingCta";
-import { V3HomePage } from "../components/v3/V3Website";
+import { HomeV4 } from "./HomeV4";
 
 export function HomePage({ locale }: { locale: Locale }) {
-  if (locale === "en") return <V3HomePage />;
+  if (locale === "en") return <HomeV4 />;
 
   const t = getContent(locale);
   const isArabic = locale === "ar";
