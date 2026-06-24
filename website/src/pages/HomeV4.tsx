@@ -254,18 +254,29 @@ export function HomeV4() {
           <img className="scene-zee zee-right" src="/zaki/bot/heart.png" alt="" aria-hidden="true" />
         </section>
 
-        {/* CH.6 — SPACES */}
-        <section className="chapter stage-light spaces" data-stage="light" data-screen-label="06 Spaces" id="spaces">
-          <div className="wrap">
-            <div className="sec-head reveal">
-              <span className="kicker"><span className="ix">06</span> ZAKI in context</span>
-              <h2 className="display">Keep every conversation<br />in its world.</h2>
-              <p className="lede">Create a Space for a project, topic, class, or client. Add documents once. Open as many threads as you need — every thread works from the same shared context, and nothing leaks out.</p>
-              <div className="caps"><span className="cap">Many threads</span><span className="cap">Shared documents</span><span className="cap">Web search</span><span className="cap teal">Scoped memory</span></div>
+        {/* SCENE 5 — EVERY WORLD (Spaces + the suite as honest Soon facets) */}
+        <section className="scene spaces" data-stage="dark" data-reveal data-screen-label="05 Spaces" id="spaces">
+          <div className="scene-glow" aria-hidden="true"></div>
+          <div className="scene-inner spaces-inner">
+            <div className="spaces-copy">
+              <span className="scene-eyebrow">Many worlds · 05</span>
+              <h2 className="scene-h1">One mind.<br />Every part of <em className="hl">your life.</em></h2>
+              <p className="scene-lede">A world for every project, class, or client — its own docs, its own threads, nothing leaking between them. And the same intelligence shows up in the shape each moment needs.</p>
+              <ul className="scene-facets">
+                <li><b>Spaces</b><span>In context</span><i className="fct-live">Live</i></li>
+                <li><b>Design</b><span>In creation</span><i className="fct-soon">Soon</i></li>
+                <li><b>Learn</b><span>In growth</span><i className="fct-soon">Soon</i></li>
+                <li><b>Career</b><span>In motion</span><i className="fct-soon">Soon</i></li>
+              </ul>
+              <div className="scene-cta">
+                <a className="btn btn-primary btn-lg" href="/spaces">Open Spaces
+                  <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </a>
+              </div>
             </div>
 
-            <div className="spaces-grid">
-              <div className="space-win reveal" data-d="1">
+            <div className="spaces-vis">
+              <div className="space-win">
                 <aside className="space-rail">
                   <div className="space-head">
                     <span className="space-dot"></span>
@@ -293,100 +304,10 @@ export function HomeV4() {
                   </div>
                 </div>
               </div>
-
-              <ul className="space-proof reveal" data-d="2">
-                <li><span className="sp-n">1</span> One Space</li>
-                <li><span className="sp-n">∞</span> Many threads</li>
-                <li><span className="sp-n">◇</span> Shared documents</li>
-                <li><span className="sp-n">⚡</span> Fast conversation</li>
-                <li><span className="sp-n">⌕</span> Web search when needed</li>
-                <li><span className="sp-n">↻</span> Global continuity where useful</li>
-              </ul>
             </div>
           </div>
+          <img className="scene-zee zee-right" src="/zaki/bot/wave.png" alt="" aria-hidden="true" />
         </section>
-
-        {/* CH.7–9 — CREATION MOVEMENT */}
-        <div className="movement stage-light">
-          <section className="chapter beat beat-design stage-light" data-stage="light" data-screen-label="07 Design" id="design">
-            <div className="wrap beat-grid">
-              <div className="beat-copy reveal">
-                <span className="kicker"><span className="ix">07</span> ZAKI in creation</span>
-                <h2 className="display">From idea to<br />something you can see.</h2>
-                <p className="lede">Start with the rough thought. Explore visual directions. Choose what feels right. Turn it into a design you can refine and use.</p>
-                <div className="beat-flow">
-                  <span>Brief</span><i></i><span>Directions</span><i></i><span>Decision</span><i></i><span className="on">Design</span>
-                </div>
-                <div className="caps"><span className="cap">Directions</span><span className="cap">Compare</span><span className="cap">Refine</span><span className="cap">Hand off</span></div>
-                <span className="status soon beat-status">Soon</span>
-              </div>
-              <div className="beat-proof reveal" data-d="1">
-                <div className="dir-win">
-                  <div className="dir-bar"><span>Directions</span><span className="dir-sub">Pick one to refine</span></div>
-                  <div className="dir-tiles">
-                    <div className="dir-tile t1"><span className="dir-swatch s1"></span><span className="dir-l">Editorial</span></div>
-                    <div className="dir-tile t2 sel"><span className="dir-swatch s2"></span><span className="dir-l">Warm minimal</span><span className="dir-pick">Selected</span></div>
-                    <div className="dir-tile t3"><span className="dir-swatch s3"></span><span className="dir-l">Bold mono</span></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="wrap"><a className="continuation reveal" href="#learn">Build the capability behind the work<svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></a></div>
-          </section>
-
-          <section className="chapter beat beat-learn stage-light" data-stage="light" data-screen-label="08 Learn" id="learn">
-            <div className="wrap beat-grid reverse">
-              <div className="beat-copy reveal">
-                <span className="kicker"><span className="ix">08</span> ZAKI in growth</span>
-                <h2 className="display">Learn the way<br />your mind works.</h2>
-                <p className="lede">Understand difficult material, uncover the gaps, practice with feedback, and keep a study path that changes as you progress.</p>
-                <p className="beat-outcome">Less guessing what to study. More moments where it clicks.</p>
-                <div className="caps"><span className="cap">Diagnose gaps</span><span className="cap">Explain</span><span className="cap">Practice</span><span className="cap teal">Track progress</span></div>
-                <span className="status soon beat-status">Soon</span>
-              </div>
-              <div className="beat-proof reveal" data-d="1">
-                <div className="learn-win">
-                  <div className="learn-bar"><span>Study path</span><span className="learn-sub">Organic chemistry</span></div>
-                  <div className="learn-steps">
-                    <div className="lstep done"><span className="lstep-i"></span><span>Explained — resonance structures</span></div>
-                    <div className="lstep gap"><span className="lstep-i"></span><span>Gap found — electron pushing</span></div>
-                    <div className="lstep active"><span className="lstep-i"></span><span>Practice — 3 guided problems</span></div>
-                  </div>
-                  <div className="learn-prog"><span className="learn-prog-k">Mastery</span><div className="learn-bar-track"><i style={{ width: "64%" }}></i></div><span className="learn-prog-v">64%</span></div>
-                </div>
-              </div>
-            </div>
-            <div className="wrap"><a className="continuation reveal" href="#career">Turn progress into opportunity<svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></a></div>
-          </section>
-
-          <section className="chapter beat beat-career stage-light" data-stage="light" data-screen-label="09 Career" id="career">
-            <div className="wrap beat-grid">
-              <div className="beat-copy reveal">
-                <span className="kicker"><span className="ix">09</span> ZAKI in motion</span>
-                <h2 className="display">Let the right<br />role find you.</h2>
-                <p className="lede">Build a living career profile. Discover roles that fit. Tailor your story. Keep applications and follow-ups moving — with you in control.</p>
-                <p className="beat-outcome">A job search that works every day, not only when you have the energy.</p>
-                <div className="caps"><span className="cap">Living profile</span><span className="cap">Role matching</span><span className="cap">Tailor story</span><span className="cap">Approved actions</span></div>
-                <span className="status soon beat-status">Soon</span>
-              </div>
-              <div className="beat-proof reveal" data-d="1">
-                <div className="career-win">
-                  <div className="career-bar"><span>Role matches</span><span className="career-sub">Updated daily</span></div>
-                  <ul className="career-roles">
-                    <li><span className="cr-role">Senior Product Designer</span><span className="cr-co">Fintech · Remote</span><span className="cr-fit high">94%</span></li>
-                    <li><span className="cr-role">Brand &amp; Systems Lead</span><span className="cr-co">Studio · Hybrid</span><span className="cr-fit">88%</span></li>
-                    <li><span className="cr-role">Design Engineer</span><span className="cr-co">SaaS · Remote</span><span className="cr-fit">81%</span></li>
-                  </ul>
-                  <div className="career-next">
-                    <span className="career-next-k">Next action · tailored intro ready</span>
-                    <span className="career-gate"><svg viewBox="0 0 14 14" fill="none"><rect x="2" y="6" width="10" height="6.5" rx="1.4" stroke="currentColor" strokeWidth="1.2" /><path d="M4.3 6V4.4a2.7 2.7 0 0 1 5.4 0V6" stroke="currentColor" strokeWidth="1.2" /></svg>Approve before it sends</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="wrap"><a className="continuation reveal" href="#day">Keep the next actions moving<svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></a></div>
-          </section>
-        </div>
 
         {/* CH.10 — A DAY WITH ZAKI */}
         <section className="chapter stage-dark day" data-stage="dark" data-screen-label="10 A day with ZAKI" id="day">
