@@ -101,10 +101,10 @@
         scrambleIO.unobserve(e.target);
       });
     }, { threshold: 0.6 });
-    // the single scramble engine binds opt-in targets, every mono eyebrow
-    // (.kicker / .fcol-k), AND every section headline (.chapter h2 — the hero
-    // h1 is excluded; it's handled by splitHeadline). Supersedes the old IIFE.
-    [].forEach.call(document.querySelectorAll('[data-scramble], .kicker, .fcol-k, .chapter h2'), function (el) {
+    // SCALPEL, not blanket: scramble fires only on the accent word(s) per scene
+    // (.hl / .hlt) plus anything explicitly opted-in with [data-scramble].
+    // Eyebrows and full headlines no longer decode — that was the over-use.
+    [].forEach.call(document.querySelectorAll('.hl, .hlt, [data-scramble]'), function (el) {
       scrambleIO.observe(el);
     });
   }
@@ -254,9 +254,42 @@
     });
   }
 
-  // Ambient field renders on the SAME clock (no separate rAF).
-  field = buildField();
-  if (field) { fieldTickFn = function () { field.render(); }; gsap.ticker.add(fieldTickFn); }
+  // Ambient scramble field is OFF — it over-used the signature and fought the
+  // clean sui.io editorial direction. buildField() is retained (unused) in case
+  // a far subtler version is wanted later. Scramble now lives only on accents.
+  void buildField;
+  field = null;
+
+  /* ====================================================================
+     Hybrid scroll choreography — sui.io-style
+       - hero: clean editorial intro on load, then PIN + transform out
+         as scene 2 arrives (the section-to-section hand-off)
+       - free-scroll scenes [data-reveal]: bold staggered reveal on enter
+     ==================================================================== */
+  if (!reduce && document.querySelector('#hero .scene-inner')) {
+    // intro on load
+    gsap.timeline({ delay: 0.1 })
+      .from('#hero .scene-eyebrow', { y: 18, opacity: 0, duration: 0.7, ease: 'power3.out' })
+      .from('#hero .scene-h1', { y: 34, opacity: 0, duration: 0.95, ease: 'power3.out' }, '-=0.45')
+      .from('#hero .scene-lede', { y: 20, opacity: 0, duration: 0.7, ease: 'power3.out' }, '-=0.6')
+      .from('#hero .scene-cta', { y: 16, opacity: 0, duration: 0.6, ease: 'power3.out' }, '-=0.5')
+      .from('#hero .scene-cue', { opacity: 0, duration: 0.8, ease: 'power1.out' }, '-=0.2');
+
+    // pin the hero briefly and lift/fade it out as scene 2 arrives (tight hand-off)
+    gsap.timeline({ scrollTrigger: { trigger: '#hero', start: 'top top', end: '+=55%', pin: true, scrub: 0.5 } })
+      .to('#hero .scene-cue', { opacity: 0, ease: 'none' }, 0)
+      .to('#hero .scene-inner', { yPercent: -10, opacity: 0, ease: 'power1.in' }, 0);
+
+    // free-scroll scene reveals
+    [].forEach.call(document.querySelectorAll('.scene[data-reveal]'), function (sc) {
+      gsap.from(sc.querySelectorAll('.scene-eyebrow, .scene-h1, .scene-lede, .scene-cta'), {
+        scrollTrigger: { trigger: sc, start: 'top 72%' },
+        y: 40, opacity: 0, duration: 0.95, ease: 'power3.out', stagger: 0.1
+      });
+    });
+
+    requestAnimationFrame(function () { ST.refresh(); });
+  }
 
   /* ====================================================================
      Teardown the React hook calls on unmount (SPA-leak fix)

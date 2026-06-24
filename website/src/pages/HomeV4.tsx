@@ -7,6 +7,7 @@ import "../../public/zaki/styles/zaki-foundation.css";
 import "../../public/zaki/styles/zaki-home.css";
 import "../../public/zaki/styles/zaki-chapters.css";
 import "../../public/zaki/styles/zaki-mind.css";
+import "../../public/zaki/styles/zaki-scenes.css";
 import { appHandoffUrl } from "../lib/appHandoff";
 
 export function HomeV4() {
@@ -133,77 +134,31 @@ export function HomeV4() {
 
       <main id="top">
 
-        {/* CH.1 — HERO */}
-        <header className="hero stage-dark" data-stage="dark" data-screen-label="01 Hero" id="hero">
-          <div className="hero-atlas" aria-hidden="true">
-            <div className="dots" id="hero-dots"></div>
-            <div className="glow" id="hero-glow"></div>
-            <div className="vignette"></div>
-          </div>
-          <div className="wrap hero-inner">
-            <div className="hero-copy">
-              <div className="hero-eyebrow reveal"><span className="pip"></span><span data-scramble>ENTER · 01</span></div>
-              <h1 className="display-xl" id="hero-h1" data-split>Enter <em className="hl">ZAKI&rsquo;s mind.</em></h1>
-              <p className="lede reveal" data-d="1">Not a chatbot you open. A mind you step inside — one intelligence that holds your whole life in view, and remembers you between every visit.</p>
-              <div className="hero-cta reveal" data-d="2">
-                <a className="btn btn-primary btn-lg" href={signupUrl}>Enter ZAKI&rsquo;s mind
-                  <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                </a>
-                <a className="btn btn-ghost btn-lg" href="#reframe">Scroll to begin</a>
-              </div>
-              <div className="hero-micro reveal" data-d="3">
-                <span className="hero-sign">Never build alone.</span><span className="sep"></span><span>One memory, one mind — across everything you do.</span>
-              </div>
-            </div>
-
-            {/* Presence proof window */}
-            <div className="presence reveal" data-d="2" id="presence" aria-hidden="true">
-              <img className="zbot idle hero-mascot" src="/zaki/bot/sunglasses.png" alt="" />
-              <div className="presence-bar">
-                <span className="pdot"></span>
-                <span className="presence-title">ZAKI</span>
-                <span className="presence-live"><i></i>Present</span>
-              </div>
-              <div className="presence-body" id="presence-body">
-                <div className="msg you">
-                  <span className="who">You</span>
-                  <div className="bubble">Build my week around the investor update, my exam Thursday, and two hours for the portfolio.</div>
-                </div>
-                <div className="msg zaki">
-                  <span className="who">ZAKI</span>
-                  <div className="bubble" id="presence-reply"></div>
-                  <div className="memchip" id="presence-mem" style={{ opacity: 0 }}>
-                    <svg viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
-                    Remembered · you do deep work best before noon
-                  </div>
-                </div>
-              </div>
+        {/* SCENE 1 — HERO (full-screen editorial, pinned) */}
+        <header className="scene stage-dark" data-stage="dark" data-screen-label="01 Hero" id="hero">
+          <div className="scene-glow" aria-hidden="true"></div>
+          <div className="scene-inner">
+            <span className="scene-eyebrow">ZAKI · The intelligence layer for your life</span>
+            <h1 className="scene-h1">Enter <em className="hl">ZAKI&rsquo;s mind.</em></h1>
+            <p className="scene-lede">Not a chatbot you open. A mind you step inside — one intelligence that plans the work, remembers you, and stays. Day to day.</p>
+            <div className="scene-cta">
+              <a className="btn btn-primary btn-lg" href={signupUrl}>Enter ZAKI&rsquo;s mind
+                <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </a>
+              <a className="btn btn-ghost btn-lg" href="#reframe">See how it works</a>
             </div>
           </div>
+          <span className="scene-cue" aria-hidden="true">Scroll<i></i></span>
         </header>
 
         {/* CH.2 — REFRAME */}
-        <section className="chapter stage-dark reframe" data-stage="dark" data-screen-label="02 One intelligence" id="reframe">
-          <div className="wrap">
-            <div className="sec-head reveal">
-              <span className="kicker"><span className="ix">02</span> One intelligence</span>
-              <h2 className="display">Not five AI tools.<br />One intelligence.</h2>
-            </div>
-            <div className="reframe-grid">
-              <div className="reframe-say reveal" data-d="1">
-                <p className="reframe-lead">The same ZAKI moves with you. It becomes</p>
-                <p className="reframe-morph"><span className="morph-word" id="morph-word">an agent</span><span className="morph-cap">when the work is complex.</span></p>
-                <p className="reframe-tail">A space when you need clarity. A design partner when an idea needs form. A tutor when something must click. A career engine when you are ready for what is next.</p>
-                <p className="reframe-close">Different moments. The same memory. <em className="hl">The same ZAKI.</em></p>
-              </div>
-              <ul className="reframe-forms reveal" data-d="2" aria-hidden="true">
-                <li className="rf agent" data-w="an agent"><span className="rf-k">Agent</span><span className="rf-r">in action</span></li>
-                <li className="rf spaces" data-w="a space"><span className="rf-k">Spaces</span><span className="rf-r">in context</span></li>
-                <li className="rf design" data-w="a design partner"><span className="rf-k">Design</span><span className="rf-r">in creation</span></li>
-                <li className="rf learn" data-w="a tutor"><span className="rf-k">Learn</span><span className="rf-r">in growth</span></li>
-                <li className="rf career" data-w="a career engine"><span className="rf-k">Career</span><span className="rf-r">in motion</span></li>
-              </ul>
-            </div>
+        {/* SCENE 2 — ONE INTELLIGENCE (full-screen statement, free-scroll reveal) */}
+        <section className="scene reframe stage-dark" data-stage="dark" data-reveal data-screen-label="02 One intelligence" id="reframe">
+          <div className="scene-glow" aria-hidden="true"></div>
+          <div className="scene-inner">
+            <span className="scene-eyebrow">One intelligence</span>
+            <h2 className="scene-h1">Not five AI tools.<br />One <em className="hl">intelligence.</em></h2>
+            <p className="scene-lede">Most AI lives in a dozen tabs that don&rsquo;t know each other. ZAKI is one mind that becomes whatever the moment needs — an agent, a space, a tutor — all sharing one memory of you.</p>
           </div>
         </section>
 

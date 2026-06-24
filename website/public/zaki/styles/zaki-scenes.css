@@ -1,0 +1,79 @@
+/* ============================================================
+   ZAKI — Full-screen editorial scenes  (sui.io-inspired)
+   Hybrid scroll: the hero + signature scenes pin and transform;
+   the rest free-scroll with bold reveals. Type-forward, massive
+   negative space, clean. Scramble is a scalpel (.hl accent only).
+   Bundled into <head> via HomeV4.tsx (styled before paint).
+   ============================================================ */
+
+/* sui.io is clean — drop the narrative spine (Thread + chapter rail). */
+.thread-svg, #chap-rail, #scroll-progress { display: none !important; }
+
+/* --- scene shell: one idea, full viewport --- */
+.scene {
+  position: relative;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  padding: clamp(110px, 15vh, 200px) max(24px, 7vw);
+  overflow: clip;
+}
+.scene-inner { position: relative; z-index: 2; width: 100%; max-width: 1240px; margin: 0 auto; }
+.scene-glow { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+
+/* --- editorial type --- */
+.scene-eyebrow {
+  display: inline-flex; align-items: center; gap: 12px;
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase;
+  color: var(--ink-3); margin: 0 0 clamp(22px, 3.4vh, 38px);
+}
+.scene-eyebrow::before { content: ''; width: 28px; height: 1px; background: currentColor; opacity: .55; }
+
+.scene-h1 {
+  font-family: 'Cabinet Grotesk', system-ui, sans-serif; font-weight: 800;
+  font-size: clamp(46px, 8.4vw, 130px); line-height: 0.95; letter-spacing: -0.035em;
+  margin: 0; max-width: 16ch; color: var(--ink-1); text-wrap: balance;
+}
+.scene-h1 .hl { color: var(--brand); }
+
+.scene-lede {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: clamp(18px, 2.05vw, 25px); line-height: 1.5; color: var(--ink-2);
+  max-width: 50ch; margin: clamp(26px, 4.2vh, 46px) 0 clamp(34px, 5vh, 50px);
+}
+
+.scene-cta { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+
+/* --- scroll cue (hero only) --- */
+.scene-cue {
+  position: absolute; left: 50%; bottom: clamp(22px, 4vh, 42px); transform: translateX(-50%);
+  z-index: 3; display: flex; flex-direction: column; align-items: center; gap: 12px;
+  font-family: 'DM Mono', ui-monospace, monospace; font-size: 10.5px;
+  letter-spacing: 0.3em; text-transform: uppercase; color: var(--ink-3);
+}
+.scene-cue i { width: 1px; height: 40px; background: linear-gradient(var(--ink-3), transparent);
+  transform-origin: top; animation: cuePulse 2.4s ease-in-out infinite; }
+@keyframes cuePulse { 0%, 100% { transform: scaleY(.35); opacity: .35; } 50% { transform: scaleY(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .scene-cue i { animation: none; } }
+
+/* --- scene backgrounds (subtle gradient glows, not glyph noise) --- */
+#hero .scene-glow {
+  background:
+    radial-gradient(72% 56% at 50% 30%, var(--brand-12), transparent 70%),
+    radial-gradient(46% 46% at 82% 82%, rgba(96, 226, 197, .05), transparent 72%);
+}
+#reframe .scene-glow {
+  background: radial-gradient(60% 50% at 14% 30%, var(--brand-12), transparent 68%);
+}
+
+/* hero sits centered with a touch more drama */
+#hero { padding-top: clamp(120px, 16vh, 220px); }
+#hero .scene-h1 { max-width: 14ch; }
+
+/* mobile */
+@media (max-width: 720px) {
+  .scene { padding: clamp(96px, 13vh, 140px) 22px; }
+  .scene-h1 { font-size: clamp(40px, 13vw, 72px); }
+  .scene-lede { font-size: 17px; }
+}
