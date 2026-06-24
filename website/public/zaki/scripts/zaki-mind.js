@@ -303,6 +303,13 @@
       });
     });
 
+    // Zee companion — reveal on scene enter (immediately if already in view, e.g. hero)
+    [].forEach.call(document.querySelectorAll('.scene-zee'), function (z) {
+      var sc = z.closest('.scene'); if (!sc) return;
+      if (sc.getBoundingClientRect().top < window.innerHeight * 0.85) { z.classList.add('is-in'); return; }
+      ST.create({ trigger: sc, start: 'top 80%', once: true, onEnter: function () { z.classList.add('is-in'); } });
+    });
+
     requestAnimationFrame(function () { ST.refresh(); });
   }
 

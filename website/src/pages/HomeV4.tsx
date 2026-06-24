@@ -138,16 +138,16 @@ export function HomeV4() {
         <header className="scene stage-dark" data-stage="dark" data-screen-label="01 Hero" id="hero">
           <div className="scene-glow" aria-hidden="true"></div>
           <div className="scene-inner">
-            <span className="scene-eyebrow">ZAKI · The intelligence layer for your life</span>
+            <span className="scene-eyebrow">Your AI · 01</span>
             <h1 className="scene-h1">Enter <em className="hl">ZAKI&rsquo;s mind.</em></h1>
-            <p className="scene-lede">Not a chatbot you open. A mind you step inside — one intelligence that plans the work, remembers you, and stays. Day to day.</p>
+            <p className="scene-lede">Not a tool you manage. A mind that&rsquo;s with you — and lifts what you&rsquo;re carrying.</p>
             <div className="scene-cta">
               <a className="btn btn-primary btn-lg" href={signupUrl}>Enter ZAKI&rsquo;s mind
                 <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </a>
-              <a className="btn btn-ghost btn-lg" href="#reframe">See how it works</a>
             </div>
           </div>
+          <img className="scene-zee zee-hero" src="/zaki/bot/wave.png" alt="" aria-hidden="true" />
           <span className="scene-cue" aria-hidden="true">Scroll<i></i></span>
         </header>
 

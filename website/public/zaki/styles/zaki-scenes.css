@@ -91,6 +91,13 @@ body, body[data-stage] {
 #hero { padding-top: clamp(120px, 16vh, 220px); }
 #hero .scene-h1 { max-width: 14ch; }
 
+/* Zee — the companion, one pose per scene, revealed on enter (.is-in) */
+.scene-zee { position: absolute; z-index: 1; pointer-events: none; image-rendering: pixelated;
+  width: clamp(72px, 9vw, 128px); height: auto; opacity: 0; transform: translateY(10px); }
+.scene-zee.is-in { opacity: 1; transform: none; transition: opacity .8s ease, transform .8s ease; }
+.zee-hero { right: clamp(20px, 6vw, 96px); bottom: clamp(26px, 9vh, 96px); }
+@media (max-width: 720px) { .scene-zee { width: 60px; } }
+
 /* mobile */
 @media (max-width: 720px) {
   .scene { padding: clamp(96px, 13vh, 140px) 22px; }
