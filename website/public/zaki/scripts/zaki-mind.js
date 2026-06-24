@@ -224,7 +224,7 @@
   /* ====================================================================
      Lenis smooth scroll + the one shared clock (gsap.ticker)
      ==================================================================== */
-  var lenis = null, tickFn = null, fieldTickFn = null, altTickFn = null, menuObs = null, onVis = null;
+  var lenis = null, tickFn = null, fieldTickFn = null, altTickFn = null, goalMO = null, menuObs = null, onVis = null;
 
   if (!reduce && Lenis) {
     lenis = new Lenis({
@@ -275,6 +275,20 @@
     if (!reduce) { altTickFn = altitude; gsap.ticker.add(altTickFn); }
   })();
 
+  /* ---- Carried-goal token: mirror the stored goal (shown via body.has-intent,
+     toggled by the existing intent writer in zaki-chapters.js) ---- */
+  (function () {
+    var t = document.getElementById('goal-token'); if (!t) return;
+    var txt = t.querySelector('.gt-text');
+    function sync() {
+      try { var v = JSON.parse(localStorage.getItem('zaki_intent_v1') || 'null');
+        if (v && v.text) txt.textContent = v.text; } catch (e) {}
+    }
+    sync();
+    goalMO = new MutationObserver(sync);
+    goalMO.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  })();
+
   /* ====================================================================
      Hybrid scroll choreography — sui.io-style
        - hero: clean editorial intro on load, then PIN + transform out
@@ -321,6 +335,7 @@
       try { ST.getAll().forEach(function (s) { s.kill(); }); } catch (e) {}
       if (fieldTickFn) gsap.ticker.remove(fieldTickFn);
       if (altTickFn) { gsap.ticker.remove(altTickFn); altTickFn = null; }
+      if (goalMO) { goalMO.disconnect(); goalMO = null; }
       if (field) { field.destroy(); field = null; }
       if (lenis) { if (tickFn) gsap.ticker.remove(tickFn); lenis.destroy(); lenis = null; }
       if (menuObs) { menuObs.disconnect(); menuObs = null; }

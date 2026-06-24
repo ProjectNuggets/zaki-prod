@@ -20,9 +20,8 @@ export function HomeV4() {
 
   return (
     <>
-      {/* Ambient scramble field — "Enter ZAKI's mind". Fixed full-viewport, behind all content
-          (z-index:-1); canvas attaches post-hydration via zaki-mind.js. */}
-      <div id="mind-field" aria-hidden="true"></div>
+      {/* Carried-goal token: the goal named in Scene 2 rises with --altitude up the page */}
+      <div id="goal-token" aria-hidden="true"><span className="gt-dot"></span><span className="gt-text"></span></div>
       <div className="scroll-progress" id="scroll-progress" aria-hidden="true"></div>
       <div className="grain" aria-hidden="true"></div>
 
@@ -152,28 +151,13 @@ export function HomeV4() {
         </header>
 
         {/* CH.2 — REFRAME */}
-        {/* SCENE 2 — ONE INTELLIGENCE (full-screen statement, free-scroll reveal) */}
-        <section className="scene reframe stage-dark" data-stage="dark" data-reveal data-screen-label="02 One intelligence" id="reframe">
+        {/* SCENE 2 — YOUR CHAPTER (name your goal; it becomes the carried token) */}
+        <section className="scene" data-stage="dark" data-reveal data-screen-label="02 Begin" id="intention">
           <div className="scene-glow" aria-hidden="true"></div>
           <div className="scene-inner">
-            <span className="scene-eyebrow">One intelligence</span>
-            <h2 className="scene-h1">Not five AI tools.<br />One <em className="hl">intelligence.</em></h2>
-            <p className="scene-lede">Most AI lives in a dozen tabs that don&rsquo;t know each other. ZAKI is one mind that becomes whatever the moment needs — an agent, a space, a tutor — all sharing one memory of you.</p>
-          </div>
-        </section>
-
-        {/* CH.3 — INTENTION */}
-        <section className="chapter stage-dark intention" data-stage="dark" data-screen-label="03 Intention" id="intention">
-          <div className="wrap intent-wrap">
-            <div className="intent-presence reveal" aria-hidden="true">
-              <img className="zbot idle" src="/zaki/bot/wave.png" alt="" />
-              <span className="zstate" id="intent-state">Listening</span>
-            </div>
-            <div className="sec-head center reveal" style={{ marginInline: "auto", textAlign: "center" }}>
-              <span className="kicker center"><span className="ix">03</span> Begin</span>
-              <h2 className="display" style={{ marginInline: "auto" }}>What are you trying to<br />move forward?</h2>
-              <p className="lede" style={{ marginInline: "auto" }}>Pick one, or tell ZAKI in your words. It stays on this device, shapes the examples ahead, and you can forget it anytime.</p>
-            </div>
+            <span className="scene-eyebrow">Begin · 02</span>
+            <h2 className="scene-h1">What are you trying to <em className="hl">move forward?</em></h2>
+            <p className="scene-lede">Name one thing. From here, the page is about that — and so is ZAKI.</p>
 
             <div className="intent-pick reveal" data-d="1" id="intent-pick">
               <button className="intent-chip" data-key="project" data-eg="launch my design portfolio">Move a project forward</button>
@@ -198,9 +182,10 @@ export function HomeV4() {
                   <button className="ir-btn danger" id="intent-forget">Forget</button>
                 </div>
               </div>
-              <p className="ir-note">ZAKI will use this in the examples below — and nowhere else.</p>
+              <p className="ir-note">It travels with you — used in the moments below, and nowhere else.</p>
             </div>
           </div>
+          <img className="scene-zee zee-left" src="/zaki/bot/wave.png" alt="" aria-hidden="true" />
         </section>
 
         {/* CH.4 — AGENT */}

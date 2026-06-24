@@ -96,7 +96,21 @@ body, body[data-stage] {
   width: clamp(72px, 9vw, 128px); height: auto; opacity: 0; transform: translateY(10px); }
 .scene-zee.is-in { opacity: 1; transform: none; transition: opacity .8s ease, transform .8s ease; }
 .zee-hero { right: clamp(20px, 6vw, 96px); bottom: clamp(26px, 9vh, 96px); }
+.zee-left { left: clamp(20px, 6vw, 80px); bottom: clamp(24px, 8vh, 80px); }
 @media (max-width: 720px) { .scene-zee { width: 60px; } }
+
+/* Carried-goal token — rises with --altitude along the RIGHT gutter (the
+   editorial content is left-aligned, so the right stays clear of headlines/panels). */
+#goal-token { position: fixed; right: clamp(16px, 4vw, 64px); z-index: 60;
+  top: calc(78vh - var(--altitude) * 62vh);
+  display: none; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 99px;
+  background: color-mix(in oklab, var(--bg), var(--brand) 16%); border: 1px solid var(--brand-30);
+  font-family: 'DM Mono', ui-monospace, monospace; font-size: 12px; color: var(--ink-1);
+  box-shadow: 0 0 24px var(--brand-20); pointer-events: none; max-width: 56vw; }
+body.has-intent #goal-token { display: inline-flex; }
+#goal-token .gt-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); flex: none; }
+#goal-token .gt-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 720px) { #goal-token { display: none !important; } }
 
 /* mobile */
 @media (max-width: 720px) {
