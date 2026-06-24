@@ -1,4 +1,3 @@
-import React from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
@@ -7,12 +6,14 @@ import "./styles/v3.css";
 
 const rootElement = document.getElementById("root");
 
+// StrictMode removed: its dev-only double-invoke remounts the homepage effect
+// and races the async vanilla-script injection, so GSAP pins/choreography fail
+// to register in dev. Production is unaffected (StrictMode double-invoke is
+// dev-only). See docs/immersive/2026-06-24-homepage-ascent-plan.md, Task 1.
 const app = (
-  <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
-  </React.StrictMode>
+  <BrowserRouter>
+    <App />
+  </BrowserRouter>
 );
 
 if (rootElement?.hasChildNodes()) {

@@ -9,6 +9,26 @@
 /* sui.io is clean — drop the narrative spine (Thread + chapter rail). */
 .thread-svg, #chap-rail, #scroll-progress { display: none !important; }
 
+/* ---- Rising palette, driven by --altitude (0 top -> 1 bottom).
+   The climb WARMS (cold near-black -> warm amber-black) while staying dark, so
+   light text is legible the whole way; then it OPENS to dawn near the summit,
+   where text flips dark-on-light. A continuous dark->light bg would pass through
+   mid-grey (illegible for any text) — this avoids that mid-grey resting state.
+   `body[data-stage]` (0,1,1) beats the foundation stage tokens. ---- */
+:root { --altitude: 0; }
+body, body[data-stage] {
+  --warm:     color-mix(in oklab, #0C0A09, #2E1C0D calc(var(--altitude) * 100%));
+  --alt-bg:   clamp(0, calc((var(--altitude) - 0.80) / 0.12), 1);   /* dawn opens 0.80->0.92 */
+  --ink-flip: clamp(0, calc((var(--altitude) - 0.85) / 0.10), 1);   /* text flips 0.85->0.95 */
+  --bg:    color-mix(in oklab, var(--warm), #F4EAD8 calc(var(--alt-bg) * 100%));
+  --ink-1: color-mix(in oklab, #F4EFE7, #1F1A14 calc(var(--ink-flip) * 100%));
+  --ink-2: color-mix(in oklab, #C2BAAE, #564737 calc(var(--ink-flip) * 100%));
+  --ink-3: color-mix(in oklab, #8B8378, #6B5A45 calc(var(--ink-flip) * 100%));
+  background: var(--bg);
+  color: var(--ink-1);
+}
+@media (prefers-reduced-motion: reduce) { :root { --altitude: 0 !important; } }
+
 /* --- scene shell: one idea, full viewport --- */
 .scene {
   position: relative;

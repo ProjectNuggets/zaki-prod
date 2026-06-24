@@ -224,7 +224,7 @@
   /* ====================================================================
      Lenis smooth scroll + the one shared clock (gsap.ticker)
      ==================================================================== */
-  var lenis = null, tickFn = null, fieldTickFn = null, menuObs = null, onVis = null;
+  var lenis = null, tickFn = null, fieldTickFn = null, altTickFn = null, menuObs = null, onVis = null;
 
   if (!reduce && Lenis) {
     lenis = new Lenis({
@@ -259,6 +259,21 @@
   // a far subtler version is wanted later. Scramble now lives only on accents.
   void buildField;
   field = null;
+
+  /* ---- Altitude driver: one scroll value (0 top -> 1 bottom) -> rising palette ---- */
+  (function () {
+    var root = document.documentElement;
+    function altitude() {
+      if (document.hidden) return;
+      var de = document.documentElement;
+      var max = de.scrollHeight - de.clientHeight;
+      var p = max > 0 ? (window.scrollY || de.scrollTop) / max : 0;
+      if (p < 0) p = 0; else if (p > 1) p = 1;
+      root.style.setProperty('--altitude', p.toFixed(4));
+    }
+    altitude();                       // initial paint (also correct under reduce/no-anim)
+    if (!reduce) { altTickFn = altitude; gsap.ticker.add(altTickFn); }
+  })();
 
   /* ====================================================================
      Hybrid scroll choreography — sui.io-style
@@ -298,6 +313,7 @@
     destroy: function () {
       try { ST.getAll().forEach(function (s) { s.kill(); }); } catch (e) {}
       if (fieldTickFn) gsap.ticker.remove(fieldTickFn);
+      if (altTickFn) { gsap.ticker.remove(altTickFn); altTickFn = null; }
       if (field) { field.destroy(); field = null; }
       if (lenis) { if (tickFn) gsap.ticker.remove(tickFn); lenis.destroy(); lenis = null; }
       if (menuObs) { menuObs.disconnect(); menuObs = null; }
