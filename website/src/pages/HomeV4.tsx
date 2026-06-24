@@ -309,89 +309,23 @@ export function HomeV4() {
           <img className="scene-zee zee-right" src="/zaki/bot/wave.png" alt="" aria-hidden="true" />
         </section>
 
-        {/* CH.10 — A DAY WITH ZAKI */}
-        <section className="chapter stage-dark day" data-stage="dark" data-screen-label="10 A day with ZAKI" id="day">
-          <div className="wrap">
-            <div className="sec-head reveal">
-              <span className="kicker"><span className="ix">10</span> Everyday intelligence</span>
-              <h2 className="display">One day.<br />One intelligence beside you.</h2>
-              <p className="lede">You change contexts all day long. ZAKI keeps the thread — carrying what matters from one moment to the next.</p>
-            </div>
-            <ol className="timeline">
-              <li className="tl-moment reveal">
-                <span className="tl-time">07:45</span>
-                <div className="tl-card">
-                  <span className="tl-label">Begin with clarity</span>
-                  <p className="tl-say">"Brief me on what matters today."</p>
-                  <p className="tl-zaki">ZAKI filters the noise and puts the real decisions first.</p>
-                </div>
-              </li>
-              <li className="tl-moment reveal" data-d="1">
-                <span className="tl-time">10:20</span>
-                <div className="tl-card">
-                  <span className="tl-label">Move the work</span>
-                  <p className="tl-say">"Turn these notes into the plan."</p>
-                  <p className="tl-zaki">It creates the structure and carries the context forward.</p>
-                </div>
-              </li>
-              <li className="tl-moment reveal" data-d="2">
-                <span className="tl-time">14:10</span>
-                <div className="tl-card">
-                  <span className="tl-label">Give the idea form</span>
-                  <p className="tl-say">"Show me three directions."</p>
-                  <p className="tl-zaki">ZAKI Design turns the brief into something you can react to.</p>
-                </div>
-              </li>
-              <li className="tl-moment reveal" data-d="1">
-                <span className="tl-time">17:30</span>
-                <div className="tl-card">
-                  <span className="tl-label">Make it click</span>
-                  <p className="tl-say">"Explain the part I keep missing."</p>
-                  <p className="tl-zaki">ZAKI Learn changes the explanation and builds the right practice.</p>
-                </div>
-              </li>
-              <li className="tl-moment reveal" data-d="2">
-                <span className="tl-time">20:15</span>
-                <div className="tl-card">
-                  <span className="tl-label">Keep the future moving</span>
-                  <p className="tl-say">"Find roles that actually fit me."</p>
-                  <p className="tl-zaki">ZAKI Career updates the search and prepares the next actions.</p>
-                </div>
-              </li>
-              <li className="tl-moment sleep reveal" data-d="1">
-                <span className="tl-time">While you sleep</span>
-                <div className="tl-card">
-                  <span className="tl-label">Approved, scheduled work continues</span>
-                  <p className="tl-zaki">The follow-ups you approved keep moving — nothing sensitive without your say.</p>
-                </div>
-              </li>
-            </ol>
-            <p className="day-close reveal"><img className="zbot idle day-mascot" src="/zaki/bot/heart.png" alt="" /><span>You change contexts. <em className="hl">ZAKI keeps the thread.</em></span></p>
-          </div>
-        </section>
-
-        {/* CH.11 — TRUST */}
-        <section className="chapter stage-dark trust" data-stage="dark" data-screen-label="11 Trust" id="trust">
-          <div className="wrap">
-            <div className="trust-grid">
-              <div className="sec-head reveal">
-                <span className="kicker"><span className="ix">11</span> Your life stays yours</span>
-                <h2 className="display">Close enough to know you.<br />Built to protect you.</h2>
-                <p className="lede">Personal intelligence requires personal trust. Your memory, permissions, private information, and rules stay under your control. Privacy is architecture — not a setting buried in a menu.</p>
-                <ul className="trust-controls">
-                  <li>Inspect, correct, and delete memory</li>
-                  <li>Scope information to one Space</li>
-                  <li>Approve a tool before it runs</li>
-                  <li>Revoke access at any time</li>
-                  <li>Approve every external action</li>
-                </ul>
-                <a className="btn btn-ghost trust-cta" href="/story">Read the security model
+        {/* SCENE 6 — BECAUSE YOU LET IT (Trust; the permission boundary set-piece) */}
+        <section className="scene trust" data-stage="dark" data-reveal data-screen-label="06 Trust" id="trust">
+          <div className="scene-glow" aria-hidden="true"></div>
+          <div className="scene-inner trust-inner">
+            <div className="trust-copy">
+              <span className="scene-eyebrow">Your life stays yours · 06</span>
+              <h2 className="scene-h1">It knows you<br />because <em className="hl">you let it.</em></h2>
+              <p className="scene-lede">Personal intelligence asks for personal trust. You own the memory — inspect it, scope it, delete it. ZAKI reaches the boundary of any real action and waits for your yes. Privacy isn&rsquo;t a setting here; it&rsquo;s the architecture.</p>
+              <div className="scene-cta">
+                <a className="btn btn-ghost btn-lg" href="/story">Read the security model
                   <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </a>
               </div>
+            </div>
 
-              {/* Trust boundary scene */}
-              <div className="boundary reveal" data-d="1" id="boundary">
+            {/* Trust boundary scene — interactive (approve/deny handled by zaki-chapters.js) */}
+            <div className="boundary" id="boundary">
                 <div className="boundary-scene" id="boundary-scene">
                   <div className="boundary-track"></div>
                   <div className="boundary-trail" id="boundary-trail"></div>
@@ -410,7 +344,7 @@ export function HomeV4() {
                 </div>
               </div>
             </div>
-          </div>
+          <img className="scene-zee zee-right" src="/zaki/bot/thinking.png" alt="" aria-hidden="true" />
         </section>
 
         {/* CH.11.5 — ORIGIN STORY TEASER */}
