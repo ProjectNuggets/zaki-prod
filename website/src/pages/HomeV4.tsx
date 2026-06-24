@@ -146,7 +146,7 @@ export function HomeV4() {
               </a>
             </div>
           </div>
-          <img className="scene-zee zee-hero" src="/zaki/bot/wave.png" alt="" aria-hidden="true" />
+          <img className="scene-zee zee-hero" src="/zaki/bot/sunglasses.png" alt="" aria-hidden="true" />
           <span className="scene-cue" aria-hidden="true">Scroll<i></i></span>
         </header>
 
@@ -228,56 +228,30 @@ export function HomeV4() {
           <img className="scene-zee zee-right" src="/zaki/bot/thinking.png" alt="" aria-hidden="true" />
         </section>
 
-        {/* CH.5 — MEMORY */}
-        <section className="chapter stage-light memory" data-stage="light" data-screen-label="05 Memory" id="memory">
-          <div className="wrap">
-            <div className="sec-head reveal">
-              <span className="kicker"><span className="ix">05</span> Continuity</span>
-              <h2 className="display">It remembers the person,<br />not just the prompt.</h2>
-              <p className="lede">Your goals, preferences, decisions, corrections, and relationships form a living graph. ZAKI brings the right context forward when it helps — and keeps it out of the way when it doesn't.</p>
-            </div>
-
-            <div className="mem-grid">
-              <div className="mem-panel reveal" data-d="1" id="mem-panel">
-                <div className="mem-bar">
-                  <span className="mem-title"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.4" stroke="currentColor" strokeWidth="1.3" /><circle cx="8" cy="8" r="2" fill="currentColor" /></svg>Memory</span>
-                  <span className="mem-sub">What ZAKI is carrying for you</span>
-                </div>
-                <ul className="mem-list" id="mem-list">
-                  <li className="mem-item" data-type="Preference"><span className="mem-type pref">Preference</span><span className="mem-text">You do deep work best before noon</span><span className="mem-act"></span></li>
-                  <li className="mem-item sel" data-type="Project"><span className="mem-type proj">Project</span><span className="mem-text" data-intent-echo="Launch my design portfolio" data-eg-fallback="Launch my design portfolio">Launch my design portfolio</span><span className="mem-act"></span></li>
-                  <li className="mem-item" data-type="Correction"><span className="mem-type corr">Correction</span><span className="mem-text">Put evidence beside every recommendation</span><span className="mem-act"></span></li>
-                  <li className="mem-item" data-type="Deadline"><span className="mem-type dl">Deadline</span><span className="mem-text">Investor update — every other Monday</span><span className="mem-act"></span></li>
-                </ul>
-                <div className="mem-controls">
-                  <span className="mem-controls-k">Selected memory</span>
-                  <div className="mem-controls-btns">
-                    <button className="mem-ctl">Inspect</button>
-                    <button className="mem-ctl">Correct</button>
-                    <button className="mem-ctl danger">Forget</button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mem-layers reveal" data-d="2">
-                <article className="mlayer">
-                  <span className="mlayer-ix">Global continuity</span>
-                  <p>Your name, preferences, and long-running goals can move with you — across every product.</p>
-                </article>
-                <article className="mlayer">
-                  <span className="mlayer-ix">Context that stays scoped</span>
-                  <p>Documents inside a Space are available to its threads without leaking into unrelated work.</p>
-                </article>
-                <article className="mlayer">
-                  <span className="mlayer-ix">Memory under your control</span>
-                  <p>Inspect it. Correct it. Remove it. You decide what stays — and what ZAKI forgets.</p>
-                </article>
-                <a className="mem-more" href="#trust">See how memory works
+        {/* SCENE 4 — IT REMEMBERS YOU (living memory graph; your goal is the red node) */}
+        <section className="scene memory" data-stage="dark" data-screen-label="04 Memory" id="memory">
+          <div className="scene-glow" aria-hidden="true"></div>
+          <div className="scene-inner mem-inner">
+            <div className="mem-copy">
+              <span className="scene-eyebrow">Continuity · 04</span>
+              <h2 className="scene-h1">It remembers <em className="hl">the person,</em><br />not the prompt.</h2>
+              <p className="scene-lede">One living memory under everything — your goals, preferences, the corrections you&rsquo;ve made — that you can inspect, correct, export, or forget. It&rsquo;s yours, and it carries from one product to the next.</p>
+              <div className="scene-cta">
+                <a className="btn btn-ghost btn-lg" href="#trust">See how memory stays yours
                   <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </a>
               </div>
             </div>
+            <div className="mem-graph" data-constellation data-dense aria-hidden="true"></div>
           </div>
+          {/* the real memories — kept for screen readers + the goal echo (the graph is the visual) */}
+          <ul className="mem-list sr-only" id="mem-list">
+            <li className="mem-item" data-type="Preference"><span className="mem-type pref">Preference</span><span className="mem-text">You do deep work best before noon</span></li>
+            <li className="mem-item sel" data-type="Project"><span className="mem-type proj">Project</span><span className="mem-text" data-intent-echo="Launch my design portfolio" data-eg-fallback="Launch my design portfolio">Launch my design portfolio</span></li>
+            <li className="mem-item" data-type="Correction"><span className="mem-type corr">Correction</span><span className="mem-text">Put evidence beside every recommendation</span></li>
+            <li className="mem-item" data-type="Deadline"><span className="mem-type dl">Deadline</span><span className="mem-text">Investor update — every other Monday</span></li>
+          </ul>
+          <img className="scene-zee zee-right" src="/zaki/bot/heart.png" alt="" aria-hidden="true" />
         </section>
 
         {/* CH.6 — SPACES */}
