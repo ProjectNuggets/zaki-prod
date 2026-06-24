@@ -29,6 +29,38 @@ body, body[data-stage] {
 }
 @media (prefers-reduced-motion: reduce) { :root { --altitude: 0 !important; } }
 
+/* ---- Crafted intro veil — the dark valley floor before the climb ----
+   Visible by default (prerendered → the hero never flashes underneath). JS lifts it
+   like a curtain (.is-lifting / html.intro-done); the CSS auto-lift is a no-JS / slow-JS
+   fallback; reduced-motion skips it entirely. */
+#intro-veil {
+  position: fixed; inset: 0; z-index: 999; background: #0C0A09;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  animation: introAutoLift 1s cubic-bezier(.76,0,.24,1) 2.7s forwards;   /* no-JS safety net */
+}
+html.intro-done #intro-veil, #intro-veil.is-lifting {
+  transform: translateY(-100%);
+  transition: transform .92s cubic-bezier(.76,0,.24,1);
+  animation: none;                                                       /* JS lift supersedes */
+}
+@keyframes introAutoLift { to { transform: translateY(-100%); } }
+@media (prefers-reduced-motion: reduce) { #intro-veil { display: none !important; } }
+html.intro-on, html.intro-on body { overflow: hidden; }                  /* lock scroll while up */
+
+#intro-veil .iv-inner { display: flex; flex-direction: column; align-items: center; gap: 18px;
+  animation: ivRise 1s cubic-bezier(.2,.7,.2,1) both; }
+@keyframes ivRise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+#intro-veil .iv-mark { width: 54px; height: 54px; image-rendering: pixelated; }
+#intro-veil .iv-word { font-family: 'Cabinet Grotesk', system-ui, sans-serif; font-weight: 800;
+  font-size: clamp(44px, 7vw, 88px); letter-spacing: .04em; line-height: 1; color: #F4EFE7; }
+#intro-veil .iv-tag { font-family: 'DM Mono', ui-monospace, monospace; font-size: 12px;
+  letter-spacing: .32em; text-transform: uppercase; color: rgba(244,239,231,.45); }
+#intro-veil .iv-skip { position: absolute; bottom: 38px; left: 50%; transform: translateX(-50%);
+  font-family: 'DM Mono', ui-monospace, monospace; font-size: 10.5px; letter-spacing: .26em;
+  text-transform: uppercase; color: rgba(244,239,231,.32); cursor: pointer;
+  animation: ivSkipFade 1.1s ease 1.3s both; }
+@keyframes ivSkipFade { from { opacity: 0; } to { opacity: 1; } }
+
 /* --- scene shell: one idea, full viewport --- */
 .scene {
   position: relative;

@@ -224,7 +224,7 @@
   /* ====================================================================
      Lenis smooth scroll + the one shared clock (gsap.ticker)
      ==================================================================== */
-  var lenis = null, tickFn = null, fieldTickFn = null, altTickFn = null, goalMO = null, zeeIO = null, menuObs = null, onVis = null;
+  var lenis = null, tickFn = null, fieldTickFn = null, altTickFn = null, goalMO = null, zeeIO = null, menuObs = null, onVis = null, heroIntro = null;
 
   if (!reduce && Lenis) {
     lenis = new Lenis({
@@ -298,8 +298,11 @@
   if (!reduce && document.querySelector('#hero .scene-inner')) {
     var EASE = 'expo.out';   // ONE signature easing language across the whole climb
 
-    // hero intro on load — decelerates hard into place (premium, unhurried)
-    gsap.timeline({ defaults: { ease: EASE }, delay: 0.15 })
+    // hero intro — built PAUSED so it plays exactly as the intro veil lifts (the hero
+    // rises into the space the curtain just vacated). immediateRender pre-hides the hero
+    // behind the veil. If there's no veil, the controller below plays it on load.
+    heroIntro = gsap.timeline({ defaults: { ease: EASE }, paused: true });
+    heroIntro
       .from('#hero .scene-eyebrow', { y: 20, opacity: 0, duration: 0.9 })
       .from('#hero .scene-h1',      { y: 42, opacity: 0, duration: 1.15 }, '-=0.58')
       .from('#hero .scene-lede',    { y: 24, opacity: 0, duration: 0.9 },  '-=0.78')
@@ -323,6 +326,34 @@
 
     requestAnimationFrame(function () { ST.refresh(); });
   }
+
+  /* ---- Crafted intro: the dark valley floor holds for a beat (ZAKI decoding), then
+     lifts like a curtain — the hero rises into the space it vacated. The veil is
+     prerendered & visible (no hero flash); here JS owns the lift + scroll lock. CSS
+     auto-lifts as a no-JS fallback and skips the veil entirely under reduced-motion. ---- */
+  (function () {
+    var veil = document.getElementById('intro-veil'); if (!veil) return;
+    function playHero() { if (heroIntro) heroIntro.play(); }
+    if (reduce) { docEl.classList.add('intro-done'); if (veil.parentNode) veil.parentNode.removeChild(veil); playHero(); return; }
+    docEl.classList.add('intro-on');
+    if (lenis) lenis.stop();
+    window.scrollTo(0, 0);
+    var word = veil.querySelector('.iv-word');
+    if (word && window.ZakiScramble) setTimeout(function () { window.ZakiScramble(word, { duration: 950 }); }, 260);
+    var lifted = false, t;
+    function lift() {
+      if (lifted) return; lifted = true;
+      clearTimeout(t);
+      veil.classList.add('is-lifting');
+      docEl.classList.remove('intro-on');
+      docEl.classList.add('intro-done');
+      if (lenis) lenis.start();
+      playHero();
+      setTimeout(function () { if (veil.parentNode) veil.parentNode.removeChild(veil); }, 950);
+    }
+    t = setTimeout(lift, 1950);
+    veil.addEventListener('click', lift);
+  })();
 
   /* ---- Zee climber: ONE companion that ascends the right gutter WITH you.
      Its vertical position rides --altitude (CSS); here we swap its pose as each

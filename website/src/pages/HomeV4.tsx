@@ -20,6 +20,19 @@ export function HomeV4() {
 
   return (
     <>
+      {/* Crafted intro veil — the dark valley floor before the climb. Prerendered &
+          visible by default (so the hero never flashes underneath); JS lifts it like a
+          curtain after a beat (or on click), a CSS auto-lift is the no-JS fallback, and
+          reduced-motion skips it entirely. "ZAKI" decodes via the scramble engine. */}
+      <div id="intro-veil" aria-hidden="true">
+        <div className="iv-inner">
+          <img className="iv-mark" src="/zaki/assets/zaki-mark.png" alt="" />
+          <span className="iv-word">ZAKI</span>
+          <span className="iv-tag">Enter the mind</span>
+        </div>
+        <span className="iv-skip">click to enter</span>
+      </div>
+
       {/* Carried-goal token: the goal named in Scene 2 rises with --altitude up the page */}
       <div id="goal-token" aria-hidden="true"><span className="gt-dot"></span><span className="gt-text"></span></div>
       {/* Zee — the companion. ONE pixel mascot that climbs the right gutter WITH you,
