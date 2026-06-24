@@ -71,6 +71,16 @@
 #hero { padding-top: clamp(120px, 16vh, 220px); }
 #hero .scene-h1 { max-width: 14ch; }
 
+/* Spaces facet list (Scene 6) — clean editorial rows, not a heavy demo */
+.scene-facets { list-style: none; margin: clamp(28px, 4.5vh, 48px) 0 clamp(32px, 5vh, 50px); padding: 0; max-width: 580px; }
+.scene-facets li { display: flex; align-items: center; gap: 14px; padding: 16px 2px; border-top: 1px solid var(--hair); }
+.scene-facets li:last-child { border-bottom: 1px solid var(--hair); }
+.scene-facets b { font-family: 'Cabinet Grotesk', system-ui, sans-serif; font-weight: 700; font-size: 18px; color: var(--ink-1); min-width: 88px; }
+.scene-facets span { font-family: 'DM Mono', ui-monospace, monospace; font-size: 12px; color: var(--ink-3); margin-right: auto; }
+.scene-facets i { font-family: 'DM Mono', ui-monospace, monospace; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; padding: 3px 10px; border-radius: 99px; font-style: normal; }
+.fct-live { color: var(--teal-900); background: var(--teal-12); }
+.fct-soon { color: var(--ink-3); background: var(--hair); }
+
 /* mobile */
 @media (max-width: 720px) {
   .scene { padding: clamp(96px, 13vh, 140px) 22px; }
