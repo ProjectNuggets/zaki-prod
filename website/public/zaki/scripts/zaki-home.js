@@ -389,22 +389,9 @@
     ro.observe(doc.body);
   }
 
-  /* ---------- SCRAMBLE signature (mono labels glitch in on reveal) ---------- */
-  (function () {
-    if (reduce || !('IntersectionObserver' in window)) return;
-    var glyphs = 'ABCDEFGHJKLMNPQRSTUVWXYZ0123456789/\u00b7\u2014#%';
-    function scramble(node) {
-      var fin = node._final, len = fin.length, frame = 0;
-      var iv = setInterval(function () {
-        frame++; var out = '';
-        for (var i = 0; i < len; i++) { var ch = fin.charAt(i); if (ch === ' ') { out += ' '; } else if (i < frame - 3) { out += ch; } else { out += glyphs.charAt((Math.random() * glyphs.length) | 0); } }
-        node.nodeValue = out;
-        if (frame > len + 3) { clearInterval(iv); node.nodeValue = fin; }
-      }, 26);
-    }
-    var io = new IntersectionObserver(function (es) { es.forEach(function (e) { if (!e.isIntersecting) return; if (e.target._sn) scramble(e.target._sn); io.unobserve(e.target); }); }, { threshold: 0.7 });
-    $all('.kicker, .fcol-k').forEach(function (k) { var tn = k.lastChild; if (tn && tn.nodeType === 3 && tn.nodeValue && tn.nodeValue.trim().length > 1) { tn._final = tn.nodeValue; k._sn = tn; io.observe(k); } });
-  })();
+  /* SCRAMBLE signature now lives in zaki-mind.js (window.ZakiScramble), which
+     binds .kicker / .fcol-k itself. The old standalone engine was removed here
+     to avoid double-binding the same mono labels. */
 
   /* ---------- MAGNETIC primary CTAs (subtle pull toward the cursor) ---------- */
   (function () {

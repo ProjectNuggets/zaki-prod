@@ -67,7 +67,7 @@
       var cta = $('#cta-primary');
       if (cta) {
         var span = cta.querySelector('.cta-label');
-        if (span) span.textContent = intent ? ('Continue: ' + cap(intent.text)) : 'Meet ZAKI';
+        if (span) span.textContent = intent ? ('Continue: ' + cap(intent.text)) : "Enter ZAKI's mind";
       }
     }
 

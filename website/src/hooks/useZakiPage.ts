@@ -19,13 +19,6 @@ const HOME_SCRIPTS = [
 
 const PAGE_SCRIPTS = ["/zaki/scripts/zaki-page.js"];
 
-const HOME_CSS = [
-  "/zaki/styles/zaki-foundation.css",
-  "/zaki/styles/zaki-home.css",
-  "/zaki/styles/zaki-chapters.css",
-  "/zaki/styles/zaki-mind.css",
-];
-
 function injectLinks(hrefs: string[]): HTMLLinkElement[] {
   return hrefs.map((href) => {
     if (document.querySelector(`link[data-zaki][href="${href}"]`)) return null as unknown as HTMLLinkElement;
@@ -66,10 +59,11 @@ export function useZakiHomePage(bodyStage = "dark") {
   useEffect(() => {
     if (typeof document === "undefined") return;
     document.body.setAttribute("data-stage", bodyStage);
-    const links = injectLinks(HOME_CSS);
+    // CSS is bundled into <head> via Vite imports in HomeV4.tsx (styled before
+    // paint). Only the enhancement scripts are injected at runtime here.
     const scripts = loadScripts([...VENDOR_SCRIPTS, ...HOME_SCRIPTS]);
     return () => {
-      cleanup(links, scripts);
+      cleanup([], scripts);
       document.body.removeAttribute("data-stage");
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

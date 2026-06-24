@@ -1,4 +1,12 @@
 import { useZakiHomePage } from "../hooks/useZakiPage";
+// Marketing CSS bundled into <head> by Vite (home route only) so the page is
+// styled BEFORE first paint — not injected by JS after render (which caused a
+// flash of fully-unstyled content). Order = cascade: foundation -> home ->
+// chapters -> mind (mind last so it can override).
+import "../../public/zaki/styles/zaki-foundation.css";
+import "../../public/zaki/styles/zaki-home.css";
+import "../../public/zaki/styles/zaki-chapters.css";
+import "../../public/zaki/styles/zaki-mind.css";
 import { appHandoffUrl } from "../lib/appHandoff";
 
 export function HomeV4() {
@@ -11,6 +19,9 @@ export function HomeV4() {
 
   return (
     <>
+      {/* Ambient scramble field — "Enter ZAKI's mind". Fixed full-viewport, behind all content
+          (z-index:-1); canvas attaches post-hydration via zaki-mind.js. */}
+      <div id="mind-field" aria-hidden="true"></div>
       <div className="scroll-progress" id="scroll-progress" aria-hidden="true"></div>
       <div className="grain" aria-hidden="true"></div>
 
@@ -131,17 +142,17 @@ export function HomeV4() {
           </div>
           <div className="wrap hero-inner">
             <div className="hero-copy">
-              <div className="hero-eyebrow reveal"><span className="pip"></span><span>The intelligence layer for your life</span></div>
-              <h1 className="display-xl" id="hero-h1" data-split>Whatever comes next, <em className="hl">ZAKI is on your side.</em></h1>
-              <p className="lede reveal" data-d="1">One personal intelligence that remembers you, works with you, and turns intention into forward motion — across work, ideas, learning, and career.</p>
+              <div className="hero-eyebrow reveal"><span className="pip"></span><span data-scramble>ENTER · 01</span></div>
+              <h1 className="display-xl" id="hero-h1" data-split>Enter <em className="hl">ZAKI&rsquo;s mind.</em></h1>
+              <p className="lede reveal" data-d="1">Not a chatbot you open. A mind you step inside — one intelligence that holds your whole life in view, and remembers you between every visit.</p>
               <div className="hero-cta reveal" data-d="2">
-                <a className="btn btn-primary btn-lg" href={signupUrl}>Meet ZAKI
+                <a className="btn btn-primary btn-lg" href={signupUrl}>Enter ZAKI&rsquo;s mind
                   <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </a>
-                <a className="btn btn-ghost btn-lg" href="#reframe">Explore the system</a>
+                <a className="btn btn-ghost btn-lg" href="#reframe">Scroll to begin</a>
               </div>
               <div className="hero-micro reveal" data-d="3">
-                <span className="hero-sign">Never build alone.</span><span className="sep"></span><span>One memory, many ways forward — your rules.</span>
+                <span className="hero-sign">Never build alone.</span><span className="sep"></span><span>One memory, one mind — across everything you do.</span>
               </div>
             </div>
 
@@ -634,10 +645,10 @@ export function HomeV4() {
             <img className="zbot idle resolve-mascot reveal" src="/zaki/bot/sunglasses.png" alt="ZAKI Presence" />
             <span className="resolve-mark reveal"><img src="/zaki/assets/zaki-mark.png" alt="ZAKI" /></span>
             <span className="kicker center reveal" data-d="1">A new chapter</span>
-            <h2 className="display-xl reveal" data-d="1">Never build <em className="hl">alone.</em></h2>
-            <p className="resolve-sub reveal" data-d="2">This is the chapter where intelligence is finally on your side. Bring the first thing you want to move forward — ZAKI remembers it, and carries it from here.</p>
+            <h2 className="display-xl reveal" data-d="1">Never build alone.<br />Never start the next chapter <em className="hl">alone.</em></h2>
+            <p className="resolve-sub reveal" data-d="2">Whatever comes next — the launch, the move, the idea you&rsquo;ve been putting off — you don&rsquo;t begin it from zero, and you don&rsquo;t begin it by yourself. Bring the first thing you want to move forward. ZAKI remembers it from here.</p>
             <div className="resolve-cta reveal" data-d="2">
-              <a className="btn btn-primary btn-lg" id="cta-primary" href={signupUrl}><span className="cta-label">Meet ZAKI</span>
+              <a className="btn btn-primary btn-lg" id="cta-primary" href={signupUrl}><span className="cta-label">Enter ZAKI&rsquo;s mind</span>
                 <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </a>
               <a className="btn btn-ghost btn-lg" href="/story">Read the story</a>

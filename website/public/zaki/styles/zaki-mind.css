@@ -14,9 +14,26 @@ html.lenis body { height: auto; }
 .lenis.lenis-stopped { overflow: hidden; }
 .lenis.lenis-smooth iframe { pointer-events: none; }
 
-/* Defensive horizontal-overflow guard. Once Lenis + (Stage 2) the fixed WebGL
-   canvas + cursor parallax are live, transient horizontal overflow is easy to
-   introduce. `clip` (not `hidden`) so it never establishes a scroll container
-   that would break position:sticky or the Thread's scrollHeight math.
-   (No real horizontal overflow exists today — this is insurance.) */
+/* Defensive horizontal-overflow guard. Once Lenis + the canvas + cursor
+   parallax are live, transient horizontal overflow is easy to introduce.
+   `clip` (not `hidden`) so it never establishes a scroll container that would
+   break position:sticky or the Thread's scrollHeight math. */
 html, body { overflow-x: clip; }
+
+/* ============================================================
+   SCRAMBLE signature — ambient field + text decode
+   ============================================================ */
+
+/* Ambient scramble field — fixed full-viewport, behind ALL content. The body
+   holds the stage background and sections are transparent, so z-index:-1 shows
+   through every scene as one continuous field. Per-glyph alpha (zaki-mind.js)
+   controls faintness; host opacity just fades the canvas in once it's live.
+   Reduced-motion: zaki-mind.js skips the field entirely (no canvas). */
+#mind-field { position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  opacity: 0; transition: opacity 1.6s ease; }
+#mind-field.is-live { opacity: 1; }
+html.no-anim #mind-field { display: none; }
+
+/* Text decode: disable ligatures so glyph-swaps stay crisp while resolving.
+   (No nowrap — headlines keep their authored line breaks and may wrap.) */
+[data-scramble], .is-scrambling { font-variant-ligatures: none; }
