@@ -188,27 +188,23 @@ export function HomeV4() {
           <img className="scene-zee zee-left" src="/zaki/bot/wave.png" alt="" aria-hidden="true" />
         </section>
 
-        {/* CH.4 — AGENT */}
-        <section className="chapter stage-light agent" data-stage="light" data-screen-label="04 Agent" id="agent">
-          <div className="wrap">
-            <div className="agent-top">
-              <div className="sec-head reveal">
-                <span className="kicker"><span className="ix">04</span> Flagship · ZAKI in action</span>
-                <h2 className="display">Give it the outcome.<br />ZAKI handles the path.</h2>
-                <p className="lede">Delegate research, planning, creation, and follow-through. Add skills. Connect tools. Schedule work. ZAKI doesn't stop at an answer — it stops at a result you can use.</p>
-                <div className="caps"><span className="cap">Plan &amp; act</span><span className="cap">Use tools</span><span className="cap">Create files &amp; images</span><span className="cap">Delegate</span><span className="cap">Schedule</span><span className="cap">Approvals</span></div>
-              </div>
-              <div className="agent-side reveal" data-d="1">
-                <span className="status live">Live</span>
-                <p className="agent-side-note">Your permissions. Your tools. Your final say.</p>
-                <a className="btn btn-primary btn-sm agent-explore" href="/agent">Explore the Agent
+        {/* SCENE 3 — IT ACTS (Agent; the run executes as you scroll, on YOUR goal) */}
+        <section className="scene agent" data-stage="dark" data-screen-label="03 Agent" id="agent">
+          <div className="scene-glow" aria-hidden="true"></div>
+          <div className="scene-inner agent-inner">
+            <div className="agent-copy">
+              <span className="scene-eyebrow">In action · 03</span>
+              <h2 className="scene-h1">Give it the outcome.<br />It <em className="hl">does the work.</em></h2>
+              <p className="scene-lede">Not an answer you copy out — a result you can use. ZAKI plans, uses real tools, creates the files, and follows through. Every step visible. Nothing ships without your approval.</p>
+              <div className="scene-cta">
+                <a className="btn btn-primary btn-lg" href={agentUrl}>Watch ZAKI run
                   <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </a>
               </div>
             </div>
-
-            {/* Agent run proof window */}
-            <div className="run reveal" data-d="1" id="run" aria-label="Example agent run">
+            {/* run console — scrubbed by the scene pin (id renamed off #run so the
+                zaki-chapters.js auto-play stays dormant; the scroll scrub drives it) */}
+            <div className="run" id="agent-run" aria-label="Example agent run">
               <div className="run-bar">
                 <span className="run-mark"><img src="/zaki/assets/zaki-mark.png" alt="" /></span>
                 <span className="run-title">ZAKI Agent</span>
@@ -217,46 +213,19 @@ export function HomeV4() {
               </div>
               <div className="run-task">
                 <span className="run-task-k">Task</span>
-                <p className="run-task-v">"Research five launch partners, rank them against our criteria, draft the outreach, and put the final list in a spreadsheet — for <em className="hl" data-intent-echo="my product launch" data-eg-fallback="my product launch">my product launch</em>."</p>
+                <p className="run-task-v">&ldquo;Research five launch partners, rank them, draft the outreach, and put the final list in a sheet — for <em className="run-echo" data-intent-echo="my product launch" data-eg-fallback="my product launch">my product launch</em>.&rdquo;</p>
               </div>
-              <div className="run-grid">
-                <ol className="run-phases" id="run-phases">
-                  <li data-phase><span className="ph-ix">1</span><span className="ph-t">Understanding the outcome</span><span className="ph-s"></span></li>
-                  <li data-phase><span className="ph-ix">2</span><span className="ph-t">Building the criteria</span><span className="ph-s"></span></li>
-                  <li data-phase><span className="ph-ix">3</span><span className="ph-t">Researching candidates</span><span className="ph-s"></span></li>
-                  <li data-phase><span className="ph-ix">4</span><span className="ph-t">Validating the shortlist</span><span className="ph-s"></span></li>
-                  <li data-phase><span className="ph-ix">5</span><span className="ph-t">Creating the deliverables</span><span className="ph-s"></span></li>
-                  <li data-phase><span className="ph-ix">6</span><span className="ph-t">Ready for review</span><span className="ph-s"></span></li>
-                </ol>
-                <div className="run-stream">
-                  <div className="run-tools" id="run-tools" aria-hidden="true">
-                    <span className="tool" data-tool><svg viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4.2" stroke="currentColor" strokeWidth="1.3" /><path d="M9.3 9.3 12 12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>Research</span>
-                    <span className="tool" data-tool><svg viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.3" stroke="currentColor" strokeWidth="1.2" /><path d="M1.7 7h10.6M7 1.7c2 2.4 2 8.2 0 10.6M7 1.7c-2 2.4-2 8.2 0 10.6" stroke="currentColor" strokeWidth="1.2" /></svg>Web search</span>
-                    <span className="tool" data-tool><svg viewBox="0 0 14 14" fill="none"><path d="M3 1.6h5l3 3v7.8H3z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /><path d="M8 1.6v3h3" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>File creation</span>
-                    <span className="tool" data-tool><svg viewBox="0 0 14 14" fill="none"><path d="M2 11 5.5 4l2.2 4L9.4 6 12 11z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>Spreadsheet</span>
-                  </div>
-                  <div className="run-deliverables" id="run-deliverables" aria-hidden="true">
-                    <div className="dlv"><span className="dlv-n">5</span><span className="dlv-l">partners ranked</span></div>
-                    <div className="dlv"><span className="dlv-n">5</span><span className="dlv-l">outreach drafts</span></div>
-                    <div className="dlv"><span className="dlv-n">1</span><span className="dlv-l">spreadsheet ready</span></div>
-                  </div>
-                  <div className="run-learn" id="run-learn" aria-hidden="true">
-                    <div className="run-mascot"><img className="zbot" src="/zaki/bot/thinking.png" alt="" /><span className="zstate">Ready for review</span></div>
-                    <span className="learn-chip"><svg viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>Learned · prefer evidence beside every recommendation</span>
-                    <a className="btn btn-primary btn-sm run-cta" href={agentUrl}>Start with the Agent</a>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* outcome cards */}
-            <div className="agent-cards">
-              <article className="acard reveal"><span className="acard-ix">01</span><h3>Ask for the result</h3><p>Start with what needs to be true — not a perfect prompt.</p></article>
-              <article className="acard reveal" data-d="1"><span className="acard-ix">02</span><h3>Watch the work unfold</h3><p>ZAKI plans, acts, checks, and keeps going. Every phase is observable.</p></article>
-              <article className="acard reveal" data-d="2"><span className="acard-ix">03</span><h3>Add the skills you need</h3><p>Install or create reusable ways of working, then reuse them.</p></article>
-              <article className="acard reveal" data-d="3"><span className="acard-ix">04</span><h3>Keep the momentum</h3><p>Run recurring work and continue across sessions — with memory intact.</p></article>
+              <ol className="run-phases" id="run-phases">
+                <li data-phase><span className="ph-ix">1</span><span className="ph-t">Understanding the outcome</span><span className="ph-s"></span></li>
+                <li data-phase><span className="ph-ix">2</span><span className="ph-t">Building the criteria</span><span className="ph-s"></span></li>
+                <li data-phase><span className="ph-ix">3</span><span className="ph-t">Researching candidates</span><span className="ph-s"></span></li>
+                <li data-phase><span className="ph-ix">4</span><span className="ph-t">Validating the shortlist</span><span className="ph-s"></span></li>
+                <li data-phase><span className="ph-ix">5</span><span className="ph-t">Creating the deliverables</span><span className="ph-s"></span></li>
+                <li data-phase><span className="ph-ix">6</span><span className="ph-t">Ready for review</span><span className="ph-s"></span></li>
+              </ol>
             </div>
           </div>
+          <img className="scene-zee zee-right" src="/zaki/bot/thinking.png" alt="" aria-hidden="true" />
         </section>
 
         {/* CH.5 — MEMORY */}

@@ -327,6 +327,22 @@
     requestAnimationFrame(function () { ST.refresh(); });
   }
 
+  /* ---- Scene 3 (Agent): pin the scene; the run executes as you scroll ----
+     #run-phases is the sole driver here (the markup id is #agent-run, not #run,
+     so the zaki-chapters.js auto-play stays dormant and can't fight the scrub). */
+  (function () {
+    var sec = document.getElementById('agent');
+    if (!sec || reduce || matchMedia('(pointer:coarse)').matches) return;
+    var phases = [].slice.call(sec.querySelectorAll('#run-phases li'));
+    if (!phases.length) return;
+    gsap.timeline({ scrollTrigger: { trigger: sec, start: 'top top', end: '+=120%', pin: true, scrub: 0.5,
+      onUpdate: function (self) {
+        var k = Math.round(self.progress * phases.length);
+        phases.forEach(function (li, i) { li.classList.toggle('done', i < k); li.classList.toggle('active', i === k); });
+      } } });
+    requestAnimationFrame(function () { ST.refresh(); });
+  })();
+
   /* ====================================================================
      Teardown the React hook calls on unmount (SPA-leak fix)
      ==================================================================== */

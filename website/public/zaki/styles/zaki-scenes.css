@@ -112,6 +112,17 @@ body.has-intent #goal-token { display: inline-flex; }
 #goal-token .gt-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 720px) { #goal-token { display: none !important; } }
 
+/* Scene 3 — Agent: copy + run console side by side; console scrubbed by the pin */
+.agent-inner { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: clamp(32px, 5vw, 72px); align-items: center; }
+.agent .scene-h1 { font-size: clamp(34px, 5vw, 74px); max-width: 12ch; }
+.agent .scene-lede { margin-bottom: clamp(20px, 3vh, 30px); max-width: 42ch; }
+.run-echo { color: var(--brand); font-style: normal; }
+.zee-right { right: clamp(20px, 6vw, 80px); bottom: clamp(24px, 8vh, 80px); }
+@media (max-width: 980px) {
+  .agent-inner { grid-template-columns: 1fr; gap: 26px; }
+  .agent .scene-h1 { font-size: clamp(34px, 9vw, 56px); }
+}
+
 /* mobile */
 @media (max-width: 720px) {
   .scene { padding: clamp(96px, 13vh, 140px) 22px; }
