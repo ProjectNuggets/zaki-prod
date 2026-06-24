@@ -152,6 +152,20 @@ body.has-intent #goal-token { display: inline-flex; }
 .trust .scene-h1 { font-size: clamp(34px, 5vw, 78px); }
 @media (max-width: 980px) { .trust-inner { grid-template-columns: 1fr; gap: 28px; } }
 
+/* Scene 7 — Summit: brightest, centered, dawn glow; the goal resolves here */
+.summit { text-align: center; }
+.summit-inner { max-width: 1000px; }
+.summit .scene-eyebrow { justify-content: center; }
+.summit .scene-h1 { margin: 0 auto; max-width: 18ch; }
+.summit .scene-lede { margin-left: auto; margin-right: auto; }
+.summit .scene-cta { justify-content: center; }
+.summit-origin { margin-top: clamp(28px, 4vh, 44px); font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 12.5px; letter-spacing: .02em; color: var(--ink-3); }
+.summit-origin a { color: var(--brand); text-decoration: none; }
+.summit-origin a:hover { text-decoration: underline; }
+#cta .scene-glow { background: radial-gradient(80% 62% at 50% 28%, rgba(255, 206, 130, .28), transparent 70%); }
+.zee-summit { left: 50%; transform: translateX(-50%); bottom: clamp(16px, 4vh, 40px); }
+
 /* mobile */
 @media (max-width: 720px) {
   .scene { padding: clamp(96px, 13vh, 140px) 22px; }

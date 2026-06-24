@@ -347,51 +347,22 @@ export function HomeV4() {
           <img className="scene-zee zee-right" src="/zaki/bot/thinking.png" alt="" aria-hidden="true" />
         </section>
 
-        {/* CH.11.5 — ORIGIN STORY TEASER */}
-        <section className="chapter stage-light originteaser" data-stage="light" data-screen-label="The origin" id="story">
-          <div className="wrap origin-inner">
-            <div className="origin-copy">
-              <span className="kicker reveal">The origin</span>
-              <h2 className="display reveal" data-d="1">Designed by agents.<br /><em className="hlt">Built to remember.</em></h2>
-              <p className="lede reveal" data-d="2">ZAKI is a meta-agent. We didn't guess what an agent should be — we asked four of the strongest agents in the world, then built their answer in-house on a nine-layer, human-inspired memory.</p>
-              <div className="origin-architects reveal" data-d="3">
-                <span className="oa-k">Specified by</span>
-                <div className="oa-names"><span>Claude Code</span><span>Codex</span><span>OpenCode</span><span>Hermes</span></div>
-              </div>
-              <a className="btn btn-primary origin-cta reveal" data-d="3" href="/story">Read the full story
-                <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              </a>
-            </div>
-            <div className="origin-art reveal" data-d="2">
-              <div className="origin-panel">
-                <img className="origin-bot" src="/zaki/bot/thinking.png" alt="ZAKI Presence" />
-                <div className="origin-stats">
-                  <div className="origin-stat"><div className="os-n">9</div><div className="os-l">Memory layers</div></div>
-                  <div className="origin-stat"><div className="os-n">3</div><div className="os-l">Recall tiers</div></div>
-                  <div className="origin-stat"><div className="os-n">1</div><div className="os-l">Living graph</div></div>
-                </div>
-                <p className="origin-panel-cap">The first agent that can <b>debate itself</b> before it answers.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* CH.12 — RESOLUTION */}
-        <section className="chapter stage-dark resolve" data-stage="dark" data-screen-label="12 A new chapter" id="cta">
-          <div className="resolve-atlas" aria-hidden="true"><div className="resolve-con" data-constellation data-quiet data-no-labels></div><div className="dots"></div><div className="glow"></div></div>
-          <div className="wrap resolve-inner">
-            <img className="zbot idle resolve-mascot reveal" src="/zaki/bot/sunglasses.png" alt="ZAKI Presence" />
-            <span className="resolve-mark reveal"><img src="/zaki/assets/zaki-mark.png" alt="ZAKI" /></span>
-            <span className="kicker center reveal" data-d="1">A new chapter</span>
-            <h2 className="display-xl reveal" data-d="1">Never build alone.<br />Never start the next chapter <em className="hl">alone.</em></h2>
-            <p className="resolve-sub reveal" data-d="2">Whatever comes next — the launch, the move, the idea you&rsquo;ve been putting off — you don&rsquo;t begin it from zero, and you don&rsquo;t begin it by yourself. Bring the first thing you want to move forward. ZAKI remembers it from here.</p>
-            <div className="resolve-cta reveal" data-d="2">
+        {/* SCENE 7 — THE SUMMIT (brightest dawn; your goal resolves; "alone" settles last) */}
+        <section className="scene summit" data-stage="light" data-reveal data-screen-label="07 A new chapter" id="cta">
+          <div className="scene-glow" aria-hidden="true"></div>
+          <div className="scene-inner summit-inner">
+            <span className="scene-eyebrow">A new chapter · 07</span>
+            <h2 className="scene-h1">Never build alone.<br />Never start the next chapter <em className="hl">alone.</em></h2>
+            <p className="scene-lede">Whatever comes next — the launch, the move, the idea you&rsquo;ve been carrying — you don&rsquo;t begin it from zero, and you don&rsquo;t begin it by yourself.</p>
+            <div className="scene-cta resolve-cta">
               <a className="btn btn-primary btn-lg" id="cta-primary" href={signupUrl}><span className="cta-label">Enter ZAKI&rsquo;s mind</span>
                 <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </a>
               <a className="btn btn-ghost btn-lg" href="/story">Read the story</a>
             </div>
+            <p className="summit-origin">Designed by agents. Built to remember. <a href="/story">Read the full story &rarr;</a></p>
           </div>
+          <img className="scene-zee zee-summit" src="/zaki/bot/heart.png" alt="" aria-hidden="true" />
         </section>
 
       </main>
