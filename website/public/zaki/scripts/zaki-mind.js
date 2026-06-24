@@ -309,10 +309,13 @@
       .from('#hero .scene-cta',     { y: 18, opacity: 0, duration: 0.8 },  '-=0.66')
       .from('#hero .scene-cue',     { opacity: 0, duration: 0.9, ease: 'sine.out' }, '-=0.3');
 
-    // pin the hero and lift/fade it out as scene 2 arrives (tight hand-off)
-    gsap.timeline({ scrollTrigger: { trigger: '#hero', start: 'top top', end: '+=60%', pin: true, scrub: 0.6 } })
-      .to('#hero .scene-cue',   { opacity: 0, ease: 'none' }, 0)
-      .to('#hero .scene-inner', { yPercent: -12, opacity: 0, ease: 'power2.in' }, 0);
+    // pin the hero and lift/fade it out as scene 2 arrives (tight hand-off).
+    // Desktop only — pinning fights touch scrollers, so coarse pointers free-scroll.
+    if (!matchMedia('(pointer:coarse)').matches) {
+      gsap.timeline({ scrollTrigger: { trigger: '#hero', start: 'top top', end: '+=60%', pin: true, scrub: 0.6 } })
+        .to('#hero .scene-cue',   { opacity: 0, ease: 'none' }, 0)
+        .to('#hero .scene-inner', { yPercent: -12, opacity: 0, ease: 'power2.in' }, 0);
+    }
 
     // scene reveals — copy staggers in on the signature ease, then the visual panel
     // rises a beat later (overlapping). Every non-hero scene gets the same signature.
