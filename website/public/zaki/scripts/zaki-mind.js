@@ -224,7 +224,7 @@
   /* ====================================================================
      Lenis smooth scroll + the one shared clock (gsap.ticker)
      ==================================================================== */
-  var lenis = null, tickFn = null, fieldTickFn = null, altTickFn = null, goalMO = null, menuObs = null, onVis = null;
+  var lenis = null, tickFn = null, fieldTickFn = null, altTickFn = null, goalMO = null, zeeIO = null, menuObs = null, onVis = null;
 
   if (!reduce && Lenis) {
     lenis = new Lenis({
@@ -317,15 +317,50 @@
       });
     });
 
-    // Zee companion — reveal on scene enter (immediately if already in view, e.g. hero)
-    [].forEach.call(document.querySelectorAll('.scene-zee'), function (z) {
-      var sc = z.closest('.scene'); if (!sc) return;
-      if (sc.getBoundingClientRect().top < window.innerHeight * 0.85) { z.classList.add('is-in'); return; }
-      ST.create({ trigger: sc, start: 'top 80%', once: true, onEnter: function () { z.classList.add('is-in'); } });
-    });
-
     requestAnimationFrame(function () { ST.refresh(); });
   }
+
+  /* ---- Zee climber: ONE companion that ascends the right gutter WITH you.
+     Its vertical position rides --altitude (CSS); here we swap its pose as each
+     scene takes over, and at the summit it turns to face you (.at-summit). The
+     "never alone" promise, made literal and persistent. Desktop only (CSS gates
+     the display); pose-swap is cheap and runs under reduce too. ---- */
+  (function () {
+    var zee = document.getElementById('zee-climber'); if (!zee) return;
+    var scenes = [].slice.call(document.querySelectorAll('.scene[data-zee]'));
+    if (!scenes.length || !('IntersectionObserver' in window)) return;
+    // Drive the pose from whichever scene is MOST visible — self-correcting under
+    // any scroll speed or direction (onEnter/onEnterBack lagged by one on fast jumps,
+    // and fired the summit turn a scene early). The dominant scene owns Zee.
+    var ratios = new Map(), cur = '';
+    function pick() {
+      var best = null, bestR = -1;
+      scenes.forEach(function (s) { var r = ratios.get(s) || 0; if (r > bestR) { bestR = r; best = s; } });
+      if (!best || bestR <= 0) return;
+      var src = best.getAttribute('data-zee');
+      if (src && src !== cur) {
+        cur = src;
+        zee.classList.add('zee-swap');
+        setTimeout(function () { zee.src = src; zee.classList.remove('zee-swap'); }, 150);
+      }
+      zee.classList.toggle('at-summit', best.id === 'cta');
+    }
+    zeeIO = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { ratios.set(e.target, e.intersectionRatio); });
+      pick();
+    }, { threshold: [0, 0.2, 0.4, 0.6, 0.8, 1] });
+    scenes.forEach(function (s) { zeeIO.observe(s); });
+    // join a beat after the hero intro settles
+    requestAnimationFrame(function () { setTimeout(function () { zee.classList.add('is-in'); }, 650); });
+  })();
+
+  /* ---- Summit arrival bloom: the dawn opens with a beat as you crest the top.
+     The glow blooms from nothing; the goal resolving in the CTA gets its payoff. ---- */
+  (function () {
+    var cta = document.getElementById('cta'); if (!cta || reduce) return;
+    ST.create({ trigger: cta, start: 'top 68%', once: true,
+      onEnter: function () { cta.classList.add('summit-bloomed'); } });
+  })();
 
   /* ---- Scene 3 (Agent): pin the scene; the run executes as you scroll ----
      #run-phases is the sole driver here (the markup id is #agent-run, not #run,
@@ -352,6 +387,7 @@
       if (fieldTickFn) gsap.ticker.remove(fieldTickFn);
       if (altTickFn) { gsap.ticker.remove(altTickFn); altTickFn = null; }
       if (goalMO) { goalMO.disconnect(); goalMO = null; }
+      if (zeeIO) { zeeIO.disconnect(); zeeIO = null; }
       if (field) { field.destroy(); field = null; }
       if (lenis) { if (tickFn) gsap.ticker.remove(tickFn); lenis.destroy(); lenis = null; }
       if (menuObs) { menuObs.disconnect(); menuObs = null; }

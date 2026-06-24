@@ -22,6 +22,10 @@ export function HomeV4() {
     <>
       {/* Carried-goal token: the goal named in Scene 2 rises with --altitude up the page */}
       <div id="goal-token" aria-hidden="true"><span className="gt-dot"></span><span className="gt-text"></span></div>
+      {/* Zee — the companion. ONE pixel mascot that climbs the right gutter WITH you,
+          swapping pose per scene (data-zee on each .scene) and turning to face you at the
+          summit. Carries the goal token up the mountain. Swap poses by editing data-zee. */}
+      <img id="zee-climber" src="/zaki/bot/sunglasses.png" alt="" aria-hidden="true" />
       <div className="scroll-progress" id="scroll-progress" aria-hidden="true"></div>
       <div className="grain" aria-hidden="true"></div>
 
@@ -134,7 +138,7 @@ export function HomeV4() {
       <main id="top">
 
         {/* SCENE 1 — HERO (full-screen editorial, pinned) */}
-        <header className="scene stage-dark" data-stage="dark" data-screen-label="01 Hero" id="hero">
+        <header className="scene stage-dark" data-stage="dark" data-screen-label="01 Hero" data-zee="/zaki/bot/sunglasses.png" id="hero">
           <div className="scene-glow" aria-hidden="true"></div>
           <div className="scene-inner">
             <span className="scene-eyebrow">Your AI · 01</span>
@@ -146,13 +150,12 @@ export function HomeV4() {
               </a>
             </div>
           </div>
-          <img className="scene-zee zee-hero" src="/zaki/bot/sunglasses.png" alt="" aria-hidden="true" />
           <span className="scene-cue" aria-hidden="true">Scroll<i></i></span>
         </header>
 
         {/* CH.2 — REFRAME */}
         {/* SCENE 2 — YOUR CHAPTER (name your goal; it becomes the carried token) */}
-        <section className="scene" data-stage="dark" data-reveal data-screen-label="02 Begin" id="intention">
+        <section className="scene" data-stage="dark" data-reveal data-screen-label="02 Begin" data-zee="/zaki/bot/wave.png" id="intention">
           <div className="scene-glow" aria-hidden="true"></div>
           <div className="scene-inner">
             <span className="scene-eyebrow">Begin · 02</span>
@@ -185,11 +188,10 @@ export function HomeV4() {
               <p className="ir-note">It travels with you — used in the moments below, and nowhere else.</p>
             </div>
           </div>
-          <img className="scene-zee zee-left" src="/zaki/bot/wave.png" alt="" aria-hidden="true" />
         </section>
 
         {/* SCENE 3 — IT ACTS (Agent; the run executes as you scroll, on YOUR goal) */}
-        <section className="scene agent" data-stage="dark" data-screen-label="03 Agent" id="agent">
+        <section className="scene agent" data-stage="dark" data-screen-label="03 Agent" data-zee="/zaki/bot/thinking.png" id="agent">
           <div className="scene-glow" aria-hidden="true"></div>
           <div className="scene-inner agent-inner">
             <div className="agent-copy">
@@ -225,11 +227,10 @@ export function HomeV4() {
               </ol>
             </div>
           </div>
-          <img className="scene-zee zee-right" src="/zaki/bot/thinking.png" alt="" aria-hidden="true" />
         </section>
 
         {/* SCENE 4 — IT REMEMBERS YOU (living memory graph; your goal is the red node) */}
-        <section className="scene memory" data-stage="dark" data-screen-label="04 Memory" id="memory">
+        <section className="scene memory" data-stage="dark" data-screen-label="04 Memory" data-zee="/zaki/bot/heart.png" id="memory">
           <div className="scene-glow" aria-hidden="true"></div>
           <div className="scene-inner mem-inner">
             <div className="mem-copy">
@@ -251,11 +252,10 @@ export function HomeV4() {
             <li className="mem-item" data-type="Correction"><span className="mem-type corr">Correction</span><span className="mem-text">Put evidence beside every recommendation</span></li>
             <li className="mem-item" data-type="Deadline"><span className="mem-type dl">Deadline</span><span className="mem-text">Investor update — every other Monday</span></li>
           </ul>
-          <img className="scene-zee zee-right" src="/zaki/bot/heart.png" alt="" aria-hidden="true" />
         </section>
 
         {/* SCENE 5 — EVERY WORLD (Spaces + the suite as honest Soon facets) */}
-        <section className="scene spaces" data-stage="dark" data-reveal data-screen-label="05 Spaces" id="spaces">
+        <section className="scene spaces" data-stage="dark" data-reveal data-screen-label="05 Spaces" data-zee="/zaki/bot/hop.png" id="spaces">
           <div className="scene-glow" aria-hidden="true"></div>
           <div className="scene-inner spaces-inner">
             <div className="spaces-copy">
@@ -306,11 +306,10 @@ export function HomeV4() {
               </div>
             </div>
           </div>
-          <img className="scene-zee zee-right" src="/zaki/bot/wave.png" alt="" aria-hidden="true" />
         </section>
 
         {/* SCENE 6 — BECAUSE YOU LET IT (Trust; the permission boundary set-piece) */}
-        <section className="scene trust" data-stage="dark" data-reveal data-screen-label="06 Trust" id="trust">
+        <section className="scene trust" data-stage="dark" data-reveal data-screen-label="06 Trust" data-zee="/zaki/bot/wink.png" id="trust">
           <div className="scene-glow" aria-hidden="true"></div>
           <div className="scene-inner trust-inner">
             <div className="trust-copy">
@@ -344,11 +343,10 @@ export function HomeV4() {
                 </div>
               </div>
             </div>
-          <img className="scene-zee zee-right" src="/zaki/bot/thinking.png" alt="" aria-hidden="true" />
         </section>
 
         {/* SCENE 7 — THE SUMMIT (brightest dawn; your goal resolves; "alone" settles last) */}
-        <section className="scene summit" data-stage="light" data-reveal data-screen-label="07 A new chapter" id="cta">
+        <section className="scene summit" data-stage="light" data-reveal data-screen-label="07 A new chapter" data-zee="/zaki/bot/grin.png" id="cta">
           <div className="scene-glow" aria-hidden="true"></div>
           <div className="scene-inner summit-inner">
             <span className="scene-eyebrow">A new chapter · 07</span>
@@ -362,7 +360,6 @@ export function HomeV4() {
             </div>
             <p className="summit-origin">Designed by agents. Built to remember. <a href="/story">Read the full story &rarr;</a></p>
           </div>
-          <img className="scene-zee zee-summit" src="/zaki/bot/heart.png" alt="" aria-hidden="true" />
         </section>
 
       </main>

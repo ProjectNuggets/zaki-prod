@@ -91,13 +91,38 @@ body, body[data-stage] {
 #hero { padding-top: clamp(120px, 16vh, 220px); }
 #hero .scene-h1 { max-width: 14ch; }
 
-/* Zee — the companion, one pose per scene, revealed on enter (.is-in) */
-.scene-zee { position: absolute; z-index: 1; pointer-events: none; image-rendering: pixelated;
-  width: clamp(72px, 9vw, 128px); height: auto; opacity: 0; transform: translateY(10px); }
-.scene-zee.is-in { opacity: 1; transform: none; transition: opacity .8s ease, transform .8s ease; }
-.zee-hero { right: clamp(20px, 6vw, 96px); bottom: clamp(26px, 9vh, 96px); }
-.zee-left { left: clamp(20px, 6vw, 80px); bottom: clamp(24px, 8vh, 80px); }
-@media (max-width: 720px) { .scene-zee { width: 60px; } }
+/* Zee climber — ONE companion that ascends the RIGHT gutter WITH you. Its vertical
+   position rides --altitude (rises as you climb, just below the goal token, so Zee
+   "carries" the goal up the mountain); JS swaps its pose per scene. Desktop only —
+   a fixed mascot is intrusive on a phone, so it's gated to fine-pointer ≥981px. */
+#zee-climber {
+  display: none; position: fixed; z-index: 58;
+  right: clamp(18px, 4vw, 70px);
+  top: calc(84vh - var(--altitude) * 62vh);
+  width: clamp(58px, 5vw, 84px); height: auto;
+  image-rendering: pixelated; pointer-events: none;
+  opacity: 0; transform: translateY(14px) scale(.9);
+  transition: opacity .7s ease, transform .7s cubic-bezier(.2,.7,.2,1);
+  filter: drop-shadow(0 10px 22px rgba(0,0,0,.34));
+  will-change: top, opacity;
+}
+@media (hover: hover) and (pointer: fine) and (min-width: 981px) { #zee-climber { display: block; } }
+#zee-climber.is-in { opacity: 1; transform: none; }
+#zee-climber.zee-swap { opacity: 0; transition: opacity .15s ease; }          /* crossfade pose swap */
+@media (prefers-reduced-motion: no-preference) {
+  #zee-climber.is-in:not(.zee-swap):not(.at-summit) { animation: zeeBob 3.6s ease-in-out infinite; }
+}
+@keyframes zeeBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+/* Summit: Zee steps to center and turns to face you — bigger, warm glow, the payoff */
+#zee-climber.at-summit {
+  top: auto; bottom: clamp(20px, 6vh, 54px);
+  right: 50%; transform: translateX(50%) scale(1.55); opacity: 1;
+  width: clamp(74px, 7vw, 112px);
+  filter: drop-shadow(0 0 32px var(--brand-30)) drop-shadow(0 14px 26px rgba(0,0,0,.16));
+  transition: top .9s cubic-bezier(.2,.7,.2,1), bottom .9s cubic-bezier(.2,.7,.2,1),
+              right .9s cubic-bezier(.2,.7,.2,1), transform .9s cubic-bezier(.2,.7,.2,1),
+              width .9s ease, filter .9s ease;
+}
 
 /* Carried-goal token — rises with --altitude along the RIGHT gutter (the
    editorial content is left-aligned, so the right stays clear of headlines/panels). */
@@ -117,7 +142,6 @@ body.has-intent #goal-token { display: inline-flex; }
 .agent .scene-h1 { font-size: clamp(34px, 5vw, 74px); max-width: 12ch; }
 .agent .scene-lede { margin-bottom: clamp(20px, 3vh, 30px); max-width: 42ch; }
 .run-echo { color: var(--brand); font-style: normal; }
-.zee-right { right: clamp(20px, 6vw, 80px); bottom: clamp(24px, 8vh, 80px); }
 @media (max-width: 980px) {
   .agent-inner { grid-template-columns: 1fr; gap: 26px; }
   .agent .scene-h1 { font-size: clamp(34px, 9vw, 56px); }
@@ -163,8 +187,17 @@ body.has-intent #goal-token { display: inline-flex; }
   font-size: 12.5px; letter-spacing: .02em; color: var(--ink-3); }
 .summit-origin a { color: var(--brand); text-decoration: none; }
 .summit-origin a:hover { text-decoration: underline; }
-#cta .scene-glow { background: radial-gradient(80% 62% at 50% 28%, rgba(255, 206, 130, .28), transparent 70%); }
-.zee-summit { left: 50%; transform: translateX(-50%); bottom: clamp(16px, 4vh, 40px); }
+/* Summit arrival bloom — the dawn glow opens from nothing as you crest (.summit-bloomed
+   set by a ScrollTrigger). A second, brighter core blooms a touch slower for depth. */
+#cta .scene-glow {
+  background:
+    radial-gradient(80% 62% at 50% 28%, rgba(255, 206, 130, .30), transparent 70%),
+    radial-gradient(40% 34% at 50% 24%, rgba(255, 233, 196, .42), transparent 72%);
+  transform: scale(.55); opacity: 0; transform-origin: 50% 26%;
+  transition: transform 1.5s cubic-bezier(.2,.7,.2,1), opacity 1.4s ease;
+}
+#cta.summit-bloomed .scene-glow { transform: scale(1); opacity: 1; }
+@media (prefers-reduced-motion: reduce) { #cta .scene-glow { transform: none; opacity: 1; transition: none; } }
 
 /* mobile */
 @media (max-width: 720px) {
