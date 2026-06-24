@@ -296,25 +296,29 @@
        - free-scroll scenes [data-reveal]: bold staggered reveal on enter
      ==================================================================== */
   if (!reduce && document.querySelector('#hero .scene-inner')) {
-    // intro on load
-    gsap.timeline({ delay: 0.1 })
-      .from('#hero .scene-eyebrow', { y: 18, opacity: 0, duration: 0.7, ease: 'power3.out' })
-      .from('#hero .scene-h1', { y: 34, opacity: 0, duration: 0.95, ease: 'power3.out' }, '-=0.45')
-      .from('#hero .scene-lede', { y: 20, opacity: 0, duration: 0.7, ease: 'power3.out' }, '-=0.6')
-      .from('#hero .scene-cta', { y: 16, opacity: 0, duration: 0.6, ease: 'power3.out' }, '-=0.5')
-      .from('#hero .scene-cue', { opacity: 0, duration: 0.8, ease: 'power1.out' }, '-=0.2');
+    var EASE = 'expo.out';   // ONE signature easing language across the whole climb
 
-    // pin the hero briefly and lift/fade it out as scene 2 arrives (tight hand-off)
-    gsap.timeline({ scrollTrigger: { trigger: '#hero', start: 'top top', end: '+=55%', pin: true, scrub: 0.5 } })
-      .to('#hero .scene-cue', { opacity: 0, ease: 'none' }, 0)
-      .to('#hero .scene-inner', { yPercent: -10, opacity: 0, ease: 'power1.in' }, 0);
+    // hero intro on load — decelerates hard into place (premium, unhurried)
+    gsap.timeline({ defaults: { ease: EASE }, delay: 0.15 })
+      .from('#hero .scene-eyebrow', { y: 20, opacity: 0, duration: 0.9 })
+      .from('#hero .scene-h1',      { y: 42, opacity: 0, duration: 1.15 }, '-=0.58')
+      .from('#hero .scene-lede',    { y: 24, opacity: 0, duration: 0.9 },  '-=0.78')
+      .from('#hero .scene-cta',     { y: 18, opacity: 0, duration: 0.8 },  '-=0.66')
+      .from('#hero .scene-cue',     { opacity: 0, duration: 0.9, ease: 'sine.out' }, '-=0.3');
 
-    // free-scroll scene reveals
+    // pin the hero and lift/fade it out as scene 2 arrives (tight hand-off)
+    gsap.timeline({ scrollTrigger: { trigger: '#hero', start: 'top top', end: '+=60%', pin: true, scrub: 0.6 } })
+      .to('#hero .scene-cue',   { opacity: 0, ease: 'none' }, 0)
+      .to('#hero .scene-inner', { yPercent: -12, opacity: 0, ease: 'power2.in' }, 0);
+
+    // scene reveals — copy staggers in on the signature ease, then the visual panel
+    // rises a beat later (overlapping). Every non-hero scene gets the same signature.
     [].forEach.call(document.querySelectorAll('.scene[data-reveal]'), function (sc) {
-      gsap.from(sc.querySelectorAll('.scene-eyebrow, .scene-h1, .scene-lede, .scene-cta'), {
-        scrollTrigger: { trigger: sc, start: 'top 72%' },
-        y: 40, opacity: 0, duration: 0.95, ease: 'power3.out', stagger: 0.1
-      });
+      var copy = sc.querySelectorAll('.scene-eyebrow, .scene-h1, .scene-lede, .scene-facets, .scene-cta, .summit-origin');
+      var tl = gsap.timeline({ scrollTrigger: { trigger: sc, start: 'top 74%' } });
+      if (copy.length) tl.from(copy, { y: 46, opacity: 0, duration: 1.1, ease: EASE, stagger: 0.085 });
+      var panel = sc.querySelector('.run, .mem-graph, .spaces-vis, .boundary');
+      if (panel) tl.from(panel, { y: 40, opacity: 0, duration: 1.15, ease: EASE }, '-=0.85');
     });
 
     requestAnimationFrame(function () { ST.refresh(); });

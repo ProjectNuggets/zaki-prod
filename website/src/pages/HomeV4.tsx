@@ -191,7 +191,7 @@ export function HomeV4() {
         </section>
 
         {/* SCENE 3 — IT ACTS (Agent; the run executes as you scroll, on YOUR goal) */}
-        <section className="scene agent" data-stage="dark" data-screen-label="03 Agent" data-zee="/zaki/bot/thinking.png" id="agent">
+        <section className="scene agent" data-stage="dark" data-reveal data-screen-label="03 Agent" data-zee="/zaki/bot/thinking.png" id="agent">
           <div className="scene-glow" aria-hidden="true"></div>
           <div className="scene-inner agent-inner">
             <div className="agent-copy">
@@ -230,7 +230,7 @@ export function HomeV4() {
         </section>
 
         {/* SCENE 4 — IT REMEMBERS YOU (living memory graph; your goal is the red node) */}
-        <section className="scene memory" data-stage="dark" data-screen-label="04 Memory" data-zee="/zaki/bot/heart.png" id="memory">
+        <section className="scene memory" data-stage="dark" data-reveal data-screen-label="04 Memory" data-zee="/zaki/bot/heart.png" id="memory">
           <div className="scene-glow" aria-hidden="true"></div>
           <div className="scene-inner mem-inner">
             <div className="mem-copy">
