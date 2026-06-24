@@ -162,13 +162,18 @@ export function HomeV4() {
           </div>
         </section>
 
-        {/* SCENE 3 — INTENTION (full-screen, free-scroll reveal) */}
-        <section className="scene stage-dark" data-stage="dark" data-reveal data-screen-label="03 Begin" id="intention">
-          <div className="scene-glow" aria-hidden="true"></div>
-          <div className="scene-inner">
-            <span className="scene-eyebrow">Begin · 03</span>
-            <h2 className="scene-h1">What are you trying to <em className="hl">move forward?</em></h2>
-            <p className="scene-lede">Name one thing. From here, the page is about that — and so is ZAKI. It stays on this device, and you can forget it anytime.</p>
+        {/* CH.3 — INTENTION */}
+        <section className="chapter stage-dark intention" data-stage="dark" data-screen-label="03 Intention" id="intention">
+          <div className="wrap intent-wrap">
+            <div className="intent-presence reveal" aria-hidden="true">
+              <img className="zbot idle" src="/zaki/bot/wave.png" alt="" />
+              <span className="zstate" id="intent-state">Listening</span>
+            </div>
+            <div className="sec-head center reveal" style={{ marginInline: "auto", textAlign: "center" }}>
+              <span className="kicker center"><span className="ix">03</span> Begin</span>
+              <h2 className="display" style={{ marginInline: "auto" }}>What are you trying to<br />move forward?</h2>
+              <p className="lede" style={{ marginInline: "auto" }}>Pick one, or tell ZAKI in your words. It stays on this device, shapes the examples ahead, and you can forget it anytime.</p>
+            </div>
 
             <div className="intent-pick reveal" data-d="1" id="intent-pick">
               <button className="intent-chip" data-key="project" data-eg="launch my design portfolio">Move a project forward</button>
@@ -198,73 +203,406 @@ export function HomeV4() {
           </div>
         </section>
 
-        {/* SCENE 4 — AGENT (full-screen, free-scroll reveal) */}
-        <section className="scene stage-light" data-stage="light" data-reveal data-screen-label="04 Agent" id="agent">
-          <div className="scene-inner">
-            <span className="scene-eyebrow">In action · 04</span>
-            <h2 className="scene-h1">Give it the outcome.<br />It <em className="hl">does the work.</em></h2>
-            <p className="scene-lede">Not an answer you copy out — a result you can use. ZAKI plans, researches, uses real tools, creates the files, and follows through. Every step visible. Nothing ships without your approval.</p>
-            <div className="scene-cta">
-              <a className="btn btn-primary btn-lg" href={agentUrl}>Watch ZAKI run
+        {/* CH.4 — AGENT */}
+        <section className="chapter stage-light agent" data-stage="light" data-screen-label="04 Agent" id="agent">
+          <div className="wrap">
+            <div className="agent-top">
+              <div className="sec-head reveal">
+                <span className="kicker"><span className="ix">04</span> Flagship · ZAKI in action</span>
+                <h2 className="display">Give it the outcome.<br />ZAKI handles the path.</h2>
+                <p className="lede">Delegate research, planning, creation, and follow-through. Add skills. Connect tools. Schedule work. ZAKI doesn't stop at an answer — it stops at a result you can use.</p>
+                <div className="caps"><span className="cap">Plan &amp; act</span><span className="cap">Use tools</span><span className="cap">Create files &amp; images</span><span className="cap">Delegate</span><span className="cap">Schedule</span><span className="cap">Approvals</span></div>
+              </div>
+              <div className="agent-side reveal" data-d="1">
+                <span className="status live">Live</span>
+                <p className="agent-side-note">Your permissions. Your tools. Your final say.</p>
+                <a className="btn btn-primary btn-sm agent-explore" href="/agent">Explore the Agent
+                  <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </a>
+              </div>
+            </div>
+
+            {/* Agent run proof window */}
+            <div className="run reveal" data-d="1" id="run" aria-label="Example agent run">
+              <div className="run-bar">
+                <span className="run-mark"><img src="/zaki/assets/zaki-mark.png" alt="" /></span>
+                <span className="run-title">ZAKI Agent</span>
+                <span className="run-sub">Personal agent</span>
+                <span className="run-mem"><i></i>Memory on</span>
+              </div>
+              <div className="run-task">
+                <span className="run-task-k">Task</span>
+                <p className="run-task-v">"Research five launch partners, rank them against our criteria, draft the outreach, and put the final list in a spreadsheet — for <em className="hl" data-intent-echo="my product launch" data-eg-fallback="my product launch">my product launch</em>."</p>
+              </div>
+              <div className="run-grid">
+                <ol className="run-phases" id="run-phases">
+                  <li data-phase><span className="ph-ix">1</span><span className="ph-t">Understanding the outcome</span><span className="ph-s"></span></li>
+                  <li data-phase><span className="ph-ix">2</span><span className="ph-t">Building the criteria</span><span className="ph-s"></span></li>
+                  <li data-phase><span className="ph-ix">3</span><span className="ph-t">Researching candidates</span><span className="ph-s"></span></li>
+                  <li data-phase><span className="ph-ix">4</span><span className="ph-t">Validating the shortlist</span><span className="ph-s"></span></li>
+                  <li data-phase><span className="ph-ix">5</span><span className="ph-t">Creating the deliverables</span><span className="ph-s"></span></li>
+                  <li data-phase><span className="ph-ix">6</span><span className="ph-t">Ready for review</span><span className="ph-s"></span></li>
+                </ol>
+                <div className="run-stream">
+                  <div className="run-tools" id="run-tools" aria-hidden="true">
+                    <span className="tool" data-tool><svg viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4.2" stroke="currentColor" strokeWidth="1.3" /><path d="M9.3 9.3 12 12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>Research</span>
+                    <span className="tool" data-tool><svg viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.3" stroke="currentColor" strokeWidth="1.2" /><path d="M1.7 7h10.6M7 1.7c2 2.4 2 8.2 0 10.6M7 1.7c-2 2.4-2 8.2 0 10.6" stroke="currentColor" strokeWidth="1.2" /></svg>Web search</span>
+                    <span className="tool" data-tool><svg viewBox="0 0 14 14" fill="none"><path d="M3 1.6h5l3 3v7.8H3z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /><path d="M8 1.6v3h3" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>File creation</span>
+                    <span className="tool" data-tool><svg viewBox="0 0 14 14" fill="none"><path d="M2 11 5.5 4l2.2 4L9.4 6 12 11z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>Spreadsheet</span>
+                  </div>
+                  <div className="run-deliverables" id="run-deliverables" aria-hidden="true">
+                    <div className="dlv"><span className="dlv-n">5</span><span className="dlv-l">partners ranked</span></div>
+                    <div className="dlv"><span className="dlv-n">5</span><span className="dlv-l">outreach drafts</span></div>
+                    <div className="dlv"><span className="dlv-n">1</span><span className="dlv-l">spreadsheet ready</span></div>
+                  </div>
+                  <div className="run-learn" id="run-learn" aria-hidden="true">
+                    <div className="run-mascot"><img className="zbot" src="/zaki/bot/thinking.png" alt="" /><span className="zstate">Ready for review</span></div>
+                    <span className="learn-chip"><svg viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>Learned · prefer evidence beside every recommendation</span>
+                    <a className="btn btn-primary btn-sm run-cta" href={agentUrl}>Start with the Agent</a>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* outcome cards */}
+            <div className="agent-cards">
+              <article className="acard reveal"><span className="acard-ix">01</span><h3>Ask for the result</h3><p>Start with what needs to be true — not a perfect prompt.</p></article>
+              <article className="acard reveal" data-d="1"><span className="acard-ix">02</span><h3>Watch the work unfold</h3><p>ZAKI plans, acts, checks, and keeps going. Every phase is observable.</p></article>
+              <article className="acard reveal" data-d="2"><span className="acard-ix">03</span><h3>Add the skills you need</h3><p>Install or create reusable ways of working, then reuse them.</p></article>
+              <article className="acard reveal" data-d="3"><span className="acard-ix">04</span><h3>Keep the momentum</h3><p>Run recurring work and continue across sessions — with memory intact.</p></article>
+            </div>
+          </div>
+        </section>
+
+        {/* CH.5 — MEMORY */}
+        <section className="chapter stage-light memory" data-stage="light" data-screen-label="05 Memory" id="memory">
+          <div className="wrap">
+            <div className="sec-head reveal">
+              <span className="kicker"><span className="ix">05</span> Continuity</span>
+              <h2 className="display">It remembers the person,<br />not just the prompt.</h2>
+              <p className="lede">Your goals, preferences, decisions, corrections, and relationships form a living graph. ZAKI brings the right context forward when it helps — and keeps it out of the way when it doesn't.</p>
+            </div>
+
+            <div className="mem-grid">
+              <div className="mem-panel reveal" data-d="1" id="mem-panel">
+                <div className="mem-bar">
+                  <span className="mem-title"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.4" stroke="currentColor" strokeWidth="1.3" /><circle cx="8" cy="8" r="2" fill="currentColor" /></svg>Memory</span>
+                  <span className="mem-sub">What ZAKI is carrying for you</span>
+                </div>
+                <ul className="mem-list" id="mem-list">
+                  <li className="mem-item" data-type="Preference"><span className="mem-type pref">Preference</span><span className="mem-text">You do deep work best before noon</span><span className="mem-act"></span></li>
+                  <li className="mem-item sel" data-type="Project"><span className="mem-type proj">Project</span><span className="mem-text" data-intent-echo="Launch my design portfolio" data-eg-fallback="Launch my design portfolio">Launch my design portfolio</span><span className="mem-act"></span></li>
+                  <li className="mem-item" data-type="Correction"><span className="mem-type corr">Correction</span><span className="mem-text">Put evidence beside every recommendation</span><span className="mem-act"></span></li>
+                  <li className="mem-item" data-type="Deadline"><span className="mem-type dl">Deadline</span><span className="mem-text">Investor update — every other Monday</span><span className="mem-act"></span></li>
+                </ul>
+                <div className="mem-controls">
+                  <span className="mem-controls-k">Selected memory</span>
+                  <div className="mem-controls-btns">
+                    <button className="mem-ctl">Inspect</button>
+                    <button className="mem-ctl">Correct</button>
+                    <button className="mem-ctl danger">Forget</button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mem-layers reveal" data-d="2">
+                <article className="mlayer">
+                  <span className="mlayer-ix">Global continuity</span>
+                  <p>Your name, preferences, and long-running goals can move with you — across every product.</p>
+                </article>
+                <article className="mlayer">
+                  <span className="mlayer-ix">Context that stays scoped</span>
+                  <p>Documents inside a Space are available to its threads without leaking into unrelated work.</p>
+                </article>
+                <article className="mlayer">
+                  <span className="mlayer-ix">Memory under your control</span>
+                  <p>Inspect it. Correct it. Remove it. You decide what stays — and what ZAKI forgets.</p>
+                </article>
+                <a className="mem-more" href="#trust">See how memory works
+                  <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* CH.6 — SPACES */}
+        <section className="chapter stage-light spaces" data-stage="light" data-screen-label="06 Spaces" id="spaces">
+          <div className="wrap">
+            <div className="sec-head reveal">
+              <span className="kicker"><span className="ix">06</span> ZAKI in context</span>
+              <h2 className="display">Keep every conversation<br />in its world.</h2>
+              <p className="lede">Create a Space for a project, topic, class, or client. Add documents once. Open as many threads as you need — every thread works from the same shared context, and nothing leaks out.</p>
+              <div className="caps"><span className="cap">Many threads</span><span className="cap">Shared documents</span><span className="cap">Web search</span><span className="cap teal">Scoped memory</span></div>
+            </div>
+
+            <div className="spaces-grid">
+              <div className="space-win reveal" data-d="1">
+                <aside className="space-rail">
+                  <div className="space-head">
+                    <span className="space-dot"></span>
+                    <span className="space-name">Portfolio Launch</span>
+                  </div>
+                  <span className="space-rail-k">Threads</span>
+                  <ul className="space-threads">
+                    <li className="active">Case study order</li>
+                    <li>Homepage copy</li>
+                    <li>Outreach list</li>
+                    <li>Pricing questions</li>
+                  </ul>
+                  <span className="space-rail-k">Shared documents</span>
+                  <ul className="space-docs">
+                    <li><svg viewBox="0 0 14 14" fill="none"><path d="M3 1.6h5l3 3v7.8H3z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /><path d="M8 1.6v3h3" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>brand-guidelines.pdf</li>
+                    <li><svg viewBox="0 0 14 14" fill="none"><path d="M3 1.6h5l3 3v7.8H3z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /><path d="M8 1.6v3h3" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>case-studies.docx</li>
+                  </ul>
+                </aside>
+                <div className="space-main">
+                  <div className="space-boundary"><span><svg viewBox="0 0 14 14" fill="none"><rect x="2" y="6" width="10" height="6.5" rx="1.4" stroke="currentColor" strokeWidth="1.2" /><path d="M4.3 6V4.4a2.7 2.7 0 0 1 5.4 0V6" stroke="currentColor" strokeWidth="1.2" /></svg>Scoped to this Space — context doesn't leak out</span></div>
+                  <div className="space-thread">
+                    <div className="st-msg you">Which case study should open the portfolio?</div>
+                    <div className="st-msg zaki">Based on <em>case-studies.docx</em> and your goal to land design roles, lead with the fintech rebrand — it shows range and measurable impact.</div>
+                    <div className="st-global"><span className="sg-pip"></span>Global continuity used · your goal to land design roles</div>
+                  </div>
+                </div>
+              </div>
+
+              <ul className="space-proof reveal" data-d="2">
+                <li><span className="sp-n">1</span> One Space</li>
+                <li><span className="sp-n">∞</span> Many threads</li>
+                <li><span className="sp-n">◇</span> Shared documents</li>
+                <li><span className="sp-n">⚡</span> Fast conversation</li>
+                <li><span className="sp-n">⌕</span> Web search when needed</li>
+                <li><span className="sp-n">↻</span> Global continuity where useful</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        {/* CH.7–9 — CREATION MOVEMENT */}
+        <div className="movement stage-light">
+          <section className="chapter beat beat-design stage-light" data-stage="light" data-screen-label="07 Design" id="design">
+            <div className="wrap beat-grid">
+              <div className="beat-copy reveal">
+                <span className="kicker"><span className="ix">07</span> ZAKI in creation</span>
+                <h2 className="display">From idea to<br />something you can see.</h2>
+                <p className="lede">Start with the rough thought. Explore visual directions. Choose what feels right. Turn it into a design you can refine and use.</p>
+                <div className="beat-flow">
+                  <span>Brief</span><i></i><span>Directions</span><i></i><span>Decision</span><i></i><span className="on">Design</span>
+                </div>
+                <div className="caps"><span className="cap">Directions</span><span className="cap">Compare</span><span className="cap">Refine</span><span className="cap">Hand off</span></div>
+                <span className="status soon beat-status">Soon</span>
+              </div>
+              <div className="beat-proof reveal" data-d="1">
+                <div className="dir-win">
+                  <div className="dir-bar"><span>Directions</span><span className="dir-sub">Pick one to refine</span></div>
+                  <div className="dir-tiles">
+                    <div className="dir-tile t1"><span className="dir-swatch s1"></span><span className="dir-l">Editorial</span></div>
+                    <div className="dir-tile t2 sel"><span className="dir-swatch s2"></span><span className="dir-l">Warm minimal</span><span className="dir-pick">Selected</span></div>
+                    <div className="dir-tile t3"><span className="dir-swatch s3"></span><span className="dir-l">Bold mono</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="wrap"><a className="continuation reveal" href="#learn">Build the capability behind the work<svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></a></div>
+          </section>
+
+          <section className="chapter beat beat-learn stage-light" data-stage="light" data-screen-label="08 Learn" id="learn">
+            <div className="wrap beat-grid reverse">
+              <div className="beat-copy reveal">
+                <span className="kicker"><span className="ix">08</span> ZAKI in growth</span>
+                <h2 className="display">Learn the way<br />your mind works.</h2>
+                <p className="lede">Understand difficult material, uncover the gaps, practice with feedback, and keep a study path that changes as you progress.</p>
+                <p className="beat-outcome">Less guessing what to study. More moments where it clicks.</p>
+                <div className="caps"><span className="cap">Diagnose gaps</span><span className="cap">Explain</span><span className="cap">Practice</span><span className="cap teal">Track progress</span></div>
+                <span className="status soon beat-status">Soon</span>
+              </div>
+              <div className="beat-proof reveal" data-d="1">
+                <div className="learn-win">
+                  <div className="learn-bar"><span>Study path</span><span className="learn-sub">Organic chemistry</span></div>
+                  <div className="learn-steps">
+                    <div className="lstep done"><span className="lstep-i"></span><span>Explained — resonance structures</span></div>
+                    <div className="lstep gap"><span className="lstep-i"></span><span>Gap found — electron pushing</span></div>
+                    <div className="lstep active"><span className="lstep-i"></span><span>Practice — 3 guided problems</span></div>
+                  </div>
+                  <div className="learn-prog"><span className="learn-prog-k">Mastery</span><div className="learn-bar-track"><i style={{ width: "64%" }}></i></div><span className="learn-prog-v">64%</span></div>
+                </div>
+              </div>
+            </div>
+            <div className="wrap"><a className="continuation reveal" href="#career">Turn progress into opportunity<svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></a></div>
+          </section>
+
+          <section className="chapter beat beat-career stage-light" data-stage="light" data-screen-label="09 Career" id="career">
+            <div className="wrap beat-grid">
+              <div className="beat-copy reveal">
+                <span className="kicker"><span className="ix">09</span> ZAKI in motion</span>
+                <h2 className="display">Let the right<br />role find you.</h2>
+                <p className="lede">Build a living career profile. Discover roles that fit. Tailor your story. Keep applications and follow-ups moving — with you in control.</p>
+                <p className="beat-outcome">A job search that works every day, not only when you have the energy.</p>
+                <div className="caps"><span className="cap">Living profile</span><span className="cap">Role matching</span><span className="cap">Tailor story</span><span className="cap">Approved actions</span></div>
+                <span className="status soon beat-status">Soon</span>
+              </div>
+              <div className="beat-proof reveal" data-d="1">
+                <div className="career-win">
+                  <div className="career-bar"><span>Role matches</span><span className="career-sub">Updated daily</span></div>
+                  <ul className="career-roles">
+                    <li><span className="cr-role">Senior Product Designer</span><span className="cr-co">Fintech · Remote</span><span className="cr-fit high">94%</span></li>
+                    <li><span className="cr-role">Brand &amp; Systems Lead</span><span className="cr-co">Studio · Hybrid</span><span className="cr-fit">88%</span></li>
+                    <li><span className="cr-role">Design Engineer</span><span className="cr-co">SaaS · Remote</span><span className="cr-fit">81%</span></li>
+                  </ul>
+                  <div className="career-next">
+                    <span className="career-next-k">Next action · tailored intro ready</span>
+                    <span className="career-gate"><svg viewBox="0 0 14 14" fill="none"><rect x="2" y="6" width="10" height="6.5" rx="1.4" stroke="currentColor" strokeWidth="1.2" /><path d="M4.3 6V4.4a2.7 2.7 0 0 1 5.4 0V6" stroke="currentColor" strokeWidth="1.2" /></svg>Approve before it sends</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="wrap"><a className="continuation reveal" href="#day">Keep the next actions moving<svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg></a></div>
+          </section>
+        </div>
+
+        {/* CH.10 — A DAY WITH ZAKI */}
+        <section className="chapter stage-dark day" data-stage="dark" data-screen-label="10 A day with ZAKI" id="day">
+          <div className="wrap">
+            <div className="sec-head reveal">
+              <span className="kicker"><span className="ix">10</span> Everyday intelligence</span>
+              <h2 className="display">One day.<br />One intelligence beside you.</h2>
+              <p className="lede">You change contexts all day long. ZAKI keeps the thread — carrying what matters from one moment to the next.</p>
+            </div>
+            <ol className="timeline">
+              <li className="tl-moment reveal">
+                <span className="tl-time">07:45</span>
+                <div className="tl-card">
+                  <span className="tl-label">Begin with clarity</span>
+                  <p className="tl-say">"Brief me on what matters today."</p>
+                  <p className="tl-zaki">ZAKI filters the noise and puts the real decisions first.</p>
+                </div>
+              </li>
+              <li className="tl-moment reveal" data-d="1">
+                <span className="tl-time">10:20</span>
+                <div className="tl-card">
+                  <span className="tl-label">Move the work</span>
+                  <p className="tl-say">"Turn these notes into the plan."</p>
+                  <p className="tl-zaki">It creates the structure and carries the context forward.</p>
+                </div>
+              </li>
+              <li className="tl-moment reveal" data-d="2">
+                <span className="tl-time">14:10</span>
+                <div className="tl-card">
+                  <span className="tl-label">Give the idea form</span>
+                  <p className="tl-say">"Show me three directions."</p>
+                  <p className="tl-zaki">ZAKI Design turns the brief into something you can react to.</p>
+                </div>
+              </li>
+              <li className="tl-moment reveal" data-d="1">
+                <span className="tl-time">17:30</span>
+                <div className="tl-card">
+                  <span className="tl-label">Make it click</span>
+                  <p className="tl-say">"Explain the part I keep missing."</p>
+                  <p className="tl-zaki">ZAKI Learn changes the explanation and builds the right practice.</p>
+                </div>
+              </li>
+              <li className="tl-moment reveal" data-d="2">
+                <span className="tl-time">20:15</span>
+                <div className="tl-card">
+                  <span className="tl-label">Keep the future moving</span>
+                  <p className="tl-say">"Find roles that actually fit me."</p>
+                  <p className="tl-zaki">ZAKI Career updates the search and prepares the next actions.</p>
+                </div>
+              </li>
+              <li className="tl-moment sleep reveal" data-d="1">
+                <span className="tl-time">While you sleep</span>
+                <div className="tl-card">
+                  <span className="tl-label">Approved, scheduled work continues</span>
+                  <p className="tl-zaki">The follow-ups you approved keep moving — nothing sensitive without your say.</p>
+                </div>
+              </li>
+            </ol>
+            <p className="day-close reveal"><img className="zbot idle day-mascot" src="/zaki/bot/heart.png" alt="" /><span>You change contexts. <em className="hl">ZAKI keeps the thread.</em></span></p>
+          </div>
+        </section>
+
+        {/* CH.11 — TRUST */}
+        <section className="chapter stage-dark trust" data-stage="dark" data-screen-label="11 Trust" id="trust">
+          <div className="wrap">
+            <div className="trust-grid">
+              <div className="sec-head reveal">
+                <span className="kicker"><span className="ix">11</span> Your life stays yours</span>
+                <h2 className="display">Close enough to know you.<br />Built to protect you.</h2>
+                <p className="lede">Personal intelligence requires personal trust. Your memory, permissions, private information, and rules stay under your control. Privacy is architecture — not a setting buried in a menu.</p>
+                <ul className="trust-controls">
+                  <li>Inspect, correct, and delete memory</li>
+                  <li>Scope information to one Space</li>
+                  <li>Approve a tool before it runs</li>
+                  <li>Revoke access at any time</li>
+                  <li>Approve every external action</li>
+                </ul>
+                <a className="btn btn-ghost trust-cta" href="/story">Read the security model
+                  <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </a>
+              </div>
+
+              {/* Trust boundary scene */}
+              <div className="boundary reveal" data-d="1" id="boundary">
+                <div className="boundary-scene" id="boundary-scene">
+                  <div className="boundary-track"></div>
+                  <div className="boundary-trail" id="boundary-trail"></div>
+                  <div className="boundary-edge"><span className="bl-lock"><svg viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.6" stroke="currentColor" strokeWidth="1.3" /><path d="M5.3 7V5.2a2.7 2.7 0 0 1 5.4 0V7" stroke="currentColor" strokeWidth="1.3" /></svg></span></div>
+                  <span className="boundary-presence" id="boundary-presence"><img src="/zaki/bot/thinking.png" alt="ZAKI Presence" /></span>
+                  <span className="boundary-wait" id="boundary-wait">Reaches the boundary · waits for you</span>
+                </div>
+                <div className="permission-card">
+                  <span className="pc-k">Permission needed</span>
+                  <p className="pc-ask">ZAKI is ready to send <strong>5 outreach emails</strong> on your behalf.</p>
+                  <div className="pc-actions">
+                    <button className="pc-btn deny">Not yet</button>
+                    <button className="pc-btn approve">Approve &amp; send</button>
+                  </div>
+                  <span className="pc-sent"><svg viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>Sent · logged in your activity</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* CH.11.5 — ORIGIN STORY TEASER */}
+        <section className="chapter stage-light originteaser" data-stage="light" data-screen-label="The origin" id="story">
+          <div className="wrap origin-inner">
+            <div className="origin-copy">
+              <span className="kicker reveal">The origin</span>
+              <h2 className="display reveal" data-d="1">Designed by agents.<br /><em className="hlt">Built to remember.</em></h2>
+              <p className="lede reveal" data-d="2">ZAKI is a meta-agent. We didn't guess what an agent should be — we asked four of the strongest agents in the world, then built their answer in-house on a nine-layer, human-inspired memory.</p>
+              <div className="origin-architects reveal" data-d="3">
+                <span className="oa-k">Specified by</span>
+                <div className="oa-names"><span>Claude Code</span><span>Codex</span><span>OpenCode</span><span>Hermes</span></div>
+              </div>
+              <a className="btn btn-primary origin-cta reveal" data-d="3" href="/story">Read the full story
                 <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </a>
             </div>
-          </div>
-        </section>
-
-        {/* SCENE 5 — MEMORY (full-screen, free-scroll reveal) */}
-        <section className="scene stage-light" data-stage="light" data-reveal data-screen-label="05 Memory" id="memory">
-          <div className="scene-inner">
-            <span className="scene-eyebrow">Continuity · 05</span>
-            <h2 className="scene-h1">It remembers <em className="hl">the person,</em><br />not the prompt.</h2>
-            <p className="scene-lede">One living memory under everything — your goals, preferences, the corrections you&rsquo;ve made — that you can inspect, correct, export, or forget. It&rsquo;s yours, and it carries from one product to the next.</p>
-            <div className="scene-cta">
-              <a className="btn btn-ghost btn-lg" href="#trust">See how memory stays yours</a>
+            <div className="origin-art reveal" data-d="2">
+              <div className="origin-panel">
+                <img className="origin-bot" src="/zaki/bot/thinking.png" alt="ZAKI Presence" />
+                <div className="origin-stats">
+                  <div className="origin-stat"><div className="os-n">9</div><div className="os-l">Memory layers</div></div>
+                  <div className="origin-stat"><div className="os-n">3</div><div className="os-l">Recall tiers</div></div>
+                  <div className="origin-stat"><div className="os-n">1</div><div className="os-l">Living graph</div></div>
+                </div>
+                <p className="origin-panel-cap">The first agent that can <b>debate itself</b> before it answers.</p>
+              </div>
             </div>
           </div>
         </section>
 
-        {/* SCENE 6 — SPACES (full-screen, free-scroll reveal) */}
-        <section className="scene stage-light" data-stage="light" data-reveal data-screen-label="06 Spaces" id="spaces">
-          <div className="scene-inner">
-            <span className="scene-eyebrow">Many worlds · 06</span>
-            <h2 className="scene-h1">One mind.<br /><em className="hl">Many worlds.</em></h2>
-            <p className="scene-lede">A space for every project, class, or client — its own docs, its own threads, nothing leaking between them. And the same intelligence shows up in the shape each moment needs.</p>
-            <ul className="scene-facets">
-              <li><b>Spaces</b><span>In context</span><i className="fct-live">Live</i></li>
-              <li><b>Design</b><span>In creation</span><i className="fct-soon">Soon</i></li>
-              <li><b>Learn</b><span>In growth</span><i className="fct-soon">Soon</i></li>
-              <li><b>Career</b><span>In motion</span><i className="fct-soon">Soon</i></li>
-            </ul>
-            <div className="scene-cta">
-              <a className="btn btn-primary btn-lg" href="/spaces">Open Spaces
-                <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              </a>
-            </div>
-          </div>
-        </section>
-
-        {/* SCENE 7 — TRUST (full-screen, free-scroll reveal) */}
-        <section className="scene stage-dark" data-stage="dark" data-reveal data-screen-label="07 Trust" id="trust">
-          <div className="scene-glow" aria-hidden="true"></div>
-          <div className="scene-inner">
-            <span className="scene-eyebrow">Your life stays yours · 07</span>
-            <h2 className="scene-h1">It knows you<br />because <em className="hl">you let it.</em></h2>
-            <p className="scene-lede">Personal intelligence asks for personal trust. You own the memory — inspect it, scope it, delete it. ZAKI reaches the boundary of any real action and waits for your yes. Privacy isn&rsquo;t a setting here; it&rsquo;s the architecture.</p>
-            <div className="scene-cta">
-              <a className="btn btn-ghost btn-lg" href="/story">Read the security model</a>
-            </div>
-          </div>
-        </section>
-
-        {/* SCENE 8 — CTA (full-screen, free-scroll reveal) */}
-        <section className="scene stage-dark" data-stage="dark" data-reveal data-screen-label="08 A new chapter" id="cta">
-          <div className="scene-glow" aria-hidden="true"></div>
-          <div className="scene-inner">
-            <span className="scene-eyebrow">A new chapter · 08</span>
-            <h2 className="scene-h1">Never build alone.<br />Never start the next chapter <em className="hl">alone.</em></h2>
-            <p className="scene-lede">Whatever comes next — the launch, the move, the idea you&rsquo;ve been putting off — you don&rsquo;t begin it from zero, and you don&rsquo;t begin it by yourself. Bring the first thing you want to move forward.</p>
-            <div className="scene-cta">
+        {/* CH.12 — RESOLUTION */}
+        <section className="chapter stage-dark resolve" data-stage="dark" data-screen-label="12 A new chapter" id="cta">
+          <div className="resolve-atlas" aria-hidden="true"><div className="resolve-con" data-constellation data-quiet data-no-labels></div><div className="dots"></div><div className="glow"></div></div>
+          <div className="wrap resolve-inner">
+            <img className="zbot idle resolve-mascot reveal" src="/zaki/bot/sunglasses.png" alt="ZAKI Presence" />
+            <span className="resolve-mark reveal"><img src="/zaki/assets/zaki-mark.png" alt="ZAKI" /></span>
+            <span className="kicker center reveal" data-d="1">A new chapter</span>
+            <h2 className="display-xl reveal" data-d="1">Never build alone.<br />Never start the next chapter <em className="hl">alone.</em></h2>
+            <p className="resolve-sub reveal" data-d="2">Whatever comes next — the launch, the move, the idea you&rsquo;ve been putting off — you don&rsquo;t begin it from zero, and you don&rsquo;t begin it by yourself. Bring the first thing you want to move forward. ZAKI remembers it from here.</p>
+            <div className="resolve-cta reveal" data-d="2">
               <a className="btn btn-primary btn-lg" id="cta-primary" href={signupUrl}><span className="cta-label">Enter ZAKI&rsquo;s mind</span>
                 <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </a>
