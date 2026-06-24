@@ -1,0 +1,22 @@
+/* ============================================================
+   ZAKI — Mind layer styles  (Stage 1)
+   Lenis smooth-scroll support + a defensive overflow guard.
+   The WebGL #mind-field host, theming (--con-*), and fallbacks
+   land in Stage 2.
+   ============================================================ */
+
+/* Recommended Lenis styles — https://github.com/darkroomengineering/lenis
+   Lenis adds .lenis / .lenis-smooth / .lenis-stopped to <html> at runtime. */
+html.lenis,
+html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+.lenis.lenis-smooth [data-lenis-prevent] { overscroll-behavior: contain; }
+.lenis.lenis-stopped { overflow: hidden; }
+.lenis.lenis-smooth iframe { pointer-events: none; }
+
+/* Defensive horizontal-overflow guard. Once Lenis + (Stage 2) the fixed WebGL
+   canvas + cursor parallax are live, transient horizontal overflow is easy to
+   introduce. `clip` (not `hidden`) so it never establishes a scroll container
+   that would break position:sticky or the Thread's scrollHeight math.
+   (No real horizontal overflow exists today — this is insurance.) */
+html, body { overflow-x: clip; }
