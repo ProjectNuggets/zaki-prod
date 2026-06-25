@@ -231,6 +231,20 @@ body.has-intent #goal-token { display: inline-flex; }
 #cta.summit-bloomed .scene-glow { transform: scale(1); opacity: 1; }
 @media (prefers-reduced-motion: reduce) { #cta .scene-glow { transform: none; opacity: 1; transition: none; } }
 
+/* ---- Footer resolves in the dawn ----
+   The whole page climbs dark -> dawn; the footer used to hard-reset to near-black
+   (stage-dark) with a red seam-line, dropping you back into the night you climbed out
+   of. Now it continues the summit: bg matched EXACTLY to the rising palette's dawn
+   (#F4EAD8) so the summit->footer transition is seamless, no top hairline, and the red
+   glow-line becomes a soft warm dawn glow rising into the footer (echoing the summit). */
+.footer.stage-light { --bg: #F4EAD8; background: var(--bg); border-top: 0; }
+.footer.stage-light .footer-glow {
+  top: -64px; height: 128px; width: min(1040px, 96%);
+  background: radial-gradient(58% 100% at 50% 100%, rgba(255, 206, 130, .32), transparent 70%);
+  opacity: 1; box-shadow: none;
+}
+.footer.stage-light .footer-glow::after { display: none; }   /* drop the red seam dot */
+
 /* mobile */
 @media (max-width: 720px) {
   .scene { padding: clamp(96px, 13vh, 140px) 22px; }

@@ -377,8 +377,9 @@ export function HomeV4() {
 
       </main>
 
-      {/* FOOTER */}
-      <footer className="footer stage-dark" data-stage="dark">
+      {/* FOOTER — resolves in the DAWN (continues the summit, doesn't reset to night).
+          The climb ends in the light it reached. Palette + seam handled in zaki-scenes.css. */}
+      <footer className="footer stage-light" data-stage="light">
         <span className="footer-glow" aria-hidden="true"></span>
         <div className="wrap footer-top">
           <div className="footer-lead">
