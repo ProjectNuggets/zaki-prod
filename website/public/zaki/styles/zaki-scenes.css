@@ -9,21 +9,18 @@
 /* sui.io is clean — drop the narrative spine (Thread + chapter rail). */
 .thread-svg, #chap-rail, #scroll-progress { display: none !important; }
 
-/* ---- Rising palette, driven by --altitude (0 top -> 1 bottom).
-   The climb WARMS (cold near-black -> warm amber-black) while staying dark, so
-   light text is legible the whole way; then it OPENS to dawn near the summit,
-   where text flips dark-on-light. A continuous dark->light bg would pass through
-   mid-grey (illegible for any text) — this avoids that mid-grey resting state.
-   `body[data-stage]` (0,1,1) beats the foundation stage tokens. ---- */
+/* ---- Climb palette, driven by --altitude (0 top -> 1 bottom).
+   The climb WARMS (cold near-black -> warm amber-black) but STAYS DARK the whole way.
+   The dawn is NOT a global background lightening — a continuous dark->light bg must pass
+   through an illegible mid-grey, and because the page height (esp. the tall footer) is
+   variable, that mid-grey can't be reliably kept off a resting scene (it landed on the
+   trust scene). So the dawn lives ONLY in the summit + footer, each with its own light
+   background. Dark scenes (1-6) are transparent and ride this warm-dark body bg. ---- */
 :root { --altitude: 0; }
 body, body[data-stage] {
-  --warm:     color-mix(in oklab, #0C0A09, #2E1C0D calc(var(--altitude) * 100%));
-  --alt-bg:   clamp(0, calc((var(--altitude) - 0.80) / 0.12), 1);   /* dawn opens 0.80->0.92 */
-  --ink-flip: clamp(0, calc((var(--altitude) - 0.85) / 0.10), 1);   /* text flips 0.85->0.95 */
-  --bg:    color-mix(in oklab, var(--warm), #F4EAD8 calc(var(--alt-bg) * 100%));
-  --ink-1: color-mix(in oklab, #F4EFE7, #1F1A14 calc(var(--ink-flip) * 100%));
-  --ink-2: color-mix(in oklab, #C2BAAE, #564737 calc(var(--ink-flip) * 100%));
-  --ink-3: color-mix(in oklab, #8B8378, #6B5A45 calc(var(--ink-flip) * 100%));
+  --warm: color-mix(in oklab, #0C0A09, #2E1C0D calc(var(--altitude) * 100%));
+  --bg: var(--warm);
+  --ink-1: #F4EFE7; --ink-2: #C2BAAE; --ink-3: #8B8378;
   background: var(--bg);
   color: var(--ink-1);
 }
@@ -208,8 +205,17 @@ body.has-intent #goal-token { display: inline-flex; }
 .trust .scene-h1 { font-size: clamp(34px, 5vw, 78px); }
 @media (max-width: 980px) { .trust-inner { grid-template-columns: 1fr; gap: 28px; } }
 
-/* Scene 7 — Summit: brightest, centered, dawn glow; the goal resolves here */
-.summit { text-align: center; }
+/* Scene 7 — Summit: the dawn lives HERE (not in a global bg lightening). The summit
+   carries its own light background with a soft dark->dawn lead-in at the very top that
+   hands off seamlessly from the dark trust scene above; the content is vertically
+   centred, well clear of the lead-in, so it always rests on full dawn. Inks flip dark. */
+.summit {
+  text-align: center;
+  background: linear-gradient(to bottom, #2A1A0C 0%, #F4EAD8 16%, #F4EAD8 100%);
+  --ink-1: #1F1A14; --ink-2: #564737; --ink-3: #88735A;
+  --hair: rgba(31, 26, 20, .12); --hair-strong: rgba(31, 26, 20, .22);
+  color: var(--ink-1);
+}
 .summit-inner { max-width: 1000px; }
 .summit .scene-eyebrow { justify-content: center; }
 .summit .scene-h1 { margin: 0 auto; max-width: 18ch; }
