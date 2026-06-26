@@ -168,7 +168,7 @@ export function HomeV4() {
 
         {/* CH.2 — REFRAME */}
         {/* SCENE 2 — YOUR CHAPTER (name your goal; it becomes the carried token) */}
-        <section className="scene" data-stage="dark" data-reveal data-screen-label="02 Begin" data-zee="/zaki/bot/wave.png" id="intention">
+        <section className="scene" data-stage="dark" data-reveal data-screen-label="02 Begin" data-zee="/zaki/bot/intent.png" id="intention">
           <div className="scene-glow" aria-hidden="true"></div>
           <div className="scene-inner">
             <span className="scene-eyebrow">Begin · 02</span>
@@ -204,7 +204,7 @@ export function HomeV4() {
         </section>
 
         {/* SCENE 3 — IT ACTS (Agent; the run executes as you scroll, on YOUR goal) */}
-        <section className="scene agent" data-stage="dark" data-reveal data-screen-label="03 Agent" data-zee="/zaki/bot/thinking.png" id="agent">
+        <section className="scene agent" data-stage="dark" data-reveal data-screen-label="03 Agent" data-zee="/zaki/bot/work.png" id="agent">
           <div className="scene-glow" aria-hidden="true"></div>
           <div className="scene-inner agent-inner">
             <div className="agent-copy">
@@ -243,7 +243,7 @@ export function HomeV4() {
         </section>
 
         {/* SCENE 4 — IT REMEMBERS YOU (living memory graph; your goal is the red node) */}
-        <section className="scene memory" data-stage="dark" data-reveal data-screen-label="04 Memory" data-zee="/zaki/bot/heart.png" id="memory">
+        <section className="scene memory" data-stage="dark" data-reveal data-screen-label="04 Memory" data-zee="/zaki/bot/remember.png" id="memory">
           <div className="scene-glow" aria-hidden="true"></div>
           <div className="scene-inner mem-inner">
             <div className="mem-copy">
@@ -359,7 +359,7 @@ export function HomeV4() {
         </section>
 
         {/* SCENE 7 — THE SUMMIT (brightest dawn; your goal resolves; "alone" settles last) */}
-        <section className="scene summit" data-stage="light" data-reveal data-screen-label="07 A new chapter" data-zee="/zaki/bot/grin.png" id="cta">
+        <section className="scene summit" data-stage="light" data-reveal data-screen-label="07 A new chapter" data-zee="/zaki/bot/summit.png" id="cta">
           <div className="scene-glow" aria-hidden="true"></div>
           <div className="scene-inner summit-inner">
             <span className="scene-eyebrow">A new chapter · 07</span>
