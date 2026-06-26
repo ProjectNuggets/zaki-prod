@@ -195,7 +195,10 @@
     return d;
   }
   function buildThread() {
-    if (!thSvg) return;
+    // The Living Thread is force-hidden on the new homepage (display:none in zaki-scenes.css).
+    // Bail before the expensive getTotalLength + 480-sample getPointAtLength loop (which was
+    // re-run on every resize) — pathLen stays unset, so updateThread() no-ops too.
+    if (!thSvg || (window.getComputedStyle && getComputedStyle(thSvg).display === 'none')) return;
     thSvg.style.height = '0px';   // don't let the absolute full-height SVG inflate the measurement
     var W = doc.documentElement.clientWidth;
     var ft = $('.footer');
@@ -322,7 +325,7 @@
   /* ---------- CHAPTER RAIL ---------- */
   var railEl = $('#chap-rail'), railBtns = [];
   function buildChapRail() {
-    if (!railEl) return;
+    if (!railEl || (window.getComputedStyle && getComputedStyle(railEl).display === 'none')) return;  // rail is force-hidden on the new homepage
     collectChapters();
     railEl.innerHTML = '';
     railBtns = chapters.map(function (c, i) {

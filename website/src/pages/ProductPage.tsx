@@ -74,8 +74,8 @@ export function ProductPage({ locale }: { locale: Locale }) {
             </h1>
             <p className="mt-6 max-w-[62ch] text-base leading-8 text-zk-text-secondary">
               {isArabic
-                ? "ZAKI V2 يبدأ من Chat، يحمل العمل في Agent، ويجعل الذاكرة مرئية في Brain. المسارات القادمة تبقى مقيّدة حتى تكتمل الحقيقة التشغيلية."
-                : "ZAKI V2 starts in Chat, carries work through Agent, and makes memory visible in Brain. Future lanes stay gated until the operational truth is complete."}
+                ? "ZAKI V1 يبدأ من Chat، يحمل العمل في Agent، ويجعل الذاكرة مرئية في Brain. المسارات القادمة تبقى مقيّدة حتى تكتمل الحقيقة التشغيلية."
+                : "ZAKI V1 starts in Chat, carries work through Agent, and makes memory visible in Brain. Future lanes stay gated until the operational truth is complete."}
             </p>
           </Reveal>
 

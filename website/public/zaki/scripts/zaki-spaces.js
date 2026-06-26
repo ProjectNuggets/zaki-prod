@@ -42,7 +42,7 @@
       views.forEach(function (v, j) { v.classList.toggle('active', j === i); });
       var w = WORLDS[i] || WORLDS[0];
       says.textContent = w.line;
-      var src = 'web/bot/' + w.mood + '.png';
+      var src = '/zaki/bot/' + w.mood + '.png';
       if (bot.getAttribute('src') !== src) bot.setAttribute('src', src);
       bot.classList.remove('react'); void bot.offsetWidth; bot.classList.add('react');
     }

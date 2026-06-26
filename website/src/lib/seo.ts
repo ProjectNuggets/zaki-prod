@@ -119,7 +119,7 @@ export function getRouteSeo(pathname: string): RouteSeo {
   if (route === "/agent/") {
     const description = "ZAKI Agent delegates the whole task — it plans, acts, and follows through. Funny, loyal, and it never sends without you.";
     return {
-      title: "ZAKI Agent — Never do it alone.",
+      title: "ZAKI Agent — Never build alone.",
       description,
       canonical: `${SITE_URL}/agent/`,
       lang: "en",
@@ -137,7 +137,7 @@ export function getRouteSeo(pathname: string): RouteSeo {
   if (route === "/spaces/") {
     const description = "ZAKI Spaces keeps every project in its own world — its own threads, docs, and memory. One mind across all of them, and it never mixes them up.";
     return {
-      title: "ZAKI Spaces — A world for everything you're working on.",
+      title: "ZAKI Spaces — Many worlds. One mind. Zero mix-ups.",
       description,
       canonical: `${SITE_URL}/spaces/`,
       lang: "en",
@@ -207,7 +207,7 @@ export function getRouteSeo(pathname: string): RouteSeo {
     const description = isPricing
       ? locale === "ar"
         ? "ابدأ من Chat مجانًا، واستخدم Agent وBrain للاستمرارية والذاكرة عندما يحتاج العمل إلى حساب."
-        : "ZAKI pricing: Free, Personal EUR 15, Pro EUR 45, Pro MAX EUR 99. Start free and upgrade for more room, deeper memory, and priority."
+        : "ZAKI pricing: Free, Personal $15, Pro $45, Pro Max $99. Start free and upgrade for more room, deeper memory, and priority."
       : locale === "ar"
         ? "استخدم زكي للكتابة والبحث والعمل ثنائي اللغة والمتابعة والذاكرة، مع بقاء Learn وCareer وصول خاص وDesign انتظار."
         : "How founders, adventurers, and operators use ZAKI: an agent that acts, spaces for focused work, and a memory that carries context forward.";
@@ -239,7 +239,7 @@ export function getRouteSeo(pathname: string): RouteSeo {
     const description =
       locale === "ar"
         ? "اعرف ما يتضمنه زكي V1: Chat وAgent وBrain والتحكم في الذاكرة والأسعار والخصوصية والأسطح القادمة."
-        : "Learn what ZAKI includes in V1: Chat, Agent, Brain, memory controls, pricing, privacy, and gated future surfaces.";
+        : "Learn what ZAKI includes in V1: Chat, Agent, Brain, memory controls, and what's live versus coming.";
     return {
       title:
         locale === "ar"
@@ -266,13 +266,13 @@ export function getRouteSeo(pathname: string): RouteSeo {
     const description =
       locale === "ar"
         ? "لماذا يوجد زكي: كيف يجمع بين Spaces كمساحات عمل منظّمة وبين زكي كوكيل ذكاء شخصي مستمر يتشكل علنًا."
-        : "Why ZAKI exists: the last mile between people and AI is continuity. ZAKI started as a promise to remember, support, and show up.";
+        : "How ZAKI was designed — by a council of AI agents debating what a personal intelligence owes you: memory that lasts, judgment that thinks twice, and a promise to never leave you building alone.";
     const canonical = toAbsoluteUrl(route);
     return {
       title:
         locale === "ar"
           ? "لماذا زكي | ZAKI · ذكاء عربي أولًا"
-          : "ZAKI Story — It started as a promise.",
+          : "ZAKI Story — Designed by agents. Built to remember.",
       description,
       canonical,
       lang: locale,
@@ -283,10 +283,10 @@ export function getRouteSeo(pathname: string): RouteSeo {
       keywords:
         locale === "ar"
           ? "حكاية زكي, قصة زكي, ذكاء عربي, ZAKI story"
-          : "ZAKI story, Arabic AI story, why ZAKI, building in public",
+          : "ZAKI story, why ZAKI, AI memory architecture, designed by agents, Arabic-first AI",
       schema: [
         ...buildCommonSchema(locale, description),
-        buildWebPageSchema("Why ZAKI", canonical, locale, description),
+        buildWebPageSchema("ZAKI Story", canonical, locale, description),
       ],
       alternates,
       updatedAt: SEO_UPDATED_AT,
@@ -387,14 +387,14 @@ export function getRouteSeo(pathname: string): RouteSeo {
             "@type": "Offer",
             category: "Chat",
             price: "0",
-            priceCurrency: "EUR",
+            priceCurrency: "USD",
             url: `${APP_URL}/?source=website_schema&intent=dashboard`,
           },
           {
             "@type": "Offer",
             category: "Agent",
             price: "0",
-            priceCurrency: "EUR",
+            priceCurrency: "USD",
             url: `${APP_URL}/?source=website_schema&intent=dashboard`,
           },
         ],

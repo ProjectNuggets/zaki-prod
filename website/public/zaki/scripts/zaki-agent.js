@@ -45,7 +45,7 @@
   /* ---------- BOT MOOD ---------- */
   function bot(el, mood) {
     if (!el) return;
-    var src = 'web/bot/' + mood + '.png';
+    var src = '/zaki/bot/' + mood + '.png';
     if (el.getAttribute('src') === src) return;
     el.setAttribute('src', src);
     el.classList.remove('react'); void el.offsetWidth; el.classList.add('react');
@@ -168,7 +168,7 @@
       '<div class="log-gate"><div class="log-gate-h"><span class="status live">Needs your OK</span><span class="log-gate-t">' + g.title + '</span></div>' +
       '<div class="log-gate-b">' + g.body + '</div>' +
       '<div class="log-gate-actions"><button class="btn btn-ghost btn-sm g-no">Not yet</button><button class="btn btn-primary btn-sm g-yes">Approve &amp; go</button></div>' +
-      '<div class="log-gate-ok"><img src="web/bot/heart.png" alt="">Approved \u2014 finishing up.</div></div>';
+      '<div class="log-gate-ok"><img src="/zaki/bot/heart.png" alt="">Approved \u2014 finishing up.</div></div>';
     return wrap;
   }
 
