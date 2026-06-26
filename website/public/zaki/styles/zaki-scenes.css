@@ -219,7 +219,19 @@ body.has-intent #goal-token { display: inline-flex; }
    centred, well clear of the lead-in, so it always rests on full dawn. Inks flip dark. */
 .summit {
   text-align: center;
-  background: linear-gradient(to bottom, #1A140F 0%, #F4EAD8 16%, #F4EAD8 100%);
+  /* warm SUNRISE ramp, not a straight dark->cream lerp (that passes through a cold
+     silver-grey midtone — the "chrome band"). Stay on the warm hue line: valley dark ->
+     ember -> amber -> gold -> peach -> dawn cream, so it reads as a dawn breaking. */
+  background: linear-gradient(to bottom,
+    #18120D 0%,
+    #2C1B10 5%,
+    #573620 9%,
+    #8A5A33 12.5%,
+    #B98A57 15.5%,
+    #DEB988 18.5%,
+    #F0DEBE 22%,
+    #F4EAD8 26%,
+    #F4EAD8 100%);
   --ink-1: #1F1A14; --ink-2: #564737; --ink-3: #88735A;
   --hair: rgba(31, 26, 20, .12); --hair-strong: rgba(31, 26, 20, .22);
   color: var(--ink-1);
