@@ -82,42 +82,42 @@ export function HomeV4() {
         </a>
         <nav className="nav-links" aria-label="Primary">
           <div className="nav-item has-mega" id="nav-products">
-            <button className="nav-trigger" aria-expanded="false" aria-haspopup="true">Products
+            <button className="nav-trigger" aria-expanded="false">Products
               <svg className="chev" viewBox="0 0 12 12" fill="none"><path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </button>
-            <div className="mega" role="menu">
+            <div className="mega">
               <div className="mega-grid">
-                <a className="mega-card" href="/agent" role="menuitem">
+                <a className="mega-card" href="/agent">
                   <span className="mega-ic" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="M10 2l1.8 4.4L16 8.2l-3.4 2.9.9 4.6L10 13.4 6.5 15.7l.9-4.6L4 8.2l4.2-1.8z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg></span>
                   <span className="mega-tt">Agent <span className="status live">Live</span></span>
                   <span className="mega-role">ZAKI in action</span>
                   <span className="mega-d">Delegate the whole task — it plans, acts, and follows through.</span>
                 </a>
-                <a className="mega-card" href="/spaces" role="menuitem">
+                <a className="mega-card" href="/spaces">
                   <span className="mega-ic" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><rect x="3" y="3" width="14" height="14" rx="3" stroke="currentColor" strokeWidth="1.3" /><path d="M3 8h14M8 8v9" stroke="currentColor" strokeWidth="1.3" /></svg></span>
                   <span className="mega-tt">Spaces <span className="status live">Live</span></span>
                   <span className="mega-role">ZAKI in context</span>
                   <span className="mega-d">Keep every conversation in its world — shared docs, many threads.</span>
                 </a>
-                <a className="mega-card" href={signupUrl} role="menuitem">
+                <a className="mega-card" href={signupUrl}>
                   <span className="mega-ic" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="M4 16l8-8 1.5 1.5M14 4l2 2-9.5 9.5L4 16l.5-2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg></span>
                   <span className="mega-tt">Design <span className="status soon">Soon</span></span>
                   <span className="mega-role">ZAKI in creation</span>
                   <span className="mega-d">Turn a rough brief into directions you can see and shape.</span>
                 </a>
-                <a className="mega-card" href={signupUrl} role="menuitem">
+                <a className="mega-card" href={signupUrl}>
                   <span className="mega-ic" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="M10 4 3 7l7 3 7-3-7-3zM5 9v4c0 1 2.2 2 5 2s5-1 5-2V9" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg></span>
                   <span className="mega-tt">Learn <span className="status soon">Soon</span></span>
                   <span className="mega-role">ZAKI in growth</span>
                   <span className="mega-d">Understand, practice, and progress in a way that adapts to you.</span>
                 </a>
-                <a className="mega-card" href={signupUrl} role="menuitem">
+                <a className="mega-card" href={signupUrl}>
                   <span className="mega-ic" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><rect x="3" y="6" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.3" /><path d="M7 6V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="1.3" /></svg></span>
                   <span className="mega-tt">Career <span className="status soon">Soon</span></span>
                   <span className="mega-role">ZAKI in motion</span>
                   <span className="mega-d">Find stronger matches and keep the follow-up moving — you approve.</span>
                 </a>
-                <a className="mega-card mega-mem" href="#memory" role="menuitem">
+                <a className="mega-card mega-mem" href="#memory">
                   <span className="mega-ic" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.3" /><circle cx="10" cy="10" r="2.4" fill="currentColor" /></svg></span>
                   <span className="mega-tt">Memory</span>
                   <span className="mega-role">The continuity layer</span>
@@ -195,7 +195,7 @@ export function HomeV4() {
               </button>
             </form>
 
-            <div className="intent-remembered" id="intent-remembered" hidden>
+            <div className="intent-remembered" id="intent-remembered" role="status" aria-live="polite" hidden>
               <div className="ir-inner">
                 <span className="ir-label"><span className="ir-pip"></span>Remembered on this device</span>
                 <span className="ir-value" id="intent-value">Launch my design portfolio</span>

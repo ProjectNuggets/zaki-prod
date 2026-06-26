@@ -22,7 +22,7 @@ body, body[data-stage] {
      (the old #2E1C0D endpoint drifted to a visibly browner black by the trust scene) */
   --warm: color-mix(in oklab, #0C0A09, #1A140F calc(var(--altitude) * 100%));
   --bg: var(--warm);
-  --ink-1: #F4EFE7; --ink-2: #C2BAAE; --ink-3: #8B8378;
+  --ink-1: #F4EFE7; --ink-2: #C2BAAE; --ink-3: #9A9082;  /* ink-3 lifted to clear AA 4.5:1 for small mono labels on warm-dark */
   background: var(--bg);
   color: var(--ink-1);
 }
@@ -227,7 +227,7 @@ body.has-intent #goal-token { display: inline-flex; }
      not a vertical colour gradient — a gradient must pass through a muddy/cold midtone
      band, whereas a dither of PURE warm colours never shows a grey. */
   background: #F4EAD8;
-  --ink-1: #1F1A14; --ink-2: #564737; --ink-3: #88735A;
+  --ink-1: #1F1A14; --ink-2: #564737; --ink-3: #6E5C46;  /* ink-3 darkened to clear AA on the cream summit */
   --hair: rgba(31, 26, 20, .12); --hair-strong: rgba(31, 26, 20, .22);
   color: var(--ink-1);
 }

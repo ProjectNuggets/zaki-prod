@@ -56,6 +56,11 @@
       return { node: node, chars: f.split('') };
     });
     if (!nodes.length) return;
+    // a11y: pin the element's accessible name to the FINAL word so screen readers never
+    // read the random decode glyphs (the visible text scrambles; AT reads aria-label).
+    if (!el.getAttribute('aria-label')) {
+      el.setAttribute('aria-label', nodes.map(function (it) { return it.node.__final; }).join(''));
+    }
     if (reduce) { nodes.forEach(function (it) { it.node.nodeValue = it.node.__final; }); return; }
     el.__scrambling = true;
     el.classList.add('is-scrambling');
@@ -269,6 +274,7 @@
       var max = de.scrollHeight - de.clientHeight;
       var p = max > 0 ? (window.scrollY || de.scrollTop) / max : 0;
       if (p < 0) p = 0; else if (p > 1) p = 1;
+      if (Math.abs(p - curAlt) < 0.0006) return;   // skip sub-perceptual updates -> fewer whole-tree style invalidations
       curAlt = p;
       root.style.setProperty('--altitude', p.toFixed(4));
     }
