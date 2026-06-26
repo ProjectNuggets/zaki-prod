@@ -121,7 +121,7 @@ export function AgentPage() {
             </div>
             <div className="ahero-stage" aria-hidden="true">
               <div className="ahero-bot-ring"></div>
-              <img className="abot" id="hero-bot" src="/zaki/bot/wave.png" alt="Your ZAKI agent, waving" />
+              <img className="abot" id="hero-bot" src="/zaki/bot/work.png" alt="Your ZAKI agent, ready to work" />
               <div className="abot-tag" id="hero-tag"><span className="abot-dot"></span><span id="hero-tag-name">Zee</span> · online &amp; nosy</div>
             </div>
           </div>
