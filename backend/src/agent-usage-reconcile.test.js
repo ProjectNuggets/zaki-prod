@@ -297,6 +297,28 @@ describe("reconcileDaemonTurnUsage", () => {
     expect(reserveUnits).toHaveBeenCalledTimes(2);
   });
 
+  it("provisions daemon reconcile wallets from the canonical paid tier", async () => {
+    const store = { rows: [makeRow()] };
+    const reserveUnits = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: false, reason: "no_wallet" })
+      .mockResolvedValueOnce({ ok: true, hold: { id: "hold-pro", user_id: 42, reserved_units: 40 } });
+    const ensureWallet = jest.fn(async () => ({ user_id: 42, plan_id: "pro" }));
+    const dbGet = jest.fn(async () => ({
+      id: 42,
+      email: "pro@example.com",
+      plan_tier: "pro",
+      plan_status: "active",
+      current_period_end: "2026-12-31T00:00:00.000Z",
+    }));
+    const deps = makeDeps(store, { reserveUnits, ensureWallet, dbGet });
+
+    const result = await reconcileDaemonTurnUsage(deps);
+
+    expect(result.debited).toBe(1);
+    expect(ensureWallet).toHaveBeenCalledWith({ userId: 42, planId: "pro" });
+  });
+
   it("respects the batch LIMIT passed to the SELECT and the maxLoops guard", async () => {
     const rows = Array.from({ length: 5 }, (_, i) =>
       makeRow({ turn_key: `t-${i + 1}`, created_at: `2026-01-01T00:00:0${i + 1}.000Z` })

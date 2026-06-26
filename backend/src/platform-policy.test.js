@@ -201,6 +201,15 @@ describe("platform policy", () => {
     );
   });
 
+  it("treats commercial-only legacy personal as Pro without changing active Personal", () => {
+    expect(
+      resolvePlatformPlanForCommercialState({
+        commercialPlanId: "legacy_personal",
+        premium: false,
+      })
+    ).toBe("pro");
+  });
+
   // Regression: a paying Pro/Pro MAX account whose commercial SKU is the
   // collapsed `legacy_personal` alias must STILL display its real ladder tier.
   // Before the fix the commercial alias won outright and a €/$ Pro subscriber

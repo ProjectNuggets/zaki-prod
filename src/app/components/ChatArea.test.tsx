@@ -652,6 +652,81 @@ describe("P1-12 chat-stream retryable classification (isRetryableChatError)", ()
     );
   });
 
+  it("uses the Agent denial meter instead of stale cached meter status", () => {
+    const error = new ChatRequestError("capacity low", 429, "insufficient_units", false, {
+      constraint: "rolling",
+      meter: {
+        plan: { tier: "pro", label: "Pro" },
+        rolling: {
+          windowHours: 5,
+          used: 30,
+          limit: 60,
+          remaining: 30,
+          resetAt: "2026-06-20T14:00:00.000Z",
+        },
+      },
+    });
+
+    const cardData = buildBillingPaywallCardData({
+      error,
+      paywallState: "out_of_usage",
+      planLabel: "Personal",
+      isAgentTarget: true,
+      meterStatus: {
+        plan: { tier: "pro", label: "Stale Pro" },
+        rolling: {
+          windowHours: 5,
+          used: 119,
+          limit: 660,
+          remaining: 541,
+          resetAt: "2026-06-20T16:07:00.000Z",
+        },
+      },
+    });
+
+    expect(cardData).toEqual(
+      expect.objectContaining({
+        planLabel: "Pro",
+        rollingWindowPercent: 50,
+        resetAt: "2026-06-20T14:00:00.000Z",
+      })
+    );
+  });
+
+  it("does not borrow stale cached rolling usage when an Agent denial has no meter", () => {
+    const error = new ChatRequestError("capacity low", 429, "insufficient_units", false, {
+      constraint: "rolling",
+      requiredUnits: 60,
+      effectiveRemaining: 11,
+    });
+
+    const cardData = buildBillingPaywallCardData({
+      error,
+      paywallState: "out_of_usage",
+      planLabel: "Pro",
+      isAgentTarget: true,
+      meterStatus: {
+        rolling: {
+          windowHours: 5,
+          used: 119,
+          limit: 660,
+          remaining: 541,
+          resetAt: "2026-06-20T16:07:00.000Z",
+        },
+      },
+    });
+
+    expect(cardData).toEqual(
+      expect.objectContaining({
+        planLabel: "Pro",
+        constraint: "rolling",
+        rollingWindowPercent: null,
+        rollingWindowHours: undefined,
+        resetAt: null,
+      })
+    );
+  });
+
   it("does not use Agent available-now fallback for non-Agent paywall denials", () => {
     const error = new ChatRequestError("spaces quota", 429, "insufficient_units");
     const cardData = buildBillingPaywallCardData({

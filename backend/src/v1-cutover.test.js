@@ -1,6 +1,7 @@
 import { describe, expect, jest, test } from "@jest/globals";
 import {
   V1_CUTOVER_VERSION,
+  listV1CutoverUsers,
   normalizeV1CutoverUser,
   requestNullalisV1Cutover,
   runV1CutoverBatch,
@@ -110,6 +111,72 @@ describe("V1 beta cutover", () => {
       email: "beta@example.com",
       planId: "pro",
     });
+  });
+
+  test("keeps explicit paid tiers above collapsed commercial aliases during cutover", () => {
+    expect(
+      normalizeV1CutoverUser({
+        id: 42,
+        email: "pro@example.com",
+        commercial_plan_id: "legacy_personal",
+        plan_tier: "pro",
+        plan_status: "active",
+        current_period_end: "2026-12-31T00:00:00.000Z",
+      }).planId
+    ).toBe("pro");
+    expect(
+      normalizeV1CutoverUser({
+        id: 43,
+        email: "personal@example.com",
+        commercial_plan_id: "legacy_personal",
+        plan_tier: "personal",
+        plan_status: "active",
+        current_period_end: "2026-12-31T00:00:00.000Z",
+      }).planId
+    ).toBe("personal");
+    expect(
+      normalizeV1CutoverUser({
+        id: 44,
+        email: "legacy@example.com",
+        commercial_plan_id: "legacy_personal",
+      }).planId
+    ).toBe("pro");
+    expect(
+      normalizeV1CutoverUser({
+        id: 45,
+        email: "canceled@example.com",
+        commercial_plan_id: "legacy_personal",
+        plan_tier: "pro",
+        plan_status: "canceled",
+      }).planId
+    ).toBe("free");
+    expect(
+      normalizeV1CutoverUser({
+        id: 46,
+        email: "free@example.com",
+        commercial_plan_id: "legacy_personal",
+        plan_tier: "free",
+      }).planId
+    ).toBe("free");
+    expect(
+      normalizeV1CutoverUser({
+        id: 47,
+        email: "bogus@example.com",
+        plan_tier: "bogus",
+      }).planId
+    ).toBe("free");
+  });
+
+  test("batch user listing includes entitlement fields needed for canonical wallet plans", async () => {
+    const dbAll = jest.fn(async () => []);
+
+    await listV1CutoverUsers({ dbAll, limit: 5 });
+
+    const [query] = dbAll.mock.calls[0];
+    expect(query).toContain("plan_status");
+    expect(query).toContain("current_period_end");
+    expect(query).toContain("access_expires_at");
+    expect(query).toContain("access_code_campaign");
   });
 
   test("re-running a completed user is a logged no-op", async () => {

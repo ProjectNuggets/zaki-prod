@@ -492,6 +492,9 @@ export function resolvePlatformPlanForCommercialState({
     //   - legacy_personal (→personal) + pro tier      → pro     (the fix)
     //   - legacy_personal (→personal) + pro_max tier  → pro_max (the fix)
     const commercialPlan = normalizePlatformPlanId(normalizedCommercialPlanId);
+    if (normalizedCommercialPlanId === "legacy_personal" && !premium) {
+      return PLATFORM_PLAN_IDS.PRO;
+    }
     if (premium && ladderTier) return higherLadderPlan(commercialPlan, ladderTier);
     return commercialPlan;
   }

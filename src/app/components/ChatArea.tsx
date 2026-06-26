@@ -332,10 +332,9 @@ export function buildBillingPaywallCardData({
   meterStatus?: MeterStatusResponse | null;
   isAgentTarget?: boolean;
 }) {
+  const denialMeter = isAgentTarget ? error.denialDetails?.meter ?? null : null;
   const agentAvailability = isAgentTarget
-    ? error.denialDetails?.meter?.availableNow?.agent ??
-      meterStatus?.availableNow?.agent ??
-      null
+    ? denialMeter?.availableNow?.agent ?? null
     : null;
   const effectiveRemaining =
     typeof error.denialDetails?.effectiveRemaining === "number"
@@ -355,19 +354,19 @@ export function buildBillingPaywallCardData({
     null;
   const remaining =
     effectiveRemaining ??
-    meterStatus?.weekly?.remaining ??
+    (!isAgentTarget ? meterStatus?.weekly?.remaining : undefined) ??
     undefined;
   const resetAt =
     error.denialDetails?.resetAt ||
     agentAvailability?.resetAt ||
     (constraint === "rolling"
-      ? error.denialDetails?.meter?.rolling?.resetAt || meterStatus?.rolling?.resetAt
+      ? denialMeter?.rolling?.resetAt
       : null) ||
-    meterStatus?.weekly?.resetAt ||
+    (!isAgentTarget ? meterStatus?.weekly?.resetAt : null) ||
     null;
   const rollingWindow =
     isAgentTarget
-      ? error.denialDetails?.meter?.rolling ?? meterStatus?.rolling ?? null
+      ? denialMeter?.rolling ?? null
       : null;
   const rollingWindowPercent =
     typeof rollingWindow?.limit === "number" && typeof rollingWindow?.used === "number"
@@ -376,7 +375,7 @@ export function buildBillingPaywallCardData({
 
   return {
     state: paywallState,
-    planLabel: planLabel ?? undefined,
+    planLabel: denialMeter?.plan?.label ?? planLabel ?? undefined,
     remaining: typeof remaining === "number" ? remaining : undefined,
     effectiveRemaining,
     requiredUnits,

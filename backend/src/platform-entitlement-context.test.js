@@ -1,5 +1,8 @@
 import { describe, expect, it } from "@jest/globals";
-import { resolveEffectivePlatformEntitlement } from "./platform-entitlement-context.js";
+import {
+  resolveEffectivePlatformEntitlement,
+  resolvePlatformWalletPlanForUser,
+} from "./platform-entitlement-context.js";
 import { buildPlatformEntitlementSummary } from "./platform-policy.js";
 
 // Mirror of the BFF plan{} builder used by /api/meter/status,
@@ -109,5 +112,48 @@ describe("platform entitlement context", () => {
       expect.objectContaining({ id: "pro_max", label: "Pro MAX", premium: true })
     );
     expect(plan.label).not.toBe("Personal");
+  });
+
+  it("resolves wallet plans from the live entitlement tier, not the collapsed commercial alias", () => {
+    const nowDate = new Date("2026-06-16T00:00:00.000Z");
+    const base = {
+      email: "billing@example.com",
+      plan_status: "active",
+      current_period_end: "2026-12-31T00:00:00.000Z",
+    };
+
+    expect(
+      resolvePlatformWalletPlanForUser({ ...base, plan_tier: "personal" }, { env: {}, nowDate })
+    ).toBe("personal");
+    expect(
+      resolvePlatformWalletPlanForUser({ ...base, plan_tier: "pro" }, { env: {}, nowDate })
+    ).toBe("pro");
+    expect(
+      resolvePlatformWalletPlanForUser({ ...base, plan_tier: "pro_max" }, { env: {}, nowDate })
+    ).toBe("pro_max");
+    expect(
+      resolvePlatformWalletPlanForUser(
+        { ...base, plan_tier: "pro", plan_status: "canceled" },
+        { env: {}, nowDate }
+      )
+    ).toBe("free");
+    expect(
+      resolvePlatformWalletPlanForUser(
+        { email: "legacy@example.com", commercial_plan_id: "legacy_personal" },
+        { env: {}, nowDate }
+      )
+    ).toBe("pro");
+    expect(
+      resolvePlatformWalletPlanForUser(
+        { email: "free@example.com", commercial_plan_id: "legacy_personal", plan_tier: "free" },
+        { env: {}, nowDate }
+      )
+    ).toBe("free");
+    expect(
+      resolvePlatformWalletPlanForUser(
+        { email: "bogus@example.com", plan_tier: "bogus" },
+        { env: {}, nowDate }
+      )
+    ).toBe("free");
   });
 });

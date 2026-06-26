@@ -8,6 +8,7 @@ import {
   resolveAgentReserveUnits,
   settleAgentChatUnits,
 } from "./agent-metering.js";
+import { resolvePlatformWalletPlanForUser } from "./platform-entitlement-context.js";
 
 const identity = (overrides = {}) => ({
   type: "user",
@@ -133,6 +134,61 @@ describe("reserveAgentChatUnits", () => {
 
     expect(ensureWallet).toHaveBeenCalledWith({ userId: 42, planId: "personal" });
     expect(reserveUnits).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows a Pro user at the reported staging usage while Personal stays constrained", async () => {
+    const env = { ZAKI_AGENT_RESERVE_UNITS: "60" };
+    const nowDate = new Date("2026-06-25T12:00:00.000Z");
+    const baseUser = {
+      id: 42,
+      email: "meter@example.com",
+      plan_status: "active",
+      current_period_end: "2026-12-31T00:00:00.000Z",
+    };
+    async function reserveFor(plan_tier) {
+      let walletPlan = "free";
+      const reserveUnits = jest.fn(async ({ reservedUnits }) => {
+        const rollingLimit = walletPlan === "pro" ? 660 : 130;
+        const remaining = rollingLimit - 119;
+        if (remaining < reservedUnits) {
+          return {
+            ok: false,
+            reason: "insufficient_units",
+            constraint: "rolling",
+            effectiveRemaining: remaining,
+            rollingRemaining: remaining,
+            requiredUnits: reservedUnits,
+          };
+        }
+        return { ok: true, hold: { id: `hold-${walletPlan}`, reserved_units: reservedUnits } };
+      });
+      const ensureWallet = jest.fn(async ({ planId }) => {
+        walletPlan = planId;
+        return {};
+      });
+      const zakiUser = { ...baseUser, plan_tier };
+      const result = await reserveAgentChatUnits({
+        identity: identity({
+          zakiUser,
+          effectivePlanId: resolvePlatformWalletPlanForUser(zakiUser, { env, nowDate }),
+        }),
+        idempotencyKey: `agent:42:${plan_tier}`,
+        env,
+        reserveUnits,
+        ensureWallet,
+        deterministicGrantId,
+      });
+      return { result, ensureWallet };
+    }
+
+    const pro = await reserveFor("pro");
+    expect(pro.result.outcome).toBe("allowed");
+    expect(pro.ensureWallet).toHaveBeenCalledWith({ userId: 42, planId: "pro" });
+
+    const personal = await reserveFor("personal");
+    expect(personal.result.outcome).toBe("denied");
+    expect(personal.result.denial.constraint).toBe("rolling");
+    expect(personal.ensureWallet).toHaveBeenCalledWith({ userId: 42, planId: "personal" });
   });
 
   // C1 money-exploit fix: a true in-flight RETRY (ledger `idempotent`, hold still reserved) must NOT

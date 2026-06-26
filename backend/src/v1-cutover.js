@@ -1,5 +1,9 @@
 import { fetchNullclawPath } from "./agent-client.js";
-import { buildPlatformPlanPolicy, normalizePlatformPlanId } from "./platform-policy.js";
+import {
+  buildPlatformPlanPolicy,
+  normalizePlatformPlanId,
+} from "./platform-policy.js";
+import { resolvePlatformWalletPlanForUser } from "./platform-entitlement-context.js";
 
 export const V1_CUTOVER_VERSION = "2026-06-v1";
 
@@ -76,7 +80,7 @@ export function normalizeCutoverVersion(value = V1_CUTOVER_VERSION) {
   return normalized.replace(/[^a-zA-Z0-9._:-]+/g, "-").replace(/^-+|-+$/g, "") || V1_CUTOVER_VERSION;
 }
 
-export function normalizeV1CutoverUser(row) {
+export function normalizeV1CutoverUser(row, { env = process.env } = {}) {
   const id = Number(row?.id);
   if (!Number.isSafeInteger(id) || id <= 0) {
     throw new Error("A valid ZAKI user id is required for V1 cutover.");
@@ -84,7 +88,14 @@ export function normalizeV1CutoverUser(row) {
   return {
     id,
     email: normalizeEmail(row?.email),
-    planId: normalizePlatformPlanId(row?.commercial_plan_id || row?.plan_tier || row?.plan_id || "free"),
+    planId: resolvePlatformWalletPlanForUser(
+      {
+        ...row,
+        id,
+        plan_tier: row?.plan_tier || row?.plan_id || undefined,
+      },
+      { env }
+    ),
   };
 }
 
@@ -441,7 +452,7 @@ export async function runV1CutoverForUser({
     throw new Error("nullalisCutover dependency is required.");
   }
 
-  const user = normalizeV1CutoverUser(zakiUser);
+  const user = normalizeV1CutoverUser(zakiUser, { env });
   const version = normalizeCutoverVersion(cutoverVersion);
   const normalizedActor = normalizeEmail(actorEmail);
   const normalizedRequestId = normalizeRequestId(requestId);
@@ -636,7 +647,8 @@ export async function listV1CutoverUsers({ dbAll, userId, limit } = {}) {
   const limitValue = Math.max(1, Math.min(10000, Number(limit) || 10000));
   params.push(limitValue);
   const query = `
-    SELECT id, email, NULL::text AS commercial_plan_id, plan_tier, NULL::text AS plan_id
+    SELECT id, email, NULL::text AS commercial_plan_id, plan_tier, plan_status,
+           current_period_end, access_expires_at, access_code_campaign, NULL::text AS plan_id
     FROM zaki_users
     ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
     ORDER BY id ASC

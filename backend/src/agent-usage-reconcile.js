@@ -26,6 +26,7 @@
 // wires the real ledger + DB and the tests mock them. Mirrors agent-metering.js style.
 
 import { computeAgentSettleUnits } from "./agent-metering.js";
+import { resolvePlatformWalletPlanForUser } from "./platform-entitlement-context.js";
 
 // Bounded batch (one SELECT pull) + a max-loops guard so a large backlog drains across loops
 // without an unbounded single pass. Defaults chosen to mirror the holds sweeper cadence.
@@ -56,7 +57,7 @@ function reconcileKey(turnKey) {
  * Per-row pipeline (each wrapped in its own try/catch so one bad row never stalls the sweep):
  *   1. units = computeAgentSettleUnits({costUsd: row.cost_usd}) — real-cost when cost_available
  *      & cost>0, else the flat estimate (computeAgentSettleUnits already does this fallback).
- *   2. ensureWallet (plan from zaki_users.plan_tier, default 'free').
+ *   2. ensureWallet (canonical platform wallet plan, default 'free').
  *   3. reserveUnits with reserveIdempotencyKey = 'reconcile:'+turn_key:
  *        - ok && fresh         → settleHold (settledUnits = units) → debit. mark reconciled.
  *        - idempotency_replayed
@@ -185,7 +186,7 @@ async function reconcileRow({
 
   // no_wallet → provision from the user's plan and retry once.
   if (!reserved.ok && reserved.reason === "no_wallet") {
-    const planId = await lookupPlanId({ dbGet, userId });
+    const planId = await lookupPlanId({ dbGet, userId, env });
     await ensureWallet({ userId, planId });
     reserved = await reserveUnits(reserveArgs);
   }
@@ -282,11 +283,15 @@ async function reconcileRow({
   return "debited";
 }
 
-async function lookupPlanId({ dbGet, userId }) {
+async function lookupPlanId({ dbGet, userId, env }) {
   try {
-    const row = await dbGet(`SELECT plan_tier FROM zaki_users WHERE id = $1`, [userId]);
-    const plan = String(row?.plan_tier || "").trim();
-    return plan || "free";
+    const row = await dbGet(
+      `SELECT id, email, plan_tier, plan_status, current_period_end, access_expires_at, access_code_campaign
+       FROM zaki_users
+       WHERE id = $1`,
+      [userId]
+    );
+    return row?.id ? resolvePlatformWalletPlanForUser(row, { env }) : "free";
   } catch {
     return "free";
   }

@@ -353,7 +353,10 @@ import {
   getEffectiveEntitlementState,
   isPaidActive,
 } from "./effective-entitlements.js";
-import { resolveEffectivePlatformEntitlement } from "./platform-entitlement-context.js";
+import {
+  resolveEffectivePlatformEntitlement,
+  resolvePlatformWalletPlanForUser,
+} from "./platform-entitlement-context.js";
 import {
   buildUserQuotaContext as buildQuotaContext,
   normalizeQuotaTier,
@@ -363,7 +366,6 @@ import {
   buildPlatformMeterPolicy,
   buildPlatformPlanPolicy,
   buildPlatformProductRegistry,
-  normalizePlatformPlanId,
 } from "./platform-policy.js";
 import {
   CENTRAL_METER_CONTRACT_VERSION,
@@ -2250,13 +2252,15 @@ async function fulfillTopupCheckoutSession({ session, eventId } = {}) {
       ""
   );
   let user = null;
+  const topupUserColumns =
+    "id, email, plan_tier, plan_status, current_period_end, access_expires_at, access_code_campaign";
   if (Number.isInteger(metadataUserId) && metadataUserId > 0) {
-    user = await dbGet("SELECT id, email, plan_tier FROM zaki_users WHERE id = $1", [
+    user = await dbGet(`SELECT ${topupUserColumns} FROM zaki_users WHERE id = $1`, [
       metadataUserId,
     ]);
   }
   if (!user && metadataUserEmail) {
-    user = await dbGet("SELECT id, email, plan_tier FROM zaki_users WHERE email = $1", [
+    user = await dbGet(`SELECT ${topupUserColumns} FROM zaki_users WHERE email = $1`, [
       metadataUserEmail,
     ]);
   }
@@ -2320,7 +2324,7 @@ async function fulfillTopupCheckoutSession({ session, eventId } = {}) {
 
     await ensureWallet({
       userId: user.id,
-      planId: String(user.plan_tier || "free").trim().toLowerCase() || "free",
+      planId: resolvePlatformWalletPlanForUser(user),
     }, client);
 
     await client.query(
@@ -10452,7 +10456,7 @@ async function requireSpacesMeterGrantForChat({
   try {
     let reserved = await reserveUnits(reserveArgs);
     if (!reserved.ok && reserved.reason === "no_wallet") {
-      await ensureWallet({ userId: identity.userId, planId: zakiUser?.plan_tier || "free" });
+      await ensureWallet({ userId: identity.userId, planId: resolvePlatformWalletPlanForUser(zakiUser) });
       reserved = await reserveUnits(reserveArgs);
     }
     // C1: a key matching an existing hold is a duplicate — either a true in-flight RETRY (ledger
@@ -11355,10 +11359,7 @@ app.get("/api/spaces/:spaceId/files/:storageFilename", async (req, res) => {
 function buildAgentMeterIdentity(authContext) {
   const zakiUser = authContext?.zakiUser || authContext;
   if (!zakiUser?.id) return null;
-  const effective = resolveEffectivePlatformEntitlement(zakiUser);
-  const effectivePlanId = normalizePlatformPlanId(
-    effective?.commercial?.planId || effective?.tier || zakiUser.plan_tier || "free"
-  );
+  const effectivePlanId = resolvePlatformWalletPlanForUser(zakiUser);
   return {
     type: "user",
     tenantId: "default",
@@ -17433,7 +17434,10 @@ app.use(
     resolveUser: async (req, res) => {
       const authResult = await requireAuthUser(req, res);
       if (!authResult?.zakiUser) return null;
-      return { userId: authResult.zakiUser.id, planId: authResult.zakiUser.plan_tier || "free" };
+      return {
+        userId: authResult.zakiUser.id,
+        planId: resolvePlatformWalletPlanForUser(authResult.zakiUser),
+      };
     },
   })
 );
