@@ -12,7 +12,7 @@ import { getWebsiteRuntimeConfig } from "./runtimeConfig";
 
 export const SITE_URL = getWebsiteRuntimeConfig().siteUrl;
 export const APP_URL = getWebsiteRuntimeConfig().appBaseUrl;
-export const DEFAULT_OG_IMAGE = `${SITE_URL}/slides/1.png`;
+export const DEFAULT_OG_IMAGE = `${SITE_URL}/zaki/assets/og-cover.png`;
 export const SEO_UPDATED_AT = "2026-06-17T00:00:00Z";
 
 export type RouteSeo = {

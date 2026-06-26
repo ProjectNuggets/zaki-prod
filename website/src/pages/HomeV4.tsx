@@ -20,6 +20,7 @@ export function HomeV4() {
 
   return (
     <>
+      <a className="skip-link" href="#top">Skip to content</a>
       {/* Rising embers — faint warm sparks drifting up behind the whole climb, unifying
           every section in one ambient layer (sparser/cooler at the valley, warmer near the
           dawn, gone at the summit). Sits behind all content; painted by zaki-mind.js. */}
@@ -98,19 +99,19 @@ export function HomeV4() {
                   <span className="mega-role">ZAKI in context</span>
                   <span className="mega-d">Keep every conversation in its world — shared docs, many threads.</span>
                 </a>
-                <a className="mega-card" href="#design" role="menuitem">
+                <a className="mega-card" href={signupUrl} role="menuitem">
                   <span className="mega-ic" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="M4 16l8-8 1.5 1.5M14 4l2 2-9.5 9.5L4 16l.5-2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg></span>
                   <span className="mega-tt">Design <span className="status soon">Soon</span></span>
                   <span className="mega-role">ZAKI in creation</span>
                   <span className="mega-d">Turn a rough brief into directions you can see and shape.</span>
                 </a>
-                <a className="mega-card" href="#learn" role="menuitem">
+                <a className="mega-card" href={signupUrl} role="menuitem">
                   <span className="mega-ic" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="M10 4 3 7l7 3 7-3-7-3zM5 9v4c0 1 2.2 2 5 2s5-1 5-2V9" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg></span>
                   <span className="mega-tt">Learn <span className="status soon">Soon</span></span>
                   <span className="mega-role">ZAKI in growth</span>
                   <span className="mega-d">Understand, practice, and progress in a way that adapts to you.</span>
                 </a>
-                <a className="mega-card" href="#career" role="menuitem">
+                <a className="mega-card" href={signupUrl} role="menuitem">
                   <span className="mega-ic" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><rect x="3" y="6" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.3" /><path d="M7 6V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="1.3" /></svg></span>
                   <span className="mega-tt">Career <span className="status soon">Soon</span></span>
                   <span className="mega-role">ZAKI in motion</span>
@@ -145,15 +146,15 @@ export function HomeV4() {
         <span className="mm-k">Products</span>
         <a className="mm-link" href="/agent">Agent <span className="mm-role">In action · Live</span></a>
         <a className="mm-link" href="/spaces">Spaces <span className="mm-role">In context · Live</span></a>
-        <a className="mm-link" href="#design">Design <span className="mm-role">In creation · Soon</span></a>
-        <a className="mm-link" href="#learn">Learn <span className="mm-role">In growth · Soon</span></a>
-        <a className="mm-link" href="#career">Career <span className="mm-role">In motion · Soon</span></a>
+        <a className="mm-link" href={signupUrl}>Design <span className="mm-role">In creation · Soon</span></a>
+        <a className="mm-link" href={signupUrl}>Learn <span className="mm-role">In growth · Soon</span></a>
+        <a className="mm-link" href={signupUrl}>Career <span className="mm-role">In motion · Soon</span></a>
         <a className="mm-link" href="#memory">Memory <span className="mm-role">Continuity layer</span></a>
         <div className="mm-sub"><a href="#trust">Security</a><a href="/pricing">Pricing</a><a href="/story">Story</a><a href={signinUrl}>Sign in</a></div>
         <a className="btn btn-primary btn-lg btn-block mm-cta" href={signupUrl}>Meet ZAKI</a>
       </div>
 
-      <main id="top">
+      <main id="top" tabIndex={-1}>
 
         {/* SCENE 1 — HERO (full-screen editorial, pinned) */}
         <header className="scene" data-stage="dark" data-screen-label="01 Hero" data-zee="/zaki/bot/sunglasses.png" id="hero">
@@ -196,7 +197,7 @@ export function HomeV4() {
 
             <div className="intent-remembered" id="intent-remembered" hidden>
               <div className="ir-inner">
-                <span className="ir-label"><span className="ir-pip"></span>Remembered for this visit</span>
+                <span className="ir-label"><span className="ir-pip"></span>Remembered on this device</span>
                 <span className="ir-value" id="intent-value">Launch my design portfolio</span>
                 <div className="ir-actions">
                   <button className="ir-btn" id="intent-edit">Edit</button>
@@ -404,7 +405,7 @@ export function HomeV4() {
           <nav className="footer-cols" aria-label="Footer">
             <div className="fcol">
               <span className="fcol-k">Products</span>
-              <a href="/agent">Agent</a><a href="/spaces">Spaces</a><a href="#design">Design</a><a href="#learn">Learn</a><a href="#career">Career</a>
+              <a href="/agent">Agent</a><a href="/spaces">Spaces</a><a href={signupUrl}>Design</a><a href={signupUrl}>Learn</a><a href={signupUrl}>Career</a>
             </div>
             <div className="fcol">
               <span className="fcol-k">Company</span>

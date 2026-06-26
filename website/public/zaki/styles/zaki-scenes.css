@@ -143,7 +143,9 @@ html.intro-on, html.intro-on body { overflow: hidden; }                  /* lock
   filter: drop-shadow(0 10px 22px rgba(0,0,0,.34));
   will-change: top, opacity;
 }
-@media (hover: hover) and (pointer: fine) and (min-width: 981px) { #zee-climber { display: block; } }
+/* 1100px (not 981) so the climber only appears once scenes are genuinely two-column
+   with a clear right gutter — below that the grids collapse full-width and it overlapped. */
+@media (hover: hover) and (pointer: fine) and (min-width: 1100px) { #zee-climber { display: block; } }
 #zee-climber.is-in { opacity: 1; transform: none; }
 #zee-climber.zee-swap { opacity: 0; transition: opacity .15s ease; }          /* crossfade pose swap */
 @media (prefers-reduced-motion: no-preference) {
@@ -172,7 +174,9 @@ html.intro-on, html.intro-on body { overflow: hidden; }                  /* lock
 body.has-intent #goal-token { display: inline-flex; }
 #goal-token .gt-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); flex: none; }
 #goal-token .gt-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-@media (max-width: 720px) { #goal-token { display: none !important; } }
+/* hide the carried-goal token until scenes are two-column (matches the climber), so it
+   doesn't overlap collapsed full-width content in the 721-1099px band. */
+@media (max-width: 1099px) { #goal-token { display: none !important; } }
 
 /* Scene 3 — Agent: copy + run console side by side; console scrubbed by the pin */
 .agent-inner { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: clamp(32px, 5vw, 72px); align-items: center; }
@@ -277,4 +281,32 @@ body.has-intent #goal-token { display: inline-flex; }
   .scene { padding: clamp(96px, 13vh, 140px) 22px; }
   .scene-h1 { font-size: clamp(40px, 13vw, 72px); }
   .scene-lede { font-size: 17px; }
+  /* the demo scenes set their own (0,2,0) .scene-h1 size, which beat the mobile rule
+     above (0,1,0) and stranded their headlines at the 34px floor — match specificity
+     so all 7 scenes share ONE mobile type scale. (audit #4) */
+  .agent .scene-h1, .memory .scene-h1, .spaces .scene-h1, .trust .scene-h1 { font-size: clamp(38px, 11vw, 64px); }
 }
+
+/* ---- audit fixes ---------------------------------------------------------------- */
+
+/* #6 Focus-visible must clear 3:1 on the cream dawn (summit + footer) where the primary
+   CTAs live — the global teal ring is ~2:1 there. Switch to dark ink on light grounds. */
+.summit :focus-visible, .footer :focus-visible { outline-color: var(--ink-1); }
+/* #6 the intent input dropped its focus ring entirely (outline:none) — restore one */
+.intent-input:focus-visible { outline: 2px solid var(--teal-bright); outline-offset: 2px; border-color: var(--teal-bright); }
+
+/* #13 Scene 2's intent chips / form / remembered inherited center alignment from the old
+   chapters layout, but the intention scene is left-aligned — pin them left to match. */
+#intention .intent-pick { justify-content: flex-start; }
+#intention .intent-form { margin-left: 0; margin-right: auto; }
+#intention .intent-remembered { margin-left: 0; margin-right: auto; }
+#intention .ir-inner { justify-content: flex-start; }
+
+/* #7 Skip link — first focusable, slides in on focus, hidden otherwise. */
+.skip-link {
+  position: fixed; top: 12px; left: 12px; z-index: 2000;
+  padding: 11px 18px; border-radius: 9px; background: var(--brand); color: #fff;
+  font-family: 'DM Mono', ui-monospace, monospace; font-size: 13px; letter-spacing: .02em;
+  transform: translateY(-160%); transition: transform .22s cubic-bezier(.2,.7,.2,1);
+}
+.skip-link:focus-visible { transform: none; outline: 2px solid #fff; outline-offset: 2px; }

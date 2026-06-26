@@ -134,6 +134,10 @@
         self.pointer.active = true;
       });
       this.host.addEventListener('pointerleave', function () { self.pointer.active = false; });
+      self.offscreen = false;
+      if ('IntersectionObserver' in window) {
+        new IntersectionObserver(function (es) { self.offscreen = !es[0].isIntersecting; }, { threshold: 0 }).observe(this.host);
+      }
     }
   };
 
@@ -141,10 +145,13 @@
   Constellation.prototype.py = function (ny) { return ny * this.h; };
 
   Constellation.prototype.loop = function (now) {
+    requestAnimationFrame(this.loop);
+    // pause the simulation when the tab is hidden or the graph is scrolled off-screen
+    // (it's scene 4 of 7) — no point burning battery/CPU on an invisible canvas.
+    if (document.hidden || this.offscreen) { this.last = now; return; }
     var dt = Math.min(48, now - this.last); this.last = now; this.t += dt;
     this.update(dt);
     this.draw();
-    requestAnimationFrame(this.loop);
   };
 
   Constellation.prototype.update = function (dt) {

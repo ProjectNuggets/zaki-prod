@@ -68,8 +68,8 @@ function buildSeoBlock({ seo, structuredData }) {
       content="${escapeHtml(seo.description)}"
     />
     <meta property="og:url" content="${escapeHtml(seo.canonical)}" />
-    <meta property="og:image" content="${SITE_URL}/slides/1.png" />
-    <meta property="og:image:secure_url" content="${SITE_URL}/slides/1.png" />
+    <meta property="og:image" content="${SITE_URL}/zaki/assets/og-cover.png" />
+    <meta property="og:image:secure_url" content="${SITE_URL}/zaki/assets/og-cover.png" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -84,7 +84,7 @@ function buildSeoBlock({ seo, structuredData }) {
       name="twitter:description"
       content="${escapeHtml(seo.description)}"
     />
-    <meta name="twitter:image" content="${SITE_URL}/slides/1.png" />
+    <meta name="twitter:image" content="${SITE_URL}/zaki/assets/og-cover.png" />
     <meta name="twitter:image:alt" content="${escapeHtml(seo.imageAlt)}" />
     ${jsonLdScripts}
     ${seoEnd}`;
