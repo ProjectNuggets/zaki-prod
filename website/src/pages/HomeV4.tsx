@@ -216,7 +216,7 @@ export function HomeV4() {
             <div className="agent-copy">
               <span className="scene-eyebrow">In action · 03</span>
               <h2 className="scene-h1">Give it the outcome.<br />It <em className="hl">does the work.</em></h2>
-              <p className="scene-lede">Not an answer you copy out — a result you can use. ZAKI plans, uses real tools, creates the files, and follows through. Every step visible. Nothing ships without your approval.</p>
+              <p className="scene-lede">Not an answer you copy out — a result you can use. It plans, uses real tools, creates the files, and follows through, every step visible. Reads run on their own; writes always wait for your yes. And every run ends with a receipt — what it touched, how long it took, what it cost.</p>
               <div className="scene-cta">
                 <a className="btn btn-primary btn-lg" href={agentUrl}>Watch ZAKI run
                   <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -255,7 +255,7 @@ export function HomeV4() {
             <div className="mem-copy">
               <span className="scene-eyebrow">Continuity · 04</span>
               <h2 className="scene-h1">It remembers <em className="hl">the person,</em><br />not the prompt.</h2>
-              <p className="scene-lede">One living memory under everything — your goals, preferences, the corrections you&rsquo;ve made — that you can inspect, correct, export, or forget. It&rsquo;s yours, and it carries from one product to the next.</p>
+              <p className="scene-lede">Most AI treats memory as a lookup table. ZAKI treats it as a relationship — it notices, and it keeps itself honest: say you loved TypeScript, then switch to Go, and it asks instead of quietly contradicting itself. One living memory you can inspect, correct, export, or forget — yours, carried from one product to the next.</p>
               <div className="scene-cta">
                 <a className="btn btn-ghost btn-lg" href="#trust">See how memory stays yours
                   <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -381,6 +381,25 @@ export function HomeV4() {
               <a className="btn btn-ghost btn-lg" href="/story">Read the story</a>
             </div>
             <p className="summit-origin">Designed by agents. Built to remember. <a href="/story">Read the full story &rarr;</a></p>
+          </div>
+        </section>
+
+        {/* MISSION — a quiet dawn band: the reason ZAKI exists. Not the headline; a beat
+            as you arrive in the light. Stays in the dawn between summit and footer. */}
+        <section className="mission" data-stage="light" aria-labelledby="mission-h">
+          <div className="mission-inner">
+            <span className="scene-eyebrow">The mission</span>
+            <h2 className="mission-h" id="mission-h">Intelligence shouldn&rsquo;t follow the same map as everything else.</h2>
+            <p className="mission-lede">ZAKI is built Arabic-first — native typography, right-to-left from the ground up, and a memory that treats your language as part of who you are. The first seats go to the places AI reached last.</p>
+            <ul className="mission-seats">
+              <li><b>The Arabic-speaking world</b><span>its own voice in the AI era</span></li>
+              <li><b>Syria &amp; rebuilding regions</b><span>tools to build again</span></li>
+              <li><b>Students, teachers &amp; builders</b><span>who carry the next chapter</span></li>
+            </ul>
+            <a className="mission-cta" href={signupUrl}>Request a seat for your community
+              <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </a>
+            <p className="mission-proof">Trusted by our first members · EU-hosted, GDPR-aligned · your data stays yours.</p>
           </div>
         </section>
 

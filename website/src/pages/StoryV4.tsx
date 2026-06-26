@@ -185,7 +185,7 @@ export function StoryV4() {
             <div className="built-copy">
               <span className="kicker reveal">Built, not assembled</span>
               <h2 className="display reveal" data-d="1">So we built it<br /><em className="hlt">in-house.</em></h2>
-              <p className="lede reveal" data-d="2">ZAKI was developed internally and given the best memory architecture an agent can have — modelled not on a database, but on how human memory actually works.</p>
+              <p className="lede reveal" data-d="2">ZAKI got the best memory architecture an agent can have. Most AI treats memory as a lookup table; ZAKI treats it as a relationship — modelled not on a database, but on how human memory actually works. You don&rsquo;t fall for an AI that stores facts. You fall for one that notices, cares, and follows up.</p>
               <div className="built-list reveal" data-d="3">
                 <div className="built-li"><span className="bi-ix">01</span><div><div className="bi-t">Studied from people</div><div className="bi-d">How we hold a moment, let it cool, and recall it later when it matters — translated into structure.</div></div></div>
                 <div className="built-li"><span className="bi-ix">02</span><div><div className="bi-t">Owned end to end</div><div className="bi-d">No bolted-on memory plugin. The recall layer is the foundation, designed alongside the agent.</div></div></div>

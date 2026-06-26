@@ -551,6 +551,16 @@ export const content = {
             "ZAKI is your day-to-day AI — one that actually remembers you. It chats, takes on whole tasks through Agent, keeps each project clean in its own Space, and holds everything you've told it in a memory you can see, correct, and control. The point: you never start from zero.",
         },
         {
+          question: "Is ZAKI free? What does it cost?",
+          answer:
+            "Free to start — Chat runs on a free weekly allowance, no card. Paid plans are $15, $45, and $99 a month, and every plan unlocks the whole platform: Agent, Spaces, and Memory. What changes between tiers is the ceiling — more runs, longer memory retention, more concurrent work — and it's one shared allowance across everything, so there are no per-message meters and no separate quota per product.",
+        },
+        {
+          question: "Can I see and control what ZAKI remembers?",
+          answer:
+            "Always. Every memory is yours to browse, search, correct, export, or delete, anytime. ZAKI even keeps itself honest: if you say you love TypeScript and later switch to Go, it flags the contradiction and asks instead of silently holding both. Your memory is isolated to your account — never shared across users.",
+        },
+        {
           question: "What is the difference between ZAKI and Spaces?",
           answer:
             "ZAKI is for continuity, memory, and recall across time. Spaces are for structured execution inside a dedicated workspace. ZAKI helps you keep the long thread. Spaces help you do the focused work cleanly.",

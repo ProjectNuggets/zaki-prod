@@ -110,7 +110,7 @@ export function PricingV4() {
           <div className="wrap phero-inner">
             <span className="kicker center reveal">Pricing</span>
             <h1 className="display-xl reveal" data-d="1">One platform.<br /><em className="hl">Pick your limits.</em></h1>
-            <p className="lede reveal" data-d="2">Every plan unlocks all of ZAKI — Agent, Spaces, Memory, and everything coming next. You're not buying features. You're choosing how much room you need.</p>
+            <p className="lede reveal" data-d="2">Every plan unlocks all of ZAKI — Agent, Spaces, Memory, and everything coming next. You're not buying features; you're choosing how much room you need. It's one shared weekly allowance across everything — no per-message meters, no separate quota per product.</p>
             <div className="bill reveal" data-d="3" id="bill" data-cycle="monthly" role="group" aria-label="Billing cycle">
               <span className="knob" aria-hidden="true"></span>
               <button id="bill-monthly" className="on" aria-pressed="true"><span>Monthly</span></button>

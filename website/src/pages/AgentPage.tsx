@@ -109,7 +109,7 @@ export function AgentPage() {
             <div className="ahero-copy">
               <span className="kicker reveal"><span className="ix">01</span> ZAKI Agent · in action</span>
               <h1 className="display-xl reveal" data-d="1">You bring the goal.<br /><em className="hl">It brings the receipts.</em></h1>
-              <p className="lede reveal" data-d="2">Most assistants give you a to-do list. Your agent goes and does the list — it plans, opens the tabs, makes the calls, drafts the replies, and comes back when it's done. Or when it needs you. Never before.</p>
+              <p className="lede reveal" data-d="2">Most assistants give you a to-do list. Your agent goes and does the list — it plans, opens the tabs, makes the calls, drafts the replies, and comes back when it's done, or when it needs you, never before. Reads run on their own; writes always wait for your yes. And every run ends with a real receipt — what it touched, how long it took, what it cost.</p>
               <div className="ahero-namer reveal" data-d="3">
                 <span className="namer-q">First things first — what do you call yours?</span>
                 <form className="namer-form" id="namer-form">
