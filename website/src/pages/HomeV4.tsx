@@ -268,7 +268,7 @@ export function HomeV4() {
         </section>
 
         {/* SCENE 5 — EVERY WORLD (Spaces + the suite as honest Soon facets) */}
-        <section className="scene spaces" data-stage="dark" data-reveal data-screen-label="05 Spaces" data-zee="/zaki/bot/hop.png" id="spaces">
+        <section className="scene spaces" data-stage="dark" data-reveal data-screen-label="05 Spaces" data-zee="/zaki/bot/world.png" id="spaces">
           <div className="scene-glow" aria-hidden="true"></div>
           <div className="scene-inner spaces-inner">
             <div className="spaces-copy">
