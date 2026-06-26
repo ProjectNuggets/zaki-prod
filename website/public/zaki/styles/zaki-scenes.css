@@ -18,7 +18,9 @@
    background. Dark scenes (1-6) are transparent and ride this warm-dark body bg. ---- */
 :root { --altitude: 0; }
 body, body[data-stage] {
-  --warm: color-mix(in oklab, #0C0A09, #2E1C0D calc(var(--altitude) * 100%));
+  /* warms only VERY subtly so every dark section reads as one harmonised atmosphere
+     (the old #2E1C0D endpoint drifted to a visibly browner black by the trust scene) */
+  --warm: color-mix(in oklab, #0C0A09, #1A140F calc(var(--altitude) * 100%));
   --bg: var(--warm);
   --ink-1: #F4EFE7; --ink-2: #C2BAAE; --ink-3: #8B8378;
   background: var(--bg);
@@ -107,11 +109,10 @@ html.intro-on, html.intro-on body { overflow: hidden; }                  /* lock
 @media (prefers-reduced-motion: reduce) { .scene-cue i { animation: none; } }
 
 /* --- scene backgrounds (subtle gradient glows, not glyph noise) --- */
-#hero .scene-glow {
-  background:
-    radial-gradient(72% 56% at 50% 30%, var(--brand-12), transparent 70%),
-    radial-gradient(46% 46% at 82% 82%, rgba(96, 226, 197, .05), transparent 72%);
-}
+/* Hero rides the shared warm-dark atmosphere like every other dark scene — no
+   per-section glow (the old red/teal bloom is what made the hero look like a
+   different background from the rest). */
+#hero .scene-glow { background: none; }
 #reframe .scene-glow {
   background: radial-gradient(60% 50% at 14% 30%, var(--brand-12), transparent 68%);
 }
@@ -211,7 +212,7 @@ body.has-intent #goal-token { display: inline-flex; }
    centred, well clear of the lead-in, so it always rests on full dawn. Inks flip dark. */
 .summit {
   text-align: center;
-  background: linear-gradient(to bottom, #2A1A0C 0%, #F4EAD8 16%, #F4EAD8 100%);
+  background: linear-gradient(to bottom, #1A140F 0%, #F4EAD8 16%, #F4EAD8 100%);
   --ink-1: #1F1A14; --ink-2: #564737; --ink-3: #88735A;
   --hair: rgba(31, 26, 20, .12); --hair-strong: rgba(31, 26, 20, .22);
   color: var(--ink-1);

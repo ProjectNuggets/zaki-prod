@@ -151,7 +151,7 @@ export function HomeV4() {
       <main id="top">
 
         {/* SCENE 1 — HERO (full-screen editorial, pinned) */}
-        <header className="scene stage-dark" data-stage="dark" data-screen-label="01 Hero" data-zee="/zaki/bot/sunglasses.png" id="hero">
+        <header className="scene" data-stage="dark" data-screen-label="01 Hero" data-zee="/zaki/bot/sunglasses.png" id="hero">
           <div className="scene-glow" aria-hidden="true"></div>
           <div className="scene-inner">
             <span className="scene-eyebrow">Your AI · 01</span>
