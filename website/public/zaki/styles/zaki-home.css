@@ -131,8 +131,11 @@ body[data-stage="light"] .thread-halo{opacity:.16;}
   pointer-events:none;z-index:1;}
 /* light section opening beneath a dark one — dark bleeds down */
 #agent::before,#story::before{background:linear-gradient(180deg,#0C0A09 0%,rgba(12,10,9,0) 100%);}
-/* dark section opening beneath a light one — light bleeds down */
-#day::before,#cta::before{background:linear-gradient(180deg,#F8F2E9 0%,rgba(248,242,233,0) 100%);}
+/* dark section opening beneath a light one — light bleeds down.
+   Scoped to the homepage summit (.summit) so this cream fade doesn't leak onto OTHER
+   pages that reuse id="cta" for a DARK section (e.g. the agent CTA) — that produced a
+   muddy cream->grey->dark "chrome band" on the agent page. */
+#day::before,.summit#cta::before{background:linear-gradient(180deg,#F8F2E9 0%,rgba(248,242,233,0) 100%);}
 
 /* chapter rail nav (right, desktop) */
 .chap-rail{position:fixed;top:50%;right:26px;transform:translateY(-50%);z-index:60;
