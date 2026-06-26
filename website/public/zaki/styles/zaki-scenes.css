@@ -28,6 +28,13 @@ body, body[data-stage] {
 }
 @media (prefers-reduced-motion: reduce) { :root { --altitude: 0 !important; } }
 
+/* Rising embers ambient layer — fixed, behind ALL content (z-index:-1 sits above the
+   body's warm-dark bg but below every section), so it shows through the transparent dark
+   scenes and is naturally hidden by the opaque dawn summit + footer. Off for reduced-motion. */
+#ember-field { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+#ember-field canvas { display: block; width: 100%; height: 100%; }
+@media (prefers-reduced-motion: reduce) { #ember-field { display: none; } }
+
 /* ---- Crafted intro veil — the dark valley floor before the climb ----
    Visible by default (prerendered → the hero never flashes underneath). JS lifts it
    like a curtain (.is-lifting / html.intro-done); the CSS auto-lift is a no-JS / slow-JS

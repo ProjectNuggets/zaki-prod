@@ -20,6 +20,11 @@ export function HomeV4() {
 
   return (
     <>
+      {/* Rising embers — faint warm sparks drifting up behind the whole climb, unifying
+          every section in one ambient layer (sparser/cooler at the valley, warmer near the
+          dawn, gone at the summit). Sits behind all content; painted by zaki-mind.js. */}
+      <div id="ember-field" aria-hidden="true"></div>
+
       {/* Crafted intro veil — the dark valley floor before the climb. Prerendered &
           visible by default (so the hero never flashes underneath); JS lifts it like a
           curtain after a beat (or on click), a CSS auto-lift is the no-JS fallback, and

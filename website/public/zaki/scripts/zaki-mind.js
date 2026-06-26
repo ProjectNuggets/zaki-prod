@@ -224,7 +224,7 @@
   /* ====================================================================
      Lenis smooth scroll + the one shared clock (gsap.ticker)
      ==================================================================== */
-  var lenis = null, tickFn = null, fieldTickFn = null, altTickFn = null, goalMO = null, zeeIO = null, menuObs = null, onVis = null, heroIntro = null;
+  var lenis = null, tickFn = null, fieldTickFn = null, altTickFn = null, goalMO = null, zeeIO = null, menuObs = null, onVis = null, heroIntro = null, emberTickFn = null, curAlt = 0;
 
   if (!reduce && Lenis) {
     lenis = new Lenis({
@@ -269,6 +269,7 @@
       var max = de.scrollHeight - de.clientHeight;
       var p = max > 0 ? (window.scrollY || de.scrollTop) / max : 0;
       if (p < 0) p = 0; else if (p > 1) p = 1;
+      curAlt = p;
       root.style.setProperty('--altitude', p.toFixed(4));
     }
     altitude();                       // initial paint (also correct under reduce/no-anim)
@@ -287,6 +288,84 @@
     sync();
     goalMO = new MutationObserver(sync);
     goalMO.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  })();
+
+  /* ---- Rising embers: faint warm sparks drifting up behind the whole climb, unifying
+     every section in one ambient layer. Sparser/cooler at the valley, warmer climbing,
+     faded to nothing at the dawn summit. Additive glow, one shared clock, paused when
+     hidden, off under reduced-motion. ---- */
+  (function () {
+    var host = document.getElementById('ember-field');
+    if (!host || reduce) return;
+    var canvas = document.createElement('canvas');
+    canvas.setAttribute('aria-hidden', 'true');
+    canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;';
+    host.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    if (!ctx) { host.removeChild(canvas); return; }
+
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var coarse = matchMedia('(pointer:coarse)').matches;
+    var COUNT = coarse ? 38 : (window.innerWidth >= 1280 ? 95 : 60);
+    var W = 0, H = 0, parts = [], lastT = 0;
+
+    // pre-rendered soft warm ember sprite (drawImage is cheaper than per-frame gradients)
+    var spr = document.createElement('canvas'); spr.width = spr.height = 32;
+    var sx = spr.getContext('2d');
+    var sg = sx.createRadialGradient(16, 16, 0, 16, 16, 16);
+    sg.addColorStop(0, 'rgba(255,228,186,1)');
+    sg.addColorStop(0.45, 'rgba(255,176,108,0.55)');
+    sg.addColorStop(1, 'rgba(250,120,70,0)');
+    sx.fillStyle = sg; sx.fillRect(0, 0, 32, 32);
+
+    function rnd(a, b) { return a + Math.random() * (b - a); }
+    function spawn(p, fromBottom) {
+      p.x = Math.random() * (W || 1);
+      p.y = fromBottom ? (H + rnd(0, H * 0.4)) : Math.random() * (H || 1);
+      p.r = rnd(0.7, 2.6);
+      p.vy = rnd(7, 24);
+      p.swayAmp = rnd(4, 16);
+      p.swaySpd = rnd(0.3, 1.0);
+      p.phase = Math.random() * 6.28;
+      p.a = rnd(0.16, 0.62);
+    }
+    function seed() { parts = []; for (var i = 0; i < COUNT; i++) { var p = {}; spawn(p, false); parts.push(p); } }
+    function resize() {
+      W = host.clientWidth; H = host.clientHeight; if (!W || !H) return;
+      canvas.width = W * dpr; canvas.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      seed();
+    }
+
+    function render() {
+      if (!W || document.hidden) { lastT = 0; return; }
+      var now = performance.now();
+      var dt = lastT ? Math.min(0.05, (now - lastT) / 1000) : 0.016; lastT = now;
+      ctx.clearRect(0, 0, W, H);
+      var a = curAlt;
+      var dawnFade = a < 0.84 ? 1 : Math.max(0, 1 - (a - 0.84) / 0.10);   // gone by the dawn
+      if (dawnFade <= 0) { return; }
+      var warmth = 0.6 + 0.4 * a;
+      var density = (0.58 + 0.42 * a) * dawnFade;
+      var vel = lenis ? Math.min(1, Math.abs(lenis.velocity || 0) / 40) : 0;
+      ctx.globalCompositeOperation = 'lighter';
+      for (var i = 0; i < parts.length; i++) {
+        var p = parts[i];
+        p.y -= (p.vy * (1 + vel * 1.4)) * dt;
+        p.phase += p.swaySpd * dt;
+        if (p.y < -12) spawn(p, true);
+        if ((i / parts.length) > density) continue;
+        var x = p.x + Math.sin(p.phase) * p.swayAmp;
+        var sz = p.r * (3.4 + warmth * 1.9);
+        ctx.globalAlpha = p.a * dawnFade;
+        ctx.drawImage(spr, x - sz, p.y - sz, sz * 2, sz * 2);
+      }
+      ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    }
+
+    var ro = ('ResizeObserver' in window) ? new ResizeObserver(resize) : null;
+    if (ro) ro.observe(host); else window.addEventListener('resize', resize, { passive: true });
+    resize();
+    emberTickFn = render; gsap.ticker.add(emberTickFn);
   })();
 
   /* ====================================================================
@@ -426,6 +505,7 @@
       if (altTickFn) { gsap.ticker.remove(altTickFn); altTickFn = null; }
       if (goalMO) { goalMO.disconnect(); goalMO = null; }
       if (zeeIO) { zeeIO.disconnect(); zeeIO = null; }
+      if (emberTickFn) { gsap.ticker.remove(emberTickFn); emberTickFn = null; }
       if (field) { field.destroy(); field = null; }
       if (lenis) { if (tickFn) gsap.ticker.remove(tickFn); lenis.destroy(); lenis = null; }
       if (menuObs) { menuObs.disconnect(); menuObs = null; }
