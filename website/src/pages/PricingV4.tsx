@@ -228,7 +228,7 @@ export function PricingV4() {
               </div>
               <div className="incl t reveal" data-d="3">
                 <div className="incl-ic"><svg viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="1.3" /><circle cx="11" cy="11" r="2.6" fill="currentColor" /></svg></div>
-                <div className="incl-t">9-layer Memory</div>
+                <div className="incl-t">Living memory</div>
                 <div className="incl-d">The continuity layer under everything — inspect it, correct it, or forget it. Always yours.</div>
               </div>
               <div className="incl reveal" data-d="1">

@@ -548,7 +548,7 @@ export const content = {
         {
           question: "What is ZAKI?",
           answer:
-            "ZAKI is the persistent intelligence layer. It remembers useful context and keeps an ongoing thread with you over time. Chat and Spaces are the fast entry points, Agent carries follow-through, and Brain keeps memory visible.",
+            "ZAKI is your day-to-day AI — one that actually remembers you. It chats, takes on whole tasks through Agent, keeps each project clean in its own Space, and holds everything you've told it in a memory you can see, correct, and control. The point: you never start from zero.",
         },
         {
           question: "What is the difference between ZAKI and Spaces?",

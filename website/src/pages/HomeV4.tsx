@@ -162,7 +162,7 @@ export function HomeV4() {
           <div className="scene-inner">
             <span className="scene-eyebrow">Your AI · 01</span>
             <h1 className="scene-h1">Enter <em className="hl">ZAKI&rsquo;s mind.</em></h1>
-            <p className="scene-lede">Not a tool you manage. A mind that&rsquo;s with you — and lifts what you&rsquo;re carrying.</p>
+            <p className="scene-lede">A day-to-day AI that talks it through, takes on the whole task, and remembers what matters. Not a tool you manage — a mind that&rsquo;s with you, lifting what you carry.</p>
             <div className="scene-cta">
               <a className="btn btn-primary btn-lg" href={signupUrl}>Enter ZAKI&rsquo;s mind
                 <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>

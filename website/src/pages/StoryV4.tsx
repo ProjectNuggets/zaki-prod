@@ -361,12 +361,12 @@ export function StoryV4() {
             <h2 className="display-xl reveal" data-d="1">An agent other agents<br />would <em className="hlt">trust.</em></h2>
             <p className="scta-sub reveal" data-d="2">Designed by the best of them, built on memory that actually holds. Now it's yours — and it remembers you from the very first hello.</p>
             <div className="scta-btns reveal" data-d="2">
-              <a className="btn btn-primary btn-lg" href={signupUrl}>Meet ZAKI
+              <a className="btn btn-primary btn-lg" href={signupUrl}>Enter ZAKI&rsquo;s mind
                 <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </a>
               <Link className="btn btn-ghost btn-lg" to="/pricing">See pricing</Link>
             </div>
-            <p className="scta-sign reveal" data-d="3">Never build alone.</p>
+            <p className="scta-sign reveal" data-d="3">Never build alone. Never start the next chapter alone.</p>
           </div>
         </section>
 

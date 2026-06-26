@@ -34,10 +34,10 @@ type LegalContent = {
 
 const contactContent: Record<Locale, ContactContent> = {
   en: {
-    badge: "Support",
+    badge: "Get in touch",
     title: "Contact",
     intro:
-      "For support, account, legal, privacy, or compliance requests, contact the team directly. Keep the summary concise and include enough context for a real response.",
+      "Real people read every message. Whether it's a bug, your account, or a privacy request, send us a note and we'll come back to you — usually within a day.",
     cards: [
       {
         title: "Support requests",
@@ -48,7 +48,7 @@ const contactContent: Record<Locale, ContactContent> = {
         body: "Add the request type clearly: access, correction, export, deletion, or compliance inquiry.",
       },
     ],
-    emailLabel: "support@chatzaki.com",
+    emailLabel: "Email support",
     appLabel: "Open app",
     seo: {
       title: "Contact ZAKI | Support and Inquiries",

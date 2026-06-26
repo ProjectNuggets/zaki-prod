@@ -712,7 +712,7 @@ export function V3ProductPage() {
     <V3Shell route="product">
       <SubHero
         label="One login · one memory · every surface"
-        title="The AI that does not make you start over."
+        title="One memory across every surface. Pick up right where you left off."
         body="Agent, Chat, Spaces, Brain, Learn, Design, and Career: one home, one memory. Open any live surface and it already knows your world, so the work picks up where you left off instead of from zero. That is the difference between a tool and a counterpart."
         cta="Start your next chapter"
         ctaHref={signupUrl}
@@ -756,7 +756,7 @@ function SubHero({ label, title, body, cta, ctaHref, secondary, secondaryHref }:
       <div className="proof">
         <div className="wrap">
           {[
-            ["Live today", "Chat · Agent · Brain", "public"],
+            ["Live today", "Agent · Chat & Spaces · Brain", "public"],
             ["One memory", "Visible", "user controlled"],
             ["Language", "AR · EN", "mixed by default"],
             ["Next", "Learn · Design · Career", "gated"],
@@ -812,7 +812,7 @@ function ProductOsSection() {
 function ProductDetailRows() {
   const rows = [
     ["agent", "Agent", "Live · in every plan", "An operator that acts and shows its work.", "The Agent does not just answer. It researches, drafts the email you are avoiding, takes the next step, and follows through with visible phases so you always know what is happening.", ["Plans multi-step work and runs it", "Visible phases: research, draft, act, review", "Reaches you on web and Telegram", "Tunable reasoning and autonomy"], ["plan · draft the investor update", "pulled last month's metrics from Brain", "drafted in your voice", "waiting for your approval to send"]],
-    ["spaces", "Spaces", "Free", "Focused workspaces that keep context clean.", "Give each chapter its own space: the launch, the move, the client, the essay, the decision. No more one giant chat where everything bleeds together.", ["A space per project, client, or topic", "Per-space instructions and documents", "Clean separation, shared memory underneath", "Free to use, no card"], ["Launch plan", "Investor comms", "Visa and relocation", "The Brain ties them together"]],
+    ["spaces", "Chat & Spaces", "Free", "Focused workspaces that keep context clean.", "Give each chapter its own space: the launch, the move, the client, the essay, the decision. No more one giant chat where everything bleeds together.", ["A space per project, client, or topic", "Per-space instructions and documents", "Clean separation, shared memory underneath", "Free to use, no card"], ["Launch plan", "Investor comms", "Visa and relocation", "The Brain ties them together"]],
     ["brain", "Brain", "Included", "A memory you can see, search, and own.", "The Brain is what ZAKI knows about your world: preferences, decisions, people, projects, goals, and promises, laid out so you can review it, correct it, export it, or forget it.", ["Browse and search every memory", "Review flows and conflict checks", "Export or delete anytime", "Scoped personal and workspace context"], ["Pref: warm concise tone", "Goal: launch in Q3", "Person: Lina, lawyer", "Context: Arabic family, English work"]],
   ] as const;
   return (
