@@ -219,19 +219,10 @@ body.has-intent #goal-token { display: inline-flex; }
    centred, well clear of the lead-in, so it always rests on full dawn. Inks flip dark. */
 .summit {
   text-align: center;
-  /* warm SUNRISE ramp, not a straight dark->cream lerp (that passes through a cold
-     silver-grey midtone — the "chrome band"). Stay on the warm hue line: valley dark ->
-     ember -> amber -> gold -> peach -> dawn cream, so it reads as a dawn breaking. */
-  background: linear-gradient(to bottom,
-    #18120D 0%,
-    #2C1B10 5%,
-    #573620 9%,
-    #8A5A33 12.5%,
-    #B98A57 15.5%,
-    #DEB988 18.5%,
-    #F0DEBE 22%,
-    #F4EAD8 26%,
-    #F4EAD8 100%);
+  /* Clean dawn cream. The dark->dawn transition is a PIXEL DISSOLVE (#dawn-pixels),
+     not a vertical colour gradient — a gradient must pass through a muddy/cold midtone
+     band, whereas a dither of PURE warm colours never shows a grey. */
+  background: #F4EAD8;
   --ink-1: #1F1A14; --ink-2: #564737; --ink-3: #88735A;
   --hair: rgba(31, 26, 20, .12); --hair-strong: rgba(31, 26, 20, .22);
   color: var(--ink-1);
@@ -245,6 +236,16 @@ body.has-intent #goal-token { display: inline-flex; }
   font-size: 12.5px; letter-spacing: .02em; color: var(--ink-3); }
 .summit-origin a { color: var(--brand); text-decoration: none; }
 .summit-origin a:hover { text-decoration: underline; }
+/* Dawn dissolve — the dark valley PIXELATES into the dawn across the top of the summit.
+   Pure dithered warm colours (dark -> ember -> amber -> gold -> cream): no muddy/cold
+   gradient band is possible because no pixel is ever an interpolated midtone. Blooms
+   upward on enter; painted by zaki-mind.js. Sits above the glow, below the content. */
+#dawn-pixels {
+  position: absolute; top: 0; left: 0; width: 100%; height: 30vh;
+  z-index: 1; pointer-events: none; display: block;
+}
+@media (max-width: 720px) { #dawn-pixels { height: 24vh; } }
+
 /* Summit arrival bloom — the dawn glow opens from nothing as you crest (.summit-bloomed
    set by a ScrollTrigger). A second, brighter core blooms a touch slower for depth. */
 #cta .scene-glow {

@@ -366,6 +366,9 @@ export function HomeV4() {
         {/* SCENE 7 — THE SUMMIT (brightest dawn; your goal resolves; "alone" settles last) */}
         <section className="scene summit" data-stage="light" data-reveal data-screen-label="07 A new chapter" data-zee="/zaki/bot/summit.png" id="cta">
           <div className="scene-glow" aria-hidden="true"></div>
+          {/* Dawn dissolve: the dark valley pixelates into the dawn (warm dithered pixels,
+              no muddy gradient band). Painted + bloomed by zaki-mind.js. */}
+          <canvas id="dawn-pixels" aria-hidden="true"></canvas>
           <div className="scene-inner summit-inner">
             <span className="scene-eyebrow">A new chapter · 07</span>
             <h2 className="scene-h1">Never build alone.<br />Never start the next chapter <em className="hl">alone.</em></h2>

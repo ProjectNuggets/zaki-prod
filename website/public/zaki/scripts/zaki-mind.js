@@ -479,6 +479,54 @@
       onEnter: function () { cta.classList.add('summit-bloomed'); } });
   })();
 
+  /* ---- Dawn dissolve: the dark valley PIXELATES into the dawn across the top of the
+     summit. A dither of PURE warm colours (dark -> ember -> amber -> gold -> cream) — no
+     pixel is ever an interpolated midtone, so there is no muddy/cold gradient band. The
+     dawn blooms upward from the bottom as the summit enters; static under reduced-motion. ---- */
+  (function () {
+    var cv = document.getElementById('dawn-pixels'); if (!cv) return;
+    var sec = document.getElementById('cta'); if (!sec) return;
+    var ctx = cv.getContext('2d'); if (!ctx) return;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var GAP = window.innerWidth < 720 ? 9 : 12;
+    var PAL = ['#18120D', '#34200F', '#5E3A1B', '#8C5A2C', '#B8823F', '#DBB069', '#EED7AE', '#F4EAD8'];
+    var cells = [], W = 0, H = 0, raf = null, started = false, bloom = 0;
+
+    function build() {
+      W = cv.clientWidth; H = cv.clientHeight; if (!W || !H) return;
+      cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      cells = [];
+      var cx = W * 0.5, maxd = Math.sqrt(cx * cx + H * H), n = PAL.length;
+      for (var y = 0; y < H; y += GAP) {
+        for (var x = 0; x < W; x += GAP) {
+          var t = (y / H) / 0.62; if (t > 1) t = 1;         // dissolve completes in the top ~62%
+          var thr = t + (Math.random() - 0.5) * 0.6;        // ...leaving clean cream below for the headline
+          if (t >= 1) thr = 1.5;                            // force solid cream in the buffer zone
+          var idx = Math.round(thr * (n - 1)); idx = idx < 0 ? 0 : idx > n - 1 ? n - 1 : idx;
+          var dx = x - cx, dy = H - y, d = Math.sqrt(dx * dx + dy * dy);
+          cells.push({ x: x, y: y, c: PAL[idx], delay: d / maxd, full: Math.random() < 0.86 ? GAP + 1 : GAP * 0.55 });
+        }
+      }
+    }
+    function paint(p) {
+      ctx.clearRect(0, 0, W, H);
+      for (var i = 0; i < cells.length; i++) {
+        var c = cells[i], local = (p - c.delay) / 0.3;
+        if (local <= 0) continue;
+        var g = local >= 1 ? 1 : local, s = c.full * g, o = (c.full - s) / 2;
+        ctx.fillStyle = c.c; ctx.fillRect(c.x + o, c.y + o, s, s);
+      }
+    }
+    function tick() { bloom += 0.022; paint(bloom); if (bloom < 1.32) raf = requestAnimationFrame(tick); else { paint(2); raf = null; } }
+    function start() { if (started) return; started = true; if (reduce) { paint(2); return; } bloom = 0; if (raf) cancelAnimationFrame(raf); tick(); }
+
+    build();
+    if (reduce) paint(2);
+    ST.create({ trigger: sec, start: 'top bottom', onEnter: start });   // bloom as the summit first peeks in
+    var ro = ('ResizeObserver' in window) ? new ResizeObserver(function () { build(); paint(started ? 2 : 0); }) : null;
+    if (ro) ro.observe(cv);
+  })();
+
   /* ---- Scene 3 (Agent): pin the scene; the run executes as you scroll ----
      #run-phases is the sole driver here (the markup id is #agent-run, not #run,
      so the zaki-chapters.js auto-play stays dormant and can't fight the scrub). */
