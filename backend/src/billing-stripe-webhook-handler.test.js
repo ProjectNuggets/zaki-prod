@@ -134,3 +134,66 @@ describe("stripe webhook handler — Task 5 wallet re-provision (subscription ev
     expect(deps.billingHealth.recordFailure).not.toHaveBeenCalled();
   });
 });
+
+describe("webhook failure rolls back the processed-mark", () => {
+  const KNOWN_EVENT_ID = "evt_rollback_test_1";
+
+  function rollbackTestEvent() {
+    return {
+      id: KNOWN_EVENT_ID,
+      type: "customer.subscription.updated",
+      created: 1766710800,
+      data: {
+        object: {
+          id: "sub_rollback",
+          customer: "cus_rollback",
+          status: "active",
+          cancel_at_period_end: false,
+          current_period_end: 1769302800,
+          items: { data: [{ price: { id: "price_personal" } }] },
+          metadata: {},
+        },
+      },
+    };
+  }
+
+  it("calls unmarkWebhookEventProcessed once with ('stripe', eventId) when the subscription UPDATE throws", async () => {
+    const unmarkWebhookEventProcessed = jest.fn(async () => true);
+    const deps = {
+      ...createDependencies({
+        event: rollbackTestEvent(),
+        resolvedUser: { id: 7, email: "owner@example.com", stripe_last_event_created_at: null },
+      }),
+      dbQuery: jest.fn(async () => { throw new Error("db blip"); }),
+      resolveUserByStripeCustomer: jest.fn(async () => ({ id: 7, email: "owner@example.com", stripe_last_event_created_at: null })),
+      markWebhookEventProcessed: jest.fn(async () => true),
+      unmarkWebhookEventProcessed,
+    };
+    const handler = createStripeWebhookHandler(deps);
+
+    const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+
+    expect(res.statusCode).toBe(500);
+    expect(unmarkWebhookEventProcessed).toHaveBeenCalledTimes(1);
+    expect(unmarkWebhookEventProcessed).toHaveBeenCalledWith("stripe", KNOWN_EVENT_ID);
+  });
+
+  it("does NOT call unmarkWebhookEventProcessed on a successful subscription update", async () => {
+    const unmarkWebhookEventProcessed = jest.fn(async () => true);
+    const deps = {
+      ...createDependencies({
+        event: rollbackTestEvent(),
+        resolvedUser: { id: 7, email: "owner@example.com", stripe_last_event_created_at: null },
+      }),
+      resolveUserByStripeCustomer: jest.fn(async () => ({ id: 7, email: "owner@example.com", stripe_last_event_created_at: null })),
+      markWebhookEventProcessed: jest.fn(async () => true),
+      unmarkWebhookEventProcessed,
+    };
+    const handler = createStripeWebhookHandler(deps);
+
+    const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+
+    expect(res.statusCode).toBe(200);
+    expect(unmarkWebhookEventProcessed).not.toHaveBeenCalled();
+  });
+});

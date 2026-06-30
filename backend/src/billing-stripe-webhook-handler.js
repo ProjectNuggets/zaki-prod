@@ -59,6 +59,7 @@ export function createStripeWebhookHandler({
   stripe,
   stripeWebhookSecret,
   markWebhookEventProcessed,
+  unmarkWebhookEventProcessed = null,
   billingHealth,
   emitBillingAlert,
   normalizeEmail,
@@ -395,6 +396,21 @@ export function createStripeWebhookHandler({
           error: error?.message || String(error),
         },
       });
+      // The event was marked processed up front (line ~161). If we failed before
+      // finishing, undo that mark so Stripe's retry RE-PROCESSES instead of short-
+      // circuiting as a duplicate and silently losing the plan change. Best-effort;
+      // the handlers above are idempotent so at-least-once redelivery is safe.
+      const failedEventId = String(event?.id || "").trim();
+      if (failedEventId && typeof unmarkWebhookEventProcessed === "function") {
+        try {
+          await unmarkWebhookEventProcessed("stripe", failedEventId);
+        } catch (unmarkErr) {
+          console.error("[Stripe] failed to roll back webhook-event mark after handler error:", {
+            eventId: failedEventId,
+            error: unmarkErr?.message || String(unmarkErr),
+          });
+        }
+      }
       console.error("[Stripe] Webhook handler error:", error);
       res.status(500).json({ error: "Webhook handler failed." });
     }

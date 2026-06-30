@@ -22,3 +22,16 @@ export async function markWebhookEventProcessed(dbGet, { provider, eventId } = {
   );
   return Boolean(inserted?.id);
 }
+
+export async function unmarkWebhookEventProcessed(dbQuery, { provider, eventId } = {}) {
+  const normalizedProvider = normalizeWebhookProvider(provider);
+  const normalizedEventId = normalizeWebhookEventId(eventId);
+  if (!normalizedProvider || !normalizedEventId || typeof dbQuery !== "function") {
+    return false;
+  }
+  await dbQuery(
+    `DELETE FROM billing_webhook_events WHERE provider = $1 AND event_id = $2`,
+    [normalizedProvider, normalizedEventId]
+  );
+  return true;
+}
