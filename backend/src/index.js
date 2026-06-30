@@ -46,7 +46,7 @@ import {
   buildAcceptedDocumentTypesFallback,
   normalizeAcceptedDocumentTypesPayload,
 } from "./document-accepted-types.js";
-import { markWebhookEventProcessed as markWebhookEventProcessedOnce, unmarkWebhookEventProcessed as unmarkWebhookEventProcessedOnce } from "./billing-webhook-events.js";
+import { markWebhookEventProcessed as markWebhookEventProcessedOnce, hasWebhookEventBeenProcessed as hasWebhookEventProcessedOnce } from "./billing-webhook-events.js";
 import { createBillingHealthTracker } from "./billing-health.js";
 import { createBillingAlertDispatcher } from "./billing-alerts.js";
 import {
@@ -2373,8 +2373,8 @@ const stripeWebhookHandler = createStripeWebhookHandler({
   stripeWebhookSecret: STRIPE_WEBHOOK_SECRET,
   markWebhookEventProcessed: (provider, eventId) =>
     markWebhookEventProcessedOnce(dbGet, { provider, eventId }),
-  unmarkWebhookEventProcessed: (provider, eventId) =>
-    unmarkWebhookEventProcessedOnce(dbQuery, { provider, eventId }),
+  hasWebhookEventBeenProcessed: (provider, eventId) =>
+    hasWebhookEventProcessedOnce(dbGet, { provider, eventId }),
   billingHealth,
   emitBillingAlert,
   normalizeEmail,
