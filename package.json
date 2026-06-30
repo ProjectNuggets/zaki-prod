@@ -34,6 +34,7 @@
     "smoke:hire-readiness": "node scripts/smoke-hire-readiness.mjs",
     "smoke:hire-provider": "node scripts/smoke-hire-provider.mjs",
     "smoke:hire-isolation": "node scripts/multiuser-hire-isolation.mjs",
+    "smoke:spaces-isolation": "node scripts/multiuser-spaces-isolation.mjs",
     "smoke:hire-browser": "node scripts/smoke-hire-browser.mjs",
     "smoke:hire-value": "node scripts/smoke-hire-value-e2e.mjs",
     "dev:hire:local": "node scripts/dev-hire-local.mjs",

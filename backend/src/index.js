@@ -10898,6 +10898,28 @@ const streamChatHandler = async (req, res) => {
       res.setHeader("X-Zaki-Spaces-Route", remappedSpacesRoute);
     }
 
+    // SECURITY (G0-ISO-1): verify the caller actually owns this workspace before any
+    // admin-key call. The anonymous-target path was already remapped to the caller's own
+    // default workspace above (remappedSpacesRoute set), so it is owned by construction and
+    // skips this check. For an explicit slug, confirm visibility for THIS session's novaUserId,
+    // mirroring requireWorkspaceAccess (index.js:3124-3134). Without this, the agent-turn admin
+    // key + doc-grounding below would run against an arbitrary victim workspace.
+    if (!remappedSpacesRoute) {
+      const normalizedSlug = String(slug || "").trim().toLowerCase();
+      const accessCheck = await workspaceVisibleForSession(novaUserId, normalizedSlug);
+      if (!accessCheck.success) {
+        res.status(accessCheck.status || 502).json({
+          error: accessCheck.error || "Unable to verify workspace access.",
+        });
+        return;
+      }
+      if (!accessCheck.visible) {
+        res.status(403).json({ error: "You do not have access to this workspace." });
+        return;
+      }
+      slug = normalizedSlug;
+    }
+
     const requestPayload = req.body;
     const originalMessage = extractStreamMessage(requestPayload) || "";
     const requestedFormat = getRequestedResponseFormat(originalMessage);
