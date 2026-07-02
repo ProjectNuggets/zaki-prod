@@ -12754,6 +12754,26 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   background: var(--v2-danger);
 }
 
+.zaki-dashboard-command__meter-track[data-unavailable="true"] {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--v2-ink-4),
+    var(--v2-ink-4) 3px,
+    transparent 3px,
+    transparent 6px
+  );
+  opacity: 0.5;
+}
+
+.zaki-dashboard-command__meter-track[data-unavailable="true"] > span {
+  width: 0;
+  background: transparent;
+}
+
+.zaki-dashboard-command__meter[data-unavailable="true"] .zaki-dashboard-command__meter-top strong {
+  color: var(--v2-ink-3);
+}
+
 .zaki-dashboard-command__actions {
   display: grid;
   min-width: 0;
