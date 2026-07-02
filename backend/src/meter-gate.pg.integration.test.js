@@ -59,15 +59,17 @@ d("meter-gate — HTTP request debits a real wallet (real PG)", () => {
   });
 
   it("denies with HTTP 429 when the 5h burst window is exhausted", async () => {
-    // free plan burst = 20 → four 5-unit ops fill it, the fifth is denied
-    for (let i = 0; i < 4; i++) {
+    // free plan burst = 40 (mirrors platform-policy.js DEFAULT_ROLLING_ALLOWANCE_UNITS.free — if that
+    // changes, update this test too; the pg.integration CI job will now catch drift) →
+    // eight 5-unit ops fill it, the ninth is denied
+    for (let i = 0; i < 8; i++) {
       const r = await post({ units: 5, actualUnits: 5, idempotencyKey: `fill${i}` });
       expect(r.status).toBe(200);
     }
     const denied = await post({ units: 5, actualUnits: 5 });
     expect(denied.status).toBe(429);
     expect(denied.body).toMatchObject({ ok: false, reason: "insufficient_units" });
-    expect(await usedUnits()).toBe(20); // never over-debited
+    expect(await usedUnits()).toBe(40); // never over-debited
   });
 
   // C1 money-exploit fix: replaying the SAME grant+key AFTER the first op has fully completed (its hold
