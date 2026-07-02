@@ -360,6 +360,7 @@ function SliderRow({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
+        aria-label={label}
         className="w-full accent-zaki-brand"
       />
       {hint ? <p className="mt-1 text-[11px] leading-snug text-white/40">{hint}</p> : null}

@@ -73,6 +73,7 @@ export function BrainTimeScrubber({ userId, onHighlightKeys, onPick }: Props) {
             onChange={(e) => setDate(e.target.value)}
             className="rounded-zaki-md border border-white/10 bg-[#1f1f1f] px-2 py-0.5 text-xs text-white/85 focus:border-zaki-brand focus:outline-none"
             data-testid="brain-scrubber-date"
+            aria-label={t("brain.scrubber.date", { defaultValue: "Scrubber date" })}
           />
           <button
             type="button"
