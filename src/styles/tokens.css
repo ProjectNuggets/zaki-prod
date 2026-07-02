@@ -221,10 +221,19 @@
   /* ============================================
    * TRANSITIONS
    * ============================================ */
-  --zaki-transition-fast: 150ms ease;
-  --zaki-transition-base: 200ms ease;
-  --zaki-transition-slow: 300ms ease;
-  --zaki-transition-sidebar: 300ms ease;
+  /* Two signature curves (G3 motion §2): 'standard' for hover/color/state,
+   * 'emphasized' (overshoot) for movement/appearance. Every transition token
+   * routes through these so nothing falls back to the generic browser `ease`. */
+  --zaki-ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --zaki-ease-emphasized: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --zaki-dur-fast: 120ms;
+  --zaki-dur-base: 180ms;
+  --zaki-dur-slow: 240ms;
+  --zaki-dur-page: 320ms;
+  --zaki-transition-fast: var(--zaki-dur-fast) var(--zaki-ease-standard);
+  --zaki-transition-base: var(--zaki-dur-base) var(--zaki-ease-standard);
+  --zaki-transition-slow: var(--zaki-dur-slow) var(--zaki-ease-standard);
+  --zaki-transition-sidebar: var(--zaki-dur-slow) var(--zaki-ease-standard);
 
   /* ============================================
    * Z-INDEX LAYERS
