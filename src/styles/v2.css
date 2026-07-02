@@ -193,7 +193,6 @@
 .zaki-v2-sheet,
 .zaki-v2-modal-panel {
   --zaki-brand: var(--v2-accent);
-  --zaki-brand-text: var(--v2-accent-text);
   --zaki-brand-hover: var(--v2-accent-hover);
   --zaki-brand-subtle: var(--v2-accent-faint);
   --zaki-brand-10: var(--v2-accent-faint);
@@ -274,8 +273,12 @@
 
 /* Type-to-confirm phrase span: small mono text on the destructive dialog,
    narrower than the broad .text-zaki-brand utility above so large accent
-   uses of that class keep the bright ember. */
-.zaki-app-v2 :where(.font-mono-ui.text-zaki-brand) {
+   uses of that class keep the bright ember. Intentionally NOT scoped under
+   .zaki-app-v2 — TypeToConfirmDialog renders via ModalShell's createPortal
+   to document.body, outside the .zaki-app-v2 subtree, so a scoped rule
+   would never match it. The .font-mono-ui.text-zaki-brand compound is
+   specific enough on its own to override the .text-zaki-brand utility. */
+:where(.font-mono-ui.text-zaki-brand) {
   color: var(--v2-accent-text) !important;
 }
 

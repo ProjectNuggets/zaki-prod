@@ -143,41 +143,37 @@ export function SkeletonThreadsList() {
   );
 }
 
+/* SkeletonChatShell and SkeletonSettingsPage are Suspense fallbacks for
+   routes rendered through the <Outlet/> inside App.tsx's <main>, which
+   already provides ProductRail + Sidebar chrome="context" + AppTopbar
+   around the outlet slot. These skeletons must fill ONLY that content
+   slot — no own sidebar and no min-h-screen full-page shell, or the
+   fallback doubles the app chrome while the route loads. */
+
 export function SkeletonChatShell() {
   return (
-    <div className="flex min-h-screen zaki-message-enter-assistant">
-      <div className="hidden md:block w-[260px] shrink-0 border-r border-zaki px-3 py-6">
-        <SkeletonThreadList />
-      </div>
-      <div className="flex-1 flex flex-col gap-6 px-4 py-8 md:px-8">
+    <div className="flex h-full flex-1 flex-col gap-6 px-4 py-8 md:px-8 zaki-message-enter-assistant">
+      <div className="flex-1 flex flex-col gap-6">
         <SkeletonMessage />
         <SkeletonMessage isUser />
         <SkeletonMessage />
       </div>
+      <Skeleton className="h-14 w-full rounded-zaki-lg shrink-0" />
     </div>
   );
 }
 
 export function SkeletonSettingsPage() {
   return (
-    <div className="flex min-h-screen zaki-message-enter-assistant">
-      <div className="hidden md:block w-[260px] shrink-0 border-r border-zaki px-3 py-6">
-        <div className="flex flex-col gap-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-9 w-full rounded-zaki-md" />
-          ))}
-        </div>
-      </div>
-      <div className="flex-1 px-6 py-8 max-w-2xl">
-        <Skeleton className="h-7 w-40 rounded mb-8" />
-        <div className="space-y-6">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i}>
-              <Skeleton className="h-4 w-32 rounded mb-2" />
-              <Skeleton className="h-10 w-full rounded-zaki-md" />
-            </div>
-          ))}
-        </div>
+    <div className="flex h-full flex-1 flex-col px-6 py-8 max-w-2xl zaki-message-enter-assistant">
+      <Skeleton className="h-7 w-40 rounded mb-8" />
+      <div className="space-y-6">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i}>
+            <Skeleton className="h-4 w-32 rounded mb-2" />
+            <Skeleton className="h-10 w-full rounded-zaki-md" />
+          </div>
+        ))}
       </div>
     </div>
   );

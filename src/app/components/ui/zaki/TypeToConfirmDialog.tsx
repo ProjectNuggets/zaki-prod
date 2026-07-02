@@ -85,6 +85,7 @@ export function TypeToConfirmDialog({
           onChange={(event) => setValue(event.target.value)}
           disabled={isSubmitting}
           autoFocus
+          data-autofocus
           className="w-full rounded-zaki-md border border-zaki-strong bg-zaki-hover px-3 py-2.5 text-sm text-zaki-primary font-mono-ui outline-none focus:border-zaki-brand focus:ring-2 focus:ring-zaki-brand/20 dark:bg-[#1a1714]"
           placeholder={confirmPhrase}
         />

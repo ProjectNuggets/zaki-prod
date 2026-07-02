@@ -229,7 +229,6 @@
   --zaki-dur-fast: 120ms;
   --zaki-dur-base: 180ms;
   --zaki-dur-slow: 240ms;
-  --zaki-dur-page: 320ms;
   --zaki-transition-fast: var(--zaki-dur-fast) var(--zaki-ease-standard);
   --zaki-transition-base: var(--zaki-dur-base) var(--zaki-ease-standard);
   --zaki-transition-slow: var(--zaki-dur-slow) var(--zaki-ease-standard);
