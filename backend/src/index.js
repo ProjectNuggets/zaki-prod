@@ -68,6 +68,7 @@ import {
 } from "./billing-route-handlers.js";
 import { createStripeWebhookHandler } from "./billing-stripe-webhook-handler.js";
 import { copyResponseHeaders } from "./upstream-headers.js";
+import { isSafeAgentShareCode } from "./agent-share-code.js";
 import {
   buildAgentForwardHeaders,
   buildAgentRetrySsePayload,
@@ -819,6 +820,14 @@ const ANONYMOUS_TURN_RATE_LIMIT_WINDOW_MS = Math.max(
 const ANONYMOUS_TURN_RATE_LIMIT_MAX = Math.max(
   1,
   Number(process.env.ZAKI_ANONYMOUS_TURN_RATE_LIMIT_MAX || 20)
+);
+const PUBLIC_SHARE_RATE_LIMIT_WINDOW_MS = Math.max(
+  1_000,
+  Number(process.env.ZAKI_PUBLIC_SHARE_RATE_LIMIT_WINDOW_MS || 60 * 1000)
+);
+const PUBLIC_SHARE_RATE_LIMIT_MAX = Math.max(
+  1,
+  Number(process.env.ZAKI_PUBLIC_SHARE_RATE_LIMIT_MAX || 30)
 );
 const ANONYMOUS_DEVICE_DAILY_PROMPT_LIMIT = Math.max(
   1,
@@ -2441,6 +2450,12 @@ const anonymousTurnRateLimiter = createPersistentRateLimit({
   prefix: "anon-turn",
   windowMs: ANONYMOUS_TURN_RATE_LIMIT_WINDOW_MS,
   limit: ANONYMOUS_TURN_RATE_LIMIT_MAX,
+});
+const publicShareRateLimiter = createPersistentRateLimit({
+  dbQuery,
+  prefix: "public-share",
+  windowMs: PUBLIC_SHARE_RATE_LIMIT_WINDOW_MS,
+  limit: PUBLIC_SHARE_RATE_LIMIT_MAX,
 });
 const signupTurnstileMiddleware = createTurnstileMiddleware();
 
@@ -15913,7 +15928,6 @@ const makeAgentUserProxyHandler = (pathBuilder, proxyOptions = {}) => async (req
 
 const AGENT_RUNTIME_ID_SAFE_PATTERN = /^[a-zA-Z0-9:_.\-]+$/;
 const AGENT_EXPORT_FILENAME_SAFE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/;
-const AGENT_SHARE_CODE_SAFE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{7,127}$/;
 
 function isSafeAgentExportFilename(filename) {
   const value = String(filename || "").trim();
@@ -15922,10 +15936,6 @@ function isSafeAgentExportFilename(filename) {
     !value.includes("..") &&
     !value.startsWith(".")
   );
-}
-
-function isSafeAgentShareCode(shareCode) {
-  return AGENT_SHARE_CODE_SAFE_PATTERN.test(String(shareCode || "").trim());
 }
 
 async function proxyNullclawPublicRequest(req, res, targetPath) {
@@ -17162,7 +17172,7 @@ app.get(
   }
 );
 
-app.get("/api/agent/share/artifact/:shareCode", async (req, res) => {
+app.get("/api/agent/share/artifact/:shareCode", publicShareRateLimiter, async (req, res) => {
   try {
     const shareCode = String(req.params.shareCode || "").trim();
     if (!isSafeAgentShareCode(shareCode)) {
@@ -17179,7 +17189,7 @@ app.get("/api/agent/share/artifact/:shareCode", async (req, res) => {
   }
 });
 
-app.get("/api/agent/share/trace/:shareCode", async (req, res) => {
+app.get("/api/agent/share/trace/:shareCode", publicShareRateLimiter, async (req, res) => {
   try {
     const shareCode = String(req.params.shareCode || "").trim();
     if (!isSafeAgentShareCode(shareCode)) {
