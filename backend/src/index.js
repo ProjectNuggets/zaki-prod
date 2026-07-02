@@ -10340,19 +10340,26 @@ function estimateSpacesChatMeterUnits(message = "", action = "spaces_chat_turn")
   return Math.round(Math.max(baseUnits, estimatedTokenUnits) * 10_000) / 10_000;
 }
 
-function readSpacesIdempotencyKey(req, action) {
+function readSpacesIdempotencyKey(req, action, userId) {
+  // G2-ISO-4: the ledger's idempotency identity is the key string (grant_id is derived from it), so a
+  // RAW client-supplied header would let user B collide with user A's key and force a 409 on A's turn
+  // (cross-tenant quota DoS). Namespace the CLIENT-controlled portion under spaces:${userId}: — mirrors
+  // the agent path's agent:${userId}:${reqId}. Cap the client part BEFORE prefixing so a long key can't
+  // be truncated down onto another user's namespace.
+  const ns = `spaces:${userId ?? "anon"}:`;
   const headerValue =
     req.headers?.["idempotency-key"] ||
     req.headers?.["x-idempotency-key"];
   const raw = Array.isArray(headerValue) ? headerValue[0] : headerValue;
   const normalizedHeader = String(raw || "").trim();
-  if (normalizedHeader) return normalizedHeader.slice(0, 180);
-  return [
+  if (normalizedHeader) return `${ns}${normalizedHeader}`.slice(0, 180);
+  const clientPart = [
     getOrCreateRequestId(req),
     req.params?.slug || "workspace",
     req.params?.threadSlug || "thread",
     normalizeMeterAction(action),
-  ].join(":").slice(0, 180);
+  ].join(":");
+  return `${ns}${clientPart}`.slice(0, 180);
 }
 
 function setSpacesMeterHeaders(res, grant, meter) {
@@ -10414,7 +10421,7 @@ async function requireSpacesMeterGrantForChat({
     return { allowed: true, action };
   }
   const normalizedAction = normalizeMeterAction(action);
-  const idempotencyKey = readSpacesIdempotencyKey(req, action);
+  const idempotencyKey = readSpacesIdempotencyKey(req, action, identity.userId);
   const estimatedUnits = estimateChatUnits({ inputChars: String(message || "").length, action });
   const grantId = deterministicGrantId(idempotencyKey);
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
