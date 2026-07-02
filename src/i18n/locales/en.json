@@ -706,7 +706,8 @@
     "usedMemory": "Used memory",
     "usedMemoryCount": "Used {{count}} memories",
     "memoryDontUse": "Don't use this",
-    "sources": "Sources"
+    "sources": "Sources",
+    "tryAgain": "Try again"
   },
   "input": {
     "disclaimer": "Zaki can make mistakes. Consider checking important information.",

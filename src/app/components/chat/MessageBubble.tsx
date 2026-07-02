@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FileText } from "lucide-react";
+import { FileText, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CenterLogo } from "../icons";
 import { MessageActions } from "./MessageActions";
@@ -224,6 +224,16 @@ export function MessageBubble({
                 />
               ) : (
                 content
+              )}
+              {isAssistantError && onRegenerate && (
+                <button
+                  type="button"
+                  onClick={() => onRegenerate(message)}
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-zaki-md border border-zaki-strong px-2.5 py-1 text-xs text-zaki-error hover:bg-zaki-hover transition-colors"
+                >
+                  <RotateCcw className="size-3.5" />
+                  {t("chat.tryAgain", { defaultValue: "Try again" })}
+                </button>
               )}
             </div>
           );
