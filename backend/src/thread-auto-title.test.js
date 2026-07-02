@@ -21,6 +21,30 @@ function createMockRes() {
   };
 }
 
+// G2-ISO-3: default ownership stubs assume the caller owns the requested thread, mirroring
+// the real assertWorkspaceAndThreadOwnership success shape. Tests that need to exercise the
+// 403 path override assertWorkspaceAndThreadOwnership explicitly.
+function createOwnershipStubs({ threadOwned = true, slug = "space-1", threadSlug = "thread-1" } = {}) {
+  const assertWorkspaceAndThreadOwnership = jest.fn(async () => ({
+    success: true,
+    status: 200,
+    visible: true,
+    threadOwned,
+    slug,
+    threadSlug,
+  }));
+  const sendThreadOwnershipFailure = jest.fn((res, check) => {
+    if (!check.success) {
+      res.status(check.status || 502).json({ error: check.error || "Unable to verify thread access." });
+      return;
+    }
+    res
+      .status(403)
+      .json({ error: check.visible ? "You do not have access to this thread." : "You do not have access to this workspace." });
+  });
+  return { assertWorkspaceAndThreadOwnership, sendThreadOwnershipFailure };
+}
+
 describe("thread auto-title", () => {
   it("treats placeholder labels as default", () => {
     expect(isDefaultThreadLabel("")).toBe(true);
@@ -37,7 +61,7 @@ describe("thread auto-title", () => {
   });
 
   it("skips when the persisted thread is already named", async () => {
-    const requireWorkspaceAccess = jest.fn(async () => ({ slug: "space-1" }));
+    const requireWorkspaceAccess = jest.fn(async () => ({ slug: "space-1", novaUserId: 42 }));
     const novaAdminRequest = jest
       .fn(async () => ({
         ok: true,
@@ -48,9 +72,12 @@ describe("thread auto-title", () => {
         }),
       }));
     const chatFn = jest.fn();
+    const { assertWorkspaceAndThreadOwnership, sendThreadOwnershipFailure } = createOwnershipStubs();
     const handler = createThreadAutoTitleHandler({
       requireWorkspaceAccess,
       novaAdminRequest,
+      assertWorkspaceAndThreadOwnership,
+      sendThreadOwnershipFailure,
       chatFn,
     });
     const req = {
@@ -67,7 +94,7 @@ describe("thread auto-title", () => {
   });
 
   it("updates the thread when title generation succeeds", async () => {
-    const requireWorkspaceAccess = jest.fn(async () => ({ slug: "space-1" }));
+    const requireWorkspaceAccess = jest.fn(async () => ({ slug: "space-1", novaUserId: 42 }));
     const novaAdminRequest = jest
       .fn()
       .mockResolvedValueOnce({
@@ -107,9 +134,12 @@ describe("thread auto-title", () => {
     const chatFn = jest.fn(async () => ({
       content: JSON.stringify({ title: "Travel budget for Berlin" }),
     }));
+    const { assertWorkspaceAndThreadOwnership, sendThreadOwnershipFailure } = createOwnershipStubs();
     const handler = createThreadAutoTitleHandler({
       requireWorkspaceAccess,
       novaAdminRequest,
+      assertWorkspaceAndThreadOwnership,
+      sendThreadOwnershipFailure,
       chatFn,
     });
     const req = {
@@ -135,7 +165,7 @@ describe("thread auto-title", () => {
   });
 
   it("handles workspace and update payloads that use id/label fields", async () => {
-    const requireWorkspaceAccess = jest.fn(async () => ({ slug: "space-1" }));
+    const requireWorkspaceAccess = jest.fn(async () => ({ slug: "space-1", novaUserId: 42 }));
     const novaAdminRequest = jest
       .fn()
       .mockResolvedValueOnce({
@@ -175,9 +205,12 @@ describe("thread auto-title", () => {
     const chatFn = jest.fn(async () => ({
       content: JSON.stringify({ title: "Berlin budget trip" }),
     }));
+    const { assertWorkspaceAndThreadOwnership, sendThreadOwnershipFailure } = createOwnershipStubs();
     const handler = createThreadAutoTitleHandler({
       requireWorkspaceAccess,
       novaAdminRequest,
+      assertWorkspaceAndThreadOwnership,
+      sendThreadOwnershipFailure,
       chatFn,
     });
     const req = {
@@ -196,7 +229,7 @@ describe("thread auto-title", () => {
   });
 
   it("handles upstream workspace arrays when locating the thread", async () => {
-    const requireWorkspaceAccess = jest.fn(async () => ({ slug: "space-1" }));
+    const requireWorkspaceAccess = jest.fn(async () => ({ slug: "space-1", novaUserId: 42 }));
     const novaAdminRequest = jest
       .fn()
       .mockResolvedValueOnce({
@@ -238,9 +271,12 @@ describe("thread auto-title", () => {
     const chatFn = jest.fn(async () => ({
       content: JSON.stringify({ title: "Lisbon weekend itinerary" }),
     }));
+    const { assertWorkspaceAndThreadOwnership, sendThreadOwnershipFailure } = createOwnershipStubs();
     const handler = createThreadAutoTitleHandler({
       requireWorkspaceAccess,
       novaAdminRequest,
+      assertWorkspaceAndThreadOwnership,
+      sendThreadOwnershipFailure,
       chatFn,
     });
     const req = {
@@ -258,7 +294,7 @@ describe("thread auto-title", () => {
   });
 
   it("returns generation_failed when the model output is unusable", async () => {
-    const requireWorkspaceAccess = jest.fn(async () => ({ slug: "space-1" }));
+    const requireWorkspaceAccess = jest.fn(async () => ({ slug: "space-1", novaUserId: 42 }));
     const novaAdminRequest = jest.fn(async () => ({
       ok: true,
       json: async () =>
@@ -278,9 +314,12 @@ describe("thread auto-title", () => {
     const chatFn = jest.fn(async () => ({
       content: JSON.stringify({ title: "Conversation" }),
     }));
+    const { assertWorkspaceAndThreadOwnership, sendThreadOwnershipFailure } = createOwnershipStubs();
     const handler = createThreadAutoTitleHandler({
       requireWorkspaceAccess,
       novaAdminRequest,
+      assertWorkspaceAndThreadOwnership,
+      sendThreadOwnershipFailure,
       chatFn,
     });
     const req = {
@@ -296,7 +335,7 @@ describe("thread auto-title", () => {
   });
 
   it("falls back to a sanitized user-message title when model generation fails", async () => {
-    const requireWorkspaceAccess = jest.fn(async () => ({ slug: "space-1" }));
+    const requireWorkspaceAccess = jest.fn(async () => ({ slug: "space-1", novaUserId: 42 }));
     const novaAdminRequest = jest
       .fn()
       .mockResolvedValueOnce({
@@ -336,9 +375,12 @@ describe("thread auto-title", () => {
     const chatFn = jest.fn(async () => ({
       content: JSON.stringify({ title: "Conversation" }),
     }));
+    const { assertWorkspaceAndThreadOwnership, sendThreadOwnershipFailure } = createOwnershipStubs();
     const handler = createThreadAutoTitleHandler({
       requireWorkspaceAccess,
       novaAdminRequest,
+      assertWorkspaceAndThreadOwnership,
+      sendThreadOwnershipFailure,
       chatFn,
     });
     const req = {
@@ -371,7 +413,7 @@ describe("thread auto-title", () => {
   });
 
   it("prefers the persisted first exchange from thread history over the current client exchange", async () => {
-    const requireWorkspaceAccess = jest.fn(async () => ({ slug: "space-1" }));
+    const requireWorkspaceAccess = jest.fn(async () => ({ slug: "space-1", novaUserId: 42 }));
     const novaAdminRequest = jest
       .fn()
       .mockResolvedValueOnce({
@@ -412,9 +454,12 @@ describe("thread auto-title", () => {
     const chatFn = jest.fn(async () => ({
       content: JSON.stringify({ title: "Original thread title" }),
     }));
+    const { assertWorkspaceAndThreadOwnership, sendThreadOwnershipFailure } = createOwnershipStubs();
     const handler = createThreadAutoTitleHandler({
       requireWorkspaceAccess,
       novaAdminRequest,
+      assertWorkspaceAndThreadOwnership,
+      sendThreadOwnershipFailure,
       chatFn,
     });
     const req = {
@@ -438,5 +483,34 @@ describe("thread auto-title", () => {
         ]),
       })
     );
+  });
+
+  it("G2-ISO-3: 403s and never calls the admin key when the caller does not own the requested thread", async () => {
+    const requireWorkspaceAccess = jest.fn(async () => ({ slug: "space-1", novaUserId: 42 }));
+    const novaAdminRequest = jest.fn();
+    const chatFn = jest.fn();
+    const { assertWorkspaceAndThreadOwnership, sendThreadOwnershipFailure } = createOwnershipStubs({
+      threadOwned: false,
+    });
+    const handler = createThreadAutoTitleHandler({
+      requireWorkspaceAccess,
+      novaAdminRequest,
+      assertWorkspaceAndThreadOwnership,
+      sendThreadOwnershipFailure,
+      chatFn,
+    });
+    const req = {
+      params: { threadSlug: "victim-thread" },
+      body: { userMessage: "Hello", assistantMessage: "Hi there" },
+    };
+    const res = createMockRes();
+
+    await handler(req, res);
+
+    expect(assertWorkspaceAndThreadOwnership).toHaveBeenCalledWith(42, "space-1", "victim-thread");
+    expect(novaAdminRequest).not.toHaveBeenCalled();
+    expect(chatFn).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(403);
+    expect(res.jsonBody).toEqual({ error: "You do not have access to this thread." });
   });
 });

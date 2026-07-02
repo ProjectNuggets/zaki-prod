@@ -189,6 +189,8 @@ export async function generateThreadTitleFromExchange({
 export function createThreadAutoTitleHandler({
   requireWorkspaceAccess,
   novaAdminRequest,
+  assertWorkspaceAndThreadOwnership,
+  sendThreadOwnershipFailure,
   chatFn = callNovaTypChat,
 } = {}) {
   return async function threadAutoTitleHandler(req, res) {
@@ -204,6 +206,13 @@ export function createThreadAutoTitleHandler({
         res.status(400).json({ error: "Thread slug is required." });
         return;
       }
+
+      const ownership = await assertWorkspaceAndThreadOwnership(access.novaUserId, access.slug, threadSlug);
+      if (!ownership.success || !ownership.threadOwned) {
+        sendThreadOwnershipFailure(res, ownership);
+        return;
+      }
+      const verifiedThreadSlug = ownership.threadSlug;
 
       const workspaceResponse = await novaAdminRequest(`/v1/workspace/${access.slug}`);
       const workspaceData = await workspaceResponse.json().catch(() => ({}));
@@ -238,7 +247,7 @@ export function createThreadAutoTitleHandler({
       let assistantMessage = fallbackAssistantMessage;
       try {
         const historyResponse = await novaAdminRequest(
-          `/v1/workspace/${access.slug}/thread/${encodeURIComponent(threadSlug)}/chats`
+          `/v1/workspace/${access.slug}/thread/${encodeURIComponent(verifiedThreadSlug)}/chats`
         );
         const historyData = await historyResponse.json().catch(() => ({}));
         if (historyResponse.ok) {
@@ -269,7 +278,7 @@ export function createThreadAutoTitleHandler({
       }
 
       const updateResponse = await novaAdminRequest(
-        `/v1/workspace/${access.slug}/thread/${encodeURIComponent(threadSlug)}/update`,
+        `/v1/workspace/${access.slug}/thread/${encodeURIComponent(verifiedThreadSlug)}/update`,
         {
           method: "POST",
           body: JSON.stringify({ name: generatedTitle }),

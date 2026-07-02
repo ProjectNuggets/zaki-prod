@@ -398,6 +398,7 @@ import {
 import {
   fetchTypWorkspaces,
   fetchTypWorkspaceSlugs,
+  fetchTypWorkspaceObjects,
   requestTypChatStream,
   getTypUserSessionToken,
 } from "./typ-client.js";
@@ -2838,6 +2839,57 @@ async function workspaceVisibleForSession(novaUserId, normalizedSlug) {
     visible: result.slugs.includes(normalizedSlug),
     slugs: result.slugs,
   };
+}
+
+/**
+ * SECURITY (G2-ISO-3): assert the caller owns BOTH the workspace and the specific thread.
+ * workspaceVisibleForSession only proves the user owns *some* thread in the workspace; this
+ * closes the thread-granularity IDOR by matching the requested thread's user_id. Returns a
+ * VERIFIED threadSlug (the canonical slug/id from TYP) that per-thread admin-key handlers MUST
+ * use instead of the raw req.params value.
+ *
+ * @param {number} novaUserId
+ * @param {string} slug — workspace slug (already normalized lower-case by caller)
+ * @param {string} threadSlug — requested thread slug (raw)
+ * @returns {Promise<{ success:boolean, status?:number, error?:string, visible:boolean, threadOwned:boolean, slug:string, threadSlug:string }>}
+ */
+async function assertWorkspaceAndThreadOwnership(novaUserId, slug, threadSlug) {
+  const normalizedSlug = String(slug || "").trim().toLowerCase();
+  const requestedThread = String(threadSlug || "").trim();
+  const result = await fetchTypWorkspaceObjects(novaUserId);
+  if (!result.success) {
+    return { ...result, visible: false, threadOwned: false, slug: normalizedSlug, threadSlug: requestedThread };
+  }
+  const userId = Number(novaUserId);
+  const workspace = result.workspaces.find(
+    (w) => String(w?.slug || "").trim().toLowerCase() === normalizedSlug
+  );
+  if (!workspace) {
+    return { success: true, status: 200, visible: false, threadOwned: false, slug: normalizedSlug, threadSlug: requestedThread };
+  }
+  const threads = Array.isArray(workspace.threads) ? workspace.threads : [];
+  const owned = threads.find((t) => {
+    if (Number(t?.user_id) !== userId) return false;
+    const tSlug = String(t?.slug || t?.id || "").trim();
+    return tSlug === requestedThread;
+  });
+  return {
+    success: true,
+    status: 200,
+    visible: true,
+    threadOwned: Boolean(owned),
+    slug: normalizedSlug,
+    // Prefer the canonical slug TYP returns; fall back to the requested value.
+    threadSlug: owned ? String(owned.slug || owned.id || requestedThread).trim() : requestedThread,
+  };
+}
+
+function sendThreadOwnershipFailure(res, check) {
+  if (!check.success) {
+    res.status(check.status || 502).json({ error: check.error || "Unable to verify thread access." });
+    return;
+  }
+  res.status(403).json({ error: check.visible ? "You do not have access to this thread." : "You do not have access to this workspace." });
 }
 
 async function verifyWorkspaceDeleted(novaUserId, normalizedSlug, attempts = 3) {
@@ -9501,12 +9553,18 @@ const updateThreadHandler = async (req, res) => {
     const access = await requireWorkspaceAccess(req, res);
     if (!access) return;
 
-    const threadSlug = String(access.threadSlug || req.params.threadSlug || "").trim();
+    const requestedThreadSlug = String(access.threadSlug || req.params.threadSlug || "").trim();
     const name = String(req.body?.name || "").trim();
-    if (!threadSlug || !name) {
+    if (!requestedThreadSlug || !name) {
       res.status(400).json({ error: "Thread slug and name are required." });
       return;
     }
+    const ownership = await assertWorkspaceAndThreadOwnership(access.novaUserId, access.slug, requestedThreadSlug);
+    if (!ownership.success || !ownership.threadOwned) {
+      sendThreadOwnershipFailure(res, ownership);
+      return;
+    }
+    const threadSlug = ownership.threadSlug;
 
     const response = await novaAdminRequest(
       `/v1/workspace/${access.slug}/thread/${encodeURIComponent(threadSlug)}/update`,
@@ -9550,6 +9608,8 @@ app.post(
 const threadAutoTitleHandler = createThreadAutoTitleHandler({
   requireWorkspaceAccess,
   novaAdminRequest,
+  assertWorkspaceAndThreadOwnership,
+  sendThreadOwnershipFailure,
 });
 
 app.post(
@@ -9568,11 +9628,17 @@ const deleteThreadHandler = async (req, res) => {
     const access = await requireWorkspaceAccess(req, res);
     if (!access) return;
 
-    const threadSlug = String(access.threadSlug || req.params.threadSlug || "").trim();
-    if (!threadSlug) {
+    const requestedThreadSlug = String(access.threadSlug || req.params.threadSlug || "").trim();
+    if (!requestedThreadSlug) {
       res.status(400).json({ error: "Thread slug is required." });
       return;
     }
+    const ownership = await assertWorkspaceAndThreadOwnership(access.novaUserId, access.slug, requestedThreadSlug);
+    if (!ownership.success || !ownership.threadOwned) {
+      sendThreadOwnershipFailure(res, ownership);
+      return;
+    }
+    const threadSlug = ownership.threadSlug;
 
     const response = await novaAdminRequest(
       `/v1/workspace/${access.slug}/thread/${encodeURIComponent(threadSlug)}`,
@@ -9602,11 +9668,17 @@ const getThreadChatsHandler = async (req, res) => {
     const access = await requireWorkspaceAccess(req, res);
     if (!access) return;
 
-    const threadSlug = String(access.threadSlug || req.params.threadSlug || "").trim();
-    if (!threadSlug) {
+    const requestedThreadSlug = String(access.threadSlug || req.params.threadSlug || "").trim();
+    if (!requestedThreadSlug) {
       res.status(400).json({ error: "Thread slug is required." });
       return;
     }
+    const ownership = await assertWorkspaceAndThreadOwnership(access.novaUserId, access.slug, requestedThreadSlug);
+    if (!ownership.success || !ownership.threadOwned) {
+      sendThreadOwnershipFailure(res, ownership);
+      return;
+    }
+    const threadSlug = ownership.threadSlug;
 
     const response = await novaAdminRequest(
       `/v1/workspace/${access.slug}/thread/${encodeURIComponent(threadSlug)}/chats`,
@@ -10874,26 +10946,31 @@ const streamChatHandler = async (req, res) => {
       res.setHeader("X-Zaki-Spaces-Route", remappedSpacesRoute);
     }
 
-    // SECURITY (G0-ISO-1): verify the caller actually owns this workspace before any
-    // admin-key call. The anonymous-target path was already remapped to the caller's own
-    // default workspace above (remappedSpacesRoute set), so it is owned by construction and
-    // skips this check. For an explicit slug, confirm visibility for THIS session's novaUserId,
-    // mirroring requireWorkspaceAccess (index.js:3124-3134). Without this, the agent-turn admin
-    // key + doc-grounding below would run against an arbitrary victim workspace.
+    // SECURITY (G0-ISO-1 + G2-ISO-3): verify the caller owns both this workspace AND this
+    // specific thread before any admin-key call. The anonymous-target path was already
+    // remapped to the caller's own default workspace/thread above (remappedSpacesRoute set),
+    // so it is owned by construction and skips this check. For an explicit slug, confirm
+    // workspace visibility AND thread ownership for THIS session's novaUserId, mirroring
+    // requireWorkspaceAccess (index.js:3124-3134). Without this, the agent-turn admin key +
+    // doc-grounding below would run against an arbitrary victim workspace/thread.
     if (!remappedSpacesRoute) {
-      const normalizedSlug = String(slug || "").trim().toLowerCase();
-      const accessCheck = await workspaceVisibleForSession(novaUserId, normalizedSlug);
-      if (!accessCheck.success) {
-        res.status(accessCheck.status || 502).json({
-          error: accessCheck.error || "Unable to verify workspace access.",
+      const ownership = await assertWorkspaceAndThreadOwnership(novaUserId, slug, threadSlug);
+      if (!ownership.success) {
+        res.status(ownership.status || 502).json({
+          error: ownership.error || "Unable to verify workspace access.",
         });
         return;
       }
-      if (!accessCheck.visible) {
+      if (!ownership.visible) {
         res.status(403).json({ error: "You do not have access to this workspace." });
         return;
       }
-      slug = normalizedSlug;
+      if (!ownership.threadOwned) {
+        res.status(403).json({ error: "You do not have access to this thread." });
+        return;
+      }
+      slug = ownership.slug;
+      threadSlug = ownership.threadSlug;
     }
 
     const requestPayload = req.body;
