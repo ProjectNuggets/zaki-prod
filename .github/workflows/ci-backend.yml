@@ -35,6 +35,10 @@ jobs:
           node --check scripts/smoke-v01.mjs
           node --check scripts/smoke-hire-readiness.mjs
           node --check scripts/multiuser-hire-isolation.mjs
+          node --check scripts/multiuser-agent-isolation.mjs
+          node --check scripts/multiuser-spaces-isolation.mjs
+          node --check scripts/multiuser-learning-isolation.mjs
+          node --check scripts/multiuser-isolation-suite.mjs
           node --check scripts/load-memory.mjs
           node --check scripts/backup-restore-drill.mjs
 
@@ -230,6 +234,52 @@ jobs:
           export HIRE_USER_B_EMAIL="${HIRE_SMOKE_USER_B_EMAIL}"
           export HIRE_USER_B_PASSWORD="${HIRE_SMOKE_USER_B_PASSWORD}"
           node scripts/multiuser-hire-isolation.mjs
+
+  isolation-suite:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve isolation config
+        id: iso-config
+        env:
+          ZAKI_ISOLATION_BASE_URL: ${{ secrets.ZAKI_ISOLATION_BASE_URL }}
+          SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL }}
+          ZAKI_MULTIUSER_TOKENS: ${{ secrets.ZAKI_MULTIUSER_TOKENS }}
+        run: |
+          set -euo pipefail
+          base_url="${ZAKI_ISOLATION_BASE_URL:-${SMOKE_BASE_URL:-}}"
+          if [ -n "${base_url}" ] && [ -n "${ZAKI_MULTIUSER_TOKENS}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping isolation suite: ZAKI_ISOLATION_BASE_URL/SMOKE_BASE_URL + ZAKI_MULTIUSER_TOKENS not configured."
+          fi
+      - uses: actions/checkout@v4
+        if: ${{ steps.iso-config.outputs.enabled == 'true' }}
+      - uses: actions/setup-node@v4
+        if: ${{ steps.iso-config.outputs.enabled == 'true' }}
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend deps (pg/bcryptjs for learning step)
+        if: ${{ steps.iso-config.outputs.enabled == 'true' }}
+        run: npm --prefix backend ci
+      - name: Multi-user isolation suite (required mode)
+        if: ${{ steps.iso-config.outputs.enabled == 'true' }}
+        env:
+          ZAKI_ISOLATION_REQUIRED: '1'
+          ZAKI_ISOLATION_BASE_URL: ${{ secrets.ZAKI_ISOLATION_BASE_URL }}
+          SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL }}
+          ZAKI_MULTIUSER_TOKENS: ${{ secrets.ZAKI_MULTIUSER_TOKENS }}
+          HIRE_USER_A_EMAIL: ${{ secrets.HIRE_SMOKE_USER_A_EMAIL }}
+          HIRE_USER_A_PASSWORD: ${{ secrets.HIRE_SMOKE_USER_A_PASSWORD }}
+          HIRE_USER_B_EMAIL: ${{ secrets.HIRE_SMOKE_USER_B_EMAIL }}
+          HIRE_USER_B_PASSWORD: ${{ secrets.HIRE_SMOKE_USER_B_PASSWORD }}
+          DATABASE_URL: ${{ secrets.ISOLATION_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          export ZAKI_BASE_URL="${ZAKI_ISOLATION_BASE_URL:-${SMOKE_BASE_URL:-}}"
+          node scripts/multiuser-isolation-suite.mjs
 
   memory-load:
     runs-on: ubuntu-latest
