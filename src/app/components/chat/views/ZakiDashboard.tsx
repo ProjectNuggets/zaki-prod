@@ -1099,7 +1099,7 @@ export function ZakiDashboard({
     selectedCommandPrompt.length > 0 || anonymousWorkItems.length > 0
   );
   const agentCapacityBlocked =
-    selectedProductId === "agent" && !meterLoading && isAvailabilityBlocked(agentAvailability);
+    selectedProductId === "agent" && !meterLoading && !meterUnavailable && isAvailabilityBlocked(agentAvailability);
   const creditsExhausted =
     !meterLoading &&
     !meterUnavailable &&
