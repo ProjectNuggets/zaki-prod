@@ -4183,7 +4183,12 @@ app.post("/api/admin/v1-cutover/run", express.json({ limit: "100kb" }), async (r
   }
 });
 
-await initDb();
+try {
+  await initDb();
+} catch (err) {
+  console.error("[boot] initDb failed:", err?.stack || err?.message || err);
+  process.exit(1);
+}
 await ensureSuperAdminMembersSeed();
 await loadRuntimeRateLimitSettings();
 
