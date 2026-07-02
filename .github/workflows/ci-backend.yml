@@ -58,6 +58,7 @@ jobs:
 
   backend-pg-integration:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -237,6 +238,7 @@ jobs:
 
   isolation-suite:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Resolve isolation config
         id: iso-config

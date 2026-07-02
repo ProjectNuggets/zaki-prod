@@ -15,7 +15,7 @@ const steps = [
   { name:"hire",     cmd:["node","scripts/multiuser-hire-isolation.mjs"],     ready:hasHireCreds, needs:"HIRE_USER_A/B_EMAIL + _PASSWORD" },
   { name:"learning", cmd:["node","scripts/multiuser-learning-isolation.mjs"], ready:hasDbUrl,     needs:"DATABASE_URL (+ live BFF)" },
 ];
-function runStep(step){return new Promise((resolve)=>{const t=Date.now();const c=spawn(step.cmd[0],step.cmd.slice(1),{stdio:"inherit",env:process.env});c.on("close",(code)=>resolve({name:step.name,ok:code===0,code:code??1,durationMs:Date.now()-t}));});}
+function runStep(step){return new Promise((resolve)=>{const t=Date.now();const c=spawn(step.cmd[0],step.cmd.slice(1),{stdio:"inherit",env:process.env});c.on("error",(e)=>resolve({name:step.name,ok:false,code:1,error:String(e),durationMs:Date.now()-t}));c.on("close",(code)=>resolve({name:step.name,ok:code===0,code:code??1,durationMs:Date.now()-t}));});}
 const summary=[]; let hardFail=false;
 for (const step of steps){
   if(!step.ready){
