@@ -2800,7 +2800,7 @@ async function novaSessionRequest(path, authHeader, options = {}) {
 }
 
 async function fetchNovaUserIdByUsername(username) {
-  const response = await novaAdminRequest("/v1/users", { method: "GET" });
+  const response = await novaAdminRequest("/v1/users", { method: "GET" }); // lint-allow-admin-ungated: internal username->id lookup for provisioner, not a route handler
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !Array.isArray(data?.users)) {
     return null;
@@ -3304,30 +3304,6 @@ function buildProxyHeaders(req) {
     headers.set(key, Array.isArray(value) ? value.join(",") : String(value));
   }
   return headers;
-}
-
-function copyHireResponseHeaders(upstream, res) {
-  upstream.headers.forEach((value, key) => {
-    const lower = key.toLowerCase();
-    if (
-      [
-        "connection",
-        "transfer-encoding",
-        "content-encoding",
-        "content-length",
-        "keep-alive",
-        "proxy-authenticate",
-        "proxy-authorization",
-        "set-cookie",
-        "te",
-        "trailers",
-        "upgrade",
-      ].includes(lower)
-    ) {
-      return;
-    }
-    res.setHeader(key, value);
-  });
 }
 
 function sanitizeAgentUpstreamPayload(payload) {
@@ -9726,7 +9702,7 @@ app.get("/api/workspace/:slug/thread/:threadSlug/chats", getThreadChatsHandler);
 
 const getAcceptedDocumentTypesHandler = async (_req, res) => {
   try {
-    const response = await novaAdminRequest("/v1/document/accepted-file-types", {
+    const response = await novaAdminRequest("/v1/document/accepted-file-types", { // lint-allow-admin-ungated: returns a static accepted-file-types list, no per-user/workspace data
       method: "GET",
     });
     const data = await response.json().catch(() => ({}));
@@ -13380,7 +13356,7 @@ async function pipeHireResponse(req, res, upstream) {
     upstreamHeaders: upstream.headers,
   });
   res.status(upstream.status);
-  copyHireResponseHeaders(upstream, res);
+  copyResponseHeaders(upstream, res);
   if (!upstream.body) {
     res.end();
     return;
