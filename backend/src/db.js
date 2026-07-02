@@ -52,6 +52,10 @@ export async function initDb() {
   const MIGRATION_LOCK_KEY = 8534127;
   const migrationClient = await pool.connect();
   try {
+    // Fail-fast backstop: a hung DDL/lock-wait would otherwise block every other
+    // replica on the advisory lock forever. On timeout the query errors → initDb
+    // throws → boot exit(1) → session ends → advisory lock auto-releases.
+    await migrationClient.query("SET statement_timeout = '120s'");
     await migrationClient.query("SELECT pg_advisory_lock($1)", [
       MIGRATION_LOCK_KEY,
     ]);

@@ -15,8 +15,9 @@ const src = readFileSync(FILE, "utf8").split("\n");
 
 const CALL = /\b(?:novaAdminRequest|adminRequest)\s*\(/;
 const GATES = /requireWorkspaceAccess|assertWorkspaceAndThreadOwnership|requireAuthUser|workspaceVisibleForSession|ensureTypUserForZakiUser/;
-// Column-0 boundary heads: named fn, assigned const, or an inline express route registration.
-const HEAD = /^(?:export\s+)?(?:async\s+)?function\s+\w+|^(?:export\s+)?const\s+\w+\s*=|^app\.(?:get|post|put|delete|patch|all)\s*\(/;
+// Column-0 boundary heads: named fn, assigned const, or an inline express route registration
+// (app.<verb>/router.<verb> or a chained .route(...) handler).
+const HEAD = /^(?:export\s+)?(?:async\s+)?function\s+\w+|^(?:export\s+)?const\s+\w+\s*=|^app\.(?:get|post|put|delete|patch|all)\s*\(|^router\.(?:get|post|put|delete|patch|all|use)\s*\(|^\w+\.route\s*\(/;
 const DEF_LINE = /^\s*(?:export\s+)?async\s+function\s+novaAdminRequest\b/; // the definition itself
 const PROP_VAL = /adminRequest:\s*novaAdminRequest/; // passed as a value, not invoked
 const PRAGMA = /lint-allow-admin-ungated/;

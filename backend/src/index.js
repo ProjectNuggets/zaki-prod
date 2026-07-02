@@ -7761,6 +7761,7 @@ app.get("/api/account/export", async (req, res) => {
       memories,
       memoryConfirmations,
       memoryConflicts,
+      memoryPreferences,
       learningStudyProfiles,
       learningStudyPlans,
       learningStudyTasks,
@@ -7799,6 +7800,12 @@ app.get("/api/account/export", async (req, res) => {
            FROM memory_conflicts
            WHERE user_id = $1
            ORDER BY created_at DESC`,
+          [memoryKey]
+        ),
+        loadOptionalRows(
+          `SELECT policy, created_at, updated_at
+           FROM zaki_memory_preferences
+           WHERE user_id = $1`,
           [memoryKey]
         ),
         loadOptionalRows(
@@ -7871,6 +7878,7 @@ app.get("/api/account/export", async (req, res) => {
         stored: memories,
         confirmations: memoryConfirmations,
         conflicts: memoryConflicts,
+        preferences: memoryPreferences,
       },
       learning,
       learningStudy: {
@@ -7981,6 +7989,7 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
       await deleteByEmail("memory_confirmations");
       await deleteByEmail("memory_triggers");
       await deleteByEmail("memories");
+      await deleteByEmail("zaki_memory_preferences");
       await dbQuery("DELETE FROM zaki_users WHERE id = $1", [zakiUser.id]);
       await dbQuery("COMMIT");
     } catch (err) {
