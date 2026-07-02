@@ -123,7 +123,10 @@ const PRODUCT_DEFINITIONS = Object.freeze({
     label: "ZAKI Learn",
     productKind: "product",
     lifecycle: "current",
-    defaultState: PRODUCT_OPERATIONAL_STATES.ENABLED,
+    // G4-1: not-ready future spoke — registry default DISABLED, matching Hire/Design.
+    // The data path is separately gated by ZAKI_LEARNING_ENABLED; flip back per-env via
+    // ZAKI_PRODUCT_STATE_LEARNING=enabled without a code change.
+    defaultState: PRODUCT_OPERATIONAL_STATES.DISABLED,
     visibleInSettings: true,
     route: "/learn",
     entryPoint: "Learning",
