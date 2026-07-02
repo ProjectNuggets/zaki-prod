@@ -2851,33 +2851,35 @@ async function workspaceVisibleForSession(novaUserId, normalizedSlug) {
  * @param {number} novaUserId
  * @param {string} slug — workspace slug (already normalized lower-case by caller)
  * @param {string} threadSlug — requested thread slug (raw)
- * @returns {Promise<{ success:boolean, status?:number, error?:string, visible:boolean, threadOwned:boolean, slug:string, threadSlug:string }>}
+ * @returns {Promise<{ success:boolean, status?:number, error?:string, visible:boolean, threadOwned:boolean, threadExists:boolean, slug:string, threadSlug:string }>}
  */
 async function assertWorkspaceAndThreadOwnership(novaUserId, slug, threadSlug) {
   const normalizedSlug = String(slug || "").trim().toLowerCase();
   const requestedThread = String(threadSlug || "").trim();
   const result = await fetchTypWorkspaceObjects(novaUserId);
   if (!result.success) {
-    return { ...result, visible: false, threadOwned: false, slug: normalizedSlug, threadSlug: requestedThread };
+    return { ...result, visible: false, threadOwned: false, threadExists: false, slug: normalizedSlug, threadSlug: requestedThread };
   }
   const userId = Number(novaUserId);
   const workspace = result.workspaces.find(
     (w) => String(w?.slug || "").trim().toLowerCase() === normalizedSlug
   );
   if (!workspace) {
-    return { success: true, status: 200, visible: false, threadOwned: false, slug: normalizedSlug, threadSlug: requestedThread };
+    return { success: true, status: 200, visible: false, threadOwned: false, threadExists: false, slug: normalizedSlug, threadSlug: requestedThread };
   }
   const threads = Array.isArray(workspace.threads) ? workspace.threads : [];
-  const owned = threads.find((t) => {
-    if (Number(t?.user_id) !== userId) return false;
+  const requestedMatch = (t) => {
     const tSlug = String(t?.slug || t?.id || "").trim();
     return tSlug === requestedThread;
-  });
+  };
+  const threadExists = threads.some(requestedMatch);
+  const owned = threads.find((t) => Number(t?.user_id) === userId && requestedMatch(t));
   return {
     success: true,
     status: 200,
     visible: true,
     threadOwned: Boolean(owned),
+    threadExists,
     slug: normalizedSlug,
     // Prefer the canonical slug TYP returns; fall back to the requested value.
     threadSlug: owned ? String(owned.slug || owned.id || requestedThread).trim() : requestedThread,
@@ -10965,7 +10967,11 @@ const streamChatHandler = async (req, res) => {
         res.status(403).json({ error: "You do not have access to this workspace." });
         return;
       }
-      if (!ownership.threadOwned) {
+      // Block only a KNOWN foreign thread. A thread not yet in the workspace list is
+      // a NEW thread this (workspace-visible) user is creating — allow it, so first
+      // messages don't 403. Cross-tenant is already blocked by the visibility check
+      // above; per-user private workspaces make foreign existing threads unreachable.
+      if (ownership.threadExists && !ownership.threadOwned) {
         res.status(403).json({ error: "You do not have access to this thread." });
         return;
       }

@@ -47,26 +47,28 @@ async function assertWorkspaceAndThreadOwnership(novaUserId, slug, threadSlug) {
   const requestedThread = String(threadSlug || "").trim();
   const result = await fetchTypWorkspaceObjects(novaUserId);
   if (!result.success) {
-    return { ...result, visible: false, threadOwned: false, slug: normalizedSlug, threadSlug: requestedThread };
+    return { ...result, visible: false, threadOwned: false, threadExists: false, slug: normalizedSlug, threadSlug: requestedThread };
   }
   const userId = Number(novaUserId);
   const workspace = result.workspaces.find(
     (w) => String(w?.slug || "").trim().toLowerCase() === normalizedSlug
   );
   if (!workspace) {
-    return { success: true, status: 200, visible: false, threadOwned: false, slug: normalizedSlug, threadSlug: requestedThread };
+    return { success: true, status: 200, visible: false, threadOwned: false, threadExists: false, slug: normalizedSlug, threadSlug: requestedThread };
   }
   const threads = Array.isArray(workspace.threads) ? workspace.threads : [];
-  const owned = threads.find((t) => {
-    if (Number(t?.user_id) !== userId) return false;
+  const requestedMatch = (t) => {
     const tSlug = String(t?.slug || t?.id || "").trim();
     return tSlug === requestedThread;
-  });
+  };
+  const threadExists = threads.some(requestedMatch);
+  const owned = threads.find((t) => Number(t?.user_id) === userId && requestedMatch(t));
   return {
     success: true,
     status: 200,
     visible: true,
     threadOwned: Boolean(owned),
+    threadExists,
     slug: normalizedSlug,
     threadSlug: owned ? String(owned.slug || owned.id || requestedThread).trim() : requestedThread,
   };
@@ -84,10 +86,16 @@ describe("assertWorkspaceAndThreadOwnership source pin (index.js)", () => {
     // Lenient match: requested value must match thread.slug OR thread.id.
     expect(helperSource).toContain('const tSlug = String(t?.slug || t?.id || "").trim();');
     expect(helperSource).toContain("return tSlug === requestedThread;");
+    // threadExists: does the requested slug match ANY thread in the workspace, regardless
+    // of owner (G2-ISO-3-FIX). Computed independently of the owner-scoped match below.
+    expect(helperSource).toContain("const threadExists = threads.some(requestedMatch);");
     // Ownership requires BOTH user_id match and slug/id match (fail-closed on missing user_id).
-    expect(helperSource).toContain("if (Number(t?.user_id) !== userId) return false;");
-    // Workspace-not-visible short-circuits before thread matching (never leaks threadOwned:true).
-    expect(helperSource).toMatch(/if \(!workspace\) \{[\s\S]*visible: false, threadOwned: false/);
+    expect(helperSource).toContain(
+      "const owned = threads.find((t) => Number(t?.user_id) === userId && requestedMatch(t));"
+    );
+    // Workspace-not-visible short-circuits before thread matching (never leaks threadOwned:true
+    // or threadExists:true).
+    expect(helperSource).toMatch(/if \(!workspace\) \{[\s\S]*visible: false, threadOwned: false, threadExists: false/);
     // Upstream failure propagates success:false (caller must 502, not 403).
     expect(helperSource).toContain("if (!result.success) {");
     // Returns the CANONICAL threadSlug on a match, not the raw requested value.
@@ -129,7 +137,9 @@ describe("assertWorkspaceAndThreadOwnership source pin (index.js)", () => {
     // not silently drop workspace-level enforcement while adding thread-level enforcement.
     expect(streamHandlerSource).toContain("G0-ISO-1");
     expect(streamHandlerSource).toContain("!ownership.visible");
-    expect(streamHandlerSource).toContain("!ownership.threadOwned");
+    // G2-ISO-3-FIX: the stream path blocks only a KNOWN foreign thread (threadExists &&
+    // !threadOwned), not a brand-new thread not yet in TYP's workspace thread list.
+    expect(streamHandlerSource).toContain("ownership.threadExists && !ownership.threadOwned");
 
     // requireWorkspaceAccess itself must NOT be the one calling the new helper — it stays
     // workspace-only so thread-create / workspace-level routes are unaffected.
@@ -261,5 +271,55 @@ describe("assertWorkspaceAndThreadOwnership behavior (executed against real fetc
 
     expect(result.visible).toBe(true);
     expect(result.threadOwned).toBe(false);
+  });
+
+  // G2-ISO-3-FIX: threadExists distinguishes a KNOWN foreign thread (block on stream path)
+  // from a brand-new thread not yet in TYP's workspace thread list (allow on stream path).
+  test("threadExists: requested slug belongs to another user -> threadExists:true, threadOwned:false", async () => {
+    mockTypWorkspacesResponse([
+      {
+        slug: "shared-space",
+        threads: [
+          { slug: "victim-thread", user_id: 99 },
+          { slug: "caller-thread", user_id: 42 },
+        ],
+      },
+    ]);
+
+    const result = await assertWorkspaceAndThreadOwnership(42, "shared-space", "victim-thread");
+
+    expect(result.threadExists).toBe(true);
+    expect(result.threadOwned).toBe(false);
+  });
+
+  test("threadExists: requested slug is NOT in the workspace's thread list (new thread) -> threadExists:false, threadOwned:false", async () => {
+    mockTypWorkspacesResponse([
+      {
+        slug: "shared-space",
+        threads: [{ slug: "caller-thread", user_id: 42 }],
+      },
+    ]);
+
+    const result = await assertWorkspaceAndThreadOwnership(42, "shared-space", "brand-new-thread");
+
+    expect(result.threadExists).toBe(false);
+    expect(result.threadOwned).toBe(false);
+  });
+
+  test("threadExists: caller's own thread -> threadExists:true, threadOwned:true", async () => {
+    mockTypWorkspacesResponse([
+      {
+        slug: "shared-space",
+        threads: [
+          { slug: "victim-thread", user_id: 99 },
+          { slug: "caller-thread", user_id: 42 },
+        ],
+      },
+    ]);
+
+    const result = await assertWorkspaceAndThreadOwnership(42, "shared-space", "caller-thread");
+
+    expect(result.threadExists).toBe(true);
+    expect(result.threadOwned).toBe(true);
   });
 });
