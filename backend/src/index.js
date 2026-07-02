@@ -492,6 +492,19 @@ function normalizeEmailValue(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function scopedMemoryUserId(email) {
+  // INVARIANT (G2-ISO-5): memory rows are keyed on normalizeUserId(email) =
+  // email.trim().toLowerCase() (see backend/src/memory/operations.js normalizeUserId
+  // and memory/routes.js normalizeScopedUserId). Account delete/export MUST key the
+  // memory_* tables on the SAME byte string, and zaki_users is deleted by id whose
+  // email column is stored already-normalized (signup uses normalizeEmail; Google uses
+  // validateGoogleIdTokenInfoPayload). Deriving the key here — instead of trusting the
+  // raw authResult.email that _resolveZakiUser returns unnormalized (index.js ~4589) —
+  // closes the gap by construction. DEFERRED: replace TEXT email key with a FK id +
+  // ON DELETE CASCADE once an email-change feature ships.
+  return normalizeEmailValue(email);
+}
+
 function parseEmailList(value) {
   return String(value || "")
     .split(",")
@@ -7748,6 +7761,7 @@ app.get("/api/account/export", async (req, res) => {
     if (!authResult) return;
     const { email, zakiUser } = authResult;
     auditUser = zakiUser;
+    const memoryKey = scopedMemoryUserId(email);
 
     const loadOptionalRows = async (sql, params = []) => {
       try {
@@ -7790,21 +7804,21 @@ app.get("/api/account/export", async (req, res) => {
            FROM memories
            WHERE user_id = $1
            ORDER BY created_at DESC`,
-          [email]
+          [memoryKey]
         ),
         loadOptionalRows(
           `SELECT id, content, type, status, confidence_score, source_thread_id, source_message_id, created_at, updated_at
            FROM memory_confirmations
            WHERE user_id = $1
            ORDER BY created_at DESC`,
-          [email]
+          [memoryKey]
         ),
         loadOptionalRows(
           `SELECT id, new_content, new_type, new_confidence_score, conflicting_content, conflicting_type, status, resolution, created_at, resolved_at
            FROM memory_conflicts
            WHERE user_id = $1
            ORDER BY created_at DESC`,
-          [email]
+          [memoryKey]
         ),
         loadOptionalRows(
           `SELECT profile_json, created_at, updated_at
@@ -7918,6 +7932,7 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
     if (!authResult) return;
     const { email, zakiUser } = authResult;
     auditUser = zakiUser;
+    const memoryKey = scopedMemoryUserId(email);
 
     const validation = validateInput(DeleteAccountSchema, req.body || {});
     if (!validation.valid) {
@@ -7974,7 +7989,7 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
     try {
       const deleteByEmail = async (table) => {
         try {
-          await dbQuery(`DELETE FROM ${table} WHERE user_id = $1`, [email]);
+          await dbQuery(`DELETE FROM ${table} WHERE user_id = $1`, [memoryKey]);
         } catch (err) {
           // Table may not exist in older deployments; skip safely.
           if (err?.code !== "42P01") throw err;
