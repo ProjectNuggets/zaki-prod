@@ -30,6 +30,8 @@ const shouldOpenCheckout =
   String(process.env.SMOKE_BILLING_OPEN_CHECKOUT || "").trim().toLowerCase() === "true";
 const requireFreshUpgrade =
   String(process.env.SMOKE_BILLING_REQUIRE_FRESH_UPGRADE || "true").trim().toLowerCase() !== "false";
+const requireSecrets =
+  String(process.env.SMOKE_REQUIRE_SECRETS || "").trim().toLowerCase() === "true";
 const policyVersion = String(
   process.env.SMOKE_LEGAL_POLICY_VERSION ||
     process.env.ZAKI_LEGAL_POLICY_VERSION ||
@@ -172,8 +174,18 @@ async function pollForWebhookAndEntitlement({
 async function main() {
   logStep(`Target base URL: ${baseUrl}`);
   assert(["student", "personal"].includes(plan), "SMOKE_BILLING_PLAN must be student or personal.");
-  assert(userEmail && userPassword, "SMOKE_USER_EMAIL and SMOKE_USER_PASSWORD are required.");
-  assert(adminEmail && adminPassword, "SMOKE_ADMIN_EMAIL and SMOKE_ADMIN_PASSWORD are required.");
+  const missingSecrets = [];
+  if (!userEmail) missingSecrets.push("SMOKE_USER_EMAIL");
+  if (!userPassword) missingSecrets.push("SMOKE_USER_PASSWORD");
+  if (!adminEmail) missingSecrets.push("SMOKE_ADMIN_EMAIL");
+  if (!adminPassword) missingSecrets.push("SMOKE_ADMIN_PASSWORD");
+  if (missingSecrets.length > 0) {
+    const msg = `Missing required billing smoke secrets: ${missingSecrets.join(", ")}`;
+    if (requireSecrets) {
+      logStep(`REQUIRED-MODE FAILURE: ${msg}. Refusing to skip. Provision secrets in the release environment.`);
+    }
+    throw new Error(msg);
+  }
 
   const health = await request("/health");
   assert(health.status === 200, `Health failed: ${health.status} ${health.raw}`);

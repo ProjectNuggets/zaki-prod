@@ -64,7 +64,20 @@ Behavior:
 - Polls `/api/entitlements` for premium activation.
 - Fails on timeout (`SMOKE_BILLING_WEBHOOK_TIMEOUT_MS`, default 10m).
 
-## 4) Pass/Fail Criteria
+## 4) Required-Mode Secrets Check
+
+The smoke script supports `SMOKE_REQUIRE_SECRETS=true`. When set, a missing
+`SMOKE_USER_EMAIL` / `SMOKE_USER_PASSWORD` / `SMOKE_ADMIN_EMAIL` /
+`SMOKE_ADMIN_PASSWORD` fails loudly (`REQUIRED-MODE FAILURE: ...`) instead of
+just throwing — the gate cannot be silently skipped by leaving secrets unset.
+
+`release:check` already runs the billing smoke in required mode whenever it's
+enabled (`RELEASE_CHECK_RUN_BILLING_E2E=true`). The `RELEASE_CHECK_RUN_BILLING_E2E`
+default itself stays opt-in (off by default) until staging + Stripe test
+secrets are provisioned. Once those exist, flip enforcement on by default by
+removing the opt-in check in `scripts/release-check-next-release.mjs`.
+
+## 5) Pass/Fail Criteria
 
 Pass when:
 - Stripe processed count increases from baseline.
@@ -76,7 +89,7 @@ Fail when:
 - Webhook processed count does not increase within timeout.
 - Entitlements remain free after webhook processing.
 
-## 5) Staging Webhook Stress Drill
+## 6) Staging Webhook Stress Drill
 
 Run:
 

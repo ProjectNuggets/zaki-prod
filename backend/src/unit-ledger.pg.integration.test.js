@@ -132,11 +132,13 @@ d("unit-ledger — real Postgres concurrency, idempotency, sweeper", () => {
     await dbQuery(`DELETE FROM zaki_meter_holds WHERE user_id = $1`, [userId]);
     await dbQuery(`DELETE FROM zaki_unit_wallets WHERE user_id = $1`, [userId]);
 
-    // 1) Provision from the 'personal' plan → weekly 500, burst (5h) 100.
+    // 1) Provision from the 'personal' plan → weekly 1000, burst (5h) 200.
+    // (mirrors platform-policy.js DEFAULT_WEEKLY_ALLOWANCE_UNITS.personal / DEFAULT_ROLLING_ALLOWANCE_UNITS.personal —
+    //  if those change, update this test too; the pg.integration CI job will now catch drift.)
     await ensureWallet({ userId, planId: "personal", env: {} });
     const w0 = await getWallet();
-    expect(Number(w0.weekly_allowance_units)).toBe(500);
-    expect(Number(w0.burst_allowance_units)).toBe(100);
+    expect(Number(w0.weekly_allowance_units)).toBe(1000);
+    expect(Number(w0.burst_allowance_units)).toBe(200);
 
     // 2) Reserve 30, settle the real cost (12) → wallet shows 12 used (18 refunded).
     const r1 = await reserve({ grantId: "55555555-5555-5555-5555-555555555555", units: 30, key: "loop1" });
@@ -144,11 +146,11 @@ d("unit-ledger — real Postgres concurrency, idempotency, sweeper", () => {
     await settleHold({ holdId: r1.hold.id, settleIdempotencyKey: "loop1:receipt", settledUnits: 12 });
     expect(Number((await getWallet()).weekly_used_units)).toBe(12);
 
-    // 3) Drain the burst window: 12 (settled) + 88 (reserved) = 100 = the 5h cap.
-    const r2 = await reserve({ grantId: "66666666-6666-6666-6666-666666666666", units: 88, key: "loop2" });
+    // 3) Drain the burst window: 12 (settled) + 188 (reserved) = 200 = the 5h cap.
+    const r2 = await reserve({ grantId: "66666666-6666-6666-6666-666666666666", units: 188, key: "loop2" });
     expect(r2.ok).toBe(true);
 
-    // 4) Next request is DENIED by the burst gate (even though weekly has 400 left).
+    // 4) Next request is DENIED by the burst gate (even though weekly has 800 left).
     const r3 = await reserve({ grantId: "77777777-7777-7777-7777-777777777777", units: 1, key: "loop3" });
     expect(r3).toMatchObject({ ok: false, reason: "insufficient_units" });
   });

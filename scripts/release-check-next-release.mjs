@@ -82,6 +82,7 @@ try {
       label: "Billing webhook E2E smoke gate",
       cmd: "npm",
       args: ["run", "smoke:billing"],
+      env: { SMOKE_REQUIRE_SECRETS: "true" },
     });
   } else {
     process.stdout.write(
