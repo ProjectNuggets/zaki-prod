@@ -29,6 +29,9 @@ jobs:
         run: npm --prefix backend ci
       - name: Backend lint checks
         run: npm --prefix backend run lint
+      - name: ESLint (informational, non-blocking)
+        run: npm --prefix backend run lint:eslint
+        continue-on-error: true
       - name: Admin-key gating lint
         run: node scripts/lint-admin-gating.mjs
         working-directory: backend
