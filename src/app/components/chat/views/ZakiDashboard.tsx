@@ -520,23 +520,34 @@ function ProductTaskStrip({
 function CreditMeter({
   t,
   loading,
+  unavailable,
   weeklyStats,
   weeklyReset,
 }: {
   t: TranslateFn;
   loading: boolean;
+  unavailable: boolean;
   weeklyStats: WindowStats;
   weeklyReset: string | null;
 }) {
   const roundedPercent = getRoundedUsagePercent(weeklyStats.usedPercent);
+  const isUnavailable = unavailable && !loading;
   const usageShortLabel = loading
     ? t("zakiDashboard.meter.loading")
+    : isUnavailable
+    ? t("zakiControls.powerUser.usage.unavailable", {
+        defaultValue: "Usage unavailable",
+      })
     : t("zakiDashboard.meter.usageShort", {
         percent: roundedPercent,
         defaultValue: `${roundedPercent}%`,
       });
   const usageAriaLabel = loading
     ? t("zakiDashboard.meter.loading")
+    : isUnavailable
+    ? t("zakiControls.powerUser.usage.unavailable", {
+        defaultValue: "Usage unavailable",
+      })
     : t("zakiDashboard.meter.usagePercent", {
         percent: roundedPercent,
         defaultValue: formatUsagePercentLabel(weeklyStats.usedPercent),
@@ -549,11 +560,12 @@ function CreditMeter({
     : t("zakiDashboard.meter.resetPendingShort", {
         defaultValue: "Pending",
       });
-  const nearCap = !loading && isUsageNearCap(weeklyStats.usedPercent);
+  const nearCap = !loading && !isUnavailable && isUsageNearCap(weeklyStats.usedPercent);
   return (
     <div
       className="zaki-dashboard-command__meter"
       data-testid="zaki-dashboard-command-meter"
+      data-unavailable={isUnavailable ? "true" : undefined}
       aria-label={usageAriaLabel}
     >
       <div className="zaki-dashboard-command__meter-top">
@@ -578,10 +590,11 @@ function CreditMeter({
       </div>
       <div
         className="zaki-dashboard-command__meter-track"
+        data-unavailable={isUnavailable ? "true" : undefined}
         aria-label={usageAriaLabel}
       >
         <span
-          style={{ width: `${weeklyStats.usedPercent}%` }}
+          style={isUnavailable ? undefined : { width: `${weeklyStats.usedPercent}%` }}
         />
       </div>
     </div>
@@ -973,11 +986,15 @@ export function ZakiDashboard({
   const [memoryBridgeSeen, setMemoryBridgeSeen] = useState(false);
   const [titleSignalIndex, setTitleSignalIndex] = useState(0);
   const { isLoading: productRegistryLoading } = useProductRegistry();
-  const { data: meterStatusResult, isLoading: meterStatusLoading } =
-    useMeterStatus();
+  const {
+    data: meterStatusResult,
+    isLoading: meterStatusLoading,
+    isError: meterStatusError,
+  } = useMeterStatus();
   const {
     data: anonymousMeterStatusResult,
     isLoading: anonymousMeterStatusLoading,
+    isError: anonymousMeterStatusError,
   } = useAnonymousMeterStatus(!token);
   const { data: zakiSessions } = useZakiSessions(
     Boolean(token)
@@ -987,6 +1004,7 @@ export function ZakiDashboard({
     ? meterStatusResult?.data
     : anonymousMeterStatusResult?.data;
   const meterLoading = token ? meterStatusLoading : anonymousMeterStatusLoading;
+  const meterUnavailable = token ? meterStatusError : anonymousMeterStatusError;
   const identityLabel =
     meterStatus?.identity?.type === "anonymous"
       ? t("zakiDashboard.identity.anonymous")
@@ -1081,9 +1099,12 @@ export function ZakiDashboard({
     selectedCommandPrompt.length > 0 || anonymousWorkItems.length > 0
   );
   const agentCapacityBlocked =
-    selectedProductId === "agent" && !meterLoading && isAvailabilityBlocked(agentAvailability);
+    selectedProductId === "agent" && !meterLoading && !meterUnavailable && isAvailabilityBlocked(agentAvailability);
   const creditsExhausted =
-    !meterLoading && typeof weeklyStats.remaining === "number" && weeklyStats.remaining <= 0;
+    !meterLoading &&
+    !meterUnavailable &&
+    typeof weeklyStats.remaining === "number" &&
+    weeklyStats.remaining <= 0;
   const commandBlockedByUsage =
     selectedProductRequiresAuthBeforeRun
       ? false
@@ -1579,6 +1600,7 @@ export function ZakiDashboard({
                 <CreditMeter
                   t={t}
                   loading={meterLoading}
+                  unavailable={meterUnavailable}
                   weeklyStats={weeklyStats}
                   weeklyReset={weeklyReset}
                 />

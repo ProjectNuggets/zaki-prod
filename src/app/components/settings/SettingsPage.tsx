@@ -1914,11 +1914,17 @@ export function SettingsPage() {
                   defaultValue: "Read-only sign-in identity for this account.",
                 })}
               >
-                <input className="v2-input" value={user?.username || ""} readOnly />
+                <input
+                  className="v2-input"
+                  aria-label={t("settingsModal.profile.email")}
+                  value={user?.username || ""}
+                  readOnly
+                />
               </V2SettingsRow>
               <V2SettingsRow name={t("settingsModal.preferences.theme")}>
                 <select
                   className="v2-input"
+                  aria-label={t("settingsModal.preferences.theme")}
                   value={themePreference}
                   onChange={(event) =>
                     setThemePreference(event.target.value as "light" | "dark" | "system")
@@ -1932,6 +1938,7 @@ export function SettingsPage() {
               <V2SettingsRow name={t("settings.language")}>
                 <select
                   className="v2-input"
+                  aria-label={t("settings.language")}
                   value={languageValue}
                   onChange={(event) => void i18n.changeLanguage(event.target.value)}
                 >

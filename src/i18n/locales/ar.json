@@ -706,7 +706,8 @@
     "usedMemory": "استخدمت الذاكرة",
     "usedMemoryCount": "استخدمت {{count}} ذكريات",
     "memoryDontUse": "لا تستخدم هذا",
-    "sources": "المصادر"
+    "sources": "المصادر",
+    "tryAgain": "إعادة المحاولة"
   },
   "input": {
     "disclaimer": "قد يخطئ Zaki. يُفضّل التحقق من المعلومات المهمة.",

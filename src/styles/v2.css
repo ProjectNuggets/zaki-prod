@@ -82,6 +82,7 @@
   --v2-accent-dim: rgba(210, 68, 48, 0.55);
   --v2-accent-faint: rgba(210, 68, 48, 0.12);
   --v2-accent-hairline: rgba(210, 68, 48, 0.35);
+  --v2-accent-text: #c23a25;
   --v2-success: #21916f;
   --v2-success-faint: rgba(33, 145, 111, 0.12);
   --v2-warn: #c28d2c;
@@ -120,6 +121,7 @@
   --v2-ink-5: #3a352f;
   --v2-ink-on-accent: #0a0908;
   --v2-ink-on-inverse: #0e0d0b;
+  --v2-accent-text: var(--v2-accent);
   --v2-hairline: rgba(236, 231, 223, 0.1);
   --v2-hairline-strong: rgba(236, 231, 223, 0.22);
   --v2-hairline-faint: rgba(236, 231, 223, 0.05);
@@ -267,6 +269,17 @@
 
 .zaki-app-v2 :where(.text-zaki-brand, .text-zaki-accent, .hover\:text-zaki-brand:hover, .hover\:text-zaki-accent:hover) {
   color: var(--v2-accent) !important;
+}
+
+/* Type-to-confirm phrase span: small mono text on the destructive dialog,
+   narrower than the broad .text-zaki-brand utility above so large accent
+   uses of that class keep the bright ember. Intentionally NOT scoped under
+   .zaki-app-v2 — TypeToConfirmDialog renders via ModalShell's createPortal
+   to document.body, outside the .zaki-app-v2 subtree, so a scoped rule
+   would never match it. The .font-mono-ui.text-zaki-brand compound is
+   specific enough on its own to override the .text-zaki-brand utility. */
+:where(.font-mono-ui.text-zaki-brand) {
+  color: var(--v2-accent-text) !important;
 }
 
 .zaki-app-v2 :where(.bg-zaki-brand, .bg-zaki-primary, .bg-zaki-accent) {
@@ -421,7 +434,7 @@
 }
 
 .v2-badge--accent {
-  color: var(--v2-accent);
+  color: var(--v2-accent-text);
   border-color: var(--v2-accent-hairline);
 }
 
@@ -838,7 +851,7 @@ button.v2-status-strip__item:focus-visible {
 }
 
 .zaki-auth-v2__eyebrow {
-  color: var(--v2-accent);
+  color: var(--v2-accent-text);
   font-size: var(--v2-text-2xs);
   line-height: 1;
 }
@@ -1056,7 +1069,7 @@ button.v2-status-strip__item:focus-visible {
 }
 
 .zaki-auth-v2__consent a {
-  color: var(--v2-accent);
+  color: var(--v2-accent-text);
   text-decoration: none;
 }
 
@@ -1356,7 +1369,7 @@ button.v2-status-strip__item:focus-visible {
 .v2-meter small {
   display: block;
   margin-top: 6px;
-  color: var(--v2-ink-4);
+  color: var(--v2-ink-3);
   font-size: 10px;
   line-height: 1.35;
   text-transform: uppercase;
@@ -1535,7 +1548,7 @@ button.v2-status-strip__item:focus-visible {
 }
 
 .v2-product-card--primary .v2-product-card__code {
-  color: var(--v2-accent);
+  color: var(--v2-accent-text);
 }
 
 .v2-product-card--primary::before {
@@ -1600,7 +1613,7 @@ button.v2-status-strip__item:focus-visible {
 }
 
 .v2-product-card dt {
-  color: var(--v2-ink-4);
+  color: var(--v2-ink-3);
   font-size: 9px;
   line-height: 1.4;
   text-transform: uppercase;
@@ -2295,7 +2308,7 @@ button.v2-status-strip__item:focus-visible {
 .zaki-app-topbar__toggle kbd {
   border: 1px solid var(--v2-hairline);
   padding: 1px 5px;
-  color: var(--v2-ink-4);
+  color: var(--v2-ink-3);
   font-family: var(--v2-font-mono);
   font-size: 9px;
   letter-spacing: 0;
@@ -3045,7 +3058,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .v2-settings-nav__list small {
-  color: var(--v2-ink-4);
+  color: var(--v2-ink-3);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
@@ -6330,7 +6343,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-approval-history__kicker {
-  color: var(--v2-accent);
+  color: var(--v2-accent-text);
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-approval-history__tool {
@@ -12754,6 +12767,26 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   background: var(--v2-danger);
 }
 
+.zaki-dashboard-command__meter-track[data-unavailable="true"] {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--v2-ink-4),
+    var(--v2-ink-4) 3px,
+    transparent 3px,
+    transparent 6px
+  );
+  opacity: 0.5;
+}
+
+.zaki-dashboard-command__meter-track[data-unavailable="true"] > span {
+  width: 0;
+  background: transparent;
+}
+
+.zaki-dashboard-command__meter[data-unavailable="true"] .zaki-dashboard-command__meter-top strong {
+  color: var(--v2-ink-3);
+}
+
 .zaki-dashboard-command__actions {
   display: grid;
   min-width: 0;
@@ -12967,7 +13000,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
 .zaki-dashboard-intro__head span,
 .zaki-dashboard-intro__slide-kicker {
-  color: var(--v2-accent);
+  color: var(--v2-accent-text);
   font-family: var(--v2-font-mono);
   font-size: 10px;
   letter-spacing: 0.14em;

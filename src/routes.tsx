@@ -1,7 +1,12 @@
 import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router-dom';
 import App from './app/App';
-import { SkeletonBrainPage } from './app/components/ui/skeleton';
+import {
+  SkeletonBrainPage,
+  SkeletonChatShell,
+  SkeletonSettingsPage,
+  SkeletonSpaceGrid,
+} from './app/components/ui/skeleton';
 import { ProductAccessGate } from './app/components/ProductAccessGate';
 import { ProductLaunchPage } from './app/components/ProductLaunchPage';
 import { useAuthStore } from './stores';
@@ -11,8 +16,8 @@ function RouteFallback() {
   return <div className="min-h-screen bg-zaki-bg" aria-label="Loading route" />;
 }
 
-function routeSuspense(children: ReactNode) {
-  return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
+function routeSuspense(children: ReactNode, fallback: ReactNode = <RouteFallback />) {
+  return <Suspense fallback={fallback}>{children}</Suspense>;
 }
 
 function ExternalRedirect({ to }: { to: string }) {
@@ -71,7 +76,7 @@ const BrainPage = lazy(() =>
 );
 
 function HomeRoute() {
-  return routeSuspense(<ChatArea />);
+  return routeSuspense(<ChatArea />, <SkeletonChatShell />);
 }
 
 function ProductRoute({ locale = "en" }: { locale?: "en" | "ar" }) {
@@ -119,27 +124,27 @@ export const router = createBrowserRouter([
       },
       {
         path: 'agent',
-        element: routeSuspense(<ChatArea />), // Authenticated Agent workbench
+        element: routeSuspense(<ChatArea />, <SkeletonChatShell />), // Authenticated Agent workbench
       },
       {
         path: 'spaces',
-        element: routeSuspense(<ChatArea />), // Will show spaces view
+        element: routeSuspense(<ChatArea />, <SkeletonChatShell />), // Will show spaces view
       },
       {
         path: 'spaces/:spaceId',
-        element: routeSuspense(<ChatArea />), // Will show space detail
+        element: routeSuspense(<ChatArea />, <SkeletonChatShell />), // Will show space detail
       },
       {
         path: 'spaces/:spaceId/threads/:threadId',
-        element: routeSuspense(<ChatArea />), // Will show chat view
+        element: routeSuspense(<ChatArea />, <SkeletonChatShell />), // Will show chat view
       },
       {
         path: 'about',
-        element: routeSuspense(<ChatArea />),
+        element: routeSuspense(<ChatArea />, <SkeletonChatShell />),
       },
       {
         path: 'reset',
-        element: routeSuspense(<ChatArea />),
+        element: routeSuspense(<ChatArea />, <SkeletonChatShell />),
       },
       {
         path: 'artifact/:shareCode',
@@ -147,11 +152,11 @@ export const router = createBrowserRouter([
       },
       {
         path: 'pricing',
-        element: routeSuspense(<PricingPage />),
+        element: routeSuspense(<PricingPage />, <SkeletonSpaceGrid />),
       },
       {
         path: 'pricing/success',
-        element: routeSuspense(<BillingSuccessPage />),
+        element: routeSuspense(<BillingSuccessPage />, <SkeletonSpaceGrid />),
       },
       {
         path: 'products/:productId',
@@ -275,7 +280,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'settings',
-        element: routeSuspense(<SettingsPage />),
+        element: routeSuspense(<SettingsPage />, <SkeletonSettingsPage />),
       },
       {
         path: 'learn',

@@ -31,12 +31,17 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(isActive: bool
     // Store the previously focused element
     previousActiveElement.current = document.activeElement;
 
-    // Focus the first focusable element in the container
+    // Focus an explicit initial target if the container opts in via
+    // [data-autofocus] (React's `autoFocus` prop doesn't render an
+    // `autofocus` DOM attribute, so this hint lets a modal request focus on
+    // a specific field instead of always landing on the first focusable
+    // element, e.g. a leading Close button).
     const focusableElements = getFocusableElements();
     if (focusableElements.length > 0) {
       // Small delay to ensure the modal is fully rendered
       requestAnimationFrame(() => {
-        focusableElements[0]?.focus();
+        const initial = containerRef.current?.querySelector<HTMLElement>('[data-autofocus]');
+        (initial ?? focusableElements[0])?.focus();
       });
     }
 

@@ -752,6 +752,9 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
         return space;
       });
 
+    const prevSpaces: SidebarSpace[] = spaces;
+    const prevCache = queryClient.getQueryData<Space[]>(spaceKeys.all);
+
     setSpaces((prev) => applyRename(prev));
     queryClient.setQueryData(spaceKeys.all, (prev: Space[] | undefined) =>
       prev ? applyRename(prev) : prev
@@ -763,14 +766,16 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
         })
       );
     }
-    syncRename(editingItem.type, editingItem.id, trimmed);
+    syncRename(editingItem.type, editingItem.id, trimmed, prevSpaces, prevCache);
     setEditingItem(null);
   };
 
   const syncRename = async (
     type: "space" | "thread",
     id: string,
-    label: string
+    label: string,
+    prevSpaces: SidebarSpace[],
+    prevCache: Space[] | undefined
   ) => {
     try {
       if (type === "space") {
@@ -789,7 +794,10 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
         body: JSON.stringify({ name: label }),
       });
     } catch (error) {
+      setSpaces(prevSpaces);
+      queryClient.setQueryData(spaceKeys.all, prevCache);
       setSpacesError("Unable to rename item. Try again.");
+      queryClient.invalidateQueries({ queryKey: spaceKeys.all });
     }
   };
 
