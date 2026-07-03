@@ -130,7 +130,7 @@ describe("platform policy", () => {
     expect(registry.products.find((product) => product.productId === "learning")).toEqual(
       expect.objectContaining({
         legacyProductId: ZAKI_PRODUCT_IDS.LEARN,
-        state: PRODUCT_OPERATIONAL_STATES.ENABLED,
+        state: PRODUCT_OPERATIONAL_STATES.DISABLED,
         route: "/learn",
         visibleInSettings: true,
         memoryScope: MEMORY_SCOPE_IDS.LEARNER_MEMORY,
