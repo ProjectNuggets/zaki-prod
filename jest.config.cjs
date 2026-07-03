@@ -8,8 +8,7 @@ module.exports = {
     "\\.(css|less|scss|sass)$": "<rootDir>/src/test/styleMock.ts",
     "^@/(.*)$": "<rootDir>/src/$1",
     "^react-markdown$": "<rootDir>/src/test/reactMarkdownMock.tsx",
-    "^remark-gfm$": "<rootDir>/src/test/remarkMock.ts",
-    "^rehype-highlight$": "<rootDir>/src/test/rehypeMock.ts"
+    "^remark-gfm$": "<rootDir>/src/test/remarkMock.ts"
   },
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json"],
   testPathIgnorePatterns: ["/node_modules/", "/dist/"],

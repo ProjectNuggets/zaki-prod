@@ -47,7 +47,7 @@ export default defineConfig(({ mode }) => {
             if (id.includes('/three/')) {
               return 'vendor-three';
             }
-            if (id.includes('/troika-three-text/') || id.includes('/d3-force/') || id.includes('/d3-force-3d/')) {
+            if (id.includes('/troika-three-text/') || id.includes('/d3-force-3d/')) {
               return 'vendor-brain-graph';
             }
             if (id.includes('/@radix-ui/') || id.includes('/vaul/') || id.includes('/cmdk/') || id.includes('/input-otp/')) {
@@ -56,8 +56,6 @@ export default defineConfig(({ mode }) => {
             if (
               id.includes('/react-markdown/') ||
               id.includes('/remark-gfm/') ||
-              id.includes('/rehype-highlight/') ||
-              id.includes('/highlight.js/') ||
               id.includes('/unified/') ||
               id.includes('/micromark') ||
               id.includes('/mdast') ||
@@ -76,10 +74,7 @@ export default defineConfig(({ mode }) => {
             if (id.includes('/motion/')) {
               return 'vendor-motion';
             }
-            if (id.includes('/react-dnd/') || id.includes('/react-dnd-html5-backend/') || id.includes('/dnd-core/')) {
-              return 'vendor-dnd';
-            }
-            if (id.includes('/embla-carousel-react/') || id.includes('/react-slick/')) {
+            if (id.includes('/embla-carousel-react/')) {
               return 'vendor-carousel';
             }
             return;
