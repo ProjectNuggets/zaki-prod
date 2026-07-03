@@ -27,7 +27,10 @@ describe("anonymous work ledger", () => {
     );
 
     expect(first?.title).toBe("Summarize this launch plan");
-    expect(readAnonymousWorkLedger().items).toHaveLength(1);
+    // Read at a fixed `now` (like every other read here) so the assertion is
+    // deterministic — an arg-less read uses the real clock and expires this
+    // 2026-06-01 item once wall-time is >30 days past it (EXPIRY_MS).
+    expect(readAnonymousWorkLedger(Date.parse("2026-06-01T10:00:00.000Z")).items).toHaveLength(1);
 
     const updated = upsertAnonymousWorkItem(
       {
