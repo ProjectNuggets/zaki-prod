@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * ZAKI Spaces stream-chat two-user isolation smoke (G0-ISO-1).
+ * ZAKI Spaces stream-chat two-user isolation smoke (G0-ISO-1 + G2-ISO-3).
  *
  * Verifies that the workspace ownership gate added to streamChatHandler
  * prevents cross-tenant access to Spaces stream-chat while preserving
@@ -10,6 +10,19 @@
  * NOTE: This script requires a live backend and two real bearer tokens.
  * It is expected NOT to run to completion in a local dev environment
  * without those prerequisites. Run it in a staging/integration environment.
+ *
+ * KNOWN GAP (G2-ISO-3, pre-merge verification item): this script only exercises
+ * WORKSPACE-granularity isolation (user A's workspace vs user B's workspace, each
+ * with their own default thread). It does NOT yet cover the THREAD-granularity case
+ * added by assertWorkspaceAndThreadOwnership — i.e. two users CO-INHABITING the same
+ * workspace, where user A must be blocked from reading/updating/deleting/streaming
+ * into user B's specific thread even though A is workspace-visible. Building that
+ * negative case here requires provisioning two TYP users into one shared workspace
+ * with distinct thread ownership, which is not derivable from this script's two
+ * independent bearer tokens without live TYP admin setup. Until a co-inhabited-workspace
+ * fixture exists, verify the thread-level own-thread and cross-thread cases manually
+ * against staging (via smoke:isolation-suite or an equivalent live-TYP two-user thread
+ * setup) BEFORE merging any change to assertWorkspaceAndThreadOwnership.
  *
  * Usage:
  *   ZAKI_BASE_URL=https://api.chatzaki.com \

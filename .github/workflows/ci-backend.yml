@@ -29,9 +29,13 @@ jobs:
         run: npm --prefix backend ci
       - name: Backend lint checks
         run: npm --prefix backend run lint
+      - name: Admin-key gating lint
+        run: node scripts/lint-admin-gating.mjs
+        working-directory: backend
       - name: Root script syntax checks
         run: |
           node --check backend/src/memory/telemetry.js
+          node --check backend/scripts/lint-admin-gating.mjs
           node --check scripts/smoke-v01.mjs
           node --check scripts/smoke-hire-readiness.mjs
           node --check scripts/multiuser-hire-isolation.mjs

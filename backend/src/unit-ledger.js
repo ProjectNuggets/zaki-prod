@@ -169,9 +169,13 @@ export async function reserveUnits(
     //        REPLAY, not a reservation (C1 money exploit: with a client-controlled key this otherwise
     //        yields a FREE, UNMETERED op). Signal a DISTINCT refusal so callers reject the duplicate
     //        instead of proceeding allowed+null-hold.
+    // G2-ISO-4 defense-in-depth: scope the idempotency match to THIS user. grant_id is derived from
+    // the key string, so without user_id a key colliding across tenants would match another user's
+    // hold (cross-tenant 409 DoS). Scoping to user_id makes a foreign key's collision INVISIBLE here →
+    // it falls through to a fresh reserve against the caller's own wallet.
     const existing = await c.query(
-      `SELECT * FROM zaki_meter_holds WHERE grant_id = $1 AND reserve_idempotency_key = $2`,
-      [grantId, reserveIdempotencyKey]
+      `SELECT * FROM zaki_meter_holds WHERE grant_id = $1 AND reserve_idempotency_key = $2 AND user_id = $3`,
+      [grantId, reserveIdempotencyKey, userId]
     );
     if (existing.rows[0]) {
       const hold = existing.rows[0];
@@ -257,8 +261,8 @@ export async function reserveUnits(
       // true in-flight retry (echo idempotent); a terminal winner means the key was consumed by a
       // completed op → a REPLAY (refuse, never a free reserve — C1).
       const again = await c.query(
-        `SELECT * FROM zaki_meter_holds WHERE grant_id = $1 AND reserve_idempotency_key = $2`,
-        [grantId, reserveIdempotencyKey]
+        `SELECT * FROM zaki_meter_holds WHERE grant_id = $1 AND reserve_idempotency_key = $2 AND user_id = $3`,
+        [grantId, reserveIdempotencyKey, userId]
       );
       const winner = again.rows[0] ?? null;
       if (winner && TERMINAL_STATES.has(winner.state)) {

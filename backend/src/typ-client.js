@@ -172,6 +172,34 @@ export async function fetchTypWorkspaceSlugs(novaUserId) {
 }
 
 /**
+ * Fetch the workspace objects (incl. their threads[]) owned by a TYP user.
+ * Same source as fetchTypWorkspaceSlugs but preserves each workspace's `threads`
+ * array so callers can assert per-thread ownership (thread.user_id). Reuses
+ * fetchTypWorkspaces, which already filters to workspaces where the user owns a thread.
+ *
+ * @param {number} novaUserId — from zakiUser.nova_user_id
+ * @returns {Promise<{ success: boolean, status: number, workspaces: object[], error?: string }>}
+ */
+export async function fetchTypWorkspaceObjects(novaUserId) {
+  let response;
+  try {
+    response = await fetchTypWorkspaces(novaUserId);
+  } catch (err) {
+    return { success: false, status: 502, error: err.message, workspaces: [] };
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !Array.isArray(data?.workspaces)) {
+    return {
+      success: false,
+      status: response.status || 502,
+      error: data?.error || data?.message || "Unable to fetch workspaces.",
+      workspaces: [],
+    };
+  }
+  return { success: true, status: response.status, workspaces: data.workspaces };
+}
+
+/**
  * Forward a chat stream request to TYP's internal route.
  * Auth: pass a per-user TYP session JWT (from getTypUserSessionToken) as `authToken` —
  * the internal `/api/workspace/.../stream-chat` route requires it in multi-user mode.

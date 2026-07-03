@@ -398,6 +398,7 @@ import {
 import {
   fetchTypWorkspaces,
   fetchTypWorkspaceSlugs,
+  fetchTypWorkspaceObjects,
   requestTypChatStream,
   getTypUserSessionToken,
 } from "./typ-client.js";
@@ -489,6 +490,19 @@ const TRUST_PROXY_SETTING = (() => {
 
 function normalizeEmailValue(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function scopedMemoryUserId(email) {
+  // INVARIANT (G2-ISO-5): memory rows are keyed on normalizeUserId(email) =
+  // email.trim().toLowerCase() (see backend/src/memory/operations.js normalizeUserId
+  // and memory/routes.js normalizeScopedUserId). Account delete/export MUST key the
+  // memory_* tables on the SAME byte string, and zaki_users is deleted by id whose
+  // email column is stored already-normalized (signup uses normalizeEmail; Google uses
+  // validateGoogleIdTokenInfoPayload). Deriving the key here — instead of trusting the
+  // raw authResult.email that _resolveZakiUser returns unnormalized (index.js ~4589) —
+  // closes the gap by construction. DEFERRED: replace TEXT email key with a FK id +
+  // ON DELETE CASCADE once an email-change feature ships.
+  return normalizeEmailValue(email);
 }
 
 function parseEmailList(value) {
@@ -2786,7 +2800,7 @@ async function novaSessionRequest(path, authHeader, options = {}) {
 }
 
 async function fetchNovaUserIdByUsername(username) {
-  const response = await novaAdminRequest("/v1/users", { method: "GET" });
+  const response = await novaAdminRequest("/v1/users", { method: "GET" }); // lint-allow-admin-ungated: internal username->id lookup for provisioner, not a route handler
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !Array.isArray(data?.users)) {
     return null;
@@ -2838,6 +2852,59 @@ async function workspaceVisibleForSession(novaUserId, normalizedSlug) {
     visible: result.slugs.includes(normalizedSlug),
     slugs: result.slugs,
   };
+}
+
+/**
+ * SECURITY (G2-ISO-3): assert the caller owns BOTH the workspace and the specific thread.
+ * workspaceVisibleForSession only proves the user owns *some* thread in the workspace; this
+ * closes the thread-granularity IDOR by matching the requested thread's user_id. Returns a
+ * VERIFIED threadSlug (the canonical slug/id from TYP) that per-thread admin-key handlers MUST
+ * use instead of the raw req.params value.
+ *
+ * @param {number} novaUserId
+ * @param {string} slug — workspace slug (already normalized lower-case by caller)
+ * @param {string} threadSlug — requested thread slug (raw)
+ * @returns {Promise<{ success:boolean, status?:number, error?:string, visible:boolean, threadOwned:boolean, threadExists:boolean, slug:string, threadSlug:string }>}
+ */
+async function assertWorkspaceAndThreadOwnership(novaUserId, slug, threadSlug) {
+  const normalizedSlug = String(slug || "").trim().toLowerCase();
+  const requestedThread = String(threadSlug || "").trim();
+  const result = await fetchTypWorkspaceObjects(novaUserId);
+  if (!result.success) {
+    return { ...result, visible: false, threadOwned: false, threadExists: false, slug: normalizedSlug, threadSlug: requestedThread };
+  }
+  const userId = Number(novaUserId);
+  const workspace = result.workspaces.find(
+    (w) => String(w?.slug || "").trim().toLowerCase() === normalizedSlug
+  );
+  if (!workspace) {
+    return { success: true, status: 200, visible: false, threadOwned: false, threadExists: false, slug: normalizedSlug, threadSlug: requestedThread };
+  }
+  const threads = Array.isArray(workspace.threads) ? workspace.threads : [];
+  const requestedMatch = (t) => {
+    const tSlug = String(t?.slug || t?.id || "").trim();
+    return tSlug === requestedThread;
+  };
+  const threadExists = threads.some(requestedMatch);
+  const owned = threads.find((t) => Number(t?.user_id) === userId && requestedMatch(t));
+  return {
+    success: true,
+    status: 200,
+    visible: true,
+    threadOwned: Boolean(owned),
+    threadExists,
+    slug: normalizedSlug,
+    // Prefer the canonical slug TYP returns; fall back to the requested value.
+    threadSlug: owned ? String(owned.slug || owned.id || requestedThread).trim() : requestedThread,
+  };
+}
+
+function sendThreadOwnershipFailure(res, check) {
+  if (!check.success) {
+    res.status(check.status || 502).json({ error: check.error || "Unable to verify thread access." });
+    return;
+  }
+  res.status(403).json({ error: check.visible ? "You do not have access to this thread." : "You do not have access to this workspace." });
 }
 
 async function verifyWorkspaceDeleted(novaUserId, normalizedSlug, attempts = 3) {
@@ -3237,30 +3304,6 @@ function buildProxyHeaders(req) {
     headers.set(key, Array.isArray(value) ? value.join(",") : String(value));
   }
   return headers;
-}
-
-function copyHireResponseHeaders(upstream, res) {
-  upstream.headers.forEach((value, key) => {
-    const lower = key.toLowerCase();
-    if (
-      [
-        "connection",
-        "transfer-encoding",
-        "content-encoding",
-        "content-length",
-        "keep-alive",
-        "proxy-authenticate",
-        "proxy-authorization",
-        "set-cookie",
-        "te",
-        "trailers",
-        "upgrade",
-      ].includes(lower)
-    ) {
-      return;
-    }
-    res.setHeader(key, value);
-  });
 }
 
 function sanitizeAgentUpstreamPayload(payload) {
@@ -4116,7 +4159,12 @@ app.post("/api/admin/v1-cutover/run", express.json({ limit: "100kb" }), async (r
   }
 });
 
-await initDb();
+try {
+  await initDb();
+} catch (err) {
+  console.error("[boot] initDb failed:", err?.stack || err?.message || err);
+  process.exit(1);
+}
 await ensureSuperAdminMembersSeed();
 await loadRuntimeRateLimitSettings();
 
@@ -7694,6 +7742,7 @@ app.get("/api/account/export", async (req, res) => {
     if (!authResult) return;
     const { email, zakiUser } = authResult;
     auditUser = zakiUser;
+    const memoryKey = scopedMemoryUserId(email);
 
     const loadOptionalRows = async (sql, params = []) => {
       try {
@@ -7712,6 +7761,7 @@ app.get("/api/account/export", async (req, res) => {
       memories,
       memoryConfirmations,
       memoryConflicts,
+      memoryPreferences,
       learningStudyProfiles,
       learningStudyPlans,
       learningStudyTasks,
@@ -7736,21 +7786,27 @@ app.get("/api/account/export", async (req, res) => {
            FROM memories
            WHERE user_id = $1
            ORDER BY created_at DESC`,
-          [email]
+          [memoryKey]
         ),
         loadOptionalRows(
           `SELECT id, content, type, status, confidence_score, source_thread_id, source_message_id, created_at, updated_at
            FROM memory_confirmations
            WHERE user_id = $1
            ORDER BY created_at DESC`,
-          [email]
+          [memoryKey]
         ),
         loadOptionalRows(
           `SELECT id, new_content, new_type, new_confidence_score, conflicting_content, conflicting_type, status, resolution, created_at, resolved_at
            FROM memory_conflicts
            WHERE user_id = $1
            ORDER BY created_at DESC`,
-          [email]
+          [memoryKey]
+        ),
+        loadOptionalRows(
+          `SELECT policy, created_at, updated_at
+           FROM zaki_memory_preferences
+           WHERE user_id = $1`,
+          [memoryKey]
         ),
         loadOptionalRows(
           `SELECT profile_json, created_at, updated_at
@@ -7822,6 +7878,7 @@ app.get("/api/account/export", async (req, res) => {
         stored: memories,
         confirmations: memoryConfirmations,
         conflicts: memoryConflicts,
+        preferences: memoryPreferences,
       },
       learning,
       learningStudy: {
@@ -7864,6 +7921,7 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
     if (!authResult) return;
     const { email, zakiUser } = authResult;
     auditUser = zakiUser;
+    const memoryKey = scopedMemoryUserId(email);
 
     const validation = validateInput(DeleteAccountSchema, req.body || {});
     if (!validation.valid) {
@@ -7920,7 +7978,7 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
     try {
       const deleteByEmail = async (table) => {
         try {
-          await dbQuery(`DELETE FROM ${table} WHERE user_id = $1`, [email]);
+          await dbQuery(`DELETE FROM ${table} WHERE user_id = $1`, [memoryKey]);
         } catch (err) {
           // Table may not exist in older deployments; skip safely.
           if (err?.code !== "42P01") throw err;
@@ -7931,6 +7989,7 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
       await deleteByEmail("memory_confirmations");
       await deleteByEmail("memory_triggers");
       await deleteByEmail("memories");
+      await deleteByEmail("zaki_memory_preferences");
       await dbQuery("DELETE FROM zaki_users WHERE id = $1", [zakiUser.id]);
       await dbQuery("COMMIT");
     } catch (err) {
@@ -9501,12 +9560,18 @@ const updateThreadHandler = async (req, res) => {
     const access = await requireWorkspaceAccess(req, res);
     if (!access) return;
 
-    const threadSlug = String(access.threadSlug || req.params.threadSlug || "").trim();
+    const requestedThreadSlug = String(access.threadSlug || req.params.threadSlug || "").trim();
     const name = String(req.body?.name || "").trim();
-    if (!threadSlug || !name) {
+    if (!requestedThreadSlug || !name) {
       res.status(400).json({ error: "Thread slug and name are required." });
       return;
     }
+    const ownership = await assertWorkspaceAndThreadOwnership(access.novaUserId, access.slug, requestedThreadSlug);
+    if (!ownership.success || !ownership.threadOwned) {
+      sendThreadOwnershipFailure(res, ownership);
+      return;
+    }
+    const threadSlug = ownership.threadSlug;
 
     const response = await novaAdminRequest(
       `/v1/workspace/${access.slug}/thread/${encodeURIComponent(threadSlug)}/update`,
@@ -9550,6 +9615,8 @@ app.post(
 const threadAutoTitleHandler = createThreadAutoTitleHandler({
   requireWorkspaceAccess,
   novaAdminRequest,
+  assertWorkspaceAndThreadOwnership,
+  sendThreadOwnershipFailure,
 });
 
 app.post(
@@ -9568,11 +9635,17 @@ const deleteThreadHandler = async (req, res) => {
     const access = await requireWorkspaceAccess(req, res);
     if (!access) return;
 
-    const threadSlug = String(access.threadSlug || req.params.threadSlug || "").trim();
-    if (!threadSlug) {
+    const requestedThreadSlug = String(access.threadSlug || req.params.threadSlug || "").trim();
+    if (!requestedThreadSlug) {
       res.status(400).json({ error: "Thread slug is required." });
       return;
     }
+    const ownership = await assertWorkspaceAndThreadOwnership(access.novaUserId, access.slug, requestedThreadSlug);
+    if (!ownership.success || !ownership.threadOwned) {
+      sendThreadOwnershipFailure(res, ownership);
+      return;
+    }
+    const threadSlug = ownership.threadSlug;
 
     const response = await novaAdminRequest(
       `/v1/workspace/${access.slug}/thread/${encodeURIComponent(threadSlug)}`,
@@ -9602,11 +9675,17 @@ const getThreadChatsHandler = async (req, res) => {
     const access = await requireWorkspaceAccess(req, res);
     if (!access) return;
 
-    const threadSlug = String(access.threadSlug || req.params.threadSlug || "").trim();
-    if (!threadSlug) {
+    const requestedThreadSlug = String(access.threadSlug || req.params.threadSlug || "").trim();
+    if (!requestedThreadSlug) {
       res.status(400).json({ error: "Thread slug is required." });
       return;
     }
+    const ownership = await assertWorkspaceAndThreadOwnership(access.novaUserId, access.slug, requestedThreadSlug);
+    if (!ownership.success || !ownership.threadOwned) {
+      sendThreadOwnershipFailure(res, ownership);
+      return;
+    }
+    const threadSlug = ownership.threadSlug;
 
     const response = await novaAdminRequest(
       `/v1/workspace/${access.slug}/thread/${encodeURIComponent(threadSlug)}/chats`,
@@ -9632,7 +9711,7 @@ app.get("/api/workspace/:slug/thread/:threadSlug/chats", getThreadChatsHandler);
 
 const getAcceptedDocumentTypesHandler = async (_req, res) => {
   try {
-    const response = await novaAdminRequest("/v1/document/accepted-file-types", {
+    const response = await novaAdminRequest("/v1/document/accepted-file-types", { // lint-allow-admin-ungated: returns a static accepted-file-types list, no per-user/workspace data
       method: "GET",
     });
     const data = await response.json().catch(() => ({}));
@@ -10340,19 +10419,26 @@ function estimateSpacesChatMeterUnits(message = "", action = "spaces_chat_turn")
   return Math.round(Math.max(baseUnits, estimatedTokenUnits) * 10_000) / 10_000;
 }
 
-function readSpacesIdempotencyKey(req, action) {
+function readSpacesIdempotencyKey(req, action, userId) {
+  // G2-ISO-4: the ledger's idempotency identity is the key string (grant_id is derived from it), so a
+  // RAW client-supplied header would let user B collide with user A's key and force a 409 on A's turn
+  // (cross-tenant quota DoS). Namespace the CLIENT-controlled portion under spaces:${userId}: — mirrors
+  // the agent path's agent:${userId}:${reqId}. Cap the client part BEFORE prefixing so a long key can't
+  // be truncated down onto another user's namespace.
+  const ns = `spaces:${userId ?? "anon"}:`;
   const headerValue =
     req.headers?.["idempotency-key"] ||
     req.headers?.["x-idempotency-key"];
   const raw = Array.isArray(headerValue) ? headerValue[0] : headerValue;
   const normalizedHeader = String(raw || "").trim();
-  if (normalizedHeader) return normalizedHeader.slice(0, 180);
-  return [
+  if (normalizedHeader) return `${ns}${normalizedHeader}`.slice(0, 180);
+  const clientPart = [
     getOrCreateRequestId(req),
     req.params?.slug || "workspace",
     req.params?.threadSlug || "thread",
     normalizeMeterAction(action),
-  ].join(":").slice(0, 180);
+  ].join(":");
+  return `${ns}${clientPart}`.slice(0, 180);
 }
 
 function setSpacesMeterHeaders(res, grant, meter) {
@@ -10414,7 +10500,7 @@ async function requireSpacesMeterGrantForChat({
     return { allowed: true, action };
   }
   const normalizedAction = normalizeMeterAction(action);
-  const idempotencyKey = readSpacesIdempotencyKey(req, action);
+  const idempotencyKey = readSpacesIdempotencyKey(req, action, identity.userId);
   const estimatedUnits = estimateChatUnits({ inputChars: String(message || "").length, action });
   const grantId = deterministicGrantId(idempotencyKey);
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
@@ -10867,26 +10953,35 @@ const streamChatHandler = async (req, res) => {
       res.setHeader("X-Zaki-Spaces-Route", remappedSpacesRoute);
     }
 
-    // SECURITY (G0-ISO-1): verify the caller actually owns this workspace before any
-    // admin-key call. The anonymous-target path was already remapped to the caller's own
-    // default workspace above (remappedSpacesRoute set), so it is owned by construction and
-    // skips this check. For an explicit slug, confirm visibility for THIS session's novaUserId,
-    // mirroring requireWorkspaceAccess (index.js:3124-3134). Without this, the agent-turn admin
-    // key + doc-grounding below would run against an arbitrary victim workspace.
+    // SECURITY (G0-ISO-1 + G2-ISO-3): verify the caller owns both this workspace AND this
+    // specific thread before any admin-key call. The anonymous-target path was already
+    // remapped to the caller's own default workspace/thread above (remappedSpacesRoute set),
+    // so it is owned by construction and skips this check. For an explicit slug, confirm
+    // workspace visibility AND thread ownership for THIS session's novaUserId, mirroring
+    // requireWorkspaceAccess (index.js:3124-3134). Without this, the agent-turn admin key +
+    // doc-grounding below would run against an arbitrary victim workspace/thread.
     if (!remappedSpacesRoute) {
-      const normalizedSlug = String(slug || "").trim().toLowerCase();
-      const accessCheck = await workspaceVisibleForSession(novaUserId, normalizedSlug);
-      if (!accessCheck.success) {
-        res.status(accessCheck.status || 502).json({
-          error: accessCheck.error || "Unable to verify workspace access.",
+      const ownership = await assertWorkspaceAndThreadOwnership(novaUserId, slug, threadSlug);
+      if (!ownership.success) {
+        res.status(ownership.status || 502).json({
+          error: ownership.error || "Unable to verify workspace access.",
         });
         return;
       }
-      if (!accessCheck.visible) {
+      if (!ownership.visible) {
         res.status(403).json({ error: "You do not have access to this workspace." });
         return;
       }
-      slug = normalizedSlug;
+      // Block only a KNOWN foreign thread. A thread not yet in the workspace list is
+      // a NEW thread this (workspace-visible) user is creating — allow it, so first
+      // messages don't 403. Cross-tenant is already blocked by the visibility check
+      // above; per-user private workspaces make foreign existing threads unreachable.
+      if (ownership.threadExists && !ownership.threadOwned) {
+        res.status(403).json({ error: "You do not have access to this thread." });
+        return;
+      }
+      slug = ownership.slug;
+      threadSlug = ownership.threadSlug;
     }
 
     const requestPayload = req.body;
@@ -13270,7 +13365,7 @@ async function pipeHireResponse(req, res, upstream) {
     upstreamHeaders: upstream.headers,
   });
   res.status(upstream.status);
-  copyHireResponseHeaders(upstream, res);
+  copyResponseHeaders(upstream, res);
   if (!upstream.body) {
     res.end();
     return;

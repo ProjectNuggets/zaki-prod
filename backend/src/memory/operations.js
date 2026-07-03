@@ -186,6 +186,14 @@ async function fetchWithTimeout(url, options, { timeoutMs, label }) {
   }
 }
 
+// DEFERRED (G2-ISO-5): memories.user_id is a mutable-email TEXT key with no FK/cascade
+// to zaki_users. The full migration — add memories.owner_id BIGINT REFERENCES zaki_users(id)
+// ON DELETE CASCADE, backfill from lower(email), then drop the email-keyed column — is
+// intentionally NOT done here. It only becomes necessary when an email-change feature
+// ships (none exists today; grep for email-change routes returns nothing). Until then the
+// interim guard suffices: memory write / scope / account-delete keys are all the same
+// normalized email string (enforced by account-key-invariant.test.js). When email-change
+// lands, do the id-FK migration in the SAME change so a rename can't strand memories.
 function normalizeUserId(userId) {
   return String(userId || "").trim().toLowerCase();
 }

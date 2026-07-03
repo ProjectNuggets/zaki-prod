@@ -43,25 +43,42 @@ export async function initDb() {
     });
   }
 
-  // Check for pgvector extension
+  // Serialize schema migration across replicas (minReplicas=3): only one
+  // boot runs the idempotent DDL at a time. The lock is session-scoped, so
+  // it is pinned to a single checked-out client for the whole migration
+  // (a pg.Pool does not guarantee the same physical connection across
+  // separate pool.query calls). Released in the finally below.
+  // 8534127 is an arbitrary fixed app key (must match the unlock call).
+  const MIGRATION_LOCK_KEY = 8534127;
+  const migrationClient = await pool.connect();
   try {
-    const result = await pool.query(`
-      SELECT EXISTS (
-        SELECT 1 FROM pg_extension WHERE extname = 'vector'
-      ) as has_vector;
-    `);
-    if (result.rows[0]?.has_vector) {
-      console.log("[DB] pgvector extension detected ✓");
-    } else {
-      console.warn("[DB] pgvector extension not installed");
-      console.warn("[DB] Run: CREATE EXTENSION vector; in the zaki database");
+    // Fail-fast backstop: a hung DDL/lock-wait would otherwise block every other
+    // replica on the advisory lock forever. On timeout the query errors → initDb
+    // throws → boot exit(1) → session ends → advisory lock auto-releases.
+    await migrationClient.query("SET statement_timeout = '120s'");
+    await migrationClient.query("SELECT pg_advisory_lock($1)", [
+      MIGRATION_LOCK_KEY,
+    ]);
+
+    // Check for pgvector extension
+    try {
+      const result = await migrationClient.query(`
+        SELECT EXISTS (
+          SELECT 1 FROM pg_extension WHERE extname = 'vector'
+        ) as has_vector;
+      `);
+      if (result.rows[0]?.has_vector) {
+        console.log("[DB] pgvector extension detected ✓");
+      } else {
+        console.warn("[DB] pgvector extension not installed");
+        console.warn("[DB] Run: CREATE EXTENSION vector; in the zaki database");
+      }
+    } catch (err) {
+      console.warn("[DB] Could not check for pgvector:", err.message);
     }
-  } catch (err) {
-    console.warn("[DB] Could not check for pgvector:", err.message);
-  }
 
   // Users table
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_users (
       id BIGSERIAL PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
@@ -75,7 +92,7 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_admin_members (
       email TEXT PRIMARY KEY,
       role TEXT NOT NULL DEFAULT 'admin' CHECK (role IN ('admin', 'super_admin')),
@@ -86,12 +103,12 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_admin_members_active_role
     ON zaki_admin_members (active, role);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_workspace_metadata (
       workspace_slug TEXT PRIMARY KEY,
       description TEXT,
@@ -103,7 +120,7 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_spaces_defaults (
       zaki_user_id BIGINT PRIMARY KEY REFERENCES zaki_users(id) ON DELETE CASCADE,
       nova_user_id BIGINT,
@@ -114,7 +131,7 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS verification_tokens (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
@@ -125,7 +142,7 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
@@ -136,38 +153,38 @@ export async function initDb() {
     );
   `);
 
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS full_name TEXT;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS date_of_birth TEXT;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS google_sub TEXT;");
-  await pool.query(`
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS full_name TEXT;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS date_of_birth TEXT;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS google_sub TEXT;");
+  await migrationClient.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_zaki_users_google_sub
       ON zaki_users (google_sub)
       WHERE google_sub IS NOT NULL;
   `);
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS auth_provider TEXT;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_price_id TEXT;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS creem_customer_id TEXT;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS creem_subscription_id TEXT;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS creem_product_id TEXT;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS plan_tier TEXT DEFAULT 'free';");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS plan_status TEXT DEFAULT 'inactive';");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMPTZ;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOLEAN DEFAULT FALSE;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS billing_updated_at TIMESTAMPTZ;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS meter_entitlement_started_at TIMESTAMPTZ;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_last_event_created_at TIMESTAMPTZ;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_last_event_id TEXT;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS access_expires_at TIMESTAMPTZ;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS access_code_campaign TEXT;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS access_code_last TEXT;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS student_verified BOOLEAN DEFAULT FALSE;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS student_verified_at TIMESTAMPTZ;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS legal_consent_at TIMESTAMPTZ;");
-  await pool.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS legal_consent_version TEXT;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS auth_provider TEXT;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_price_id TEXT;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS creem_customer_id TEXT;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS creem_subscription_id TEXT;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS creem_product_id TEXT;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS plan_tier TEXT DEFAULT 'free';");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS plan_status TEXT DEFAULT 'inactive';");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMPTZ;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOLEAN DEFAULT FALSE;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS billing_updated_at TIMESTAMPTZ;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS meter_entitlement_started_at TIMESTAMPTZ;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_last_event_created_at TIMESTAMPTZ;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS stripe_last_event_id TEXT;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS access_expires_at TIMESTAMPTZ;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS access_code_campaign TEXT;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS access_code_last TEXT;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS student_verified BOOLEAN DEFAULT FALSE;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS student_verified_at TIMESTAMPTZ;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS legal_consent_at TIMESTAMPTZ;");
+  await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS legal_consent_version TEXT;");
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS legal_consent_events (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
@@ -179,13 +196,13 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_legal_consent_events_user
     ON legal_consent_events (user_id, consented_at DESC);
   `);
 
   // Shared conversations table
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS shared_conversations (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       token TEXT UNIQUE NOT NULL,
@@ -202,16 +219,16 @@ export async function initDb() {
     );
   `);
   
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_shared_conversations_token ON shared_conversations(token);
   `);
   
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_shared_conversations_user_id ON shared_conversations(user_id);
   `);
 
   // Access codes (campaign-based, monthly)
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS access_codes (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       code TEXT UNIQUE NOT NULL,
@@ -225,7 +242,7 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS access_code_redemptions (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       code_id UUID NOT NULL REFERENCES access_codes(id) ON DELETE CASCADE,
@@ -237,20 +254,20 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_access_codes_code ON access_codes(code);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_access_codes_code_normalized
     ON access_codes (UPPER(regexp_replace(code, '[\\s-]+', '', 'g')));
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_access_redemptions_user ON access_code_redemptions(user_id);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_learning_account_audit_events (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT,
@@ -263,12 +280,12 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_learning_account_audit_subject
     ON zaki_learning_account_audit_events(subject_hash, created_at DESC, id DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_learning_study_profiles (
       user_id BIGINT PRIMARY KEY REFERENCES zaki_users(id) ON DELETE CASCADE,
       profile_json JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -277,7 +294,7 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_learning_study_plans (
       id TEXT PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
@@ -290,12 +307,12 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_learning_study_plans_user_status
     ON zaki_learning_study_plans(user_id, status, updated_at DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_learning_study_tasks (
       id TEXT PRIMARY KEY,
       plan_id TEXT NOT NULL REFERENCES zaki_learning_study_plans(id) ON DELETE CASCADE,
@@ -312,12 +329,12 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_learning_study_tasks_user_plan
     ON zaki_learning_study_tasks(user_id, plan_id, created_at ASC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_design_projects (
       project_id TEXT PRIMARY KEY,
       owner_user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
@@ -333,12 +350,12 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_design_projects_owner_status
     ON zaki_design_projects(owner_user_id, status, updated_at DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_design_project_roles (
       project_id TEXT NOT NULL REFERENCES zaki_design_projects(project_id) ON DELETE CASCADE,
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
@@ -349,12 +366,12 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_design_project_roles_user
     ON zaki_design_project_roles(user_id, role, updated_at DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_design_project_audit_events (
       id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
       user_id BIGINT REFERENCES zaki_users(id) ON DELETE SET NULL,
@@ -367,12 +384,12 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_design_project_audit_user_created
     ON zaki_design_project_audit_events(user_id, created_at DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS access_code_orders (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
@@ -394,17 +411,17 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_access_code_orders_user_created
     ON access_code_orders (user_id, created_at DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_access_code_orders_email_status_updated
     ON access_code_orders (email_status, updated_at DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS billing_topup_orders (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
@@ -423,12 +440,12 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_billing_topup_orders_user_created
     ON billing_topup_orders (user_id, created_at DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS billing_webhook_events (
       id BIGSERIAL PRIMARY KEY,
       provider TEXT NOT NULL,
@@ -438,7 +455,7 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS product_analytics_events (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
@@ -452,17 +469,17 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_product_analytics_events_created_at
     ON product_analytics_events (created_at DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_product_analytics_events_user_event
     ON product_analytics_events (user_id, event, created_at DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_usage_events (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
@@ -485,22 +502,22 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_usage_events_created_at
     ON zaki_usage_events (created_at DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_usage_events_user_product
     ON zaki_usage_events (user_id, product_id, created_at DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_usage_events_surface_event
     ON zaki_usage_events (surface, event_type, created_at DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_hire_audit_events (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
@@ -514,17 +531,17 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_hire_audit_events_user_created
     ON zaki_hire_audit_events (user_id, created_at DESC, id DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_hire_audit_events_action_created
     ON zaki_hire_audit_events (action, created_at DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS website_feedback_posts (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       body TEXT NOT NULL,
@@ -535,12 +552,12 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_website_feedback_posts_visible_created
     ON website_feedback_posts (status, created_at DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS website_feedback_votes (
       post_id UUID NOT NULL REFERENCES website_feedback_posts(id) ON DELETE CASCADE,
       client_id TEXT NOT NULL,
@@ -551,12 +568,12 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_website_feedback_votes_post
     ON website_feedback_votes (post_id, updated_at DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS website_beta_waitlist (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       email TEXT NOT NULL UNIQUE,
@@ -575,54 +592,54 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(
+  await migrationClient.query(
     "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS name TEXT;"
   );
-  await pool.query(
+  await migrationClient.query(
     "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS role TEXT;"
   );
-  await pool.query(
+  await migrationClient.query(
     "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS use_case TEXT;"
   );
-  await pool.query(
+  await migrationClient.query(
     "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS locale TEXT;"
   );
-  await pool.query(
+  await migrationClient.query(
     "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS source TEXT;"
   );
-  await pool.query(
+  await migrationClient.query(
     "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS submission_count INT NOT NULL DEFAULT 1;"
   );
-  await pool.query(
+  await migrationClient.query(
     "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS first_submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW();"
   );
-  await pool.query(
+  await migrationClient.query(
     "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS last_submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW();"
   );
-  await pool.query(
+  await migrationClient.query(
     "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS ip_address TEXT;"
   );
-  await pool.query(
+  await migrationClient.query(
     "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS user_agent TEXT;"
   );
-  await pool.query(
+  await migrationClient.query(
     "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();"
   );
-  await pool.query(
+  await migrationClient.query(
     "ALTER TABLE website_beta_waitlist ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();"
   );
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_website_beta_waitlist_last_submitted
     ON website_beta_waitlist (last_submitted_at DESC, created_at DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_website_beta_waitlist_source
     ON website_beta_waitlist (source, last_submitted_at DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_bot_messages (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
@@ -634,17 +651,17 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     ALTER TABLE zaki_bot_messages
       ADD COLUMN IF NOT EXISTS events_jsonb JSONB NOT NULL DEFAULT '[]'::jsonb;
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_bot_messages_user_thread
     ON zaki_bot_messages (user_id, space_id, thread_id, id ASC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_bot_threads (
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
       space_id TEXT NOT NULL,
@@ -657,12 +674,12 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_bot_threads_user_last_active
     ON zaki_bot_threads (user_id, last_active_at DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_daily_prompt_usage (
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
       usage_date DATE NOT NULL,
@@ -673,12 +690,12 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_daily_prompt_usage_date_bucket
     ON zaki_daily_prompt_usage (usage_date, bucket);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_anonymous_prompt_usage (
       anon_key_hash TEXT NOT NULL,
       usage_date DATE NOT NULL,
@@ -689,12 +706,12 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_anonymous_prompt_usage_date_bucket
     ON zaki_anonymous_prompt_usage (usage_date, bucket);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_anonymous_device_usage (
       device_signal_hash TEXT NOT NULL,
       usage_date DATE NOT NULL,
@@ -705,12 +722,12 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_anonymous_device_usage_date_bucket
     ON zaki_anonymous_device_usage (usage_date, bucket);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_rate_limit_hits (
       rate_key TEXT PRIMARY KEY,
       total_hits INT NOT NULL DEFAULT 0,
@@ -719,12 +736,12 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_rate_limit_hits_reset_at
     ON zaki_rate_limit_hits (reset_at);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_login_failures (
       email TEXT PRIMARY KEY,
       failure_count INT NOT NULL DEFAULT 0,
@@ -733,12 +750,12 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_login_failures_reset_at
     ON zaki_login_failures (reset_at);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_meter_grants (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       tenant_id TEXT NOT NULL,
@@ -765,31 +782,31 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_meter_grants_user_created
     ON zaki_meter_grants (user_id, created_at DESC)
     WHERE user_id IS NOT NULL;
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_meter_grants_anonymous_created
     ON zaki_meter_grants (anonymous_key_hash, created_at DESC)
     WHERE anonymous_key_hash IS NOT NULL;
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_zaki_meter_grants_user_idempotency
     ON zaki_meter_grants (tenant_id, user_id, product_id, idempotency_key)
     WHERE user_id IS NOT NULL AND idempotency_key IS NOT NULL;
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_zaki_meter_grants_anonymous_idempotency
     ON zaki_meter_grants (tenant_id, anonymous_key_hash, product_id, idempotency_key)
     WHERE anonymous_key_hash IS NOT NULL AND idempotency_key IS NOT NULL;
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_meter_receipts (
       id BIGSERIAL PRIMARY KEY,
       grant_id UUID NOT NULL REFERENCES zaki_meter_grants(id) ON DELETE CASCADE,
@@ -808,12 +825,12 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_meter_receipts_grant_created
     ON zaki_meter_receipts (grant_id, created_at DESC);
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_runtime_settings (
       setting_key TEXT PRIMARY KEY,
       value_json JSONB NOT NULL,
@@ -823,7 +840,7 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_bot_messages_legacy (
       id BIGSERIAL PRIMARY KEY,
       legacy_message_id BIGINT,
@@ -838,7 +855,7 @@ export async function initDb() {
     );
   `);
 
-  const zakiBotUserIdType = await pool.query(`
+  const zakiBotUserIdType = await migrationClient.query(`
     SELECT data_type
     FROM information_schema.columns
     WHERE table_schema = 'public'
@@ -848,9 +865,9 @@ export async function initDb() {
   `);
   const currentZakiBotUserIdType = String(zakiBotUserIdType.rows?.[0]?.data_type || "").toLowerCase();
   if (currentZakiBotUserIdType && currentZakiBotUserIdType !== "bigint") {
-    await pool.query("BEGIN");
+    await migrationClient.query("BEGIN");
     try {
-      await pool.query(`
+      await migrationClient.query(`
         CREATE TABLE IF NOT EXISTS zaki_bot_messages_new (
           id BIGSERIAL PRIMARY KEY,
           user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
@@ -862,7 +879,7 @@ export async function initDb() {
         );
       `);
 
-      await pool.query(`
+      await migrationClient.query(`
         INSERT INTO zaki_bot_messages_legacy (
           legacy_message_id,
           legacy_user_id_text,
@@ -896,7 +913,7 @@ export async function initDb() {
         );
       `);
 
-      await pool.query(`
+      await migrationClient.query(`
         INSERT INTO zaki_bot_messages_new (
           id,
           user_id,
@@ -920,55 +937,55 @@ export async function initDb() {
         WHERE src.user_id ~ '^[0-9]{1,18}$';
       `);
 
-      await pool.query("DROP TABLE zaki_bot_messages;");
-      await pool.query("ALTER TABLE zaki_bot_messages_new RENAME TO zaki_bot_messages;");
-      await pool.query(`
+      await migrationClient.query("DROP TABLE zaki_bot_messages;");
+      await migrationClient.query("ALTER TABLE zaki_bot_messages_new RENAME TO zaki_bot_messages;");
+      await migrationClient.query(`
         CREATE INDEX IF NOT EXISTS idx_zaki_bot_messages_user_thread
         ON zaki_bot_messages (user_id, space_id, thread_id, id ASC);
       `);
-      await pool.query(`
+      await migrationClient.query(`
         SELECT setval(
           pg_get_serial_sequence('zaki_bot_messages', 'id'),
           GREATEST(COALESCE((SELECT MAX(id) FROM zaki_bot_messages), 0), 1),
           true
         );
       `);
-      await pool.query("COMMIT");
+      await migrationClient.query("COMMIT");
       console.log("[DB] Migrated zaki_bot_messages.user_id to BIGINT with quarantine handling.");
     } catch (error) {
-      await pool.query("ROLLBACK");
+      await migrationClient.query("ROLLBACK");
       throw error;
     }
   }
 
-  const zakiBotIdSeqResult = await pool.query(`
+  const zakiBotIdSeqResult = await migrationClient.query(`
     SELECT pg_get_serial_sequence('zaki_bot_messages', 'id') AS seq;
   `);
   let zakiBotIdSeq = String(zakiBotIdSeqResult.rows?.[0]?.seq || "").trim();
   if (!zakiBotIdSeq) {
-    await pool.query("BEGIN");
+    await migrationClient.query("BEGIN");
     try {
-      await pool.query(`
+      await migrationClient.query(`
         CREATE SEQUENCE IF NOT EXISTS zaki_bot_messages_id_seq;
       `);
-      await pool.query(`
+      await migrationClient.query(`
         ALTER TABLE zaki_bot_messages
         ALTER COLUMN id SET DEFAULT nextval('zaki_bot_messages_id_seq');
       `);
-      await pool.query(`
+      await migrationClient.query(`
         ALTER SEQUENCE zaki_bot_messages_id_seq
         OWNED BY zaki_bot_messages.id;
       `);
-      await pool.query("COMMIT");
+      await migrationClient.query("COMMIT");
       zakiBotIdSeq = "public.zaki_bot_messages_id_seq";
       console.log("[DB] Repaired zaki_bot_messages.id auto-increment sequence.");
     } catch (error) {
-      await pool.query("ROLLBACK");
+      await migrationClient.query("ROLLBACK");
       throw error;
     }
   }
 
-  await pool.query(
+  await migrationClient.query(
     `
       SELECT setval(
         $1::regclass,
@@ -979,7 +996,7 @@ export async function initDb() {
     [zakiBotIdSeq]
   );
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_hidden_workspaces (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
@@ -990,14 +1007,14 @@ export async function initDb() {
     );
   `);
 
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_hidden_workspaces_user
     ON zaki_hidden_workspaces (user_id, created_at DESC);
   `);
 
   // Memories table with vector support
   try {
-    await pool.query(`
+    await migrationClient.query(`
       CREATE TABLE IF NOT EXISTS memories (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id TEXT NOT NULL,
@@ -1013,25 +1030,25 @@ export async function initDb() {
     `);
     
     // P0 Enhancement: Add importance scoring and access tracking columns
-    await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS importance_score FLOAT DEFAULT 0.5;`);
-    await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS confidence_score FLOAT DEFAULT 0.8;`);
-    await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS access_count INT DEFAULT 0;`);
-    await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS last_accessed_at TIMESTAMPTZ;`);
-    await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS decay_rate FLOAT DEFAULT 0.01;`);
-    await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS user_verified BOOLEAN DEFAULT FALSE;`);
-    await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS source_thread_id TEXT;`);
-    await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS source_message_id TEXT;`);
-    await pool.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';`);
+    await migrationClient.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS importance_score FLOAT DEFAULT 0.5;`);
+    await migrationClient.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS confidence_score FLOAT DEFAULT 0.8;`);
+    await migrationClient.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS access_count INT DEFAULT 0;`);
+    await migrationClient.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS last_accessed_at TIMESTAMPTZ;`);
+    await migrationClient.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS decay_rate FLOAT DEFAULT 0.01;`);
+    await migrationClient.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS user_verified BOOLEAN DEFAULT FALSE;`);
+    await migrationClient.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS source_thread_id TEXT;`);
+    await migrationClient.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS source_message_id TEXT;`);
+    await migrationClient.query(`ALTER TABLE memories ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';`);
     
     // Create indexes for efficient querying
-    await pool.query(`
+    await migrationClient.query(`
       CREATE INDEX IF NOT EXISTS idx_memories_user_id ON memories(user_id);
     `);
-    await pool.query(`
+    await migrationClient.query(`
       CREATE INDEX IF NOT EXISTS idx_memories_content_hash ON memories(user_id, content_hash);
     `);
     // Enforce exact dedupe integrity at DB layer.
-    await pool.query(`
+    await migrationClient.query(`
       DELETE FROM memories older
       USING memories newer
       WHERE older.user_id = newer.user_id
@@ -1041,35 +1058,35 @@ export async function initDb() {
           OR (older.created_at = newer.created_at AND older.id < newer.id)
         );
     `);
-    await pool.query(`
+    await migrationClient.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_user_content_hash_unique
       ON memories(user_id, content_hash);
     `);
-    await pool.query(`
+    await migrationClient.query(`
       CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(user_id, importance_score DESC);
     `);
     // Speeds active-only filters (findConflict, identity core, retrieval) and the
     // outdated-row retention sweep (pruneOutdatedMemories).
-    await pool.query(`
+    await migrationClient.query(`
       CREATE INDEX IF NOT EXISTS idx_memories_user_status ON memories(user_id, status);
     `);
     // Conflict-key lookup for findConflict's subject-scoped supersede. Lives in the
     // memories block (not a review-flow table block) so it survives that cleanup.
-    await pool.query(`
+    await migrationClient.query(`
       CREATE INDEX IF NOT EXISTS idx_memories_conflict_key
       ON memories ((metadata->>'conflictKey'));
     `);
 
     // Vector similarity index (IVFFlat for approximate search)
     try {
-      await pool.query(`
+      await migrationClient.query(`
         CREATE INDEX IF NOT EXISTS idx_memories_embedding 
         ON memories USING ivfflat (embedding vector_cosine_ops)
         WITH (lists = 100);
       `);
     } catch {
       // IVFFlat requires data to exist, use HNSW instead
-      await pool.query(`
+      await migrationClient.query(`
         CREATE INDEX IF NOT EXISTS idx_memories_embedding 
         ON memories USING hnsw (embedding vector_cosine_ops);
       `).catch(() => {
@@ -1084,7 +1101,7 @@ export async function initDb() {
   
   // P0 Enhancement: Proactive Memory Triggers table
   try {
-    await pool.query(`
+    await migrationClient.query(`
       CREATE TABLE IF NOT EXISTS memory_triggers (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id TEXT NOT NULL,
@@ -1099,13 +1116,13 @@ export async function initDb() {
       );
     `);
     
-    await pool.query(`
+    await migrationClient.query(`
       CREATE INDEX IF NOT EXISTS idx_memory_triggers_user_date 
       ON memory_triggers(user_id, trigger_date) 
       WHERE fired = FALSE;
     `);
     
-    await pool.query(`
+    await migrationClient.query(`
       CREATE INDEX IF NOT EXISTS idx_memory_triggers_pending
       ON memory_triggers(trigger_date)
       WHERE fired = FALSE;
@@ -1123,7 +1140,7 @@ export async function initDb() {
   // GDPR delete-by-email both tolerate the tables' absence (Postgres 42P01).
 
   try {
-    await pool.query(`
+    await migrationClient.query(`
       CREATE TABLE IF NOT EXISTS zaki_memory_preferences (
         user_id TEXT PRIMARY KEY,
         policy TEXT NOT NULL DEFAULT 'balanced',
@@ -1138,7 +1155,7 @@ export async function initDb() {
 
   // Translation cache for memory conflict keys
   try {
-    await pool.query(`
+    await migrationClient.query(`
       CREATE TABLE IF NOT EXISTS memory_translation_cache (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         source_text TEXT NOT NULL,
@@ -1149,7 +1166,7 @@ export async function initDb() {
       );
     `);
 
-    await pool.query(`
+    await migrationClient.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_translation_cache_source
       ON memory_translation_cache (source_text);
     `);
@@ -1163,7 +1180,7 @@ export async function initDb() {
 
   // P0: Persistent undo windows (survives restarts / multi-instance)
   try {
-    await pool.query(`
+    await migrationClient.query(`
       CREATE TABLE IF NOT EXISTS memory_undo_windows (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         memory_id UUID NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
@@ -1174,12 +1191,12 @@ export async function initDb() {
       );
     `);
 
-    await pool.query(`
+    await migrationClient.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_undo_windows_memory_id
       ON memory_undo_windows(memory_id);
     `);
 
-    await pool.query(`
+    await migrationClient.query(`
       CREATE INDEX IF NOT EXISTS idx_memory_undo_windows_user_active
       ON memory_undo_windows(user_id, expires_at DESC)
       WHERE used_at IS NULL;
@@ -1191,7 +1208,7 @@ export async function initDb() {
   }
 
   // --- ZAKI sessions (v2.0 OATH phase) ---
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_sessions (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
@@ -1204,26 +1221,26 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_sessions_user_id
       ON zaki_sessions (user_id);
   `);
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_sessions_active
       ON zaki_sessions (user_id, last_used_at DESC)
       WHERE revoked_at IS NULL;
   `);
-  await pool.query(`
+  await migrationClient.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_zaki_sessions_refresh_hash
       ON zaki_sessions (refresh_token_hash);
   `);
   // Phase 04-typ-adapter: TYP-03 — drop typ_session_token from running DBs
-  await pool.query(`
+  await migrationClient.query(`
     ALTER TABLE zaki_sessions DROP COLUMN IF EXISTS typ_session_token;
   `);
 
   // --- Agent-generated file ownership registry ---
-  await pool.query(`
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_generated_files (
       storage_filename TEXT PRIMARY KEY,
       zaki_user_id TEXT NOT NULL,
@@ -1234,7 +1251,7 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
-  await pool.query(`
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_generated_files_user
       ON zaki_generated_files (zaki_user_id);
   `);
@@ -1243,8 +1260,8 @@ export async function initDb() {
   // Dynamic import avoids a static circular dependency (unit-ledger.js imports db.js).
   try {
     const { UNIT_LEDGER_DDL } = await import("./unit-ledger.js");
-    await pool.query(UNIT_LEDGER_DDL);
-    await pool.query(`
+    await migrationClient.query(UNIT_LEDGER_DDL);
+    await migrationClient.query(`
       ALTER TABLE IF EXISTS zaki_unit_wallets
         ADD COLUMN IF NOT EXISTS weekly_anchor_at TIMESTAMPTZ,
         ADD COLUMN IF NOT EXISTS weekly_reset_at TIMESTAMPTZ;
@@ -1258,10 +1275,16 @@ export async function initDb() {
   // Dynamic import keeps this DDL colocated with the service while avoiding import cycles.
   try {
     const { V1_CUTOVER_DDL } = await import("./v1-cutover.js");
-    await pool.query(V1_CUTOVER_DDL);
+    await migrationClient.query(V1_CUTOVER_DDL);
     console.log("[DB] V1 cutover tables ready");
   } catch (err) {
     console.warn("[DB] V1 cutover table creation failed:", err.message);
+  }
+  } finally {
+    await migrationClient
+      .query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY])
+      .catch(() => {});
+    migrationClient.release();
   }
 }
 

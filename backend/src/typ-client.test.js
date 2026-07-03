@@ -2,6 +2,7 @@ import { describe, expect, test, jest, beforeEach, afterEach } from "@jest/globa
 import {
   fetchTypWorkspaces,
   fetchTypWorkspaceSlugs,
+  fetchTypWorkspaceObjects,
   requestTypChatStream,
   mintTypUserSession,
   getTypUserSessionToken,
@@ -128,6 +129,66 @@ describe("fetchTypWorkspaceSlugs", () => {
     expect(result.status).toBe(403);
     expect(result.error).toBe("Unauthorized workspace access");
     expect(result.slugs).toEqual([]);
+  });
+});
+
+// G2-ISO-3: fetchTypWorkspaceObjects — returns full workspace objects (incl. threads[]) so
+// callers can assert per-thread ownership, not just workspace-level slugs.
+describe("fetchTypWorkspaceObjects", () => {
+  test("returns { success: true, workspaces } preserving each workspace's threads[]", async () => {
+    const mockWorkspaces = [
+      {
+        slug: "space-1",
+        threads: [
+          { slug: "thread-a", user_id: 42 },
+          { slug: "thread-b", user_id: 99 },
+        ],
+      },
+    ];
+    const fakeResponse = {
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({ workspaces: mockWorkspaces }),
+    };
+    jest.spyOn(global, "fetch").mockResolvedValue(fakeResponse);
+
+    const result = await fetchTypWorkspaceObjects(42);
+
+    expect(result.success).toBe(true);
+    expect(result.status).toBe(200);
+    expect(result.workspaces).toHaveLength(1);
+    expect(result.workspaces[0].slug).toBe("space-1");
+    expect(result.workspaces[0].threads).toEqual([
+      { slug: "thread-a", user_id: 42 },
+      { slug: "thread-b", user_id: 99 },
+    ]);
+  });
+
+  test("returns { success: false, status, error, workspaces: [] } on non-ok response", async () => {
+    const fakeResponse = {
+      ok: false,
+      status: 403,
+      json: jest.fn().mockResolvedValue({ error: "Unauthorized workspace access" }),
+    };
+    jest.spyOn(global, "fetch").mockResolvedValue(fakeResponse);
+
+    const result = await fetchTypWorkspaceObjects(99);
+
+    expect(result.success).toBe(false);
+    expect(result.status).toBe(403);
+    expect(result.error).toBe("Unauthorized workspace access");
+    expect(result.workspaces).toEqual([]);
+  });
+
+  test("returns { success: false } when the upstream fetch throws", async () => {
+    jest.spyOn(global, "fetch").mockRejectedValue(new Error("network down"));
+
+    const result = await fetchTypWorkspaceObjects(1);
+
+    expect(result.success).toBe(false);
+    expect(result.status).toBe(502);
+    expect(result.error).toBe("network down");
+    expect(result.workspaces).toEqual([]);
   });
 });
 
