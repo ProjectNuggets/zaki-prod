@@ -50,9 +50,6 @@ export default defineConfig(({ mode }) => {
             if (id.includes('/troika-three-text/') || id.includes('/d3-force/') || id.includes('/d3-force-3d/')) {
               return 'vendor-brain-graph';
             }
-            if (id.includes('/@mui/') || id.includes('/@emotion/') || id.includes('/@popperjs/')) {
-              return 'vendor-mui';
-            }
             if (id.includes('/@radix-ui/') || id.includes('/vaul/') || id.includes('/cmdk/') || id.includes('/input-otp/')) {
               return 'vendor-ui';
             }
