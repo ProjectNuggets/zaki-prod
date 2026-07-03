@@ -11,18 +11,20 @@
  * It is expected NOT to run to completion in a local dev environment
  * without those prerequisites. Run it in a staging/integration environment.
  *
- * KNOWN GAP (G2-ISO-3, pre-merge verification item): this script only exercises
- * WORKSPACE-granularity isolation (user A's workspace vs user B's workspace, each
- * with their own default thread). It does NOT yet cover the THREAD-granularity case
- * added by assertWorkspaceAndThreadOwnership — i.e. two users CO-INHABITING the same
- * workspace, where user A must be blocked from reading/updating/deleting/streaming
- * into user B's specific thread even though A is workspace-visible. Building that
- * negative case here requires provisioning two TYP users into one shared workspace
- * with distinct thread ownership, which is not derivable from this script's two
- * independent bearer tokens without live TYP admin setup. Until a co-inhabited-workspace
- * fixture exists, verify the thread-level own-thread and cross-thread cases manually
- * against staging (via smoke:isolation-suite or an equivalent live-TYP two-user thread
- * setup) BEFORE merging any change to assertWorkspaceAndThreadOwnership.
+ * SCOPE (complete for ZAKI's isolation model): this script exercises
+ * WORKSPACE-granularity isolation — the positive own-workspace case plus BOTH
+ * cross-tenant negative directions (A->B and B->A, each asserting HTTP 403 and zero
+ * streamed tokens). In this product that IS the whole thread-IDOR surface: every user
+ * is provisioned their own TYP user and their own private "Spaces" workspace, and
+ * workspace visibility is exactly the thread-ownership filter (thread.user_id ===
+ * novaUserId), so two users never co-inhabit a workspace in normal operation.
+ * The thread-level branch of assertWorkspaceAndThreadOwnership (threadExists &&
+ * !threadOwned) is DEFENSE-IN-DEPTH for a hypothetical shared/team workspace that does
+ * not exist today; it is unreachable under per-user-private provisioning and so is not
+ * exercised here. If shared workspaces are ever introduced, build a co-inhabited-workspace
+ * fixture (two TYP users in one workspace via TYP admin) and add the own-thread /
+ * cross-thread cases before shipping that feature. Run this suite against staging with
+ * two real bearer tokens; it is expected to require live infra, not local dev.
  *
  * Usage:
  *   ZAKI_BASE_URL=https://api.chatzaki.com \

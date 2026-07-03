@@ -2876,6 +2876,11 @@ async function workspaceVisibleForSession(novaUserId, normalizedSlug) {
  * VERIFIED threadSlug (the canonical slug/id from TYP) that per-thread admin-key handlers MUST
  * use instead of the raw req.params value.
  *
+ * Model note: users are provisioned one private "Spaces" workspace each and never co-inhabit
+ * a workspace, so the !visible (cross-workspace) branch is what blocks the reachable attack.
+ * The threadExists && !threadOwned branch is defense-in-depth for a future shared/team
+ * workspace; keep it — it costs nothing and pre-closes the IDOR if that model is ever added.
+ *
  * @param {number} novaUserId
  * @param {string} slug — workspace slug (already normalized lower-case by caller)
  * @param {string} threadSlug — requested thread slug (raw)
