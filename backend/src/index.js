@@ -46,7 +46,7 @@ import {
   buildAcceptedDocumentTypesFallback,
   normalizeAcceptedDocumentTypesPayload,
 } from "./document-accepted-types.js";
-import { markWebhookEventProcessed as markWebhookEventProcessedOnce } from "./billing-webhook-events.js";
+import { markWebhookEventProcessed as markWebhookEventProcessedOnce, hasWebhookEventBeenProcessed as hasWebhookEventProcessedOnce } from "./billing-webhook-events.js";
 import { createBillingHealthTracker } from "./billing-health.js";
 import { createBillingAlertDispatcher } from "./billing-alerts.js";
 import {
@@ -67,6 +67,7 @@ import {
   createBillingReconcileHandler,
 } from "./billing-route-handlers.js";
 import { createStripeWebhookHandler } from "./billing-stripe-webhook-handler.js";
+import { copyResponseHeaders } from "./upstream-headers.js";
 import {
   buildAgentForwardHeaders,
   buildAgentRetrySsePayload,
@@ -2372,6 +2373,8 @@ const stripeWebhookHandler = createStripeWebhookHandler({
   stripeWebhookSecret: STRIPE_WEBHOOK_SECRET,
   markWebhookEventProcessed: (provider, eventId) =>
     markWebhookEventProcessedOnce(dbGet, { provider, eventId }),
+  hasWebhookEventBeenProcessed: (provider, eventId) =>
+    hasWebhookEventProcessedOnce(dbGet, { provider, eventId }),
   billingHealth,
   emitBillingAlert,
   normalizeEmail,
@@ -3234,40 +3237,6 @@ function buildProxyHeaders(req) {
     headers.set(key, Array.isArray(value) ? value.join(",") : String(value));
   }
   return headers;
-}
-
-// Headers we must NOT copy from an upstream (engine) response onto the client response.
-// Beyond hop-by-hop headers, this strips the upstream's CORS headers: AnythingLLM responds with
-// `Access-Control-Allow-Origin: *`, and copying it would OVERWRITE the BFF's own cors() middleware
-// value. A browser rejects a wildcard ACAO when the request is `credentials: 'include'` — which is
-// exactly why the chat stream failed in the browser ("Failed to fetch") while node/in-pod calls
-// (no CORS enforcement) succeeded. Let the BFF's cors() own all Access-Control-* headers.
-const UPSTREAM_HEADER_BLOCKLIST = new Set([
-  "connection",
-  "transfer-encoding",
-  "content-encoding",
-  "content-length",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailers",
-  "upgrade",
-  "access-control-allow-origin",
-  "access-control-allow-credentials",
-  "access-control-allow-methods",
-  "access-control-allow-headers",
-  "access-control-expose-headers",
-  "access-control-max-age",
-]);
-
-function copyResponseHeaders(upstream, res) {
-  upstream.headers.forEach((value, key) => {
-    if (UPSTREAM_HEADER_BLOCKLIST.has(key.toLowerCase())) {
-      return;
-    }
-    res.setHeader(key, value);
-  });
 }
 
 function copyHireResponseHeaders(upstream, res) {
@@ -10896,6 +10865,28 @@ const streamChatHandler = async (req, res) => {
     }
     if (remappedSpacesRoute) {
       res.setHeader("X-Zaki-Spaces-Route", remappedSpacesRoute);
+    }
+
+    // SECURITY (G0-ISO-1): verify the caller actually owns this workspace before any
+    // admin-key call. The anonymous-target path was already remapped to the caller's own
+    // default workspace above (remappedSpacesRoute set), so it is owned by construction and
+    // skips this check. For an explicit slug, confirm visibility for THIS session's novaUserId,
+    // mirroring requireWorkspaceAccess (index.js:3124-3134). Without this, the agent-turn admin
+    // key + doc-grounding below would run against an arbitrary victim workspace.
+    if (!remappedSpacesRoute) {
+      const normalizedSlug = String(slug || "").trim().toLowerCase();
+      const accessCheck = await workspaceVisibleForSession(novaUserId, normalizedSlug);
+      if (!accessCheck.success) {
+        res.status(accessCheck.status || 502).json({
+          error: accessCheck.error || "Unable to verify workspace access.",
+        });
+        return;
+      }
+      if (!accessCheck.visible) {
+        res.status(403).json({ error: "You do not have access to this workspace." });
+        return;
+      }
+      slug = normalizedSlug;
     }
 
     const requestPayload = req.body;

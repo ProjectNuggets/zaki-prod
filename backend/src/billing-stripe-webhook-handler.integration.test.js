@@ -59,7 +59,7 @@ async function invoke(handler, { body = Buffer.from("{}"), headers = {}, path = 
   return res;
 }
 
-function createDependencies({ event, constructError = null, markResult = true, resolvedUser = null } = {}) {
+function createDependencies({ event, constructError = null, markResult = true, alreadyProcessed = false, resolvedUser = null } = {}) {
   const stripe = {
     webhooks: {
       constructEvent: jest.fn(() => {
@@ -73,6 +73,7 @@ function createDependencies({ event, constructError = null, markResult = true, r
     stripe,
     stripeWebhookSecret: "whsec_test",
     markWebhookEventProcessed: jest.fn(async () => markResult),
+    hasWebhookEventBeenProcessed: jest.fn(async () => alreadyProcessed),
     billingHealth: {
       recordReceived: jest.fn(),
       recordDuplicate: jest.fn(),
@@ -143,7 +144,7 @@ describe("stripe webhook handler integration", () => {
         },
       },
     };
-    const deps = createDependencies({ event, markResult: false });
+    const deps = createDependencies({ event, alreadyProcessed: true });
     const handler = createStripeWebhookHandler(deps);
 
     const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });

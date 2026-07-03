@@ -59,6 +59,7 @@ export function createStripeWebhookHandler({
   stripe,
   stripeWebhookSecret,
   markWebhookEventProcessed,
+  hasWebhookEventBeenProcessed,
   billingHealth,
   emitBillingAlert,
   normalizeEmail,
@@ -158,8 +159,8 @@ export function createStripeWebhookHandler({
 
       billingHealth.recordReceived("stripe", { eventId, eventType });
       if (eventId) {
-        const shouldProcess = await markWebhookEventProcessed("stripe", eventId);
-        if (!shouldProcess) {
+        const alreadyProcessed = await hasWebhookEventBeenProcessed("stripe", eventId);
+        if (alreadyProcessed) {
           billingHealth.recordDuplicate("stripe", { eventId, eventType });
           res.status(200).json({ received: true, duplicate: true });
           return;
@@ -274,9 +275,10 @@ export function createStripeWebhookHandler({
             );
 
             // Best-effort: re-sync the unit wallet allowance to the new plan.
-            // markWebhookEventProcessed already marked this event up front, so a
-            // throw here would make Stripe's retry a skipped duplicate and lose
-            // the re-provision — keep it non-fatal.
+            // The event is marked processed only AFTER all side effects succeed,
+            // so a throw here would simply let Stripe reprocess (every branch is
+            // idempotent). Keep ensureWallet non-fatal anyway so a wallet hiccup
+            // doesn't force a full reprocess of the subscription update.
             try {
               await ensureWallet({ userId: user.id, planId: tierToStore });
             } catch (e) {
@@ -373,6 +375,13 @@ export function createStripeWebhookHandler({
         }
       }
 
+      // Mark processed ONLY after all side effects above succeeded. If anything threw,
+      // we never reach here, the event stays unmarked, and Stripe's retry reprocesses
+      // (every branch above is idempotent). This is the durable fix for the prior
+      // mark-before-write silent-loss window.
+      if (eventId) {
+        await markWebhookEventProcessed("stripe", eventId);
+      }
       billingHealth.recordProcessed("stripe", { eventId, eventType });
       res.json({ received: true, ...(staleSkipped ? { stale: true } : {}) });
     } catch (error) {
