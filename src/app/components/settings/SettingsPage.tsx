@@ -66,9 +66,7 @@ import {
   type MemoryPolicy,
   type MeterStatusProduct,
   type MeterWindowSnapshot,
-  type PlatformUsageProductId,
   type ProductRegistryItem,
-  type UsageQuotaSnapshot,
 } from "@/lib/api";
 import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
 import {
@@ -144,14 +142,6 @@ const SETTINGS_PLAN_LABELS: Record<SettingsBillingPlanId, string> = {
   pro: "Pro",
   pro_max: "Pro MAX",
 };
-
-const PLATFORM_USAGE_PRODUCTS: PlatformUsageProductId[] = [
-  "spaces",
-  "agent",
-  "learn",
-  "hire",
-  "design",
-];
 
 type AgentSettingsDraft = Required<
   Pick<
@@ -387,30 +377,6 @@ function getMeterRunsLabel(
     agentRuns: estimate.agentRuns,
     chats: estimate.chats,
     defaultValue: `≈ ${estimate.agentRuns} agent runs · or ${estimate.chats} chats`,
-  });
-}
-
-function getQuotaSummaryLabel(
-  t: (key: string, options?: Record<string, unknown>) => string,
-  quota?: UsageQuotaSnapshot
-) {
-  if (!quota) return t("settingsModal.usage.pending");
-  if (quota.unavailable) return t("settingsModal.usage.unavailable");
-  if (quota.metered === false) return t("settingsModal.usage.memoryGoverned");
-  if (quota.unlimited) {
-    return t("settingsModal.usage.usedUnlimited", {
-      defaultValue: "Included in weekly usage",
-    });
-  }
-  if (typeof quota.limit === "number" && typeof quota.used === "number") {
-    const percent = getUsagePercent({ used: quota.used, limit: quota.limit });
-    return t("settingsModal.usage.productUsagePercent", {
-      percent: getRoundedUsagePercent(percent),
-      defaultValue: `${getRoundedUsagePercent(percent)}% this week`,
-    });
-  }
-  return t("settingsModal.usage.productUsageLinked", {
-    defaultValue: "Included in weekly usage",
   });
 }
 
@@ -1147,11 +1113,6 @@ export function SettingsPage() {
         meterProduct: product.productId ? meterStatus.products?.[product.productId] ?? null : null,
       }))
     : [];
-  const legacyUsageProducts = PLATFORM_USAGE_PRODUCTS.map((productId) => {
-    const product = platformUsage?.products?.[productId];
-    if (!product) return null;
-    return product;
-  }).filter(Boolean);
   const getBooleanStatusLabel = (value: boolean) =>
     value
       ? t("settingsModal.status.on", { defaultValue: "On" })
@@ -2149,16 +2110,18 @@ export function SettingsPage() {
                       })}
                     </p>
                   </div>
-                  <V2Badge>
-                    {t("settingsModal.usage.productCount", {
-                      count: meterUsageRows.length || legacyUsageProducts.length,
-                      defaultValue: `${meterUsageRows.length || legacyUsageProducts.length} products`,
-                    })}
-                  </V2Badge>
+                  {meterUsageRows.length > 0 ? (
+                    <V2Badge>
+                      {t("settingsModal.usage.productCount", {
+                        count: meterUsageRows.length,
+                        defaultValue: `${meterUsageRows.length} products`,
+                      })}
+                    </V2Badge>
+                  ) : null}
                 </summary>
                 <div className="zaki-settings-v2__usage-grid">
-                  {meterUsageRows.length > 0
-                    ? meterUsageRows.map(({ product, meterProduct }) => {
+                  {meterUsageRows.length > 0 ? (
+                    meterUsageRows.map(({ product, meterProduct }) => {
                         const productUsed =
                           typeof meterProduct?.weekly?.used === "number"
                             ? meterProduct.weekly.used
@@ -2203,37 +2166,12 @@ export function SettingsPage() {
                           </div>
                         );
                       })
-                    : legacyUsageProducts.map((product) => {
-                        const quota = product?.quota;
-                        const resetLabel = formatUsageReset(quota?.resetAt);
-                        const hasProductLimit = typeof quota?.limit === "number";
-                        return (
-                          <div key={product?.productId} className="zaki-settings-v2__usage-row">
-                            <div>
-                              <strong>{product?.label}</strong>
-                              <small>{getUsageLifecycleLabel(t, product?.lifecycle || "current")}</small>
-                              <small>{getUsageLaunchStateLabel(t, product?.productId)}</small>
-                            </div>
-                            <div className="zaki-settings-v2__usage-row-meter">
-                              <span>{getQuotaSummaryLabel(t, quota)}</span>
-                              {hasProductLimit ? (
-                                <div
-                                  className="zaki-settings-v2__meter-track"
-                                  style={getMeterBarStyle(quota?.used, quota?.limit)}
-                                  aria-hidden="true"
-                                >
-                                  <span />
-                                </div>
-                              ) : null}
-                            </div>
-                            <small>
-                              {resetLabel
-                                ? t("settingsModal.usage.resetsAt", { reset: resetLabel })
-                                : t("settingsModal.usage.resetPending")}
-                            </small>
-                          </div>
-                        );
-                      })}
+                  ) : platformUsageLoading || meterStatusLoading ? null : (
+                    // Meter query failed (not loading) but the section is open: don't leave a bare
+                    // "0 products" grid — say so plainly. We do NOT fall back to the old per-surface
+                    // budgets (the pooled wallet is the source of truth).
+                    <p className="v2-body-sm">{t("settingsModal.usage.unavailable")}</p>
+                  )}
                 </div>
               </details>
               <div className="zaki-settings-v2__billing-actions">

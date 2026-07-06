@@ -293,6 +293,32 @@ export function buildAgentComposerUsageState({
   return { locked };
 }
 
+// Spaces (non-agent) composer send-lock. Authenticated users are gated by the pooled unit wallet
+// (weekly.remaining, else limit - used) — the single source of truth, since the server reserves and
+// settles every Spaces turn against it. Anonymous users have no wallet, so they fall back to the
+// legacy daily count. Unknown wallet remaining (meter still loading, or an unlimited tier whose
+// weekly limit is null) fails open — the server denial path still catches a truly-empty wallet.
+export function isSpacesSendLocked({
+  isAuthenticated,
+  weekly,
+  legacyRemaining,
+}: {
+  isAuthenticated: boolean;
+  weekly?: { used?: number | null; limit?: number | null; remaining?: number | null } | null;
+  legacyRemaining?: number | null;
+}): boolean {
+  if (isAuthenticated) {
+    const remaining =
+      typeof weekly?.remaining === "number"
+        ? weekly.remaining
+        : typeof weekly?.limit === "number" && typeof weekly?.used === "number"
+          ? Math.max(0, weekly.limit - weekly.used)
+          : null;
+    return remaining != null && remaining <= 0;
+  }
+  return typeof legacyRemaining === "number" && legacyRemaining <= 0;
+}
+
 export class ChatRequestError extends Error {
   status: number;
   code: string | null;
@@ -3910,7 +3936,11 @@ export function ChatArea() {
   }, [isZakiBotActiveSpace, setZakiSandboxState]);
   const headerThreadName = activeThread?.label || chatCopy.newChat;
 
+  // The legacy daily count is anonymous-only now: authenticated users are metered by the pooled
+  // unit wallet (single source of truth), so the daily bucket must not drive their send-lock or
+  // the "Daily usage" badge. Anonymous users have no wallet, so they keep it.
   const legacyQuotaInfo =
+    !authUserId &&
     !isZakiBotActiveSpace &&
     freeDailyQuota &&
     !freeDailyQuota.unlimited &&
@@ -3975,9 +4005,14 @@ export function ChatArea() {
       : freeDailyQuota?.unlimited
         ? t("agent.status.weeklyIncluded", { defaultValue: "Included" })
         : t("agent.status.weeklySyncing", { defaultValue: "Syncing" });
+  const spacesSendLocked = isSpacesSendLocked({
+    isAuthenticated: Boolean(authUserId),
+    weekly: meterResult?.data?.weekly ?? null,
+    legacyRemaining: legacyQuotaInfo?.remaining ?? null,
+  });
   const isZakiBotSendLocked = isZakiBotActiveSpace
     ? agentCapacityBlocked || isAgentComposerBootstrapping
-    : Boolean(legacyQuotaInfo && legacyQuotaInfo.remaining <= 0);
+    : spacesSendLocked;
   const isComposerSendLocked = !isOnline || isZakiBotSendLocked;
   const latestAssistantMessageContent = useMemo(() => {
     const latestAssistant = [...messages]

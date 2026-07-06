@@ -28,6 +28,7 @@ import {
   ChatRequestError,
   buildBillingPaywallCardData,
   buildAgentComposerUsageState,
+  isSpacesSendLocked,
   isRetryableChatError,
   resolveTurnRetryable,
   CHAT_RETRYABLE_MAX_ATTEMPTS,
@@ -808,6 +809,75 @@ describe("P1-12 chat-stream retryable classification (isRetryableChatError)", ()
 
     expect(state).toEqual({
       locked: false,
+    });
+  });
+
+  describe("isSpacesSendLocked (Spaces composer send-lock source of truth)", () => {
+    it("gates authenticated users on the pooled wallet, not the daily count", () => {
+      // Empty wallet -> locked, even though the legacy count says there is headroom.
+      expect(
+        isSpacesSendLocked({
+          isAuthenticated: true,
+          weekly: { used: 600, limit: 600, remaining: 0 },
+          legacyRemaining: 8,
+        })
+      ).toBe(true);
+      // Wallet has units left -> not locked, even if the legacy daily count is exhausted.
+      expect(
+        isSpacesSendLocked({
+          isAuthenticated: true,
+          weekly: { used: 100, limit: 600, remaining: 500 },
+          legacyRemaining: 0,
+        })
+      ).toBe(false);
+    });
+
+    it("derives remaining from limit - used when remaining is absent", () => {
+      expect(
+        isSpacesSendLocked({
+          isAuthenticated: true,
+          weekly: { used: 600, limit: 600 },
+          legacyRemaining: null,
+        })
+      ).toBe(true);
+      expect(
+        isSpacesSendLocked({
+          isAuthenticated: true,
+          weekly: { used: 599, limit: 600 },
+          legacyRemaining: null,
+        })
+      ).toBe(false);
+    });
+
+    it("fails open for authed users when wallet remaining is unknown (loading or unlimited tier)", () => {
+      expect(
+        isSpacesSendLocked({ isAuthenticated: true, weekly: null, legacyRemaining: 0 })
+      ).toBe(false);
+      // Unlimited tier: no numeric limit/remaining -> never locked.
+      expect(
+        isSpacesSendLocked({
+          isAuthenticated: true,
+          weekly: { used: 999999, limit: null, remaining: null },
+          legacyRemaining: 0,
+        })
+      ).toBe(false);
+    });
+
+    it("keeps anonymous users on the legacy daily count (no wallet)", () => {
+      expect(
+        isSpacesSendLocked({ isAuthenticated: false, weekly: null, legacyRemaining: 0 })
+      ).toBe(true);
+      expect(
+        isSpacesSendLocked({ isAuthenticated: false, weekly: null, legacyRemaining: 3 })
+      ).toBe(false);
+      // Anonymous users ignore the wallet entirely, even if it somehow reports units.
+      expect(
+        isSpacesSendLocked({
+          isAuthenticated: false,
+          weekly: { used: 0, limit: 600, remaining: 600 },
+          legacyRemaining: 0,
+        })
+      ).toBe(true);
     });
   });
 
