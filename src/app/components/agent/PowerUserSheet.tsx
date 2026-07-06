@@ -21,10 +21,15 @@ import {
   resolveContextGaugePercent,
 } from "@/lib/agentContext";
 import {
+  USAGE_CAP_PERCENT,
+  USAGE_NEAR_CAP_PERCENT,
   formatUsagePercentLabel,
   getRoundedUsagePercent,
   getUsagePercent,
+  isUsageAtCap,
+  isUsageNearCap,
 } from "@/lib/usageDisplay";
+import { useMeterStatus } from "@/queries/useBilling";
 import { SheetShell } from "@/app/components/ui/zaki";
 import {
   downloadAgentExportFile,
@@ -35,7 +40,6 @@ import {
   fetchContextDiagnostics,
   fetchAgentDiagnostics,
   fetchMemoryDoctor,
-  fetchUsageQuota,
   listAgentArtifacts,
   listAgentTraces,
   revokeAgentArtifactShare,
@@ -48,7 +52,6 @@ import {
   type AgentSessionMode,
   type ContextDiagnosticsResponse,
   type MemoryDoctorResponse,
-  type UsageQuotaSurface,
 } from "@/lib/api";
 import {
   getAgentArtifactExportDownloadUrl,
@@ -78,7 +81,7 @@ export type PowerUserTab =
 export type SoftLimitState = "normal" | "warning" | "near_limit" | "unlimited";
 
 export interface PowerUserUsageSurface {
-  surface: UsageQuotaSurface;
+  surface: string;
   label: string;
   unlimited: boolean;
   limit: number | null;
@@ -161,16 +164,17 @@ const EXTENSION_TOOL_NAMES = [
   "extension_list_tabs",
 ];
 
-const USAGE_SURFACES: Array<{ surface: UsageQuotaSurface; labelKey: string }> = [
-  { surface: "app_chat", labelKey: "zakiControls.powerUser.usage.surfaces.app_chat" },
-  { surface: "zaki_bot", labelKey: "zakiControls.powerUser.usage.surfaces.zaki_bot" },
-  { surface: "learning", labelKey: "zakiControls.powerUser.usage.surfaces.learning" },
+// Per-product usage rows, all read from the canonical unit meter (/api/meter/status products{}),
+// not the legacy per-surface /api/usage/quota prompt-count. The meter/registry product ids are
+// spaces/agent/learning (NOT the legacy surface names app_chat/zaki_bot/learn); labels reuse the
+// existing surface strings.
+const USAGE_PRODUCTS: Array<{ productId: string; labelKey: string }> = [
+  { productId: "spaces", labelKey: "zakiControls.powerUser.usage.surfaces.app_chat" },
+  { productId: "agent", labelKey: "zakiControls.powerUser.usage.surfaces.zaki_bot" },
+  { productId: "learning", labelKey: "zakiControls.powerUser.usage.surfaces.learning" },
 ];
 
 type AgentDiagnosticsSurface = Awaited<ReturnType<typeof fetchAgentDiagnostics>>["data"];
-
-const SOFT_LIMIT_WARNING_THRESHOLD = 0.7;
-const SOFT_LIMIT_NEAR_THRESHOLD = 0.9;
 
 export function deriveSoftLimitState(
   used: number,
@@ -178,9 +182,11 @@ export function deriveSoftLimitState(
   unlimited: boolean
 ): SoftLimitState {
   if (unlimited || limit == null || limit <= 0) return "unlimited";
-  const ratio = used / limit;
-  if (ratio >= SOFT_LIMIT_NEAR_THRESHOLD) return "near_limit";
-  if (ratio >= SOFT_LIMIT_WARNING_THRESHOLD) return "warning";
+  // Use the shared 80/100 model (usageDisplay) so the Usage tab matches the dashboard/settings
+  // meters instead of its old 70/90 thresholds.
+  const percent = getUsagePercent({ used, limit });
+  if (isUsageAtCap(percent)) return "near_limit";
+  if (isUsageNearCap(percent)) return "warning";
   return "normal";
 }
 
@@ -324,8 +330,45 @@ export function PowerUserSheet({
   const { t } = useTranslation();
   const [tab, setTab] = useState<PowerUserTab>(initialTab);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [usageSurfaces, setUsageSurfaces] = useState<PowerUserUsageSurface[] | null>(null);
-  const [usageLoading, setUsageLoading] = useState(false);
+  // Unified usage source: read the canonical unit meter (/api/meter/status) per product instead of
+  // the legacy per-surface /api/usage/quota prompt-count, so the Usage tab agrees with the
+  // dashboard/settings meters (same pooled weekly units, same 80/100 thresholds).
+  const { data: meterResult, isLoading: usageLoading } = useMeterStatus();
+  const usageSurfaces = useMemo<PowerUserUsageSurface[] | null>(() => {
+    const meterStatus = meterResult?.data ?? null;
+    if (!meterStatus) return null;
+    const productMap = (meterStatus.products ?? {}) as Record<
+      string,
+      {
+        weekly?: {
+          limit?: number | null;
+          used?: number | null;
+          remaining?: number | null;
+          resetAt?: string | null;
+        } | null;
+      }
+    >;
+    return USAGE_PRODUCTS.map(({ productId, labelKey }) => {
+      const weekly = productMap[productId]?.weekly ?? null;
+      const limit = typeof weekly?.limit === "number" ? weekly.limit : null;
+      const used = typeof weekly?.used === "number" ? weekly.used : 0;
+      const remaining = typeof weekly?.remaining === "number" ? weekly.remaining : null;
+      const resetAt = typeof weekly?.resetAt === "string" ? weekly.resetAt : null;
+      const unlimited = limit == null;
+      return {
+        surface: productId,
+        label: t(labelKey),
+        unlimited,
+        limit,
+        used,
+        remaining,
+        resetAt,
+        period: "week",
+        state: deriveSoftLimitState(used, limit, unlimited),
+        error: null,
+      } satisfies PowerUserUsageSurface;
+    });
+  }, [meterResult, t]);
   const [contextDiag, setContextDiag] =
     useState<ContextDiagnosticsResponse | null>(null);
   const [contextDiagLoading, setContextDiagLoading] = useState(false);
@@ -574,45 +617,6 @@ export function PowerUserSheet({
       active = false;
     };
   }, [isOpen, tab]);
-
-  useEffect(() => {
-    if (!isOpen || tab !== "usage") return;
-    let active = true;
-    setUsageLoading(true);
-    void Promise.all(
-      USAGE_SURFACES.map(async ({ surface, labelKey }) => {
-        const { response, data } = await fetchUsageQuota(surface);
-        const unlimited = Boolean(data?.unlimited);
-        const limit = typeof data?.limit === "number" ? data.limit : null;
-        const used = typeof data?.used === "number" ? data.used : 0;
-        const remaining =
-          typeof data?.remaining === "number" ? data.remaining : null;
-        const resetAt = typeof data?.resetAt === "string" ? data.resetAt : null;
-        const period = typeof data?.period === "string" ? data.period : null;
-        const state = deriveSoftLimitState(used, limit, unlimited);
-        const error = response.ok ? null : data?.error || "unavailable";
-        return {
-          surface,
-          label: t(labelKey),
-          unlimited,
-          limit,
-          used,
-          remaining,
-          resetAt,
-          period,
-          state,
-          error,
-        } satisfies PowerUserUsageSurface;
-      })
-    ).then((rows) => {
-      if (!active) return;
-      setUsageSurfaces(rows);
-      setUsageLoading(false);
-    });
-    return () => {
-      active = false;
-    };
-  }, [isOpen, tab, t]);
 
   const pendingCount = pendingApprovals.length;
 
@@ -1291,8 +1295,8 @@ export function PowerUserSheet({
         })}
         <div className="rounded-zaki-lg border border-dashed border-zaki bg-transparent p-3 text-2xs leading-relaxed text-zaki-muted">
           {t("zakiControls.powerUser.usage.footer", {
-            warning: Math.round(SOFT_LIMIT_WARNING_THRESHOLD * 100),
-            near: Math.round(SOFT_LIMIT_NEAR_THRESHOLD * 100),
+            warning: USAGE_NEAR_CAP_PERCENT,
+            near: USAGE_CAP_PERCENT,
           })}
         </div>
       </div>
