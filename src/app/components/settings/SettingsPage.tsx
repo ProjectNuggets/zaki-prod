@@ -72,6 +72,8 @@ import {
 } from "@/lib/api";
 import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
 import {
+  estimateTurnsFromUnits,
+  formatUnits,
   formatUsagePercentLabel,
   getRoundedUsagePercent,
   getUsagePercent,
@@ -341,6 +343,49 @@ function getMeterWindowLabel(
     });
   }
   return null;
+}
+
+// Exact "N of M left" from a meter window snapshot (prefers the pooled remaining, which is
+// topup-aware; falls back to limit - used).
+function getMeterRemainingLabel(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  snapshot?: MeterWindowSnapshot | null
+) {
+  if (!snapshot || typeof snapshot.limit !== "number") return null;
+  const remaining =
+    typeof snapshot.remaining === "number"
+      ? snapshot.remaining
+      : typeof snapshot.used === "number"
+      ? Math.max(0, snapshot.limit - snapshot.used)
+      : null;
+  if (remaining === null) return null;
+  return t("settingsModal.usage.remainingOfLimit", {
+    remaining: formatUnits(remaining),
+    limit: formatUnits(snapshot.limit),
+    defaultValue: `${formatUnits(remaining)} of ${formatUnits(snapshot.limit)} left`,
+  });
+}
+
+// "≈ N agent runs · or M chats" — only meaningful on the POOLED weekly total (the per-product
+// rows are weighted slices of this same pool, not independent budgets).
+function getMeterRunsLabel(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  snapshot?: MeterWindowSnapshot | null
+) {
+  if (!snapshot) return null;
+  const remaining =
+    typeof snapshot.remaining === "number"
+      ? snapshot.remaining
+      : typeof snapshot.limit === "number" && typeof snapshot.used === "number"
+      ? Math.max(0, snapshot.limit - snapshot.used)
+      : null;
+  const estimate = estimateTurnsFromUnits(remaining);
+  if (!estimate) return null;
+  return t("settingsModal.usage.runsHeadline", {
+    agentRuns: estimate.agentRuns,
+    chats: estimate.chats,
+    defaultValue: `≈ ${estimate.agentRuns} agent runs · or ${estimate.chats} chats`,
+  });
 }
 
 function getQuotaSummaryLabel(
@@ -1012,6 +1057,8 @@ export function SettingsPage() {
           ),
         })
       : t("settingsModal.usage.weeklyAllowancePending"));
+  const weeklyRunsLabel = getMeterRunsLabel(t, meterStatus?.weekly ?? null);
+  const weeklyRemainingLabel = getMeterRemainingLabel(t, meterStatus?.weekly ?? null);
   const burstWindowLabel =
     getMeterWindowLabel(
       t,
@@ -1989,7 +2036,7 @@ export function SettingsPage() {
                   >
                     <header>
                       <span>{t("settingsModal.usage.weeklyAllowance")}</span>
-                      <strong>{weeklyAllowanceLabel}</strong>
+                      <strong>{weeklyRunsLabel || weeklyAllowanceLabel}</strong>
                     </header>
                     <div
                       className="zaki-settings-v2__meter-track"
@@ -2003,6 +2050,12 @@ export function SettingsPage() {
                         <dt>{t("settingsModal.usage.usage", { defaultValue: "Usage" })}</dt>
                         <dd>{weeklyAllowanceLabel}</dd>
                       </div>
+                      {weeklyRemainingLabel ? (
+                        <div>
+                          <dt>{t("settingsModal.usage.left", { defaultValue: "Left" })}</dt>
+                          <dd>{weeklyRemainingLabel}</dd>
+                        </div>
+                      ) : null}
                       <div>
                         <dt>{t("settingsModal.usage.reset", { defaultValue: "Reset" })}</dt>
                         <dd>
@@ -2088,9 +2141,9 @@ export function SettingsPage() {
                       {t("settingsModal.usage.productUsage", { defaultValue: "Weekly by product" })}
                     </strong>
                     <p className="v2-body-sm">
-                      {t("settingsModal.usage.helper", {
+                      {t("settingsModal.usage.helperShared", {
                         defaultValue:
-                          "Open when you want to see which products contributed to this week's usage.",
+                          "Weighted shares of your one shared weekly allowance — not separate budgets.",
                       })}
                     </p>
                   </div>
@@ -2121,6 +2174,11 @@ export function SettingsPage() {
                             </div>
                             <div className="zaki-settings-v2__usage-row-meter">
                               <span>{summaryLabel}</span>
+                              {getMeterRemainingLabel(t, weekly) ? (
+                                <small className="zaki-settings-v2__usage-row-remaining">
+                                  {getMeterRemainingLabel(t, weekly)}
+                                </small>
+                              ) : null}
                               {hasProductLimit ? (
                                 <div
                                   className="zaki-settings-v2__meter-track"
