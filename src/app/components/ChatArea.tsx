@@ -3224,9 +3224,9 @@ export function ChatArea() {
       isRtl
         ? `وصلت إلى حد الاستخدام المجاني اليوم. يتم إعادة التعيين يوميًا. جرّب مرة أخرى بعد ${resetLabel}.`
         : `You reached today's free limit. Free usage resets daily. Try again after ${resetLabel}.`,
-    quotaBadgeNeutral: isRtl ? "استخدام أسبوعي" : "Weekly usage",
-    quotaBadgeWarning: isRtl ? "الاستخدام الأسبوعي يقترب من الاكتمال" : "Weekly usage is getting full",
-    quotaBadgeDanger: isRtl ? "الاستخدام الأسبوعي ممتلئ" : "Weekly usage is full",
+    quotaBadgeNeutral: isRtl ? "الاستخدام اليومي" : "Daily usage",
+    quotaBadgeWarning: isRtl ? "الاستخدام اليومي يقترب من الاكتمال" : "Daily usage is getting full",
+    quotaBadgeDanger: isRtl ? "الاستخدام اليومي ممتلئ" : "Daily usage is full",
   };
   useAuthStore(); // For auth context, values used elsewhere
   const {
