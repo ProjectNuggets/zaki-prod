@@ -109,17 +109,11 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
   if (key === "zakiControls.powerUser.usage.unlimited") {
     return "Unlimited";
   }
-  if (key === "zakiControls.powerUser.usage.dailyPercent") {
-    return `${String(options?.percent ?? "")}% of your daily usage`;
-  }
   if (key === "zakiControls.powerUser.usage.weeklyPercent") {
     return `${String(options?.percent ?? "")}% of your weekly usage`;
   }
-  if (key === "zakiControls.powerUser.usage.legacyRequestsThisWeek") {
-    return "Legacy Agent weekly quota";
-  }
-  if (key === "zakiControls.powerUser.usage.legacyWeeklyPercent") {
-    return `${String(options?.percent ?? "")}% of legacy Agent weekly quota`;
+  if (key === "zakiControls.powerUser.usage.usedThisWeek") {
+    return "Used this week";
   }
   if (key === "zakiControls.powerUser.usage.footer") {
     return `Soft-limit warning at ${String(options?.warning ?? "")}% used; near-limit at ${String(options?.near ?? "")}%. Hard stops still apply on hit.`;
@@ -849,19 +843,16 @@ describe("PowerUserSheet", () => {
   });
 
   it("reads per-product usage from the unified meter and flags near-cap on the 80/100 model", async () => {
+    // Usage is one shared pool: the cap is meterStatus.weekly.limit; each product carries only its
+    // `used` contribution. Rows show each product's SHARE of the pooled limit.
     useMeterStatusMock.mockReturnValue({
       data: {
         data: {
+          weekly: { limit: 100, used: 205, remaining: 0, resetAt: "2026-04-19T00:00:00Z" },
           products: {
-            spaces: {
-              weekly: { limit: 100, used: 85, remaining: 15, resetAt: "2026-04-19T00:00:00Z" },
-            },
-            agent: {
-              weekly: { limit: 100, used: 20, remaining: 80, resetAt: "2026-04-19T00:00:00Z" },
-            },
-            learning: {
-              weekly: { limit: 100, used: 100, remaining: 0, resetAt: "2026-04-19T00:00:00Z" },
-            },
+            spaces: { weekly: { used: 85 } },
+            agent: { weekly: { used: 20 } },
+            learning: { weekly: { used: 100 } },
           },
         },
       },
@@ -870,7 +861,7 @@ describe("PowerUserSheet", () => {
     await act(async () => {
       render(<PowerUserSheet isOpen onClose={() => {}} initialTab="usage" />);
     });
-    // spaces 85% -> warning (80-100), agent 20% -> normal, learning 100% -> near_limit (at cap).
+    // Share of the pooled limit (100): spaces 85% -> warning, agent 20% -> normal, learning 100% -> near_limit.
     await waitFor(() => {
       expect(
         screen.getByTestId("power-user-usage-surface-spaces")

@@ -339,32 +339,32 @@ export function PowerUserSheet({
     if (!meterStatus) return null;
     const productMap = (meterStatus.products ?? {}) as Record<
       string,
-      {
-        weekly?: {
-          limit?: number | null;
-          used?: number | null;
-          remaining?: number | null;
-          resetAt?: string | null;
-        } | null;
-      }
+      { weekly?: { used?: number | null } | null }
     >;
+    // Usage is ONE shared weekly pool: per-product snapshots carry only `used` (each product's
+    // contribution), not a per-product limit (the meter hardcodes per-product limit/remaining null).
+    // So each row shows the product's SHARE of the pooled weekly cap (used / pooledLimit); the cap is
+    // the shared meterStatus.weekly.limit. This replaces the old per-surface count budgets.
+    const pooled = (meterStatus.weekly ?? null) as {
+      limit?: number | null;
+      resetAt?: string | null;
+    } | null;
+    const pooledLimit = typeof pooled?.limit === "number" ? pooled.limit : null;
+    const pooledResetAt = typeof pooled?.resetAt === "string" ? pooled.resetAt : null;
     return USAGE_PRODUCTS.map(({ productId, labelKey }) => {
-      const weekly = productMap[productId]?.weekly ?? null;
-      const limit = typeof weekly?.limit === "number" ? weekly.limit : null;
-      const used = typeof weekly?.used === "number" ? weekly.used : 0;
-      const remaining = typeof weekly?.remaining === "number" ? weekly.remaining : null;
-      const resetAt = typeof weekly?.resetAt === "string" ? weekly.resetAt : null;
-      const unlimited = limit == null;
+      const productUsed = productMap[productId]?.weekly?.used;
+      const used = typeof productUsed === "number" ? productUsed : 0;
+      const unlimited = pooledLimit == null;
       return {
         surface: productId,
         label: t(labelKey),
         unlimited,
-        limit,
+        limit: pooledLimit,
         used,
-        remaining,
-        resetAt,
+        remaining: null,
+        resetAt: pooledResetAt,
         period: "week",
-        state: deriveSoftLimitState(used, limit, unlimited),
+        state: deriveSoftLimitState(used, pooledLimit, unlimited),
         error: null,
       } satisfies PowerUserUsageSurface;
     });
@@ -1203,7 +1203,8 @@ export function PowerUserSheet({
           </div>
         ) : null}
         {(usageSurfaces || []).map((row) => {
-          const isLegacyAgentQuota = row.surface === "zaki_bot";
+          // Each row is a product's SHARE of the shared weekly pool (used / pooledLimit), not an
+          // independent budget — so a single weekly percent, no daily/legacy branches.
           const pct =
             row.unlimited || !row.limit
               ? null
@@ -1212,27 +1213,14 @@ export function PowerUserSheet({
           const usagePercentLabel =
             pct == null
               ? t("zakiControls.powerUser.usage.unlimited")
-              : isLegacyAgentQuota
-                ? t("zakiControls.powerUser.usage.legacyWeeklyPercent", {
-                    percent: roundedPct,
-                    defaultValue: `${roundedPct}% of legacy Agent weekly quota`,
-                  })
-              : row.period === "week"
-                ? t("zakiControls.powerUser.usage.weeklyPercent", {
-                    percent: roundedPct,
-                    defaultValue: formatUsagePercentLabel(pct),
-                  })
-                : t("zakiControls.powerUser.usage.dailyPercent", {
-                    percent: roundedPct,
-                    defaultValue: formatUsagePercentLabel(pct),
-                  });
-          const usagePeriodLabel = isLegacyAgentQuota
-            ? t("zakiControls.powerUser.usage.legacyRequestsThisWeek", {
-                defaultValue: "Legacy Agent weekly quota",
-              })
-            : row.period === "week"
-              ? t("zakiControls.powerUser.usage.requestsThisWeek")
-              : t("zakiControls.powerUser.usage.requestsToday");
+              : t("zakiControls.powerUser.usage.weeklyPercent", {
+                  percent: roundedPct,
+                  defaultValue: formatUsagePercentLabel(pct),
+                });
+          const usagePeriodLabel = t(
+            "zakiControls.powerUser.usage.usedThisWeek",
+            { defaultValue: "Used this week" }
+          );
           return (
             <div
               key={row.surface}

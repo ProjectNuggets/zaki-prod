@@ -1114,12 +1114,8 @@
         },
         "loading": "جارٍ تحميل الاستخدام...",
         "unavailable": "الاستخدام غير متاح.",
-        "requestsToday": "طلبات اليوم",
-        "requestsThisWeek": "طلبات هذا الأسبوع",
-        "legacyRequestsThisWeek": "حصة Agent الأسبوعية القديمة",
-        "dailyPercent": "{{percent}}% من استخدامك اليومي",
+        "usedThisWeek": "المُستخدَم هذا الأسبوع",
         "weeklyPercent": "{{percent}}% من استخدامك الأسبوعي",
-        "legacyWeeklyPercent": "{{percent}}% من حصة Agent الأسبوعية القديمة",
         "usedUnlimited": "غير محدود",
         "resets": "إعادة الضبط",
         "footer": "يبدأ التحذير اللين عند استخدام {{warning}}%، ويصبح قريبًا من الحد عند {{near}}%. ما تزال الحدود الصلبة مطبقة عند بلوغها."

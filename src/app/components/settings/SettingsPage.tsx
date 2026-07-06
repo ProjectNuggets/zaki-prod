@@ -372,7 +372,9 @@ function getMeterRunsLabel(
   t: (key: string, options?: Record<string, unknown>) => string,
   snapshot?: MeterWindowSnapshot | null
 ) {
-  if (!snapshot) return null;
+  // Only meaningful when there is a real numeric cap; an unlimited/unmetered window (limit null)
+  // must NOT render a concrete "≈ N agent runs" headline (it would falsely imply a finite budget).
+  if (!snapshot || typeof snapshot.limit !== "number") return null;
   const remaining =
     typeof snapshot.remaining === "number"
       ? snapshot.remaining
@@ -2157,14 +2159,23 @@ export function SettingsPage() {
                 <div className="zaki-settings-v2__usage-grid">
                   {meterUsageRows.length > 0
                     ? meterUsageRows.map(({ product, meterProduct }) => {
+                        const productUsed =
+                          typeof meterProduct?.weekly?.used === "number"
+                            ? meterProduct.weekly.used
+                            : null;
+                        // Per-product rows are weighted slices of the ONE pooled weekly allowance,
+                        // not standalone budgets — show each product's share of that shared pool
+                        // (its % of the pooled limit), never a per-product "N of M".
+                        const productShare =
+                          productUsed !== null && typeof weeklyWindow.limit === "number"
+                            ? { used: productUsed, limit: weeklyWindow.limit }
+                            : null;
                         const summaryLabel =
-                          getMeterWindowLabel(t, meterProduct?.weekly ?? null) ||
+                          getMeterWindowLabel(t, productShare) ||
                           t("settingsModal.usage.productUsageLinked", {
                             defaultValue: "Included in weekly usage",
                           });
                         const resetLabel = formatUsageReset(meterProduct?.weekly?.resetAt);
-                        const weekly = meterProduct?.weekly ?? null;
-                        const hasProductLimit = typeof weekly?.limit === "number";
                         return (
                           <div key={product.productId} className="zaki-settings-v2__usage-row">
                             <div>
@@ -2174,15 +2185,10 @@ export function SettingsPage() {
                             </div>
                             <div className="zaki-settings-v2__usage-row-meter">
                               <span>{summaryLabel}</span>
-                              {getMeterRemainingLabel(t, weekly) ? (
-                                <small className="zaki-settings-v2__usage-row-remaining">
-                                  {getMeterRemainingLabel(t, weekly)}
-                                </small>
-                              ) : null}
-                              {hasProductLimit ? (
+                              {productShare ? (
                                 <div
                                   className="zaki-settings-v2__meter-track"
-                                  style={getMeterBarStyle(weekly?.used, weekly?.limit)}
+                                  style={getMeterBarStyle(productShare.used, productShare.limit)}
                                   aria-hidden="true"
                                 >
                                   <span />

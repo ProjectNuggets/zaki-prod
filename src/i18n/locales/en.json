@@ -1114,12 +1114,8 @@
         },
         "loading": "Loading usage...",
         "unavailable": "Usage unavailable.",
-        "requestsToday": "Requests today",
-        "requestsThisWeek": "Requests this week",
-        "legacyRequestsThisWeek": "Legacy Agent weekly quota",
-        "dailyPercent": "{{percent}}% of your daily usage",
+        "usedThisWeek": "Used this week",
         "weeklyPercent": "{{percent}}% of your weekly usage",
-        "legacyWeeklyPercent": "{{percent}}% of legacy Agent weekly quota",
         "usedUnlimited": "Unlimited",
         "resets": "Resets",
         "footer": "Soft-limit warning at {{warning}}% used; near-limit at {{near}}%. Hard stops still apply on hit."

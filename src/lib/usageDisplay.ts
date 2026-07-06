@@ -71,8 +71,10 @@ export function estimateTurnsFromUnits(
   };
 }
 
-// Round a units value for display (settles can be fractional, e.g. 22.083).
+// Floor a units value for display (settles can be fractional, e.g. 22.083). Floor — not round —
+// so "N of M left" agrees with estimateTurnsFromUnits (which floors): you never show more headroom
+// than you actually have.
 export function formatUnits(units?: number | null): string {
   if (typeof units !== "number" || !Number.isFinite(units)) return "—";
-  return String(Math.max(0, Math.round(units)));
+  return String(Math.max(0, Math.floor(units)));
 }
