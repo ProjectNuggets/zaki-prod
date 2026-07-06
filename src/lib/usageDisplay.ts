@@ -40,3 +40,39 @@ export function isUsageNearCap(percent: number) {
     percent < USAGE_CAP_PERCENT
   );
 }
+
+// Display-only estimates so users can read the pooled weekly allowance as concrete actions
+// ("≈ N agent runs · or M chats") instead of a bare percent. Measured on staging (2026): a
+// chat/Spaces turn settles ~1 unit; an agent turn settles ~22 units (real, cache-inclusive cost).
+// True per-turn cost varies, hence the "≈" — these are tunable if the model/context budget changes.
+export const EST_UNITS_PER_AGENT_RUN = 22;
+export const EST_UNITS_PER_CHAT = 1;
+
+export type UsageRemainingEstimate = {
+  agentRuns: number;
+  chats: number;
+};
+
+// Estimate how many agent runs / chats the remaining pooled units buy. Returns null when there is
+// no numeric remaining to reason about (unknown/unmetered), so callers can fall back to a percent.
+export function estimateTurnsFromUnits(
+  remainingUnits?: number | null
+): UsageRemainingEstimate | null {
+  if (
+    typeof remainingUnits !== "number" ||
+    !Number.isFinite(remainingUnits) ||
+    remainingUnits < 0
+  ) {
+    return null;
+  }
+  return {
+    agentRuns: Math.floor(remainingUnits / EST_UNITS_PER_AGENT_RUN),
+    chats: Math.floor(remainingUnits / EST_UNITS_PER_CHAT),
+  };
+}
+
+// Round a units value for display (settles can be fractional, e.g. 22.083).
+export function formatUnits(units?: number | null): string {
+  if (typeof units !== "number" || !Number.isFinite(units)) return "—";
+  return String(Math.max(0, Math.round(units)));
+}

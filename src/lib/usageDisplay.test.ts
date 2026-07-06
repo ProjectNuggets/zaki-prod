@@ -1,5 +1,9 @@
 import { describe, expect, it } from "@jest/globals";
 import {
+  EST_UNITS_PER_AGENT_RUN,
+  EST_UNITS_PER_CHAT,
+  estimateTurnsFromUnits,
+  formatUnits,
   formatUsagePercentLabel,
   getUsagePercent,
   isUsageAtCap,
@@ -27,5 +31,24 @@ describe("usageDisplay", () => {
     expect(isUsageNearCap(100)).toBe(false);
     expect(isUsageAtCap(99.9)).toBe(false);
     expect(isUsageAtCap(100)).toBe(true);
+  });
+
+  it("estimates agent runs and chats from remaining pooled units", () => {
+    expect(EST_UNITS_PER_AGENT_RUN).toBeGreaterThan(EST_UNITS_PER_CHAT);
+    expect(estimateTurnsFromUnits(1420)).toEqual({ agentRuns: 64, chats: 1420 });
+    expect(estimateTurnsFromUnits(97)).toEqual({ agentRuns: 4, chats: 97 });
+    expect(estimateTurnsFromUnits(0)).toEqual({ agentRuns: 0, chats: 0 });
+    // null / negative / non-finite -> null so callers fall back to a percent
+    expect(estimateTurnsFromUnits(null)).toBeNull();
+    expect(estimateTurnsFromUnits(-5)).toBeNull();
+    expect(estimateTurnsFromUnits(Number.NaN)).toBeNull();
+  });
+
+  it("formats fractional units for display", () => {
+    expect(formatUnits(22.083)).toBe("22");
+    expect(formatUnits(0)).toBe("0");
+    expect(formatUnits(-3)).toBe("0");
+    expect(formatUnits(null)).toBe("—");
+    expect(formatUnits(Number.NaN)).toBe("—");
   });
 });
