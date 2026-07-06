@@ -714,6 +714,12 @@ const CREEM_WEBHOOK_SECRET = (process.env.CREEM_WEBHOOK_SECRET || "").trim();
 const SKIP_EMAIL_VERIFICATION = ["non", "none", "no"].includes(
   ZAKI_EMAIL_MODE.toLowerCase()
 );
+// Legacy prompt-COUNT quota for AUTHENTICATED users. Deactivated by default: logged-in users are
+// metered solely by the unit wallet (Spaces + Agent are wallet-covered). Anonymous users keep the
+// count (they have no wallet). Set ZAKI_AUTHENTICATED_PROMPT_COUNT_ENABLED=1 to re-enable it.
+const AUTHENTICATED_PROMPT_COUNT_ENABLED = /^(1|true|yes|on)$/i.test(
+  String(process.env.ZAKI_AUTHENTICATED_PROMPT_COUNT_ENABLED || "").trim()
+);
 const ZAKI_VERIFY_TTL_MINUTES = Number(
   process.env.ZAKI_VERIFY_TTL_MINUTES || 60
 );
@@ -11933,6 +11939,9 @@ const agentChatStreamHandler = async (req, res) => {
       surface: ZAKI_BOT_SURFACE,
       consumePromptQuotaForUser,
       setPromptQuotaHeaders,
+      // Deactivated for logged-in users: the agent turn is already metered by the unit-wallet
+      // reserve/settle above, so the legacy per-surface count is a redundant second cap.
+      enabled: AUTHENTICATED_PROMPT_COUNT_ENABLED,
     });
     if (!agentQuotaDecision.allowed) {
       // No agent work ran (quota gate denied after reserve) → release the hold (full refund).

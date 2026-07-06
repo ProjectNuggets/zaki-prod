@@ -12,8 +12,12 @@ export async function enforcePromptQuotaForIngress({
   surface = APP_CHAT_SURFACE,
   consumePromptQuotaForUser,
   setPromptQuotaHeaders,
+  // The legacy prompt-COUNT quota is deactivated for authenticated users — logged-in users are
+  // metered solely by the unit wallet. Pass enabled:false to skip it (anonymous users use a
+  // separate counter path and are unaffected by this function).
+  enabled = true,
 }) {
-  if (!zakiUser?.id) {
+  if (!enabled || !zakiUser?.id) {
     return { allowed: true, quota: null };
   }
 

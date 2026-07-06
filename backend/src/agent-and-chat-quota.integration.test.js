@@ -351,4 +351,21 @@ describe("agent/chat surface quota integration", () => {
     );
     expect(readWeeklyPromptUsage).toHaveBeenCalledTimes(2);
   });
+
+  it("deactivates the authenticated count when enabled:false — logged-in users are wallet-only", async () => {
+    const consumePromptQuotaForUser = jest.fn();
+    const res = createMockRes();
+    const decision = await enforcePromptQuotaForIngress({
+      zakiUser: { id: 42 },
+      surface: ZAKI_BOT_SURFACE,
+      res,
+      consumePromptQuotaForUser,
+      setPromptQuotaHeaders,
+      enabled: false,
+    });
+    expect(decision.allowed).toBe(true);
+    expect(decision.quota).toBeNull();
+    // The legacy count is never touched and no 429 / X-Zaki-Quota headers are emitted.
+    expect(consumePromptQuotaForUser).not.toHaveBeenCalled();
+  });
 });
