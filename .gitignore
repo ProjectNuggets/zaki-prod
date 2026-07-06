@@ -21,3 +21,7 @@ tmp/
 # during the D28 commit. Block them going forward.
 zaki-webhook.*.ts.net.crt
 zaki-webhook.*.ts.net.key
+
+# macOS Finder metadata (never track)
+.DS_Store
+**/.DS_Store

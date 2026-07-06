@@ -120,8 +120,10 @@ async function readStreamTokens(response) {
  * streamChatHandler already remaps to the caller's own workspace.
  */
 async function fetchUserWorkspace(token, label) {
-  // Try the Spaces workspace list endpoint — common shapes: /api/workspace or /api/spaces/workspaces
-  for (const path of ["/api/spaces/workspaces", "/api/workspace"]) {
+  // Try the workspace list endpoint. /api/workspaces is the real route (listWorkspacesHandler,
+  // which also lazily provisions the caller's default Spaces workspace on first call); the other
+  // two are kept as harmless fallbacks for older backends.
+  for (const path of ["/api/workspaces", "/api/spaces/workspaces", "/api/workspace"]) {
     const res = await authRequest(token, path);
     if (!res.ok) continue;
     const data = await res.json().catch(() => null);
