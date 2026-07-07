@@ -66,12 +66,12 @@ import {
   type MemoryPolicy,
   type MeterStatusProduct,
   type MeterWindowSnapshot,
-  type PlatformUsageProductId,
   type ProductRegistryItem,
-  type UsageQuotaSnapshot,
 } from "@/lib/api";
 import { hasActiveSubscription, resolveEffectiveEntitlement } from "@/lib/entitlements";
 import {
+  estimateTurnsFromUnits,
+  formatUnits,
   formatUsagePercentLabel,
   getRoundedUsagePercent,
   getUsagePercent,
@@ -142,14 +142,6 @@ const SETTINGS_PLAN_LABELS: Record<SettingsBillingPlanId, string> = {
   pro: "Pro",
   pro_max: "Pro MAX",
 };
-
-const PLATFORM_USAGE_PRODUCTS: PlatformUsageProductId[] = [
-  "spaces",
-  "agent",
-  "learn",
-  "hire",
-  "design",
-];
 
 type AgentSettingsDraft = Required<
   Pick<
@@ -343,27 +335,48 @@ function getMeterWindowLabel(
   return null;
 }
 
-function getQuotaSummaryLabel(
+// Exact "N of M left" from a meter window snapshot (prefers the pooled remaining, which is
+// topup-aware; falls back to limit - used).
+function getMeterRemainingLabel(
   t: (key: string, options?: Record<string, unknown>) => string,
-  quota?: UsageQuotaSnapshot
+  snapshot?: MeterWindowSnapshot | null
 ) {
-  if (!quota) return t("settingsModal.usage.pending");
-  if (quota.unavailable) return t("settingsModal.usage.unavailable");
-  if (quota.metered === false) return t("settingsModal.usage.memoryGoverned");
-  if (quota.unlimited) {
-    return t("settingsModal.usage.usedUnlimited", {
-      defaultValue: "Included in weekly usage",
-    });
-  }
-  if (typeof quota.limit === "number" && typeof quota.used === "number") {
-    const percent = getUsagePercent({ used: quota.used, limit: quota.limit });
-    return t("settingsModal.usage.productUsagePercent", {
-      percent: getRoundedUsagePercent(percent),
-      defaultValue: `${getRoundedUsagePercent(percent)}% this week`,
-    });
-  }
-  return t("settingsModal.usage.productUsageLinked", {
-    defaultValue: "Included in weekly usage",
+  if (!snapshot || typeof snapshot.limit !== "number") return null;
+  const remaining =
+    typeof snapshot.remaining === "number"
+      ? snapshot.remaining
+      : typeof snapshot.used === "number"
+      ? Math.max(0, snapshot.limit - snapshot.used)
+      : null;
+  if (remaining === null) return null;
+  return t("settingsModal.usage.remainingOfLimit", {
+    remaining: formatUnits(remaining),
+    limit: formatUnits(snapshot.limit),
+    defaultValue: `${formatUnits(remaining)} of ${formatUnits(snapshot.limit)} left`,
+  });
+}
+
+// "≈ N agent runs · or M chats" — only meaningful on the POOLED weekly total (the per-product
+// rows are weighted slices of this same pool, not independent budgets).
+function getMeterRunsLabel(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  snapshot?: MeterWindowSnapshot | null
+) {
+  // Only meaningful when there is a real numeric cap; an unlimited/unmetered window (limit null)
+  // must NOT render a concrete "≈ N agent runs" headline (it would falsely imply a finite budget).
+  if (!snapshot || typeof snapshot.limit !== "number") return null;
+  const remaining =
+    typeof snapshot.remaining === "number"
+      ? snapshot.remaining
+      : typeof snapshot.limit === "number" && typeof snapshot.used === "number"
+      ? Math.max(0, snapshot.limit - snapshot.used)
+      : null;
+  const estimate = estimateTurnsFromUnits(remaining);
+  if (!estimate) return null;
+  return t("settingsModal.usage.runsHeadline", {
+    agentRuns: estimate.agentRuns,
+    chats: estimate.chats,
+    defaultValue: `≈ ${estimate.agentRuns} agent runs · or ${estimate.chats} chats`,
   });
 }
 
@@ -1012,6 +1025,8 @@ export function SettingsPage() {
           ),
         })
       : t("settingsModal.usage.weeklyAllowancePending"));
+  const weeklyRunsLabel = getMeterRunsLabel(t, meterStatus?.weekly ?? null);
+  const weeklyRemainingLabel = getMeterRemainingLabel(t, meterStatus?.weekly ?? null);
   const burstWindowLabel =
     getMeterWindowLabel(
       t,
@@ -1098,11 +1113,6 @@ export function SettingsPage() {
         meterProduct: product.productId ? meterStatus.products?.[product.productId] ?? null : null,
       }))
     : [];
-  const legacyUsageProducts = PLATFORM_USAGE_PRODUCTS.map((productId) => {
-    const product = platformUsage?.products?.[productId];
-    if (!product) return null;
-    return product;
-  }).filter(Boolean);
   const getBooleanStatusLabel = (value: boolean) =>
     value
       ? t("settingsModal.status.on", { defaultValue: "On" })
@@ -1989,7 +1999,7 @@ export function SettingsPage() {
                   >
                     <header>
                       <span>{t("settingsModal.usage.weeklyAllowance")}</span>
-                      <strong>{weeklyAllowanceLabel}</strong>
+                      <strong>{weeklyRunsLabel || weeklyAllowanceLabel}</strong>
                     </header>
                     <div
                       className="zaki-settings-v2__meter-track"
@@ -2003,6 +2013,12 @@ export function SettingsPage() {
                         <dt>{t("settingsModal.usage.usage", { defaultValue: "Usage" })}</dt>
                         <dd>{weeklyAllowanceLabel}</dd>
                       </div>
+                      {weeklyRemainingLabel ? (
+                        <div>
+                          <dt>{t("settingsModal.usage.left", { defaultValue: "Left" })}</dt>
+                          <dd>{weeklyRemainingLabel}</dd>
+                        </div>
+                      ) : null}
                       <div>
                         <dt>{t("settingsModal.usage.reset", { defaultValue: "Reset" })}</dt>
                         <dd>
@@ -2088,30 +2104,41 @@ export function SettingsPage() {
                       {t("settingsModal.usage.productUsage", { defaultValue: "Weekly by product" })}
                     </strong>
                     <p className="v2-body-sm">
-                      {t("settingsModal.usage.helper", {
+                      {t("settingsModal.usage.helperShared", {
                         defaultValue:
-                          "Open when you want to see which products contributed to this week's usage.",
+                          "Weighted shares of your one shared weekly allowance — not separate budgets.",
                       })}
                     </p>
                   </div>
-                  <V2Badge>
-                    {t("settingsModal.usage.productCount", {
-                      count: meterUsageRows.length || legacyUsageProducts.length,
-                      defaultValue: `${meterUsageRows.length || legacyUsageProducts.length} products`,
-                    })}
-                  </V2Badge>
+                  {meterUsageRows.length > 0 ? (
+                    <V2Badge>
+                      {t("settingsModal.usage.productCount", {
+                        count: meterUsageRows.length,
+                        defaultValue: `${meterUsageRows.length} products`,
+                      })}
+                    </V2Badge>
+                  ) : null}
                 </summary>
                 <div className="zaki-settings-v2__usage-grid">
-                  {meterUsageRows.length > 0
-                    ? meterUsageRows.map(({ product, meterProduct }) => {
+                  {meterUsageRows.length > 0 ? (
+                    meterUsageRows.map(({ product, meterProduct }) => {
+                        const productUsed =
+                          typeof meterProduct?.weekly?.used === "number"
+                            ? meterProduct.weekly.used
+                            : null;
+                        // Per-product rows are weighted slices of the ONE pooled weekly allowance,
+                        // not standalone budgets — show each product's share of that shared pool
+                        // (its % of the pooled limit), never a per-product "N of M".
+                        const productShare =
+                          productUsed !== null && typeof weeklyWindow.limit === "number"
+                            ? { used: productUsed, limit: weeklyWindow.limit }
+                            : null;
                         const summaryLabel =
-                          getMeterWindowLabel(t, meterProduct?.weekly ?? null) ||
+                          getMeterWindowLabel(t, productShare) ||
                           t("settingsModal.usage.productUsageLinked", {
                             defaultValue: "Included in weekly usage",
                           });
                         const resetLabel = formatUsageReset(meterProduct?.weekly?.resetAt);
-                        const weekly = meterProduct?.weekly ?? null;
-                        const hasProductLimit = typeof weekly?.limit === "number";
                         return (
                           <div key={product.productId} className="zaki-settings-v2__usage-row">
                             <div>
@@ -2121,10 +2148,10 @@ export function SettingsPage() {
                             </div>
                             <div className="zaki-settings-v2__usage-row-meter">
                               <span>{summaryLabel}</span>
-                              {hasProductLimit ? (
+                              {productShare ? (
                                 <div
                                   className="zaki-settings-v2__meter-track"
-                                  style={getMeterBarStyle(weekly?.used, weekly?.limit)}
+                                  style={getMeterBarStyle(productShare.used, productShare.limit)}
                                   aria-hidden="true"
                                 >
                                   <span />
@@ -2139,37 +2166,12 @@ export function SettingsPage() {
                           </div>
                         );
                       })
-                    : legacyUsageProducts.map((product) => {
-                        const quota = product?.quota;
-                        const resetLabel = formatUsageReset(quota?.resetAt);
-                        const hasProductLimit = typeof quota?.limit === "number";
-                        return (
-                          <div key={product?.productId} className="zaki-settings-v2__usage-row">
-                            <div>
-                              <strong>{product?.label}</strong>
-                              <small>{getUsageLifecycleLabel(t, product?.lifecycle || "current")}</small>
-                              <small>{getUsageLaunchStateLabel(t, product?.productId)}</small>
-                            </div>
-                            <div className="zaki-settings-v2__usage-row-meter">
-                              <span>{getQuotaSummaryLabel(t, quota)}</span>
-                              {hasProductLimit ? (
-                                <div
-                                  className="zaki-settings-v2__meter-track"
-                                  style={getMeterBarStyle(quota?.used, quota?.limit)}
-                                  aria-hidden="true"
-                                >
-                                  <span />
-                                </div>
-                              ) : null}
-                            </div>
-                            <small>
-                              {resetLabel
-                                ? t("settingsModal.usage.resetsAt", { reset: resetLabel })
-                                : t("settingsModal.usage.resetPending")}
-                            </small>
-                          </div>
-                        );
-                      })}
+                  ) : platformUsageLoading || meterStatusLoading ? null : (
+                    // Meter query failed (not loading) but the section is open: don't leave a bare
+                    // "0 products" grid — say so plainly. We do NOT fall back to the old per-surface
+                    // budgets (the pooled wallet is the source of truth).
+                    <p className="v2-body-sm">{t("settingsModal.usage.unavailable")}</p>
+                  )}
                 </div>
               </details>
               <div className="zaki-settings-v2__billing-actions">

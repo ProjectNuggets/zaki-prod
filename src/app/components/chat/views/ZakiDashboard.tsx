@@ -42,6 +42,8 @@ import { claimAnonymousSpacesWork } from "@/lib/api";
 import { useAuthStore } from "@/stores";
 import { cn } from "@/lib/utils";
 import {
+  estimateTurnsFromUnits,
+  formatUnits,
   formatUsagePercentLabel,
   getRoundedUsagePercent,
   getUsagePercent,
@@ -532,21 +534,52 @@ function CreditMeter({
 }) {
   const roundedPercent = getRoundedUsagePercent(weeklyStats.usedPercent);
   const isUnavailable = unavailable && !loading;
+  // Prefer a concrete "≈ N agent runs · or M chats" readout over a bare percent whenever we have
+  // real pooled-remaining numbers; fall back to the percent (or loading/unavailable) otherwise.
+  const estimate =
+    !loading && !isUnavailable ? estimateTurnsFromUnits(weeklyStats.remaining) : null;
+  const hasNumbers = estimate !== null && typeof weeklyStats.limit === "number";
   const usageShortLabel = loading
     ? t("zakiDashboard.meter.loading")
     : isUnavailable
     ? t("zakiControls.powerUser.usage.unavailable", {
         defaultValue: "Usage unavailable",
       })
+    : hasNumbers && estimate
+    ? t("zakiDashboard.meter.runsHeadline", {
+        agentRuns: estimate.agentRuns,
+        chats: estimate.chats,
+        defaultValue: `≈ ${estimate.agentRuns} agent runs · or ${estimate.chats} chats`,
+      })
     : t("zakiDashboard.meter.usageShort", {
         percent: roundedPercent,
         defaultValue: `${roundedPercent}%`,
       });
+  const remainingDetail =
+    hasNumbers
+      ? t("zakiDashboard.meter.remainingOfLimit", {
+          remaining: formatUnits(weeklyStats.remaining),
+          limit: formatUnits(weeklyStats.limit),
+          defaultValue: `${formatUnits(weeklyStats.remaining)} of ${formatUnits(
+            weeklyStats.limit
+          )} left`,
+        })
+      : null;
   const usageAriaLabel = loading
     ? t("zakiDashboard.meter.loading")
     : isUnavailable
     ? t("zakiControls.powerUser.usage.unavailable", {
         defaultValue: "Usage unavailable",
+      })
+    : hasNumbers && estimate
+    ? t("zakiDashboard.meter.usageRunsAria", {
+        agentRuns: estimate.agentRuns,
+        chats: estimate.chats,
+        remaining: formatUnits(weeklyStats.remaining),
+        limit: formatUnits(weeklyStats.limit),
+        defaultValue: `About ${estimate.agentRuns} agent runs or ${estimate.chats} chats left — ${formatUnits(
+          weeklyStats.remaining
+        )} of ${formatUnits(weeklyStats.limit)} weekly usage remaining.`,
       })
     : t("zakiDashboard.meter.usagePercent", {
         percent: roundedPercent,
@@ -575,6 +608,11 @@ function CreditMeter({
           })}
         </span>
         <strong>{usageShortLabel}</strong>
+        {remainingDetail ? (
+          <small className="zaki-dashboard-command__meter-remaining">
+            {remainingDetail}
+          </small>
+        ) : null}
         <small className="zaki-dashboard-command__meter-reset">
           <span>{t("zakiDashboard.meter.reset", { defaultValue: "Reset" })}</span>
           <b>{resetValue}</b>

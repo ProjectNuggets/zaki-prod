@@ -5,6 +5,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { PowerUserSheet, deriveSoftLimitState } from "./PowerUserSheet";
 import type { NullalisApprovalRequest } from "@/app/components/chat/BotStatusRail";
 
+jest.mock("@/queries/useBilling", () => ({
+  useMeterStatus: jest.fn(() => ({ data: null, isLoading: false })),
+}));
+
 jest.mock("@/lib/api", () => ({
   downloadAgentExportFile: jest.fn(),
   exportAgentArtifact: jest.fn(),
@@ -105,17 +109,11 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
   if (key === "zakiControls.powerUser.usage.unlimited") {
     return "Unlimited";
   }
-  if (key === "zakiControls.powerUser.usage.dailyPercent") {
-    return `${String(options?.percent ?? "")}% of your daily usage`;
-  }
   if (key === "zakiControls.powerUser.usage.weeklyPercent") {
     return `${String(options?.percent ?? "")}% of your weekly usage`;
   }
-  if (key === "zakiControls.powerUser.usage.legacyRequestsThisWeek") {
-    return "Legacy Agent weekly quota";
-  }
-  if (key === "zakiControls.powerUser.usage.legacyWeeklyPercent") {
-    return `${String(options?.percent ?? "")}% of legacy Agent weekly quota`;
+  if (key === "zakiControls.powerUser.usage.usedThisWeek") {
+    return "Used this week";
   }
   if (key === "zakiControls.powerUser.usage.footer") {
     return `Soft-limit warning at ${String(options?.warning ?? "")}% used; near-limit at ${String(options?.near ?? "")}%. Hard stops still apply on hit.`;
@@ -136,6 +134,8 @@ jest.mock("react-i18next", () => ({
 }));
 
 const fetchUsageQuotaMock = jest.requireMock("@/lib/api").fetchUsageQuota as jest.Mock;
+const useMeterStatusMock = jest.requireMock("@/queries/useBilling")
+  .useMeterStatus as jest.Mock;
 const fetchAgentDiagnosticsMock = jest.requireMock("@/lib/api")
   .fetchAgentDiagnostics as jest.Mock;
 const fetchAgentExtensionDiagnosticsMock = jest.requireMock("@/lib/api")
@@ -833,41 +833,47 @@ describe("PowerUserSheet", () => {
     });
   });
 
-  it("derives soft-limit state at 70% (warning) and 90% (near_limit)", () => {
+  it("derives soft-limit state on the shared 80/100 model", () => {
     expect(deriveSoftLimitState(0, 10, false)).toBe("normal");
-    expect(deriveSoftLimitState(7, 10, false)).toBe("warning");
-    expect(deriveSoftLimitState(9, 10, false)).toBe("near_limit");
-    expect(deriveSoftLimitState(10, 10, false)).toBe("near_limit");
+    expect(deriveSoftLimitState(7, 10, false)).toBe("normal"); // 70% no longer warns
+    expect(deriveSoftLimitState(8, 10, false)).toBe("warning"); // 80% near-cap
+    expect(deriveSoftLimitState(9, 10, false)).toBe("warning");
+    expect(deriveSoftLimitState(10, 10, false)).toBe("near_limit"); // 100% at cap
     expect(deriveSoftLimitState(100, null, true)).toBe("unlimited");
   });
 
-  it("fetches usage quota when Usage tab is shown and marks near-limit state", async () => {
-    fetchUsageQuotaMock.mockImplementation((surface: string) => {
-      if (surface === "app_chat") {
-        return Promise.resolve({
-          response: { ok: true },
-          data: { unlimited: false, limit: 10, used: 9, remaining: 1, resetAt: "2026-04-19T00:00:00Z" },
-        });
-      }
-      return Promise.resolve({
-        response: { ok: true },
-        data: { unlimited: false, limit: 10, used: 2, remaining: 8, resetAt: "2026-04-19T00:00:00Z" },
-      });
+  it("reads per-product usage from the unified meter and flags near-cap on the 80/100 model", async () => {
+    // Usage is one shared pool: the cap is meterStatus.weekly.limit; each product carries only its
+    // `used` contribution. Rows show each product's SHARE of the pooled limit.
+    useMeterStatusMock.mockReturnValue({
+      data: {
+        data: {
+          weekly: { limit: 100, used: 205, remaining: 0, resetAt: "2026-04-19T00:00:00Z" },
+          products: {
+            spaces: { weekly: { used: 85 } },
+            agent: { weekly: { used: 20 } },
+            learning: { weekly: { used: 100 } },
+          },
+        },
+      },
+      isLoading: false,
     });
     await act(async () => {
       render(<PowerUserSheet isOpen onClose={() => {}} initialTab="usage" />);
     });
+    // Share of the pooled limit (100): spaces 85% -> warning, agent 20% -> normal, learning 100% -> near_limit.
     await waitFor(() => {
       expect(
-        screen.getByTestId("power-user-usage-surface-app_chat")
-      ).toHaveAttribute("data-soft-limit-state", "near_limit");
+        screen.getByTestId("power-user-usage-surface-spaces")
+      ).toHaveAttribute("data-soft-limit-state", "warning");
     });
     expect(
-      screen.getByTestId("power-user-usage-surface-zaki_bot")
+      screen.getByTestId("power-user-usage-surface-agent")
     ).toHaveAttribute("data-soft-limit-state", "normal");
-    expect(screen.getByText("90% of your daily usage")).toBeInTheDocument();
-    expect(screen.getByText("Legacy Agent weekly quota")).toBeInTheDocument();
-    expect(screen.getByText("20% of legacy Agent weekly quota")).toBeInTheDocument();
-    expect(screen.queryByText("9 / 10")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("power-user-usage-surface-learning")
+    ).toHaveAttribute("data-soft-limit-state", "near_limit");
+    // No longer reads the legacy per-surface quota endpoint.
+    expect(fetchUsageQuotaMock).not.toHaveBeenCalled();
   });
 });

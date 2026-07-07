@@ -186,9 +186,12 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.meter.free": "Free",
     "zakiDashboard.meter.usagePercent": "{{percent}}% of your weekly usage",
     "zakiDashboard.meter.usageShort": "{{percent}}%",
+    "zakiDashboard.meter.runsHeadline": "≈ {{agentRuns}} agent runs · or {{chats}} chats",
+    "zakiDashboard.meter.remainingOfLimit": "{{remaining}} of {{limit}} left",
+    "zakiDashboard.meter.usageRunsAria":
+      "About {{agentRuns}} agent runs or {{chats}} chats left — {{remaining}} of {{limit}} weekly usage remaining.",
     "zakiDashboard.meter.used": "Used",
     "zakiDashboard.meter.remaining": "Remaining",
-    "zakiDashboard.meter.remainingOfLimit": "{{percent}}% of your weekly usage",
     "zakiDashboard.meter.usedOfLimit": "{{percent}}% of your weekly usage",
     "zakiDashboard.meter.usedUnits": "{{percent}}% of your weekly usage",
     "zakiDashboard.meter.resets": "Resets {{reset}}",
@@ -287,6 +290,8 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     .replace("{{name}}", String(options?.name ?? ""))
     .replace("{{hours}}", String(options?.hours ?? ""))
     .replace("{{remaining}}", String(options?.remaining ?? ""))
+    .replace("{{agentRuns}}", String(options?.agentRuns ?? ""))
+    .replace("{{chats}}", String(options?.chats ?? ""))
     .replace("{{percent}}", String(options?.percent ?? ""))
     .replace("{{limit}}", String(options?.limit ?? ""))
     .replace("{{used}}", String(options?.used ?? ""))
@@ -516,9 +521,10 @@ describe("ZakiDashboard", () => {
     expect(screen.getByRole("heading", { name: "Let's move." })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Hi, Nova User. 1,420 left." })).not.toBeInTheDocument();
     expect(screen.getAllByText("Pro").length).toBeGreaterThan(0);
-    expect(within(screen.getByTestId("zaki-dashboard-command-meter")).getByText("5%")).toBeInTheDocument();
+    expect(within(screen.getByTestId("zaki-dashboard-command-meter")).getByText("≈ 64 agent runs · or 1420 chats")).toBeInTheDocument();
+    expect(within(screen.getByTestId("zaki-dashboard-command-meter")).getByText("1420 of 1500 left")).toBeInTheDocument();
     expect(screen.getByTestId("zaki-dashboard-command-meter")).toHaveAccessibleName(
-      "5% of your weekly usage"
+      "About 64 agent runs or 1420 chats left — 1420 of 1500 weekly usage remaining."
     );
     expect(
       screen.getByPlaceholderText("Describe the outcome, constraints, and where Agent should start.")
@@ -627,9 +633,9 @@ describe("ZakiDashboard", () => {
 
     renderDashboard();
 
-    expect(within(screen.getByTestId("zaki-dashboard-command-meter")).getByText("82%")).toBeInTheDocument();
+    expect(within(screen.getByTestId("zaki-dashboard-command-meter")).getByText("1440 of 8000 left")).toBeInTheDocument();
     expect(screen.getByTestId("zaki-dashboard-command-meter")).toHaveAccessibleName(
-      "82% of your weekly usage"
+      "About 65 agent runs or 1440 chats left — 1440 of 8000 weekly usage remaining."
     );
     expect(screen.getByText("You're at 82% this week — upgrade for more room.")).toBeInTheDocument();
     expect(screen.queryByText("6,560")).not.toBeInTheDocument();
@@ -728,11 +734,11 @@ describe("ZakiDashboard", () => {
     expect(mockUseAnonymousMeterStatus).toHaveBeenCalledWith(true);
     expect(screen.getAllByText("Anonymous free session").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Free").length).toBeGreaterThan(0);
-    expect(within(screen.getByTestId("zaki-dashboard-command-meter")).getByText("3%")).toBeInTheDocument();
+    expect(within(screen.getByTestId("zaki-dashboard-command-meter")).getByText("≈ 4 agent runs · or 97 chats")).toBeInTheDocument();
+    expect(within(screen.getByTestId("zaki-dashboard-command-meter")).getByText("97 of 100 left")).toBeInTheDocument();
     expect(screen.getByTestId("zaki-dashboard-command-meter")).toHaveAccessibleName(
-      "3% of your weekly usage"
+      "About 4 agent runs or 97 chats left — 97 of 100 weekly usage remaining."
     );
-    expect(screen.queryByText("97")).not.toBeInTheDocument();
   });
 
   it("uses the same command product order for anonymous users", () => {
@@ -1084,9 +1090,9 @@ describe("ZakiDashboard", () => {
     });
 
     expect(screen.getByText("Weekly usage is full.")).toBeInTheDocument();
-    expect(within(screen.getByTestId("zaki-dashboard-command-meter")).getByText("100%")).toBeInTheDocument();
+    expect(within(screen.getByTestId("zaki-dashboard-command-meter")).getByText("0 of 100 left")).toBeInTheDocument();
     expect(screen.getByTestId("zaki-dashboard-command-meter")).toHaveAccessibleName(
-      "100% of your weekly usage"
+      "About 0 agent runs or 0 chats left — 0 of 100 weekly usage remaining."
     );
     expect(screen.getByRole("button", { name: "Start chat" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Save and sign up" }));
