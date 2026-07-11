@@ -119,6 +119,10 @@ export const AGENT_RUNTIME_FACADE_ROUTES = Object.freeze([
   { method: "delete", path: "/api/agent/artifacts/:artifactId/share" },
   { method: "post", path: "/api/agent/artifacts/:artifactId/export" },
   { method: "get", path: "/api/agent/brain/documents" },
+  // TELOS Slice 1 — curated user-model north star (read-only). Forwards to the
+  // nullalis gateway /api/v1/users/{id}/telos. Curation writes go through the
+  // approved wish/telos loop, never a UI POST (T4).
+  { method: "get", path: "/api/agent/telos" },
 ]);
 
 const AGENT_EXPORT_FILENAME_SAFE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/;
