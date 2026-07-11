@@ -100,6 +100,7 @@ import {
   type ChannelBindingDraft,
   type SettingsChannelId,
 } from "./SettingsChannelsSection";
+import { SettingsTelosSection } from "./SettingsTelosSection";
 import {
   GatedRow,
   V2SettingsBlock,
@@ -1398,6 +1399,12 @@ export function SettingsPage() {
       group: t("settingsModal.navGroups.personal", { defaultValue: "Personal" }),
     },
     {
+      href: "#settings-telos",
+      label: t("settingsModal.nav.telos", { defaultValue: "Your goals" }),
+      icon: UserRound,
+      group: t("settingsModal.navGroups.personal", { defaultValue: "Personal" }),
+    },
+    {
       href: "#settings-billing",
       label: t("settingsModal.nav.planUsage", { defaultValue: "Plan & Usage" }),
       icon: CreditCard,
@@ -2500,6 +2507,8 @@ export function SettingsPage() {
                 </div>
               </V2SettingsRow>
             </V2SettingsBlock>
+
+            <SettingsTelosSection />
 
             <SettingsChannelsSection
               agentChannelsById={agentChannelsById}
