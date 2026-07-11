@@ -139,20 +139,14 @@ Backend readiness alone does not count. UI affordance alone does not count.
 Use isolated branches/worktrees for parallel work. Never have two agents edit
 the same checkout.
 
-Current agent work is assigned in:
+Current agent work is claimed and assigned on the central board:
 
-`docs/multi-agent-execution-board-2026-05-30.md`
+`zaki-infra/docs/COORDINATION.md` (§2 task claims — claim before starting,
+leave a note in §4 when you finish or hand off)
 
-Branch naming:
-
-- `codex/v2-agent-closeout`
-- `codex/v2-brain-closeout`
-- `codex/v2-learning-closeout`
-- `codex/v2-design-waitlist`
-- `codex/v2-hire-closeout`
-- `codex/v2-settings-control-plane`
-- `codex/v2-operator-control-plane`
-- `codex/v2-release-e2e`
+Branch naming: `<agent-handle>/<short-task>` (e.g. `codex/settings-model-picker`,
+`docs/central-coordination`). The May-era `codex/v2-*` closeout branches are
+historical — see `docs/archive/`.
 
 Each agent must:
 
@@ -212,11 +206,12 @@ Required routes for final V1 app QA:
 
 ## 9. Known Coordination Constraints
 
-- `/Users/nova/Desktop/zaki-prod` is the integration checkout on
-  `codex/zaki-prod-finalization`.
-- `/Users/nova/Desktop/zaki-prod-agent` is the active Agent closeout worktree on
-  `codex/v2-agent-closeout`.
-- `/Users/nova/Desktop/zaki-prod-hire` is the dedicated Hire worktree.
-- `/Users/nova/Desktop/nullalis` is the production backend truth on `main`.
-- Nullalis backend S1-S6 are merged and documented as backend-ready, but ZAKI UI
+- **Branch/tree ownership is tracked LIVE in `zaki-infra/docs/COORDINATION.md` §1–§2** —
+  check it before touching this tree; the snapshot below goes stale, the board does not.
+- `/Users/nova/Desktop/zaki-prod` is the primary checkout — it may be mid-work on a
+  feature branch with uncommitted changes owned by another session. Never assume it is
+  clean; use your own worktree.
+- `/Users/nova/Desktop/nullalis` is the engine truth (its `main` is the validated SHA —
+  see the board registry for the current one).
+- Nullalis backend capabilities are merged and documented as backend-ready, but ZAKI UI
   release gates remain open until app-level E2E proves each exposed feature.
