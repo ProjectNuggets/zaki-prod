@@ -6,12 +6,25 @@ This repo is the commercial ZAKI web app and BFF. It coordinates product
 surfaces across ZAKI Agent, Chat/Spaces, Brain, Learn, Hire, Design, billing,
 usage, identity, and settings.
 
+## 0. Platform coordination (read this FIRST)
+
+**The live multi-agent coordination board for the whole platform lives in the central repo:
+`zaki-infra/docs/COORDINATION.md`** (local: `~/Desktop/zaki-infra`, branch `staging`). It holds the
+per-repo registry (owners, branch, tree state), active task claims, cross-repo handoffs, and an
+**agent notes log** where concurrent agents leave messages to each other — **claim your task there
+before starting, and leave a note when you finish or hand off.** Backlog:
+`zaki-infra/docs/superpowers/ROADMAP-2026-07-11.md` · platform map: `zaki-infra/docs/PLATFORM.md`.
+The old May-2026 boards in this repo are **archived** (`docs/archive/`) — do not work from them.
+
+Developing this repo without running upstream services locally? See
+`docs/contributing-proxy-to-staging.md`.
+
 ## 1. Read First
 
 Before editing code, read:
 
-1. `docs/multi-agent-execution-board-2026-05-30.md`
-2. `docs/multi-agent-finalization-plan-2026-05-30.md`
+1. `zaki-infra/docs/COORDINATION.md` — the live board (see §0)
+2. `zaki-infra/docs/PLATFORM.md` — the cross-repo map
 3. `docs/zaki-client-value-activation-map-2026-05-30.md`
 4. `docs/nullalis-user-config-surface-map-2026-05-30.md`
 5. `docs/zaki-v2-surface-activation-inventory-2026-05-30.md`
