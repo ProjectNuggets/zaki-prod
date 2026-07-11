@@ -204,6 +204,7 @@ const SETTINGS_SECTION_QUERY_MAP: Record<string, string> = {
 
 const SETTINGS_NAV_HASHES = [
   "#settings-account",
+  "#settings-telos",
   "#settings-billing",
   "#settings-agent",
   "#settings-channels",
@@ -1977,6 +1978,8 @@ export function SettingsPage() {
               </V2SettingsRow>
             </V2SettingsBlock>
 
+            <SettingsTelosSection />
+
             <V2SettingsBlock
               id="settings-billing"
               data-testid="settings-billing"
@@ -2507,8 +2510,6 @@ export function SettingsPage() {
                 </div>
               </V2SettingsRow>
             </V2SettingsBlock>
-
-            <SettingsTelosSection />
 
             <SettingsChannelsSection
               agentChannelsById={agentChannelsById}
