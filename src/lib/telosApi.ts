@@ -2,7 +2,8 @@ import { backendAuthRequest } from "@/lib/api";
 
 export type TelosItem = {
   key: string;
-  /** Referent type parsed from the key: mission | goal | challenge | … */
+  /** Referent type from the endpoint (the gateway derives it from the key):
+   *  mission | goal | challenge | strategy | project | value | identity. */
   type: string;
   content: string;
 };

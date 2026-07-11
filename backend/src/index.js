@@ -16427,6 +16427,14 @@ app.get(
   requireAgentContext,
   makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/config`)
 );
+// TELOS Slice 1 — curated user-model north star (read-only). Forwards to the
+// nullalis gateway handleTelos. Curation writes go through the approved
+// wish/telos loop, never a UI POST (T4).
+app.get(
+  "/api/agent/telos",
+  requireAgentContext,
+  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/telos`)
+);
 app.get(
   "/api/agent/secrets/:key",
   requireAgentContext,
