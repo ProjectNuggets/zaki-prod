@@ -30,6 +30,8 @@ import { useAuthStore } from "@/stores";
 
 type ActiveFilter = "all" | "active" | "inactive";
 
+const ACCESS_CODE_MAX_DURATION_DAYS = 3650;
+
 const LEARNING_AI_STACK_TESTS: Array<{
   service: AdminLearningAiStackTestService;
   label: string;
@@ -94,8 +96,8 @@ export function AdminAccessCodesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
 
-  const [campaign, setCampaign] = useState("launch");
-  const [count, setCount] = useState("10");
+  const [campaign, setCampaign] = useState("manual_grant");
+  const [count, setCount] = useState("1");
   const [durationDays, setDurationDays] = useState("30");
   const [maxRedemptions, setMaxRedemptions] = useState("1");
   const [expiresAt, setExpiresAt] = useState("");
@@ -317,8 +319,12 @@ export function AdminAccessCodesPage() {
       toast.error("Count must be between 1 and 200.");
       return;
     }
-    if (!Number.isInteger(parsedDuration) || parsedDuration < 1 || parsedDuration > 3650) {
-      toast.error("Duration must be between 1 and 3650 days.");
+    if (
+      !Number.isInteger(parsedDuration) ||
+      parsedDuration < 1 ||
+      parsedDuration > ACCESS_CODE_MAX_DURATION_DAYS
+    ) {
+      toast.error(`Duration must be between 1 and ${ACCESS_CODE_MAX_DURATION_DAYS} days.`);
       return;
     }
     if (parsedMax !== null && (!Number.isInteger(parsedMax) || parsedMax < 1)) {
@@ -1064,22 +1070,26 @@ export function AdminAccessCodesPage() {
         </section>
 
         <section className="rounded-2xl border border-zaki-subtle bg-white px-6 py-6 shadow-[0px_16px_30px_rgba(15,15,15,0.06)] dark:bg-zaki-dark-card">
-          <div className="text-xs uppercase tracking-[0.3em] text-zaki-muted">Internal</div>
+          <div className="text-xs uppercase tracking-[0.3em] text-zaki-muted">
+            Super admin · Access grants
+          </div>
           <h1 className="mt-2 text-2xl font-semibold text-zaki-primary dark:text-zaki-dark-primary">
-            Access Code Admin
+            Generate access codes
           </h1>
-          <p className="mt-1 text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
-            Hidden panel for generating and managing access codes.
+          <p className="mt-1 max-w-3xl text-sm text-zaki-secondary dark:text-zaki-dark-subtle">
+            Create time-bound Personal access grants. A code can be redeemed only once per account;
+            retrying the same code returns the original expiry without stacking access. The 10-year
+            ceiling is reserved for deliberate long-lived grants; normal grants default to 30 days.
           </p>
 
           <form className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-6" onSubmit={onSubmitCreate}>
             <label className="flex flex-col gap-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
-              Campaign
+              Grant label
               <input
                 value={campaign}
                 onChange={(event) => setCampaign(event.target.value)}
                 className="rounded-xl border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:bg-zaki-dark-card dark:text-zaki-dark-primary"
-                placeholder="launch"
+                placeholder="manual_grant"
               />
             </label>
             <label className="flex flex-col gap-1 text-xs text-zaki-secondary dark:text-zaki-dark-subtle">
@@ -1098,7 +1108,7 @@ export function AdminAccessCodesPage() {
               <input
                 type="number"
                 min={1}
-                max={3650}
+                max={ACCESS_CODE_MAX_DURATION_DAYS}
                 value={durationDays}
                 onChange={(event) => setDurationDays(event.target.value)}
                 className="rounded-xl border border-zaki-subtle bg-white px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus dark:bg-zaki-dark-card dark:text-zaki-dark-primary"

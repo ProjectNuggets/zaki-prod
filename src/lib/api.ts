@@ -1050,6 +1050,7 @@ export async function redeemAccessCode(code: string, authToken?: string) {
     success?: boolean;
     accessExpiresAt?: string | null;
     campaign?: string | null;
+    alreadyRedeemed?: boolean;
     error?: string | null;
   } = {};
   try {
