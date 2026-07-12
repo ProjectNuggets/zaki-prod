@@ -2,7 +2,7 @@ name: Build and Publish Nova Nuggets Website Image
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/novaorbit-website-release]
     paths:
       - "nova-website/**"
       - ".github/workflows/deploy-nova-website.yml"
