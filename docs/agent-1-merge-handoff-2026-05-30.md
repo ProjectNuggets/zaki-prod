@@ -30,7 +30,7 @@ has the newer activation map and execution board.
 
 - `dist/*` build artifacts from `e4a2e21`
 - Stale doc edits that conflicted with the orchestration docs:
-  - `docs/multi-agent-finalization-plan-2026-05-30.md`
+  - `docs/archive/multi-agent-finalization-plan-2026-05-30.md` (archived after this handoff)
   - `docs/nullalis-user-config-surface-map-2026-05-30.md`
 
 ## Coordination Notes

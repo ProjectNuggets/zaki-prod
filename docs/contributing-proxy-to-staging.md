@@ -6,7 +6,8 @@ Point at the staging environment instead and iterate on the frontend only.
 
 Verified against the real wiring as of 2026-07-11. If config drifts, re-verify against
 [`src/lib/runtimeEnv.ts`](../src/lib/runtimeEnv.ts) + [`vite.config.ts`](../vite.config.ts) here, and
-`zaki-infra/charts/zaki-*/values-staging.yaml` for the staging side.
+the [`zaki-infra` staging values](https://github.com/ProjectNuggets/zaki-infra/tree/staging/charts)
+for the staging side.
 
 ---
 
@@ -42,8 +43,9 @@ Two ways around it. Pick one.
 ## Option A — Local reverse proxy, same-origin (zero infra change; recommended for a solo dev)
 
 Make the browser talk to a **single origin** (your local dev server) and have that server forward
-`/api/*` to the staging BFF, rewriting the cookie domain back to localhost. The browser never makes
-a cross-origin request, so there is no CORS and the cookie sticks. Re-add the dev proxy locally
+`/api/*` to the staging BFF, removing the staging cookie domain so the cookie becomes host-only on
+localhost. The browser never makes a cross-origin request, so there is no CORS and the cookie sticks.
+Re-add the dev proxy locally
 (an uncommitted, dev-only convenience — **don't commit it**; the repo removed it on purpose).
 
 1. In `.env.local`, **blank the backend base** so the SPA uses its own origin:
@@ -63,16 +65,21 @@ a cross-origin request, so there is no CORS and the cookie sticks. Re-add the de
          target: 'https://api-staging.chatzaki.ai',
          changeOrigin: true,                // Host header becomes api-staging.chatzaki.ai
          secure: true,
-         cookieDomainRewrite: 'localhost',  // .chatzaki.ai cookie → localhost so it persists
+         cookieDomainRewrite: '',           // remove Domain=.chatzaki.ai; bind cookie to localhost
        },
-       '/env.js': { target: 'https://api-staging.chatzaki.ai', changeOrigin: true, secure: true },
      },
    }
    ```
 
+   **Do not proxy `/env.js`.** Keep the local [`public/env.js`](../public/env.js) placeholder. A
+   staging `/env.js` injects `BACKEND_URL=https://api-staging.chatzaki.ai`, and runtime config has
+   priority over the blank Vite variables; proxying it would silently bypass `/api` and recreate the
+   CORS/cookie failure this option is meant to avoid.
+
 3. `npm run dev`, open `http://localhost:5173`. Every `/api/*` call is forwarded to staging; log in
    normally through the app UI. Verify in DevTools → Network that XHRs are same-origin
-   (`localhost:5173`) and a session cookie is set.
+   (`localhost:5173`), `window.__ZAKI_ENV__.BACKEND_URL` is empty/undefined, and a host-only
+   `zaki_refresh` cookie is set for localhost.
 
 **What you inherit for free:** staging's real nullalis token, chat key, and brain DSN live in the
 *staging BFF* — you never see a secret on your laptop. Run the full local stack only when you
@@ -91,10 +98,13 @@ cookie attaches. Costs one infra change.
    `mkcert` or `@vitejs/plugin-basic-ssl`) — the staging cookie is `Secure`, so the origin must be https.
 3. `.env.local`: `VITE_ZAKI_BACKEND_URL=https://api-staging.chatzaki.ai`
 4. **Infra handoff (zaki-infra's job, not yours):** add the dev origin to the staging BFF allowlist —
-   `zaki-infra charts/zaki-api/values-staging.yaml` → append `https://dev-local.chatzaki.ai:5173` to
+   [`charts/zaki-api/values-staging.yaml`](https://github.com/ProjectNuggets/zaki-infra/blob/staging/charts/zaki-api/values-staging.yaml)
+   → append `https://dev-local.chatzaki.ai:5173` to
    `ZAKI_ALLOWED_ORIGINS` → re-sync. **Staging-only convenience; never add a dev origin to prod.**
-   Request it via a note on the central board (`zaki-infra/docs/COORDINATION.md`, handoff H11) and an
-   infra agent lands it.
+   Request it via a note on the
+   [central board](https://github.com/ProjectNuggets/zaki-infra/blob/staging/docs/COORDINATION.md)
+   (handoff H11) and an infra agent lands it. If you cannot access the private infra repository,
+   request the handoff in your zaki-prod issue or PR instead.
 
 Because `dev-local.chatzaki.ai` shares the registrable domain, the `.chatzaki.ai` session cookie is
 same-site and attaches; CORS passes because the origin is allowlisted.
@@ -112,6 +122,6 @@ same-site and attaches; CORS passes because the origin is allowlisted.
   worth it unless you're changing the BFF↔engine contract itself. Prefer A or B.
 - The public LoadBalancer IP / DNS A-record for `api-staging.chatzaki.ai` and any edge WAF/allowlist
   are **not in git** (DNS + edge are managed outside these repos). If the host doesn't resolve or
-  403s at the edge, ask on the central board.
+  403s at the edge, ask on the central board or in your zaki-prod issue/PR.
 - Staging TLD is `.chatzaki.ai` for app+api but `.chatzaki.com` for the marketing site; prod is
   `.com` for all three. Don't cross them.
