@@ -19,7 +19,6 @@ export const ZAKI_URL = "https://chatzaki.com";
 export const BOOKING_URL = "https://calendar.app.google/7rmv1kwmYhum1TTT9";
 export const GENERAL_EMAIL = "hello@novanuggets.com";
 export const FOUNDER_EMAIL = "as@novanuggets.com";
-export const INVESTOR_MEMO_URL = "/assets/downloads/nova-nuggets-seed-deck.pdf";
 export const INVESTOR_REQUEST_URL =
   "mailto:hello@novanuggets.com?subject=Investor%20memo%20request%20%7C%20Nova%20Nuggets";
 export const NOVAORBIT_ONE_PAGER_URL = "/assets/downloads/novaorbit-one-pager.pdf";
@@ -41,6 +40,7 @@ export type PageSlug =
   | "investors"
   | "impressum"
   | "privacy"
+  | "terms"
   | "nova-orbit-snapshot"
   | "approach"
   | "ai-workforce"
@@ -227,7 +227,7 @@ export const routes: RouteDefinition[] = [
     label: "Impressum",
     title: "Impressum | Nova Nuggets",
     description:
-      "Legal notice and provider identification for Nova Nuggets. Placeholder details to be finalized before launch.",
+      "Legal notice and provider identification for Nova Nuggets.",
   },
   {
     slug: "privacy",
@@ -236,6 +236,14 @@ export const routes: RouteDefinition[] = [
     title: "Privacy Notice | Nova Nuggets",
     description:
       "Privacy notice for Nova Nuggets website visitors, inquiries, and NovaOrbit booking requests.",
+  },
+  {
+    slug: "terms",
+    path: "/terms/",
+    label: "Terms",
+    title: "Website Terms | Nova Nuggets",
+    description:
+      "Terms governing use of the Nova Nuggets website, public materials, and downloadable NovaOrbit resources.",
   },
   {
     slug: "nova-orbit-snapshot",
@@ -1256,9 +1264,42 @@ export const privacyFields = [
   ["Contact", "hello@novanuggets.com"],
   ["Purpose", "Responding to inquiries, booking NovaOrbit calls, managing investor requests, and improving the website."],
   ["Data categories", "Contact details, company details, inquiry content, booking metadata, and basic technical logs."],
-  ["Cookies", "The current site uses an essential local consent setting. Analytics or marketing cookies require a separate opt-in before launch."],
+  ["Inquiry delivery", "Qualification briefs are stored in the Nova Nuggets/ZAKI platform and delivered to the Nova Nuggets team through its configured transactional email provider."],
+  ["External booking", "Booking links open Google Calendar appointment scheduling. Google processes information submitted there under its own privacy terms."],
+  ["Cookies and analytics", "The current website does not set analytics or marketing cookies and does not run behavioural advertising pixels."],
   ["Retention", "Inquiry and booking data is kept only as long as needed for the business relationship or legal obligations."],
   ["Rights", "Visitors may request access, correction, deletion, restriction, or objection through hello@novanuggets.com."],
+];
+
+export const termsSections = [
+  {
+    title: "Website scope",
+    text: "This website provides information about Nova Nuggets, NovaOrbit, ZAKI, private AI infrastructure, and related professional services. Website content is general information and does not create a client relationship, commitment, warranty, or statement of work.",
+  },
+  {
+    title: "Engagements and commercial terms",
+    text: "Any assessment, advisory engagement, implementation, managed service, or infrastructure delivery is governed by the signed proposal, statement of work, order form, or other written agreement for that engagement. If website information differs from a signed agreement, the signed agreement controls.",
+  },
+  {
+    title: "Public materials and intellectual property",
+    text: "Nova Nuggets owns or licenses the website content, visual identity, frameworks, and public materials. You may download and share materials explicitly offered for download for internal evaluation, provided attribution and notices remain intact. You may not resell, republish, or present them as your own without written permission.",
+  },
+  {
+    title: "Availability and external services",
+    text: "We aim to keep the website accurate and available, but may update, withdraw, or correct content without notice. Links to external services, including booking, media, and professional profiles, are governed by those providers' terms and privacy practices.",
+  },
+  {
+    title: "Responsible use",
+    text: "You may not misuse the website, attempt unauthorized access, interfere with its operation, submit unlawful or malicious content, or use public resources in a way that infringes third-party rights.",
+  },
+  {
+    title: "Liability",
+    text: "To the extent permitted by applicable law, Nova Nuggets is not liable for decisions made solely from general website content or for indirect loss arising from website use. Nothing in these terms limits liability that cannot lawfully be limited.",
+  },
+  {
+    title: "Contact and updates",
+    text: "Questions about these website terms can be sent to hello@novanuggets.com. We may update these terms when the website, services, or applicable requirements change. The current version is the version published on this page.",
+  },
 ];
 
 export const hiddenCosts = [

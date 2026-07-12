@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { Download } from "lucide-react";
 import {
   ArrowIcon,
@@ -71,10 +78,12 @@ import {
   sampleReportTimeline,
   sampleReportWorkflowSections,
   teamMembers,
+  termsSections,
   workforceDemoScenarios,
   workforceRoles,
   type PageSlug,
 } from "./lib/content";
+import { submitQualification } from "./lib/qualification";
 
 type AppProps = {
   path: string;
@@ -232,25 +241,27 @@ function SignatureScrambleText({
   variant = "editorial",
   dir,
   ariaHidden = false,
+  interactionOnly = false,
 }: {
   text: string;
   className?: string;
   variant?: string;
   dir?: "ltr" | "rtl";
   ariaHidden?: boolean;
+  interactionOnly?: boolean;
 }) {
   const [displayText, setDisplayText] = useState(text);
   const [isScrambling, setIsScrambling] = useState(false);
   const timersRef = useRef<number[]>([]);
 
-  useEffect(() => {
+  const runScramble = () => {
     timersRef.current.forEach((timer) => window.clearTimeout(timer));
     timersRef.current = [];
     setDisplayText(text);
     setIsScrambling(false);
 
     if (typeof window === "undefined" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      return undefined;
+      return;
     }
 
     setIsScrambling(true);
@@ -263,12 +274,21 @@ function SignatureScrambleText({
       }, frame * SIGNATURE_SCRAMBLE_INTERVAL_MS);
       timersRef.current.push(timer);
     }
+  };
+
+  useEffect(() => {
+    timersRef.current.forEach((timer) => window.clearTimeout(timer));
+    timersRef.current = [];
+    setDisplayText(text);
+    setIsScrambling(false);
+
+    if (!interactionOnly) runScramble();
 
     return () => {
       timersRef.current.forEach((timer) => window.clearTimeout(timer));
       timersRef.current = [];
     };
-  }, [text]);
+  }, [interactionOnly, text]);
 
   return (
     <span
@@ -277,6 +297,7 @@ function SignatureScrambleText({
       data-scrambling={isScrambling ? "true" : "false"}
       data-variant={variant}
       dir={dir}
+      onPointerEnter={interactionOnly ? runScramble : undefined}
     >
       {displayText}
     </span>
@@ -286,7 +307,7 @@ function SignatureScrambleText({
 function ScrambleBrandTitle() {
   return (
     <h1 className="hero-title hero-scramble-title" aria-label="Nova Nuggets">
-      <SignatureScrambleText text={"Nova\nNuggets"} ariaHidden dir="ltr" />
+      <SignatureScrambleText text={"Nova\nNuggets"} ariaHidden dir="ltr" interactionOnly />
     </h1>
   );
 }
@@ -390,12 +411,12 @@ export function App({ path }: AppProps) {
         {current === "investors" && <InvestorsPage />}
         {current === "impressum" && <ImpressumPage />}
         {current === "privacy" && <PrivacyPage />}
+        {current === "terms" && <TermsPage />}
         {current === "nova-orbit-snapshot" && <NovaOrbitSnapshotPage />}
         {current === "field-notes" && <FieldNotesPage />}
         {current.startsWith("field-note-") && <FieldNotePage path={route.path} />}
       </main>
       <SiteFooter />
-      <CookieBanner />
     </div>
   );
 }
@@ -438,7 +459,7 @@ function SiteHeader({ current }: { current: PageSlug }) {
         Skip to content
       </a>
       <a className="brand-lockup" href="/" aria-label="Nova Nuggets home">
-        <img src="/assets/nova-nuggets-logo-cut-transparent.png" alt="" />
+        <img src="/assets/nova-nuggets-logo-cut-256.webp" alt="" width="256" height="256" />
         <span>Nova Nuggets</span>
       </a>
       <button
@@ -529,37 +550,8 @@ function TechnologyScrollerSection() {
 }
 
 function Hero() {
-  const heroRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    let context: { revert: () => void } | undefined;
-    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    if (prefersReducedMotion) return undefined;
-
-    void import("gsap").then(({ gsap }) => {
-      if (!mounted || !heroRef.current) return;
-
-      context = gsap.context(() => {
-        const timeline = gsap.timeline({ defaults: { duration: 0.72, ease: "power3.out" } });
-
-        timeline.from(".hero-kicker, .hero-title, .hero-definition, .hero-copy, .hero-actions", {
-          autoAlpha: 0,
-          y: 26,
-          stagger: 0.075,
-        });
-      }, heroRef.current);
-    });
-
-    return () => {
-      mounted = false;
-      context?.revert();
-    };
-  }, []);
-
   return (
-    <section ref={heroRef} className="hero hero-brand">
+    <section className="hero hero-brand">
       <div className="hero-inner">
         <p className="hero-kicker">Innovation and Artificial Intelligence Research and Consultancies</p>
         <ScrambleBrandTitle />
@@ -902,7 +894,14 @@ function ZakiCommandFrame({
             </svg>
             <span className="hero-orbit-signal" aria-hidden="true" />
             <div className="hero-command-core">
-              <img src="/assets/nova-nuggets-logo-cut-transparent.png" alt="" />
+              <img
+                src="/assets/nova-nuggets-logo-cut-256.webp"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                width="256"
+                height="256"
+              />
               <strong>{current.agent}</strong>
               <span>{current.department} workflow</span>
             </div>
@@ -1000,13 +999,13 @@ function NooxProofSection({ visual = "operations" }: { visual?: "product" | "ope
   const image =
     visual === "product"
       ? {
-          src: "/assets/noox/noox-product-cinematic.png",
+          src: "/assets/noox/noox-product-cinematic.webp",
           alt: "NooX on-premise AI server cinematic product render with blueprint construction lines.",
           width: 1672,
           height: 941,
         }
       : {
-          src: "/assets/noox/noox-operations-room.png",
+          src: "/assets/noox/noox-operations-room.webp",
           alt: "NooX private AI appliance connected inside a local AI operations environment.",
           width: 1672,
           height: 941,
@@ -1084,7 +1083,7 @@ function DataBoundarySection() {
       </div>
       <div className="data-boundary-media">
         <img
-          src="/assets/noox/noox-data-frozen.png"
+          src="/assets/noox/noox-data-frozen.webp"
           alt="NooX appliance visually sealed inside a transparent frozen data boundary."
           width="1536"
           height="1024"
@@ -1404,7 +1403,14 @@ function CommandRoomSection() {
             <span>ledger: ROI + audit evidence</span>
           </div>
           <div className="command-core">
-            <img src="/assets/nova-nuggets-logo-cut-transparent.png" alt="" />
+            <img
+              src="/assets/nova-nuggets-logo-cut-256.webp"
+              alt=""
+              loading="lazy"
+              decoding="async"
+              width="256"
+              height="256"
+            />
             <strong>{current.metric}</strong>
             <span>{current.label}</span>
           </div>
@@ -1676,7 +1682,7 @@ function NooxTopologySection() {
       <div className="topology-suite">
         <figure className="topology-appliance">
           <img
-            src="/assets/noox/noox-appliance-clean.png"
+            src="/assets/noox/noox-appliance-clean.webp"
             alt="Standard NooX private AI inferencing appliance."
             width="900"
             height="900"
@@ -2159,8 +2165,8 @@ function TeamVisualProofSection() {
         <p className="section-kicker">Founder credibility</p>
         <h2>Named operators, public thesis, visible accountability.</h2>
         <p>
-          The site should feel like there are real people behind the runtime. Until we add formal
-          photography, the credibility layer points to named profiles, advisors, and public media.
+          The people accountable for the work are visible before an engagement begins. Named
+          operators, advisors, and public conversations make the point of view easy to inspect.
         </p>
       </div>
       <div className="team-proof-wall" aria-label="Founder and advisor credibility wall">
@@ -2513,7 +2519,14 @@ function NovaOrbitSampleReportPage() {
         </div>
         <div className="sample-report-sheet" aria-label="NovaOrbit sample report summary">
           <div className="sample-report-sheet-head">
-            <img src="/assets/nova-nuggets-logo-cut-transparent.png" alt="" />
+            <img
+              src="/assets/nova-nuggets-logo-cut-256.webp"
+              alt=""
+              loading="lazy"
+              decoding="async"
+              width="256"
+              height="256"
+            />
             <span>NovaOrbit assessment readout</span>
           </div>
           <div className="sample-report-client">
@@ -2901,6 +2914,50 @@ function ArchitecturePage() {
 }
 
 function ContactPage() {
+  const [submissionState, setSubmissionState] = useState<
+    { status: "idle" | "sending" | "success" | "error"; message?: string }
+  >({ status: "idle" });
+
+  const handleQualificationSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+
+    // A hidden honeypot absorbs basic bot submissions without exposing another challenge to buyers.
+    if (String(data.get("website") || "").trim()) {
+      setSubmissionState({
+        status: "success",
+        message: "Thank you. Your qualification brief has been received.",
+      });
+      form.reset();
+      return;
+    }
+
+    setSubmissionState({ status: "sending" });
+    const result = await submitQualification({
+      name: String(data.get("name") || "").trim(),
+      email: String(data.get("email") || "").trim(),
+      company: String(data.get("company") || "").trim(),
+      role: String(data.get("role") || "").trim(),
+      assessmentPath: String(data.get("assessment_path") || "").trim(),
+      workflow: String(data.get("workflow") || "").trim(),
+      stackAccess: String(data.get("stack_access") || "").trim(),
+      decisionWindow: String(data.get("decision_window") || "").trim(),
+      ndaDossierRequested: data.get("nda_dossier_requested") === "yes",
+    });
+
+    if (result.success) {
+      setSubmissionState({
+        status: "success",
+        message: "Brief received. We will reply with the right next step within two working days.",
+      });
+      form.reset();
+      return;
+    }
+
+    setSubmissionState({ status: "error", message: result.error });
+  };
+
   return (
     <ArticlePage
       kicker="Contact"
@@ -2928,11 +2985,13 @@ function ContactPage() {
         </div>
         <form
           className="qualification-form"
-          action={`mailto:${GENERAL_EMAIL}?subject=${encodeURIComponent("NovaOrbit qualification brief")}`}
-          method="post"
-          encType="text/plain"
+          onSubmit={handleQualificationSubmit}
           aria-label="NovaOrbit qualification form"
         >
+          <label>
+            Your name
+            <input name="name" type="text" required autoComplete="name" />
+          </label>
           <label>
             Assessment path
             <select name="assessment_path" required defaultValue="">
@@ -3001,9 +3060,44 @@ function ContactPage() {
             <input name="nda_dossier_requested" type="checkbox" value="yes" />
             <span>Also request the NDA evidence path.</span>
           </label>
-          <button className="button button-primary" type="submit">
-            Send qualification brief <ArrowIcon size={18} aria-hidden="true" />
+          <label className="contact-checkbox contact-consent">
+            <input name="contact_consent" type="checkbox" required value="yes" />
+            <span>
+              I agree that Nova Nuggets may use these details to respond to this request. See the{" "}
+              <a href="/privacy/">privacy notice</a>.
+            </span>
+          </label>
+          <div className="qualification-honeypot" aria-hidden="true">
+            <label>
+              Website
+              <input name="website" type="text" tabIndex={-1} autoComplete="off" />
+            </label>
+          </div>
+          <button
+            className="button button-primary"
+            type="submit"
+            disabled={submissionState.status === "sending"}
+          >
+            {submissionState.status === "sending" ? "Sending brief..." : "Send qualification brief"}
+            {submissionState.status !== "sending" && (
+              <ArrowIcon size={18} aria-hidden="true" />
+            )}
           </button>
+          {submissionState.status !== "idle" && submissionState.message && (
+            <p
+              className={`qualification-status qualification-status-${submissionState.status}`}
+              role={submissionState.status === "error" ? "alert" : "status"}
+              aria-live="polite"
+            >
+              {submissionState.message}
+              {submissionState.status === "error" && (
+                <>
+                  {" "}
+                  <a href={`mailto:${GENERAL_EMAIL}`}>Email us directly.</a>
+                </>
+              )}
+            </p>
+          )}
         </form>
       </section>
     </ArticlePage>
@@ -4860,7 +4954,7 @@ function PrivacyPage() {
     <ArticlePage
       kicker="Privacy"
       title="Privacy notice."
-      text="A practical privacy notice for website visitors, inquiries, booking requests, and investor conversations. A German legal review should finalize this before production launch."
+      text="How Nova Nuggets handles website inquiries, booking requests, investor conversations, and essential technical records."
       showFinalCta={false}
     >
       <section className="section legal-section">
@@ -4868,9 +4962,9 @@ function PrivacyPage() {
           <p className="section-kicker">Data handling</p>
           <h2>Minimal data, clear purpose, explicit consent for anything beyond essential use.</h2>
           <p>
-            The current website does not need tracking to convert. Essential local storage is used
-            to remember cookie consent; analytics and marketing pixels should only be added after
-            the consent model is finalized.
+            The current website does not use behavioural advertising, analytics pixels, or
+            marketing cookies. Information is collected only when a visitor submits an inquiry,
+            books a call through the linked booking provider, or contacts Nova Nuggets directly.
           </p>
         </div>
         <div className="legal-table" role="table" aria-label="Privacy notice fields">
@@ -4879,6 +4973,39 @@ function PrivacyPage() {
               <span role="cell">{label}</span>
               <strong role="cell">{value}</strong>
             </p>
+          ))}
+        </div>
+      </section>
+    </ArticlePage>
+  );
+}
+
+function TermsPage() {
+  return (
+    <ArticlePage
+      kicker="Terms"
+      title="Website terms."
+      text="The rules for using the Nova Nuggets website and its public NovaOrbit resources. Last updated 12 July 2026."
+      showFinalCta={false}
+    >
+      <section className="section legal-section terms-section">
+        <div>
+          <p className="section-kicker">Use of this website</p>
+          <h2>Public information. Written agreements govern client work.</h2>
+          <p>
+            These terms apply to the public Nova Nuggets website. They do not replace a proposal,
+            statement of work, order form, NDA, DPA, or other signed client agreement.
+          </p>
+        </div>
+        <div className="terms-list">
+          {termsSections.map((section, index) => (
+            <article key={section.title}>
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <div>
+                <h3>{section.title}</h3>
+                <p>{section.text}</p>
+              </div>
+            </article>
           ))}
         </div>
       </section>
@@ -4992,47 +5119,18 @@ function FinalCta() {
   );
 }
 
-function CookieBanner() {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    setVisible(window.localStorage.getItem("nngts_cookie_consent") !== "essential");
-  }, []);
-
-  if (!visible) {
-    return null;
-  }
-
-  return (
-    <aside className="cookie-banner" aria-label="Cookie notice">
-      <div>
-        <strong>Privacy-first website</strong>
-        <p>
-          We use essential local storage to remember this choice. Analytics and marketing cookies
-          are not active.
-        </p>
-      </div>
-      <div className="cookie-actions">
-        <a href="/privacy/">Privacy notice</a>
-        <button
-          type="button"
-          onClick={() => {
-            window.localStorage.setItem("nngts_cookie_consent", "essential");
-            setVisible(false);
-          }}
-        >
-          Accept essential
-        </button>
-      </div>
-    </aside>
-  );
-}
-
 function SiteFooter() {
   return (
     <footer className="site-footer">
       <div>
-        <img src="/assets/nova-nuggets-logo-transparent.png" alt="Nova Nuggets" />
+        <img
+          src="/assets/nova-nuggets-logo-256.webp"
+          alt="Nova Nuggets"
+          loading="lazy"
+          decoding="async"
+          width="256"
+          height="256"
+        />
         <p>Owned AI workforces. Dubai + Hamburg.</p>
       </div>
       <nav aria-label="Footer navigation">
