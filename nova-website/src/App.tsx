@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Download } from "lucide-react";
-import { ArticleHeroVisual, PageFlowMotion, RouteJourney, SiteProgress } from "./components/SiteFlow";
 import {
   ArrowIcon,
   BOOKING_URL,
@@ -373,8 +372,6 @@ export function App({ path }: AppProps) {
 
   return (
     <div className="site-shell">
-      <PageFlowMotion />
-      <SiteProgress />
       <SiteHeader current={current} />
       <main id="main">
         {current === "home" && <HomePage />}
@@ -419,17 +416,6 @@ function SiteHeader({ current }: { current: PageSlug }) {
   useEffect(() => {
     setMenuOpen(false);
   }, [current]);
-
-  useEffect(() => {
-    if (!menuOpen) return undefined;
-
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMenuOpen(false);
-    };
-
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [menuOpen]);
 
   return (
     <header
@@ -498,12 +484,8 @@ function HomePage() {
     <>
       <Hero />
       <ProofBand points={homeTrustSignals} />
-      <TechnologyScrollerSection />
       <HomeLivePathSection />
-      <WorkforceDemoSection />
-      <NooxProofSection visual="product" />
       <HomeStackSection />
-      <AudienceRouteSection />
       <HomeProofSection />
       <FinalCta />
     </>
@@ -551,7 +533,7 @@ function Hero() {
       context = gsap.context(() => {
         const timeline = gsap.timeline({ defaults: { duration: 0.72, ease: "power3.out" } });
 
-        timeline.from(".hero-kicker, .hero-title, .hero-thesis, .hero-copy, .hero-actions, .hero-definition", {
+        timeline.from(".hero-kicker, .hero-title, .hero-definition, .hero-copy, .hero-actions", {
           autoAlpha: 0,
           y: 26,
           stagger: 0.075,
@@ -568,25 +550,8 @@ function Hero() {
   return (
     <section ref={heroRef} className="hero hero-brand">
       <div className="hero-inner">
-        <p className="hero-kicker">Locally owned agents for the future of work</p>
+        <p className="hero-kicker">Innovation and Artificial Intelligence Research and Consultancies</p>
         <ScrambleBrandTitle />
-        <div className="hero-thesis">
-          <strong>Start with one local agent.</strong>
-          <span>Build an AI-enabled organisation.</span>
-        </div>
-        <p className="hero-copy">
-          For frontier startups and established companies that believe agents will reshape work.
-          NovaOrbit finds the first workflow, ZAKI runs it, and private infrastructure keeps the
-          system controlled as it scales.
-        </p>
-        <div className="hero-actions">
-          <a className="button button-primary" href="/nova-orbit-snapshot/">
-            Run NovaOrbit Snapshot <ArrowIcon size={18} aria-hidden="true" />
-          </a>
-          <a className="button button-secondary" href="/nova-orbit/">
-            See NovaOrbit
-          </a>
-        </div>
         <dl className="hero-definition" aria-label="Nova Nuggets brand definition">
           <div>
             <dt>nova</dt>
@@ -597,6 +562,18 @@ function Hero() {
             <dd>a small lump of gold; a concentrated piece of useful insight, wisdom, or clever knowledge.</dd>
           </div>
         </dl>
+        <p className="hero-copy">
+          AI that actually ships: not scripts, API wrappers, or demos. NovaOrbit maps the work,
+          ZAKI runs the agents, and private infrastructure keeps it owned.
+        </p>
+        <div className="hero-actions">
+          <a className="button button-primary" href="/nova-orbit-snapshot/">
+            Run NovaOrbit Snapshot <ArrowIcon size={18} aria-hidden="true" />
+          </a>
+          <a className="button button-secondary" href="/nova-orbit/">
+            See NovaOrbit
+          </a>
+        </div>
       </div>
     </section>
   );
@@ -1281,30 +1258,19 @@ function HomeProofSection() {
 
 function AudienceRouteSection() {
   return (
-    <section className="audience-route-section" aria-labelledby="audience-route-title">
-      <div className="audience-route-intro">
-        <p className="section-kicker">Choose your entry point</p>
-        <h2 id="audience-route-title">Different starting positions. One path to owned AI work.</h2>
-        <p>
-          Startups can design agent-native operations before process debt hardens. Established
-          organisations can begin locally, prove one workflow, and expand without losing control.
-        </p>
-      </div>
-      <div className="audience-route-grid">
-        {audienceRoutes.map((route, index) => (
-          <a
-            key={route.title}
-            href={route.href}
-            target={route.external ? "_blank" : undefined}
-            rel={route.external ? "noreferrer" : undefined}
-          >
-            <span>{String(index + 1).padStart(2, "0")} / {route.label}</span>
-            <strong>{route.title}</strong>
-            <p>{route.text}</p>
-            <i aria-hidden="true"><ArrowIcon size={18} /></i>
-          </a>
-        ))}
-      </div>
+    <section className="audience-route-section" aria-label="Choose your path">
+      {audienceRoutes.map((route) => (
+        <a
+          key={route.title}
+          href={route.href}
+          target={route.external ? "_blank" : undefined}
+          rel={route.external ? "noreferrer" : undefined}
+        >
+          <span>{route.label}</span>
+          <strong>{route.title}</strong>
+          <p>{route.text}</p>
+        </a>
+      ))}
     </section>
   );
 }
@@ -1368,12 +1334,11 @@ function WorkforceDemoSection() {
   return (
     <section className="section workforce-demo-section">
       <div className="workforce-demo-copy">
-        <p className="section-kicker">Local-first operating loop</p>
-        <h2>Watch one agent become organisational capacity.</h2>
+        <p className="section-kicker">ZAKI operating loop</p>
+        <h2>Watch one agent become useful work.</h2>
         <p>
-          Start inside one real team. ZAKI turns private memory, approved tools, human control,
-          useful output, business evidence, and an audit trail into a repeatable workflow that can
-          earn the right to scale.
+          Start with a department. ZAKI turns private memory, approved tools, human control,
+          useful output, business evidence, and an audit trail into one repeatable workflow.
         </p>
       </div>
       <ZakiCommandFrame
@@ -2570,19 +2535,19 @@ function NovaOrbitSampleReportPage() {
         />
         <div className="sample-score-table" role="table" aria-label="NovaOrbit sample scorecard">
           <div className="sample-score-row sample-score-head" role="row">
-            <span role="columnheader">Dimension</span>
-            <span role="columnheader">Score</span>
-            <span role="columnheader">Stage</span>
-            <span role="columnheader">Blocker</span>
-            <span role="columnheader">Next action</span>
+            <span>Dimension</span>
+            <span>Score</span>
+            <span>Stage</span>
+            <span>Blocker</span>
+            <span>Next action</span>
           </div>
           {sampleReportScoreRows.map((row) => (
             <div className="sample-score-row" role="row" key={row.dimension}>
-              <strong role="rowheader" data-label="Dimension">{row.dimension}</strong>
-              <span role="cell" data-label="Score">{row.score}</span>
-              <span role="cell" data-label="Stage">{row.stage}</span>
-              <p role="cell" data-label="Blocker">{row.blocker}</p>
-              <p role="cell" data-label="Next action">{row.action}</p>
+              <strong data-label="Dimension">{row.dimension}</strong>
+              <span data-label="Score">{row.score}</span>
+              <span data-label="Stage">{row.stage}</span>
+              <p data-label="Blocker">{row.blocker}</p>
+              <p data-label="Next action">{row.action}</p>
             </div>
           ))}
         </div>
@@ -4642,10 +4607,10 @@ function NovaOrbitMaturityMap({
   variant?: "standard" | "demo" | "snapshot" | "sample";
 }) {
   return (
-    <div className={`maturity-map maturity-map-${variant}`} role="group" aria-label="NovaOrbit maturity gap map">
-      <div className="maturity-map-head">
+    <div className={`maturity-map maturity-map-${variant}`} role="table" aria-label="NovaOrbit maturity gap map">
+      <div className="maturity-map-head" role="row">
         <span>Benchmark</span>
-        <div className="maturity-map-axis" aria-label="Maturity stages">
+        <div className="maturity-map-axis" aria-hidden="true">
           {snapshotStageNames.map((stage) => (
             <span key={stage}>
               S{stage}
@@ -4673,6 +4638,7 @@ function NovaOrbitMaturityMap({
               return (
                 <div
                   className={`maturity-map-row${row.redGate ? " maturity-map-row-capped" : ""}`}
+                  role="row"
                   key={row.id}
                   style={
                     {
@@ -4683,7 +4649,7 @@ function NovaOrbitMaturityMap({
                     } as CSSProperties
                   }
                 >
-                  <div className="maturity-benchmark">
+                  <div className="maturity-benchmark" role="cell">
                     <span>{row.code}</span>
                     <strong>{row.bench}</strong>
                     <small>
@@ -4692,7 +4658,7 @@ function NovaOrbitMaturityMap({
                   </div>
                   <div
                     className="maturity-track"
-                    role="img"
+                    role="cell"
                     aria-label={`${row.code} ${row.bench}: Stage ${row.stage} ${snapshotStageLabels[row.stage]}, target Stage ${row.targetStage}`}
                   >
                     <span className="maturity-grid-lines" aria-hidden="true" />
@@ -4706,7 +4672,7 @@ function NovaOrbitMaturityMap({
                     <span className="maturity-marker maturity-marker-target" aria-hidden="true" />
                     {row.redGate && <span className="maturity-cap" aria-hidden="true">Cap</span>}
                   </div>
-                  <p className="maturity-action">
+                  <p className="maturity-action" role="cell">
                     {row.redGate && <span>{row.redGate.label}</span>}
                     {row.action}
                   </p>
@@ -4931,23 +4897,19 @@ function ArticlePage({
   return (
     <>
       <section className={articleHeroClassName}>
-        <div className="article-hero-copy">
-          <p className="section-kicker">{kicker}</p>
-          <h1>{title}</h1>
-          <p>{text}</p>
-          {showHeroActions && (
-            <div className="article-hero-actions" aria-label="Primary buyer actions">
-              <a className="button button-primary" href="/nova-orbit-snapshot/">
-                Run Snapshot <ArrowIcon size={18} aria-hidden="true" />
-              </a>
-              <a className="button button-secondary" href={BOOKING_URL} target="_blank" rel="noreferrer">
-                Book NovaOrbit
-              </a>
-            </div>
-          )}
-        </div>
-        <ArticleHeroVisual kicker={kicker} />
-        <RouteJourney kicker={kicker} />
+        <p className="section-kicker">{kicker}</p>
+        <h1>{title}</h1>
+        <p>{text}</p>
+        {showHeroActions && (
+          <div className="article-hero-actions" aria-label="Primary buyer actions">
+            <a className="button button-primary" href="/nova-orbit-snapshot/">
+              Run Snapshot <ArrowIcon size={18} aria-hidden="true" />
+            </a>
+            <a className="button button-secondary" href={BOOKING_URL} target="_blank" rel="noreferrer">
+              Book NovaOrbit
+            </a>
+          </div>
+        )}
       </section>
       {children}
       {showFinalCta && <FinalCta />}
