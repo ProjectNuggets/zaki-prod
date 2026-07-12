@@ -1287,6 +1287,7 @@
     }
   },
   "pricingPage": {
+    "back": "رجوع",
     "eyebrow": "الخطط",
     "title": "اختر كيف تريد أن يواصل ZAKI العمل معك",
     "subtitle": "ابدأ مجانًا في Chat بدون حساب. قم بالترقية عندما تحتاج مساحة أكبر لـ Agent وChat وSpaces وBrain. Learn وDesign وCareer تبقى متوقفة حتى تجهز مساراتها.",
