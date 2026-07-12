@@ -1,9 +1,13 @@
+import crypto from "node:crypto";
+
 export class AccountErasureError extends Error {
   constructor(message, {
     code = "account_erasure_failed",
     status = 502,
     details,
     retryable = false,
+    cause,
+    internalDetails,
   } = {}) {
     super(message);
     this.name = "AccountErasureError";
@@ -11,7 +15,19 @@ export class AccountErasureError extends Error {
     this.status = status;
     this.details = details;
     this.retryable = retryable;
+    if (cause !== undefined) this.cause = cause;
+    if (internalDetails !== undefined) this.internalDetails = internalDetails;
   }
+}
+
+export function resolveAccountErasureTimeoutMs(
+  value,
+  { defaultMs, minMs = 1_000, maxMs = 300_000 } = {}
+) {
+  const fallback = Number.isFinite(defaultMs) ? defaultMs : 60_000;
+  const parsed = Number(value);
+  const resolved = Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  return Math.max(minMs, Math.min(maxMs, Math.trunc(resolved)));
 }
 
 export function assertAuthoritativeNullalisManifest(manifest) {
@@ -45,8 +61,9 @@ export function assertAuthoritativeNullalisManifest(manifest) {
       details: {
         status: manifest?.status || null,
         sessionsSkippedActive: Number(manifest?.sessions_skipped_active || 0),
-        errors,
+        errorCount: errors.length,
       },
+      internalDetails: { errors },
     });
   }
   return manifest;
@@ -60,7 +77,7 @@ export async function eraseAccountData({
   deleteTypUser,
   cleanupBilling,
   deleteLearning,
-  dbQuery,
+  runInTransaction,
 }) {
   let purge;
   try {
@@ -73,7 +90,7 @@ export async function eraseAccountData({
       code: "nullalis_purge_unavailable",
       status: 502,
       retryable: true,
-      details: { cause: error?.message || "Nullalis request failed." },
+      cause: error,
     });
   }
   if (!purge?.ok) {
@@ -97,7 +114,7 @@ export async function eraseAccountData({
         code: "typ_purge_unavailable",
         status: 502,
         retryable: true,
-        details: { cause: error?.message || "TYP request failed." },
+        cause: error,
       });
     }
     if (!deletion?.ok && deletion?.status !== 404) {
@@ -112,8 +129,8 @@ export async function eraseAccountData({
   await cleanupBilling({ zakiUser });
   const learning = await deleteLearning({ zakiUser, requestId });
 
-  await dbQuery("BEGIN");
-  try {
+  return runInTransaction(async (transaction) => {
+    const query = transaction.query.bind(transaction);
     const hubTables = [
       "memory_notifications",
       "memory_conflicts",
@@ -125,14 +142,14 @@ export async function eraseAccountData({
     const hubRowsDeleted = {};
     for (const table of hubTables) {
       try {
-        const result = await dbQuery(`DELETE FROM ${table} WHERE user_id = $1`, [memoryKey]);
+        const result = await query(`DELETE FROM ${table} WHERE user_id = $1`, [memoryKey]);
         hubRowsDeleted[table] = Number(result?.rowCount || 0);
       } catch (error) {
         if (error?.code !== "42P01") throw error;
         hubRowsDeleted[table] = 0;
       }
     }
-    const userDelete = await dbQuery("DELETE FROM zaki_users WHERE id = $1", [zakiUser.id]);
+    const userDelete = await query("DELETE FROM zaki_users WHERE id = $1", [zakiUser.id]);
     hubRowsDeleted.zaki_users = Number(userDelete?.rowCount || 0);
 
     const subjectHash = crypto
@@ -158,7 +175,7 @@ export async function eraseAccountData({
           : [],
       },
     };
-    const receiptResult = await dbQuery(
+    const receiptResult = await query(
       `INSERT INTO zaki_account_erasure_receipts
          (subject_hash, request_id, engine_manifest_json, spoke_summary_json, hub_summary_json, created_at)
        VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, NOW())
@@ -171,16 +188,11 @@ export async function eraseAccountData({
         JSON.stringify({ rowsDeleted: hubRowsDeleted }),
       ]
     );
-    await dbQuery("COMMIT");
     return {
       engine,
       typ,
       learning,
       receiptId: receiptResult?.rows?.[0]?.id || null,
     };
-  } catch (error) {
-    await dbQuery("ROLLBACK");
-    throw error;
-  }
+  });
 }
-import crypto from "node:crypto";

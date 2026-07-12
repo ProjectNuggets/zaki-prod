@@ -110,7 +110,10 @@ import {
   requestNullalisUserPurge,
   requestNullclawChatStream,
 } from "./agent-client.js";
-import { eraseAccountData } from "./account-erasure.js";
+import {
+  eraseAccountData,
+  resolveAccountErasureTimeoutMs,
+} from "./account-erasure.js";
 import {
   V1_CUTOVER_VERSION,
   listV1CutoverAuditEvents,
@@ -7989,9 +7992,9 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
           userId,
           requestId: purgeRequestId,
           fetchWithTimeout,
-          timeoutMs: Math.max(
-            1_000,
-            Number(process.env.NULLALIS_GDPR_PURGE_TIMEOUT_MS || 60_000)
+          timeoutMs: resolveAccountErasureTimeoutMs(
+            process.env.NULLALIS_GDPR_PURGE_TIMEOUT_MS,
+            { defaultMs: 60_000 }
           ),
         });
         return {
@@ -8003,13 +8006,18 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
       deleteTypUser: async ({ novaUserId }) => {
         const response = await novaAdminRequest(`/v1/admin/users/${novaUserId}`, {
           method: "DELETE",
+          signal: AbortSignal.timeout(
+            resolveAccountErasureTimeoutMs(process.env.TYP_GDPR_PURGE_TIMEOUT_MS, {
+              defaultMs: 30_000,
+            })
+          ),
         });
         return { ok: response.ok, status: response.status };
       },
       cleanupBilling: ({ zakiUser: user }) =>
         getBillingAdapter().cleanupCustomerOnDelete({ zakiUser: user }),
       deleteLearning: deleteLearningAccountResources,
-      dbQuery,
+      runInTransaction: withDbTransaction,
     });
     const learningDeletion = erasure.learning;
 

@@ -2,9 +2,16 @@ import { describe, expect, jest, test } from "@jest/globals";
 import {
   assertAuthoritativeNullalisManifest,
   eraseAccountData,
+  resolveAccountErasureTimeoutMs,
 } from "./account-erasure.js";
 
 describe("account erasure", () => {
+  test("uses a bounded default when an erasure timeout env is invalid", () => {
+    expect(resolveAccountErasureTimeoutMs("not-a-number", { defaultMs: 60_000 })).toBe(60_000);
+    expect(resolveAccountErasureTimeoutMs("100", { defaultMs: 60_000 })).toBe(1_000);
+    expect(resolveAccountErasureTimeoutMs("9999999", { defaultMs: 60_000 })).toBe(300_000);
+  });
+
   test("rejects a malformed Nullalis manifest before treating it as authoritative", () => {
     expect(() => assertAuthoritativeNullalisManifest({ status: "ok" })).toThrow(
       expect.objectContaining({
@@ -15,7 +22,8 @@ describe("account erasure", () => {
   });
 
   test("rejects a partial Nullalis purge manifest even when the upstream returned HTTP 200", () => {
-    expect(() =>
+    let caught;
+    try {
       assertAuthoritativeNullalisManifest({
         status: "partial",
         sessions_evicted: 0,
@@ -23,12 +31,22 @@ describe("account erasure", () => {
         pg_user_row_deleted: true,
         vector_rows_removed: 3,
         filesystem_removed: true,
-        errors: ["session_evict_partial:active_skipped=1"],
-      })
-    ).toThrow(expect.objectContaining({
+        errors: ["fs_path_not_absolute:/internal/data/users"],
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({
       code: "nullalis_purge_residue",
       status: 502,
-    }));
+      details: {
+        status: "partial",
+        sessionsSkippedActive: 1,
+        errorCount: 1,
+      },
+    });
+    expect(JSON.stringify(caught.details)).not.toContain("/internal/data/users");
+    expect(caught.internalDetails.errors).toContain("fs_path_not_absolute:/internal/data/users");
   });
 
   test("fails loudly and stops before TYP or hub deletion when Nullalis rejects the purge", async () => {
@@ -70,6 +88,7 @@ describe("account erasure", () => {
       code: "nullalis_purge_unavailable",
       status: 502,
       retryable: true,
+      details: undefined,
     });
   });
 
@@ -138,12 +157,15 @@ describe("account erasure", () => {
   });
 
   test("persists a content-free receipt in the same transaction as hub deletion", async () => {
-    const dbQuery = jest.fn(async (sql) => {
+    const transactionQuery = jest.fn(async (sql) => {
       if (sql.includes("INSERT INTO zaki_account_erasure_receipts")) {
         return { rows: [{ id: 91 }], rowCount: 1 };
       }
       return { rows: [], rowCount: 1 };
     });
+    const runInTransaction = jest.fn(async (callback) =>
+      callback({ query: transactionQuery })
+    );
     const engineManifest = {
       status: "ok",
       sessions_evicted: 2,
@@ -165,16 +187,17 @@ describe("account erasure", () => {
         attempted: true,
         deleted: [{ resource: "session", path: "/private/path" }],
       }),
-      dbQuery,
+      runInTransaction,
     });
 
     expect(result.receiptId).toBe(91);
-    expect(dbQuery.mock.calls.map(([sql]) => sql.trim())).toEqual(expect.arrayContaining([
-      "BEGIN",
+    expect(runInTransaction).toHaveBeenCalledTimes(1);
+    expect(transactionQuery.mock.calls.map(([sql]) => sql.trim())).toEqual(expect.arrayContaining([
       expect.stringContaining("DELETE FROM zaki_users"),
-      "COMMIT",
     ]));
-    const receiptCall = dbQuery.mock.calls.find(([sql]) =>
+    expect(transactionQuery).not.toHaveBeenCalledWith("BEGIN");
+    expect(transactionQuery).not.toHaveBeenCalledWith("COMMIT");
+    const receiptCall = transactionQuery.mock.calls.find(([sql]) =>
       sql.includes("INSERT INTO zaki_account_erasure_receipts")
     );
     expect(receiptCall).toBeDefined();
