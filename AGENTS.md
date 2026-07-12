@@ -8,23 +8,27 @@ usage, identity, and settings.
 
 ## 0. Platform coordination (read this FIRST)
 
-**The live multi-agent coordination board for the whole platform lives in the central repo:
-`zaki-infra/docs/COORDINATION.md`** (local: `~/Desktop/zaki-infra`, branch `staging`). It holds the
+**The live multi-agent coordination board for the whole platform lives in the central repo:**
+[`zaki-infra/docs/COORDINATION.md`](https://github.com/ProjectNuggets/zaki-infra/blob/staging/docs/COORDINATION.md)
+(optional local checkout: `~/Desktop/zaki-infra`, branch `staging`). It holds the
 per-repo registry (owners, branch, tree state), active task claims, cross-repo handoffs, and an
 **agent notes log** where concurrent agents leave messages to each other — **claim your task there
 before starting, and leave a note when you finish or hand off.** Backlog:
-`zaki-infra/docs/superpowers/ROADMAP-2026-07-11.md` · platform map: `zaki-infra/docs/PLATFORM.md`.
+[roadmap](https://github.com/ProjectNuggets/zaki-infra/blob/staging/docs/superpowers/ROADMAP-2026-07-11.md)
+· [platform map](https://github.com/ProjectNuggets/zaki-infra/blob/staging/docs/PLATFORM.md).
+If you cannot access the private infra repository, put the claim and handoff context in the relevant
+zaki-prod issue or PR and ask a maintainer to mirror it to the board.
 The old May-2026 boards in this repo are **archived** (`docs/archive/`) — do not work from them.
 
 Developing this repo without running upstream services locally? See
-`docs/contributing-proxy-to-staging.md`.
+[`docs/contributing-proxy-to-staging.md`](docs/contributing-proxy-to-staging.md).
 
 ## 1. Read First
 
 Before editing code, read:
 
-1. `zaki-infra/docs/COORDINATION.md` — the live board (see §0)
-2. `zaki-infra/docs/PLATFORM.md` — the cross-repo map
+1. [The live coordination board](https://github.com/ProjectNuggets/zaki-infra/blob/staging/docs/COORDINATION.md) (see §0)
+2. [The cross-repo platform map](https://github.com/ProjectNuggets/zaki-infra/blob/staging/docs/PLATFORM.md)
 3. `docs/zaki-client-value-activation-map-2026-05-30.md`
 4. `docs/nullalis-user-config-surface-map-2026-05-30.md`
 5. `docs/zaki-v2-surface-activation-inventory-2026-05-30.md`
@@ -141,8 +145,8 @@ the same checkout.
 
 Current agent work is claimed and assigned on the central board:
 
-`zaki-infra/docs/COORDINATION.md` (§2 task claims — claim before starting,
-leave a note in §4 when you finish or hand off)
+[`zaki-infra/docs/COORDINATION.md`](https://github.com/ProjectNuggets/zaki-infra/blob/staging/docs/COORDINATION.md)
+(§2 task claims — claim before starting, leave a note in §4 when you finish or hand off)
 
 Branch naming: `<agent-handle>/<short-task>` (e.g. `codex/settings-model-picker`,
 `docs/central-coordination`). The May-era `codex/v2-*` closeout branches are
@@ -152,7 +156,7 @@ Each agent must:
 
 - State its branch/worktree in the first response.
 - Read this file and the relevant docs above.
-- Read its numbered agent section in the execution board.
+- Read its task claim and the currently open roadmap wave on the live coordination board.
 - Keep changes inside its assigned surface unless the orchestrator approves a
   shared contract change.
 - Avoid unrelated formatting churn.
@@ -206,7 +210,9 @@ Required routes for final V1 app QA:
 
 ## 9. Known Coordination Constraints
 
-- **Branch/tree ownership is tracked LIVE in `zaki-infra/docs/COORDINATION.md` §1–§2** —
+- **Branch/tree ownership is tracked LIVE in the
+  [coordination board](https://github.com/ProjectNuggets/zaki-infra/blob/staging/docs/COORDINATION.md)
+  §1–§2** —
   check it before touching this tree; the snapshot below goes stale, the board does not.
 - `/Users/nova/Desktop/zaki-prod` is the primary checkout — it may be mid-work on a
   feature branch with uncommitted changes owned by another session. Never assume it is
