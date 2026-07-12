@@ -1,10 +1,20 @@
-# ZAKI Memory System (Current Production)
+# Legacy Spaces-side memory layer (hub BFF) — not the Brain
 
-Last updated: February 23, 2026
+Last reviewed: July 12, 2026
+
+> **Scope warning:** this document describes the legacy memory routes implemented inside the
+> `zaki-api` hub BFF for Chat/Spaces compatibility. It is **not** the ZAKI Brain and must not be used
+> as the current platform memory architecture.
+>
+> The Brain is owned by `nullalis`: its Postgres `zaki_bot` schema contains the
+> 1024-dimensional pgvector memory store, nullalis is the only writer, and `zaki-web` reads it
+> through authenticated `/api/agent/brain/*` BFF proxies. See the
+> [cross-repo platform map](https://github.com/ProjectNuggets/zaki-infra/blob/staging/docs/PLATFORM.md#the-brain--readwrite-boundary)
+> and [Agent-first product spec](docs/zaki-agent-first-v1-product-spec.md).
 
 ## Overview
 
-ZAKI memory is a per-user persistent memory layer with:
+The legacy hub layer is a per-user persistent memory implementation with:
 - autosave mode (default)
 - manual confirmation mode
 - conflict detection and resolution

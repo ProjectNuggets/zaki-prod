@@ -59,6 +59,9 @@ V1 public surfaces:
 Private beta or gated:
 
 - Learn
+
+Repo-local and not deployed:
+
 - Hire
 
 Waitlist / coming soon:
