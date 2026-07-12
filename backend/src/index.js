@@ -107,8 +107,10 @@ import {
   fetchNullclawUserHistory,
   getNullclawBase,
   probeNullclawReadyWithRetry,
+  requestNullalisUserPurge,
   requestNullclawChatStream,
 } from "./agent-client.js";
+import { eraseAccountData } from "./account-erasure.js";
 import {
   V1_CUTOVER_VERSION,
   listV1CutoverAuditEvents,
@@ -7976,52 +7978,40 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
       details: { confirmationMatched: true },
     });
 
-    // Best-effort cleanup in NOVA.TYP (non-blocking; local deletion remains source of truth).
-    if (zakiUser.nova_user_id) {
-      try {
-        const novaDelete = await novaAdminRequest(
-          `/v1/admin/users/${Number(zakiUser.nova_user_id)}`,
-          { method: "DELETE" }
-        );
-        if (!novaDelete.ok && novaDelete.status !== 404) {
-          const payload = await novaDelete.json().catch(() => ({}));
-          console.warn("[Account] NOVA delete returned non-OK:", novaDelete.status, payload);
-        }
-      } catch (err) {
-        console.warn("[Account] NOVA delete failed:", err?.message || err);
-      }
-    }
-
-    // Best-effort provider customer cleanup.
-    await getBillingAdapter().cleanupCustomerOnDelete({ zakiUser });
-
-    const learningDeletion = await deleteLearningAccountResources({
+    const erasure = await eraseAccountData({
       zakiUser,
+      memoryKey,
       requestId,
+      purgeNullalis: async ({ userId, requestId: purgeRequestId }) => {
+        const response = await requestNullalisUserPurge({
+          baseUrl: NULLCLAW_BASE_URL,
+          internalToken: NULLCLAW_INTERNAL_TOKEN,
+          userId,
+          requestId: purgeRequestId,
+          fetchWithTimeout,
+          timeoutMs: Math.max(
+            1_000,
+            Number(process.env.NULLALIS_GDPR_PURGE_TIMEOUT_MS || 60_000)
+          ),
+        });
+        return {
+          ok: response.ok,
+          status: response.status,
+          data: await response.json().catch(() => null),
+        };
+      },
+      deleteTypUser: async ({ novaUserId }) => {
+        const response = await novaAdminRequest(`/v1/admin/users/${novaUserId}`, {
+          method: "DELETE",
+        });
+        return { ok: response.ok, status: response.status };
+      },
+      cleanupBilling: ({ zakiUser: user }) =>
+        getBillingAdapter().cleanupCustomerOnDelete({ zakiUser: user }),
+      deleteLearning: deleteLearningAccountResources,
+      dbQuery,
     });
-
-    await dbQuery("BEGIN");
-    try {
-      const deleteByEmail = async (table) => {
-        try {
-          await dbQuery(`DELETE FROM ${table} WHERE user_id = $1`, [memoryKey]);
-        } catch (err) {
-          // Table may not exist in older deployments; skip safely.
-          if (err?.code !== "42P01") throw err;
-        }
-      };
-      await deleteByEmail("memory_notifications");
-      await deleteByEmail("memory_conflicts");
-      await deleteByEmail("memory_confirmations");
-      await deleteByEmail("memory_triggers");
-      await deleteByEmail("memories");
-      await deleteByEmail("zaki_memory_preferences");
-      await dbQuery("DELETE FROM zaki_users WHERE id = $1", [zakiUser.id]);
-      await dbQuery("COMMIT");
-    } catch (err) {
-      await dbQuery("ROLLBACK");
-      throw err;
-    }
+    const learningDeletion = erasure.learning;
 
     await recordLearningAccountAuditEventBestEffort({
       dbQuery,
@@ -8031,7 +8021,13 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
       requestId,
       details: summarizeLearningDeletionResult(learningDeletion),
     });
-    res.status(200).json({ success: true, message: "Account deleted.", learningDeletion });
+    res.status(200).json({
+      success: true,
+      message: "Account deleted.",
+      erasureReceiptId: erasure.receiptId,
+      purgeManifest: erasure.engine,
+      learningDeletion,
+    });
   } catch (error) {
     console.error("[Account] Delete error:", error);
     if (auditUser) {
@@ -8049,7 +8045,10 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
       });
     }
     res.status(error?.status || 500).json({
+      success: false,
       error: error?.message || "Account delete failed.",
+      code: error?.code || "account_delete_failed",
+      retryable: Boolean(error?.retryable),
       details: error?.details || undefined,
     });
   }
