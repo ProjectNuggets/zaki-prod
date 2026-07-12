@@ -109,9 +109,10 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.markers.waitlist": "Waitlist",
     "zakiDashboard.command.markers.comingSoon": "Coming soon",
     "zakiDashboard.command.creditsExhaustedTitle": "Weekly usage is full.",
-    "zakiDashboard.command.creditsExhaustedCopy": "Keep your prompt here, then sign up, wait for reset, or choose a plan with more room.",
+    "zakiDashboard.command.creditsExhaustedCopy": "Your draft stays saved here. Sign up, wait for the weekly reset, or pick a plan with more room.",
     "zakiDashboard.command.capacityWindowTitle": "{{hours}}h Agent window is {{percent}}% used.",
-    "zakiDashboard.command.capacityWindowCopy": "Recent Agent work leaves this window at {{reset}}.",
+    "zakiDashboard.command.capacityWindowCopy": "Your draft stays saved here. More room opens at {{reset}}.",
+    "zakiDashboard.command.capacityWindowCopySoon": "Your draft stays saved here. More room opens soon.",
     "zakiDashboard.command.saveAndSignup": "Save and sign up",
     "zakiDashboard.command.viewPlans": "View plans",
     "zakiDashboard.command.waitForReset": "Wait for reset",
@@ -602,7 +603,7 @@ describe("ZakiDashboard", () => {
 
     expect(screen.getAllByText(/5h Agent window is 50% used/).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Continue in Agent" })).toBeDisabled();
-    expect(screen.getByText(/Recent Agent work leaves this window at/)).toBeInTheDocument();
+    expect(screen.getByText(/More room opens at/)).toBeInTheDocument();
   });
 
   it("keeps signed-in Agent submit enabled when current capacity satisfies reserve", () => {
