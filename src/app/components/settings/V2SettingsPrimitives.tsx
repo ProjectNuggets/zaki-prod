@@ -68,18 +68,28 @@ export function V2SettingsNav({
 export function V2SettingsBlock({
   title,
   meta,
+  action,
   children,
   className,
   ...props
 }: HTMLAttributes<HTMLElement> & {
   title: ReactNode;
   meta?: ReactNode;
+  /** Optional control rendered on the right of the header band (e.g. Reset to defaults). */
+  action?: ReactNode;
 }) {
   return (
     <section className={cn("v2-settings-block", className)} {...props}>
       <div className="v2-settings-block__head">
         <h2>{title}</h2>
-        {meta != null ? <span>{meta}</span> : null}
+        {meta != null || action != null ? (
+          <div className="v2-settings-block__head-aside">
+            {meta != null ? <span>{meta}</span> : null}
+            {action != null ? (
+              <div className="v2-settings-block__head-action">{action}</div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       <div className="v2-settings-block__body">{children}</div>
     </section>

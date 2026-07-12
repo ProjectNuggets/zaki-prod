@@ -2,6 +2,7 @@ import "@testing-library/jest-dom";
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
+import { toast } from "sonner";
 import { SettingsModal } from "./SettingsModal";
 import { SettingsPage } from "../settings/SettingsPage";
 import { useAuthStore, useUIStore } from "@/stores";
@@ -1533,6 +1534,52 @@ describe("SettingsPage", () => {
     fireEvent.blur(sessionTimeoutInput);
     await waitFor(() => {
       expect(updateBotSettingsMock).toHaveBeenCalledWith({ session_timeout_minutes: 45 });
+    });
+  });
+
+  it("restores Agent tenant defaults from the header Reset to defaults action", async () => {
+    const updateBotSettingsMock = updateBotSettings as jest.MockedFunction<typeof updateBotSettings>;
+    const toastSuccessMock = toast.success as jest.MockedFunction<typeof toast.success>;
+    updateBotSettingsMock.mockClear();
+    toastSuccessMock.mockClear();
+    await renderSettingsPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-agent")).toBeInTheDocument();
+    });
+
+    // Loaded profile equals the canonical defaults, so reset starts disabled.
+    const resetButton = screen.getByTestId("settings-agent-reset");
+    expect(resetButton).toBeDisabled();
+
+    // Move a control off-default to enable the reset affordance.
+    fireEvent.change(screen.getByLabelText("Autonomy"), { target: { value: "supervised" } });
+    await waitFor(() => {
+      expect(updateBotSettingsMock).toHaveBeenCalledWith({ autonomy: "supervised" });
+    });
+    await waitFor(() => {
+      expect(resetButton).not.toBeDisabled();
+    });
+
+    updateBotSettingsMock.mockClear();
+    fireEvent.click(resetButton);
+
+    // Reset applies the full editable-default patch via the existing save path.
+    await waitFor(() => {
+      expect(updateBotSettingsMock).toHaveBeenCalledWith({
+        assistant_mode: "balanced",
+        autonomy: "full",
+        group_activation: "mention",
+        voice_replies: false,
+        session_timeout_minutes: 30,
+      });
+    });
+    await waitFor(() => {
+      expect(toastSuccessMock).toHaveBeenCalledWith("Agent defaults restored.");
+    });
+    // Controls are back at defaults, so the affordance disables itself again.
+    await waitFor(() => {
+      expect(resetButton).toBeDisabled();
     });
   });
 

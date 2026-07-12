@@ -170,6 +170,20 @@ const DEFAULT_AGENT_SETTINGS: AgentSettingsDraft = {
   selected_model: null,
 };
 
+// "Reset to defaults" restores exactly the controls the Agent (tenant defaults)
+// panel edits, using DEFAULT_AGENT_SETTINGS as the source of truth — the
+// canonical frontend defaults, which mirror the backend bot-settings contract
+// (backend/src/bot-bff.test.js fixture). The disabled proactive_updates toggle
+// (paused for launch) and the Memory & Data-owned dream/query toggles are not
+// controls of this panel and are intentionally excluded.
+const AGENT_DEFAULTS_RESET_PATCH = {
+  assistant_mode: DEFAULT_AGENT_SETTINGS.assistant_mode,
+  autonomy: DEFAULT_AGENT_SETTINGS.autonomy,
+  group_activation: DEFAULT_AGENT_SETTINGS.group_activation,
+  voice_replies: DEFAULT_AGENT_SETTINGS.voice_replies,
+  session_timeout_minutes: DEFAULT_AGENT_SETTINGS.session_timeout_minutes,
+} satisfies BotSettingsPatch;
+
 const AGENT_SESSION_TIMEOUT_MINUTES_MIN = 5;
 const AGENT_SESSION_TIMEOUT_MINUTES_MAX = 180;
 
@@ -1490,7 +1504,10 @@ export function SettingsPage() {
     }
   };
 
-  const patchAgentSettings = (patch: BotSettingsPatch): Promise<boolean> => {
+  const patchAgentSettings = (
+    patch: BotSettingsPatch,
+    options?: { successMessage?: string }
+  ): Promise<boolean> => {
     const run = async (): Promise<boolean> => {
       const previousDraft = agentSettingsDraftRef.current;
       setAgentSettingsSaving(true);
@@ -1509,9 +1526,10 @@ export function SettingsPage() {
         agentSettingsDraftRef.current = nextDraft;
         setAgentSettingsDraft(nextDraft);
         toast.success(
-          t("settingsModal.agentSettings.success.updated", {
-            defaultValue: "Agent settings updated.",
-          })
+          options?.successMessage ??
+            t("settingsModal.agentSettings.success.updated", {
+              defaultValue: "Agent settings updated.",
+            })
         );
         return true;
       } catch (err) {
@@ -1536,6 +1554,26 @@ export function SettingsPage() {
       () => false
     );
     return queued;
+  };
+
+  const isAtAgentDefaults =
+    agentSettingsDraft.assistant_mode === AGENT_DEFAULTS_RESET_PATCH.assistant_mode &&
+    agentSettingsDraft.autonomy === AGENT_DEFAULTS_RESET_PATCH.autonomy &&
+    agentSettingsDraft.group_activation === AGENT_DEFAULTS_RESET_PATCH.group_activation &&
+    agentSettingsDraft.voice_replies === AGENT_DEFAULTS_RESET_PATCH.voice_replies &&
+    agentSettingsDraft.session_timeout_minutes ===
+      AGENT_DEFAULTS_RESET_PATCH.session_timeout_minutes;
+
+  const handleResetAgentDefaults = () => {
+    if (agentSettingsLoading || agentSettingsSaving || isAtAgentDefaults) return;
+    setSessionTimeoutError(null);
+    setSessionTimeoutDraft(String(AGENT_DEFAULTS_RESET_PATCH.session_timeout_minutes));
+    setAgentSettingsDraft((current) => ({ ...current, ...AGENT_DEFAULTS_RESET_PATCH }));
+    void patchAgentSettings(AGENT_DEFAULTS_RESET_PATCH, {
+      successMessage: t("settingsModal.agentSettings.success.reset", {
+        defaultValue: "Agent defaults restored.",
+      }),
+    });
   };
 
   const commitSessionTimeoutDraft = async () => {
@@ -2347,6 +2385,19 @@ export function SettingsPage() {
                 agentSettingsLoading
                   ? t("settingsModal.agentSettings.loadingShort", { defaultValue: "Loading" })
                   : t("settingsModal.agentSettings.ready", { defaultValue: "Tenant defaults" })
+              }
+              action={
+                <V2Button
+                  size="sm"
+                  variant="ghost"
+                  data-testid="settings-agent-reset"
+                  disabled={agentSettingsLoading || agentSettingsSaving || isAtAgentDefaults}
+                  onClick={handleResetAgentDefaults}
+                >
+                  {t("settingsModal.agentSettings.resetDefaults", {
+                    defaultValue: "Reset to defaults",
+                  })}
+                </V2Button>
               }
             >
               {agentSettingsLoading ? (

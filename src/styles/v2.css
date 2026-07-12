@@ -3119,6 +3119,18 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   text-transform: uppercase;
 }
 
+/* Header band right cluster: meta text + optional action (e.g. Reset to defaults). */
+.v2-settings-block__head-aside {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.v2-settings-block__head-action {
+  display: inline-flex;
+}
+
 /* V2InfoHint — hairline (i) affordance + plain-language bubble on cryptic labels. */
 .v2-info-hint {
   position: relative;

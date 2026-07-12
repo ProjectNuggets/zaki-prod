@@ -256,6 +256,7 @@
       "loadingShort": "Loading",
       "ready": "Tenant defaults",
       "defaultsNotice": "Defaults for new Agent turns and supported channel runtimes. Composer chips can still override the next Agent send only.",
+      "resetDefaults": "Reset to defaults",
       "reasoningEffort": {
         "name": "Reasoning effort",
         "helper": "Default thinking depth for new Agent turns. Live per-turn controls stay in Agent.",
@@ -302,7 +303,8 @@
         "query": "Query {{status}}"
       },
       "success": {
-        "updated": "Agent settings updated."
+        "updated": "Agent settings updated.",
+        "reset": "Agent defaults restored."
       },
       "errors": {
         "update": "Unable to update Agent settings."
