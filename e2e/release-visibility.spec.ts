@@ -47,18 +47,21 @@ test.describe("ZAKI V1 product visibility", () => {
     const hint = page.getByTestId("zaki-dashboard-product-hint");
     await expect(strip).toBeVisible({ timeout: 20_000 });
 
-    for (const label of ["Chat", "Agent", "Brain"]) {
+    // Brain remains public in the product rail above. The command strip is
+    // intentionally limited to lanes that accept a dashboard prompt.
+    for (const label of ["Agent", "Chat"]) {
       await expect(strip.getByRole("tab", { name: label })).toBeVisible();
     }
+    await expect(strip.getByRole("tab", { name: "Brain" })).toHaveCount(0);
 
     await strip.getByRole("tab", { name: "Learn" }).click();
-    await expect(hint.locator("p").filter({ hasText: /Learn is coming soon/i })).toBeVisible();
+    await expect(hint.getByText(/Learn stays gated until learner state/i)).toBeVisible();
 
     await strip.getByRole("tab", { name: "Design" }).click();
-    await expect(hint.locator("p").filter({ hasText: /Design is coming soon/i })).toBeVisible();
+    await expect(hint.getByText(/Design stays waitlisted until the project service/i)).toBeVisible();
 
     await strip.getByRole("tab", { name: "Career" }).click();
-    await expect(hint.locator("p").filter({ hasText: /Career is gated/i })).toBeVisible();
+    await expect(hint.getByText(/Career stays gated until the private workflow/i)).toBeVisible();
   });
 
   test("direct beta and waitlist routes render gates instead of product surfaces", async ({ page }) => {
