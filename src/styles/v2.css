@@ -3196,6 +3196,22 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   top: calc(100% + 7px);
 }
 
+/* Several settings containers blanket-style nested `span`s as
+   block/uppercase/mono (e.g. `.zaki-settings-v2__billing-meter header span`,
+   specificity 0,2,1). V2InfoHint is built from spans, so those rules would drop
+   the trigger onto its own line and force the readable bubble into uppercase
+   mono. These self-scoped overrides out-specify the blanket so the primitive
+   stays inline and its note stays sentence-case prose wherever it's dropped. */
+.zaki-settings-v2 .v2-info-hint.v2-info-hint {
+  display: inline-flex;
+}
+
+.zaki-settings-v2 .v2-info-hint .v2-info-hint__bubble {
+  display: block;
+  text-transform: none;
+  font-family: var(--v2-font-prose);
+}
+
 .v2-settings-block__body {
   display: grid;
   gap: 0;
