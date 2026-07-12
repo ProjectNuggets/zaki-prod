@@ -84,7 +84,7 @@ describe("AgentArtifactCanvas", () => {
     });
   });
 
-  it("loads a readable artifact preview and downloads exports through the BFF URL", async () => {
+  it("loads a readable artifact preview and keeps unavailable exports hidden", async () => {
     render(
       <AgentArtifactCanvas
         artifact={{
@@ -109,19 +109,9 @@ describe("AgentArtifactCanvas", () => {
       );
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Export PDF/i }));
-
-    await waitFor(() => {
-      expect(exportAgentArtifactMock).toHaveBeenCalledWith("artifact-1", "pdf");
-      expect(downloadAgentExportFileMock).toHaveBeenCalledWith(
-        "/api/agent/exports/research-report.pdf",
-        "Research_report.pdf"
-      );
-    });
-
-    expect(screen.queryByRole("button", { name: /Export PPTX/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Export DOCX/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Export HTML/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Artifact export")).not.toBeInTheDocument();
+    expect(exportAgentArtifactMock).not.toHaveBeenCalled();
+    expect(downloadAgentExportFileMock).not.toHaveBeenCalled();
   });
 
   it("saves canvas edits with a readable change summary", async () => {

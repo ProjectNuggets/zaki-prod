@@ -160,8 +160,11 @@ export function ChatView({
     );
   };
 
-  const renderToolOnlyTurn = (msg: Message) => {
-    if (!botMode || msg.role !== "assistant" || !isToolOnlyTurnPlaceholder(msg.content)) {
+  const renderToolOnlyTurn = (msg: Message, hasToolOnlyTimelineEntry: boolean) => {
+    const hasNoDirectReply =
+      isToolOnlyTurnPlaceholder(msg.content) ||
+      (!String(msg.content || "").trim() && hasToolOnlyTimelineEntry);
+    if (!botMode || msg.role !== "assistant" || !hasNoDirectReply) {
       return null;
     }
     return (
@@ -201,7 +204,13 @@ export function ChatView({
       {messages.map((msg, index) => {
         const isLast = index === messages.length - 1;
         const isStreamingMessage = isLast && msg.role === "assistant" && isStreaming;
-        const toolOnlyTurn = renderToolOnlyTurn(msg);
+        const replayEntries =
+          msg.role === "assistant" ? replayTimelines?.[msg.id] : undefined;
+        const relevantTimelineEntries = replayEntries || (isLast ? nullalisTranscriptEntries : []);
+        const hasToolOnlyTimelineEntry = relevantTimelineEntries.some(
+          (entry) => entry.phase === "tool_only_turn" || entry.phase === "tool_only_summary"
+        );
+        const toolOnlyTurn = renderToolOnlyTurn(msg, hasToolOnlyTimelineEntry);
 
         if (isStreamingMessage) {
           if (
@@ -261,8 +270,6 @@ export function ChatView({
           );
         }
 
-        const replayEntries =
-          msg.role === "assistant" ? replayTimelines?.[msg.id] : undefined;
         const activeDoneTimeline =
           msg.role === "assistant" && isLast && !isStreaming && !replayEntries
             ? renderTimelineArtifacts({ phase: "done" })

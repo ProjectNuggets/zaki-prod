@@ -3383,6 +3383,7 @@ export function ChatArea() {
   const zakiBotProcessClearTimerRef = useRef<number | null>(null);
   const zakiBotProvisionedRef = useRef(false);
   const zakiBotProvisionPromiseRef = useRef<Promise<boolean> | null>(null);
+  const zakiBotProvisionGenerationRef = useRef(0);
   const lastAgentHistoryReconcileThreadRef = useRef<string | null>(null);
   const [zakiBotProvisionReady, setZakiBotProvisionReady] = useState(false);
   const [zakiBotProvisionState, setZakiBotProvisionState] = useState<
@@ -7784,7 +7785,7 @@ export function ChatArea() {
   const ensureZakiBotProvisioned = useCallback(
     async () => {
       if (!isZakiBotActiveSpace) return true;
-      if (!isAuthReady) return false;
+      if (!authUserId || !isAuthReady) return false;
       if (zakiBotProvisionedRef.current) {
         setZakiBotProvisionReady(true);
         setZakiBotProvisionState("ready");
@@ -7795,6 +7796,7 @@ export function ChatArea() {
         return zakiBotProvisionPromiseRef.current;
       }
 
+      const generation = zakiBotProvisionGenerationRef.current;
       const pending = (async () => {
         setZakiBotProvisionReady(false);
         setZakiBotProvisionState("loading");
@@ -7809,11 +7811,13 @@ export function ChatArea() {
               (data as { error?: string; message?: string } | null)?.message ||
               "Unable to initialize ZAKI."
           );
+          if (generation !== zakiBotProvisionGenerationRef.current) return false;
           setZakiBotProvisionState("error");
           setZakiBotProvisionError(message);
           toast.error(message);
           return false;
         }
+        if (generation !== zakiBotProvisionGenerationRef.current) return false;
         zakiBotProvisionedRef.current = true;
         setZakiBotProvisionReady(true);
         setZakiBotProvisionState("ready");
@@ -7821,6 +7825,7 @@ export function ChatArea() {
         return true;
       })()
         .catch((error) => {
+          if (generation !== zakiBotProvisionGenerationRef.current) return false;
           const message = error instanceof Error ? error.message : "Unable to initialize ZAKI.";
           setZakiBotProvisionState("error");
           setZakiBotProvisionError(message);
@@ -7828,27 +7833,30 @@ export function ChatArea() {
           return false;
         })
         .finally(() => {
-          zakiBotProvisionPromiseRef.current = null;
+          if (generation === zakiBotProvisionGenerationRef.current) {
+            zakiBotProvisionPromiseRef.current = null;
+          }
         });
 
       zakiBotProvisionPromiseRef.current = pending;
       return pending;
     },
-    [activeThreadId, isAuthReady, isZakiBotActiveSpace]
+    [activeThreadId, authUserId, isAuthReady, isZakiBotActiveSpace]
   );
 
   useEffect(() => {
-    if (!isZakiBotActiveSpace || !isAuthReady) return;
-    void ensureZakiBotProvisioned();
-  }, [ensureZakiBotProvisioned, isAuthReady, isZakiBotActiveSpace]);
-
-  useEffect(() => {
+    zakiBotProvisionGenerationRef.current += 1;
     zakiBotProvisionedRef.current = false;
     zakiBotProvisionPromiseRef.current = null;
     setZakiBotProvisionReady(false);
     setZakiBotProvisionState("idle");
     setZakiBotProvisionError(null);
   }, [authUserId]);
+
+  useEffect(() => {
+    if (!authUserId || !isZakiBotActiveSpace || !isAuthReady) return;
+    void ensureZakiBotProvisioned();
+  }, [authUserId, ensureZakiBotProvisioned, isAuthReady, isZakiBotActiveSpace]);
 
   useEffect(() => {
     if (isZakiBotActiveSpace) return;

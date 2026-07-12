@@ -117,6 +117,38 @@ describe("ChatView", () => {
     expect(screen.queryByText(/\[tools ran, no direct reply/i)).not.toBeInTheDocument();
   });
 
+  it("renders a tool-only result when the completed assistant message is empty", () => {
+    render(
+      <ChatView
+        messages={[
+          { id: "user-1", role: "user", content: "Run the checks." },
+          { id: "assistant-1", role: "assistant", content: "" },
+        ]}
+        isHistoryLoading={false}
+        isStreaming={false}
+        botMode
+        replayTimelines={{
+          "assistant-1": [
+            {
+              id: "tool-only-1",
+              kind: "status",
+              text: "Tools completed without a direct reply.",
+              timestamp: Date.now(),
+              phase: "tool_only_turn",
+              source: "tool_only_turn",
+            },
+          ],
+        }}
+        firstMessageTransition={false}
+      />
+    );
+
+    expect(screen.getByTestId("tool-only-turn-assistant-1")).toHaveTextContent(
+      "Tools completed this turn"
+    );
+    expect(screen.queryByTestId("message-bubble-assistant-1")).not.toBeInTheDocument();
+  });
+
   it("collapses the trail into 'Worked for' once final reply starts", () => {
     render(
       <ChatView
