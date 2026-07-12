@@ -9015,6 +9015,31 @@ export function ChatArea() {
     };
   }, [isAgentSurface]);
 
+  // New-thread shortcut. ⌘N is reserved by the browser, so the rail badge and
+  // this handler agree on ⌘⇧O (Ctrl+Shift+O on Windows/Linux).
+  useEffect(() => {
+    if (!isAgentSurface) return;
+    const handleNewThreadShortcut = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || !event.shiftKey || event.code !== "KeyO") {
+        return;
+      }
+      if (event.repeat) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      handleCreateAgentSession();
+    };
+    window.addEventListener("keydown", handleNewThreadShortcut);
+    return () => window.removeEventListener("keydown", handleNewThreadShortcut);
+  }, [isAgentSurface, handleCreateAgentSession]);
+
   // ZakiSessionList per-row share button dispatches this event after
   // navigating to the chosen session. We queue the requested sessionKey
   // and only open the share modal once activeZakiSessionKey matches,
