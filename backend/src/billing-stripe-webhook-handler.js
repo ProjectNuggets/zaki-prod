@@ -70,6 +70,7 @@ export function createStripeWebhookHandler({
   tierByPrice,
   fulfillAccessCodePurchaseCheckoutSession,
   fulfillTopupCheckoutSession,
+  handleRefundEvent = null,
   revokeNullalisEntitlement = null,
 } = {}) {
   return async function stripeWebhookHandler(req, res) {
@@ -195,6 +196,17 @@ export function createStripeWebhookHandler({
             eventId,
           });
         }
+      }
+
+      if (
+        (event.type === "charge.refunded" || event.type === "credit_note.created") &&
+        typeof handleRefundEvent === "function"
+      ) {
+        await handleRefundEvent({
+          event,
+          eventId,
+          requestId: req.requestId || null,
+        });
       }
 
       if (

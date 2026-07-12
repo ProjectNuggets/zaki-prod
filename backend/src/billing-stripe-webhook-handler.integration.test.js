@@ -99,6 +99,7 @@ function createDependencies({ event, constructError = null, markResult = true, a
     },
     fulfillAccessCodePurchaseCheckoutSession: jest.fn(async () => ({ handled: false })),
     fulfillTopupCheckoutSession: jest.fn(async () => ({ handled: false })),
+    handleRefundEvent: jest.fn(async () => ({ handled: true })),
   };
 }
 
@@ -257,6 +258,75 @@ describe("stripe webhook handler integration", () => {
       session: event.data.object,
       eventId: "evt_topup_1",
     });
+  });
+
+  it.each(["charge.refunded", "credit_note.created"])(
+    "routes %s through the refund clawback before marking the webhook processed",
+    async (type) => {
+      const event = {
+        id: `evt_${type.replaceAll(".", "_")}`,
+        type,
+        data: { object: { id: "refund_object_1" } },
+      };
+      const deps = createDependencies({ event });
+      const callOrder = [];
+      deps.handleRefundEvent.mockImplementation(async () => {
+        callOrder.push("clawback");
+        return { handled: true };
+      });
+      deps.markWebhookEventProcessed.mockImplementation(async () => {
+        callOrder.push("mark");
+        return true;
+      });
+      const handler = createStripeWebhookHandler(deps);
+
+      const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+
+      expect(res.statusCode).toBe(200);
+      expect(deps.handleRefundEvent).toHaveBeenCalledWith({
+        event,
+        eventId: event.id,
+        requestId: "req-test-1",
+      });
+      expect(callOrder).toEqual(["clawback", "mark"]);
+    }
+  );
+
+  it("does not claw back twice when Stripe replays the same refund event", async () => {
+    const event = {
+      id: "evt_refund_replay_1",
+      type: "charge.refunded",
+      data: { object: { id: "ch_1", payment_intent: "pi_1" } },
+    };
+    const deps = createDependencies({ event });
+    deps.hasWebhookEventBeenProcessed
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const handler = createStripeWebhookHandler(deps);
+
+    const first = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+    const replay = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+
+    expect(first.body).toEqual({ received: true });
+    expect(replay.body).toEqual({ received: true, duplicate: true });
+    expect(deps.handleRefundEvent).toHaveBeenCalledTimes(1);
+    expect(deps.markWebhookEventProcessed).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a failed refund event unmarked so Stripe can retry", async () => {
+    const event = {
+      id: "evt_refund_retry_1",
+      type: "charge.refunded",
+      data: { object: { id: "ch_1", payment_intent: "pi_1" } },
+    };
+    const deps = createDependencies({ event });
+    deps.handleRefundEvent.mockRejectedValueOnce(new Error("clawback transaction failed"));
+    const handler = createStripeWebhookHandler(deps);
+
+    const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+
+    expect(res.statusCode).toBe(500);
+    expect(deps.markWebhookEventProcessed).not.toHaveBeenCalled();
   });
 
   it.each([

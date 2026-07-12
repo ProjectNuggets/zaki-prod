@@ -451,6 +451,10 @@ export async function initDb() {
       currency TEXT,
       status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'fulfilled', 'failed')),
       fulfilled_at TIMESTAMPTZ,
+      refunded_units DOUBLE PRECISION NOT NULL DEFAULT 0,
+      refunded_amount_cents INT NOT NULL DEFAULT 0,
+      refund_event_id TEXT,
+      refunded_at TIMESTAMPTZ,
       failure_reason TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -458,8 +462,22 @@ export async function initDb() {
   `);
 
   await migrationClient.query(`
+    ALTER TABLE billing_topup_orders
+      ADD COLUMN IF NOT EXISTS refunded_units DOUBLE PRECISION NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS refunded_amount_cents INT NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS refund_event_id TEXT,
+      ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ;
+  `);
+
+  await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_billing_topup_orders_user_created
     ON billing_topup_orders (user_id, created_at DESC);
+  `);
+
+  await migrationClient.query(`
+    CREATE INDEX IF NOT EXISTS idx_billing_topup_orders_payment_intent
+    ON billing_topup_orders (stripe_payment_intent_id)
+    WHERE stripe_payment_intent_id IS NOT NULL;
   `);
 
   await migrationClient.query(`
