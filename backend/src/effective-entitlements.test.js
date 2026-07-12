@@ -136,6 +136,42 @@ describe("effective entitlements", () => {
     expect(effective.commercial.planId).toBe(COMMERCIAL_PLAN_IDS.SPACES_FREE);
   });
 
+  it("keeps a yearly subscription entitled through its Stripe period end, including past_due", () => {
+    const yearlySubscription = {
+      plan_tier: "personal",
+      plan_status: "past_due",
+      current_period_end: "2027-03-17T00:00:00.000Z",
+      access_expires_at: null,
+    };
+
+    const duringAnnualPeriod = getEffectiveEntitlementState(
+      yearlySubscription,
+      new Date("2026-10-01T00:00:00.000Z")
+    );
+    expect(duringAnnualPeriod).toEqual(
+      expect.objectContaining({
+        tier: "personal",
+        status: "past_due",
+        source: "subscription",
+        premium: true,
+        hasActiveSubscription: true,
+      })
+    );
+
+    const afterAnnualPeriod = getEffectiveEntitlementState(
+      yearlySubscription,
+      new Date("2027-03-17T00:00:00.001Z")
+    );
+    expect(afterAnnualPeriod).toEqual(
+      expect.objectContaining({
+        tier: "free",
+        source: "free",
+        premium: false,
+        hasActiveSubscription: false,
+      })
+    );
+  });
+
   it("maps new Agent subscriptions to Agent access without uncapped Spaces", () => {
     const effective = getEffectiveEntitlementState(
       { plan_tier: "agent", plan_status: "active", access_expires_at: null },
