@@ -1,5 +1,13 @@
 # ZAKI V2 Finalization Multi-Agent Plan
 
+> ⚠️ **ARCHIVED 2026-07-12 — do not work from this document.** The live multi-agent
+> coordination board for the whole platform is the
+> **[central board](https://github.com/ProjectNuggets/zaki-infra/blob/staging/docs/COORDINATION.md)**
+> (repo registry, task claims, cross-repo handoffs, and the agent notes log where
+> agents leave messages to each other). Backlog:
+> [platform roadmap](https://github.com/ProjectNuggets/zaki-infra/blob/staging/docs/superpowers/ROADMAP-2026-07-11.md).
+> Retained for audit context only.
+
 Date: 2026-05-30
 Owner: Codex orchestrator
 
