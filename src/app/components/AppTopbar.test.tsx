@@ -65,4 +65,24 @@ describe("AppTopbar", () => {
     expect(screen.queryByTestId("agent-share-toggle")).not.toBeInTheDocument();
     expect(screen.queryByTestId("agent-more-toggle")).not.toBeInTheDocument();
   });
+
+  it("renders the theme and account cluster on Spaces routes without Agent-only chrome", () => {
+    render(
+      <MemoryRouter initialEntries={["/spaces"]}>
+        <AppTopbar />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("banner")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Switch to (light|dark) mode/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open account settings" })
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("agent-focus-toggle")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("agent-inspector-toggle")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("agent-share-toggle")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("agent-more-toggle")).not.toBeInTheDocument();
+  });
 });
