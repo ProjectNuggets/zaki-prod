@@ -446,16 +446,10 @@ export function SettingsChannelsSection({
               <V2SettingsRow name={channelRow.label} description={channelRow.description}>
                 <div className="zaki-settings-v2__channel-lane">
                   <div className="zaki-settings-v2__status-chips">
+                    {/* Collapsed row shows at most two chips: status + credentials.
+                        Ownership and bindings-count are demoted to the expanded
+                        tray's summary grid (Owner / Bindings) to keep the row calm. */}
                     <V2Badge tone={channelRow.statusTone}>{channelRow.statusLabel}</V2Badge>
-                    <V2Badge tone={channelRow.ownershipTone}>{channelRow.ownershipLabel}</V2Badge>
-                    {channelRow.canManageBindings ? (
-                      <V2Badge tone={channelRow.bindings.length > 0 ? "success" : "default"}>
-                        {t("settingsModal.channels.bindings.count", {
-                          count: channelRow.bindings.length,
-                          defaultValue: `${channelRow.bindings.length} bindings`,
-                        })}
-                      </V2Badge>
-                    ) : null}
                     {channelRow.credentialFormVisible ? (
                       <V2Badge
                         tone={

@@ -1209,7 +1209,11 @@ describe("SettingsPage", () => {
 
     await waitFor(() => {
       expect(within(screen.getByTestId("settings-channels")).getAllByText("Credentials saved").length).toBeGreaterThan(0);
-      expect(within(screen.getByTestId("settings-channels")).getByText("1 bindings")).toBeInTheDocument();
+      // Ownership ("Your tokens") and bindings-count chips are demoted to the
+      // expanded tray's summary grid; the collapsed row keeps only status +
+      // credentials chips.
+      expect(within(screen.getByTestId("settings-channels")).queryByText("1 bindings")).not.toBeInTheDocument();
+      expect(within(screen.getByTestId("settings-channels")).queryByText("Your tokens")).not.toBeInTheDocument();
       expect(within(screen.getByTestId("settings-channels")).queryByText(/U123/)).not.toBeInTheDocument();
       expect(within(screen.getByTestId("settings-secrets")).getByText("telegram_bot_token")).toBeInTheDocument();
       expect(within(screen.getByTestId("settings-secrets")).getByText("Metadata only")).toBeInTheDocument();

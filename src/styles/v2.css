@@ -3073,7 +3073,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
 .v2-settings-block {
   position: relative;
-  margin-bottom: 38px;
+  margin-bottom: 44px;
   scroll-margin-top: 76px;
 }
 
@@ -3112,8 +3112,9 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .v2-settings-block__head span {
-  color: var(--v2-ink-3);
+  color: var(--v2-ink-4);
   font-size: 10px;
+  letter-spacing: 0.08em;
   line-height: 1.4;
   text-transform: uppercase;
 }
@@ -3129,7 +3130,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   grid-template-columns: minmax(0, 1fr) minmax(220px, auto);
   gap: 24px;
   align-items: center;
-  padding: 15px 0;
+  padding: 13px 0;
   border-bottom: 1px solid var(--v2-hairline-faint);
 }
 
@@ -3646,10 +3647,12 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-settings-v2__channel-lane {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
   min-width: min(100%, 360px);
-  gap: 8px;
-  justify-items: end;
+  gap: 8px 10px;
 }
 
 .zaki-settings-v2__edit-tray {
@@ -3665,11 +3668,12 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-settings-v2__edit-tray--bindings {
-  margin-left: min(280px, 38%);
+  margin-inline-start: min(280px, 38%);
 }
 
 .zaki-settings-v2__edit-tray--channel {
-  margin: 0 0 14px min(280px, 38%);
+  margin-block: 0 14px;
+  margin-inline-start: min(280px, 38%);
 }
 
 .zaki-settings-v2__channel-summary-grid {
@@ -4142,13 +4146,15 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   .zaki-settings-v2__edit-tray--channel {
     width: 100%;
     min-width: 0;
-    margin-left: 0;
+    margin-inline-start: 0;
   }
 
   .zaki-settings-v2__channel-lane {
     width: 100%;
     min-width: 0;
-    justify-items: stretch;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
   }
 
   .zaki-settings-v2__actions {
