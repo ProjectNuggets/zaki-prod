@@ -1,0 +1,13 @@
+Dimension,Gate Code,Gate,Score 0-3,Evidence Confidence,Key Evidence,Blocker,Owner,Next Action
+Where,W1,Deployment Boundary,,,,,,
+Where,W2,Inference Readiness,,,,,,
+Where,W3,Access Readiness,,,,,,
+Where,W4,Control Plane,,,,,,
+What,A1,Workflow Fit,,,,,,
+What,A2,Agent Role,,,,,,
+What,A3,App Surface,,,,,,
+What,A4,Integration Depth,,,,,,
+How,H1,Ownership,,,,,,
+How,H2,Business Case,,,,,,
+How,H3,Governance,,,,,,
+How,H4,Run Model,,,,,,

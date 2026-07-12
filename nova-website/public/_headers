@@ -1,0 +1,7 @@
+/assets/downloads/*.pdf
+  Content-Type: application/pdf
+  X-Content-Type-Options: nosniff
+
+/assets/downloads/*.xlsx
+  Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+  X-Content-Type-Options: nosniff
