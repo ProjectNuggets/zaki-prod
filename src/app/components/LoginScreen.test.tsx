@@ -154,7 +154,7 @@ describe("LoginScreen legal consent", () => {
     await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
 
     expect(screen.queryByText(new RegExp(`policy\\s+${policyVersion}`))).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Terms, Privacy & Compliance" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Terms" })).not.toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText("Email address"), "user@example.com");
     await user.type(screen.getByPlaceholderText("Password"), "Password123");
@@ -193,10 +193,18 @@ describe("LoginScreen legal consent", () => {
     await user.type(screen.getByPlaceholderText("Password"), "Password123");
     await user.type(screen.getByPlaceholderText("Confirm password"), "Password123");
 
-    const legalLink = screen.getByRole("link", { name: "Terms, Privacy & Compliance" });
-    expect(legalLink).toHaveAttribute("href", "https://chatzaki.com/terms?from=signup");
-    expect(legalLink).toHaveAttribute("target", "_blank");
-    expect(legalLink).toHaveAttribute("rel", "noopener noreferrer");
+    expect(screen.getByRole("link", { name: "Terms" })).toHaveAttribute(
+      "href",
+      "https://chatzaki.com/terms?from=signup"
+    );
+    expect(screen.getByRole("link", { name: "Privacy Notice" })).toHaveAttribute(
+      "href",
+      "https://chatzaki.com/privacy?from=signup"
+    );
+    expect(screen.getByRole("link", { name: "Security & Compliance" })).toHaveAttribute(
+      "href",
+      "https://chatzaki.com/compliance?from=signup"
+    );
 
     const createButton = screen.getByRole("button", { name: "Create account" });
     expect(createButton).toBeDisabled();
@@ -214,6 +222,27 @@ describe("LoginScreen legal consent", () => {
         legalConsentAccepted: true,
         legalPolicyVersion: policyVersion,
       });
+    });
+  });
+
+  it("carries explicit v4 consent through Google signup and blocks an unchecked start", async () => {
+    const user = userEvent.setup();
+    (buildGoogleOAuthStartUrl as unknown as jest.Mock).mockReturnValue("#google-signup");
+    renderLoginScreen();
+    await waitFor(() => expect(fetchGoogleOAuthStatus).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("button", { name: "New here? Create an account" }));
+    await user.click(screen.getByRole("button", { name: "Continue with Google" }));
+    expect(buildGoogleOAuthStartUrl).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Please accept Terms, Privacy & Compliance to create an account.")
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: "Continue with Google" }));
+    expect(buildGoogleOAuthStartUrl).toHaveBeenCalledWith("/", {
+      legalConsentAccepted: true,
+      legalPolicyVersion: policyVersion,
     });
   });
 

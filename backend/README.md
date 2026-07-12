@@ -55,7 +55,8 @@ cp .env.example .env
 - `ZAKI_APP_URL` (public frontend URL for password reset links)
 - `ZAKI_DEFAULT_WORKSPACE_SLUG` (workspace slug to auto-assign new users)
 - `ZAKI_WORKSPACE_SOFT_HIDE_FALLBACK_ENABLED` (default `true`; when NOVA delete cannot be confirmed, hide workspace from that user in ZAKI list as fallback)
-- `ZAKI_LEGAL_POLICY_VERSION` (current required policy version, ex: `2026-02-17.v2`)
+- `ZAKI_LEGAL_POLICY_VERSION` (current required policy version, ex: `2026-07-12.v4`)
+- `ZAKI_MINIMUM_SIGNUP_AGE` (server-enforced signup age, defaults to `16`; confirm with owner/legal review)
 - `ZAKI_MEMORY_ALERT_WEBHOOK_URL` (optional webhook for memory pipeline alerts)
 - `ZAKI_MEMORY_ALERT_WEBHOOK_TOKEN` (optional bearer token for alert webhook)
 - `ZAKI_EMAIL_MODE` (`console`, `smtp`, `resend`, or `non`)
@@ -97,14 +98,14 @@ npm run migrate:sqlite
 ## Endpoints
 
 - `GET /health`
-- `POST /signup` — body `{ "email": "...", "password": "...", "name": "...", "dateOfBirth": "YYYY-MM-DD", "legalConsentAccepted": true, "legalPolicyVersion": "2026-02-17.v2" }`
+- `POST /signup` — body `{ "email": "...", "password": "...", "name": "...", "dateOfBirth": "YYYY-MM-DD", "legalConsentAccepted": true, "legalPolicyVersion": "2026-07-12.v4" }`
 - `GET /verify?token=...`
 - `POST /login` — body `{ "email": "...", "password": "..." }`
 - `POST /zaki/workspaces` — body `{ "name": "..." }` (requires Authorization header)
 - `POST /password-reset/request` — body `{ "email": "..." }`
 - `POST /password-reset/confirm` — body `{ "token": "...", "password": "..." }`
 - `GET /api/legal/consent-status` — returns current policy version and (if authenticated) whether re-consent is required
-- `POST /api/legal/re-consent` — body `{ "legalConsentAccepted": true, "legalPolicyVersion": "2026-02-17.v2" }` (requires Authorization header)
+- `POST /api/legal/re-consent` — body `{ "legalConsentAccepted": true, "legalPolicyVersion": "2026-07-12.v4" }` (requires Authorization header)
 - `GET /api/billing/config` — returns billing capability flags for the signed-in user context (requires Authorization header)
 - `POST /api/billing/creem/webhook` — Creem signed webhook endpoint for subscription status sync
 - `POST /api/access-code/redeem` — body `{ "code": "..." }` (requires Authorization header)
