@@ -417,6 +417,17 @@ function SiteHeader({ current }: { current: PageSlug }) {
     setMenuOpen(false);
   }, [current]);
 
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [menuOpen]);
+
   return (
     <header
       className="site-header"
@@ -2533,21 +2544,21 @@ function NovaOrbitSampleReportPage() {
           title="The score is useful because it changes the action."
           text="NovaOrbit does not use maturity as a vanity number. Each dimension links the current state to a concrete implementation condition."
         />
-        <div className="sample-score-table" role="table" aria-label="NovaOrbit sample scorecard">
+        <div className="sample-score-table" role="table" aria-label="NovaOrbit sample scorecard" tabIndex={0}>
           <div className="sample-score-row sample-score-head" role="row">
-            <span>Dimension</span>
-            <span>Score</span>
-            <span>Stage</span>
-            <span>Blocker</span>
-            <span>Next action</span>
+            <span role="columnheader">Dimension</span>
+            <span role="columnheader">Score</span>
+            <span role="columnheader">Stage</span>
+            <span role="columnheader">Blocker</span>
+            <span role="columnheader">Next action</span>
           </div>
           {sampleReportScoreRows.map((row) => (
             <div className="sample-score-row" role="row" key={row.dimension}>
-              <strong data-label="Dimension">{row.dimension}</strong>
-              <span data-label="Score">{row.score}</span>
-              <span data-label="Stage">{row.stage}</span>
-              <p data-label="Blocker">{row.blocker}</p>
-              <p data-label="Next action">{row.action}</p>
+              <strong role="rowheader" data-label="Dimension">{row.dimension}</strong>
+              <span role="cell" data-label="Score">{row.score}</span>
+              <span role="cell" data-label="Stage">{row.stage}</span>
+              <p role="cell" data-label="Blocker">{row.blocker}</p>
+              <p role="cell" data-label="Next action">{row.action}</p>
             </div>
           ))}
         </div>
@@ -4607,10 +4618,15 @@ function NovaOrbitMaturityMap({
   variant?: "standard" | "demo" | "snapshot" | "sample";
 }) {
   return (
-    <div className={`maturity-map maturity-map-${variant}`} role="table" aria-label="NovaOrbit maturity gap map">
-      <div className="maturity-map-head" role="row">
+    <div
+      className={`maturity-map maturity-map-${variant}`}
+      role="group"
+      aria-label="NovaOrbit maturity gap map"
+      tabIndex={0}
+    >
+      <div className="maturity-map-head">
         <span>Benchmark</span>
-        <div className="maturity-map-axis" aria-hidden="true">
+        <div className="maturity-map-axis" aria-label="Maturity stages">
           {snapshotStageNames.map((stage) => (
             <span key={stage}>
               S{stage}
@@ -4638,7 +4654,6 @@ function NovaOrbitMaturityMap({
               return (
                 <div
                   className={`maturity-map-row${row.redGate ? " maturity-map-row-capped" : ""}`}
-                  role="row"
                   key={row.id}
                   style={
                     {
@@ -4649,7 +4664,7 @@ function NovaOrbitMaturityMap({
                     } as CSSProperties
                   }
                 >
-                  <div className="maturity-benchmark" role="cell">
+                  <div className="maturity-benchmark">
                     <span>{row.code}</span>
                     <strong>{row.bench}</strong>
                     <small>
@@ -4658,7 +4673,7 @@ function NovaOrbitMaturityMap({
                   </div>
                   <div
                     className="maturity-track"
-                    role="cell"
+                    role="img"
                     aria-label={`${row.code} ${row.bench}: Stage ${row.stage} ${snapshotStageLabels[row.stage]}, target Stage ${row.targetStage}`}
                   >
                     <span className="maturity-grid-lines" aria-hidden="true" />
@@ -4672,7 +4687,7 @@ function NovaOrbitMaturityMap({
                     <span className="maturity-marker maturity-marker-target" aria-hidden="true" />
                     {row.redGate && <span className="maturity-cap" aria-hidden="true">Cap</span>}
                   </div>
-                  <p className="maturity-action" role="cell">
+                  <p className="maturity-action">
                     {row.redGate && <span>{row.redGate.label}</span>}
                     {row.action}
                   </p>
