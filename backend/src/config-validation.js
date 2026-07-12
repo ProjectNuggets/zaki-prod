@@ -49,6 +49,9 @@ export function validateRuntimeConfig(env = process.env) {
   const includeVerifyLink = isTruthyBoolean(env.ZAKI_INCLUDE_VERIFY_LINK);
   const memoryAlertWebhook = normalize(env.ZAKI_MEMORY_ALERT_WEBHOOK_URL);
   const billingAlertWebhook = normalize(env.ZAKI_BILLING_ALERT_WEBHOOK_URL);
+  const meterFailOpenEnabled = !["0", "false", "no", "off"].includes(
+    normalize(env.ZAKI_METER_FAIL_OPEN_ENABLED).toLowerCase()
+  );
   const billingProvider = normalize(env.ZAKI_BILLING_PROVIDER || "stripe").toLowerCase();
   const stripeSecretKey = normalize(env.STRIPE_SECRET_KEY);
   const stripeWebhookSecret = normalize(env.STRIPE_WEBHOOK_SECRET);
@@ -128,6 +131,13 @@ export function validateRuntimeConfig(env = process.env) {
       warnings,
       "ZAKI_BILLING_ALERT_WEBHOOK_URL",
       "ZAKI_BILLING_ALERT_WEBHOOK_URL should start with http:// or https://."
+    );
+  }
+  if (isProduction && meterFailOpenEnabled && !billingAlertWebhook) {
+    pushIssue(
+      errors,
+      "ZAKI_BILLING_ALERT_WEBHOOK_URL",
+      "ZAKI_BILLING_ALERT_WEBHOOK_URL is required in production while metering fail-open is enabled."
     );
   }
   const stripeConfigIssues = isProduction ? errors : warnings;

@@ -91,11 +91,40 @@ describe("runtime config validation", () => {
         STRIPE_PRICE_PRO: "price_pro_monthly",
         STRIPE_PRICE_PRO_MAX: "price_pro_max_monthly",
         STRIPE_PRICE_ACCESS_CODE_MONTHLY: "price_access_code_monthly",
+        ZAKI_BILLING_ALERT_WEBHOOK_URL: "https://alerts.example.com/metering",
       })
     );
 
     expect(report.ok).toBe(true);
     expect(report.errors).toHaveLength(0);
+  });
+
+  it("requires a paging destination in production while fail-open is enabled", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        NODE_ENV: "production",
+        ZAKI_METER_FAIL_OPEN_ENABLED: "true",
+        ZAKI_BILLING_ALERT_WEBHOOK_URL: "",
+      })
+    );
+
+    expect(report.errors).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: "ZAKI_BILLING_ALERT_WEBHOOK_URL" })])
+    );
+  });
+
+  it("does not require a paging destination when production fail-open is killed", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        NODE_ENV: "production",
+        ZAKI_METER_FAIL_OPEN_ENABLED: "false",
+        ZAKI_BILLING_ALERT_WEBHOOK_URL: "",
+      })
+    );
+
+    expect(
+      report.errors.find((error) => error.key === "ZAKI_BILLING_ALERT_WEBHOOK_URL")
+    ).toBeUndefined();
   });
 
   it("does not emit Stripe price warnings for non-stripe providers", () => {

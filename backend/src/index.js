@@ -67,7 +67,11 @@ import {
   createBillingReconcileHandler,
 } from "./billing-route-handlers.js";
 import { createStripeWebhookHandler } from "./billing-stripe-webhook-handler.js";
-import { createRefundClawbackHandler } from "./billing-refund-clawback.js";
+import {
+  createRefundClawbackHandler,
+  lockPaymentIntentRefund,
+  resolvePendingTopupRefund,
+} from "./billing-refund-clawback.js";
 import { createMeterFailOpenBackstop } from "./meter-fail-open-backstop.js";
 import { copyResponseHeaders } from "./upstream-headers.js";
 import { isSafeAgentShareCode } from "./agent-share-code.js";
@@ -2327,6 +2331,7 @@ async function fulfillTopupCheckoutSession({ session, eventId } = {}) {
   const currency = String(session?.currency || "").trim().toLowerCase() || null;
 
   return withDbTransaction(async (client) => {
+    await lockPaymentIntentRefund(client, paymentIntent);
     const existingOrderResult = await client.query(
       `SELECT id, status, user_id, units
        FROM billing_topup_orders
@@ -2365,13 +2370,21 @@ async function fulfillTopupCheckoutSession({ session, eventId } = {}) {
       planId: resolvePlatformWalletPlanForUser(user),
     }, client);
 
+    const pendingRefund = await resolvePendingTopupRefund({
+      client,
+      paymentIntentId: paymentIntent,
+      grantedUnits: units,
+      amountTotalCents,
+    });
+    const unitsToGrant = Math.max(0, units - pendingRefund.refundedUnits);
+
     await client.query(
       `UPDATE zaki_unit_wallets
        SET topup_units = topup_units + $2,
            updated_at = NOW(),
            version = version + 1
        WHERE user_id = $1`,
-      [user.id, units]
+      [user.id, unitsToGrant]
     );
 
     await client.query(
@@ -2385,9 +2398,13 @@ async function fulfillTopupCheckoutSession({ session, eventId } = {}) {
            currency = COALESCE($7, currency),
            status = 'fulfilled',
            fulfilled_at = COALESCE(fulfilled_at, NOW()),
+           refunded_units = GREATEST(refunded_units, $8),
+           refunded_amount_cents = GREATEST(refunded_amount_cents, $9),
+           refund_event_id = COALESCE($10, refund_event_id),
+           refunded_at = CASE WHEN $8 > 0 THEN COALESCE(refunded_at, NOW()) ELSE refunded_at END,
            failure_reason = NULL,
            updated_at = NOW()
-       WHERE checkout_session_id = $8`,
+       WHERE checkout_session_id = $11`,
       [
         user.id,
         eventId || null,
@@ -2396,11 +2413,19 @@ async function fulfillTopupCheckoutSession({ session, eventId } = {}) {
         units,
         amountTotalCents,
         currency,
+        pendingRefund.refundedUnits,
+        pendingRefund.refundedAmountCents,
+        pendingRefund.eventId,
         checkoutSessionId,
       ]
     );
 
-    return { handled: true, duplicate: false, units };
+    return {
+      handled: true,
+      duplicate: false,
+      units: unitsToGrant,
+      refundedUnits: pendingRefund.refundedUnits,
+    };
   });
 }
 

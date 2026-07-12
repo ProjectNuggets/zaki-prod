@@ -481,6 +481,17 @@ export async function initDb() {
   `);
 
   await migrationClient.query(`
+    CREATE TABLE IF NOT EXISTS billing_payment_refunds (
+      stripe_payment_intent_id TEXT PRIMARY KEY,
+      refunded_amount_cents INT NOT NULL DEFAULT 0 CHECK (refunded_amount_cents >= 0),
+      fully_refunded BOOLEAN NOT NULL DEFAULT FALSE,
+      latest_event_id TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS billing_webhook_events (
       id BIGSERIAL PRIMARY KEY,
       provider TEXT NOT NULL,

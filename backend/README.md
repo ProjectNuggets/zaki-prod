@@ -44,6 +44,7 @@ cp .env.example .env
 - `ZAKI_METER_FAIL_OPEN_PER_USER_LIMIT_PER_MINUTE` (in-process degraded-mode cap per user; default `3`)
 - `ZAKI_METER_FAIL_OPEN_GLOBAL_BUDGET_PER_MINUTE` (in-process degraded-mode budget; default `100`)
 - `ZAKI_METER_FAIL_OPEN_PAGE_THRESHOLD_PER_MINUTE` (emit a critical paging alert after this many degraded turns; default `10`)
+- `ZAKI_BILLING_ALERT_WEBHOOK_URL` (required in production while fail-open is enabled)
 - `ZAKI_EXTERNAL_CHECKOUT_URL_STUDENT` (required when `ZAKI_BILLING_PROVIDER=paddle|external`)
 - `ZAKI_EXTERNAL_CHECKOUT_URL_PERSONAL` (required when `ZAKI_BILLING_PROVIDER=paddle|external`)
 - `ZAKI_EXTERNAL_PORTAL_URL` (optional portal/manage URL when `ZAKI_BILLING_PROVIDER=paddle|external`)
@@ -79,6 +80,7 @@ Production safety notes:
 - Do not use verification bypass modes (`ZAKI_EMAIL_MODE=non|none|no`) in production
 - Keep `NULLCLAW_BASE_URL` internal-only, for example `http://nullclaw:3000`
 - Stripe is fail-closed at production startup: secret, webhook secret, and every configured launch price must be present
+- Metering fail-open also fails production startup unless a billing/paging alert webhook is configured
 - Do not set `NULLALIS_DEV_USER_ID` or legacy `NULLCLAW_DEV_USER_ID` outside single-user local debugging. It bypasses authenticated user mapping and would collapse agent traffic to one configured user.
 - Set `ZAKI_AGENT_WEBHOOK_BASE_URL` to the public HTTPS agent ingress, for example `https://agent.zaki.com`
 - Telegram connect is now token-first: users should only need a bot token; `account_id` and `allow_from` are optional advanced fields
