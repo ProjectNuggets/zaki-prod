@@ -17,6 +17,7 @@ import {
   advisorMembers,
   advisoryBench,
   architectureLayers,
+  audienceRoutes,
   capabilityPillars,
   categoryOptions,
   cfoRows,
@@ -84,7 +85,7 @@ const homeTrustSignals = [
   { value: "2 weeks", label: "Standard NovaOrbit map to board decision" },
   { value: "4-6 weeks", label: "In-Depth stack, access, workflow, and ROI diagnostic" },
   { value: "60-90 days", label: "first production workflow when evidence supports build" },
-  { value: "One team", label: "strategy, engineering, deployment, and operations stay connected" },
+  { value: "No demos", label: "scripts and API wrappers are not the definition of shipped AI" },
 ];
 
 const homeModelLayers = [
@@ -280,6 +281,14 @@ function SignatureScrambleText({
     >
       {displayText}
     </span>
+  );
+}
+
+function ScrambleBrandTitle() {
+  return (
+    <h1 className="hero-title hero-scramble-title" aria-label="Nova Nuggets">
+      <SignatureScrambleText text={"Nova\nNuggets"} ariaHidden dir="ltr" />
+    </h1>
   );
 }
 
@@ -489,8 +498,12 @@ function HomePage() {
     <>
       <Hero />
       <ProofBand points={homeTrustSignals} />
+      <TechnologyScrollerSection />
       <HomeLivePathSection />
+      <WorkforceDemoSection />
+      <NooxProofSection visual="product" />
       <HomeStackSection />
+      <AudienceRouteSection />
       <HomeProofSection />
       <FinalCta />
     </>
@@ -523,27 +536,67 @@ function TechnologyScrollerSection() {
 }
 
 function Hero() {
+  const heroRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    let context: { revert: () => void } | undefined;
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (prefersReducedMotion) return undefined;
+
+    void import("gsap").then(({ gsap }) => {
+      if (!mounted || !heroRef.current) return;
+
+      context = gsap.context(() => {
+        const timeline = gsap.timeline({ defaults: { duration: 0.72, ease: "power3.out" } });
+
+        timeline.from(".hero-kicker, .hero-title, .hero-thesis, .hero-copy, .hero-actions, .hero-definition", {
+          autoAlpha: 0,
+          y: 26,
+          stagger: 0.075,
+        });
+      }, heroRef.current);
+    });
+
+    return () => {
+      mounted = false;
+      context?.revert();
+    };
+  }, []);
+
   return (
-    <section className="hero hero-brand">
+    <section ref={heroRef} className="hero hero-brand">
       <div className="hero-inner">
-        <p className="hero-kicker">Full-stack AI that ships.</p>
-        <h1 className="hero-title">Nova<br />Nuggets</h1>
+        <p className="hero-kicker">Locally owned agents for the future of work</p>
+        <ScrambleBrandTitle />
         <div className="hero-thesis">
-          <strong>Your on-demand Chief AI Officer.</strong>
-          <span>From AI ambition to operating advantage.</span>
+          <strong>Start with one local agent.</strong>
+          <span>Build an AI-enabled organisation.</span>
         </div>
         <p className="hero-copy">
-          We find the work worth transforming, build the agents and infrastructure, and operate
-          them with your team. One accountable partner from strategy to production.
+          For frontier startups and established companies that believe agents will reshape work.
+          NovaOrbit finds the first workflow, ZAKI runs it, and private infrastructure keeps the
+          system controlled as it scales.
         </p>
         <div className="hero-actions">
           <a className="button button-primary" href="/nova-orbit-snapshot/">
             Run NovaOrbit Snapshot <ArrowIcon size={18} aria-hidden="true" />
           </a>
           <a className="button button-secondary" href="/nova-orbit/">
-            See how we work
+            See NovaOrbit
           </a>
         </div>
+        <dl className="hero-definition" aria-label="Nova Nuggets brand definition">
+          <div>
+            <dt>nova</dt>
+            <dd>from Latin <em>novus</em>: new. A star that suddenly brightens; a signal of evolution, transformation, and explosive growth.</dd>
+          </div>
+          <div>
+            <dt>nugget</dt>
+            <dd>a small lump of gold; a concentrated piece of useful insight, wisdom, or clever knowledge.</dd>
+          </div>
+        </dl>
       </div>
     </section>
   );
@@ -553,19 +606,18 @@ function HomeLivePathSection() {
   return (
     <section className="home-live-path-section" aria-labelledby="home-live-path-title">
       <div className="home-live-path-copy">
-        <p className="section-kicker">From mandate to production</p>
-        <h2 id="home-live-path-title">A clear path from AI strategy to shipped work.</h2>
+        <p className="section-kicker">Diagnostic active</p>
+        <h2 id="home-live-path-title">No AI theatre. A shipping clock.</h2>
         <p>
-          Start with the Snapshot. Reach a board-ready NovaOrbit decision in two weeks, validate
-          the deeper stack where needed, and ship the first production workflow when the operating
-          gates are clear.
+          Snapshot now, Standard in 2 weeks, In-Depth in 4-6 weeks when the stack needs proof,
+          and a first production workflow in 60-90 days when the gates are clear.
         </p>
       </div>
       <div className="home-live-diagnostic" aria-label="Live NovaOrbit diagnostic path">
         <div className="home-live-status" aria-hidden="true">
           <span />
           <strong>
-            <SignatureScrambleText text="Delivery path active" variant="signal" />
+            <SignatureScrambleText text="Assessment engine live" variant="signal" />
           </strong>
         </div>
         <div className="home-decision-grid">
@@ -1227,6 +1279,36 @@ function HomeProofSection() {
   );
 }
 
+function AudienceRouteSection() {
+  return (
+    <section className="audience-route-section" aria-labelledby="audience-route-title">
+      <div className="audience-route-intro">
+        <p className="section-kicker">Choose your entry point</p>
+        <h2 id="audience-route-title">Different starting positions. One path to owned AI work.</h2>
+        <p>
+          Startups can design agent-native operations before process debt hardens. Established
+          organisations can begin locally, prove one workflow, and expand without losing control.
+        </p>
+      </div>
+      <div className="audience-route-grid">
+        {audienceRoutes.map((route, index) => (
+          <a
+            key={route.title}
+            href={route.href}
+            target={route.external ? "_blank" : undefined}
+            rel={route.external ? "noreferrer" : undefined}
+          >
+            <span>{String(index + 1).padStart(2, "0")} / {route.label}</span>
+            <strong>{route.title}</strong>
+            <p>{route.text}</p>
+            <i aria-hidden="true"><ArrowIcon size={18} /></i>
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function WorkforceDemoSection() {
   const [active, setActive] = useState(0);
   const [activePhase, setActivePhase] = useState(0);
@@ -1286,11 +1368,12 @@ function WorkforceDemoSection() {
   return (
     <section className="section workforce-demo-section">
       <div className="workforce-demo-copy">
-        <p className="section-kicker">ZAKI operating loop</p>
-        <h2>Watch one agent become useful work.</h2>
+        <p className="section-kicker">Local-first operating loop</p>
+        <h2>Watch one agent become organisational capacity.</h2>
         <p>
-          Start with a department. ZAKI turns private memory, approved tools, human control,
-          useful output, business evidence, and an audit trail into one repeatable workflow.
+          Start inside one real team. ZAKI turns private memory, approved tools, human control,
+          useful output, business evidence, and an audit trail into a repeatable workflow that can
+          earn the right to scale.
         </p>
       </div>
       <ZakiCommandFrame

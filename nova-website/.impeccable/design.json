@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-07-12T15:31:56Z",
-  "title": "Design System: Nova Nuggets Website",
+  "title": "Design System: Nova Nuggets V2",
   "extensions": {
     "colorMeta": {
       "orbital-ink": { "role": "neutral", "displayName": "Orbital Ink", "canonical": "#1a1612", "tonalRamp": ["#1a1612", "#2b251f", "#403830", "#5a5045", "#7a6e60", "#a79a8a", "#d6cabb", "#f5edde"] },
@@ -70,7 +70,7 @@
   ],
   "narrative": {
     "northStar": "The Operational Orbit",
-    "overview": "The Nova Nuggets website feels like entering a live operating model for an agent-enabled organisation. The experience is dark, warm, precise, and spatial. It is immersive because the system reveals itself through depth, motion, and interaction, not because content is hidden behind spectacle.",
+    "overview": "Nova Nuggets V2 feels like entering a live operating model for an agent-enabled organisation. The experience is dark, warm, precise, and spatial. It is immersive because the system reveals itself through depth, motion, and interaction, not because content is hidden behind spectacle.",
     "keyCharacteristics": ["Warm technical darkness", "Oversized compact display typography", "Hairline grids and orbital paths", "One dominant visual idea per viewport", "Reduced-motion-safe interaction"],
     "rules": [
       { "name": "Signal Scarcity", "body": "Terra and ember identify action or change.", "section": "colors" },

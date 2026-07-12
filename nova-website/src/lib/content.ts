@@ -65,9 +65,9 @@ export const routes: RouteDefinition[] = [
     slug: "home",
     path: "/",
     label: "Home",
-    title: "Nova Nuggets | Full-Stack AI That Ships",
+    title: "Nova Nuggets | Local-First Agents for AI-Enabled Organisations",
     description:
-      "Your on-demand Chief AI Officer: Nova Nuggets finds the work worth transforming, builds the agents and infrastructure, and operates them from strategy to production.",
+      "Nova Nuggets helps frontier startups and established companies start locally with governed agents, prove one workflow, and scale into AI-enabled organisations.",
   },
   {
     slug: "nova-orbit",
@@ -1052,9 +1052,16 @@ export const nooxBuildModes = [
 
 export const audienceRoutes = [
   {
-    label: "Enterprise buyer",
-    title: "Map the first workflow",
-    text: "Book NovaOrbit to identify the workflow, owner, ROI signal, boundary, and first production path.",
+    label: "Frontier startup",
+    title: "Build agent-native from the start",
+    text: "Design the first agent role, private memory, tools, approvals, and operating evidence before process debt hardens.",
+    href: "/ai-workforce/",
+    external: false,
+  },
+  {
+    label: "Established organisation",
+    title: "Start locally. Scale with proof.",
+    text: "Book NovaOrbit to identify the workflow, owner, ROI signal, deployment boundary, and first production path.",
     href: BOOKING_URL,
     external: true,
   },
