@@ -42,7 +42,10 @@ describe("meter fail-open backstop", () => {
       status: 429,
       reason: "user_rate_limited",
     });
-    expect(backstop.check({ userId: 8 }).allowed).toBe(true);
+    expect(backstop.check({ userId: 8 })).toMatchObject({
+      allowed: true,
+      globalAllowedCount: 2,
+    });
   });
 
   it("stops all free turns after the process-wide emergency budget is exhausted", () => {

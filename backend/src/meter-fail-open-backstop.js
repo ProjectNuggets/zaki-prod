@@ -40,6 +40,7 @@ export function createMeterFailOpenBackstop({ env = process.env, now = Date.now 
   const config = resolveMeterFailOpenConfig(env);
   let windowStartedAt = Number(now());
   let globalCount = 0;
+  let globalAllowedCount = 0;
   let pageSent = false;
   const userCounts = new Map();
 
@@ -47,6 +48,7 @@ export function createMeterFailOpenBackstop({ env = process.env, now = Date.now 
     if (currentTime - windowStartedAt < config.windowMs) return;
     windowStartedAt = currentTime;
     globalCount = 0;
+    globalAllowedCount = 0;
     pageSent = false;
     userCounts.clear();
   }
@@ -69,6 +71,7 @@ export function createMeterFailOpenBackstop({ env = process.env, now = Date.now 
         surface,
         userId: userKey,
         globalCount,
+        globalAllowedCount,
         userCount,
         windowMs: config.windowMs,
         globalLimit: config.globalLimit,
@@ -80,13 +83,20 @@ export function createMeterFailOpenBackstop({ env = process.env, now = Date.now 
       if (!config.enabled) {
         return { ...context, allowed: false, status: 503, reason: "fail_open_disabled" };
       }
-      if (globalCount > config.globalLimit) {
-        return { ...context, allowed: false, status: 503, reason: "global_budget_exhausted" };
-      }
       if (userCount > config.perUserLimit) {
         return { ...context, allowed: false, status: 429, reason: "user_rate_limited" };
       }
-      return { ...context, allowed: true, status: 200, reason: "fail_open_allowed" };
+      if (globalAllowedCount >= config.globalLimit) {
+        return { ...context, allowed: false, status: 503, reason: "global_budget_exhausted" };
+      }
+      globalAllowedCount += 1;
+      return {
+        ...context,
+        globalAllowedCount,
+        allowed: true,
+        status: 200,
+        reason: "fail_open_allowed",
+      };
     },
   };
 }
