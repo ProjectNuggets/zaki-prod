@@ -1179,19 +1179,18 @@ export function ZakiDashboard({
     : "";
   const introEyebrow = token
     ? t("zakiDashboard.command.signedEyebrow", {
-        defaultValue: "Signed in · context and progress stay connected",
+        defaultValue: "Signed in",
       })
     : t("zakiDashboard.command.guestEyebrow", {
-        defaultValue: "Guest session · start without setup",
+        defaultValue: "Guest session",
       });
   const introCopy = token
     ? t("zakiDashboard.command.signedCopy", {
-        defaultValue:
-          "Choose the lane. Name the outcome. ZAKI brings the right intelligence and carries it forward.",
+        defaultValue: "Name the outcome. ZAKI handles the rest.",
       })
     : t("zakiDashboard.command.guestCopy", {
         defaultValue:
-          "Start in Chat now. Sign in when the work needs Agent, files, memory, or history.",
+          "Start in Chat now. Sign in when you need Agent, files, or memory.",
       });
   const titlePrefix = token
     ? t("zakiDashboard.command.signedTitlePrefix", {

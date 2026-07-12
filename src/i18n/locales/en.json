@@ -1984,12 +1984,12 @@
       "signUp": "Sign up"
     },
     "command": {
-      "signedEyebrow": "Signed in · context and progress stay connected",
-      "guestEyebrow": "Guest session · start without setup",
+      "signedEyebrow": "Signed in",
+      "guestEyebrow": "Guest session",
       "signedTitlePrefix": "Let's ",
       "guestTitlePrefix": "Let's ",
-      "signedCopy": "Choose the lane. Name the outcome. ZAKI brings the right intelligence and carries it forward.",
-      "guestCopy": "Start in Chat now. Sign in when the work needs Agent, files, memory, or history.",
+      "signedCopy": "Name the outcome. ZAKI handles the rest.",
+      "guestCopy": "Start in Chat now. Sign in when you need Agent, files, or memory.",
       "weeklyFreeCredit": "Usage",
       "bestFor": "Best for",
       "memoryScope": "Memory scope",
