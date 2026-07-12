@@ -10711,6 +10711,13 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   font-family: var(--v2-font-mono);
 }
 
+.zaki-dashboard-v2 > .v2-status-strip {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--v2-bg-sunken);
+}
+
 .zaki-dashboard-v2__status {
   display: flex;
   align-items: center;
