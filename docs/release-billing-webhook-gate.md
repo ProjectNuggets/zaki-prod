@@ -14,6 +14,8 @@ Backend production-like env:
 - `STRIPE_PRICE_PERSONAL`
 - `STRIPE_PRICE_STUDENT_YEARLY`
 - `STRIPE_PRICE_PERSONAL_YEARLY`
+- `STRIPE_PRICE_PRO`
+- `STRIPE_PRICE_PRO_MAX`
 - `STRIPE_PRICE_ACCESS_CODE_MONTHLY`
 - `ZAKI_ALLOWED_ORIGINS` (real frontend domains only)
 - Optional billing alerting:
