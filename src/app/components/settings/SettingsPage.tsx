@@ -91,7 +91,7 @@ import {
 } from "@/lib/productRoutes";
 import { useAuthStore, useUIStore } from "@/stores";
 import { TypeToConfirmDialog } from "@/app/components/ui/zaki";
-import { V2Badge, V2Button, V2StatusStrip } from "@/app/components/v2";
+import { V2Badge, V2Button, V2InfoHint, V2StatusStrip } from "@/app/components/v2";
 import {
   SettingsChannelsSection,
   buildEmptyChannelActivationDrafts,
@@ -1998,7 +1998,18 @@ export function SettingsPage() {
                     data-testid="settings-weekly-meter"
                   >
                     <header>
-                      <span>{t("settingsModal.usage.weeklyAllowance")}</span>
+                      <span>
+                        {t("settingsModal.usage.weeklyAllowance")}
+                        <V2InfoHint
+                          triggerLabel={t("settingsModal.hints.trigger", {
+                            defaultValue: "What's this?",
+                          })}
+                          note={t("settingsModal.hints.weeklyMeter", {
+                            defaultValue:
+                              "Your one shared weekly allowance across all ZAKI products, shown as approximate agent runs or chats.",
+                          })}
+                        />
+                      </span>
                       <strong>{weeklyRunsLabel || weeklyAllowanceLabel}</strong>
                     </header>
                     <div
@@ -2041,7 +2052,18 @@ export function SettingsPage() {
                     data-testid="settings-burst-meter"
                   >
                     <header>
-                      <span>{t("settingsModal.usage.burstWindow")}</span>
+                      <span>
+                        {t("settingsModal.usage.burstWindow")}
+                        <V2InfoHint
+                          triggerLabel={t("settingsModal.hints.trigger", {
+                            defaultValue: "What's this?",
+                          })}
+                          note={t("settingsModal.hints.burstWindow", {
+                            defaultValue:
+                              "A rolling 5-hour limit on short bursts of heavy use — separate from your weekly allowance.",
+                          })}
+                        />
+                      </span>
                       <strong>{burstWindowLabel}</strong>
                     </header>
                     <div
@@ -2072,23 +2094,67 @@ export function SettingsPage() {
                 </div>
                 <div className="zaki-settings-v2__billing-wallet">
                   <div>
-                    <span>{t("settingsModal.plan.recurringRemaining", { defaultValue: "Weekly room" })}</span>
+                    <span>
+                      {t("settingsModal.plan.recurringRemaining", { defaultValue: "Weekly room" })}
+                      <V2InfoHint
+                        triggerLabel={t("settingsModal.hints.trigger", { defaultValue: "What's this?" })}
+                        note={t("settingsModal.hints.weeklyRoom", {
+                          defaultValue:
+                            "How much of this week's allowance is left. Refills on your weekly reset day.",
+                        })}
+                      />
+                    </span>
                     <strong>{weeklyRoomLabel}</strong>
                   </div>
                   <div>
-                    <span>{t("settingsModal.plan.topupBalance", { defaultValue: "Extra capacity" })}</span>
+                    <span>
+                      {t("settingsModal.plan.topupBalance", { defaultValue: "Extra capacity" })}
+                      <V2InfoHint
+                        triggerLabel={t("settingsModal.hints.trigger", { defaultValue: "What's this?" })}
+                        note={t("settingsModal.hints.extraCapacity", {
+                          defaultValue: "Buying capacity beyond your plan isn't available yet.",
+                        })}
+                      />
+                    </span>
                     <strong>{extraCapacityLabel}</strong>
                   </div>
                   <div>
-                    <span>{t("settingsModal.plan.agentAvailableNow", { defaultValue: "Agent available now" })}</span>
+                    <span>
+                      {t("settingsModal.plan.agentAvailableNow", { defaultValue: "Agent available now" })}
+                      <V2InfoHint
+                        triggerLabel={t("settingsModal.hints.trigger", { defaultValue: "What's this?" })}
+                        note={t("settingsModal.hints.agentAvailableNow", {
+                          defaultValue:
+                            "Whether Agent can run right now, based on your remaining weekly allowance.",
+                        })}
+                      />
+                    </span>
                     <strong>{agentAvailableNowLabel}</strong>
                   </div>
                   <div>
-                    <span>{t("settingsModal.plan.billingSource", { defaultValue: "Billing source" })}</span>
+                    <span>
+                      {t("settingsModal.plan.billingSource", { defaultValue: "Billing source" })}
+                      <V2InfoHint
+                        triggerLabel={t("settingsModal.hints.trigger", { defaultValue: "What's this?" })}
+                        note={t("settingsModal.hints.billingSource", {
+                          defaultValue:
+                            "Where your plan comes from — free account, subscription, or access code.",
+                        })}
+                      />
+                    </span>
                     <strong>{billingSourceLabel}</strong>
                   </div>
                   <div>
-                    <span>{t("settingsModal.plan.billingHealth", { defaultValue: "Billing health" })}</span>
+                    <span>
+                      {t("settingsModal.plan.billingHealth", { defaultValue: "Billing health" })}
+                      <V2InfoHint
+                        triggerLabel={t("settingsModal.hints.trigger", { defaultValue: "What's this?" })}
+                        note={t("settingsModal.hints.billingHealth", {
+                          defaultValue:
+                            "Whether billing is set up and responding for your account.",
+                        })}
+                      />
+                    </span>
                     <strong>
                       {billingConfigLoaded
                         ? t("settingsModal.plan.billingConfigured", { defaultValue: "Configured" })
@@ -2880,11 +2946,20 @@ export function SettingsPage() {
                 data-testid="settings-memory-governance"
               >
                 <header>
-                  <strong>
-                    {t("settingsModal.memoryData.governance.title", {
-                      defaultValue: "Saved Agent memories",
-                    })}
-                  </strong>
+                  <span className="zaki-settings-v2__gov-title">
+                    <strong>
+                      {t("settingsModal.memoryData.governance.title", {
+                        defaultValue: "Saved Agent memories",
+                      })}
+                    </strong>
+                    <V2InfoHint
+                      triggerLabel={t("settingsModal.hints.trigger", { defaultValue: "What's this?" })}
+                      note={t("settingsModal.hints.piiPurge", {
+                        defaultValue:
+                          "Removes phone numbers and email addresses from what Agent remembers. Dry run previews without deleting.",
+                      })}
+                    />
+                  </span>
                   <V2Badge
                     tone={
                       memoryGovernanceLoading

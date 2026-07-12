@@ -240,6 +240,17 @@
     "agentModel": {
       "operatorDefault": "Operator default"
     },
+    "hints": {
+      "trigger": "What's this?",
+      "weeklyMeter": "Your one shared weekly allowance across all ZAKI products, shown as approximate agent runs or chats.",
+      "burstWindow": "A rolling 5-hour limit on short bursts of heavy use — separate from your weekly allowance.",
+      "weeklyRoom": "How much of this week's allowance is left. Refills on your weekly reset day.",
+      "extraCapacity": "Buying capacity beyond your plan isn't available yet.",
+      "agentAvailableNow": "Whether Agent can run right now, based on your remaining weekly allowance.",
+      "billingSource": "Where your plan comes from — free account, subscription, or access code.",
+      "billingHealth": "Whether billing is set up and responding for your account.",
+      "piiPurge": "Removes phone numbers and email addresses from what Agent remembers. Dry run previews without deleting."
+    },
     "agentSettings": {
       "loading": "Loading Agent settings...",
       "loadingShort": "Loading",
