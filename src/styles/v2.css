@@ -3533,7 +3533,10 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-settings-v2__usage-heading > div {
-  padding-left: 24px;
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  padding-inline-start: 24px;
 }
 
 .zaki-settings-v2__usage-details[open] .zaki-settings-v2__usage-heading::before {
