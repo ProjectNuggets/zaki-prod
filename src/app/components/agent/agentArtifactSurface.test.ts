@@ -6,8 +6,8 @@ import {
 } from "./agentArtifactSurface";
 
 describe("agentArtifactSurface", () => {
-  it("publishes only PDF as a user-facing export format", () => {
-    expect(PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS).toEqual(["pdf"]);
+  it("keeps artifact export hidden until the deployed renderer path is live", () => {
+    expect(PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS).toEqual([]);
     expect(getAgentArtifactExportFormatLabel("pdf")).toBe("PDF");
   });
 

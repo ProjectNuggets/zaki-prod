@@ -18,9 +18,10 @@ const AGENT_ARTIFACT_EXPORT_FORMATS = [
   "xlsx",
 ] as const satisfies readonly AgentArtifactExportFormat[];
 
-export const PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS = [
-  "pdf",
-] as const satisfies readonly AgentArtifactExportFormat[];
+// Keep renderer-backed export actions out of the launch UI until the deployed
+// BFF/engine path is proven end to end. The route currently returns 501 in the
+// launch environment, so exposing even the PDF action presents a broken control.
+export const PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS: readonly AgentArtifactExportFormat[] = [];
 
 export type AgentArtifactExportState = {
   status: "idle" | "exporting" | "ready" | "exported" | "failed" | "unavailable";

@@ -307,7 +307,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
     (sectionId?: string) => {
       const hash = sectionId ? `#${sectionId}` : "";
       navigate(`/settings${hash}`);
-      window.dispatchEvent(new Event("zaki:onboarding-settings-opened"));
     },
     [navigate]
   );
@@ -340,7 +339,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
       setMemorySearchQuery(nextQuery);
       setMemoryInitialTab("memories");
       setMemoryOpen(true);
-      window.dispatchEvent(new Event("zaki:onboarding-memory-opened"));
     };
     const handleOpenSettings = () => {
       if (!user?.username) return;
@@ -962,11 +960,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
       setExpandedSpace(newSpace.id);
       setActiveItem(newSpace.id);
       window.dispatchEvent(new Event("zaki:clear-thread"));
-      window.dispatchEvent(
-        new CustomEvent("zaki:onboarding-space-created", {
-          detail: { id: newSpace.id, title: newSpace.title },
-        })
-      );
       try {
         await createThreadInSpace(newSpace.id);
       } catch {
@@ -1054,11 +1047,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
       setExpandedSpace(resolvedSpaceId);
       setActiveItem(threadId);
       goToThread(resolvedSpaceId, threadId);
-      window.dispatchEvent(
-        new CustomEvent("zaki:onboarding-thread-created", {
-          detail: { id: threadId, spaceId: resolvedSpaceId },
-        })
-      );
     } catch (error) {
       setSpacesError("Unable to create a new chat.");
     }
@@ -1858,8 +1846,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
                     )}
                     onClick={() => createThreadInSpace(space.id)}
                     type="button"
-                    data-onboarding-id="sidebar-space-new-thread"
-                    data-onboarding-space-id={space.id}
                   >
                     <div className="bg-zaki-elevated rounded-full size-5 flex items-center justify-center">
                       <AddIcon color="var(--v2-ink-3)" />
@@ -2057,8 +2043,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
                     )}
                     onClick={() => createThreadInSpace(space.id)}
                     type="button"
-                    data-onboarding-id="sidebar-space-new-thread"
-                    data-onboarding-space-id={space.id}
                   >
                     <div className="bg-zaki-elevated rounded-full size-5 flex items-center justify-center">
                       <AddIcon color="var(--v2-ink-3)" />
@@ -2085,18 +2069,11 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
 			          )}
           onClick={() => {
             setActiveItem("profile");
-            setProfileMenuOpen((open) => {
-              const nextOpen = !open;
-              if (nextOpen) {
-                window.dispatchEvent(new Event("zaki:onboarding-profile-menu-opened"));
-              }
-              return nextOpen;
-            });
+            setProfileMenuOpen((open) => !open);
 	          }}
           aria-haspopup="menu"
           aria-expanded={profileMenuOpen}
           data-profile-button
-          data-onboarding-id="profile-menu-trigger"
         >
           <div className="size-10 bg-zaki-elevated rounded-full flex items-center justify-center text-zaki-primary font-medium text-base">
             {userInitials}
@@ -2189,9 +2166,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
                 setProfileMenuOpen(false);
                 setMemorySearchQuery("");
                 setMemoryOpen(true);
-                window.dispatchEvent(new Event("zaki:onboarding-memory-opened"));
               }}
-              data-onboarding-id="profile-menu-memory"
 	            >
 		              <Brain className="size-4 text-zaki-muted" />
 		              {t("sidebar.profile.memory")}
@@ -2214,9 +2189,7 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
               onClick={() => {
                 setProfileMenuOpen(false);
                 navigate("/settings");
-                window.dispatchEvent(new Event("zaki:onboarding-settings-opened"));
               }}
-              data-onboarding-id="profile-menu-settings"
 	            >
 	              <Settings className="size-4 text-zaki-muted" />
 	              {t("sidebar.profile.settings")}
@@ -2232,31 +2205,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
 	              <Globe className="size-4 text-zaki-muted" />
 	              {t("sidebar.profile.language")}
 		            </button>
-	            <button
-	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary hover:bg-zaki-hover")}
-	              type="button"
-              onClick={() => {
-                setProfileMenuOpen(false);
-                // Reset all stages to pending so the staged tour replays
-                // from the welcome card. ChatArea listens for this and
-                // clears localStorage. Then navigate the user to the
-                // ZAKI home where the hero card lives — otherwise the
-                // reset is invisible until they happen to come back.
-                window.dispatchEvent(new Event("zaki:reset-onboarding"));
-                setExpandedSpace(ZAKI_BOT_SPACE_ID);
-                setActiveItem(ZAKI_BOT_SPACE_ID);
-                goToZakiHome();
-                toast.success(
-                  t("sidebar.profile.howToUseReset", {
-                    defaultValue: "Restarting the tour.",
-                  }),
-                );
-              }}
-              data-onboarding-id="profile-menu-how-to-use"
-	            >
-	              <HelpCircle className="size-4 text-zaki-muted" />
-	              {t("sidebar.profile.howToUse")}
-	            </button>
 	            <button
 	              className={cn(profileMenuItemBase, "text-sm text-zaki-primary hover:bg-zaki-hover")}
 	              type="button"
@@ -2324,7 +2272,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
             role="dialog"
             aria-modal="true"
             aria-label={t("sidebar.memory.title")}
-            data-onboarding-id="memory-viewer-dialog"
             className="absolute right-0 top-0 h-full w-full sm:w-[420px] md:w-[460px] bg-white dark:bg-zaki-dark-card border-l border-zaki-subtle dark:border-zaki-dark shadow-[0_24px_60px_rgba(15,15,15,0.18)] flex flex-col animate-in slide-in-from-right fade-in duration-300 ease-out"
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-zaki-subtle dark:border-zaki-dark bg-[linear-gradient(135deg,#fff8f0_0%,#f3e7d9_100%)] dark:bg-[linear-gradient(140deg,#1a1714_0%,#141210_58%,#0c0a09_100%)]">

@@ -125,7 +125,6 @@ test("pricing page displays the commercial plan prices and gift-code purchase", 
   await mockAuthAndPricing(page);
   await page.addInitScript(({ tokenKey, token }) => {
     window.localStorage.setItem(tokenKey, token);
-    window.localStorage.setItem("zaki:onboarding:v1:user@example.com", "done");
   }, {
     tokenKey: AUTH_TOKEN_KEY,
     token: "pricing-user-token-123",

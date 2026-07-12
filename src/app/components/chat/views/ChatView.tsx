@@ -51,6 +51,14 @@ interface ChatViewProps {
   getReaction?: (messageId: string) => "up" | "down" | null;
 }
 
+export function isToolOnlyTurnPlaceholder(content: string) {
+  const normalized = content.trim().toLowerCase();
+  return (
+    normalized.startsWith("[tools ran, no direct reply this turn") ||
+    normalized.startsWith("tools ran, no direct reply this turn")
+  );
+}
+
 export function ChatView({
   messages,
   spaceId = "",
@@ -152,6 +160,21 @@ export function ChatView({
     );
   };
 
+  const renderToolOnlyTurn = (msg: Message) => {
+    if (!botMode || msg.role !== "assistant" || !isToolOnlyTurnPlaceholder(msg.content)) {
+      return null;
+    }
+    return (
+      <div className="zaki-agent-tool-only-turn" role="status" data-testid={`tool-only-turn-${msg.id}`}>
+        <span aria-hidden>↘</span>
+        <span>
+          <strong>Tools completed this turn</strong>
+          <span>No direct reply was needed. Review the run timeline for results.</span>
+        </span>
+      </div>
+    );
+  };
+
   if (isHistoryLoading) {
     return (
       <div className="zaki-chat-thread max-w-3xl mx-auto pt-16 pb-6 px-4 flex flex-col gap-6">
@@ -178,6 +201,7 @@ export function ChatView({
       {messages.map((msg, index) => {
         const isLast = index === messages.length - 1;
         const isStreamingMessage = isLast && msg.role === "assistant" && isStreaming;
+        const toolOnlyTurn = renderToolOnlyTurn(msg);
 
         if (isStreamingMessage) {
           if (
@@ -214,7 +238,7 @@ export function ChatView({
             <div key={msg.id} className="flex flex-col gap-2">
               {renderTimelineArtifacts({ phase: "revealing" })}
               {renderAgentSteps(msg)}
-              {String(msg.content || "").trim() ? (
+              {toolOnlyTurn || (String(msg.content || "").trim() ? (
                 <MessageBubble
                   message={msg}
                   isStreaming={isStreamingMessage}
@@ -231,7 +255,7 @@ export function ChatView({
                     pillLabel={streamingPillLabel}
                   />
                 )
-              )}
+              ))}
               {renderGeneratedFiles(msg)}
             </div>
           );
@@ -254,15 +278,17 @@ export function ChatView({
               />
             ) : activeDoneTimeline}
             {renderAgentSteps(msg)}
-            <MessageBubble
-              message={msg}
-              botMode={botMode}
-              onCopy={onCopyMessage}
-              onRegenerate={onRegenerateMessage}
-              onThumbsUp={onThumbsUpMessage}
-              onThumbsDown={onThumbsDownMessage}
-              reaction={getReaction ? getReaction(msg.id) : null}
-            />
+            {toolOnlyTurn || (
+              <MessageBubble
+                message={msg}
+                botMode={botMode}
+                onCopy={onCopyMessage}
+                onRegenerate={onRegenerateMessage}
+                onThumbsUp={onThumbsUpMessage}
+                onThumbsDown={onThumbsDownMessage}
+                reaction={getReaction ? getReaction(msg.id) : null}
+              />
+            )}
             {renderGeneratedFiles(msg)}
           </div>
         );

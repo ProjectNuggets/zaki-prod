@@ -64,4 +64,39 @@ test.describe("ZAKI V1 release smoke (signed-in)", () => {
     await expect(page.locator(".zaki-auth-v2")).toBeVisible();
     await expect(page.locator(".zaki-app.zaki-app-v2")).toHaveCount(0);
   });
+
+  test("first-run Agent provisioning failure is visible and retryable", async ({ page }, testInfo) => {
+    const mobile = testInfo.project.name.includes("mobile");
+    await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 });
+    let attempts = 0;
+    await page.route("**/api/agent/provision", async (route) => {
+      attempts += 1;
+      await route.fulfill({
+        status: attempts === 1 ? 503 : 200,
+        contentType: "application/json",
+        body: JSON.stringify(
+          attempts === 1
+            ? { error: "Agent setup is temporarily unavailable." }
+            : { status: "provisioned" },
+        ),
+      });
+    });
+
+    await page.goto("/agent", { waitUntil: "domcontentloaded" });
+
+    const setupAlert = page.getByTestId("agent-provision-state");
+    await expect(setupAlert).toHaveAttribute("role", "alert");
+    await expect(setupAlert).toContainText("Agent setup needs another try");
+    await expect(setupAlert).toContainText("Agent setup is temporarily unavailable.");
+    await expect(page.getByRole("button", { name: "Send message" })).toBeDisabled();
+    await page.screenshot({
+      path: `e2e/__screenshots__/lane-f/${mobile ? "mobile-390x844" : "desktop-1440x1000"}-provision-error.png`,
+      fullPage: false,
+    });
+
+    await page.getByRole("button", { name: "Retry setup" }).click();
+
+    await expect(setupAlert).toHaveCount(0);
+    expect(attempts).toBe(2);
+  });
 });

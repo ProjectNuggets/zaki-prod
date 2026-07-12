@@ -357,7 +357,6 @@ export function InputArea({
     useState<ZakiTurnReasoningEffort>(zakiDefaultReasoningEffort);
   const zakiAutonomyTouchedRef = useRef(false);
   const zakiReasoningTouchedRef = useRef(false);
-  const [isOnboardingControlsLocked, setIsOnboardingControlsLocked] = useState(false);
   // 2026-05-08 — Drop-overlay visual state. Tracks pixel-level dragenter
   // depth (a dragenter on a child fires another dragenter) so the overlay
   // doesn't flicker as the cursor moves over inner elements.
@@ -927,14 +926,9 @@ export function InputArea({
       setComposerDraft(preset.prompt);
       setSlashOpen(false);
       setMentionState({ open: false, filter: "", startPos: -1 });
-      if (!isOnboardingControlsLocked) {
-        setMenuOpen(false);
-      }
+      setMenuOpen(false);
     },
-    [
-      isOnboardingControlsLocked,
-      setComposerDraft,
-    ]
+    [setComposerDraft]
   );
 
   useImperativeHandle(
@@ -1028,22 +1022,6 @@ export function InputArea({
   }, [previews]);
 
   useEffect(() => {
-    const handleOnboardingControlsState = (event: Event) => {
-      const detail = (event as CustomEvent<{ locked?: boolean; forceOpen?: boolean }>).detail;
-      const locked = Boolean(detail?.locked);
-      setIsOnboardingControlsLocked(locked);
-      if (detail?.forceOpen) {
-        setMenuOpen(true);
-      }
-    };
-
-    window.addEventListener("zaki:onboarding-controls-menu-state", handleOnboardingControlsState);
-    return () => {
-      window.removeEventListener("zaki:onboarding-controls-menu-state", handleOnboardingControlsState);
-    };
-  }, []);
-
-  useEffect(() => {
     const handleFocusComposer = () => {
       textareaRef.current?.focus();
     };
@@ -1055,14 +1033,12 @@ export function InputArea({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (isOnboardingControlsLocked) return;
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setMenuOpen(false);
       }
     };
 
     const handleEscape = (event: KeyboardEvent) => {
-      if (isOnboardingControlsLocked) return;
       if (event.key === "Escape") {
         setMenuOpen(false);
       }
@@ -1074,7 +1050,7 @@ export function InputArea({
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [isOnboardingControlsLocked]);
+  }, []);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -1086,9 +1062,7 @@ export function InputArea({
   const handleToggleQueryMode = () => {
     if (!canToggleQueryMode) return;
     onToggleQueryMode?.();
-    if (!isOnboardingControlsLocked) {
-      setMenuOpen(false);
-    }
+    setMenuOpen(false);
     if (queryModeEnabled) {
       toast.success(t("input.queryMode.offToast"));
       return;
@@ -1097,21 +1071,17 @@ export function InputArea({
   };
 
   const handleOpenZakiAttachmentPicker = useCallback(() => {
-    if (!isOnboardingControlsLocked) {
-      setMenuOpen(false);
-    }
+    setMenuOpen(false);
     fileInputRef.current?.click();
-  }, [isOnboardingControlsLocked]);
+  }, []);
 
   const handleSelectZakiMode = useCallback(
     (mode: AgentSessionMode) => {
       if (!onZakiModeChange || zakiModePending) return;
       void onZakiModeChange(mode);
-      if (!isOnboardingControlsLocked) {
-        setMenuOpen(false);
-      }
+      setMenuOpen(false);
     },
-    [isOnboardingControlsLocked, onZakiModeChange, zakiModePending]
+    [onZakiModeChange, zakiModePending]
   );
   const handleCycleZakiMode = useCallback(() => {
     handleSelectZakiMode(nextCycleValue(ZAKI_MODE_ORDER, effectiveZakiMode));
@@ -1536,24 +1506,17 @@ export function InputArea({
               type="button"
               className="zaki-composer-menu-trigger size-9 bg-zaki-elevated rounded-[2px] flex items-center justify-center border border-zaki-strong hover:bg-zaki-sunken dark:hover:bg-zaki-dark-hover transition-colors focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2"
               onClick={() => {
-                // Chat (Spaces): + goes straight to the file picker. The menu
-                // is kept for Agent and for the onboarding walkthrough.
-                if (!zakiBotMode && !isOnboardingControlsLocked) {
+                // Chat (Spaces): + goes straight to the file picker. Agent keeps
+                // the turn-tools menu.
+                if (!zakiBotMode) {
                   handleOpenZakiAttachmentPicker();
                   return;
                 }
-                setMenuOpen((open) => {
-                  const nextOpen = isOnboardingControlsLocked ? true : !open;
-                  if (nextOpen) {
-                    window.dispatchEvent(new CustomEvent("zaki:onboarding-chat-controls-opened"));
-                  }
-                  return nextOpen;
-                });
+                setMenuOpen((open) => !open);
               }}
               aria-haspopup={zakiBotMode ? "menu" : undefined}
               aria-expanded={zakiBotMode ? menuOpen : undefined}
               aria-label={zakiBotMode ? t("input.menu.addOptions") : t("input.menu.uploadFile")}
-              data-onboarding-id="chat-controls-button"
             >
               <Plus className="size-4 text-zaki-muted" />
             </button>
@@ -1708,12 +1671,9 @@ export function InputArea({
                       type="button"
                       role="menuitem"
                       onClick={() => {
-                        if (!isOnboardingControlsLocked) {
-                          setMenuOpen(false);
-                        }
+                        setMenuOpen(false);
                         window.dispatchEvent(new CustomEvent("zaki:upload-active-space-files"));
                       }}
-                      data-onboarding-id="chat-control-upload-file"
                     >
                       <Paperclip className="zaki-composer-menu__icon" aria-hidden />
                       <span className="zaki-composer-menu__copy">

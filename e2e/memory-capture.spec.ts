@@ -7,7 +7,6 @@ async function bootstrapSession(page: Page) {
   await page.addInitScript(({ tokenKey, localeKey }) => {
     window.localStorage.setItem(tokenKey, "e2e-token");
     window.localStorage.setItem(localeKey, "en");
-    window.localStorage.setItem("zaki:onboarding:v1:e2e@example.com", "done");
   }, {
     tokenKey: AUTH_TOKEN_KEY,
     localeKey: LOCALE_KEY,
