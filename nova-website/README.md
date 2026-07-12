@@ -1,4 +1,4 @@
-# Nova Nuggets V2 website
+# Nova Nuggets website
 
 This package is the standalone Nova Nuggets company website for `novanuggets.com`. It is separate from the ZAKI application and the ChatZaki marketing website.
 
@@ -39,7 +39,7 @@ The image serves the prerendered site with nginx. Hashed assets receive immutabl
 2. Deploy to the infrastructure-owned staging hostname.
 3. Run route, visual, accessibility, link, form, header, and performance checks.
 4. Preserve the current Framer deployment and DNS values as the rollback target.
-5. Point one canonical hostname to V2 and permanently redirect the other.
+5. Point one canonical hostname to the new website and permanently redirect the other.
 6. Verify apex and `www`, TLS, canonical tags, sitemap, robots, health, logs, and the qualification flow.
 
 Do not cut DNS until the contact submission destination is approved and production smoke is green.

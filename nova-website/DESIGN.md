@@ -1,6 +1,6 @@
 ---
-name: Nova Nuggets V2
-description: An operational orbit for locally owned, agent-enabled organisations.
+name: Nova Nuggets Website
+description: Full-stack AI that ships, from strategy to production.
 colors:
   orbital-ink: "#1a1612"
   warm-paper: "#f5edde"
@@ -59,13 +59,13 @@ components:
     padding: "24px"
 ---
 
-# Design System: Nova Nuggets V2
+# Design System: Nova Nuggets Website
 
 ## Overview
 
 **Creative North Star: "The Operational Orbit"**
 
-Nova Nuggets V2 should feel like entering a live operating model for an agent-enabled organisation. The experience is dark, warm, precise, and spatial: workflow decisions orbit a controlled core; progress is visible; evidence accumulates as the visitor moves from diagnosis to operation. It is immersive because the system reveals itself through depth, motion, and interaction, not because content is hidden behind spectacle.
+The Nova Nuggets website should feel like entering a live operating model for an agent-enabled organisation. The experience is dark, warm, precise, and spatial: workflow decisions orbit a controlled core; progress is visible; evidence accumulates as the visitor moves from diagnosis to operation. It is immersive because the system reveals itself through depth, motion, and interaction, not because content is hidden behind spectacle.
 
 The visual language rejects generic AI tool marketing, static brochure pages, repetitive SaaS card grids, nested glass panels, and consultancy theatre. Every composed surface should communicate a boundary, a relationship, a decision, or a measurable progression.
 

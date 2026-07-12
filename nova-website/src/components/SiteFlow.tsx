@@ -103,9 +103,28 @@ function currentJourneyStep(kicker: string) {
 
 export function ArticleHeroVisual({ kicker }: { kicker: string }) {
   const visual = visualFor(kicker);
+  const visualRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const element = visualRef.current;
+    if (!element || !("IntersectionObserver" in window)) return undefined;
+
+    const observer = new IntersectionObserver(([entry]) => {
+      element.dataset.motion = entry.isIntersecting ? "running" : "paused";
+    });
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   return (
-    <div className="article-system-visual" data-visual={visual.variant} aria-hidden="true">
+    <div
+      className="article-system-visual"
+      data-motion="running"
+      data-visual={visual.variant}
+      ref={visualRef}
+      aria-hidden="true"
+    >
       <div className="article-system-topline">
         <span>{visual.code}</span>
         <span><i /> {visual.status}</span>
