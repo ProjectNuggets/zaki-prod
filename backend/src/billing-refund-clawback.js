@@ -181,7 +181,7 @@ export function createRefundClawbackHandler({
       [eventId || null, user.id]
     );
     await ensureWalletForPlan({ userId: user.id, planId: "free" });
-    await revokeNullalisEntitlement(
+    const revokeResult = await revokeNullalisEntitlement(
       {
         ...user,
         plan_tier: "free",
@@ -190,6 +190,11 @@ export function createRefundClawbackHandler({
       },
       { requestId }
     );
+    if (!revokeResult?.ok) {
+      throw new Error(
+        `Subscription refund entitlement revoke failed for user ${user.id} (status ${revokeResult?.status || "unknown"}).`
+      );
+    }
     return { ...context, topup, subscriptionRevoked: true, userId: user.id };
   };
 }

@@ -142,4 +142,33 @@ describe("refund clawback", () => {
       { requestId: "req_1" }
     );
   });
+
+  it("throws on a non-ok entitlement revoke so Stripe retries the refund event", async () => {
+    const handler = createRefundClawbackHandler({
+      stripe: {},
+      withDbTransaction: (callback) => callback({ query: jest.fn(async () => ({ rows: [] })) }),
+      resolveUserByStripeCustomer: jest.fn(async () => ({ id: 7, plan_tier: "pro", plan_status: "active" })),
+      dbQuery: jest.fn(async () => ({ rowCount: 1 })),
+      revokeNullalisEntitlement: jest.fn(async () => ({ ok: false, status: 503 })),
+      ensureWalletForPlan: jest.fn(async () => ({})),
+    });
+
+    await expect(
+      handler({
+        event: {
+          type: "charge.refunded",
+          data: {
+            object: {
+              payment_intent: "pi_subscription",
+              customer: "cus_1",
+              invoice: { id: "in_1", subscription: "sub_1" },
+              amount_refunded: 1000,
+              refunded: true,
+            },
+          },
+        },
+        eventId: "evt_retry_revoke",
+      })
+    ).rejects.toThrow("entitlement revoke failed");
+  });
 });

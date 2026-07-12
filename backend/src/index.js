@@ -67,6 +67,8 @@ import {
   createBillingReconcileHandler,
 } from "./billing-route-handlers.js";
 import { createStripeWebhookHandler } from "./billing-stripe-webhook-handler.js";
+import { createRefundClawbackHandler } from "./billing-refund-clawback.js";
+import { createMeterFailOpenBackstop } from "./meter-fail-open-backstop.js";
 import { copyResponseHeaders } from "./upstream-headers.js";
 import { isSafeAgentShareCode } from "./agent-share-code.js";
 import {
@@ -922,6 +924,7 @@ const billingAlertDispatcher = createBillingAlertDispatcher({
   timeoutMs: ZAKI_BILLING_ALERT_TIMEOUT_MS,
   cooldownMs: ZAKI_BILLING_ALERT_COOLDOWN_MS,
 });
+const meterFailOpenBackstop = createMeterFailOpenBackstop({ env: process.env });
 
 let runtimeRateLimitSettings = {
   appChatDailyPromptLimit: APP_CHAT_QUOTA_CONFIG.limit,
@@ -2401,6 +2404,14 @@ async function fulfillTopupCheckoutSession({ session, eventId } = {}) {
   });
 }
 
+const handleStripeRefundEvent = createRefundClawbackHandler({
+  stripe,
+  withDbTransaction,
+  resolveUserByStripeCustomer,
+  dbQuery,
+  revokeNullalisEntitlement,
+});
+
 const stripeWebhookHandler = createStripeWebhookHandler({
   getBillingConfigStatus,
   stripe,
@@ -2419,6 +2430,7 @@ const stripeWebhookHandler = createStripeWebhookHandler({
   tierByPrice: TIER_BY_PRICE,
   fulfillAccessCodePurchaseCheckoutSession,
   fulfillTopupCheckoutSession,
+  handleRefundEvent: handleStripeRefundEvent,
   revokeNullalisEntitlement,
 });
 
@@ -10500,6 +10512,28 @@ function buildSpacesMeterDenialPayload(result, requestId) {
   };
 }
 
+function checkMeterFailOpenBackstop({ surface, userId, requestId, error } = {}) {
+  const decision = meterFailOpenBackstop.check({ surface, userId });
+  if (decision.shouldPage) {
+    void emitBillingAlert({
+      provider: "metering",
+      id: "meter.fail_open.page",
+      severity: "critical",
+      message: "Metering fail-open volume crossed the paging threshold.",
+      details: {
+        surface,
+        requestId,
+        error: error?.message || String(error || "meter_reserve_failed"),
+        globalCount: decision.globalCount,
+        globalAllowedCount: decision.globalAllowedCount,
+        pageThreshold: decision.pageThreshold,
+        windowMs: decision.windowMs,
+      },
+    });
+  }
+  return decision;
+}
+
 async function requireSpacesMeterGrantForChat({
   req,
   res,
@@ -10576,8 +10610,27 @@ async function requireSpacesMeterGrantForChat({
     req.spacesChatMessageChars = String(message || "").length;
     return { allowed: true, action };
   } catch (err) {
-    // Fail-OPEN for the core product: a metering DB blip must not break chat. Not charged; logged.
-    console.error(`[Spaces] wallet reserve failed (allowing chat unmetered) req=${requestId}: ${err?.message}`);
+    // Fail-OPEN for the core product, bounded by a DB-independent emergency budget.
+    console.error(`[Spaces] wallet reserve failed req=${requestId}: ${err?.message}`);
+    const backstop = checkMeterFailOpenBackstop({
+      surface: "spaces",
+      userId: identity.userId,
+      requestId,
+      error: err,
+    });
+    if (!backstop.allowed) {
+      const result = {
+        allowed: false,
+        status: backstop.status,
+        error: backstop.reason,
+        message:
+          backstop.status === 429
+            ? "Too many degraded-mode chat requests. Please retry shortly."
+            : "Chat metering is temporarily unavailable. Please retry shortly.",
+      };
+      res.status(result.status).json(buildSpacesMeterDenialPayload(result, requestId));
+      return { ...result, action };
+    }
     req.spacesChatUnmetered = true;
     void emitBillingAlert({ provider: "metering", id: "spaces.meter.fail_open", severity: "high", message: "Spaces chat metering failed; serving unmetered (fail-open).", details: { requestId, error: err?.message } });
     return { allowed: true, action };
@@ -11607,11 +11660,29 @@ async function requireAgentWalletReserveForChat(req, res, { identity, action, re
   }
 
   if (decision.outcome === "unmetered") {
-    // Fail-OPEN: serve the turn unmetered; alert (matches spaces).
-    req.agentChatUnmetered = true;
+    // Fail-OPEN only within the DB-independent per-user and process budgets.
     console.error(
-      `[Agent] wallet reserve failed (allowing chat unmetered) req=${reqId}: ${decision.error?.message}`
+      `[Agent] wallet reserve failed req=${reqId}: ${decision.error?.message}`
     );
+    const backstop = checkMeterFailOpenBackstop({
+      surface: "agent",
+      userId: identity?.userId,
+      requestId: reqId,
+      error: decision.error,
+    });
+    if (!backstop.allowed) {
+      const denial = {
+        status: backstop.status,
+        error: backstop.reason,
+        message:
+          backstop.status === 429
+            ? "Too many degraded-mode Agent requests. Please retry shortly."
+            : "Agent metering is temporarily unavailable. Please retry shortly.",
+      };
+      res.status(denial.status).json(buildAgentMeterDenialPayload(denial, reqId));
+      return { allowed: false };
+    }
+    req.agentChatUnmetered = true;
     void emitBillingAlert({
       provider: "metering",
       id: "agent.meter.fail_open",
