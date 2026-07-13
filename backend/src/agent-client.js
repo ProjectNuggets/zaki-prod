@@ -135,6 +135,29 @@ export async function requestNullclawChatStream({
   });
 }
 
+export async function requestNullalisUserPurge({
+  baseUrl,
+  internalToken,
+  userId,
+  requestId,
+  fetchWithTimeout,
+  timeoutMs,
+}) {
+  const normalizedUserId = String(userId || "").trim();
+  return fetchNullclawPath({
+    baseUrl,
+    internalToken,
+    userId: normalizedUserId,
+    requestId,
+    path: `/api/v1/users/${encodeURIComponent(normalizedUserId)}/data`,
+    method: "DELETE",
+    body: { confirm: `PURGE-USER-${normalizedUserId}` },
+    fetchWithTimeout,
+    timeoutMs,
+    label: "Nullalis GDPR user purge",
+  });
+}
+
 // B4 (P1-16): server-side ensure-provisioned primitive. Posts the provision
 // payload to the engine's idempotent /api/v1/users/provision endpoint so the
 // BFF can (re)provision a user before driving chat — defense-in-depth for the

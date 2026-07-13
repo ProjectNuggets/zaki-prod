@@ -6,6 +6,7 @@ import {
   getNullclawBase,
   probeNullclawReady,
   probeNullclawReadyWithRetry,
+  requestNullalisUserPurge,
   requestNullclawChatStream,
 } from "./agent-client.js";
 
@@ -17,6 +18,34 @@ describe("getNullclawBase", () => {
 });
 
 describe("agent client", () => {
+  test("requests the user purge with bound confirmation and internal headers", async () => {
+    const fetchWithTimeout = jest.fn().mockResolvedValue({ ok: true, status: 200 });
+
+    await requestNullalisUserPurge({
+      baseUrl: "http://nullclaw:3000/",
+      internalToken: "secret",
+      userId: "42",
+      requestId: "req-purge",
+      fetchWithTimeout,
+      timeoutMs: 10000,
+    });
+
+    expect(fetchWithTimeout).toHaveBeenCalledWith(
+      "http://nullclaw:3000/api/v1/users/42/data",
+      expect.objectContaining({
+        method: "DELETE",
+        headers: expect.objectContaining({
+          "X-Internal-Token": "secret",
+          "X-Zaki-User-Id": "42",
+          "X-Request-Id": "req-purge",
+        }),
+        body: JSON.stringify({ confirm: "PURGE-USER-42" }),
+      }),
+      10000,
+      "Nullalis GDPR user purge"
+    );
+  });
+
   test("probes readiness with internal headers", async () => {
     const fetchWithTimeout = jest.fn().mockResolvedValue({ ok: true, status: 200 });
 
