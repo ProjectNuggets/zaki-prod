@@ -12,6 +12,11 @@ import nodemailer from "nodemailer";
 import { WebSocketServer, WebSocket as UpstreamWebSocket } from "ws";
 import { z } from "zod";
 import { initDb, dbAll, dbGet, dbQuery, withDbTransaction } from "./db.js";
+import {
+  ACCESS_CODE_MAX_DURATION_DAYS,
+  clampAccessCodeDurationDays,
+  redeemAccessCodeForUser,
+} from "./access-code-policy.js";
 import { getUsageMetrics } from "./platform-metrics.js";
 import {
   resolveLegalPolicyVersion,
@@ -19,6 +24,8 @@ import {
   buildLegalConsentShape,
   validateLegalPolicyVersion,
   buildConsentStatus,
+  resolveMinimumSignupAge,
+  validateMinimumSignupAge,
 } from "./legal-consent.js";
 import { validateRuntimeConfig } from "./config-validation.js";
 import {
@@ -691,9 +698,8 @@ const ZAKI_ACCESS_CODE_PURCHASE_CAMPAIGN = (
 )
   .trim()
   .slice(0, 120);
-const ZAKI_ACCESS_CODE_PURCHASE_DURATION_DAYS = Math.max(
-  1,
-  Math.min(3650, Number(process.env.ZAKI_ACCESS_CODE_PURCHASE_DURATION_DAYS || 30))
+const ZAKI_ACCESS_CODE_PURCHASE_DURATION_DAYS = clampAccessCodeDurationDays(
+  process.env.ZAKI_ACCESS_CODE_PURCHASE_DURATION_DAYS
 );
 const ZAKI_BILLING_PROVIDER = (process.env.ZAKI_BILLING_PROVIDER || "stripe")
   .trim()
@@ -731,6 +737,9 @@ const ZAKI_RESET_TTL_MINUTES = Number(
 );
 const ZAKI_LEGAL_POLICY_VERSION = resolveLegalPolicyVersion(
   process.env.ZAKI_LEGAL_POLICY_VERSION
+);
+const ZAKI_MINIMUM_SIGNUP_AGE = resolveMinimumSignupAge(
+  process.env.ZAKI_MINIMUM_SIGNUP_AGE
 );
 const MAX_STREAM_MESSAGE_CHARS = 8000;
 const ZAKI_INCLUDE_VERIFY_LINK =
@@ -2118,9 +2127,9 @@ async function fulfillAccessCodePurchaseCheckoutSession({ session, eventId } = {
 
   const defaults = getAccessCodePurchaseDefaults();
   const campaign = String(metadata?.campaign || defaults.campaign).trim().slice(0, 120) || defaults.campaign;
-  const durationDays = Math.max(
-    1,
-    Math.min(3650, Number(metadata?.duration_days || defaults.durationDays))
+  const durationDays = clampAccessCodeDurationDays(
+    metadata?.duration_days,
+    defaults.durationDays
   );
   const paymentIntent =
     typeof session?.payment_intent === "string"
@@ -3538,7 +3547,7 @@ const DeleteAccountSchema = z.object({
 const AccessCodeAdminCreateSchema = z.object({
   campaign: z.string().trim().min(1, "Campaign is required").max(120),
   count: z.coerce.number().int().min(1).max(500).default(1),
-  durationDays: z.coerce.number().int().min(1).max(3650).default(30),
+  durationDays: z.coerce.number().int().min(1).max(ACCESS_CODE_MAX_DURATION_DAYS).default(30),
   maxRedemptions: z.union([z.coerce.number().int().min(1), z.null()]).default(1),
   expiresAt: z.union([z.string().trim().min(1), z.null()]).optional(),
   active: z.boolean().default(true),
@@ -3555,7 +3564,7 @@ const AccessCodeAdminListSchema = z.object({
 const AccessCodeAdminUpdateSchema = z
   .object({
     campaign: z.string().trim().min(1).max(120).optional(),
-    durationDays: z.coerce.number().int().min(1).max(3650).optional(),
+    durationDays: z.coerce.number().int().min(1).max(ACCESS_CODE_MAX_DURATION_DAYS).optional(),
     maxRedemptions: z.union([z.coerce.number().int().min(1), z.null()]).optional(),
     expiresAt: z.union([z.string().trim().min(1), z.null()]).optional(),
     active: z.boolean().optional(),
@@ -4356,28 +4365,30 @@ function getLegalConsentStatus(zakiUser) {
 
 async function recordLegalConsent({ userId, policyVersion, source, req }) {
   const now = new Date().toISOString();
-  await dbQuery(
-    `UPDATE zaki_users
-     SET legal_consent_at = $1,
-         legal_consent_version = $2,
-         updated_at = $3
-     WHERE id = $4`,
-    [now, policyVersion, now, userId]
-  );
+  await withDbTransaction(async (client) => {
+    await client.query(
+      `UPDATE zaki_users
+       SET legal_consent_at = $1,
+           legal_consent_version = $2,
+           updated_at = $3
+       WHERE id = $4`,
+      [now, policyVersion, now, userId]
+    );
 
-  await dbQuery(
-    `INSERT INTO legal_consent_events
-     (user_id, policy_version, source, consented_at, ip_address, user_agent)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
-    [
-      userId,
-      policyVersion,
-      source,
-      now,
-      getClientIp(req),
-      req.get("user-agent") || null,
-    ]
-  );
+    await client.query(
+      `INSERT INTO legal_consent_events
+       (user_id, policy_version, source, consented_at, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        userId,
+        policyVersion,
+        source,
+        now,
+        getClientIp(req),
+        req.get("user-agent") || null,
+      ]
+    );
+  });
 }
 
 function normalizeAccessCode(value) {
@@ -4444,10 +4455,7 @@ function getAccessCodePurchaseDefaults() {
   const campaign = String(ZAKI_ACCESS_CODE_PURCHASE_CAMPAIGN || "paid_monthly")
     .trim()
     .slice(0, 120);
-  const durationDays = Math.max(
-    1,
-    Math.min(3650, Number(ZAKI_ACCESS_CODE_PURCHASE_DURATION_DAYS || 30))
-  );
+  const durationDays = clampAccessCodeDurationDays(ZAKI_ACCESS_CODE_PURCHASE_DURATION_DAYS);
   return {
     campaign: campaign || "paid_monthly",
     durationDays,
@@ -4888,12 +4896,25 @@ app.get("/api/auth/google/start", (req, res) => {
       return;
     }
     const returnTo = sanitizeGoogleOAuthReturnTo(req.query?.returnTo || req.query?.return_to || "/spaces");
+    let legalPolicyVersion = null;
+    if (String(req.query?.legalConsentAccepted || "").toLowerCase() === "true") {
+      const policyVersionResult = validateLegalPolicyVersion(
+        req.query?.legalPolicyVersion,
+        ZAKI_LEGAL_POLICY_VERSION
+      );
+      if (!policyVersionResult.ok) {
+        res.status(409).json({ success: false, error: policyVersionResult.error });
+        return;
+      }
+      legalPolicyVersion = policyVersionResult.version;
+    }
     const nonce = createGoogleOAuthNonce();
     const state = signGoogleOAuthStatePayload(
       {
         returnTo,
         exp: Date.now() + 10 * 60 * 1000,
         nonceHash: hashGoogleOAuthNonce(nonce),
+        ...(legalPolicyVersion ? { legalPolicyVersion } : {}),
       },
       GOOGLE_OAUTH_STATE_SECRET
     );
@@ -4935,11 +4956,27 @@ app.get("/api/auth/google/callback", async (req, res) => {
       res.redirect(302, `${getAppUrl()}/?auth=login&error=google_oauth_missing_code`);
       return;
     }
-    const { returnTo, nonceHash } = verifyGoogleOAuthState(state, GOOGLE_OAUTH_STATE_SECRET);
+    const { returnTo, nonceHash, legalPolicyVersion } = verifyGoogleOAuthState(
+      state,
+      GOOGLE_OAUTH_STATE_SECRET
+    );
     verifyGoogleOAuthNonceBinding({
       cookieNonce: extractGoogleOAuthNonceFromCookieHeader(req.headers?.cookie),
       stateNonceHash: nonceHash,
     });
+    let acceptedPolicyVersion = null;
+    if (legalPolicyVersion) {
+      const policyVersionResult = validateLegalPolicyVersion(
+        legalPolicyVersion,
+        ZAKI_LEGAL_POLICY_VERSION
+      );
+      if (!policyVersionResult.ok) {
+        const error = new Error(policyVersionResult.error);
+        error.status = 409;
+        throw error;
+      }
+      acceptedPolicyVersion = policyVersionResult.version;
+    }
     const tokenPayload = await exchangeGoogleOAuthCode({
       code,
       redirectUri: getGoogleOAuthRedirectUri(req),
@@ -4950,6 +4987,17 @@ app.get("/api/auth/google/callback", async (req, res) => {
       dbQuery,
       userColumns: _ZAKI_USER_COLS,
       ...googleProfile,
+      ...(acceptedPolicyVersion
+        ? {
+            recordLegalConsent: ({ userId }) =>
+              recordLegalConsent({
+                userId,
+                policyVersion: acceptedPolicyVersion,
+                source: "google_signup",
+                req,
+              }),
+          }
+        : {}),
     });
     if (!zakiUser?.id) {
       throw new Error("Unable to create or link Google user.");
@@ -4963,6 +5011,9 @@ app.get("/api/auth/google/callback", async (req, res) => {
       buildClearedGoogleOAuthNonceCookie({ secure: isSecureCookieRequest(req) }),
     ]);
     const appUrl = new URL(returnTo, getAppUrl());
+    if (!acceptedPolicyVersion && getLegalConsentStatus(zakiUser).requiresReconsent) {
+      appUrl.searchParams.set("legalConsent", "required");
+    }
     res.redirect(302, appUrl.toString());
   } catch (error) {
     console.error("[GoogleOAuth] callback error:", error);
@@ -5155,7 +5206,7 @@ async function requireAdminUser(req, res) {
 async function requireSuperAdminUser(req, res) {
   const authResult = await requireAdminUser(req, res);
   if (!authResult) return null;
-  if (!authResult.admin?.isSuperAdmin) {
+  if (!superAdminEmailSet.has(normalizeEmail(authResult.email))) {
     res.status(403).json({ error: "Super admin access required." });
     return null;
   }
@@ -6270,6 +6321,17 @@ const signupHandler = async (req, res) => {
     const normalizedEmail = normalizeEmail(email);
     const normalizedName = name.trim();
     const normalizedDob = dateOfBirth;
+    const minimumAgeResult = validateMinimumSignupAge(
+      normalizedDob,
+      ZAKI_MINIMUM_SIGNUP_AGE
+    );
+    if (!minimumAgeResult.ok) {
+      res.status(400).json({
+        success: false,
+        error: minimumAgeResult.error,
+      });
+      return;
+    }
     const policyVersionResult = validateLegalPolicyVersion(
       legalPolicyVersion,
       ZAKI_LEGAL_POLICY_VERSION
@@ -9030,7 +9092,7 @@ app.post(
 
 app.post("/api/admin/access-codes", express.json({ limit: "200kb" }), async (req, res) => {
   try {
-    const authResult = await requireAdminUser(req, res);
+    const authResult = await requireSuperAdminUser(req, res);
     if (!authResult) return;
 
     const validation = validateInput(AccessCodeAdminCreateSchema, req.body || {});
@@ -9101,7 +9163,7 @@ app.post("/api/admin/access-codes", express.json({ limit: "200kb" }), async (req
 
 app.get("/api/admin/access-codes", async (req, res) => {
   try {
-    const authResult = await requireAdminUser(req, res);
+    const authResult = await requireSuperAdminUser(req, res);
     if (!authResult) return;
 
     const validation = validateInput(AccessCodeAdminListSchema, req.query || {});
@@ -9160,7 +9222,7 @@ app.get("/api/admin/access-codes", async (req, res) => {
 
 app.patch("/api/admin/access-codes/:id", express.json({ limit: "100kb" }), async (req, res) => {
   try {
-    const authResult = await requireAdminUser(req, res);
+    const authResult = await requireSuperAdminUser(req, res);
     if (!authResult) return;
 
     const codeId = String(req.params.id || "").trim();
@@ -9246,91 +9308,13 @@ app.post("/api/access-code/redeem", express.json({ limit: "50kb" }), async (req,
     if (!email || !zakiUser) return;
 
     const code = normalizeAccessCode(validation.data.code);
-    const redeemResult = await withDbTransaction(async (client) => {
-      const accessCodeResult = await client.query(
-        `SELECT *
-         FROM access_codes
-         WHERE UPPER(regexp_replace(code, '[\\s-]+', '', 'g')) = $1
-         FOR UPDATE`,
-        [code]
-      );
-      const accessCode = accessCodeResult.rows[0];
-      if (!accessCode || !accessCode.active) {
-        return { status: 404, body: { success: false, error: "Invalid access code." } };
-      }
-
-      if (accessCode.expires_at && new Date(accessCode.expires_at).getTime() < Date.now()) {
-        return { status: 410, body: { success: false, error: "Access code expired." } };
-      }
-
-      const incrementResult = await client.query(
-        `UPDATE access_codes
-         SET redeemed_count = redeemed_count + 1
-         WHERE id = $1
-           AND active = TRUE
-           AND (max_redemptions IS NULL OR redeemed_count < max_redemptions)
-         RETURNING id, code, campaign, duration_days, redeemed_count`,
-        [accessCode.id]
-      );
-      const incrementedCode = incrementResult.rows[0];
-      if (!incrementedCode) {
-        return {
-          status: 400,
-          body: { success: false, error: "Access code already fully redeemed." },
-        };
-      }
-
-      const userRowResult = await client.query(
-        `SELECT access_expires_at
-         FROM zaki_users
-         WHERE id = $1
-         FOR UPDATE`,
-        [zakiUser.id]
-      );
-      const userRow = userRowResult.rows[0];
-      if (!userRow) {
-        throw new Error("Authenticated user not found during code redemption.");
-      }
-
-      const now = new Date();
-      const currentExpiry = userRow.access_expires_at
-        ? new Date(userRow.access_expires_at)
-        : null;
-      const baseDate =
-        currentExpiry && currentExpiry.getTime() > now.getTime()
-          ? currentExpiry
-          : now;
-      const durationDays = Number(accessCode.duration_days || 30);
-      const expiresAt = new Date(
-        baseDate.getTime() + durationDays * 24 * 60 * 60 * 1000
-      );
-
-      await client.query(
-        `UPDATE zaki_users
-         SET access_expires_at = $1,
-             access_code_campaign = $2,
-             access_code_last = $3,
-             updated_at = NOW()
-         WHERE id = $4`,
-        [expiresAt.toISOString(), accessCode.campaign, accessCode.code, zakiUser.id]
-      );
-
-      await client.query(
-        `INSERT INTO access_code_redemptions
-         (code_id, user_id, access_expires_at, campaign, code)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [accessCode.id, zakiUser.id, expiresAt.toISOString(), accessCode.campaign, code]
-      );
-
-      return {
-        status: 200,
-        body: {
-          success: true,
-          accessExpiresAt: expiresAt.toISOString(),
-          campaign: accessCode.campaign,
-        },
-      };
-    });
+    const redeemResult = await withDbTransaction((client) =>
+      redeemAccessCodeForUser({
+        client,
+        normalizedCode: code,
+        userId: zakiUser.id,
+      })
+    );
 
     res.status(redeemResult.status).json(redeemResult.body);
   } catch (error) {

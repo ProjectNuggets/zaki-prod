@@ -486,13 +486,20 @@ export async function requestLogout() {
   return { response, data };
 }
 
-export function buildGoogleOAuthStartUrl(returnTo?: string) {
+export function buildGoogleOAuthStartUrl(
+  returnTo?: string,
+  consent?: { legalConsentAccepted: boolean; legalPolicyVersion: string }
+) {
   const fallbackReturnTo =
     typeof window !== "undefined"
       ? `${window.location.pathname}${window.location.search}${window.location.hash}`
       : "/spaces";
   const url = new URL(buildApiUrl("/api/auth/google/start"));
   url.searchParams.set("returnTo", returnTo || fallbackReturnTo);
+  if (consent?.legalConsentAccepted && consent.legalPolicyVersion) {
+    url.searchParams.set("legalConsentAccepted", "true");
+    url.searchParams.set("legalPolicyVersion", consent.legalPolicyVersion);
+  }
   return url.toString();
 }
 
@@ -1050,6 +1057,7 @@ export async function redeemAccessCode(code: string, authToken?: string) {
     success?: boolean;
     accessExpiresAt?: string | null;
     campaign?: string | null;
+    alreadyRedeemed?: boolean;
     error?: string | null;
   } = {};
   try {

@@ -50,6 +50,7 @@ describe("findOrCreateGoogleUser", () => {
     };
     const dbQuery = jest.fn().mockResolvedValue({ rows: [createdUser] });
 
+    const recordLegalConsent = jest.fn().mockResolvedValue(undefined);
     await expect(
       findOrCreateGoogleUser({
         dbGet,
@@ -58,6 +59,7 @@ describe("findOrCreateGoogleUser", () => {
         email: "grace@example.com",
         googleSub: "google-sub-2",
         fullName: "Grace Hopper",
+        recordLegalConsent,
       })
     ).resolves.toEqual(createdUser);
 
@@ -71,6 +73,7 @@ describe("findOrCreateGoogleUser", () => {
         expect.any(String),
       ]
     );
+    expect(recordLegalConsent).toHaveBeenCalledWith({ userId: 77 });
   });
 
   it("rejects email linking when the local user is already linked to a different Google subject", async () => {

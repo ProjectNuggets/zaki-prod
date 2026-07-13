@@ -525,7 +525,7 @@ describe("requestPublicSignup", () => {
       name: "Signup User",
       dateOfBirth: "1995-01-15",
       legalConsentAccepted: true,
-      legalPolicyVersion: "2026-02-17.v2",
+      legalPolicyVersion: "2026-07-12.v4",
       turnstileToken: "turnstile-token",
     });
 
@@ -539,11 +539,27 @@ describe("requestPublicSignup", () => {
           name: "Signup User",
           dateOfBirth: "1995-01-15",
           legalConsentAccepted: true,
-          legalPolicyVersion: "2026-02-17.v2",
+          legalPolicyVersion: "2026-07-12.v4",
           turnstileToken: "turnstile-token",
         }),
       })
     );
+  });
+});
+
+describe("buildGoogleOAuthStartUrl", () => {
+  it("includes signed-state consent inputs only for an explicit Google signup acceptance", async () => {
+    const { buildGoogleOAuthStartUrl } = await import("@/lib/api");
+    const url = new URL(
+      buildGoogleOAuthStartUrl("/agent", {
+        legalConsentAccepted: true,
+        legalPolicyVersion: "2026-07-12.v4",
+      })
+    );
+
+    expect(url.searchParams.get("returnTo")).toBe("/agent");
+    expect(url.searchParams.get("legalConsentAccepted")).toBe("true");
+    expect(url.searchParams.get("legalPolicyVersion")).toBe("2026-07-12.v4");
   });
 });
 

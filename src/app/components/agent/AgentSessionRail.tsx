@@ -284,10 +284,11 @@ export function AgentSessionRail({
           type="button"
           className="zaki-agent-session-rail__new-thread"
           onClick={onCreateSession}
+          aria-keyshortcuts="Meta+Shift+O Control+Shift+O"
         >
           <Plus aria-hidden="true" />
           <span>{t("agent.sessionRail.newThread", { defaultValue: "New thread" })}</span>
-          <kbd>⌘N</kbd>
+          <kbd>⌘⇧O</kbd>
         </button>
       </div>
     </aside>

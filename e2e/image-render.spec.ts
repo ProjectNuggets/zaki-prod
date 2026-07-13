@@ -70,7 +70,7 @@ async function mockAppShell(page: Page, assistantContent: string = ASSISTANT_CON
       body: JSON.stringify({
         success: true,
         authenticated: true,
-        policyVersion: "2026-02-17.v2",
+        policyVersion: "2026-07-12.v4",
         hasConsent: true,
         isCurrent: true,
         requiresReconsent: false,
