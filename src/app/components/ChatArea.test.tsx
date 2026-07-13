@@ -60,6 +60,7 @@ import {
 } from "@/lib/api";
 import { PENDING_INTENT_KEY } from "@/lib/pendingIntent";
 import { ANONYMOUS_WORK_LEDGER_KEY } from "@/lib/anonymousWork";
+import { ANONYMOUS_SPACES_WORKSPACE_ID } from "@/lib/anonymousSpaces";
 import { toast } from "sonner";
 
 jest.mock("sonner", () => ({
@@ -2303,6 +2304,54 @@ describe("ChatArea Component", () => {
       threadId: "main",
       status: "draft",
     });
+  });
+
+  it("lets a fresh anonymous visitor chat without manually selecting a workspace", async () => {
+    // Reproduces the launch bug: a fresh anon session (no active workspace, and
+    // spacesList still empty because the Sidebar's `zaki:spaces-data` broadcast
+    // has not landed) used to hit "Select a workspace before sending a message"
+    // and abort. The send handler should now fall back to the default anonymous
+    // space so the send proceeds down the `/api/anonymous/...` path.
+    navState.view = "chat";
+    navState.spaceId = null;
+    navState.threadId = null;
+    authState = { user: null, isLoading: false };
+
+    await renderChatAreaAndWaitForEffects();
+
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "Help me plan my launch week" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    // Does NOT block with the "select a workspace" error toast.
+    expect(toast.error).not.toHaveBeenCalledWith(
+      "Select a workspace before sending a message"
+    );
+
+    // Resolves the default anonymous space slug and creates the thread against
+    // the anonymous BFF route (skipAuth) — i.e. the send proceeded.
+    await waitFor(() => {
+      expect(apiRequest).toHaveBeenCalledWith(
+        `/api/anonymous/workspace/${ANONYMOUS_SPACES_WORKSPACE_ID}/thread/new`,
+        expect.objectContaining({ method: "POST", skipAuth: true })
+      );
+    });
+
+    // The anonymous "save this work" ledger captures the send under the
+    // default anon space so the quota + save-work flow stays intact. (The
+    // item's terminal status depends on the stubbed stream response and is
+    // intentionally not asserted here — what matters is that the send was
+    // recorded against the resolved default anon slug rather than blocked.)
+    const ledger = JSON.parse(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY) || "{}");
+    expect(ledger.items?.[0]).toMatchObject({
+      productId: "spaces",
+      taskKind: "chat",
+      prompt: "Help me plan my launch week",
+    });
+    expect(ledger.items?.[0]?.route).toContain(
+      `/spaces/${ANONYMOUS_SPACES_WORKSPACE_ID}`
+    );
   });
 
   it("waits for auth hydration before auto-provisioning the ZAKI bot route", async () => {
