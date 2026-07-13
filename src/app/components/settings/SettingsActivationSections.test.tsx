@@ -6,6 +6,10 @@ import { listAgentJobs } from "@/lib/api";
 import { fetchAgentSuggestions, transitionAgentSuggestion } from "@/lib/suggestionsApi";
 
 import { SettingsAutomationsSection } from "./SettingsAutomationsSection";
+import {
+  AGENT_MODEL_OPTIONS,
+  SettingsAgentModelPicker,
+} from "./SettingsAgentModelPicker";
 import { SettingsSuggestionsSection } from "./SettingsSuggestionsSection";
 
 jest.mock("@/lib/api", () => ({
@@ -53,6 +57,23 @@ describe("Settings activation sections", () => {
     expect(screen.getByText("Weekday brief")).toBeInTheDocument();
     expect(screen.getAllByText("Paused")).toHaveLength(2);
     expect(screen.getAllByText(/^Next run /)).toHaveLength(2);
+  });
+
+  it("renders the canonical allowlisted model picker and clears to the operator default", () => {
+    const onChange = jest.fn();
+    render(
+      <SettingsAgentModelPicker
+        value="claude-opus-4.7"
+        onChange={onChange}
+      />,
+    );
+
+    const picker = screen.getByRole("combobox", { name: "Default model" });
+    expect(picker).toHaveValue("claude-opus-4.7");
+    expect(screen.getAllByRole("option")).toHaveLength(AGENT_MODEL_OPTIONS.length + 1);
+    expect(screen.getByRole("option", { name: /Kimi K2\.6 · 256K · cost A/ })).toBeInTheDocument();
+    fireEvent.change(picker, { target: { value: "" } });
+    expect(onChange).toHaveBeenCalledWith(null);
   });
 
   it("adopts and dismisses only through the transition API, then removes the reviewed row", async () => {
