@@ -1913,6 +1913,130 @@ describe("SettingsPage", () => {
     expect(toast.success).not.toHaveBeenCalled();
   });
 
+  it("downgrades a connected channel badge to needs-attention when the last live test failed", async () => {
+    const fetchChannelControlsMock = fetchAgentChannelControls as jest.MockedFunction<
+      typeof fetchAgentChannelControls
+    >;
+    fetchChannelControlsMock.mockResolvedValueOnce({
+      response: { ok: true } as Response,
+      data: {
+        channels: [
+          {
+            channel: "slack",
+            label: "Slack",
+            build_enabled: true,
+            operator_configured: true,
+            user_managed: true,
+            user_connected: true,
+            status: "connected",
+            secret_refs: [
+              { key: "slack_bot_token", label: "Bot token", required: true, present: true },
+              { key: "slack_signing_secret", label: "Signing secret", required: true, present: true },
+            ],
+            config: {},
+            // Stored state says connected, but the last live /test failed.
+            last_test: { ok: false, detail: "provider_auth_rejected", checked_at_s: 1730000000 },
+          },
+        ],
+      },
+    });
+
+    await renderSettingsPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-channel-slack")).toBeInTheDocument();
+    });
+
+    const slackRow = within(screen.getByTestId("settings-channel-slack"));
+    const badge = slackRow.getByText("Needs attention");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveClass("v2-badge--warn");
+    // The badge must NOT read as healthy just because stored state is connected.
+    expect(slackRow.queryByText("Connected")).not.toBeInTheDocument();
+  });
+
+  it("degrades gracefully when a live test response omits last_test (pre-liveness engine)", async () => {
+    const testMock = testAgentChannelControl as jest.MockedFunction<typeof testAgentChannelControl>;
+    // An old engine that predates channel liveness returns no last_test field.
+    testMock.mockResolvedValueOnce({
+      response: { ok: true } as Response,
+      data: { channel: "slack" },
+    });
+
+    await renderSettingsPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-channel-slack")).toBeInTheDocument();
+    });
+
+    (toast as unknown as jest.Mock).mockClear();
+    (toast.error as jest.Mock).mockClear();
+    (toast.success as jest.Mock).mockClear();
+
+    fireEvent.click(
+      within(screen.getByTestId("settings-channel-slack")).getByRole("button", {
+        name: "Manage Slack",
+      })
+    );
+    fireEvent.click(
+      within(screen.getByTestId("settings-channel-panel-slack")).getByRole("button", {
+        name: "Test Slack connection",
+      })
+    );
+
+    await waitFor(() => {
+      expect(testMock).toHaveBeenCalledWith("slack");
+    });
+    // No throw / error toast — a neutral "unknown" toast instead.
+    await waitFor(() => {
+      expect(toast).toHaveBeenCalledWith(
+        "Test request sent, but this engine did not report a live result."
+      );
+    });
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("shows an in-flight Testing... affordance while a channel test is running", async () => {
+    const testMock = testAgentChannelControl as jest.MockedFunction<typeof testAgentChannelControl>;
+    let resolveTest: (value: Awaited<ReturnType<typeof testAgentChannelControl>>) => void = () => {};
+    testMock.mockImplementationOnce(
+      () =>
+        new Promise<Awaited<ReturnType<typeof testAgentChannelControl>>>((resolve) => {
+          resolveTest = resolve;
+        })
+    );
+
+    await renderSettingsPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-channel-slack")).toBeInTheDocument();
+    });
+
+    fireEvent.click(
+      within(screen.getByTestId("settings-channel-slack")).getByRole("button", {
+        name: "Manage Slack",
+      })
+    );
+    const panel = within(screen.getByTestId("settings-channel-panel-slack"));
+    fireEvent.click(panel.getByRole("button", { name: "Test Slack connection" }));
+
+    await waitFor(() => {
+      expect(panel.getByRole("button", { name: "Testing..." })).toBeDisabled();
+    });
+
+    await act(async () => {
+      resolveTest({
+        response: { ok: true } as Response,
+        data: { channel: "slack", last_test: { ok: true, detail: "provider_reachable" } },
+      });
+    });
+
+    await waitFor(() => {
+      expect(panel.getByRole("button", { name: "Test Slack connection" })).toBeEnabled();
+    });
+  });
+
   it("connects Discord through the generic channel-control path with token and optional guild", async () => {
     const connectMock = connectAgentChannelControl as jest.MockedFunction<
       typeof connectAgentChannelControl

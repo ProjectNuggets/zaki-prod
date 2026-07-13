@@ -246,8 +246,18 @@ function getChannelStatusLabel(channel?: AgentChannelStatus | null) {
   return "Not configured";
 }
 
+// A connected-but-broken channel must not read as healthy: only treat the last
+// live /test as a failure when the engine actually reported ok === false. A
+// missing/null last_test (never tested, or a pre-liveness engine) is "unknown",
+// not "failed", so we fall back to the stored connection state.
+export function lastLiveTestFailed(control?: AgentChannelControlStatus | null) {
+  return control?.last_test?.ok === false;
+}
+
 function getChannelControlTone(control?: AgentChannelControlStatus | null): V2BadgeTone {
-  if (control?.user_connected || control?.status === "connected") return "success";
+  if (control?.user_connected || control?.status === "connected") {
+    return lastLiveTestFailed(control) ? "warn" : "success";
+  }
   if (control?.status === "partial") return "warn";
   if (control?.build_enabled === false || control?.status === "disabled_in_build") return "danger";
   return "default";
@@ -255,7 +265,9 @@ function getChannelControlTone(control?: AgentChannelControlStatus | null): V2Ba
 
 function getChannelControlStatusLabel(control?: AgentChannelControlStatus | null) {
   if (!control) return "Setup status unavailable";
-  if (control.status === "connected" || control.user_connected) return "Connected";
+  if (control.status === "connected" || control.user_connected) {
+    return lastLiveTestFailed(control) ? "Needs attention" : "Connected";
+  }
   if (control.status === "partial") return "Needs required fields";
   if (control.status === "disabled_in_build" || control.build_enabled === false) return "Disabled in this build";
   return "Needs setup";
@@ -631,10 +643,15 @@ export function SettingsChannelsSection({
                           disabled={channelControlAction === `${channelRow.id}:test`}
                           onClick={() => void handleTestChannelControl(channelRow.id)}
                         >
-                          {t("settingsModal.channels.control.test", {
-                            channel: channelRow.label,
-                            defaultValue: formatChannelTestActionLabel(channelRow.id, channelRow.label),
-                          })}
+                          {channelControlAction === `${channelRow.id}:test`
+                            ? t("settingsModal.channels.control.testing", {
+                                channel: channelRow.label,
+                                defaultValue: "Testing...",
+                              })
+                            : t("settingsModal.channels.control.test", {
+                                channel: channelRow.label,
+                                defaultValue: formatChannelTestActionLabel(channelRow.id, channelRow.label),
+                              })}
                         </V2Button>
                       ) : null}
                       {channelRow.canDisconnectChannel ? (

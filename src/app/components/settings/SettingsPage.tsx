@@ -1253,10 +1253,18 @@ export function SettingsPage() {
       if (!response.ok || data?.error) {
         throw new Error(data?.message || data?.error || "channel_test_failed");
       }
-      if (!data.last_test) {
-        throw new Error("Channel test did not return a result.");
-      }
       await loadChannelControls();
+      if (!data.last_test) {
+        // A pre-liveness engine won't return last_test. Degrade gracefully
+        // (treat as unknown / not yet tested) instead of throwing an error.
+        toast(
+          t("settingsModal.channels.control.testUnknown", {
+            defaultValue:
+              "Test request sent, but this engine did not report a live result.",
+          })
+        );
+        return;
+      }
       const resultMessage = formatChannelTestDetail(data.last_test.detail);
       if (data.last_test.ok) {
         toast.success(resultMessage);
