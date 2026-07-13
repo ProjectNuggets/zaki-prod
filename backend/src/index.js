@@ -24,6 +24,8 @@ import {
   buildLegalConsentShape,
   validateLegalPolicyVersion,
   buildConsentStatus,
+  resolveMinimumSignupAge,
+  validateMinimumSignupAge,
 } from "./legal-consent.js";
 import { validateRuntimeConfig } from "./config-validation.js";
 import {
@@ -732,6 +734,9 @@ const ZAKI_RESET_TTL_MINUTES = Number(
 );
 const ZAKI_LEGAL_POLICY_VERSION = resolveLegalPolicyVersion(
   process.env.ZAKI_LEGAL_POLICY_VERSION
+);
+const ZAKI_MINIMUM_SIGNUP_AGE = resolveMinimumSignupAge(
+  process.env.ZAKI_MINIMUM_SIGNUP_AGE
 );
 const MAX_STREAM_MESSAGE_CHARS = 8000;
 const ZAKI_INCLUDE_VERIFY_LINK =
@@ -4248,28 +4253,30 @@ function getLegalConsentStatus(zakiUser) {
 
 async function recordLegalConsent({ userId, policyVersion, source, req }) {
   const now = new Date().toISOString();
-  await dbQuery(
-    `UPDATE zaki_users
-     SET legal_consent_at = $1,
-         legal_consent_version = $2,
-         updated_at = $3
-     WHERE id = $4`,
-    [now, policyVersion, now, userId]
-  );
+  await withDbTransaction(async (client) => {
+    await client.query(
+      `UPDATE zaki_users
+       SET legal_consent_at = $1,
+           legal_consent_version = $2,
+           updated_at = $3
+       WHERE id = $4`,
+      [now, policyVersion, now, userId]
+    );
 
-  await dbQuery(
-    `INSERT INTO legal_consent_events
-     (user_id, policy_version, source, consented_at, ip_address, user_agent)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
-    [
-      userId,
-      policyVersion,
-      source,
-      now,
-      getClientIp(req),
-      req.get("user-agent") || null,
-    ]
-  );
+    await client.query(
+      `INSERT INTO legal_consent_events
+       (user_id, policy_version, source, consented_at, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        userId,
+        policyVersion,
+        source,
+        now,
+        getClientIp(req),
+        req.get("user-agent") || null,
+      ]
+    );
+  });
 }
 
 function normalizeAccessCode(value) {
@@ -4777,12 +4784,25 @@ app.get("/api/auth/google/start", (req, res) => {
       return;
     }
     const returnTo = sanitizeGoogleOAuthReturnTo(req.query?.returnTo || req.query?.return_to || "/spaces");
+    let legalPolicyVersion = null;
+    if (String(req.query?.legalConsentAccepted || "").toLowerCase() === "true") {
+      const policyVersionResult = validateLegalPolicyVersion(
+        req.query?.legalPolicyVersion,
+        ZAKI_LEGAL_POLICY_VERSION
+      );
+      if (!policyVersionResult.ok) {
+        res.status(409).json({ success: false, error: policyVersionResult.error });
+        return;
+      }
+      legalPolicyVersion = policyVersionResult.version;
+    }
     const nonce = createGoogleOAuthNonce();
     const state = signGoogleOAuthStatePayload(
       {
         returnTo,
         exp: Date.now() + 10 * 60 * 1000,
         nonceHash: hashGoogleOAuthNonce(nonce),
+        ...(legalPolicyVersion ? { legalPolicyVersion } : {}),
       },
       GOOGLE_OAUTH_STATE_SECRET
     );
@@ -4824,11 +4844,27 @@ app.get("/api/auth/google/callback", async (req, res) => {
       res.redirect(302, `${getAppUrl()}/?auth=login&error=google_oauth_missing_code`);
       return;
     }
-    const { returnTo, nonceHash } = verifyGoogleOAuthState(state, GOOGLE_OAUTH_STATE_SECRET);
+    const { returnTo, nonceHash, legalPolicyVersion } = verifyGoogleOAuthState(
+      state,
+      GOOGLE_OAUTH_STATE_SECRET
+    );
     verifyGoogleOAuthNonceBinding({
       cookieNonce: extractGoogleOAuthNonceFromCookieHeader(req.headers?.cookie),
       stateNonceHash: nonceHash,
     });
+    let acceptedPolicyVersion = null;
+    if (legalPolicyVersion) {
+      const policyVersionResult = validateLegalPolicyVersion(
+        legalPolicyVersion,
+        ZAKI_LEGAL_POLICY_VERSION
+      );
+      if (!policyVersionResult.ok) {
+        const error = new Error(policyVersionResult.error);
+        error.status = 409;
+        throw error;
+      }
+      acceptedPolicyVersion = policyVersionResult.version;
+    }
     const tokenPayload = await exchangeGoogleOAuthCode({
       code,
       redirectUri: getGoogleOAuthRedirectUri(req),
@@ -4839,6 +4875,17 @@ app.get("/api/auth/google/callback", async (req, res) => {
       dbQuery,
       userColumns: _ZAKI_USER_COLS,
       ...googleProfile,
+      ...(acceptedPolicyVersion
+        ? {
+            recordLegalConsent: ({ userId }) =>
+              recordLegalConsent({
+                userId,
+                policyVersion: acceptedPolicyVersion,
+                source: "google_signup",
+                req,
+              }),
+          }
+        : {}),
     });
     if (!zakiUser?.id) {
       throw new Error("Unable to create or link Google user.");
@@ -4852,6 +4899,9 @@ app.get("/api/auth/google/callback", async (req, res) => {
       buildClearedGoogleOAuthNonceCookie({ secure: isSecureCookieRequest(req) }),
     ]);
     const appUrl = new URL(returnTo, getAppUrl());
+    if (!acceptedPolicyVersion && getLegalConsentStatus(zakiUser).requiresReconsent) {
+      appUrl.searchParams.set("legalConsent", "required");
+    }
     res.redirect(302, appUrl.toString());
   } catch (error) {
     console.error("[GoogleOAuth] callback error:", error);
@@ -6159,6 +6209,17 @@ const signupHandler = async (req, res) => {
     const normalizedEmail = normalizeEmail(email);
     const normalizedName = name.trim();
     const normalizedDob = dateOfBirth;
+    const minimumAgeResult = validateMinimumSignupAge(
+      normalizedDob,
+      ZAKI_MINIMUM_SIGNUP_AGE
+    );
+    if (!minimumAgeResult.ok) {
+      res.status(400).json({
+        success: false,
+        error: minimumAgeResult.error,
+      });
+      return;
+    }
     const policyVersionResult = validateLegalPolicyVersion(
       legalPolicyVersion,
       ZAKI_LEGAL_POLICY_VERSION

@@ -2,8 +2,8 @@ import "@testing-library/jest-dom";
 import { afterEach, describe, expect, it, jest } from "@jest/globals";
 import { act } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { ApprovalRequiredCard } from "./NullalisRuntimeWidgets";
-import type { NullalisApprovalRequest } from "./BotStatusRail";
+import { ApprovalRequiredCard, TaskChecklist } from "./NullalisRuntimeWidgets";
+import type { NullalisApprovalRequest, NullalisTaskItem } from "./BotStatusRail";
 
 const translations: Record<string, string> = {
   "zakiControls.approval.title": "Approval required for {{tool}}",
@@ -77,6 +77,25 @@ const request: NullalisApprovalRequest = {
   command: "extension.click #send",
   files: ["active-tab"],
 };
+
+describe("TaskChecklist", () => {
+  it("opens when a running task arrives after the initial render", async () => {
+    const runningTask: NullalisTaskItem = {
+      taskId: "task-background-1",
+      status: "running",
+      description: "Waiting for delegated research result",
+      progressPct: 55,
+      updatedAt: Date.now(),
+    };
+    const { container, rerender } = render(<TaskChecklist tasks={[]} />);
+
+    rerender(<TaskChecklist tasks={[runningTask]} />);
+
+    await waitFor(() => expect(container.querySelector("details")).toHaveAttribute("open"));
+    expect(screen.getByText("Waiting for delegated research result")).toBeVisible();
+    expect(screen.getByText("55%")).toBeVisible();
+  });
+});
 
 describe("ApprovalRequiredCard", () => {
   afterEach(() => {

@@ -4,6 +4,8 @@ import {
   buildSignupSchema,
   validateLegalPolicyVersion,
   buildConsentStatus,
+  resolveMinimumSignupAge,
+  validateMinimumSignupAge,
 } from "./legal-consent.js";
 
 describe("legal consent auth schemas", () => {
@@ -39,21 +41,36 @@ describe("legal consent auth schemas", () => {
       name: "User",
       dateOfBirth: "1995-01-15",
       legalConsentAccepted: true,
-      legalPolicyVersion: "2026-02-17.v2",
+      legalPolicyVersion: "2026-07-12.v4",
     });
     expect(valid.success).toBe(true);
   });
 });
 
+describe("minimum signup age", () => {
+  it("uses 16 unless an operator configures a plausible threshold", () => {
+    expect(resolveMinimumSignupAge(undefined)).toBe(16);
+    expect(resolveMinimumSignupAge("18")).toBe(18);
+    expect(resolveMinimumSignupAge("12")).toBe(16);
+  });
+
+  it("rejects under-age and impossible birth dates on the server", () => {
+    const now = new Date("2026-07-12T12:00:00.000Z");
+    expect(validateMinimumSignupAge("2010-07-13", 16, now)).toMatchObject({ ok: false });
+    expect(validateMinimumSignupAge("2010-07-12", 16, now)).toMatchObject({ ok: true, age: 16 });
+    expect(validateMinimumSignupAge("2020-02-31", 16, now)).toMatchObject({ ok: false });
+  });
+});
+
 describe("legal consent version and status", () => {
   it("rejects stale policy version", () => {
-    const result = validateLegalPolicyVersion("2025-01-01.v1", "2026-02-17.v2");
+    const result = validateLegalPolicyVersion("2025-01-01.v1", "2026-07-12.v4");
     expect(result.ok).toBe(false);
-    expect(result.error).toContain("2026-02-17.v2");
+    expect(result.error).toContain("2026-07-12.v4");
   });
 
   it("marks missing or stale consent as requiring re-consent", () => {
-    const current = "2026-02-17.v2";
+    const current = "2026-07-12.v4";
     const missing = buildConsentStatus({}, current);
     expect(missing.requiresReconsent).toBe(true);
 
