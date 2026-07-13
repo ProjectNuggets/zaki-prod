@@ -58,6 +58,7 @@ import {
   type AnonymousWorkProductId,
 } from "@/lib/anonymousWork";
 import { buildProductReturnTo, writePendingIntent } from "@/lib/pendingIntent";
+import { RELEASE_VISIBLE_SPOKES } from "@/lib/productRoutes";
 import { useOnlineStatus } from "@/hooks";
 
 interface ZakiDashboardProps {
@@ -75,13 +76,7 @@ type WindowStats = {
   usedPercent: number;
 };
 
-const COMMAND_PRODUCT_ORDER: AnonymousWorkProductId[] = [
-  "agent",
-  "spaces",
-  "learning",
-  "design",
-  "hire",
-];
+const COMMAND_PRODUCT_ORDER: AnonymousWorkProductId[] = [...RELEASE_VISIBLE_SPOKES];
 
 const ANONYMOUS_COMMAND_PRODUCT_ORDER = COMMAND_PRODUCT_ORDER;
 const SIGNED_IN_COMMAND_PRODUCT_ORDER = COMMAND_PRODUCT_ORDER;
@@ -92,6 +87,7 @@ const WEBSITE_PRODUCT_URL = "https://chatzaki.com/product";
 const WEBSITE_PRICING_ROUTE = "/pricing";
 const COMING_SOON_PRODUCT_IDS = new Set<AnonymousWorkProductId>([
   "design",
+  "minutes",
   "learning",
   "hire",
 ]);
@@ -106,6 +102,7 @@ const COMMAND_TASK_KIND: Record<AnonymousWorkProductId, string> = {
   learning: "study_plan",
   design: "brief",
   hire: "career_plan",
+  minutes: "meeting_notes",
   spaces: "chat",
 };
 
@@ -115,6 +112,7 @@ const COMMAND_PRODUCT_ICON: Record<AnonymousWorkProductId, LucideIcon> = {
   learning: GraduationCap,
   design: PenTool,
   hire: BriefcaseBusiness,
+  minutes: Clock3,
   spaces: MessageSquareText,
 };
 
@@ -231,6 +229,7 @@ function getCommandProductVerb(
     learning: { signed: "learn", guest: "study" },
     design: { signed: "shape", guest: "shape" },
     hire: { signed: "advance", guest: "advance" },
+    minutes: { signed: "capture", guest: "capture" },
     spaces: { signed: "chat", guest: "chat" },
   };
   return t(
@@ -259,6 +258,7 @@ function getCommandPlaceholder(
     design: "Sketch the product, page, or brand direction you want to shape.",
     learning: "Name the topic and goal; ZAKI can make a study plan or explain the first step.",
     hire: "Paste a role, CV note, or career goal; ZAKI can shape the next move.",
+    minutes: "Bring a meeting recording or notes; Minutes will turn them into decisions and follow-ups.",
   };
   const detail = fallback[productId];
   if (typeof detail === "string") {
@@ -311,6 +311,11 @@ function getCommandProductDetails(
     hire: {
       headline: "If you need CV or career planning today, use Chat or Agent.",
       note: "Career stays gated until the private workflow is ready.",
+      accessTone: "warn",
+    },
+    minutes: {
+      headline: "If you need meeting notes today, use Chat or Agent.",
+      note: "Minutes is coming soon while ingestion, privacy, and retention are finalized.",
       accessTone: "warn",
     },
     spaces: {

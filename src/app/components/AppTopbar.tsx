@@ -14,9 +14,10 @@ function getInitials(name: string) {
 function getRouteCrumb(pathname: string) {
   if (pathname === "/") return "dashboard";
   if (pathname === "/agent") return "agent";
-  if (pathname === "/learn") return "learn";
   if (pathname === "/brain") return "brain";
   if (pathname === "/settings") return "settings";
+  if (pathname === "/design") return "design";
+  if (pathname === "/minutes") return "minutes";
   if (pathname === "/spaces" || pathname.startsWith("/spaces/")) return "chat";
   if (pathname === "/pricing") return "billing";
   if (pathname === "/help") return "help";

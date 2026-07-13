@@ -134,6 +134,8 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.details.hire.note": "Career stays gated until the private workflow is ready.",
     "zakiDashboard.command.details.design.headline": "If you need a design brief today, use Chat or Agent.",
     "zakiDashboard.command.details.design.note": "Design stays waitlisted until the project service is ready.",
+    "zakiDashboard.command.details.minutes.headline": "If you need meeting notes today, use Chat or Agent.",
+    "zakiDashboard.command.details.minutes.note": "Minutes is coming soon while ingestion, privacy, and retention are finalized.",
     "zakiDashboard.command.details.learning.headline": "If you need study help today, use Chat or Agent.",
     "zakiDashboard.command.details.learning.note": "Learn stays gated until learner state and the beta path are ready.",
     "zakiDashboard.links.howItWorks": "How it works",
@@ -222,6 +224,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.products.names.learning": "Learn",
     "zakiDashboard.products.names.hire": "Career",
     "zakiDashboard.products.names.design": "Design",
+    "zakiDashboard.products.names.minutes": "Minutes",
     "zakiDashboard.products.tags.live": "Live",
     "zakiDashboard.products.tags.privateBeta": "Private access",
     "zakiDashboard.products.tags.waitlist": "Waitlist",
@@ -548,8 +551,10 @@ describe("ZakiDashboard", () => {
       .getAllByRole("tab")
       .map((tab) => tab.getAttribute("aria-label"));
 
-    expect(tabs).toEqual(["Agent", "Chat", "Learn", "Design", "Career"]);
+    expect(tabs).toEqual(["Agent", "Chat", "Design", "Minutes"]);
     expect(screen.queryByRole("tab", { name: "Brain" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Learn" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Career" })).not.toBeInTheDocument();
   });
 
   it("routes signed-in command prompts to the selected product surface", () => {
@@ -756,8 +761,10 @@ describe("ZakiDashboard", () => {
       .getAllByRole("tab")
       .map((tab) => tab.getAttribute("aria-label"));
 
-    expect(tabs).toEqual(["Agent", "Chat", "Learn", "Design", "Career"]);
+    expect(tabs).toEqual(["Agent", "Chat", "Design", "Minutes"]);
     expect(screen.queryByRole("tab", { name: "Brain" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Learn" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Career" })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true");
     expect(container.querySelector(".zaki-dashboard-command__helper")).toBeNull();
     expect(
@@ -876,7 +883,7 @@ describe("ZakiDashboard", () => {
     });
   });
 
-  it("frames the Career product as a user career lane", () => {
+  it("frames Minutes as a coming-soon spoke", () => {
     useAuthStore.setState({
       token: null,
       user: null,
@@ -886,14 +893,12 @@ describe("ZakiDashboard", () => {
 
     renderDashboard();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Career" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Minutes" }));
 
     const hint = screen.getByTestId("zaki-dashboard-product-hint");
-    expect(hint).toHaveTextContent("If you need CV or career planning today, use Chat or Agent.");
-    expect(hint).toHaveTextContent("Career stays gated until the private workflow is ready.");
-    expect(screen.getByRole("button", { name: "Career coming soon" })).toBeDisabled();
-    expect(hint).not.toHaveTextContent("Job descriptions");
-    expect(hint).not.toHaveTextContent("Candidate");
+    expect(hint).toHaveTextContent("If you need meeting notes today, use Chat or Agent.");
+    expect(hint).toHaveTextContent("Minutes is coming soon");
+    expect(screen.getByRole("button", { name: "Minutes coming soon" })).toBeDisabled();
   });
 
   it("submits anonymous chat from the command dashboard with local work and pending intent", () => {
@@ -1045,7 +1050,7 @@ describe("ZakiDashboard", () => {
 
     const { container } = renderDashboard();
 
-    for (const product of ["Design", "Learn", "Career"]) {
+    for (const product of ["Design", "Minutes"]) {
       fireEvent.click(screen.getByRole("tab", { name: product }));
       fireEvent.change(screen.getByLabelText("Describe what you want ZAKI to do"), {
         target: { value: `Try ${product}` },
@@ -1057,6 +1062,8 @@ describe("ZakiDashboard", () => {
     }
 
     expect(screen.queryByRole("button", { name: "Save this work" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Learn" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Career" })).not.toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalledWith(expect.stringContaining("/?auth=signup"));
     expect(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY)).toBeNull();
     expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();

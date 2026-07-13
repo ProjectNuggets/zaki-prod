@@ -27,11 +27,17 @@ test.describe("ZAKI V1 release lock", () => {
       "/brain?source=website_product_brain&intent=memory",
     );
 
-    await page.goto("/products/learn", { waitUntil: "domcontentloaded" });
+    await page.goto("/products/design", { waitUntil: "domcontentloaded" });
     await expect(page.getByRole("link", { name: /Open dashboard/i })).toHaveAttribute(
       "href",
-      "/?source=website_product_learn&intent=dashboard",
+      "/?source=website_product_design&intent=dashboard",
     );
+
+    for (const path of ["/products/learn", "/products/hire"]) {
+      await page.goto(path, { waitUntil: "domcontentloaded" });
+      await expect(page).toHaveURL(/\/$/);
+      await expect(page.locator('[data-product-id="learning"], [data-product-id="hire"]')).toHaveCount(0);
+    }
   });
 
   test("operator routes stay hidden from signed-in non-superadmins", async ({ page }) => {
