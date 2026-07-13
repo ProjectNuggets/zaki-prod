@@ -27,15 +27,9 @@ function jobTimestamp(job: AgentJob) {
 }
 
 function automationKind(job: AgentJob) {
-  const haystack = [
-    jobText(job, "command", "prompt"),
-    jobText(job, "name", "title", "label"),
-    jobText(job, "id", "job_id", "jobId"),
-  ]
-    .join(" ")
-    .toLowerCase();
-  if (/(^|\W)dream(\W|$)/.test(haystack)) return "Dream reflection";
-  if (/(^|\W)mine(\W|$)/.test(haystack)) return "Learning miner";
+  const command = jobText(job, "command").toLowerCase();
+  if (command === "dream") return "Dream reflection";
+  if (command === "mine") return "Learning miner";
   return jobText(job, "name", "title", "label", "prompt", "command") || "Scheduled task";
 }
 
@@ -50,7 +44,8 @@ export function SettingsAutomationsSection() {
     queryFn: async () => {
       const { response, data } = await listAgentJobs({ redirectOnAuthFailure: false });
       if (!response.ok) throw new Error("automations_unavailable");
-      return data?.jobs ?? data?.items ?? [];
+      const jobs = data?.jobs ?? data?.items;
+      return Array.isArray(jobs) ? jobs : [];
     },
     staleTime: 30_000,
   });
@@ -89,11 +84,11 @@ export function SettingsAutomationsSection() {
               key={id}
               name={automationKind(job)}
               description={
-                nextRun
-                  ? `Next run ${nextRun.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`
-                  : enabled
-                    ? "Next run is being scheduled."
-                    : "Paused"
+                !enabled
+                  ? "Paused"
+                  : nextRun
+                    ? `Next run ${nextRun.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`
+                    : "Next run is being scheduled."
               }
             >
               <V2Badge tone={enabled ? "success" : "default"}>{enabled ? "Active" : "Paused"}</V2Badge>

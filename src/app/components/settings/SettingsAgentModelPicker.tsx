@@ -9,6 +9,7 @@ export const AGENT_MODEL_OPTIONS = [
   { id: "claude-opus-4.7", label: "Claude Opus 4.7", context: "1M", cost: "C" },
   { id: "claude-sonnet-4.6", label: "Claude Sonnet 4.6", context: "1M", cost: "B" },
   { id: "claude-opus-4.6", label: "Claude Opus 4.6", context: "1M", cost: "C" },
+  { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", context: "200K", cost: "A" },
   { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", context: "1M", cost: "B" },
   { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", context: "200K", cost: "A" },
   { id: "gpt-5.2", label: "GPT-5.2", context: "128K", cost: "C" },
@@ -16,6 +17,20 @@ export const AGENT_MODEL_OPTIONS = [
   { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro", context: "512K", cost: "A" },
   { id: "deepseek-v4-flash", label: "DeepSeek V4 Flash", context: "512K", cost: "A" },
 ] as const;
+
+const AGENT_MODEL_ALIASES: Record<string, string> = {
+  k2p6: "kimi-k2.6",
+  k2p5: "kimi-k2.5",
+  "claude-opus-4-7": "claude-opus-4.7",
+  "claude-opus-4-6": "claude-opus-4.6",
+  "claude-sonnet-4-6": "claude-sonnet-4.6",
+};
+
+function canonicalModelId(value: string | null | undefined) {
+  if (!value) return "";
+  const normalized = value.toLowerCase();
+  return AGENT_MODEL_ALIASES[normalized] ?? normalized;
+}
 
 export function SettingsAgentModelPicker({
   value,
@@ -26,7 +41,8 @@ export function SettingsAgentModelPicker({
   disabled?: boolean;
   onChange: (value: string | null) => void;
 }) {
-  const selected = AGENT_MODEL_OPTIONS.find((model) => model.id === value);
+  const canonicalValue = canonicalModelId(value);
+  const selected = AGENT_MODEL_OPTIONS.find((model) => model.id === canonicalValue);
 
   return (
     <V2SettingsRow
@@ -37,7 +53,7 @@ export function SettingsAgentModelPicker({
         <select
           className="v2-input"
           aria-label="Default model"
-          value={value ?? ""}
+          value={canonicalValue}
           disabled={disabled}
           onChange={(event) => onChange(event.target.value || null)}
         >

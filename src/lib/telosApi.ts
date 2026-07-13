@@ -8,22 +8,46 @@ export type TelosItem = {
   content: string;
 };
 
+export type TelosStatus = {
+  items: TelosItem[];
+  telosInPrompt: boolean;
+};
+
 /**
  * GET /api/agent/telos — the curated user-model north star (see the nullalis
  * `docs/telos-contract.md`). Token-scoped, so no user id is needed in the path
  * (mirrors `fetchBrainMe`). READ-ONLY by design: the model is inferred from
  * conversation and confirmed inline, and durable edits go through the approved
- * `wish/telos` curation loop — never a UI write (T4). Fail-soft: any non-OK
- * response yields an empty list so the Settings view degrades to its empty state.
+ * `wish/telos` curation loop — never a UI write (T4). Non-OK responses reject so
+ * Settings can distinguish an upstream failure from a genuinely empty model.
  */
-export async function fetchTelos(): Promise<TelosItem[]> {
-  const response = await backendAuthRequest("/api/agent/telos", { method: "GET" });
-  if (!response.ok) return [];
+export async function fetchTelos(): Promise<TelosStatus> {
+  const response = await backendAuthRequest("/api/agent/telos", {
+    method: "GET",
+    redirectOnAuthFailure: false,
+  });
+  if (!response.ok) throw new Error("telos_unavailable");
   const raw = (await response.json().catch(() => null)) as {
-    telos?: Array<{ key?: string; type?: string; content?: string }>;
+    telos?: unknown;
+    telos_in_prompt?: unknown;
   } | null;
-  const items = raw?.telos ?? [];
-  return items
-    .filter((i): i is { key: string; type?: string; content?: string } => Boolean(i?.key))
-    .map((i) => ({ key: i.key, type: i.type ?? "unknown", content: i.content ?? "" }));
+  const items = Array.isArray(raw?.telos) ? raw.telos : [];
+  return {
+    telosInPrompt: raw?.telos_in_prompt === true,
+    items: items
+      .filter(
+        (item): item is Record<string, unknown> & { key: string } =>
+          Boolean(
+            item &&
+              typeof item === "object" &&
+              typeof (item as Record<string, unknown>).key === "string" &&
+              String((item as Record<string, unknown>).key).trim(),
+          ),
+      )
+      .map((item) => ({
+        key: item.key,
+        type: typeof item.type === "string" ? item.type : "unknown",
+        content: typeof item.content === "string" ? item.content : "",
+      })),
+  };
 }

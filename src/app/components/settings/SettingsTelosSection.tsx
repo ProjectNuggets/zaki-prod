@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchTelos } from "@/lib/telosApi";
+import { V2Badge } from "@/app/components/v2";
 
 import { V2SettingsBlock, V2SettingsRow } from "./V2SettingsPrimitives";
 
@@ -17,14 +18,23 @@ export function SettingsTelosSection() {
     staleTime: 60_000,
   });
 
-  const items = data ?? [];
+  const items = data?.items ?? [];
+  const statusBadge = isLoading ? (
+    <V2Badge>Loading</V2Badge>
+  ) : isError ? (
+    <V2Badge tone="warn">Unavailable</V2Badge>
+  ) : data?.telosInPrompt ? (
+    <V2Badge tone="success">Active in prompts</V2Badge>
+  ) : (
+    <V2Badge>Learning only</V2Badge>
+  );
 
   return (
     <V2SettingsBlock
       id="settings-telos"
       data-testid="settings-telos"
       title="What ZAKI understands about your goals"
-      meta={items.length > 0 ? String(items.length) : undefined}
+      meta={statusBadge}
     >
       {isLoading ? (
         <V2SettingsRow name="Loading…" />
