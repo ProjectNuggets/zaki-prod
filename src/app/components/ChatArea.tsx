@@ -80,7 +80,7 @@ import {
   isDefaultThreadLabel,
   stripThreadDisplayName,
 } from "@/lib/threadTitles";
-import { createAnonymousThreadId } from "@/lib/anonymousSpaces";
+import { ANONYMOUS_SPACES_WORKSPACE_ID, createAnonymousThreadId } from "@/lib/anonymousSpaces";
 import { upsertAnonymousWorkItem } from "@/lib/anonymousWork";
 import { clearPendingIntent, readPendingIntent } from "@/lib/pendingIntent";
 import { openSpacesMemoryViewer, type MemoryViewerTab } from "@/lib/spacesMemory";
@@ -7980,7 +7980,20 @@ export function ChatArea() {
       toast.error("Sign in to upload files to Spaces.");
       return;
     }
-    const resolvedWorkspaceSlug = preferredWorkspaceSlug ?? activeWorkspaceSlug ?? primarySpace?.id ?? null;
+    // Anonymous visitors always have an implicit default workspace (the
+    // "Free daily workspace chat" anon space). A fresh anon session — e.g. the
+    // dashboard "Start chat" — may fire before the Sidebar has broadcast its
+    // `zaki:spaces-data`, so `spacesList`/`primarySpace` can still be empty and
+    // nothing is manually selected. Rather than blocking the core "chat now, no
+    // setup" promise with a "select a workspace" error, fall back to the default
+    // anonymous space so the send proceeds down the existing `/api/anonymous/...`
+    // path (thread creation + daily quota metering + save-this-work all keyed on
+    // this slug). Authenticated users still require a real, resolved workspace.
+    const resolvedWorkspaceSlug =
+      preferredWorkspaceSlug ??
+      activeWorkspaceSlug ??
+      primarySpace?.id ??
+      (!authUserId ? ANONYMOUS_SPACES_WORKSPACE_ID : null);
     if (!resolvedWorkspaceSlug) {
       toast.error("Select a workspace before sending a message");
       return;
