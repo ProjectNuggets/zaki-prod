@@ -19,7 +19,7 @@ const templateHtml = readFileSync(templatePath, "utf8");
 const seoStart = "<!-- SEO:START -->";
 const seoEnd = "<!-- SEO:END -->";
 const siteUrl = "https://novanuggets.com";
-const defaultOgImage = `${siteUrl}/assets/noox/noox-operations-room.png`;
+const defaultOgImage = `${siteUrl}/assets/social/nova-nuggets-og.png`;
 const logoImage = `${siteUrl}/assets/nova-nuggets-logo.png`;
 
 const routeSeoTopics = {
@@ -286,11 +286,14 @@ function buildSeoBlock(route) {
     <meta property="og:url" content="${escapeHtml(canonical)}" />
     <meta property="og:locale" content="en_US" />
     <meta property="og:image" content="${defaultOgImage}" />
-    <meta property="og:image:alt" content="NooX AI inferencing computer by Nova Nuggets" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Nova Nuggets — full-stack AI systems that ship" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${escapeHtml(route.title)}" />
     <meta name="twitter:description" content="${escapeHtml(route.description)}" />
     <meta name="twitter:image" content="${defaultOgImage}" />
+    <meta name="twitter:image:alt" content="Nova Nuggets — full-stack AI systems that ship" />
     <script type="application/ld+json">${JSON.stringify(schema)}</script>
     ${seoEnd}`;
 }

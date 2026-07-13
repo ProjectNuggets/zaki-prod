@@ -640,6 +640,9 @@ const ZAKI_PUBLIC_URL = (process.env.ZAKI_PUBLIC_URL || "").trim();
 const ZAKI_APP_URL = (process.env.ZAKI_APP_URL || "").trim();
 const ZAKI_EMAIL_LOGO_URL = (process.env.ZAKI_EMAIL_LOGO_URL || "").trim();
 const ZAKI_EMAIL_MODE = (process.env.ZAKI_EMAIL_MODE || "console").trim();
+const NOVA_QUALIFICATION_NOTIFY_EMAIL = (
+  process.env.NOVA_QUALIFICATION_NOTIFY_EMAIL || "hello@novanuggets.com"
+).trim();
 const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || "").trim();
 const GOOGLE_CLIENT_SECRET = (process.env.GOOGLE_CLIENT_SECRET || "").trim();
 const GOOGLE_OAUTH_REDIRECT_URI = (process.env.GOOGLE_OAUTH_REDIRECT_URI || "").trim();
@@ -844,6 +847,14 @@ const PUBLIC_SHARE_RATE_LIMIT_MAX = Math.max(
   1,
   Number(process.env.ZAKI_PUBLIC_SHARE_RATE_LIMIT_MAX || 30)
 );
+const WEBSITE_LEAD_RATE_LIMIT_WINDOW_MS = Math.max(
+  1_000,
+  Number(process.env.ZAKI_WEBSITE_LEAD_RATE_LIMIT_WINDOW_MS || 60 * 60 * 1000)
+);
+const WEBSITE_LEAD_RATE_LIMIT_MAX = Math.max(
+  1,
+  Number(process.env.ZAKI_WEBSITE_LEAD_RATE_LIMIT_MAX || 8)
+);
 const ANONYMOUS_DEVICE_DAILY_PROMPT_LIMIT = Math.max(
   1,
   Number(
@@ -912,6 +923,9 @@ const allowedOrigins = Array.from(
     [
       "https://chatzaki.com",
       "https://www.chatzaki.com",
+      "https://novanuggets.com",
+      "https://www.novanuggets.com",
+      "https://novanuggets-staging.alis24.com",
       ZAKI_APP_URL || "https://app.chatzaki.com",
       ...(process.env.ZAKI_ALLOWED_ORIGINS || "")
         .split(",")
@@ -2472,6 +2486,17 @@ const publicShareRateLimiter = createPersistentRateLimit({
   windowMs: PUBLIC_SHARE_RATE_LIMIT_WINDOW_MS,
   limit: PUBLIC_SHARE_RATE_LIMIT_MAX,
 });
+const websiteLeadRateLimiter = createPersistentRateLimit({
+  dbQuery,
+  prefix: "website-lead",
+  windowMs: WEBSITE_LEAD_RATE_LIMIT_WINDOW_MS,
+  limit: WEBSITE_LEAD_RATE_LIMIT_MAX,
+  message: {
+    success: false,
+    error: "Too many requests. Please wait before sending another brief.",
+    code: "lead_rate_limited",
+  },
+});
 const signupTurnstileMiddleware = createTurnstileMiddleware();
 
 const memoryReadPathMatchers = [
@@ -3836,6 +3861,7 @@ app.post(
 
 app.post(
   "/api/website-beta-waitlist",
+  websiteLeadRateLimiter,
   express.json({ limit: "50kb" }),
   async (req, res) => {
     const validation = validateInput(WebsiteBetaWaitlistSchema, req.body || {});
@@ -3883,6 +3909,16 @@ app.post(
            RETURNING id`,
           [email, name, role, useCase, locale, source, ipAddress, userAgent]
         );
+        if (source === "nova-nuggets-qualification") {
+          void sendNovaQualificationNotification({ email, name, role, useCase, source }).catch(
+            (notificationError) => {
+              console.error(
+                "[Nova Nuggets Qualification] notification failed:",
+                notificationError?.message || notificationError
+              );
+            }
+          );
+        }
         res.status(200).json({ success: true, id: String(updated.id), duplicate: true });
         return;
       }
@@ -3895,6 +3931,16 @@ app.post(
         [email, name, role, useCase, locale, source, ipAddress, userAgent]
       );
 
+      if (source === "nova-nuggets-qualification") {
+        void sendNovaQualificationNotification({ email, name, role, useCase, source }).catch(
+          (notificationError) => {
+            console.error(
+              "[Nova Nuggets Qualification] notification failed:",
+              notificationError?.message || notificationError
+            );
+          }
+        );
+      }
       res.status(201).json({ success: true, id: String(inserted.id) });
     } catch (error) {
       console.error("[Website Waitlist] create failed:", error);
@@ -4235,6 +4281,72 @@ function getClientIp(req) {
     if (first) return first;
   }
   return req.ip || null;
+}
+
+async function sendNovaQualificationNotification({ email, name, role, useCase, source }) {
+  if (!NOVA_QUALIFICATION_NOTIFY_EMAIL) return;
+
+  const subject = `Nova Nuggets qualification brief${name ? ` · ${name}` : ""}`;
+  const text = [
+    "A new Nova Nuggets qualification brief was submitted.",
+    "",
+    `Name: ${name || "Not provided"}`,
+    `Email: ${email}`,
+    `Role: ${role || "Not provided"}`,
+    `Source: ${source || "nova-nuggets-qualification"}`,
+    "",
+    useCase || "No workflow details provided.",
+    "",
+    "The lead is also stored in the website waitlist admin view.",
+  ].join("\n");
+
+  if (ZAKI_EMAIL_MODE.toLowerCase() === "resend") {
+    if (!resendApiKey) throw new Error("RESEND_API_KEY is not configured.");
+    const from = parseFromAddress(resendFrom, "");
+    if (!from.email) throw new Error("RESEND_FROM is not configured.");
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    try {
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: from.name ? `${from.name} <${from.email}>` : from.email,
+          to: [NOVA_QUALIFICATION_NOTIFY_EMAIL],
+          reply_to: email,
+          subject,
+          text,
+        }),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(
+          `Resend error (${response.status})${errorText ? `: ${errorText}` : ""}`
+        );
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
+    return;
+  }
+
+  if (mailer) {
+    await mailer.sendMail({
+      from: smtpFrom || smtpUser || "no-reply@zaki.local",
+      to: NOVA_QUALIFICATION_NOTIFY_EMAIL,
+      replyTo: email,
+      subject,
+      text,
+    });
+    return;
+  }
+
+  console.log(`[Nova Nuggets Qualification] received for ${email}`);
 }
 
 function getLegalConsentStatus(zakiUser) {

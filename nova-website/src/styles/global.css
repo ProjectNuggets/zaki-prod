@@ -7395,9 +7395,86 @@ textarea {
   accent-color: var(--nn-terra);
 }
 
+.contact-consent {
+  align-items: flex-start;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.contact-consent a,
+.qualification-status a {
+  color: #8f2f1c;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.qualification-honeypot {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.qualification-form button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.qualification-status {
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  border: 1px solid rgba(26, 22, 18, 0.18);
+  color: rgba(26, 22, 18, 0.78);
+  line-height: 1.5;
+}
+
+.qualification-status-success {
+  border-color: rgba(53, 91, 64, 0.34);
+  background: rgba(53, 91, 64, 0.08);
+}
+
+.qualification-status-error {
+  border-color: rgba(143, 47, 28, 0.34);
+  background: rgba(143, 47, 28, 0.08);
+}
+
 .qualification-form .button-primary {
   background: #17120e;
   color: #fffaf1;
+}
+
+.terms-list {
+  display: grid;
+  border-top: 1px solid rgba(26, 22, 18, 0.18);
+}
+
+.terms-list article {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 22px;
+  padding: 24px 0;
+  border-bottom: 1px solid rgba(26, 22, 18, 0.16);
+}
+
+.terms-list article > span {
+  color: #a43f1e;
+  font-family: "DM Mono", monospace;
+  font-size: 11px;
+}
+
+.terms-list h3 {
+  margin: 0 0 8px;
+  font-family: "Cabinet Grotesk", Inter, system-ui, sans-serif;
+  font-size: clamp(22px, 2vw, 30px);
+}
+
+.terms-list p {
+  max-width: 780px;
+  margin: 0;
+  color: rgba(26, 22, 18, 0.7);
+  line-height: 1.6;
 }
 
 .final-cta {
@@ -7442,67 +7519,6 @@ textarea {
 
 .site-footer a:hover {
   color: var(--nn-paper);
-}
-
-.cookie-banner {
-  position: fixed;
-  bottom: 22px;
-  right: clamp(14px, 3vw, 28px);
-  z-index: 60;
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  width: min(460px, calc(100vw - 28px));
-  padding: 10px 12px;
-  border: 1px solid rgba(245, 237, 222, 0.18);
-  border-radius: 6px;
-  background: rgba(15, 12, 9, 0.94);
-  color: var(--nn-paper);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(18px);
-}
-
-.cookie-banner strong {
-  display: block;
-  margin-bottom: 3px;
-  font-family: "Cabinet Grotesk", Inter, system-ui, sans-serif;
-  font-size: 14px;
-  line-height: 1;
-}
-
-.cookie-banner p {
-  margin: 0;
-  color: rgba(245, 237, 222, 0.68);
-  font-size: 11.5px;
-  line-height: 1.35;
-}
-
-.cookie-actions {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin-left: auto;
-}
-
-.cookie-actions a,
-.cookie-actions button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 34px;
-  padding: 0 10px;
-  border: 1px solid rgba(245, 237, 222, 0.18);
-  background: transparent;
-  color: #fffaf1;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.cookie-actions button {
-  border-color: rgba(226, 122, 77, 0.55);
-  background: rgba(201, 88, 44, 0.18);
-  cursor: pointer;
 }
 
 @media (max-width: 1050px) {
@@ -8810,42 +8826,9 @@ textarea {
   }
 
   .final-cta,
-  .site-footer,
-  .cookie-banner {
+  .site-footer {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .cookie-banner {
-    top: auto;
-    right: 8px;
-    bottom: 8px;
-    left: 8px;
-    display: grid;
-    width: auto;
-    grid-template-columns: 1fr;
-    gap: 10px;
-    padding: 10px;
-  }
-
-  .cookie-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .cookie-banner strong {
-    font-size: 14px;
-  }
-
-  .cookie-banner p {
-    font-size: 11px;
-    line-height: 1.35;
-  }
-
-  .cookie-actions a,
-  .cookie-actions button {
-    min-height: 34px;
-    padding: 0 10px;
   }
 
   .site-footer nav {
@@ -8990,7 +8973,6 @@ textarea {
 
   .site-header,
   .site-footer,
-  .cookie-banner,
   .article-hero,
   .snapshot-intro,
   .snapshot-console,
@@ -9062,4 +9044,108 @@ textarea {
   .technology-mark[data-duplicate="true"] {
     display: none;
   }
+}
+
+/* Launch accessibility corrections: preserve the original visual system while meeting AA contrast. */
+.contact-cred,
+.contact-cred span,
+.investor-table span,
+.legal-table span {
+  color: #a43f1e;
+}
+
+.snapshot-score > span {
+  color: #ef936b;
+}
+
+.home-live-status strong span {
+  width: auto;
+  height: auto;
+  background: transparent;
+  box-shadow: none;
+  color: rgba(245, 237, 222, 0.82);
+}
+
+/* Paper surfaces use the deeper terra; ink surfaces use the lighter ember. */
+.sample-score-row:not(.sample-score-head) > span,
+.sample-report-workflow-grid article > span,
+.process-item > p,
+.team-grid article > p,
+.advisor-people-grid article > p,
+.approach-gate-grid article > span,
+.investor-metric-grid article > span,
+.investor-plan-list span,
+.investor-timeline article > span {
+  color: #a43f1e;
+}
+
+.field-note-meta span,
+.field-note-decision span {
+  color: #a43f1e;
+}
+
+.deployment-decision-cards article > span,
+.deployment-decision-cards article p > strong {
+  color: #a43f1e;
+}
+
+.sample-score-head > span,
+.sample-report-timeline article > span,
+.category-grid article > p,
+.category-grid article.featured > p,
+.media-grid article > span {
+  color: #ef936b;
+}
+
+.process-item > .step-number {
+  color: #625d55;
+}
+
+.faq-section .section-kicker,
+.team-section .section-kicker,
+.team-proof-copy .section-kicker,
+.advisor-people-section .section-kicker,
+.advisor-section .section-kicker,
+.advisory-section .section-kicker,
+.workforce-demo-copy .section-kicker,
+.investor-panel > .section-kicker,
+.investor-plan-grid .section-kicker {
+  color: #a43f1e;
+}
+
+.advisory-grid article > strong {
+  color: #625d55;
+}
+
+.section-light .section-kicker,
+#approach .section-kicker,
+#orbit-framework .section-kicker,
+#orbit-offers .section-kicker,
+#orbit-assets .section-kicker,
+.sample-report-score-section .section-kicker,
+.sample-report-workflow-section .section-kicker,
+.deployment-decision-section .section-kicker,
+.deploy-section .section-kicker,
+.proof-media-section .section-kicker,
+.approach-gate-copy .section-kicker,
+.commercial-copy .section-kicker,
+.contact-panel > div > .section-kicker,
+.nova-orbit-dimension-grid article > span,
+.nova-orbit-offer-grid article > span,
+.orbit-download-grid span,
+.orbit-download-grid strong,
+.proof-quote-grid blockquote cite {
+  color: #a43f1e;
+}
+
+.nova-orbit-stage-rail article > span,
+.snapshot-report-summary p > span,
+.nova-orbit-method-list article > span {
+  color: #ef936b;
+}
+
+.orbit-download-actions .button-secondary {
+  color: var(--nn-ink);
+  background: transparent;
+  border-color: rgba(26, 22, 18, 0.18);
 }

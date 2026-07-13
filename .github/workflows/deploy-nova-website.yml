@@ -1,0 +1,66 @@
+name: Build and Publish Nova Nuggets Website Image
+
+on:
+  push:
+    branches: [main, codex/novaorbit-website-release]
+    paths:
+      - "nova-website/**"
+      - ".github/workflows/deploy-nova-website.yml"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io/projectnuggets
+  IMAGE_NAME: nova-nuggets-website
+
+concurrency:
+  group: publish-nova-nuggets-website-image
+  cancel-in-progress: false
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image refs
+        id: image
+        run: |
+          image_repo="${REGISTRY}/${IMAGE_NAME}"
+          sha_tag="${image_repo}:sha-${GITHUB_SHA}"
+          raw_tag="${image_repo}:${GITHUB_SHA}"
+          echo "sha_tag=${sha_tag}" >> "$GITHUB_OUTPUT"
+          echo "raw_tag=${raw_tag}" >> "$GITHUB_OUTPUT"
+          {
+            echo "tags<<EOF"
+            echo "${sha_tag}"
+            echo "${raw_tag}"
+            if [ "${GITHUB_REF_NAME}" = "main" ]; then
+              echo "${image_repo}:latest"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Nova Nuggets website
+        uses: docker/build-push-action@v5
+        with:
+          context: ./nova-website
+          file: ./nova-website/Dockerfile
+          push: true
+          tags: ${{ steps.image.outputs.tags }}
+          platforms: linux/amd64
+
+      - name: Publish summary
+        run: |
+          echo "Published image: ${{ steps.image.outputs.sha_tag }}"
+          echo "Immutable alias: ${{ steps.image.outputs.raw_tag }}"
+          echo "Production promotion is owned by zaki-infra."

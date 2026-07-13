@@ -1,0 +1,37 @@
+name: CI Nova Nuggets Website
+
+on:
+  pull_request:
+    paths:
+      - "nova-website/**"
+      - "backend/src/index.js"
+      - ".github/workflows/ci-nova-website.yml"
+  push:
+    branches: [main]
+    paths:
+      - "nova-website/**"
+      - "backend/src/index.js"
+      - ".github/workflows/ci-nova-website.yml"
+  workflow_dispatch:
+
+jobs:
+  website:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: nova-website/package-lock.json
+      - name: Install dependencies
+        run: npm --prefix nova-website ci
+      - name: Dependency audit
+        run: npm --prefix nova-website audit --audit-level=high
+      - name: Typecheck
+        run: npm --prefix nova-website run typecheck
+      - name: Production build and route validation
+        run: npm --prefix nova-website run build
+      - name: Build production container
+        run: docker build -t nova-nuggets-website:ci nova-website
+

@@ -39,6 +39,9 @@ Core pages for citation and retrieval:
 - https://novanuggets.com/team/
 - https://novanuggets.com/investors/
 - https://novanuggets.com/contact/
+- https://novanuggets.com/impressum/
+- https://novanuggets.com/privacy/
+- https://novanuggets.com/terms/
 
 Summary:
 
