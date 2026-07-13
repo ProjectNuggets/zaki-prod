@@ -100,24 +100,46 @@ export function applySuperAdminEntitlementOverride(entitlement, { isSuperAdmin =
   return { ...SUPER_ADMIN_ENTITLEMENT };
 }
 
+function canRuntimeEntitlementAct(entitlement, nowUnix) {
+  if (!entitlement) return false;
+  if (entitlement.status === "active" || entitlement.status === "past_due") return true;
+  return (
+    entitlement.status === "canceled" &&
+    Number.isFinite(entitlement.period_end_unix) &&
+    entitlement.period_end_unix > nowUnix
+  );
+}
+
 // Nullalis still has a legacy subscription-status gate even though zaki-prod's
-// unit wallet is the commercial source of truth for Agent turns. Once the BFF
-// meter gate has allowed a turn (reserved or explicit fail-open), mark only
-// that engine-bound provision as active so Free allowance can reach the
-// runtime. Calls that have not passed the meter gate keep the DB-derived
-// inactive/expired status unchanged.
+// unit wallet is the commercial source of truth for Agent turns. After the BFF
+// meter gate allows a turn (reserved or explicit fail-open), give an otherwise
+// inactive engine entitlement a bounded canceled-period lease. Nullalis canAct
+// accepts that tuple only until period_end_unix, avoiding an indefinite global
+// activation in the process-wide entitlement cache. Already-valid paid or
+// super-admin tuples pass through unchanged.
 export function buildAgentRuntimeEntitlementFields(
   zakiUserRow,
-  { isSuperAdmin = false, meterGatePassed = false } = {}
+  {
+    isSuperAdmin = false,
+    nowUnix = Math.floor(Date.now() / 1000),
+    meterAuthorizedUntilUnix = null,
+  } = {}
 ) {
   const entitlement = applySuperAdminEntitlementOverride(
     buildEntitlementFields(zakiUserRow),
     { isSuperAdmin }
   );
-  if (!meterGatePassed) return entitlement;
+  const authorizationEnd = Number(meterAuthorizedUntilUnix);
+  if (
+    !Number.isFinite(authorizationEnd) ||
+    authorizationEnd <= nowUnix ||
+    canRuntimeEntitlementAct(entitlement, nowUnix)
+  ) {
+    return entitlement;
+  }
   return {
     plan_tier: entitlement?.plan_tier || "free",
-    status: "active",
-    period_end_unix: entitlement?.period_end_unix ?? null,
+    status: "canceled",
+    period_end_unix: Math.floor(authorizationEnd),
   };
 }

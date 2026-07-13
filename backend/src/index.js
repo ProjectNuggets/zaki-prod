@@ -893,6 +893,14 @@ const ZAKI_AGENT_PROVISION_CONFIRMATION_TTL_MS = Math.max(
 const agentProvisionConfirmationCache = createProvisionConfirmationCache({
   ttlMs: ZAKI_AGENT_PROVISION_CONFIRMATION_TTL_MS,
 });
+// A cached provision can be reused for the full confirmation TTL, and the
+// resulting turn can then run for the full upstream timeout. Add one minute of
+// clock/network margin so a lease created on the first provision cannot expire
+// during the latest turn that legitimately reuses that confirmation.
+const ZAKI_AGENT_METER_RUNTIME_LEASE_MS =
+  ZAKI_AGENT_PROVISION_CONFIRMATION_TTL_MS +
+  ZAKI_STREAM_UPSTREAM_TIMEOUT_MS +
+  60_000;
 // Agent error capture — routes genuine BFF failures (upstream 5xx, stream error, etc.) to GlitchTip.
 const { captureAgentError } = makeAgentErrorCapture({ sentry: Sentry });
 
@@ -11870,7 +11878,13 @@ async function ensureAgentUserProvisioned({
   meterGatePassed = false,
 }) {
   const basePayload = buildBotProvisionPayload(userId, {});
-  const entitlement = await loadUserEntitlement(userId, { email, meterGatePassed });
+  const meterAuthorizedUntilUnix = meterGatePassed
+    ? Math.floor((Date.now() + ZAKI_AGENT_METER_RUNTIME_LEASE_MS) / 1000)
+    : null;
+  const entitlement = await loadUserEntitlement(userId, {
+    email,
+    meterAuthorizedUntilUnix,
+  });
   const body = entitlement ? { ...basePayload, ...entitlement } : basePayload;
   return ensureNullclawProvisioned({
     baseUrl: nullclawBase,
@@ -15539,11 +15553,14 @@ async function proxyNullclawRequest(req, res, targetPath, options = {}) {
   pipeReadableToResponse(Readable.fromWeb(upstream.body), res, "Nullclaw proxy response");
 }
 
-async function loadUserEntitlement(userId, { email, meterGatePassed = false } = {}) {
+async function loadUserEntitlement(
+  userId,
+  { email, meterAuthorizedUntilUnix = null } = {}
+) {
   // Engine-bound entitlement chokepoint. Nullalis caches this tuple at
   // PROVISION time and 402s chat when status is expired/canceled. Super-admins
-  // keep their owner override; the Agent chat path may also mark the tuple
-  // active only after its meter gate allowed the turn. Billing writes and the
+  // keep their owner override; after its meter gate allows a turn, the Agent
+  // chat path may also attach a bounded runtime lease. Billing writes and the
   // ordinary provision route remain DB-derived.
   const isSuperAdmin = superAdminEmailSet.has(normalizeEmail(email));
   try {
@@ -15553,7 +15570,7 @@ async function loadUserEntitlement(userId, { email, meterGatePassed = false } = 
     );
     return buildAgentRuntimeEntitlementFields(row, {
       isSuperAdmin,
-      meterGatePassed,
+      meterAuthorizedUntilUnix,
     });
   } catch (error) {
     // Soft-fail: forwarding entitlements is optional on the nullalis
@@ -15568,7 +15585,7 @@ async function loadUserEntitlement(userId, { email, meterGatePassed = false } = 
     // so the override still applies to the null result.
     return buildAgentRuntimeEntitlementFields(null, {
       isSuperAdmin,
-      meterGatePassed,
+      meterAuthorizedUntilUnix,
     });
   }
 }

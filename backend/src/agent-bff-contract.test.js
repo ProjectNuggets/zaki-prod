@@ -349,6 +349,29 @@ describe("agent BOT BFF contract", () => {
     ]);
   });
 
+  it("leases inactive runtime entitlement only after the Agent wallet gate allows the turn", () => {
+    const source = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
+    const streamHandlerSource = source.slice(
+      source.indexOf("const agentChatStreamHandler = async"),
+      source.indexOf("function normalizeZakiBotThreadTitle")
+    );
+    const ordinaryProvisionSource = source.slice(
+      source.indexOf("const agentProvisionHandler = async"),
+      source.indexOf("const makeAgentSecretsTwoPhaseHandler")
+    );
+
+    const reserveIndex = streamHandlerSource.indexOf("requireAgentWalletReserveForChat");
+    const denialIndex = streamHandlerSource.indexOf("if (!meterDecision.allowed || res.headersSent)");
+    const provisionIndex = streamHandlerSource.indexOf("ensureProvisionedBeforeChat");
+    const authorizationIndex = streamHandlerSource.indexOf("meterGatePassed: true");
+
+    expect(reserveIndex).toBeGreaterThanOrEqual(0);
+    expect(denialIndex).toBeGreaterThan(reserveIndex);
+    expect(provisionIndex).toBeGreaterThan(denialIndex);
+    expect(authorizationIndex).toBeGreaterThan(provisionIndex);
+    expect(ordinaryProvisionSource).not.toContain("meterGatePassed: true");
+  });
+
   it("soft-empties the explicit Agent session detail handler on missing sessions", () => {
     const source = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
     const detailHandlerSource = source.slice(

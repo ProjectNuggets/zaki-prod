@@ -151,7 +151,7 @@ describe("buildEntitlementFields", () => {
 });
 
 describe("buildAgentRuntimeEntitlementFields", () => {
-  it("lets a free user with a wallet-authorized turn reach the agent runtime", () => {
+  it("gives a free user a bounded runtime lease after the meter authorizes a turn", () => {
     expect(
       buildAgentRuntimeEntitlementFields(
         {
@@ -159,26 +159,72 @@ describe("buildAgentRuntimeEntitlementFields", () => {
           plan_status: "inactive",
           current_period_end: null,
         },
-        { meterGatePassed: true }
+        {
+          nowUnix: 1_700_000_000,
+          meterAuthorizedUntilUnix: 1_700_000_660,
+        }
       )
     ).toEqual({
       plan_tier: "free",
-      status: "active",
-      period_end_unix: null,
+      status: "canceled",
+      period_end_unix: 1_700_000_660,
     });
   });
 
-  it("keeps a truly inactive user gated when no wallet turn was authorized", () => {
+  it("keeps a truly inactive user gated when no meter authorization exists", () => {
     expect(
-      buildAgentRuntimeEntitlementFields({
-        plan_tier: "free",
-        plan_status: "inactive",
-        current_period_end: null,
-      })
+      buildAgentRuntimeEntitlementFields(
+        {
+          plan_tier: "free",
+          plan_status: "inactive",
+          current_period_end: null,
+        },
+        { nowUnix: 1_700_000_000 }
+      )
     ).toEqual({
       plan_tier: "free",
       status: "expired",
       period_end_unix: null,
+    });
+  });
+
+  it("does not revive a user with an already-expired meter authorization", () => {
+    expect(
+      buildAgentRuntimeEntitlementFields(
+        {
+          plan_tier: "free",
+          plan_status: "inactive",
+          current_period_end: null,
+        },
+        {
+          nowUnix: 1_700_000_000,
+          meterAuthorizedUntilUnix: 1_700_000_000,
+        }
+      )
+    ).toEqual({
+      plan_tier: "free",
+      status: "expired",
+      period_end_unix: null,
+    });
+  });
+
+  it("preserves an already-active paid entitlement instead of rewriting billing state", () => {
+    expect(
+      buildAgentRuntimeEntitlementFields(
+        {
+          plan_tier: "personal",
+          plan_status: "active",
+          current_period_end: "2027-01-01T00:00:00.000Z",
+        },
+        {
+          nowUnix: 1_700_000_000,
+          meterAuthorizedUntilUnix: 1_700_000_660,
+        }
+      )
+    ).toEqual({
+      plan_tier: "pro",
+      status: "active",
+      period_end_unix: 1_798_761_600,
     });
   });
 });
