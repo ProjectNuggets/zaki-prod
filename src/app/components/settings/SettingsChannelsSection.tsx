@@ -30,6 +30,7 @@ type SettingsChannelViewModel = SettingsChannelConfig & {
   control: AgentChannelControlStatus | null;
   bindings: AgentChannelBinding[];
   missingSecrets: string[];
+  missingSecretKeys: string[];
   presentSecrets: number;
   totalRequiredSecrets: number;
   statusLabel: string;
@@ -103,10 +104,22 @@ export const USER_MANAGED_CHANNELS: AgentChannelControlId[] = [
 
 export const CHANNEL_ACTIVATION_FIELDS: Partial<Record<
   AgentChannelControlId,
-  Array<{ key: string; label: string; placeholder: string; secret?: boolean }>
+  Array<{
+    key: string;
+    label: string;
+    placeholder: string;
+    secret?: boolean;
+    vaultKey?: string;
+  }>
 >> = {
   telegram: [
-    { key: "bot_token", label: "Bot token", placeholder: "123456:ABC...", secret: true },
+    {
+      key: "bot_token",
+      vaultKey: "telegram_bot_token",
+      label: "Bot token",
+      placeholder: "123456:ABC...",
+      secret: true,
+    },
     {
       key: "webhook_base_url",
       label: "Webhook base URL",
@@ -337,6 +350,9 @@ export function SettingsChannelsSection({
       const missingSecrets = requiredSecretRefs
         .filter((secret) => !secret.present)
         .map((secret) => secret.label || secret.key);
+      const missingSecretKeys = requiredSecretRefs
+        .filter((secret) => !secret.present)
+        .map((secret) => secret.key);
       const credentialFormVisible =
         Boolean(control) &&
         channelControlsAvailable &&
@@ -413,6 +429,7 @@ export function SettingsChannelsSection({
         control,
         bindings,
         missingSecrets,
+        missingSecretKeys,
         presentSecrets,
         totalRequiredSecrets,
         statusLabel,
@@ -468,6 +485,13 @@ export function SettingsChannelsSection({
           const activationDraft = channelActivationDrafts[channelRow.id] || {};
           const hasActivationDraft = hasChannelActivationPayload(activationDraft);
           const credentialFields = CHANNEL_ACTIVATION_FIELDS[channelRow.id] ?? [];
+          const hasMissingRequiredDrafts = channelRow.missingSecretKeys.every((vaultKey) => {
+            const field = credentialFields.find(
+              (candidate) => (candidate.vaultKey ?? candidate.key) === vaultKey
+            );
+            return Boolean(field && activationDraft[field.key]?.trim());
+          });
+          const canSaveActivationDraft = hasActivationDraft && hasMissingRequiredDrafts;
 
           return (
             <div
@@ -623,7 +647,10 @@ export function SettingsChannelsSection({
                       <V2Button
                         size="sm"
                         variant="accent"
-                        disabled={channelControlAction === `${channelRow.id}:connect` || !hasActivationDraft}
+                        disabled={
+                          channelControlAction === `${channelRow.id}:connect` ||
+                          !canSaveActivationDraft
+                        }
                         onClick={() => void handleConnectChannelControl(channelRow.id)}
                       >
                         {channelControlAction === `${channelRow.id}:connect`
@@ -668,9 +695,11 @@ export function SettingsChannelsSection({
                         </V2Button>
                       ) : null}
                       <span className="zaki-settings-v2__action-note">
-                        {hasActivationDraft
-                          ? "Saving replaces only the fields you enter; stored secret values are not revealed."
-                          : "Enter at least one credential field to save an update."}
+                        {!hasActivationDraft
+                          ? "Enter at least one credential field to save an update."
+                          : !hasMissingRequiredDrafts
+                            ? "Enter every missing required credential before saving."
+                            : "Saving replaces only the fields you enter; stored secret values are not revealed."}
                       </span>
                     </div>
                   ) : null}

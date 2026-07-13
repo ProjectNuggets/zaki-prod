@@ -141,6 +141,14 @@ export function validateRuntimeConfig(env = process.env) {
     );
   }
   const stripeConfigIssues = isProduction ? errors : warnings;
+  // A missing SKU disables ONE checkout button; it must never crash the server. So the checks split:
+  //  - fatal-in-prod (stripeConfigIssues): the pieces without which Stripe cannot operate at all
+  //    (secret key, webhook secret) and the currently-sellable core plans (Personal/Pro/Pro Max
+  //    monthly). If those are absent in prod, the product is broken and we should refuse to boot.
+  //  - warnings only: SKUs the owner has explicitly deferred as non-blocking (student, the yearly
+  //    variants, access-code purchase). Their own message already says "will be unavailable" —
+  //    graceful degradation, not a boot failure. Keeping these fatal blocked the prod cut on price
+  //    IDs that aren't ready yet, contradicting that intent.
   if (billingProvider === "stripe" && !stripeSecretKey) {
     pushIssue(
       stripeConfigIssues,
@@ -157,21 +165,21 @@ export function validateRuntimeConfig(env = process.env) {
   }
   if (billingProvider === "stripe" && !stripePriceStudentMonthly) {
     pushIssue(
-      stripeConfigIssues,
+      warnings,
       "STRIPE_PRICE_STUDENT",
       "STRIPE_PRICE_STUDENT is not set. Student monthly checkout will be unavailable."
     );
   }
   if (billingProvider === "stripe" && !stripePriceStudentYearly) {
     pushIssue(
-      stripeConfigIssues,
+      warnings,
       "STRIPE_PRICE_STUDENT_YEARLY",
       "STRIPE_PRICE_STUDENT_YEARLY is not set. Student yearly checkout will be unavailable."
     );
   }
   if (billingProvider === "stripe" && !stripePricePersonalYearly) {
     pushIssue(
-      stripeConfigIssues,
+      warnings,
       "STRIPE_PRICE_PERSONAL_YEARLY",
       "STRIPE_PRICE_PERSONAL_YEARLY is not set. Personal yearly checkout will be unavailable."
     );
@@ -199,7 +207,7 @@ export function validateRuntimeConfig(env = process.env) {
   }
   if (billingProvider === "stripe" && !stripePriceAccessCodeMonthly) {
     pushIssue(
-      stripeConfigIssues,
+      warnings,
       "STRIPE_PRICE_ACCESS_CODE_MONTHLY",
       "STRIPE_PRICE_ACCESS_CODE_MONTHLY is not set. Access-code purchase checkout will be unavailable."
     );

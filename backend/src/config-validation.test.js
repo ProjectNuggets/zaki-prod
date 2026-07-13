@@ -99,6 +99,53 @@ describe("runtime config validation", () => {
     expect(report.errors).toHaveLength(0);
   });
 
+  it("boots in production when only the deferred SKUs (student/yearly/access-code) are unset", () => {
+    // The owner deferred these price IDs as non-blocking; a missing SKU disables one checkout
+    // button, it must not crash the server. Core monthly plans + Stripe secrets + the fail-open
+    // paging webhook are present, so production boots with warnings — not a fatal config error.
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        NODE_ENV: "production",
+        ZAKI_ALLOWED_ORIGINS: "https://app.chatzaki.com",
+        ZAKI_PUBLIC_URL: "https://api.chatzaki.com",
+        ZAKI_APP_URL: "https://app.chatzaki.com",
+        ZAKI_LEGAL_POLICY_VERSION: "1.0",
+        ZAKI_EMAIL_MODE: "resend",
+        RESEND_API_KEY: "re_test",
+        RESEND_FROM: "no-reply@chatzaki.com",
+        ZAKI_JWT_SIGNING_KEY: "a".repeat(64),
+        ZAKI_TURNSTILE_SECRET_KEY: "turnstile-secret",
+        STRIPE_SECRET_KEY: "sk_test_configured",
+        STRIPE_WEBHOOK_SECRET: "whsec_configured",
+        STRIPE_PRICE_PERSONAL: "price_personal_monthly",
+        STRIPE_PRICE_PRO: "price_pro_monthly",
+        STRIPE_PRICE_PRO_MAX: "price_pro_max_monthly",
+        ZAKI_BILLING_ALERT_WEBHOOK_URL: "https://alerts.example.com/metering",
+        // Deferred, non-blocking:
+        STRIPE_PRICE_STUDENT: "",
+        STRIPE_PRICE_STUDENT_YEARLY: "",
+        STRIPE_PRICE_PERSONAL_YEARLY: "",
+        STRIPE_PRICE_ACCESS_CODE_MONTHLY: "",
+      })
+    );
+
+    expect(report.ok).toBe(true);
+    expect(report.errors).toHaveLength(0);
+    const errorKeys = report.errors.map((e) => e.key);
+    expect(errorKeys).not.toContain("STRIPE_PRICE_STUDENT");
+    expect(errorKeys).not.toContain("STRIPE_PRICE_STUDENT_YEARLY");
+    expect(errorKeys).not.toContain("STRIPE_PRICE_PERSONAL_YEARLY");
+    expect(errorKeys).not.toContain("STRIPE_PRICE_ACCESS_CODE_MONTHLY");
+    expect(report.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "STRIPE_PRICE_STUDENT" }),
+        expect.objectContaining({ key: "STRIPE_PRICE_STUDENT_YEARLY" }),
+        expect.objectContaining({ key: "STRIPE_PRICE_PERSONAL_YEARLY" }),
+        expect.objectContaining({ key: "STRIPE_PRICE_ACCESS_CODE_MONTHLY" }),
+      ])
+    );
+  });
+
   it("requires a paging destination in production while fail-open is enabled", () => {
     const report = validateRuntimeConfig(
       createBaseEnv({

@@ -205,7 +205,7 @@ const SETTINGS_SECTION_QUERY_MAP: Record<string, string> = {
   suggestions: "#settings-suggestions",
   devices: "#settings-devices",
   extension: "#settings-devices",
-  oauth: "#settings-account",
+  oauth: "#settings-connections",
   connections: "#settings-connections",
   developer: "#settings-secrets",
   "developer-access": "#settings-secrets",
