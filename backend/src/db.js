@@ -445,6 +445,34 @@ export async function initDb() {
   `);
 
   await migrationClient.query(`
+    CREATE TABLE IF NOT EXISTS zaki_design_sessions (
+      session_id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL UNIQUE REFERENCES zaki_design_projects(project_id) ON DELETE CASCADE,
+      owner_user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      tenant_id TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT 'REQUESTED'
+        CHECK (state IN (
+          'REQUESTED', 'STARTING', 'RESTORING', 'READY', 'ACTIVE',
+          'IDLE', 'DRAINING', 'CHECKPOINTING', 'STOPPED', 'FAILED'
+        )),
+      checkpoint_generation BIGINT NOT NULL DEFAULT 0 CHECK (checkpoint_generation >= 0),
+      checkpoint_sha256 TEXT,
+      checkpoint_bytes BIGINT CHECK (checkpoint_bytes IS NULL OR checkpoint_bytes >= 0),
+      checkpoint_object_key TEXT,
+      last_request_id TEXT,
+      last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      stopped_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await migrationClient.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_design_sessions_owner_state
+    ON zaki_design_sessions(owner_user_id, state, updated_at DESC);
+  `);
+
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS access_code_orders (
       id BIGSERIAL PRIMARY KEY,
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
