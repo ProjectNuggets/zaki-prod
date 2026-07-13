@@ -1828,15 +1828,29 @@ describe("SettingsPage", () => {
     );
 
     const slackControl = within(screen.getByTestId("settings-channel-panel-slack"));
+    expect(
+      slackControl.getByText(/Bot User OAuth Token \(xoxb-/i)
+    ).toBeInTheDocument();
+    expect(
+      slackControl.getByText(/workspace OAuth app-install is not available yet/i)
+    ).toBeInTheDocument();
+    expect(
+      slackControl.getByText(/Both the Bot token and Signing secret are required for first-time setup/i)
+    ).toBeInTheDocument();
     const saveCredentialsButton = slackControl.getByRole("button", {
       name: "Update Slack credentials",
     });
     expect(saveCredentialsButton).toBeDisabled();
 
-    fireEvent.change(slackControl.getByLabelText("Slack Bot token"), {
+    const slackBotToken = slackControl.getByLabelText("Slack Bot token");
+    const slackSigningSecret = slackControl.getByLabelText("Slack Signing secret");
+    expect(slackBotToken).toHaveAttribute("type", "password");
+    expect(slackSigningSecret).toHaveAttribute("type", "password");
+
+    fireEvent.change(slackBotToken, {
       target: { value: " xoxb-settings-test " },
     });
-    fireEvent.change(slackControl.getByLabelText("Slack Signing secret"), {
+    fireEvent.change(slackSigningSecret, {
       target: { value: " signing-secret " },
     });
     expect(saveCredentialsButton).toBeEnabled();
@@ -1858,7 +1872,7 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(disconnectMock).toHaveBeenCalledWith("slack");
     });
-  });
+  }, 15_000);
 
   it("connects Discord through the generic channel-control path with token and optional guild", async () => {
     const connectMock = connectAgentChannelControl as jest.MockedFunction<
