@@ -15,6 +15,7 @@ cp .env.example .env
 - `NOVA_TYP_BASE_URL` (ex: `https://typ.novanuggets.com`)
 - `NOVA_TYP_API_KEY` (admin API key from NOVA.TYP)
 - `ZAKI_AGENT_BACKEND_ENABLED` (`true` to enable Nullclaw adapter route)
+- `ZAKI_AGENT_TELOS_IN_PROMPT` (read-only Settings status; must mirror nullalis `agent.telos_in_prompt`)
 - `NULLCLAW_BASE_URL` (canonical production value: `http://nullclaw:3000`)
 - `NULLCLAW_INTERNAL_TOKEN` (must match Nullclaw `X-Internal-Token` allowlist)
 - `ZAKI_AGENT_WEBHOOK_BASE_URL` (required in deployed environments for smooth Telegram connect when the UI does not pass a webhook URL; ex: `https://agent-dev.zaki.com`)

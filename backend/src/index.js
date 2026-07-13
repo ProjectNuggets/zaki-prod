@@ -270,10 +270,12 @@ import {
   getAgentLaunchChannel,
   buildBotProvisionPayload,
   normalizeAgentArtifactExportPayload,
+  normalizeAgentTelosPayload,
   normalizeTelegramDisconnectErrorPayload,
   normalizeAgentControlChannelId,
   normalizeAgentLaunchChannelId,
   registerAgentSessionBffRoutes,
+  registerAgentSuggestionRoutes,
   registerBotBffAliases,
   registerTelegramDisconnectAliases,
   resolveSoftEmptyAgentResponse,
@@ -578,6 +580,12 @@ const ZAKI_AGENT_WEBHOOK_BASE_URL = (
 ).trim().replace(/\/+$/, "");
 const ZAKI_AGENT_BACKEND_ENABLED =
   String(process.env.ZAKI_AGENT_BACKEND_ENABLED || "")
+    .toLowerCase()
+    .trim() === "true";
+// Read-only mirror of nullalis `agent.telos_in_prompt`. Deployment config must
+// set both values together; default false keeps the UI honest when unset.
+const ZAKI_AGENT_TELOS_IN_PROMPT =
+  String(process.env.ZAKI_AGENT_TELOS_IN_PROMPT || "")
     .toLowerCase()
     .trim() === "true";
 const LEARNING_ENGINE_BASE_URL = (process.env.LEARNING_ENGINE_BASE_URL || "")
@@ -16601,6 +16609,21 @@ app.get(
   requireAgentContext,
   makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/config`)
 );
+// TELOS Slice 1 — curated user-model north star (read-only). Forwards to the
+// nullalis gateway handleTelos. Curation writes go through the approved
+// wish/telos loop, never a UI POST (T4).
+app.get(
+  "/api/agent/telos",
+  requireAgentContext,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/telos`,
+    {
+      responseMode: "json",
+      label: "Nullclaw Agent TELOS response",
+      transformJson: (data) => normalizeAgentTelosPayload(data, ZAKI_AGENT_TELOS_IN_PROMPT),
+    }
+  )
+);
 app.get(
   "/api/agent/secrets/:key",
   requireAgentContext,
@@ -17262,6 +17285,16 @@ app.get(
     return appendAllowedQueryParams(path, req, ["status", "limit", "cursor"]);
   }, AGENT_RUNTIME_JSON_PROXY_OPTIONS)
 );
+
+// Learning-loop review gate. The engine owns the only legal state
+// transitions (shadow -> active/retired); the browser can only request an
+// adopt or dismiss for an authenticated, BFF-pinned user.
+registerAgentSuggestionRoutes(app, {
+  requireAgentContext,
+  json1mb: agentJson1mb,
+  makeUserProxyHandler: makeAgentUserProxyHandler,
+  proxyOptions: AGENT_RUNTIME_JSON_PROXY_OPTIONS,
+});
 
 app.post(
   "/api/agent/history/append",
