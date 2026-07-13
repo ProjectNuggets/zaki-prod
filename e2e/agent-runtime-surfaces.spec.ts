@@ -407,14 +407,22 @@ test.describe("Agent runtime surfaces", () => {
       await openScenario(page, scenario);
 
       if (scenario.name === "facet") {
-        await expect(page.getByText("Tighten this")).toBeVisible();
+        // Quick replies are a short-lived affordance after a newly completed
+        // turn; they intentionally do not reappear for restored history.
+        await expect(page.getByTestId("quick-reply-chips")).toHaveCount(0);
+        const openPanelButton = page.getByRole("button", { name: /Open agent panel/i });
+        if (await openPanelButton.isVisible().catch(() => false)) {
+          await openPanelButton.click();
+        }
+        const inspector = page.locator(".zaki-agent-inspector:visible").first();
+        await expect(inspector).toBeVisible();
         await expect(
-          page.getByTestId("agent-reply-artifact").getByText("Founder GTM brief")
+          inspector.getByTestId("agent-artifact-row").getByText("Founder GTM brief")
         ).toBeVisible();
-        await expect(
-          page.getByTestId("agent-reply-touched").getByText("docs/ui-handoff.md")
-        ).toBeVisible();
-        await expect(page.getByTestId("agent-reply-touched").getByText("example.com")).toBeVisible();
+        // Artifact/source evidence moved out of the reply footer during the
+        // Agent surface consolidation.
+        await expect(page.getByTestId("agent-reply-artifact")).toHaveCount(0);
+        await expect(page.getByTestId("agent-reply-touched")).toHaveCount(0);
         await expect(page.getByText(/SURFACING/i)).toHaveCount(0);
         await expect(page.getByText(/delegate agent=/i)).toHaveCount(0);
       }
@@ -438,17 +446,12 @@ test.describe("Agent runtime surfaces", () => {
         await page.getByRole("combobox").fill("Capture the current browser frame.");
         await page.getByRole("button", { name: /Send message/i }).click();
         await expect(page.getByText("Browser frame captured.")).toBeVisible();
-        let browserTab = page.getByRole("tab", { name: /Browser/i });
-        if ((await browserTab.count()) === 0) {
-          await page.getByRole("button", { name: /Panel/i }).first().click();
-          browserTab = page.getByRole("tab", { name: /Browser/i });
-        }
-        await expect(browserTab).toBeVisible();
-        await browserTab.click();
-        const mobilePanel = page.getByRole("dialog", { name: "Agent panel" });
-        const browserScope = (await mobilePanel.isVisible().catch(() => false))
-          ? mobilePanel
-          : page.locator("body");
+        // Browser frames now auto-open in a dedicated live panel instead of
+        // occupying an inspector tab.
+        const browserScope = page
+          .locator('[data-testid="agent-live-browser-panel"]:visible')
+          .first();
+        await expect(browserScope).toBeVisible();
         await expect(
           browserScope.getByRole("heading", { name: "Example Pricing" }).first()
         ).toBeVisible();
@@ -456,19 +459,12 @@ test.describe("Agent runtime surfaces", () => {
       }
 
       if (scenario.name === "tool-only") {
-        const openPanelButton = page.getByRole("button", { name: /Open agent panel/i });
-        if (await openPanelButton.isVisible().catch(() => false)) {
-          await openPanelButton.click();
-        }
-        const panelDialog = page.getByRole("dialog", { name: "Agent panel" });
-        const panelScope = (await panelDialog.isVisible().catch(() => false))
-          ? panelDialog
-          : page.locator("body");
-        await expect(
-          panelScope.getByText("Waiting for delegated research result").first()
-        ).toBeVisible();
-        await expect(panelScope.getByText("current work").first()).toBeVisible();
-        await expect(panelScope.getByText("55%").first()).toBeVisible();
+        // Active work lives inline with the current turn now that the old Plan
+        // inspector tab has been removed.
+        const plan = page.locator("details.zaki-agent-plan-inline").first();
+        await expect(plan).toBeVisible();
+        await expect(plan.getByText("Waiting for delegated research result")).toBeVisible();
+        await expect(plan.getByText("55%")).toBeVisible();
       }
 
       await page.screenshot({

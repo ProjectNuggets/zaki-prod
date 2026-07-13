@@ -91,6 +91,64 @@ describe("ChatView", () => {
     );
   });
 
+  it("replaces the raw tool-only placeholder with a structured run result", () => {
+    render(
+      <ChatView
+        messages={[
+          { id: "user-1", role: "user", content: "Run the checks." },
+          {
+            id: "assistant-1",
+            role: "assistant",
+            content: "[tools ran, no direct reply this turn — results may arrive on a follow-up.]",
+          },
+        ]}
+        isHistoryLoading={false}
+        isStreaming={false}
+        botMode
+        firstMessageTransition={false}
+      />
+    );
+
+    expect(screen.getByTestId("tool-only-turn-assistant-1")).toHaveTextContent(
+      "Tools completed this turn"
+    );
+    expect(screen.getByText("No direct reply was needed. Review the run timeline for results.")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-bubble-assistant-1")).not.toBeInTheDocument();
+    expect(screen.queryByText(/\[tools ran, no direct reply/i)).not.toBeInTheDocument();
+  });
+
+  it("renders a tool-only result when the completed assistant message is empty", () => {
+    render(
+      <ChatView
+        messages={[
+          { id: "user-1", role: "user", content: "Run the checks." },
+          { id: "assistant-1", role: "assistant", content: "" },
+        ]}
+        isHistoryLoading={false}
+        isStreaming={false}
+        botMode
+        replayTimelines={{
+          "assistant-1": [
+            {
+              id: "tool-only-1",
+              kind: "status",
+              text: "Tools completed without a direct reply.",
+              timestamp: Date.now(),
+              phase: "tool_only_turn",
+              source: "tool_only_turn",
+            },
+          ],
+        }}
+        firstMessageTransition={false}
+      />
+    );
+
+    expect(screen.getByTestId("tool-only-turn-assistant-1")).toHaveTextContent(
+      "Tools completed this turn"
+    );
+    expect(screen.queryByTestId("message-bubble-assistant-1")).not.toBeInTheDocument();
+  });
+
   it("collapses the trail into 'Worked for' once final reply starts", () => {
     render(
       <ChatView
@@ -201,6 +259,50 @@ describe("ChatView", () => {
     const timelines = document.querySelectorAll(".zaki-agent-timeline");
     expect(timelines).toHaveLength(1);
     expect(screen.getAllByText(/Worked for/)).toHaveLength(1);
+  });
+
+  it("keeps active background tasks visible beside a replayed turn timeline", () => {
+    render(
+      <ChatView
+        messages={[
+          { id: "user-1", role: "user", content: "Research this in the background." },
+          {
+            id: "assistant-1",
+            role: "assistant",
+            content: "I started the background research.",
+          },
+        ]}
+        replayTimelines={{
+          "assistant-1": [
+            {
+              id: "tool-replay-1",
+              kind: "tool",
+              text: "Delegated research started.",
+              timestamp: Date.now(),
+              tool: "delegate",
+              resultState: "done",
+              source: "tool",
+            },
+          ],
+        }}
+        nullalisTaskItems={[
+          {
+            taskId: "task-background-1",
+            status: "running",
+            description: "Waiting for delegated research result",
+            progressPct: 55,
+            updatedAt: Date.now(),
+          },
+        ]}
+        isHistoryLoading={false}
+        isStreaming={false}
+        botMode
+        firstMessageTransition={false}
+      />
+    );
+
+    expect(screen.getByText("Waiting for delegated research result")).toBeVisible();
+    expect(screen.getByText("55%")).toBeVisible();
   });
 
   it("renders the nullalis turn timeline with reasoning block inline", () => {

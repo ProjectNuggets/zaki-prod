@@ -145,6 +145,7 @@ export function verifyGoogleOAuthState(state, stateSecret, { now = Date.now() } 
   return {
     returnTo: sanitizeGoogleOAuthReturnTo(payload.returnTo),
     nonceHash: String(payload.nonceHash || "").trim(),
+    legalPolicyVersion: String(payload.legalPolicyVersion || "").trim() || null,
   };
 }
 

@@ -47,6 +47,14 @@ jest.mock("react-i18next", () => ({
       "pricingPage.signInToChoose": "Sign in for {{plan}}",
       "pricingPage.choose": "Choose {{plan}}",
       "pricingPage.managePlan": "Manage plan",
+      "pricingPage.billingCadence": "Billing cadence",
+      "pricingPage.interval.monthly": "Monthly",
+      "pricingPage.interval.yearly": "Yearly",
+      "pricingPage.priceSuffix.monthly": "/ month",
+      "pricingPage.priceSuffix.yearly": "/ year",
+      "pricingPage.priceWithSuffix": "{{price}} {{suffix}}",
+      "pricingPage.savePercent": "· save {{percent}}%",
+      "pricingPage.intervalUnavailable": "{{interval}} not available",
       "pricingPage.plans.free.label": "Chat Free",
       "pricingPage.plans.free.price": "$0",
       "pricingPage.plans.free.cta": "Start chat",
@@ -63,14 +71,15 @@ jest.mock("react-i18next", () => ({
       "pricingPage.allowance.weekly": "{{allowance}} units/week",
     };
     return {
-      t: (key: string, options?: { returnObjects?: boolean; defaultValue?: string; plan?: string; allowance?: string }) => {
+      t: (key: string, options?: Record<string, unknown> & { returnObjects?: boolean; defaultValue?: string }) => {
         if (Object.prototype.hasOwnProperty.call(dictionary, key)) {
           const value = dictionary[key];
-          if (typeof value === "string" && options?.plan) {
-            return value.replace("{{plan}}", options.plan);
-          }
-          if (typeof value === "string" && options?.allowance) {
-            return value.replace("{{allowance}}", options.allowance);
+          if (typeof value === "string" && options) {
+            return Object.entries(options).reduce(
+              (result, [name, replacement]) =>
+                result.replaceAll(`{{${name}}}`, String(replacement)),
+              value
+            );
           }
           return value;
         }
@@ -345,6 +354,49 @@ describe("PricingPage", () => {
     await waitFor(() => {
       expect(checkoutMutateAsync).toHaveBeenCalledWith(
         expect.objectContaining({ plan: "pro", interval: "monthly", provider: "stripe" })
+      );
+    });
+  });
+
+  it("starts configured Personal yearly checkout and frames the Stripe discount", async () => {
+    billingConfigData.data.configured.pricingAvailability.personal.yearly = true;
+    billingConfigData.data.configured.pricingCatalog = {
+      personal: {
+        monthly: { priceId: "price_personal_month", unitAmount: 1500, currency: "usd" },
+        yearly: { priceId: "price_personal_year", unitAmount: 14400, currency: "usd" },
+      },
+      pro: {
+        monthly: { priceId: "price_pro_month", unitAmount: 4500, currency: "usd" },
+        yearly: null,
+      },
+      pro_max: {
+        monthly: { priceId: "price_pro_max_month", unitAmount: 9900, currency: "usd" },
+        yearly: null,
+      },
+    };
+
+    render(
+      <MemoryRouter initialEntries={["/pricing"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Yearly/ }));
+
+    expect(screen.getByRole("button", { name: /Yearly · save 20%/ })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByText("$144 / year")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Yearly not available" })).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose Personal" }));
+
+    await waitFor(() => {
+      expect(checkoutMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ plan: "personal", interval: "yearly", provider: "stripe" })
       );
     });
   });

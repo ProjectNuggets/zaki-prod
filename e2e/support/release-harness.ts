@@ -20,14 +20,6 @@ import type { Page, Route } from "@playwright/test";
 
 export const AUTH_TOKEN_KEY = "zaki.auth.token";
 export const LOCALE_KEY = "zaki:locale";
-export const ONBOARDING_KEY_PREFIX = "zaki:onboarding-progress:v2:";
-export const ONBOARDING_STAGES = [
-  "welcome",
-  "plus_menu",
-  "compaction",
-  "brain_panel",
-  "channels",
-] as const;
 
 export const RELEASE_USER = {
   id: 4273,
@@ -370,25 +362,19 @@ export type ReleaseShellOptions = {
 };
 
 /**
- * Bootstraps localStorage so the SPA boots straight into a signed-in,
- * onboarding-complete English session before any script runs.
+ * Bootstraps localStorage so the SPA boots straight into a signed-in English
+ * session before any script runs.
  */
 export async function bootstrapSignedInSession(page: Page) {
-  const onboardingDone = Object.fromEntries(ONBOARDING_STAGES.map((stage) => [stage, "done"]));
   await page.addInitScript(
-    ({ tokenKey, localeKey, prefix, username, token, progress }) => {
+    ({ tokenKey, localeKey, token }) => {
       window.localStorage.setItem(tokenKey, token);
       window.localStorage.setItem(localeKey, "en");
-      // authUserId resolves to the lowercased username.
-      window.localStorage.setItem(`${prefix}${username.toLowerCase()}`, JSON.stringify(progress));
     },
     {
       tokenKey: AUTH_TOKEN_KEY,
       localeKey: LOCALE_KEY,
-      prefix: ONBOARDING_KEY_PREFIX,
-      username: RELEASE_USER.username,
       token: RELEASE_TOKEN,
-      progress: onboardingDone,
     },
   );
 }
@@ -440,7 +426,7 @@ export async function mockReleaseShell(page: Page, options: ReleaseShellOptions 
     await json(route, {
       success: true,
       authenticated: true,
-      policyVersion: "2026-02-17.v2",
+      policyVersion: "2026-07-12.v4",
       hasConsent: true,
       isCurrent: true,
       requiresReconsent: false,

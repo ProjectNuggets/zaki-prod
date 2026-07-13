@@ -18,7 +18,6 @@ async function bootstrapSession(page: Page) {
   await page.addInitScript(({ tokenKey, localeKey }) => {
     window.localStorage.setItem(tokenKey, "e2e-token");
     window.localStorage.setItem(localeKey, "en");
-    window.localStorage.setItem("zaki:onboarding:v1:e2e@example.com", "done");
   }, {
     tokenKey: AUTH_TOKEN_KEY,
     localeKey: LOCALE_KEY,
@@ -48,7 +47,7 @@ async function mockAppShell(page: Page) {
     await json(route, {
       success: true,
       authenticated: true,
-      policyVersion: "2026-02-17.v2",
+      policyVersion: "2026-07-12.v4",
       hasConsent: true,
       isCurrent: true,
       requiresReconsent: false,

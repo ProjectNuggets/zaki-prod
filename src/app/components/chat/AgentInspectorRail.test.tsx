@@ -139,7 +139,7 @@ describe("AgentInspectorRail", () => {
 
     fireEvent.click(within(row).getByRole("button", { name: /Show details/i }));
     expect(await within(row).findByRole("button", { name: /Share/i })).toBeInTheDocument();
-    expect(within(row).getByRole("button", { name: /Download PDF/i })).toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: /Download PDF/i })).not.toBeInTheDocument();
     expect(within(row).queryByRole("button", { name: /PPT/i })).not.toBeInTheDocument();
     expect(within(row).queryByRole("button", { name: /DOCX/i })).not.toBeInTheDocument();
     expect(within(row).queryByRole("button", { name: /HTML/i })).not.toBeInTheDocument();

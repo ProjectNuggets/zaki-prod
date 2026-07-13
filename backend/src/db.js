@@ -286,6 +286,23 @@ export async function initDb() {
   `);
 
   await migrationClient.query(`
+    CREATE TABLE IF NOT EXISTS zaki_account_erasure_receipts (
+      id BIGSERIAL PRIMARY KEY,
+      subject_hash TEXT NOT NULL,
+      request_id TEXT,
+      engine_manifest_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      spoke_summary_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      hub_summary_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await migrationClient.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_account_erasure_receipts_subject
+    ON zaki_account_erasure_receipts(subject_hash, created_at DESC, id DESC);
+  `);
+
+  await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_learning_study_profiles (
       user_id BIGINT PRIMARY KEY REFERENCES zaki_users(id) ON DELETE CASCADE,
       profile_json JSONB NOT NULL DEFAULT '{}'::jsonb,

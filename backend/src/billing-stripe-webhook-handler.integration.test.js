@@ -93,7 +93,9 @@ function createDependencies({ event, constructError = null, markResult = true, a
     resolveTier: normalizeQuotaTier,
     tierByPrice: {
       price_student: "student",
+      price_student_yearly: "student",
       price_personal: "personal",
+      price_personal_yearly: "personal",
       price_pro: "pro",
       price_pro_max: "pro_max",
     },
@@ -156,6 +158,38 @@ describe("stripe webhook handler integration", () => {
     );
     expect(deps.dbQuery).not.toHaveBeenCalled();
   });
+
+  it.each(["charge.refunded", "credit_note.created", "credit_note.updated"])(
+    "acknowledges and logs %s without mutating billing state",
+    async (eventType) => {
+      const event = {
+        id: `evt_${eventType.replaceAll(".", "_")}`,
+        type: eventType,
+        data: { object: { customer: "cus_refund_1" } },
+      };
+      const deps = createDependencies({ event, markResult: true });
+      const consoleInfo = jest.spyOn(console, "info").mockImplementation(() => undefined);
+
+      try {
+        const handler = createStripeWebhookHandler(deps);
+        const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toEqual({ received: true });
+        expect(consoleInfo).toHaveBeenCalledWith(
+          "[Stripe] refund event acknowledged without billing mutation:",
+          expect.objectContaining({ eventId: event.id, eventType })
+        );
+        expect(deps.dbQuery).not.toHaveBeenCalled();
+        expect(deps.resolveUserByStripeCustomer).not.toHaveBeenCalled();
+        expect(deps.fulfillAccessCodePurchaseCheckoutSession).not.toHaveBeenCalled();
+        expect(deps.fulfillTopupCheckoutSession).not.toHaveBeenCalled();
+        expect(deps.markWebhookEventProcessed).toHaveBeenCalledWith("stripe", event.id);
+      } finally {
+        consoleInfo.mockRestore();
+      }
+    }
+  );
 
   it("skips stale out-of-order subscription events", async () => {
     const event = {
@@ -309,6 +343,58 @@ describe("stripe webhook handler integration", () => {
       expect(weeklyAllowanceForTier(expectedTier)).toBe(expectedWeeklyAllowance);
     }
   );
+
+  it.each([
+    ["customer.subscription.created", "2026-01-01T00:00:00.000Z", "2027-01-01T00:00:00.000Z"],
+    ["customer.subscription.updated", "2027-01-01T00:00:00.000Z", "2028-01-01T00:00:00.000Z"],
+  ])(
+    "persists Stripe's full annual period for %s without a monthly fallback",
+    async (eventType, periodStartIso, periodEndIso) => {
+      const event = {
+        id: `evt_personal_yearly_${eventType.endsWith("created") ? "created" : "renewed"}`,
+        type: eventType,
+        created: Math.floor(Date.parse(periodStartIso) / 1000),
+        data: {
+          object: {
+            id: "sub_personal_yearly",
+            customer: "cus_personal_yearly",
+            status: "active",
+            cancel_at_period_end: false,
+            current_period_start: Math.floor(Date.parse(periodStartIso) / 1000),
+            current_period_end: Math.floor(Date.parse(periodEndIso) / 1000),
+            items: { data: [{ price: { id: "price_personal_yearly" } }] },
+            metadata: { billing_interval: "yearly" },
+          },
+        },
+      };
+      const deps = createDependencies({
+        event,
+        resolvedUser: {
+          id: 91,
+          email: "yearly@example.com",
+          stripe_last_event_created_at: null,
+        },
+      });
+      const handler = createStripeWebhookHandler(deps);
+
+      const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+
+      expect(res.statusCode).toBe(200);
+      expect(deps.dbQuery).toHaveBeenCalledWith(
+        expect.stringContaining("current_period_end = $6"),
+        expect.arrayContaining([
+          "price_personal_yearly",
+          "personal",
+          "active",
+          periodEndIso,
+          periodStartIso,
+        ])
+      );
+      expect(ensureWalletMock).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 91, planId: "personal" })
+      );
+    }
+  );
 });
 
 describe("stripe webhook handler — S2.7 nullalis revocation", () => {
@@ -439,6 +525,7 @@ describe("stripe webhook handler — S2.7 nullalis revocation", () => {
       expect.stringContaining("plan_status = 'past_due'"),
       expect.arrayContaining(["evt_pf_1", 42])
     );
+    expect(deps.dbQuery.mock.calls[0][0]).not.toContain("current_period_end =");
     expect(revoke).toHaveBeenCalledTimes(1);
     expect(revoke.mock.calls[0][0].plan_status).toBe("past_due");
   });

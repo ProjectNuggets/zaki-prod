@@ -100,6 +100,10 @@ import {
   type ChannelBindingDraft,
   type SettingsChannelId,
 } from "./SettingsChannelsSection";
+import { SettingsAgentModelPicker } from "./SettingsAgentModelPicker";
+import { SettingsAutomationsSection } from "./SettingsAutomationsSection";
+import { SettingsSuggestionsSection } from "./SettingsSuggestionsSection";
+import { SettingsTelosSection } from "./SettingsTelosSection";
 import {
   GatedRow,
   V2SettingsBlock,
@@ -182,6 +186,7 @@ const SETTINGS_SECTION_QUERY_MAP: Record<string, string> = {
   products: "#settings-billing",
   access: "#settings-billing",
   agent: "#settings-agent",
+  automations: "#settings-automations",
   spaces: "#settings-billing",
   chat: "#settings-billing",
   brain: "#settings-memory-data",
@@ -191,6 +196,8 @@ const SETTINGS_SECTION_QUERY_MAP: Record<string, string> = {
   secrets: "#settings-secrets",
   providers: "#settings-agent",
   models: "#settings-agent",
+  growth: "#settings-suggestions",
+  suggestions: "#settings-suggestions",
   devices: "#settings-devices",
   extension: "#settings-devices",
   oauth: "#settings-account",
@@ -203,8 +210,11 @@ const SETTINGS_SECTION_QUERY_MAP: Record<string, string> = {
 
 const SETTINGS_NAV_HASHES = [
   "#settings-account",
+  "#settings-telos",
+  "#settings-suggestions",
   "#settings-billing",
   "#settings-agent",
+  "#settings-automations",
   "#settings-channels",
   "#settings-secrets",
   "#settings-devices",
@@ -1398,6 +1408,18 @@ export function SettingsPage() {
       group: t("settingsModal.navGroups.personal", { defaultValue: "Personal" }),
     },
     {
+      href: "#settings-telos",
+      label: t("settingsModal.nav.telos", { defaultValue: "Your goals" }),
+      icon: UserRound,
+      group: t("settingsModal.navGroups.personal", { defaultValue: "Personal" }),
+    },
+    {
+      href: "#settings-suggestions",
+      label: t("settingsModal.nav.suggestions", { defaultValue: "Suggestions" }),
+      icon: Database,
+      group: t("settingsModal.navGroups.personal", { defaultValue: "Personal" }),
+    },
+    {
       href: "#settings-billing",
       label: t("settingsModal.nav.planUsage", { defaultValue: "Plan & Usage" }),
       icon: CreditCard,
@@ -1406,6 +1428,12 @@ export function SettingsPage() {
     {
       href: "#settings-agent",
       label: t("settingsModal.nav.agent", { defaultValue: "Agent" }),
+      icon: Bot,
+      group: t("settingsModal.navGroups.agent", { defaultValue: "Agent" }),
+    },
+    {
+      href: "#settings-automations",
+      label: t("settingsModal.nav.automations", { defaultValue: "Automations" }),
       icon: Bot,
       group: t("settingsModal.navGroups.agent", { defaultValue: "Agent" }),
     },
@@ -1970,6 +1998,10 @@ export function SettingsPage() {
               </V2SettingsRow>
             </V2SettingsBlock>
 
+            <SettingsTelosSection />
+
+            <SettingsSuggestionsSection />
+
             <V2SettingsBlock
               id="settings-billing"
               data-testid="settings-billing"
@@ -2333,6 +2365,14 @@ export function SettingsPage() {
                   ))}
                 </select>
               </V2SettingsRow>
+              <SettingsAgentModelPicker
+                value={agentSettingsDraft.selected_model}
+                disabled={agentSettingsLoading || agentSettingsSaving}
+                onChange={(selected_model) => {
+                  setAgentSettingsDraft((current) => ({ ...current, selected_model }));
+                  void patchAgentSettings({ selected_model });
+                }}
+              />
               <V2SettingsRow
                 name={t("settingsModal.agentSettings.autonomy.name", {
                   defaultValue: "Autonomy",
@@ -2500,6 +2540,8 @@ export function SettingsPage() {
                 </div>
               </V2SettingsRow>
             </V2SettingsBlock>
+
+            <SettingsAutomationsSection />
 
             <SettingsChannelsSection
               agentChannelsById={agentChannelsById}

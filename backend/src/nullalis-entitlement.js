@@ -93,11 +93,58 @@ export const SUPER_ADMIN_ENTITLEMENT = Object.freeze({
 // Pure override: given the DB-derived entitlement (possibly null on soft-fail)
 // and whether the authenticated caller is a super-admin, return the tuple to
 // send to the engine. Non-super-admins get the input back untouched (same
-// reference). buildEntitlementFields stays a pure DB-state mapper; this is the
-// only place the engine-bound payload is intentionally diverged from DB state,
-// and it is applied at the agent-provision call site (never in the
-// Stripe/Creem billing-write paths).
+// reference). buildEntitlementFields stays a pure DB-state mapper, and none of
+// these engine-bound transforms touch Stripe/Creem billing-write paths.
 export function applySuperAdminEntitlementOverride(entitlement, { isSuperAdmin = false } = {}) {
   if (!isSuperAdmin) return entitlement;
   return { ...SUPER_ADMIN_ENTITLEMENT };
+}
+
+function canRuntimeEntitlementAct(entitlement, nowUnix) {
+  if (!entitlement) return false;
+  if (entitlement.status === "active" || entitlement.status === "past_due") return true;
+  return (
+    entitlement.status === "canceled" &&
+    Number.isFinite(entitlement.period_end_unix) &&
+    entitlement.period_end_unix > nowUnix
+  );
+}
+
+// Nullalis still has a legacy subscription-status gate even though zaki-prod's
+// unit wallet is the commercial source of truth for Agent turns. After the BFF
+// meter gate allows a turn (reserved or explicit fail-open), give an otherwise
+// inactive engine entitlement a bounded canceled-period lease. Nullalis canAct
+// accepts that tuple only until period_end_unix, avoiding an indefinite global
+// activation in the process-wide entitlement cache. Already-valid paid or
+// super-admin tuples pass through unchanged.
+export function buildAgentRuntimeEntitlementFields(
+  zakiUserRow,
+  {
+    isSuperAdmin = false,
+    nowUnix = Math.floor(Date.now() / 1000),
+    meterAuthorizedUntilUnix = null,
+  } = {}
+) {
+  const entitlement = applySuperAdminEntitlementOverride(
+    buildEntitlementFields(zakiUserRow),
+    { isSuperAdmin }
+  );
+  const authorizationEnd = Number(meterAuthorizedUntilUnix);
+  if (
+    !Number.isFinite(authorizationEnd) ||
+    authorizationEnd <= nowUnix ||
+    canRuntimeEntitlementAct(entitlement, nowUnix)
+  ) {
+    return entitlement;
+  }
+  // A metered turn is authorized by the wallet, NOT by a historical plan. Pin the lease to
+  // "free" so a LAPSED-paid user (whose zaki_users.plan_tier still reads "pro"/"personal")
+  // cannot inherit paid-tier tooling (subagents, browser, integrations, image_generate) on the
+  // free metered allowance. Active-paid + super-admin tuples never reach here — they pass
+  // through unchanged via the canRuntimeEntitlementAct branch above.
+  return {
+    plan_tier: "free",
+    status: "canceled",
+    period_end_unix: Math.floor(authorizationEnd),
+  };
 }

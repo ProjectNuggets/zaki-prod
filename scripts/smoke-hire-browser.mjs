@@ -17,7 +17,7 @@ const frontendUrl = String(process.env.ZAKI_FRONTEND_URL || "http://127.0.0.1:51
 const backendUrl = String(process.env.ZAKI_BASE_URL || process.env.SMOKE_BASE_URL || "http://127.0.0.1:8787").replace(/\/+$/, "");
 const email = String(process.env.HIRE_BROWSER_EMAIL || process.env.SMOKE_USER_EMAIL || "zaki-e2e-user-a@example.com").trim();
 const password = String(process.env.HIRE_BROWSER_PASSWORD || process.env.SMOKE_USER_PASSWORD || process.env.SMOKE_PASSWORD || "ZakiE2E!2026").trim();
-const legalPolicyVersion = String(process.env.ZAKI_LEGAL_POLICY_VERSION || "2026-02-17.v2").trim();
+const legalPolicyVersion = String(process.env.ZAKI_LEGAL_POLICY_VERSION || "2026-07-12.v4").trim();
 const screenshotPath = String(process.env.HIRE_BROWSER_SCREENSHOT || "/tmp/zaki-hire-browser-smoke.png").trim();
 const cleanup = String(process.env.HIRE_BROWSER_CLEANUP || "true").toLowerCase() !== "false";
 const runId = Date.now().toString(36);

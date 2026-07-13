@@ -1,7 +1,15 @@
 import { BackgroundPattern } from "./BackgroundPattern";
 import { InputArea, type InputAreaHandle, type InputAreaSendOptions } from "./InputArea";
 import { AgentSessionRail } from "@/app/components/agent/AgentSessionRail";
-import { Share2, MoreVertical, Download, Brain, ChevronDown } from "lucide-react";
+import {
+  Share2,
+  MoreVertical,
+  Download,
+  Brain,
+  ChevronDown,
+  LoaderCircle,
+  RefreshCw,
+} from "lucide-react";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
@@ -3375,8 +3383,13 @@ export function ChatArea() {
   const zakiBotProcessClearTimerRef = useRef<number | null>(null);
   const zakiBotProvisionedRef = useRef(false);
   const zakiBotProvisionPromiseRef = useRef<Promise<boolean> | null>(null);
+  const zakiBotProvisionGenerationRef = useRef(0);
   const lastAgentHistoryReconcileThreadRef = useRef<string | null>(null);
   const [zakiBotProvisionReady, setZakiBotProvisionReady] = useState(false);
+  const [zakiBotProvisionState, setZakiBotProvisionState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [zakiBotProvisionError, setZakiBotProvisionError] = useState<string | null>(null);
   const [sessionModePending, setSessionModePending] = useState(false);
   const [agentDefaultAutonomy, setAgentDefaultAutonomy] =
     useState<AgentDefaultAutonomy>("supervised");
@@ -4011,7 +4024,9 @@ export function ChatArea() {
     legacyRemaining: legacyQuotaInfo?.remaining ?? null,
   });
   const isZakiBotSendLocked = isZakiBotActiveSpace
-    ? agentCapacityBlocked || isAgentComposerBootstrapping
+    ? agentCapacityBlocked ||
+      isAgentComposerBootstrapping ||
+      (Boolean(authUserId) && zakiBotProvisionState !== "ready")
     : spacesSendLocked;
   const isComposerSendLocked = !isOnline || isZakiBotSendLocked;
   const latestAssistantMessageContent = useMemo(() => {
@@ -7768,19 +7783,24 @@ export function ChatArea() {
   }, [authUserId, isMemoryPipelineEnabled, requestMemoryStatusSync]);
 
   const ensureZakiBotProvisioned = useCallback(
-    async (silent = false) => {
+    async () => {
       if (!isZakiBotActiveSpace) return true;
-      if (!isAuthReady) return false;
+      if (!authUserId || !isAuthReady) return false;
       if (zakiBotProvisionedRef.current) {
         setZakiBotProvisionReady(true);
+        setZakiBotProvisionState("ready");
+        setZakiBotProvisionError(null);
         return true;
       }
       if (zakiBotProvisionPromiseRef.current) {
         return zakiBotProvisionPromiseRef.current;
       }
 
+      const generation = zakiBotProvisionGenerationRef.current;
       const pending = (async () => {
         setZakiBotProvisionReady(false);
+        setZakiBotProvisionState("loading");
+        setZakiBotProvisionError(null);
         const { response, data } = await provisionAgent({
           spaceId: ZAKI_BOT_SPACE_ID,
           threadId: activeThreadId || ZAKI_BOT_THREAD_ID,
@@ -7791,39 +7811,58 @@ export function ChatArea() {
               (data as { error?: string; message?: string } | null)?.message ||
               "Unable to initialize ZAKI."
           );
-          if (!silent) toast.error(message);
+          if (generation !== zakiBotProvisionGenerationRef.current) return false;
+          setZakiBotProvisionState("error");
+          setZakiBotProvisionError(message);
+          toast.error(message);
           return false;
         }
+        if (generation !== zakiBotProvisionGenerationRef.current) return false;
         zakiBotProvisionedRef.current = true;
         setZakiBotProvisionReady(true);
+        setZakiBotProvisionState("ready");
+        setZakiBotProvisionError(null);
         return true;
       })()
         .catch((error) => {
-          if (!silent) {
-            toast.error(error instanceof Error ? error.message : "Unable to initialize ZAKI.");
-          }
+          if (generation !== zakiBotProvisionGenerationRef.current) return false;
+          const isTimeout =
+            error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+          const message = isTimeout
+            ? "ZAKI took too long to initialize. Check your connection and retry."
+            : error instanceof Error
+              ? error.message
+              : "Unable to initialize ZAKI.";
+          setZakiBotProvisionState("error");
+          setZakiBotProvisionError(message);
+          toast.error(message);
           return false;
         })
         .finally(() => {
-          zakiBotProvisionPromiseRef.current = null;
+          if (generation === zakiBotProvisionGenerationRef.current) {
+            zakiBotProvisionPromiseRef.current = null;
+          }
         });
 
       zakiBotProvisionPromiseRef.current = pending;
       return pending;
     },
-    [isAuthReady, isZakiBotActiveSpace]
+    [activeThreadId, authUserId, isAuthReady, isZakiBotActiveSpace]
   );
 
   useEffect(() => {
-    if (!isZakiBotActiveSpace || !isAuthReady) return;
-    void ensureZakiBotProvisioned(true);
-  }, [ensureZakiBotProvisioned, isAuthReady, isZakiBotActiveSpace]);
-
-  useEffect(() => {
+    zakiBotProvisionGenerationRef.current += 1;
     zakiBotProvisionedRef.current = false;
     zakiBotProvisionPromiseRef.current = null;
     setZakiBotProvisionReady(false);
+    setZakiBotProvisionState("idle");
+    setZakiBotProvisionError(null);
   }, [authUserId]);
+
+  useEffect(() => {
+    if (!authUserId || !isZakiBotActiveSpace || !isAuthReady) return;
+    void ensureZakiBotProvisioned();
+  }, [authUserId, ensureZakiBotProvisioned, isAuthReady, isZakiBotActiveSpace]);
 
   useEffect(() => {
     if (isZakiBotActiveSpace) return;
@@ -7970,7 +8009,7 @@ export function ChatArea() {
           })
         : null;
     if (isZakiBotTarget) {
-      const provisioned = await ensureZakiBotProvisioned(false);
+      const provisioned = await ensureZakiBotProvisioned();
       if (!provisioned) return;
     }
     // For ZAKI bot without an activeThreadId, generate a new thread slug.
@@ -9015,6 +9054,31 @@ export function ChatArea() {
     };
   }, [isAgentSurface]);
 
+  // New-thread shortcut. ⌘N is reserved by the browser, so the rail badge and
+  // this handler agree on ⌘⇧O (Ctrl+Shift+O on Windows/Linux).
+  useEffect(() => {
+    if (!isAgentSurface) return;
+    const handleNewThreadShortcut = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || !event.shiftKey || event.code !== "KeyO") {
+        return;
+      }
+      if (event.repeat) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      handleCreateAgentSession();
+    };
+    window.addEventListener("keydown", handleNewThreadShortcut);
+    return () => window.removeEventListener("keydown", handleNewThreadShortcut);
+  }, [isAgentSurface, handleCreateAgentSession]);
+
   // ZakiSessionList per-row share button dispatches this event after
   // navigating to the chosen session. We queue the requested sessionKey
   // and only open the share modal once activeZakiSessionKey matches,
@@ -9730,13 +9794,22 @@ export function ChatArea() {
               {
                 id: "runtime",
                 label:
-                  isStreaming || activeSessionUi?.live || activeSessionRecord?.live
+                  zakiBotProvisionState === "error"
+                    ? t("agent.status.setupBlocked", { defaultValue: "Setup blocked" })
+                    : zakiBotProvisionState !== "ready"
+                      ? t("agent.status.settingUp", { defaultValue: "Setting up" })
+                      : isStreaming || activeSessionUi?.live || activeSessionRecord?.live
                     ? t("agent.status.online", { defaultValue: "Online" })
                     : t("agent.status.ready", { defaultValue: "Ready" }),
-                active: Boolean(
-                  isStreaming || activeSessionUi?.live || activeSessionRecord?.live
-                ),
-                tone: "accent",
+                active:
+                  zakiBotProvisionState === "ready" &&
+                  Boolean(isStreaming || activeSessionUi?.live || activeSessionRecord?.live),
+                tone:
+                  zakiBotProvisionState === "error"
+                    ? "danger"
+                    : zakiBotProvisionState === "ready"
+                      ? "accent"
+                      : "warn",
               },
               {
                 id: "mode",
@@ -9868,6 +9941,55 @@ export function ChatArea() {
           {/* C5: System notices — rendered here so they appear on ALL views
               (home, spaces, chat, brain) regardless of which view is active */}
           <SystemNoticesStack className="-mb-2" />
+
+          {isZakiBotActiveSpace && authUserId && zakiBotProvisionState !== "ready" ? (
+            <div
+              className="zaki-agent-provision-state"
+              data-state={zakiBotProvisionState === "error" ? "error" : "loading"}
+              data-testid="agent-provision-state"
+              role={zakiBotProvisionState === "error" ? "alert" : "status"}
+              aria-live={zakiBotProvisionState === "error" ? "assertive" : "polite"}
+            >
+              <span className="zaki-agent-provision-state__icon" aria-hidden>
+                {zakiBotProvisionState === "error" ? (
+                  <RefreshCw className="size-3.5" />
+                ) : (
+                  <LoaderCircle className="size-3.5 animate-spin" />
+                )}
+              </span>
+              <span className="zaki-agent-provision-state__copy">
+                <strong>
+                  {zakiBotProvisionState === "error"
+                    ? t("agent.provision.errorTitle", {
+                        defaultValue: "Agent setup needs another try",
+                      })
+                    : t("agent.provision.loadingTitle", {
+                        defaultValue: "Setting up your agent…",
+                      })}
+                </strong>
+                <span>
+                  {zakiBotProvisionState === "error"
+                    ? zakiBotProvisionError ||
+                      t("agent.provision.errorFallback", {
+                        defaultValue: "ZAKI could not finish setup.",
+                      })
+                    : t("agent.provision.loadingHelper", {
+                        defaultValue: "The composer will unlock when setup is ready.",
+                      })}
+                </span>
+              </span>
+              {zakiBotProvisionState === "error" ? (
+                <button
+                  type="button"
+                  className="zaki-agent-provision-state__retry"
+                  onClick={() => void ensureZakiBotProvisioned()}
+                >
+                  <RefreshCw className="size-3" aria-hidden />
+                  {t("agent.provision.retry", { defaultValue: "Retry setup" })}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
 
           {/* Main Content */}
           <div className={cn("zaki-chat-main flex-1 relative z-10 min-h-0 flex overflow-hidden", isAgentSurface && "zaki-agent-v2__workspace")}>

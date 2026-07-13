@@ -143,15 +143,19 @@ function openMarketingProductOverview() {
   window.open(WEBSITE_PRODUCT_URL, "_blank", "noopener,noreferrer");
 }
 
-function formatTime(value?: string | number | null) {
-  if (!value) return "—";
+function formatTimeOrNull(value?: string | number | null) {
+  if (!value) return null;
   const date =
     typeof value === "number" ? new Date(value * 1000) : new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
+  if (Number.isNaN(date.getTime())) return null;
   return date.toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatTime(value?: string | number | null) {
+  return formatTimeOrNull(value) ?? "—";
 }
 
 function getMemoryBridgeOfferKey(user: unknown) {
@@ -1100,7 +1104,7 @@ export function ZakiDashboard({
   const rollingUsagePercentRounded = getRoundedUsagePercent(rollingStats.usedPercent);
   const rollingWindowHours =
     typeof meterStatus?.rolling?.windowHours === "number" ? meterStatus.rolling.windowHours : 5;
-  const rollingClearTime = formatTime(meterStatus?.rolling?.resetAt);
+  const rollingClearTime = formatTimeOrNull(meterStatus?.rolling?.resetAt);
   const agentAvailability = meterStatus?.availableNow?.agent ?? null;
   const liveAgentSession = zakiSessions?.find(
     (session) => session.live || (session.pending_approval_count ?? 0) > 0
@@ -1179,19 +1183,18 @@ export function ZakiDashboard({
     : "";
   const introEyebrow = token
     ? t("zakiDashboard.command.signedEyebrow", {
-        defaultValue: "Signed in · context and progress stay connected",
+        defaultValue: "Signed in",
       })
     : t("zakiDashboard.command.guestEyebrow", {
-        defaultValue: "Guest session · start without setup",
+        defaultValue: "Guest session",
       });
   const introCopy = token
     ? t("zakiDashboard.command.signedCopy", {
-        defaultValue:
-          "Choose the lane. Name the outcome. ZAKI brings the right intelligence and carries it forward.",
+        defaultValue: "Name the outcome. ZAKI handles the rest.",
       })
     : t("zakiDashboard.command.guestCopy", {
         defaultValue:
-          "Start in Chat now. Sign in when the work needs Agent, files, memory, or history.",
+          "Start in Chat now. Sign in when you need Agent, files, or memory.",
       });
   const titlePrefix = token
     ? t("zakiDashboard.command.signedTitlePrefix", {
@@ -1696,17 +1699,19 @@ export function ZakiDashboard({
                 </strong>
                 <span>
                   {agentCapacityBlocked
-                    ? t("zakiDashboard.command.capacityWindowCopy", {
-                        hours: rollingWindowHours,
-                        percent: rollingUsagePercentRounded,
-                        reset: rollingClearTime || t("zakiDashboard.meter.resetPending"),
-                        defaultValue: rollingClearTime
-                          ? `Keep your prompt here. Recent Agent work leaves the ${rollingWindowHours}h window at ${rollingClearTime}.`
-                          : "Keep your prompt here while recent Agent work leaves the rolling window.",
-                      })
+                    ? rollingClearTime
+                      ? t("zakiDashboard.command.capacityWindowCopy", {
+                          reset: rollingClearTime,
+                          defaultValue:
+                            "Your draft stays saved here. More room opens at {{reset}}.",
+                        })
+                      : t("zakiDashboard.command.capacityWindowCopySoon", {
+                          defaultValue:
+                            "Your draft stays saved here. More room opens soon.",
+                        })
                     : t("zakiDashboard.command.creditsExhaustedCopy", {
                         defaultValue:
-                          "Keep your prompt here, then sign up, wait for reset, or choose a plan with more room.",
+                          "Your draft stays saved here. Sign up, wait for the weekly reset, or pick a plan with more room.",
                       })}
                 </span>
                 <div>

@@ -229,7 +229,9 @@ const AUTH_COPY = {
     resetHint: "Enter your new password below.",
     consent: {
       prefix: "I agree to the",
-      link: "Terms, Privacy & Compliance",
+      terms: "Terms",
+      privacy: "Privacy Notice",
+      compliance: "Security & Compliance",
     },
     actions: {
       forgotPassword: "Forgot password?",
@@ -331,7 +333,9 @@ const AUTH_COPY = {
     resetHint: "أدخل كلمة المرور الجديدة أدناه.",
     consent: {
       prefix: "أوافق على",
-      link: "الشروط والخصوصية والامتثال",
+      terms: "شروط الاستخدام",
+      privacy: "إشعار الخصوصية",
+      compliance: "الأمان والامتثال",
     },
     actions: {
       forgotPassword: "هل نسيت كلمة المرور؟",
@@ -937,7 +941,17 @@ export function LoginScreen() {
                 type="button"
                 className="zaki-auth-v2__oauth"
                 onClick={() => {
-                  window.location.href = buildGoogleOAuthStartUrl(postLoginReturnTo || "/");
+                  if (mode === "signup" && !signupLegalConsent) {
+                    setError(copy.errors.consentRequired);
+                    return;
+                  }
+                  window.location.href =
+                    mode === "signup"
+                      ? buildGoogleOAuthStartUrl(postLoginReturnTo || "/", {
+                          legalConsentAccepted: true,
+                          legalPolicyVersion,
+                        })
+                      : buildGoogleOAuthStartUrl(postLoginReturnTo || "/");
                 }}
               >
                 <span aria-hidden>G</span>
@@ -1116,7 +1130,23 @@ export function LoginScreen() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  {copy.consent.link}
+                  {copy.consent.terms}
+                </a>
+                {isRtl ? "، " : ", "}
+                <a
+                  href={isRtl ? "https://chatzaki.com/ar/privacy?from=signup" : "https://chatzaki.com/privacy?from=signup"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {copy.consent.privacy}
+                </a>
+                {isRtl ? "، و" : ", and "}
+                <a
+                  href={isRtl ? "https://chatzaki.com/ar/compliance?from=signup" : "https://chatzaki.com/compliance?from=signup"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {copy.consent.compliance}
                 </a>
                 .
               </span>

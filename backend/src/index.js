@@ -12,6 +12,11 @@ import nodemailer from "nodemailer";
 import { WebSocketServer, WebSocket as UpstreamWebSocket } from "ws";
 import { z } from "zod";
 import { initDb, dbAll, dbGet, dbQuery, withDbTransaction } from "./db.js";
+import {
+  ACCESS_CODE_MAX_DURATION_DAYS,
+  clampAccessCodeDurationDays,
+  redeemAccessCodeForUser,
+} from "./access-code-policy.js";
 import { getUsageMetrics } from "./platform-metrics.js";
 import {
   resolveLegalPolicyVersion,
@@ -19,6 +24,8 @@ import {
   buildLegalConsentShape,
   validateLegalPolicyVersion,
   buildConsentStatus,
+  resolveMinimumSignupAge,
+  validateMinimumSignupAge,
 } from "./legal-consent.js";
 import { validateRuntimeConfig } from "./config-validation.js";
 import {
@@ -67,6 +74,7 @@ import {
   createBillingReconcileHandler,
 } from "./billing-route-handlers.js";
 import { createStripeWebhookHandler } from "./billing-stripe-webhook-handler.js";
+import { createMeterFailOpenBackstop } from "./meter-fail-open-backstop.js";
 import { copyResponseHeaders } from "./upstream-headers.js";
 import { isSafeAgentShareCode } from "./agent-share-code.js";
 import {
@@ -107,8 +115,14 @@ import {
   fetchNullclawUserHistory,
   getNullclawBase,
   probeNullclawReadyWithRetry,
+  requestNullalisUserPurge,
   requestNullclawChatStream,
 } from "./agent-client.js";
+import {
+  AccountErasureError,
+  eraseAccountData,
+  resolveAccountErasureTimeoutMs,
+} from "./account-erasure.js";
 import {
   V1_CUTOVER_VERSION,
   listV1CutoverAuditEvents,
@@ -256,10 +270,12 @@ import {
   getAgentLaunchChannel,
   buildBotProvisionPayload,
   normalizeAgentArtifactExportPayload,
+  normalizeAgentTelosPayload,
   normalizeTelegramDisconnectErrorPayload,
   normalizeAgentControlChannelId,
   normalizeAgentLaunchChannelId,
   registerAgentSessionBffRoutes,
+  registerAgentSuggestionRoutes,
   registerBotBffAliases,
   registerTelegramDisconnectAliases,
   resolveSoftEmptyAgentResponse,
@@ -281,8 +297,7 @@ import {
 import { buildBackendHealthStatus, buildBackendReadyStatus } from "./health-readiness.js";
 import { prepareAndApplySecret } from "./nullalis-secrets.js";
 import {
-  buildEntitlementFields,
-  applySuperAdminEntitlementOverride,
+  buildAgentRuntimeEntitlementFields,
 } from "./nullalis-entitlement.js";
 import {
   APP_CHAT_SURFACE,
@@ -566,6 +581,12 @@ const ZAKI_AGENT_BACKEND_ENABLED =
   String(process.env.ZAKI_AGENT_BACKEND_ENABLED || "")
     .toLowerCase()
     .trim() === "true";
+// Read-only mirror of nullalis `agent.telos_in_prompt`. Deployment config must
+// set both values together; default false keeps the UI honest when unset.
+const ZAKI_AGENT_TELOS_IN_PROMPT =
+  String(process.env.ZAKI_AGENT_TELOS_IN_PROMPT || "")
+    .toLowerCase()
+    .trim() === "true";
 const LEARNING_ENGINE_BASE_URL = (process.env.LEARNING_ENGINE_BASE_URL || "")
   .trim()
   .replace(/\/+$/, "");
@@ -691,9 +712,8 @@ const ZAKI_ACCESS_CODE_PURCHASE_CAMPAIGN = (
 )
   .trim()
   .slice(0, 120);
-const ZAKI_ACCESS_CODE_PURCHASE_DURATION_DAYS = Math.max(
-  1,
-  Math.min(3650, Number(process.env.ZAKI_ACCESS_CODE_PURCHASE_DURATION_DAYS || 30))
+const ZAKI_ACCESS_CODE_PURCHASE_DURATION_DAYS = clampAccessCodeDurationDays(
+  process.env.ZAKI_ACCESS_CODE_PURCHASE_DURATION_DAYS
 );
 const ZAKI_BILLING_PROVIDER = (process.env.ZAKI_BILLING_PROVIDER || "stripe")
   .trim()
@@ -731,6 +751,9 @@ const ZAKI_RESET_TTL_MINUTES = Number(
 );
 const ZAKI_LEGAL_POLICY_VERSION = resolveLegalPolicyVersion(
   process.env.ZAKI_LEGAL_POLICY_VERSION
+);
+const ZAKI_MINIMUM_SIGNUP_AGE = resolveMinimumSignupAge(
+  process.env.ZAKI_MINIMUM_SIGNUP_AGE
 );
 const MAX_STREAM_MESSAGE_CHARS = 8000;
 const ZAKI_INCLUDE_VERIFY_LINK =
@@ -879,6 +902,14 @@ const ZAKI_AGENT_PROVISION_CONFIRMATION_TTL_MS = Math.max(
 const agentProvisionConfirmationCache = createProvisionConfirmationCache({
   ttlMs: ZAKI_AGENT_PROVISION_CONFIRMATION_TTL_MS,
 });
+// A cached provision can be reused for the full confirmation TTL, and the
+// resulting turn can then run for the full upstream timeout. Add one minute of
+// clock/network margin so a lease created on the first provision cannot expire
+// during the latest turn that legitimately reuses that confirmation.
+const ZAKI_AGENT_METER_RUNTIME_LEASE_MS =
+  ZAKI_AGENT_PROVISION_CONFIRMATION_TTL_MS +
+  ZAKI_STREAM_UPSTREAM_TIMEOUT_MS +
+  60_000;
 // Agent error capture — routes genuine BFF failures (upstream 5xx, stream error, etc.) to GlitchTip.
 const { captureAgentError } = makeAgentErrorCapture({ sentry: Sentry });
 
@@ -931,6 +962,7 @@ const billingAlertDispatcher = createBillingAlertDispatcher({
   timeoutMs: ZAKI_BILLING_ALERT_TIMEOUT_MS,
   cooldownMs: ZAKI_BILLING_ALERT_COOLDOWN_MS,
 });
+const meterFailOpenBackstop = createMeterFailOpenBackstop({ env: process.env });
 
 let runtimeRateLimitSettings = {
   appChatDailyPromptLimit: APP_CHAT_QUOTA_CONFIG.limit,
@@ -2118,9 +2150,9 @@ async function fulfillAccessCodePurchaseCheckoutSession({ session, eventId } = {
 
   const defaults = getAccessCodePurchaseDefaults();
   const campaign = String(metadata?.campaign || defaults.campaign).trim().slice(0, 120) || defaults.campaign;
-  const durationDays = Math.max(
-    1,
-    Math.min(3650, Number(metadata?.duration_days || defaults.durationDays))
+  const durationDays = clampAccessCodeDurationDays(
+    metadata?.duration_days,
+    defaults.durationDays
   );
   const paymentIntent =
     typeof session?.payment_intent === "string"
@@ -3538,7 +3570,7 @@ const DeleteAccountSchema = z.object({
 const AccessCodeAdminCreateSchema = z.object({
   campaign: z.string().trim().min(1, "Campaign is required").max(120),
   count: z.coerce.number().int().min(1).max(500).default(1),
-  durationDays: z.coerce.number().int().min(1).max(3650).default(30),
+  durationDays: z.coerce.number().int().min(1).max(ACCESS_CODE_MAX_DURATION_DAYS).default(30),
   maxRedemptions: z.union([z.coerce.number().int().min(1), z.null()]).default(1),
   expiresAt: z.union([z.string().trim().min(1), z.null()]).optional(),
   active: z.boolean().default(true),
@@ -3555,7 +3587,7 @@ const AccessCodeAdminListSchema = z.object({
 const AccessCodeAdminUpdateSchema = z
   .object({
     campaign: z.string().trim().min(1).max(120).optional(),
-    durationDays: z.coerce.number().int().min(1).max(3650).optional(),
+    durationDays: z.coerce.number().int().min(1).max(ACCESS_CODE_MAX_DURATION_DAYS).optional(),
     maxRedemptions: z.union([z.coerce.number().int().min(1), z.null()]).optional(),
     expiresAt: z.union([z.string().trim().min(1), z.null()]).optional(),
     active: z.boolean().optional(),
@@ -4356,28 +4388,30 @@ function getLegalConsentStatus(zakiUser) {
 
 async function recordLegalConsent({ userId, policyVersion, source, req }) {
   const now = new Date().toISOString();
-  await dbQuery(
-    `UPDATE zaki_users
-     SET legal_consent_at = $1,
-         legal_consent_version = $2,
-         updated_at = $3
-     WHERE id = $4`,
-    [now, policyVersion, now, userId]
-  );
+  await withDbTransaction(async (client) => {
+    await client.query(
+      `UPDATE zaki_users
+       SET legal_consent_at = $1,
+           legal_consent_version = $2,
+           updated_at = $3
+       WHERE id = $4`,
+      [now, policyVersion, now, userId]
+    );
 
-  await dbQuery(
-    `INSERT INTO legal_consent_events
-     (user_id, policy_version, source, consented_at, ip_address, user_agent)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
-    [
-      userId,
-      policyVersion,
-      source,
-      now,
-      getClientIp(req),
-      req.get("user-agent") || null,
-    ]
-  );
+    await client.query(
+      `INSERT INTO legal_consent_events
+       (user_id, policy_version, source, consented_at, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        userId,
+        policyVersion,
+        source,
+        now,
+        getClientIp(req),
+        req.get("user-agent") || null,
+      ]
+    );
+  });
 }
 
 function normalizeAccessCode(value) {
@@ -4444,10 +4478,7 @@ function getAccessCodePurchaseDefaults() {
   const campaign = String(ZAKI_ACCESS_CODE_PURCHASE_CAMPAIGN || "paid_monthly")
     .trim()
     .slice(0, 120);
-  const durationDays = Math.max(
-    1,
-    Math.min(3650, Number(ZAKI_ACCESS_CODE_PURCHASE_DURATION_DAYS || 30))
-  );
+  const durationDays = clampAccessCodeDurationDays(ZAKI_ACCESS_CODE_PURCHASE_DURATION_DAYS);
   return {
     campaign: campaign || "paid_monthly",
     durationDays,
@@ -4888,12 +4919,25 @@ app.get("/api/auth/google/start", (req, res) => {
       return;
     }
     const returnTo = sanitizeGoogleOAuthReturnTo(req.query?.returnTo || req.query?.return_to || "/spaces");
+    let legalPolicyVersion = null;
+    if (String(req.query?.legalConsentAccepted || "").toLowerCase() === "true") {
+      const policyVersionResult = validateLegalPolicyVersion(
+        req.query?.legalPolicyVersion,
+        ZAKI_LEGAL_POLICY_VERSION
+      );
+      if (!policyVersionResult.ok) {
+        res.status(409).json({ success: false, error: policyVersionResult.error });
+        return;
+      }
+      legalPolicyVersion = policyVersionResult.version;
+    }
     const nonce = createGoogleOAuthNonce();
     const state = signGoogleOAuthStatePayload(
       {
         returnTo,
         exp: Date.now() + 10 * 60 * 1000,
         nonceHash: hashGoogleOAuthNonce(nonce),
+        ...(legalPolicyVersion ? { legalPolicyVersion } : {}),
       },
       GOOGLE_OAUTH_STATE_SECRET
     );
@@ -4935,11 +4979,27 @@ app.get("/api/auth/google/callback", async (req, res) => {
       res.redirect(302, `${getAppUrl()}/?auth=login&error=google_oauth_missing_code`);
       return;
     }
-    const { returnTo, nonceHash } = verifyGoogleOAuthState(state, GOOGLE_OAUTH_STATE_SECRET);
+    const { returnTo, nonceHash, legalPolicyVersion } = verifyGoogleOAuthState(
+      state,
+      GOOGLE_OAUTH_STATE_SECRET
+    );
     verifyGoogleOAuthNonceBinding({
       cookieNonce: extractGoogleOAuthNonceFromCookieHeader(req.headers?.cookie),
       stateNonceHash: nonceHash,
     });
+    let acceptedPolicyVersion = null;
+    if (legalPolicyVersion) {
+      const policyVersionResult = validateLegalPolicyVersion(
+        legalPolicyVersion,
+        ZAKI_LEGAL_POLICY_VERSION
+      );
+      if (!policyVersionResult.ok) {
+        const error = new Error(policyVersionResult.error);
+        error.status = 409;
+        throw error;
+      }
+      acceptedPolicyVersion = policyVersionResult.version;
+    }
     const tokenPayload = await exchangeGoogleOAuthCode({
       code,
       redirectUri: getGoogleOAuthRedirectUri(req),
@@ -4950,6 +5010,17 @@ app.get("/api/auth/google/callback", async (req, res) => {
       dbQuery,
       userColumns: _ZAKI_USER_COLS,
       ...googleProfile,
+      ...(acceptedPolicyVersion
+        ? {
+            recordLegalConsent: ({ userId }) =>
+              recordLegalConsent({
+                userId,
+                policyVersion: acceptedPolicyVersion,
+                source: "google_signup",
+                req,
+              }),
+          }
+        : {}),
     });
     if (!zakiUser?.id) {
       throw new Error("Unable to create or link Google user.");
@@ -4963,6 +5034,9 @@ app.get("/api/auth/google/callback", async (req, res) => {
       buildClearedGoogleOAuthNonceCookie({ secure: isSecureCookieRequest(req) }),
     ]);
     const appUrl = new URL(returnTo, getAppUrl());
+    if (!acceptedPolicyVersion && getLegalConsentStatus(zakiUser).requiresReconsent) {
+      appUrl.searchParams.set("legalConsent", "required");
+    }
     res.redirect(302, appUrl.toString());
   } catch (error) {
     console.error("[GoogleOAuth] callback error:", error);
@@ -5155,7 +5229,7 @@ async function requireAdminUser(req, res) {
 async function requireSuperAdminUser(req, res) {
   const authResult = await requireAdminUser(req, res);
   if (!authResult) return null;
-  if (!authResult.admin?.isSuperAdmin) {
+  if (!superAdminEmailSet.has(normalizeEmail(authResult.email))) {
     res.status(403).json({ error: "Super admin access required." });
     return null;
   }
@@ -5419,7 +5493,7 @@ const billingAdapters = {
       throw new Error("Billing provider is not configured.");
     },
     async cleanupCustomerOnDelete() {
-      return;
+      return { attempted: false, ok: true, reason: "not_supported" };
     },
   },
   stripe: {
@@ -5620,11 +5694,17 @@ const billingAdapters = {
       };
     },
     async cleanupCustomerOnDelete({ zakiUser }) {
-      if (!stripe || !zakiUser.stripe_customer_id) return;
+      // Never silent (review IMPORTANT): the outcome is recorded in the erasure
+      // receipt's spokeSummary so provider-side residue is visible, not invisible.
+      if (!stripe || !zakiUser.stripe_customer_id) {
+        return { attempted: false, ok: true, reason: !stripe ? "no_provider" : "no_customer" };
+      }
       try {
         await stripe.customers.del(zakiUser.stripe_customer_id);
+        return { attempted: true, ok: true, reason: null };
       } catch (err) {
-        console.warn("[Account] Stripe customer delete failed:", err?.message || err);
+        console.error("[Account] Stripe customer delete failed:", err?.message || err);
+        return { attempted: true, ok: false, reason: "provider_error" };
       }
     },
   },
@@ -5661,7 +5741,7 @@ const billingAdapters = {
       throw err;
     },
     async cleanupCustomerOnDelete() {
-      return;
+      return { attempted: false, ok: true, reason: "not_supported" };
     },
   },
   creem: {
@@ -5746,7 +5826,7 @@ const billingAdapters = {
       throw err;
     },
     async cleanupCustomerOnDelete() {
-      return;
+      return { attempted: false, ok: true, reason: "not_supported" };
     },
   },
 };
@@ -6270,6 +6350,17 @@ const signupHandler = async (req, res) => {
     const normalizedEmail = normalizeEmail(email);
     const normalizedName = name.trim();
     const normalizedDob = dateOfBirth;
+    const minimumAgeResult = validateMinimumSignupAge(
+      normalizedDob,
+      ZAKI_MINIMUM_SIGNUP_AGE
+    );
+    if (!minimumAgeResult.ok) {
+      res.status(400).json({
+        success: false,
+        error: minimumAgeResult.error,
+      });
+      return;
+    }
     const policyVersionResult = validateLegalPolicyVersion(
       legalPolicyVersion,
       ZAKI_LEGAL_POLICY_VERSION
@@ -8088,52 +8179,45 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
       details: { confirmationMatched: true },
     });
 
-    // Best-effort cleanup in NOVA.TYP (non-blocking; local deletion remains source of truth).
-    if (zakiUser.nova_user_id) {
-      try {
-        const novaDelete = await novaAdminRequest(
-          `/v1/admin/users/${Number(zakiUser.nova_user_id)}`,
-          { method: "DELETE" }
-        );
-        if (!novaDelete.ok && novaDelete.status !== 404) {
-          const payload = await novaDelete.json().catch(() => ({}));
-          console.warn("[Account] NOVA delete returned non-OK:", novaDelete.status, payload);
-        }
-      } catch (err) {
-        console.warn("[Account] NOVA delete failed:", err?.message || err);
-      }
-    }
-
-    // Best-effort provider customer cleanup.
-    await getBillingAdapter().cleanupCustomerOnDelete({ zakiUser });
-
-    const learningDeletion = await deleteLearningAccountResources({
+    const erasure = await eraseAccountData({
       zakiUser,
+      memoryKey,
       requestId,
+      purgeNullalis: async ({ userId, requestId: purgeRequestId }) => {
+        const response = await requestNullalisUserPurge({
+          baseUrl: NULLCLAW_BASE_URL,
+          internalToken: NULLCLAW_INTERNAL_TOKEN,
+          userId,
+          requestId: purgeRequestId,
+          fetchWithTimeout,
+          timeoutMs: resolveAccountErasureTimeoutMs(
+            process.env.NULLALIS_GDPR_PURGE_TIMEOUT_MS,
+            { defaultMs: 60_000 }
+          ),
+        });
+        return {
+          ok: response.ok,
+          status: response.status,
+          data: await response.json().catch(() => null),
+        };
+      },
+      deleteTypUser: async ({ novaUserId }) => {
+        const response = await novaAdminRequest(`/v1/admin/users/${novaUserId}`, {
+          method: "DELETE",
+          signal: AbortSignal.timeout(
+            resolveAccountErasureTimeoutMs(process.env.TYP_GDPR_PURGE_TIMEOUT_MS, {
+              defaultMs: 30_000,
+            })
+          ),
+        });
+        return { ok: response.ok, status: response.status };
+      },
+      cleanupBilling: ({ zakiUser: user }) =>
+        getBillingAdapter().cleanupCustomerOnDelete({ zakiUser: user }),
+      deleteLearning: deleteLearningAccountResources,
+      runInTransaction: withDbTransaction,
     });
-
-    await dbQuery("BEGIN");
-    try {
-      const deleteByEmail = async (table) => {
-        try {
-          await dbQuery(`DELETE FROM ${table} WHERE user_id = $1`, [memoryKey]);
-        } catch (err) {
-          // Table may not exist in older deployments; skip safely.
-          if (err?.code !== "42P01") throw err;
-        }
-      };
-      await deleteByEmail("memory_notifications");
-      await deleteByEmail("memory_conflicts");
-      await deleteByEmail("memory_confirmations");
-      await deleteByEmail("memory_triggers");
-      await deleteByEmail("memories");
-      await deleteByEmail("zaki_memory_preferences");
-      await dbQuery("DELETE FROM zaki_users WHERE id = $1", [zakiUser.id]);
-      await dbQuery("COMMIT");
-    } catch (err) {
-      await dbQuery("ROLLBACK");
-      throw err;
-    }
+    const learningDeletion = erasure.learning;
 
     await recordLearningAccountAuditEventBestEffort({
       dbQuery,
@@ -8143,7 +8227,13 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
       requestId,
       details: summarizeLearningDeletionResult(learningDeletion),
     });
-    res.status(200).json({ success: true, message: "Account deleted.", learningDeletion });
+    res.status(200).json({
+      success: true,
+      message: "Account deleted.",
+      erasureReceiptId: erasure.receiptId,
+      purgeManifest: erasure.engine,
+      learningDeletion,
+    });
   } catch (error) {
     console.error("[Account] Delete error:", error);
     if (auditUser) {
@@ -8160,9 +8250,15 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
         },
       });
     }
+    // Only AccountErasureError carries browser-safe messaging; anything else
+    // (pg/transaction/upstream internals) is redacted — logged server-side above.
+    const known = error instanceof AccountErasureError;
     res.status(error?.status || 500).json({
-      error: error?.message || "Account delete failed.",
-      details: error?.details || undefined,
+      success: false,
+      error: known ? error.message : "Account delete failed.",
+      code: known ? error.code || "account_delete_failed" : "account_delete_failed",
+      retryable: Boolean(error?.retryable),
+      details: known ? error.details || undefined : undefined,
     });
   }
 });
@@ -9030,7 +9126,7 @@ app.post(
 
 app.post("/api/admin/access-codes", express.json({ limit: "200kb" }), async (req, res) => {
   try {
-    const authResult = await requireAdminUser(req, res);
+    const authResult = await requireSuperAdminUser(req, res);
     if (!authResult) return;
 
     const validation = validateInput(AccessCodeAdminCreateSchema, req.body || {});
@@ -9101,7 +9197,7 @@ app.post("/api/admin/access-codes", express.json({ limit: "200kb" }), async (req
 
 app.get("/api/admin/access-codes", async (req, res) => {
   try {
-    const authResult = await requireAdminUser(req, res);
+    const authResult = await requireSuperAdminUser(req, res);
     if (!authResult) return;
 
     const validation = validateInput(AccessCodeAdminListSchema, req.query || {});
@@ -9160,7 +9256,7 @@ app.get("/api/admin/access-codes", async (req, res) => {
 
 app.patch("/api/admin/access-codes/:id", express.json({ limit: "100kb" }), async (req, res) => {
   try {
-    const authResult = await requireAdminUser(req, res);
+    const authResult = await requireSuperAdminUser(req, res);
     if (!authResult) return;
 
     const codeId = String(req.params.id || "").trim();
@@ -9246,91 +9342,13 @@ app.post("/api/access-code/redeem", express.json({ limit: "50kb" }), async (req,
     if (!email || !zakiUser) return;
 
     const code = normalizeAccessCode(validation.data.code);
-    const redeemResult = await withDbTransaction(async (client) => {
-      const accessCodeResult = await client.query(
-        `SELECT *
-         FROM access_codes
-         WHERE UPPER(regexp_replace(code, '[\\s-]+', '', 'g')) = $1
-         FOR UPDATE`,
-        [code]
-      );
-      const accessCode = accessCodeResult.rows[0];
-      if (!accessCode || !accessCode.active) {
-        return { status: 404, body: { success: false, error: "Invalid access code." } };
-      }
-
-      if (accessCode.expires_at && new Date(accessCode.expires_at).getTime() < Date.now()) {
-        return { status: 410, body: { success: false, error: "Access code expired." } };
-      }
-
-      const incrementResult = await client.query(
-        `UPDATE access_codes
-         SET redeemed_count = redeemed_count + 1
-         WHERE id = $1
-           AND active = TRUE
-           AND (max_redemptions IS NULL OR redeemed_count < max_redemptions)
-         RETURNING id, code, campaign, duration_days, redeemed_count`,
-        [accessCode.id]
-      );
-      const incrementedCode = incrementResult.rows[0];
-      if (!incrementedCode) {
-        return {
-          status: 400,
-          body: { success: false, error: "Access code already fully redeemed." },
-        };
-      }
-
-      const userRowResult = await client.query(
-        `SELECT access_expires_at
-         FROM zaki_users
-         WHERE id = $1
-         FOR UPDATE`,
-        [zakiUser.id]
-      );
-      const userRow = userRowResult.rows[0];
-      if (!userRow) {
-        throw new Error("Authenticated user not found during code redemption.");
-      }
-
-      const now = new Date();
-      const currentExpiry = userRow.access_expires_at
-        ? new Date(userRow.access_expires_at)
-        : null;
-      const baseDate =
-        currentExpiry && currentExpiry.getTime() > now.getTime()
-          ? currentExpiry
-          : now;
-      const durationDays = Number(accessCode.duration_days || 30);
-      const expiresAt = new Date(
-        baseDate.getTime() + durationDays * 24 * 60 * 60 * 1000
-      );
-
-      await client.query(
-        `UPDATE zaki_users
-         SET access_expires_at = $1,
-             access_code_campaign = $2,
-             access_code_last = $3,
-             updated_at = NOW()
-         WHERE id = $4`,
-        [expiresAt.toISOString(), accessCode.campaign, accessCode.code, zakiUser.id]
-      );
-
-      await client.query(
-        `INSERT INTO access_code_redemptions
-         (code_id, user_id, access_expires_at, campaign, code)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [accessCode.id, zakiUser.id, expiresAt.toISOString(), accessCode.campaign, code]
-      );
-
-      return {
-        status: 200,
-        body: {
-          success: true,
-          accessExpiresAt: expiresAt.toISOString(),
-          campaign: accessCode.campaign,
-        },
-      };
-    });
+    const redeemResult = await withDbTransaction((client) =>
+      redeemAccessCodeForUser({
+        client,
+        normalizedCode: code,
+        userId: zakiUser.id,
+      })
+    );
 
     res.status(redeemResult.status).json(redeemResult.body);
   } catch (error) {
@@ -10605,6 +10623,28 @@ function buildSpacesMeterDenialPayload(result, requestId) {
   };
 }
 
+function checkMeterFailOpenBackstop({ surface, userId, requestId, error } = {}) {
+  const decision = meterFailOpenBackstop.check({ surface, userId });
+  if (decision.shouldPage) {
+    void emitBillingAlert({
+      provider: "metering",
+      id: "meter.fail_open.page",
+      severity: "critical",
+      message: "Metering fail-open volume crossed the paging threshold.",
+      details: {
+        surface,
+        requestId,
+        error: error?.message || String(error || "meter_reserve_failed"),
+        globalCount: decision.globalCount,
+        globalAllowedCount: decision.globalAllowedCount,
+        pageThreshold: decision.pageThreshold,
+        windowMs: decision.windowMs,
+      },
+    });
+  }
+  return decision;
+}
+
 async function requireSpacesMeterGrantForChat({
   req,
   res,
@@ -10681,8 +10721,27 @@ async function requireSpacesMeterGrantForChat({
     req.spacesChatMessageChars = String(message || "").length;
     return { allowed: true, action };
   } catch (err) {
-    // Fail-OPEN for the core product: a metering DB blip must not break chat. Not charged; logged.
-    console.error(`[Spaces] wallet reserve failed (allowing chat unmetered) req=${requestId}: ${err?.message}`);
+    // Fail-OPEN for the core product, bounded by a DB-independent emergency budget.
+    console.error(`[Spaces] wallet reserve failed req=${requestId}: ${err?.message}`);
+    const backstop = checkMeterFailOpenBackstop({
+      surface: "spaces",
+      userId: identity.userId,
+      requestId,
+      error: err,
+    });
+    if (!backstop.allowed) {
+      const result = {
+        allowed: false,
+        status: backstop.status,
+        error: backstop.reason,
+        message:
+          backstop.status === 429
+            ? "Too many degraded-mode chat requests. Please retry shortly."
+            : "Chat metering is temporarily unavailable. Please retry shortly.",
+      };
+      res.status(result.status).json(buildSpacesMeterDenialPayload(result, requestId));
+      return { ...result, action };
+    }
     req.spacesChatUnmetered = true;
     void emitBillingAlert({ provider: "metering", id: "spaces.meter.fail_open", severity: "high", message: "Spaces chat metering failed; serving unmetered (fail-open).", details: { requestId, error: err?.message } });
     return { allowed: true, action };
@@ -11712,11 +11771,29 @@ async function requireAgentWalletReserveForChat(req, res, { identity, action, re
   }
 
   if (decision.outcome === "unmetered") {
-    // Fail-OPEN: serve the turn unmetered; alert (matches spaces).
-    req.agentChatUnmetered = true;
+    // Fail-OPEN only within the DB-independent per-user and process budgets.
     console.error(
-      `[Agent] wallet reserve failed (allowing chat unmetered) req=${reqId}: ${decision.error?.message}`
+      `[Agent] wallet reserve failed req=${reqId}: ${decision.error?.message}`
     );
+    const backstop = checkMeterFailOpenBackstop({
+      surface: "agent",
+      userId: identity?.userId,
+      requestId: reqId,
+      error: decision.error,
+    });
+    if (!backstop.allowed) {
+      const denial = {
+        status: backstop.status,
+        error: backstop.reason,
+        message:
+          backstop.status === 429
+            ? "Too many degraded-mode Agent requests. Please retry shortly."
+            : "Agent metering is temporarily unavailable. Please retry shortly.",
+      };
+      res.status(denial.status).json(buildAgentMeterDenialPayload(denial, reqId));
+      return { allowed: false };
+    }
+    req.agentChatUnmetered = true;
     void emitBillingAlert({
       provider: "metering",
       id: "agent.meter.fail_open",
@@ -11862,9 +11939,21 @@ async function recordAgentMeterReceiptBestEffort(req, {
  * Returns { ok, status, error } — never throws — so the caller can hard-fail
  * chat with a retryable 503 instead of trusting the client ref.
  */
-async function ensureAgentUserProvisioned({ nullclawBase, userId, email, requestId }) {
+async function ensureAgentUserProvisioned({
+  nullclawBase,
+  userId,
+  email,
+  requestId,
+  meterGatePassed = false,
+}) {
   const basePayload = buildBotProvisionPayload(userId, {});
-  const entitlement = await loadUserEntitlement(userId, { email });
+  const meterAuthorizedUntilUnix = meterGatePassed
+    ? Math.floor((Date.now() + ZAKI_AGENT_METER_RUNTIME_LEASE_MS) / 1000)
+    : null;
+  const entitlement = await loadUserEntitlement(userId, {
+    email,
+    meterAuthorizedUntilUnix,
+  });
   const body = entitlement ? { ...basePayload, ...entitlement } : basePayload;
   return ensureNullclawProvisioned({
     baseUrl: nullclawBase,
@@ -12019,6 +12108,7 @@ const agentChatStreamHandler = async (req, res) => {
           userId,
           email: authResult.email,
           requestId: String(req.requestId || crypto.randomUUID()),
+          meterGatePassed: true,
         }),
     });
     if (!provisionGuard.ok) {
@@ -12127,6 +12217,7 @@ const agentChatStreamHandler = async (req, res) => {
           userId,
           email: authResult.email,
           requestId: String(req.requestId || crypto.randomUUID()),
+          meterGatePassed: true,
         }),
     });
     if (provisionRetry.reprovisioned) {
@@ -15531,25 +15622,24 @@ async function proxyNullclawRequest(req, res, targetPath, options = {}) {
   pipeReadableToResponse(Readable.fromWeb(upstream.body), res, "Nullclaw proxy response");
 }
 
-async function loadUserEntitlement(userId, { email } = {}) {
-  // Owner-only super-admin bypass of the AGENT entitlement paywall. The
-  // nullalis engine caches the entitlement tuple it receives at PROVISION
-  // time and 402s on chat when that cached status is expired/canceled. For an
-  // allowlisted super-admin we send the engine an entitled tuple regardless of
-  // DB tier/status so the engine provisions them entitled and never 402s.
-  // This is the single chokepoint both agent-provision call sites funnel
-  // through (agentProvisionHandler + bot-bff provision). It ONLY changes the
-  // entitlement payload sent to the engine — wallet metering is untouched, and
-  // the Stripe/Creem billing-write paths use buildEntitlementFields directly
-  // (no override) so DB state is never diverged.
+async function loadUserEntitlement(
+  userId,
+  { email, meterAuthorizedUntilUnix = null } = {}
+) {
+  // Engine-bound entitlement chokepoint. Nullalis caches this tuple at
+  // PROVISION time and 402s chat when status is expired/canceled. Super-admins
+  // keep their owner override; after its meter gate allows a turn, the Agent
+  // chat path may also attach a bounded runtime lease. Billing writes and the
+  // ordinary provision route remain DB-derived.
   const isSuperAdmin = superAdminEmailSet.has(normalizeEmail(email));
   try {
     const row = await dbGet(
       "SELECT plan_tier, plan_status, current_period_end FROM zaki_users WHERE id = $1",
       [userId]
     );
-    return applySuperAdminEntitlementOverride(buildEntitlementFields(row), {
+    return buildAgentRuntimeEntitlementFields(row, {
       isSuperAdmin,
+      meterAuthorizedUntilUnix,
     });
   } catch (error) {
     // Soft-fail: forwarding entitlements is optional on the nullalis
@@ -15562,7 +15652,10 @@ async function loadUserEntitlement(userId, { email } = {}) {
     });
     // A super-admin must remain entitled even when the DB lookup soft-fails,
     // so the override still applies to the null result.
-    return applySuperAdminEntitlementOverride(null, { isSuperAdmin });
+    return buildAgentRuntimeEntitlementFields(null, {
+      isSuperAdmin,
+      meterAuthorizedUntilUnix,
+    });
   }
 }
 
@@ -16539,6 +16632,21 @@ app.get(
   requireAgentContext,
   makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/config`)
 );
+// TELOS Slice 1 — curated user-model north star (read-only). Forwards to the
+// nullalis gateway handleTelos. Curation writes go through the approved
+// wish/telos loop, never a UI POST (T4).
+app.get(
+  "/api/agent/telos",
+  requireAgentContext,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/telos`,
+    {
+      responseMode: "json",
+      label: "Nullclaw Agent TELOS response",
+      transformJson: (data) => normalizeAgentTelosPayload(data, ZAKI_AGENT_TELOS_IN_PROMPT),
+    }
+  )
+);
 app.get(
   "/api/agent/secrets/:key",
   requireAgentContext,
@@ -17200,6 +17308,16 @@ app.get(
     return appendAllowedQueryParams(path, req, ["status", "limit", "cursor"]);
   }, AGENT_RUNTIME_JSON_PROXY_OPTIONS)
 );
+
+// Learning-loop review gate. The engine owns the only legal state
+// transitions (shadow -> active/retired); the browser can only request an
+// adopt or dismiss for an authenticated, BFF-pinned user.
+registerAgentSuggestionRoutes(app, {
+  requireAgentContext,
+  json1mb: agentJson1mb,
+  makeUserProxyHandler: makeAgentUserProxyHandler,
+  proxyOptions: AGENT_RUNTIME_JSON_PROXY_OPTIONS,
+});
 
 app.post(
   "/api/agent/history/append",

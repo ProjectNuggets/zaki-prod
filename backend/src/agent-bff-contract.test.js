@@ -21,10 +21,12 @@ import {
   getAgentLaunchChannel,
   normalizeAgentArtifactExportPayload,
   normalizeAgentExportDownloadUrl,
+  normalizeAgentTelosPayload,
   normalizeTelegramDisconnectErrorPayload,
   normalizeAgentControlChannelId,
   normalizeAgentLaunchChannelId,
   registerAgentSessionBffRoutes,
+  registerAgentSuggestionRoutes,
   registerBotBffAliases,
   registerTelegramDisconnectAliases,
   resolveSoftEmptyAgentResponse,
@@ -43,6 +45,9 @@ describe("agent BOT BFF contract", () => {
       { method: "get", path: "/api/agent/tasks/:taskId" },
       { method: "post", path: "/api/agent/tasks/:taskId/stop" },
       { method: "get", path: "/api/agent/jobs" },
+      { method: "get", path: "/api/agent/suggestions" },
+      { method: "post", path: "/api/agent/suggestions/adopt" },
+      { method: "post", path: "/api/agent/suggestions/dismiss" },
       { method: "post", path: "/api/agent/history/append" },
       { method: "get", path: "/api/agent/traces" },
       { method: "get", path: "/api/agent/traces/:runId" },
@@ -62,6 +67,57 @@ describe("agent BOT BFF contract", () => {
       { method: "post", path: "/api/agent/artifacts/:artifactId/export" },
       { method: "get", path: "/api/agent/brain/documents" },
     ]);
+  });
+
+  it("adds the read-only prompt-activation flag to the TELOS payload", () => {
+    expect(normalizeAgentTelosPayload({ telos: [{ key: "goal/1" }] }, true)).toEqual({
+      telos: [{ key: "goal/1" }],
+      telos_in_prompt: true,
+    });
+    expect(normalizeAgentTelosPayload(null, false)).toEqual({ telos_in_prompt: false });
+  });
+
+  it("registers authenticated, user-pinned suggestion review routes", () => {
+    const requireAgentContext = jest.fn();
+    const json1mb = jest.fn();
+    const app = { get: jest.fn(), post: jest.fn() };
+    const proxyOptions = { responseMode: "json" };
+    const makeUserProxyHandler = jest.fn((pathBuilder, options) => ({ pathBuilder, options }));
+
+    registerAgentSuggestionRoutes(app, {
+      requireAgentContext,
+      json1mb,
+      makeUserProxyHandler,
+      proxyOptions,
+    });
+
+    expect(app.get).toHaveBeenCalledWith(
+      "/api/agent/suggestions",
+      requireAgentContext,
+      expect.any(Object)
+    );
+    expect(app.post).toHaveBeenCalledWith(
+      "/api/agent/suggestions/adopt",
+      requireAgentContext,
+      json1mb,
+      expect.any(Object)
+    );
+    expect(app.post).toHaveBeenCalledWith(
+      "/api/agent/suggestions/dismiss",
+      requireAgentContext,
+      json1mb,
+      expect.any(Object)
+    );
+
+    const [getPathBuilder, getOptions] = makeUserProxyHandler.mock.calls[0];
+    const [adoptPathBuilder, adoptOptions] = makeUserProxyHandler.mock.calls[1];
+    const [dismissPathBuilder, dismissOptions] = makeUserProxyHandler.mock.calls[2];
+    expect(getPathBuilder("user 42")).toBe("/api/v1/users/user%2042/suggestions");
+    expect(adoptPathBuilder("user 42")).toBe("/api/v1/users/user%2042/suggestions/adopt");
+    expect(dismissPathBuilder("user 42")).toBe("/api/v1/users/user%2042/suggestions/dismiss");
+    expect(getOptions).toBe(proxyOptions);
+    expect(adoptOptions).toBe(proxyOptions);
+    expect(dismissOptions).toBe(proxyOptions);
   });
 
   it("normalizes produced-file download URLs through the Agent export bridge", () => {
@@ -347,6 +403,29 @@ describe("agent BOT BFF contract", () => {
       { method: "post",   path: "/api/agent/sessions/:sessionKey/approve",  upstreamSuffix: "/approve", json: true,  retry: true },
       { method: "post",   path: "/api/agent/sessions/:sessionKey/cancel",   upstreamSuffix: "/cancel",  json: false },
     ]);
+  });
+
+  it("leases inactive runtime entitlement only after the Agent wallet gate allows the turn", () => {
+    const source = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
+    const streamHandlerSource = source.slice(
+      source.indexOf("const agentChatStreamHandler = async"),
+      source.indexOf("function normalizeZakiBotThreadTitle")
+    );
+    const ordinaryProvisionSource = source.slice(
+      source.indexOf("const agentProvisionHandler = async"),
+      source.indexOf("const makeAgentSecretsTwoPhaseHandler")
+    );
+
+    const reserveIndex = streamHandlerSource.indexOf("requireAgentWalletReserveForChat");
+    const denialIndex = streamHandlerSource.indexOf("if (!meterDecision.allowed || res.headersSent)");
+    const provisionIndex = streamHandlerSource.indexOf("ensureProvisionedBeforeChat");
+    const authorizationIndex = streamHandlerSource.indexOf("meterGatePassed: true");
+
+    expect(reserveIndex).toBeGreaterThanOrEqual(0);
+    expect(denialIndex).toBeGreaterThan(reserveIndex);
+    expect(provisionIndex).toBeGreaterThan(denialIndex);
+    expect(authorizationIndex).toBeGreaterThan(provisionIndex);
+    expect(ordinaryProvisionSource).not.toContain("meterGatePassed: true");
   });
 
   it("soft-empties the explicit Agent session detail handler on missing sessions", () => {

@@ -15,6 +15,7 @@ cp .env.example .env
 - `NOVA_TYP_BASE_URL` (ex: `https://typ.novanuggets.com`)
 - `NOVA_TYP_API_KEY` (admin API key from NOVA.TYP)
 - `ZAKI_AGENT_BACKEND_ENABLED` (`true` to enable Nullclaw adapter route)
+- `ZAKI_AGENT_TELOS_IN_PROMPT` (read-only Settings status; must mirror nullalis `agent.telos_in_prompt`)
 - `NULLCLAW_BASE_URL` (canonical production value: `http://nullclaw:3000`)
 - `NULLCLAW_INTERNAL_TOKEN` (must match Nullclaw `X-Internal-Token` allowlist)
 - `ZAKI_AGENT_WEBHOOK_BASE_URL` (required in deployed environments for smooth Telegram connect when the UI does not pass a webhook URL; ex: `https://agent-dev.zaki.com`)
@@ -38,7 +39,13 @@ cp .env.example .env
 - `STRIPE_PRICE_PERSONAL` (Personal monthly Stripe price)
 - `STRIPE_PRICE_PRO` (Pro monthly Stripe price)
 - `STRIPE_PRICE_PRO_MAX` (Pro Max monthly Stripe price)
+- `STRIPE_WEBHOOK_SECRET` (required in production; startup refuses incomplete Stripe config)
 - `STRIPE_BILLING_PORTAL_CONFIGURATION` (Stripe Customer Portal configuration created by `npm run billing:ensure-commercial-catalog`; required for subscription management)
+- `ZAKI_METER_FAIL_OPEN_ENABLED` (emergency kill switch; default `true`)
+- `ZAKI_METER_FAIL_OPEN_PER_USER_LIMIT_PER_MINUTE` (in-process degraded-mode cap per user; default `3`)
+- `ZAKI_METER_FAIL_OPEN_GLOBAL_BUDGET_PER_MINUTE` (in-process degraded-mode budget; default `100`)
+- `ZAKI_METER_FAIL_OPEN_PAGE_THRESHOLD_PER_MINUTE` (emit a critical paging alert after this many degraded turns; default `10`)
+- `ZAKI_BILLING_ALERT_WEBHOOK_URL` (required in production while fail-open is enabled)
 - `ZAKI_EXTERNAL_CHECKOUT_URL_STUDENT` (required when `ZAKI_BILLING_PROVIDER=paddle|external`)
 - `ZAKI_EXTERNAL_CHECKOUT_URL_PERSONAL` (required when `ZAKI_BILLING_PROVIDER=paddle|external`)
 - `ZAKI_EXTERNAL_PORTAL_URL` (optional portal/manage URL when `ZAKI_BILLING_PROVIDER=paddle|external`)
@@ -55,7 +62,8 @@ cp .env.example .env
 - `ZAKI_APP_URL` (public frontend URL for password reset links)
 - `ZAKI_DEFAULT_WORKSPACE_SLUG` (workspace slug to auto-assign new users)
 - `ZAKI_WORKSPACE_SOFT_HIDE_FALLBACK_ENABLED` (default `true`; when NOVA delete cannot be confirmed, hide workspace from that user in ZAKI list as fallback)
-- `ZAKI_LEGAL_POLICY_VERSION` (current required policy version, ex: `2026-02-17.v2`)
+- `ZAKI_LEGAL_POLICY_VERSION` (current required policy version, ex: `2026-07-12.v4`)
+- `ZAKI_MINIMUM_SIGNUP_AGE` (server-enforced signup age, defaults to `16`; confirm with owner/legal review)
 - `ZAKI_MEMORY_ALERT_WEBHOOK_URL` (optional webhook for memory pipeline alerts)
 - `ZAKI_MEMORY_ALERT_WEBHOOK_TOKEN` (optional bearer token for alert webhook)
 - `ZAKI_EMAIL_MODE` (`console`, `smtp`, `resend`, or `non`)
@@ -73,6 +81,8 @@ Production safety notes:
 - `ZAKI_LEGAL_POLICY_VERSION` must be explicitly set
 - Do not use verification bypass modes (`ZAKI_EMAIL_MODE=non|none|no`) in production
 - Keep `NULLCLAW_BASE_URL` internal-only, for example `http://nullclaw:3000`
+- Stripe is fail-closed at production startup: secret, webhook secret, and every configured launch price must be present
+- Metering fail-open also fails production startup unless a billing/paging alert webhook is configured
 - Do not set `NULLALIS_DEV_USER_ID` or legacy `NULLCLAW_DEV_USER_ID` outside single-user local debugging. It bypasses authenticated user mapping and would collapse agent traffic to one configured user.
 - Set `ZAKI_AGENT_WEBHOOK_BASE_URL` to the public HTTPS agent ingress, for example `https://agent.zaki.com`
 - Telegram connect is now token-first: users should only need a bot token; `account_id` and `allow_from` are optional advanced fields
@@ -97,14 +107,14 @@ npm run migrate:sqlite
 ## Endpoints
 
 - `GET /health`
-- `POST /signup` — body `{ "email": "...", "password": "...", "name": "...", "dateOfBirth": "YYYY-MM-DD", "legalConsentAccepted": true, "legalPolicyVersion": "2026-02-17.v2" }`
+- `POST /signup` — body `{ "email": "...", "password": "...", "name": "...", "dateOfBirth": "YYYY-MM-DD", "legalConsentAccepted": true, "legalPolicyVersion": "2026-07-12.v4" }`
 - `GET /verify?token=...`
 - `POST /login` — body `{ "email": "...", "password": "..." }`
 - `POST /zaki/workspaces` — body `{ "name": "..." }` (requires Authorization header)
 - `POST /password-reset/request` — body `{ "email": "..." }`
 - `POST /password-reset/confirm` — body `{ "token": "...", "password": "..." }`
 - `GET /api/legal/consent-status` — returns current policy version and (if authenticated) whether re-consent is required
-- `POST /api/legal/re-consent` — body `{ "legalConsentAccepted": true, "legalPolicyVersion": "2026-02-17.v2" }` (requires Authorization header)
+- `POST /api/legal/re-consent` — body `{ "legalConsentAccepted": true, "legalPolicyVersion": "2026-07-12.v4" }` (requires Authorization header)
 - `GET /api/billing/config` — returns billing capability flags for the signed-in user context (requires Authorization header)
 - `POST /api/billing/creem/webhook` — Creem signed webhook endpoint for subscription status sync
 - `POST /api/access-code/redeem` — body `{ "code": "..." }` (requires Authorization header)

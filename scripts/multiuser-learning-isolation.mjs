@@ -36,7 +36,7 @@ loadEnvFile(backendEnvPath);
 
 const baseUrl = String(process.env.ZAKI_BASE_URL || "http://127.0.0.1:8787").replace(/\/+$/, "");
 const databaseUrl = String(process.env.DATABASE_URL || "").trim();
-const policyVersion = String(process.env.ZAKI_LEGAL_POLICY_VERSION || "2026-02-17.v2").trim();
+const policyVersion = String(process.env.ZAKI_LEGAL_POLICY_VERSION || "2026-07-12.v4").trim();
 const password = process.env.LEARNING_ISOLATION_PASSWORD || "LearnIsolation!123";
 const cleanup = String(process.env.LEARNING_ISOLATION_CLEANUP || "true").toLowerCase() !== "false";
 const runId = `learniso-${Date.now().toString(36)}`;
