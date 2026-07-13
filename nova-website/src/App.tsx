@@ -8,6 +8,12 @@ import {
 } from "react";
 import { Download } from "lucide-react";
 import {
+  ArchitectureSystemFlow,
+  BuyerJourneyRail,
+  OperatingLayerBridge,
+} from "./components/MeaningfulVisuals";
+import { NovaOrbitHeroShader } from "./components/NovaOrbitHeroShader";
+import {
   ArrowIcon,
   BOOKING_URL,
   FOUNDER_EMAIL,
@@ -519,6 +525,7 @@ function HomePage() {
       <HomeLivePathSection />
       <HomeStackSection />
       <HomeProofSection />
+      <BuyerJourneyRail current="understand" />
       <FinalCta />
     </>
   );
@@ -555,6 +562,10 @@ function Hero() {
       <div className="hero-inner">
         <p className="hero-kicker">Innovation and Artificial Intelligence Research and Consultancies</p>
         <ScrambleBrandTitle />
+        <p className="hero-copy">
+          AI that actually ships: not scripts, API wrappers, or demos. NovaOrbit maps the work,
+          ZAKI runs the agents, and private infrastructure keeps it owned.
+        </p>
         <dl className="hero-definition" aria-label="Nova Nuggets brand definition">
           <div>
             <dt>nova</dt>
@@ -565,10 +576,6 @@ function Hero() {
             <dd>a small lump of gold; a concentrated piece of useful insight, wisdom, or clever knowledge.</dd>
           </div>
         </dl>
-        <p className="hero-copy">
-          AI that actually ships: not scripts, API wrappers, or demos. NovaOrbit maps the work,
-          ZAKI runs the agents, and private infrastructure keeps it owned.
-        </p>
         <div className="hero-actions">
           <a className="button button-primary" href="/nova-orbit-snapshot/">
             Run NovaOrbit Snapshot <ArrowIcon size={18} aria-hidden="true" />
@@ -2234,6 +2241,8 @@ function NovaOrbitPage() {
       text="NovaOrbit is the AI maturity assessment that shows where AI can run, what it should do, and how your business turns it into measurable operating capacity."
       showFinalCta={false}
       showHeroActions
+      heroClassName="article-hero-orbit"
+      heroVisual={<NovaOrbitHeroShader />}
     >
       <NovaOrbitChapterNav />
       <NovaOrbitThesisSection />
@@ -2245,6 +2254,7 @@ function NovaOrbitPage() {
       <NovaOrbitMethodSection />
       <OrbitDeliverablesSection />
       <NovaOrbitDownloadSection />
+      <BuyerJourneyRail current="assess" />
       <BuyerCtaStrip />
     </ArticlePage>
   );
@@ -2287,6 +2297,7 @@ function NovaOrbitThesisSection() {
           inside the company with the right context, systems, approvals, interfaces, owners, and
           evidence.
         </p>
+        <OperatingLayerBridge />
       </div>
     </section>
   );
@@ -2776,6 +2787,7 @@ function WhatWeDoPage() {
       <CapabilitySection />
       <OperatingModel />
       <WorkforceSection />
+      <BuyerJourneyRail current="understand" />
     </ArticlePage>
   );
 }
@@ -2794,6 +2806,7 @@ function DeployPage() {
       <DeploymentDecisionSection />
       <NooxTopologySection />
       <DeploymentSection />
+      <BuyerJourneyRail current="deploy" />
       <BuyerCtaStrip />
     </ArticlePage>
   );
@@ -2813,6 +2826,7 @@ function ProofPage() {
       <ProofCaseSection />
       <ProofDiligenceSection />
       <ProofMediaSection />
+      <BuyerJourneyRail current="prove" />
       <BuyerCtaStrip />
     </ArticlePage>
   );
@@ -2829,6 +2843,7 @@ function PricingPage() {
     >
       <PricingDecisionSection />
       <FaqSection />
+      <BuyerJourneyRail current="assess" />
       <BuyerCtaStrip />
     </ArticlePage>
   );
@@ -2907,7 +2922,9 @@ function ArchitecturePage() {
       text="Nova Nuggets combines traditional AI delivery with the operating fabric that makes agents useful: RAG, fine-tuning, process automation, deployment controls, and run support."
       showHeroActions
     >
+      <ArchitectureSystemFlow />
       <ArchitectureSection />
+      <BuyerJourneyRail current="deploy" />
       <CommercialSection />
     </ArticlePage>
   );
@@ -5022,6 +5039,7 @@ function ArticlePage({
   compactHero = false,
   showHeroActions = false,
   heroClassName,
+  heroVisual,
 }: {
   kicker: string;
   title: string;
@@ -5031,6 +5049,7 @@ function ArticlePage({
   compactHero?: boolean;
   showHeroActions?: boolean;
   heroClassName?: string;
+  heroVisual?: ReactNode;
 }) {
   const articleHeroClassName = [compactHero ? "article-hero article-hero-compact" : "article-hero", heroClassName]
     .filter(Boolean)
@@ -5039,6 +5058,7 @@ function ArticlePage({
   return (
     <>
       <section className={articleHeroClassName}>
+        {heroVisual}
         <p className="section-kicker">{kicker}</p>
         <h1>{title}</h1>
         <p>{text}</p>
