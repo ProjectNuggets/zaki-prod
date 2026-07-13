@@ -7,8 +7,8 @@ describe("legal policy runtime config", () => {
   });
 
   it("falls back to the backend default policy version", () => {
-    expect(LEGAL_POLICY_VERSION_FALLBACK).toBe("2026-02-17.v2");
-    expect(getInitialLegalPolicyVersion()).toBe("2026-02-17.v2");
+    expect(LEGAL_POLICY_VERSION_FALLBACK).toBe("2026-07-12.v4");
+    expect(getInitialLegalPolicyVersion()).toBe("2026-07-12.v4");
   });
 
   it("uses the runtime-injected policy version when present", () => {

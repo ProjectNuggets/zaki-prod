@@ -72,6 +72,7 @@ describe("google-oauth helpers", () => {
         returnTo: "/pricing?plan=agent&auth=login",
         exp: 2_000,
         nonceHash: hashGoogleOAuthNonce("nonce-value"),
+        legalPolicyVersion: "2026-07-12.v4",
       },
       secret
     );
@@ -79,6 +80,7 @@ describe("google-oauth helpers", () => {
     expect(verifyGoogleOAuthState(state, secret, { now: 1_000 })).toEqual({
       returnTo: "/pricing?plan=agent",
       nonceHash: hashGoogleOAuthNonce("nonce-value"),
+      legalPolicyVersion: "2026-07-12.v4",
     });
 
     expect(() => verifyGoogleOAuthState(`${state}tampered`, secret, { now: 1_000 })).toThrow(
