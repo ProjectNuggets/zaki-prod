@@ -1,5 +1,5 @@
-node_modules
+archive
 dist
-dist-ssr
-.env.local
-npm-debug.log
+node_modules
+.DS_Store
+*.log
