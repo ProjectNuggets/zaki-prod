@@ -36,9 +36,9 @@ export const content = {
       helper: "Spaces work in Arabic, English, or both. They are the structured workspaces inside the app.",
     },
     productSplit: {
-      heading: "Three stages. One product ladder.",
+      heading: "Four spokes. One product system.",
       subheading:
-        "Chat, Agent, Spaces, and Brain are the public core. Learn stays gated, Design stays waitlist, and Career is not publicly deployed.",
+        "Agent, Chat/Spaces, Design, and Minutes are the four visible spokes. Design stays waitlist and Minutes stays coming soon; Brain is the Agent memory view.",
       cards: [
         {
           stage: "Surface 1",
@@ -151,9 +151,9 @@ export const content = {
       ],
       cta: "Open Agent",
       secondary: "Jump to plans below to choose the right public access path.",
-      campaignLabel: "Coming soon: gated product lanes",
+      campaignLabel: "Coming next: gated spokes",
       campaignTeaser:
-        "Updates for Learn and Design as they move through their release gates. Career is not publicly deployed.",
+        "Updates for Design and Minutes as they move through their release gates.",
       instagramNote:
         "Sign in to see the plans and access currently available to your account.",
     },
@@ -394,7 +394,7 @@ export const content = {
             "Spaces are the live product layer.\nThey give users a disciplined workspace for Arabic-English daily work.\nThat practical layer is how we earn the right to build the next product step.",
         },
         {
-          pill: "Learn",
+          pill: "Continuity",
           title: "Persistence changes the relationship",
           description:
             "When context carries forward, AI becomes more useful, more trainable, and more accountable.\nMemory continuity, review loops, and user control matter more than one-off answers.\nThat is what ZAKI is testing in public.",
@@ -454,7 +454,7 @@ export const content = {
           description: "Plan faster, write sharper, and make clearer decisions with context-aware support.",
         },
         {
-          title: "Learning",
+          title: "Study",
           description: "Summarize, explain, and translate ideas in a way that stays relevant to your context.",
         },
         {
@@ -553,7 +553,7 @@ export const content = {
         {
           question: "Is ZAKI free? What does it cost?",
           answer:
-            "Free to start — Chat has a free weekly allowance and Agent has bounded free use, with no card required. Paid plans are $15, $45, and $99 a month and add a larger shared weekly allowance across Agent, Chat, Spaces, and Brain. Learn stays gated, Design stays waitlist, and Career is not publicly deployed.",
+            "Free to start — Chat has a free weekly allowance and Agent has bounded free use, with no card required. Paid plans are $15, $45, and $99 a month and add a larger shared weekly allowance across Agent and Chat/Spaces, with Brain as the Agent memory view. Design stays waitlist and Minutes stays coming soon.",
         },
         {
           question: "Can I see and control what ZAKI remembers?",
@@ -664,9 +664,9 @@ export const content = {
       helper: "Spaces تعمل بالعربية والإنجليزية أو بالاثنين. وهي مساحات العمل المنظمة داخل التطبيق.",
     },
     productSplit: {
-      heading: "ثلاث مراحل. سلّم منتج واحد.",
+      heading: "أربعة مسارات. نظام منتج واحد.",
       subheading:
-        "Chat وAgent وSpaces وBrain هي الأسطح العامة الأساسية. Learn مقيّد، وDesign قائمة انتظار، وCareer غير منشور للعامة.",
+        "Agent وChat/Spaces وDesign وMinutes هي المسارات الأربعة المرئية. Design قائمة انتظار وMinutes قريبًا، وBrain هو عرض ذاكرة Agent.",
       cards: [
         {
           stage: "المرحلة 1",
@@ -698,10 +698,10 @@ export const content = {
         },
         {
           stage: "المرحلة 3",
-          title: "المسارات القادمة",
+          title: "Design وMinutes",
           badge: "مقيّدة",
           description:
-            "Learn مقيّد، وDesign قائمة انتظار، وCareer غير منشور للعامة حتى تكتمل مساراتها من البداية إلى النهاية.",
+            "Design قائمة انتظار وMinutes قريبًا حتى تكتمل مساراتهما من البداية إلى النهاية.",
           bullets: [
             "لا تُباع كمنتجات مكتملة",
             "تُفتح بعد اتفاق الصلاحيات والواجهة والاختبارات",
@@ -715,11 +715,11 @@ export const content = {
     beta: {
       heading: "حالة المنتج الآن",
       warning:
-        "Chat وAgent وSpaces وBrain متاحة الآن. المسارات غير العامة تبقى مقيّدة حتى تكتمل عقودها واختباراتها.",
+        "Agent وChat/Spaces هما المساران المباشران، وDesign قائمة انتظار وMinutes قريبًا. Brain هو عرض ذاكرة Agent.",
       bullets: [
         "Chat مجاني للبدء وAgent متاح بحد مجاني مقيد",
         "الخطط المدفوعة هي 15 و45 و99 دولارًا شهريًا",
-        "Learn مقيّد وDesign قائمة انتظار وCareer غير منشور للعامة",
+        "Design قائمة انتظار وMinutes قريبًا",
         "لا يُعلن أي مسار قبل اكتماله من البداية إلى النهاية",
       ],
       primaryCta: "انضم إلى البيتا",
@@ -1159,7 +1159,7 @@ export const content = {
         heading: "المسارات القادمة",
         badge: "مقيّدة",
         description:
-          "Learn مقيّد، وDesign قائمة انتظار، وCareer غير منشور للعامة حتى تكتمل مساراتها.",
+          "Design قائمة انتظار وMinutes قريبًا حتى تكتمل مساراتهما.",
         bullets: [
           "لا تُباع كمنتجات مكتملة",
           "تُفتح بعد اجتياز بوابات الإصدار",

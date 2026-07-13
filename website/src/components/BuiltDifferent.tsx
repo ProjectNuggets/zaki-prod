@@ -6,26 +6,26 @@ const metrics = [
   {
     value: 4,
     suffix: "",
-    label: { en: "Public routes", ar: "مسارات عامة" },
-    sublabel: { en: "Home, Agent, Brain, Settings", ar: "الرئيسية، Agent، Brain، Settings" },
+    label: { en: "Visible spokes", ar: "مسارات مرئية" },
+    sublabel: { en: "Agent, Chat/Spaces, Design, Minutes", ar: "Agent وChat/Spaces وDesign وMinutes" },
   },
   {
     value: 3,
     suffix: "",
-    label: { en: "Public products", ar: "منتجات عامة" },
-    sublabel: { en: "Chat, Agent, Brain", ar: "Chat وAgent وBrain" },
-  },
-  {
-    value: 2,
-    suffix: "",
-    label: { en: "Gated lanes", ar: "مسارات مقيدة" },
-    sublabel: { en: "Learn and Career", ar: "Learn وCareer" },
+    label: { en: "Live spokes", ar: "مسارات مباشرة" },
+    sublabel: { en: "Agent and Chat/Spaces", ar: "Agent وChat/Spaces" },
   },
   {
     value: 1,
     suffix: "",
-    label: { en: "Waitlist lane", ar: "قائمة انتظار" },
-    sublabel: { en: "Design", ar: "Design" },
+    label: { en: "Agent memory view", ar: "عرض ذاكرة Agent" },
+    sublabel: { en: "Brain", ar: "Brain" },
+  },
+  {
+    value: 2,
+    suffix: "",
+    label: { en: "Gated spokes", ar: "مسارات مقيدة" },
+    sublabel: { en: "Design and Minutes", ar: "Design وMinutes" },
   },
 ];
 
@@ -47,7 +47,7 @@ export function BuiltDifferent({ locale }: { locale: Locale }) {
           <p className="mt-4 max-w-[56ch] text-sm leading-6 text-zk-text-secondary md:text-base md:leading-7">
             {isArabic
               ? "كل CTA يقود إلى سطح متاح أو قائمة انتظار صحيحة: Chat للبدء، Agent للاستمرارية، Brain للذاكرة، Settings للتحكم."
-              : "Every CTA routes to a real state: Chat to start, Agent for continuity, Brain for memory, Settings for control, and waitlist where the product is not public."}
+              : "Every CTA routes to a real state: Chat/Spaces to start, Agent for continuity, Brain for Agent memory, Settings for control, and the correct gate for Design or Minutes."}
           </p>
         </Reveal>
 

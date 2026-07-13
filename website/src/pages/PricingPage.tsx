@@ -23,8 +23,8 @@ export function PricingPage({ locale }: { locale: Locale }) {
             </h1>
             <p className="mt-6 max-w-[64ch] text-base leading-8 text-zk-text-secondary">
               {isArabic
-                ? "التسعير لا يبيع منتجات غير جاهزة. Chat مجاني للبدء، وAgent وSpaces وBrain هي الأسطح العامة الأساسية. Learn مقيّد، وDesign قائمة انتظار، وCareer غير منشور للعامة."
-                : "Pricing does not sell unfinished surfaces. Chat is free to start, Agent and Brain carry continuity, and Learn, Career, and Design remain gated by product state."}
+                ? "التسعير لا يبيع منتجات غير جاهزة. Agent وChat/Spaces يعملان الآن، وDesign على قائمة الانتظار، وMinutes قريبًا. Brain هو عرض ذاكرة Agent."
+                : "Pricing does not sell unfinished surfaces. Agent and Chat/Spaces are live, Design is waitlist, Minutes is coming soon, and Brain is the Agent memory view."}
             </p>
           </Reveal>
         </div>

@@ -1,4 +1,4 @@
-import { ArrowRight, Brain, Check, Lock, MessageSquareText, PenTool, Sparkles } from "lucide-react";
+import { ArrowRight, Check, Clock3, MessageSquareText, PenTool, Sparkles } from "lucide-react";
 import { SiteShell } from "../components/layout/SiteShell";
 import { ProductCards } from "../components/ProductCards";
 import { BuiltDifferent } from "../components/BuiltDifferent";
@@ -28,24 +28,6 @@ const productRows = [
     cta: "Open Agent",
   },
   {
-    id: "brain",
-    icon: Brain,
-    title: "Brain",
-    status: "Public",
-    body: "The memory control plane. Search, inspect provenance, and understand what ZAKI carries forward before expanding into deeper product lanes.",
-    href: productHandoffUrl("brain"),
-    cta: "Open Brain",
-  },
-  {
-    id: "learn-hire",
-    icon: Lock,
-    title: "Learn + Career",
-    status: "Private access",
-    body: "Visible as direction, not general access. Learn and Career stay gated until entitlement, memory, usage, UI, and E2E all agree.",
-    href: appHandoffUrl("/settings?section=products", "website_product_beta", "dashboard"),
-    cta: "View access",
-  },
-  {
     id: "design",
     icon: PenTool,
     title: "Design",
@@ -53,6 +35,15 @@ const productRows = [
     body: "Design remains waitlist until service health, project flow, registry state, and tests prove it can be exposed truthfully.",
     href: appHandoffUrl("/design", "website_product_design_waitlist", "design_waitlist"),
     cta: "Join waitlist",
+  },
+  {
+    id: "minutes",
+    icon: Clock3,
+    title: "Minutes",
+    status: "Coming soon",
+    body: "Minutes remains coming soon until meeting ingestion, privacy, retention, and follow-up delivery are proven.",
+    href: appHandoffUrl("/minutes", "website_product_minutes", "minutes_waitlist"),
+    cta: "See status",
   },
 ];
 
@@ -74,18 +65,18 @@ export function ProductPage({ locale }: { locale: Locale }) {
             </h1>
             <p className="mt-6 max-w-[62ch] text-base leading-8 text-zk-text-secondary">
               {isArabic
-                ? "ZAKI V1 يبدأ من Chat، يحمل العمل في Agent، ويجعل الذاكرة مرئية في Brain. المسارات القادمة تبقى مقيّدة حتى تكتمل الحقيقة التشغيلية."
-                : "ZAKI V1 starts in Chat, carries work through Agent, and makes memory visible in Brain. Future lanes stay gated until the operational truth is complete."}
+                ? "المسارات الأربعة هي Agent وChat/Spaces وDesign وMinutes. Brain هو عرض ذاكرة Agent، وليس مسارًا خامسًا."
+                : "The four spokes are Agent, Chat/Spaces, Design, and Minutes. Brain is the Agent memory view, not a fifth spoke."}
             </p>
           </Reveal>
 
           <Reveal delay={80}>
             <div className="grid border border-zk-border-strong bg-zk-surface md:grid-cols-2">
               {[
-                ["Public", "Chat, Agent, Brain"],
-                ["Gated", "Learn, Career"],
-                ["Waitlist", "Design"],
-                ["Control", "Settings owns account configuration"],
+                ["Spokes", "Agent, Chat/Spaces, Design, Minutes"],
+                ["Live", "Agent, Chat/Spaces"],
+                ["Gated", "Design, Minutes"],
+                ["Agent view", "Brain memory control"],
               ].map(([label, value]) => (
                 <div key={label} className="border-b border-e border-zk-border px-5 py-5 last:border-b-0 md:[&:nth-child(2n)]:border-e-0 md:[&:nth-last-child(-n+2)]:border-b-0">
                   <p className="font-mono-ui text-[10px] uppercase tracking-[0.22em] text-zk-text-tertiary">{label}</p>
@@ -108,7 +99,7 @@ export function ProductPage({ locale }: { locale: Locale }) {
             </h2>
           </Reveal>
 
-          <div className="mt-10 grid border border-zk-border-strong bg-zk-surface lg:grid-cols-5">
+          <div className="mt-10 grid border border-zk-border-strong bg-zk-surface lg:grid-cols-4">
             {productRows.map((product) => (
               <a
                 key={product.id}

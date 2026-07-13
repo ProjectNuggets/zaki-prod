@@ -66,6 +66,6 @@ All app CTAs carry an explicit app handoff contract:
 Current product truth:
 
 - Chat/Spaces is the free entry point.
-- Agent and Brain are the signed-in continuity and memory surfaces.
-- Learn and Hire remain gated.
-- Design remains waitlist/early access.
+- Agent and Chat/Spaces are the live spokes.
+- Design remains waitlist and Minutes remains coming soon.
+- Brain is the Agent memory view, not a separate spoke.
