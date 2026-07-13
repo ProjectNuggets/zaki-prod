@@ -11,7 +11,7 @@ jest.mock("react-i18next", () => ({
 }));
 
 function renderGate(
-  productId: "design" | "hire" | "learning",
+  productId: "design" | "minutes",
   title: string,
   mode: "coming_soon" | "private_beta" | "waitlist"
 ) {
@@ -24,16 +24,16 @@ function renderGate(
 
 describe("ProductAccessGate", () => {
   it("labels private-access products separately from coming soon", () => {
-    renderGate("learning", "ZAKI Learn", "private_beta");
+    renderGate("design", "ZAKI Design", "private_beta");
 
-    expect(screen.getByTestId("product-gate-learning")).toHaveAttribute(
+    expect(screen.getByTestId("product-gate-design")).toHaveAttribute(
       "data-product-gate",
       "private_beta"
     );
     expect(screen.getByRole("heading", { name: "This product is gated for private access" })).toBeInTheDocument();
     expect(screen.getByText("Private access")).toBeInTheDocument();
     expect(screen.getByText("Launch state: private access")).toBeInTheDocument();
-    expect(screen.getByText("Dashboard, Agent, Chat, Brain, Settings")).toBeInTheDocument();
+    expect(screen.getByText("Agent, Chat/Spaces, Design, Minutes")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open dashboard/ })).toHaveAttribute("href", "/");
   });
 
@@ -48,5 +48,15 @@ describe("ProductAccessGate", () => {
     expect(screen.getByText("Waitlist")).toBeInTheDocument();
     expect(screen.getByText("Launch state: waitlist")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open dashboard/ })).toHaveAttribute("href", "/");
+  });
+
+  it("labels coming-soon products without exposing app access", () => {
+    renderGate("minutes", "ZAKI Minutes", "coming_soon");
+
+    expect(screen.getByTestId("product-gate-minutes")).toHaveAttribute(
+      "data-product-gate",
+      "coming_soon"
+    );
+    expect(screen.getByText("Coming soon")).toBeInTheDocument();
   });
 });

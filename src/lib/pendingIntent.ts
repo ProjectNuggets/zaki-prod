@@ -56,7 +56,8 @@ function normalizeProductId(value: unknown): AnonymousWorkProductId | null {
     productId === "brain" ||
     productId === "learning" ||
     productId === "hire" ||
-    productId === "design"
+    productId === "design" ||
+    productId === "minutes"
   ) {
     return productId;
   }
@@ -80,6 +81,7 @@ function inferProductFromRoute(pathname: string): AnonymousWorkProductId | null 
   if (normalized === "/brain") return "brain";
   if (normalized === "/learn") return "learning";
   if (normalized === "/design") return "design";
+  if (normalized === "/minutes") return "minutes";
   if (normalized === "/hire") return "hire";
   return null;
 }

@@ -10,8 +10,8 @@
 //   - Wave 1 = smoke scaffolding only. Mocks are permissive and benign so a
 //     route mounts; this file deliberately avoids encoding brittle product
 //     assertions.
-//   - Product visibility truth (Agent/Chat/Brain public; Learn/Hire beta;
-//     Design waitlist) lives in `RELEASE_PRODUCT_REGISTRY` so visibility specs
+//   - Product visibility truth (four spokes; Brain as the Agent view;
+//     Learn/Hire hidden) lives in `RELEASE_VISIBILITY` so visibility specs
 //     and the QA matrix share one source of truth.
 //   - Failure-state overrides (gateway down, extension disconnected, empty
 //     Brain, quota low) are exposed as small composable helpers.
@@ -29,26 +29,26 @@ export const RELEASE_USER = {
 
 export const RELEASE_TOKEN = "release-qa-token";
 
-export type ReleaseVisibilityTier = "public" | "beta" | "waitlist" | "control_plane";
+export type ReleaseVisibilityTier =
+  | "public"
+  | "waitlist"
+  | "coming_soon"
+  | "support"
+  | "hidden";
 
 /**
- * Single source of truth for V1 product visibility. The dashboard renders an
- * explicit text tag per product via `getProductTag()`:
- *   - hire    -> "Private beta"
- *   - design  -> "Waitlist"
- *   - brain   -> "Control plane"
- *   - enabled -> "Live"
- * Learn is operationally `enabled` in the registry but strategy keeps it
- * private beta, so the gate treats Learn's *tier* as beta even though its
- * operational `state` is enabled (see activation map line 107-108).
+ * Release source of truth. The registry deliberately keeps operational Learn
+ * and Hire records so E2E proves the UI visibility policy wins over backend
+ * state and those retained engines cannot reappear.
  */
 export const RELEASE_VISIBILITY: Record<string, ReleaseVisibilityTier> = {
   spaces: "public",
   agent: "public",
-  brain: "control_plane",
-  learning: "beta",
-  hire: "beta",
+  brain: "support",
+  learning: "hidden",
+  hire: "hidden",
   design: "waitlist",
+  minutes: "coming_soon",
 };
 
 type RegistryItem = {
@@ -221,7 +221,7 @@ function releaseBrainGraph(empty = false) {
         kind: "conversation",
         created_at: 1_779_920_000,
         session_id: "session-release",
-        summary: "ZAKI V1 is being finalized with Agent, Chat, Brain, and Settings as the public spine.",
+        summary: "ZAKI has four visible spokes: Agent, Chat/Spaces, Design, and Minutes; Brain is the Agent memory view.",
         valid_to: null,
         importance: 0.91,
         display_label: "ZAKI V1",
@@ -235,7 +235,7 @@ function releaseBrainGraph(empty = false) {
         kind: "daily",
         created_at: 1_780_006_400,
         session_id: "session-release",
-        summary: "Agent memory, workspace memory, learning memory, and hire memory are separate scopes.",
+        summary: "Agent, workspace, and retained specialized-engine memories are separate scopes.",
         valid_to: null,
         importance: 0.84,
         display_label: "Memory scopes",
@@ -830,11 +830,10 @@ export const RELEASE_ROUTES = [
   { path: "/settings", name: "settings" },
 ] as const;
 
-/** Direct beta/waitlist routes must render gates in the public V1 build. */
+/** Visible future-spoke routes must render the correct release gates. */
 export const RELEASE_GATED_ROUTES = [
-  { path: "/learn", name: "learn-gate", gate: "product-gate-learning" },
-  { path: "/hire", name: "hire-gate", gate: "product-gate-hire" },
   { path: "/design", name: "design-gate", gate: "product-gate-design" },
+  { path: "/minutes", name: "minutes-gate", gate: "product-gate-minutes" },
 ] as const;
 
 /** Required signed-in capture viewports (AGENTS.md §8). */

@@ -2,7 +2,7 @@ import "@testing-library/jest-dom";
 import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Navigate, Route, Routes } from "react-router-dom";
 import App from "./App";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -28,9 +28,10 @@ function renderAppAt(path: string) {
           <Route path="/" element={<App />}>
             <Route index element={<div>public home</div>} />
             <Route path="spaces" element={<div>anonymous spaces</div>} />
-            <Route path="learn" element={<div>learn workspace</div>} />
-            <Route path="hire" element={<div>hire workspace</div>} />
+            <Route path="learn" element={<Navigate to="/" replace />} />
+            <Route path="hire" element={<Navigate to="/" replace />} />
             <Route path="design" element={<div>design workspace</div>} />
+            <Route path="minutes" element={<div>minutes workspace</div>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -145,10 +146,9 @@ describe("App route hydration", () => {
   });
 
   it.each([
-    ["/learn", "learn workspace"],
-    ["/hire", "hire workspace"],
     ["/design", "design workspace"],
-  ])("lets gated product routes render without an auth cliff at %s", async (path, label) => {
+    ["/minutes", "minutes workspace"],
+  ])("lets visible gated product routes render without an auth cliff at %s", async (path, label) => {
     fetchMock.mockResolvedValue({
       ok: false,
       status: 401,
@@ -159,5 +159,18 @@ describe("App route hydration", () => {
 
     expect(await screen.findByText(label)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /continue/i })).not.toBeInTheDocument();
+  });
+
+  it.each(["/learn", "/hire"])("lets hidden product routes redirect home without an auth cliff at %s", async (path) => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({}),
+    } as Response);
+
+    renderAppAt(path);
+
+    expect(await screen.findByText("public home")).toBeInTheDocument();
+    expect(screen.queryByText(/workspace/)).not.toBeInTheDocument();
   });
 });

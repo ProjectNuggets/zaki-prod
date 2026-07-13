@@ -23,6 +23,7 @@ import { useAuthStore, useUIStore, useNavigationStore } from "@/stores";
 import { ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID } from "@/lib/zakiBot";
 import { consumeWebsiteCommandIntentFromUrl } from "@/lib/pendingIntent";
 import { getInitialLegalPolicyVersion } from "@/lib/legalPolicy";
+import { getProductLaunchState } from "@/lib/productRoutes";
 
 const PUBLIC_WEBSITE_PATHS = new Set([
   "/",
@@ -59,7 +60,13 @@ function normalizePathname(pathname: string) {
 
 function isGatedProductPath(pathname: string) {
   const normalized = normalizePathname(pathname);
-  return normalized === "/learn" || normalized === "/hire" || normalized === "/design";
+  const state = getProductLaunchState(normalized.slice(1));
+  return state === "waitlist" || state === "coming_soon";
+}
+
+function isHiddenProductPath(pathname: string) {
+  const normalized = normalizePathname(pathname);
+  return getProductLaunchState(normalized.slice(1)) === "hidden";
 }
 
 function isPublicWebsitePath(pathname: string) {
@@ -75,6 +82,7 @@ function isAnonymousAllowedPath(pathname: string) {
   return (
     isPublicWebsitePath(normalized) ||
     isGatedProductPath(normalized) ||
+    isHiddenProductPath(normalized) ||
     normalized === "/spaces" ||
     normalized.startsWith("/spaces/") ||
     normalized === "/pricing/success"
@@ -101,6 +109,7 @@ export default function App() {
   const { t } = useTranslation();
   const normalizedPath = normalizePathname(location.pathname);
   const isGatedProductRoute = isGatedProductPath(normalizedPath);
+  const isHiddenProductRoute = isHiddenProductPath(normalizedPath);
   const isWorkspaceRoute = false;
   const isDashboardRoute = normalizedPath === "/";
   const isAgentRoute = normalizedPath === "/agent";
@@ -111,7 +120,8 @@ export default function App() {
     isAgentRoute ||
     isBrainRoute ||
     isSettingsRoute ||
-    isGatedProductRoute;
+    isGatedProductRoute ||
+    isHiddenProductRoute;
   const isPublicWebsiteRoute = isPublicWebsitePath(normalizedPath);
   const isAnonymousAllowedRoute = isAnonymousAllowedPath(normalizedPath);
   const searchParams = new URLSearchParams(location.search);
@@ -160,7 +170,7 @@ export default function App() {
       );
     } else if (path === '/brain') {
       store.setSidebarMode("brain");
-    } else if (path === '/learn' || path === '/hire' || path === '/design') {
+    } else if (isGatedProductPath(path) || isHiddenProductPath(path)) {
       store.goHome();
     } else if (path === '/spaces' && !spaceId) {
       store.goToSpaces();

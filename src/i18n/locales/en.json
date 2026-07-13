@@ -1754,6 +1754,7 @@
     "learn": "Learn",
     "hire": "Career",
     "design": "Design",
+    "minutes": "Minutes",
     "settings": "Settings",
     "quickSettings": {
       "title": "Quick settings",
@@ -1990,6 +1991,7 @@
         },
         "spaces": "Ask a question, draft a reply, translate text, or compare options.",
         "design": "Sketch the product, page, or brand direction you want to shape.",
+        "minutes": "Bring a meeting recording or notes; Minutes will turn them into decisions and follow-ups.",
         "learning": "Name the topic and goal; ZAKI can make a study plan or explain the first step.",
         "hire": "Paste a role, CV note, or career goal; ZAKI can shape the next move."
       },
@@ -2029,6 +2031,7 @@
         "brain": { "signed": "map", "guest": "map" },
         "spaces": { "signed": "chat", "guest": "chat" },
         "design": { "signed": "shape", "guest": "shape" },
+        "minutes": { "signed": "capture", "guest": "capture" },
         "learning": { "signed": "learn", "guest": "study" },
         "hire": { "signed": "advance", "guest": "advance" }
       },
@@ -2043,6 +2046,7 @@
         },
         "spaces": "Ask now, draft quickly, or test the platform without setting anything up.",
         "design": "Design is coming soon. For now, use Chat to shape a brief or Agent to plan the design work.",
+        "minutes": "Minutes is coming soon. For now, use Chat for a summary or Agent to plan follow-up work.",
         "learning": "Learn is coming soon. For now, use Chat for quick study help or Agent to plan a learning path.",
         "hire": "Career is gated. For now, use Chat to improve CV copy or Agent to plan your next move."
       },
@@ -2074,6 +2078,10 @@
         "design": {
           "headline": "If you need a design brief today, use Chat or Agent.",
           "note": "Design stays waitlisted until the project service is ready."
+        },
+        "minutes": {
+          "headline": "If you need meeting notes today, use Chat or Agent.",
+          "note": "Minutes is coming soon while ingestion, privacy, and retention are finalized."
         },
         "learning": {
           "headline": "If you need study help today, use Chat or Agent.",
@@ -2190,7 +2198,8 @@
         "brain": "Brain",
         "learning": "Learn",
         "hire": "Career",
-        "design": "Design"
+        "design": "Design",
+        "minutes": "Minutes"
       },
       "tags": {
         "live": "Live",
@@ -2207,7 +2216,8 @@
         "brain": "The memory graph made visible: provenance, scopes, conflicts, and governance.",
         "learning": "Study surface for sources, notebooks, tutors, quizzes, and learner memory.",
         "hire": "Career support for target roles, CV positioning, fit notes, applications, and career memory.",
-        "design": "Future design surface for briefs, assets, iterations, and design memory."
+        "design": "Future design surface for briefs, assets, iterations, and design memory.",
+        "minutes": "Future meeting surface for notes, decisions, owners, and follow-ups."
       }
     },
     "memory": {

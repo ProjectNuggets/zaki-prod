@@ -90,6 +90,7 @@ import {
 import { trackProductEvent } from "@/lib/productTelemetry";
 import {
   getProductLaunchState,
+  isProductVisibleInRelease,
   type ProductLaunchState,
 } from "@/lib/productRoutes";
 import { useAuthStore, useUIStore } from "@/stores";
@@ -146,7 +147,7 @@ const SETTINGS_PLAN_LABELS: Record<SettingsBillingPlanId, string> = {
   free: "Free",
   personal: "Personal",
   agent: "ZAKI Agent",
-  learn: "ZAKI Learn",
+  learn: "Legacy plan",
   complete: "ZAKI Complete",
   pro: "Pro",
   pro_max: "Pro MAX",
@@ -426,6 +427,7 @@ function getUsageLaunchStateLabel(
     public_app: "Launch: public app",
     private_beta: "Launch: private access",
     waitlist: "Launch: waitlist",
+    coming_soon: "Launch: coming soon",
     hidden: "Launch: hidden",
   };
   return t(`settingsModal.usage.launchState.${launchState}`, {
@@ -1146,7 +1148,10 @@ export function SettingsPage() {
 
   const productAccessRows =
     productRegistry?.products?.filter(
-      (product) => product.visibleInSettings !== false && product.state !== "hidden"
+      (product) =>
+        product.visibleInSettings !== false &&
+        product.state !== "hidden" &&
+        isProductVisibleInRelease(product.productId)
     ) ?? [];
   const meteredProducts = productAccessRows.filter(
     (product) => product.productKind !== "control_plane" && product.productKind !== "client"

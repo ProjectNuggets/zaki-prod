@@ -96,12 +96,16 @@ describe("ProductRail quick settings", () => {
     expect(screen.getByRole("menuitem", { name: /Sign out/ })).toBeInTheDocument();
   });
 
-  it("keeps future product spokes visible but disabled in normal navigation", () => {
+  it("shows the four release spokes, hides Learn/Career, and keeps future spokes disabled", () => {
     renderProductRail();
 
-    expect(screen.getByTitle("Learn")).toBeDisabled();
-    expect(screen.getByTitle("Career")).toBeDisabled();
+    expect(screen.queryByTitle("Learn")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Career")).not.toBeInTheDocument();
+    expect(screen.getByTitle("Agent")).toBeEnabled();
+    expect(screen.getByTitle("Chat")).toBeEnabled();
     expect(screen.getByTitle("Design")).toBeDisabled();
+    expect(screen.getByTitle("Minutes")).toBeDisabled();
+    expect(screen.getByTitle("Brain")).toBeEnabled();
   });
 
   it("routes anonymous Agent and Brain rail clicks through login with return paths", () => {

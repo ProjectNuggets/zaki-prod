@@ -13,7 +13,7 @@ import {
 type ProductGateMode = "coming_soon" | "private_beta" | "waitlist";
 
 type ProductAccessGateProps = {
-  productId: ProductRegistryProductId;
+  productId: ProductRegistryProductId | "minutes";
   title: string;
   mode: ProductGateMode;
 };
@@ -40,9 +40,9 @@ function modeCopy(mode: ProductGateMode): ProductGateCopy {
       badge: "Coming soon",
       heading: "This product is coming soon",
       body:
-        "This product is visible in the ZAKI family, but public V1 is focused on Dashboard, Agent, Chat, Brain, and Settings first.",
+        "This spoke is visible in the ZAKI family while its complete production flow is finalized.",
       status: "Launch state: coming soon",
-      next: "Start today with Chat, Agent, or Brain from the dashboard.",
+      next: "Start today with Chat or Agent from the dashboard.",
       action: "Open dashboard",
       tone: "warn",
     },
@@ -52,7 +52,7 @@ function modeCopy(mode: ProductGateMode): ProductGateCopy {
       body:
         "{{product}} is gated while route access, entitlement, memory boundaries, and signed-in E2E coverage are finalized together.",
       status: "Launch state: private access",
-      next: "Use Chat, Agent, or Brain today. Access stays gated until the full product contract is ready.",
+      next: "Use Chat or Agent today. Access stays gated until the full product contract is ready.",
       action: "Open dashboard",
       tone: "accent",
     },
@@ -62,7 +62,7 @@ function modeCopy(mode: ProductGateMode): ProductGateCopy {
       body:
         "{{product}} is visible as a future ZAKI surface, but it is not a public app product or paid plan yet.",
       status: "Launch state: waitlist",
-      next: "Visit the product page for context, or start with Chat, Agent, or Brain today.",
+      next: "Visit the product page for context, or start with Chat or Agent today.",
       action: "Open dashboard",
       tone: "warn",
     },
@@ -118,8 +118,8 @@ export function ProductAccessGate({
           <V2PanelBody>
             <dl className="zaki-product-gate__facts">
               <div>
-                <dt>{t("productGate.facts.public", { defaultValue: "Public surfaces" })}</dt>
-                <dd>{t("productGate.facts.publicValue", { defaultValue: "Dashboard, Agent, Chat, Brain, Settings" })}</dd>
+                <dt>{t("productGate.facts.public", { defaultValue: "Visible spokes" })}</dt>
+                <dd>{t("productGate.facts.publicValue", { defaultValue: "Agent, Chat/Spaces, Design, Minutes" })}</dd>
               </div>
               <div>
                 <dt>{t("productGate.facts.memory", { defaultValue: "Memory boundary" })}</dt>

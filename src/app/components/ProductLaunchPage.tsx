@@ -64,28 +64,6 @@ const LAUNCH_COPY: Record<string, LaunchCopy> = {
     policy: "Available now",
     next: "Start in Chat, then move durable work into Agent or Brain when needed.",
   },
-  learn: {
-    id: "learn",
-    heading: "ZAKI Learn",
-    badge: "Private access",
-    body:
-      "Learn is visible in the product family while learner state, entitlement, memory, and E2E coverage are finalized.",
-    primaryLabel: "Open dashboard",
-    primaryHref: "/?source=website_product_learn&intent=dashboard",
-    policy: "Private access",
-    next: "Use Chat or Agent for study work until Learn is opened as a complete product surface.",
-  },
-  hire: {
-    id: "hire",
-    heading: "ZAKI Career",
-    badge: "Private access",
-    body:
-      "Career is gated while role targeting, CV positioning, application memory, and access controls are completed.",
-    primaryLabel: "Open dashboard",
-    primaryHref: "/?source=website_product_hire&intent=dashboard",
-    policy: "Private access",
-    next: "Use Chat for CV copy or Agent to plan the next step while Career stays gated.",
-  },
   design: {
     id: "design",
     heading: "ZAKI Design",
@@ -96,6 +74,17 @@ const LAUNCH_COPY: Record<string, LaunchCopy> = {
     primaryHref: "/?source=website_product_design&intent=dashboard",
     policy: "Waitlist",
     next: "Use Chat or Agent to shape the brief while the Design service and project flow are finalized.",
+  },
+  minutes: {
+    id: "minutes",
+    heading: "ZAKI Minutes",
+    badge: "Coming soon",
+    body:
+      "Minutes is visible as a future spoke while meeting ingestion, privacy, retention, and delivery are finalized.",
+    primaryLabel: "Open dashboard",
+    primaryHref: "/?source=website_product_minutes&intent=dashboard",
+    policy: "Coming soon",
+    next: "Use Chat or Agent for meeting summaries while the Minutes flow is finalized.",
   },
 };
 
