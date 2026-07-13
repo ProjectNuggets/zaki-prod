@@ -1287,6 +1287,7 @@
     }
   },
   "pricingPage": {
+    "back": "Back",
     "eyebrow": "Plans",
     "title": "Choose how ZAKI should keep working with you",
     "subtitle": "Start free in Chat without an account. Upgrade when you want more room for Agent, Chat, Spaces, and Brain. Learn, Design, and Career stay parked until their full flows are ready.",
@@ -1987,12 +1988,12 @@
       "signUp": "Sign up"
     },
     "command": {
-      "signedEyebrow": "Signed in · context and progress stay connected",
-      "guestEyebrow": "Guest session · start without setup",
+      "signedEyebrow": "Signed in",
+      "guestEyebrow": "Guest session",
       "signedTitlePrefix": "Let's ",
       "guestTitlePrefix": "Let's ",
-      "signedCopy": "Choose the lane. Name the outcome. ZAKI brings the right intelligence and carries it forward.",
-      "guestCopy": "Start in Chat now. Sign in when the work needs Agent, files, memory, or history.",
+      "signedCopy": "Name the outcome. ZAKI handles the rest.",
+      "guestCopy": "Start in Chat now. Sign in when you need Agent, files, or memory.",
       "weeklyFreeCredit": "Usage",
       "bestFor": "Best for",
       "memoryScope": "Memory scope",
@@ -2026,9 +2027,10 @@
       "submitOpen": "Continue in {{product}}",
       "submitComingSoon": "{{product}} coming soon",
       "creditsExhaustedTitle": "Weekly usage is full.",
-      "creditsExhaustedCopy": "Keep your prompt here, then sign up, wait for reset, or choose a plan with more room.",
+      "creditsExhaustedCopy": "Your draft stays saved here. Sign up, wait for the weekly reset, or pick a plan with more room.",
       "capacityWindowTitle": "{{hours}}h Agent window is {{percent}}% used.",
-      "capacityWindowCopy": "Keep your prompt here. Recent Agent work leaves this window at {{reset}}.",
+      "capacityWindowCopy": "Your draft stays saved here. More room opens at {{reset}}.",
+      "capacityWindowCopySoon": "Your draft stays saved here. More room opens soon.",
       "nearCapNudge": "You're at {{percent}}% this week — upgrade for more room.",
       "saveAndSignup": "Save and sign up",
       "viewPlans": "View plans",

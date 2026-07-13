@@ -1287,6 +1287,7 @@
     }
   },
   "pricingPage": {
+    "back": "رجوع",
     "eyebrow": "الخطط",
     "title": "اختر كيف تريد أن يواصل ZAKI العمل معك",
     "subtitle": "ابدأ مجانًا في Chat بدون حساب. قم بالترقية عندما تحتاج مساحة أكبر لـ Agent وChat وSpaces وBrain. Learn وDesign وCareer تبقى متوقفة حتى تجهز مساراتها.",
@@ -1987,12 +1988,12 @@
       "signUp": "إنشاء حساب"
     },
     "command": {
-      "signedEyebrow": "مسجل الدخول · يبقى السياق والتقدم متصلين",
-      "guestEyebrow": "جلسة ضيف · ابدأ بلا إعداد",
+      "signedEyebrow": "تم تسجيل الدخول",
+      "guestEyebrow": "جلسة ضيف",
       "signedTitlePrefix": "لنبدأ ",
       "guestTitlePrefix": "لنبدأ ",
-      "signedCopy": "اختر المسار. سم النتيجة. يجلب ZAKI الذكاء المناسب ويمضي بالعمل للأمام.",
-      "guestCopy": "ابدأ في الدردشة الآن. سجّل الدخول عندما يحتاج العمل إلى Agent أو الملفات أو الذاكرة أو السجل.",
+      "signedCopy": "سمِّ النتيجة، وزكي يتولى الباقي.",
+      "guestCopy": "ابدأ في الدردشة الآن. سجّل الدخول عندما تحتاج إلى Agent أو الملفات أو الذاكرة.",
       "weeklyFreeCredit": "الاستخدام",
       "bestFor": "الأفضل لـ",
       "memoryScope": "نطاق الذاكرة",
@@ -2026,9 +2027,10 @@
       "submitOpen": "تابع في {{product}}",
       "submitComingSoon": "{{product}} قريبًا",
       "creditsExhaustedTitle": "الاستخدام الأسبوعي ممتلئ.",
-      "creditsExhaustedCopy": "احتفظ بطلبك هنا، ثم سجّل، أو انتظر إعادة الضبط، أو اختر خطة بمساحة أكبر.",
+      "creditsExhaustedCopy": "تبقى مسودتك محفوظة هنا. سجّل حسابًا، أو انتظر إعادة الضبط الأسبوعية، أو اختر خطة بمساحة أكبر.",
       "capacityWindowTitle": "نافذة Agent لمدة {{hours}} ساعات مستخدمة بنسبة {{percent}}%.",
-      "capacityWindowCopy": "احتفظ بطلبك هنا. تخرج أعمال Agent الأخيرة من هذه النافذة عند {{reset}}.",
+      "capacityWindowCopy": "تبقى مسودتك محفوظة هنا. تتاح مساحة إضافية عند {{reset}}.",
+      "capacityWindowCopySoon": "تبقى مسودتك محفوظة هنا. ستتاح مساحة إضافية قريبًا.",
       "nearCapNudge": "أنت عند {{percent}}% هذا الأسبوع — الترقية تمنحك مساحة أكبر.",
       "saveAndSignup": "احفظ وأنشئ حسابًا",
       "viewPlans": "عرض الخطط",

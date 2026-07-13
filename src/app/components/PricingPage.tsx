@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import {
   useAccessCodePurchaseCheckout,
   useBillingConfig,
@@ -78,6 +79,7 @@ export function PricingPage() {
   const isRtl = i18n.dir?.() === "rtl" || i18n.language?.startsWith("ar");
   const language = i18n.language || undefined;
   const token = useAuthStore((state) => state.token);
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const handledBillingStatusRef = useRef<string | null>(null);
   const autostartRef = useRef<string | null>(null);
@@ -120,6 +122,38 @@ export function PricingPage() {
     if (isProductTelemetrySource(value)) return value;
     return "pricing_page";
   })();
+
+  const handleBack = useCallback(() => {
+    const historyIndex =
+      (window.history.state as { idx?: number } | null)?.idx ?? 0;
+    if (historyIndex > 0) {
+      navigate(-1);
+    } else {
+      navigate("/", { replace: true });
+    }
+  }, [navigate]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (providerModalSelection) {
+        setProviderModalSelection(null);
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      handleBack();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [handleBack, providerModalSelection]);
 
   const entitlements = entitlementsResult?.data ?? null;
   const effectiveEntitlement = resolveEffectiveEntitlement(entitlements);
@@ -538,11 +572,22 @@ export function PricingPage() {
 
   return (
     <div
-      className="zaki-pricing-page h-full overflow-y-auto overflow-x-hidden overscroll-y-contain zaki-scrollbar-fade px-4 py-6 sm:px-6 sm:py-10"
+      className="zaki-pricing-page h-[100dvh] overflow-y-auto overflow-x-hidden overscroll-y-contain zaki-scrollbar-fade px-4 py-6 sm:px-6 sm:py-10"
       style={{ WebkitOverflowScrolling: "touch" }}
       dir={isRtl ? "rtl" : "ltr"}
     >
       <div className="mx-auto w-full max-w-6xl">
+        <button
+          type="button"
+          onClick={handleBack}
+          className="mb-4 inline-flex w-fit items-center gap-2 text-sm font-medium text-zaki-secondary transition-colors hover:text-zaki-primary dark:text-zaki-dark-subtle dark:hover:text-zaki-dark-primary"
+        >
+          <ArrowLeft
+            className={cn("size-4", isRtl && "rotate-180")}
+            aria-hidden="true"
+          />
+          {t("pricingPage.back")}
+        </button>
         <div className={cn("flex flex-col gap-3", isRtl ? "text-right" : "text-left")}>
           <div
             className={cn(
