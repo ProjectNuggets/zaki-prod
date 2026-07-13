@@ -7826,7 +7826,13 @@ export function ChatArea() {
       })()
         .catch((error) => {
           if (generation !== zakiBotProvisionGenerationRef.current) return false;
-          const message = error instanceof Error ? error.message : "Unable to initialize ZAKI.";
+          const isTimeout =
+            error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+          const message = isTimeout
+            ? "ZAKI took too long to initialize. Check your connection and retry."
+            : error instanceof Error
+              ? error.message
+              : "Unable to initialize ZAKI.";
           setZakiBotProvisionState("error");
           setZakiBotProvisionError(message);
           toast.error(message);

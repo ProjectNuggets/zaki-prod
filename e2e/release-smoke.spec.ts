@@ -99,4 +99,35 @@ test.describe("ZAKI V1 release smoke (signed-in)", () => {
     await expect(setupAlert).toHaveCount(0);
     expect(attempts).toBe(2);
   });
+
+  test("first-run Agent provisioning network failure is visible and retryable", async ({ page }) => {
+    // The stalled/severed-connection shape (not an HTTP status): the request
+    // errors at the network layer. The bounded provision fetch must settle,
+    // surface the same error+retry UI, and the retry must succeed.
+    let attempts = 0;
+    await page.route("**/api/agent/provision", async (route) => {
+      attempts += 1;
+      if (attempts === 1) {
+        await route.abort("connectionreset");
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ status: "provisioned" }),
+      });
+    });
+
+    await page.goto("/agent", { waitUntil: "domcontentloaded" });
+
+    const setupAlert = page.getByTestId("agent-provision-state");
+    await expect(setupAlert).toHaveAttribute("role", "alert");
+    await expect(setupAlert).toContainText("Agent setup needs another try");
+    await expect(page.getByRole("button", { name: "Send message" })).toBeDisabled();
+
+    await page.getByRole("button", { name: "Retry setup" }).click();
+
+    await expect(setupAlert).toHaveCount(0);
+    expect(attempts).toBe(2);
+  });
 });

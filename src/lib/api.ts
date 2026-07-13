@@ -2391,9 +2391,12 @@ export async function fetchBotUsage() {
 }
 
 export async function provisionAgent(payload: Record<string, unknown> = {}) {
+  // Bounded: a hung/stalled request must settle so the caller's error+retry UI
+  // and single-flight promise-ref cleanup always run (P0-1 stalled-request shape).
   const response = await backendAuthRequest("/api/agent/provision", {
     method: "POST",
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(15_000),
   });
   const data = await parseApiJson<Record<string, unknown>>(response);
   return { response, data };
