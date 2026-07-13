@@ -210,6 +210,15 @@ test.describe("V2 production-final app surfaces", () => {
     await expect(page.getByTestId("settings-channels").getByText("Slack", { exact: true }).first()).toBeVisible();
     await expect(page.getByTestId("settings-channels").getByText("Discord", { exact: true }).first()).toBeVisible();
     await expect(page.getByTestId("settings-channels").getByText("Email", { exact: true })).toHaveCount(0);
+    const telegramChannel = page.getByTestId("settings-channel-telegram");
+    await telegramChannel.getByRole("button", { name: "Manage Telegram" }).click();
+    const telegramPanel = page.getByTestId("settings-channel-panel-telegram");
+    const telegramTestButton = telegramPanel.getByRole("button", { name: "Test Telegram connection" });
+    await expect(telegramTestButton).toBeVisible();
+    await telegramTestButton.click();
+    await expect(telegramPanel.getByText("Last connection test")).toBeVisible();
+    await expect(telegramPanel.getByText("Provider connection verified.")).toBeVisible();
+    await attachViewportShot(page, testInfo, "settings-telegram-liveness-1440x1000");
     const slackChannel = page.getByTestId("settings-channel-slack");
     await slackChannel.getByRole("button", { name: "Manage Slack" }).click();
     const slackPanel = page.getByTestId("settings-channel-panel-slack");
@@ -256,6 +265,12 @@ test.describe("V2 production-final app surfaces", () => {
     await expect(
       page.getByTestId("settings-automations").getByText("Dream reflection", { exact: true }),
     ).toBeVisible();
+    await page.getByTestId("settings-channel-telegram").scrollIntoViewIfNeeded();
+    await page.getByTestId("settings-channel-telegram").getByRole("button", { name: "Manage Telegram" }).click();
+    const mobileTelegramPanel = page.getByTestId("settings-channel-panel-telegram");
+    await mobileTelegramPanel.getByRole("button", { name: "Test Telegram connection" }).click();
+    await expect(mobileTelegramPanel.getByText("Provider connection verified.")).toBeVisible();
+    await attachViewportShot(page, testInfo, "settings-telegram-liveness-390x844");
     await page.getByTestId("settings-channel-slack").scrollIntoViewIfNeeded();
     await page.getByTestId("settings-channel-slack").getByRole("button", { name: "Manage Slack" }).click();
     const mobileSlackGuidance = page

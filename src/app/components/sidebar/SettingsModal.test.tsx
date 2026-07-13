@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
+import { toast } from "sonner";
 import { SettingsModal } from "./SettingsModal";
 import { SettingsPage } from "../settings/SettingsPage";
+import { formatChannelTestActionLabel } from "../settings/SettingsChannelsSection";
 import { useAuthStore, useUIStore } from "@/stores";
 import {
   connectBotTelegram,
@@ -1816,6 +1818,10 @@ describe("SettingsPage", () => {
         bot_token: "123456:telegram-token",
       });
     });
+    fireEvent.click(telegramControl.getByRole("button", { name: "Test Telegram connection" }));
+    await waitFor(() => {
+      expect(testMock).toHaveBeenCalledWith("telegram");
+    });
     fireEvent.click(telegramControl.getByRole("button", { name: "Disconnect Telegram" }));
     await waitFor(() => {
       expect(disconnectTelegramMock).toHaveBeenCalled();
@@ -1863,7 +1869,7 @@ describe("SettingsPage", () => {
       });
     });
 
-    fireEvent.click(slackControl.getByRole("button", { name: "Check Slack credentials" }));
+    fireEvent.click(slackControl.getByRole("button", { name: "Test Slack connection" }));
     await waitFor(() => {
       expect(testMock).toHaveBeenCalledWith("slack");
     });
@@ -1873,6 +1879,39 @@ describe("SettingsPage", () => {
       expect(disconnectMock).toHaveBeenCalledWith("slack");
     });
   }, 15_000);
+
+  it("shows a user-safe error when a live channel test rejects saved credentials", async () => {
+    const testMock = testAgentChannelControl as jest.MockedFunction<typeof testAgentChannelControl>;
+    testMock.mockResolvedValueOnce({
+      response: { ok: true } as Response,
+      data: {
+        channel: "telegram",
+        last_test: { ok: false, detail: "provider_auth_rejected", checked_at_s: 1730000000 },
+      },
+    });
+    (toast.error as jest.Mock).mockClear();
+    (toast.success as jest.Mock).mockClear();
+    await renderSettingsPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-channel-telegram")).toBeInTheDocument();
+    });
+    fireEvent.click(
+      within(screen.getByTestId("settings-channel-telegram")).getByRole("button", {
+        name: "Manage Telegram",
+      })
+    );
+    fireEvent.click(
+      within(screen.getByTestId("settings-channel-panel-telegram")).getByRole("button", {
+        name: "Test Telegram connection",
+      })
+    );
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("Provider rejected the saved credentials.");
+    });
+    expect(toast.success).not.toHaveBeenCalled();
+  });
 
   it("connects Discord through the generic channel-control path with token and optional guild", async () => {
     const connectMock = connectAgentChannelControl as jest.MockedFunction<
@@ -1910,6 +1949,13 @@ describe("SettingsPage", () => {
         guild_id: "123456789012345678",
       });
     });
+  });
+
+  it("keeps structural-only channel test actions credential-specific", () => {
+    expect(formatChannelTestActionLabel("telegram", "Telegram")).toBe("Test Telegram connection");
+    expect(formatChannelTestActionLabel("slack", "Slack")).toBe("Test Slack connection");
+    expect(formatChannelTestActionLabel("discord", "Discord")).toBe("Check Discord credentials");
+    expect(formatChannelTestActionLabel("whatsapp", "WhatsApp")).toBe("Check WhatsApp credentials");
   });
 
   it("hides channel credential actions when the channel control plane is unavailable", async () => {

@@ -46,6 +46,7 @@ type SettingsChannelViewModel = SettingsChannelConfig & {
   isConnected: boolean;
   canTestChannel: boolean;
   canDisconnectChannel: boolean;
+  hasLiveProbe: boolean;
 };
 
 export type ChannelBindingDraft = Pick<
@@ -206,6 +207,31 @@ function formatUnixDate(value?: number | null) {
   });
 }
 
+export function formatChannelTestDetail(detail?: string | null) {
+  if (!detail) return "Connection test completed.";
+  if (detail === "provider_reachable") return "Provider connection verified.";
+  if (detail === "provider_auth_rejected") return "Provider rejected the saved credentials.";
+  if (detail === "provider_timeout") return "Provider connection test timed out.";
+  if (detail === "provider_unreachable") return "Provider could not be reached.";
+  if (detail === "invalid_provider_response") return "Provider returned an unexpected response.";
+  if (detail === "credentials_present") {
+    return "Saved credentials are present; this provider does not have a live probe yet.";
+  }
+  if (detail.startsWith("missing_required_secret")) return "A required channel credential is missing.";
+  if (detail.startsWith("malformed_secret")) return "A saved channel credential is malformed.";
+  return "Connection test completed.";
+}
+
+export function channelHasLiveProbe(channel: SettingsChannelId) {
+  return channel === "telegram" || channel === "slack";
+}
+
+export function formatChannelTestActionLabel(channel: SettingsChannelId, label: string) {
+  return channelHasLiveProbe(channel)
+    ? `Test ${label} connection`
+    : `Check ${label} credentials`;
+}
+
 function getChannelTone(channel?: AgentChannelStatus | null): V2BadgeTone {
   if (channel?.connected || channel?.configured) return "success";
   if (channel?.available || channel?.live) return "warn";
@@ -311,10 +337,10 @@ export function SettingsChannelsSection({
       const hasRequiredSecrets =
         totalRequiredSecrets === 0 || presentSecrets >= totalRequiredSecrets;
       const canTestChannel =
-        config.id !== "telegram" &&
         credentialFormVisible &&
         Boolean(control?.endpoints?.test || control) &&
         (isConnected || hasRequiredSecrets);
+      const hasLiveProbe = channelHasLiveProbe(config.id);
       const canDisconnectChannel =
         credentialFormVisible &&
         (config.id === "telegram" || Boolean(control?.endpoints?.disconnect || control)) &&
@@ -391,6 +417,7 @@ export function SettingsChannelsSection({
         isConnected,
         canTestChannel,
         canDisconnectChannel,
+        hasLiveProbe,
       }];
     });
   }, [
@@ -564,10 +591,16 @@ export function SettingsChannelsSection({
 
                   {control?.last_test ? (
                     <div className="zaki-settings-v2__channel-check">
-                      <span>Last credential check</span>
-                      <strong>{control.last_test.ok ? "Valid" : "Failed"}</strong>
+                      <span>{channelRow.hasLiveProbe ? "Last connection test" : "Last credential check"}</span>
+                      <strong>
+                        {control.last_test.ok
+                          ? channelRow.hasLiveProbe
+                            ? "Verified"
+                            : "Valid"
+                          : "Failed"}
+                      </strong>
                       <small>
-                        {control.last_test.detail || "checked"}
+                        {formatChannelTestDetail(control.last_test.detail)}
                         {lastTestDate ? ` · ${lastTestDate}` : ""}
                       </small>
                     </div>
@@ -600,7 +633,7 @@ export function SettingsChannelsSection({
                         >
                           {t("settingsModal.channels.control.test", {
                             channel: channelRow.label,
-                            defaultValue: `Check ${channelRow.label} credentials`,
+                            defaultValue: formatChannelTestActionLabel(channelRow.id, channelRow.label),
                           })}
                         </V2Button>
                       ) : null}

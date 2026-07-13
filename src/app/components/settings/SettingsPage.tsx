@@ -100,6 +100,7 @@ import {
   buildEmptyChannelActivationDrafts,
   compactStringPayload,
   defaultChannelBindingDraft,
+  formatChannelTestDetail,
   type ChannelBindingDraft,
   type SettingsChannelId,
 } from "./SettingsChannelsSection";
@@ -1245,7 +1246,6 @@ export function SettingsPage() {
   };
 
   const handleTestChannelControl = async (channel: AgentChannelControlId) => {
-    if (channel === "telegram") return;
     if (!channelControlsAvailable) return;
     setChannelControlAction(`${channel}:test`);
     try {
@@ -1253,16 +1253,16 @@ export function SettingsPage() {
       if (!response.ok || data?.error) {
         throw new Error(data?.message || data?.error || "channel_test_failed");
       }
+      if (!data.last_test) {
+        throw new Error("Channel test did not return a result.");
+      }
       await loadChannelControls();
-      toast.success(
-        data.last_test?.ok
-          ? t("settingsModal.channels.control.testOk", {
-              defaultValue: "Channel check passed.",
-            })
-          : t("settingsModal.channels.control.testComplete", {
-              defaultValue: "Channel check completed.",
-            })
-      );
+      const resultMessage = formatChannelTestDetail(data.last_test.detail);
+      if (data.last_test.ok) {
+        toast.success(resultMessage);
+      } else {
+        toast.error(resultMessage);
+      }
     } catch (error) {
       toast.error(
         error instanceof Error
