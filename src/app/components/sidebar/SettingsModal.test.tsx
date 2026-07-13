@@ -1217,11 +1217,16 @@ describe("SettingsPage", () => {
     expect(channelsSection.getAllByText("WhatsApp")).toHaveLength(1);
     const connectionsSection = within(screen.getByTestId("settings-connections"));
     expect(connectionsSection.getByText("Gmail & Google Drive")).toBeInTheDocument();
-    expect(connectionsSection.getByRole("button", { name: "Connect Gmail" })).toBeDisabled();
-    expect(connectionsSection.getByText("Connector configured")).toBeInTheDocument();
+    expect(connectionsSection.queryByRole("button", { name: "Connect Gmail" })).not.toBeInTheDocument();
+    expect(connectionsSection.queryByText("OAuth setup blocked")).not.toBeInTheDocument();
+    expect(connectionsSection.getByText("Composio available")).toBeInTheDocument();
+    expect(connectionsSection.getByText("Managed in chat")).toBeInTheDocument();
+    expect(
+      connectionsSection.getByText(/ZAKI gives you a secure Composio OAuth link in the conversation/i)
+    ).toBeInTheDocument();
     expect(connectionsSection.getByText(/never asks for an IMAP or SMTP password/i)).toBeInTheDocument();
     expect(
-      connectionsSection.getByText(/require approval before private data is sent elsewhere/i)
+      connectionsSection.getByText(/requires approval before private data is sent elsewhere/i)
     ).toBeInTheDocument();
     expect(screen.queryByLabelText(/IMAP password/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/SMTP password/i)).not.toBeInTheDocument();

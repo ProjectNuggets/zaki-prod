@@ -108,6 +108,29 @@ describe("MessageContent", () => {
     ).toBeGreaterThan(0);
   });
 
+  it("renders a Composio Connect Link from the agent as a clear external link", () => {
+    render(
+      <MessageContent
+        role="assistant"
+        surface="bot"
+        agentReply
+        content={
+          "Connect your Gmail account to continue: https://connect.composio.dev/link/ln_test-user"
+        }
+      />,
+    );
+
+    const connectLink = screen.getByRole("link", {
+      name: "https://connect.composio.dev/link/ln_test-user",
+    });
+    expect(connectLink).toHaveAttribute(
+      "href",
+      "https://connect.composio.dev/link/ln_test-user",
+    );
+    expect(connectLink).toHaveAttribute("target", "_blank");
+    expect(connectLink).toHaveAttribute("rel", "noreferrer");
+  });
+
   it("renders plain email addresses as mail links", () => {
     render(
       <MessageContent

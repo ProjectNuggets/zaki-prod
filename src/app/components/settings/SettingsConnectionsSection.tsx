@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { V2Badge, V2Button } from "@/app/components/v2";
+import { V2Badge } from "@/app/components/v2";
 import type { AgentIntegrationsResponse } from "@/lib/api";
 import { V2SettingsBlock, V2SettingsRow } from "./V2SettingsPrimitives";
 
@@ -28,7 +28,7 @@ export function SettingsConnectionsSection({
   const connectorLabel = loading
     ? "Checking connector"
     : connectorConfigured
-      ? "Connector configured"
+      ? "Composio available"
       : "Connector unavailable";
 
   return (
@@ -36,25 +36,22 @@ export function SettingsConnectionsSection({
       id="settings-connections"
       data-testid="settings-connections"
       title="Connections"
-      meta={loading ? "Checking OAuth availability" : "Personal accounts"}
+      meta={loading ? "Checking OAuth availability" : "Agent-managed OAuth"}
     >
       <V2SettingsRow
         name="Gmail & Google Drive"
-        description="Connect your own Google account through Composio OAuth so ZAKI can act as you in Gmail and Drive. ZAKI never asks for an IMAP or SMTP password. Setup remains unavailable until ZAKI can show the authorized account and require approval before private data is sent elsewhere."
+        description="Ask ZAKI to use Gmail or Drive and ZAKI gives you a secure Composio OAuth link in the conversation. ZAKI never asks for an IMAP or SMTP password, and requires approval before private data is sent elsewhere."
       >
         <div className="zaki-settings-v2__control-stack">
           <div className="zaki-settings-v2__status-chips">
             <V2Badge tone={connectorConfigured ? "success" : "default"}>
               {connectorLabel}
             </V2Badge>
-            <V2Badge tone="warn">OAuth setup blocked</V2Badge>
+            <V2Badge>Managed in chat</V2Badge>
           </div>
-          <V2Button size="sm" variant="accent" disabled>
-            Connect Gmail
-          </V2Button>
           <span className="zaki-settings-v2__action-note">
-            User-scoped OAuth start and connected-account status are not exposed
-            by the BFF yet.
+            When an account is needed, ZAKI presents the Connect Link and
+            continues after you authorize it with Composio.
           </span>
         </div>
       </V2SettingsRow>
