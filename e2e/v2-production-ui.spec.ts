@@ -256,9 +256,8 @@ test.describe("V2 production-final app surfaces", () => {
     { path: "/ar/products/agent", target: /\/agent$/, signal: ".zaki-agent-v2" },
     { path: "/zaki-bot", target: /\/agent$/, signal: ".zaki-agent-v2" },
     { path: "/products/spaces", target: /\/spaces$/, testId: "zaki-spaces-shell" },
-    { path: "/products/learn", target: /\/products\/learn$/, heading: "ZAKI Learn" },
-    { path: "/products/hire", target: /\/products\/hire$/, heading: "ZAKI Career" },
     { path: "/products/design", target: /\/products\/design$/, heading: "ZAKI Design" },
+    { path: "/products/minutes", target: /\/products\/minutes$/, heading: "ZAKI Minutes" },
   ] as const) {
     test(`signed-in product marketing path ${route.path} resolves to truthful surface`, async ({ page }) => {
       await page.setViewportSize(RELEASE_VIEWPORTS.desktop);
@@ -275,6 +274,15 @@ test.describe("V2 production-final app surfaces", () => {
         await expect(page.getByRole("link", { name: /Open dashboard/i })).toBeVisible();
         await expect(page.locator('[data-product-gate]')).toHaveCount(0);
       }
+    });
+  }
+
+  for (const path of ["/products/learn", "/products/hire"] as const) {
+    test(`hidden product marketing path ${path} redirects home`, async ({ page }) => {
+      await page.setViewportSize(RELEASE_VIEWPORTS.desktop);
+      await page.goto(path, { waitUntil: "domcontentloaded" });
+      await expect(page).toHaveURL(/\/$/, { timeout: 20_000 });
+      await expect(page.locator('[data-product-gate], [data-product-id="learning"], [data-product-id="hire"]')).toHaveCount(0);
     });
   }
 });

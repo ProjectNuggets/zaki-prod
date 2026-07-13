@@ -15,7 +15,8 @@ export type AnonymousWorkProductId =
   | "brain"
   | "learning"
   | "hire"
-  | "design";
+  | "design"
+  | "minutes";
 
 export type AnonymousWorkStatus = "draft" | "succeeded" | "failed";
 
@@ -93,7 +94,8 @@ function normalizeProductId(value: unknown): AnonymousWorkProductId | null {
     productId === "brain" ||
     productId === "learning" ||
     productId === "hire" ||
-    productId === "design"
+    productId === "design" ||
+    productId === "minutes"
   ) {
     return productId;
   }

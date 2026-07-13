@@ -8,12 +8,11 @@ export type AppIntent =
   | "agent"
   | "memory"
   | "plans"
-  | "learn_waitlist"
   | "design_waitlist"
-  | "hire_waitlist";
+  | "minutes_waitlist";
 
-export type WebsiteProductId = "chat" | "agent" | "brain" | "learn" | "design" | "hire";
-export type WebsiteProductState = "public" | "private_beta" | "waitlist";
+export type WebsiteProductId = "chat" | "agent" | "brain" | "design" | "minutes";
+export type WebsiteProductState = "public" | "waitlist" | "coming_soon";
 
 export type WebsiteProductHandoff = {
   id: WebsiteProductId;
@@ -54,15 +53,6 @@ export const websiteProductHandoffs: WebsiteProductHandoff[] = [
     source: "website_product_brain",
   },
   {
-    id: "learn",
-    name: "ZAKI Learn",
-    state: "private_beta",
-    statusLabel: "Private access",
-    route: "/",
-    intent: "learn_waitlist",
-    source: "website_product_learn",
-  },
-  {
     id: "design",
     name: "ZAKI Design",
     state: "waitlist",
@@ -72,13 +62,13 @@ export const websiteProductHandoffs: WebsiteProductHandoff[] = [
     source: "website_product_design",
   },
   {
-    id: "hire",
-    name: "ZAKI Career",
-    state: "private_beta",
-    statusLabel: "Private access",
+    id: "minutes",
+    name: "ZAKI Minutes",
+    state: "coming_soon",
+    statusLabel: "Coming soon",
     route: "/",
-    intent: "hire_waitlist",
-    source: "website_product_hire",
+    intent: "minutes_waitlist",
+    source: "website_product_minutes",
   },
 ];
 

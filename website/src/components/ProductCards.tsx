@@ -1,4 +1,4 @@
-import { Brain, Check, ArrowRight } from "lucide-react";
+import { Brain, Check, ArrowRight, Clock3, PenTool } from "lucide-react";
 import type { Locale } from "../lib/content";
 import { productHandoffUrl } from "../lib/appHandoff";
 import { Reveal } from "./Reveal";
@@ -24,16 +24,16 @@ export function ProductCards({ locale }: { locale: Locale }) {
             {isArabic ? "اختر طريقك" : "Choose your path"}
           </p>
           <h2 className="font-display mt-3 text-center text-3xl font-extrabold leading-tight tracking-[-0.03em] text-zk-text md:text-4xl">
-            {isArabic ? "ثلاثة أسطح عامة. مسار واحد." : "Three public surfaces. One path."}
+            {isArabic ? "أربعة مسارات مرئية. نظام واحد." : "Four visible spokes. One system."}
           </h2>
           <p className="mx-auto mt-4 max-w-[48ch] text-center text-sm leading-6 text-zk-text-secondary">
             {isArabic
-              ? "Chat للبدء فورًا. Agent للاستمرارية. Brain لمراجعة الذاكرة والتحكم بها."
-              : "Chat starts the work. Agent keeps it moving. Brain makes memory visible and controllable."}
+              ? "Agent وChat/Spaces مباشران. Design قائمة انتظار وMinutes قريبًا. Brain هو عرض ذاكرة Agent."
+              : "Agent and Chat/Spaces are live. Design is waitlist and Minutes is coming soon. Brain is the Agent memory view."}
           </p>
         </Reveal>
 
-        <div className="mt-12 grid gap-6 lg:grid-cols-3">
+        <div className="mt-12 grid gap-6 lg:grid-cols-4">
           {/* Chat card */}
           <Reveal delay={60}>
             <div className="relative flex h-full flex-col rounded-2xl border border-zk-border bg-zk-surface p-7">
@@ -119,47 +119,90 @@ export function ProductCards({ locale }: { locale: Locale }) {
             </div>
           </Reveal>
 
-          {/* Brain card */}
+          {/* Design card */}
           <Reveal delay={180}>
             <div className="relative flex h-full flex-col rounded-2xl border border-zk-border bg-zk-surface p-7">
               <div className="flex items-center gap-2">
-                <Brain className="size-5 text-zk-accent" strokeWidth={1.5} />
-                <span className="font-display text-xl font-bold text-zk-text">ZAKI Brain</span>
+                <PenTool className="size-5 text-zk-accent" strokeWidth={1.5} />
+                <span className="font-display text-xl font-bold text-zk-text">ZAKI Design</span>
                 <span className="rounded-full bg-zk-accent/10 px-2.5 py-0.5 text-[11px] font-medium text-zk-accent">
-                  {isArabic ? "مشمول" : "Included"}
+                  {isArabic ? "انتظار" : "Waitlist"}
                 </span>
               </div>
 
               <p className="mt-2 text-sm text-zk-text-secondary">
                 {isArabic
-                  ? "سطح الذاكرة الشخصي: ابحث، راجع المصدر، وافهم ما يحمله ZAKI للأمام."
-                  : "The personal memory surface: search, inspect provenance, and understand what ZAKI carries forward."}
+                  ? "تحويل الموجزات إلى اتجاهات وواجهات عندما يثبت المسار الكامل."
+                  : "Briefs into directions and interfaces once the complete flow is proven."}
               </p>
 
               <div className="mt-6 flex items-baseline gap-1">
-                <span className="text-4xl font-bold text-zk-text">{isArabic ? "مرئي" : "Visible"}</span>
-                <span className="text-sm text-zk-text-tertiary">{isArabic ? "بالتحكم" : "memory"}</span>
+                <span className="text-4xl font-bold text-zk-text">{isArabic ? "قريبًا" : "Next"}</span>
               </div>
 
               <ul className="mt-6 flex flex-col gap-3">
-                <FeatureItem>{isArabic ? "بحث في الذاكرة الشخصية" : "Personal memory search"}</FeatureItem>
-                <FeatureItem>{isArabic ? "مصدر وسياق لكل ذاكرة" : "Source and context for each memory"}</FeatureItem>
-                <FeatureItem>{isArabic ? "مسار التحكم قبل التوسع" : "Governance before expansion"}</FeatureItem>
-                <FeatureItem>{isArabic ? "يرتبط بـ Agent وSettings" : "Linked to Agent and Settings"}</FeatureItem>
+                <FeatureItem>{isArabic ? "إنشاء مشاريع مثبت" : "Proven project creation"}</FeatureItem>
+                <FeatureItem>{isArabic ? "تسليم واضح وقابل للمراجعة" : "Reviewable delivery"}</FeatureItem>
               </ul>
 
               <div className="mt-auto pt-6">
                 <a
-                  href={productHandoffUrl("brain")}
+                  href={productHandoffUrl("design")}
                   className="flex w-full items-center justify-center gap-2 rounded-full border border-zk-border-strong bg-zk-surface-hover py-3 text-sm font-medium text-zk-text transition-all duration-300 hover:-translate-y-0.5 hover:border-zk-text-ghost hover:bg-zk-surface-active"
                 >
-                  {isArabic ? "افتح Brain" : "Open Brain"}
+                  {isArabic ? "انضم للانتظار" : "Join waitlist"}
+                  <ArrowRight className="size-3.5" />
+                </a>
+              </div>
+            </div>
+          </Reveal>
+
+          {/* Minutes card */}
+          <Reveal delay={240}>
+            <div className="relative flex h-full flex-col rounded-2xl border border-zk-border bg-zk-surface p-7">
+              <div className="flex items-center gap-2">
+                <Clock3 className="size-5 text-zk-accent" strokeWidth={1.5} />
+                <span className="font-display text-xl font-bold text-zk-text">ZAKI Minutes</span>
+                <span className="rounded-full bg-zk-accent/10 px-2.5 py-0.5 text-[11px] font-medium text-zk-accent">
+                  {isArabic ? "قريبًا" : "Coming soon"}
+                </span>
+              </div>
+
+              <p className="mt-2 text-sm text-zk-text-secondary">
+                {isArabic
+                  ? "الاجتماعات إلى قرارات ومسؤولين ومتابعات بعد اكتمال الخصوصية والاحتفاظ."
+                  : "Meetings into decisions, owners, and follow-ups once privacy and retention are ready."}
+              </p>
+
+              <div className="mt-6 flex items-baseline gap-1">
+                <span className="text-4xl font-bold text-zk-text">{isArabic ? "قريبًا" : "Soon"}</span>
+              </div>
+
+              <ul className="mt-6 flex flex-col gap-3">
+                <FeatureItem>{isArabic ? "ملاحظات وقرارات واضحة" : "Clear notes and decisions"}</FeatureItem>
+                <FeatureItem>{isArabic ? "مسؤولون ومتابعات" : "Owners and follow-ups"}</FeatureItem>
+              </ul>
+
+              <div className="mt-auto pt-6">
+                <a
+                  href={productHandoffUrl("minutes")}
+                  className="flex w-full items-center justify-center gap-2 rounded-full border border-zk-border-strong bg-zk-surface-hover py-3 text-sm font-medium text-zk-text transition-all duration-300 hover:-translate-y-0.5 hover:border-zk-text-ghost hover:bg-zk-surface-active"
+                >
+                  {isArabic ? "شاهد الحالة" : "See status"}
                   <ArrowRight className="size-3.5" />
                 </a>
               </div>
             </div>
           </Reveal>
         </div>
+
+        <Reveal delay={300}>
+          <a href={productHandoffUrl("brain")} className="mt-6 flex items-center gap-3 border border-zk-border bg-zk-bg-raised p-4 text-sm text-zk-text-secondary transition-colors hover:border-zk-border-strong">
+            <Brain className="size-5 shrink-0 text-zk-accent" strokeWidth={1.5} />
+            <span>{isArabic ? "Brain هو عرض ذاكرة Agent: ابحث وراجع وعدّل ما يحمله ZAKI للأمام." : "Brain is the Agent memory view: search, inspect, edit, export, or forget what ZAKI carries forward."}</span>
+            <ArrowRight className="ms-auto size-3.5 shrink-0" />
+          </a>
+        </Reveal>
       </div>
     </section>
   );

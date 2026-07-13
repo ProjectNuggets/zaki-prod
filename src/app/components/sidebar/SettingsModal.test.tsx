@@ -1190,9 +1190,11 @@ describe("SettingsPage", () => {
       ).toBeTruthy();
     }
 
-    expect(within(screen.getByTestId("settings-billing")).getByText("ZAKI Career")).toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-billing")).queryByText("ZAKI Learn")).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-billing")).queryByText("ZAKI Career")).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-billing")).getByText("ZAKI Design")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-billing")).getAllByText("Launch: public app").length).toBeGreaterThan(0);
-    expect(within(screen.getByTestId("settings-billing")).getAllByText("Launch: private access").length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId("settings-billing")).queryByText("Launch: private access")).not.toBeInTheDocument();
     expect(within(screen.getByTestId("settings-billing")).getByText("Launch: waitlist")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-billing")).queryByText("ZAKI CLI")).not.toBeInTheDocument();
     expect(within(screen.getByTestId("settings-billing")).getByText("Additional capacity")).toBeInTheDocument();

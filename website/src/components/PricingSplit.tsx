@@ -119,8 +119,8 @@ export function PricingSplit({ locale, t: _t }: { locale: Locale; t: WebsiteCont
     ? ["ذاكرة واستمرارية للحساب", "موافقات أدوات قبل الأفعال الحساسة", "متابعات وجلسات وسياق قابل للمراجعة", "Brain يعرض الذاكرة ومصدرها"]
     : ["Account memory and continuity", "Tool approvals before sensitive actions", "Follow-ups, sessions, and reviewable context", "Brain shows memory and provenance"];
   const futureFeatureItems = isArabic
-    ? ["Learn يبقى وصولًا مقيّدًا", "Design يبقى قائمة انتظار", "Career غير منشور للعامة", "لا وعود عامة حتى تكتمل المسارات"]
-    : ["Learn stays gated", "Design stays waitlist", "Career is not publicly deployed", "No public promises until flows are complete"];
+    ? ["Design يبقى قائمة انتظار", "Minutes يبقى قريبًا", "لا وعود عامة حتى تكتمل المسارات"]
+    : ["Design stays waitlist", "Minutes stays coming soon", "No public promises until flows are complete"];
   const chatStats = [
     { value: "$0", label: isArabic ? "للبدء" : "To start" },
     { value: "10", label: isArabic ? "رسائل / يوم" : "Msgs / day" },
@@ -150,8 +150,8 @@ export function PricingSplit({ locale, t: _t }: { locale: Locale; t: WebsiteCont
             </h2>
             <p className="mt-4 text-[15px] leading-[1.8] text-zk-text-secondary md:text-base">
               {isArabic
-                ? "Chat هو المدخل المجاني، وAgent وSpaces وBrain هي الأسطح العامة الأساسية. Learn مقيّد، وDesign قائمة انتظار، وCareer غير منشور للعامة."
-                : "Chat is the free entry point, while Agent, Spaces, and Brain make up the public core. Learn is gated, Design is waitlist, and Career is not publicly deployed."}
+                ? "Agent وChat/Spaces هما المساران المباشران. Design قائمة انتظار، وMinutes قريبًا، وBrain هو عرض ذاكرة Agent."
+                : "Agent and Chat/Spaces are live. Design is waitlist, Minutes is coming soon, and Brain is the Agent memory view."}
             </p>
           </div>
         </Reveal>
@@ -275,8 +275,8 @@ export function PricingSplit({ locale, t: _t }: { locale: Locale; t: WebsiteCont
                 </h3>
                 <p className="mt-4 text-[14px] leading-[1.75] text-zk-text-secondary">
                   {isArabic
-                    ? "Learn يبقى مقيّدًا، وDesign قائمة انتظار، وCareer غير منشور للعامة، حتى تتفق الواجهة والصلاحيات والاختبارات."
-                    : "Learn stays gated, Design stays waitlist, and Career is not publicly deployed until UI, entitlement, and tests agree."}
+                    ? "Design يبقى قائمة انتظار، وMinutes يبقى قريبًا، حتى تتفق الواجهة والصلاحيات والاختبارات."
+                    : "Design stays waitlist, and Minutes stays coming soon until UI, entitlement, and tests agree."}
                 </p>
                 <PricingFeatureList items={futureFeatureItems} />
                 <PricingSupportPanel eyebrow={isArabic ? "تحديثات" : "Updates"}>

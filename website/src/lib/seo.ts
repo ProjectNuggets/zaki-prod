@@ -155,7 +155,7 @@ export function getRouteSeo(pathname: string): RouteSeo {
   if (route === "/product/" || route === "/ar/product/") {
     const description =
       locale === "ar"
-        ? "لوحة منتج زكي V1: Chat وAgent وBrain عامة، Learn وCareer وصول خاص، وDesign قائمة انتظار حتى تكتمل مساراتها."
+        ? "المسارات الأربعة المرئية في زكي: Agent وChat/Spaces وDesign وMinutes، مع بقاء Brain عرض ذاكرة Agent."
         : "ZAKI is an intelligence layer for people building their next chapter: Agent acts, Spaces keep work focused, and Brain remembers what matters.";
     return {
       title:
@@ -209,7 +209,7 @@ export function getRouteSeo(pathname: string): RouteSeo {
         ? "ابدأ من Chat مجانًا، واستخدم Agent وBrain للاستمرارية والذاكرة عندما يحتاج العمل إلى حساب."
         : "ZAKI pricing: Free, Personal $15, Pro $45, Pro Max $99. Start free and upgrade for more room, deeper memory, and priority."
       : locale === "ar"
-        ? "استخدم زكي للكتابة والبحث والعمل ثنائي اللغة والمتابعة والذاكرة، مع بقاء Learn وCareer وصول خاص وDesign انتظار."
+        ? "استخدم زكي عبر Agent وChat/Spaces، وتابع Design وMinutes عبر بواباتهما، مع بقاء Brain عرض ذاكرة Agent."
         : "How founders, adventurers, and operators use ZAKI: an agent that acts, spaces for focused work, and a memory that carries context forward.";
     const pricingTitle =
       locale === "ar" ? "أسعار زكي | ابدأ مجانًا" : "ZAKI Pricing — Free, Personal, Pro, and Pro Max";
@@ -239,7 +239,7 @@ export function getRouteSeo(pathname: string): RouteSeo {
     const description =
       locale === "ar"
         ? "اعرف ما يتضمنه زكي V1: Chat وAgent وBrain والتحكم في الذاكرة والأسعار والخصوصية والأسطح القادمة."
-        : "Learn what ZAKI includes in V1: Chat, Agent, Brain, memory controls, and what's live versus coming.";
+        : "See what ZAKI includes: Agent, Chat/Spaces, Design, Minutes, the Agent Brain view, and what's live versus coming.";
     return {
       title:
         locale === "ar"

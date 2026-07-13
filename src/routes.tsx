@@ -10,7 +10,7 @@ import {
 import { ProductAccessGate } from './app/components/ProductAccessGate';
 import { ProductLaunchPage } from './app/components/ProductLaunchPage';
 import { useAuthStore } from './stores';
-import { getCanonicalAppProductRoute } from './lib/productRoutes';
+import { getCanonicalAppProductRoute, getProductLaunchState } from './lib/productRoutes';
 
 function RouteFallback() {
   return <div className="min-h-screen bg-zaki-bg" aria-label="Loading route" />;
@@ -82,6 +82,7 @@ function HomeRoute() {
 function ProductRoute({ locale = "en" }: { locale?: "en" | "ar" }) {
   const token = useAuthStore((state) => state.token);
   const { productId } = useParams();
+  if (getProductLaunchState(productId) === "hidden") return <Navigate to="/" replace />;
   const appRoute = getCanonicalAppProductRoute(productId);
   if (token && appRoute) return <Navigate to={appRoute} replace />;
   return <ProductLaunchPage productId={productId} locale={locale} />;
@@ -284,23 +285,11 @@ export const router = createBrowserRouter([
       },
       {
         path: 'learn',
-        element: (
-          <ProductAccessGate
-            productId="learning"
-            title="ZAKI Learn"
-            mode="private_beta"
-          />
-        ),
+        element: <Navigate to="/" replace />,
       },
       {
         path: 'hire',
-        element: routeSuspense(
-          <ProductAccessGate
-            productId="hire"
-            title="ZAKI Career"
-            mode="private_beta"
-          />
-        ),
+        element: <Navigate to="/" replace />,
       },
       {
         path: 'design',
@@ -309,6 +298,16 @@ export const router = createBrowserRouter([
             productId="design"
             title="ZAKI Design"
             mode="waitlist"
+          />
+        ),
+      },
+      {
+        path: 'minutes',
+        element: routeSuspense(
+          <ProductAccessGate
+            productId="minutes"
+            title="ZAKI Minutes"
+            mode="coming_soon"
           />
         ),
       },

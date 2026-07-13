@@ -22,6 +22,22 @@ function readSourceFiles(root: string) {
 }
 
 describe("V3 website link audit", () => {
+  it("keeps hidden product names and routes out of standalone website source", () => {
+    const files = readSourceFiles(websiteSrc);
+    for (const [path, source] of files) {
+      expect({ path, source }).not.toEqual(
+        expect.objectContaining({
+          source: expect.stringMatching(/["'`](?:ZAKI )?(?:Learn|Hire|Career)["'`]/),
+        }),
+      );
+      expect({ path, source }).not.toEqual(
+        expect.objectContaining({
+          source: expect.stringMatching(/(?:href|to)=\{?["'`]\/?(?:learn|hire)(?:[/?#"'`])/i),
+        }),
+      );
+    }
+  });
+
   it("keeps website app handoffs runtime-configured and never app.chatzaki.com", () => {
     const files = readSourceFiles(websiteSrc);
     for (const [path, source] of files) {
@@ -31,8 +47,10 @@ describe("V3 website link audit", () => {
 
     const appHandoff = readFileSync(join(websiteSrc, "lib/appHandoff.ts"), "utf8");
     expect(appHandoff).toContain("getWebsiteRuntimeConfig");
-    expect(appHandoff).toContain('"hire_waitlist"');
-    expect(appHandoff).toContain('"ZAKI Career"');
+    expect(appHandoff).toContain('"design_waitlist"');
+    expect(appHandoff).toContain('"minutes_waitlist"');
+    expect(appHandoff).not.toContain('"ZAKI Learn"');
+    expect(appHandoff).not.toContain('"ZAKI Career"');
 
     const websiteApi = readFileSync(join(websiteSrc, "lib/websiteApi.ts"), "utf8");
     expect(websiteApi).toContain("getWebsiteRuntimeConfig");
@@ -58,7 +76,9 @@ describe("V3 website link audit", () => {
     expect(v3Source).toContain('to="/privacy"');
     expect(v3Source).toContain('to="/terms"');
     expect(v3Source).toContain('to="/compliance"');
-    expect(v3Source).toContain("Design & Career");
+    expect(v3Source).toContain("Agent · Chat/Spaces · Design · Minutes");
+    expect(v3Source).not.toContain("ZAKI Learn");
+    expect(v3Source).not.toContain("ZAKI Career");
     expect(v3Source).not.toContain("open beta");
     expect(v3Source).not.toContain("Private beta");
     expect(v3Source).not.toContain('href="#"');

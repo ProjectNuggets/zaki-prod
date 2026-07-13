@@ -30,7 +30,9 @@ export function Footer({ locale }: { locale: Locale }) {
             <Link to={isArabic ? "/ar/product/" : "/product/"} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "نظرة المنتج" : "Product overview"}</Link>
             <a href={productHandoffUrl("chat")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "ZAKI Chat" : "ZAKI Chat"}</a>
             <a href={productHandoffUrl("agent")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "زكي Agent" : "ZAKI Agent"}</a>
-            <a href={productHandoffUrl("brain")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "ZAKI Brain" : "ZAKI Brain"}</a>
+            <a href={productHandoffUrl("design")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">ZAKI Design</a>
+            <a href={productHandoffUrl("minutes")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">ZAKI Minutes</a>
+            <a href={productHandoffUrl("brain")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "Brain · ذاكرة Agent" : "Brain · Agent memory"}</a>
             <a href={appHandoffUrl("/settings", "website_footer", "dashboard")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "Settings" : "Settings"}</a>
             <Link to={isArabic ? "/ar/pricing/" : "/pricing/"} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "الأسعار" : "Pricing"}</Link>
             <Link to={isArabic ? "/ar/story/" : "/story/"} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "لماذا زكي" : "Why ZAKI"}</Link>

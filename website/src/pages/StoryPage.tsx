@@ -15,7 +15,7 @@ const pillColors: Record<string, string> = {
   Origin: "bg-zk-accent/10 text-zk-accent",
   Gap: "bg-amber-500/10 text-amber-400",
   Launch: "bg-emerald-500/10 text-emerald-400",
-  Learn: "bg-sky-500/10 text-sky-400",
+  Continuity: "bg-sky-500/10 text-sky-400",
   Focus: "bg-violet-500/10 text-violet-400",
   Vision: "bg-rose-500/10 text-rose-400",
   "الأصل": "bg-zk-accent/10 text-zk-accent",
