@@ -30,6 +30,7 @@ describe("account erasure", () => {
         sessions_skipped_active: 1,
         pg_user_row_deleted: true,
         vector_rows_removed: 3,
+        pg_embedding_rows_removed: 3,
         filesystem_removed: true,
         errors: ["fs_path_not_absolute:/internal/data/users"],
       });
@@ -109,6 +110,7 @@ describe("account erasure", () => {
             sessions_skipped_active: 0,
             pg_user_row_deleted: true,
             vector_rows_removed: 3,
+            pg_embedding_rows_removed: 3,
             filesystem_removed: true,
             errors: [],
           },
@@ -141,6 +143,7 @@ describe("account erasure", () => {
             sessions_skipped_active: 0,
             pg_user_row_deleted: false,
             vector_rows_removed: 0,
+            pg_embedding_rows_removed: 0,
             filesystem_removed: false,
             errors: [],
           },
@@ -172,6 +175,7 @@ describe("account erasure", () => {
       sessions_skipped_active: 0,
       pg_user_row_deleted: true,
       vector_rows_removed: 4,
+      pg_embedding_rows_removed: 4,
       filesystem_removed: true,
       errors: [],
     };

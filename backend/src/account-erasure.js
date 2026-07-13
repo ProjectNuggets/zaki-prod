@@ -40,6 +40,11 @@ export function assertAuthoritativeNullalisManifest(manifest) {
     isCount(manifest.sessions_skipped_active) &&
     typeof manifest.pg_user_row_deleted === "boolean" &&
     isCount(manifest.vector_rows_removed) &&
+    // Deploy-order interlock (review CRITICAL): pg_embedding_rows_removed only exists on
+    // engines with the durable embedding purge (NULL-ALIS #166). Requiring it makes a
+    // pre-#166 engine fail LOUD here instead of silently skipping the pgvector purge for
+    // non-resident tenants — the engine-first deploy order is self-enforcing forever.
+    isCount(manifest.pg_embedding_rows_removed) &&
     typeof manifest.filesystem_removed === "boolean" &&
     Array.isArray(manifest.errors) &&
     manifest.errors.every((error) => typeof error === "string");
@@ -124,9 +129,21 @@ export async function eraseAccountData({
         details: { upstreamStatus: deletion?.status || null },
       });
     }
+    if (deletion?.status === 404) {
+      // 404 is treated as idempotent success, but a KNOWN-linked nova_user_id 404ing may
+      // mean the admin route is misrouted (path drift) rather than "already deleted" —
+      // log loudly so a systematic 404 pattern is visible in ops (review minor).
+      console.error(
+        `[AccountErasure] TYP purge got 404 for known-linked nova_user_id=${zakiUser.nova_user_id} — verify the admin route if this repeats across deletions.`
+      );
+    }
     typ = { attempted: true, status: deletion?.status || null };
   }
-  await cleanupBilling({ zakiUser });
+  const billing = (await cleanupBilling({ zakiUser })) || {
+    attempted: false,
+    ok: true,
+    reason: "unknown",
+  };
   const learning = await deleteLearning({ zakiUser, requestId });
 
   return runInTransaction(async (transaction) => {
@@ -162,10 +179,16 @@ export async function eraseAccountData({
       sessionsSkippedActive: Number(engine.sessions_skipped_active || 0),
       pgUserRowDeleted: Boolean(engine.pg_user_row_deleted),
       vectorRowsRemoved: Number(engine.vector_rows_removed || 0),
+      pgEmbeddingRowsRemoved: Number(engine.pg_embedding_rows_removed || 0),
       filesystemRemoved: Boolean(engine.filesystem_removed),
     };
     const spokeSummary = {
       typ,
+      billing: {
+        attempted: Boolean(billing?.attempted),
+        ok: Boolean(billing?.ok),
+        reason: billing?.reason || null,
+      },
       learning: {
         attempted: Boolean(learning?.attempted),
         reason: learning?.reason || null,

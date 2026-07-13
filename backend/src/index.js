@@ -111,6 +111,7 @@ import {
   requestNullclawChatStream,
 } from "./agent-client.js";
 import {
+  AccountErasureError,
   eraseAccountData,
   resolveAccountErasureTimeoutMs,
 } from "./account-erasure.js";
@@ -5312,7 +5313,7 @@ const billingAdapters = {
       throw new Error("Billing provider is not configured.");
     },
     async cleanupCustomerOnDelete() {
-      return;
+      return { attempted: false, ok: true, reason: "not_supported" };
     },
   },
   stripe: {
@@ -5513,11 +5514,17 @@ const billingAdapters = {
       };
     },
     async cleanupCustomerOnDelete({ zakiUser }) {
-      if (!stripe || !zakiUser.stripe_customer_id) return;
+      // Never silent (review IMPORTANT): the outcome is recorded in the erasure
+      // receipt's spokeSummary so provider-side residue is visible, not invisible.
+      if (!stripe || !zakiUser.stripe_customer_id) {
+        return { attempted: false, ok: true, reason: !stripe ? "no_provider" : "no_customer" };
+      }
       try {
         await stripe.customers.del(zakiUser.stripe_customer_id);
+        return { attempted: true, ok: true, reason: null };
       } catch (err) {
-        console.warn("[Account] Stripe customer delete failed:", err?.message || err);
+        console.error("[Account] Stripe customer delete failed:", err?.message || err);
+        return { attempted: true, ok: false, reason: "provider_error" };
       }
     },
   },
@@ -5554,7 +5561,7 @@ const billingAdapters = {
       throw err;
     },
     async cleanupCustomerOnDelete() {
-      return;
+      return { attempted: false, ok: true, reason: "not_supported" };
     },
   },
   creem: {
@@ -5639,7 +5646,7 @@ const billingAdapters = {
       throw err;
     },
     async cleanupCustomerOnDelete() {
-      return;
+      return { attempted: false, ok: true, reason: "not_supported" };
     },
   },
 };
@@ -8052,12 +8059,15 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
         },
       });
     }
+    // Only AccountErasureError carries browser-safe messaging; anything else
+    // (pg/transaction/upstream internals) is redacted — logged server-side above.
+    const known = error instanceof AccountErasureError;
     res.status(error?.status || 500).json({
       success: false,
-      error: error?.message || "Account delete failed.",
-      code: error?.code || "account_delete_failed",
+      error: known ? error.message : "Account delete failed.",
+      code: known ? error.code || "account_delete_failed" : "account_delete_failed",
       retryable: Boolean(error?.retryable),
-      details: error?.details || undefined,
+      details: known ? error.details || undefined : undefined,
     });
   }
 });
