@@ -65,9 +65,14 @@ const SETTINGS_CHANNELS: SettingsChannelConfig[] = [
   {
     id: "slack",
     label: "Slack",
-    description: "Workspace channel for Agent messages.",
+    description: "Connect your own Slack app to a workspace with write-only credentials.",
     principalPlaceholder: "U123456",
     scopePlaceholder: "C123456",
+    setupNotes: [
+      "Create a Slack app, install it to your workspace, and copy its Bot User OAuth Token (xoxb-…).",
+      "Under Basic Information, copy the Signing Secret. Both the Bot token and Signing secret are required for first-time setup.",
+      "This V1 flow uses pasted app credentials; workspace OAuth app-install is not available yet.",
+    ],
   },
   {
     id: "discord",

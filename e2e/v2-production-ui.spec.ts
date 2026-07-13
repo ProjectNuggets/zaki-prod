@@ -210,6 +210,14 @@ test.describe("V2 production-final app surfaces", () => {
     await expect(page.getByTestId("settings-channels").getByText("Slack", { exact: true }).first()).toBeVisible();
     await expect(page.getByTestId("settings-channels").getByText("Discord", { exact: true }).first()).toBeVisible();
     await expect(page.getByTestId("settings-channels").getByText("Email", { exact: true })).toHaveCount(0);
+    const slackChannel = page.getByTestId("settings-channel-slack");
+    await slackChannel.getByRole("button", { name: "Manage Slack" }).click();
+    const slackPanel = page.getByTestId("settings-channel-panel-slack");
+    await expect(slackPanel.getByText(/Bot User OAuth Token \(xoxb-/i)).toBeVisible();
+    await expect(slackPanel.getByText(/Both the Bot token and Signing secret are required for first-time setup/i)).toBeVisible();
+    await expect(slackPanel.getByText(/workspace OAuth app-install is not available yet/i)).toBeVisible();
+    await expect(slackPanel.getByLabel("Slack Bot token")).toHaveAttribute("type", "password");
+    await attachViewportShot(page, testInfo, "settings-slack-1440x1000");
     const connections = page.getByTestId("settings-connections");
     await expect(connections.getByText("Gmail & Google Drive")).toBeVisible();
     await expect(connections.getByRole("button", { name: "Connect Gmail" })).toBeDisabled();
@@ -248,6 +256,14 @@ test.describe("V2 production-final app surfaces", () => {
     await expect(
       page.getByTestId("settings-automations").getByText("Dream reflection", { exact: true }),
     ).toBeVisible();
+    await page.getByTestId("settings-channel-slack").scrollIntoViewIfNeeded();
+    await page.getByTestId("settings-channel-slack").getByRole("button", { name: "Manage Slack" }).click();
+    const mobileSlackGuidance = page
+      .getByTestId("settings-channel-panel-slack")
+      .getByText(/Both the Bot token and Signing secret are required for first-time setup/i);
+    await mobileSlackGuidance.scrollIntoViewIfNeeded();
+    await expect(mobileSlackGuidance).toBeVisible();
+    await attachViewportShot(page, testInfo, "settings-slack-390x844");
     await page.getByTestId("settings-connections").scrollIntoViewIfNeeded();
     await expect(page.getByText("Gmail & Google Drive")).toBeVisible();
     await expect(page.getByRole("button", { name: "Connect Gmail" })).toBeDisabled();
