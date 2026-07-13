@@ -6,6 +6,7 @@ import {
   Cable,
   CreditCard,
   Database,
+  Link2,
   LockKeyhole,
   MonitorSmartphone,
   ShieldCheck,
@@ -37,6 +38,7 @@ import {
   fetchAgentChannels,
   fetchAgentExtensionDevices,
   fetchAgentExtensionDiagnostics,
+  fetchAgentIntegrations,
   fetchAgentMemoryGovernance,
   fetchBotSettings,
   fetchMemoryPreferences,
@@ -58,6 +60,7 @@ import {
   type AgentChannelStatus,
   type AgentExtensionDevice,
   type AgentExtensionDiagnosticsResponse,
+  type AgentIntegrationsResponse,
   type AgentMemoryGovernanceResponse,
   type AgentMemoryPurgePiiResponse,
   type BotTelegramConnectPayload,
@@ -97,11 +100,13 @@ import {
   buildEmptyChannelActivationDrafts,
   compactStringPayload,
   defaultChannelBindingDraft,
+  formatChannelTestDetail,
   type ChannelBindingDraft,
   type SettingsChannelId,
 } from "./SettingsChannelsSection";
 import { SettingsAgentModelPicker } from "./SettingsAgentModelPicker";
 import { SettingsAutomationsSection } from "./SettingsAutomationsSection";
+import { SettingsConnectionsSection } from "./SettingsConnectionsSection";
 import { SettingsSuggestionsSection } from "./SettingsSuggestionsSection";
 import { SettingsTelosSection } from "./SettingsTelosSection";
 import {
@@ -200,8 +205,8 @@ const SETTINGS_SECTION_QUERY_MAP: Record<string, string> = {
   suggestions: "#settings-suggestions",
   devices: "#settings-devices",
   extension: "#settings-devices",
-  oauth: "#settings-account",
-  connections: "#settings-account",
+  oauth: "#settings-connections",
+  connections: "#settings-connections",
   developer: "#settings-secrets",
   "developer-access": "#settings-secrets",
   privacy: "#settings-privacy",
@@ -215,6 +220,7 @@ const SETTINGS_NAV_HASHES = [
   "#settings-billing",
   "#settings-agent",
   "#settings-automations",
+  "#settings-connections",
   "#settings-channels",
   "#settings-secrets",
   "#settings-devices",
@@ -227,7 +233,6 @@ const SETTINGS_HASH_COMPAT_MAP: Record<string, (typeof SETTINGS_NAV_HASHES)[numb
   "#settings-spaces": "#settings-billing",
   "#settings-brain": "#settings-memory-data",
   "#settings-developer-access": "#settings-secrets",
-  "#settings-connections": "#settings-account",
   "#settings-usage": "#settings-billing",
   "#settings-providers": "#settings-agent",
 };
@@ -493,6 +498,11 @@ export function SettingsPage() {
     Record<string, Record<string, string>>
   >(() => buildEmptyChannelActivationDrafts());
   const [channelAction, setChannelAction] = useState<string | null>(null);
+  const [agentIntegrations, setAgentIntegrations] = useState<
+    NonNullable<AgentIntegrationsResponse["integrations"]>
+  >([]);
+  const [agentIntegrationsLoading, setAgentIntegrationsLoading] = useState(true);
+  const [agentIntegrationsAvailable, setAgentIntegrationsAvailable] = useState(true);
   const [expandedChannelId, setExpandedChannelId] = useState<SettingsChannelId | null>(null);
   const [channelBindingDrafts, setChannelBindingDrafts] = useState<
     Record<AgentChannelId, ChannelBindingDraft>
@@ -681,6 +691,30 @@ export function SettingsPage() {
       }
       scroller.removeEventListener("scroll", scheduleUpdate);
       window.removeEventListener("resize", scheduleUpdate);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setAgentIntegrationsLoading(true);
+    fetchAgentIntegrations()
+      .then(({ response, data }) => {
+        if (!active) return;
+        setAgentIntegrationsAvailable(response.ok);
+        setAgentIntegrations(
+          response.ok && Array.isArray(data?.integrations) ? data.integrations : []
+        );
+      })
+      .catch(() => {
+        if (!active) return;
+        setAgentIntegrationsAvailable(false);
+        setAgentIntegrations([]);
+      })
+      .finally(() => {
+        if (active) setAgentIntegrationsLoading(false);
+      });
+    return () => {
+      active = false;
     };
   }, []);
 
@@ -1212,7 +1246,6 @@ export function SettingsPage() {
   };
 
   const handleTestChannelControl = async (channel: AgentChannelControlId) => {
-    if (channel === "telegram") return;
     if (!channelControlsAvailable) return;
     setChannelControlAction(`${channel}:test`);
     try {
@@ -1221,15 +1254,23 @@ export function SettingsPage() {
         throw new Error(data?.message || data?.error || "channel_test_failed");
       }
       await loadChannelControls();
-      toast.success(
-        data.last_test?.ok
-          ? t("settingsModal.channels.control.testOk", {
-              defaultValue: "Channel check passed.",
-            })
-          : t("settingsModal.channels.control.testComplete", {
-              defaultValue: "Channel check completed.",
-            })
-      );
+      if (!data.last_test) {
+        // A pre-liveness engine won't return last_test. Degrade gracefully
+        // (treat as unknown / not yet tested) instead of throwing an error.
+        toast(
+          t("settingsModal.channels.control.testUnknown", {
+            defaultValue:
+              "Test request sent, but this engine did not report a live result.",
+          })
+        );
+        return;
+      }
+      const resultMessage = formatChannelTestDetail(data.last_test.detail);
+      if (data.last_test.ok) {
+        toast.success(resultMessage);
+      } else {
+        toast.error(resultMessage);
+      }
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -1435,6 +1476,12 @@ export function SettingsPage() {
       href: "#settings-automations",
       label: t("settingsModal.nav.automations", { defaultValue: "Automations" }),
       icon: Bot,
+      group: t("settingsModal.navGroups.agent", { defaultValue: "Agent" }),
+    },
+    {
+      href: "#settings-connections",
+      label: t("settingsModal.nav.connections", { defaultValue: "Connections" }),
+      icon: Link2,
       group: t("settingsModal.navGroups.agent", { defaultValue: "Agent" }),
     },
     {
@@ -2542,6 +2589,12 @@ export function SettingsPage() {
             </V2SettingsBlock>
 
             <SettingsAutomationsSection />
+
+            <SettingsConnectionsSection
+              integrations={agentIntegrations}
+              loading={agentIntegrationsLoading}
+              available={agentIntegrationsAvailable}
+            />
 
             <SettingsChannelsSection
               agentChannelsById={agentChannelsById}

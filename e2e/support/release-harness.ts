@@ -654,9 +654,38 @@ export async function mockReleaseShell(page: Page, options: ReleaseShellOptions 
       ],
     });
   });
+  let telegramLastTest: { ok: boolean; checked_at_s: number; detail: string } | null = null;
+  await page.route("**/api/agent/channel-control/telegram/test", async (route) => {
+    telegramLastTest = {
+      ok: true,
+      checked_at_s: 1_780_000_000,
+      detail: "provider_reachable",
+    };
+    await json(route, { channel: "telegram", last_test: telegramLastTest });
+  });
   await page.route("**/api/agent/channel-control", async (route) => {
     await json(route, {
       channels: [
+        {
+          channel: "telegram",
+          label: "Telegram",
+          build_enabled: true,
+          operator_configured: true,
+          user_managed: false,
+          user_connected: true,
+          status: "connected",
+          secret_refs: [
+            { key: "telegram_bot_token", label: "Bot token", required: true, present: true },
+          ],
+          config: {},
+          last_test: telegramLastTest,
+          endpoints: {
+            self: "/api/v1/users/release-user/channels/telegram",
+            connect: "/api/v1/users/release-user/channels/telegram/connect",
+            test: "/api/v1/users/release-user/channels/telegram/test",
+            disconnect: "/api/v1/users/release-user/channels/telegram/disconnect",
+          },
+        },
         {
           channel: "slack",
           label: "Slack",

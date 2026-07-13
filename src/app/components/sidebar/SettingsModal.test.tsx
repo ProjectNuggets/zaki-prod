@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
+import { toast } from "sonner";
 import { SettingsModal } from "./SettingsModal";
 import { SettingsPage } from "../settings/SettingsPage";
+import { formatChannelTestActionLabel } from "../settings/SettingsChannelsSection";
 import { useAuthStore, useUIStore } from "@/stores";
 import {
   connectBotTelegram,
@@ -1148,6 +1150,7 @@ describe("SettingsPage", () => {
 
     expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeInTheDocument();
     expect(screen.getByTestId("settings-account")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-connections")).toBeInTheDocument();
     expect(screen.getByTestId("settings-channels")).toBeInTheDocument();
     expect(screen.getByTestId("settings-secrets")).toBeInTheDocument();
     expect(screen.queryByTestId("settings-providers")).not.toBeInTheDocument();
@@ -1160,7 +1163,6 @@ describe("SettingsPage", () => {
     expect(screen.getByTestId("settings-platform-usage")).toBeInTheDocument();
     expect(screen.getByTestId("settings-memory-data")).toBeInTheDocument();
     expect(screen.queryByTestId("settings-developer-access")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("settings-connections")).not.toBeInTheDocument();
     expect(screen.getByTestId("settings-privacy")).toBeInTheDocument();
 
     expect(screen.getByRole("link", { name: "Plan & Usage" })).toBeInTheDocument();
@@ -1177,6 +1179,7 @@ describe("SettingsPage", () => {
       "settings-account",
       "settings-billing",
       "settings-agent",
+      "settings-connections",
       "settings-channels",
       "settings-secrets",
       "settings-devices",
@@ -1208,8 +1211,18 @@ describe("SettingsPage", () => {
     expect(channelsSection.getByText("Telegram")).toBeInTheDocument();
     expect(channelsSection.getAllByText("Slack")).toHaveLength(1);
     expect(channelsSection.getAllByText("Discord")).toHaveLength(1);
-    expect(channelsSection.getAllByText("Email")).toHaveLength(1);
+    expect(channelsSection.queryByText("Email")).not.toBeInTheDocument();
     expect(channelsSection.getAllByText("WhatsApp")).toHaveLength(1);
+    const connectionsSection = within(screen.getByTestId("settings-connections"));
+    expect(connectionsSection.getByText("Gmail & Google Drive")).toBeInTheDocument();
+    expect(connectionsSection.getByRole("button", { name: "Connect Gmail" })).toBeDisabled();
+    expect(connectionsSection.getByText("Connector configured")).toBeInTheDocument();
+    expect(connectionsSection.getByText(/never asks for an IMAP or SMTP password/i)).toBeInTheDocument();
+    expect(
+      connectionsSection.getByText(/require approval before private data is sent elsewhere/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText(/IMAP password/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/SMTP password/i)).not.toBeInTheDocument();
     expect(within(screen.getByTestId("settings-memory-data")).getByText("Chat memory capture")).toBeInTheDocument();
     expect(
       within(screen.getByTestId("settings-memory-data")).getByText("Improve Agent memories automatically")
@@ -1217,7 +1230,7 @@ describe("SettingsPage", () => {
     expect(within(screen.getByTestId("settings-memory-data")).getByText("Improve Agent recall")).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(within(screen.getByTestId("settings-channels")).getAllByText("Credentials saved").length).toBeGreaterThan(0);
+      expect(within(screen.getByTestId("settings-channels")).getAllByText("Connected").length).toBeGreaterThan(0);
       expect(within(screen.getByTestId("settings-channels")).getByText("1 bindings")).toBeInTheDocument();
       expect(within(screen.getByTestId("settings-channels")).queryByText(/U123/)).not.toBeInTheDocument();
       expect(within(screen.getByTestId("settings-secrets")).getByText("telegram_bot_token")).toBeInTheDocument();
@@ -1297,10 +1310,18 @@ describe("SettingsPage", () => {
     const connectionsRender = await renderSettingsPage("/settings#settings-connections");
     await waitFor(() => {
       expect(screen.getByTestId("settings-location")).toHaveTextContent(
-        "/settings#settings-account"
+        "/settings#settings-connections"
       );
     });
     connectionsRender.unmount();
+
+    const oauthRender = await renderSettingsPage("/settings?section=oauth");
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-location")).toHaveTextContent(
+        "/settings#settings-connections"
+      );
+    });
+    oauthRender.unmount();
 
     const usageRender = await renderSettingsPage("/settings#settings-usage");
     await waitFor(() => {
@@ -1309,7 +1330,7 @@ describe("SettingsPage", () => {
       );
     });
     usageRender.unmount();
-  });
+  }, 15_000);
 
   it("wires Plan & Usage actions to the monthly platform billing mutations", async () => {
     checkoutMutateMock.mockClear();
@@ -1805,6 +1826,10 @@ describe("SettingsPage", () => {
         bot_token: "123456:telegram-token",
       });
     });
+    fireEvent.click(telegramControl.getByRole("button", { name: "Test Telegram connection" }));
+    await waitFor(() => {
+      expect(testMock).toHaveBeenCalledWith("telegram");
+    });
     fireEvent.click(telegramControl.getByRole("button", { name: "Disconnect Telegram" }));
     await waitFor(() => {
       expect(disconnectTelegramMock).toHaveBeenCalled();
@@ -1817,15 +1842,29 @@ describe("SettingsPage", () => {
     );
 
     const slackControl = within(screen.getByTestId("settings-channel-panel-slack"));
+    expect(
+      slackControl.getByText(/Bot User OAuth Token \(xoxb-/i)
+    ).toBeInTheDocument();
+    expect(
+      slackControl.getByText(/workspace OAuth app-install is not available yet/i)
+    ).toBeInTheDocument();
+    expect(
+      slackControl.getByText(/Both the Bot token and Signing secret are required for first-time setup/i)
+    ).toBeInTheDocument();
     const saveCredentialsButton = slackControl.getByRole("button", {
       name: "Update Slack credentials",
     });
     expect(saveCredentialsButton).toBeDisabled();
 
-    fireEvent.change(slackControl.getByLabelText("Slack Bot token"), {
+    const slackBotToken = slackControl.getByLabelText("Slack Bot token");
+    const slackSigningSecret = slackControl.getByLabelText("Slack Signing secret");
+    expect(slackBotToken).toHaveAttribute("type", "password");
+    expect(slackSigningSecret).toHaveAttribute("type", "password");
+
+    fireEvent.change(slackBotToken, {
       target: { value: " xoxb-settings-test " },
     });
-    fireEvent.change(slackControl.getByLabelText("Slack Signing secret"), {
+    fireEvent.change(slackSigningSecret, {
       target: { value: " signing-secret " },
     });
     expect(saveCredentialsButton).toBeEnabled();
@@ -1838,7 +1877,7 @@ describe("SettingsPage", () => {
       });
     });
 
-    fireEvent.click(slackControl.getByRole("button", { name: "Check Slack credentials" }));
+    fireEvent.click(slackControl.getByRole("button", { name: "Test Slack connection" }));
     await waitFor(() => {
       expect(testMock).toHaveBeenCalledWith("slack");
     });
@@ -1847,6 +1886,300 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(disconnectMock).toHaveBeenCalledWith("slack");
     });
+  }, 15_000);
+
+  it("shows a user-safe error when a live channel test rejects saved credentials", async () => {
+    const testMock = testAgentChannelControl as jest.MockedFunction<typeof testAgentChannelControl>;
+    testMock.mockResolvedValueOnce({
+      response: { ok: true } as Response,
+      data: {
+        channel: "telegram",
+        last_test: { ok: false, detail: "provider_auth_rejected", checked_at_s: 1730000000 },
+      },
+    });
+    (toast.error as jest.Mock).mockClear();
+    (toast.success as jest.Mock).mockClear();
+    await renderSettingsPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-channel-telegram")).toBeInTheDocument();
+    });
+    fireEvent.click(
+      within(screen.getByTestId("settings-channel-telegram")).getByRole("button", {
+        name: "Manage Telegram",
+      })
+    );
+    fireEvent.click(
+      within(screen.getByTestId("settings-channel-panel-telegram")).getByRole("button", {
+        name: "Test Telegram connection",
+      })
+    );
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith("Provider rejected the saved credentials.");
+    });
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("downgrades a connected channel badge to needs-attention when the last live test failed", async () => {
+    const fetchChannelControlsMock = fetchAgentChannelControls as jest.MockedFunction<
+      typeof fetchAgentChannelControls
+    >;
+    fetchChannelControlsMock.mockResolvedValueOnce({
+      response: { ok: true } as Response,
+      data: {
+        channels: [
+          {
+            channel: "slack",
+            label: "Slack",
+            build_enabled: true,
+            operator_configured: true,
+            user_managed: true,
+            user_connected: true,
+            status: "connected",
+            secret_refs: [
+              { key: "slack_bot_token", label: "Bot token", required: true, present: true },
+              { key: "slack_signing_secret", label: "Signing secret", required: true, present: true },
+            ],
+            config: {},
+            // Stored state says connected, but the last live /test failed.
+            last_test: { ok: false, detail: "provider_auth_rejected", checked_at_s: 1730000000 },
+          },
+        ],
+      },
+    });
+
+    await renderSettingsPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-channel-slack")).toBeInTheDocument();
+    });
+
+    const slackRow = within(screen.getByTestId("settings-channel-slack"));
+    const badge = slackRow.getByText("Needs attention");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveClass("v2-badge--warn");
+    // The badge must NOT read as healthy just because stored state is connected.
+    expect(slackRow.queryByText("Connected")).not.toBeInTheDocument();
+  });
+
+  it("degrades gracefully when a live test response omits last_test (pre-liveness engine)", async () => {
+    const testMock = testAgentChannelControl as jest.MockedFunction<typeof testAgentChannelControl>;
+    // An old engine that predates channel liveness returns no last_test field.
+    testMock.mockResolvedValueOnce({
+      response: { ok: true } as Response,
+      data: { channel: "slack" },
+    });
+
+    await renderSettingsPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-channel-slack")).toBeInTheDocument();
+    });
+
+    (toast as unknown as jest.Mock).mockClear();
+    (toast.error as jest.Mock).mockClear();
+    (toast.success as jest.Mock).mockClear();
+
+    fireEvent.click(
+      within(screen.getByTestId("settings-channel-slack")).getByRole("button", {
+        name: "Manage Slack",
+      })
+    );
+    fireEvent.click(
+      within(screen.getByTestId("settings-channel-panel-slack")).getByRole("button", {
+        name: "Test Slack connection",
+      })
+    );
+
+    await waitFor(() => {
+      expect(testMock).toHaveBeenCalledWith("slack");
+    });
+    // No throw / error toast — a neutral "unknown" toast instead.
+    await waitFor(() => {
+      expect(toast).toHaveBeenCalledWith(
+        "Test request sent, but this engine did not report a live result."
+      );
+    });
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("shows an in-flight Testing... affordance while a channel test is running", async () => {
+    const testMock = testAgentChannelControl as jest.MockedFunction<typeof testAgentChannelControl>;
+    let resolveTest: (value: Awaited<ReturnType<typeof testAgentChannelControl>>) => void = () => {};
+    testMock.mockImplementationOnce(
+      () =>
+        new Promise<Awaited<ReturnType<typeof testAgentChannelControl>>>((resolve) => {
+          resolveTest = resolve;
+        })
+    );
+
+    await renderSettingsPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-channel-slack")).toBeInTheDocument();
+    });
+
+    fireEvent.click(
+      within(screen.getByTestId("settings-channel-slack")).getByRole("button", {
+        name: "Manage Slack",
+      })
+    );
+    const panel = within(screen.getByTestId("settings-channel-panel-slack"));
+    fireEvent.click(panel.getByRole("button", { name: "Test Slack connection" }));
+
+    await waitFor(() => {
+      expect(panel.getByRole("button", { name: "Testing..." })).toBeDisabled();
+    });
+
+    await act(async () => {
+      resolveTest({
+        response: { ok: true } as Response,
+        data: { channel: "slack", last_test: { ok: true, detail: "provider_reachable" } },
+      });
+    });
+
+    await waitFor(() => {
+      expect(panel.getByRole("button", { name: "Test Slack connection" })).toBeEnabled();
+    });
+  });
+
+  it("connects Discord through the generic channel-control path with token and optional guild", async () => {
+    const connectMock = connectAgentChannelControl as jest.MockedFunction<
+      typeof connectAgentChannelControl
+    >;
+    const fetchChannelControlsMock = fetchAgentChannelControls as jest.MockedFunction<
+      typeof fetchAgentChannelControls
+    >;
+    connectMock.mockClear();
+    await renderSettingsPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-channel-discord")).toBeInTheDocument();
+    });
+
+    fireEvent.click(
+      within(screen.getByTestId("settings-channel-discord")).getByRole("button", {
+        name: "Manage Discord",
+      })
+    );
+
+    const discordPanel = within(screen.getByTestId("settings-channel-panel-discord"));
+    expect(discordPanel.getByText(/Discord Developer Portal/i)).toBeInTheDocument();
+    expect(discordPanel.getByText(/OAuth2.*invite it to your server/i)).toBeInTheDocument();
+    expect(discordPanel.queryByLabelText("Discord Application ID")).not.toBeInTheDocument();
+
+    const saveDiscordButton = discordPanel.getByRole("button", {
+      name: "Save Discord credentials",
+    });
+    expect(saveDiscordButton).toBeDisabled();
+    fireEvent.change(discordPanel.getByLabelText("Discord Guild ID"), {
+      target: { value: " 123456789012345678 " },
+    });
+    expect(saveDiscordButton).toBeDisabled();
+    expect(
+      discordPanel.getByText("Enter every missing required credential before saving.")
+    ).toBeInTheDocument();
+    fireEvent.change(discordPanel.getByLabelText("Discord Bot token"), {
+      target: { value: " MTAxMjM0NTY3ODkwMTIzNDU2Nzg5MA.abc " },
+    });
+    expect(saveDiscordButton).toBeEnabled();
+
+    fetchChannelControlsMock.mockResolvedValueOnce({
+      response: { ok: true } as Response,
+      data: {
+        channels: [
+          {
+            channel: "discord",
+            label: "Discord",
+            build_enabled: true,
+            operator_configured: true,
+            user_managed: true,
+            user_connected: true,
+            status: "connected",
+            secret_refs: [
+              {
+                key: "discord_bot_token",
+                label: "Bot token",
+                required: true,
+                present: true,
+              },
+            ],
+            config: { guild_id: "123456789012345678" },
+            last_test: null,
+          },
+        ],
+      },
+    });
+    fireEvent.click(saveDiscordButton);
+
+    await waitFor(() => {
+      expect(connectMock).toHaveBeenCalledWith("discord", {
+        discord_bot_token: "MTAxMjM0NTY3ODkwMTIzNDU2Nzg5MA.abc",
+        guild_id: "123456789012345678",
+      });
+    });
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId("settings-channel-discord")).getAllByText("Connected")
+      ).not.toHaveLength(0);
+    });
+  });
+
+  it("maps Telegram's dedicated bot-token payload to its vault requirement", async () => {
+    const fetchChannelControlsMock = fetchAgentChannelControls as jest.MockedFunction<
+      typeof fetchAgentChannelControls
+    >;
+    fetchChannelControlsMock.mockResolvedValueOnce({
+      response: { ok: true } as Response,
+      data: {
+        channels: [
+          {
+            channel: "telegram",
+            label: "Telegram",
+            build_enabled: true,
+            operator_configured: true,
+            user_managed: true,
+            user_connected: false,
+            status: "not_connected",
+            secret_refs: [
+              {
+                key: "telegram_bot_token",
+                label: "Bot token",
+                required: true,
+                present: false,
+              },
+            ],
+            config: {},
+            last_test: null,
+          },
+        ],
+      },
+    });
+    await renderSettingsPage();
+
+    fireEvent.click(
+      within(screen.getByTestId("settings-channel-telegram")).getByRole("button", {
+        name: "Manage Telegram",
+      })
+    );
+    const telegramPanel = within(screen.getByTestId("settings-channel-panel-telegram"));
+    const saveButton = telegramPanel.getByRole("button", {
+      name: "Update Telegram credentials",
+    });
+    expect(saveButton).toBeDisabled();
+    fireEvent.change(telegramPanel.getByLabelText("Telegram Bot token"), {
+      target: { value: "123456:telegram-token" },
+    });
+    expect(saveButton).toBeEnabled();
+  });
+
+  it("keeps structural-only channel test actions credential-specific", () => {
+    expect(formatChannelTestActionLabel("telegram", "Telegram")).toBe("Test Telegram connection");
+    expect(formatChannelTestActionLabel("slack", "Slack")).toBe("Test Slack connection");
+    expect(formatChannelTestActionLabel("discord", "Discord")).toBe("Check Discord credentials");
+    expect(formatChannelTestActionLabel("whatsapp", "WhatsApp")).toBe("Check WhatsApp credentials");
   });
 
   it("hides channel credential actions when the channel control plane is unavailable", async () => {
