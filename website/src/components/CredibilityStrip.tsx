@@ -2,11 +2,11 @@ import type { Locale } from "../lib/content";
 import { Reveal } from "./Reveal";
 
 const stats = [
-  { value: "83,500+", label: { en: "lines of code", ar: "سطر برمجي" } },
-  { value: "5,300+", label: { en: "tests passing", ar: "اختبار ناجح" } },
-  { value: "7", label: { en: "AI providers", ar: "مزوّد ذكاء" } },
-  { value: "17", label: { en: "channels", ar: "قناة تواصل" } },
-  { value: "ChaCha20", label: { en: "encryption", ar: "تشفير" } },
+  { value: "4", label: { en: "public core surfaces", ar: "أسطح عامة أساسية" } },
+  { value: "AR · EN", label: { en: "bilingual", ar: "ثنائي اللغة" } },
+  { value: "Weekly", label: { en: "shared allowance", ar: "سعة مشتركة" } },
+  { value: "Visible", label: { en: "account memory", ar: "ذاكرة الحساب" } },
+  { value: "Gated", label: { en: "unfinished lanes", ar: "المسارات غير المكتملة" } },
 ];
 
 export function CredibilityStrip({ locale }: { locale: Locale }) {

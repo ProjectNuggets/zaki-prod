@@ -15,7 +15,7 @@ export function PricingPage({ locale }: { locale: Locale }) {
       <section className="border-b border-zk-border px-5 py-20 md:px-8 md:py-28">
         <div className="mx-auto max-w-5xl">
           <Reveal>
-            <p className="font-mono-ui text-[11px] uppercase tracking-[0.28em] text-zk-accent">
+            <p className="font-mono-ui text-[11px] uppercase tracking-[0.28em] text-zk-accent-hover">
               {isArabic ? "الأسعار" : "Pricing"}
             </p>
             <h1 className="font-display mt-5 max-w-[13ch] text-[44px] font-extrabold leading-[0.94] tracking-[-0.05em] text-zk-text md:text-[72px]">
@@ -23,7 +23,7 @@ export function PricingPage({ locale }: { locale: Locale }) {
             </h1>
             <p className="mt-6 max-w-[64ch] text-base leading-8 text-zk-text-secondary">
               {isArabic
-                ? "التسعير لا يبيع منتجات غير جاهزة. Chat مجاني للبدء، Agent وBrain يحملان الاستمرارية، وLearn وHire وDesign تبقى مقيّدة حسب حالة المنتج."
+                ? "التسعير لا يبيع منتجات غير جاهزة. Chat مجاني للبدء، وAgent وSpaces وBrain هي الأسطح العامة الأساسية. Learn مقيّد، وDesign قائمة انتظار، وCareer غير منشور للعامة."
                 : "Pricing does not sell unfinished surfaces. Chat is free to start, Agent and Brain carry continuity, and Learn, Career, and Design remain gated by product state."}
             </p>
           </Reveal>

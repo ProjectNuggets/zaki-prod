@@ -5,7 +5,6 @@ import { StoryPage } from "./pages/StoryPage";
 import { StoryV4 } from "./pages/StoryV4";
 import { ProductPage } from "./pages/ProductPage";
 import { PricingPage } from "./pages/PricingPage";
-import { PricingV4 } from "./pages/PricingV4";
 import { AgentPage } from "./pages/AgentPage";
 import { SpacesPage } from "./pages/SpacesPage";
 import { UseCasesPage } from "./pages/UseCasesPage";
@@ -21,7 +20,7 @@ export function AppRoutes() {
       <Route path="/spaces" element={<SpacesPage />} />
       <Route path="/product" element={<ProductPage locale="en" />} />
       <Route path="/ar/product" element={<ProductPage locale="ar" />} />
-      <Route path="/pricing" element={<PricingV4 />} />
+      <Route path="/pricing" element={<PricingPage locale="en" />} />
       <Route path="/ar/pricing" element={<PricingPage locale="ar" />} />
       <Route path="/use-cases" element={<UseCasesPage locale="en" />} />
       <Route path="/ar/use-cases" element={<UseCasesPage locale="ar" />} />

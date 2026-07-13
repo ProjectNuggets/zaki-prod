@@ -306,20 +306,20 @@ const homeProducts: ProductCard[] = [
   },
   {
     icon: GraduationCap,
-    status: "Private access",
+    status: "Gated",
     statusTone: "soon",
     title: "Learn",
     meta: "A tutor that remembers.",
-    body: "Turn your own material into AI-built books, practice, and tutors you can reach in WhatsApp or Telegram. In private beta — shipped when it's truly ready.",
+    body: "Turn your own material into AI-built books, practice, and tutors you can reach in WhatsApp or Telegram. Gated until the complete flow is ready.",
     wide: true,
   },
   {
     icon: BriefcaseBusiness,
-    status: "Private access",
+    status: "Not public",
     statusTone: "soon",
     title: "Design & Career",
     meta: "For the work that scales.",
-    body: "Private lanes for interfaces and career moves. Same login, same memory, released only when the full flows are ready.",
+    body: "Design remains waitlist. Career is not publicly deployed. Both stay outside the public core until their full flows are ready.",
     wide: true,
   },
 ];
@@ -404,8 +404,8 @@ export function V3HomePage() {
         <div className="proof">
           <div className="wrap">
             {[
-              ["Early community", "300+", "joined in week one"],
-              ["One login", "6 products", "one memory"],
+              ["Public core", "4 surfaces", "Agent · Chat · Spaces · Brain"],
+              ["Release gates", "3 lanes", "Learn · Design · Career"],
               ["Bilingual by default", "AR · EN", "even mixed"],
               ["Your memory", "100% yours", "export or forget"],
             ].map(([label, value, note], index) => (
@@ -426,7 +426,6 @@ export function V3HomePage() {
       <HowItWorksSection />
       <UseCasesTeaser />
       <StoryTeaser />
-      <ProofSection />
       <PricingTeaser />
       <FinalCta />
     </V3Shell>
@@ -604,35 +603,6 @@ function StoryTeaser() {
   );
 }
 
-function ProofSection() {
-  return (
-    <section className="stage-light sec" data-screen-label="Proof">
-      <div className="wrap">
-        <div className="sec-head reveal">
-          <span className="kicker"><span className="idx">07</span> In good company</span>
-          <h2 className="h-sec">300+ builders joined in the first week.</h2>
-        </div>
-        <div className="quotes-grid">
-          {[
-            ["SF", "Solo founder", "moved to Lisbon", "ZAKI remembered every visa deadline, every contact, every detail while I focused on actually building.", true],
-            ["RM", "Founder", "B2B marketplace", "ZAKI does not just do tasks. ZAKI gets the context. It is like having a counterpart who never needs the recap.", false],
-            ["AN", "Author & consultant", "writing while consulting", "ZAKI keeps my research, my clients, and my deadlines organized, so I can actually think.", false],
-          ].map(([initials, name, role, quote, featured], index) => (
-            <div className={`qcard ${featured ? "feat" : ""} reveal`} data-d={index} key={String(name)}>
-              <div className="mark">"</div>
-              <blockquote>{quote}</blockquote>
-              <div className="who">
-                <div className="av">{initials}</div>
-                <div><div className="nm">{name}</div><div className="role">{role}</div></div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function PricingTeaser() {
   return (
     <section className="stage-light sec" id="pricing" data-screen-label="Pricing">
@@ -640,10 +610,10 @@ function PricingTeaser() {
         <div className="sec-head center reveal">
           <span className="kicker"><span className="idx">08</span> Pricing</span>
           <h2 className="h-sec">Free today. Upgrade when ZAKI earns it.</h2>
-          <p className="lede">Free is not a trick. Upgrade only when you want more room, deeper memory, and priority when it counts. Learn, Design, and Career stay gated until ready.</p>
+          <p className="lede">Free is not a trick. Upgrade only when you want more weekly room and priority where available. Learn stays gated, Design stays waitlist, and Career is not publicly deployed.</p>
         </div>
         <PricingTiers compact />
-        <p className="pricing-foot">Prices in EUR · cancel anytime · your memory exports with you. <Link to="/pricing" style={{ color: "var(--accent)" }}>Full pricing &amp; FAQ →</Link></p>
+        <p className="pricing-foot">Prices in USD · cancel anytime · your memory exports with you. <Link to="/pricing" style={{ color: "var(--accent)" }}>Full pricing &amp; FAQ →</Link></p>
       </div>
     </section>
   );
@@ -671,10 +641,10 @@ function FinalCta({ variant = "home" }: { variant?: "home" | "subpage" }) {
 
 function PricingTiers({ compact = false }: { compact?: boolean }) {
   const tiers = [
-    ["Free", "Start the chapter", "$0", "forever", "The live product, no card: enough to feel what changes when AI remembers.", ["Agent, Chat, Spaces & Brain", "Memory continuity, you control", "Arabic & English, no card"], pricingSignup()],
-    ["Personal", "For your daily chapter", "€15", "/ month", "More room for daily work, with a memory that never starts over.", ["A meaningful weekly allowance", "Full memory continuity", "Everything in Free"], pricingSignup("personal")],
-    ["Pro", "For the bold adventure", "€45", "/ month", "Run heavier work without hitting a wall while ZAKI keeps the context close.", ["Larger allowance & generous burst", "Deeper memory & stronger caps", "Everything in Personal"], pricingSignup("pro")],
-    ["Pro MAX", "For the biggest leap", "€99", "/ month", "The most ZAKI can be: fastest, deepest, first to ready new products.", ["Highest limits & priority routing", "Deepest memory capability", "Earliest access when products are ready"], pricingSignup("pro_max")],
+    ["Free", "Start the chapter", "$0", "forever", "The live core product, no card: Chat plus bounded Agent use, Spaces, and Brain when signed in.", ["Free weekly usage", "Account continuity when signed in", "Arabic & English, no card"], pricingSignup()],
+    ["Personal", "For your daily chapter", "$15", "/ month", "More weekly room for everyday work across the live core product.", ["A meaningful weekly allowance", "Agent, Chat, Spaces & Brain", "Everything in Free"], pricingSignup("personal")],
+    ["Pro", "For the bold adventure", "$45", "/ month", "A larger shared weekly allowance for heavier work.", ["Larger weekly allowance", "Priority where available", "Everything in Personal"], pricingSignup("pro")],
+    ["Pro MAX", "For the biggest leap", "$99", "/ month", "The highest current limits for sustained, demanding work.", ["Highest weekly allowance", "Priority where available", "First access when gated products are offered"], pricingSignup("pro_max")],
   ];
   return (
     <div className="tiers four">
@@ -1110,7 +1080,7 @@ export function V3PricingPage() {
       <SubHero
         label="Pricing"
         title="Pricing that grows with you: never against you."
-        body="Every plan includes the live product palette: Agent, Chat, Spaces, and your Brain. You pay for room to work, not false access to unfinished surfaces or a promise we have not earned yet."
+        body="Free includes Chat plus bounded Agent use, with Spaces and Brain available when signed in. Paid plans add a larger shared weekly allowance across the live core product."
         cta="Start your next chapter"
         ctaHref={signupUrl}
         secondary="Explore the product"
@@ -1120,7 +1090,7 @@ export function V3PricingPage() {
         <div className="wrap">
           <PricingTiers />
           <div className="gift reveal">
-            <div className="g-l"><h4>Learn, Design, and Career are not sold as finished products yet.</h4><p>They stay gated until entitlement, memory, UI, product state, and tests agree.</p></div>
+            <div className="g-l"><h4>Learn, Design, and Career are not sold as finished products yet.</h4><p>Learn stays gated, Design stays waitlist, and Career is not publicly deployed.</p></div>
             <div className="g-r"><span className="g-price">Truth first</span></div>
           </div>
         </div>
@@ -1131,9 +1101,9 @@ export function V3PricingPage() {
           <div className="sec-head center reveal"><span className="kicker"><span className="idx">FAQ</span> Pricing questions</span><h2 className="h-sec">Pricing questions, answered.</h2></div>
           <div className="faq-grid reveal">
             {[
-              ["Is Free a trial?", "No. Free is a real starting plan with no card: enough to feel what changes when ZAKI remembers."],
-              ["What do paid plans add?", "More room, deeper memory capacity, priority where available, and earlier access when gated products are ready."],
-              ["What about Learn, Design, and Career?", "They are gated until production readiness is proven end to end. We do not sell unfinished surfaces as finished products."],
+              ["Is Free a trial?", "No. Free is a real starting plan with no card. It includes free weekly usage for Chat and bounded Agent use."],
+              ["What do paid plans add?", "A larger shared weekly allowance across Agent, Chat, Spaces, and Brain, plus priority where available."],
+              ["What about Learn, Design, and Career?", "Learn stays gated, Design stays waitlist, and Career is not publicly deployed. We do not sell unfinished surfaces as finished products."],
             ].map(([q, a], index) => (
               <details className="faq-item" key={q} open={index === 0}>
                 <summary className="faq-q">{q}<span className="pm" /></summary>
