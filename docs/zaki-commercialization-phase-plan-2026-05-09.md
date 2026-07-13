@@ -1,10 +1,14 @@
 # ZAKI Commercialization Phase Plan
 
-Status: locked for phase-by-phase execution.
+> **HISTORICAL — 2026-05-09.** This completed phase plan is retained for audit context and is not the
+> current execution source of truth. Use the live coordination board and roadmap linked from
+> `AGENTS.md`; use `docs/zaki-agent-first-v1-product-spec.md` for current product direction.
+
+Status: historical phase plan.
 Owner: Codex in this workspace.
 Date locked: 2026-05-09.
 
-This document is the execution source of truth for moving ZAKI from the current beta/student-personal model into the new commercial product model. It is written for an engineer landing cold who needs to implement the work safely without reopening product strategy.
+This document records the execution model used to move ZAKI from the earlier beta/student-personal model into a commercial product model.
 
 ## Mission
 

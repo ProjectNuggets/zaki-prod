@@ -4,6 +4,11 @@ Status: Accepted baseline for production finalization
 Date: 2026-05-19
 Owner: CTO/Product
 
+> **Update — 2026-07-12:** this May baseline predates the Agent-first launch decision. Where product
+> visibility, launch order, memory ownership, or availability differs, defer to
+> [`docs/zaki-agent-first-v1-product-spec.md`](docs/zaki-agent-first-v1-product-spec.md), `AGENTS.md`,
+> and the live cross-repository coordination board linked there.
+
 This document is the product truth for ZAKI Prod. It translates the agreed CEO decisions into a stable operating contract that engineering, design, billing, support, and future product lines can build against.
 
 ## North Star
