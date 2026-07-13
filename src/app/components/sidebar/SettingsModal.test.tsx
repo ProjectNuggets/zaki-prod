@@ -1148,6 +1148,7 @@ describe("SettingsPage", () => {
 
     expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeInTheDocument();
     expect(screen.getByTestId("settings-account")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-connections")).toBeInTheDocument();
     expect(screen.getByTestId("settings-channels")).toBeInTheDocument();
     expect(screen.getByTestId("settings-secrets")).toBeInTheDocument();
     expect(screen.queryByTestId("settings-providers")).not.toBeInTheDocument();
@@ -1160,7 +1161,6 @@ describe("SettingsPage", () => {
     expect(screen.getByTestId("settings-platform-usage")).toBeInTheDocument();
     expect(screen.getByTestId("settings-memory-data")).toBeInTheDocument();
     expect(screen.queryByTestId("settings-developer-access")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("settings-connections")).not.toBeInTheDocument();
     expect(screen.getByTestId("settings-privacy")).toBeInTheDocument();
 
     expect(screen.getByRole("link", { name: "Plan & Usage" })).toBeInTheDocument();
@@ -1177,6 +1177,7 @@ describe("SettingsPage", () => {
       "settings-account",
       "settings-billing",
       "settings-agent",
+      "settings-connections",
       "settings-channels",
       "settings-secrets",
       "settings-devices",
@@ -1208,8 +1209,18 @@ describe("SettingsPage", () => {
     expect(channelsSection.getByText("Telegram")).toBeInTheDocument();
     expect(channelsSection.getAllByText("Slack")).toHaveLength(1);
     expect(channelsSection.getAllByText("Discord")).toHaveLength(1);
-    expect(channelsSection.getAllByText("Email")).toHaveLength(1);
+    expect(channelsSection.queryByText("Email")).not.toBeInTheDocument();
     expect(channelsSection.getAllByText("WhatsApp")).toHaveLength(1);
+    const connectionsSection = within(screen.getByTestId("settings-connections"));
+    expect(connectionsSection.getByText("Gmail & Google Drive")).toBeInTheDocument();
+    expect(connectionsSection.getByRole("button", { name: "Connect Gmail" })).toBeDisabled();
+    expect(connectionsSection.getByText("Connector configured")).toBeInTheDocument();
+    expect(connectionsSection.getByText(/never asks for an IMAP or SMTP password/i)).toBeInTheDocument();
+    expect(
+      connectionsSection.getByText(/require approval before private data is sent elsewhere/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText(/IMAP password/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/SMTP password/i)).not.toBeInTheDocument();
     expect(within(screen.getByTestId("settings-memory-data")).getByText("Chat memory capture")).toBeInTheDocument();
     expect(
       within(screen.getByTestId("settings-memory-data")).getByText("Improve Agent memories automatically")
@@ -1217,7 +1228,7 @@ describe("SettingsPage", () => {
     expect(within(screen.getByTestId("settings-memory-data")).getByText("Improve Agent recall")).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(within(screen.getByTestId("settings-channels")).getAllByText("Credentials saved").length).toBeGreaterThan(0);
+      expect(within(screen.getByTestId("settings-channels")).getAllByText("Connected").length).toBeGreaterThan(0);
       expect(within(screen.getByTestId("settings-channels")).getByText("1 bindings")).toBeInTheDocument();
       expect(within(screen.getByTestId("settings-channels")).queryByText(/U123/)).not.toBeInTheDocument();
       expect(within(screen.getByTestId("settings-secrets")).getByText("telegram_bot_token")).toBeInTheDocument();
@@ -1297,10 +1308,18 @@ describe("SettingsPage", () => {
     const connectionsRender = await renderSettingsPage("/settings#settings-connections");
     await waitFor(() => {
       expect(screen.getByTestId("settings-location")).toHaveTextContent(
-        "/settings#settings-account"
+        "/settings#settings-connections"
       );
     });
     connectionsRender.unmount();
+
+    const oauthRender = await renderSettingsPage("/settings?section=oauth");
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-location")).toHaveTextContent(
+        "/settings#settings-connections"
+      );
+    });
+    oauthRender.unmount();
 
     const usageRender = await renderSettingsPage("/settings#settings-usage");
     await waitFor(() => {
@@ -1309,7 +1328,7 @@ describe("SettingsPage", () => {
       );
     });
     usageRender.unmount();
-  });
+  }, 15_000);
 
   it("wires Plan & Usage actions to the monthly platform billing mutations", async () => {
     checkoutMutateMock.mockClear();
@@ -1847,6 +1866,136 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(disconnectMock).toHaveBeenCalledWith("slack");
     });
+  });
+
+  it("connects Discord through the generic channel-control path with token and optional guild", async () => {
+    const connectMock = connectAgentChannelControl as jest.MockedFunction<
+      typeof connectAgentChannelControl
+    >;
+    const fetchChannelControlsMock = fetchAgentChannelControls as jest.MockedFunction<
+      typeof fetchAgentChannelControls
+    >;
+    connectMock.mockClear();
+    await renderSettingsPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-channel-discord")).toBeInTheDocument();
+    });
+
+    fireEvent.click(
+      within(screen.getByTestId("settings-channel-discord")).getByRole("button", {
+        name: "Manage Discord",
+      })
+    );
+
+    const discordPanel = within(screen.getByTestId("settings-channel-panel-discord"));
+    expect(discordPanel.getByText(/Discord Developer Portal/i)).toBeInTheDocument();
+    expect(discordPanel.getByText(/OAuth2.*invite it to your server/i)).toBeInTheDocument();
+    expect(discordPanel.queryByLabelText("Discord Application ID")).not.toBeInTheDocument();
+
+    const saveDiscordButton = discordPanel.getByRole("button", {
+      name: "Save Discord credentials",
+    });
+    expect(saveDiscordButton).toBeDisabled();
+    fireEvent.change(discordPanel.getByLabelText("Discord Guild ID"), {
+      target: { value: " 123456789012345678 " },
+    });
+    expect(saveDiscordButton).toBeDisabled();
+    expect(
+      discordPanel.getByText("Enter every missing required credential before saving.")
+    ).toBeInTheDocument();
+    fireEvent.change(discordPanel.getByLabelText("Discord Bot token"), {
+      target: { value: " MTAxMjM0NTY3ODkwMTIzNDU2Nzg5MA.abc " },
+    });
+    expect(saveDiscordButton).toBeEnabled();
+
+    fetchChannelControlsMock.mockResolvedValueOnce({
+      response: { ok: true } as Response,
+      data: {
+        channels: [
+          {
+            channel: "discord",
+            label: "Discord",
+            build_enabled: true,
+            operator_configured: true,
+            user_managed: true,
+            user_connected: true,
+            status: "connected",
+            secret_refs: [
+              {
+                key: "discord_bot_token",
+                label: "Bot token",
+                required: true,
+                present: true,
+              },
+            ],
+            config: { guild_id: "123456789012345678" },
+            last_test: null,
+          },
+        ],
+      },
+    });
+    fireEvent.click(saveDiscordButton);
+
+    await waitFor(() => {
+      expect(connectMock).toHaveBeenCalledWith("discord", {
+        discord_bot_token: "MTAxMjM0NTY3ODkwMTIzNDU2Nzg5MA.abc",
+        guild_id: "123456789012345678",
+      });
+    });
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId("settings-channel-discord")).getAllByText("Connected")
+      ).not.toHaveLength(0);
+    });
+  });
+
+  it("maps Telegram's dedicated bot-token payload to its vault requirement", async () => {
+    const fetchChannelControlsMock = fetchAgentChannelControls as jest.MockedFunction<
+      typeof fetchAgentChannelControls
+    >;
+    fetchChannelControlsMock.mockResolvedValueOnce({
+      response: { ok: true } as Response,
+      data: {
+        channels: [
+          {
+            channel: "telegram",
+            label: "Telegram",
+            build_enabled: true,
+            operator_configured: true,
+            user_managed: true,
+            user_connected: false,
+            status: "not_connected",
+            secret_refs: [
+              {
+                key: "telegram_bot_token",
+                label: "Bot token",
+                required: true,
+                present: false,
+              },
+            ],
+            config: {},
+            last_test: null,
+          },
+        ],
+      },
+    });
+    await renderSettingsPage();
+
+    fireEvent.click(
+      within(screen.getByTestId("settings-channel-telegram")).getByRole("button", {
+        name: "Manage Telegram",
+      })
+    );
+    const telegramPanel = within(screen.getByTestId("settings-channel-panel-telegram"));
+    const saveButton = telegramPanel.getByRole("button", {
+      name: "Update Telegram credentials",
+    });
+    expect(saveButton).toBeDisabled();
+    fireEvent.change(telegramPanel.getByLabelText("Telegram Bot token"), {
+      target: { value: "123456:telegram-token" },
+    });
+    expect(saveButton).toBeEnabled();
   });
 
   it("hides channel credential actions when the channel control plane is unavailable", async () => {

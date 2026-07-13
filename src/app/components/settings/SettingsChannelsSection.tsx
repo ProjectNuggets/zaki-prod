@@ -22,6 +22,7 @@ type SettingsChannelConfig = {
   description: string;
   principalPlaceholder: string;
   scopePlaceholder: string;
+  setupNotes?: string[];
 };
 
 type SettingsChannelViewModel = SettingsChannelConfig & {
@@ -29,6 +30,7 @@ type SettingsChannelViewModel = SettingsChannelConfig & {
   control: AgentChannelControlStatus | null;
   bindings: AgentChannelBinding[];
   missingSecrets: string[];
+  missingSecretKeys: string[];
   presentSecrets: number;
   totalRequiredSecrets: number;
   statusLabel: string;
@@ -70,16 +72,13 @@ const SETTINGS_CHANNELS: SettingsChannelConfig[] = [
   {
     id: "discord",
     label: "Discord",
-    description: "Community channel for Agent messages.",
+    description: "Connect your own Discord bot for direct messages and server channels.",
     principalPlaceholder: "discord-user-id",
     scopePlaceholder: "discord-channel-id",
-  },
-  {
-    id: "email",
-    label: "Email",
-    description: "Mailbox channel for Agent updates.",
-    principalPlaceholder: "person@example.com",
-    scopePlaceholder: "inbox@example.com",
+    setupNotes: [
+      "Create a bot in the Discord Developer Portal, open Bot, and copy its token.",
+      "Use OAuth2 → URL Generator to select the bot scope, invite it to your server, and enable the Message Content intent.",
+    ],
   },
   {
     id: "whatsapp",
@@ -94,16 +93,27 @@ export const USER_MANAGED_CHANNELS: AgentChannelControlId[] = [
   "telegram",
   "slack",
   "discord",
-  "email",
   "whatsapp",
 ];
 
-export const CHANNEL_ACTIVATION_FIELDS: Record<
+export const CHANNEL_ACTIVATION_FIELDS: Partial<Record<
   AgentChannelControlId,
-  Array<{ key: string; label: string; placeholder: string; secret?: boolean }>
-> = {
+  Array<{
+    key: string;
+    label: string;
+    placeholder: string;
+    secret?: boolean;
+    vaultKey?: string;
+  }>
+>> = {
   telegram: [
-    { key: "bot_token", label: "Bot token", placeholder: "123456:ABC...", secret: true },
+    {
+      key: "bot_token",
+      vaultKey: "telegram_bot_token",
+      label: "Bot token",
+      placeholder: "123456:ABC...",
+      secret: true,
+    },
     {
       key: "webhook_base_url",
       label: "Webhook base URL",
@@ -138,17 +148,7 @@ export const CHANNEL_ACTIVATION_FIELDS: Record<
   ],
   discord: [
     { key: "discord_bot_token", label: "Bot token", placeholder: "Discord bot token", secret: true },
-    { key: "application_id", label: "Application ID", placeholder: "Discord app id (optional)" },
-  ],
-  email: [
-    { key: "username", label: "Mailbox", placeholder: "inbox@example.com" },
-    { key: "imap_host", label: "IMAP host", placeholder: "imap.example.com" },
-    { key: "imap_port", label: "IMAP port", placeholder: "993" },
-    { key: "smtp_host", label: "SMTP host", placeholder: "smtp.example.com" },
-    { key: "smtp_port", label: "SMTP port", placeholder: "587" },
-    { key: "from_address", label: "From address", placeholder: "ZAKI <inbox@example.com>" },
-    { key: "email_imap_password", label: "IMAP password", placeholder: "IMAP password", secret: true },
-    { key: "email_smtp_password", label: "SMTP password", placeholder: "SMTP password", secret: true },
+    { key: "guild_id", label: "Guild ID", placeholder: "Discord server id (optional)" },
   ],
   whatsapp: [
     { key: "whatsapp_access_token", label: "Access token", placeholder: "WhatsApp access token", secret: true },
@@ -170,7 +170,7 @@ export function defaultChannelBindingDraft(): ChannelBindingDraft {
 
 export function buildEmptyChannelActivationDrafts() {
   return USER_MANAGED_CHANNELS.reduce<Record<string, Record<string, string>>>((drafts, channel) => {
-    drafts[channel] = CHANNEL_ACTIVATION_FIELDS[channel].reduce<Record<string, string>>((fields, field) => {
+    drafts[channel] = (CHANNEL_ACTIVATION_FIELDS[channel] ?? []).reduce<Record<string, string>>((fields, field) => {
       fields[field.key] = "";
       return fields;
     }, {});
@@ -237,7 +237,7 @@ function getChannelControlTone(control?: AgentChannelControlStatus | null): V2Ba
 
 function getChannelControlStatusLabel(control?: AgentChannelControlStatus | null) {
   if (!control) return "Setup status unavailable";
-  if (control.status === "connected" || control.user_connected) return "Credentials saved";
+  if (control.status === "connected" || control.user_connected) return "Connected";
   if (control.status === "partial") return "Needs required fields";
   if (control.status === "disabled_in_build" || control.build_enabled === false) return "Disabled in this build";
   return "Needs setup";
@@ -307,6 +307,9 @@ export function SettingsChannelsSection({
       const missingSecrets = requiredSecretRefs
         .filter((secret) => !secret.present)
         .map((secret) => secret.label || secret.key);
+      const missingSecretKeys = requiredSecretRefs
+        .filter((secret) => !secret.present)
+        .map((secret) => secret.key);
       const credentialFormVisible =
         Boolean(control) &&
         channelControlsAvailable &&
@@ -358,6 +361,7 @@ export function SettingsChannelsSection({
             : `Manage ${config.label}`
           : "Status only";
       const notes: string[] = [];
+      notes.push(...(config.setupNotes ?? []));
       if (!channelControlsAvailable && config.id !== "telegram") {
         notes.push("Credential actions are unavailable while the channel control plane is offline.");
       }
@@ -382,6 +386,7 @@ export function SettingsChannelsSection({
         control,
         bindings,
         missingSecrets,
+        missingSecretKeys,
         presentSecrets,
         totalRequiredSecrets,
         statusLabel,
@@ -436,6 +441,13 @@ export function SettingsChannelsSection({
           const activationDraft = channelActivationDrafts[channelRow.id] || {};
           const hasActivationDraft = hasChannelActivationPayload(activationDraft);
           const credentialFields = CHANNEL_ACTIVATION_FIELDS[channelRow.id] ?? [];
+          const hasMissingRequiredDrafts = channelRow.missingSecretKeys.every((vaultKey) => {
+            const field = credentialFields.find(
+              (candidate) => (candidate.vaultKey ?? candidate.key) === vaultKey
+            );
+            return Boolean(field && activationDraft[field.key]?.trim());
+          });
+          const canSaveActivationDraft = hasActivationDraft && hasMissingRequiredDrafts;
 
           return (
             <div
@@ -585,7 +597,10 @@ export function SettingsChannelsSection({
                       <V2Button
                         size="sm"
                         variant="accent"
-                        disabled={channelControlAction === `${channelRow.id}:connect` || !hasActivationDraft}
+                        disabled={
+                          channelControlAction === `${channelRow.id}:connect` ||
+                          !canSaveActivationDraft
+                        }
                         onClick={() => void handleConnectChannelControl(channelRow.id)}
                       >
                         {channelControlAction === `${channelRow.id}:connect`
@@ -625,9 +640,11 @@ export function SettingsChannelsSection({
                         </V2Button>
                       ) : null}
                       <span className="zaki-settings-v2__action-note">
-                        {hasActivationDraft
-                          ? "Saving replaces only the fields you enter; stored secret values are not revealed."
-                          : "Enter at least one credential field to save an update."}
+                        {!hasActivationDraft
+                          ? "Enter at least one credential field to save an update."
+                          : !hasMissingRequiredDrafts
+                            ? "Enter every missing required credential before saving."
+                            : "Saving replaces only the fields you enter; stored secret values are not revealed."}
                       </span>
                     </div>
                   ) : null}
