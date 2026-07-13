@@ -17202,6 +17202,30 @@ app.get(
   }, AGENT_RUNTIME_JSON_PROXY_OPTIONS)
 );
 
+// Learning-loop review gate. The engine owns the only legal state
+// transitions (shadow -> active/retired); the browser can only request an
+// adopt or dismiss for an authenticated, BFF-pinned user.
+app.get(
+  "/api/agent/suggestions",
+  requireAgentContext,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/suggestions`,
+    AGENT_RUNTIME_JSON_PROXY_OPTIONS
+  )
+);
+
+for (const action of ["adopt", "dismiss"]) {
+  app.post(
+    `/api/agent/suggestions/${action}`,
+    requireAgentContext,
+    agentJson1mb,
+    makeAgentUserProxyHandler(
+      (userId) => `/api/v1/users/${encodeURIComponent(userId)}/suggestions/${action}`,
+      AGENT_RUNTIME_JSON_PROXY_OPTIONS
+    )
+  );
+}
+
 app.post(
   "/api/agent/history/append",
   requireAgentContext,
