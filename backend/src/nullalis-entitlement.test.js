@@ -4,6 +4,7 @@ import {
   mapPlanStatus,
   toPeriodEndUnix,
   buildEntitlementFields,
+  buildAgentRuntimeEntitlementFields,
   applySuperAdminEntitlementOverride,
   SUPER_ADMIN_ENTITLEMENT,
 } from "./nullalis-entitlement.js";
@@ -140,6 +141,39 @@ describe("buildEntitlementFields", () => {
         plan_tier: "ghost",
         plan_status: "limbo",
         current_period_end: "not a date",
+      })
+    ).toEqual({
+      plan_tier: "free",
+      status: "expired",
+      period_end_unix: null,
+    });
+  });
+});
+
+describe("buildAgentRuntimeEntitlementFields", () => {
+  it("lets a free user with a wallet-authorized turn reach the agent runtime", () => {
+    expect(
+      buildAgentRuntimeEntitlementFields(
+        {
+          plan_tier: "free",
+          plan_status: "inactive",
+          current_period_end: null,
+        },
+        { meterGatePassed: true }
+      )
+    ).toEqual({
+      plan_tier: "free",
+      status: "active",
+      period_end_unix: null,
+    });
+  });
+
+  it("keeps a truly inactive user gated when no wallet turn was authorized", () => {
+    expect(
+      buildAgentRuntimeEntitlementFields({
+        plan_tier: "free",
+        plan_status: "inactive",
+        current_period_end: null,
       })
     ).toEqual({
       plan_tier: "free",

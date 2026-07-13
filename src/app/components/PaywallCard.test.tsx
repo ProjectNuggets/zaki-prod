@@ -49,6 +49,21 @@ describe("PaywallCard", () => {
     render(<PaywallCard state="plan_inactive" planLabel="Agent" {...base} />);
     expect(screen.getByText(/plan is inactive/i)).toBeInTheDocument();
   });
+  it("turns a truly inactive Agent denial into a clear upgrade CTA instead of raw engine copy", () => {
+    render(
+      <PaywallCard
+        state="plan_inactive"
+        planLabel="Free"
+        message="subscription inactive — update billing to continue"
+        {...base}
+      />
+    );
+    expect(screen.getByRole("button", { name: /see plans/i })).toBeInTheDocument();
+    expect(screen.getByText(/plan is inactive/i)).toBeInTheDocument();
+    expect(
+      screen.queryByText("subscription inactive — update billing to continue")
+    ).not.toBeInTheDocument();
+  });
   it("falls back to the denial message when plan data is absent", () => {
     render(<PaywallCard state="out_of_usage" {...base} />);
     expect(screen.getByText("fallback msg")).toBeInTheDocument();

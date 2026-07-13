@@ -93,11 +93,31 @@ export const SUPER_ADMIN_ENTITLEMENT = Object.freeze({
 // Pure override: given the DB-derived entitlement (possibly null on soft-fail)
 // and whether the authenticated caller is a super-admin, return the tuple to
 // send to the engine. Non-super-admins get the input back untouched (same
-// reference). buildEntitlementFields stays a pure DB-state mapper; this is the
-// only place the engine-bound payload is intentionally diverged from DB state,
-// and it is applied at the agent-provision call site (never in the
-// Stripe/Creem billing-write paths).
+// reference). buildEntitlementFields stays a pure DB-state mapper, and none of
+// these engine-bound transforms touch Stripe/Creem billing-write paths.
 export function applySuperAdminEntitlementOverride(entitlement, { isSuperAdmin = false } = {}) {
   if (!isSuperAdmin) return entitlement;
   return { ...SUPER_ADMIN_ENTITLEMENT };
+}
+
+// Nullalis still has a legacy subscription-status gate even though zaki-prod's
+// unit wallet is the commercial source of truth for Agent turns. Once the BFF
+// meter gate has allowed a turn (reserved or explicit fail-open), mark only
+// that engine-bound provision as active so Free allowance can reach the
+// runtime. Calls that have not passed the meter gate keep the DB-derived
+// inactive/expired status unchanged.
+export function buildAgentRuntimeEntitlementFields(
+  zakiUserRow,
+  { isSuperAdmin = false, meterGatePassed = false } = {}
+) {
+  const entitlement = applySuperAdminEntitlementOverride(
+    buildEntitlementFields(zakiUserRow),
+    { isSuperAdmin }
+  );
+  if (!meterGatePassed) return entitlement;
+  return {
+    plan_tier: entitlement?.plan_tier || "free",
+    status: "active",
+    period_end_unix: entitlement?.period_end_unix ?? null,
+  };
 }
