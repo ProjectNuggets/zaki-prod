@@ -473,7 +473,7 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
         {
           title: "Age and children",
           body:
-            "ZAKI is not directed to children. The minimum signup age is 16 and the server enforces the configured threshold. Higher local minimum-age or parental-consent rules still apply where required by law.",
+            "ZAKI is not directed to children. The minimum signup age is 16. For email signups the server enforces this threshold against the date of birth you provide; for Google sign-ins you confirm you meet it by accepting the Terms. Higher local minimum-age or parental-consent rules still apply where required by law.",
         },
         {
           title: "Requests and incidents",
@@ -533,7 +533,7 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
         {
           title: "العمر والأطفال",
           body:
-            "الخدمة غير موجهة للأطفال. الحد الأدنى للتسجيل هو 16 عامًا ويطبق الخادم الحد المهيأ. وتظل الحدود الأعلى أو قواعد موافقة ولي الأمر المحلية سارية عندما يفرضها القانون.",
+            "الخدمة غير موجهة للأطفال. الحد الأدنى للتسجيل هو 16 عامًا. في التسجيل بالبريد الإلكتروني يطبق الخادم هذا الحد على تاريخ الميلاد الذي تقدمه؛ وفي تسجيل الدخول عبر Google فإنك تؤكد استيفاءك له بقبول الشروط. وتظل الحدود الأعلى أو قواعد موافقة ولي الأمر المحلية سارية عندما يفرضها القانون.",
         },
         {
           title: "الطلبات والحوادث",
