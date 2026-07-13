@@ -212,7 +212,7 @@ export function getRouteSeo(pathname: string): RouteSeo {
         ? "استخدم زكي للكتابة والبحث والعمل ثنائي اللغة والمتابعة والذاكرة، مع بقاء Learn وCareer وصول خاص وDesign انتظار."
         : "How founders, adventurers, and operators use ZAKI: an agent that acts, spaces for focused work, and a memory that carries context forward.";
     const pricingTitle =
-      locale === "ar" ? "أسعار زكي | ابدأ مجانًا" : "ZAKI Pricing — Every live product included.";
+      locale === "ar" ? "أسعار زكي | ابدأ مجانًا" : "ZAKI Pricing — Free, Personal, Pro, and Pro Max";
     const canonical = toAbsoluteUrl(route);
     return {
       title: isPricing ? pricingTitle : title,

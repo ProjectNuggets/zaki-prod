@@ -82,7 +82,7 @@ export function CookieBanner({ locale }: { locale: Locale }) {
         {labels.body}{" "}
         <Link
           to={privacyHref}
-          style={{ color: "#D24430", textDecoration: "underline", textUnderlineOffset: "3px" }}
+          style={{ color: "#E35A45", textDecoration: "underline", textUnderlineOffset: "3px" }}
         >
           {labels.privacyLink}
         </Link>

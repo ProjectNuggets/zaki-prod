@@ -23,7 +23,7 @@ export function Footer({ locale }: { locale: Locale }) {
 
         {/* Product */}
         <div>
-          <p className="font-mono-ui text-[11px] uppercase tracking-[0.24em] text-zk-text-tertiary">
+          <p className="font-mono-ui text-[11px] uppercase tracking-[0.24em] text-zk-text-secondary">
             {isArabic ? "المنتج" : "Product"}
           </p>
           <div className="mt-4 flex flex-col gap-2.5 text-sm text-zk-text-secondary">
@@ -40,7 +40,7 @@ export function Footer({ locale }: { locale: Locale }) {
 
         {/* Website */}
         <div>
-          <p className="font-mono-ui text-[11px] uppercase tracking-[0.24em] text-zk-text-tertiary">
+          <p className="font-mono-ui text-[11px] uppercase tracking-[0.24em] text-zk-text-secondary">
             {isArabic ? "الموقع" : "Website"}
           </p>
           <div className="mt-4 flex flex-col gap-2.5 text-sm text-zk-text-secondary">
@@ -53,7 +53,7 @@ export function Footer({ locale }: { locale: Locale }) {
 
         {/* Legal */}
         <div>
-          <p className="font-mono-ui text-[11px] uppercase tracking-[0.24em] text-zk-text-tertiary">
+          <p className="font-mono-ui text-[11px] uppercase tracking-[0.24em] text-zk-text-secondary">
             {isArabic ? "القانون" : "Legal"}
           </p>
           <div className="mt-4 flex flex-col gap-2.5 text-sm text-zk-text-secondary">
@@ -66,7 +66,7 @@ export function Footer({ locale }: { locale: Locale }) {
 
       {/* Bottom bar */}
       <div className="mx-auto max-w-6xl border-t border-zk-border px-5 py-5 md:px-8">
-        <p className="text-xs text-zk-text-tertiary">
+        <p className="text-xs text-zk-text-secondary">
           © {new Date().getFullYear()}{" "}
           <a href="https://www.novanuggets.com" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">Nova Nuggets</a>.{" "}
           {isArabic ? "جميع الحقوق محفوظة." : "All rights reserved."}
