@@ -100,6 +100,7 @@ import {
   buildEmptyChannelActivationDrafts,
   compactStringPayload,
   defaultChannelBindingDraft,
+  formatChannelTestDetail,
   type ChannelBindingDraft,
   type SettingsChannelId,
 } from "./SettingsChannelsSection";
@@ -1245,7 +1246,6 @@ export function SettingsPage() {
   };
 
   const handleTestChannelControl = async (channel: AgentChannelControlId) => {
-    if (channel === "telegram") return;
     if (!channelControlsAvailable) return;
     setChannelControlAction(`${channel}:test`);
     try {
@@ -1254,15 +1254,23 @@ export function SettingsPage() {
         throw new Error(data?.message || data?.error || "channel_test_failed");
       }
       await loadChannelControls();
-      toast.success(
-        data.last_test?.ok
-          ? t("settingsModal.channels.control.testOk", {
-              defaultValue: "Channel check passed.",
-            })
-          : t("settingsModal.channels.control.testComplete", {
-              defaultValue: "Channel check completed.",
-            })
-      );
+      if (!data.last_test) {
+        // A pre-liveness engine won't return last_test. Degrade gracefully
+        // (treat as unknown / not yet tested) instead of throwing an error.
+        toast(
+          t("settingsModal.channels.control.testUnknown", {
+            defaultValue:
+              "Test request sent, but this engine did not report a live result.",
+          })
+        );
+        return;
+      }
+      const resultMessage = formatChannelTestDetail(data.last_test.detail);
+      if (data.last_test.ok) {
+        toast.success(resultMessage);
+      } else {
+        toast.error(resultMessage);
+      }
     } catch (error) {
       toast.error(
         error instanceof Error

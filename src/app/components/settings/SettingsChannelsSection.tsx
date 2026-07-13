@@ -47,6 +47,7 @@ type SettingsChannelViewModel = SettingsChannelConfig & {
   isConnected: boolean;
   canTestChannel: boolean;
   canDisconnectChannel: boolean;
+  hasLiveProbe: boolean;
 };
 
 export type ChannelBindingDraft = Pick<
@@ -219,6 +220,31 @@ function formatUnixDate(value?: number | null) {
   });
 }
 
+export function formatChannelTestDetail(detail?: string | null) {
+  if (!detail) return "Connection test completed.";
+  if (detail === "provider_reachable") return "Provider connection verified.";
+  if (detail === "provider_auth_rejected") return "Provider rejected the saved credentials.";
+  if (detail === "provider_timeout") return "Provider connection test timed out.";
+  if (detail === "provider_unreachable") return "Provider could not be reached.";
+  if (detail === "invalid_provider_response") return "Provider returned an unexpected response.";
+  if (detail === "credentials_present") {
+    return "Saved credentials are present; this provider does not have a live probe yet.";
+  }
+  if (detail.startsWith("missing_required_secret")) return "A required channel credential is missing.";
+  if (detail.startsWith("malformed_secret")) return "A saved channel credential is malformed.";
+  return "Connection test completed.";
+}
+
+export function channelHasLiveProbe(channel: SettingsChannelId) {
+  return channel === "telegram" || channel === "slack";
+}
+
+export function formatChannelTestActionLabel(channel: SettingsChannelId, label: string) {
+  return channelHasLiveProbe(channel)
+    ? `Test ${label} connection`
+    : `Check ${label} credentials`;
+}
+
 function getChannelTone(channel?: AgentChannelStatus | null): V2BadgeTone {
   if (channel?.connected || channel?.configured) return "success";
   if (channel?.available || channel?.live) return "warn";
@@ -233,8 +259,18 @@ function getChannelStatusLabel(channel?: AgentChannelStatus | null) {
   return "Not configured";
 }
 
+// A connected-but-broken channel must not read as healthy: only treat the last
+// live /test as a failure when the engine actually reported ok === false. A
+// missing/null last_test (never tested, or a pre-liveness engine) is "unknown",
+// not "failed", so we fall back to the stored connection state.
+export function lastLiveTestFailed(control?: AgentChannelControlStatus | null) {
+  return control?.last_test?.ok === false;
+}
+
 function getChannelControlTone(control?: AgentChannelControlStatus | null): V2BadgeTone {
-  if (control?.user_connected || control?.status === "connected") return "success";
+  if (control?.user_connected || control?.status === "connected") {
+    return lastLiveTestFailed(control) ? "warn" : "success";
+  }
   if (control?.status === "partial") return "warn";
   if (control?.build_enabled === false || control?.status === "disabled_in_build") return "danger";
   return "default";
@@ -242,7 +278,9 @@ function getChannelControlTone(control?: AgentChannelControlStatus | null): V2Ba
 
 function getChannelControlStatusLabel(control?: AgentChannelControlStatus | null) {
   if (!control) return "Setup status unavailable";
-  if (control.status === "connected" || control.user_connected) return "Connected";
+  if (control.status === "connected" || control.user_connected) {
+    return lastLiveTestFailed(control) ? "Needs attention" : "Connected";
+  }
   if (control.status === "partial") return "Needs required fields";
   if (control.status === "disabled_in_build" || control.build_enabled === false) return "Disabled in this build";
   return "Needs setup";
@@ -327,10 +365,10 @@ export function SettingsChannelsSection({
       const hasRequiredSecrets =
         totalRequiredSecrets === 0 || presentSecrets >= totalRequiredSecrets;
       const canTestChannel =
-        config.id !== "telegram" &&
         credentialFormVisible &&
         Boolean(control?.endpoints?.test || control) &&
         (isConnected || hasRequiredSecrets);
+      const hasLiveProbe = channelHasLiveProbe(config.id);
       const canDisconnectChannel =
         credentialFormVisible &&
         (config.id === "telegram" || Boolean(control?.endpoints?.disconnect || control)) &&
@@ -408,6 +446,7 @@ export function SettingsChannelsSection({
         isConnected,
         canTestChannel,
         canDisconnectChannel,
+        hasLiveProbe,
       }];
     });
   }, [
@@ -588,10 +627,16 @@ export function SettingsChannelsSection({
 
                   {control?.last_test ? (
                     <div className="zaki-settings-v2__channel-check">
-                      <span>Last credential check</span>
-                      <strong>{control.last_test.ok ? "Valid" : "Failed"}</strong>
+                      <span>{channelRow.hasLiveProbe ? "Last connection test" : "Last credential check"}</span>
+                      <strong>
+                        {control.last_test.ok
+                          ? channelRow.hasLiveProbe
+                            ? "Verified"
+                            : "Valid"
+                          : "Failed"}
+                      </strong>
                       <small>
-                        {control.last_test.detail || "checked"}
+                        {formatChannelTestDetail(control.last_test.detail)}
                         {lastTestDate ? ` · ${lastTestDate}` : ""}
                       </small>
                     </div>
@@ -625,10 +670,15 @@ export function SettingsChannelsSection({
                           disabled={channelControlAction === `${channelRow.id}:test`}
                           onClick={() => void handleTestChannelControl(channelRow.id)}
                         >
-                          {t("settingsModal.channels.control.test", {
-                            channel: channelRow.label,
-                            defaultValue: `Check ${channelRow.label} credentials`,
-                          })}
+                          {channelControlAction === `${channelRow.id}:test`
+                            ? t("settingsModal.channels.control.testing", {
+                                channel: channelRow.label,
+                                defaultValue: "Testing...",
+                              })
+                            : t("settingsModal.channels.control.test", {
+                                channel: channelRow.label,
+                                defaultValue: formatChannelTestActionLabel(channelRow.id, channelRow.label),
+                              })}
                         </V2Button>
                       ) : null}
                       {channelRow.canDisconnectChannel ? (
