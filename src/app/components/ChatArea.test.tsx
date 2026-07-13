@@ -60,6 +60,15 @@ import {
 } from "@/lib/api";
 import { PENDING_INTENT_KEY } from "@/lib/pendingIntent";
 import { ANONYMOUS_WORK_LEDGER_KEY } from "@/lib/anonymousWork";
+import { toast } from "sonner";
+
+jest.mock("sonner", () => ({
+  toast: {
+    error: jest.fn(),
+    info: jest.fn(),
+    success: jest.fn(),
+  },
+}));
 
 jest.mock("@/lib/api", () => ({
   apiRequest: jest.fn(async () => ({
@@ -1042,7 +1051,16 @@ describe("ChatArea Component", () => {
     (fetchMemoryActivity as jest.Mock).mockClear();
     (listAgentSessions as jest.Mock).mockClear();
     (listAgentJobs as jest.Mock).mockClear();
-    (provisionAgent as jest.Mock).mockClear();
+    (provisionAgent as jest.Mock).mockReset();
+    (provisionAgent as jest.Mock).mockImplementation(async () => ({
+      response: {
+        ok: true,
+        status: 200,
+        json: async () => ({ status: "provisioned" }),
+      },
+      data: { status: "provisioned" },
+    }));
+    jest.mocked(toast.error).mockClear();
     (setAgentSessionMode as jest.Mock).mockClear();
     (approveAgentSession as jest.Mock).mockClear();
     (cancelAgentSession as jest.Mock).mockClear();
@@ -2319,6 +2337,124 @@ describe("ChatArea Component", () => {
         threadId: "main",
       });
     });
+  });
+
+  it("shows setup progress and keeps the Agent composer locked while provisioning", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+
+    let finishProvisioning: (() => void) | null = null;
+    (provisionAgent as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishProvisioning = () =>
+            resolve({
+              response: { ok: true, status: 200, json: async () => ({ status: "provisioned" }) },
+              data: { status: "provisioned" },
+            });
+        })
+    );
+
+    await renderChatAreaAndWaitForEffects();
+
+    expect(await screen.findByText("agent.provision.loadingTitle")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "input.sendAria" })).toBeDisabled();
+
+    await act(async () => {
+      finishProvisioning?.();
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId("agent-provision-state")).not.toBeInTheDocument();
+    });
+  });
+
+  it("surfaces provisioning failure and retries from a persistent Agent setup state", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+
+    (provisionAgent as jest.Mock)
+      .mockResolvedValueOnce({
+        response: { ok: false, status: 503, json: async () => ({ error: "Agent setup is unavailable." }) },
+        data: { error: "Agent setup is unavailable." },
+      })
+      .mockResolvedValueOnce({
+        response: { ok: true, status: 200, json: async () => ({ status: "provisioned" }) },
+        data: { status: "provisioned" },
+      });
+
+    await renderChatAreaAndWaitForEffects();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("agent.provision.errorTitle");
+    expect(screen.getByRole("alert")).toHaveTextContent("Agent setup is unavailable.");
+    expect(toast.error).toHaveBeenCalledWith("Agent setup is unavailable.");
+    expect(screen.getByRole("button", { name: "input.sendAria" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "agent.provision.retry" }));
+
+    await waitFor(() => {
+      expect(provisionAgent).toHaveBeenCalledTimes(2);
+      expect(screen.queryByTestId("agent-provision-state")).not.toBeInTheDocument();
+    });
+  });
+
+  it("provisions the next signed-in user and ignores the previous user's late failure", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "first@test.com" }, isLoading: false };
+
+    let finishFirstProvisioning: ((result: unknown) => void) | null = null;
+    let finishSecondProvisioning: ((result: unknown) => void) | null = null;
+    (provisionAgent as jest.Mock)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishFirstProvisioning = resolve;
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishSecondProvisioning = resolve;
+          })
+      );
+
+    const view = await renderChatAreaAndWaitForEffects();
+    expect(provisionAgent).toHaveBeenCalledTimes(1);
+
+    authState = { user: { username: "second@test.com" }, isLoading: false };
+    view.rerender(
+      <QueryClientProvider client={view.queryClient}>
+        <MemoryRouter>
+          <ChatArea />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => expect(provisionAgent).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      finishSecondProvisioning?.({
+        response: { ok: true, status: 200, json: async () => ({ status: "provisioned" }) },
+        data: { status: "provisioned" },
+      });
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId("agent-provision-state")).not.toBeInTheDocument();
+    });
+
+    await act(async () => {
+      finishFirstProvisioning?.({
+        response: { ok: false, status: 503, json: async () => ({ error: "Old user failure" }) },
+        data: { error: "Old user failure" },
+      });
+    });
+
+    expect(screen.queryByTestId("agent-provision-state")).not.toBeInTheDocument();
+    expect(toast.error).not.toHaveBeenCalledWith("Old user failure");
   });
 
   it("hydrates the active persisted Agent session detail even when the list marks it inactive", async () => {

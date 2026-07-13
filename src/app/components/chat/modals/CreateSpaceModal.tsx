@@ -44,13 +44,6 @@ export function CreateSpaceModal({
   if (!isOpen) return null;
 
   const handleCreate = () => {
-    if (typeof window !== "undefined" && spaceName.trim().length > 0) {
-      window.dispatchEvent(
-        new CustomEvent("zaki:onboarding-space-submit", {
-          detail: { name: spaceName.trim() },
-        })
-      );
-    }
     onCreate({
       name: spaceName,
       description: spaceDescription,
@@ -94,7 +87,6 @@ export function CreateSpaceModal({
           <label className="text-xs text-zaki-muted">
             {t("createSpaceModal.fields.name")}
             <input
-              data-onboarding-id="create-space-name-input"
               className="mt-1 w-full rounded-zaki-md border border-zaki-strong px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus"
               value={spaceName}
               onChange={(event) => setSpaceName(event.target.value)}
@@ -114,7 +106,6 @@ export function CreateSpaceModal({
           <label className="text-xs text-zaki-muted">
             {t("createSpaceModal.fields.instructions")}
             <textarea
-              data-onboarding-id="create-space-instructions-input"
               className="mt-1 w-full rounded-zaki-md border border-zaki-strong px-3 py-2 text-sm text-zaki-primary outline-none focus:border-zaki-focus resize-none"
               rows={3}
               value={spaceInstructions}
@@ -136,7 +127,6 @@ export function CreateSpaceModal({
             className="zaki-spaces-btn zaki-spaces-btn--primary zaki-pressable w-full sm:w-auto"
             onClick={handleCreate}
             disabled={spaceName.trim().length === 0}
-            data-onboarding-id="create-space-submit"
           >
             {t("createSpaceModal.actions.create")}
           </button>

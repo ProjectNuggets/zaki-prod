@@ -150,9 +150,6 @@ test("user can sign in on pricing route and complete provider-selected checkout"
   page,
 }) => {
   await mockAuthAndPricing(page);
-  await page.addInitScript(() => {
-    window.localStorage.setItem("zaki:onboarding:v1:user@example.com", "done");
-  });
 
   // V1 commercial flow: a plan intent carried in the URL (plan + autostart)
   // survives the in-pricing sign-in, then PricingPage auto-starts checkout. The

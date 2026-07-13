@@ -720,7 +720,8 @@ export function AgentArtifactCanvas({
           </div>
         </section>
 
-        <section className="zaki-agent-artifact-canvas__delivery-card">
+        {PUBLIC_AGENT_ARTIFACT_EXPORT_FORMATS.length > 0 ? (
+        <section className="zaki-agent-artifact-canvas__delivery-card" aria-label="Artifact export">
           <div className="zaki-agent-artifact-canvas__section-head">
             <span>export</span>
             <small>{exportedCount ? `${exportedCount} ready` : "render on demand"}</small>
@@ -760,6 +761,7 @@ export function AgentArtifactCanvas({
             })}
           </div>
         </section>
+        ) : null}
       </div>
 
       <div className="zaki-agent-artifact-canvas__workspace" data-mode={mode}>

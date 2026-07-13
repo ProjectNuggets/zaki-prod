@@ -146,16 +146,12 @@ const fetchContextDiagnosticsMock = jest.requireMock("@/lib/api")
   .fetchContextDiagnostics as jest.Mock;
 const fetchMemoryDoctorMock = jest.requireMock("@/lib/api")
   .fetchMemoryDoctor as jest.Mock;
-const downloadAgentExportFileMock = jest.requireMock("@/lib/api")
-  .downloadAgentExportFile as jest.Mock;
 const exportAgentArtifactMock = jest.requireMock("@/lib/api").exportAgentArtifact as jest.Mock;
 const fetchAgentTraceMock = jest.requireMock("@/lib/api").fetchAgentTrace as jest.Mock;
 const listAgentArtifactsMock = jest.requireMock("@/lib/api").listAgentArtifacts as jest.Mock;
 const listAgentTracesMock = jest.requireMock("@/lib/api").listAgentTraces as jest.Mock;
 const shareAgentArtifactMock = jest.requireMock("@/lib/api").shareAgentArtifact as jest.Mock;
 const shareAgentTraceMock = jest.requireMock("@/lib/api").shareAgentTrace as jest.Mock;
-const toastErrorMock = jest.requireMock("sonner").toast.error as jest.Mock;
-const toastMessageMock = jest.requireMock("sonner").toast.message as jest.Mock;
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -207,10 +203,6 @@ beforeEach(() => {
   exportAgentArtifactMock.mockResolvedValue({
     response: { ok: true },
     data: { url: "/api/agent/exports/artifact.pdf" },
-  });
-  downloadAgentExportFileMock.mockResolvedValue({
-    filename: "artifact.pdf",
-    bytes: 12,
   });
   fetchAgentTraceMock.mockResolvedValue({
     response: { ok: true },
@@ -375,7 +367,7 @@ describe("PowerUserSheet", () => {
     });
   });
 
-  it("does not treat private artifact export urls as public share links", async () => {
+  it("does not treat private artifact export urls as public share links or expose parked exports", async () => {
     listAgentArtifactsMock.mockResolvedValueOnce({
       response: { ok: true },
       data: {
@@ -404,135 +396,10 @@ describe("PowerUserSheet", () => {
     expect(
       screen.getByTestId("power-user-artifact-revoke-artifact-private")
     ).toBeDisabled();
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("power-user-artifact-export-pdf-artifact-private"));
-    });
-    await waitFor(() => {
-      expect(exportAgentArtifactMock).toHaveBeenCalledWith("artifact-private", "pdf");
-      expect(downloadAgentExportFileMock).toHaveBeenCalledWith(
-        "/api/agent/exports/artifact.pdf",
-        "Private_preview.pdf"
-      );
-      expect(screen.getByTestId("power-user-artifact-download-pdf-artifact-private")).toBeInTheDocument();
-    });
-  });
-
-  it("rewrites upstream artifact export downloads through the ZAKI BFF bridge", async () => {
-    exportAgentArtifactMock.mockResolvedValueOnce({
-      response: { ok: true },
-      data: { download_url: "/api/v1/users/42/exports/report.pdf" },
-    });
-    listAgentArtifactsMock.mockResolvedValueOnce({
-      response: { ok: true },
-      data: {
-        artifacts: [
-          {
-            id: "artifact-report",
-            title: "Research report",
-            type: "markdown",
-            version: 1,
-          },
-        ],
-      },
-    });
-
-    await act(async () => {
-      render(<PowerUserSheet isOpen onClose={() => {}} initialTab="artifacts" />);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText("Research report")).toBeInTheDocument();
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("power-user-artifact-export-pdf-artifact-report"));
-    });
-
-    await waitFor(() => {
-      expect(downloadAgentExportFileMock).toHaveBeenCalledWith(
-        "/api/agent/exports/report.pdf",
-        "Research_report.pdf"
-      );
-      expect(screen.getByTestId("power-user-artifact-download-pdf-artifact-report")).toBeInTheDocument();
-    });
-  });
-
-  it("keeps artifact export retryable when the backend omits a download URL", async () => {
-    exportAgentArtifactMock.mockResolvedValueOnce({
-      response: { ok: true },
-      data: { ok: true },
-    });
-    listAgentArtifactsMock.mockResolvedValueOnce({
-      response: { ok: true },
-      data: {
-        artifacts: [
-          {
-            id: "artifact-no-url",
-            title: "Missing URL",
-            type: "markdown",
-            version: 1,
-          },
-        ],
-      },
-    });
-
-    await act(async () => {
-      render(<PowerUserSheet isOpen onClose={() => {}} initialTab="artifacts" />);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText("Missing URL")).toBeInTheDocument();
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("power-user-artifact-export-pdf-artifact-no-url"));
-    });
-
-    await waitFor(() => {
-      expect(toastErrorMock).toHaveBeenCalledWith(
-        "zakiControls.powerUser.artifacts.exportFailed"
-      );
-    });
-  });
-
-  it("surfaces parked artifact export as an unavailable action", async () => {
-    exportAgentArtifactMock.mockResolvedValueOnce({
-      response: { ok: false, status: 501 },
-      data: { error: "export_not_yet_available" },
-    });
-    listAgentArtifactsMock.mockResolvedValueOnce({
-      response: { ok: true },
-      data: {
-        artifacts: [
-          {
-            id: "artifact-export-parked",
-            title: "Export parked",
-            type: "markdown",
-            version: 1,
-          },
-        ],
-      },
-    });
-
-    await act(async () => {
-      render(<PowerUserSheet isOpen onClose={() => {}} initialTab="artifacts" />);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText("Export parked")).toBeInTheDocument();
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("power-user-artifact-export-pdf-artifact-export-parked"));
-    });
-
-    await waitFor(() => {
-      expect(exportAgentArtifactMock).toHaveBeenCalledWith("artifact-export-parked", "pdf");
-      expect(toastMessageMock).toHaveBeenCalledWith(
-        "zakiControls.powerUser.artifacts.exportNotAvailable"
-      );
-    });
+    expect(
+      screen.queryByTestId("power-user-artifact-export-pdf-artifact-private")
+    ).not.toBeInTheDocument();
+    expect(exportAgentArtifactMock).not.toHaveBeenCalled();
   });
 
   it("lists traces and can request a sanitized share", async () => {

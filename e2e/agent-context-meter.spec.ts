@@ -15,7 +15,6 @@ type ContextPayload = Record<string, unknown>;
 async function mockSignedInAgent(page: Page, getContext: () => ContextPayload) {
   await page.addInitScript(() => {
     window.localStorage.setItem("zaki:locale", "en");
-    window.localStorage.setItem("zaki:onboarding:v1:e2e@example.com", "done");
   });
 
   await page.route("**/system/refresh-user", async (route) => {

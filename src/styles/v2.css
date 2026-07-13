@@ -1659,81 +1659,6 @@ button.v2-status-strip__item:focus-visible {
   outline-offset: 3px;
 }
 
-.zaki-onboarding-v2 {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  pointer-events: none;
-  color: var(--v2-ink-1);
-  font-family: var(--v2-font-mono);
-}
-
-.zaki-onboarding-v2__spotlight,
-.zaki-onboarding-v2__overlay {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-.zaki-onboarding-v2__spotlight-fill {
-  fill: rgba(12, 10, 9, 0.5);
-}
-
-.zaki-onboarding-v2__overlay {
-  background: rgba(12, 10, 9, 0.42);
-}
-
-.zaki-onboarding-v2__card {
-  position: absolute;
-  pointer-events: auto;
-  border: 1px solid var(--v2-hairline-strong);
-  border-radius: var(--v2-r-2);
-  background: var(--v2-bg-raised);
-  color: var(--v2-ink-1);
-  padding: 16px;
-  box-shadow: var(--v2-elev-4);
-}
-
-.zaki-onboarding-v2__close {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-}
-
-.zaki-onboarding-v2__step {
-  margin: 0 34px 6px 0;
-  color: var(--v2-ink-3);
-  font-size: 10px;
-  line-height: 1.35;
-  text-transform: uppercase;
-}
-
-.zaki-onboarding-v2__card h3 {
-  margin: 0 34px 0 0;
-  color: var(--v2-ink-1);
-  font-family: var(--v2-font-mono);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.35;
-}
-
-.zaki-onboarding-v2__card p {
-  margin: 10px 0 0;
-  color: var(--v2-ink-2);
-  font-family: var(--v2-font-prose);
-  font-size: 13px;
-  line-height: 1.55;
-}
-
-.zaki-onboarding-v2__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 14px;
-}
-
 .v2-modal {
   width: min(480px, calc(100vw - 2rem));
   border: 1px solid var(--v2-hairline-strong);
@@ -6329,6 +6254,36 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   line-height: 1.45;
 }
 
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-tool-only-turn {
+  width: min(100%, 680px);
+  border: 1px solid var(--v2-hairline);
+  background: var(--v2-bg-raised);
+  color: var(--v2-ink-3);
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px 10px;
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-tool-only-turn > span:first-child {
+  color: var(--v2-success);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-tool-only-turn > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-tool-only-turn strong {
+  color: var(--v2-ink-1);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .zaki-app-v2 .zaki-agent-v2 .zaki-approval-history {
   display: inline-grid;
   grid-template-columns: auto auto 1fr;
@@ -6816,6 +6771,70 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   width: min(100%, 900px);
   margin: 0 auto 8px;
   padding: 0 24px;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-provision-state {
+  width: min(100%, 852px);
+  min-height: 44px;
+  margin: 0 auto 8px;
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg-raised);
+  color: var(--v2-ink-2);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  font-family: var(--v2-font-mono);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-provision-state[data-state="error"] {
+  border-color: color-mix(in srgb, var(--v2-danger) 68%, var(--v2-hairline-strong));
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-provision-state__icon {
+  color: var(--v2-accent);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-provision-state[data-state="error"] .zaki-agent-provision-state__icon {
+  color: var(--v2-danger);
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-provision-state__copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-provision-state__copy strong {
+  color: var(--v2-ink-1);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-provision-state__copy span {
+  color: var(--v2-ink-3);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-provision-state__retry {
+  min-height: 26px;
+  border: 1px solid var(--v2-hairline-strong);
+  background: transparent;
+  color: var(--v2-ink-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  font-size: 10px;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-provision-state__retry:hover,
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-provision-state__retry:focus-visible {
+  border-color: var(--v2-ink-3);
+  color: var(--v2-ink-1);
 }
 
 .zaki-app-v2 .zaki-agent-v2 .zaki-composer-quick-replies {
@@ -8492,6 +8511,17 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   .zaki-app-v2 .zaki-agent-v2 .zaki-approval-card-slot {
     padding: 0 14px;
     margin-bottom: 6px;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-agent-provision-state {
+    width: calc(100% - 28px);
+    grid-template-columns: auto minmax(0, 1fr);
+    margin-bottom: 6px;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-agent-provision-state__retry {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .zaki-approval-card__layout {
