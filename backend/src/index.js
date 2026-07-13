@@ -74,6 +74,7 @@ import {
   createBillingReconcileHandler,
 } from "./billing-route-handlers.js";
 import { createStripeWebhookHandler } from "./billing-stripe-webhook-handler.js";
+import { createMeterFailOpenBackstop } from "./meter-fail-open-backstop.js";
 import { copyResponseHeaders } from "./upstream-headers.js";
 import { isSafeAgentShareCode } from "./agent-share-code.js";
 import {
@@ -269,10 +270,12 @@ import {
   getAgentLaunchChannel,
   buildBotProvisionPayload,
   normalizeAgentArtifactExportPayload,
+  normalizeAgentTelosPayload,
   normalizeTelegramDisconnectErrorPayload,
   normalizeAgentControlChannelId,
   normalizeAgentLaunchChannelId,
   registerAgentSessionBffRoutes,
+  registerAgentSuggestionRoutes,
   registerBotBffAliases,
   registerTelegramDisconnectAliases,
   resolveSoftEmptyAgentResponse,
@@ -576,6 +579,12 @@ const ZAKI_AGENT_WEBHOOK_BASE_URL = (
 ).trim().replace(/\/+$/, "");
 const ZAKI_AGENT_BACKEND_ENABLED =
   String(process.env.ZAKI_AGENT_BACKEND_ENABLED || "")
+    .toLowerCase()
+    .trim() === "true";
+// Read-only mirror of nullalis `agent.telos_in_prompt`. Deployment config must
+// set both values together; default false keeps the UI honest when unset.
+const ZAKI_AGENT_TELOS_IN_PROMPT =
+  String(process.env.ZAKI_AGENT_TELOS_IN_PROMPT || "")
     .toLowerCase()
     .trim() === "true";
 const LEARNING_ENGINE_BASE_URL = (process.env.LEARNING_ENGINE_BASE_URL || "")
@@ -953,6 +962,7 @@ const billingAlertDispatcher = createBillingAlertDispatcher({
   timeoutMs: ZAKI_BILLING_ALERT_TIMEOUT_MS,
   cooldownMs: ZAKI_BILLING_ALERT_COOLDOWN_MS,
 });
+const meterFailOpenBackstop = createMeterFailOpenBackstop({ env: process.env });
 
 let runtimeRateLimitSettings = {
   appChatDailyPromptLimit: APP_CHAT_QUOTA_CONFIG.limit,
@@ -10613,6 +10623,28 @@ function buildSpacesMeterDenialPayload(result, requestId) {
   };
 }
 
+function checkMeterFailOpenBackstop({ surface, userId, requestId, error } = {}) {
+  const decision = meterFailOpenBackstop.check({ surface, userId });
+  if (decision.shouldPage) {
+    void emitBillingAlert({
+      provider: "metering",
+      id: "meter.fail_open.page",
+      severity: "critical",
+      message: "Metering fail-open volume crossed the paging threshold.",
+      details: {
+        surface,
+        requestId,
+        error: error?.message || String(error || "meter_reserve_failed"),
+        globalCount: decision.globalCount,
+        globalAllowedCount: decision.globalAllowedCount,
+        pageThreshold: decision.pageThreshold,
+        windowMs: decision.windowMs,
+      },
+    });
+  }
+  return decision;
+}
+
 async function requireSpacesMeterGrantForChat({
   req,
   res,
@@ -10689,8 +10721,27 @@ async function requireSpacesMeterGrantForChat({
     req.spacesChatMessageChars = String(message || "").length;
     return { allowed: true, action };
   } catch (err) {
-    // Fail-OPEN for the core product: a metering DB blip must not break chat. Not charged; logged.
-    console.error(`[Spaces] wallet reserve failed (allowing chat unmetered) req=${requestId}: ${err?.message}`);
+    // Fail-OPEN for the core product, bounded by a DB-independent emergency budget.
+    console.error(`[Spaces] wallet reserve failed req=${requestId}: ${err?.message}`);
+    const backstop = checkMeterFailOpenBackstop({
+      surface: "spaces",
+      userId: identity.userId,
+      requestId,
+      error: err,
+    });
+    if (!backstop.allowed) {
+      const result = {
+        allowed: false,
+        status: backstop.status,
+        error: backstop.reason,
+        message:
+          backstop.status === 429
+            ? "Too many degraded-mode chat requests. Please retry shortly."
+            : "Chat metering is temporarily unavailable. Please retry shortly.",
+      };
+      res.status(result.status).json(buildSpacesMeterDenialPayload(result, requestId));
+      return { ...result, action };
+    }
     req.spacesChatUnmetered = true;
     void emitBillingAlert({ provider: "metering", id: "spaces.meter.fail_open", severity: "high", message: "Spaces chat metering failed; serving unmetered (fail-open).", details: { requestId, error: err?.message } });
     return { allowed: true, action };
@@ -11720,11 +11771,29 @@ async function requireAgentWalletReserveForChat(req, res, { identity, action, re
   }
 
   if (decision.outcome === "unmetered") {
-    // Fail-OPEN: serve the turn unmetered; alert (matches spaces).
-    req.agentChatUnmetered = true;
+    // Fail-OPEN only within the DB-independent per-user and process budgets.
     console.error(
-      `[Agent] wallet reserve failed (allowing chat unmetered) req=${reqId}: ${decision.error?.message}`
+      `[Agent] wallet reserve failed req=${reqId}: ${decision.error?.message}`
     );
+    const backstop = checkMeterFailOpenBackstop({
+      surface: "agent",
+      userId: identity?.userId,
+      requestId: reqId,
+      error: decision.error,
+    });
+    if (!backstop.allowed) {
+      const denial = {
+        status: backstop.status,
+        error: backstop.reason,
+        message:
+          backstop.status === 429
+            ? "Too many degraded-mode Agent requests. Please retry shortly."
+            : "Agent metering is temporarily unavailable. Please retry shortly.",
+      };
+      res.status(denial.status).json(buildAgentMeterDenialPayload(denial, reqId));
+      return { allowed: false };
+    }
+    req.agentChatUnmetered = true;
     void emitBillingAlert({
       provider: "metering",
       id: "agent.meter.fail_open",
@@ -16563,6 +16632,21 @@ app.get(
   requireAgentContext,
   makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/config`)
 );
+// TELOS Slice 1 — curated user-model north star (read-only). Forwards to the
+// nullalis gateway handleTelos. Curation writes go through the approved
+// wish/telos loop, never a UI POST (T4).
+app.get(
+  "/api/agent/telos",
+  requireAgentContext,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/telos`,
+    {
+      responseMode: "json",
+      label: "Nullclaw Agent TELOS response",
+      transformJson: (data) => normalizeAgentTelosPayload(data, ZAKI_AGENT_TELOS_IN_PROMPT),
+    }
+  )
+);
 app.get(
   "/api/agent/secrets/:key",
   requireAgentContext,
@@ -17224,6 +17308,16 @@ app.get(
     return appendAllowedQueryParams(path, req, ["status", "limit", "cursor"]);
   }, AGENT_RUNTIME_JSON_PROXY_OPTIONS)
 );
+
+// Learning-loop review gate. The engine owns the only legal state
+// transitions (shadow -> active/retired); the browser can only request an
+// adopt or dismiss for an authenticated, BFF-pinned user.
+registerAgentSuggestionRoutes(app, {
+  requireAgentContext,
+  json1mb: agentJson1mb,
+  makeUserProxyHandler: makeAgentUserProxyHandler,
+  proxyOptions: AGENT_RUNTIME_JSON_PROXY_OPTIONS,
+});
 
 app.post(
   "/api/agent/history/append",

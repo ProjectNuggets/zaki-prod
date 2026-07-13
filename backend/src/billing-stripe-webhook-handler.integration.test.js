@@ -159,6 +159,38 @@ describe("stripe webhook handler integration", () => {
     expect(deps.dbQuery).not.toHaveBeenCalled();
   });
 
+  it.each(["charge.refunded", "credit_note.created", "credit_note.updated"])(
+    "acknowledges and logs %s without mutating billing state",
+    async (eventType) => {
+      const event = {
+        id: `evt_${eventType.replaceAll(".", "_")}`,
+        type: eventType,
+        data: { object: { customer: "cus_refund_1" } },
+      };
+      const deps = createDependencies({ event, markResult: true });
+      const consoleInfo = jest.spyOn(console, "info").mockImplementation(() => undefined);
+
+      try {
+        const handler = createStripeWebhookHandler(deps);
+        const res = await invoke(handler, { headers: { "stripe-signature": "sig_ok" } });
+
+        expect(res.statusCode).toBe(200);
+        expect(res.body).toEqual({ received: true });
+        expect(consoleInfo).toHaveBeenCalledWith(
+          "[Stripe] refund event acknowledged without billing mutation:",
+          expect.objectContaining({ eventId: event.id, eventType })
+        );
+        expect(deps.dbQuery).not.toHaveBeenCalled();
+        expect(deps.resolveUserByStripeCustomer).not.toHaveBeenCalled();
+        expect(deps.fulfillAccessCodePurchaseCheckoutSession).not.toHaveBeenCalled();
+        expect(deps.fulfillTopupCheckoutSession).not.toHaveBeenCalled();
+        expect(deps.markWebhookEventProcessed).toHaveBeenCalledWith("stripe", event.id);
+      } finally {
+        consoleInfo.mockRestore();
+      }
+    }
+  );
+
   it("skips stale out-of-order subscription events", async () => {
     const event = {
       id: "evt_old",

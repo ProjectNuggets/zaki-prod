@@ -27,6 +27,58 @@ async function openInspectorIfNeeded(page: Page) {
   }
 }
 
+async function mockSettingsActivation(page: Page) {
+  let adoptedKey = "";
+  await page.route("**/api/agent/telos", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        telos_in_prompt: true,
+        telos: [{ key: "durable_fact/telos/goal/1", type: "goal", content: "Launch ZAKI" }],
+      }),
+    });
+  });
+  await page.route("**/api/agent/jobs**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        jobs: [
+          { id: "dream_3am", command: "dream", next_run_secs: 1_800_000_000 },
+          { id: "mine_330am", command: "mine", next_run_secs: 1_800_001_800 },
+          { id: "weekday-brief", name: "Weekday brief", next_run_secs: 1_800_003_600 },
+        ],
+      }),
+    });
+  });
+  await page.route("**/api/agent/suggestions/adopt", async (route) => {
+    const body = route.request().postDataJSON() as { key?: string } | null;
+    adoptedKey = body?.key || "";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ status: "adopted", key: adoptedKey }),
+    });
+  });
+  await page.route("**/api/agent/suggestions", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        suggestions: [
+          {
+            key: "durable_fact/behavior/1",
+            origin: "trace-miner",
+            content: "Lead with outcomes",
+          },
+        ],
+      }),
+    });
+  });
+  return () => adoptedKey;
+}
+
 test.describe("V2 production-final app surfaces", () => {
   test.beforeEach(async ({ page }) => {
     await signInForRelease(page);
@@ -125,6 +177,7 @@ test.describe("V2 production-final app surfaces", () => {
   });
 
   test("Settings exposes the final control-plane sections without secrets", async ({ page }, testInfo) => {
+    const adoptedKey = await mockSettingsActivation(page);
     await page.setViewportSize(RELEASE_VIEWPORTS.desktop);
     await page.goto("/settings", { waitUntil: "domcontentloaded" });
 
@@ -133,6 +186,9 @@ test.describe("V2 production-final app surfaces", () => {
       "settings-billing",
       "settings-platform-usage",
       "settings-agent",
+      "settings-automations",
+      "settings-suggestions",
+      "settings-telos",
       "settings-channels",
       "settings-secrets",
       "settings-devices",
@@ -156,7 +212,35 @@ test.describe("V2 production-final app surfaces", () => {
     await expect(page.getByTestId("settings-secrets").getByText("telegram_bot_token")).toBeVisible();
     await expect(page.getByTestId("settings-secrets").getByText(/xoxb-|Discord bot token|IMAP password/i)).toHaveCount(0);
     await expect(page.getByTestId("settings-billing").getByText("ZAKI CLI")).toHaveCount(0);
+    await expect(page.getByRole("combobox", { name: "Default model" })).toBeVisible();
+    await expect(page.getByRole("option", { name: /Claude Haiku 4\.5/ })).toHaveCount(1);
+    await expect(page.getByTestId("settings-telos").getByText("Active in prompts")).toBeVisible();
+    await expect(page.getByTestId("settings-automations").getByText("Dream reflection")).toBeVisible();
+    await expect(page.getByTestId("settings-automations").getByText("Learning miner")).toBeVisible();
+    await expect(page.getByTestId("settings-automations").getByText("Weekday brief")).toBeVisible();
+    const suggestions = page.getByTestId("settings-suggestions");
+    await expect(suggestions.getByText("Lead with outcomes")).toBeVisible();
+    await suggestions.getByRole("button", { name: "Adopt" }).click();
+    await expect.poll(adoptedKey).toBe("durable_fact/behavior/1");
+    await expect(suggestions.getByText("Lead with outcomes")).toHaveCount(0);
     await attachViewportShot(page, testInfo, "settings-1440x1000");
+  });
+
+  test("Settings activation remains reachable on mobile", async ({ page }, testInfo) => {
+    await mockSettingsActivation(page);
+    await page.setViewportSize(RELEASE_VIEWPORTS.mobile);
+    await page.goto("/settings", { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByTestId("settings-telos")).toBeVisible({ timeout: 20_000 });
+    await page.getByTestId("settings-agent").scrollIntoViewIfNeeded();
+    await expect(page.getByRole("combobox", { name: "Default model" })).toBeVisible();
+    await page.getByTestId("settings-suggestions").scrollIntoViewIfNeeded();
+    await expect(page.getByRole("button", { name: "Adopt" })).toBeVisible();
+    await page.getByTestId("settings-automations").scrollIntoViewIfNeeded();
+    await expect(
+      page.getByTestId("settings-automations").getByText("Dream reflection", { exact: true }),
+    ).toBeVisible();
+    await attachViewportShot(page, testInfo, "settings-390x844");
   });
 
   for (const route of RELEASE_GATED_ROUTES) {
