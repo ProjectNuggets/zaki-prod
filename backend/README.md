@@ -134,6 +134,18 @@ npm run migrate:sqlite
 
 Billing endpoints may return `503` with code `billing_unavailable` when Stripe is not configured in the runtime environment.
 
+## Parked refund clawback (future work)
+
+Refund and credit-note clawback is not a launch feature. The implementation on
+this parked branch must not be merged or wired into production until all of
+these acceptance criteria are met:
+
+1. Refunding an older subscription cannot revoke a newer paid subscription.
+2. Refunded access-code purchases have a complete clawback path, including
+   already-redeemed access.
+3. Refund revocation is durable and cannot be undone by a later
+   `customer.subscription.updated` webhook.
+
 Nullclaw ownership note:
 - `zaki-prod` owns only the backend proxy contract to Nullclaw.
 - `zaki-prod` does not own Nullclaw provider selection, Together AI configuration, or Kubernetes deployment topology.
