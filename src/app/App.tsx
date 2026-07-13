@@ -123,7 +123,9 @@ export default function App() {
   const [legalPolicyVersion, setLegalPolicyVersion] = useState(
     getInitialLegalPolicyVersion
   );
-  const [legalReconsentRequired, setLegalReconsentRequired] = useState(false);
+  const [legalReconsentRequired, setLegalReconsentRequired] = useState(
+    searchParams.get("legalConsent") === "required"
+  );
   const [legalReconsentChecked, setLegalReconsentChecked] = useState(false);
   const [legalReconsentSubmitting, setLegalReconsentSubmitting] = useState(false);
   const [legalReconsentError, setLegalReconsentError] = useState("");
@@ -300,7 +302,8 @@ export default function App() {
         }
       })
       .catch(() => {
-        // Keep current access if status check fails; user can continue.
+        // A Google-created account marked by the callback remains gated even if
+        // the follow-up status request is temporarily unavailable.
       });
 
     return () => {

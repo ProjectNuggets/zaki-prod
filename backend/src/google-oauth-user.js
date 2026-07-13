@@ -8,8 +8,15 @@ export async function findOrCreateGoogleUser({
   email,
   googleSub,
   fullName,
+  recordLegalConsent,
 }) {
   const now = new Date().toISOString();
+  const finalizeUser = async (user) => {
+    if (user?.id && typeof recordLegalConsent === "function") {
+      await recordLegalConsent({ userId: user.id });
+    }
+    return user;
+  };
   const existingByGoogleSub = await dbGet(
     `SELECT ${userColumns}, google_sub FROM zaki_users WHERE google_sub = $1`,
     [googleSub]
@@ -29,7 +36,7 @@ export async function findOrCreateGoogleUser({
        RETURNING ${userColumns}`,
       [existingByGoogleSub.id, fullName, now]
     );
-    return result.rows?.[0] || { ...existingByGoogleSub, verified: true };
+    return finalizeUser(result.rows?.[0] || { ...existingByGoogleSub, verified: true });
   }
 
   const existing = await dbGet(
@@ -64,7 +71,7 @@ export async function findOrCreateGoogleUser({
       err.code = "google_account_mismatch";
       throw err;
     }
-    return result.rows[0];
+    return finalizeUser(result.rows[0]);
   }
 
   const passwordHash = bcrypt.hashSync(crypto.randomBytes(32).toString("hex"), 10);
@@ -75,5 +82,5 @@ export async function findOrCreateGoogleUser({
      RETURNING ${userColumns}`,
     [email, passwordHash, fullName, googleSub, now]
   );
-  return result.rows?.[0];
+  return finalizeUser(result.rows?.[0]);
 }

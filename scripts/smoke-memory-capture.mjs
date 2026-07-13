@@ -6,7 +6,7 @@ const password = String(process.env.SMOKE_USER_PASSWORD || "").trim();
 const policyVersion = String(
   process.env.SMOKE_LEGAL_POLICY_VERSION ||
     process.env.ZAKI_LEGAL_POLICY_VERSION ||
-    "2026-02-17.v2"
+    "2026-07-12.v4"
 ).trim();
 const timeoutMs = Number.parseInt(process.env.SMOKE_TIMEOUT_MS || "15000", 10);
 const undoExpiryWaitMs = Number.parseInt(process.env.SMOKE_UNDO_EXPIRY_WAIT_MS || "5600", 10);

@@ -12,7 +12,7 @@ SMOKE_ADMIN_EMAIL="<admin-email>" \
 SMOKE_ADMIN_PASSWORD="<admin-password>" \
 SMOKE_USER_EMAIL="<regular-user-email>" \
 SMOKE_USER_PASSWORD="<regular-user-password>" \
-SMOKE_LEGAL_POLICY_VERSION="2026-02-17.v2" \
+SMOKE_LEGAL_POLICY_VERSION="2026-07-12.v4" \
 npm run smoke:v01
 ```
 
