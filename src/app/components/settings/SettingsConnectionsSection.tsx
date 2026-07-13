@@ -24,7 +24,12 @@ export function SettingsConnectionsSection({
       null,
     [integrations],
   );
-  const connectorReady = available && composio?.configured === true;
+  const connectorConfigured = available && composio?.configured === true;
+  const connectorLabel = loading
+    ? "Checking connector"
+    : connectorConfigured
+      ? "Connector configured"
+      : "Connector unavailable";
 
   return (
     <V2SettingsBlock
@@ -39,8 +44,8 @@ export function SettingsConnectionsSection({
       >
         <div className="zaki-settings-v2__control-stack">
           <div className="zaki-settings-v2__status-chips">
-            <V2Badge tone={connectorReady ? "success" : "default"}>
-              {connectorReady ? "Composio ready" : "Connector unavailable"}
+            <V2Badge tone={connectorConfigured ? "success" : "default"}>
+              {connectorLabel}
             </V2Badge>
             <V2Badge tone="warn">OAuth setup blocked</V2Badge>
           </div>
