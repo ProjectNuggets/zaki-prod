@@ -189,6 +189,7 @@ test.describe("V2 production-final app surfaces", () => {
       "settings-automations",
       "settings-suggestions",
       "settings-telos",
+      "settings-connections",
       "settings-channels",
       "settings-secrets",
       "settings-devices",
@@ -208,7 +209,14 @@ test.describe("V2 production-final app surfaces", () => {
     await expect(page.getByTestId("settings-channels").getByText("Telegram", { exact: true })).toBeVisible();
     await expect(page.getByTestId("settings-channels").getByText("Slack", { exact: true }).first()).toBeVisible();
     await expect(page.getByTestId("settings-channels").getByText("Discord", { exact: true }).first()).toBeVisible();
-    await expect(page.getByTestId("settings-channels").getByText("Email", { exact: true }).first()).toBeVisible();
+    await expect(page.getByTestId("settings-channels").getByText("Email", { exact: true })).toHaveCount(0);
+    const connections = page.getByTestId("settings-connections");
+    await expect(connections.getByText("Gmail & Google Drive")).toBeVisible();
+    await expect(connections.getByRole("button", { name: "Connect Gmail" })).toBeDisabled();
+    await expect(connections.getByText(/never asks for an IMAP or SMTP password/i)).toBeVisible();
+    await expect(
+      connections.getByText(/require approval before private data is sent elsewhere/i),
+    ).toBeVisible();
     await expect(page.getByTestId("settings-secrets").getByText("telegram_bot_token")).toBeVisible();
     await expect(page.getByTestId("settings-secrets").getByText(/xoxb-|Discord bot token|IMAP password/i)).toHaveCount(0);
     await expect(page.getByTestId("settings-billing").getByText("ZAKI CLI")).toHaveCount(0);
@@ -240,6 +248,9 @@ test.describe("V2 production-final app surfaces", () => {
     await expect(
       page.getByTestId("settings-automations").getByText("Dream reflection", { exact: true }),
     ).toBeVisible();
+    await page.getByTestId("settings-connections").scrollIntoViewIfNeeded();
+    await expect(page.getByText("Gmail & Google Drive")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Connect Gmail" })).toBeDisabled();
     await attachViewportShot(page, testInfo, "settings-390x844");
   });
 
