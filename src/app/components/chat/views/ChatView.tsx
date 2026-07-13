@@ -277,12 +277,15 @@ export function ChatView({
         return (
           <div key={msg.id} className="flex flex-col gap-2">
             {replayEntries && replayEntries.length > 0 ? (
-              <NullalisTurnTimeline
-                entries={replayEntries}
-                frame={null}
-                isStreaming={false}
-                revealPhase="done"
-              />
+              <div className="flex flex-col items-start gap-1.5">
+                <NullalisTurnTimeline
+                  entries={replayEntries}
+                  frame={null}
+                  isStreaming={false}
+                  revealPhase="done"
+                />
+                {isLast ? <TaskChecklist tasks={nullalisTaskItems} /> : null}
+              </div>
             ) : activeDoneTimeline}
             {renderAgentSteps(msg)}
             {toolOnlyTurn || (

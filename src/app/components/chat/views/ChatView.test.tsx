@@ -261,6 +261,50 @@ describe("ChatView", () => {
     expect(screen.getAllByText(/Worked for/)).toHaveLength(1);
   });
 
+  it("keeps active background tasks visible beside a replayed turn timeline", () => {
+    render(
+      <ChatView
+        messages={[
+          { id: "user-1", role: "user", content: "Research this in the background." },
+          {
+            id: "assistant-1",
+            role: "assistant",
+            content: "I started the background research.",
+          },
+        ]}
+        replayTimelines={{
+          "assistant-1": [
+            {
+              id: "tool-replay-1",
+              kind: "tool",
+              text: "Delegated research started.",
+              timestamp: Date.now(),
+              tool: "delegate",
+              resultState: "done",
+              source: "tool",
+            },
+          ],
+        }}
+        nullalisTaskItems={[
+          {
+            taskId: "task-background-1",
+            status: "running",
+            description: "Waiting for delegated research result",
+            progressPct: 55,
+            updatedAt: Date.now(),
+          },
+        ]}
+        isHistoryLoading={false}
+        isStreaming={false}
+        botMode
+        firstMessageTransition={false}
+      />
+    );
+
+    expect(screen.getByText("Waiting for delegated research result")).toBeVisible();
+    expect(screen.getByText("55%")).toBeVisible();
+  });
+
   it("renders the nullalis turn timeline with reasoning block inline", () => {
     const longReasoning =
       "I need to read the repo structure, identify the failing test, and then decide whether the fix belongs in the controller or the service layer before making changes.";

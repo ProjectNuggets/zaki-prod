@@ -1,5 +1,8 @@
 # Brain Graph Visual Quality — Polish Plan
 
+> **ARCHIVED:** completed May 2026 feature plan. This is not the repository roadmap or a live task
+> list. Use the coordination board linked from `AGENTS.md`.
+
 ## Problem
 Spring simulation runs synchronously (300 iterations blocking main thread), has no center gravity or
 alpha cooling, and clamps nodes to canvas walls — causing corner-clustering. No zoom/pan, hover state,
