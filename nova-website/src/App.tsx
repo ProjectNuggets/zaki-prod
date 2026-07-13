@@ -535,8 +535,8 @@ function TechnologyScrollerSection() {
   const repeatedMarks = [...partnerMarks, ...partnerMarks];
 
   return (
-    <section className="technology-strip" aria-label="Partners and infrastructure ecosystem">
-      <div className="technology-marquee" aria-label="Selected partners and technologies">
+    <section className="technology-strip" aria-label="Infrastructure and technology ecosystem">
+      <div className="technology-marquee" aria-label="Selected infrastructure technologies">
         <div className="technology-marquee-track">
           {repeatedMarks.map((mark, index) => (
             <span
@@ -1724,12 +1724,12 @@ function ProofSection({ includeDossier = false }: { includeDossier?: boolean }) 
   return (
     <section className="section proof-section" id="proof-dossier">
       <div className="proof-copy">
-        <p className="section-kicker">Proof · live</p>
-        <h2>Measured workflow proof. Evidence path available.</h2>
+        <p className="section-kicker">Proof · controlled</p>
+        <h2>Sanitized reference evidence. Diligence path available.</h2>
         <p>
-          Ninety days from assessment to measurable savings. One workflow automated end-to-end. Three
-          departments using managed ZAKI agents inside the customer perimeter. Public figures stay
-          sanitized; serious buyers can request the controlled evidence room.
+          The public figures below are reference benchmarks from an anonymized German mid-market
+          workflow. Customer identity and source artifacts stay private; qualified buyers can request
+          the controlled evidence room under MNDA.
         </p>
         <a
           className="proof-link"
