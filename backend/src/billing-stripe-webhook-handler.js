@@ -167,6 +167,14 @@ export function createStripeWebhookHandler({
         }
       }
 
+      if (eventType === "charge.refunded" || eventType.startsWith("credit_note.")) {
+        console.info("[Stripe] refund event acknowledged without billing mutation:", {
+          eventId,
+          eventType,
+          requestId: req.requestId || null,
+        });
+      }
+
       if (event.type === "checkout.session.completed") {
         const session = event.data.object;
         const customerId = session.customer;
