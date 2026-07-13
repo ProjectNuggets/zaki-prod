@@ -137,8 +137,13 @@ export function buildAgentRuntimeEntitlementFields(
   ) {
     return entitlement;
   }
+  // A metered turn is authorized by the wallet, NOT by a historical plan. Pin the lease to
+  // "free" so a LAPSED-paid user (whose zaki_users.plan_tier still reads "pro"/"personal")
+  // cannot inherit paid-tier tooling (subagents, browser, integrations, image_generate) on the
+  // free metered allowance. Active-paid + super-admin tuples never reach here — they pass
+  // through unchanged via the canRuntimeEntitlementAct branch above.
   return {
-    plan_tier: entitlement?.plan_tier || "free",
+    plan_tier: "free",
     status: "canceled",
     period_end_unix: Math.floor(authorizationEnd),
   };

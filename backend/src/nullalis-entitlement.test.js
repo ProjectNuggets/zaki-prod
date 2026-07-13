@@ -171,6 +171,29 @@ describe("buildAgentRuntimeEntitlementFields", () => {
     });
   });
 
+  it("pins a LAPSED-paid user's metered lease to free (no paid-tier tooling leak)", () => {
+    // Regression: a former subscriber keeps plan_tier="pro" in zaki_users after their sub lapses.
+    // The metered lease must NOT inherit "pro" — that would unlock subagents/browser/integrations
+    // on the free allowance. The wallet authorizes the turn; the tier stays free.
+    expect(
+      buildAgentRuntimeEntitlementFields(
+        {
+          plan_tier: "pro",
+          plan_status: "canceled",
+          current_period_end: 1_699_999_000, // already lapsed
+        },
+        {
+          nowUnix: 1_700_000_000,
+          meterAuthorizedUntilUnix: 1_700_000_660,
+        }
+      )
+    ).toEqual({
+      plan_tier: "free",
+      status: "canceled",
+      period_end_unix: 1_700_000_660,
+    });
+  });
+
   it("keeps a truly inactive user gated when no meter authorization exists", () => {
     expect(
       buildAgentRuntimeEntitlementFields(
