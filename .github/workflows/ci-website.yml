@@ -29,3 +29,5 @@ jobs:
         run: npm --prefix website run typecheck
       - name: Website build
         run: npm --prefix website run build
+      - name: Website container build
+        run: docker build --tag zaki-website:v5-candidate website

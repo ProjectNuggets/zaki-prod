@@ -72,7 +72,7 @@
       statusClass: "z-status--next",
       kicker: "ZAKI / Design",
       title: "Turn a brief into something you can use.",
-      summary: "ZAKI Design turns intent, audience, and references into a clear creative direction, then keeps feedback, iterations, and the usable artifact in one project.",
+      summary: "ZAKI Design is being built to turn intent, audience, and references into a clear creative direction, then keep feedback, iterations, and the usable artifact in one project.",
       cta: "Join the Design waitlist",
       evidenceLabel: "Creative direction",
       evidenceChip: "Iteration 03",
@@ -92,7 +92,7 @@
   var data = products[product];
   if (!data) return;
 
-  document.title = "ZAKI " + data.name + " - Nova Nuggets";
+  document.title = "ZAKI " + data.name + " — ZAKI Website V5";
   document.querySelectorAll("[data-product-name]").forEach(function (node) { node.textContent = data.name; });
   document.querySelectorAll("[data-status]").forEach(function (node) {
     node.textContent = data.status;
@@ -131,7 +131,7 @@
   if (!data.brain && brain) brain.remove();
 
   document.querySelectorAll("[data-mail-subject]").forEach(function (link) {
-    link.href = "mailto:hello@novanuggets.com?subject=" + encodeURIComponent("ZAKI " + data.name + " access");
+    link.href = "mailto:support@chatzaki.com?subject=" + encodeURIComponent("ZAKI " + data.name + " access");
   });
   if (data.mode === "agent") {
     document.querySelectorAll("[data-agent-handoff]").forEach(function (link) {

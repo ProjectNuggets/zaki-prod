@@ -1739,7 +1739,7 @@
       '<option value="free">Free</option>' +
       '<option value="pro-15">$15 / month</option>' +
       '<option value="pro-45">$45 / month</option>' +
-      '<option value="pro-95">$95 / month</option>' +
+      '<option value="pro-max">$99 / month</option>' +
       '<option value="discuss">Help me choose</option>' +
       "</select></label>" +
       "</div>" +
@@ -1786,7 +1786,7 @@
         "",
         data.description || ""
       ].join("\n");
-      window.location.href = "mailto:hello@novanuggets.com?subject=" + encodeURIComponent("ZAKI access - " + project) + "&body=" + encodeURIComponent(body);
+      window.location.href = "mailto:support@chatzaki.com?subject=" + encodeURIComponent("ZAKI access - " + project) + "&body=" + encodeURIComponent(body);
       var card = wrap.querySelector(".cs-lead-modal__card");
       card.innerHTML =
         '<button type="button" class="cs-lead-modal__close" aria-label="Close">×</button>' +
@@ -4264,7 +4264,7 @@
     if (!rows.length) return;
     await scrollToNode(rows[0].closest("section") || rows[0], "start");
     state.mode = "work";
-    say("Current work. Four doors into the same brain.");
+    say("Current work. Four products with clear context boundaries.");
     await gwait(1100);
 
     var quips = [
@@ -4540,7 +4540,7 @@
     }).join("");
     gate.innerHTML =
       '<div class="cs-guide-gate__bar">' +
-      '<span class="cs-guide-gate__logo">Nova Nuggets</span>' +
+      '<span class="cs-guide-gate__logo">ZAKI</span>' +
       '<span class="cs-guide-gate__live"><button type="button" class="cs-sound-toggle" data-sound-toggle aria-pressed="false">sound: off</button><i></i><em>Live session</em></span>' +
       "</div>" +
       '<div class="cs-guide-choice">' +
@@ -4794,15 +4794,15 @@
     services: {
       related: ["projects", "workforce", "quote"],
       variants: [
-        "ZAKI is the product family for your digital life: **Agent**, **Spaces**, **Minutes** and **Design**. The Agent runs goals and follow-up, Spaces hold context, Minutes turns meetings into action, and Design helps ideas become visual direction. [[go:process]]",
-        "Think of ZAKI as one brain with several doors: Agent for action, Spaces for context, Minutes for meetings, Design for creation. The point is not another chat box — it is continuity across your digital life. [[go:process]]",
+        "ZAKI is the product family for your digital life. **Agent** and **Spaces** are available now; **Minutes** and **Design** are coming next. Agent runs goals with your personal Brain, while Spaces keeps project context in a separate scoped store. [[go:process]]",
+        "Think of ZAKI as a family with clear boundaries: Agent for visible action and personal memory, Spaces for scoped project context, with Minutes and Design coming next. [[go:process]]",
       ],
     },
     pricing: {
       related: ["quote", "human"],
       variants: [
-        "The public pricing shape is **Free**, then **$15**, **$45** and **$95 USD**. Paid plans increase capacity and help Nova Nuggets expand free access while building an AI engine with the Arabic world in mind, without excluding non-Arabic users.",
-        "Start free. Upgrade when you need more capacity, deeper automation and stronger memory. Paid tiers also help fund more free access for the community.",
+        "The public plans are **Free**, **Personal at $15**, **Pro at $45**, and **Pro MAX at $99 USD per month**. Paid plans increase the shared allowance; the app confirms live checkout availability and exact limits.",
+        "Start free. Upgrade when you need a larger shared weekly and burst allowance. The app shows the current terms before payment.",
       ],
     },
     speed: {
@@ -4830,8 +4830,8 @@
         ] } };
       },
       variants: [
-        "The current family is **Agent**, **Spaces**, **Minutes** and **Design**. Agent is the flagship; Spaces gives projects a home; Minutes and Design are the next spokes around the same brain. [[go:cases]]",
-        "Four doors, one ZAKI: Agent, Spaces, Minutes, Design. Click Current work and use Agent as the first product-page entry point. [[go:cases]]",
+        "The current family is **Agent**, **Spaces**, **Minutes** and **Design**. Agent and Spaces are available now; Minutes and Design are coming next. Agent uses the personal Brain, while Spaces has a separate project-scoped store. [[go:cases]]",
+        "Four products, clear availability: Agent and Spaces now, Minutes and Design next. Click Current work to inspect each product page. [[go:cases]]",
       ],
     },
     workforce: {
@@ -4866,8 +4866,8 @@
     free: { name: "Free", min: 0, max: 0, weeks: "start now" },
     starter: { name: "$15 plan", min: 15, max: 15, weeks: "monthly" },
     pro: { name: "$45 plan", min: 45, max: 45, weeks: "monthly" },
-    max: { name: "$95 plan", min: 95, max: 95, weeks: "monthly" },
-    notsure: { name: "Help me choose", min: 0, max: 95, weeks: "guided" },
+    max: { name: "$99 plan", min: 99, max: 99, weeks: "monthly" },
+    notsure: { name: "Help me choose", min: 0, max: 99, weeks: "guided" },
   };
   var SIZE_FACTOR = {
     light: { f: 1, label: "light daily use" },
@@ -4886,14 +4886,14 @@
       var sizeF = SIZE_FACTOR[payload.size];
       var whenC = WHEN_COPY[payload.when];
       if (!base || !sizeF || !whenC) return null;
-      var min = Math.round(base.min * sizeF.f / 500) * 500;
-      var max = Math.round(base.max * sizeF.f / 500) * 500;
+      var min = Math.round(base.min * sizeF.f);
+      var max = Math.round(base.max * sizeF.f);
       var fmt = function (n) { return n === 0 ? "Free" : "$" + n + "/mo"; };
       var brief = "Plan interest: " + base.name + "\nUse: " + sizeF.label + "\nTimeline: " + whenC.label +
         "\nSuggested range: " + fmt(min) + "–" + fmt(max) + ", " + base.weeks;
       return {
         text: "There it is — a starting point, not a maze. " + whenC.line +
-          " Send the brief and Nova Nuggets can point you to the cleanest first ZAKI loop.",
+          " Send the brief and ZAKI support can point you to the cleanest first loop.",
         related: ["human"],
         visual: { kind: "estimate", payload: {
           service: base.name,
@@ -4902,8 +4902,8 @@
           scope: sizeF.label,
           when: whenC.label,
           phases: CHAT_PHASES.slice(0, 4),
-          disclaimer: "Public tiers are Free, $15, $45 and $95 USD. Final fit depends on capacity and use.",
-          mailto: "mailto:hello@novanuggets.com?subject=" +
+          disclaimer: "Public tiers are Free, $15, $45 and $99 USD. The app confirms live availability and exact limits.",
+          mailto: "mailto:support@chatzaki.com?subject=" +
             encodeURIComponent("ZAKI plan help — " + base.name) +
             "&body=" + encodeURIComponent(brief + "\n\nMy ZAKI loop:\n"),
         } },
@@ -4923,7 +4923,7 @@
       { v: "free", label: "Free" },
       { v: "starter", label: "$15 plan" },
       { v: "pro", label: "$45 plan" },
-      { v: "max", label: "$95 plan" },
+      { v: "max", label: "$99 plan" },
       { v: "notsure", label: "Not sure yet" },
     ] },
     { key: "size", prompt: "How will you use it?", options: [
@@ -5089,7 +5089,7 @@
     if (state.chatBusy) return;
     chatBubble("user", "Start with ZAKI");
     sfx("pop");
-    chatBubble("site", "Start free, or tell Nova Nuggets where ZAKI should begin: Agent, Spaces, Minutes or Design. The cleanest first step is one real loop from your digital life. [[email]]");
+    chatBubble("site", "Start free, or tell ZAKI support where you want to begin: Agent, Spaces, Minutes or Design. The cleanest first step is one real loop from your digital life. [[email]]");
     renderRelatedPills(["services", "projects", "pricing"]);
   }
 
@@ -5214,7 +5214,7 @@
       });
       if (data.related) renderRelatedPills(data.related);
     } catch (err) {
-      live.textContent = "Hiccup on my side. Try another question — or hello@novanuggets.com";
+      live.textContent = "Hiccup on my side. Try another question — or support@chatzaki.com";
     } finally {
       state.chatBusy = false;
       if (panel) panel.classList.remove("is-busy");
@@ -5251,7 +5251,7 @@
       }, 350);
     } else {
       window.setTimeout(function () {
-        window.location.href = "mailto:hello@novanuggets.com?subject=" +
+        window.location.href = "mailto:support@chatzaki.com?subject=" +
           encodeURIComponent("Project inquiry — sent by your living website");
       }, 500);
     }

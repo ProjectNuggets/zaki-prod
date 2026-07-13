@@ -5,7 +5,7 @@
  * Nova Nuggets Living Organism — standalone particle system.
  *
  * A portable, framework-free version of the particle organism from
- * novanuggets.com. Single file, only dependency is three.js (r160+).
+ * chatzaki.com. Single file, only dependency is three.js (r160+).
  *
  * Usage:
  *   import { createOrganism } from "./organism.js";

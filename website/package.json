@@ -1,7 +1,7 @@
 {
   "name": "@zaki/website",
   "private": true,
-  "version": "0.3.0-launch-draft",
+  "version": "5.0.0",
   "type": "module",
   "scripts": {
     "dev": "node scripts/serve-launch-draft.mjs",

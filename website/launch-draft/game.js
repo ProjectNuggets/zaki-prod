@@ -243,7 +243,7 @@
       '<canvas></canvas>' +
       '<div class="cs-game__hud">' +
         '<div>LEVEL<b data-lvl>1</b><span class="cs-game__lives" data-lives></span></div>' +
-        '<span class="cs-game__logo">Nova Nuggets</span>' +
+        '<span class="cs-game__logo">ZAKI</span>' +
         '<div style="text-align:right">SCORE<b data-score>0</b><span class="cs-game__gold" data-gold></span></div>' +
       '</div>' +
       '<div class="cs-game__beat" data-beat hidden></div>' +
@@ -1448,7 +1448,7 @@
       link.searchParams.set("beat", String(g.score));
       link.searchParams.set("by", name);
       var url = link.toString();
-      var text = "I scored " + g.score + " in DOT SHOT on novanuggets.com — beat that.";
+      var text = "I scored " + g.score + " in DOT SHOT on chatzaki.com — beat that.";
       var status = UI.card.querySelector("[data-status]");
       if (navigator.share) {
         navigator.share({ title: "DOT SHOT", text: text, url: url }).catch(function () {});
