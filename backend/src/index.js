@@ -297,8 +297,7 @@ import {
 import { buildBackendHealthStatus, buildBackendReadyStatus } from "./health-readiness.js";
 import { prepareAndApplySecret } from "./nullalis-secrets.js";
 import {
-  buildEntitlementFields,
-  applySuperAdminEntitlementOverride,
+  buildAgentRuntimeEntitlementFields,
 } from "./nullalis-entitlement.js";
 import {
   APP_CHAT_SURFACE,
@@ -903,6 +902,14 @@ const ZAKI_AGENT_PROVISION_CONFIRMATION_TTL_MS = Math.max(
 const agentProvisionConfirmationCache = createProvisionConfirmationCache({
   ttlMs: ZAKI_AGENT_PROVISION_CONFIRMATION_TTL_MS,
 });
+// A cached provision can be reused for the full confirmation TTL, and the
+// resulting turn can then run for the full upstream timeout. Add one minute of
+// clock/network margin so a lease created on the first provision cannot expire
+// during the latest turn that legitimately reuses that confirmation.
+const ZAKI_AGENT_METER_RUNTIME_LEASE_MS =
+  ZAKI_AGENT_PROVISION_CONFIRMATION_TTL_MS +
+  ZAKI_STREAM_UPSTREAM_TIMEOUT_MS +
+  60_000;
 // Agent error capture — routes genuine BFF failures (upstream 5xx, stream error, etc.) to GlitchTip.
 const { captureAgentError } = makeAgentErrorCapture({ sentry: Sentry });
 
@@ -11932,9 +11939,21 @@ async function recordAgentMeterReceiptBestEffort(req, {
  * Returns { ok, status, error } — never throws — so the caller can hard-fail
  * chat with a retryable 503 instead of trusting the client ref.
  */
-async function ensureAgentUserProvisioned({ nullclawBase, userId, email, requestId }) {
+async function ensureAgentUserProvisioned({
+  nullclawBase,
+  userId,
+  email,
+  requestId,
+  meterGatePassed = false,
+}) {
   const basePayload = buildBotProvisionPayload(userId, {});
-  const entitlement = await loadUserEntitlement(userId, { email });
+  const meterAuthorizedUntilUnix = meterGatePassed
+    ? Math.floor((Date.now() + ZAKI_AGENT_METER_RUNTIME_LEASE_MS) / 1000)
+    : null;
+  const entitlement = await loadUserEntitlement(userId, {
+    email,
+    meterAuthorizedUntilUnix,
+  });
   const body = entitlement ? { ...basePayload, ...entitlement } : basePayload;
   return ensureNullclawProvisioned({
     baseUrl: nullclawBase,
@@ -12089,6 +12108,7 @@ const agentChatStreamHandler = async (req, res) => {
           userId,
           email: authResult.email,
           requestId: String(req.requestId || crypto.randomUUID()),
+          meterGatePassed: true,
         }),
     });
     if (!provisionGuard.ok) {
@@ -12197,6 +12217,7 @@ const agentChatStreamHandler = async (req, res) => {
           userId,
           email: authResult.email,
           requestId: String(req.requestId || crypto.randomUUID()),
+          meterGatePassed: true,
         }),
     });
     if (provisionRetry.reprovisioned) {
@@ -15601,25 +15622,24 @@ async function proxyNullclawRequest(req, res, targetPath, options = {}) {
   pipeReadableToResponse(Readable.fromWeb(upstream.body), res, "Nullclaw proxy response");
 }
 
-async function loadUserEntitlement(userId, { email } = {}) {
-  // Owner-only super-admin bypass of the AGENT entitlement paywall. The
-  // nullalis engine caches the entitlement tuple it receives at PROVISION
-  // time and 402s on chat when that cached status is expired/canceled. For an
-  // allowlisted super-admin we send the engine an entitled tuple regardless of
-  // DB tier/status so the engine provisions them entitled and never 402s.
-  // This is the single chokepoint both agent-provision call sites funnel
-  // through (agentProvisionHandler + bot-bff provision). It ONLY changes the
-  // entitlement payload sent to the engine — wallet metering is untouched, and
-  // the Stripe/Creem billing-write paths use buildEntitlementFields directly
-  // (no override) so DB state is never diverged.
+async function loadUserEntitlement(
+  userId,
+  { email, meterAuthorizedUntilUnix = null } = {}
+) {
+  // Engine-bound entitlement chokepoint. Nullalis caches this tuple at
+  // PROVISION time and 402s chat when status is expired/canceled. Super-admins
+  // keep their owner override; after its meter gate allows a turn, the Agent
+  // chat path may also attach a bounded runtime lease. Billing writes and the
+  // ordinary provision route remain DB-derived.
   const isSuperAdmin = superAdminEmailSet.has(normalizeEmail(email));
   try {
     const row = await dbGet(
       "SELECT plan_tier, plan_status, current_period_end FROM zaki_users WHERE id = $1",
       [userId]
     );
-    return applySuperAdminEntitlementOverride(buildEntitlementFields(row), {
+    return buildAgentRuntimeEntitlementFields(row, {
       isSuperAdmin,
+      meterAuthorizedUntilUnix,
     });
   } catch (error) {
     // Soft-fail: forwarding entitlements is optional on the nullalis
@@ -15632,7 +15652,10 @@ async function loadUserEntitlement(userId, { email } = {}) {
     });
     // A super-admin must remain entitled even when the DB lookup soft-fails,
     // so the override still applies to the null result.
-    return applySuperAdminEntitlementOverride(null, { isSuperAdmin });
+    return buildAgentRuntimeEntitlementFields(null, {
+      isSuperAdmin,
+      meterAuthorizedUntilUnix,
+    });
   }
 }
 
