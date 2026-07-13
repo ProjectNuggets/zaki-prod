@@ -1316,6 +1316,9 @@
     "viewPlans": "عرض الخطط",
     "accessActiveCta": "الوصول نشط",
     "priceWithSuffix": "{{price}} {{suffix}}",
+    "billingCadence": "دورة الفوترة",
+    "savePercent": "· وفّر {{percent}}٪",
+    "intervalUnavailable": "الفوترة {{interval}} غير متاحة",
     "interval": {
       "monthly": "شهري",
       "yearly": "سنوي"

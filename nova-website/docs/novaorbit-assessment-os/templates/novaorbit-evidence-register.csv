@@ -1,0 +1,13 @@
+Gate Code,Gate,Evidence Requested,Evidence Received,Confidence,Missing Evidence,Risk,Follow-Up Owner,Due Date
+W1,Deployment Boundary,,,,,,,
+W2,Inference Readiness,,,,,,,
+W3,Access Readiness,,,,,,,
+W4,Control Plane,,,,,,,
+A1,Workflow Fit,,,,,,,
+A2,Agent Role,,,,,,,
+A3,App Surface,,,,,,,
+A4,Integration Depth,,,,,,,
+H1,Ownership,,,,,,,
+H2,Business Case,,,,,,,
+H3,Governance,,,,,,,
+H4,Run Model,,,,,,,

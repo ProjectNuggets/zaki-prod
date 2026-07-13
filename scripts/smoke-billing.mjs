@@ -35,7 +35,7 @@ const requireSecrets =
 const policyVersion = String(
   process.env.SMOKE_LEGAL_POLICY_VERSION ||
     process.env.ZAKI_LEGAL_POLICY_VERSION ||
-    "2026-02-17.v2"
+    "2026-07-12.v4"
 ).trim();
 
 function assert(condition, message) {

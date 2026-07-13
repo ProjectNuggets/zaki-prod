@@ -28,7 +28,7 @@ async function mockAuthAndPricing(page: Page) {
     await json(route, {
       success: true,
       authenticated: hasAuth,
-      policyVersion: "2026-02-17.v2",
+      policyVersion: "2026-07-12.v4",
       hasConsent: hasAuth,
       isCurrent: true,
       requiresReconsent: false,
@@ -111,8 +111,22 @@ async function mockAuthAndPricing(page: Page) {
         checkoutProviders: [{ key: "stripe", label: "Stripe", enabled: true }],
         pricingAvailability: {
           personal: { monthly: true, yearly: true },
-          pro: { monthly: true, yearly: true },
-          pro_max: { monthly: true, yearly: true },
+          pro: { monthly: true, yearly: false },
+          pro_max: { monthly: true, yearly: false },
+        },
+        pricingCatalog: {
+          personal: {
+            monthly: { priceId: "price_personal_month", unitAmount: 1500, currency: "usd" },
+            yearly: { priceId: "price_personal_year", unitAmount: 14400, currency: "usd" },
+          },
+          pro: {
+            monthly: { priceId: "price_pro_month", unitAmount: 4500, currency: "usd" },
+            yearly: null,
+          },
+          pro_max: {
+            monthly: { priceId: "price_pro_max_month", unitAmount: 9900, currency: "usd" },
+            yearly: null,
+          },
         },
       },
     });
@@ -121,7 +135,12 @@ async function mockAuthAndPricing(page: Page) {
 
 test("pricing page displays the commercial plan prices and gift-code purchase", async ({
   page,
-}) => {
+}, testInfo) => {
+  await page.setViewportSize(
+    testInfo.project.name.includes("mobile")
+      ? { width: 390, height: 844 }
+      : { width: 1440, height: 1000 }
+  );
   await mockAuthAndPricing(page);
   await page.addInitScript(({ tokenKey, token }) => {
     window.localStorage.setItem(tokenKey, token);
@@ -148,4 +167,17 @@ test("pricing page displays the commercial plan prices and gift-code purchase", 
   await expect(page.getByText("Buy an access code", { exact: true })).toBeVisible();
   await expect(page.getByText("$15 one-time", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Buy access code" })).toBeVisible();
+
+  await page.getByRole("button", { name: /Yearly/ }).click();
+  await expect(page.getByRole("button", { name: "Yearly · save 20%" })).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  );
+  await expect(page.getByText("$144 / year", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Choose Personal" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Yearly not available" }).first()).toBeDisabled();
+
+  await page.screenshot({
+    path: testInfo.outputPath(`pricing-yearly-${testInfo.project.name}.png`),
+  });
 });

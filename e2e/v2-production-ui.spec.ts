@@ -45,7 +45,7 @@ test.describe("V2 production-final app surfaces", () => {
     await attachViewportShot(page, testInfo, "dashboard-1440x1000");
   });
 
-  test("Agent desktop exposes composer controls and inspector tabs", async ({ page }, testInfo) => {
+  test("Agent desktop exposes composer controls and delivery tabs", async ({ page }, testInfo) => {
     await page.setViewportSize(RELEASE_VIEWPORTS.desktop);
     await page.goto("/agent", { waitUntil: "domcontentloaded" });
 
@@ -59,10 +59,11 @@ test.describe("V2 production-final app surfaces", () => {
     await openInspectorIfNeeded(page);
     const inspector = page.locator(".zaki-agent-inspector").first();
     await expect(inspector).toBeVisible();
-    for (const label of ["Plan", "Cron", "Sources", "Artifacts", "Browser", "Trace"]) {
+    for (const label of ["Artifacts", "Schedules"]) {
       await expect(inspector.getByRole("tab", { name: new RegExp(label, "i") })).toBeVisible();
     }
-    await expect(page.getByTestId("agent-narration-box")).toBeVisible();
+    await expect(inspector.getByRole("tab")).toHaveCount(2);
+    await expect(inspector.getByRole("region", { name: "Artifacts" })).toBeVisible();
     await attachViewportShot(page, testInfo, "agent-1440x1000");
   });
 

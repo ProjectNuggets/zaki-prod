@@ -1,6 +1,10 @@
 import crypto from "node:crypto";
 import dotenv from "dotenv";
 import pg from "pg";
+import {
+  ACCESS_CODE_MAX_DURATION_DAYS,
+  clampAccessCodeDurationDays,
+} from "../src/access-code-policy.js";
 
 dotenv.config();
 
@@ -17,7 +21,7 @@ for (const arg of args) {
 }
 
 if (options.help || options.h) {
-  console.log("Create access codes for monthly app activation");
+  console.log("Create time-bound access grants");
   console.log("");
   console.log("Usage:");
   console.log(
@@ -27,7 +31,9 @@ if (options.help || options.h) {
   console.log("Options:");
   console.log("  --campaign=<name>    Required campaign label");
   console.log("  --count=<n>          How many codes to create (default: 1)");
-  console.log("  --duration=<days>    Access duration in days (default: 30)");
+  console.log(
+    `  --duration=<days>    Access duration in days (default: 30, max: ${ACCESS_CODE_MAX_DURATION_DAYS})`
+  );
   console.log("  --max=<n|unlimited>  Max redemptions per code (default: 1)");
   console.log("  --expires=<date>     Optional code expiry date (YYYY-MM-DD)");
   process.exit(0);
@@ -40,7 +46,7 @@ if (!campaign) {
 }
 
 const count = Math.max(1, Number(options.count || 1));
-const durationDays = Math.max(1, Number(options.duration || 30));
+const durationDays = clampAccessCodeDurationDays(options.duration);
 const maxRaw = String(options.max || "1").trim().toLowerCase();
 const maxRedemptions =
   maxRaw === "unlimited" || maxRaw === "none" ? null : Math.max(1, Number(maxRaw));

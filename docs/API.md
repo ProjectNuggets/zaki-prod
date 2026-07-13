@@ -1,5 +1,11 @@
 # ZAKI API Reference (Backend)
 
+> **Partial legacy reference.** This document covers selected hub and TYP-era routes; it is not a
+> complete or current API contract. The authoritative BFF surface is the route registration in
+> `backend/src/index.js` plus the focused contracts under `backend/src/*-contract.js`. Agent and
+> Brain upstream shapes are defined by nullalis and exposed to browsers only through authenticated
+> ZAKI BFF facades.
+
 ## Profile
 
 ## Chat Failure Contract

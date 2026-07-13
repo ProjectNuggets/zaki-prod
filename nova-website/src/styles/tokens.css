@@ -1,0 +1,42 @@
+@font-face {
+  font-family: "Cabinet Grotesk";
+  src: url("/fonts/CabinetGrotesk-Extrabold.woff2") format("woff2");
+  font-weight: 800;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Cabinet Grotesk";
+  src: url("/fonts/CabinetGrotesk-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  src: url("/fonts/plus-jakarta-sans-latin-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  src: url("/fonts/plus-jakarta-sans-latin-500-normal.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "DM Mono";
+  src: url("/fonts/dm-mono-latin-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  --nn-ink: #1a1612;
+  --nn-paper: #f5edde;
+  --nn-terra: #c9582c;
+  --nn-ember: #e27a4d;
+  --nn-moss: #6ea888;
+}

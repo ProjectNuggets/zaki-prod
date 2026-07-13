@@ -1316,6 +1316,9 @@
     "viewPlans": "View plans",
     "accessActiveCta": "Access active",
     "priceWithSuffix": "{{price}} {{suffix}}",
+    "billingCadence": "Billing cadence",
+    "savePercent": "· save {{percent}}%",
+    "intervalUnavailable": "{{interval}} not available",
     "interval": {
       "monthly": "Monthly",
       "yearly": "Yearly"

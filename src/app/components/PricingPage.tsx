@@ -28,6 +28,7 @@ import { toast } from "sonner";
 
 type CommercialPaidPlan = "personal" | "pro" | "pro_max";
 type CheckoutProviderKey = "stripe" | "paddle" | "creem";
+type BillingInterval = "monthly" | "yearly";
 
 type BillingNotice = {
   tone: "success" | "info";
@@ -63,6 +64,10 @@ const PRICING_CARDS: PricingCard[] = [
   { id: "pro_max", plan: "pro_max", translationKey: "pro_max" },
 ];
 
+function normalizeBillingInterval(value: string | null): BillingInterval {
+  return value === "yearly" ? "yearly" : "monthly";
+}
+
 function checkoutProviderSupportsPlan(provider: CheckoutProvider, plan: CommercialPaidPlan) {
   // Public checkout is Stripe-only for the commercial platform tiers. Legacy
   // provider URLs may remain configured, but must not receive these plan IDs.
@@ -85,6 +90,9 @@ export function PricingPage() {
   const [highlightGiftCodeCard, setHighlightGiftCodeCard] = useState(false);
   const [providerModalSelection, setProviderModalSelection] =
     useState<CommercialPaidPlan | null>(null);
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>(() =>
+    normalizeBillingInterval(searchParams.get("interval"))
+  );
 
   const checkout = useCheckout();
   const accessCodePurchaseCheckout = useAccessCodePurchaseCheckout();
@@ -192,15 +200,50 @@ export function PricingPage() {
     }
   };
 
+  const isPlanIntervalAvailable = (plan: CommercialPaidPlan, interval = billingInterval) => {
+    // Preserve the existing monthly provider/error flow. Annual checkout is
+    // stricter because only explicitly configured Stripe yearly Prices are valid.
+    if (interval === "monthly") return true;
+    if (!billingConfigLoaded) return true;
+    return Boolean(billingConfig?.pricingAvailability?.[plan]?.[interval]);
+  };
+
   const getPlanPriceLabel = (plan: CommercialPaidPlan) => {
-    const entry = billingConfig?.pricingCatalog?.[plan]?.monthly;
+    const entry = billingConfig?.pricingCatalog?.[plan]?.[billingInterval];
     const formatted = formatCurrencyAmount(entry?.unitAmount, entry?.currency);
-    if (!formatted) return t(`pricingPage.plans.${plan}.price`);
+    if (!formatted) {
+      if (billingInterval === "yearly" && !isPlanIntervalAvailable(plan, "yearly")) {
+        return t("pricingPage.intervalUnavailable", { interval: t("pricingPage.interval.yearly") });
+      }
+      return t(`pricingPage.plans.${plan}.price`);
+    }
     return t("pricingPage.priceWithSuffix", {
       price: formatted,
-      suffix: t("pricingPage.priceSuffix.monthly"),
+      suffix: t(`pricingPage.priceSuffix.${billingInterval}`),
     });
   };
+
+  const yearlySavingsPercent = useMemo(() => {
+    const percentages = PAID_PLAN_IDS.flatMap((plan) => {
+      const monthly = billingConfig?.pricingCatalog?.[plan]?.monthly?.unitAmount;
+      const yearly = billingConfig?.pricingCatalog?.[plan]?.yearly?.unitAmount;
+      if (
+        typeof monthly !== "number" ||
+        typeof yearly !== "number" ||
+        monthly <= 0 ||
+        yearly <= 0 ||
+        yearly >= monthly * 12
+      ) {
+        return [];
+      }
+      return [Math.round((1 - yearly / (monthly * 12)) * 100)];
+    });
+    return percentages.length > 0 ? Math.max(...percentages) : null;
+  }, [billingConfig?.pricingCatalog]);
+
+  const yearlyBillingAvailable = PAID_PLAN_IDS.some((plan) =>
+    Boolean(billingConfig?.pricingAvailability?.[plan]?.yearly)
+  );
 
   const accessCodePriceLabel = (() => {
     const entry = billingConfig?.pricingCatalog?.access?.monthly;
@@ -365,7 +408,7 @@ export function PricingPage() {
   const requestSignInForPlan = (plan: CommercialPaidPlan) => {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("plan", plan);
-    nextParams.set("interval", "monthly");
+    nextParams.set("interval", billingInterval);
     nextParams.set("autostart", "1");
     nextParams.set("auth", "login");
     nextParams.set("source", sourceFromQuery);
@@ -385,14 +428,14 @@ export function PricingPage() {
       source: sourceFromQuery,
       language: isRtl ? "ar" : "en",
       plan,
-      interval: "monthly",
+      interval: billingInterval,
     }).catch(() => {
       // Best-effort telemetry only.
     });
     await checkout.mutateAsync({
       plan,
       provider,
-      interval: "monthly",
+      interval: billingInterval,
       context: { source: sourceFromQuery },
     });
   };
@@ -403,13 +446,22 @@ export function PricingPage() {
       source: sourceFromQuery,
       language: isRtl ? "ar" : "en",
       plan,
-      interval: "monthly",
+      interval: billingInterval,
     }).catch(() => {
       // Best-effort telemetry only.
     });
 
     if (!token) {
       requestSignInForPlan(plan);
+      return;
+    }
+
+    if (!isPlanIntervalAvailable(plan)) {
+      toast.error(
+        t("pricingPage.intervalUnavailable", {
+          interval: t(`pricingPage.interval.${billingInterval}`),
+        })
+      );
       return;
     }
 
@@ -461,6 +513,9 @@ export function PricingPage() {
       PLAN_RANK[currentPaidPlan] > PLAN_RANK[card.plan]
     );
     const checkoutPlan = card.plan;
+    const intervalAvailable = isPlanIntervalAvailable(checkoutPlan);
+    const emphasized =
+      billingInterval === "yearly" ? checkoutPlan === "personal" : Boolean(card.emphasized);
 
     if (hasSubscription && current) {
       return (
@@ -486,12 +541,16 @@ export function PricingPage() {
         type="button"
         className={cn(
           "w-full zaki-btn-sm disabled:opacity-50",
-          card.emphasized ? "zaki-btn-primary" : "zaki-btn-secondary"
+          emphasized ? "zaki-btn-primary" : "zaki-btn-secondary"
         )}
-        disabled={checkout.isPending || currentPlanIncludesCard}
+        disabled={checkout.isPending || currentPlanIncludesCard || !intervalAvailable}
         onClick={() => openProviderSelection(checkoutPlan as CommercialPaidPlan)}
       >
-        {!token
+        {!intervalAvailable
+          ? t("pricingPage.intervalUnavailable", {
+              interval: t(`pricingPage.interval.${billingInterval}`),
+            })
+          : !token
           ? t("pricingPage.signInToChoose", {
               plan: t(`pricingPage.plans.${card.translationKey}.label`),
             })
@@ -608,7 +667,56 @@ export function PricingPage() {
           )}
         </div>
 
-        <div ref={plansSectionRef} className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div
+          className={cn(
+            "mt-8 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between",
+            isRtl && "sm:flex-row-reverse"
+          )}
+        >
+          <div className="text-xs font-medium uppercase tracking-[0.18em] text-zaki-muted">
+            {t("pricingPage.billingCadence")}
+          </div>
+          <div
+            className="inline-flex w-fit border border-zaki-strong bg-white dark:bg-zaki-dark-card"
+            role="group"
+            aria-label={t("pricingPage.billingCadence")}
+          >
+            {(["monthly", "yearly"] as BillingInterval[]).map((interval) => {
+              const selected = billingInterval === interval;
+              const disabled = interval === "yearly" && billingConfigLoaded && !yearlyBillingAvailable;
+              const intervalLabel = t(`pricingPage.interval.${interval}`);
+              const savingsLabel =
+                interval === "yearly" && yearlySavingsPercent
+                  ? t("pricingPage.savePercent", { percent: yearlySavingsPercent })
+                  : null;
+              return (
+                <button
+                  key={interval}
+                  type="button"
+                  aria-label={savingsLabel ? `${intervalLabel} ${savingsLabel}` : intervalLabel}
+                  aria-pressed={selected}
+                  disabled={disabled}
+                  className={cn(
+                    "border-r border-zaki-strong px-3 py-2 text-xs last:border-r-0 disabled:cursor-not-allowed disabled:opacity-40",
+                    selected
+                      ? "bg-zaki-primary text-white dark:bg-zaki-dark-primary dark:text-zaki-dark"
+                      : "text-zaki-secondary hover:text-zaki-primary dark:text-zaki-dark-subtle"
+                  )}
+                  onClick={() => setBillingInterval(interval)}
+                >
+                  {intervalLabel}
+                  {savingsLabel ? (
+                    <span className={cn("ml-1", isRtl && "ml-0 mr-1")}>
+                      {savingsLabel}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div ref={plansSectionRef} className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {PRICING_CARDS.map((card) => {
             const features = t(`pricingPage.plans.${card.translationKey}.features`, {
               returnObjects: true,
@@ -617,12 +725,14 @@ export function PricingPage() {
               ? getPlanPriceLabel(card.plan)
               : t(`pricingPage.plans.${card.translationKey}.price`);
             const allowanceLabel = getPlanAllowanceLabel(card);
+            const emphasized =
+              billingInterval === "yearly" ? card.plan === "personal" : Boolean(card.emphasized);
             return (
               <div
                 key={card.id}
                 className={cn(
                   "zaki-pricing-page__plan rounded-2xl border bg-white dark:bg-zaki-dark-card px-5 py-6 shadow-[0px_16px_30px_rgba(15,15,15,0.06)] flex flex-col gap-3",
-                  card.emphasized
+                  emphasized
                     ? "border-zaki-brand ring-1 ring-zaki-brand/20"
                     : "border-zaki-subtle"
                 )}
@@ -631,7 +741,7 @@ export function PricingPage() {
                   <div className="text-sm font-semibold text-zaki-primary dark:text-zaki-dark-primary">
                     {t(`pricingPage.plans.${card.translationKey}.label`)}
                   </div>
-                  {card.emphasized ? (
+                  {emphasized ? (
                     <span className="rounded-full border border-zaki-brand/30 bg-zaki-brand/10 px-2.5 py-1 text-2xs text-zaki-brand">
                       {t("pricingPage.recommendedBadge")}
                     </span>

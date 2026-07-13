@@ -1,4 +1,4 @@
-export const LEGAL_POLICY_VERSION_FALLBACK = "2026-02-17.v2";
+export const LEGAL_POLICY_VERSION_FALLBACK = "2026-07-12.v4";
 
 export function getInitialLegalPolicyVersion() {
   if (typeof window !== "undefined") {

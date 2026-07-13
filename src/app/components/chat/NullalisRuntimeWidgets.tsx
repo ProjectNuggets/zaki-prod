@@ -367,6 +367,12 @@ function buildApprovalAuditMeta(request: NullalisApprovalRequest, t: ApprovalT) 
 export function TaskChecklist({ tasks }: { tasks: NullalisTaskItem[] }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(() => tasks.some((t) => t.status === "running"));
+  const hasRunningTask = tasks.some((task) => task.status === "running");
+
+  useEffect(() => {
+    if (hasRunningTask) setOpen(true);
+  }, [hasRunningTask]);
+
   if (!tasks.length) return null;
 
   const sortedTasks = [...tasks].sort((a, b) => a.updatedAt - b.updatedAt);
