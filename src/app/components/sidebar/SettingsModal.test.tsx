@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom";
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { SettingsModal } from "./SettingsModal";
@@ -1056,13 +1057,21 @@ async function renderSettingsPage(initialEntry = "/settings") {
     isLoading: false,
   });
   useUIStore.setState({ themePreference: "system", systemTheme: "light" });
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
   let result: ReturnType<typeof render> | undefined;
   await act(async () => {
     result = render(
-      <MemoryRouter initialEntries={[initialEntry]}>
-        <SettingsPage />
-        <LocationProbe />
-      </MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[initialEntry]}>
+          <SettingsPage />
+          <LocationProbe />
+        </MemoryRouter>
+      </QueryClientProvider>
     );
     await Promise.resolve();
     await Promise.resolve();
