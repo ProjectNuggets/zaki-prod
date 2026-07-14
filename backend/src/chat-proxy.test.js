@@ -139,6 +139,17 @@ test("composeContextEnvelope folds guardrail + memory into ONE block", () => {
   expect((env.match(/ZAKI_MEMORY_CONTEXT_V2/g) || []).length).toBe(2);
 });
 
+test("composeContextEnvelope carries imported prior conversation without memory", () => {
+  const env = composeContextEnvelope({
+    importedTranscript: "USER:\nold question\n\nASSISTANT:\nold answer",
+  });
+
+  expect(env).toContain("Prior conversation context for this thread");
+  expect(env).toContain("USER:\nold question");
+  expect(env).toContain("ASSISTANT:\nold answer");
+  expect((env.match(/ZAKI_MEMORY_CONTEXT_V2/g) || []).length).toBe(2);
+});
+
 test("composeContextEnvelope without guardrail and without memory returns empty", () => {
   expect(composeContextEnvelope({ guardrail: false, core: "", context: "" })).toBe("");
 });

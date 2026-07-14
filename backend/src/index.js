@@ -432,6 +432,7 @@ import {
 import {
   claimRequestHasWork,
   createAnonymousWorkClaimStore,
+  createImportedThreadContextProvider,
   importAnonymousWorkClaim,
   mergeImportedThreadHistory,
   parseAnonymousWorkClaimRequest,
@@ -2924,6 +2925,9 @@ const spacesTypProvisioner = createSpacesTypProvisioner({
 // (upstream has no message-append API) and merged into the thread history read
 // path, so the thread the visitor lands in genuinely contains their work.
 const anonymousWorkClaimStore = createAnonymousWorkClaimStore({ dbGet, dbAll, dbQuery });
+const importedThreadContextProvider = createImportedThreadContextProvider({
+  store: anonymousWorkClaimStore,
+});
 
 function sendSpacesProvisioningFailure(res, error, { stream = false } = {}) {
   const payload = buildSpacesProvisioningErrorPayload(error);
@@ -11301,6 +11305,13 @@ const claimAnonymousSpacesWorkHandler = async (req, res) => {
     });
     if (existingClaim) {
       const importedCount = Number(existingClaim.imported_count) || 0;
+      if (importedCount > 0) {
+        importedThreadContextProvider.invalidateThread({
+          userId: zakiUser.id,
+          workspaceSlug: existingClaim.workspace_slug,
+          threadSlug: existingClaim.thread_slug,
+        });
+      }
       res.status(200).json({
         success: true,
         workspaceSlug: existingClaim.workspace_slug,
@@ -11353,6 +11364,13 @@ const claimAnonymousSpacesWorkHandler = async (req, res) => {
       threadSlug,
       store: anonymousWorkClaimStore,
     });
+    if (result.imported) {
+      importedThreadContextProvider.invalidateThread({
+        userId: zakiUser.id,
+        workspaceSlug: result.workspaceSlug,
+        threadSlug: result.threadSlug,
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -11547,6 +11565,24 @@ const streamChatHandler = async (req, res) => {
     const isQueryMode = String(requestPayload?.mode || "").trim().toLowerCase() === "query";
     const isAgentTurn = !isQueryMode;
 
+    // Imported anonymous turns exist only in ZAKI Postgres. Start their lazy
+    // lookup alongside the existing memory/doc work so the one cold read does
+    // not serialize the hot path. Empty results are TTL-cached by the provider.
+    const importedThreadTarget = {
+      userId: zakiUser.id,
+      workspaceSlug: slug,
+      threadSlug,
+    };
+    const importedThreadContextPromise = importedThreadContextProvider
+      .getThreadContext(importedThreadTarget)
+      .catch((error) => {
+        console.warn(
+          "[AnonymousSpaces] Imported model context lookup skipped:",
+          error?.message || error
+        );
+        return { transcript: "", messageIds: [] };
+      });
+
     // Doc-grounding parity: pre-fetch relevance-filtered workspace vector chunks so the agent grounds on
     // embedded docs WITHOUT depending on the model choosing rag-memory. Runs in PARALLEL with the memory
     // build below; best-effort (never blocks/fails the turn). Agent turns only — query mode already does
@@ -11643,6 +11679,9 @@ const streamChatHandler = async (req, res) => {
       console.log("[Memory] Skipping context injection for query mode or long prompt");
     }
 
+    const importedThreadContext = await importedThreadContextPromise;
+    const importedTranscript = importedThreadContext.transcript || "";
+
     if (isAgentTurn) {
       // Single Auto mode runs on the dev-API agent path, which DROPS promptPrefix — so the ZAKI
       // identity guardrail (and any memory context) must ride INSIDE the message envelope. Always
@@ -11662,14 +11701,16 @@ const streamChatHandler = async (req, res) => {
         guardrail: true,
         core: memoryCore,
         context: memoryContext,
+        importedTranscript,
         nowISO: new Date().toISOString().slice(0, 10),
       })}\n\n${docBlock}${enrichedMessage}`;
-    } else if (memoryCore || memoryContext) {
-      // Query mode: inject the memory envelope (identity core + relevant recall), no guardrail.
+    } else if (memoryCore || memoryContext || importedTranscript) {
+      // Query mode: inject memory and/or the imported prior transcript, no guardrail.
       enrichedMessage = `${composeContextEnvelope({
         guardrail: false,
         core: memoryCore,
         context: memoryContext,
+        importedTranscript,
       })}\n${originalMessage}`;
     }
 
@@ -11686,6 +11727,8 @@ const streamChatHandler = async (req, res) => {
       ...chatLogContext,
       memoryInjected,
       memorySourceCount: memorySources.length,
+      importedContextInjected: Boolean(importedTranscript),
+      importedContextMessageCount: importedThreadContext.messageIds.length,
     });
 
     const upstreamPayload = buildStreamUpstreamPayload(requestPayload, enrichedMessage);
@@ -11739,10 +11782,27 @@ const streamChatHandler = async (req, res) => {
       }
     }
 
+    if (upstreamResponse.ok && importedThreadContext.messageIds.length > 0) {
+      try {
+        await importedThreadContextProvider.markForwarded({
+          ...importedThreadTarget,
+          messageIds: importedThreadContext.messageIds,
+        });
+      } catch (error) {
+        // Safe failure mode: keep the rows pending so a later turn retries the
+        // bounded transcript rather than losing conversation continuity.
+        console.warn(
+          "[AnonymousSpaces] Imported model context mark skipped:",
+          error?.message || error
+        );
+      }
+    }
+
     console.log("[Chat] Upstream response", {
       ...chatLogContext,
       upstreamStatus: upstreamResponse.status,
       memoryInjected,
+      importedContextInjected: Boolean(importedTranscript),
     });
 
     // Stream the response back

@@ -87,6 +87,23 @@ describe("Spaces continuity contract", () => {
     expect(chatsHandlerSource).toContain("listThreadMessages");
   });
 
+  test("pending imported turns are fed to the model once on the authenticated stream path", () => {
+    const source = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
+    const streamHandlerSource = source.slice(
+      source.indexOf("const streamChatHandler = async"),
+      source.indexOf('app.post(\n  "/workspace/:slug/thread/:threadSlug/stream-chat"')
+    );
+
+    expect(source).toContain("createImportedThreadContextProvider");
+    expect(streamHandlerSource).toContain("getThreadContext");
+    expect(streamHandlerSource).toMatch(
+      /composeContextEnvelope\(\{[\s\S]*importedTranscript/
+    );
+    expect(streamHandlerSource).toMatch(
+      /if \(upstreamResponse\.ok[\s\S]*markForwarded/
+    );
+  });
+
   test("the post-auth claim is shared by every sign-in path, not just credential login", () => {
     const appSource = fs.readFileSync(
       path.join(__dirname, "../../src/app/App.tsx"),
