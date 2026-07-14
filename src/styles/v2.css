@@ -1097,6 +1097,16 @@ button.v2-status-strip__item:focus-visible {
   text-decoration: underline;
 }
 
+/* WP-M: the minimum-age representation, now that no birthdate is collected. */
+.zaki-auth-v2__age-attestation {
+  margin: -4px 0 0;
+  padding: 0 12px;
+  color: var(--v2-ink-3, var(--v2-ink-2));
+  font-family: var(--v2-font-prose);
+  font-size: var(--v2-text-xs, var(--v2-text-sm));
+  line-height: var(--v2-leading-normal);
+}
+
 .zaki-auth-v2__turnstile {
   min-height: 65px;
   display: flex;

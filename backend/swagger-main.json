@@ -56,12 +56,11 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["email", "password", "name", "dateOfBirth"],
+                "required": ["email", "password", "name"],
                 "properties": {
                   "email": { "type": "string", "format": "email" },
                   "password": { "type": "string", "minLength": 6 },
-                  "name": { "type": "string" },
-                  "dateOfBirth": { "type": "string", "format": "date" }
+                  "name": { "type": "string" }
                 }
               }
             }

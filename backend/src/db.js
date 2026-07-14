@@ -78,6 +78,8 @@ export async function initDb() {
     }
 
   // Users table
+  //
+  // date_of_birth is DEPRECATED and UNUSED as of WP-M — see the ALTER below.
   await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_users (
       id BIGSERIAL PRIMARY KEY,
@@ -154,6 +156,31 @@ export async function initDb() {
   `);
 
   await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS full_name TEXT;");
+  // ---------------------------------------------------------------------------
+  // DEPRECATED — zaki_users.date_of_birth (WP-M, GDPR Art. 5(1)(c))
+  //
+  // ZAKI no longer collects a date of birth: the age gate is off, so the value was
+  // gathered and never enforced, which makes it a liability rather than an asset.
+  // The signup form, request payload, Zod schema and every INSERT/UPDATE that
+  // touched this column are gone (see email-signup-user.js). Nothing reads it
+  // either — neither ZAKI_USER_COLUMNS (require-auth-user.js) nor _ZAKI_USER_COLS
+  // (index.js) selects it.
+  //
+  // This is the "stop writing" half of an expand-contract removal. The column is
+  // retained here, unused, so that:
+  //   * schemas stay identical across prod / staging / a fresh dev DB, and
+  //   * legacy rows are not destroyed by a deploy.
+  //
+  // CONTRACT STEP — NOT APPLIED. Dropping the column destroys the birthdates of
+  // every existing account, which is irreversible and needs the owner's explicit
+  // say-so. When approved, the whole migration is one statement:
+  //
+  //     ALTER TABLE zaki_users DROP COLUMN IF EXISTS date_of_birth;
+  //
+  // (Reversible only in structure — `ADD COLUMN date_of_birth TEXT` restores the
+  // column but not the data, so take a backup first. Data minimisation says the
+  // data SHOULD go; this is a decision, not an accident, hence it waits.)
+  // ---------------------------------------------------------------------------
   await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS date_of_birth TEXT;");
   await migrationClient.query("ALTER TABLE zaki_users ADD COLUMN IF NOT EXISTS google_sub TEXT;");
   await migrationClient.query(`

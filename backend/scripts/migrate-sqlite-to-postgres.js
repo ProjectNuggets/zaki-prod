@@ -42,7 +42,9 @@ async function migrate() {
   await initDb();
 
   const users = readSqliteJson(
-    "SELECT id, email, password_hash, full_name, date_of_birth, verified, nova_user_id, created_at, updated_at FROM zaki_users ORDER BY id;"
+    // WP-M: date_of_birth is deliberately NOT carried forward — ZAKI no longer
+    // collects or persists it (GDPR data minimisation).
+    "SELECT id, email, password_hash, full_name, verified, nova_user_id, created_at, updated_at FROM zaki_users ORDER BY id;"
   );
   const tokens = readSqliteJson(
     "SELECT id, user_id, token, expires_at, used_at, created_at FROM verification_tokens ORDER BY id;"
@@ -68,12 +70,11 @@ async function migrate() {
           : Number(row.nova_user_id);
       await client.query(
         `INSERT INTO zaki_users
-         (id, email, password_hash, full_name, date_of_birth, verified, nova_user_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         (id, email, password_hash, full_name, verified, nova_user_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (email) DO UPDATE SET
            password_hash = EXCLUDED.password_hash,
            full_name = EXCLUDED.full_name,
-           date_of_birth = EXCLUDED.date_of_birth,
            verified = EXCLUDED.verified,
            nova_user_id = EXCLUDED.nova_user_id,
            updated_at = EXCLUDED.updated_at`,
@@ -82,7 +83,6 @@ async function migrate() {
           row.email,
           row.password_hash,
           row.full_name || null,
-          row.date_of_birth || null,
           verified,
           novaUserId,
           row.created_at,

@@ -565,11 +565,16 @@ export async function fetchGoogleOAuthStatus() {
   return { response, data };
 }
 
+/**
+ * WP-M: the signup payload carries NO date of birth. The age gate is off, so a
+ * DOB was collected and never enforced — under GDPR data minimisation that is a
+ * liability, not a feature. Minimum age is attested via the Terms (the mandatory
+ * `legalConsentAccepted` clickwrap), not proved with a birthdate.
+ */
 export async function requestPublicSignup({
   email,
   password,
   name,
-  dateOfBirth,
   legalConsentAccepted,
   legalPolicyVersion,
   turnstileToken,
@@ -577,7 +582,6 @@ export async function requestPublicSignup({
   email: string;
   password: string;
   name: string;
-  dateOfBirth: string;
   legalConsentAccepted?: boolean;
   legalPolicyVersion?: string;
   turnstileToken?: string | null;
@@ -586,7 +590,6 @@ export async function requestPublicSignup({
     email,
     password,
     name,
-    dateOfBirth,
   };
   if (typeof legalConsentAccepted === "boolean") {
     payload.legalConsentAccepted = legalConsentAccepted;

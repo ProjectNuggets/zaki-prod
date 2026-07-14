@@ -18,7 +18,11 @@ const USER_COLUMNS = "id, email, verified, full_name, legal_consent_version, leg
 const CURRENT_POLICY_VERSION = "2026-07-12.v4";
 const NOW = new Date("2026-07-14T00:00:00.000Z");
 
-const GATE_ON = resolveSignupAgePolicy({});
+// WP-M flipped the DEFAULT to gate-off (no DOB is collected anywhere any more, so
+// a DOB gate is unsatisfiable and must not be the default). GATE_ON is therefore
+// resolved from explicit config rather than from the default. This is the ONLY
+// line WP-M changed in this file: every consent assertion below is #87's, verbatim.
+const GATE_ON = resolveSignupAgePolicy({ ZAKI_AGE_GATE_ENABLED: "true" });
 const GATE_OFF = resolveSignupAgePolicy({ ZAKI_AGE_GATE_ENABLED: "false" });
 
 const PROFILE = {

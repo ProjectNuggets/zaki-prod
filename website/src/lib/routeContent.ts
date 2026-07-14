@@ -473,7 +473,7 @@ const legalContent: Record<LegalSlug, Record<Locale, LegalContent>> = {
         {
           title: "Age and children",
           body:
-            "ZAKI is not directed to children. The minimum signup age is 16. For email signups the server enforces this threshold against the date of birth you provide; for Google sign-ins you confirm you meet it by accepting the Terms. Higher local minimum-age or parental-consent rules still apply where required by law.",
+            "ZAKI is not directed to children. The minimum signup age is 16. ZAKI does not collect or store your date of birth: on every signup path — email and Google alike — you confirm you meet the minimum age by accepting the Terms. Higher local minimum-age or parental-consent rules still apply where required by law.",
         },
         {
           title: "Requests and incidents",
