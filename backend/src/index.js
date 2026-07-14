@@ -74,6 +74,7 @@ import {
   createBillingReconcileHandler,
 } from "./billing-route-handlers.js";
 import { createStripeWebhookHandler } from "./billing-stripe-webhook-handler.js";
+import { createMeterFailOpenBackstop } from "./meter-fail-open-backstop.js";
 import { copyResponseHeaders } from "./upstream-headers.js";
 import { isSafeAgentShareCode } from "./agent-share-code.js";
 import {
@@ -269,10 +270,12 @@ import {
   getAgentLaunchChannel,
   buildBotProvisionPayload,
   normalizeAgentArtifactExportPayload,
+  normalizeAgentTelosPayload,
   normalizeTelegramDisconnectErrorPayload,
   normalizeAgentControlChannelId,
   normalizeAgentLaunchChannelId,
   registerAgentSessionBffRoutes,
+  registerAgentSuggestionRoutes,
   registerBotBffAliases,
   registerTelegramDisconnectAliases,
   resolveSoftEmptyAgentResponse,
@@ -294,8 +297,7 @@ import {
 import { buildBackendHealthStatus, buildBackendReadyStatus } from "./health-readiness.js";
 import { prepareAndApplySecret } from "./nullalis-secrets.js";
 import {
-  buildEntitlementFields,
-  applySuperAdminEntitlementOverride,
+  buildAgentRuntimeEntitlementFields,
 } from "./nullalis-entitlement.js";
 import {
   APP_CHAT_SURFACE,
@@ -577,6 +579,12 @@ const ZAKI_AGENT_WEBHOOK_BASE_URL = (
 ).trim().replace(/\/+$/, "");
 const ZAKI_AGENT_BACKEND_ENABLED =
   String(process.env.ZAKI_AGENT_BACKEND_ENABLED || "")
+    .toLowerCase()
+    .trim() === "true";
+// Read-only mirror of nullalis `agent.telos_in_prompt`. Deployment config must
+// set both values together; default false keeps the UI honest when unset.
+const ZAKI_AGENT_TELOS_IN_PROMPT =
+  String(process.env.ZAKI_AGENT_TELOS_IN_PROMPT || "")
     .toLowerCase()
     .trim() === "true";
 const LEARNING_ENGINE_BASE_URL = (process.env.LEARNING_ENGINE_BASE_URL || "")
@@ -894,6 +902,14 @@ const ZAKI_AGENT_PROVISION_CONFIRMATION_TTL_MS = Math.max(
 const agentProvisionConfirmationCache = createProvisionConfirmationCache({
   ttlMs: ZAKI_AGENT_PROVISION_CONFIRMATION_TTL_MS,
 });
+// A cached provision can be reused for the full confirmation TTL, and the
+// resulting turn can then run for the full upstream timeout. Add one minute of
+// clock/network margin so a lease created on the first provision cannot expire
+// during the latest turn that legitimately reuses that confirmation.
+const ZAKI_AGENT_METER_RUNTIME_LEASE_MS =
+  ZAKI_AGENT_PROVISION_CONFIRMATION_TTL_MS +
+  ZAKI_STREAM_UPSTREAM_TIMEOUT_MS +
+  60_000;
 // Agent error capture — routes genuine BFF failures (upstream 5xx, stream error, etc.) to GlitchTip.
 const { captureAgentError } = makeAgentErrorCapture({ sentry: Sentry });
 
@@ -946,6 +962,7 @@ const billingAlertDispatcher = createBillingAlertDispatcher({
   timeoutMs: ZAKI_BILLING_ALERT_TIMEOUT_MS,
   cooldownMs: ZAKI_BILLING_ALERT_COOLDOWN_MS,
 });
+const meterFailOpenBackstop = createMeterFailOpenBackstop({ env: process.env });
 
 let runtimeRateLimitSettings = {
   appChatDailyPromptLimit: APP_CHAT_QUOTA_CONFIG.limit,
@@ -10606,6 +10623,28 @@ function buildSpacesMeterDenialPayload(result, requestId) {
   };
 }
 
+function checkMeterFailOpenBackstop({ surface, userId, requestId, error } = {}) {
+  const decision = meterFailOpenBackstop.check({ surface, userId });
+  if (decision.shouldPage) {
+    void emitBillingAlert({
+      provider: "metering",
+      id: "meter.fail_open.page",
+      severity: "critical",
+      message: "Metering fail-open volume crossed the paging threshold.",
+      details: {
+        surface,
+        requestId,
+        error: error?.message || String(error || "meter_reserve_failed"),
+        globalCount: decision.globalCount,
+        globalAllowedCount: decision.globalAllowedCount,
+        pageThreshold: decision.pageThreshold,
+        windowMs: decision.windowMs,
+      },
+    });
+  }
+  return decision;
+}
+
 async function requireSpacesMeterGrantForChat({
   req,
   res,
@@ -10682,8 +10721,27 @@ async function requireSpacesMeterGrantForChat({
     req.spacesChatMessageChars = String(message || "").length;
     return { allowed: true, action };
   } catch (err) {
-    // Fail-OPEN for the core product: a metering DB blip must not break chat. Not charged; logged.
-    console.error(`[Spaces] wallet reserve failed (allowing chat unmetered) req=${requestId}: ${err?.message}`);
+    // Fail-OPEN for the core product, bounded by a DB-independent emergency budget.
+    console.error(`[Spaces] wallet reserve failed req=${requestId}: ${err?.message}`);
+    const backstop = checkMeterFailOpenBackstop({
+      surface: "spaces",
+      userId: identity.userId,
+      requestId,
+      error: err,
+    });
+    if (!backstop.allowed) {
+      const result = {
+        allowed: false,
+        status: backstop.status,
+        error: backstop.reason,
+        message:
+          backstop.status === 429
+            ? "Too many degraded-mode chat requests. Please retry shortly."
+            : "Chat metering is temporarily unavailable. Please retry shortly.",
+      };
+      res.status(result.status).json(buildSpacesMeterDenialPayload(result, requestId));
+      return { ...result, action };
+    }
     req.spacesChatUnmetered = true;
     void emitBillingAlert({ provider: "metering", id: "spaces.meter.fail_open", severity: "high", message: "Spaces chat metering failed; serving unmetered (fail-open).", details: { requestId, error: err?.message } });
     return { allowed: true, action };
@@ -11713,11 +11771,29 @@ async function requireAgentWalletReserveForChat(req, res, { identity, action, re
   }
 
   if (decision.outcome === "unmetered") {
-    // Fail-OPEN: serve the turn unmetered; alert (matches spaces).
-    req.agentChatUnmetered = true;
+    // Fail-OPEN only within the DB-independent per-user and process budgets.
     console.error(
-      `[Agent] wallet reserve failed (allowing chat unmetered) req=${reqId}: ${decision.error?.message}`
+      `[Agent] wallet reserve failed req=${reqId}: ${decision.error?.message}`
     );
+    const backstop = checkMeterFailOpenBackstop({
+      surface: "agent",
+      userId: identity?.userId,
+      requestId: reqId,
+      error: decision.error,
+    });
+    if (!backstop.allowed) {
+      const denial = {
+        status: backstop.status,
+        error: backstop.reason,
+        message:
+          backstop.status === 429
+            ? "Too many degraded-mode Agent requests. Please retry shortly."
+            : "Agent metering is temporarily unavailable. Please retry shortly.",
+      };
+      res.status(denial.status).json(buildAgentMeterDenialPayload(denial, reqId));
+      return { allowed: false };
+    }
+    req.agentChatUnmetered = true;
     void emitBillingAlert({
       provider: "metering",
       id: "agent.meter.fail_open",
@@ -11863,9 +11939,21 @@ async function recordAgentMeterReceiptBestEffort(req, {
  * Returns { ok, status, error } — never throws — so the caller can hard-fail
  * chat with a retryable 503 instead of trusting the client ref.
  */
-async function ensureAgentUserProvisioned({ nullclawBase, userId, email, requestId }) {
+async function ensureAgentUserProvisioned({
+  nullclawBase,
+  userId,
+  email,
+  requestId,
+  meterGatePassed = false,
+}) {
   const basePayload = buildBotProvisionPayload(userId, {});
-  const entitlement = await loadUserEntitlement(userId, { email });
+  const meterAuthorizedUntilUnix = meterGatePassed
+    ? Math.floor((Date.now() + ZAKI_AGENT_METER_RUNTIME_LEASE_MS) / 1000)
+    : null;
+  const entitlement = await loadUserEntitlement(userId, {
+    email,
+    meterAuthorizedUntilUnix,
+  });
   const body = entitlement ? { ...basePayload, ...entitlement } : basePayload;
   return ensureNullclawProvisioned({
     baseUrl: nullclawBase,
@@ -12020,6 +12108,7 @@ const agentChatStreamHandler = async (req, res) => {
           userId,
           email: authResult.email,
           requestId: String(req.requestId || crypto.randomUUID()),
+          meterGatePassed: true,
         }),
     });
     if (!provisionGuard.ok) {
@@ -12128,6 +12217,7 @@ const agentChatStreamHandler = async (req, res) => {
           userId,
           email: authResult.email,
           requestId: String(req.requestId || crypto.randomUUID()),
+          meterGatePassed: true,
         }),
     });
     if (provisionRetry.reprovisioned) {
@@ -15532,25 +15622,24 @@ async function proxyNullclawRequest(req, res, targetPath, options = {}) {
   pipeReadableToResponse(Readable.fromWeb(upstream.body), res, "Nullclaw proxy response");
 }
 
-async function loadUserEntitlement(userId, { email } = {}) {
-  // Owner-only super-admin bypass of the AGENT entitlement paywall. The
-  // nullalis engine caches the entitlement tuple it receives at PROVISION
-  // time and 402s on chat when that cached status is expired/canceled. For an
-  // allowlisted super-admin we send the engine an entitled tuple regardless of
-  // DB tier/status so the engine provisions them entitled and never 402s.
-  // This is the single chokepoint both agent-provision call sites funnel
-  // through (agentProvisionHandler + bot-bff provision). It ONLY changes the
-  // entitlement payload sent to the engine — wallet metering is untouched, and
-  // the Stripe/Creem billing-write paths use buildEntitlementFields directly
-  // (no override) so DB state is never diverged.
+async function loadUserEntitlement(
+  userId,
+  { email, meterAuthorizedUntilUnix = null } = {}
+) {
+  // Engine-bound entitlement chokepoint. Nullalis caches this tuple at
+  // PROVISION time and 402s chat when status is expired/canceled. Super-admins
+  // keep their owner override; after its meter gate allows a turn, the Agent
+  // chat path may also attach a bounded runtime lease. Billing writes and the
+  // ordinary provision route remain DB-derived.
   const isSuperAdmin = superAdminEmailSet.has(normalizeEmail(email));
   try {
     const row = await dbGet(
       "SELECT plan_tier, plan_status, current_period_end FROM zaki_users WHERE id = $1",
       [userId]
     );
-    return applySuperAdminEntitlementOverride(buildEntitlementFields(row), {
+    return buildAgentRuntimeEntitlementFields(row, {
       isSuperAdmin,
+      meterAuthorizedUntilUnix,
     });
   } catch (error) {
     // Soft-fail: forwarding entitlements is optional on the nullalis
@@ -15563,7 +15652,10 @@ async function loadUserEntitlement(userId, { email } = {}) {
     });
     // A super-admin must remain entitled even when the DB lookup soft-fails,
     // so the override still applies to the null result.
-    return applySuperAdminEntitlementOverride(null, { isSuperAdmin });
+    return buildAgentRuntimeEntitlementFields(null, {
+      isSuperAdmin,
+      meterAuthorizedUntilUnix,
+    });
   }
 }
 
@@ -16540,6 +16632,21 @@ app.get(
   requireAgentContext,
   makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/config`)
 );
+// TELOS Slice 1 — curated user-model north star (read-only). Forwards to the
+// nullalis gateway handleTelos. Curation writes go through the approved
+// wish/telos loop, never a UI POST (T4).
+app.get(
+  "/api/agent/telos",
+  requireAgentContext,
+  makeAgentUserProxyHandler(
+    (userId) => `/api/v1/users/${encodeURIComponent(userId)}/telos`,
+    {
+      responseMode: "json",
+      label: "Nullclaw Agent TELOS response",
+      transformJson: (data) => normalizeAgentTelosPayload(data, ZAKI_AGENT_TELOS_IN_PROMPT),
+    }
+  )
+);
 app.get(
   "/api/agent/secrets/:key",
   requireAgentContext,
@@ -17201,6 +17308,16 @@ app.get(
     return appendAllowedQueryParams(path, req, ["status", "limit", "cursor"]);
   }, AGENT_RUNTIME_JSON_PROXY_OPTIONS)
 );
+
+// Learning-loop review gate. The engine owns the only legal state
+// transitions (shadow -> active/retired); the browser can only request an
+// adopt or dismiss for an authenticated, BFF-pinned user.
+registerAgentSuggestionRoutes(app, {
+  requireAgentContext,
+  json1mb: agentJson1mb,
+  makeUserProxyHandler: makeAgentUserProxyHandler,
+  proxyOptions: AGENT_RUNTIME_JSON_PROXY_OPTIONS,
+});
 
 app.post(
   "/api/agent/history/append",

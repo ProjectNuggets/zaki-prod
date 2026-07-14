@@ -101,6 +101,9 @@ export const AGENT_RUNTIME_FACADE_ROUTES = Object.freeze([
   { method: "get", path: "/api/agent/tasks/:taskId" },
   { method: "post", path: "/api/agent/tasks/:taskId/stop" },
   { method: "get", path: "/api/agent/jobs" },
+  { method: "get", path: "/api/agent/suggestions" },
+  { method: "post", path: "/api/agent/suggestions/adopt" },
+  { method: "post", path: "/api/agent/suggestions/dismiss" },
   { method: "post", path: "/api/agent/history/append" },
   { method: "get", path: "/api/agent/traces" },
   { method: "get", path: "/api/agent/traces/:runId" },
@@ -120,6 +123,45 @@ export const AGENT_RUNTIME_FACADE_ROUTES = Object.freeze([
   { method: "post", path: "/api/agent/artifacts/:artifactId/export" },
   { method: "get", path: "/api/agent/brain/documents" },
 ]);
+
+export function normalizeAgentTelosPayload(payload, telosInPrompt) {
+  const safePayload =
+    payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {};
+  return {
+    ...safePayload,
+    telos_in_prompt: telosInPrompt === true,
+  };
+}
+
+export function registerAgentSuggestionRoutes(app, handlers) {
+  const {
+    requireAgentContext,
+    json1mb,
+    makeUserProxyHandler,
+    proxyOptions,
+  } = handlers;
+
+  app.get(
+    "/api/agent/suggestions",
+    requireAgentContext,
+    makeUserProxyHandler(
+      (userId) => `/api/v1/users/${encodeURIComponent(userId)}/suggestions`,
+      proxyOptions
+    )
+  );
+
+  for (const action of ["adopt", "dismiss"]) {
+    app.post(
+      `/api/agent/suggestions/${action}`,
+      requireAgentContext,
+      json1mb,
+      makeUserProxyHandler(
+        (userId) => `/api/v1/users/${encodeURIComponent(userId)}/suggestions/${action}`,
+        proxyOptions
+      )
+    );
+  }
+}
 
 const AGENT_EXPORT_FILENAME_SAFE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/;
 

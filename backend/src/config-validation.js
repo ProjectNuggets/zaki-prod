@@ -49,7 +49,13 @@ export function validateRuntimeConfig(env = process.env) {
   const includeVerifyLink = isTruthyBoolean(env.ZAKI_INCLUDE_VERIFY_LINK);
   const memoryAlertWebhook = normalize(env.ZAKI_MEMORY_ALERT_WEBHOOK_URL);
   const billingAlertWebhook = normalize(env.ZAKI_BILLING_ALERT_WEBHOOK_URL);
+  const meterFailOpenEnabled = !["0", "false", "no", "off"].includes(
+    normalize(env.ZAKI_METER_FAIL_OPEN_ENABLED).toLowerCase()
+  );
   const billingProvider = normalize(env.ZAKI_BILLING_PROVIDER || "stripe").toLowerCase();
+  const stripeSecretKey = normalize(env.STRIPE_SECRET_KEY);
+  const stripeWebhookSecret = normalize(env.STRIPE_WEBHOOK_SECRET);
+  const stripePriceStudentMonthly = normalize(env.STRIPE_PRICE_STUDENT);
   const stripePriceStudentYearly = normalize(env.STRIPE_PRICE_STUDENT_YEARLY);
   const stripePricePersonalYearly = normalize(env.STRIPE_PRICE_PERSONAL_YEARLY);
   const stripePricePersonalMonthly = normalize(env.STRIPE_PRICE_PERSONAL);
@@ -127,6 +133,43 @@ export function validateRuntimeConfig(env = process.env) {
       "ZAKI_BILLING_ALERT_WEBHOOK_URL should start with http:// or https://."
     );
   }
+  if (isProduction && meterFailOpenEnabled && !billingAlertWebhook) {
+    pushIssue(
+      errors,
+      "ZAKI_BILLING_ALERT_WEBHOOK_URL",
+      "ZAKI_BILLING_ALERT_WEBHOOK_URL is required in production while metering fail-open is enabled."
+    );
+  }
+  const stripeConfigIssues = isProduction ? errors : warnings;
+  // A missing SKU disables ONE checkout button; it must never crash the server. So the checks split:
+  //  - fatal-in-prod (stripeConfigIssues): the pieces without which Stripe cannot operate at all
+  //    (secret key, webhook secret) and the currently-sellable core plans (Personal/Pro/Pro Max
+  //    monthly). If those are absent in prod, the product is broken and we should refuse to boot.
+  //  - warnings only: SKUs the owner has explicitly deferred as non-blocking (student, the yearly
+  //    variants, access-code purchase). Their own message already says "will be unavailable" —
+  //    graceful degradation, not a boot failure. Keeping these fatal blocked the prod cut on price
+  //    IDs that aren't ready yet, contradicting that intent.
+  if (billingProvider === "stripe" && !stripeSecretKey) {
+    pushIssue(
+      stripeConfigIssues,
+      "STRIPE_SECRET_KEY",
+      "STRIPE_SECRET_KEY is not set. Stripe checkout cannot start."
+    );
+  }
+  if (billingProvider === "stripe" && !stripeWebhookSecret) {
+    pushIssue(
+      stripeConfigIssues,
+      "STRIPE_WEBHOOK_SECRET",
+      "STRIPE_WEBHOOK_SECRET is not set. Stripe fulfillment and lifecycle events cannot be verified."
+    );
+  }
+  if (billingProvider === "stripe" && !stripePriceStudentMonthly) {
+    pushIssue(
+      warnings,
+      "STRIPE_PRICE_STUDENT",
+      "STRIPE_PRICE_STUDENT is not set. Student monthly checkout will be unavailable."
+    );
+  }
   if (billingProvider === "stripe" && !stripePriceStudentYearly) {
     pushIssue(
       warnings,
@@ -143,21 +186,21 @@ export function validateRuntimeConfig(env = process.env) {
   }
   if (billingProvider === "stripe" && !stripePricePersonalMonthly) {
     pushIssue(
-      warnings,
+      stripeConfigIssues,
       "STRIPE_PRICE_PERSONAL",
       "STRIPE_PRICE_PERSONAL is not set. ZAKI Personal checkout will be unavailable."
     );
   }
   if (billingProvider === "stripe" && !stripePriceProMonthly) {
     pushIssue(
-      warnings,
+      stripeConfigIssues,
       "STRIPE_PRICE_PRO",
       "STRIPE_PRICE_PRO is not set. ZAKI Pro checkout will be unavailable."
     );
   }
   if (billingProvider === "stripe" && !stripePriceProMaxMonthly) {
     pushIssue(
-      warnings,
+      stripeConfigIssues,
       "STRIPE_PRICE_PRO_MAX",
       "STRIPE_PRICE_PRO_MAX is not set. ZAKI Pro Max checkout will be unavailable."
     );

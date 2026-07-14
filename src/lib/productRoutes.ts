@@ -2,74 +2,95 @@ export type ProductLaunchState =
   | "public_app"
   | "private_beta"
   | "waitlist"
+  | "coming_soon"
   | "hidden"
   | "unknown";
 
 type ProductLaunchPolicy = {
   launchState: Exclude<ProductLaunchState, "unknown">;
+  releaseRole: "spoke" | "support" | "hidden";
   appRoute?: string;
   marketingRoute?: string;
 };
 
+export const RELEASE_VISIBLE_SPOKES = ["agent", "spaces", "design", "minutes"] as const;
+
 const PRODUCT_LAUNCH_POLICIES: Record<string, ProductLaunchPolicy> = {
   agent: {
     launchState: "public_app",
+    releaseRole: "spoke",
     appRoute: "/agent",
     marketingRoute: "/products/agent",
   },
   "zaki-agent": {
     launchState: "public_app",
+    releaseRole: "spoke",
     appRoute: "/agent",
     marketingRoute: "/products/agent",
   },
   "zaki-bot": {
     launchState: "public_app",
+    releaseRole: "spoke",
     appRoute: "/agent",
     marketingRoute: "/products/agent",
   },
   spaces: {
     launchState: "public_app",
+    releaseRole: "spoke",
     appRoute: "/spaces",
     marketingRoute: "/products/spaces",
   },
   chat: {
     launchState: "public_app",
+    releaseRole: "spoke",
     appRoute: "/spaces",
     marketingRoute: "/products/spaces",
   },
   brain: {
     launchState: "public_app",
+    releaseRole: "support",
     appRoute: "/brain",
     marketingRoute: "/products/brain",
   },
   learning: {
-    launchState: "private_beta",
-    appRoute: "/learn",
-    marketingRoute: "/product",
+    launchState: "hidden",
+    releaseRole: "hidden",
   },
   learn: {
-    launchState: "private_beta",
-    appRoute: "/learn",
-    marketingRoute: "/product",
+    launchState: "hidden",
+    releaseRole: "hidden",
   },
   hire: {
-    launchState: "private_beta",
-    appRoute: "/hire",
-    marketingRoute: "/product",
+    launchState: "hidden",
+    releaseRole: "hidden",
+  },
+  career: {
+    launchState: "hidden",
+    releaseRole: "hidden",
   },
   design: {
     launchState: "waitlist",
+    releaseRole: "spoke",
     appRoute: "/design",
+    marketingRoute: "/product",
+  },
+  minutes: {
+    launchState: "coming_soon",
+    releaseRole: "spoke",
+    appRoute: "/minutes",
     marketingRoute: "/product",
   },
   cli: {
     launchState: "hidden",
+    releaseRole: "hidden",
   },
   local_app: {
     launchState: "hidden",
+    releaseRole: "hidden",
   },
   extensions: {
     launchState: "hidden",
+    releaseRole: "hidden",
   },
 };
 
@@ -87,11 +108,22 @@ export function getProductLaunchState(productId?: string | null): ProductLaunchS
   return getProductLaunchPolicy(productId)?.launchState || "unknown";
 }
 
+export function isProductVisibleInRelease(productId?: string | null) {
+  const policy = getProductLaunchPolicy(productId);
+  return Boolean(policy && policy.releaseRole !== "hidden");
+}
+
+export function isReleaseSpoke(productId?: string | null) {
+  return getProductLaunchPolicy(productId)?.releaseRole === "spoke";
+}
+
 export function getProductMarketingRoute(productId?: string | null) {
-  return getProductLaunchPolicy(productId)?.marketingRoute || null;
+  const policy = getProductLaunchPolicy(productId);
+  return policy?.releaseRole === "hidden" ? null : policy?.marketingRoute || null;
 }
 
 export function getProductActivationRoute(productId?: string | null) {
   const policy = getProductLaunchPolicy(productId);
+  if (!policy || policy.releaseRole === "hidden") return null;
   return policy?.appRoute || policy?.marketingRoute || null;
 }

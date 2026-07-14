@@ -754,44 +754,21 @@ async function mockLearning(page: Page) {
 // ───────────────────────────────────────────────────────────────────────────
 // REAL-NEEDS-DECISION (do not silently "fix" by weakening these tests).
 //
-// Every test below navigates to `/learn?view=…` and expects the full ZAKI Learn
-// workspace (LearningPage) to mount. On current main it never does: commit
-// 0fbf51b ("feat: close v2 production UI gate") deliberately replaced the
-// `/learn` route element `<LearningPage />` with a childless
-// `<ProductAccessGate productId="learning" mode="private_beta" />` (see
-// src/routes.tsx). So `/learn` now ALWAYS renders the "Private beta access" gate
-// and LearningPage is mounted nowhere in the app.
+// Every test below navigates to `/learn?view=…` and expects the retained ZAKI
+// Learn workspace (LearningPage) to mount. The 2026-07-13 owner directive hides
+// Learn from all user-facing surfaces, so `/learn` redirects to the dashboard
+// and LearningPage is mounted nowhere in the release app.
 //
-// This is intentional V1 product strategy, not a stray bug:
-//   • AGENTS.md §2 lists Learn under "Private beta or gated".
-//   • e2e/v2-production-ui.spec.ts:131 ("direct /learn route stays gated") and
-//     e2e/release-visibility.spec.ts:64 BOTH assert `/learn` renders
-//     `product-gate-learning` — they pass today and encode the gate contract.
-//   • ProductAccessGate has no "access granted → render children" path for
-//     `learning` (only `design` has one), so there is no test-settable signal
-//     (entitlement / localStorage / registry flag) that would mount LearningPage
-//     through the gate.
+// This is intentional release strategy, not a stray bug:
+//   • AGENTS.md §2 lists Learn under hidden user-facing products.
+//   • e2e/release-visibility.spec.ts asserts the route redirects and no Learn
+//     gate, rail item, or dashboard tab renders.
+//   • The engine/BFF implementation remains in place for a future release.
 //
-// Honestly reconciling this requires a PRODUCT/ARCHITECTURE decision, not a
-// test edit:
-//   (a) keep `/learn` gated for V1 → these parity tests should target a
-//       not-yet-existing beta-access entry point (and ProductAccessGate needs a
-//       learning children/grant path), or
-//   (b) expose LearningPage behind the gate when beta access is granted (new
-//       grant mechanism) and have these tests grant it.
-// Un-gating `/learn` outright is rejected: it violates AGENTS.md and breaks the
-// two gate-contract specs above.
-//
-// DECISION (2026-06-07): KEEP `/learn` GATED. A production-readiness audit found
-// Learn is NOT ship-ready — it is a BFF proxy to an external `zaki-learning-engine`
-// that is not deployed/in-repo (routes 404/500 without it), and the team's own GA
-// deployment-readiness gates (immutable engine image, tenant_data_root, DR drill,
-// monitoring) are unmet. The BFF's multi-user isolation itself is sound; this is a
-// deployment/sequencing gate, not a defect. These parity tests therefore exercise a
-// deliberately-disabled product, so the whole suite is QUARANTINED with .skip.
-// RE-ENABLE when Learn is un-gated (engine deployed + GA gates pass + ProductAccessGate
-// gains a `learning` grant→children path). The gate-contract specs (v2-production-ui:131,
-// release-visibility:64) remain the live source of truth that `/learn` stays gated.
+// These parity tests therefore exercise a deliberately hidden retained engine,
+// so the suite stays quarantined with .skip. Re-enable only after a future owner
+// directive restores Learn to the release visibility policy and provides an
+// authenticated entry point. The release-visibility spec is the live contract.
 // ───────────────────────────────────────────────────────────────────────────
 test.describe.skip("ZAKI Learn parity wiring", () => {
   test.beforeEach(async ({ page }) => {

@@ -4,6 +4,7 @@ import {
   mapPlanStatus,
   toPeriodEndUnix,
   buildEntitlementFields,
+  buildAgentRuntimeEntitlementFields,
   applySuperAdminEntitlementOverride,
   SUPER_ADMIN_ENTITLEMENT,
 } from "./nullalis-entitlement.js";
@@ -145,6 +146,108 @@ describe("buildEntitlementFields", () => {
       plan_tier: "free",
       status: "expired",
       period_end_unix: null,
+    });
+  });
+});
+
+describe("buildAgentRuntimeEntitlementFields", () => {
+  it("gives a free user a bounded runtime lease after the meter authorizes a turn", () => {
+    expect(
+      buildAgentRuntimeEntitlementFields(
+        {
+          plan_tier: "free",
+          plan_status: "inactive",
+          current_period_end: null,
+        },
+        {
+          nowUnix: 1_700_000_000,
+          meterAuthorizedUntilUnix: 1_700_000_660,
+        }
+      )
+    ).toEqual({
+      plan_tier: "free",
+      status: "canceled",
+      period_end_unix: 1_700_000_660,
+    });
+  });
+
+  it("pins a LAPSED-paid user's metered lease to free (no paid-tier tooling leak)", () => {
+    // Regression: a former subscriber keeps plan_tier="pro" in zaki_users after their sub lapses.
+    // The metered lease must NOT inherit "pro" — that would unlock subagents/browser/integrations
+    // on the free allowance. The wallet authorizes the turn; the tier stays free.
+    expect(
+      buildAgentRuntimeEntitlementFields(
+        {
+          plan_tier: "pro",
+          plan_status: "canceled",
+          current_period_end: 1_699_999_000, // already lapsed
+        },
+        {
+          nowUnix: 1_700_000_000,
+          meterAuthorizedUntilUnix: 1_700_000_660,
+        }
+      )
+    ).toEqual({
+      plan_tier: "free",
+      status: "canceled",
+      period_end_unix: 1_700_000_660,
+    });
+  });
+
+  it("keeps a truly inactive user gated when no meter authorization exists", () => {
+    expect(
+      buildAgentRuntimeEntitlementFields(
+        {
+          plan_tier: "free",
+          plan_status: "inactive",
+          current_period_end: null,
+        },
+        { nowUnix: 1_700_000_000 }
+      )
+    ).toEqual({
+      plan_tier: "free",
+      status: "expired",
+      period_end_unix: null,
+    });
+  });
+
+  it("does not revive a user with an already-expired meter authorization", () => {
+    expect(
+      buildAgentRuntimeEntitlementFields(
+        {
+          plan_tier: "free",
+          plan_status: "inactive",
+          current_period_end: null,
+        },
+        {
+          nowUnix: 1_700_000_000,
+          meterAuthorizedUntilUnix: 1_700_000_000,
+        }
+      )
+    ).toEqual({
+      plan_tier: "free",
+      status: "expired",
+      period_end_unix: null,
+    });
+  });
+
+  it("preserves an already-active paid entitlement instead of rewriting billing state", () => {
+    expect(
+      buildAgentRuntimeEntitlementFields(
+        {
+          plan_tier: "personal",
+          plan_status: "active",
+          current_period_end: "2027-01-01T00:00:00.000Z",
+        },
+        {
+          nowUnix: 1_700_000_000,
+          meterAuthorizedUntilUnix: 1_700_000_660,
+        }
+      )
+    ).toEqual({
+      plan_tier: "pro",
+      status: "active",
+      period_end_unix: 1_798_761_600,
     });
   });
 });

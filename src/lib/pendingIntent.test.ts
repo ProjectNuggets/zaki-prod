@@ -69,7 +69,9 @@ describe("pending intent", () => {
       returnTo: "https://evil.example/hire",
     });
 
-    expect(readPendingIntent()?.returnTo).toBe("/hire");
+    // WP-14: hire is a hidden product, so its canonical route resolves to the
+    // dashboard ("/"). The external evil URL is rejected either way.
+    expect(readPendingIntent()?.returnTo).toBe("/");
 
     window.localStorage.setItem(
       PENDING_INTENT_KEY,
@@ -109,11 +111,18 @@ describe("pending intent", () => {
     expect(readPendingIntent()).toBeNull();
   });
 
-  it("builds canonical product return routes", () => {
+  it("builds canonical product return routes for the visible spokes", () => {
+    // WP-14: only the four release-visible spokes have canonical routes.
     expect(buildProductReturnTo("agent")).toBe("/agent");
-    expect(buildProductReturnTo("learning")).toBe("/learn");
-    expect(buildProductReturnTo("design")).toBe("/design");
     expect(buildProductReturnTo("spaces")).toBe("/spaces");
+    expect(buildProductReturnTo("design")).toBe("/design");
+    expect(buildProductReturnTo("minutes")).toBe("/minutes");
+  });
+
+  it("falls back to the dashboard for hidden products", () => {
+    // WP-14: Learn + Hire/Career are hidden, so they have no canonical route.
+    expect(buildProductReturnTo("learning")).toBe("/");
+    expect(buildProductReturnTo("hire")).toBe("/");
   });
 
   it("consumes website command query params into a replayable pending intent", () => {

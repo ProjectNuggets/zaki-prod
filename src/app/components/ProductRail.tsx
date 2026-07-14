@@ -3,6 +3,7 @@ import {
   BriefcaseBusiness,
   Bot,
   Cable,
+  Clock3,
   CreditCard,
   Database,
   GraduationCap,
@@ -22,11 +23,12 @@ import { cn } from "@/lib/utils";
 import { useNavigation } from "@/hooks/useNavigation";
 import { useAuthStore, useNavigationStore } from "@/stores";
 import { requestLogout } from "@/lib/api";
+import { isProductVisibleInRelease } from "@/lib/productRoutes";
 import { toast } from "sonner";
 import { LogoArabicRed } from "./icons";
 
 type ProductRailItem = {
-  id: "dashboard" | "agent" | "chat" | "brain" | "learn" | "hire" | "design";
+  id: "dashboard" | "agent" | "chat" | "brain" | "learn" | "hire" | "design" | "minutes";
   labelKey: string;
   fallback: string;
   shortcut: string;
@@ -43,6 +45,7 @@ function isActiveProduct(pathname: string, itemId: ProductRailItem["id"]) {
   if (itemId === "learn") return pathname === "/learn";
   if (itemId === "hire") return pathname === "/hire";
   if (itemId === "design") return pathname === "/design";
+  if (itemId === "minutes") return pathname === "/minutes";
   return false;
 }
 
@@ -79,7 +82,7 @@ export function ProductRail() {
     goToProtectedRoute("/brain");
   }, [goToProtectedRoute, setSidebarMode]);
 
-  const items: ProductRailItem[] = [
+  const items = ([
     {
       id: "dashboard",
       labelKey: "productRail.dashboard",
@@ -134,12 +137,23 @@ export function ProductRail() {
       id: "design",
       labelKey: "productRail.design",
       fallback: "Design",
-      shortcut: "⌘7",
+      shortcut: "⌘5",
       icon: Palette,
       disabled: true,
       action: () => undefined,
     },
-  ];
+    {
+      id: "minutes",
+      labelKey: "productRail.minutes",
+      fallback: "Minutes",
+      shortcut: "⌘6",
+      icon: Clock3,
+      disabled: true,
+      action: () => undefined,
+    },
+  ] satisfies ProductRailItem[]).filter(
+    (item) => item.id === "dashboard" || isProductVisibleInRelease(item.id)
+  );
 
   const quickSettingsItems = useMemo(
     () => [
