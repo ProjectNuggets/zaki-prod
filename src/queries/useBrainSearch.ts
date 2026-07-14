@@ -1,9 +1,30 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchBrainSearch, type BrainSearchResponse } from "@/lib/api";
+import { sanitizeAssistantScaffold } from "@/app/components/chat/rendering/scaffoldSanitizer";
 
 export const brainSearchKeys = {
   results: (userId: string, q: string) => ["brain", "search", userId, q] as const,
 };
+
+/** Brain search feeds both the @mention and pin-memory render lanes. */
+export function sanitizeBrainSearchResponse(response: BrainSearchResponse): BrainSearchResponse {
+  return {
+    ...response,
+    results: response.results.map((result) => ({
+      ...result,
+      summary: sanitizeAssistantScaffold(result.summary),
+      display_label: result.display_label
+        ? sanitizeAssistantScaffold(result.display_label)
+        : result.display_label,
+      community_name: result.community_name
+        ? sanitizeAssistantScaffold(result.community_name) || null
+        : result.community_name,
+      source_snippet: result.source_snippet
+        ? sanitizeAssistantScaffold(result.source_snippet) || null
+        : result.source_snippet,
+    })),
+  };
+}
 
 /**
  * M2: Fetches matching memories for a search query.
@@ -22,7 +43,7 @@ export function useBrainSearch(userId: string, q: string) {
     queryFn: async () => {
       if (!q || q.length < 2) return null;
       try {
-        return await fetchBrainSearch(userId, q);
+        return sanitizeBrainSearchResponse(await fetchBrainSearch(userId, q));
       } catch {
         // 404 or not-yet-live backend — local matchesSearch filter stays active
         return null;

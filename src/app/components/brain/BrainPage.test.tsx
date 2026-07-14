@@ -142,8 +142,22 @@ describe("BrainPage", () => {
     expect(screen.getByText("Memory layer unavailable")).toBeInTheDocument();
     expect(screen.getByText("Memory unavailable")).toBeInTheDocument();
     expect(screen.getByText("Unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Semantic degraded")).not.toBeInTheDocument();
     expect(screen.queryByTestId("brain-home-slot")).not.toBeInTheDocument();
     expect(screen.queryByTestId("brain-graph-slot")).not.toBeInTheDocument();
+  });
+
+  it("keeps the graph available when only semantic search is degraded", () => {
+    mockGraph = {
+      ...POPULATED,
+      data: { ...POPULATED.data, semantic_degraded: true },
+    };
+
+    renderPage();
+
+    expect(screen.getByText("Semantic degraded")).toBeInTheDocument();
+    expect(screen.getByTestId("brain-graph-slot")).toBeInTheDocument();
+    expect(screen.queryByTestId("brain-unavailable-state")).not.toBeInTheDocument();
   });
 
   it("renders the empty state when the corpus has zero memories", () => {

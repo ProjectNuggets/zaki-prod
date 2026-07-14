@@ -1,5 +1,6 @@
 import { useBrainMemory } from "@/queries";
 import { KIND_LABEL } from "../brainColors";
+import { brainDisplayText, sanitizeBrainText } from "../brainText";
 
 export interface BrainDetailPanelProps {
   userId: string;
@@ -15,6 +16,10 @@ export function BrainDetailPanel({ userId, memoryKey, onClose }: BrainDetailPane
   const { data, isLoading, isError } = useBrainMemory(userId, memoryKey);
   if (!memoryKey) return null;
   const stableKey = data?.key ?? data?.id ?? memoryKey;
+  const displayKey = brainDisplayText(stableKey, "Memory");
+  const summary = sanitizeBrainText(data?.summary);
+  const content = sanitizeBrainText(data?.content);
+  const sourceSnippet = sanitizeBrainText(data?.source?.snippet);
 
   return (
     <aside className="zaki-galaxy-detail" data-testid="brain-galaxy-detail" aria-label="Memory detail">
@@ -40,7 +45,9 @@ export function BrainDetailPanel({ userId, memoryKey, onClose }: BrainDetailPane
         <p className="zaki-galaxy-detail__muted">This memory is no longer available.</p>
       ) : (
         <div className="zaki-galaxy-detail__body">
-          <h3 className="zaki-galaxy-detail__title">{data.summary || data.content || data.id}</h3>
+          <h3 className="zaki-galaxy-detail__title">
+            {brainDisplayText(summary, content, data.id, "Memory")}
+          </h3>
 
           {/* Executive brief: when ZAKI learned this + how sure it is — the
               trust signals that matter for an AI-authored memory. */}
@@ -60,24 +67,24 @@ export function BrainDetailPanel({ userId, memoryKey, onClose }: BrainDetailPane
           <section className="zaki-galaxy-detail__section">
             <span className="zaki-galaxy-detail__label">Memory key</span>
             <div className="zaki-galaxy-detail__key-row">
-              <code>{stableKey}</code>
+              <code>{displayKey}</code>
               <button type="button" onClick={() => copyMemoryKey(stableKey)}>
                 Copy
               </button>
             </div>
           </section>
 
-          {data.content && data.content !== data.summary ? (
+          {content && content !== summary ? (
             <section className="zaki-galaxy-detail__section">
               <span className="zaki-galaxy-detail__label">Content</span>
-              <p className="zaki-galaxy-detail__prose">{data.content}</p>
+              <p className="zaki-galaxy-detail__prose">{content}</p>
             </section>
           ) : null}
 
-          {data.source?.snippet ? (
+          {sourceSnippet ? (
             <section className="zaki-galaxy-detail__section">
               <span className="zaki-galaxy-detail__label">Where this came from</span>
-              <blockquote className="zaki-galaxy-detail__quote">{data.source.snippet}</blockquote>
+              <blockquote className="zaki-galaxy-detail__quote">{sourceSnippet}</blockquote>
             </section>
           ) : null}
 
@@ -88,7 +95,7 @@ export function BrainDetailPanel({ userId, memoryKey, onClose }: BrainDetailPane
                 {data.valid_history.slice(0, 6).map((step, i) => (
                   <li key={`${step.valid_from}-${i}`}>
                     <span className="zaki-galaxy-detail__when">{formatAge(step.valid_from)}</span>
-                    {step.content}
+                    {brainDisplayText(step.content, "Memory")}
                   </li>
                 ))}
               </ul>
@@ -104,7 +111,7 @@ export function BrainDetailPanel({ userId, memoryKey, onClose }: BrainDetailPane
                 {data.linked_memories.slice(0, 8).map((memory, i) => (
                   <li key={memory.id ?? `${memory.link_type}-${i}`}>
                     <span className="zaki-galaxy-detail__rel">{memory.link_type}</span>
-                    {memory.summary}
+                    {brainDisplayText(memory.summary, "Memory")}
                   </li>
                 ))}
               </ul>
