@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { claimPendingAnonymousWork } from "@/lib/anonymousWorkClaim";
+import { claimPendingAnonymousWork, isClaimableProduct } from "@/lib/anonymousWorkClaim";
 import { readPendingIntent } from "@/lib/pendingIntent";
 import { useAnonymousWorkClaimStore, useAuthStore } from "@/stores";
 
@@ -37,8 +37,9 @@ export function useAnonymousWorkClaim() {
     const { setClaiming, setResult } = useAnonymousWorkClaimStore.getState();
 
     void (async () => {
-      // Only a Spaces handoff has anonymous work to carry over.
-      if (readPendingIntent()?.productId !== "spaces") return;
+      // A Spaces chat or a WP-F Agent plan preview — the two handoffs that carry real,
+      // importable anonymous work. Everything else has nothing to claim.
+      if (!isClaimableProduct(readPendingIntent()?.productId)) return;
 
       setClaiming();
       const result = await claimPendingAnonymousWork();

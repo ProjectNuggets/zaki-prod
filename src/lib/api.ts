@@ -356,6 +356,49 @@ export async function claimAnonymousSpacesWork(
   return { response, data };
 }
 
+/**
+ * WP-F — the anonymous Agent PLAN PREVIEW.
+ *
+ * `executed: false` is not a hint, it is the contract: the BFF endpoint behind this declares
+ * no tools to the model and holds no executor, so a plan is the only thing it can produce.
+ * `quota` reports the shared anonymous daily counter so the caller can render "N of 10 free
+ * chats left today" from the same number the backend just enforced.
+ */
+export type AnonymousAgentPreviewResponse = {
+  success?: boolean;
+  preview?: boolean;
+  executed?: boolean;
+  prompt?: string;
+  plan?: { steps?: string[] };
+  planMarkdown?: string;
+  quota?: {
+    remaining?: number;
+    limit?: number;
+    used?: number;
+    resetAt?: string | null;
+    period?: string;
+  };
+  /** Canonical WP-C taxonomy code on failure (never a raw provider string). */
+  code?: string;
+  error?: string;
+  message?: string;
+  /** Present on a 429 limit response. */
+  limit?: number;
+  resetAt?: string | null;
+};
+
+export async function requestAnonymousAgentPreview(prompt: string) {
+  const response = await apiRequest("/api/anonymous/agent/preview", {
+    method: "POST",
+    // Anonymous by definition — never attach the caller's bearer token.
+    skipAuth: true,
+    redirectOnAuthFailure: false,
+    body: JSON.stringify({ prompt }),
+  });
+  const data = (await response.json().catch(() => ({}))) as AnonymousAgentPreviewResponse;
+  return { response, data };
+}
+
 export async function captureMemory({
   message,
   threadId,

@@ -75,7 +75,31 @@ const BrainPage = lazy(() =>
   import('./app/components/brain/BrainPage').then((m) => ({ default: m.BrainPage })),
 );
 
+const AnonymousAgentPreview = lazy(() =>
+  import('./app/components/agent/AnonymousAgentPreview').then((m) => ({
+    default: m.AnonymousAgentPreview,
+  })),
+);
+
 function HomeRoute() {
+  return routeSuspense(<ChatArea />, <SkeletonChatShell />);
+}
+
+/**
+ * WP-F (spec F5 + F7) — /agent resolves for an anonymous visitor instead of bouncing them into
+ * a full-screen login wall.
+ *
+ * The fork is the safety boundary, and it is a fork rather than a flag on purpose. Signed in,
+ * you get the real Agent workbench (ChatArea's agent surface: sessions, the agent engine, tools).
+ * Signed out, you get the plan preview — a surface that talks to exactly one tool-less endpoint.
+ * An anonymous visitor is never rendered into the workbench at all, so there is no
+ * half-authenticated state in which its session provisioning or tool calls could fire.
+ */
+function AgentRoute() {
+  const token = useAuthStore((state) => state.token);
+  if (!token) {
+    return routeSuspense(<AnonymousAgentPreview />, <SkeletonChatShell />);
+  }
   return routeSuspense(<ChatArea />, <SkeletonChatShell />);
 }
 
@@ -125,7 +149,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'agent',
-        element: routeSuspense(<ChatArea />, <SkeletonChatShell />), // Authenticated Agent workbench
+        element: <AgentRoute />, // Authed: Agent workbench. Anon: WP-F plan preview (F5/F7).
       },
       {
         path: 'spaces',

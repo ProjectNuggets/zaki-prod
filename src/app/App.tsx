@@ -85,6 +85,14 @@ function isAnonymousAllowedPath(pathname: string) {
     isHiddenProductPath(normalized) ||
     normalized === "/spaces" ||
     normalized.startsWith("/spaces/") ||
+    // WP-F (spec F5) — /agent resolves for an anonymous visitor. The tier matrix promises
+    // "Agent: anonymous = preview only", so a deep link here must land on the plan preview,
+    // NOT a full-screen login wall. The route itself (AgentRoute) is what keeps this safe:
+    // signed out it renders the tool-less preview, never the authenticated workbench.
+    //
+    // /brain is deliberately NOT here. Brain is a real surface and its anonymous story (F8)
+    // is a separate decision — it still gates.
+    normalized === "/agent" ||
     normalized === "/pricing/success"
   );
 }

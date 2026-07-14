@@ -28,6 +28,8 @@ function renderAppAt(path: string) {
           <Route path="/" element={<App />}>
             <Route index element={<div>public home</div>} />
             <Route path="spaces" element={<div>anonymous spaces</div>} />
+            <Route path="agent" element={<div>agent plan preview</div>} />
+            <Route path="brain" element={<div>brain surface</div>} />
             <Route path="learn" element={<Navigate to="/" replace />} />
             <Route path="hire" element={<Navigate to="/" replace />} />
             <Route path="design" element={<div>design workspace</div>} />
@@ -101,6 +103,41 @@ describe("App route hydration", () => {
 
     expect(await screen.findByText("public home")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /continue/i })).not.toBeInTheDocument();
+  });
+
+  // WP-F (spec F5) — /agent used to be missing from isAnonymousAllowedPath, so an anonymous
+  // deep link hit a full-screen LOGIN WALL. The tier matrix promises "Agent: anonymous =
+  // preview only", so the route must RESOLVE.
+  it("resolves /agent for an anonymous visitor instead of bouncing to login", async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({}),
+    } as Response);
+
+    renderAppAt("/agent");
+
+    // The Agent surface renders. No login wall.
+    expect(await screen.findByText("agent plan preview")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /sign in/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument();
+  });
+
+  // WP-F is scoped to Agent. Brain is a real surface whose anonymous story (F8) is a separate
+  // P1 decision — it must still gate, and this is the test that keeps WP-F from quietly
+  // widening into it.
+  it("still gates /brain for an anonymous visitor", async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({}),
+    } as Response);
+
+    renderAppAt("/brain");
+
+    await waitFor(() => {
+      expect(screen.queryByText("brain surface")).not.toBeInTheDocument();
+    });
   });
 
   it("honors an explicit auth intent on the public home route", async () => {

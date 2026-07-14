@@ -437,6 +437,13 @@ import {
   parseAnonymousWorkClaimRequest,
   resolveClaimKey,
 } from "./anonymous-work-claim.js";
+// WP-F — the anonymous Agent plan preview. Note what is NOT imported here: no agent client,
+// no tool registry, no nullclaw handle. The preview is a tool-less code path by construction.
+import {
+  ANONYMOUS_AGENT_PREVIEW_TIMEOUT_MS,
+  buildAnonymousAgentPlanRequestBody,
+  createAnonymousAgentPreviewHandler,
+} from "./anonymous-agent-preview.js";
 import { buildAuthRouter } from "./auth-endpoints.js";
 import { loginHandler as zakiLoginHandler } from "./login-handler.js";
 import {
@@ -11149,6 +11156,98 @@ app.post(
   anonymousTurnRateLimiter,
   express.json({ limit: "5mb" }),
   anonymousStreamChatHandler
+);
+
+/**
+ * WP-F — generate an Agent PLAN for an anonymous visitor.
+ *
+ * This is a single, bounded chat-completion. It is deliberately NOT the agent engine:
+ * `agentChatStreamHandler` proxies to nullclaw, which is where tools, the browser, the shell
+ * and memory live, and it sits behind `requireAgentContext`. Nothing in this function can
+ * reach any of that — it POSTs a tool-less body (see buildAnonymousAgentPlanRequestBody: no
+ * `tools`, no `tool_choice`, no `functions`) and returns the completion TEXT.
+ *
+ * Bounds: max_tokens 400, temperature 0.2, and a 20s abort. One request, no loop — there is
+ * no tool-call turn to iterate on, so there is nothing to iterate.
+ */
+async function generateAnonymousAgentPlanText(prompt) {
+  if (!TOGETHER_API_KEY) {
+    throw new Error("TOGETHER_API_KEY is not configured for the anonymous Agent preview.");
+  }
+  const response = await fetchWithTimeout(
+    "https://api.together.xyz/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${TOGETHER_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(
+        buildAnonymousAgentPlanRequestBody({ model: ZAKI_ANONYMOUS_SPACES_MODEL, prompt })
+      ),
+    },
+    ANONYMOUS_AGENT_PREVIEW_TIMEOUT_MS,
+    "Anonymous Agent preview request"
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(
+      data?.error?.message || data?.message || "Anonymous Agent preview provider failed."
+    );
+    // Carry the status so the taxonomy can classify it (429 -> rate_limited, 5xx -> overload).
+    error.status = response.status;
+    throw error;
+  }
+  return String(data?.choices?.[0]?.message?.content || "").trim();
+}
+
+/**
+ * The anonymous Agent preview endpoint.
+ *
+ * Metered on the SAME anonymous daily counter as anonymous Spaces chat — the same two buckets
+ * (per-session and per-device), the same limit payload, the same headers. An Agent preview
+ * spends one of the visitor's N free daily turns, so the "N of 10 free chats left today"
+ * readout WP-B/WP-C (#91) made honest stays honest, and hitting the cap here renders the same
+ * limit state with the same "Sign in to keep going" CTA. No second anon meter exists.
+ */
+const anonymousAgentPreviewHandler = createAnonymousAgentPreviewHandler({
+  generatePlanText: generateAnonymousAgentPlanText,
+  // The SAME per-device bucket the anonymous Spaces turn consumes.
+  consumeDeviceQuota: (req) =>
+    consumeAnonymousDeviceQuota({
+      dbQuery,
+      dbGet,
+      deviceSignalHash: buildAnonymousDeviceSignalHash(req, {
+        secret: ANONYMOUS_SPACES_ID_SECRET || GOOGLE_OAUTH_STATE_SECRET || meterSigningSecret(),
+      }),
+      bucket: `${ANONYMOUS_SPACES_QUOTA_CONFIG.bucket}_device`,
+      limit: ANONYMOUS_DEVICE_DAILY_PROMPT_LIMIT,
+    }),
+  // The SAME per-session daily counter the anonymous Spaces turn consumes. Same bucket, same
+  // limit: a preview and a chat are interchangeable draws on one allowance.
+  consumeDailyQuota: (req, res) =>
+    consumeAnonymousDailyPromptQuota({
+      dbQuery,
+      dbGet,
+      anonKeyHash: buildAnonymousQuotaHash(req, res),
+      bucket: ANONYMOUS_SPACES_QUOTA_CONFIG.bucket,
+      limit: ANONYMOUS_SPACES_QUOTA_CONFIG.limit,
+    }),
+  setQuotaHeaders: setPromptQuotaHeaders,
+  buildLimitPayload: buildDailyLimitExceededPayload,
+  dailyLimit: ANONYMOUS_SPACES_QUOTA_CONFIG.limit,
+  deviceLimit: ANONYMOUS_DEVICE_DAILY_PROMPT_LIMIT,
+  dailyBucket: ANONYMOUS_SPACES_QUOTA_CONFIG.bucket,
+  deviceBucket: `${ANONYMOUS_SPACES_QUOTA_CONFIG.bucket}_device`,
+  surface: APP_CHAT_SURFACE,
+});
+
+app.post(
+  "/api/anonymous/agent/preview",
+  anonymousTurnRateLimiter,
+  // A task description, nothing else. No attachments, no history, no session.
+  express.json({ limit: "64kb" }),
+  anonymousAgentPreviewHandler
 );
 
 function sanitizeAnonymousClaimText(value, maxLength) {
