@@ -3073,22 +3073,12 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
 .v2-settings-block {
   position: relative;
-  margin-bottom: 38px;
+  margin-bottom: 44px;
   scroll-margin-top: 76px;
 }
 
 .v2-settings-block:target .v2-settings-block__head {
   border-bottom-color: var(--v2-accent-hairline);
-}
-
-.v2-settings-block:target .v2-settings-block__head h2::before {
-  content: "";
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-right: 8px;
-  background: var(--v2-accent);
-  vertical-align: 1px;
 }
 
 .v2-settings-block__head {
@@ -3101,21 +3091,130 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   border-bottom: 1px solid var(--v2-hairline);
 }
 
+/* Section identity comes from three stacked-but-quiet signals: a 13px title
+   that outranks the 14px row names once tracking/uppercase are factored in, an
+   always-on accent pip as a scannable chapter marker (same idiom as the status
+   strip), and the 44px block gap. The pip was previously :target-only; the
+   :target state now signals via the accent rule alone. */
 .v2-settings-block__head h2 {
   color: var(--v2-ink-1);
   font-family: var(--v2-font-mono);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.14em;
   line-height: 1.4;
   text-transform: uppercase;
+}
+
+.v2-settings-block__head h2::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-inline-end: 9px;
+  background: var(--v2-accent);
+  vertical-align: 2px;
 }
 
 .v2-settings-block__head span {
   color: var(--v2-ink-3);
   font-size: 10px;
+  letter-spacing: 0.08em;
   line-height: 1.4;
   text-transform: uppercase;
+}
+
+/* Header band right cluster: meta text + optional action (e.g. Reset to defaults). */
+.v2-settings-block__head-aside {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.v2-settings-block__head-action {
+  display: inline-flex;
+}
+
+/* V2InfoHint — hairline (i) affordance + plain-language bubble on cryptic labels. */
+.v2-info-hint {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin-inline-start: 5px;
+}
+
+.v2-info-hint__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--v2-ink-3);
+  line-height: 0;
+  cursor: pointer;
+}
+
+.v2-info-hint__trigger:hover {
+  border-color: var(--v2-ink-3);
+  background: var(--v2-hover);
+  color: var(--v2-ink-1);
+}
+
+.v2-info-hint__trigger:focus-visible {
+  outline: 2px solid var(--v2-accent);
+  outline-offset: 2px;
+  color: var(--v2-ink-1);
+}
+
+.v2-info-hint__bubble {
+  position: absolute;
+  left: 50%;
+  z-index: 40;
+  width: max-content;
+  max-width: min(260px, 72vw);
+  padding: 8px 10px;
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg-raised);
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-prose);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: 0;
+  text-align: start;
+  text-transform: none;
+  white-space: normal;
+  transform: translateX(calc(-50% + var(--v2-hint-shift, 0px)));
+}
+
+.v2-info-hint__bubble[data-side="top"] {
+  bottom: calc(100% + 7px);
+}
+
+.v2-info-hint__bubble[data-side="bottom"] {
+  top: calc(100% + 7px);
+}
+
+/* Several settings containers blanket-style nested `span`s as
+   block/uppercase/mono (e.g. `.zaki-settings-v2__billing-meter header span`,
+   specificity 0,2,1). V2InfoHint is built from spans, so those rules would drop
+   the trigger onto its own line and force the readable bubble into uppercase
+   mono. These self-scoped overrides out-specify the blanket so the primitive
+   stays inline and its note stays sentence-case prose wherever it's dropped. */
+.zaki-settings-v2 .v2-info-hint.v2-info-hint {
+  display: inline-flex;
+}
+
+.zaki-settings-v2 .v2-info-hint .v2-info-hint__bubble {
+  display: block;
+  text-transform: none;
+  font-family: var(--v2-font-prose);
 }
 
 .v2-settings-block__body {
@@ -3129,7 +3228,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   grid-template-columns: minmax(0, 1fr) minmax(220px, auto);
   gap: 24px;
   align-items: center;
-  padding: 15px 0;
+  padding: 13px 0;
   border-bottom: 1px solid var(--v2-hairline-faint);
 }
 
@@ -3577,6 +3676,13 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   gap: 16px;
 }
 
+.zaki-settings-v2__gov-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .zaki-settings-v2__product-row strong,
 .zaki-settings-v2__usage-row strong,
 .zaki-settings-v2__memory-list strong {
@@ -3646,10 +3752,12 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-settings-v2__channel-lane {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
   min-width: min(100%, 360px);
-  gap: 8px;
-  justify-items: end;
+  gap: 8px 10px;
 }
 
 .zaki-settings-v2__edit-tray {
@@ -3665,11 +3773,12 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-settings-v2__edit-tray--bindings {
-  margin-left: min(280px, 38%);
+  margin-inline-start: min(280px, 38%);
 }
 
 .zaki-settings-v2__edit-tray--channel {
-  margin: 0 0 14px min(280px, 38%);
+  margin-block: 0 14px;
+  margin-inline-start: min(280px, 38%);
 }
 
 .zaki-settings-v2__channel-summary-grid {
@@ -4142,13 +4251,15 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   .zaki-settings-v2__edit-tray--channel {
     width: 100%;
     min-width: 0;
-    margin-left: 0;
+    margin-inline-start: 0;
   }
 
   .zaki-settings-v2__channel-lane {
     width: 100%;
     min-width: 0;
-    justify-items: stretch;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
   }
 
   .zaki-settings-v2__actions {

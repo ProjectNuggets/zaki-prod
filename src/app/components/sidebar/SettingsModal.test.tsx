@@ -1232,8 +1232,17 @@ describe("SettingsPage", () => {
     expect(within(screen.getByTestId("settings-memory-data")).getByText("Improve Agent recall")).toBeInTheDocument();
 
     await waitFor(() => {
+      // Status label semantics are owned by the channel-liveness work (#81):
+      // "Connected" / "Needs attention" via lastLiveTestFailed(). The earlier
+      // "Credentials saved" rename on this branch is superseded by that logic.
       expect(within(screen.getByTestId("settings-channels")).getAllByText("Connected").length).toBeGreaterThan(0);
-      expect(within(screen.getByTestId("settings-channels")).getByText("1 bindings")).toBeInTheDocument();
+      // Chip trim (settings-batch spec, item #14): the collapsed row shows at
+      // most two chips — status + credentials. Ownership ("Your tokens") and the
+      // bindings-count chip are demoted to the expanded tray's summary grid.
+      // Demoted, not deleted — the expanded-tray coverage below proves the info
+      // is still reachable.
+      expect(within(screen.getByTestId("settings-channels")).queryByText("1 bindings")).not.toBeInTheDocument();
+      expect(within(screen.getByTestId("settings-channels")).queryByText("Your tokens")).not.toBeInTheDocument();
       expect(within(screen.getByTestId("settings-channels")).queryByText(/U123/)).not.toBeInTheDocument();
       expect(within(screen.getByTestId("settings-secrets")).getByText("telegram_bot_token")).toBeInTheDocument();
       expect(within(screen.getByTestId("settings-secrets")).getByText("Metadata only")).toBeInTheDocument();
@@ -1564,6 +1573,52 @@ describe("SettingsPage", () => {
     });
   });
 
+  it("restores Agent tenant defaults from the header Reset to defaults action", async () => {
+    const updateBotSettingsMock = updateBotSettings as jest.MockedFunction<typeof updateBotSettings>;
+    const toastSuccessMock = toast.success as jest.MockedFunction<typeof toast.success>;
+    updateBotSettingsMock.mockClear();
+    toastSuccessMock.mockClear();
+    await renderSettingsPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-agent")).toBeInTheDocument();
+    });
+
+    // Loaded profile equals the canonical defaults, so reset starts disabled.
+    const resetButton = screen.getByTestId("settings-agent-reset");
+    expect(resetButton).toBeDisabled();
+
+    // Move a control off-default to enable the reset affordance.
+    fireEvent.change(screen.getByLabelText("Autonomy"), { target: { value: "supervised" } });
+    await waitFor(() => {
+      expect(updateBotSettingsMock).toHaveBeenCalledWith({ autonomy: "supervised" });
+    });
+    await waitFor(() => {
+      expect(resetButton).not.toBeDisabled();
+    });
+
+    updateBotSettingsMock.mockClear();
+    fireEvent.click(resetButton);
+
+    // Reset applies the full editable-default patch via the existing save path.
+    await waitFor(() => {
+      expect(updateBotSettingsMock).toHaveBeenCalledWith({
+        assistant_mode: "balanced",
+        autonomy: "full",
+        group_activation: "mention",
+        voice_replies: false,
+        session_timeout_minutes: 30,
+      });
+    });
+    await waitFor(() => {
+      expect(toastSuccessMock).toHaveBeenCalledWith("Agent defaults restored.");
+    });
+    // Controls are back at defaults, so the affordance disables itself again.
+    await waitFor(() => {
+      expect(resetButton).toBeDisabled();
+    });
+  });
+
   it("keeps the Agent settings tab focused on controls instead of navigation chips", async () => {
     await renderSettingsPage();
 
@@ -1744,6 +1799,16 @@ describe("SettingsPage", () => {
         name: "Manage Slack",
       })
     );
+
+    // Chip trim (settings-batch spec, item #14) demotes the ownership and
+    // bindings-count chips off the collapsed row into the expanded tray's
+    // summary grid. Assert the info is genuinely still reachable here — demoted,
+    // not deleted. Slack is the fixture channel carrying a binding.
+    const slackRow = within(screen.getByTestId("settings-channel-slack"));
+    expect(slackRow.getByText("Owner")).toBeInTheDocument();
+    expect(slackRow.getByText("Your tokens")).toBeInTheDocument();
+    expect(slackRow.getByText("Bindings")).toBeInTheDocument();
+    expect(slackRow.getByText("1 binding")).toBeInTheDocument();
 
     const slackBindingEditor = screen.getByTestId("settings-channel-bindings-slack");
     expect(slackBindingEditor).not.toBeNull();

@@ -4,6 +4,8 @@ export { V2Badge } from "./V2Badge";
 export type { V2BadgeProps, V2BadgeTone } from "./V2Badge";
 export { V2Button } from "./V2Button";
 export type { V2ButtonProps, V2ButtonSize, V2ButtonVariant } from "./V2Button";
+export { V2InfoHint } from "./V2InfoHint";
+export type { V2InfoHintProps } from "./V2InfoHint";
 export { V2InlineRow } from "./V2InlineRow";
 export type { V2InlineRowProps, V2InlineRowTone } from "./V2InlineRow";
 export { V2Meter } from "./V2Meter";

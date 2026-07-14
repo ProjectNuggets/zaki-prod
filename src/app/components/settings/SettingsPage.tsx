@@ -95,7 +95,7 @@ import {
 } from "@/lib/productRoutes";
 import { useAuthStore, useUIStore } from "@/stores";
 import { TypeToConfirmDialog } from "@/app/components/ui/zaki";
-import { V2Badge, V2Button, V2StatusStrip } from "@/app/components/v2";
+import { V2Badge, V2Button, V2InfoHint, V2StatusStrip } from "@/app/components/v2";
 import {
   SettingsChannelsSection,
   buildEmptyChannelActivationDrafts,
@@ -179,6 +179,20 @@ const DEFAULT_AGENT_SETTINGS: AgentSettingsDraft = {
   query_expansion_enabled: false,
   selected_model: null,
 };
+
+// "Reset to defaults" restores exactly the controls the Agent (tenant defaults)
+// panel edits, using DEFAULT_AGENT_SETTINGS as the source of truth — the
+// canonical frontend defaults, which mirror the backend bot-settings contract
+// (backend/src/bot-bff.test.js fixture). The disabled proactive_updates toggle
+// (paused for launch) and the Memory & Data-owned dream/query toggles are not
+// controls of this panel and are intentionally excluded.
+const AGENT_DEFAULTS_RESET_PATCH = {
+  assistant_mode: DEFAULT_AGENT_SETTINGS.assistant_mode,
+  autonomy: DEFAULT_AGENT_SETTINGS.autonomy,
+  group_activation: DEFAULT_AGENT_SETTINGS.group_activation,
+  voice_replies: DEFAULT_AGENT_SETTINGS.voice_replies,
+  session_timeout_minutes: DEFAULT_AGENT_SETTINGS.session_timeout_minutes,
+} satisfies BotSettingsPatch;
 
 const AGENT_SESSION_TIMEOUT_MINUTES_MIN = 5;
 const AGENT_SESSION_TIMEOUT_MINUTES_MAX = 180;
@@ -1570,7 +1584,10 @@ export function SettingsPage() {
     }
   };
 
-  const patchAgentSettings = (patch: BotSettingsPatch): Promise<boolean> => {
+  const patchAgentSettings = (
+    patch: BotSettingsPatch,
+    options?: { successMessage?: string }
+  ): Promise<boolean> => {
     const run = async (): Promise<boolean> => {
       const previousDraft = agentSettingsDraftRef.current;
       setAgentSettingsSaving(true);
@@ -1589,9 +1606,10 @@ export function SettingsPage() {
         agentSettingsDraftRef.current = nextDraft;
         setAgentSettingsDraft(nextDraft);
         toast.success(
-          t("settingsModal.agentSettings.success.updated", {
-            defaultValue: "Agent settings updated.",
-          })
+          options?.successMessage ??
+            t("settingsModal.agentSettings.success.updated", {
+              defaultValue: "Agent settings updated.",
+            })
         );
         return true;
       } catch (err) {
@@ -1616,6 +1634,26 @@ export function SettingsPage() {
       () => false
     );
     return queued;
+  };
+
+  const isAtAgentDefaults =
+    agentSettingsDraft.assistant_mode === AGENT_DEFAULTS_RESET_PATCH.assistant_mode &&
+    agentSettingsDraft.autonomy === AGENT_DEFAULTS_RESET_PATCH.autonomy &&
+    agentSettingsDraft.group_activation === AGENT_DEFAULTS_RESET_PATCH.group_activation &&
+    agentSettingsDraft.voice_replies === AGENT_DEFAULTS_RESET_PATCH.voice_replies &&
+    agentSettingsDraft.session_timeout_minutes ===
+      AGENT_DEFAULTS_RESET_PATCH.session_timeout_minutes;
+
+  const handleResetAgentDefaults = () => {
+    if (agentSettingsLoading || agentSettingsSaving || isAtAgentDefaults) return;
+    setSessionTimeoutError(null);
+    setSessionTimeoutDraft(String(AGENT_DEFAULTS_RESET_PATCH.session_timeout_minutes));
+    setAgentSettingsDraft((current) => ({ ...current, ...AGENT_DEFAULTS_RESET_PATCH }));
+    void patchAgentSettings(AGENT_DEFAULTS_RESET_PATCH, {
+      successMessage: t("settingsModal.agentSettings.success.reset", {
+        defaultValue: "Agent defaults restored.",
+      }),
+    });
   };
 
   const commitSessionTimeoutDraft = async () => {
@@ -2082,7 +2120,18 @@ export function SettingsPage() {
                     data-testid="settings-weekly-meter"
                   >
                     <header>
-                      <span>{t("settingsModal.usage.weeklyAllowance")}</span>
+                      <span>
+                        {t("settingsModal.usage.weeklyAllowance")}
+                        <V2InfoHint
+                          triggerLabel={t("settingsModal.hints.trigger", {
+                            defaultValue: "What's this?",
+                          })}
+                          note={t("settingsModal.hints.weeklyMeter", {
+                            defaultValue:
+                              "Your one shared weekly allowance across all ZAKI products, shown as approximate agent runs or chats.",
+                          })}
+                        />
+                      </span>
                       <strong>{weeklyRunsLabel || weeklyAllowanceLabel}</strong>
                     </header>
                     <div
@@ -2125,7 +2174,18 @@ export function SettingsPage() {
                     data-testid="settings-burst-meter"
                   >
                     <header>
-                      <span>{t("settingsModal.usage.burstWindow")}</span>
+                      <span>
+                        {t("settingsModal.usage.burstWindow")}
+                        <V2InfoHint
+                          triggerLabel={t("settingsModal.hints.trigger", {
+                            defaultValue: "What's this?",
+                          })}
+                          note={t("settingsModal.hints.burstWindow", {
+                            defaultValue:
+                              "A rolling 5-hour limit on short bursts of heavy use — separate from your weekly allowance.",
+                          })}
+                        />
+                      </span>
                       <strong>{burstWindowLabel}</strong>
                     </header>
                     <div
@@ -2156,23 +2216,67 @@ export function SettingsPage() {
                 </div>
                 <div className="zaki-settings-v2__billing-wallet">
                   <div>
-                    <span>{t("settingsModal.plan.recurringRemaining", { defaultValue: "Weekly room" })}</span>
+                    <span>
+                      {t("settingsModal.plan.recurringRemaining", { defaultValue: "Weekly room" })}
+                      <V2InfoHint
+                        triggerLabel={t("settingsModal.hints.trigger", { defaultValue: "What's this?" })}
+                        note={t("settingsModal.hints.weeklyRoom", {
+                          defaultValue:
+                            "How much of this week's allowance is left. Refills on your weekly reset day.",
+                        })}
+                      />
+                    </span>
                     <strong>{weeklyRoomLabel}</strong>
                   </div>
                   <div>
-                    <span>{t("settingsModal.plan.topupBalance", { defaultValue: "Extra capacity" })}</span>
+                    <span>
+                      {t("settingsModal.plan.topupBalance", { defaultValue: "Extra capacity" })}
+                      <V2InfoHint
+                        triggerLabel={t("settingsModal.hints.trigger", { defaultValue: "What's this?" })}
+                        note={t("settingsModal.hints.extraCapacity", {
+                          defaultValue: "Buying capacity beyond your plan isn't available yet.",
+                        })}
+                      />
+                    </span>
                     <strong>{extraCapacityLabel}</strong>
                   </div>
                   <div>
-                    <span>{t("settingsModal.plan.agentAvailableNow", { defaultValue: "Agent available now" })}</span>
+                    <span>
+                      {t("settingsModal.plan.agentAvailableNow", { defaultValue: "Agent available now" })}
+                      <V2InfoHint
+                        triggerLabel={t("settingsModal.hints.trigger", { defaultValue: "What's this?" })}
+                        note={t("settingsModal.hints.agentAvailableNow", {
+                          defaultValue:
+                            "Whether Agent can run right now, based on your remaining weekly allowance.",
+                        })}
+                      />
+                    </span>
                     <strong>{agentAvailableNowLabel}</strong>
                   </div>
                   <div>
-                    <span>{t("settingsModal.plan.billingSource", { defaultValue: "Billing source" })}</span>
+                    <span>
+                      {t("settingsModal.plan.billingSource", { defaultValue: "Billing source" })}
+                      <V2InfoHint
+                        triggerLabel={t("settingsModal.hints.trigger", { defaultValue: "What's this?" })}
+                        note={t("settingsModal.hints.billingSource", {
+                          defaultValue:
+                            "Where your plan comes from — free account, subscription, or access code.",
+                        })}
+                      />
+                    </span>
                     <strong>{billingSourceLabel}</strong>
                   </div>
                   <div>
-                    <span>{t("settingsModal.plan.billingHealth", { defaultValue: "Billing health" })}</span>
+                    <span>
+                      {t("settingsModal.plan.billingHealth", { defaultValue: "Billing health" })}
+                      <V2InfoHint
+                        triggerLabel={t("settingsModal.hints.trigger", { defaultValue: "What's this?" })}
+                        note={t("settingsModal.hints.billingHealth", {
+                          defaultValue:
+                            "Whether billing is set up and responding for your account.",
+                        })}
+                      />
+                    </span>
                     <strong>
                       {billingConfigLoaded
                         ? t("settingsModal.plan.billingConfigured", { defaultValue: "Configured" })
@@ -2365,6 +2469,19 @@ export function SettingsPage() {
                 agentSettingsLoading
                   ? t("settingsModal.agentSettings.loadingShort", { defaultValue: "Loading" })
                   : t("settingsModal.agentSettings.ready", { defaultValue: "Tenant defaults" })
+              }
+              action={
+                <V2Button
+                  size="sm"
+                  variant="ghost"
+                  data-testid="settings-agent-reset"
+                  disabled={agentSettingsLoading || agentSettingsSaving || isAtAgentDefaults}
+                  onClick={handleResetAgentDefaults}
+                >
+                  {t("settingsModal.agentSettings.resetDefaults", {
+                    defaultValue: "Reset to defaults",
+                  })}
+                </V2Button>
               }
             >
               {agentSettingsLoading ? (
@@ -2980,11 +3097,20 @@ export function SettingsPage() {
                 data-testid="settings-memory-governance"
               >
                 <header>
-                  <strong>
-                    {t("settingsModal.memoryData.governance.title", {
-                      defaultValue: "Saved Agent memories",
-                    })}
-                  </strong>
+                  <span className="zaki-settings-v2__gov-title">
+                    <strong>
+                      {t("settingsModal.memoryData.governance.title", {
+                        defaultValue: "Saved Agent memories",
+                      })}
+                    </strong>
+                    <V2InfoHint
+                      triggerLabel={t("settingsModal.hints.trigger", { defaultValue: "What's this?" })}
+                      note={t("settingsModal.hints.piiPurge", {
+                        defaultValue:
+                          "Removes phone numbers and email addresses from what Agent remembers. Dry run previews without deleting.",
+                      })}
+                    />
+                  </span>
                   <V2Badge
                     tone={
                       memoryGovernanceLoading

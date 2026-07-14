@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { GatedRow, V2SettingsNav } from "./V2SettingsPrimitives";
+import { GatedRow, V2SettingsBlock, V2SettingsNav } from "./V2SettingsPrimitives";
 
 function TestIcon({ className }: { className?: string }) {
   return <svg className={className} aria-hidden="true" />;
@@ -45,6 +45,35 @@ describe("GatedRow", () => {
     expect(screen.getByText("Backend channel contract pending")).toHaveClass(
       "v2-settings-gated__reason",
     );
+  });
+});
+
+describe("V2SettingsBlock", () => {
+  it("renders the header band title, meta, and an optional header action", () => {
+    render(
+      <V2SettingsBlock
+        title="Agent"
+        meta="Tenant defaults"
+        action={<button type="button">Reset to defaults</button>}
+      >
+        <div>Body</div>
+      </V2SettingsBlock>,
+    );
+
+    expect(screen.getByRole("heading", { name: "Agent" })).toBeInTheDocument();
+    expect(screen.getByText("Tenant defaults")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reset to defaults" })).toBeInTheDocument();
+    expect(screen.getByText("Body")).toBeInTheDocument();
+  });
+
+  it("omits the header aside when neither meta nor action is provided", () => {
+    const { container } = render(
+      <V2SettingsBlock title="Privacy">
+        <div>Body</div>
+      </V2SettingsBlock>,
+    );
+
+    expect(container.querySelector(".v2-settings-block__head-aside")).toBeNull();
   });
 });
 
