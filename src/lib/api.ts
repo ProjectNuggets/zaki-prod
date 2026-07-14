@@ -2016,13 +2016,10 @@ export type MeterStatusResponse = {
     agent?: MeterAvailableNow | null;
   } | null;
   products?: Partial<Record<ProductRegistryProductId, MeterStatusProduct>>;
-  // WP-B2 — the gate the backend ACTUALLY enforces for THIS identity.
+  // The sole allowance authority the backend enforces for this identity.
   //
-  // For a signed-in user that is the unit wallet (the `weekly`/`rolling` windows above).
-  // For an ANONYMOUS visitor the wallet is bypassed entirely — the real gate is a daily
-  // prompt COUNTER. Rendering wallet units to an anon advertised headroom that does not
-  // gate them ("250 of 250 left" while the backend cuts them off at 10). The meter must
-  // read this field, not the wallet, whenever the backend says the wallet isn't the gate.
+  // Signed-in responses carry unit-wallet `weekly`/`rolling` windows. Anonymous responses
+  // intentionally omit those fields and carry only the daily prompt allowance here.
   enforced?: {
     kind: "unit_wallet" | "anonymous_daily_prompts" | string;
     surface?: string;

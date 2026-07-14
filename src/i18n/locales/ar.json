@@ -2020,6 +2020,7 @@
       "syncing": "تتم المزامنة",
       "plan": "الخطة",
       "weeklyReset": "إعادة الضبط الأسبوعية",
+      "dailyReset": "إعادة الضبط اليومية",
       "identity": "الهوية",
       "agentLive": "الوكيل مباشر · #{{id}}"
     },
@@ -2075,6 +2076,8 @@
       "submitComingSoon": "{{product}} قريبًا",
       "creditsExhaustedTitle": "الاستخدام الأسبوعي ممتلئ.",
       "creditsExhaustedCopy": "تبقى مسودتك محفوظة هنا. سجّل حسابًا، أو انتظر إعادة الضبط الأسبوعية، أو اختر خطة بمساحة أكبر.",
+      "anonymousCreditsExhaustedTitle": "استخدمت كل المحادثات المجانية لليوم.",
+      "anonymousCreditsExhaustedCopy": "تبقى مسودتك هنا. سجّل الدخول للمتابعة الآن، أو انتظر إعادة الضبط اليومية.",
       "capacityWindowTitle": "نافذة Agent لمدة {{hours}} ساعات مستخدمة بنسبة {{percent}}%.",
       "capacityWindowCopy": "تبقى مسودتك محفوظة هنا. تتاح مساحة إضافية عند {{reset}}.",
       "capacityWindowCopySoon": "تبقى مسودتك محفوظة هنا. ستتاح مساحة إضافية قريبًا.",

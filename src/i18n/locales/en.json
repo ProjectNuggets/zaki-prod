@@ -2020,6 +2020,7 @@
       "syncing": "Syncing",
       "plan": "Plan",
       "weeklyReset": "Weekly reset",
+      "dailyReset": "Daily reset",
       "identity": "Identity",
       "agentLive": "Agent live · #{{id}}"
     },
@@ -2075,6 +2076,8 @@
       "submitComingSoon": "{{product}} coming soon",
       "creditsExhaustedTitle": "Weekly usage is full.",
       "creditsExhaustedCopy": "Your draft stays saved here. Sign up, wait for the weekly reset, or pick a plan with more room.",
+      "anonymousCreditsExhaustedTitle": "Free chats are used up for today.",
+      "anonymousCreditsExhaustedCopy": "Your draft stays here. Sign in to keep going now, or wait for the daily reset.",
       "capacityWindowTitle": "{{hours}}h Agent window is {{percent}}% used.",
       "capacityWindowCopy": "Your draft stays saved here. More room opens at {{reset}}.",
       "capacityWindowCopySoon": "Your draft stays saved here. More room opens soon.",
