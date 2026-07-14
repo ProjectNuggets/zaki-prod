@@ -315,6 +315,7 @@ import {
   getQuotaResetAtUtcIso,
   getSurfaceQuotaConfig,
   getWeeklyQuotaResetAtUtcIso,
+  readAnonymousDailyPromptUsage,
   readDailyPromptUsage,
   readWeeklyPromptUsage,
   resolveQuotaSurface,
@@ -473,6 +474,7 @@ import {
   buildAnonymousDeviceSignalHash,
   cleanupAnonymousDeviceUsage,
   consumeAnonymousDeviceQuota,
+  readAnonymousDeviceUsage,
 } from "./anonymous-abuse-guard.js";
 import {
   cleanupExpiredRateLimitHits,
@@ -4995,8 +4997,15 @@ app.get("/api/auth/google/start", (req, res) => {
     authUrl.searchParams.set("prompt", "select_account");
     res.redirect(302, authUrl.toString());
   } catch (error) {
+    // WP-B10: never echo the raw exception text to the browser — it leaks internals and
+    // reads as gibberish to the user. Emit a machine `code` the client switches on plus a
+    // human `message`. The real exception stays in the server log.
     console.error("[GoogleOAuth] start error:", error);
-    res.status(500).json({ error: error?.message || "Unable to start Google login." });
+    res.status(500).json({
+      error: "google_oauth_start_failed",
+      code: "google_oauth_start_failed",
+      message: "We couldn't start Google sign-in. Try again, or use your email and password.",
+    });
   }
 });
 
@@ -5020,6 +5029,21 @@ app.get("/api/auth/google/callback", async (req, res) => {
   try {
     if (!ensureGoogleOAuthConfigured()) {
       res.redirect(302, `${getAppUrl()}/?auth=login&error=google_oauth_unconfigured`);
+      return;
+    }
+    // WP-B10: Google reports a refused/cancelled consent screen by redirecting back with
+    // its OWN `error` param (`access_denied` when the user clicks Cancel) and no `code`.
+    // Treating that as a malformed callback sent the user to a blank login form. Give the
+    // cancel path its own code so the login screen can say what actually happened.
+    const googleError = String(req.query?.error || "").trim();
+    if (googleError) {
+      const cancelled = googleError === "access_denied";
+      res.redirect(
+        302,
+        `${getAppUrl()}/?auth=login&error=${
+          cancelled ? "google_oauth_cancelled" : "google_oauth_failed"
+        }`
+      );
       return;
     }
     const code = String(req.query?.code || "").trim();
@@ -7443,6 +7467,57 @@ async function recordMeterReceiptForGrant({
   return { receipt, debit, idempotent: Boolean(existing) };
 }
 
+// WP-B2 — the meter the DASHBOARD shows must be the meter the BACKEND ENFORCES.
+//
+// An anonymous visitor's chat never touches the unit wallet: reserveSpacesMeterUnits
+// returns `{ allowed: true }` without reserving (anonymous identities have no wallet).
+// The gate that actually denies them is the anonymous DAILY PROMPT counter — two of
+// them, in fact: a per-anon-session bucket and a per-device bucket, whichever runs out
+// first. Showing an anon "250 of 250 left" from the wallet was advertising headroom
+// that does not gate them and does not exist.
+//
+// `enforced` names the counter that will actually say no, so the UI can stop lying.
+async function buildEnforcedLimitSnapshot(req, res, identity) {
+  if (identity?.type !== "anonymous") {
+    // For a signed-in user the unit wallet IS the enforced gate (weekly/rolling windows
+    // already carried in the payload). Nothing extra to describe.
+    return { kind: "unit_wallet", surface: "spaces" };
+  }
+
+  const deviceBucket = `${ANONYMOUS_SPACES_QUOTA_CONFIG.bucket}_device`;
+  const [sessionUsed, deviceUsed] = await Promise.all([
+    readAnonymousDailyPromptUsage({
+      dbGet,
+      anonKeyHash: buildAnonymousQuotaHash(req, res),
+      bucket: ANONYMOUS_SPACES_QUOTA_CONFIG.bucket,
+    }),
+    readAnonymousDeviceUsage({
+      dbGet,
+      deviceSignalHash: buildAnonymousDeviceSignalHash(req, {
+        secret: ANONYMOUS_SPACES_ID_SECRET || GOOGLE_OAUTH_STATE_SECRET || meterSigningSecret(),
+      }),
+      bucket: deviceBucket,
+    }),
+  ]);
+
+  const sessionRemaining = Math.max(0, ANONYMOUS_SPACES_QUOTA_CONFIG.limit - sessionUsed);
+  const deviceRemaining = Math.max(0, ANONYMOUS_DEVICE_DAILY_PROMPT_LIMIT - deviceUsed);
+  // Whichever bucket bites first is the truth the visitor experiences.
+  const bindingIsDevice = deviceRemaining < sessionRemaining;
+
+  return {
+    kind: "anonymous_daily_prompts",
+    surface: "spaces",
+    period: "day",
+    limit: bindingIsDevice
+      ? ANONYMOUS_DEVICE_DAILY_PROMPT_LIMIT
+      : ANONYMOUS_SPACES_QUOTA_CONFIG.limit,
+    used: bindingIsDevice ? deviceUsed : sessionUsed,
+    remaining: Math.min(sessionRemaining, deviceRemaining),
+    resetAt: getQuotaResetAtUtcIso(),
+  };
+}
+
 app.get("/api/meter/status", async (req, res) => {
   try {
     const tenantId = normalizeMeterTenantId(req.query?.tenantId);
@@ -7451,10 +7526,20 @@ app.get("/api/meter/status", async (req, res) => {
     const platform = buildPlatformForMeterIdentity(identity);
     const registry = buildPlatformProductRegistry();
     const policy = buildPlatformMeterPolicy({ env: process.env });
-    res.status(200).json(await buildMeterResponsePayload(identity, platform, registry, policy));
+    const payload = await buildMeterResponsePayload(identity, platform, registry, policy);
+    res.status(200).json({
+      ...payload,
+      enforced: await buildEnforcedLimitSnapshot(req, res, identity),
+    });
   } catch (error) {
     console.error("[Meter] Status endpoint error:", error);
-    res.status(500).json({ success: false, error: error?.message || "Unable to load meter." });
+    // WP-C: no raw exception text to the browser.
+    res.status(500).json({
+      success: false,
+      error: "meter_unavailable",
+      code: "meter_unavailable",
+      message: "Usage information isn't available right now.",
+    });
   }
 });
 
@@ -12751,10 +12836,20 @@ async function agentSessionDeleteHandler(req, res) {
 
     const parsed = parseZakiSessionKey(sessionKey);
     if (!parsed.userId || parsed.lane === "unknown") {
-      return res.status(400).json({ error: "invalid_session_key", code: "invalid_session_key" });
+      // WP-C: `error` carried the raw machine code with no `message`, so the frontend
+      // rendered "invalid_session_key" as user copy. Human message is now mandatory.
+      return res.status(400).json({
+        error: "invalid_session_key",
+        code: "invalid_session_key",
+        message: "This chat session is no longer valid. Start a new chat to continue.",
+      });
     }
     if (parsed.userId && parsed.userId !== String(userId)) {
-      return res.status(403).json({ error: "session_not_owned", code: "session_not_owned" });
+      return res.status(403).json({
+        error: "session_not_owned",
+        code: "session_not_owned",
+        message: "This chat session belongs to another account.",
+      });
     }
 
     let upstream;
@@ -17062,7 +17157,19 @@ const SESSION_KEY_SAFE_PATTERN = /^[a-zA-Z0-9:_.\-]+$/;
 function validateSessionKeyParam(req, res) {
   const sessionKey = req.params.sessionKey;
   if (!sessionKey || sessionKey.length > 255 || !SESSION_KEY_SAFE_PATTERN.test(sessionKey)) {
-    res.status(400).json({ error: "invalid_session_key" });
+    // WP-C: this used to be a bare `{ error: "invalid_session_key" }`. The frontend
+    // preferred `error` over `message`, so the machine code rendered verbatim in a
+    // banner AND a toast on a brand-new account's first screen. Every denial now ships
+    // a human `message` alongside the machine `code`.
+    res.status(400).json(
+      buildProductError({
+        error: "invalid_session_key",
+        message:
+          "This chat session is no longer valid. Start a new chat to continue.",
+        retryable: false,
+        requestId: getOrCreateRequestId(req),
+      })
+    );
     return null;
   }
   return sessionKey;

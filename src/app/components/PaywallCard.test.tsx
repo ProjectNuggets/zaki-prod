@@ -2,6 +2,22 @@ import "@testing-library/jest-dom";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { PaywallCard, classifyBillingDenial } from "./PaywallCard";
 
+// The limit state is translated; return the shipped English defaults so these assertions
+// check the copy a user actually reads.
+jest.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string, opts?: Record<string, unknown>) => {
+      let out = String(opts?.defaultValue ?? key);
+      for (const [k, v] of Object.entries(opts ?? {})) {
+        if (k === "defaultValue") continue;
+        out = out.replace(new RegExp(`{{${k}}}`, "g"), String(v));
+      }
+      return out;
+    },
+    i18n: { language: "en", dir: () => "ltr" },
+  }),
+}));
+
 describe("classifyBillingDenial", () => {
   it("maps insufficient_units → out_of_usage", () => {
     expect(classifyBillingDenial("insufficient_units")).toEqual({ isPaywall: true, state: "out_of_usage" });
@@ -14,6 +30,150 @@ describe("classifyBillingDenial", () => {
     expect(classifyBillingDenial("rate_limited").isPaywall).toBe(false);
     expect(classifyBillingDenial(null).isPaywall).toBe(false);
     expect(classifyBillingDenial(undefined).isPaywall).toBe(false);
+  });
+
+  // WP-B2 — THE fix: these codes are what the backend actually enforces for chat. They
+  // were absent from the map, so they fell through to a bare toast.error().
+  it("maps the enforced quota codes → limit_reached (they used to fall through to a toast)", () => {
+    expect(classifyBillingDenial("daily_limit_reached")).toEqual({
+      isPaywall: true,
+      state: "limit_reached",
+    });
+    expect(classifyBillingDenial("weekly_limit_reached")).toEqual({
+      isPaywall: true,
+      state: "limit_reached",
+    });
+    expect(classifyBillingDenial("quota_exceeded")).toEqual({
+      isPaywall: true,
+      state: "limit_reached",
+    });
+  });
+});
+
+describe("PaywallCard — limit_reached (WP-B2)", () => {
+  const base = { message: "fallback", onSeePlans: jest.fn(), onDismiss: jest.fn() };
+  // 2026-07-15T00:00:00Z — a real instant, so the card can print a real date AND time.
+  const resetAt = "2026-07-15T00:00:00Z";
+
+  it("NAMES the limit — how much of what was used", () => {
+    render(
+      <PaywallCard
+        state="limit_reached"
+        identity="anon"
+        limitPeriod="day"
+        limitUsed={10}
+        limitTotal={10}
+        resetAt={resetAt}
+        {...base}
+      />
+    );
+    expect(screen.getByTestId("zaki-limit-state")).toBeInTheDocument();
+    expect(screen.getByText(/you've used today's free limit/i)).toBeInTheDocument();
+    expect(screen.getByTestId("zaki-limit-usage")).toHaveTextContent(
+      "10 of 10 free chats used today"
+    );
+  });
+
+  // (b) — the anon variant: sign-in CTA + a REAL reset time (date AND clock time).
+  it("anon variant shows the sign-in CTA and an exact reset date + time", () => {
+    const onSignIn = jest.fn();
+    render(
+      <PaywallCard
+        state="limit_reached"
+        identity="anon"
+        limitPeriod="day"
+        limitUsed={10}
+        limitTotal={10}
+        resetAt={resetAt}
+        onSignIn={onSignIn}
+        {...base}
+      />
+    );
+
+    const cta = screen.getByRole("button", { name: /sign in to keep going/i });
+    expect(cta).toBeInTheDocument();
+    fireEvent.click(cta);
+    expect(onSignIn).toHaveBeenCalled();
+
+    // An anon cannot upgrade — never offer it.
+    expect(screen.queryByRole("button", { name: /upgrade/i })).not.toBeInTheDocument();
+
+    // A real reset instant: a date AND a wall-clock time, not "tomorrow".
+    const reset = screen.getByTestId("zaki-limit-reset");
+    expect(reset).toHaveTextContent(/resets/i);
+    expect(reset).toHaveTextContent(/\d{1,2}:\d{2}/); // clock time present
+    expect(reset).not.toHaveTextContent(/tomorrow|next week/i);
+  });
+
+  it("authed variant frames the upgrade as continuing THIS task", () => {
+    const onSeePlans = jest.fn();
+    render(
+      <PaywallCard
+        state="limit_reached"
+        identity="authed"
+        limitPeriod="day"
+        limitUsed={10}
+        limitTotal={10}
+        resetAt={resetAt}
+        message="fallback"
+        onSeePlans={onSeePlans}
+        onDismiss={jest.fn()}
+      />
+    );
+    const cta = screen.getByRole("button", { name: /upgrade to finish this task/i });
+    fireEvent.click(cta);
+    expect(onSeePlans).toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /sign in to keep going/i })).not.toBeInTheDocument();
+  });
+
+  it("tells the user their unsent prompt was preserved", () => {
+    render(
+      <PaywallCard
+        state="limit_reached"
+        identity="anon"
+        limitPeriod="day"
+        limitUsed={10}
+        limitTotal={10}
+        resetAt={resetAt}
+        promptPreserved
+        {...base}
+      />
+    );
+    expect(screen.getByTestId("zaki-limit-preserved")).toHaveTextContent(/saved in the composer/i);
+  });
+
+  it("names the WEEKLY limit when that is the bucket that was hit", () => {
+    render(
+      <PaywallCard
+        state="limit_reached"
+        identity="authed"
+        limitPeriod="week"
+        limitUsed={25}
+        limitTotal={25}
+        resetAt={resetAt}
+        {...base}
+      />
+    );
+    expect(screen.getByText(/you've used this week's free limit/i)).toBeInTheDocument();
+    expect(screen.getByTestId("zaki-limit-usage")).toHaveTextContent(
+      "25 of 25 free chats used this week"
+    );
+  });
+
+  it("never renders a machine code", () => {
+    const { container } = render(
+      <PaywallCard
+        state="limit_reached"
+        identity="anon"
+        limitPeriod="day"
+        limitUsed={10}
+        limitTotal={10}
+        resetAt={resetAt}
+        message="daily_limit_reached"
+        {...base}
+      />
+    );
+    expect(container.textContent).not.toContain("daily_limit_reached");
   });
 });
 

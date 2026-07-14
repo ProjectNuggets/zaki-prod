@@ -158,7 +158,17 @@ import { useZakiSessions, zakiSessionKeys } from "@/queries/useZakiSessions";
 import { buildZakiSessionRepairTitle, prepareAutoTitleExchange } from "@/lib/sessionAutoTitle";
 import { useMessageReactions } from "@/queries/useMessageReactions";
 import { MemoryCaptureToast } from "./memory/MemoryCaptureToast";
-import { PaywallCard, classifyBillingDenial, type PaywallState } from "./PaywallCard";
+import {
+  PaywallCard,
+  classifyBillingDenial,
+  type PaywallIdentity,
+  type PaywallState,
+} from "./PaywallCard";
+import {
+  codeFromHttpStatus,
+  looksLikeMachineCode,
+  resolveErrorMessage,
+} from "@/lib/userFacingErrors";
 import { MemoryImportSheet } from "./onboarding/MemoryImportSheet";
 import { AgentArtifactCanvas } from "./agent/AgentArtifactCanvas";
 import {
@@ -274,6 +284,11 @@ type ChatDenialDetails = {
   effectiveRemaining?: number | null;
   resetAt?: string | null;
   meter?: MeterStatusResponse | null;
+  // WP-B2: the quota denial (daily_limit_reached / weekly_limit_reached) carries the
+  // enforced allowance so the limit state can NAME the limit ("10 of 10 used today")
+  // instead of gesturing vaguely at "usage".
+  limit?: number | null;
+  period?: "day" | "week" | null;
 } | null;
 
 export function isMeterAvailabilityBlocked(availability?: MeterAvailableNow | null) {
@@ -359,13 +374,44 @@ export function buildBillingPaywallCardData({
   planLabel,
   meterStatus,
   isAgentTarget,
+  identity = "authed",
+  promptPreserved = false,
 }: {
   error: ChatRequestError;
   paywallState: PaywallState;
   planLabel?: string | null;
   meterStatus?: MeterStatusResponse | null;
   isAgentTarget?: boolean;
+  /** WP-B2: anon hits a daily counter and can only sign in; authed can upgrade. */
+  identity?: PaywallIdentity;
+  /** WP-B2: true when the unsent prompt was restored into the composer. */
+  promptPreserved?: boolean;
 }) {
+  // ── WP-B2: the quota limit state is a different animal from a wallet paywall. It is
+  // gated by a COUNTER (N of M prompts), not by units, so it carries its own fields.
+  if (paywallState === "limit_reached") {
+    const limitTotal =
+      typeof error.denialDetails?.limit === "number" ? error.denialDetails.limit : null;
+    const period = error.denialDetails?.period ?? "day";
+    return {
+      state: paywallState as PaywallState,
+      planLabel: planLabel ?? undefined,
+      remaining: undefined,
+      effectiveRemaining: undefined,
+      requiredUnits: undefined,
+      constraint: null,
+      rollingWindowPercent: null,
+      rollingWindowHours: undefined,
+      resetAt: error.denialDetails?.resetAt ?? null,
+      message: error.message,
+      identity,
+      limitPeriod: period,
+      // The denial means the allowance is fully spent: used === limit.
+      limitUsed: limitTotal,
+      limitTotal,
+      promptPreserved,
+    };
+  }
   const denialMeter = isAgentTarget ? error.denialDetails?.meter ?? null : null;
   const agentAvailability = isAgentTarget
     ? denialMeter?.availableNow?.agent ?? null
@@ -419,6 +465,11 @@ export function buildBillingPaywallCardData({
       typeof rollingWindow?.windowHours === "number" ? rollingWindow.windowHours : undefined,
     resetAt,
     message: error.message,
+    identity,
+    limitPeriod: null,
+    limitUsed: null,
+    limitTotal: null,
+    promptPreserved,
   };
 }
 
@@ -3337,6 +3388,12 @@ export function ChatArea() {
     rollingWindowHours?: number | null;
     resetAt?: string | null;
     message: string;
+    // WP-B2 limit-state fields.
+    identity?: PaywallIdentity;
+    limitPeriod?: "day" | "week" | null;
+    limitUsed?: number | null;
+    limitTotal?: number | null;
+    promptPreserved?: boolean;
   } | null>(null);
   const [, setApprovalContinuationPendingId] = useState<string | null>(null);
   const [agentArtifactEventCount, setAgentArtifactEventCount] = useState(0);
@@ -6558,7 +6615,8 @@ export function ChatArea() {
 
     if (!response.ok) {
       console.error(`[Chat] Stream failed: ${response.status}`);
-      let message = `Chat request failed (${response.status}).`;
+      const genericStatusFallback = `Chat request failed (${response.status}).`;
+      let message = genericStatusFallback;
       let errorCode: string | null = null;
       let errorRetryable = false;
       let quotaResetAt: string | null = null;
@@ -6592,9 +6650,19 @@ export function ChatArea() {
                 : null,
             resetAt: typeof data.resetAt === "string" ? data.resetAt : null,
             meter: data.meter || null,
+            limit: typeof data.limit === "number" ? data.limit : null,
+            period:
+              data.period === "week" ? "week" : data.period === "day" ? "day" : null,
           };
+          // WP-C: the machine code comes from `code` — and, for legacy routes that only
+          // send `error`, from `error` ONLY when it is code-shaped. It is never copy.
           if (typeof data.code === "string" && data.code.trim()) {
             errorCode = data.code.trim();
+          } else if (
+            typeof data.error === "string" &&
+            looksLikeMachineCode(data.error.trim())
+          ) {
+            errorCode = data.error.trim();
           }
           if (data.retryable === true) {
             errorRetryable = true;
@@ -6607,33 +6675,57 @@ export function ChatArea() {
           } else if (typeof data.surface === "string" && data.surface.trim().toLowerCase() === "app_chat") {
             quotaSurfaceCode = "app_chat";
           }
-          if (typeof data.message === "string" && data.message.trim()) {
-            message = data.message;
-          } else if (typeof data.error === "string" && data.error.trim()) {
-            message = data.error;
-          } else if (errorCode === "access_expired") {
-            message = "Access code required. Redeem a fresh code to keep chatting.";
-          } else if (errorCode === "daily_limit_reached" || errorCode === "weekly_limit_reached") {
+          // WP-C — PRECEDENCE INVERTED.
+          //
+          // This used to fall back to `data.error` (the MACHINE code) whenever `message`
+          // was absent, so a bare `{ error: "invalid_session_key" }` rendered the literal
+          // code in a banner and a toast. Now: a real `message` wins; otherwise the code
+          // is resolved through the ONE taxonomy into tailored human copy. `data.error`
+          // is never copy.
+          if (errorCode === "daily_limit_reached" || errorCode === "weekly_limit_reached") {
+            // The limit state owns this copy (it names the limit + exact reset). Keep the
+            // server sentence if it sent one, else a taxonomy-safe default.
             const resetLabel = quotaResetAt
               ? new Date(quotaResetAt).toLocaleString()
               : errorCode === "weekly_limit_reached"
                 ? "next week"
                 : "tomorrow";
             const isBotQuota = quotaSurfaceCode === "zaki_bot" || isZakiAgentSpace;
-            if (isBotQuota) {
-              message = chatCopy.experimentalLimitReached(resetLabel);
-            } else {
-              message = chatCopy.appFreeLimitReached(resetLabel);
-            }
-          }
-        } else {
-          const text = (await response.text()).trim();
-          if (text) {
-            message = text;
+            const serverMessage =
+              typeof data.message === "string" &&
+              data.message.trim() &&
+              !looksLikeMachineCode(data.message.trim())
+                ? data.message.trim()
+                : null;
+            message =
+              serverMessage ??
+              (isBotQuota
+                ? chatCopy.experimentalLimitReached(resetLabel)
+                : chatCopy.appFreeLimitReached(resetLabel));
+          } else if (errorCode === "access_expired") {
+            message = "Access code required. Redeem a fresh code to keep chatting.";
+          } else {
+            message = resolveErrorMessage(
+              { code: errorCode, message: data.message, error: data.error },
+              t
+            );
           }
         }
+        // WP-C: the raw response-body dump that used to live here is GONE. Echoing an
+        // arbitrary upstream body (HTML error pages, stack traces, machine codes) into a
+        // user-facing string is exactly what the spec bans. A non-JSON error body tells
+        // us nothing a user can act on, so we keep the taxonomy fallback instead.
       } catch {
         // Keep fallback message.
+      }
+      // Final guard: nothing code-shaped ever reaches the DOM, and a failure with no code
+      // at all still gets tailored copy (derived from the HTTP status) rather than the
+      // generic "Chat request failed (500)." placeholder.
+      if (!message || looksLikeMachineCode(message) || message === genericStatusFallback) {
+        message = resolveErrorMessage(
+          { code: errorCode || codeFromHttpStatus(response.status), message: null },
+          t
+        );
       }
       if (requestId) {
         message = `${message} (Ref: ${requestId})`;
@@ -7366,6 +7458,9 @@ export function ChatArea() {
     responseFormattingConfig.disableResponseEnvelope,
     spacesList,
     streamAgentInvocation,
+    // WP-C: the error path resolves copy through the i18n taxonomy. `t` is referentially
+    // stable in react-i18next except across a language change — which re-renders anyway.
+    t,
     updateAssistantContent,
     updateAssistantSources,
     updateAssistantDocSources,
@@ -7806,10 +7901,22 @@ export function ChatArea() {
           threadId: activeThreadId || ZAKI_BOT_THREAD_ID,
         });
         if (!response.ok) {
-          const message = String(
-            (data as { error?: string; message?: string } | null)?.error ||
-              (data as { error?: string; message?: string } | null)?.message ||
-              "Unable to initialize ZAKI."
+          // WP-C — this is THE line that put "invalid_session_key" on a brand-new
+          // account's first screen: it preferred `error` (the machine code) over
+          // `message` (the human sentence), then rendered it in the banner AND a toast.
+          // Precedence is now message → taxonomy(code) → generic. Never the raw code.
+          const payload = data as
+            | { error?: string; message?: string; code?: string }
+            | null;
+          const code =
+            payload?.code ||
+            (looksLikeMachineCode(payload?.error) ? payload?.error : null) ||
+            codeFromHttpStatus(response.status);
+          // `error` is still read as COPY — but only when it is demonstrably human.
+          // A code-shaped `error` is discarded and resolved through the taxonomy instead.
+          const message = resolveErrorMessage(
+            { code, message: payload?.message, error: payload?.error },
+            t
           );
           if (generation !== zakiBotProvisionGenerationRef.current) return false;
           setZakiBotProvisionState("error");
@@ -8399,6 +8506,16 @@ export function ChatArea() {
           if (isZakiBotTarget) {
             finalizeZakiBotProgress("error");
           }
+          // WP-B2 — a quota denial is a LIMIT STATE, not a toast. `daily_limit_reached`
+          // used to fall through classifyBillingDenial into a bare toast.error(); it now
+          // lands here and renders the card that names the limit, shows the exact reset
+          // time, and offers ONE way forward (sign in for anon, upgrade for authed).
+          const isLimitState = paywallState === "limit_reached";
+          // Preserve the unsent prompt. The composer cleared itself on submit, so put the
+          // text back — the user must not have to retype the thing that got refused.
+          if (isLimitState && trimmed) {
+            composerHandleRef.current?.setDraft(trimmed);
+          }
           // Show the inline paywall card — subsumes the old access_expired redirect.
           const planLabel =
             entitlementsResult?.data?.effective?.tier ??
@@ -8410,6 +8527,10 @@ export function ChatArea() {
               planLabel,
               meterStatus: meterResult?.data ?? null,
               isAgentTarget: isZakiBotTarget,
+              // An anonymous visitor has no wallet and nothing to upgrade — the door is
+              // an account. `authUserId` is the same anon signal the work-ledger uses.
+              identity: authUserId ? "authed" : "anon",
+              promptPreserved: isLimitState && Boolean(trimmed),
             })
           );
           return;
@@ -10104,7 +10225,16 @@ export function ChatArea() {
                     rollingWindowHours={paywallCardData.rollingWindowHours}
                     resetAt={paywallCardData.resetAt}
                     message={paywallCardData.message}
+                    identity={paywallCardData.identity}
+                    limitPeriod={paywallCardData.limitPeriod}
+                    limitUsed={paywallCardData.limitUsed}
+                    limitTotal={paywallCardData.limitTotal}
+                    promptPreserved={paywallCardData.promptPreserved}
                     onSeePlans={() => navigate("/pricing")}
+                    // The anonymous limit state's ONE action: an account. Carry the
+                    // visitor back here after auth so the preserved prompt is still
+                    // in front of them (the #89 claim flow imports the thread).
+                    onSignIn={() => navigate("/?auth=login")}
                     onDismiss={() => setPaywallCardData(null)}
                   />
                 </div>
