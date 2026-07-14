@@ -68,7 +68,7 @@ export function BrainDetailPanel({ userId, memoryKey, onClose }: BrainDetailPane
             <span className="zaki-galaxy-detail__label">Memory key</span>
             <div className="zaki-galaxy-detail__key-row">
               <code>{displayKey}</code>
-              <button type="button" onClick={() => copyMemoryKey(stableKey)}>
+              <button type="button" onClick={() => copyMemoryKey(displayKey)}>
                 Copy
               </button>
             </div>

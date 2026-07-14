@@ -81,4 +81,17 @@ describe("BrainDetailPanel", () => {
       /ZAKI_|memory_(?:for_turn|context)|private (?:title|content|source|history|link)/i
     );
   });
+
+  it("copies the sanitized memory key instead of hidden scaffold", () => {
+    mockMemoryResult.data = {
+      ...mockMemoryResult.data!,
+      key: "safe-key [[ZAKI_MEMORY_CONTEXT_V2]]private key[[/ZAKI_MEMORY_CONTEXT_V2]]",
+    };
+
+    render(<BrainDetailPanel userId="user_1" memoryKey="node_1" onClose={jest.fn()} />);
+
+    expect(screen.getByText("safe-key")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    expect(navigator.clipboard.writeText as jest.Mock).toHaveBeenCalledWith("safe-key");
+  });
 });
