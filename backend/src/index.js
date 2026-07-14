@@ -18455,7 +18455,7 @@ app.use(
   "/api/design/workbench",
   buildDesignWorkbenchRouter({
     enabled: ZAKI_DESIGN_ENABLED && ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED,
-    resolveAccess: (req) => designWorkbenchAccess?.resolve(req) ?? null,
+    resolveAccess: (req, sessionId) => designWorkbenchAccess?.resolve(req, sessionId) ?? null,
     controller: designSessionController || unavailableDesignSessionController,
     getRequestId: getOrCreateRequestId,
   })
@@ -18491,6 +18491,7 @@ app.use(
     authorizeProxy: authorizeDesignSessionProxy,
     settleProxy: settleDesignSessionProxy,
     issueWorkbenchAccess: (binding) => designWorkbenchAccess?.issue(binding),
+    revokeWorkbenchAccess: (sessionId) => designWorkbenchAccess?.revoke(sessionId),
     resolveProxyAccess: (req, sessionId) => designWorkbenchAccess?.resolve(req, sessionId) ?? null,
   })
 );

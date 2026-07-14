@@ -1,6 +1,7 @@
 import express from "express";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { normalizeDesignProxyPath } from "./design-proxy-path.js";
 
 const OPAQUE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
@@ -19,6 +20,7 @@ export function buildDesignSessionRouter({
   authorizeProxy,
   settleProxy,
   issueWorkbenchAccess,
+  revokeWorkbenchAccess,
   resolveProxyAccess,
 }) {
   const router = express.Router();
@@ -68,7 +70,9 @@ export function buildDesignSessionRouter({
             desiredGeneration: session.generation,
             requestId,
           });
-      if (!recoveringStop && typeof issueWorkbenchAccess === "function") {
+      if (["STOPPED", "FAILED"].includes(result.session.state)) {
+        appendWorkbenchRevocation(res, revokeWorkbenchAccess, session.sessionId);
+      } else if (!recoveringStop && typeof issueWorkbenchAccess === "function") {
         res.append("set-cookie", issueWorkbenchAccess({
           userId: session.userId,
           sessionId: session.sessionId,
@@ -218,6 +222,9 @@ export function buildDesignSessionRouter({
         requestId,
       });
       await updateSessionStateBestEffort(updateSessionState, dbQuery, session, result, requestId);
+      if (["STOPPED", "FAILED"].includes(result.session.state)) {
+        appendWorkbenchRevocation(res, revokeWorkbenchAccess, session.sessionId);
+      }
       return res.json(result);
     } catch (error) {
       return sessionFailure(res, error, requestId);
@@ -251,6 +258,7 @@ export function buildDesignSessionRouter({
         requestId,
       });
       if (drainingSession.state === "STOPPED") {
+        appendWorkbenchRevocation(res, revokeWorkbenchAccess, drainingSession.sessionId);
         return res.json({
           session: {
             id: drainingSession.sessionId,
@@ -272,6 +280,9 @@ export function buildDesignSessionRouter({
         requestId,
       });
       await updateSessionStateBestEffort(updateSessionState, dbQuery, session, result, requestId);
+      if (["STOPPED", "FAILED"].includes(result.session.state)) {
+        appendWorkbenchRevocation(res, revokeWorkbenchAccess, drainingSession.sessionId);
+      }
       return res.json(result);
     } catch (error) {
       return sessionFailure(res, error, requestId);
@@ -279,6 +290,11 @@ export function buildDesignSessionRouter({
   });
 
   return router;
+}
+
+function appendWorkbenchRevocation(res, revokeWorkbenchAccess, sessionId) {
+  if (typeof revokeWorkbenchAccess !== "function") return;
+  res.append("set-cookie", revokeWorkbenchAccess(sessionId));
 }
 
 async function authorizeSessionProxy(input) {
@@ -350,19 +366,7 @@ function parseBoundSessionRequest(sessionId, value) {
 function proxyTargetPath(req, sessionId, method) {
   const marker = `/api/design/sessions/${sessionId}/proxy`;
   if (!req.originalUrl.startsWith(marker)) return null;
-  const raw = req.originalUrl.slice(marker.length);
-  const isApi = raw.startsWith("/api/") || raw === "/api";
-  const isReadOnlyAsset = ["GET", "HEAD"].includes(method)
-    && ["/artifacts", "/frames"].some((prefix) => raw === prefix || raw.startsWith(`${prefix}/`));
-  if (!isApi && !isReadOnlyAsset) return null;
-  try {
-    const url = new URL(raw, "http://worker.invalid");
-    const segments = url.pathname.split("/").map((segment) => decodeURIComponent(segment));
-    if (segments.includes(".") || segments.includes("..")) return null;
-    return `${url.pathname}${url.search}`;
-  } catch {
-    return null;
-  }
+  return normalizeDesignProxyPath(req.originalUrl.slice(marker.length), method);
 }
 
 function proxyHeaders(req) {

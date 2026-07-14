@@ -166,6 +166,21 @@ describe("DesignControllerClient", () => {
     expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
   });
 
+  test("rejects encoded dot segments before proxy URL normalization", async () => {
+    const fetchWithTimeout = jest.fn().mockResolvedValue(new Response("unexpected"));
+    const client = new DesignControllerClient({
+      baseUrl: "http://controller.internal:7460", token: "hub-controller-secret", fetchWithTimeout,
+    });
+    const input = {
+      sessionId: "sess_01", projectId: "project_01", userId: "42", tenantId: "default",
+      expectedGeneration: 7, headers: {}, requestId: "req_escape", method: "POST",
+    };
+
+    await expect(client.proxy({ ...input, targetPath: "/api/%2e%2e/healthz" }))
+      .rejects.toMatchObject({ code: "DESIGN_CONTROLLER_REQUEST_INVALID", status: 400 });
+    expect(fetchWithTimeout).not.toHaveBeenCalled();
+  });
+
   test("fetches only read-only workbench assets with server credentials", async () => {
     const fetchWithTimeout = jest.fn().mockResolvedValue(new Response("html"));
     const client = new DesignControllerClient({

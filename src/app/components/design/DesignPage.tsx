@@ -32,7 +32,10 @@ export function DesignPage() {
       setSelectedProject(project);
       setInitialSession(null);
     },
-    onSuccess: setInitialSession,
+    onSuccess: (result) => {
+      queryClient.removeQueries({ queryKey: ["design", "session"] });
+      setInitialSession(result);
+    },
   });
   const createProject = useMutation({
     mutationFn: createDesignProject,

@@ -1,3 +1,5 @@
+import { normalizeDesignProxyPath } from "./design-proxy-path.js";
+
 const SESSION_STATES = new Set([
   "REQUESTED",
   "STARTING",
@@ -233,21 +235,11 @@ function validWorkbenchPath(value) {
 }
 
 function validProxyPath(value, method) {
-  const raw = String(value || "");
-  const isApi = raw.startsWith("/api/") || raw === "/api";
-  const isReadOnlyAsset = ["GET", "HEAD"].includes(method)
-    && ["/artifacts", "/frames"].some((prefix) => raw === prefix || raw.startsWith(`${prefix}/`));
-  if (!isApi && !isReadOnlyAsset) {
+  const normalized = normalizeDesignProxyPath(value, method);
+  if (!normalized) {
     throw new DesignControllerClientError("DESIGN_CONTROLLER_REQUEST_INVALID", "Design proxy path is invalid.", 400);
   }
-  try {
-    const url = new URL(raw, "http://worker.invalid");
-    const segments = url.pathname.split("/").map((segment) => decodeURIComponent(segment));
-    if (segments.includes(".") || segments.includes("..")) throw new Error("dot segment");
-    return `${url.pathname}${url.search}`;
-  } catch {
-    throw new DesignControllerClientError("DESIGN_CONTROLLER_REQUEST_INVALID", "Design proxy path is invalid.", 400);
-  }
+  return normalized;
 }
 
 async function boundedJson(response, timeoutMs) {

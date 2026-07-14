@@ -253,6 +253,40 @@ describe("Design public session routes", () => {
     }));
   });
 
+  test("does not issue workbench access when admission returns a terminal session", async () => {
+    const issueWorkbenchAccess = jest.fn().mockReturnValue("unexpected=credential");
+    const revokeWorkbenchAccess = jest.fn().mockReturnValue(
+      "zaki_design_workbench_sess_failed=; Path=/api/design; HttpOnly; SameSite=Strict; Max-Age=0",
+    );
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn().mockResolvedValue({
+        sessionId: "sess_failed", projectId: "project_01", userId: "42",
+        tenantId: "default", state: "REQUESTED", generation: 7,
+      }),
+      readSessionBinding: jest.fn(), updateSessionState: jest.fn(), runInTransaction: jest.fn(),
+      dbQuery: jest.fn(), createSessionId: jest.fn(),
+      controller: {
+        ensure: jest.fn().mockResolvedValue({
+          session: { id: "sess_failed", projectId: "project_01", state: "FAILED", generation: 7 },
+        }),
+        status: jest.fn(), stop: jest.fn(),
+      },
+      getRequestId: () => "req_failed",
+      issueWorkbenchAccess,
+      revokeWorkbenchAccess,
+    }));
+
+    const response = await request(app).post("/api/design/sessions").send({ projectId: "project_01" });
+
+    expect(response.status).toBe(202);
+    expect(issueWorkbenchAccess).not.toHaveBeenCalled();
+    expect(revokeWorkbenchAccess).toHaveBeenCalledWith("sess_failed");
+    expect(response.headers["set-cookie"]?.[0]).toContain("Max-Age=0");
+  });
+
   test("proxies only through a session binding owned by the authenticated user", async () => {
     const controllerProxy = jest.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), {
       status: 200,
@@ -533,6 +567,9 @@ describe("Design public session routes", () => {
       events.push("stop");
       return { session: { id: "sess_01", projectId: "project_01", state: "STOPPED", generation: 8 } };
     });
+    const revokeWorkbenchAccess = jest.fn().mockReturnValue(
+      "zaki_design_workbench_sess_01=; Path=/api/design; HttpOnly; SameSite=Strict; Max-Age=0",
+    );
     const app = express();
     app.use("/api/design/sessions", buildDesignSessionRouter({
       enabled: true,
@@ -546,6 +583,7 @@ describe("Design public session routes", () => {
       createSessionId: jest.fn(),
       controller: { ensure: jest.fn(), status: jest.fn(), stop: controllerStop },
       getRequestId: () => "req_stop_01",
+      revokeWorkbenchAccess,
     }));
 
     const response = await request(app)
@@ -559,6 +597,9 @@ describe("Design public session routes", () => {
       expectedGeneration: 7,
       requestId: "req_stop_01",
     }));
+    expect(revokeWorkbenchAccess).toHaveBeenCalledWith("sess_01");
+    expect(response.headers["set-cookie"]?.[0]).toContain("zaki_design_workbench_sess_01=");
+    expect(response.headers["set-cookie"]?.[0]).toContain("Max-Age=0");
   });
 
   test("finalizes an already committed checkpoint on a direct stop retry", async () => {

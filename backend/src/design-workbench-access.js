@@ -37,6 +37,13 @@ export function createDesignWorkbenchAccess({ secret, secure = process.env.NODE_
     return null;
   }
 
+  function revoke(sessionId) {
+    if (!OPAQUE_ID.test(String(sessionId || ""))) {
+      throw new Error("Design workbench session is invalid.");
+    }
+    return `${cookieName(sessionId)}=; Path=/api/design; HttpOnly; SameSite=Strict; Max-Age=0${secure ? "; Secure" : ""}`;
+  }
+
   function resolveToken(token) {
     if (!token) return null;
     const [body, signature, extra] = token.split(".");
@@ -70,7 +77,7 @@ export function createDesignWorkbenchAccess({ secret, secure = process.env.NODE_
     }
   }
 
-  return { issue, resolve };
+  return { issue, resolve, revoke };
 }
 
 function requiredSecret(value) {

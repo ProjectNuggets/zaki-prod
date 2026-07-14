@@ -2,6 +2,8 @@ import express from "express";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
+const OPAQUE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+
 export function buildDesignWorkbenchRouter({ enabled, resolveAccess, controller, getRequestId }) {
   const router = express.Router();
   router.use(async (req, res) => {
@@ -14,9 +16,19 @@ export function buildDesignWorkbenchRouter({ enabled, resolveAccess, controller,
         code: "design_workbench_method_not_allowed", message: "Design workbench is read-only.", requestId,
       });
     }
-    const access = await resolveAccess(req);
-    if (!access?.userId) {
-      return res.status(401).json({ code: "design_workbench_auth_required", message: "Design workbench access is required.", requestId });
+    const navigationBinding = readNavigationBinding(req);
+    if (navigationBinding === false) {
+      return workbenchAuthRequired(res, requestId);
+    }
+    const access = await resolveAccess(req, navigationBinding?.sessionId);
+    if (
+      !access?.userId ||
+      (navigationBinding && (
+        access.sessionId !== navigationBinding.sessionId ||
+        access.projectId !== navigationBinding.projectId
+      ))
+    ) {
+      return workbenchAuthRequired(res, requestId);
     }
     try {
       const upstream = await controller.workbench({
@@ -48,6 +60,28 @@ export function buildDesignWorkbenchRouter({ enabled, resolveAccess, controller,
     }
   });
   return router;
+}
+
+function readNavigationBinding(req) {
+  const match = /^\/projects\/([^/]+)(?:\/|$)/.exec(req.path || "");
+  const sessionId = typeof req.query?.sessionId === "string" ? req.query.sessionId : "";
+  const projectId = typeof req.query?.projectId === "string" ? req.query.projectId : "";
+  const hasBindingQuery = req.query?.sessionId !== undefined || req.query?.projectId !== undefined;
+  if (!match && !hasBindingQuery) return null;
+  let pathProjectId = projectId;
+  if (match) {
+    try { pathProjectId = decodeURIComponent(match[1]); } catch { return false; }
+  }
+  if (!OPAQUE_ID.test(sessionId) || !OPAQUE_ID.test(projectId) || projectId !== pathProjectId) return false;
+  return { sessionId, projectId };
+}
+
+function workbenchAuthRequired(res, requestId) {
+  return res.status(401).json({
+    code: "design_workbench_auth_required",
+    message: "Design workbench access is required.",
+    requestId,
+  });
 }
 
 function requestHeaders(req) {

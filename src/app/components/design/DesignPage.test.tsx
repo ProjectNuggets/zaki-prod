@@ -17,8 +17,14 @@ jest.mock("@/lib/designApi", () => ({
   ensureDesignSession: (...args: unknown[]) => mockEnsure(...args),
   getDesignSession: (...args: unknown[]) => mockStatus(...args),
   stopDesignSession: (...args: unknown[]) => mockStop(...args),
-  designWorkbenchUrl: (session: { id: string; projectId: string }) =>
-    `/api/design/workbench/projects/${session.projectId}?sessionId=${session.id}`,
+  designWorkbenchUrl: (session: { id: string; projectId: string }, projectName: string) => {
+    const query = new URLSearchParams({
+      sessionId: session.id,
+      projectId: session.projectId,
+      projectName,
+    });
+    return `/api/design/workbench/projects/${session.projectId}?${query.toString()}`;
+  },
 }));
 
 function renderPage() {
@@ -45,7 +51,10 @@ describe("DesignPage hosted lifecycle", () => {
 
     await waitFor(() => expect(mockEnsure).toHaveBeenCalledWith("project_01"));
     const frame = await screen.findByTitle("ZAKI Design workbench");
-    expect(frame).toHaveAttribute("src", "/api/design/workbench/projects/project_01?sessionId=sess_01");
+    expect(frame).toHaveAttribute(
+      "src",
+      "/api/design/workbench/projects/project_01?sessionId=sess_01&projectId=project_01&projectName=Brand+system",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Stop" }));
     await waitFor(() => expect(mockStop).toHaveBeenCalledWith("sess_01", "project_01"));
@@ -77,5 +86,28 @@ describe("DesignPage hosted lifecycle", () => {
 
     expect(await screen.findByRole("button", { name: "Retry" })).toBeVisible();
     expect(screen.queryByText("Restoring project files and starting an isolated worker.")).not.toBeInTheDocument();
+  });
+
+  it("opens the workbench when retry readmits the same stopped session", async () => {
+    mockEnsure
+      .mockResolvedValueOnce({
+        session: { id: "sess_01", projectId: "project_01", state: "STARTING", generation: 1 },
+        retryAfterMs: 10,
+      })
+      .mockResolvedValueOnce({
+        session: { id: "sess_01", projectId: "project_01", state: "READY", generation: 1 },
+      });
+    mockStatus.mockResolvedValueOnce({
+      session: { id: "sess_01", projectId: "project_01", state: "STOPPED", generation: 1 },
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Brand system/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByTitle("ZAKI Design workbench")).toHaveAttribute(
+      "src",
+      "/api/design/workbench/projects/project_01?sessionId=sess_01&projectId=project_01&projectName=Brand+system",
+    );
   });
 });

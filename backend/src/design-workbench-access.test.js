@@ -49,4 +49,13 @@ describe("Design workbench scoped access", () => {
     expect(access.resolve(req, "sess_01")).toMatchObject({ sessionId: "sess_01", projectId: "project_01" });
     expect(access.resolve(req, "sess_02")).toMatchObject({ sessionId: "sess_02", projectId: "project_02" });
   });
+
+  test("expires only the stopped session credential", () => {
+    const access = createDesignWorkbenchAccess({ secret: "controller-secret-at-least-16", secure: true });
+
+    expect(access.revoke("sess_01")).toBe(
+      "zaki_design_workbench_sess_01=; Path=/api/design; HttpOnly; SameSite=Strict; Max-Age=0; Secure",
+    );
+    expect(() => access.revoke("../session")).toThrow("Design workbench session is invalid.");
+  });
 });
