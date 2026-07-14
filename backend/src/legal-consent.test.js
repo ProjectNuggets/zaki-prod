@@ -31,7 +31,6 @@ describe("legal consent auth schemas", () => {
       email: "user@example.com",
       password: "Password123",
       name: "User",
-      dateOfBirth: "1995-01-15",
     });
     expect(missingConsent.success).toBe(false);
 
@@ -39,11 +38,56 @@ describe("legal consent auth schemas", () => {
       email: "user@example.com",
       password: "Password123",
       name: "User",
-      dateOfBirth: "1995-01-15",
       legalConsentAccepted: true,
       legalPolicyVersion: "2026-07-12.v4",
     });
     expect(valid.success).toBe(true);
+  });
+
+  // WP-M (a) — email signup succeeds with NO date of birth in the payload.
+  describe("WP-M: the signup schema no longer collects a date of birth", () => {
+    it("ACCEPTS a signup payload that contains no dateOfBirth at all", () => {
+      const result = buildSignupSchema().safeParse({
+        email: "user@example.com",
+        password: "Password123",
+        name: "User",
+        legalConsentAccepted: true,
+        legalPolicyVersion: "2026-07-12.v4",
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data).not.toHaveProperty("dateOfBirth");
+    });
+
+    it("has no dateOfBirth key in its shape — the field is gone, not optional", () => {
+      expect(Object.keys(buildSignupSchema().shape)).not.toContain("dateOfBirth");
+    });
+
+    it("STRIPS a dateOfBirth sent by a stale client rather than persisting it", () => {
+      // An old cached bundle may still post a birthdate. Zod strips unknown keys,
+      // so the value is discarded at the edge and never reaches the database.
+      const result = buildSignupSchema().safeParse({
+        email: "user@example.com",
+        password: "Password123",
+        name: "User",
+        dateOfBirth: "1995-01-15",
+        legalConsentAccepted: true,
+        legalPolicyVersion: "2026-07-12.v4",
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data).not.toHaveProperty("dateOfBirth");
+      expect(JSON.stringify(result.data)).not.toContain("1995-01-15");
+    });
+
+    it("still refuses a signup with no consent — WP-M does not weaken #87", () => {
+      const result = buildSignupSchema().safeParse({
+        email: "user@example.com",
+        password: "Password123",
+        name: "User",
+      });
+      expect(result.success).toBe(false);
+    });
   });
 });
 

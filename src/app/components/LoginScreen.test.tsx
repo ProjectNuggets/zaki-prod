@@ -192,10 +192,6 @@ describe("LoginScreen legal consent", () => {
     await user.click(screen.getByRole("button", { name: "New here? Create an account" }));
 
     await user.type(screen.getByPlaceholderText("Full name"), "User Name");
-    await user.type(
-      screen.getByLabelText("Date of birth"),
-      "1995-01-15"
-    );
     await user.type(screen.getByPlaceholderText("Email address"), "signup@example.com");
     await user.type(screen.getByPlaceholderText("Password"), "Password123");
     await user.type(screen.getByPlaceholderText("Confirm password"), "Password123");
@@ -236,7 +232,6 @@ describe("LoginScreen legal consent", () => {
         email: "signup@example.com",
         password: "Password123",
         name: "User Name",
-        dateOfBirth: "1995-01-15",
         legalConsentAccepted: true,
         legalPolicyVersion: policyVersion,
       });
@@ -293,9 +288,12 @@ describe("LoginScreen legal consent", () => {
     renderLoginScreen();
     await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
 
-    expect(
-      await screen.findByText(/Google does not share your date of birth/)
-    ).toBeInTheDocument();
+    const message = await screen.findByText(/We can't verify your age right now/);
+    expect(message).toBeInTheDocument();
+    // WP-M: the old copy sent people to the email form "so we can collect your
+    // date of birth". That form no longer collects one, so it must not be offered
+    // as a workaround — that would be a loop with no exit.
+    expect(document.body.textContent).not.toMatch(/date of birth/i);
   });
 
   it("explains a Google signup refused for want of consent", async () => {
@@ -343,32 +341,92 @@ describe("LoginScreen legal consent", () => {
     expect(document.body.textContent).not.toContain("some_unmapped_backend_code");
   });
 
-  it("formats and caps the signup birth date input", async () => {
-    const user = userEvent.setup();
-    renderLoginScreen();
-    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
+  // ── WP-M: DOB collection is GONE ────────────────────────────────────────────────
+  //
+  // The age gate is off in every environment, so the birthdate the signup form used
+  // to collect was stored and never enforced. GDPR Art. 5(1)(c) makes an unused
+  // sensitive field a liability in itself, so the field, its validation and its
+  // payload key are removed. Minimum age is now a ToS attestation.
+  describe("WP-M: the signup form no longer collects a date of birth", () => {
+    async function openSignup() {
+      const user = userEvent.setup();
+      renderLoginScreen();
+      await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
+      await user.click(screen.getByRole("button", { name: "New here? Create an account" }));
+      return user;
+    }
 
-    await user.click(screen.getByRole("button", { name: "New here? Create an account" }));
+    it("renders NO date-of-birth field on the signup form", async () => {
+      await openSignup();
 
-    const birthDateInput = screen.getByLabelText("Date of birth");
-    await user.type(birthDateInput, "199501159999");
+      expect(screen.queryByLabelText("Date of birth")).not.toBeInTheDocument();
+      expect(screen.queryByPlaceholderText("YYYY-MM-DD")).not.toBeInTheDocument();
+      expect(document.querySelector("#signup-bday")).toBeNull();
+      expect(document.querySelector('[autocomplete="bday"]')).toBeNull();
+      expect(document.querySelector('[name="bday"]')).toBeNull();
+    });
 
-    expect(birthDateInput).toHaveValue("1995-01-15");
-    expect(birthDateInput).toHaveAttribute("inputmode", "numeric");
-    expect(birthDateInput).toHaveAttribute("maxlength", "10");
-  });
+    it("(a) submits a signup with NO dateOfBirth anywhere in the payload", async () => {
+      const user = await openSignup();
 
-  it("marks impossible signup birth dates invalid", async () => {
-    const user = userEvent.setup();
-    renderLoginScreen();
-    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
+      await user.type(screen.getByPlaceholderText("Full name"), "User Name");
+      await user.type(screen.getByPlaceholderText("Email address"), "signup@example.com");
+      await user.type(screen.getByPlaceholderText("Password"), "Password123");
+      await user.type(screen.getByPlaceholderText("Confirm password"), "Password123");
+      await user.click(screen.getByRole("checkbox"));
+      await user.click(screen.getByRole("button", { name: "Create account" }));
 
-    await user.click(screen.getByRole("button", { name: "New here? Create an account" }));
-    await user.type(screen.getByLabelText("Date of birth"), "19951340");
-    await user.tab();
+      await waitFor(() => expect(requestPublicSignup).toHaveBeenCalled());
 
-    expect(await screen.findByText("Enter a real birth date as YYYY-MM-DD.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Date of birth")).toHaveAttribute("aria-invalid", "true");
+      const payload = (requestPublicSignup as jest.Mock).mock.calls[0][0];
+      expect(payload).not.toHaveProperty("dateOfBirth");
+      expect(Object.keys(payload)).toEqual(
+        expect.not.arrayContaining(["dateOfBirth", "dob", "bday", "birthDate"])
+      );
+
+      // ...and nothing date-shaped smuggled in under another key. `legalPolicyVersion`
+      // ("2026-07-12.v4") is date-shaped by design, so it is excluded from the sweep.
+      const { legalPolicyVersion: _policyVersion, ...rest } = payload;
+      expect(JSON.stringify(rest)).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    });
+
+    it("enables Create account with no birthdate — the DOB is not a gate any more", async () => {
+      const user = await openSignup();
+
+      await user.type(screen.getByPlaceholderText("Full name"), "User Name");
+      await user.type(screen.getByPlaceholderText("Email address"), "signup@example.com");
+      await user.type(screen.getByPlaceholderText("Password"), "Password123");
+      await user.type(screen.getByPlaceholderText("Confirm password"), "Password123");
+
+      // Consent is still the thing that gates the button — that is #87's invariant.
+      const createButton = screen.getByRole("button", { name: "Create account" });
+      expect(createButton).toBeDisabled();
+      await user.click(screen.getByRole("checkbox"));
+      expect(createButton).toBeEnabled();
+    });
+
+    it("keeps a minimum-age statement: the ToS attestation line", async () => {
+      await openSignup();
+
+      // The age language must not vanish silently along with the field.
+      const attestation = screen.getByTestId("signup-age-attestation");
+      expect(attestation).toBeInTheDocument();
+      expect(attestation).toHaveTextContent(
+        "By continuing you confirm you meet the minimum age in our Terms."
+      );
+    });
+
+    it("still refuses to submit without the consent attestation (#87 intact)", async () => {
+      const user = await openSignup();
+
+      await user.type(screen.getByPlaceholderText("Full name"), "User Name");
+      await user.type(screen.getByPlaceholderText("Email address"), "signup@example.com");
+      await user.type(screen.getByPlaceholderText("Password"), "Password123");
+      await user.type(screen.getByPlaceholderText("Confirm password"), "Password123");
+      await user.click(screen.getByRole("button", { name: "Create account" }));
+
+      expect(requestPublicSignup).not.toHaveBeenCalled();
+    });
   });
 
   it("blocks signup when confirmation password does not match", async () => {
@@ -378,7 +436,6 @@ describe("LoginScreen legal consent", () => {
 
     await user.click(screen.getByRole("button", { name: "New here? Create an account" }));
     await user.type(screen.getByPlaceholderText("Full name"), "User Name");
-    await user.type(screen.getByLabelText("Date of birth"), "1995-01-15");
     await user.type(screen.getByPlaceholderText("Email address"), "signup@example.com");
     await user.type(screen.getByPlaceholderText("Password"), "Password123");
     await user.type(screen.getByPlaceholderText("Confirm password"), "Password456");

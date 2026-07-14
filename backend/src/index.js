@@ -29,6 +29,7 @@ import {
   resolveSignupAgePolicy,
   evaluateSignupAgePolicy,
 } from "./signup-policy.js";
+import { completeEmailSignup } from "./email-signup-user.js";
 import { validateRuntimeConfig } from "./config-validation.js";
 import {
   createMemoryRoutes,
@@ -777,6 +778,19 @@ const ZAKI_LEGAL_POLICY_VERSION = resolveLegalPolicyVersion(
 // ZAKI_AGE_GATE_ENABLED / ZAKI_MINIMUM_SIGNUP_AGE to change policy — do not edit
 // the auth routes.
 const SIGNUP_AGE_POLICY = resolveSignupAgePolicy(process.env);
+// WP-M dropped date-of-birth collection entirely, so an enabled gate has nothing
+// to check and fails closed on BOTH paths. A legal control must never silently
+// no-op, so we refuse rather than wave people through — but nobody should ever
+// discover that from a production signup graph going to zero.
+if (SIGNUP_AGE_POLICY.enabled) {
+  console.error(
+    "[ZAKI] CONFIG ERROR: ZAKI_AGE_GATE_ENABLED is on, but ZAKI no longer collects a " +
+      "date of birth (WP-M, GDPR data minimisation). The age gate is unsatisfiable and " +
+      "ALL new accounts — email and Google — will be refused with age_verification_required. " +
+      "Set ZAKI_AGE_GATE_ENABLED=false, or reintroduce DOB collection in the signup form, " +
+      "payload and schema before enabling it."
+  );
+}
 const MAX_STREAM_MESSAGE_CHARS = 8000;
 const ZAKI_INCLUDE_VERIFY_LINK =
   String(process.env.ZAKI_INCLUDE_VERIFY_LINK || "").toLowerCase() === "true";
@@ -6433,13 +6447,14 @@ const signupHandler = async (req, res) => {
       return;
     }
 
-    const { email, password, name, dateOfBirth, legalPolicyVersion } = validation.data;
+    const { email, password, name, legalPolicyVersion } = validation.data;
     const normalizedEmail = normalizeEmail(email);
     const normalizedName = name.trim();
-    const normalizedDob = dateOfBirth;
-    // Shared age policy — identical evaluation to the Google OAuth path.
+    // Shared age policy — identical evaluation to the Google OAuth path. WP-M: no
+    // DOB is collected on EITHER path any more, so both call this with no
+    // birthdate and, with the gate off (the only supported config), both pass.
     const minimumAgeResult = evaluateSignupAgePolicy({
-      dateOfBirth: normalizedDob,
+      dateOfBirth: null,
       policy: SIGNUP_AGE_POLICY,
     });
     if (!minimumAgeResult.ok) {
@@ -6464,51 +6479,34 @@ const signupHandler = async (req, res) => {
     // writes at that same current version.
 
     const now = new Date().toISOString();
-    const existing = await dbGet(
-      "SELECT * FROM zaki_users WHERE email = $1",
-      [normalizedEmail]
-    );
     const passwordHash = bcrypt.hashSync(String(password), 10);
 
-    let userId = existing?.id;
-    if (existing && existing.verified) {
-      res.status(400).json({
-        success: false,
-        error: "Email already registered. Please sign in.",
-      });
-      return;
-    }
-
-    if (existing) {
-      await dbQuery(
-        `UPDATE zaki_users
-         SET password_hash = $1, full_name = $2, date_of_birth = $3, updated_at = $4
-         WHERE id = $5`,
-        [passwordHash, normalizedName, normalizedDob, now, existing.id]
-      );
-    } else {
-      const insertResult = await dbQuery(
-        `INSERT INTO zaki_users
-         (email, password_hash, full_name, date_of_birth, verified, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, false, $5, $6)
-         RETURNING id`,
-        [normalizedEmail, passwordHash, normalizedName, normalizedDob, now, now]
-      );
-      userId = insertResult.rows[0]?.id;
-    }
-
-    if (!userId) {
-      res.status(500).json({ success: false, error: "Unable to create user." });
-      return;
-    }
-
-    // Shared consent writer — same function the Google OAuth path calls.
+    // Upserts the account and records consent — the shared consent writer, same
+    // function the Google OAuth path calls, still called on EVERY email signup.
     // `policyVersion` was validated == ZAKI_LEGAL_POLICY_VERSION above.
-    await recordSignupConsent({
-      userId,
-      source: "signup",
-      req,
-    });
+    // WP-M: neither the INSERT nor the UPDATE writes date_of_birth any more.
+    let userId;
+    try {
+      ({ userId } = await completeEmailSignup({
+        dbGet,
+        dbQuery,
+        email: normalizedEmail,
+        passwordHash,
+        fullName: normalizedName,
+        now,
+        recordSignupConsent: ({ userId: id, source }) =>
+          recordSignupConsent({ userId: id, source, req }),
+      }));
+    } catch (signupError) {
+      if (signupError?.status) {
+        res.status(signupError.status).json({
+          success: false,
+          error: signupError.message,
+        });
+        return;
+      }
+      throw signupError;
+    }
 
     if (SKIP_EMAIL_VERIFICATION) {
       await dbQuery(
@@ -8229,7 +8227,10 @@ app.get("/api/account/export", async (req, res) => {
         id: zakiUser.id,
         email: zakiUser.email,
         fullName: zakiUser.full_name || null,
-        dateOfBirth: zakiUser.date_of_birth || null,
+        // WP-M: `dateOfBirth` used to be exported here, but `requireAuthUser` never
+        // selected `date_of_birth` — so this key has always serialised as null for
+        // every user. Dropping a field that never carried data; no Art. 15 access
+        // regression, because there was nothing in it to disclose.
         verified: Boolean(zakiUser.verified),
         createdAt: zakiUser.created_at ? new Date(zakiUser.created_at).toISOString() : null,
         updatedAt: zakiUser.updated_at ? new Date(zakiUser.updated_at).toISOString() : null,

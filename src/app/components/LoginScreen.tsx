@@ -19,11 +19,9 @@ import { clearPendingIntent, readPendingIntent } from "@/lib/pendingIntent";
 import { getConfiguredTurnstileSiteKey } from "@/lib/runtimeEnv";
 import { useAuthStore } from "@/stores";
 import { getInitialLegalPolicyVersion } from "@/lib/legalPolicy";
+import { AUTH_COPY } from "./loginCopy";
 
 const TURNSTILE_SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-const DATE_OF_BIRTH_MIN_YEAR = 1900;
-const DATE_OF_BIRTH_DIGIT_LIMIT = 8;
-const DATE_OF_BIRTH_PATTERN = "\\d{4}-\\d{2}-\\d{2}";
 const PRICING_INTENT_SOURCES = new Set([
   "website_pricing",
   "website_product_agent",
@@ -63,42 +61,6 @@ declare global {
 
 function getTurnstileSiteKey() {
   return String(getConfiguredTurnstileSiteKey() || "").trim();
-}
-
-function formatDateOfBirthInput(value: string) {
-  const digits = value.replace(/\D/g, "").slice(0, DATE_OF_BIRTH_DIGIT_LIMIT);
-  if (digits.length <= 4) return digits;
-  if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
-  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
-}
-
-function dateTupleValue(year: number, month: number, day: number) {
-  return year * 10000 + month * 100 + day;
-}
-
-function isValidDateOfBirth(value: string) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return false;
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  if (year < DATE_OF_BIRTH_MIN_YEAR) return false;
-
-  const parsed = new Date(Date.UTC(year, month - 1, day));
-  if (
-    parsed.getUTCFullYear() !== year ||
-    parsed.getUTCMonth() !== month - 1 ||
-    parsed.getUTCDate() !== day
-  ) {
-    return false;
-  }
-
-  const today = new Date();
-  return (
-    dateTupleValue(year, month, day) <=
-    dateTupleValue(today.getFullYear(), today.getMonth() + 1, today.getDate())
-  );
 }
 
 export function hasExplicitPricingIntent(input: {
@@ -174,244 +136,6 @@ function getSafeAuthErrorMessage(message: unknown, fallback: string) {
   return text;
 }
 
-const AUTH_COPY = {
-  en: {
-    title: {
-      signup: "Create a ZAKI account",
-      resetRequest: "Reset your password",
-      resetConfirm: "Set a new password",
-      login: "Sign in to ZAKI",
-    },
-    chrome: {
-      product: "ZAKI",
-      descriptor: "Secure workspace access",
-    },
-    eyebrow: {
-      signup: "Start",
-      resetRequest: "Reset",
-      resetConfirm: "New password",
-      login: "Welcome back",
-    },
-    fields: {
-      fullName: "Full name",
-      dateOfBirth: "Date of birth",
-      email: "Email",
-      password: "Password",
-      confirmPassword: "Confirm password",
-      newPassword: "New password",
-      confirmNewPassword: "Confirm new password",
-      accessCode: "Activation code (optional)",
-    },
-    placeholders: {
-      fullName: "Full name",
-      dateOfBirth: "YYYY-MM-DD",
-      email: "Email address",
-      password: "Password",
-      confirmPassword: "Confirm password",
-      newPassword: "New password",
-      confirmNewPassword: "Confirm new password",
-      accessCode: "Access code",
-    },
-    resetHint: "Enter your new password below.",
-    consent: {
-      prefix: "I agree to the",
-      oauthPrefix: "By continuing with Google you agree to the",
-      terms: "Terms",
-      privacy: "Privacy Notice",
-      compliance: "Security & Compliance",
-    },
-    actions: {
-      forgotPassword: "Forgot password?",
-      createAccount: "Create account",
-      creatingAccount: "Creating account...",
-      sendResetLink: "Send reset link",
-      sendingResetLink: "Sending link...",
-      updatePassword: "Update password",
-      updatingPassword: "Updating password...",
-      signIn: "Sign in",
-      signingIn: "Signing in...",
-      continueWithGoogle: "Continue with Google",
-      googleUnavailable: "Google sign-in is not configured yet",
-      haveAccount: "Have an account? Sign in",
-      newHere: "New here? Create an account",
-      backToSignIn: "Back to sign in",
-      showActivationCode: "Have an activation code?",
-      hideActivationCode: "Hide activation code",
-    },
-    subtitles: {
-      login: "Use your email or Google account to continue.",
-      signup: "Create one account for Agent, Spaces, Brain, and billing.",
-      resetRequest: "Enter the account email and we will send a secure reset link.",
-      resetConfirm: "Choose a new password for this account.",
-    },
-    aria: {
-      hidePassword: "Hide password",
-      showPassword: "Show password",
-    },
-    notices: {
-      verifiedSuccess: "Email verified successfully. You can sign in now.",
-      verifiedAlready: "Email already verified. Please sign in.",
-      resetSent: "If the account exists, a reset link has been sent.",
-      passwordUpdated: "Password updated. You can sign in now.",
-      verifyEmail: "Check your email to verify your account.",
-      verificationLink: "Verification link (dev):",
-    },
-    errors: {
-      verificationExpired: "Verification link expired. Please sign up again.",
-      verificationInvalid: "Verification link is invalid. Please sign up again.",
-      verificationMissing: "Verification token is missing. Please sign up again.",
-      emailRequired: "Email is required.",
-      resetTokenMissing: "Reset token is missing.",
-      passwordRequired: "Password is required.",
-      passwordsMismatch: "Passwords do not match.",
-      resetFailed: "Unable to reset your password. Please request a new link.",
-      fullNameRequired: "Full name is required.",
-      dateOfBirthRequired: "Date of birth is required.",
-      dateOfBirthInvalid: "Enter a real birth date as YYYY-MM-DD.",
-      consentRequired: "Please accept Terms, Privacy & Compliance to create an account.",
-      signupFailed: "Sign up failed. Please check your details and try again.",
-      loginFailed: "Login failed. Check your credentials and try again.",
-      loginServiceDown:
-        "Login service is temporarily unavailable. Please try again in a moment.",
-      activationCodeInvalid: "Activation code is invalid or expired.",
-      genericSignupFailed: "Sign up failed. Please try again.",
-      genericResetFailed: "Password reset failed. Please try again.",
-      genericLoginFailed: "Login failed. Please try again.",
-      captchaRequired: "Complete the verification challenge before creating an account.",
-      googleConsentRequired:
-        "Please accept Terms, Privacy & Compliance, then continue with Google again.",
-      googleAgeUnverifiable:
-        "Google does not share your date of birth, so we cannot verify your age. Please create your account with your email address instead.",
-      googleUnderage: "You are not old enough to create a ZAKI account.",
-      googleOAuthFailed: "Google sign-in failed. Please try again.",
-      // WP-B10 — each of these used to be an UNMAPPED code that produced a blank login
-      // form with no message. Every one now names what happened and what to do next.
-      googleOAuthCancelled:
-        "Google sign-in was cancelled. Try again, or sign in with your email and password.",
-      googleOAuthIncomplete:
-        "Google sign-in didn't complete. Try again, or sign in with your email and password.",
-      googleOAuthUnavailable:
-        "Google sign-in isn't available right now. Sign in with your email and password instead.",
-    },
-  },
-  ar: {
-    title: {
-      signup: "أنشئ حساب ZAKI",
-      resetRequest: "إعادة تعيين كلمة المرور",
-      resetConfirm: "عيّن كلمة مرور جديدة",
-      login: "تسجيل الدخول إلى ZAKI",
-    },
-    chrome: {
-      product: "ZAKI",
-      descriptor: "دخول آمن إلى مساحة العمل",
-    },
-    eyebrow: {
-      signup: "ابدأ",
-      resetRequest: "استعادة",
-      resetConfirm: "كلمة مرور جديدة",
-      login: "مرحبًا بعودتك",
-    },
-    fields: {
-      fullName: "الاسم الكامل",
-      dateOfBirth: "تاريخ الميلاد",
-      email: "البريد الإلكتروني",
-      password: "كلمة المرور",
-      confirmPassword: "تأكيد كلمة المرور",
-      newPassword: "كلمة المرور الجديدة",
-      confirmNewPassword: "تأكيد كلمة المرور الجديدة",
-      accessCode: "رمز التفعيل (اختياري)",
-    },
-    placeholders: {
-      fullName: "الاسم الكامل",
-      dateOfBirth: "YYYY-MM-DD",
-      email: "you@company.com",
-      password: "أدخل كلمة المرور",
-      confirmPassword: "أعد إدخال كلمة المرور",
-      newPassword: "أدخل كلمة مرور جديدة",
-      confirmNewPassword: "أعد إدخال كلمة المرور الجديدة",
-      accessCode: "رمز التفعيل",
-    },
-    resetHint: "أدخل كلمة المرور الجديدة أدناه.",
-    consent: {
-      prefix: "أوافق على",
-      oauthPrefix: "بالمتابعة باستخدام Google فإنك توافق على",
-      terms: "شروط الاستخدام",
-      privacy: "إشعار الخصوصية",
-      compliance: "الأمان والامتثال",
-    },
-    actions: {
-      forgotPassword: "هل نسيت كلمة المرور؟",
-      createAccount: "إنشاء الحساب",
-      creatingAccount: "جارٍ إنشاء الحساب...",
-      sendResetLink: "إرسال رابط إعادة التعيين",
-      sendingResetLink: "جارٍ إرسال الرابط...",
-      updatePassword: "تحديث كلمة المرور",
-      updatingPassword: "جارٍ تحديث كلمة المرور...",
-      signIn: "تسجيل الدخول",
-      signingIn: "جارٍ تسجيل الدخول...",
-      continueWithGoogle: "المتابعة باستخدام Google",
-      googleUnavailable: "تسجيل الدخول عبر Google غير مهيأ بعد",
-      haveAccount: "لديك حساب؟ سجّل الدخول",
-      newHere: "جديد هنا؟ أنشئ حسابًا",
-      backToSignIn: "العودة إلى تسجيل الدخول",
-      showActivationCode: "لديك رمز تفعيل؟",
-      hideActivationCode: "إخفاء رمز التفعيل",
-    },
-    subtitles: {
-      login: "استخدم بريدك أو حساب Google للمتابعة.",
-      signup: "حساب واحد لـ Agent والمساحات والذاكرة والفوترة.",
-      resetRequest: "أدخل بريد الحساب وسنرسل لك رابطًا آمنًا لإعادة التعيين.",
-      resetConfirm: "اختر كلمة مرور جديدة لهذا الحساب.",
-    },
-    aria: {
-      hidePassword: "إخفاء كلمة المرور",
-      showPassword: "إظهار كلمة المرور",
-    },
-    notices: {
-      verifiedSuccess: "تم تأكيد البريد الإلكتروني بنجاح. يمكنك تسجيل الدخول الآن.",
-      verifiedAlready: "تم تأكيد البريد الإلكتروني مسبقًا. سجّل الدخول.",
-      resetSent: "إذا كان الحساب موجودًا، فقد تم إرسال رابط إعادة التعيين.",
-      passwordUpdated: "تم تحديث كلمة المرور. يمكنك تسجيل الدخول الآن.",
-      verifyEmail: "تحقق من بريدك الإلكتروني لتأكيد الحساب.",
-      verificationLink: "رابط التحقق (بيئة التطوير):",
-    },
-    errors: {
-      verificationExpired: "انتهت صلاحية رابط التحقق. يرجى إنشاء حساب جديد.",
-      verificationInvalid: "رابط التحقق غير صالح. يرجى إنشاء حساب جديد.",
-      verificationMissing: "رمز التحقق مفقود. يرجى إنشاء حساب جديد.",
-      emailRequired: "البريد الإلكتروني مطلوب.",
-      resetTokenMissing: "رمز إعادة التعيين مفقود.",
-      passwordRequired: "كلمة المرور مطلوبة.",
-      passwordsMismatch: "كلمتا المرور غير متطابقتين.",
-      resetFailed: "تعذر إعادة تعيين كلمة المرور. اطلب رابطًا جديدًا.",
-      fullNameRequired: "الاسم الكامل مطلوب.",
-      dateOfBirthRequired: "تاريخ الميلاد مطلوب.",
-      dateOfBirthInvalid: "أدخل تاريخ ميلاد صحيحًا بصيغة YYYY-MM-DD.",
-      consentRequired: "يرجى الموافقة على الشروط والخصوصية والامتثال لإنشاء الحساب.",
-      signupFailed: "فشل إنشاء الحساب. يرجى مراجعة بياناتك والمحاولة مرة أخرى.",
-      loginFailed: "فشل تسجيل الدخول. تحقق من بياناتك ثم حاول مرة أخرى.",
-      loginServiceDown:
-        "خدمة تسجيل الدخول غير متاحة مؤقتًا. يرجى المحاولة بعد قليل.",
-      activationCodeInvalid: "رمز التفعيل غير صالح أو منتهي الصلاحية.",
-      genericSignupFailed: "فشل إنشاء الحساب. حاول مرة أخرى.",
-      genericResetFailed: "فشلت إعادة تعيين كلمة المرور. حاول مرة أخرى.",
-      genericLoginFailed: "فشل تسجيل الدخول. حاول مرة أخرى.",
-      captchaRequired: "أكمل تحدي التحقق قبل إنشاء الحساب.",
-      googleConsentRequired:
-        "يرجى الموافقة على الشروط والخصوصية والامتثال ثم المتابعة باستخدام Google مرة أخرى.",
-      googleAgeUnverifiable:
-        "لا يشارك Google تاريخ ميلادك، لذا لا يمكننا التحقق من عمرك. يرجى إنشاء حسابك باستخدام بريدك الإلكتروني.",
-      googleUnderage: "عمرك لا يسمح بإنشاء حساب ZAKI.",
-      googleOAuthFailed: "فشل تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.",
-      googleOAuthCancelled:
-        "تم إلغاء تسجيل الدخول عبر Google. حاول مرة أخرى أو سجّل الدخول ببريدك الإلكتروني وكلمة المرور.",
-      googleOAuthIncomplete:
-        "لم يكتمل تسجيل الدخول عبر Google. حاول مرة أخرى أو سجّل الدخول ببريدك الإلكتروني وكلمة المرور.",
-      googleOAuthUnavailable:
-        "تسجيل الدخول عبر Google غير متاح حاليًا. سجّل الدخول ببريدك الإلكتروني وكلمة المرور بدلًا من ذلك.",
-    },
-  },
-} as const;
 
 export function LoginScreen() {
   const { i18n } = useTranslation();
@@ -430,7 +154,6 @@ export function LoginScreen() {
   const [mode, setMode] = useState<AuthMode>(initialToken ? "reset-confirm" : "login");
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
-  const [dateOfBirth, setDateOfBirth] = useState("");
   const [password, setPassword] = useState("");
   const [loginAccessCode, setLoginAccessCode] = useState("");
   const [showLoginAccessCode, setShowLoginAccessCode] = useState(false);
@@ -466,7 +189,6 @@ export function LoginScreen() {
       }
       if (nextMode !== "signup") {
         setFullName("");
-        setDateOfBirth("");
         setConfirmPassword("");
         setSignupLegalConsent(false);
         setTurnstileToken("");
@@ -733,21 +455,9 @@ export function LoginScreen() {
       }
 
       if (mode === "signup") {
-        const normalizedDateOfBirth = formatDateOfBirthInput(dateOfBirth);
         if (!fullName.trim()) {
           setFieldErrors({ fullName: copy.errors.fullNameRequired });
           setError(copy.errors.fullNameRequired);
-          return;
-        }
-        if (!normalizedDateOfBirth) {
-          setFieldErrors({ dateOfBirth: copy.errors.dateOfBirthRequired });
-          setError(copy.errors.dateOfBirthRequired);
-          return;
-        }
-        if (!isValidDateOfBirth(normalizedDateOfBirth)) {
-          setDateOfBirth(normalizedDateOfBirth);
-          setFieldErrors({ dateOfBirth: copy.errors.dateOfBirthInvalid });
-          setError(copy.errors.dateOfBirthInvalid);
           return;
         }
         if (!email.trim()) {
@@ -774,11 +484,12 @@ export function LoginScreen() {
           return;
         }
 
+        // WP-M: no dateOfBirth. `legalConsentAccepted` is the ToS attestation that
+        // now carries the minimum-age representation — it stays mandatory.
         const { data } = await requestPublicSignup({
           email: email.trim(),
           password,
           name: fullName.trim(),
-          dateOfBirth: normalizedDateOfBirth,
           legalConsentAccepted: true,
           legalPolicyVersion,
           ...(turnstileSiteKey ? { turnstileToken: turnstileToken || null } : {}),
@@ -911,7 +622,6 @@ export function LoginScreen() {
   const modeTitle = copy.title[modeCopyKey];
   const modeSubtitle = copy.subtitles[modeCopyKey];
   const modeEyebrow = copy.eyebrow[modeCopyKey];
-  const normalizedDateOfBirth = formatDateOfBirthInput(dateOfBirth);
   const submitDisabled =
     isLoading ||
     ((mode === "login" || mode === "signup" || mode === "reset-request") &&
@@ -919,7 +629,6 @@ export function LoginScreen() {
     ((mode === "login" || mode === "signup") && password.length === 0) ||
     (mode === "signup" &&
       (!fullName.trim() ||
-        !isValidDateOfBirth(normalizedDateOfBirth) ||
         confirmPassword.length === 0 ||
         !signupLegalConsent ||
         (Boolean(turnstileSiteKey) && !turnstileReady))) ||
@@ -1049,48 +758,10 @@ export function LoginScreen() {
               ) : null}
             </label>
           )}
-          {mode === "signup" && (
-            <label className="zaki-auth-v2__field">
-              <span id="signup-bday-label">{copy.fields.dateOfBirth}</span>
-              <input
-                type="text"
-                value={dateOfBirth}
-                onChange={(event) => {
-                  setDateOfBirth(formatDateOfBirthInput(event.target.value));
-                  clearFieldError("dateOfBirth");
-                }}
-                onBlur={() => {
-                  if (dateOfBirth && !isValidDateOfBirth(formatDateOfBirthInput(dateOfBirth))) {
-                    setFieldErrors((prev) => ({
-                      ...prev,
-                      dateOfBirth: copy.errors.dateOfBirthInvalid,
-                    }));
-                  }
-                }}
-                onPaste={(event) => {
-                  event.preventDefault();
-                  setDateOfBirth(formatDateOfBirthInput(event.clipboardData.getData("text")));
-                  clearFieldError("dateOfBirth");
-                }}
-                inputMode="numeric"
-                placeholder={copy.placeholders.dateOfBirth}
-                pattern={DATE_OF_BIRTH_PATTERN}
-                maxLength={10}
-                id="signup-bday"
-                name="bday"
-                autoComplete="bday"
-                aria-labelledby="signup-bday-label"
-                aria-describedby={fieldErrors.dateOfBirth ? "signup-bday-error" : undefined}
-                aria-invalid={Boolean(fieldErrors.dateOfBirth)}
-                required
-              />
-              {fieldErrors.dateOfBirth ? (
-                <em id="signup-bday-error" className="zaki-auth-v2__field-error">
-                  {fieldErrors.dateOfBirth}
-                </em>
-              ) : null}
-            </label>
-          )}
+          {/* WP-M: the date-of-birth field lived here. It is gone — the age gate is
+              off, so the birthdate was collected and never enforced, and an unused
+              sensitive field is a GDPR liability rather than a control. Minimum age
+              is now attested through the Terms; see the consent clickwrap below. */}
           {(mode === "login" ||
             mode === "signup" ||
             mode === "reset-request") && (
@@ -1212,6 +883,15 @@ export function LoginScreen() {
                 .
               </span>
             </label>
+          )}
+
+          {/* The minimum-age representation. WP-M removed the DOB field, not the age
+              rule: users now attest to the minimum age in our Terms instead of
+              handing us a birthdate we never enforced. */}
+          {mode === "signup" && (
+            <p className="zaki-auth-v2__age-attestation" data-testid="signup-age-attestation">
+              {copy.consent.ageAttestation}
+            </p>
           )}
 
           {mode === "signup" && turnstileSiteKey ? (

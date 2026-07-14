@@ -33,14 +33,23 @@ export function buildLoginSchema() {
     });
 }
 
+/**
+ * WP-M — the signup schema no longer accepts a date of birth.
+ *
+ * The age gate is off (`ZAKI_AGE_GATE_ENABLED=false`), so a DOB was collected and
+ * never enforced. Under GDPR Art. 5(1)(c) (data minimisation) holding a sensitive
+ * personal field we do not act on is itself a liability, so we stopped collecting
+ * it. Minimum age is now a ToS attestation — the same posture as ChatGPT/Claude —
+ * carried by the mandatory `legalConsentAccepted` clickwrap below.
+ *
+ * Zod strips unknown keys by default, so a stale client still sending
+ * `dateOfBirth` is accepted and the value is discarded rather than persisted.
+ */
 export function buildSignupSchema() {
   return z.object({
     email: z.string().email("Invalid email address"),
     password: z.string().min(8, "Password must be at least 8 characters"),
     name: z.string().min(1, "Name is required").max(100),
-    dateOfBirth: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD format"),
     ...buildLegalConsentShape(),
   });
 }
@@ -59,6 +68,15 @@ export function validateLegalPolicyVersion(rawVersion, currentVersion) {
   return { ok: true, version };
 }
 
+/**
+ * Age-gate primitives, retained but DORMANT (WP-M).
+ *
+ * No auth path collects a date of birth any more, so nothing calls
+ * `validateMinimumSignupAge` at runtime: `evaluateSignupAgePolicy` short-circuits
+ * on the missing DOB long before it gets here. They are kept — at zero runtime
+ * cost — so that reintroducing a real age gate is a config + form change rather
+ * than a rewrite of birthdate arithmetic. See `signup-policy.js`.
+ */
 export function resolveMinimumSignupAge(rawAge) {
   const parsed = Number.parseInt(String(rawAge ?? ""), 10);
   return Number.isInteger(parsed) && parsed >= 13 && parsed <= 21

@@ -523,7 +523,6 @@ describe("requestPublicSignup", () => {
       email: "signup@example.com",
       password: "Password123",
       name: "Signup User",
-      dateOfBirth: "1995-01-15",
       legalConsentAccepted: true,
       legalPolicyVersion: "2026-07-12.v4",
       turnstileToken: "turnstile-token",
@@ -537,13 +536,39 @@ describe("requestPublicSignup", () => {
           email: "signup@example.com",
           password: "Password123",
           name: "Signup User",
-          dateOfBirth: "1995-01-15",
           legalConsentAccepted: true,
           legalPolicyVersion: "2026-07-12.v4",
           turnstileToken: "turnstile-token",
         }),
       })
     );
+  });
+
+  // WP-M (a) — the wire format carries no birthdate. This is the last line of
+  // defence: even if a caller somehow held one, the request body must not.
+  it("sends NO date of birth on the wire", async () => {
+    mockFetch.mockResolvedValueOnce(makeResponse(200, { success: true }));
+
+    const { requestPublicSignup } = await import("@/lib/api");
+    await requestPublicSignup({
+      email: "signup@example.com",
+      password: "Password123",
+      name: "Signup User",
+      legalConsentAccepted: true,
+      legalPolicyVersion: "2026-07-12.v4",
+    });
+
+    const body = String(mockFetch.mock.calls[0][1]?.body ?? "");
+    expect(body).not.toMatch(/dateOfBirth|date_of_birth|bday/i);
+
+    // `legalPolicyVersion` ("2026-07-12.v4") is date-shaped by design, so exclude it
+    // and assert that nothing ELSE in the payload looks like a calendar date — i.e.
+    // no birthdate smuggled in under a different key.
+    const { legalPolicyVersion: _policyVersion, ...rest } = JSON.parse(body);
+    expect(JSON.stringify(rest)).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+
+    // Consent still travels — WP-M removes the birthdate, not the attestation.
+    expect(JSON.parse(body)).toMatchObject({ legalConsentAccepted: true });
   });
 });
 

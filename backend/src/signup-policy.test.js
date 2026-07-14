@@ -10,12 +10,18 @@ import {
 const NOW = new Date("2026-07-14T00:00:00.000Z");
 
 describe("resolveSignupAgePolicy", () => {
-  it("defaults to the hard DOB gate at 16, preserving today's email-path behaviour", () => {
-    expect(resolveSignupAgePolicy({})).toEqual({ enabled: true, minimumAge: 16 });
-    expect(DEFAULT_AGE_GATE_ENABLED).toBe(true);
+  // WP-M: ZAKI collects no date of birth on any path. A DOB gate is therefore
+  // unsatisfiable, and MUST NOT be the default — a default of "enabled" would mean
+  // a fresh environment refuses every signup, email and Google alike.
+  it("defaults to NO DOB WALL — the only supported behaviour after WP-M", () => {
+    expect(resolveSignupAgePolicy({})).toEqual({ enabled: false, minimumAge: 16 });
+    expect(DEFAULT_AGE_GATE_ENABLED).toBe(false);
   });
 
-  it("lets legal disable the DOB wall by config alone", () => {
+  it("keeps the config surface so a gate can be reintroduced without surgery", () => {
+    expect(resolveSignupAgePolicy({ ZAKI_AGE_GATE_ENABLED: "true" })).toMatchObject({
+      enabled: true,
+    });
     expect(resolveSignupAgePolicy({ ZAKI_AGE_GATE_ENABLED: "false" })).toMatchObject({
       enabled: false,
     });
@@ -28,15 +34,29 @@ describe("resolveSignupAgePolicy", () => {
     }
   );
 
-  it.each(["true", "1", "yes", "on", ""])("treats %p as gate-enabled", (raw) => {
+  it.each(["true", "1", "yes", "on"])("treats %p as gate-enabled", (raw) => {
     expect(resolveAgeGateEnabled(raw)).toBe(true);
   });
 
+  it("treats an unset value as gate-DISABLED (the WP-M default)", () => {
+    expect(resolveAgeGateEnabled("")).toBe(false);
+    expect(resolveAgeGateEnabled(undefined)).toBe(false);
+    expect(resolveAgeGateEnabled(null)).toBe(false);
+  });
+
   it("reads the threshold from ZAKI_MINIMUM_SIGNUP_AGE", () => {
+    // The threshold is still configurable, but setting it alone does NOT turn the
+    // gate on — that needs ZAKI_AGE_GATE_ENABLED, and (post-WP-M) DOB collection.
     expect(resolveSignupAgePolicy({ ZAKI_MINIMUM_SIGNUP_AGE: "18" })).toEqual({
-      enabled: true,
+      enabled: false,
       minimumAge: 18,
     });
+    expect(
+      resolveSignupAgePolicy({
+        ZAKI_MINIMUM_SIGNUP_AGE: "18",
+        ZAKI_AGE_GATE_ENABLED: "true",
+      })
+    ).toEqual({ enabled: true, minimumAge: 18 });
   });
 
   it("falls back to 16 for out-of-range thresholds", () => {
@@ -49,7 +69,54 @@ describe("evaluateSignupAgePolicy — the ONE rule both auth paths run", () => {
   const enabled = { enabled: true, minimumAge: 16 };
   const disabled = { enabled: false, minimumAge: 16 };
 
-  describe("gate enabled (default)", () => {
+  // WP-M — the live configuration. Neither auth path supplies a birthdate any
+  // more, so this is what actually runs in production on every signup.
+  describe("gate disabled + no DOB anywhere (the WP-M reality)", () => {
+    it("lets an email signup through with NO date of birth at all", () => {
+      expect(
+        evaluateSignupAgePolicy({ policy: disabled, now: NOW })
+      ).toMatchObject({ ok: true, enforced: false });
+    });
+
+    it("lets a Google signup through with NO date of birth at all", () => {
+      expect(
+        evaluateSignupAgePolicy({ dateOfBirth: null, policy: disabled, now: NOW })
+      ).toMatchObject({ ok: true, enforced: false });
+    });
+
+    it("is the DEFAULT — an unconfigured environment imposes no wall", () => {
+      expect(evaluateSignupAgePolicy({ now: NOW })).toMatchObject({ ok: true });
+      expect(
+        evaluateSignupAgePolicy({ policy: resolveSignupAgePolicy({}), now: NOW })
+      ).toMatchObject({ ok: true, enforced: false });
+    });
+  });
+
+  // A re-enabled gate is now UNSATISFIABLE: no path collects a DOB, so the policy
+  // refuses everyone. That is deliberate — a legal control must fail closed rather
+  // than silently no-op — and index.js logs a loud config error at boot.
+  describe("gate re-enabled without reintroducing DOB collection -> fails closed", () => {
+    it("refuses BOTH paths, because neither can supply a birthdate", () => {
+      expect(evaluateSignupAgePolicy({ policy: enabled, now: NOW })).toMatchObject({
+        ok: false,
+        code: "age_verification_required",
+      });
+      expect(
+        evaluateSignupAgePolicy({ dateOfBirth: null, policy: enabled, now: NOW })
+      ).toMatchObject({ ok: false, code: "age_verification_required" });
+    });
+
+    it("no longer tells the user to go and use the email form", () => {
+      // The old copy promised "sign up with your email address so we can collect
+      // your date of birth" — that route does not exist any more, so promising it
+      // would strand the user in a loop.
+      const verdict = evaluateSignupAgePolicy({ policy: enabled, now: NOW });
+      expect(verdict.error).not.toMatch(/date of birth/i);
+      expect(verdict.error).not.toMatch(/email address/i);
+    });
+  });
+
+  describe("gate enabled (dormant — only reachable if DOB collection returns)", () => {
     it("accepts a user who is old enough", () => {
       expect(
         evaluateSignupAgePolicy({ dateOfBirth: "2000-01-01", policy: enabled, now: NOW })
@@ -164,7 +231,7 @@ describe("assertSignupAgePolicy", () => {
     );
   });
 
-  it("is a no-op when the gate is disabled", () => {
+  it("is a no-op when the gate is disabled — the default, and the live config", () => {
     expect(() =>
       assertSignupAgePolicy({
         dateOfBirth: null,

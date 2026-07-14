@@ -1,3 +1,4 @@
+import { AUTH_COPY } from "@/app/components/loginCopy";
 import ar from "./locales/ar.json";
 import en from "./locales/en.json";
 
@@ -83,5 +84,57 @@ describe("i18n locale parity", () => {
   ])("%s exists in both locales", (key) => {
     expect(enKeys).toContain(key);
     expect(arKeys).toContain(key);
+  });
+});
+
+// The auth screen keeps its copy in its own bundle (AUTH_COPY) rather than the JSON
+// locales, so until WP-M it sat OUTSIDE this gate entirely — ~120 strings that could
+// drift between en and ar with nothing to catch it. It is gated now.
+describe("i18n auth-screen (AUTH_COPY) parity", () => {
+  const enKeys = flattenKeys(AUTH_COPY.en as unknown as Nested);
+  const arKeys = flattenKeys(AUTH_COPY.ar as unknown as Nested);
+
+  it("en and ar have identical key sets", () => {
+    const enSet = new Set(enKeys);
+    const arSet = new Set(arKeys);
+
+    expect({
+      missingInAr: enKeys.filter((k) => !arSet.has(k)),
+      missingInEn: arKeys.filter((k) => !enSet.has(k)),
+    }).toEqual({ missingInAr: [], missingInEn: [] });
+    expect(enKeys.length).toBe(arKeys.length);
+  });
+
+  it("no auth string is empty in either locale", () => {
+    const read = (bundle: unknown, path: string) =>
+      path.split(".").reduce<unknown>((acc, part) => (acc as Nested)?.[part], bundle);
+
+    const empty = enKeys.filter((path) => {
+      const enValue = read(AUTH_COPY.en, path);
+      const arValue = read(AUTH_COPY.ar, path);
+      return String(enValue ?? "").trim() === "" || String(arValue ?? "").trim() === "";
+    });
+    expect(empty).toEqual([]);
+  });
+
+  // WP-M: the date-of-birth field is gone, so these keys must be too — a stale key
+  // here is a stale field waiting to be re-rendered.
+  it.each([
+    "fields.dateOfBirth",
+    "placeholders.dateOfBirth",
+    "errors.dateOfBirthRequired",
+    "errors.dateOfBirthInvalid",
+  ])("%s is GONE from both locales (WP-M dropped DOB)", (key) => {
+    expect(enKeys).not.toContain(key);
+    expect(arKeys).not.toContain(key);
+  });
+
+  // ...and the age language did NOT silently vanish with the field: minimum age is
+  // now a ToS attestation, and it must exist in both locales.
+  it("the ToS age attestation exists in both locales", () => {
+    expect(enKeys).toContain("consent.ageAttestation");
+    expect(arKeys).toContain("consent.ageAttestation");
+    expect(AUTH_COPY.en.consent.ageAttestation).toMatch(/minimum age/i);
+    expect(AUTH_COPY.ar.consent.ageAttestation.trim()).not.toBe("");
   });
 });

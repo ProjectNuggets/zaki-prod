@@ -109,7 +109,6 @@ async function main() {
       email,
       password: initialPassword,
       name: "ZAKI Resend Smoke",
-      dateOfBirth: "1999-01-01",
       legalConsentAccepted: true,
       legalPolicyVersion: policyVersion,
     }),

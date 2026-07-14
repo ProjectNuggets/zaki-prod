@@ -14,7 +14,6 @@ async function createUser() {
   const email = 'nova@test.com'; // Change this
   const password = 'password123'; // Change this
   const fullName = 'Nova Test';
-  const dateOfBirth = '1990-01-01';
 
   const passwordHash = bcrypt.hashSync(password, 10);
   const now = new Date().toISOString();
@@ -22,10 +21,10 @@ async function createUser() {
   try {
     const result = await pool.query(
       `INSERT INTO zaki_users 
-       (email, password_hash, full_name, date_of_birth, verified, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, true, $5, $6)
+       (email, password_hash, full_name, verified, created_at, updated_at)
+       VALUES ($1, $2, $3, true, $4, $5)
        RETURNING id, email`,
-      [email, passwordHash, fullName, dateOfBirth, now, now]
+      [email, passwordHash, fullName, now, now]
     );
 
     console.log('✅ User created:');
