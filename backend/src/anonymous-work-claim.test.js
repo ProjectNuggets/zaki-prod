@@ -7,7 +7,9 @@ import {
   claimRequestHasWork,
   createAnonymousWorkClaimStore,
   createImportedThreadContextProvider,
+  createImportedThreadContextInvalidationPayload,
   importAnonymousWorkClaim,
+  invalidateImportedThreadContextFromNotification,
   mergeImportedThreadHistory,
   parseAnonymousWorkClaimRequest,
   resolveClaimKey,
@@ -22,11 +24,13 @@ import {
 function createFakeStore() {
   const claims = new Map(); // `${userId}:${claimKey}` -> claim row
   const messages = []; // message rows, id ascending
+  const contextInvalidations = [];
   let nextId = 1;
 
   return {
     claims,
     messages,
+    contextInvalidations,
     async findClaim({ userId, claimKey }) {
       return claims.get(`${userId}:${claimKey}`) ?? null;
     },
@@ -75,6 +79,9 @@ function createFakeStore() {
     async setImportedCount({ userId, claimKey, importedCount }) {
       const row = claims.get(`${userId}:${claimKey}`);
       if (row) row.imported_count = importedCount;
+    },
+    async notifyThreadContextChanged(target) {
+      contextInvalidations.push(target);
     },
     async listThreadMessages({ userId, workspaceSlug, threadSlug }) {
       return messages
@@ -185,6 +192,7 @@ describe("anonymous work claim — the import is real", () => {
     });
     expect(rows[1]).toMatchObject({ role: "assistant", thread_slug: "thread-1" });
     expect(rows[1].content).toContain("## Day 1");
+    expect(store.contextInvalidations).toEqual([target]);
   });
 
   // (b) re-claiming the same workId is idempotent
@@ -374,6 +382,78 @@ describe("anonymous work claim — imported turns reach the model context", () =
     expect(marked).toEqual([{ ...thread, messageIds: [11, 12] }]);
     expect(await provider.getThreadContext(thread)).toEqual({ transcript: "", messageIds: [] });
   });
+
+  it("acknowledges only pending rows that fit in the bounded transcript", async () => {
+    const rows = Array.from({ length: 8 }, (_, index) => ({
+      id: index + 1,
+      role: index % 2 === 0 ? "user" : "assistant",
+      content: `turn-${index + 1}`,
+    }));
+    const provider = createImportedThreadContextProvider({
+      store: {
+        async listPendingThreadMessages() {
+          return rows;
+        },
+      },
+    });
+
+    const context = await provider.getThreadContext({
+      userId: 7,
+      workspaceSlug: "space-7",
+      threadSlug: "thread-7",
+    });
+
+    expect(context.transcript).not.toContain("turn-1");
+    expect(context.transcript).not.toContain("turn-2");
+    expect(context.messageIds).toEqual([3, 4, 5, 6, 7, 8]);
+  });
+
+  it("invalidates a cached miss when another replica publishes a claim", async () => {
+    let rows = [];
+    let reads = 0;
+    const provider = createImportedThreadContextProvider({
+      store: {
+        async listPendingThreadMessages() {
+          reads += 1;
+          return rows;
+        },
+      },
+    });
+    const thread = { userId: 7, workspaceSlug: "space-7", threadSlug: "thread-7" };
+
+    expect(await provider.getThreadContext(thread)).toEqual({ transcript: "", messageIds: [] });
+    rows = [
+      { id: 11, role: "user", content: "claimed elsewhere" },
+      { id: 12, role: "assistant", content: "now visible here" },
+    ];
+    invalidateImportedThreadContextFromNotification(
+      provider,
+      createImportedThreadContextInvalidationPayload(thread)
+    );
+
+    expect((await provider.getThreadContext(thread)).messageIds).toEqual([11, 12]);
+    expect(reads).toBe(2);
+  });
+
+  it("does not retain positive context after the shared database state changes", async () => {
+    let rows = [{ id: 11, role: "user", content: "pending once" }];
+    let reads = 0;
+    const provider = createImportedThreadContextProvider({
+      store: {
+        async listPendingThreadMessages() {
+          reads += 1;
+          return rows;
+        },
+      },
+    });
+    const thread = { userId: 7, workspaceSlug: "space-7", threadSlug: "thread-7" };
+
+    expect((await provider.getThreadContext(thread)).messageIds).toEqual([11]);
+    rows = [];
+
+    expect(await provider.getThreadContext(thread)).toEqual({ transcript: "", messageIds: [] });
+    expect(reads).toBe(2);
+  });
 });
 
 describe("anonymous work claim — SQL store", () => {
@@ -440,10 +520,37 @@ describe("anonymous work claim — SQL store", () => {
     await store.markThreadMessagesForwarded({ ...thread, messageIds: [11, 12] });
 
     expect(calls[0].text).toContain("context_forwarded_at IS NULL");
-    expect(calls[0].params).toEqual([7, "space-7", "thread-7"]);
+    expect(calls[0].text).toContain("ORDER BY id DESC");
+    expect(calls[0].text).toContain("LIMIT $4");
+    expect(calls[0].params).toEqual([7, "space-7", "thread-7", 6]);
     expect(calls[1].text).toContain("SET context_forwarded_at = NOW()");
     expect(calls[1].text).toContain("user_id = $1");
     expect(calls[1].params).toEqual([7, "space-7", "thread-7", [11, 12]]);
+  });
+
+  it("publishes a Postgres invalidation for every replica after a claim", async () => {
+    const calls = [];
+    const store = createAnonymousWorkClaimStore({
+      dbGet: async () => null,
+      dbAll: async () => [],
+      dbQuery: async (text, params) => {
+        calls.push({ text, params });
+        return { rows: [] };
+      },
+    });
+
+    await store.notifyThreadContextChanged({
+      userId: 7,
+      workspaceSlug: "SPACE-7",
+      threadSlug: "thread-7",
+    });
+
+    expect(calls[0].text).toContain("pg_notify");
+    expect(JSON.parse(calls[0].params[1])).toEqual({
+      userId: "7",
+      workspaceSlug: "space-7",
+      threadSlug: "thread-7",
+    });
   });
 
   it("inserts turns with ON CONFLICT DO NOTHING on (user_id, claim_key, position)", async () => {
