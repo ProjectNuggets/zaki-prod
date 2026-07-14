@@ -881,6 +881,26 @@ button.v2-status-strip__item:focus-visible {
   padding: 4px 24px 0;
 }
 
+/* Clickwrap notice under "Continue with Google" — this is the consent the user
+   attests to on the OAuth path, in BOTH login and signup mode. */
+.zaki-auth-v2__oauth-legal {
+  margin: 8px 0 0;
+  color: var(--v2-ink-3, var(--v2-ink-2));
+  font-family: var(--v2-font-prose);
+  font-size: var(--v2-text-xs, var(--v2-text-sm));
+  line-height: var(--v2-leading-normal);
+  text-wrap: pretty;
+}
+
+.zaki-auth-v2__oauth-legal a {
+  color: var(--v2-accent-text);
+  text-decoration: none;
+}
+
+.zaki-auth-v2__oauth-legal a:hover {
+  text-decoration: underline;
+}
+
 .zaki-auth-v2__oauth {
   min-height: var(--v2-control-h-lg);
   display: inline-flex;

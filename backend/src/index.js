@@ -24,9 +24,11 @@ import {
   buildLegalConsentShape,
   validateLegalPolicyVersion,
   buildConsentStatus,
-  resolveMinimumSignupAge,
-  validateMinimumSignupAge,
 } from "./legal-consent.js";
+import {
+  resolveSignupAgePolicy,
+  evaluateSignupAgePolicy,
+} from "./signup-policy.js";
 import { validateRuntimeConfig } from "./config-validation.js";
 import {
   createMemoryRoutes,
@@ -454,7 +456,7 @@ import {
   verifyGoogleOAuthNonceBinding,
   verifyGoogleOAuthState,
 } from "./google-oauth.js";
-import { findOrCreateGoogleUser } from "./google-oauth-user.js";
+import { completeGoogleOAuthSignIn } from "./google-oauth-user.js";
 import {
   resolveAnonymousMeterId,
   resolveAnonymousSpacesId,
@@ -752,9 +754,11 @@ const ZAKI_RESET_TTL_MINUTES = Number(
 const ZAKI_LEGAL_POLICY_VERSION = resolveLegalPolicyVersion(
   process.env.ZAKI_LEGAL_POLICY_VERSION
 );
-const ZAKI_MINIMUM_SIGNUP_AGE = resolveMinimumSignupAge(
-  process.env.ZAKI_MINIMUM_SIGNUP_AGE
-);
+// The ONE place the age gate is read. Both signup paths (email + Google) share
+// this object, so the policy can never drift between them. Flip
+// ZAKI_AGE_GATE_ENABLED / ZAKI_MINIMUM_SIGNUP_AGE to change policy — do not edit
+// the auth routes.
+const SIGNUP_AGE_POLICY = resolveSignupAgePolicy(process.env);
 const MAX_STREAM_MESSAGE_CHARS = 8000;
 const ZAKI_INCLUDE_VERIFY_LINK =
   String(process.env.ZAKI_INCLUDE_VERIFY_LINK || "").toLowerCase() === "true";
@@ -4414,6 +4418,29 @@ async function recordLegalConsent({ userId, policyVersion, source, req }) {
   });
 }
 
+/**
+ * Record the consent row for a NEWLY CREATED account. This is the single
+ * consent-writer shared by BOTH signup paths (email + Google OAuth).
+ *
+ * It always writes at the CURRENT server policy version, which is the invariant
+ * that matters legally: an account that exists must have a demonstrable consent
+ * record at ZAKI_LEGAL_POLICY_VERSION (GDPR Art. 7(1)). Callers must have
+ * already verified the user attested to that same version.
+ *
+ * Call this ONLY on account creation. Returning users must not be re-written —
+ * a stale consent version is handled by the reconsent wave
+ * (getLegalConsentStatus -> requiresReconsent -> POST /api/legal/re-consent),
+ * which captures a fresh affirmative act instead of silently fabricating one.
+ */
+async function recordSignupConsent({ userId, source, req }) {
+  await recordLegalConsent({
+    userId,
+    policyVersion: ZAKI_LEGAL_POLICY_VERSION,
+    source,
+    req,
+  });
+}
+
 function normalizeAccessCode(value) {
   return String(value || "")
     .trim()
@@ -4967,6 +4994,15 @@ app.get("/api/auth/google/status", (_req, res) => {
   });
 });
 
+// Signup refusals we explain to the user, rather than reporting as a generic
+// OAuth failure. Anything else is an infrastructure problem, not the user's.
+const GOOGLE_SIGNUP_BLOCKED_CODES = new Set([
+  "google_consent_required",
+  "google_consent_stale",
+  "age_verification_required",
+  "minimum_age",
+]);
+
 app.get("/api/auth/google/callback", async (req, res) => {
   try {
     if (!ensureGoogleOAuthConfigured()) {
@@ -4987,6 +5023,8 @@ app.get("/api/auth/google/callback", async (req, res) => {
       cookieNonce: extractGoogleOAuthNonceFromCookieHeader(req.headers?.cookie),
       stateNonceHash: nonceHash,
     });
+    // The consent the user attested to, carried tamper-proof in the HMAC-signed
+    // state. The frontend sends it from BOTH the login and signup screens.
     let acceptedPolicyVersion = null;
     if (legalPolicyVersion) {
       const policyVersionResult = validateLegalPolicyVersion(
@@ -4996,6 +5034,7 @@ app.get("/api/auth/google/callback", async (req, res) => {
       if (!policyVersionResult.ok) {
         const error = new Error(policyVersionResult.error);
         error.status = 409;
+        error.code = "google_consent_stale";
         throw error;
       }
       acceptedPolicyVersion = policyVersionResult.version;
@@ -5005,26 +5044,20 @@ app.get("/api/auth/google/callback", async (req, res) => {
       redirectUri: getGoogleOAuthRedirectUri(req),
     });
     const googleProfile = await verifyGoogleIdToken(tokenPayload?.id_token);
-    const zakiUser = await findOrCreateGoogleUser({
+
+    // Gates creation on consent + the shared age policy, then records consent
+    // exactly once (on creation only). Same for login-mode and signup-mode entry.
+    const { user: zakiUser, created } = await completeGoogleOAuthSignIn({
       dbGet,
       dbQuery,
       userColumns: _ZAKI_USER_COLS,
-      ...googleProfile,
-      ...(acceptedPolicyVersion
-        ? {
-            recordLegalConsent: ({ userId }) =>
-              recordLegalConsent({
-                userId,
-                policyVersion: acceptedPolicyVersion,
-                source: "google_signup",
-                req,
-              }),
-          }
-        : {}),
+      profile: googleProfile,
+      acceptedPolicyVersion,
+      agePolicy: SIGNUP_AGE_POLICY,
+      recordSignupConsent: ({ userId, source }) =>
+        recordSignupConsent({ userId, source, req }),
     });
-    if (!zakiUser?.id) {
-      throw new Error("Unable to create or link Google user.");
-    }
+
     const { refreshToken } = await mintZakiSession(
       { id: zakiUser.id, email: zakiUser.email },
       req
@@ -5034,7 +5067,10 @@ app.get("/api/auth/google/callback", async (req, res) => {
       buildClearedGoogleOAuthNonceCookie({ secure: isSecureCookieRequest(req) }),
     ]);
     const appUrl = new URL(returnTo, getAppUrl());
-    if (!acceptedPolicyVersion && getLegalConsentStatus(zakiUser).requiresReconsent) {
+    // Existing users only: legacy Google accounts created before this fix have
+    // no consent row, and a policy bump leaves everyone stale. Both are caught
+    // by the reconsent wave rather than by silently fabricating consent here.
+    if (!created && getLegalConsentStatus(zakiUser).requiresReconsent) {
       appUrl.searchParams.set("legalConsent", "required");
     }
     res.redirect(302, appUrl.toString());
@@ -5045,7 +5081,10 @@ app.get("/api/auth/google/callback", async (req, res) => {
       buildClearedGoogleOAuthNonceCookie({ secure: isSecureCookieRequest(req) })
     );
     const appUrl = new URL("/?auth=login", getAppUrl());
-    appUrl.searchParams.set("error", "google_oauth_failed");
+    appUrl.searchParams.set(
+      "error",
+      GOOGLE_SIGNUP_BLOCKED_CODES.has(error?.code) ? error.code : "google_oauth_failed"
+    );
     res.redirect(302, appUrl.toString());
   }
 });
@@ -6350,10 +6389,11 @@ const signupHandler = async (req, res) => {
     const normalizedEmail = normalizeEmail(email);
     const normalizedName = name.trim();
     const normalizedDob = dateOfBirth;
-    const minimumAgeResult = validateMinimumSignupAge(
-      normalizedDob,
-      ZAKI_MINIMUM_SIGNUP_AGE
-    );
+    // Shared age policy — identical evaluation to the Google OAuth path.
+    const minimumAgeResult = evaluateSignupAgePolicy({
+      dateOfBirth: normalizedDob,
+      policy: SIGNUP_AGE_POLICY,
+    });
     if (!minimumAgeResult.ok) {
       res.status(400).json({
         success: false,
@@ -6372,7 +6412,8 @@ const signupHandler = async (req, res) => {
       });
       return;
     }
-    const policyVersion = policyVersionResult.version;
+    // The attested version matched ZAKI_LEGAL_POLICY_VERSION; recordSignupConsent
+    // writes at that same current version.
 
     const now = new Date().toISOString();
     const existing = await dbGet(
@@ -6413,9 +6454,10 @@ const signupHandler = async (req, res) => {
       return;
     }
 
-    await recordLegalConsent({
+    // Shared consent writer — same function the Google OAuth path calls.
+    // `policyVersion` was validated == ZAKI_LEGAL_POLICY_VERSION above.
+    await recordSignupConsent({
       userId,
-      policyVersion,
       source: "signup",
       req,
     });
