@@ -739,6 +739,20 @@ export async function initDb() {
       ADD COLUMN IF NOT EXISTS context_forwarded_at TIMESTAMPTZ;
   `);
 
+  // A thread-level expiring lease makes imported-context delivery exclusive
+  // across concurrent requests and across app replicas. It is released on a
+  // failed stream and deleted atomically when exact message IDs are finalized.
+  await migrationClient.query(`
+    CREATE TABLE IF NOT EXISTS zaki_imported_context_leases (
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      workspace_slug TEXT NOT NULL,
+      thread_slug TEXT NOT NULL,
+      lease_id UUID NOT NULL,
+      lease_expires_at TIMESTAMPTZ NOT NULL,
+      PRIMARY KEY (user_id, workspace_slug, thread_slug)
+    );
+  `);
+
   await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_anonymous_work_messages_thread
     ON zaki_anonymous_work_messages (user_id, workspace_slug, thread_slug, id ASC);

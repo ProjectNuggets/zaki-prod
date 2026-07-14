@@ -17,6 +17,8 @@ export async function startPostgresNotificationListener({
   channel,
   onPayload,
   onError = () => {},
+  onConnected = () => {},
+  onDisconnected = () => {},
   retryDelayMs = 1000,
   scheduleRetry = (callback, delay) => setTimeout(callback, delay),
   clearRetry = (timer) => clearTimeout(timer),
@@ -45,6 +47,7 @@ export async function startPostgresNotificationListener({
         await connectListener();
       } catch (error) {
         onError(error);
+        onDisconnected(error);
         queueReconnect();
       }
     }, Math.max(1, retryDelayMs));
@@ -69,6 +72,7 @@ export async function startPostgresNotificationListener({
         if (active !== entry) return;
         active = null;
         detach(entry, error instanceof Error ? error : new Error("Postgres listener ended."));
+        onDisconnected(error);
         if (error instanceof Error) onError(error);
         queueReconnect();
       },
@@ -79,14 +83,25 @@ export async function startPostgresNotificationListener({
     client.on("end", entry.handleDisconnect);
     try {
       await client.query(`LISTEN ${quotedChannel}`);
+      if (stopped) {
+        detach(entry);
+        return;
+      }
       active = entry;
+      onConnected();
     } catch (error) {
       detach(entry, error);
       throw error;
     }
   }
 
-  await connectListener();
+  try {
+    await connectListener();
+  } catch (error) {
+    onError(error);
+    onDisconnected(error);
+    queueReconnect();
+  }
 
   return async function stop() {
     if (stopped) return;

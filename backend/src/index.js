@@ -4325,6 +4325,8 @@ try {
       invalidateImportedThreadContextFromNotification(importedThreadContextProvider, payload);
     },
     {
+      onConnected: () => importedThreadContextProvider.invalidateAll(),
+      onDisconnected: () => importedThreadContextProvider.invalidateAll(),
       onError: (error) =>
         console.warn(
           "[AnonymousSpaces] Imported-context invalidation listener reconnecting:",
@@ -11454,6 +11456,8 @@ app.post(
 const streamChatHandler = async (req, res) => {
   console.log(`[Chat] Received message request for ${req.params.slug}/${req.params.threadSlug}`);
   const meterStartedAtMs = Date.now();
+  let importedThreadLease = null;
+  let importedThreadLeaseSettled = false;
   try {
     const apiBase = getApiBase();
     if (!apiBase) {
@@ -11614,6 +11618,16 @@ const streamChatHandler = async (req, res) => {
     };
     const importedThreadContextPromise = importedThreadContextProvider
       .getThreadContext(importedThreadTarget)
+      .then((context) => {
+        if (context?.leaseId && context?.messageIds?.length > 0) {
+          importedThreadLease = {
+            ...importedThreadTarget,
+            messageIds: context.messageIds,
+            leaseId: context.leaseId,
+          };
+        }
+        return context;
+      })
       .catch((error) => {
         console.warn(
           "[AnonymousSpaces] Imported model context lookup skipped:",
@@ -11927,7 +11941,9 @@ const streamChatHandler = async (req, res) => {
         await importedThreadContextProvider.markForwarded({
           ...importedThreadTarget,
           messageIds: importedThreadContext.messageIds,
+          leaseId: importedThreadContext.leaseId,
         });
+        importedThreadLeaseSettled = true;
       } catch (error) {
         // Safe failure mode: keep the rows pending so a later turn retries the
         // bounded transcript rather than losing conversation continuity.
@@ -11971,6 +11987,19 @@ const streamChatHandler = async (req, res) => {
       error: message,
       code: timedOut ? "upstream_timeout" : "chat_error",
     });
+  } finally {
+    if (importedThreadLease && !importedThreadLeaseSettled) {
+      try {
+        await importedThreadContextProvider.releaseLease(importedThreadLease);
+      } catch (error) {
+        // A failed release remains safe: the database lease expires, making the
+        // transcript available to a later turn without allowing concurrent use.
+        console.warn(
+          "[AnonymousSpaces] Imported model context lease release skipped:",
+          error?.message || error
+        );
+      }
+    }
   }
 };
 

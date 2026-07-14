@@ -103,6 +103,9 @@ describe("Spaces continuity contract", () => {
     expect(streamHandlerSource.indexOf("markForwarded")).toBeGreaterThan(
       streamHandlerSource.indexOf("pipeSseWithAgentLinks")
     );
+    expect(streamHandlerSource).toContain("releaseLease");
+    expect(streamHandlerSource).toMatch(/finally\s*\{/);
+    expect(streamHandlerSource).toMatch(/markForwarded\(\{[\s\S]*leaseId/);
   });
 
   test("anonymous-work claims invalidate imported-context misses on every replica", () => {
@@ -113,6 +116,7 @@ describe("Spaces continuity contract", () => {
     expect(source.slice(listenerIndex, listenerIndex + 1200)).toContain(
       "invalidateImportedThreadContextFromNotification"
     );
+    expect(source.slice(listenerIndex, listenerIndex + 1200)).toContain("invalidateAll");
   });
 
   test("the post-auth claim is shared by every sign-in path, not just credential login", () => {
