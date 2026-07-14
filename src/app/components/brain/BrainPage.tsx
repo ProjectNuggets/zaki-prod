@@ -32,6 +32,7 @@ import {
   type RecencyBucket,
 } from "./brainColors";
 import { V2StatusStrip } from "@/app/components/v2";
+import { readPendingIntent, writePendingIntent, type PendingIntent } from "@/lib/pendingIntent";
 
 // V1.11 (2026-05-07) — Brain page UX rework. Pre-V1.11 the graph tab
 // rendered three always-visible columns (filter panel, canvas, side
@@ -105,6 +106,10 @@ export function BrainPage() {
   const [composeOpen, setComposeOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState(initialQ);
   const [debouncedSearch, setDebouncedSearch] = useState(initialQ);
+  const [recoveryIntent] = useState<PendingIntent | null>(() => {
+    const intent = readPendingIntent();
+    return intent?.productId === "brain" ? intent : null;
+  });
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // V1.7 graph state
@@ -325,6 +330,46 @@ export function BrainPage() {
             </Link>
           </div>
         </header>
+
+        {recoveryIntent ? (
+          <section
+            className="border border-[var(--v2-accent-hairline)] bg-[var(--v2-accent-faint)] p-3"
+            role="region"
+            aria-label={t("brain.recovery.ariaLabel", {
+              defaultValue: "Preserved work",
+            })}
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div className="min-w-0">
+                <p className="font-mono-ui text-[10px] uppercase tracking-[0.12em] text-[var(--v2-accent-text)]">
+                  {t("brain.recovery.title", { defaultValue: "Your work is still here" })}
+                </p>
+                <p className="mt-1 whitespace-pre-wrap break-words text-sm text-[var(--v2-ink-1)]">
+                  {recoveryIntent.prompt}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="v2-btn v2-btn--accent v2-btn--sm shrink-0"
+                onClick={() => {
+                  writePendingIntent({
+                    productId: "spaces",
+                    taskKind: "chat",
+                    prompt: recoveryIntent.prompt,
+                    source: "brain_recovery",
+                    returnTo: "/spaces",
+                    replayMode: "draft",
+                  });
+                  navigate("/spaces");
+                }}
+              >
+                {t("brain.recovery.continueInSpaces", {
+                  defaultValue: "Continue in Spaces",
+                })}
+              </button>
+            </div>
+          </section>
+        ) : null}
 
         {brainUnavailable ? (
           <BrainUnavailableState />

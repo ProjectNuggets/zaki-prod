@@ -1784,6 +1784,16 @@
   "app": {
     "loadingSession": "Loading session...",
     "openNavigationMenu": "Open navigation menu",
+    "recovery": {
+      "eyebrow": "Storage unavailable",
+      "title": "Work could not be saved",
+      "body": "Your browser blocked local storage. Copy this text now and continue in a new Space so it is not lost.",
+      "workLabel": "Unsaved work",
+      "copyFailed": "Automatic copy failed. Select and copy the text manually before continuing.",
+      "copyAndOpenSpaces": "Copy and open Spaces",
+      "selectWork": "Select work",
+      "openSpacesManually": "Open Spaces after copying"
+    },
     "legal": {
       "title": "Updated terms require your consent",
       "body": "We updated Terms, Privacy & Compliance (policy {{policyVersion}}). Please review and accept to continue using ZAKI.",

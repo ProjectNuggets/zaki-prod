@@ -74,6 +74,7 @@ jest.mock("sonner", () => ({
 }));
 
 jest.mock("@/lib/api", () => ({
+  AUTH_REQUIRED_EVENT: "zaki:auth-required",
   apiRequest: jest.fn(async () => ({
     ok: true,
     status: 200,
@@ -2239,6 +2240,35 @@ describe("ChatArea Component", () => {
     expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
   });
 
+  it("snapshots the current Agent draft before an expired-session login handoff", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+
+    await renderChatAreaAndWaitForEffects();
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "Do not lose this Agent draft" },
+    });
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("zaki:auth-required", {
+          cancelable: true,
+          detail: { loginUrl: "/?auth=login&next=%2Fagent" },
+        })
+      );
+    });
+
+    expect(JSON.parse(window.localStorage.getItem(PENDING_INTENT_KEY) || "null")).toMatchObject({
+      productId: "agent",
+      prompt: "Do not lose this Agent draft",
+      replayMode: "draft",
+      returnTo: "/agent",
+    });
+  });
+
   it("replays a matching post-auth Spaces intent by sending it into the active thread", async () => {
     navState.view = "chat";
     navState.spaceId = "space-1";
@@ -2251,6 +2281,7 @@ describe("ChatArea Component", () => {
         taskKind: "chat",
         prompt: "Summarize this workspace",
         returnTo: "/spaces",
+        replayMode: "submit",
         createdAt: new Date().toISOString(),
       })
     );
@@ -2281,6 +2312,35 @@ describe("ChatArea Component", () => {
         })
       );
     });
+    expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
+  });
+
+  it("restores an interrupted Spaces intent as a draft without sending it twice", async () => {
+    navState.view = "chat";
+    navState.spaceId = "space-1";
+    navState.threadId = "thread-1";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    window.localStorage.setItem(
+      PENDING_INTENT_KEY,
+      JSON.stringify({
+        productId: "spaces",
+        taskKind: "chat",
+        prompt: "Keep this interrupted draft",
+        returnTo: "/spaces",
+        replayMode: "draft",
+        createdAt: new Date().toISOString(),
+      })
+    );
+
+    await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(screen.getByRole("combobox")).toHaveValue("Keep this interrupted draft");
+    });
+    expect(apiRequest).not.toHaveBeenCalledWith(
+      expect.stringContaining("/stream-chat"),
+      expect.anything()
+    );
     expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
   });
 

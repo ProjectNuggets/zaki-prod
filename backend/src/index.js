@@ -31,6 +31,7 @@ import {
   buildLegalConsentShape,
   validateLegalPolicyVersion,
   buildConsentStatus,
+  buildVerificationLoginRedirect,
 } from "./legal-consent.js";
 import {
   resolveSignupAgePolicy,
@@ -6003,14 +6004,14 @@ function parseFromAddress(value, fallbackEmail) {
   return { email: trimmed, name: undefined };
 }
 
-async function issueVerificationToken(userId) {
+async function issueVerificationToken(userId, returnTo = "") {
   const token = crypto.randomBytes(32).toString("hex");
   const expiresAt = Date.now() + ZAKI_VERIFY_TTL_MINUTES * 60 * 1000;
   const now = new Date().toISOString();
   await dbQuery(
-    `INSERT INTO verification_tokens (user_id, token, expires_at, created_at)
-     VALUES ($1, $2, $3, $4)`,
-    [userId, token, expiresAt, now]
+    `INSERT INTO verification_tokens (user_id, token, expires_at, return_to, created_at)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [userId, token, expiresAt, returnTo || null, now]
   );
   return { token, expiresAt };
 }
@@ -6048,16 +6049,8 @@ function buildPasswordResetUrl(token) {
   return `${resetBase}/reset?token=${token}`;
 }
 
-function getLoginRedirectUrl(verifiedState = "success") {
-  const appBaseRaw = getAppUrl();
-  const appBase = appBaseRaw.endsWith("/api")
-    ? appBaseRaw.replace(/\/api$/, "")
-    : appBaseRaw;
-  const loginUrl = new URL(appBase.endsWith("/") ? appBase : `${appBase}/`);
-  loginUrl.pathname = "/";
-  loginUrl.searchParams.set("auth", "login");
-  loginUrl.searchParams.set("verified", String(verifiedState || "success"));
-  return loginUrl.toString();
+function getLoginRedirectUrl(verifiedState = "success", returnTo = "") {
+  return buildVerificationLoginRedirect(getAppUrl(), verifiedState, returnTo);
 }
 
 function getEmailLogoUrl() {
@@ -6490,7 +6483,7 @@ const signupHandler = async (req, res) => {
       return;
     }
 
-    const { email, password, name, legalPolicyVersion } = validation.data;
+    const { email, password, name, legalPolicyVersion, returnTo } = validation.data;
     const normalizedEmail = normalizeEmail(email);
     const normalizedName = name.trim();
     // Shared age policy — identical evaluation to the Google OAuth path. WP-M: no
@@ -6563,7 +6556,7 @@ const signupHandler = async (req, res) => {
       return;
     }
 
-    const { token } = await issueVerificationToken(userId);
+    const { token } = await issueVerificationToken(userId, returnTo);
     const verificationLink = buildVerificationUrl(token);
     let verificationEmailDelivered = false;
     try {
@@ -10557,7 +10550,7 @@ const verifyHandler = async (req, res) => {
   }
 
   const record = await dbGet(
-    `SELECT vt.id, vt.user_id, vt.expires_at, vt.used_at, u.email
+    `SELECT vt.id, vt.user_id, vt.expires_at, vt.used_at, vt.return_to, u.email
      FROM verification_tokens vt
      JOIN zaki_users u ON u.id = vt.user_id
      WHERE vt.token = $1`,
@@ -10577,7 +10570,7 @@ const verifyHandler = async (req, res) => {
     if (wantsJson) {
       res.status(200).json({ success: true, message: "Already verified." });
     } else {
-      res.redirect(302, getLoginRedirectUrl("already_verified"));
+      res.redirect(302, getLoginRedirectUrl("already_verified", record.return_to));
     }
     return;
   }
@@ -10587,7 +10580,7 @@ const verifyHandler = async (req, res) => {
     if (wantsJson) {
       res.status(410).json({ success: false, error: "Token expired." });
     } else {
-      res.redirect(302, getLoginRedirectUrl("expired"));
+      res.redirect(302, getLoginRedirectUrl("expired", record.return_to));
     }
     return;
   }
@@ -10609,7 +10602,7 @@ const verifyHandler = async (req, res) => {
       message: "Email verified. You can sign in now.",
     });
   } else {
-    res.redirect(302, getLoginRedirectUrl("success"));
+    res.redirect(302, getLoginRedirectUrl("success", record.return_to));
   }
 };
 

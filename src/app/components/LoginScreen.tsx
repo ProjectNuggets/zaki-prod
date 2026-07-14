@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Eye, EyeOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -14,6 +15,8 @@ import {
   fetchProfile,
   buildGoogleOAuthStartUrl,
   fetchGoogleOAuthStatus,
+  getFreshAuthToken,
+  GOOGLE_OAUTH_POPUP_COMPLETE_MESSAGE,
 } from "@/lib/api";
 import { clearPendingIntent, readPendingIntent } from "@/lib/pendingIntent";
 import { getConfiguredTurnstileSiteKey } from "@/lib/runtimeEnv";
@@ -137,7 +140,15 @@ function getSafeAuthErrorMessage(message: unknown, fallback: string) {
 }
 
 
-export function LoginScreen() {
+type LoginScreenProps = {
+  presentation?: "page" | "overlay";
+  onAuthenticated?: () => void;
+};
+
+export function LoginScreen({
+  presentation = "page",
+  onAuthenticated,
+}: LoginScreenProps = {}) {
   const { i18n } = useTranslation();
   const { setToken, setUser } = useAuthStore();
   const location = useLocation();
@@ -174,6 +185,12 @@ export function LoginScreen() {
   const [googleOAuthEnabled, setGoogleOAuthEnabled] = useState(false);
   const turnstileContainerRef = useRef<HTMLDivElement | null>(null);
   const turnstileWidgetIdRef = useRef<string | null>(null);
+  const reauthReturnFocusRef = useRef<HTMLElement | null>(null);
+  const googleReauthPopupRef = useRef<Window | null>(null);
+  const onAuthenticatedRef = useRef(onAuthenticated);
+  const googleOAuthFailureCopyRef = useRef(copy.errors.googleOAuthFailed);
+  onAuthenticatedRef.current = onAuthenticated;
+  googleOAuthFailureCopyRef.current = copy.errors.googleOAuthFailed;
   const turnstileSiteKey = getTurnstileSiteKey();
   const postLoginReturnTo = getPostLoginReturnTo(location);
 
@@ -311,6 +328,69 @@ export function LoginScreen() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (presentation !== "overlay") return;
+    let active = true;
+    const handleGooglePopupMessage = (event: MessageEvent) => {
+      if (
+        event.origin !== window.location.origin ||
+        event.source !== googleReauthPopupRef.current ||
+        event.data?.type !== GOOGLE_OAUTH_POPUP_COMPLETE_MESSAGE
+      ) {
+        return;
+      }
+      const popup = googleReauthPopupRef.current;
+      googleReauthPopupRef.current = null;
+      popup?.close();
+      void (async () => {
+        const freshToken = await getFreshAuthToken();
+        if (!active) return;
+        if (!freshToken) {
+          setError(googleOAuthFailureCopyRef.current);
+          return;
+        }
+        setToken(freshToken);
+        try {
+          const { response, data } = await fetchCurrentUser();
+          if (!active) return;
+          if (!response.ok || !data?.success || !data.user) {
+            setError(googleOAuthFailureCopyRef.current);
+            return;
+          }
+          let mergedUser = data.user;
+          try {
+            const profileResult = await fetchProfile();
+            if (
+              profileResult.response.ok &&
+              profileResult.data?.success &&
+              profileResult.data.user
+            ) {
+              mergedUser = {
+                ...data.user,
+                fullName:
+                  profileResult.data.user.fullName ?? data.user.fullName ?? null,
+              };
+            }
+          } catch {
+            // The authenticated base profile is sufficient to resume the session.
+          }
+          if (!active) return;
+          setUser(mergedUser);
+          onAuthenticatedRef.current?.();
+        } catch {
+          if (active) setError(googleOAuthFailureCopyRef.current);
+        }
+      })();
+    };
+    window.addEventListener("message", handleGooglePopupMessage);
+    return () => {
+      active = false;
+      window.removeEventListener("message", handleGooglePopupMessage);
+      googleReauthPopupRef.current?.close();
+      googleReauthPopupRef.current = null;
+    };
+  }, [presentation, setToken, setUser]);
 
   useEffect(() => {
     if (mode !== "signup" || !turnstileSiteKey) {
@@ -492,6 +572,7 @@ export function LoginScreen() {
           name: fullName.trim(),
           legalConsentAccepted: true,
           legalPolicyVersion,
+          ...(postLoginReturnTo ? { returnTo: postLoginReturnTo } : {}),
           ...(turnstileSiteKey ? { turnstileToken: turnstileToken || null } : {}),
         });
         if (!data?.success) {
@@ -597,7 +678,9 @@ export function LoginScreen() {
         clearPendingIntent();
       }
 
-      if (returnTo) {
+      if (onAuthenticated) {
+        onAuthenticated();
+      } else if (returnTo) {
         navigate(returnTo, { replace: true });
       }
     } catch (err) {
@@ -650,11 +733,16 @@ export function LoginScreen() {
           ? copy.actions.updatePassword
           : copy.actions.signIn;
 
-  return (
+  const content = (
     <div
       dir={isRtl ? "rtl" : "ltr"}
       lang={locale}
-      className="zaki-app-v2 zaki-auth-v2"
+      className={`zaki-app-v2 zaki-auth-v2 ${
+        presentation === "overlay" ? "zaki-auth-v2--overlay" : ""
+      }`}
+      role={presentation === "overlay" ? "dialog" : undefined}
+      aria-modal={presentation === "overlay" ? true : undefined}
+      aria-label={presentation === "overlay" ? copy.reauth.title : undefined}
     >
       <header className="zaki-auth-v2__topbar">
         <div className="zaki-auth-v2__brand">
@@ -667,6 +755,16 @@ export function LoginScreen() {
       </header>
 
       <main className="zaki-auth-v2__frame">
+        {presentation === "overlay" ? (
+          <div className="zaki-auth-v2__reauth" role="status">
+            <DialogPrimitive.Title asChild>
+              <strong>{copy.reauth.title}</strong>
+            </DialogPrimitive.Title>
+            <DialogPrimitive.Description asChild>
+              <span>{copy.reauth.detail}</span>
+            </DialogPrimitive.Description>
+          </div>
+        ) : null}
         <section className="zaki-auth-v2__panel" aria-labelledby="zaki-auth-title">
           <div className="zaki-auth-v2__panel-head">
             <span className="zaki-auth-v2__eyebrow">{modeEyebrow}</span>
@@ -688,13 +786,30 @@ export function LoginScreen() {
                   // from the login screen can still create a brand-new account,
                   // and that account must never exist without a consent record.
                   // The clickwrap notice below is the attestation in login mode.
-                  window.location.href = buildGoogleOAuthStartUrl(
-                    postLoginReturnTo || "/",
+                  const oauthUrl = buildGoogleOAuthStartUrl(
+                    presentation === "overlay"
+                      ? "/?oauthPopup=google"
+                      : postLoginReturnTo || "/",
                     {
                       legalConsentAccepted: true,
                       legalPolicyVersion,
                     }
                   );
+                  if (presentation === "overlay") {
+                    const popup = window.open(
+                      oauthUrl,
+                      "zaki-google-reauth",
+                      "popup=yes,width=520,height=720,resizable=yes,scrollbars=yes"
+                    );
+                    if (!popup) {
+                      setError(copy.errors.googlePopupBlocked);
+                      return;
+                    }
+                    googleReauthPopupRef.current = popup;
+                    popup.focus();
+                    return;
+                  }
+                  window.location.href = oauthUrl;
                 }}
               >
                 <span aria-hidden>G</span>
@@ -1022,4 +1137,37 @@ export function LoginScreen() {
       </main>
     </div>
   );
+
+  if (presentation === "overlay") {
+    return (
+      <DialogPrimitive.Root open>
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Content
+            asChild
+            onOpenAutoFocus={() => {
+              const activeElement = document.activeElement;
+              reauthReturnFocusRef.current =
+                activeElement instanceof HTMLElement && activeElement !== document.body
+                  ? activeElement
+                  : null;
+            }}
+            onCloseAutoFocus={(event) => {
+              const returnFocus = reauthReturnFocusRef.current;
+              reauthReturnFocusRef.current = null;
+              if (returnFocus?.isConnected) {
+                event.preventDefault();
+                returnFocus.focus();
+              }
+            }}
+            onEscapeKeyDown={(event) => event.preventDefault()}
+            onPointerDownOutside={(event) => event.preventDefault()}
+          >
+            {content}
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
+    );
+  }
+
+  return content;
 }

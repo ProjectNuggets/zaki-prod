@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom";
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 // ── i18n: return defaultValue (with {{var}} interpolation) or the key ──
@@ -84,6 +84,7 @@ jest.mock("@/app/components/ui/skeleton", () => ({
 }));
 
 import { BrainPage } from "./BrainPage";
+import { PENDING_INTENT_KEY, writePendingIntent } from "@/lib/pendingIntent";
 
 function renderPage(initialEntry = "/brain") {
   return render(
@@ -109,8 +110,32 @@ const POPULATED: GraphResult = {
 
 describe("BrainPage", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     mockUser = { id: 1 };
     mockGraph = { data: undefined, isLoading: true, isError: false };
+  });
+
+  it("shows preserved Brain work and moves it to Spaces as an editable draft", () => {
+    mockGraph = { ...POPULATED };
+    writePendingIntent({
+      productId: "brain",
+      taskKind: "memory",
+      prompt: "Remember the launch constraints from this note",
+      source: "website_home_command",
+      returnTo: "/brain",
+    });
+
+    renderPage();
+
+    expect(screen.getByRole("region", { name: /preserved work/i })).toHaveTextContent(
+      "Remember the launch constraints from this note"
+    );
+    fireEvent.click(screen.getByRole("button", { name: /continue in spaces/i }));
+    expect(JSON.parse(window.localStorage.getItem(PENDING_INTENT_KEY) || "null")).toMatchObject({
+      productId: "spaces",
+      prompt: "Remember the launch constraints from this note",
+      replayMode: "draft",
+    });
   });
 
   it("shows the skeleton while the initial graph probe is loading", () => {

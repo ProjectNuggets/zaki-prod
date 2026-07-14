@@ -33,6 +33,34 @@ export function buildLoginSchema() {
     });
 }
 
+export function sanitizeAuthReturnTo(value) {
+  const raw = String(value || "").trim();
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.length > 240) {
+    return "";
+  }
+  try {
+    const parsed = new URL(raw, "https://zaki.local");
+    if (parsed.origin !== "https://zaki.local") return "";
+    parsed.searchParams.delete("auth");
+    const normalized = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    return normalized === "/" ? "" : normalized;
+  } catch {
+    return "";
+  }
+}
+
+export function buildVerificationLoginRedirect(appUrl, verifiedState = "success", returnTo = "") {
+  const rawBase = String(appUrl || "").replace(/\/+$/, "");
+  const appBase = rawBase.endsWith("/api") ? rawBase.slice(0, -4) : rawBase;
+  const loginUrl = new URL(appBase.endsWith("/") ? appBase : `${appBase}/`);
+  loginUrl.pathname = "/";
+  loginUrl.searchParams.set("auth", "login");
+  loginUrl.searchParams.set("verified", String(verifiedState || "success"));
+  const safeReturnTo = sanitizeAuthReturnTo(returnTo);
+  if (safeReturnTo) loginUrl.searchParams.set("next", safeReturnTo);
+  return loginUrl.toString();
+}
+
 /**
  * WP-M — the signup schema no longer accepts a date of birth.
  *
@@ -50,6 +78,7 @@ export function buildSignupSchema() {
     email: z.string().email("Invalid email address"),
     password: z.string().min(8, "Password must be at least 8 characters"),
     name: z.string().min(1, "Name is required").max(100),
+    returnTo: z.string().max(240).optional().transform(sanitizeAuthReturnTo),
     ...buildLegalConsentShape(),
   });
 }

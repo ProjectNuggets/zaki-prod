@@ -151,9 +151,13 @@ export async function initDb() {
       token TEXT UNIQUE NOT NULL,
       expires_at BIGINT NOT NULL,
       used_at BIGINT,
+      return_to TEXT,
       created_at TIMESTAMPTZ NOT NULL
     );
   `);
+  await migrationClient.query(
+    "ALTER TABLE verification_tokens ADD COLUMN IF NOT EXISTS return_to TEXT;"
+  );
 
   await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS password_reset_tokens (

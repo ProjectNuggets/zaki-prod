@@ -1,6 +1,7 @@
 import "@/styles/fonts.css";
 import { useEffect, useRef, useState } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Sidebar } from "./components/Sidebar";
 import { MobileSidebar } from "./components/MobileSidebar";
@@ -12,9 +13,11 @@ import { LoginScreen } from "./components/LoginScreen";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Toaster } from "./components/ui/sonner";
 import {
+  AUTH_REQUIRED_EVENT,
   buildApiUrl,
   fetchCurrentUser,
   fetchProfile,
+  GOOGLE_OAUTH_POPUP_COMPLETE_MESSAGE,
   fetchLegalConsentStatus,
   requestLogout,
   submitLegalReconsent,
@@ -22,7 +25,11 @@ import {
 import { useAuthStore, useUIStore, useNavigationStore } from "@/stores";
 import { ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID } from "@/lib/zakiBot";
 import { useAnonymousWorkClaim } from "@/hooks/useAnonymousWorkClaim";
-import { consumeWebsiteCommandIntentFromUrl } from "@/lib/pendingIntent";
+import {
+  consumeWebsiteCommandIntentFromUrl,
+  PENDING_INTENT_STORAGE_FAILURE_EVENT,
+  type PendingIntentStorageFailureDetail,
+} from "@/lib/pendingIntent";
 import { getInitialLegalPolicyVersion } from "@/lib/legalPolicy";
 import { getProductLaunchState } from "@/lib/productRoutes";
 
@@ -112,6 +119,7 @@ function getSafeNextPath(value: string | null) {
 
 export default function App() {
   const location = useLocation();
+  const navigate = useNavigate();
   const scrollTimerRef = useRef<number | null>(null);
   const scrollTargetRef = useRef<HTMLElement | null>(null);
   const { t } = useTranslation();
@@ -133,6 +141,7 @@ export default function App() {
   const isPublicWebsiteRoute = isPublicWebsitePath(normalizedPath);
   const isAnonymousAllowedRoute = isAnonymousAllowedPath(normalizedPath);
   const searchParams = new URLSearchParams(location.search);
+  const isGoogleOAuthPopup = searchParams.get("oauthPopup") === "google";
   const hasExplicitAuthIntent =
     searchParams.has("auth") || Boolean(getSafeNextPath(searchParams.get("next")));
   
@@ -147,6 +156,14 @@ export default function App() {
   const [legalReconsentChecked, setLegalReconsentChecked] = useState(false);
   const [legalReconsentSubmitting, setLegalReconsentSubmitting] = useState(false);
   const [legalReconsentError, setLegalReconsentError] = useState("");
+  const [reauthRequired, setReauthRequired] = useState(false);
+  const [storageRecovery, setStorageRecovery] =
+    useState<PendingIntentStorageFailureDetail | null>(null);
+  const [storageRecoveryError, setStorageRecoveryError] = useState("");
+  const storageRecoveryActionRef = useRef<HTMLButtonElement | null>(null);
+  const storageRecoveryTextRef = useRef<HTMLTextAreaElement | null>(null);
+  const storageRecoveryReturnFocusRef = useRef<HTMLElement | null>(null);
+  const oauthPopupCompletionSentRef = useRef(false);
   
   // UI state from Zustand
   const {
@@ -190,6 +207,46 @@ export default function App() {
       store.goHome();
     }
   }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleAuthRequired = (event: Event) => {
+      event.preventDefault();
+      setReauthRequired(true);
+    };
+    const handleStorageFailure = (event: Event) => {
+      const detail = (event as CustomEvent<PendingIntentStorageFailureDetail>).detail;
+      if (detail?.prompt) {
+        setStorageRecovery(detail);
+        setStorageRecoveryError("");
+      }
+    };
+    window.addEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired);
+    window.addEventListener(PENDING_INTENT_STORAGE_FAILURE_EVENT, handleStorageFailure);
+    return () => {
+      window.removeEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired);
+      window.removeEventListener(PENDING_INTENT_STORAGE_FAILURE_EVENT, handleStorageFailure);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (
+      !isGoogleOAuthPopup ||
+      isHydrating ||
+      !token ||
+      !user?.username ||
+      !window.opener ||
+      oauthPopupCompletionSentRef.current
+    ) {
+      return;
+    }
+    oauthPopupCompletionSentRef.current = true;
+    window.opener.postMessage(
+      { type: GOOGLE_OAUTH_POPUP_COMPLETE_MESSAGE },
+      window.location.origin
+    );
+    window.close();
+  }, [isGoogleOAuthPopup, isHydrating, token, user?.username]);
 
   useEffect(() => {
     consumeWebsiteCommandIntentFromUrl({
@@ -428,6 +485,119 @@ export default function App() {
         </main>
         <Toaster />
       </div>
+      {reauthRequired ? (
+        <LoginScreen
+          presentation="overlay"
+          onAuthenticated={() => setReauthRequired(false)}
+        />
+      ) : null}
+      {storageRecovery ? (
+        <AlertDialogPrimitive.Root open>
+          <AlertDialogPrimitive.Portal>
+            <AlertDialogPrimitive.Overlay className="fixed inset-0 z-[110] bg-black/60" />
+            <AlertDialogPrimitive.Content
+              asChild
+              onOpenAutoFocus={(event) => {
+                const activeElement = document.activeElement;
+                storageRecoveryReturnFocusRef.current =
+                  activeElement instanceof HTMLElement && activeElement !== document.body
+                    ? activeElement
+                    : null;
+                event.preventDefault();
+                storageRecoveryActionRef.current?.focus();
+              }}
+              onCloseAutoFocus={(event) => {
+                const returnFocus = storageRecoveryReturnFocusRef.current;
+                storageRecoveryReturnFocusRef.current = null;
+                if (returnFocus?.isConnected) {
+                  event.preventDefault();
+                  returnFocus.focus();
+                }
+              }}
+            >
+              <section className="fixed left-1/2 top-1/2 z-[110] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 border border-[var(--v2-accent-hairline)] bg-[var(--v2-bg)] p-4 shadow-2xl">
+                <p className="font-mono-ui text-[10px] uppercase tracking-[0.12em] text-[var(--v2-accent-text)]">
+                  {t("app.recovery.eyebrow")}
+                </p>
+                <AlertDialogPrimitive.Title asChild>
+                  <h2 className="mt-2 font-mono-ui text-lg text-[var(--v2-ink-1)]">
+                    {t("app.recovery.title")}
+                  </h2>
+                </AlertDialogPrimitive.Title>
+                <AlertDialogPrimitive.Description asChild>
+                  <p className="mt-2 text-sm text-[var(--v2-ink-2)]">
+                    {t("app.recovery.body")}
+                  </p>
+                </AlertDialogPrimitive.Description>
+                <textarea
+                  ref={storageRecoveryTextRef}
+                  className="mt-4 min-h-28 w-full resize-y border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg-sunken)] p-3 font-mono-ui text-xs text-[var(--v2-ink-1)]"
+                  readOnly
+                  value={storageRecovery.prompt}
+                  aria-label={t("app.recovery.workLabel")}
+                />
+                {storageRecoveryError ? (
+                  <p className="mt-2 text-xs text-[var(--v2-danger)]" role="alert">
+                    {storageRecoveryError}
+                  </p>
+                ) : null}
+                <div className="mt-4 flex flex-wrap justify-end gap-2">
+                  {storageRecoveryError ? (
+                    <>
+                      <button
+                        type="button"
+                        className="v2-btn v2-btn--ghost v2-btn--sm"
+                        onClick={() => {
+                          storageRecoveryTextRef.current?.focus();
+                          storageRecoveryTextRef.current?.select();
+                        }}
+                      >
+                        {t("app.recovery.selectWork")}
+                      </button>
+                      <button
+                        ref={storageRecoveryActionRef}
+                        type="button"
+                        className="v2-btn v2-btn--accent v2-btn--sm"
+                        onClick={() => {
+                          setStorageRecovery(null);
+                          setStorageRecoveryError("");
+                          navigate("/spaces");
+                        }}
+                      >
+                        {t("app.recovery.openSpacesManually")}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      ref={storageRecoveryActionRef}
+                      type="button"
+                      className="v2-btn v2-btn--accent v2-btn--sm"
+                      onClick={() => {
+                        const writeText = navigator.clipboard?.writeText;
+                        if (!writeText) {
+                          setStorageRecoveryError(t("app.recovery.copyFailed"));
+                          return;
+                        }
+                        void writeText.call(navigator.clipboard, storageRecovery.prompt)
+                          .then(() => {
+                            setStorageRecovery(null);
+                            setStorageRecoveryError("");
+                            navigate("/spaces");
+                          })
+                          .catch(() => {
+                            setStorageRecoveryError(t("app.recovery.copyFailed"));
+                          });
+                      }}
+                    >
+                      {t("app.recovery.copyAndOpenSpaces")}
+                    </button>
+                  )}
+                </div>
+              </section>
+            </AlertDialogPrimitive.Content>
+          </AlertDialogPrimitive.Portal>
+        </AlertDialogPrimitive.Root>
+      ) : null}
       {legalReconsentRequired && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4">
           <div className="zaki-legal-reconsent-v2 w-full max-w-lg p-6">

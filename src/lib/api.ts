@@ -199,6 +199,34 @@ export function redirectToLogin(returnTo?: string) {
   return target;
 }
 
+export const AUTH_REQUIRED_EVENT = "zaki:auth-required";
+export const GOOGLE_OAUTH_POPUP_COMPLETE_MESSAGE = "zaki:google-oauth-popup-complete";
+
+export type AuthRequiredEventDetail = {
+  loginUrl: string;
+};
+
+/**
+ * Gives the mounted app first refusal on a dead session so it can preserve
+ * drafts and partial output behind an in-app login surface. If nothing handles
+ * the event, retain the safe legacy fallback for non-React callers.
+ */
+export function requestReauthentication(returnTo?: string) {
+  const loginUrl = buildLoginRedirectUrl(returnTo);
+  if (typeof window !== "undefined") {
+    const event = new CustomEvent<AuthRequiredEventDetail>(AUTH_REQUIRED_EVENT, {
+      cancelable: true,
+      detail: { loginUrl },
+    });
+    if (!window.dispatchEvent(event)) {
+      return loginUrl;
+    }
+    useAuthStore.getState().logout();
+    redirectToLogin(returnTo);
+  }
+  return loginUrl;
+}
+
 export async function apiRequest(
   path: string,
   options: ApiRequestOptions = {},
@@ -237,16 +265,14 @@ export async function apiRequest(
       // WR-01: if the retry also returns 401, the token is invalid — log out.
       if (retryResponse.status === 401 && typeof window !== "undefined") {
         if (!redirectOnAuthFailure) return retryResponse;
-        useAuthStore.getState().logout();
-        redirectToLogin();
+        requestReauthentication();
       }
       return retryResponse;
     }
     // Refresh failed — redirect to login
     if (!redirectOnAuthFailure) return response;
     if (typeof window !== "undefined") {
-      useAuthStore.getState().logout();
-      redirectToLogin();
+      requestReauthentication();
     }
   }
 
@@ -302,16 +328,14 @@ export async function backendAuthRequest(
       if (retryResponse.status === 401) {
         if (!redirectOnAuthFailure) return retryResponse;
         if (typeof window !== "undefined") {
-          useAuthStore.getState().logout();
-          redirectToLogin();
+          requestReauthentication();
         }
       }
       return retryResponse;
     }
     if (!redirectOnAuthFailure) return response;
     if (typeof window !== "undefined") {
-      useAuthStore.getState().logout();
-      redirectToLogin();
+      requestReauthentication();
     }
   }
   return response;
@@ -578,6 +602,7 @@ export async function requestPublicSignup({
   legalConsentAccepted,
   legalPolicyVersion,
   turnstileToken,
+  returnTo,
 }: {
   email: string;
   password: string;
@@ -585,6 +610,7 @@ export async function requestPublicSignup({
   legalConsentAccepted?: boolean;
   legalPolicyVersion?: string;
   turnstileToken?: string | null;
+  returnTo?: string;
 }) {
   const payload: Record<string, string | boolean> = {
     email,
@@ -599,6 +625,9 @@ export async function requestPublicSignup({
   }
   if (turnstileToken) {
     payload.turnstileToken = turnstileToken;
+  }
+  if (returnTo) {
+    payload.returnTo = returnTo;
   }
 
   const response = await backendRequest("/signup", {

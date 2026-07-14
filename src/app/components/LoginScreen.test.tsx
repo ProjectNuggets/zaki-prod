@@ -17,6 +17,7 @@ import {
   fetchProfile,
   buildGoogleOAuthStartUrl,
   claimAnonymousSpacesWork,
+  getFreshAuthToken,
 } from "@/lib/api";
 import { upsertAnonymousWorkItem } from "@/lib/anonymousWork";
 import { PENDING_INTENT_KEY } from "@/lib/pendingIntent";
@@ -43,6 +44,8 @@ jest.mock("@/lib/api", () => ({
   fetchProfile: jest.fn(),
   buildGoogleOAuthStartUrl: jest.fn(() => "http://localhost:8787/api/auth/google/start"),
   claimAnonymousSpacesWork: jest.fn(),
+  getFreshAuthToken: jest.fn(),
+  GOOGLE_OAUTH_POPUP_COMPLETE_MESSAGE: "zaki:google-oauth-popup-complete",
 }));
 
 describe("LoginScreen legal consent", () => {
@@ -101,6 +104,8 @@ describe("LoginScreen legal consent", () => {
       data: { valid: true, token: "token-123" },
     });
 
+    (getFreshAuthToken as unknown as jest.Mock).mockResolvedValue("google-popup-token");
+
     (requestPublicSignup as unknown as jest.Mock).mockResolvedValue({
       response: { ok: true },
       data: { success: true, message: "Check your email to verify your account." },
@@ -128,6 +133,122 @@ describe("LoginScreen legal consent", () => {
         <LoginScreen />
       </BrowserRouter>
     );
+
+  it("opens Google reauthentication in a popup without unmounting preserved work", async () => {
+    const user = userEvent.setup();
+    const popup = {
+      close: jest.fn(),
+      focus: jest.fn(),
+    } as unknown as Window;
+    const openSpy = jest.spyOn(window, "open").mockReturnValue(popup);
+    render(
+      <BrowserRouter>
+        <LoginScreen presentation="overlay" />
+      </BrowserRouter>
+    );
+    await waitFor(() => expect(fetchGoogleOAuthStatus).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("button", { name: "Continue with Google" }));
+
+    expect(buildGoogleOAuthStartUrl).toHaveBeenCalledWith("/?oauthPopup=google", {
+      legalConsentAccepted: true,
+      legalPolicyVersion: policyVersion,
+    });
+    expect(openSpy).toHaveBeenCalledWith(
+      "http://localhost:8787/api/auth/google/start",
+      "zaki-google-reauth",
+      expect.stringContaining("popup=yes")
+    );
+    expect(popup.focus).toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: /session expired/i })).toBeInTheDocument();
+  });
+
+  it("completes Google popup reauthentication in the mounted surface", async () => {
+    const user = userEvent.setup();
+    const onAuthenticated = jest.fn();
+    const popup = {
+      close: jest.fn(),
+      focus: jest.fn(),
+    } as unknown as Window;
+    jest.spyOn(window, "open").mockReturnValue(popup);
+    render(
+      <BrowserRouter>
+        <LoginScreen presentation="overlay" onAuthenticated={onAuthenticated} />
+      </BrowserRouter>
+    );
+    await waitFor(() => expect(fetchGoogleOAuthStatus).toHaveBeenCalled());
+    await user.click(screen.getByRole("button", { name: "Continue with Google" }));
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: { type: "zaki:google-oauth-popup-complete" },
+        origin: window.location.origin,
+        source: popup,
+      })
+    );
+
+    await waitFor(() => expect(onAuthenticated).toHaveBeenCalledTimes(1));
+    expect(getFreshAuthToken).toHaveBeenCalledTimes(1);
+    expect(setToken).toHaveBeenCalledWith("google-popup-token");
+    expect(setUser).toHaveBeenCalledWith({
+      id: "user-1",
+      username: "user@example.com",
+      fullName: "User Name",
+    });
+    expect(popup.close).toHaveBeenCalled();
+  });
+
+  it("keeps Google reauthentication open across preserved-surface rerenders", async () => {
+    const user = userEvent.setup();
+    const firstOnAuthenticated = jest.fn();
+    const latestOnAuthenticated = jest.fn();
+    const popup = {
+      close: jest.fn(),
+      focus: jest.fn(),
+    } as unknown as Window;
+    jest.spyOn(window, "open").mockReturnValue(popup);
+    const { rerender } = render(
+      <BrowserRouter>
+        <LoginScreen presentation="overlay" onAuthenticated={firstOnAuthenticated} />
+      </BrowserRouter>
+    );
+    await waitFor(() => expect(fetchGoogleOAuthStatus).toHaveBeenCalled());
+    await user.click(screen.getByRole("button", { name: "Continue with Google" }));
+
+    rerender(
+      <BrowserRouter>
+        <LoginScreen presentation="overlay" onAuthenticated={latestOnAuthenticated} />
+      </BrowserRouter>
+    );
+
+    expect(popup.close).not.toHaveBeenCalled();
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: { type: "zaki:google-oauth-popup-complete" },
+        origin: window.location.origin,
+        source: popup,
+      })
+    );
+
+    await waitFor(() => expect(latestOnAuthenticated).toHaveBeenCalledTimes(1));
+    expect(firstOnAuthenticated).not.toHaveBeenCalled();
+  });
+
+  it("names a blocked Google reauthentication popup without dismissing preserved work", async () => {
+    const user = userEvent.setup();
+    jest.spyOn(window, "open").mockReturnValue(null);
+    render(
+      <BrowserRouter>
+        <LoginScreen presentation="overlay" />
+      </BrowserRouter>
+    );
+    await waitFor(() => expect(fetchGoogleOAuthStatus).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("button", { name: "Continue with Google" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/allow pop-ups/i);
+    expect(screen.getByRole("dialog", { name: /session expired/i })).toBeInTheDocument();
+  });
 
   it("shows verification success notice from redirect query params", async () => {
     window.history.replaceState({}, "", "/?auth=login&verified=success");
@@ -186,10 +307,9 @@ describe("LoginScreen legal consent", () => {
 
   it("requires consent checkbox and sends consent payload on signup", async () => {
     const user = userEvent.setup();
+    window.history.replaceState({}, "", "/?auth=signup&next=%2Fbrain%3Fpanel%3Dclusters");
     renderLoginScreen();
     await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
-
-    await user.click(screen.getByRole("button", { name: "New here? Create an account" }));
 
     await user.type(screen.getByPlaceholderText("Full name"), "User Name");
     await user.type(screen.getByPlaceholderText("Email address"), "signup@example.com");
@@ -234,6 +354,7 @@ describe("LoginScreen legal consent", () => {
         name: "User Name",
         legalConsentAccepted: true,
         legalPolicyVersion: policyVersion,
+        returnTo: "/brain?panel=clusters",
       });
     });
   });

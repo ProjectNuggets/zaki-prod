@@ -267,6 +267,26 @@ describe("apiRequest — 401 retry", () => {
 // the marketing homepage with no login. The helper also carries next=/settings...
 // so users return to the protected Settings section after re-authentication.
 describe("session-dead 401 redirect target", () => {
+  it("keeps the mounted app alive when it handles the reauthentication request", async () => {
+    _storeToken = "expired-token";
+    mockFetch
+      .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
+      .mockResolvedValueOnce(makeResponse(401, { error: "Refresh also failed" }));
+    const handleAuthRequired = jest.fn((event: Event) => event.preventDefault());
+    window.addEventListener("zaki:auth-required", handleAuthRequired);
+
+    try {
+      const { apiRequest } = await import("@/lib/api");
+      await apiRequest("/api/protected", { method: "GET" });
+
+      expect(handleAuthRequired).toHaveBeenCalledTimes(1);
+      expect(mockLogout).not.toHaveBeenCalled();
+      expect(mockLoginRedirect).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("zaki:auth-required", handleAuthRequired);
+    }
+  });
+
   it("builds safe login redirects with protected return targets", async () => {
     const { buildLoginRedirectUrl } = await import("@/lib/api");
 
@@ -387,17 +407,13 @@ describe("session-dead 401 redirect target", () => {
     expect(mockLoginRedirect).not.toHaveBeenCalled();
   });
 
-  it("every dead-session logout branch uses the canonical login redirect helper, never bare /", () => {
+  it("the dead-session fallback never navigates to the bare marketing route", () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const fs = require("fs") as typeof import("fs");
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const path = require("path") as typeof import("path");
     const source = fs.readFileSync(path.join(__dirname, "api.ts"), "utf8");
 
-    const loginRedirects = source.match(/redirectToLogin\(\);/g) ?? [];
-    expect(loginRedirects.length).toBe(4);
-
-    // No dead-session logout branch may navigate to the bare marketing homepage.
     expect(source).not.toMatch(/window\.location\.href\s*=\s*"\/";/);
   });
 });
@@ -526,6 +542,7 @@ describe("requestPublicSignup", () => {
       legalConsentAccepted: true,
       legalPolicyVersion: "2026-07-12.v4",
       turnstileToken: "turnstile-token",
+      returnTo: "/brain?panel=clusters",
     });
 
     expect(mockFetch).toHaveBeenCalledWith(
@@ -539,6 +556,7 @@ describe("requestPublicSignup", () => {
           legalConsentAccepted: true,
           legalPolicyVersion: "2026-07-12.v4",
           turnstileToken: "turnstile-token",
+          returnTo: "/brain?panel=clusters",
         }),
       })
     );
