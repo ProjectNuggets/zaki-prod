@@ -64,6 +64,19 @@ const LAUNCH_COPY: Record<string, LaunchCopy> = {
     policy: "Available now",
     next: "Start in Chat, then move durable work into Agent or Brain when needed.",
   },
+  minutes: {
+    id: "minutes",
+    heading: "ZAKI Minutes",
+    badge: "Roadmap",
+    body:
+      "Minutes will turn meetings into decisions, follow-up, summaries, and durable context for the ZAKI brain.",
+    primaryLabel: "Join waitlist",
+    primaryHref: "/?source=website_product_minutes&intent=waitlist",
+    secondaryLabel: "Compare plans",
+    secondaryHref: "/pricing?source=website_product_minutes&intent=plans",
+    policy: "Planned next",
+    next: "Use Agent or Spaces for meeting follow-up while Minutes is shaped as a dedicated product spoke.",
+  },
   learn: {
     id: "learn",
     heading: "ZAKI Learn",

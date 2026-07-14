@@ -42,6 +42,14 @@ const PRODUCT_LAUNCH_POLICIES: Record<string, ProductLaunchPolicy> = {
     appRoute: "/brain",
     marketingRoute: "/products/brain",
   },
+  minutes: {
+    launchState: "waitlist",
+    marketingRoute: "/products/minutes",
+  },
+  "meeting-minutes": {
+    launchState: "waitlist",
+    marketingRoute: "/products/minutes",
+  },
   learning: {
     launchState: "private_beta",
     appRoute: "/learn",
