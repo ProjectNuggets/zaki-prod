@@ -598,7 +598,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
       "Let Agent broaden short memory searches so it can find relevant saved context more reliably.",
     "settingsModal.memoryData.capturePolicy.name": "Chat memory capture",
     "settingsModal.memoryData.capturePolicy.helper":
-      "Controls only Chat/Spaces memory capture. Agent memory does not have a master on/off switch yet.",
+      "Controls only Spaces memory capture. Agent memory does not have a master on/off switch yet.",
     "settingsModal.privacy.exportAllData": "Export all data",
     "settingsModal.privacy.exportHelper": "Download your chats and files",
     "settingsModal.privacy.deleteAccount": "Delete account",
@@ -1198,7 +1198,9 @@ describe("SettingsPage", () => {
     expect(within(screen.getByTestId("settings-billing")).getByText("ZAKI Design")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-billing")).getAllByText("Launch: public app").length).toBeGreaterThan(0);
     expect(within(screen.getByTestId("settings-billing")).queryByText("Launch: private access")).not.toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-billing")).getByText("Launch: waitlist")).toBeInTheDocument();
+    // WP-K: Design reads "coming soon" like every other not-yet-live spoke.
+    expect(within(screen.getByTestId("settings-billing")).queryByText("Launch: waitlist")).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("settings-billing")).getByText("Launch: coming soon")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-billing")).queryByText("ZAKI CLI")).not.toBeInTheDocument();
     expect(within(screen.getByTestId("settings-billing")).getByText("Additional capacity")).toBeInTheDocument();
     expect(within(screen.getByTestId("settings-billing")).getByTestId("settings-weekly-meter")).toBeInTheDocument();

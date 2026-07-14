@@ -13,11 +13,15 @@ jest.mock("react-i18next", () => ({
   }),
 }));
 
+const mockGoHome = jest.fn();
+const mockGoToSpaces = jest.fn();
+const mockGoToZakiBot = jest.fn();
+
 jest.mock("@/hooks/useNavigation", () => ({
   useNavigation: () => ({
-    goHome: jest.fn(),
-    goToSpaces: jest.fn(),
-    goToZakiBot: jest.fn(),
+    goHome: mockGoHome,
+    goToSpaces: mockGoToSpaces,
+    goToZakiBot: mockGoToZakiBot,
   }),
 }));
 
@@ -79,6 +83,9 @@ describe("ProductRail quick settings", () => {
     });
     useNavigationStore.setState({ sidebarMode: "zaki" });
     (requestLogout as jest.MockedFunction<typeof requestLogout>).mockClear();
+    mockGoHome.mockClear();
+    mockGoToSpaces.mockClear();
+    mockGoToZakiBot.mockClear();
   });
 
   it("opens a compact settings menu from the rail settings icon", () => {
@@ -96,16 +103,45 @@ describe("ProductRail quick settings", () => {
     expect(screen.getByRole("menuitem", { name: /Sign out/ })).toBeInTheDocument();
   });
 
-  it("shows the four release spokes, hides Learn/Career, and keeps future spokes disabled", () => {
+  it("names the chat lane 'Spaces' and never labels it 'Chat'", () => {
+    renderProductRail();
+
+    // WP-K: ONE canonical name per lane. The rail used to say "Chat" while the
+    // Sidebar said "Spaces" for the very same lane.
+    expect(screen.getByTitle("Spaces")).toBeEnabled();
+    expect(screen.queryByTitle("Chat")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTitle("Spaces"));
+    expect(mockGoToSpaces).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the four release spokes and hides the retired Learn/Career spokes", () => {
     renderProductRail();
 
     expect(screen.queryByTitle("Learn")).not.toBeInTheDocument();
     expect(screen.queryByTitle("Career")).not.toBeInTheDocument();
     expect(screen.getByTitle("Agent")).toBeEnabled();
-    expect(screen.getByTitle("Chat")).toBeEnabled();
-    expect(screen.getByTitle("Design")).toBeDisabled();
-    expect(screen.getByTitle("Minutes")).toBeDisabled();
+    expect(screen.getByTitle("Spaces")).toBeEnabled();
     expect(screen.getByTitle("Brain")).toBeEnabled();
+  });
+
+  it("navigates coming-soon spokes to their gate pages instead of being inert", () => {
+    // Spec §A2 bans dead controls. Design/Minutes used to be `disabled: true` with an
+    // empty action — clicking them did literally nothing. They must now navigate.
+    const { unmount } = renderProductRail("/");
+
+    const design = screen.getByTitle("Design — Coming soon");
+    expect(design).toBeEnabled();
+    fireEvent.click(design);
+    expect(screen.getByTestId("location")).toHaveTextContent("/design");
+    unmount();
+
+    renderProductRail("/");
+
+    const minutes = screen.getByTitle("Minutes — Coming soon");
+    expect(minutes).toBeEnabled();
+    fireEvent.click(minutes);
+    expect(screen.getByTestId("location")).toHaveTextContent("/minutes");
   });
 
   it("routes anonymous Agent and Brain rail clicks through login with return paths", () => {

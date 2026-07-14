@@ -10,7 +10,9 @@ import {
   type V2BadgeTone,
 } from "@/app/components/v2";
 
-type ProductGateMode = "coming_soon" | "private_beta" | "waitlist";
+// "waitlist" is intentionally absent: a visible-but-not-live spoke has exactly ONE name,
+// and that name is "coming soon" (WP-K).
+type ProductGateMode = "coming_soon" | "private_beta";
 
 type ProductAccessGateProps = {
   productId: ProductRegistryProductId | "minutes";
@@ -28,10 +30,9 @@ type ProductGateCopy = {
   tone: V2BadgeTone;
 };
 
-const MODE_KEYS: Record<ProductGateMode, "comingSoon" | "privateBeta" | "waitlist"> = {
+const MODE_KEYS: Record<ProductGateMode, "comingSoon" | "privateBeta"> = {
   coming_soon: "comingSoon",
   private_beta: "privateBeta",
-  waitlist: "waitlist",
 };
 
 function modeCopy(mode: ProductGateMode): ProductGateCopy {
@@ -42,7 +43,7 @@ function modeCopy(mode: ProductGateMode): ProductGateCopy {
       body:
         "This spoke is visible in the ZAKI family while its complete production flow is finalized.",
       status: "Launch state: coming soon",
-      next: "Start today with Chat or Agent from the dashboard.",
+      next: "Start today with Spaces or Agent from the dashboard.",
       action: "Open dashboard",
       tone: "warn",
     },
@@ -52,19 +53,9 @@ function modeCopy(mode: ProductGateMode): ProductGateCopy {
       body:
         "{{product}} is gated while route access, entitlement, memory boundaries, and signed-in E2E coverage are finalized together.",
       status: "Launch state: private access",
-      next: "Use Chat or Agent today. Access stays gated until the full product contract is ready.",
+      next: "Use Spaces or Agent today. Access stays gated until the full product contract is ready.",
       action: "Open dashboard",
       tone: "accent",
-    },
-    waitlist: {
-      badge: "Waitlist",
-      heading: "This product is on the waitlist",
-      body:
-        "{{product}} is visible as a future ZAKI surface, but it is not a public app product or paid plan yet.",
-      status: "Launch state: waitlist",
-      next: "Visit the product page for context, or start with Chat or Agent today.",
-      action: "Open dashboard",
-      tone: "warn",
     },
   };
   return copies[mode];
@@ -119,7 +110,7 @@ export function ProductAccessGate({
             <dl className="zaki-product-gate__facts">
               <div>
                 <dt>{t("productGate.facts.public", { defaultValue: "Visible spokes" })}</dt>
-                <dd>{t("productGate.facts.publicValue", { defaultValue: "Agent, Chat/Spaces, Design, Minutes" })}</dd>
+                <dd>{t("productGate.facts.publicValue", { defaultValue: "Agent, Spaces, Design, Minutes" })}</dd>
               </div>
               <div>
                 <dt>{t("productGate.facts.memory", { defaultValue: "Memory boundary" })}</dt>

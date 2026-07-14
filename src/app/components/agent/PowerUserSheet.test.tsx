@@ -728,7 +728,7 @@ describe("PowerUserSheet", () => {
     await act(async () => {
       render(<PowerUserSheet isOpen onClose={() => {}} initialTab="usage" />);
     });
-    // Share of the pooled limit (100): spaces 85% -> warning, agent 20% -> normal, learning 100% -> near_limit.
+    // Share of the pooled limit (100): spaces 85% -> warning, agent 20% -> normal.
     await waitFor(() => {
       expect(
         screen.getByTestId("power-user-usage-surface-spaces")
@@ -737,9 +737,12 @@ describe("PowerUserSheet", () => {
     expect(
       screen.getByTestId("power-user-usage-surface-agent")
     ).toHaveAttribute("data-soft-limit-state", "normal");
+    // WP-K: the meter still reports a "learning" product, but a retired lane must never
+    // get a usage row. This is the leak that shipped a live "Learn" label post-#83.
     expect(
-      screen.getByTestId("power-user-usage-surface-learning")
-    ).toHaveAttribute("data-soft-limit-state", "near_limit");
+      screen.queryByTestId("power-user-usage-surface-learning")
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Learn")).not.toBeInTheDocument();
     // No longer reads the legacy per-surface quota endpoint.
     expect(fetchUsageQuotaMock).not.toHaveBeenCalled();
   });

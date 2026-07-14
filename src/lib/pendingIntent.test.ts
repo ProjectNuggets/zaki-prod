@@ -62,22 +62,52 @@ describe("pending intent", () => {
   });
 
   it("sanitizes unsafe return routes and ignores malformed data", () => {
+    // WP-K: retired products are no longer valid intent product ids at all, so a
+    // "hire" intent is rejected outright rather than resolving to the dashboard.
+    // (Stronger than WP-14, which only neutered its returnTo.)
+    window.localStorage.setItem(
+      PENDING_INTENT_KEY,
+      JSON.stringify({
+        productId: "hire",
+        taskKind: "rubric",
+        prompt: "Build a rubric",
+        returnTo: "https://evil.example/hire",
+        createdAt: new Date().toISOString(),
+      })
+    );
+    expect(readPendingIntent()).toBeNull();
+
+    // A live product with an external returnTo still gets its route sanitized.
     writePendingIntent({
-      productId: "hire",
+      productId: "agent",
       taskKind: "rubric",
       prompt: "Build a rubric",
-      returnTo: "https://evil.example/hire",
+      returnTo: "https://evil.example/agent",
     });
-
-    // WP-14: hire is a hidden product, so its canonical route resolves to the
-    // dashboard ("/"). The external evil URL is rejected either way.
-    expect(readPendingIntent()?.returnTo).toBe("/");
+    expect(readPendingIntent()?.returnTo).toBe("/agent");
 
     window.localStorage.setItem(
       PENDING_INTENT_KEY,
       JSON.stringify({ productId: "cli", prompt: "No route" })
     );
     expect(readPendingIntent()).toBeNull();
+  });
+
+  it("maps the legacy 'chat' product id onto the canonical Spaces lane", () => {
+    window.localStorage.setItem(
+      PENDING_INTENT_KEY,
+      JSON.stringify({
+        productId: "chat",
+        taskKind: "chat",
+        prompt: "Draft a reply",
+        returnTo: "/spaces",
+        createdAt: new Date().toISOString(),
+      })
+    );
+
+    const intent = readPendingIntent();
+    expect(intent?.productId).toBe("spaces");
+    expect(intent?.returnTo).toBe("/spaces");
   });
 
   it("ignores intents older than the short redirect handoff window", () => {

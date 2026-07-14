@@ -1803,9 +1803,22 @@ button.v2-status-strip__item:focus-visible {
   background: var(--v2-accent);
 }
 
-.zaki-product-rail__button.is-disabled {
-  opacity: 0.42;
-  cursor: not-allowed;
+/* Coming-soon spokes are dimmed but NOT inert: they navigate to their gate page.
+   No `cursor: not-allowed` — the control does something, so it must look clickable. */
+.zaki-product-rail__button.is-soon {
+  opacity: 0.55;
+}
+
+.zaki-product-rail__button.is-soon:hover,
+.zaki-product-rail__button.is-soon:focus-visible,
+.zaki-product-rail__button.is-soon[aria-current="page"] {
+  opacity: 1;
+}
+
+.zaki-product-rail__state {
+  padding-left: 8px;
+  border-left: 1px solid var(--v2-hairline);
+  color: var(--v2-ink-3);
 }
 
 .zaki-product-rail__button.is-menu-open {

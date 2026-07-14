@@ -11,10 +11,8 @@ import { useNavigate } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
 import {
   Brain,
-  BriefcaseBusiness,
   Clock3,
   Gauge,
-  GraduationCap,
   LogIn,
   MessageSquareText,
   PenTool,
@@ -88,20 +86,19 @@ const WEBSITE_PRICING_ROUTE = "/pricing";
 const COMING_SOON_PRODUCT_IDS = new Set<AnonymousWorkProductId>([
   "design",
   "minutes",
-  "learning",
-  "hire",
 ]);
 const AUTH_REQUIRED_PRODUCT_IDS = new Set<AnonymousWorkProductId>([
   "agent",
   "brain",
 ]);
 
+/** The lane a coming-soon spoke falls back to, so the user is never stranded. */
+const RECOVERY_PRODUCT_ID: AnonymousWorkProductId = "spaces";
+
 const COMMAND_TASK_KIND: Record<AnonymousWorkProductId, string> = {
   agent: "plan",
   brain: "map",
-  learning: "study_plan",
   design: "brief",
-  hire: "career_plan",
   minutes: "meeting_notes",
   spaces: "chat",
 };
@@ -109,9 +106,7 @@ const COMMAND_TASK_KIND: Record<AnonymousWorkProductId, string> = {
 const COMMAND_PRODUCT_ICON: Record<AnonymousWorkProductId, LucideIcon> = {
   agent: Sparkles,
   brain: Brain,
-  learning: GraduationCap,
   design: PenTool,
-  hire: BriefcaseBusiness,
   minutes: Clock3,
   spaces: MessageSquareText,
 };
@@ -207,14 +202,7 @@ function isAvailabilityBlocked(availability?: MeterAvailableNow | null) {
 
 function getCommandProductName(t: TranslateFn, productId: AnonymousWorkProductId) {
   return t(`zakiDashboard.products.names.${productId}`, {
-    defaultValue:
-      productId === "learning"
-        ? "Learn"
-        : productId === "spaces"
-          ? "Chat"
-          : productId === "hire"
-            ? "Career"
-          : productId[0]?.toUpperCase() + productId.slice(1),
+    defaultValue: productId[0]?.toUpperCase() + productId.slice(1),
   });
 }
 
@@ -226,9 +214,7 @@ function getCommandProductVerb(
   const fallback: Record<AnonymousWorkProductId, { signed: string; guest: string }> = {
     agent: { signed: "move", guest: "plan" },
     brain: { signed: "map", guest: "map" },
-    learning: { signed: "learn", guest: "study" },
     design: { signed: "shape", guest: "shape" },
-    hire: { signed: "advance", guest: "advance" },
     minutes: { signed: "capture", guest: "capture" },
     spaces: { signed: "chat", guest: "chat" },
   };
@@ -256,8 +242,6 @@ function getCommandPlaceholder(
     },
     spaces: "Ask a question, draft a reply, translate text, or compare options.",
     design: "Sketch the product, page, or brand direction you want to shape.",
-    learning: "Name the topic and goal; ZAKI can make a study plan or explain the first step.",
-    hire: "Paste a role, CV note, or career goal; ZAKI can shape the next move.",
     minutes: "Bring a meeting recording or notes; Minutes will turn them into decisions and follow-ups.",
   };
   const detail = fallback[productId];
@@ -298,28 +282,18 @@ function getCommandProductDetails(
         : "The graph belongs to your account, not this browser session.",
       accessTone: signedIn ? "success" : "accent",
     },
-    learning: {
-      headline: "If you need study help today, use Chat or Agent.",
-      note: "Learn stays gated until learner state and the beta path are ready.",
-      accessTone: "warn",
-    },
     design: {
-      headline: "If you need a design brief today, use Chat or Agent.",
-      note: "Design stays waitlisted until the project service is ready.",
-      accessTone: "warn",
-    },
-    hire: {
-      headline: "If you need CV or career planning today, use Chat or Agent.",
-      note: "Career stays gated until the private workflow is ready.",
+      headline: "If you need a design brief today, use Spaces or Agent.",
+      note: "Design is coming soon while the project service is finalized.",
       accessTone: "warn",
     },
     minutes: {
-      headline: "If you need meeting notes today, use Chat or Agent.",
+      headline: "If you need meeting notes today, use Spaces or Agent.",
       note: "Minutes is coming soon while ingestion, privacy, and retention are finalized.",
       accessTone: "warn",
     },
     spaces: {
-      headline: "If you need a fast answer, draft, or translation, use Chat.",
+      headline: "If you need a fast answer, draft, or translation, use Spaces.",
       note: "No setup. Anonymous usage works until you choose to save.",
       accessTone: "success",
     },
@@ -381,7 +355,7 @@ function getCommandSubmitLabel(
   }
   if (productId === "spaces") {
     return t("zakiDashboard.command.submitChat", {
-      defaultValue: "Start chat",
+      defaultValue: "Start in Spaces",
     });
   }
   if (isAuthRequiredProduct(productId) && !signedIn) {
@@ -1376,6 +1350,33 @@ export function ZakiDashboard({
     ]
   );
 
+  /**
+   * Recovery path for coming-soon lanes (Design/Minutes). Their submit is legitimately
+   * disabled, so without this the user is stranded with a typed prompt and no way out.
+   * Carries the prompt straight over into the canonical Spaces lane.
+   */
+  const handleContinueInSpaces = useCallback(() => {
+    setSelectedProductId(RECOVERY_PRODUCT_ID);
+
+    const prompt = commandText.trim();
+    if (!prompt) {
+      commandInputRef.current?.focus();
+      return;
+    }
+
+    const anonymousWorkId = persistAnonymousCommandDraft(RECOVERY_PRODUCT_ID, prompt);
+    writeDashboardIntent(RECOVERY_PRODUCT_ID, prompt, anonymousWorkId);
+    onSendExample(prompt);
+    setCommandText("");
+    refreshAnonymousWork();
+  }, [
+    commandText,
+    onSendExample,
+    persistAnonymousCommandDraft,
+    refreshAnonymousWork,
+    writeDashboardIntent,
+  ]);
+
   const handleContinueAnonymousWork = useCallback(
     async (item: AnonymousWorkItem) => {
       setSelectedProductId(item.productId);
@@ -1664,6 +1665,19 @@ export function ZakiDashboard({
                       <LogIn className="size-4" aria-hidden="true" />
                       {t("zakiDashboard.command.saveWork", {
                         defaultValue: "Save this work",
+                      })}
+                    </V2Button>
+                  ) : null}
+                  {selectedProductComingSoon ? (
+                    <V2Button
+                      type="button"
+                      data-testid="zaki-dashboard-continue-in-spaces"
+                      className="zaki-dashboard-command__recover"
+                      onClick={handleContinueInSpaces}
+                    >
+                      <MessageSquareText className="size-4" aria-hidden="true" />
+                      {t("zakiDashboard.command.continueInSpaces", {
+                        defaultValue: "Continue in Spaces instead",
                       })}
                     </V2Button>
                   ) : null}

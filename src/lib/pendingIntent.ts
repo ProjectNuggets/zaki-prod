@@ -54,13 +54,13 @@ function normalizeProductId(value: unknown): AnonymousWorkProductId | null {
     productId === "agent" ||
     productId === "spaces" ||
     productId === "brain" ||
-    productId === "learning" ||
-    productId === "hire" ||
     productId === "design" ||
     productId === "minutes"
   ) {
     return productId;
   }
+  // Legacy inbound alias: ?product=chat resolves to the canonical Spaces lane.
+  if (productId === "chat") return "spaces";
   return null;
 }
 
@@ -78,11 +78,10 @@ function inferProductFromRoute(pathname: string): AnonymousWorkProductId | null 
   const normalized = String(pathname || "").replace(/\/+$/, "") || "/";
   if (normalized === "/agent") return "agent";
   if (normalized === "/spaces" || normalized.startsWith("/spaces/")) return "spaces";
+  if (normalized === "/chat") return "spaces";
   if (normalized === "/brain") return "brain";
-  if (normalized === "/learn") return "learning";
   if (normalized === "/design") return "design";
   if (normalized === "/minutes") return "minutes";
-  if (normalized === "/hire") return "hire";
   return null;
 }
 

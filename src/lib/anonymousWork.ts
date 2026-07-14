@@ -9,12 +9,12 @@ const MAX_TITLE_LENGTH = 96;
 const MAX_ROUTE_LENGTH = 240;
 const MAX_TASK_KIND_LENGTH = 64;
 
+// Ledger product ids track the release surface only. Learn/Hire are retired from every
+// UI/nav/ledger surface (WP-K); their engines stay, but they can never enter this ledger.
 export type AnonymousWorkProductId =
   | "agent"
   | "spaces"
   | "brain"
-  | "learning"
-  | "hire"
   | "design"
   | "minutes";
 
@@ -92,13 +92,14 @@ function normalizeProductId(value: unknown): AnonymousWorkProductId | null {
     productId === "agent" ||
     productId === "spaces" ||
     productId === "brain" ||
-    productId === "learning" ||
-    productId === "hire" ||
     productId === "design" ||
     productId === "minutes"
   ) {
     return productId;
   }
+  // Legacy "chat" ledger rows map onto the canonical Spaces lane; stale "learning"/"hire"
+  // rows written before the four-spokes cut are dropped on read.
+  if (productId === "chat") return "spaces";
   return null;
 }
 

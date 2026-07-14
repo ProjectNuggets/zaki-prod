@@ -98,7 +98,8 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.capacityWindowLow": "{{hours}}h Agent window is {{percent}}% used. Next room clears {{reset}}.",
     "zakiDashboard.command.agentCreditsLow": "Agent needs room.",
     "zakiDashboard.command.nearCapNudge": "You're at {{percent}}% this week — upgrade for more room.",
-    "zakiDashboard.command.comingSoonHelper": "{{product}} is coming soon. Use Chat or Agent to start now.",
+    "zakiDashboard.command.comingSoonHelper": "{{product}} is coming soon. Use Spaces or Agent to start now.",
+    "zakiDashboard.command.continueInSpaces": "Continue in Spaces instead",
     "zakiDashboard.command.submitSignIn": "Sign in for {{product}}",
     "zakiDashboard.command.submitComingSoon": "{{product}} coming soon",
     "zakiDashboard.command.markers.free": "Free",
@@ -106,7 +107,6 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.markers.live": "Live",
     "zakiDashboard.command.markers.save": "Save",
     "zakiDashboard.command.markers.beta": "Beta",
-    "zakiDashboard.command.markers.waitlist": "Waitlist",
     "zakiDashboard.command.markers.comingSoon": "Coming soon",
     "zakiDashboard.command.creditsExhaustedTitle": "Weekly usage is full.",
     "zakiDashboard.command.creditsExhaustedCopy": "Your draft stays saved here. Sign up, wait for the weekly reset, or pick a plan with more room.",
@@ -117,7 +117,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.viewPlans": "View plans",
     "zakiDashboard.command.waitForReset": "Wait for reset",
     "zakiDashboard.command.waitForResetDate": "Wait for reset {{reset}}",
-    "zakiDashboard.command.submitChat": "Start chat",
+    "zakiDashboard.command.submitChat": "Start in Spaces",
     "zakiDashboard.command.submitOpen": "Continue in {{product}}",
     "zakiDashboard.command.submitSignup": "Save and continue",
     "zakiDashboard.command.details.agent.headline.signed": "If you need a messy goal turned into action, use Agent.",
@@ -128,16 +128,12 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.details.brain.headline.guest": "If you need durable memory, sign in for Brain.",
     "zakiDashboard.command.details.brain.note.signed": "Search the graph, inspect saved context, and refine account memory.",
     "zakiDashboard.command.details.brain.note.guest": "The graph belongs to your account, not this browser session.",
-    "zakiDashboard.command.details.spaces.headline": "If you need a fast answer, draft, or translation, use Chat.",
+    "zakiDashboard.command.details.spaces.headline": "If you need a fast answer, draft, or translation, use Spaces.",
     "zakiDashboard.command.details.spaces.note": "No setup. Anonymous usage works until you choose to save.",
-    "zakiDashboard.command.details.hire.headline": "If you need CV or career planning today, use Chat or Agent.",
-    "zakiDashboard.command.details.hire.note": "Career stays gated until the private workflow is ready.",
-    "zakiDashboard.command.details.design.headline": "If you need a design brief today, use Chat or Agent.",
-    "zakiDashboard.command.details.design.note": "Design stays waitlisted until the project service is ready.",
-    "zakiDashboard.command.details.minutes.headline": "If you need meeting notes today, use Chat or Agent.",
+    "zakiDashboard.command.details.design.headline": "If you need a design brief today, use Spaces or Agent.",
+    "zakiDashboard.command.details.design.note": "Design is coming soon while the project service is finalized.",
+    "zakiDashboard.command.details.minutes.headline": "If you need meeting notes today, use Spaces or Agent.",
     "zakiDashboard.command.details.minutes.note": "Minutes is coming soon while ingestion, privacy, and retention are finalized.",
-    "zakiDashboard.command.details.learning.headline": "If you need study help today, use Chat or Agent.",
-    "zakiDashboard.command.details.learning.note": "Learn stays gated until learner state and the beta path are ready.",
     "zakiDashboard.links.howItWorks": "How it works",
     "zakiDashboard.links.waysToBuy": "Plans",
     "zakiDashboard.links.fullPalette": "Product overview",
@@ -219,10 +215,8 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.products.notAvailable": "Not available",
     "zakiDashboard.products.notAvailableAria": "{{product}} is not available",
     "zakiDashboard.products.names.agent": "Agent",
-    "zakiDashboard.products.names.spaces": "Chat",
+    "zakiDashboard.products.names.spaces": "Spaces",
     "zakiDashboard.products.names.brain": "Brain",
-    "zakiDashboard.products.names.learning": "Learn",
-    "zakiDashboard.products.names.hire": "Career",
     "zakiDashboard.products.names.design": "Design",
     "zakiDashboard.products.names.minutes": "Minutes",
     "zakiDashboard.products.tags.live": "Live",
@@ -551,7 +545,7 @@ describe("ZakiDashboard", () => {
       .getAllByRole("tab")
       .map((tab) => tab.getAttribute("aria-label"));
 
-    expect(tabs).toEqual(["Agent", "Chat", "Design", "Minutes"]);
+    expect(tabs).toEqual(["Agent", "Spaces", "Design", "Minutes"]);
     expect(screen.queryByRole("tab", { name: "Brain" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Learn" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Career" })).not.toBeInTheDocument();
@@ -761,11 +755,11 @@ describe("ZakiDashboard", () => {
       .getAllByRole("tab")
       .map((tab) => tab.getAttribute("aria-label"));
 
-    expect(tabs).toEqual(["Agent", "Chat", "Design", "Minutes"]);
+    expect(tabs).toEqual(["Agent", "Spaces", "Design", "Minutes"]);
     expect(screen.queryByRole("tab", { name: "Brain" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Learn" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Career" })).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Chat" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Spaces" })).toHaveAttribute("aria-selected", "true");
     expect(container.querySelector(".zaki-dashboard-command__helper")).toBeNull();
     expect(
       screen.getByPlaceholderText("Ask a question, draft a reply, translate text, or compare options.")
@@ -896,9 +890,59 @@ describe("ZakiDashboard", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Minutes" }));
 
     const hint = screen.getByTestId("zaki-dashboard-product-hint");
-    expect(hint).toHaveTextContent("If you need meeting notes today, use Chat or Agent.");
+    expect(hint).toHaveTextContent("If you need meeting notes today, use Spaces or Agent.");
     expect(hint).toHaveTextContent("Minutes is coming soon");
     expect(screen.getByRole("button", { name: "Minutes coming soon" })).toBeDisabled();
+  });
+
+  it("names the chat lane 'Spaces' in the product tab, never 'Chat'", () => {
+    renderDashboard();
+
+    // WP-K: ONE canonical name per lane, matching the ProductRail label.
+    expect(screen.getByRole("tab", { name: "Spaces" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Chat" })).not.toBeInTheDocument();
+  });
+
+  it("offers a recovery path out of a coming-soon lane, carrying the typed prompt into Spaces", () => {
+    // Spec A2: selecting Design/Minutes used to leave the user with a typed prompt, a
+    // permanently disabled submit, and no way forward. There must always be an exit.
+    useAuthStore.setState({
+      token: null,
+      user: null,
+      isHydrating: false,
+      isLoading: false,
+    });
+    const onSendExample = jest.fn();
+
+    renderDashboard(onSendExample);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Design" }));
+    fireEvent.change(screen.getByLabelText("Describe what you want ZAKI to do"), {
+      target: { value: "A landing page for a coffee brand" },
+    });
+
+    // Submit is legitimately disabled for a lane that cannot accept work...
+    expect(screen.getByRole("button", { name: "Design coming soon" })).toBeDisabled();
+
+    // ...so the recovery control is the thing that must work.
+    const recover = screen.getByTestId("zaki-dashboard-continue-in-spaces");
+    expect(recover).toBeEnabled();
+    fireEvent.click(recover);
+
+    // The typed prompt is carried over, not lost.
+    expect(onSendExample).toHaveBeenCalledWith("A landing page for a coffee brand");
+    expect(screen.getByRole("tab", { name: "Spaces" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+  });
+
+  it("hides the recovery control on lanes that can accept work", () => {
+    renderDashboard();
+
+    expect(
+      screen.queryByTestId("zaki-dashboard-continue-in-spaces")
+    ).not.toBeInTheDocument();
   });
 
   it("submits anonymous chat from the command dashboard with local work and pending intent", () => {
@@ -915,7 +959,7 @@ describe("ZakiDashboard", () => {
     fireEvent.change(screen.getByLabelText("Describe what you want ZAKI to do"), {
       target: { value: "Let's test the platform flow" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Start chat" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start in Spaces" }));
 
     expect(onSendExample).toHaveBeenCalledWith("Let's test the platform flow");
     const ledger = JSON.parse(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY) || "{}");
@@ -1102,7 +1146,7 @@ describe("ZakiDashboard", () => {
     expect(screen.getByTestId("zaki-dashboard-command-meter")).toHaveAccessibleName(
       "About 0 agent runs or 0 chats left — 0 of 100 weekly usage remaining."
     );
-    expect(screen.getByRole("button", { name: "Start chat" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Start in Spaces" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Save and sign up" }));
 
     expect(textarea).toHaveValue("Do not lose this exhausted-credit prompt");
