@@ -120,6 +120,7 @@ import {
   type AgentInspectorTab,
   type AgentInspectorTabRequest,
 } from "./chat/AgentInspectorRail";
+import type { AgentPlanPanelStep } from "./chat/AgentPlanPanelModel";
 import { BrowserViewFeedPanel } from "./chat/BrowserViewFeedPanel";
 import { ZakiDashboard } from "./chat/views/ZakiDashboard";
 import { V2StatusStrip } from "@/app/components/v2";
@@ -1934,7 +1935,14 @@ export function extractNullalisNarrationFrame(
       (typeof payload.status === "string" && payload.status.trim()) ||
       (typeof payload.message === "string" && payload.message.trim()) ||
       (phase === "thinking" ? "Thinking..." : phase.replace(/_/g, " ")),
-    tool: typeof payload.tool === "string" ? payload.tool : null,
+    tool:
+      typeof payload.tool === "string"
+        ? payload.tool
+        : typeof payload.tool_name === "string"
+          ? payload.tool_name
+          : typeof payload.toolName === "string"
+            ? payload.toolName
+            : null,
     iteration: numericValue(payload.iteration),
     durationMs,
     stepIndex,
@@ -2788,7 +2796,7 @@ export function extractNullalisTranscriptEntry(
       const duration = frame.durationMs != null ? ` · ${Math.round(frame.durationMs)}ms` : "";
       text = tool ? `${tool} completed${duration}` : label || `Tool completed${duration}`;
     } else if (frame.phase === "plan_step" && frame.stepIndex != null && frame.stepTotal != null) {
-      text = `Step ${frame.stepIndex}/${frame.stepTotal}: ${label}`;
+      text = `Step ${frame.stepIndex + 1}/${frame.stepTotal}: ${label}`;
     }
     const files = extractNullalisFiles(payload);
     const command = extractNullalisCommand(payload);
@@ -2839,11 +2847,20 @@ export function extractNullalisTranscriptEntry(
       tool: frame.tool,
       toolUseId,
       taskId,
+      stepIndex: frame.stepIndex,
+      stepTotal: frame.stepTotal,
       durationMs: frame.durationMs,
       files,
       command,
       heartbeat,
-      resultState: frame.phase === "tool_done" ? "done" : frame.phase === "tool_start" ? "running" : null,
+      resultState:
+        frame.phase === "tool_done"
+          ? "done"
+          : frame.phase === "tool_start" || frame.phase === "plan_step"
+            ? "running"
+            : frame.phase === "error_recovery"
+              ? "failed"
+              : null,
       groupKey:
         toolUseId
           ? `tool-use:${toolUseId}`
@@ -4037,6 +4054,30 @@ export function ChatArea() {
     () => activeAgentTaskItems(agentTaskItems),
     [agentTaskItems]
   );
+  const agentInspectorTranscriptEntries = useMemo(() => {
+    if (nullalisTranscriptEntries.length) return nullalisTranscriptEntries;
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (!message || message.role !== "assistant") continue;
+      const snapshot = localTurnSnapshots[message.id];
+      if (snapshot?.length) return snapshot;
+      const events = (message as {
+        turnEvents?: Array<{ eventType: string; payload: Record<string, unknown>; ts?: number }>;
+      }).turnEvents;
+      if (!Array.isArray(events) || !events.length) continue;
+      const entries = events
+        .map((event) =>
+          extractNullalisTranscriptEntry(
+            event.eventType,
+            event.payload ?? {},
+            typeof event.ts === "number" ? event.ts : Date.now()
+          )
+        )
+        .filter((entry): entry is NullalisTranscriptEntry => Boolean(entry));
+      if (entries.length) return entries;
+    }
+    return [];
+  }, [localTurnSnapshots, messages, nullalisTranscriptEntries]);
   const weeklyUsagePercent = getUsagePercent({
     used: meterResult?.data?.weekly?.used,
     limit: meterResult?.data?.weekly?.limit,
@@ -8586,6 +8627,18 @@ export function ChatArea() {
     zakiSessionKey,
   ]);
 
+  const handleRetryAgentPlanStep = useCallback(
+    async (step: AgentPlanPanelStep) => {
+      const retryPrompt = t("zakiAgent.planPanel.retryPrompt", {
+        defaultValue:
+          "Retry the failed step \"{{title}}\" as a new continuation. Review the earlier failure, preserve completed work, and request approval before repeating any side effect.",
+        title: step.title,
+      });
+      await handleSend(retryPrompt, []);
+    },
+    [handleSend, t]
+  );
+
   useEffect(() => {
     if (!isAuthReady || !authUserId || isStreaming) return;
     const pendingIntent = readPendingIntent();
@@ -9799,6 +9852,10 @@ export function ChatArea() {
 
   const renderAgentInspectorRail = (options?: { mobile?: boolean }) => isAgentSurface ? (
     <AgentInspectorRail
+      sessionKey={normalizedActiveZakiSessionKey}
+      tasks={agentCurrentTaskItems}
+      isStreaming={isStreaming}
+      isOnline={isOnline}
       cronJobs={agentCronJobs}
       cronLoading={agentCronLoading}
       cronError={agentCronError}
@@ -9809,9 +9866,10 @@ export function ChatArea() {
       artifactsScope={agentArtifactScope}
       artifactsLoading={agentArtifactsLoading}
       artifactsError={agentArtifactsError}
-      transcriptEntries={nullalisTranscriptEntries}
+      transcriptEntries={agentInspectorTranscriptEntries}
       onCronChanged={refreshAgentRuntimePanelData}
       onOpenArtifact={openAgentArtifactCanvas}
+      onRetryPlanStep={handleRetryAgentPlanStep}
       tabRequest={agentInspectorTabRequest}
       onClose={
         options?.mobile

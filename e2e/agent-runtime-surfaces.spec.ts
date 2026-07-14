@@ -222,6 +222,51 @@ const scenarios: Record<string, RuntimeScenario> = {
       },
     ],
   },
+  planFailure: {
+    name: "plan-failure",
+    messages: [
+      { id: "user-plan-failure", role: "user", content: "Prepare and verify the release." },
+      {
+        id: "assistant-plan-failure",
+        role: "assistant",
+        content: "The release checks stopped at the migration step.",
+        events: [
+          event("progress", {
+            type: "progress",
+            phase: "plan_step",
+            label: "Inspect the release state",
+            step_index: 0,
+            step_total: 3,
+            tool_name: "file_read",
+          }, 1_779_906_100_000),
+          event("progress", {
+            type: "progress",
+            phase: "tool_done",
+            label: "Release state inspected",
+            step_index: 0,
+            step_total: 3,
+            tool_name: "file_read",
+          }, 1_779_906_101_000),
+          event("progress", {
+            type: "progress",
+            phase: "plan_step",
+            label: "Run the schema migration",
+            step_index: 1,
+            step_total: 3,
+            tool_name: "shell",
+          }, 1_779_906_102_000),
+          event("progress", {
+            type: "progress",
+            phase: "error_recovery",
+            label: "invalid_session_key",
+            step_index: 1,
+            step_total: 3,
+            tool_name: "shell",
+          }, 1_779_906_103_000),
+        ],
+      },
+    ],
+  },
   toolOnly: {
     name: "tool-only",
     tasks: [
@@ -350,6 +395,10 @@ async function mockAgentRuntimeScenario(page: Page, scenario: RuntimeScenario) {
     await json(route, { lists: [], current_list_id: null });
   });
 
+  await page.route(`**/api/agent/sessions/${ENCODED_SESSION_KEY}/plan`, async (route) => {
+    await json(route, { active: false, plan: null });
+  });
+
   await page.route("**/api/agent/tasks**", async (route) => {
     await json(route, { tasks: scenario.tasks ?? [] });
   });
@@ -416,6 +465,7 @@ test.describe("Agent runtime surfaces", () => {
         }
         const inspector = page.locator(".zaki-agent-inspector:visible").first();
         await expect(inspector).toBeVisible();
+        await inspector.getByRole("tab", { name: "Artifacts" }).click();
         await expect(
           inspector.getByTestId("agent-artifact-row").getByText("Founder GTM brief")
         ).toBeVisible();
@@ -458,9 +508,36 @@ test.describe("Agent runtime surfaces", () => {
         await expect(browserScope.getByText("https://example.com/pricing").first()).toBeVisible();
       }
 
+      if (scenario.name === "plan-failure") {
+        const openPanelButton = page.getByRole("button", { name: /Open agent panel/i });
+        if (await openPanelButton.isVisible().catch(() => false)) {
+          await openPanelButton.click();
+        }
+        const inspector = page.locator(".zaki-agent-inspector:visible").first();
+        await expect(inspector).toBeVisible();
+        await expect(inspector.getByRole("tab", { name: "Plan" })).toHaveAttribute(
+          "aria-selected",
+          "true"
+        );
+        const failedStep = inspector.getByTestId("agent-plan-step-2");
+        await expect(failedStep).toHaveAttribute("data-state", "failed");
+        await expect(failedStep.getByText("Run the schema migration")).toBeVisible();
+        await expect(failedStep.getByText("shell")).toBeVisible();
+        await expect(failedStep).not.toContainText("invalid_session_key");
+        await page.screenshot({
+          path: `${OUT_DIR}/${device}-plan-failure-state.png`,
+          fullPage: false,
+          scale: "css",
+        });
+        await failedStep.getByRole("button", { name: "Retry from here" }).click();
+        await failedStep.getByRole("button", { name: "Start retry" }).click();
+        await expect(page.getByText(/Retry the failed step "Run the schema migration"/)).toBeVisible();
+        await expect(page.getByText("Done.", { exact: true })).toBeVisible();
+      }
+
       if (scenario.name === "tool-only") {
-        // Active work lives inline with the current turn now that the old Plan
-        // inspector tab has been removed.
+        // Active work remains legible inline and is also available through the
+        // Plan panel's explicit task fallback.
         const plan = page.locator("details.zaki-agent-plan-inline").first();
         await expect(plan).toBeVisible();
         await expect(plan.getByText("Waiting for delegated research result")).toBeVisible();

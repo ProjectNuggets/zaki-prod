@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import {
   createAgentCron,
   deleteAgentCron,
@@ -38,10 +39,12 @@ import {
   type AgentArtifactExportState,
 } from "@/app/components/agent/agentArtifactSurface";
 import { V2Panel, V2PanelHead, V2Tabs } from "@/app/components/v2";
-import type { NullalisTranscriptEntry } from "./BotStatusRail";
+import type { NullalisTaskItem, NullalisTranscriptEntry } from "./BotStatusRail";
 import { buildAgentInspectorPanelModel } from "./AgentInspectorPanelModel";
+import { AgentPlanPanel } from "./AgentPlanPanel";
+import type { AgentPlanPanelStep } from "./AgentPlanPanelModel";
 
-export type AgentInspectorTab = "artifacts" | "cron";
+export type AgentInspectorTab = "plan" | "artifacts" | "cron";
 
 export type AgentInspectorTabRequest = {
   tab: AgentInspectorTab;
@@ -134,6 +137,10 @@ type ArtifactRow = {
 };
 
 export type AgentInspectorRailProps = {
+  sessionKey?: string | null;
+  tasks?: NullalisTaskItem[];
+  isStreaming?: boolean;
+  isOnline?: boolean;
   cronJobs?: AgentInspectorCronJob[];
   cronLoading?: boolean;
   cronError?: string | null;
@@ -147,6 +154,7 @@ export type AgentInspectorRailProps = {
   transcriptEntries: NullalisTranscriptEntry[];
   onCronChanged?: () => void | Promise<void>;
   onOpenArtifact?: (artifact: AgentInspectorArtifact) => void;
+  onRetryPlanStep?: (step: AgentPlanPanelStep) => void | Promise<void>;
   tabRequest?: AgentInspectorTabRequest | null;
   onClose?: () => void;
 };
@@ -554,6 +562,10 @@ function PanelActionButton({
 }
 
 export function AgentInspectorRail({
+  sessionKey = null,
+  tasks = [],
+  isStreaming = false,
+  isOnline = true,
   cronJobs = [],
   cronLoading = false,
   cronError = null,
@@ -565,10 +577,12 @@ export function AgentInspectorRail({
   transcriptEntries,
   onCronChanged,
   onOpenArtifact,
+  onRetryPlanStep,
   tabRequest = null,
   onClose,
 }: AgentInspectorRailProps) {
-  const [tab, setTab] = useState<AgentInspectorTab>("artifacts");
+  const { t } = useTranslation();
+  const [tab, setTab] = useState<AgentInspectorTab>("plan");
   const [artifactExportStates, setArtifactExportStates] = useState<
     Record<string, Partial<Record<AgentArtifactExportFormat, AgentArtifactExportState>>>
   >({});
@@ -792,7 +806,13 @@ export function AgentInspectorRail({
 
   useEffect(() => {
     if (!tabRequest) return;
-    setTab(tabRequest.tab === "cron" ? "cron" : "artifacts");
+    setTab(
+      tabRequest.tab === "cron"
+        ? "cron"
+        : tabRequest.tab === "artifacts"
+          ? "artifacts"
+          : "plan"
+    );
   }, [tabRequest?.id, tabRequest?.tab]);
 
   const setArtifactExportState = (
@@ -988,12 +1008,16 @@ export function AgentInspectorRail({
       </div>
       <V2Tabs
         fullWidth
-        columns={2}
+        columns={3}
         className="zaki-agent-inspector__tabs"
         ariaLabel="Agent panels"
         value={tab}
         onChange={handleTabChange}
         options={[
+          {
+            id: "plan",
+            label: t("zakiAgent.planPanel.tab", { defaultValue: "Plan" }),
+          },
           {
             id: "artifacts",
             label: "Artifacts",
@@ -1004,6 +1028,17 @@ export function AgentInspectorRail({
       />
 
       <div className="zaki-agent-inspector__body">
+        {tab === "plan" ? (
+          <AgentPlanPanel
+            sessionKey={sessionKey}
+            transcriptEntries={transcriptEntries}
+            tasks={tasks}
+            isStreaming={isStreaming}
+            isOnline={isOnline}
+            onRetryStep={onRetryPlanStep}
+          />
+        ) : null}
+
         {tab === "cron" ? (
           <V2Panel aria-label="Schedules" className="zaki-agent-inspector__pane">
             <div className="zaki-agent-inspector__cron-head">

@@ -8854,12 +8854,8 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   background: var(--v2-bg);
 }
 
-.zaki-agent-inspector__tabs button:nth-child(2n) {
+.zaki-agent-inspector__tabs button:last-child {
   border-right: 0;
-}
-
-.zaki-agent-inspector__tabs button:nth-child(-n + 2) {
-  border-bottom: 1px solid var(--v2-hairline-faint);
 }
 
 .zaki-agent-inspector__tabs button[aria-selected="true"] {
@@ -9041,6 +9037,280 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
 .zaki-agent-inspector__pane {
   overflow: hidden;
+}
+
+.zaki-agent-plan {
+  min-height: 100%;
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg);
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+}
+
+.zaki-agent-plan__head {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-agent-plan__title {
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.zaki-agent-plan__source {
+  color: var(--v2-ink-4);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.zaki-agent-plan__progress {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  color: var(--v2-ink-3);
+  font-size: 9px;
+}
+
+.zaki-agent-plan__progress strong {
+  color: var(--v2-ink-1);
+  font-size: 9px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.zaki-agent-plan__bar {
+  display: block;
+  width: 46px;
+  height: 2px;
+  overflow: hidden;
+  background: var(--v2-hairline-strong);
+}
+
+.zaki-agent-plan__bar span {
+  display: block;
+  height: 100%;
+  background: var(--v2-accent);
+  transition: width 180ms ease;
+}
+
+.zaki-agent-plan__objective {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+  color: var(--v2-ink-2);
+  font-size: 11px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.zaki-agent-plan__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.zaki-agent-plan__step {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-agent-plan__step:last-child {
+  border-bottom: 0;
+}
+
+.zaki-agent-plan__mark {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+  border: 1px solid var(--v2-hairline-strong);
+  color: var(--v2-ink-4);
+}
+
+.zaki-agent-plan__step.is-done .zaki-agent-plan__mark,
+.zaki-agent-plan__step.is-running .zaki-agent-plan__mark {
+  color: var(--v2-accent);
+}
+
+.zaki-agent-plan__step.is-failed {
+  background: var(--v2-selected);
+}
+
+.zaki-agent-plan__step.is-failed .zaki-agent-plan__mark {
+  border-color: var(--v2-accent);
+  color: var(--v2-accent);
+}
+
+.zaki-agent-plan__step-body {
+  min-width: 0;
+}
+
+.zaki-agent-plan__step-title {
+  color: var(--v2-ink-1);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.zaki-agent-plan__step.is-done .zaki-agent-plan__step-title {
+  color: var(--v2-ink-3);
+}
+
+.zaki-agent-plan__step-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 7px;
+  margin-top: 4px;
+  color: var(--v2-ink-4);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.zaki-agent-plan__step-meta .is-tool {
+  border: 1px solid var(--v2-hairline-strong);
+  padding: 1px 4px;
+  color: var(--v2-ink-2);
+}
+
+.zaki-agent-plan__failure {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--v2-hairline-faint);
+}
+
+.zaki-agent-plan__failure > p {
+  color: var(--v2-ink-2);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.zaki-agent-plan__failure button,
+.zaki-agent-plan__empty button,
+.zaki-agent-plan__retry-confirm button {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 7px;
+  border: 1px solid var(--v2-hairline-strong);
+  padding: 0 8px;
+  background: var(--v2-bg);
+  color: var(--v2-ink-1);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.zaki-agent-plan__failure button:not(:disabled):hover,
+.zaki-agent-plan__failure button:not(:disabled):focus-visible,
+.zaki-agent-plan__empty button:not(:disabled):hover,
+.zaki-agent-plan__empty button:not(:disabled):focus-visible {
+  border-color: var(--v2-accent);
+  color: var(--v2-accent);
+  outline: none;
+}
+
+.zaki-agent-plan__failure button:disabled,
+.zaki-agent-plan__empty button:disabled {
+  color: var(--v2-ink-4);
+  cursor: not-allowed;
+}
+
+.zaki-agent-plan__retry-confirm {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg-sunken);
+}
+
+.zaki-agent-plan__retry-confirm > p {
+  color: var(--v2-ink-3);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.zaki-agent-plan__retry-confirm > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.zaki-agent-plan__retry-error {
+  margin-top: 7px !important;
+  color: var(--v2-accent) !important;
+}
+
+.zaki-agent-plan__empty {
+  display: flex;
+  min-height: 88px;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  color: var(--v2-ink-3);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.zaki-agent-plan__empty svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.zaki-agent-plan__empty strong,
+.zaki-agent-plan__empty span {
+  display: block;
+}
+
+.zaki-agent-plan__empty strong {
+  color: var(--v2-ink-1);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.zaki-agent-plan__empty span {
+  margin-top: 3px;
+  color: var(--v2-ink-4);
+}
+
+.zaki-agent-plan__empty button {
+  flex: 0 0 auto;
+  margin-top: 0;
+  margin-inline-start: auto;
+}
+
+@media (max-width: 767px) {
+  .zaki-agent-plan__failure button,
+  .zaki-agent-plan__empty button,
+  .zaki-agent-plan__retry-confirm button {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zaki-agent-plan__bar span {
+    transition: none;
+  }
+
+  .zaki-agent-plan .animate-spin {
+    animation: none;
+  }
 }
 
 .zaki-agent-inspector__cron-head {
