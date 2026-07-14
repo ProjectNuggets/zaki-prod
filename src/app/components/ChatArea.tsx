@@ -8354,6 +8354,12 @@ export function ChatArea() {
           taskKind: isZakiBotTarget ? "plan" : "chat",
           prompt: trimmed,
           replyPreview: String(streamResult?.content || "").trim(),
+          // The FULL answer, formatting intact. An anonymous turn is never
+          // persisted server-side, so this is the only copy that exists — and
+          // it is what signing up imports into the real thread. Keeping only
+          // the 800-char preview would mean "we kept your work" carried over a
+          // truncated stub of it.
+          reply: String(streamResult?.content || "").trim(),
           route: isZakiBotTarget
             ? "/agent"
             : `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "@jest/globals";
 import {
   ANONYMOUS_WORK_LEDGER_KEY,
   readAnonymousWorkLedger,
+  removeAnonymousWorkItems,
   upsertAnonymousWorkItem,
   writeAnonymousWorkLedger,
   type AnonymousWorkItem,
@@ -151,5 +152,84 @@ describe("anonymous work ledger", () => {
     expect(ledger.items[0]?.replyPreview).toHaveLength(800);
     expect(ledger.items[0]?.route).toBe("/");
     expect(ledger.items[0]?.meterRemaining).toBe(0);
+  });
+
+  describe("the full assistant reply", () => {
+    it("keeps the answer's formatting intact, not just an 800-char one-liner", () => {
+      const reply = "Here is the plan:\n\n1. First\n2. Second";
+      const item = upsertAnonymousWorkItem({
+        productId: "spaces",
+        prompt: "Plan it",
+        replyPreview: reply,
+        reply,
+      });
+
+      // The preview is flattened for display...
+      expect(item?.replyPreview).toBe("Here is the plan: 1. First 2. Second");
+      // ...but the copy we IMPORT is the answer the visitor actually read. This
+      // is the only surviving copy — anonymous turns are never persisted
+      // server-side — so it has to be the real thing.
+      expect(item?.reply).toBe(reply);
+      expect(readAnonymousWorkLedger().items[0]?.reply).toBe(reply);
+    });
+
+    it("caps the stored reply so one long answer cannot blow the storage quota", () => {
+      const item = upsertAnonymousWorkItem({
+        productId: "spaces",
+        prompt: "Long one",
+        reply: "x".repeat(25000),
+      });
+      expect(item?.reply).toHaveLength(20000);
+    });
+
+    it("does not erase a stored reply when a later upsert omits it", () => {
+      const first = upsertAnonymousWorkItem({
+        productId: "spaces",
+        prompt: "Plan it",
+        reply: "the real answer",
+      });
+      // e.g. a follow-up status write that carries no reply field.
+      upsertAnonymousWorkItem({
+        id: first!.id,
+        productId: "spaces",
+        prompt: "Plan it",
+        status: "succeeded",
+      });
+
+      expect(readAnonymousWorkLedger().items[0]?.reply).toBe("the real answer");
+    });
+  });
+
+  describe("removeAnonymousWorkItems", () => {
+    it("consumes only the claimed item and leaves the rest of the ledger alone", () => {
+      const kept = upsertAnonymousWorkItem({
+        productId: "spaces",
+        prompt: "Imported work",
+        reply: "an answer",
+      });
+      const other = upsertAnonymousWorkItem({
+        productId: "spaces",
+        prompt: "Still unclaimed",
+        reply: "another answer",
+      });
+
+      removeAnonymousWorkItems([kept!.id]);
+
+      const items = readAnonymousWorkLedger().items;
+      expect(items).toHaveLength(1);
+      expect(items[0]?.id).toBe(other!.id);
+    });
+
+    it("is a no-op for an empty id list", () => {
+      upsertAnonymousWorkItem({ productId: "spaces", prompt: "Keep me", reply: "answer" });
+      removeAnonymousWorkItems([]);
+      expect(readAnonymousWorkLedger().items).toHaveLength(1);
+    });
+
+    it("tolerates ids that are not in the ledger", () => {
+      upsertAnonymousWorkItem({ productId: "spaces", prompt: "Keep me", reply: "answer" });
+      removeAnonymousWorkItems(["nope"]);
+      expect(readAnonymousWorkLedger().items).toHaveLength(1);
+    });
   });
 });

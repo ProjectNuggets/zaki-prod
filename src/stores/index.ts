@@ -1,4 +1,5 @@
 // Export all stores
+export { useAnonymousWorkClaimStore, selectWorkWasKept } from "./anonymousWorkClaimStore";
 export { useAuthStore } from "./authStore";
 export { useNavigationStore } from "./navigationStore";
 export { useSpacesStore } from "./spacesStore";

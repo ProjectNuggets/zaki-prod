@@ -320,6 +320,9 @@ export async function backendAuthRequest(
 export type SpacesAnonymousWorkClaimPayload = {
   workId?: string | null;
   prompt?: string;
+  /** The full assistant reply. This is what actually gets imported. */
+  reply?: string;
+  /** Legacy truncated preview; still sent so older ledgers remain importable. */
   replyPreview?: string;
   title?: string;
   threadId?: string | null;
@@ -331,7 +334,12 @@ export type SpacesAnonymousWorkClaimResponse = {
   workspaceSlug?: string;
   threadSlug?: string | null;
   route?: string;
+  /** Whether the server actually wrote the conversation into the thread. */
   imported?: boolean;
+  /** How many message rows it wrote. The ONLY basis for "we kept your work". */
+  importedCount?: number;
+  /** True when this work was already imported by an earlier claim. */
+  alreadyClaimed?: boolean;
   retryable?: boolean;
   code?: string;
   error?: string;

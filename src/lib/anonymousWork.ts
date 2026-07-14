@@ -5,6 +5,12 @@ const MAX_ITEMS = 20;
 const EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_PROMPT_LENGTH = 800;
 const MAX_REPLY_PREVIEW_LENGTH = 800;
+// The FULL assistant reply, kept so signing up can import the answer the
+// visitor actually read rather than an 800-character stub of it. Anonymous
+// turns are never persisted server-side, so this browser copy is the only one
+// that exists — it is what the claim carries into the account. Matches
+// ANONYMOUS_WORK_MAX_REPLY_CHARS on the backend.
+const MAX_REPLY_LENGTH = 20000;
 const MAX_TITLE_LENGTH = 96;
 const MAX_ROUTE_LENGTH = 240;
 const MAX_TASK_KIND_LENGTH = 64;
@@ -25,7 +31,10 @@ export type AnonymousWorkItem = {
   productId: AnonymousWorkProductId;
   taskKind: string;
   prompt: string;
+  /** Single-line, truncated. For rendering the ledger strip. */
   replyPreview: string;
+  /** The full assistant reply, with its formatting intact. What gets imported. */
+  reply: string;
   route: string;
   threadId: string | null;
   title: string;
@@ -66,6 +75,21 @@ function makeId() {
     return crypto.randomUUID();
   }
   return `anon-work-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * Strips control characters but keeps newlines and tabs. An assistant reply is
+ * markdown; running it through sanitizeText would collapse it onto one line, so
+ * we would carry a mangled copy of the answer the visitor actually read.
+ */
+function sanitizeRichText(value: unknown, maxLength: number) {
+  return String(value ?? "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, maxLength);
 }
 
 function sanitizeText(value: unknown, maxLength: number) {
@@ -132,6 +156,7 @@ function normalizeItem(value: unknown, now = Date.now()): AnonymousWorkItem | nu
     taskKind: sanitizeText(raw.taskKind, MAX_TASK_KIND_LENGTH) || "plan",
     prompt,
     replyPreview: sanitizeText(raw.replyPreview, MAX_REPLY_PREVIEW_LENGTH),
+    reply: sanitizeRichText(raw.reply, MAX_REPLY_LENGTH),
     route: sanitizeRoute(raw.route),
     threadId: sanitizeText(raw.threadId, 120) || null,
     title: sanitizeText(raw.title, MAX_TITLE_LENGTH) || buildAnonymousWorkTitle(prompt),
@@ -217,6 +242,8 @@ export function upsertAnonymousWorkItem(input: AnonymousWorkInput, now = Date.no
     taskKind: sanitizeText(input.taskKind, MAX_TASK_KIND_LENGTH) || existing?.taskKind || "plan",
     prompt,
     replyPreview: sanitizeText(input.replyPreview, MAX_REPLY_PREVIEW_LENGTH),
+    reply:
+      sanitizeRichText(input.reply, MAX_REPLY_LENGTH) || existing?.reply || "",
     route: sanitizeRoute(input.route || existing?.route || "/"),
     threadId: sanitizeText(input.threadId, 120) || existing?.threadId || null,
     title: sanitizeText(input.title, MAX_TITLE_LENGTH) || existing?.title || buildAnonymousWorkTitle(prompt),
@@ -231,4 +258,28 @@ export function upsertAnonymousWorkItem(input: AnonymousWorkInput, now = Date.no
     now
   );
   return item;
+}
+
+/**
+ * Drop saved work from the browser ledger.
+ *
+ * Call this ONLY once the server has confirmed the work is in the account.
+ * Clearing it on anything less (a request that was merely sent, a claim that
+ * imported nothing) destroys the only copy that exists — anonymous turns are
+ * never persisted server-side — and lets the same work be re-claimed into a
+ * duplicate thread on the next attempt.
+ */
+export function removeAnonymousWorkItems(ids: string[], now = Date.now()) {
+  const doomed = new Set(
+    (Array.isArray(ids) ? ids : [])
+      .map((id) => sanitizeText(id, 120))
+      .filter(Boolean)
+  );
+  if (!doomed.size) return readAnonymousWorkLedger(now);
+
+  const ledger = readAnonymousWorkLedger(now);
+  return writeAnonymousWorkLedger(
+    ledger.items.filter((item) => !doomed.has(item.id)),
+    now
+  );
 }

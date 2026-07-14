@@ -21,6 +21,7 @@ import {
 } from "@/lib/api";
 import { useAuthStore, useUIStore, useNavigationStore } from "@/stores";
 import { ZAKI_BOT_SPACE_ID, ZAKI_BOT_THREAD_ID } from "@/lib/zakiBot";
+import { useAnonymousWorkClaim } from "@/hooks/useAnonymousWorkClaim";
 import { consumeWebsiteCommandIntentFromUrl } from "@/lib/pendingIntent";
 import { getInitialLegalPolicyVersion } from "@/lib/legalPolicy";
 import { getProductLaunchState } from "@/lib/productRoutes";
@@ -319,6 +320,11 @@ export default function App() {
       isMounted = false;
     };
   }, [token, user?.username, isHydrating]);
+
+  // The one post-auth anonymous-work claim, shared by credential login AND the
+  // Google OAuth return. It keys off the token appearing, so every sign-in path
+  // gets it — Google returns used to claim nothing at all.
+  useAnonymousWorkClaim();
 
   const handleLegalReconsent = async () => {
     if (!legalReconsentChecked) {

@@ -498,7 +498,7 @@ describe("LoginScreen legal consent", () => {
     });
   });
 
-  it("claims anonymous Spaces work before returning after credential login", async () => {
+  it("hands the pending Spaces intent to the shared post-auth claim instead of consuming it", async () => {
     const user = userEvent.setup();
     window.history.replaceState(
       {},
@@ -536,19 +536,18 @@ describe("LoginScreen legal consent", () => {
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
     await waitFor(() => {
-      expect(claimAnonymousSpacesWork).toHaveBeenCalledWith({
-        workId: savedWork?.id,
-        prompt: "Keep building this launch memo",
-        replyPreview: "",
-        title: "Launch memo",
-        threadId: "anon-abc",
-        route: "/spaces/zaky/threads/anon-abc",
-      });
+      expect(window.location.pathname).toBe("/spaces/zaky/threads/anon-abc");
     });
-    await waitFor(() => {
-      expect(window.location.pathname).toBe("/spaces/signed-space/threads/thread-1");
-    });
-    expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
+
+    // The claim belongs to App's post-auth effect, which BOTH credential login
+    // and the Google OAuth return reach. Doing it here is what left Google
+    // sign-ups with their work silently dropped.
+    expect(claimAnonymousSpacesWork).not.toHaveBeenCalled();
+
+    // And the intent SURVIVES the redirect. Clearing it here is precisely what
+    // made ChatArea's replay find an empty slot, so the visitor landed in a
+    // thread with neither an import nor a replay.
+    expect(window.localStorage.getItem(PENDING_INTENT_KEY)).not.toBeNull();
   });
 
   it("uses the same preserved-work target for Google OAuth", async () => {

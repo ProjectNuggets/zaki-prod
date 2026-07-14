@@ -428,6 +428,14 @@ import {
   isAnonymousSpacesRouteTarget,
   normalizeSpacesProvisioningError,
 } from "./spaces-typ-provisioning.js";
+import {
+  claimRequestHasWork,
+  createAnonymousWorkClaimStore,
+  importAnonymousWorkClaim,
+  mergeImportedThreadHistory,
+  parseAnonymousWorkClaimRequest,
+  resolveClaimKey,
+} from "./anonymous-work-claim.js";
 import { buildAuthRouter } from "./auth-endpoints.js";
 import { loginHandler as zakiLoginHandler } from "./login-handler.js";
 import {
@@ -2902,6 +2910,11 @@ const spacesTypProvisioner = createSpacesTypProvisioner({
   fetchTypWorkspaces,
   randomPassword: () => crypto.randomBytes(18).toString("hex"),
 });
+
+// Anonymous work a visitor claims when they sign up. The turns are written here
+// (upstream has no message-append API) and merged into the thread history read
+// path, so the thread the visitor lands in genuinely contains their work.
+const anonymousWorkClaimStore = createAnonymousWorkClaimStore({ dbGet, dbAll, dbQuery });
 
 function sendSpacesProvisioningFailure(res, error, { stream = false } = {}) {
   const payload = buildSpacesProvisioningErrorPayload(error);
@@ -9897,7 +9910,26 @@ const getThreadChatsHandler = async (req, res) => {
       return;
     }
 
-    res.status(200).json(data);
+    // Work the user carried over from a signed-out session lives in ZAKI's own
+    // store (upstream only writes a thread message by running the model), so
+    // the thread history is the union of the two. Best-effort: a lookup failure
+    // must degrade to the upstream history, never break the thread.
+    let merged = data;
+    try {
+      const importedRows = await anonymousWorkClaimStore.listThreadMessages({
+        userId: access.zakiUser.id,
+        workspaceSlug: access.slug,
+        threadSlug,
+      });
+      merged = mergeImportedThreadHistory({ upstream: data, importedRows });
+    } catch (error) {
+      console.warn(
+        "[AnonymousSpaces] Imported turn merge skipped:",
+        error?.message || error
+      );
+    }
+
+    res.status(200).json(merged);
   } catch (error) {
     console.error("[Workspace] Thread chats error:", error);
     res.status(500).json({ error: error?.message || "Unable to load thread history." });
@@ -11062,17 +11094,41 @@ const claimAnonymousSpacesWorkHandler = async (req, res) => {
     }
 
     const body = req.body && typeof req.body === "object" ? req.body : {};
-    const prompt = sanitizeAnonymousClaimText(body.prompt, 800);
-    const replyPreview = sanitizeAnonymousClaimText(body.replyPreview, 800);
-    const workId = sanitizeAnonymousClaimText(body.workId, 120) || null;
-    const sourceThreadId = sanitizeAnonymousClaimText(body.threadId, 120) || null;
-    const sourceRoute = sanitizeAnonymousClaimText(body.route, 240) || null;
+    const claimRequest = parseAnonymousWorkClaimRequest(body);
+    const { workId, sourceThreadId, sourceRoute } = claimRequest;
 
-    if (!prompt && !replyPreview && !sourceRoute) {
+    if (!claimRequestHasWork(claimRequest)) {
       res.status(400).json({
         success: false,
         error: "Saved Spaces work is required.",
         code: "anonymous_work_required",
+      });
+      return;
+    }
+
+    // Idempotency. The same saved work claimed twice — a double-submit, a
+    // refresh, a second device finishing the same sign-up — resolves to the
+    // same key and returns the thread we already imported into. No second
+    // thread, no second copy of the messages.
+    const claimKey = resolveClaimKey(claimRequest);
+    const existingClaim = await anonymousWorkClaimStore.findClaim({
+      userId: zakiUser.id,
+      claimKey,
+    });
+    if (existingClaim) {
+      const importedCount = Number(existingClaim.imported_count) || 0;
+      res.status(200).json({
+        success: true,
+        workspaceSlug: existingClaim.workspace_slug,
+        threadSlug: existingClaim.thread_slug,
+        route: existingClaim.route,
+        imported: importedCount > 0,
+        importedCount,
+        alreadyClaimed: true,
+        workId,
+        sourceThreadId,
+        sourceRoute,
+        message: "Saved Spaces work is already in your account.",
       });
       return;
     }
@@ -11102,20 +11158,32 @@ const claimAnonymousSpacesWorkHandler = async (req, res) => {
       }
     }
 
-    const route = threadSlug
-      ? `/spaces/${target.workspaceSlug}/threads/${threadSlug}`
-      : `/spaces/${target.workspaceSlug}`;
+    // Write the saved conversation into the thread. `imported`/`importedCount`
+    // report what actually landed — a draft with no assistant reply imports
+    // nothing and says so, so the UI can never claim we kept work we did not.
+    const result = await importAnonymousWorkClaim({
+      request: claimRequest,
+      claimKey,
+      userId: zakiUser.id,
+      workspaceSlug: target.workspaceSlug,
+      threadSlug,
+      store: anonymousWorkClaimStore,
+    });
 
     res.status(200).json({
       success: true,
-      workspaceSlug: target.workspaceSlug,
-      threadSlug,
-      route,
-      imported: false,
+      workspaceSlug: result.workspaceSlug,
+      threadSlug: result.threadSlug,
+      route: result.route,
+      imported: result.imported,
+      importedCount: result.importedCount,
+      alreadyClaimed: result.alreadyClaimed,
       workId,
       sourceThreadId,
       sourceRoute,
-      message: "Browser-saved Spaces work is ready to continue.",
+      message: result.imported
+        ? "Saved Spaces work was moved into your account."
+        : "Spaces is ready to continue this work.",
     });
   } catch (error) {
     console.error("[AnonymousSpaces] Claim error:", error);
@@ -11130,7 +11198,11 @@ const claimAnonymousSpacesWorkHandler = async (req, res) => {
 
 app.post(
   "/api/spaces/anonymous-work/claim",
-  express.json({ limit: "50kb" }),
+  // The claim now carries the full assistant reply (capped at
+  // ANONYMOUS_WORK_MAX_REPLY_CHARS = 20k chars), which can exceed 50kb once
+  // UTF-8 encoded and JSON-escaped. The sanitizer, not the body limit, is what
+  // bounds the imported text.
+  express.json({ limit: "256kb" }),
   claimAnonymousSpacesWorkHandler
 );
 

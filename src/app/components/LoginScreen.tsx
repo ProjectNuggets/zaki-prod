@@ -14,9 +14,7 @@ import {
   fetchProfile,
   buildGoogleOAuthStartUrl,
   fetchGoogleOAuthStatus,
-  claimAnonymousSpacesWork,
 } from "@/lib/api";
-import { readAnonymousWorkLedger } from "@/lib/anonymousWork";
 import { clearPendingIntent, readPendingIntent } from "@/lib/pendingIntent";
 import { getConfiguredTurnstileSiteKey } from "@/lib/runtimeEnv";
 import { useAuthStore } from "@/stores";
@@ -165,18 +163,6 @@ function getDirectProtectedReturnTo(location: ReturnType<typeof useLocation>) {
     return "";
   }
   return getSafeRelativeReturnTo(`${location.pathname}${location.search}${location.hash}`);
-}
-
-function isSpacesReturnTo(value: string) {
-  return /^\/spaces(?:\/|$)/.test(value);
-}
-
-function findPendingSpacesWork(anonymousWorkId: string | null | undefined) {
-  const items = readAnonymousWorkLedger().items.filter((item) => item.productId === "spaces");
-  if (anonymousWorkId) {
-    return items.find((item) => item.id === anonymousWorkId) || items[0] || null;
-  }
-  return items[0] || null;
 }
 
 function getSafeAuthErrorMessage(message: unknown, fallback: string) {
@@ -852,45 +838,32 @@ export function LoginScreen() {
       );
       const pendingIntent = readPendingIntent();
       const pendingReturnTo = getSafeRelativeReturnTo(pendingIntent?.returnTo ?? null);
-      let finalReturnTo = returnTo;
-      let shouldClearPendingIntent = Boolean(
-        pendingReturnTo && (!explicitNext || explicitNext !== pendingReturnTo)
+
+      // The anonymous-work claim does NOT run here any more. It runs in App's
+      // post-auth effect, which EVERY sign-in path reaches — credential login
+      // and the Google OAuth return, which never passes through this component
+      // and so never had its work claimed at all. That effect owns the claim,
+      // the ledger, and the redirect to the imported thread.
+      //
+      // What matters here is that we no longer destroy the pending intent on the
+      // way out. When this login is honoring the intent, it must SURVIVE the
+      // navigation: it is the instruction to replay the visitor's prompt, and
+      // clearing it here meant ChatArea's replay always found an empty slot —
+      // so the visitor landed in a thread with neither an import nor a replay.
+      // Whoever consumes it clears it: App, when an import made the replay
+      // redundant; ChatArea, when it actually replays.
+      //
+      // An intent this login is NOT honoring is stale — it would ambush the user
+      // with an unrelated prompt later — so that one still gets dropped.
+      const honorsPendingIntent = Boolean(
+        pendingReturnTo && explicitNext && explicitNext === pendingReturnTo
       );
-
-      if (
-        returnTo &&
-        pendingIntent?.productId === "spaces" &&
-        pendingReturnTo === returnTo &&
-        isSpacesReturnTo(returnTo)
-      ) {
-        const savedWork = findPendingSpacesWork(pendingIntent.anonymousWorkId);
-        try {
-          const { response: claimResponse, data: claimData } = await claimAnonymousSpacesWork({
-            workId: savedWork?.id || pendingIntent.anonymousWorkId || null,
-            prompt: savedWork?.prompt || pendingIntent.prompt || "",
-            replyPreview: savedWork?.replyPreview || "",
-            title: savedWork?.title || pendingIntent.prompt || "",
-            threadId: savedWork?.threadId || null,
-            route: savedWork?.route || returnTo,
-          });
-          if (claimResponse.ok && claimData?.success && claimData.route) {
-            finalReturnTo = claimData.route;
-            shouldClearPendingIntent = true;
-          } else {
-            finalReturnTo = "/";
-            shouldClearPendingIntent = false;
-          }
-        } catch {
-          finalReturnTo = "/";
-          shouldClearPendingIntent = false;
-        }
-      }
-
-      if (shouldClearPendingIntent) {
+      if (pendingReturnTo && !honorsPendingIntent) {
         clearPendingIntent();
       }
-      if (finalReturnTo) {
-        navigate(finalReturnTo, { replace: true });
+
+      if (returnTo) {
+        navigate(returnTo, { replace: true });
       }
     } catch (err) {
       setError(
