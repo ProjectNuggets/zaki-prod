@@ -1,7 +1,18 @@
 import fs from "node:fs";
 import pg from "pg";
+import { startPostgresNotificationListener } from "./db-notifications.js";
 
 let pool = null;
+
+export async function listenForDbNotifications(channel, onPayload, options = {}) {
+  if (!pool) throw new Error("Database is not initialized.");
+  return startPostgresNotificationListener({
+    connect: () => pool.connect(),
+    channel,
+    onPayload,
+    ...options,
+  });
+}
 
 export async function initDb() {
   const connectionString = (process.env.DATABASE_URL || "").trim();

@@ -32,6 +32,7 @@ export const ANONYMOUS_WORK_MAX_TITLE_CHARS = 96;
 export const ANONYMOUS_WORK_MAX_ID_CHARS = 120;
 export const ANONYMOUS_WORK_MAX_ROUTE_CHARS = 240;
 export const IMPORTED_THREAD_CONTEXT_MAX_CHARS = 12000;
+export const IMPORTED_THREAD_CONTEXT_INVALIDATION_CHANNEL = "zaki_imported_context";
 const IMPORTED_THREAD_TURN_MAX_CHARS = 11000;
 const IMPORTED_THREAD_CONTEXT_MAX_TURNS = 6;
 
@@ -160,8 +161,20 @@ export function buildImportedThreadTranscript(
   importedRows,
   { maxChars = IMPORTED_THREAD_CONTEXT_MAX_CHARS } = {}
 ) {
+  return buildImportedThreadContext(importedRows, { maxChars }).transcript;
+}
+
+/**
+ * Build the bounded model transcript and the exact row IDs represented by it.
+ * Keeping both outputs in one selection pass prevents omitted rows from being
+ * acknowledged as forwarded.
+ */
+export function buildImportedThreadContext(
+  importedRows,
+  { maxChars = IMPORTED_THREAD_CONTEXT_MAX_CHARS } = {}
+) {
   const rows = Array.isArray(importedRows) ? importedRows : [];
-  if (!rows.length) return "";
+  if (!rows.length) return { transcript: "", messageIds: [] };
 
   const header = "Earlier turns imported from this user's signed-out conversation:";
   const turns = rows.slice(-IMPORTED_THREAD_CONTEXT_MAX_TURNS).map((row) => {
@@ -173,21 +186,30 @@ export function buildImportedThreadTranscript(
       .replaceAll("[[", "[ [")
       .replaceAll("]]", "] ]")
       .slice(0, IMPORTED_THREAD_TURN_MAX_CHARS);
-    return content ? `${role}:\n${content}` : "";
+    const id = Number(row?.id);
+    return {
+      id: Number.isSafeInteger(id) && id > 0 ? id : null,
+      text: content ? `${role}:\n${content}` : "",
+    };
   });
 
   const selected = [];
   let used = header.length;
   for (let index = turns.length - 1; index >= 0; index -= 1) {
     const turn = turns[index];
-    if (!turn) continue;
-    const added = turn.length + 2;
+    if (!turn.text) continue;
+    const added = turn.text.length + 2;
     if (used + added > maxChars) break;
     selected.unshift(turn);
     used += added;
   }
 
-  return selected.length ? [header, ...selected].join("\n\n") : "";
+  return {
+    transcript: selected.length ? [header, ...selected.map((turn) => turn.text)].join("\n\n") : "",
+    messageIds: selected
+      .map((turn) => turn.id)
+      .filter((id) => Number.isSafeInteger(id) && id > 0),
+  };
 }
 
 /**
@@ -230,13 +252,15 @@ export function createImportedThreadContextProvider({
 
     const promise = Promise.resolve(store.listPendingThreadMessages(target)).then((rows) => {
       const safeRows = Array.isArray(rows) ? rows : [];
-      const value = {
-        transcript: buildImportedThreadTranscript(safeRows),
-        messageIds: safeRows
-          .map((row) => Number(row?.id))
-          .filter((id) => Number.isSafeInteger(id) && id > 0),
-      };
-      setCached(key, { value, expiresAt: now() + Math.max(1, ttlMs) });
+      const value = buildImportedThreadContext(safeRows);
+      if (value.messageIds.length > 0) {
+        // Pending context is rare and mutable across replicas. Coalesce only the
+        // in-flight read; resolved positive values must be rechecked against the
+        // shared delivery marker on the next turn.
+        cache.delete(key);
+      } else {
+        setCached(key, { value, expiresAt: now() + Math.max(1, ttlMs) });
+      }
       return value;
     });
 
@@ -279,6 +303,39 @@ export function createImportedThreadContextProvider({
  */
 function normalizeWorkspaceSlug(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+export function createImportedThreadContextInvalidationPayload({
+  userId,
+  workspaceSlug,
+  threadSlug,
+} = {}) {
+  return JSON.stringify({
+    userId: String(userId ?? "").trim(),
+    workspaceSlug: normalizeWorkspaceSlug(workspaceSlug),
+    threadSlug: String(threadSlug || "").trim(),
+  });
+}
+
+export function parseImportedThreadContextInvalidationPayload(payload) {
+  try {
+    const parsed = JSON.parse(String(payload || ""));
+    const target = {
+      userId: String(parsed?.userId ?? "").trim(),
+      workspaceSlug: normalizeWorkspaceSlug(parsed?.workspaceSlug),
+      threadSlug: String(parsed?.threadSlug || "").trim(),
+    };
+    return target.userId && target.workspaceSlug && target.threadSlug ? target : null;
+  } catch {
+    return null;
+  }
+}
+
+export function invalidateImportedThreadContextFromNotification(provider, payload) {
+  const target = parseImportedThreadContextInvalidationPayload(payload);
+  if (!target || typeof provider?.invalidateThread !== "function") return false;
+  provider.invalidateThread(target);
+  return true;
 }
 
 /**
@@ -355,14 +412,21 @@ export function createAnonymousWorkClaimStore({ dbGet, dbAll, dbQuery }) {
     },
 
     async listPendingThreadMessages({ userId, workspaceSlug, threadSlug }) {
-      return dbAll(
+      const rows = await dbAll(
         `SELECT id, role, content, created_at
            FROM zaki_anonymous_work_messages
           WHERE user_id = $1 AND workspace_slug = $2 AND thread_slug = $3
             AND context_forwarded_at IS NULL
-          ORDER BY id ASC`,
-        [userId, normalizeWorkspaceSlug(workspaceSlug), threadSlug]
+          ORDER BY id DESC
+          LIMIT $4`,
+        [
+          userId,
+          normalizeWorkspaceSlug(workspaceSlug),
+          threadSlug,
+          IMPORTED_THREAD_CONTEXT_MAX_TURNS,
+        ]
       );
+      return Array.isArray(rows) ? rows.slice().reverse() : [];
     },
 
     async markThreadMessagesForwarded({ userId, workspaceSlug, threadSlug, messageIds }) {
@@ -380,6 +444,13 @@ export function createAnonymousWorkClaimStore({ dbGet, dbAll, dbQuery }) {
             AND context_forwarded_at IS NULL`,
         [userId, normalizeWorkspaceSlug(workspaceSlug), threadSlug, ids]
       );
+    },
+
+    async notifyThreadContextChanged(target) {
+      await dbQuery("SELECT pg_notify($1, $2)", [
+        IMPORTED_THREAD_CONTEXT_INVALIDATION_CHANNEL,
+        createImportedThreadContextInvalidationPayload(target),
+      ]);
     },
   };
 }
@@ -450,6 +521,11 @@ export async function importAnonymousWorkClaim({
 
   const importedCount = inserted || turns.length;
   await store.setImportedCount({ userId, claimKey, importedCount });
+  if (importedCount > 0 && typeof store.notifyThreadContextChanged === "function") {
+    await store
+      .notifyThreadContextChanged({ userId, workspaceSlug, threadSlug })
+      .catch(() => undefined);
+  }
 
   return {
     workspaceSlug,
