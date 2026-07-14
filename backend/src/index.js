@@ -18419,14 +18419,14 @@ async function authorizeDesignSessionProxy({ req, res, auth, targetPath, method,
   return { allowed: true, action, grant: result.grant };
 }
 
-async function settleDesignSessionProxy({ req, authorization, upstreamStatus, durationMs }) {
+async function settleDesignSessionProxy({ req, authorization, receiptStatus, durationMs }) {
   const grant = authorization?.grant;
   if (!grant?.grantId || !authorization.action) return;
   await recordMeterReceiptForGrant({
     grant,
     product: "design",
     action: authorization.action,
-    status: upstreamStatus >= 200 && upstreamStatus < 400 ? "success" : "failed",
+    status: receiptStatus,
     rawUsageFacts: {
       durationMs,
       storageBytes: Number(req.headers?.["content-length"] || 0) || 0,

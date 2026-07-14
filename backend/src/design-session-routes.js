@@ -129,7 +129,7 @@ export function buildDesignSessionRouter({
         ...(body === undefined ? {} : { body }),
         requestId,
       });
-      await settleSessionProxyBestEffort(settleProxy, {
+      const settleDelivery = (deliveryStatus) => settleSessionProxyBestEffort(settleProxy, {
         req,
         auth,
         session,
@@ -138,14 +138,26 @@ export function buildDesignSessionRouter({
         requestId,
         authorization,
         upstreamStatus: upstream.status,
+        deliveryStatus,
+        receiptStatus: deliveryStatus === "success" && upstream.status >= 200 && upstream.status < 400
+          ? "success"
+          : "failed",
         durationMs: Date.now() - startedAt,
       });
       res.status(upstream.status);
       copyResponseHeaders(upstream, res);
       if (!upstream.body || method === "HEAD" || [204, 304].includes(upstream.status)) {
-        return res.end();
+        res.end();
+        await settleDelivery("success");
+        return undefined;
       }
-      await pipeline(Readable.fromWeb(upstream.body), res);
+      try {
+        await pipeline(Readable.fromWeb(upstream.body), res);
+      } catch (error) {
+        await settleDelivery("failed");
+        throw error;
+      }
+      await settleDelivery("success");
       return undefined;
     } catch (error) {
       if (res.headersSent) {

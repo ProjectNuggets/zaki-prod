@@ -329,7 +329,7 @@ describe("Design public session routes", () => {
     }));
   });
 
-  test("contains a controller body failure instead of emitting an unhandled stream error", async () => {
+  test("settles a metered controller body failure as failed after containing the stream error", async () => {
     const streamError = new Error("controller body reset");
     const controllerProxy = jest.fn().mockResolvedValue(new Response(new ReadableStream({
       start(controller) {
@@ -337,6 +337,7 @@ describe("Design public session routes", () => {
         controller.error(streamError);
       },
     })));
+    const settleProxy = jest.fn().mockResolvedValue(undefined);
     const unhandled = jest.fn();
     process.on("uncaughtException", unhandled);
     const app = express();
@@ -358,16 +359,29 @@ describe("Design public session routes", () => {
       createSessionId: jest.fn(),
       controller: { ensure: jest.fn(), status: jest.fn(), stop: jest.fn(), proxy: controllerProxy },
       getRequestId: () => "req_proxy_reset",
+      authorizeProxy: jest.fn().mockResolvedValue({
+        allowed: true,
+        action: "design_file_write",
+        grant: { grantId: "grant_reset" },
+      }),
+      settleProxy,
     }));
 
     try {
       await request(app)
-        .get("/api/design/sessions/sess_01/proxy/api/projects/project_01")
+        .post("/api/design/sessions/sess_01/proxy/api/projects/project_01/files")
         .set("x-zaki-project-id", "project_01")
+        .send({ name: "concept.html" })
         .timeout({ response: 500, deadline: 500 })
         .catch(() => undefined);
       await new Promise((resolve) => setImmediate(resolve));
       expect(unhandled).not.toHaveBeenCalled();
+      expect(settleProxy).toHaveBeenCalledTimes(1);
+      expect(settleProxy).toHaveBeenCalledWith(expect.objectContaining({
+        requestId: "req_proxy_reset",
+        deliveryStatus: "failed",
+        receiptStatus: "failed",
+      }));
     } finally {
       process.off("uncaughtException", unhandled);
     }
