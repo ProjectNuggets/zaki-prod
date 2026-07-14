@@ -29,6 +29,61 @@ export const LOCK_RETRY_MAX_ATTEMPTS = 3;
 export const LOCK_RETRY_MAX_WALL_TIME_MS = 1500;
 export const LOCK_RETRY_FALLBACK_DELAYS_MS = Object.freeze([100, 250, 500]);
 
+// WP-C — the BFF must NEVER emit a bare machine code with no user-facing message.
+// `error` historically carried the machine code (and a lot of server-side code and
+// tests still switch on it), so we keep it — but every envelope now also carries an
+// explicit `code` for the client to switch on AND a non-empty human `message` for
+// the client to render. A client that renders `message` can never print
+// "invalid_session_key" at a user again.
+//
+// This map is the server-side half of the frontend taxonomy in
+// src/lib/userFacingErrors.ts — keep the two in step.
+const PRODUCT_ERROR_FALLBACK_MESSAGES = Object.freeze({
+  temporary_contention: "ZAKI is handling another request on this chat. Try again in a moment.",
+  unauthorized: "Please sign in again to continue.",
+  forbidden: "You don't have access to this resource.",
+  invalid_telegram_token: "That Telegram token wasn't accepted. Check it and try again.",
+  provision_failed: "ZAKI couldn't finish setting up. Try again in a moment.",
+  settings_update_failed: "Your settings couldn't be saved. Try again.",
+  usage_unavailable: "Usage information isn't available right now.",
+  invalid_session_key: "This chat session is no longer valid. Start a new chat to continue.",
+  missing_session_key: "This chat session is no longer valid. Start a new chat to continue.",
+  session_key_user_mismatch: "This chat session belongs to another account.",
+  invalid_session_lane: "This chat session is no longer valid. Start a new chat to continue.",
+  session_not_owned: "This chat session belongs to another account.",
+  invalid_user_id: "We couldn't verify your account. Sign in again to continue.",
+  rate_limited: "You're sending messages faster than ZAKI can answer. Wait a moment, then retry.",
+  content_filter: "ZAKI couldn't process that request. Try rephrasing it.",
+  context_window_exceeded:
+    "This conversation is too long for one request. Shorten your message or start a new chat.",
+  timeout: "ZAKI took too long to respond. Try again.",
+  model_overload: "The model is busy right now. Try again, or switch to another model.",
+  gateway_draining: "ZAKI is restarting. Your message is safe — retry in a moment.",
+  agent_unavailable: "ZAKI is temporarily unavailable. Try again in a moment.",
+});
+
+const GENERIC_PRODUCT_ERROR_MESSAGE = "Something went wrong. Try again.";
+
+// Machine codes look like `snake_case_identifiers`. Human copy has spaces/punctuation.
+// Used to reject a "message" that is really a code leaking into the copy slot.
+const MACHINE_CODE_PATTERN = /^[a-z0-9]+(?:_[a-z0-9]+)+$/;
+
+export function looksLikeMachineCode(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return false;
+  return MACHINE_CODE_PATTERN.test(normalized);
+}
+
+// Resolve a guaranteed human, user-facing sentence for a machine code. Never returns
+// the code itself and never returns an empty string.
+export function resolveProductErrorMessage(code, provided) {
+  const suppliedMessage = normalizedString(provided);
+  // A "message" that is actually a machine code is not a message.
+  if (suppliedMessage && !looksLikeMachineCode(suppliedMessage)) return suppliedMessage;
+  const normalizedCode = normalizedString(code).toLowerCase();
+  return PRODUCT_ERROR_FALLBACK_MESSAGES[normalizedCode] || GENERIC_PRODUCT_ERROR_MESSAGE;
+}
+
 const botProvisionStatusSchema = z.object({ status: z.string().trim().min(1) }).strict();
 
 const botOnboardingStateSchema = z
@@ -276,16 +331,21 @@ async function readResponsePayload(response) {
 }
 
 export function buildProductError({ error, message, retryable, requestId }) {
+  // `error` stays the machine code for backward compatibility (server code and the
+  // upstream-failure classifiers switch on it). `code` is the canonical machine field
+  // for the CLIENT to switch on, and `message` is ALWAYS a human sentence — so a client
+  // that renders `message` can never display a raw code. See resolveProductErrorMessage.
   return {
     error,
-    message,
+    code: error,
+    message: resolveProductErrorMessage(error, message),
     retryable,
     request_id: normalizedString(requestId) || "unknown_request",
   };
 }
 
 export function buildSseProductError({ error, message, retryable }) {
-  return { code: error, message, retryable };
+  return { code: error, message: resolveProductErrorMessage(error, message), retryable };
 }
 
 export function isOwnershipLockConflict(statusCode, payload) {

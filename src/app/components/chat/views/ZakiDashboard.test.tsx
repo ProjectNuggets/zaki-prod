@@ -286,12 +286,19 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "settingsModal.productsAccess.memoryScopes.hireMemory": "Career memory",
     "settingsModal.productsAccess.memoryScopes.designMemory": "Design memory",
     "settingsModal.productsAccess.memoryScopes.sessionMemory": "Session memory",
+    // WP-B2 — the enforced-counter readout (what actually gates an anonymous visitor).
+    "zakiDashboard.command.freeChats": "Free chats",
+    "zakiDashboard.meter.enforcedDaily": "{{remaining}} of {{limit}} free chats left today",
+    "zakiDashboard.meter.enforcedDailyAria": "{{remaining}} of {{limit}} free chats remaining today.",
+    "zakiDashboard.meter.enforcedUsed": "{{used}} of {{limit}} used",
   };
   const value = dictionary[key] || key;
   return value
     .replace("{{name}}", String(options?.name ?? ""))
     .replace("{{hours}}", String(options?.hours ?? ""))
     .replace("{{remaining}}", String(options?.remaining ?? ""))
+    .replace(/{{limit}}/g, String(options?.limit ?? ""))
+    .replace(/{{used}}/g, String(options?.used ?? ""))
     .replace("{{agentRuns}}", String(options?.agentRuns ?? ""))
     .replace("{{chats}}", String(options?.chats ?? ""))
     .replace("{{percent}}", String(options?.percent ?? ""))
@@ -1334,5 +1341,81 @@ describe("ZakiDashboard", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Product overview" }));
     expect(mockOpen).toHaveBeenCalledWith("https://chatzaki.com/product", "_blank", "noopener,noreferrer");
+  });
+
+
+  // ── WP-B2 (c): the dashboard meter must read the counter the BACKEND ENFORCES ──
+  //
+  // An anonymous visitor's chat never debits the unit wallet — the backend lets anonymous
+  // identities straight past the wallet reserve and gates them on a DAILY PROMPT COUNTER
+  // instead. Showing them the wallet ("250 of 250 left") advertised headroom that does not
+  // gate them and that they do not have.
+  it("shows an anonymous visitor the ENFORCED daily counter, not the unit wallet", async () => {
+    useAuthStore.setState({ token: null, user: null, isHydrating: false, isLoading: false });
+    mockUseAnonymousMeterStatus.mockReturnValue({
+      data: {
+        data: {
+          success: true,
+          identity: { type: "anonymous", anonymousSessionId: "anon-truthful" },
+          plan: { tier: "free", label: "Free", source: "anonymous" },
+          // The wallet says 250 units — but it does NOT gate an anon.
+          weekly: { limit: 250, used: 0, remaining: 250 },
+          rolling: { windowHours: 5, limit: 250, used: 0, remaining: 250 },
+          // The counter that actually denies them.
+          enforced: {
+            kind: "anonymous_daily_prompts",
+            surface: "spaces",
+            period: "day",
+            limit: 10,
+            used: 3,
+            remaining: 7,
+            resetAt: "2026-07-15T00:00:00.000Z",
+          },
+          products: {},
+        },
+      },
+      isLoading: false,
+    });
+
+    renderDashboard();
+
+    const meter = await screen.findByTestId("zaki-dashboard-command-meter");
+
+    // The meter reports the ENFORCED gate...
+    expect(meter).toHaveAttribute("data-meter-source", "enforced");
+    expect(meter).toHaveAttribute("data-enforced-kind", "anonymous_daily_prompts");
+    expect(meter).toHaveAttribute("data-enforced-limit", "10");
+    expect(meter).toHaveAttribute("data-enforced-remaining", "7");
+    expect(within(meter).getByText("7 of 10 free chats left today")).toBeInTheDocument();
+    expect(within(meter).getByText("3 of 10 used")).toBeInTheDocument();
+
+    // ...and NEVER the wallet number that doesn't gate them. This is the lie the meter
+    // used to tell: "≈ 250 chats · 250 of 250 left".
+    expect(meter.textContent).not.toContain("250");
+    expect(meter.textContent).not.toMatch(/agent runs/i);
+  });
+
+  // A signed-in user IS gated by the wallet, so the wallet stays the meter for them.
+  it("keeps the unit-wallet meter for a signed-in user (the wallet IS their gate)", async () => {
+    mockUseMeterStatus.mockReturnValue({
+      data: {
+        data: {
+          success: true,
+          identity: { type: "user", userId: 1 },
+          plan: { tier: "free", label: "Free", source: "plan" },
+          weekly: { limit: 1500, used: 80, remaining: 1420 },
+          rolling: { windowHours: 5, limit: 100, used: 10, remaining: 90 },
+          enforced: { kind: "unit_wallet", surface: "spaces" },
+          products: {},
+        },
+      },
+      isLoading: false,
+    });
+
+    renderDashboard();
+
+    const meter = await screen.findByTestId("zaki-dashboard-command-meter");
+    expect(meter).not.toHaveAttribute("data-meter-source", "enforced");
+    expect(within(meter).getByText("1420 of 1500 left")).toBeInTheDocument();
   });
 });

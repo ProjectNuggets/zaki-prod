@@ -1,9 +1,13 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import {
   PRODUCT_ERROR_CODES,
+  buildProductError,
+  buildSseProductError,
   createBotBffHandlers,
   isUpstreamProvisioningFailure,
+  looksLikeMachineCode,
   normalizeBotUsageSummaryFromQuota,
+  resolveProductErrorMessage,
   sanitizeBotOnboardingState,
   validateBotSettingsPatch,
 } from "./bot-bff.js";
@@ -815,5 +819,96 @@ describe("isUpstreamProvisioningFailure — FK/not-found classifier (B4/P1-16)",
 
   it("does NOT match a generic 200/ok payload", () => {
     expect(isUpstreamProvisioningFailure({ status: "ok" }, 200)).toBe(false);
+  });
+});
+
+
+// ─────────────────────────────────────────────────────────────────────────────────
+// WP-C — the BFF must NEVER emit a bare machine code with no user-facing message.
+//
+// The regression: `buildProductError` put the machine code in `error` and the frontend
+// preferred `error` over `message`, so `invalid_session_key` rendered verbatim at the
+// user. The envelope now ALWAYS carries a human `message` plus an explicit `code`.
+// ─────────────────────────────────────────────────────────────────────────────────
+
+describe("WP-C — buildProductError never emits a bare code", () => {
+  it("always carries a machine `code` AND a human `message`", () => {
+    const payload = buildProductError({
+      error: "invalid_session_key",
+      retryable: false,
+      requestId: "req-1",
+    });
+
+    // The machine code is preserved for the client to switch on...
+    expect(payload.code).toBe("invalid_session_key");
+    expect(payload.error).toBe("invalid_session_key");
+    // ...but a human sentence is ALWAYS present to render.
+    expect(payload.message).toBeTruthy();
+    expect(looksLikeMachineCode(payload.message)).toBe(false);
+    expect(payload.message).not.toContain("invalid_session_key");
+    expect(payload.message).toMatch(/no longer valid|new chat/i);
+    expect(payload.request_id).toBe("req-1");
+  });
+
+  it("keeps a caller-supplied human message", () => {
+    const payload = buildProductError({
+      error: PRODUCT_ERROR_CODES.PROVISION_FAILED,
+      message: "Agent setup is unavailable.",
+      retryable: true,
+      requestId: "req-2",
+    });
+    expect(payload.message).toBe("Agent setup is unavailable.");
+    expect(payload.code).toBe("provision_failed");
+    expect(payload.retryable).toBe(true);
+  });
+
+  it("REJECTS a message that is really a machine code", () => {
+    const payload = buildProductError({
+      error: "provision_failed",
+      // Somebody passed the code through as the "message" — that is not a message.
+      message: "provision_failed",
+      requestId: "req-3",
+    });
+    expect(payload.message).not.toBe("provision_failed");
+    expect(looksLikeMachineCode(payload.message)).toBe(false);
+  });
+
+  it("every known PRODUCT_ERROR_CODE resolves to human copy", () => {
+    for (const code of Object.values(PRODUCT_ERROR_CODES)) {
+      const payload = buildProductError({ error: code, requestId: "r" });
+      expect(payload.message).toBeTruthy();
+      expect(looksLikeMachineCode(payload.message)).toBe(false);
+      expect(payload.message).not.toBe(code);
+    }
+  });
+
+  it("an unknown code degrades to generic human copy, never to the code", () => {
+    const payload = buildProductError({ error: "brand_new_code", requestId: "r" });
+    expect(payload.message).not.toContain("brand_new_code");
+    expect(looksLikeMachineCode(payload.message)).toBe(false);
+  });
+
+  it("the SSE error frame carries the same guarantee", () => {
+    const frame = buildSseProductError({ error: "invalid_session_key", retryable: false });
+    expect(frame.code).toBe("invalid_session_key");
+    expect(looksLikeMachineCode(frame.message)).toBe(false);
+    expect(frame.message).not.toContain("invalid_session_key");
+  });
+});
+
+describe("WP-C — looksLikeMachineCode / resolveProductErrorMessage", () => {
+  it("distinguishes machine codes from human sentences", () => {
+    expect(looksLikeMachineCode("invalid_session_key")).toBe(true);
+    expect(looksLikeMachineCode("daily_limit_reached")).toBe(true);
+    expect(looksLikeMachineCode("This chat session is no longer valid.")).toBe(false);
+    expect(looksLikeMachineCode("")).toBe(false);
+  });
+
+  it("maps the taxonomy codes onto tailored copy", () => {
+    expect(resolveProductErrorMessage("rate_limited")).toMatch(/faster than/i);
+    expect(resolveProductErrorMessage("context_window_exceeded")).toMatch(/shorten/i);
+    expect(resolveProductErrorMessage("model_overload")).toMatch(/switch/i);
+    expect(resolveProductErrorMessage("timeout")).toMatch(/too long/i);
+    expect(resolveProductErrorMessage("content_filter")).toMatch(/rephras/i);
   });
 });

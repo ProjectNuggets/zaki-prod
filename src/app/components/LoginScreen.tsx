@@ -284,6 +284,14 @@ const AUTH_COPY = {
         "Google does not share your date of birth, so we cannot verify your age. Please create your account with your email address instead.",
       googleUnderage: "You are not old enough to create a ZAKI account.",
       googleOAuthFailed: "Google sign-in failed. Please try again.",
+      // WP-B10 — each of these used to be an UNMAPPED code that produced a blank login
+      // form with no message. Every one now names what happened and what to do next.
+      googleOAuthCancelled:
+        "Google sign-in was cancelled. Try again, or sign in with your email and password.",
+      googleOAuthIncomplete:
+        "Google sign-in didn't complete. Try again, or sign in with your email and password.",
+      googleOAuthUnavailable:
+        "Google sign-in isn't available right now. Sign in with your email and password instead.",
     },
   },
   ar: {
@@ -395,6 +403,12 @@ const AUTH_COPY = {
         "لا يشارك Google تاريخ ميلادك، لذا لا يمكننا التحقق من عمرك. يرجى إنشاء حسابك باستخدام بريدك الإلكتروني.",
       googleUnderage: "عمرك لا يسمح بإنشاء حساب ZAKI.",
       googleOAuthFailed: "فشل تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.",
+      googleOAuthCancelled:
+        "تم إلغاء تسجيل الدخول عبر Google. حاول مرة أخرى أو سجّل الدخول ببريدك الإلكتروني وكلمة المرور.",
+      googleOAuthIncomplete:
+        "لم يكتمل تسجيل الدخول عبر Google. حاول مرة أخرى أو سجّل الدخول ببريدك الإلكتروني وكلمة المرور.",
+      googleOAuthUnavailable:
+        "تسجيل الدخول عبر Google غير متاح حاليًا. سجّل الدخول ببريدك الإلكتروني وكلمة المرور بدلًا من ذلك.",
     },
   },
 } as const;
@@ -509,6 +523,14 @@ export function LoginScreen() {
 
     // Google OAuth bounced the user back because signup was refused. Explain why
     // — a blocked signup must never look like a silent failure.
+    //
+    // WP-B10: #87 mapped the four SIGNUP-REFUSAL codes, but the backend also emits
+    // `google_oauth_unconfigured`, `google_oauth_missing_code` and (now)
+    // `google_oauth_cancelled` + `google_oauth_start_failed`. Those fell through the map,
+    // so `message` was undefined and the user landed on a BLANK login form with no
+    // explanation — which is precisely what "cancel Google → silent failure" looked like.
+    // Every code is mapped now, and the `??` fallback guarantees an unknown code can
+    // never be silent again.
     const oauthError = String(url.searchParams.get("error") || "").trim();
     if (oauthError) {
       const oauthErrorCopy: Record<string, string> = {
@@ -517,12 +539,14 @@ export function LoginScreen() {
         age_verification_required: copy.errors.googleAgeUnverifiable,
         minimum_age: copy.errors.googleUnderage,
         google_oauth_failed: copy.errors.googleOAuthFailed,
+        google_oauth_cancelled: copy.errors.googleOAuthCancelled,
+        google_oauth_missing_code: copy.errors.googleOAuthIncomplete,
+        google_oauth_unconfigured: copy.errors.googleOAuthUnavailable,
+        google_oauth_start_failed: copy.errors.googleOAuthUnavailable,
       };
-      const message = oauthErrorCopy[oauthError];
-      if (message) {
-        setError(message);
-        setNotice("");
-      }
+      // Never silent: an unrecognized code still gets friendly, actionable copy.
+      setError(oauthErrorCopy[oauthError] ?? copy.errors.googleOAuthFailed);
+      setNotice("");
     }
 
     if (authMode || verified || oauthError) {

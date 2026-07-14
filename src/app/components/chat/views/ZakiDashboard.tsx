@@ -34,6 +34,7 @@ import {
 import type {
   AgentSession,
   MeterAvailableNow,
+  MeterStatusResponse,
   MeterWindowSnapshot,
 } from "@/lib/api";
 import { claimAnonymousWork } from "@/lib/anonymousWorkClaim";
@@ -502,21 +503,131 @@ function ProductTaskStrip({
   );
 }
 
+// The enforced counter resets at a wall-clock instant, so name it exactly — "tomorrow"
+// is not something a user can plan around (spec §C-state-8).
+function formatEnforcedReset(resetAt?: string | null): string | null {
+  if (!resetAt) return null;
+  const d = new Date(resetAt);
+  if (Number.isNaN(d.getTime())) return null;
+  const date = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return `${date} at ${time}`;
+}
+
 function CreditMeter({
   t,
   loading,
   unavailable,
   weeklyStats,
   weeklyReset,
+  enforced,
 }: {
   t: TranslateFn;
   loading: boolean;
   unavailable: boolean;
   weeklyStats: WindowStats;
   weeklyReset: string | null;
+  enforced?: MeterStatusResponse["enforced"];
 }) {
   const roundedPercent = getRoundedUsagePercent(weeklyStats.usedPercent);
   const isUnavailable = unavailable && !loading;
+
+  // ── WP-B2: show the counter the backend ACTUALLY ENFORCES ──────────────────────
+  //
+  // An anonymous visitor's chat never debits the unit wallet — reserveSpacesMeterUnits
+  // lets anonymous identities straight through. Their real gate is a daily prompt
+  // counter. So rendering the wallet's "≈ 250 chats · 250 of 250 left" to an anon was
+  // advertising an allowance that does not gate them and that they do not have.
+  //
+  // When the backend reports a non-wallet gate, that gate IS the meter.
+  const enforcedCounter =
+    enforced && enforced.kind !== "unit_wallet" && typeof enforced.limit === "number"
+      ? enforced
+      : null;
+
+  if (enforcedCounter && !loading && !isUnavailable) {
+    const limit = Number(enforcedCounter.limit) || 0;
+    const remaining = Math.max(0, Number(enforcedCounter.remaining ?? 0));
+    const used = Math.max(0, Math.min(limit, Number(enforcedCounter.used ?? limit - remaining)));
+    const usedPercent = getUsagePercent({ used, limit });
+    const roundedEnforcedPercent = getRoundedUsagePercent(usedPercent);
+    const weekly = enforcedCounter.period === "week";
+    const resetLabel = formatEnforcedReset(enforcedCounter.resetAt);
+
+    const headline = weekly
+      ? t("zakiDashboard.meter.enforcedWeekly", {
+          remaining,
+          limit,
+          defaultValue: `${remaining} of ${limit} free chats left this week`,
+        })
+      : t("zakiDashboard.meter.enforcedDaily", {
+          remaining,
+          limit,
+          defaultValue: `${remaining} of ${limit} free chats left today`,
+        });
+    const aria = weekly
+      ? t("zakiDashboard.meter.enforcedWeeklyAria", {
+          remaining,
+          limit,
+          defaultValue: `${remaining} of ${limit} free chats remaining this week.`,
+        })
+      : t("zakiDashboard.meter.enforcedDailyAria", {
+          remaining,
+          limit,
+          defaultValue: `${remaining} of ${limit} free chats remaining today.`,
+        });
+
+    return (
+      <div
+        className="zaki-dashboard-command__meter"
+        data-testid="zaki-dashboard-command-meter"
+        // The meter's source of truth is now explicit: "enforced" means these numbers are
+        // the gate that will actually deny the next turn — not wallet units that don't.
+        data-meter-source="enforced"
+        data-enforced-kind={enforcedCounter.kind}
+        data-enforced-limit={String(limit)}
+        data-enforced-remaining={String(remaining)}
+        aria-label={aria}
+      >
+        <div className="zaki-dashboard-command__meter-top">
+          <span className="zaki-dashboard-command__meter-kicker">
+            {t("zakiDashboard.command.freeChats", { defaultValue: "Free chats" })}
+          </span>
+          <strong>{headline}</strong>
+          <small className="zaki-dashboard-command__meter-remaining">
+            {t("zakiDashboard.meter.enforcedUsed", {
+              used,
+              limit,
+              defaultValue: `${used} of ${limit} used`,
+            })}
+          </small>
+          <small className="zaki-dashboard-command__meter-reset">
+            <span>{t("zakiDashboard.meter.reset", { defaultValue: "Reset" })}</span>
+            <b>
+              {resetLabel
+                ? t("zakiDashboard.meter.resetShort", {
+                    reset: resetLabel,
+                    defaultValue: resetLabel,
+                  })
+                : t("zakiDashboard.meter.resetPendingShort", { defaultValue: "Pending" })}
+            </b>
+          </small>
+          {isUsageNearCap(usedPercent) ? (
+            <small className="zaki-dashboard-command__meter-nudge">
+              {t("zakiDashboard.command.enforcedNearCapNudge", {
+                remaining,
+                defaultValue: `${remaining} free chats left — sign in to keep going.`,
+              })}
+            </small>
+          ) : null}
+        </div>
+        <div className="zaki-dashboard-command__meter-track" aria-label={aria}>
+          <span style={{ width: `${usedPercent}%` }} />
+        </div>
+        <span className="sr-only">{roundedEnforcedPercent}%</span>
+      </div>
+    );
+  }
   // Prefer a concrete "≈ N agent runs · or M chats" readout over a bare percent whenever we have
   // real pooled-remaining numbers; fall back to the percent (or loading/unavailable) otherwise.
   const estimate =
@@ -1703,6 +1814,9 @@ export function ZakiDashboard({
                   unavailable={meterUnavailable}
                   weeklyStats={weeklyStats}
                   weeklyReset={weeklyReset}
+                  // WP-B2: for an anon this is the daily prompt counter that actually
+                  // gates them; the wallet numbers above do not.
+                  enforced={meterStatus?.enforced ?? null}
                 />
                 <div className="zaki-dashboard-command__actions">
                   {commandHelperText ? (

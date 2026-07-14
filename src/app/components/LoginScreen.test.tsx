@@ -308,6 +308,41 @@ describe("LoginScreen legal consent", () => {
     ).toBeInTheDocument();
   });
 
+  // ── WP-B10 (f): an OAuth `?error=` must ALWAYS land on friendly copy ──────────────
+  //
+  // #87 mapped the four signup-refusal codes, but the backend also emits
+  // `google_oauth_missing_code` (which is what CANCELLING Google produced),
+  // `google_oauth_unconfigured`, and `google_oauth_cancelled`. Those fell through the
+  // map, so the user landed on a BLANK login form with no message at all.
+  it.each([
+    ["google_oauth_cancelled", /Google sign-in was cancelled/i],
+    ["google_oauth_missing_code", /Google sign-in didn't complete/i],
+    ["google_oauth_unconfigured", /Google sign-in isn't available right now/i],
+    ["google_oauth_start_failed", /Google sign-in isn't available right now/i],
+    ["google_oauth_failed", /Google sign-in failed/i],
+  ])("maps ?error=%s to friendly copy with a recovery action", async (code, pattern) => {
+    window.history.replaceState({}, "", `/?auth=login&error=${code}`);
+    renderLoginScreen();
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
+
+    const message = await screen.findByText(pattern);
+    expect(message).toBeInTheDocument();
+    // Every one of these offers a way forward, not just a dead end.
+    expect(message.textContent).toMatch(/try again|email and password/i);
+  });
+
+  it("never leaves an UNKNOWN oauth error silent — the blank-form bug", async () => {
+    window.history.replaceState({}, "", "/?auth=login&error=some_unmapped_backend_code");
+    renderLoginScreen();
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
+
+    // Falls back to friendly copy rather than rendering nothing...
+    const message = await screen.findByText(/Google sign-in failed/i);
+    expect(message).toBeInTheDocument();
+    // ...and never echoes the raw machine code at the user.
+    expect(document.body.textContent).not.toContain("some_unmapped_backend_code");
+  });
+
   it("formats and caps the signup birth date input", async () => {
     const user = userEvent.setup();
     renderLoginScreen();

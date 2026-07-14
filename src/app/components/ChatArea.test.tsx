@@ -4135,4 +4135,206 @@ describe("ChatArea Component", () => {
     await waitFor(() => expect(screen.getByText(/Searching the web/i)).toBeInTheDocument());
     expect(screen.getByText("out.csv")).toBeInTheDocument();
   });
+
+
+  // ───────────────────────────────────────────────────────────────────────────────
+  // WP-B2 / WP-C — truthful limit states + user-facing error taxonomy.
+  // ───────────────────────────────────────────────────────────────────────────────
+
+  // The 429 the backend actually returns when the enforced quota counter denies a turn
+  // (backend/src/daily-quota.js → buildDailyLimitExceededPayload).
+  const quotaDenialResponse = () => ({
+    ok: false,
+    status: 429,
+    headers: new Headers({ "content-type": "application/json" }),
+    json: async () => ({
+      code: "daily_limit_reached",
+      error: "You reached today's free limit. Free usage resets daily.",
+      message: "You reached today's free limit. Free usage resets daily.",
+      limit: 10,
+      remaining: 0,
+      resetAt: "2026-07-15T00:00:00.000Z",
+      period: "day",
+      surface: "app_chat",
+    }),
+  });
+
+  // (a) daily_limit_reached renders the LIMIT STATE, not a toast — and the unsent
+  //     prompt survives the denial.
+  it("renders the limit state (not a toast) on daily_limit_reached and preserves the unsent prompt", async () => {
+    navState.view = "chat";
+    navState.spaceId = "space-1";
+    navState.threadId = "thread-1";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/stream-chat")) {
+        return quotaDenialResponse();
+      }
+      return { ok: true, status: 200, json: async () => ({}), headers: new Headers() };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "finish my launch plan" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    // The LIMIT STATE renders — this code used to fall through to a bare toast.
+    expect(await screen.findByTestId("zaki-limit-state")).toBeInTheDocument();
+
+    // ...and NOT a toast. That is the exact pattern the spec bans.
+    expect(toast.error).not.toHaveBeenCalled();
+
+    // The unsent prompt is preserved — the user does not retype what was refused.
+    await waitFor(() => {
+      expect(screen.getByRole("combobox")).toHaveValue("finish my launch plan");
+    });
+    expect(screen.getByTestId("zaki-limit-preserved")).toBeInTheDocument();
+  });
+
+  // (b) an anonymous visitor is offered an ACCOUNT (not an upgrade) + a REAL reset time.
+  it("shows the anon sign-in CTA and an exact reset time when a signed-out visitor is capped", async () => {
+    navState.view = "chat";
+    navState.spaceId = "space-1";
+    navState.threadId = "thread-1";
+    authState = { user: null, isLoading: false };
+
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/stream-chat")) {
+        return quotaDenialResponse();
+      }
+      return { ok: true, status: 200, json: async () => ({}), headers: new Headers() };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "keep going" } });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    const card = await screen.findByTestId("zaki-limit-state");
+    // The anon variant — its ONE action is an account, never an upgrade.
+    expect(card).toHaveAttribute("data-identity", "anon");
+
+    // A REAL reset instant: a date AND a wall-clock time, not "tomorrow".
+    // (`data-reset` carries the formatted value independently of the i18n harness.)
+    const reset = screen.getByTestId("zaki-limit-reset");
+    expect(reset).toHaveAttribute("data-reset", expect.stringMatching(/\d{1,2}:\d{2}/) as never);
+    expect(reset.getAttribute("data-reset")).not.toMatch(/tomorrow|next week/i);
+
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  // (d) invalid_session_key must NEVER reach the DOM. It used to render in a banner AND
+  //     a toast on a brand-new account's first screen.
+  it("never renders invalid_session_key, even when the BFF sends a bare machine code", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+
+    (provisionAgent as jest.Mock).mockResolvedValue({
+      // The EXACT shape backend/src/index.js used to return: a bare code, no message.
+      response: { ok: false, status: 400, json: async () => ({ error: "invalid_session_key" }) },
+      data: { error: "invalid_session_key" },
+    });
+
+    const { container } = await renderChatAreaAndWaitForEffects();
+    const alert = await screen.findByRole("alert");
+
+    // The machine code appears NOWHERE in the rendered output.
+    expect(container.textContent).not.toContain("invalid_session_key");
+    // Nor in any toast — it used to be in BOTH.
+    for (const call of (toast.error as jest.Mock).mock.calls) {
+      expect(String(call[0])).not.toContain("invalid_session_key");
+    }
+    // And it resolves to the TAILORED session entry, not generic copy. (This suite's
+    // i18n mock returns the key, so the key itself proves which entry was selected.)
+    expect(alert).toHaveTextContent("chatErrors.invalidSession.body");
+  });
+
+  // (e) the raw response-body dump is gone: a non-JSON error body is never echoed.
+  it("never echoes a raw non-JSON response body into the UI", async () => {
+    navState.view = "chat";
+    navState.spaceId = "space-1";
+    navState.threadId = "thread-1";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+
+    const rawBody =
+      "<html><body>500 Internal Server Error: TypeError: Cannot read property 'x' of undefined at /srv/app/index.js:12345</body></html>";
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (typeof path === "string" && path.includes("/stream-chat")) {
+        return {
+          ok: false,
+          status: 500,
+          headers: new Headers({ "content-type": "text/html" }),
+          json: async () => {
+            throw new Error("not json");
+          },
+          text: async () => rawBody,
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({}), headers: new Headers() };
+    });
+
+    const { container } = await renderChatAreaAndWaitForEffects();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "hello" } });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+
+    // Not one fragment of the raw body reaches the user.
+    expect(container.textContent).not.toContain("TypeError");
+    expect(container.textContent).not.toContain("Internal Server Error");
+    expect(container.textContent).not.toContain("/srv/app/index.js");
+    for (const call of (toast.error as jest.Mock).mock.calls) {
+      const shown = String(call[0]);
+      expect(shown).not.toContain("TypeError");
+      expect(shown).not.toContain("<html>");
+      expect(shown).not.toContain("/srv/app/index.js");
+    }
+  });
+});
+
+
+describe("WP-B2 limit state (buildBillingPaywallCardData)", () => {
+  // The quota denial the backend actually sends for a capped chat.
+  const quotaDenial = (period: "day" | "week" = "day") =>
+    new ChatRequestError(
+      "You reached today's free limit. Free usage resets daily.",
+      429,
+      period === "week" ? "weekly_limit_reached" : "daily_limit_reached",
+      false,
+      { resetAt: "2026-07-15T00:00:00.000Z", limit: 10, period }
+    );
+
+  it("carries the enforced allowance so the card can NAME the limit", () => {
+    const cardData = buildBillingPaywallCardData({
+      error: quotaDenial("day"),
+      paywallState: "limit_reached",
+      identity: "anon",
+      promptPreserved: true,
+    });
+
+    expect(cardData).toEqual(
+      expect.objectContaining({
+        state: "limit_reached",
+        identity: "anon",
+        limitPeriod: "day",
+        limitUsed: 10,
+        limitTotal: 10,
+        resetAt: "2026-07-15T00:00:00.000Z",
+        promptPreserved: true,
+      })
+    );
+  });
+
+  it("marks an authed denial as the upgrade variant", () => {
+    const cardData = buildBillingPaywallCardData({
+      error: quotaDenial("week"),
+      paywallState: "limit_reached",
+      identity: "authed",
+    });
+    expect(cardData.identity).toBe("authed");
+    expect(cardData.limitPeriod).toBe("week");
+  });
 });

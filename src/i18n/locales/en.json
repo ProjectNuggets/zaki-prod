@@ -2099,7 +2099,9 @@
           "note": "Minutes is coming soon while ingestion, privacy, and retention are finalized."
         }
       },
-      "continueInSpaces": "Continue in Spaces instead"
+      "continueInSpaces": "Continue in Spaces instead",
+      "freeChats": "Free chats",
+      "enforcedNearCapNudge": "{{remaining}} free chats left — sign in to keep going."
     },
     "links": {
       "howItWorks": "How it works",
@@ -2181,7 +2183,12 @@
       "reset": "Reset",
       "resetShort": "{{reset}}",
       "resetPending": "Reset pending",
-      "resetPendingShort": "Pending"
+      "resetPendingShort": "Pending",
+      "enforcedDaily": "{{remaining}} of {{limit}} free chats left today",
+      "enforcedWeekly": "{{remaining}} of {{limit}} free chats left this week",
+      "enforcedDailyAria": "{{remaining}} of {{limit}} free chats remaining today.",
+      "enforcedWeeklyAria": "{{remaining}} of {{limit}} free chats remaining this week.",
+      "enforcedUsed": "{{used}} of {{limit}} used"
     },
     "products": {
       "title": "Products · what you can use",
@@ -2389,5 +2396,73 @@
     "copyError": "Couldn't copy. Select the prompt and copy manually.",
     "importAction": "Send to ZAKI",
     "importError": "Couldn't send the import. Try again."
+  },
+  "chatErrors": {
+    "rateLimited": {
+      "title": "Too many requests",
+      "body": "You're sending messages faster than ZAKI can answer. Wait a few seconds, then retry.",
+      "action": "Retry"
+    },
+    "contentFilter": {
+      "title": "ZAKI can't answer that",
+      "body": "That request was blocked by the content filter. Try rephrasing it.",
+      "action": "Rephrase and resend"
+    },
+    "networkDrop": {
+      "title": "Connection lost",
+      "body": "Your connection dropped before ZAKI finished. Your message is safe.",
+      "action": "Retry"
+    },
+    "contextWindow": {
+      "title": "This chat is too long",
+      "body": "This conversation no longer fits in one request. Shorten your message or start a new chat.",
+      "action": "Shorten and resend"
+    },
+    "timeout": {
+      "title": "That took too long",
+      "body": "ZAKI didn't respond in time. Your message is safe.",
+      "action": "Retry"
+    },
+    "modelOverload": {
+      "title": "The model is busy",
+      "body": "This model is overloaded right now. Switching to another model usually gets through.",
+      "action": "Switch model"
+    },
+    "invalidSession": {
+      "title": "This chat session expired",
+      "body": "This chat session is no longer valid. Start a new chat to continue.",
+      "action": "Start a new chat"
+    },
+    "unauthorized": {
+      "title": "You've been signed out",
+      "body": "Your session ended. Sign in again to pick up where you left off.",
+      "action": "Sign in"
+    },
+    "provisionFailed": {
+      "title": "ZAKI couldn't start",
+      "body": "ZAKI couldn't finish setting up. This is usually temporary.",
+      "action": "Retry"
+    },
+    "generic": {
+      "title": "Something went wrong",
+      "body": "ZAKI couldn't finish that reply. Your message is safe.",
+      "action": "Retry"
+    }
+  },
+  "paywall": {
+    "limit": {
+      "kicker": "Free limit",
+      "aria": "Free limit reached",
+      "close": "Close limit notice",
+      "titleDaily": "You've used today's free limit",
+      "titleWeekly": "You've used this week's free limit",
+      "usedDaily": "{{used}} of {{total}} free chats used today",
+      "usedWeekly": "{{used}} of {{total}} free chats used this week",
+      "resets": "Resets {{reset}}",
+      "promptSaved": "Your message is saved in the composer — it'll still be here when you continue.",
+      "signInCta": "Sign in to keep going",
+      "upgradeCta": "Upgrade to finish this task",
+      "dismiss": "Dismiss"
+    }
   }
 }
