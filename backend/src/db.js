@@ -715,13 +715,28 @@ export async function initDb() {
       content TEXT NOT NULL,
       position INTEGER NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      context_forwarded_at TIMESTAMPTZ,
       UNIQUE (user_id, claim_key, position)
     );
+  `);
+
+  // Existing WP-A databases predate model-context forwarding. This marker is
+  // set only after nova-typ accepts a stream request containing the imported
+  // transcript, so restarts cannot inject the same transcript on every turn.
+  await migrationClient.query(`
+    ALTER TABLE zaki_anonymous_work_messages
+      ADD COLUMN IF NOT EXISTS context_forwarded_at TIMESTAMPTZ;
   `);
 
   await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_anonymous_work_messages_thread
     ON zaki_anonymous_work_messages (user_id, workspace_slug, thread_slug, id ASC);
+  `);
+
+  await migrationClient.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_anonymous_work_messages_pending_context
+    ON zaki_anonymous_work_messages (user_id, workspace_slug, thread_slug, id ASC)
+    WHERE context_forwarded_at IS NULL;
   `);
 
   await migrationClient.query(`

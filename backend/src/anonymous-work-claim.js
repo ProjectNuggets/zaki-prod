@@ -31,6 +31,9 @@ export const ANONYMOUS_WORK_MAX_REPLY_CHARS = 20000;
 export const ANONYMOUS_WORK_MAX_TITLE_CHARS = 96;
 export const ANONYMOUS_WORK_MAX_ID_CHARS = 120;
 export const ANONYMOUS_WORK_MAX_ROUTE_CHARS = 240;
+export const IMPORTED_THREAD_CONTEXT_MAX_CHARS = 12000;
+const IMPORTED_THREAD_TURN_MAX_CHARS = 11000;
+const IMPORTED_THREAD_CONTEXT_MAX_TURNS = 6;
 
 /** Single-line text: collapses all whitespace. Used for prompts/titles/ids. */
 export function sanitizeClaimText(value, maxLength) {
@@ -149,6 +152,126 @@ export function mergeImportedThreadHistory({ upstream, importedRows }) {
 }
 
 /**
+ * Render imported turns as explicit earlier conversation for the next model
+ * turn. Keeping the roles visible prevents the transcript from being mistaken
+ * for instructions authored by the current user message.
+ */
+export function buildImportedThreadTranscript(
+  importedRows,
+  { maxChars = IMPORTED_THREAD_CONTEXT_MAX_CHARS } = {}
+) {
+  const rows = Array.isArray(importedRows) ? importedRows : [];
+  if (!rows.length) return "";
+
+  const header = "Earlier turns imported from this user's signed-out conversation:";
+  const turns = rows.slice(-IMPORTED_THREAD_CONTEXT_MAX_TURNS).map((row) => {
+    const role = row?.role === "assistant" ? "ASSISTANT" : "USER";
+    const content = String(row?.content || "")
+      .trim()
+      // The transcript is nested inside the memory-context envelope. Neutralize
+      // marker syntax so an old user message cannot close that envelope early.
+      .replaceAll("[[", "[ [")
+      .replaceAll("]]", "] ]")
+      .slice(0, IMPORTED_THREAD_TURN_MAX_CHARS);
+    return content ? `${role}:\n${content}` : "";
+  });
+
+  const selected = [];
+  let used = header.length;
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    const turn = turns[index];
+    if (!turn) continue;
+    const added = turn.length + 2;
+    if (used + added > maxChars) break;
+    selected.unshift(turn);
+    used += added;
+  }
+
+  return selected.length ? [header, ...selected].join("\n\n") : "";
+}
+
+/**
+ * Lazy, bounded lookup for model-only imported context. Empty results are
+ * cached too: almost every Spaces thread has no imported rows, so the common
+ * chat path pays at most one lookup per cache window instead of one per turn.
+ */
+export function createImportedThreadContextProvider({
+  store,
+  ttlMs = 30000,
+  maxEntries = 1000,
+  now = () => Date.now(),
+} = {}) {
+  const cache = new Map();
+  const empty = () => ({ transcript: "", messageIds: [] });
+  const keyFor = ({ userId, workspaceSlug, threadSlug }) =>
+    JSON.stringify([
+      String(userId ?? ""),
+      normalizeWorkspaceSlug(workspaceSlug),
+      String(threadSlug || "").trim(),
+    ]);
+
+  function setCached(key, entry) {
+    cache.delete(key);
+    cache.set(key, entry);
+    while (cache.size > Math.max(1, maxEntries)) {
+      cache.delete(cache.keys().next().value);
+    }
+  }
+
+  async function getThreadContext(target) {
+    if (!target?.userId || !target?.workspaceSlug || !target?.threadSlug) return empty();
+    const key = keyFor(target);
+    const cached = cache.get(key);
+    if (cached && cached.expiresAt > now()) {
+      setCached(key, cached);
+      return cached.value ?? cached.promise;
+    }
+    cache.delete(key);
+
+    const promise = Promise.resolve(store.listPendingThreadMessages(target)).then((rows) => {
+      const safeRows = Array.isArray(rows) ? rows : [];
+      const value = {
+        transcript: buildImportedThreadTranscript(safeRows),
+        messageIds: safeRows
+          .map((row) => Number(row?.id))
+          .filter((id) => Number.isSafeInteger(id) && id > 0),
+      };
+      setCached(key, { value, expiresAt: now() + Math.max(1, ttlMs) });
+      return value;
+    });
+
+    setCached(key, { promise, expiresAt: now() + Math.max(1, ttlMs) });
+    try {
+      return await promise;
+    } catch (error) {
+      cache.delete(key);
+      throw error;
+    }
+  }
+
+  function invalidateThread(target) {
+    cache.delete(keyFor(target || {}));
+  }
+
+  async function markForwarded(target) {
+    const messageIds = Array.isArray(target?.messageIds)
+      ? target.messageIds
+          .map((id) => Number(id))
+          .filter((id) => Number.isSafeInteger(id) && id > 0)
+      : [];
+    if (!messageIds.length) return;
+
+    await store.markThreadMessagesForwarded({ ...target, messageIds });
+    setCached(keyFor(target), {
+      value: empty(),
+      expiresAt: now() + Math.max(1, ttlMs),
+    });
+  }
+
+  return { getThreadContext, invalidateThread, markForwarded };
+}
+
+/**
  * Workspace slugs are lowercased everywhere they are produced and consumed, but
  * the import write and the history read reach the slug by different routes.
  * Normalizing at the store boundary means a casing drift on either side can
@@ -228,6 +351,34 @@ export function createAnonymousWorkClaimStore({ dbGet, dbAll, dbQuery }) {
           WHERE user_id = $1 AND workspace_slug = $2 AND thread_slug = $3
           ORDER BY id ASC`,
         [userId, normalizeWorkspaceSlug(workspaceSlug), threadSlug]
+      );
+    },
+
+    async listPendingThreadMessages({ userId, workspaceSlug, threadSlug }) {
+      return dbAll(
+        `SELECT id, role, content, created_at
+           FROM zaki_anonymous_work_messages
+          WHERE user_id = $1 AND workspace_slug = $2 AND thread_slug = $3
+            AND context_forwarded_at IS NULL
+          ORDER BY id ASC`,
+        [userId, normalizeWorkspaceSlug(workspaceSlug), threadSlug]
+      );
+    },
+
+    async markThreadMessagesForwarded({ userId, workspaceSlug, threadSlug, messageIds }) {
+      const ids = Array.isArray(messageIds)
+        ? messageIds
+            .map((id) => Number(id))
+            .filter((id) => Number.isSafeInteger(id) && id > 0)
+        : [];
+      if (!ids.length) return;
+      await dbQuery(
+        `UPDATE zaki_anonymous_work_messages
+            SET context_forwarded_at = NOW()
+          WHERE user_id = $1 AND workspace_slug = $2 AND thread_slug = $3
+            AND id = ANY($4::bigint[])
+            AND context_forwarded_at IS NULL`,
+        [userId, normalizeWorkspaceSlug(workspaceSlug), threadSlug, ids]
       );
     },
   };
