@@ -678,6 +678,52 @@ export async function initDb() {
     ON zaki_bot_messages (user_id, space_id, thread_id, id ASC);
   `);
 
+  // --- Anonymous -> account work claim (WP-A) ---
+  // A signed-out visitor's conversation lives only in their browser: the
+  // anonymous chat handler streams the reply and keeps nothing. When they sign
+  // up, the claim carries that saved transcript into a real thread. Upstream
+  // (nova-typ) has no message-append API — it only writes a thread message by
+  // running the model — so imported turns land here and are merged into the
+  // thread history read path.
+  //
+  // zaki_anonymous_work_claims is the idempotency record: UNIQUE (user_id,
+  // claim_key) means re-claiming the same saved work can never create a second
+  // thread or a second copy of the messages.
+  await migrationClient.query(`
+    CREATE TABLE IF NOT EXISTS zaki_anonymous_work_claims (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      claim_key TEXT NOT NULL,
+      work_id TEXT,
+      workspace_slug TEXT NOT NULL,
+      thread_slug TEXT,
+      route TEXT NOT NULL,
+      imported_count INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, claim_key)
+    );
+  `);
+
+  await migrationClient.query(`
+    CREATE TABLE IF NOT EXISTS zaki_anonymous_work_messages (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      claim_key TEXT NOT NULL,
+      workspace_slug TEXT NOT NULL,
+      thread_slug TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+      content TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, claim_key, position)
+    );
+  `);
+
+  await migrationClient.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_anonymous_work_messages_thread
+    ON zaki_anonymous_work_messages (user_id, workspace_slug, thread_slug, id ASC);
+  `);
+
   await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS zaki_bot_threads (
       user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,

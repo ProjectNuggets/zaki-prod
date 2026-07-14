@@ -36,8 +36,8 @@ import type {
   MeterAvailableNow,
   MeterWindowSnapshot,
 } from "@/lib/api";
-import { claimAnonymousSpacesWork } from "@/lib/api";
-import { useAuthStore } from "@/stores";
+import { claimAnonymousWork } from "@/lib/anonymousWorkClaim";
+import { useAnonymousWorkClaimStore, useAuthStore } from "@/stores";
 import { cn } from "@/lib/utils";
 import {
   estimateTurnsFromUnits,
@@ -908,17 +908,65 @@ function ReturningWorkStrip({
   t,
   items,
   claimed = false,
+  claimedCount = 0,
+  claimedRoute = null,
   claimError = null,
+  showSaveCta = false,
   onContinue,
+  onOpenClaimed,
   onSave,
 }: {
   t: TranslateFn;
   items: AnonymousWorkItem[];
+  /**
+   * The server confirmed it imported the visitor's work. This is a FACT
+   * reported by the claim response, never an inference from "we have a token
+   * and the ledger is non-empty" — that inference was the lie this fixes.
+   */
   claimed?: boolean;
+  /** Message rows the server actually wrote. The copy quotes this number. */
+  claimedCount?: number;
+  claimedRoute?: string | null;
   claimError?: string | null;
+  /** "Save this work" is a sign-in CTA — pointless for an already-signed-in user. */
+  showSaveCta?: boolean;
   onContinue: (item: AnonymousWorkItem) => void;
+  onOpenClaimed: () => void;
   onSave: (item?: AnonymousWorkItem) => void;
 }) {
+  // Kept work is consumed from the ledger, so the "we kept it" confirmation
+  // stands on its own and points at the thread the work now lives in. It never
+  // sits above a list of items that were NOT kept.
+  if (claimed) {
+    return (
+      <div className="zaki-dashboard-command__ledger" data-testid="zaki-anonymous-work">
+        <div className="zaki-dashboard-command__ledger-head">
+          <div>
+            <h2>
+              {t("zakiDashboard.anonymousWork.claimedTitle", {
+                defaultValue: "We kept your work",
+              })}
+            </h2>
+            <p>
+              {t("zakiDashboard.anonymousWork.claimedSubtitle", {
+                count: claimedCount,
+                defaultValue:
+                  "Your signed-out conversation is now in your Space — {{count}} messages carried over.",
+              })}
+            </p>
+          </div>
+          {claimedRoute ? (
+            <V2Button type="button" onClick={onOpenClaimed}>
+              {t("zakiDashboard.anonymousWork.openClaimed", {
+                defaultValue: "Open it",
+              })}
+            </V2Button>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
   if (items.length === 0) return null;
 
   return (
@@ -926,22 +974,14 @@ function ReturningWorkStrip({
       <div className="zaki-dashboard-command__ledger-head">
         <div>
           <h2>
-            {claimed
-              ? t("zakiDashboard.anonymousWork.claimedTitle", {
-                  defaultValue: "We kept your work",
-                })
-              : t("zakiDashboard.anonymousWork.title", {
-                  defaultValue: "Continue what you started",
-                })}
+            {t("zakiDashboard.anonymousWork.title", {
+              defaultValue: "Continue what you started",
+            })}
           </h2>
           <p>
-            {claimed
-              ? t("zakiDashboard.anonymousWork.claimedSubtitle", {
-                  defaultValue: "Your recent browser work is available after sign-in.",
-                })
-              : t("zakiDashboard.anonymousWork.subtitle", {
-                  defaultValue: "Saved in this browser only. Sign in to keep it across devices.",
-                })}
+            {t("zakiDashboard.anonymousWork.subtitle", {
+              defaultValue: "Saved in this browser only. Sign in to keep it across devices.",
+            })}
           </p>
           {claimError ? (
             <p className="zaki-dashboard-command__ledger-error" role="status">
@@ -949,7 +989,7 @@ function ReturningWorkStrip({
             </p>
           ) : null}
         </div>
-        {!claimed ? (
+        {showSaveCta ? (
           <V2Button type="button" onClick={() => onSave(items[0])}>
             <LogIn className="size-4" aria-hidden="true" />
             {t("zakiDashboard.anonymousWork.save", {
@@ -1001,8 +1041,18 @@ export function ZakiDashboard({
   );
   const [commandText, setCommandText] = useState("");
   const [anonymousWorkItems, setAnonymousWorkItems] = useState<AnonymousWorkItem[]>([]);
-  const [anonymousWorkClaimed, setAnonymousWorkClaimed] = useState(false);
-  const [anonymousWorkClaimError, setAnonymousWorkClaimError] = useState<string | null>(null);
+  // The claim outcome, as reported by the server. This used to be local state
+  // set to `token && items.length > 0` — the product asserted "we kept your
+  // work" without ever checking, and it was false every time. Nothing but a
+  // server response that actually carried rows can turn this on now.
+  const anonymousWorkClaimStatus = useAnonymousWorkClaimStore((state) => state.status);
+  const anonymousWorkImportedCount = useAnonymousWorkClaimStore((state) => state.importedCount);
+  const anonymousWorkClaimRoute = useAnonymousWorkClaimStore((state) => state.route);
+  const anonymousWorkClaimError = useAnonymousWorkClaimStore((state) => state.error);
+  const setAnonymousWorkClaiming = useAnonymousWorkClaimStore((state) => state.setClaiming);
+  const setAnonymousWorkClaimResult = useAnonymousWorkClaimStore((state) => state.setResult);
+  const anonymousWorkClaimed =
+    anonymousWorkClaimStatus === "imported" && anonymousWorkImportedCount > 0;
   const [showIntro, setShowIntro] = useState(false);
   const [memoryBridgeSeen, setMemoryBridgeSeen] = useState(false);
   const [titleSignalIndex, setTitleSignalIndex] = useState(0);
@@ -1032,13 +1082,11 @@ export function ZakiDashboard({
       : t("zakiDashboard.identity.signedIn");
 
   const refreshAnonymousWork = useCallback(() => {
-    const items = readAnonymousWorkLedger().items;
-    setAnonymousWorkItems(items);
-    setAnonymousWorkClaimed(Boolean(token && items.length > 0));
-    if (!items.length || !token) {
-      setAnonymousWorkClaimError(null);
-    }
-  }, [token]);
+    // Reads the ledger, and NOTHING else. It deliberately does not decide
+    // whether the work was claimed: having a token and a non-empty ledger says
+    // nothing about what the server imported. Only the claim response does.
+    setAnonymousWorkItems(readAnonymousWorkLedger().items);
+  }, []);
 
   useEffect(() => {
     setSelectedProductId((current) => {
@@ -1393,43 +1441,35 @@ export function ZakiDashboard({
       }
       if (item.productId === "spaces" && item.route.startsWith("/spaces")) {
         if (token) {
-          try {
-            const { response, data } = await claimAnonymousSpacesWork({
-              workId: item.id,
-              prompt: item.prompt,
-              replyPreview: item.replyPreview,
-              title: item.title,
-              threadId: item.threadId,
-              route: item.route,
-            });
-            if (response.ok && data?.success && data.route) {
-              setAnonymousWorkClaimError(null);
-              setAnonymousWorkClaimed(true);
-              navigate(data.route);
-              return;
-            }
-            setAnonymousWorkClaimed(true);
-            setAnonymousWorkClaimError(
-              data?.error ||
-                t("zakiDashboard.anonymousWork.claimRetry", {
-                  defaultValue: "Spaces setup is temporarily unavailable. Retry from this saved work.",
-                })
-            );
-            return;
-          } catch {
-            setAnonymousWorkClaimed(true);
-            setAnonymousWorkClaimError(
-              t("zakiDashboard.anonymousWork.claimRetry", {
-                defaultValue: "Spaces setup is temporarily unavailable. Retry from this saved work.",
-              })
-            );
+          // The same shared claim every other sign-in path runs. It consumes the
+          // ledger item only once the server confirms the import, so a retry
+          // after a failure re-claims the same work instead of losing it.
+          setAnonymousWorkClaiming();
+          const result = await claimAnonymousWork(item);
+          setAnonymousWorkClaimResult(result);
+          refreshAnonymousWork();
+
+          if (result.status === "error") {
+            // Stay put and surface the failure. It emphatically does NOT say
+            // "we kept your work" — nothing was kept.
             return;
           }
+          if (result.route) {
+            navigate(result.route);
+          }
+          return;
         }
         navigate(item.route);
       }
     },
-    [navigate, t, token, writeDashboardIntent]
+    [
+      navigate,
+      refreshAnonymousWork,
+      setAnonymousWorkClaimResult,
+      setAnonymousWorkClaiming,
+      token,
+      writeDashboardIntent,
+    ]
   );
 
   const handleSaveAnonymousWork = useCallback(
@@ -1504,13 +1544,26 @@ export function ZakiDashboard({
 
       <div className="zaki-dashboard-v2__wrap">
         <section className="zaki-dashboard-v2__entry">
-          {!token || anonymousWorkClaimed ? (
+          {/*
+            Show saved work whenever there IS saved work, plus the kept
+            confirmation once the server has actually imported something. What
+            it must never do is treat "signed in with a non-empty ledger" as
+            proof the work was kept — that was asserted, never verified, and it
+            was false on every single claim.
+          */}
+          {anonymousWorkItems.length > 0 || anonymousWorkClaimed ? (
             <ReturningWorkStrip
               t={t}
               items={anonymousWorkItems}
               claimed={anonymousWorkClaimed}
+              claimedCount={anonymousWorkImportedCount}
+              claimedRoute={anonymousWorkClaimRoute}
               claimError={anonymousWorkClaimError}
+              showSaveCta={!token}
               onContinue={handleContinueAnonymousWork}
+              onOpenClaimed={() => {
+                if (anonymousWorkClaimRoute) navigate(anonymousWorkClaimRoute);
+              }}
               onSave={handleSaveAnonymousWork}
             />
           ) : null}

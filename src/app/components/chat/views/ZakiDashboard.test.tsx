@@ -3,8 +3,12 @@ import { describe, expect, it, jest, beforeEach } from "@jest/globals";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ZakiDashboard } from "./ZakiDashboard";
-import { useAuthStore } from "@/stores";
-import { ANONYMOUS_WORK_LEDGER_KEY, upsertAnonymousWorkItem } from "@/lib/anonymousWork";
+import { useAnonymousWorkClaimStore, useAuthStore } from "@/stores";
+import {
+  ANONYMOUS_WORK_LEDGER_KEY,
+  readAnonymousWorkLedger,
+  upsertAnonymousWorkItem,
+} from "@/lib/anonymousWork";
 import { claimAnonymousSpacesWork } from "@/lib/api";
 import { PENDING_INTENT_KEY } from "@/lib/pendingIntent";
 
@@ -495,12 +499,15 @@ describe("ZakiDashboard", () => {
       value: mockOpen,
     });
     window.sessionStorage.clear();
+    useAnonymousWorkClaimStore.getState().reset();
+    // The default: the server actually imported the conversation and says so.
     (claimAnonymousSpacesWork as unknown as jest.Mock).mockResolvedValue({
       response: { ok: true },
       data: {
         success: true,
         route: "/spaces/customer-space/threads/thread-1",
-        imported: false,
+        imported: true,
+        importedCount: 2,
       },
     });
     setupQueries();
@@ -1004,7 +1011,8 @@ describe("ZakiDashboard", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/spaces/zaky/threads/thread-1");
   });
 
-  it("keeps returning anonymous work visible after sign-in until Spaces claim succeeds", () => {
+  // (d) The headline is driven by the server result and NOTHING else.
+  it("never says 'We kept your work' just because the user is signed in with a ledger", () => {
     upsertAnonymousWorkItem({
       productId: "agent",
       taskKind: "plan",
@@ -1016,18 +1024,59 @@ describe("ZakiDashboard", () => {
       status: "draft",
     });
 
+    // Signed in (the beforeEach seeds a token) with a non-empty ledger — the
+    // exact condition the old code used to assert "We kept your work". Nothing
+    // has been claimed, so saying it would be a lie.
     renderDashboard();
 
-    expect(screen.getByTestId("zaki-anonymous-work")).toHaveTextContent("We kept your work");
-    expect(screen.getByTestId("zaki-anonymous-work")).toHaveTextContent("Launch sequence");
+    expect(screen.queryByText("We kept your work")).not.toBeInTheDocument();
     expect(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY)).not.toBeNull();
   });
 
-  it("claims signed-in Spaces ledger work before navigating to a signed-in route", async () => {
+  it("does not say 'We kept your work' when the server reports it imported nothing", async () => {
+    // The server provisioned a thread but carried no messages across — which is
+    // exactly what the endpoint used to do on EVERY claim (imported: false).
+    (claimAnonymousSpacesWork as unknown as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true },
+      data: {
+        success: true,
+        route: "/spaces/customer-space/threads/thread-1",
+        imported: false,
+        importedCount: 0,
+      },
+    });
+    upsertAnonymousWorkItem({
+      productId: "spaces",
+      taskKind: "chat",
+      prompt: "Nothing was carried over",
+      replyPreview: "an answer",
+      reply: "an answer",
+      title: "Empty claim",
+      route: "/spaces/zaky/threads/anon-789",
+      threadId: "anon-789",
+      meterRemaining: 12,
+      status: "succeeded",
+    });
+
+    renderDashboard();
+    fireEvent.click(screen.getByText("Empty claim"));
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/spaces/customer-space/threads/thread-1");
+    });
+    expect(screen.queryByText("We kept your work")).not.toBeInTheDocument();
+    // (c) Nothing was imported, so the ONLY copy of the work stays in the browser.
+    expect(readAnonymousWorkLedger().items).toHaveLength(1);
+  });
+
+  // (a) + (c) The claim imports, and only THEN is the ledger consumed.
+  it("claims Spaces ledger work with the full reply, then clears the ledger once the server confirms", async () => {
     upsertAnonymousWorkItem({
       productId: "spaces",
       taskKind: "chat",
       prompt: "Continue the anonymous strategy chat",
+      replyPreview: "Here is the strategy: step one...",
+      reply: "Here is the strategy:\n\n1. step one\n2. step two",
       title: "Strategy chat",
       route: "/spaces/zaky/threads/anon-123",
       threadId: "anon-123",
@@ -1043,14 +1092,25 @@ describe("ZakiDashboard", () => {
       expect(claimAnonymousSpacesWork).toHaveBeenCalledWith({
         workId: expect.any(String),
         prompt: "Continue the anonymous strategy chat",
-        replyPreview: "",
+        // The FULL answer, formatting intact — not the 800-char preview.
+        reply: "Here is the strategy:\n\n1. step one\n2. step two",
+        replyPreview: "Here is the strategy: step one...",
         title: "Strategy chat",
         threadId: "anon-123",
         route: "/spaces/zaky/threads/anon-123",
       });
     });
+
     expect(mockNavigate).toHaveBeenCalledWith("/spaces/customer-space/threads/thread-1");
-    expect(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY)).not.toBeNull();
+
+    // (c) The server confirmed 2 rows landed, so the browser copy is consumed —
+    // which is what stops the same work being re-claimed into a duplicate thread.
+    await waitFor(() => {
+      expect(readAnonymousWorkLedger().items).toHaveLength(0);
+    });
+
+    // (d) And only NOW may the UI say it kept the work, quoting what it kept.
+    expect(await screen.findByText("We kept your work")).toBeInTheDocument();
   });
 
   it("preserves signed-in Spaces ledger work and shows retry copy when claim fails", async () => {
@@ -1066,6 +1126,8 @@ describe("ZakiDashboard", () => {
       productId: "spaces",
       taskKind: "chat",
       prompt: "Recover this chat",
+      replyPreview: "a real answer",
+      reply: "a real answer",
       title: "Recover chat",
       route: "/spaces/zaky/threads/anon-456",
       threadId: "anon-456",
@@ -1081,6 +1143,10 @@ describe("ZakiDashboard", () => {
       await screen.findByText("Spaces setup is temporarily unavailable. Please try again.")
     ).toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalledWith("/spaces/zaky/threads/anon-456");
+    // A failed claim must never masquerade as a successful one.
+    expect(screen.queryByText("We kept your work")).not.toBeInTheDocument();
+    // (c) The work survives in the browser so the retry has something to claim.
+    expect(readAnonymousWorkLedger().items).toHaveLength(1);
     expect(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY)).not.toBeNull();
   });
 
