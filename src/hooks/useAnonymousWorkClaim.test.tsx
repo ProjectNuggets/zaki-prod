@@ -152,6 +152,53 @@ describe("useAnonymousWorkClaim — the shared post-auth claim", () => {
     });
   });
 
+  it("sends the complete eligible anonymous transcript to the claim endpoint", async () => {
+    const savedWork = upsertAnonymousWorkItem({
+      productId: "spaces",
+      taskKind: "chat",
+      prompt: "First question",
+      reply: "First answer",
+      route: "/spaces/zaky/threads/anon-abc",
+      threadId: "anon-abc",
+      turnId: "turn-one",
+      status: "succeeded",
+    });
+    upsertAnonymousWorkItem({
+      id: savedWork!.id,
+      productId: "spaces",
+      taskKind: "chat",
+      prompt: "Second question",
+      reply: "Partial second answer",
+      route: "/spaces/zaky/threads/anon-abc",
+      threadId: "anon-abc",
+      turnId: "turn-two",
+      status: "interrupted",
+    });
+    seedPendingSpacesIntent(savedWork!.id);
+    arriveAuthenticatedViaOAuthReturn();
+    renderHost();
+
+    await waitFor(() => expect(claimAnonymousSpacesWork).toHaveBeenCalledTimes(1));
+    expect(claimAnonymousSpacesWork).toHaveBeenCalledWith(
+      expect.objectContaining({
+        turns: [
+          expect.objectContaining({
+            id: "turn-one",
+            prompt: "First question",
+            reply: "First answer",
+            status: "succeeded",
+          }),
+          expect.objectContaining({
+            id: "turn-two",
+            prompt: "Second question",
+            reply: "Partial second answer",
+            status: "interrupted",
+          }),
+        ],
+      })
+    );
+  });
+
   // (c) The ledger is the ONLY copy of the conversation. It is consumed only
   // once the server confirms the import.
   it("clears the ledger item after — and only after — the server confirms the import", async () => {
@@ -256,6 +303,32 @@ describe("useAnonymousWorkClaim — the shared post-auth claim", () => {
     // actually gets an answer, instead of landing in an empty thread.
     expect(readPendingIntent()).not.toBeNull();
     expect(readPendingIntent()?.prompt).toBe("Draft the launch memo");
+  });
+
+  it("does not import a v2 streaming partial through the legacy reply fallback", async () => {
+    const streaming = upsertAnonymousWorkItem({
+      productId: "spaces",
+      taskKind: "chat",
+      prompt: "Draft the launch memo",
+      replyPreview: "Here is the unfinished",
+      reply: "Here is the unfinished",
+      title: "Launch memo",
+      route: "/spaces/zaky/threads/anon-abc",
+      threadId: "anon-abc",
+      turnId: "turn-streaming",
+      status: "streaming",
+    });
+    seedPendingSpacesIntent(streaming!.id);
+
+    arriveAuthenticatedViaOAuthReturn();
+    renderHost();
+
+    await waitFor(() => {
+      expect(useAnonymousWorkClaimStore.getState().status).toBe("idle");
+    });
+    expect(claimAnonymousSpacesWork).not.toHaveBeenCalled();
+    expect(readAnonymousWorkLedger().items).toHaveLength(1);
+    expect(readPendingIntent()?.anonymousWorkId).toBe(streaming!.id);
   });
 
   it("does not claim without a pending claimable intent", async () => {

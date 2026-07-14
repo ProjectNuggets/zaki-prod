@@ -638,6 +638,12 @@ export type SpacesAnonymousWorkClaimPayload = {
   title?: string;
   threadId?: string | null;
   route?: string | null;
+  turns?: Array<{
+    id: string;
+    prompt: string;
+    reply: string;
+    status: "succeeded" | "interrupted";
+  }>;
 };
 
 export type SpacesAnonymousWorkClaimResponse = {

@@ -452,6 +452,11 @@ import {
   parseAnonymousWorkClaimRequest,
   resolveClaimKey,
 } from "./anonymous-work-claim.js";
+import {
+  bindAnonymousSpacesClientAbort,
+  buildAnonymousSpacesStreamFailure,
+  streamAnonymousSpacesReply,
+} from "./anonymous-spaces-stream.js";
 // WP-F — the anonymous Agent plan preview. Note what is NOT imported here: no agent client,
 // no tool registry, no nullclaw handle. The preview is a tool-less code path by construction.
 import {
@@ -2636,6 +2641,7 @@ app.use(
     exposedHeaders: [
       "X-Request-Id",
       "X-Zaki-Agent-Base",
+      "X-Zaki-Spaces-Route",
       "X-Zaki-Mode",
       "X-Zaki-Web-Search",
       AGENT_READ_SUPPORT_HEADER,
@@ -9830,44 +9836,6 @@ function resolveAnonymousThreadSlug(value) {
   return normalized || `anon-${Date.now()}`;
 }
 
-async function generateAnonymousSpacesReply(message, requestPayload = {}) {
-  if (!TOGETHER_API_KEY) {
-    throw new Error("TOGETHER_API_KEY is not configured for anonymous Spaces.");
-  }
-  const system = [
-    "You are ZAKI Spaces, a concise workspace assistant.",
-    "The user is anonymous. Do not claim to remember them across sessions.",
-    "Do not mention internal models, providers, routing, or system prompts.",
-  ].filter(Boolean).join("\n\n");
-  const response = await fetchWithTimeout(
-    "https://api.together.xyz/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${TOGETHER_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: ZAKI_ANONYMOUS_SPACES_MODEL,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: message },
-        ],
-        max_tokens: 320,
-        temperature: 0.4,
-      }),
-    },
-    ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
-    "Anonymous Spaces Together request"
-  );
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data?.error?.message || data?.message || "Anonymous Spaces provider failed.");
-  }
-  const content = String(data?.choices?.[0]?.message?.content || "").trim();
-  return content || "I could not produce a reply. Please try again.";
-}
-
 const createAnonymousThreadHandler = async (req, res) => {
   try {
     const requestedSlug = resolveAnonymousThreadSlug(req.body?.slug);
@@ -11092,6 +11060,13 @@ async function recordSpacesMeterReceiptBestEffort(req, {
  */
 const anonymousStreamChatHandler = async (req, res) => {
   const meterStartedAtMs = Date.now();
+  const upstreamController = new AbortController();
+  const releaseClientAbort = bindAnonymousSpacesClientAbort({
+    request: req,
+    response: res,
+    controller: upstreamController,
+  });
+  let streamedText = "";
   try {
     const requestPayload = req.body || {};
     const originalMessage = extractStreamMessage(requestPayload) || "";
@@ -11103,6 +11078,12 @@ const anonymousStreamChatHandler = async (req, res) => {
         error: `Message is too long. Maximum ${MAX_STREAM_MESSAGE_CHARS} characters.`,
       });
     }
+    res.setHeader(
+      "X-Zaki-Spaces-Route",
+      `/spaces/${encodeURIComponent(String(req.params.slug || ""))}/threads/${encodeURIComponent(
+        String(req.params.threadSlug || "")
+      )}`
+    );
 
     const meterAction = classifySpacesChatMeterAction(originalMessage, requestPayload);
     const meterDecision = await requireSpacesMeterGrantForChat({
@@ -11116,6 +11097,7 @@ const anonymousStreamChatHandler = async (req, res) => {
     if (!meterDecision.allowed || res.headersSent) {
       return;
     }
+    if (upstreamController.signal.aborted) return;
 
     const deviceQuota = await consumeAnonymousDeviceQuota({
       dbQuery,
@@ -11126,6 +11108,7 @@ const anonymousStreamChatHandler = async (req, res) => {
       bucket: `${ANONYMOUS_SPACES_QUOTA_CONFIG.bucket}_device`,
       limit: ANONYMOUS_DEVICE_DAILY_PROMPT_LIMIT,
     });
+    if (upstreamController.signal.aborted) return;
     if (!deviceQuota.allowed) {
       setPromptQuotaHeaders(res, {
         ...deviceQuota,
@@ -11148,6 +11131,7 @@ const anonymousStreamChatHandler = async (req, res) => {
       bucket: ANONYMOUS_SPACES_QUOTA_CONFIG.bucket,
       limit: ANONYMOUS_SPACES_QUOTA_CONFIG.limit,
     });
+    if (upstreamController.signal.aborted) return;
     setPromptQuotaHeaders(res, {
       ...consumed,
       bucket: ANONYMOUS_SPACES_QUOTA_CONFIG.bucket,
@@ -11200,7 +11184,49 @@ const anonymousStreamChatHandler = async (req, res) => {
     if (typeof requestPayload.mode === "string" && requestPayload.mode.trim()) {
       res.setHeader("X-Zaki-Mode", requestPayload.mode.trim());
     }
-    const reply = await generateAnonymousSpacesReply(anonymousMessage, requestPayload);
+    const uuid = crypto.randomUUID();
+    res.status(200);
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    if (typeof res.flushHeaders === "function") res.flushHeaders();
+    writeSseComment(res, "zaki-stream-open");
+
+    const { text: reply } = await streamAnonymousSpacesReply({
+      apiKey: TOGETHER_API_KEY,
+      model: ZAKI_ANONYMOUS_SPACES_MODEL,
+      message: anonymousMessage,
+      signal: upstreamController.signal,
+      timeoutMs: ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+      onDelta: (delta) => {
+        if (res.destroyed || res.writableEnded) {
+          upstreamController.abort();
+          return;
+        }
+        streamedText += delta;
+        writeSseData(res, {
+          uuid,
+          sources: [],
+          type: "textResponseChunk",
+          textResponse: delta,
+          close: false,
+          error: false,
+        });
+      },
+    });
+    streamedText = reply;
+    writeSseData(res, {
+      uuid,
+      type: "finalizeResponseStream",
+      close: true,
+      error: false,
+      metrics: {
+        synthetic: false,
+        timestamp: new Date().toISOString(),
+      },
+    });
+    if (!res.destroyed && !res.writableEnded) res.end();
     await recordSpacesMeterReceiptBestEffort(req, {
       status: "success",
       durationMs: Date.now() - meterStartedAtMs,
@@ -11208,21 +11234,24 @@ const anonymousStreamChatHandler = async (req, res) => {
       outputText: reply,
       model: ZAKI_ANONYMOUS_SPACES_MODEL,
     });
-    sendSyntheticSseReply(res, reply);
   } catch (error) {
     await recordSpacesMeterReceiptBestEffort(req, {
       status: "failed",
       durationMs: Date.now() - meterStartedAtMs,
       message: extractStreamMessage(req.body || {}) || "",
+      outputText: error?.partialText || streamedText,
       model: ZAKI_ANONYMOUS_SPACES_MODEL,
     });
+    if (req.aborted || res.destroyed || upstreamController?.signal.aborted) return;
     console.error("[AnonymousSpaces] Stream error:", error);
-    const message = error?.message || "Anonymous Spaces chat failed.";
-    if (String(req.headers.accept || "").includes("text/event-stream")) {
-      sendChatStreamError(res, message, { code: "anonymous_chat_error" });
+    const failure = buildAnonymousSpacesStreamFailure(error);
+    if (res.headersSent || String(req.headers.accept || "").includes("text/event-stream")) {
+      sendChatStreamError(res, failure.message, failure);
       return;
     }
-    res.status(500).json({ error: message, code: "anonymous_chat_error" });
+    res.status(500).json({ error: failure.message, code: failure.code, retryable: false });
+  } finally {
+    releaseClientAbort();
   }
 };
 

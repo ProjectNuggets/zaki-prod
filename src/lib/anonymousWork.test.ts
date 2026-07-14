@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "@jest/globals";
 import {
   ANONYMOUS_WORK_LEDGER_KEY,
+  recoverAnonymousThreadTurnsAfterReload,
+  readAnonymousThreadTurns,
   readAnonymousWorkLedger,
   removeAnonymousWorkItems,
   upsertAnonymousWorkItem,
@@ -197,6 +199,189 @@ describe("anonymous work ledger", () => {
       });
 
       expect(readAnonymousWorkLedger().items[0]?.reply).toBe("the real answer");
+    });
+  });
+
+  describe("per-thread transcripts", () => {
+    it("migrates a v1 single-turn row into a v2 transcript without changing its storage key", () => {
+      window.localStorage.setItem(
+        ANONYMOUS_WORK_LEDGER_KEY,
+        JSON.stringify({
+          version: 1,
+          items: [
+            {
+              id: "legacy-work",
+              productId: "spaces",
+              taskKind: "chat",
+              prompt: "Legacy question",
+              reply: "Legacy answer",
+              replyPreview: "Legacy answer",
+              threadId: "legacy-thread",
+              route: "/spaces/zaky/threads/legacy-thread",
+              createdAt: "2026-06-01T10:00:00.000Z",
+              updatedAt: "2026-06-01T10:01:00.000Z",
+              status: "succeeded",
+            },
+          ],
+        })
+      );
+
+      const ledger = readAnonymousWorkLedger(Date.parse("2026-06-01T10:02:00.000Z"));
+      expect(ledger.version).toBe(2);
+      expect(ledger.items[0]?.turns).toEqual([
+        expect.objectContaining({
+          id: "legacy-work-turn-1",
+          prompt: "Legacy question",
+          reply: "Legacy answer",
+          status: "succeeded",
+        }),
+      ]);
+    });
+
+    it("preserves a legacy preview-only answer in the synthesized transcript turn", () => {
+      window.localStorage.setItem(
+        ANONYMOUS_WORK_LEDGER_KEY,
+        JSON.stringify({
+          version: 1,
+          items: [
+            {
+              id: "legacy-preview-work",
+              productId: "spaces",
+              taskKind: "chat",
+              prompt: "Legacy question",
+              replyPreview: "Legacy truncated answer",
+              threadId: "legacy-thread",
+              route: "/spaces/zaky/threads/legacy-thread",
+              createdAt: "2026-06-01T10:00:00.000Z",
+              updatedAt: "2026-06-01T10:01:00.000Z",
+              status: "succeeded",
+            },
+          ],
+        })
+      );
+
+      expect(
+        readAnonymousWorkLedger(Date.parse("2026-06-01T10:02:00.000Z")).items[0]?.turns
+      ).toEqual([
+        expect.objectContaining({
+          prompt: "Legacy question",
+          reply: "Legacy truncated answer",
+          status: "succeeded",
+        }),
+      ]);
+    });
+
+    it("keeps an earlier completed turn when a later turn starts in the same thread", () => {
+      const first = upsertAnonymousWorkItem({
+        productId: "spaces",
+        taskKind: "chat",
+        prompt: "First question",
+        threadId: "thread-one",
+        route: "/spaces/zaky/threads/thread-one",
+        turnId: "turn-one",
+        status: "draft",
+      });
+
+      upsertAnonymousWorkItem({
+        id: first!.id,
+        productId: "spaces",
+        taskKind: "chat",
+        prompt: "First question",
+        reply: "First answer",
+        threadId: "thread-one",
+        route: "/spaces/zaky/threads/thread-one",
+        turnId: "turn-one",
+        status: "succeeded",
+      });
+
+      upsertAnonymousWorkItem({
+        id: first!.id,
+        productId: "spaces",
+        taskKind: "chat",
+        prompt: "Second question",
+        threadId: "thread-one",
+        route: "/spaces/zaky/threads/thread-one",
+        turnId: "turn-two",
+        status: "draft",
+      });
+
+      const [item] = readAnonymousWorkLedger().items;
+      expect(item?.turns).toEqual([
+        expect.objectContaining({
+          id: "turn-one",
+          prompt: "First question",
+          reply: "First answer",
+          status: "succeeded",
+        }),
+        expect.objectContaining({
+          id: "turn-two",
+          prompt: "Second question",
+          reply: "",
+          status: "draft",
+        }),
+      ]);
+    });
+
+    it("reads the ordered transcript for one anonymous Spaces thread", () => {
+      const item = upsertAnonymousWorkItem({
+        productId: "spaces",
+        taskKind: "chat",
+        prompt: "First question",
+        reply: "First answer",
+        threadId: "thread-one",
+        route: "/spaces/zaky/threads/thread-one",
+        turnId: "turn-one",
+        status: "succeeded",
+      });
+      upsertAnonymousWorkItem({
+        id: item!.id,
+        productId: "spaces",
+        taskKind: "chat",
+        prompt: "Second question",
+        reply: "Partial second answer",
+        threadId: "thread-one",
+        route: "/spaces/zaky/threads/thread-one",
+        turnId: "turn-two",
+        status: "interrupted",
+      });
+
+      expect(readAnonymousThreadTurns("thread-one")).toEqual([
+        expect.objectContaining({ id: "turn-one", status: "succeeded" }),
+        expect.objectContaining({ id: "turn-two", status: "interrupted" }),
+      ]);
+      expect(readAnonymousThreadTurns("another-thread")).toEqual([]);
+    });
+
+    it("recovers a persisted streaming turn as interrupted after reload", () => {
+      upsertAnonymousWorkItem(
+        {
+          productId: "spaces",
+          taskKind: "chat",
+          prompt: "Question before reload",
+          reply: "Partial reply",
+          threadId: "reloaded-thread",
+          route: "/spaces/zaky/threads/reloaded-thread",
+          turnId: "streaming-turn",
+          status: "streaming",
+        },
+        Date.parse("2026-06-01T10:00:00.000Z")
+      );
+
+      expect(
+        recoverAnonymousThreadTurnsAfterReload(
+          "reloaded-thread",
+          Date.parse("2026-06-01T10:01:00.000Z")
+        )
+      ).toEqual([
+        expect.objectContaining({
+          id: "streaming-turn",
+          reply: "Partial reply",
+          status: "interrupted",
+        }),
+      ]);
+      expect(
+        readAnonymousWorkLedger(Date.parse("2026-06-01T10:01:00.000Z")).items[0]
+      ).toMatchObject({ status: "interrupted" });
     });
   });
 
