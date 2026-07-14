@@ -2,6 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, jest, test } from "@jest/globals";
 import { buildDesignSessionRouter } from "./design-session-routes.js";
+import { createDesignWorkbenchAccess } from "./design-workbench-access.js";
 
 describe("Design public session routes", () => {
   test("authenticates the user, owns the binding in the hub, then asks the controller to ensure it", async () => {
@@ -64,7 +65,12 @@ describe("Design public session routes", () => {
       desiredGeneration: 7,
       requestId: "req_01",
     });
-    expect(issueWorkbenchAccess).toHaveBeenCalledWith(42);
+    expect(issueWorkbenchAccess).toHaveBeenCalledWith({
+      userId: "42",
+      sessionId: "sess_01",
+      projectId: "project_01",
+      generation: 7,
+    });
     expect(response.headers["set-cookie"]?.[0]).toContain("zaki_design_workbench=scoped");
   });
 
@@ -289,8 +295,80 @@ describe("Design public session routes", () => {
     }));
   });
 
+  test("accepts a matching session-bound workbench credential without a browser bearer", async () => {
+    let receivedBody = "";
+    const controllerProxy = jest.fn().mockImplementation(async (input) => {
+      for await (const chunk of input.body) receivedBody += chunk.toString();
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const resolveUser = jest.fn(async (_req, res) => {
+      res.status(401).json({ error: "auth_required" });
+      return null;
+    });
+    const workbenchAccess = createDesignWorkbenchAccess({
+      secret: "controller-secret-at-least-16",
+      secure: false,
+    });
+    const cookie = workbenchAccess.issue({
+      userId: "42",
+      sessionId: "sess_01",
+      projectId: "project_01",
+      generation: 7,
+    }).split(";")[0];
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser,
+      resolveProxyAccess: (req) => workbenchAccess.resolve(req),
+      ensureSession: jest.fn(),
+      readSessionBinding: jest.fn().mockResolvedValue({
+        sessionId: "sess_01",
+        projectId: "project_01",
+        userId: "42",
+        tenantId: "default",
+        state: "READY",
+        generation: 7,
+      }),
+      updateSessionState: jest.fn(),
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: jest.fn(),
+      controller: { ensure: jest.fn(), status: jest.fn(), stop: jest.fn(), proxy: controllerProxy },
+      getRequestId: () => "req_proxy_cookie",
+      authorizeProxy: jest.fn().mockResolvedValue({ allowed: true, action: "design_file_write", grant: null }),
+    }));
+
+    const response = await request(app)
+      .post("/api/design/sessions/sess_01/proxy/api/projects/project_01/files")
+      .set("x-zaki-project-id", "project_01")
+      .set("cookie", cookie)
+      .send({ name: "concept.html" });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true });
+    expect(resolveUser).not.toHaveBeenCalled();
+    expect(controllerProxy).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      expectedGeneration: 7,
+      method: "POST",
+    }));
+    expect(receivedBody).toBe(JSON.stringify({ name: "concept.html" }));
+  });
+
   test("allows read-only artifact delivery and rejects artifact mutations", async () => {
-    const controllerProxy = jest.fn().mockResolvedValue(new Response("asset"));
+    const controllerProxy = jest.fn().mockResolvedValue(new Response("asset", {
+      status: 206,
+      headers: {
+        "accept-ranges": "bytes",
+        "content-range": "bytes 0-4/10",
+        "content-type": "application/octet-stream",
+      },
+    }));
     const app = express();
     app.use("/api/design/sessions", buildDesignSessionRouter({
       enabled: true,
@@ -305,8 +383,12 @@ describe("Design public session routes", () => {
       getRequestId: () => "req_asset",
     }));
 
-    expect((await request(app).get("/api/design/sessions/sess_01/proxy/artifacts/site/index.html")
-      .set("x-zaki-project-id", "project_01")).status).toBe(200);
+    const asset = await request(app).get("/api/design/sessions/sess_01/proxy/artifacts/site/index.html")
+      .set("x-zaki-project-id", "project_01")
+      .set("range", "bytes=0-4");
+    expect(asset.status).toBe(206);
+    expect(asset.headers["accept-ranges"]).toBe("bytes");
+    expect(asset.headers["content-range"]).toBe("bytes 0-4/10");
     expect((await request(app).post("/api/design/sessions/sess_01/proxy/frames/preview.png")
       .set("x-zaki-project-id", "project_01")).status).toBe(400);
     expect(controllerProxy).toHaveBeenCalledTimes(1);

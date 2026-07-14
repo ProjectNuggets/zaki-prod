@@ -4,6 +4,7 @@ import { DesignPage } from "./DesignPage";
 
 const mockEnsure = jest.fn();
 const mockStop = jest.fn();
+const mockStatus = jest.fn();
 
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (_key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? _key }),
@@ -14,7 +15,7 @@ jest.mock("@/lib/designApi", () => ({
   listDesignProjects: jest.fn().mockResolvedValue({ projects: [{ id: "project_01", name: "Brand system" }] }),
   createDesignProject: jest.fn(),
   ensureDesignSession: (...args: unknown[]) => mockEnsure(...args),
-  getDesignSession: jest.fn(),
+  getDesignSession: (...args: unknown[]) => mockStatus(...args),
   stopDesignSession: (...args: unknown[]) => mockStop(...args),
   designWorkbenchUrl: (session: { id: string; projectId: string }) =>
     `/api/design/workbench/projects/${session.projectId}?sessionId=${session.id}`,
@@ -32,6 +33,9 @@ describe("DesignPage hosted lifecycle", () => {
     });
     mockStop.mockReset().mockResolvedValue({
       session: { id: "sess_01", projectId: "project_01", state: "STOPPED", generation: 1 },
+    });
+    mockStatus.mockReset().mockResolvedValue({
+      session: { id: "sess_01", projectId: "project_01", state: "READY", generation: 1 },
     });
   });
 
@@ -57,5 +61,21 @@ describe("DesignPage hosted lifecycle", () => {
     expect(await screen.findByRole("button", { name: "Back to projects" })).toBeDisabled();
     resolveEnsure({ session: { id: "sess_01", projectId: "project_01", state: "READY", generation: 1 } });
     expect(await screen.findByTitle("ZAKI Design workbench")).toBeVisible();
+  });
+
+  it("offers a safe retry when the admitted worker is already stopped", async () => {
+    mockEnsure.mockResolvedValueOnce({
+      session: { id: "sess_01", projectId: "project_01", state: "STARTING", generation: 1 },
+      retryAfterMs: 10,
+    });
+    mockStatus.mockResolvedValueOnce({
+      session: { id: "sess_01", projectId: "project_01", state: "STOPPED", generation: 1 },
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Brand system/i }));
+
+    expect(await screen.findByRole("button", { name: "Retry" })).toBeVisible();
+    expect(screen.queryByText("Restoring project files and starting an isolated worker.")).not.toBeInTheDocument();
   });
 });

@@ -18490,7 +18490,8 @@ app.use(
     getRequestId: getOrCreateRequestId,
     authorizeProxy: authorizeDesignSessionProxy,
     settleProxy: settleDesignSessionProxy,
-    issueWorkbenchAccess: (userId) => designWorkbenchAccess?.issue(userId),
+    issueWorkbenchAccess: (binding) => designWorkbenchAccess?.issue(binding),
+    resolveProxyAccess: (req, sessionId) => designWorkbenchAccess?.resolve(req, sessionId) ?? null,
   })
 );
 

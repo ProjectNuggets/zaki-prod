@@ -24,26 +24,59 @@ test("signed-in user opens and stops an isolated Design workspace", async ({ pag
     }
     return json(route, { projects: [{ id: "project_01", name: "Brand system" }] });
   });
-  await page.route("**/api/design/sessions", (route) => json(route, {
-    session: { id: "sess_01", projectId: "project_01", state: "STARTING", generation: 1 },
-    retryAfterMs: 10,
-  }, 202));
+  await page.route("**/api/design/sessions", (route) => route.fulfill({
+    status: 202,
+    contentType: "application/json",
+    headers: {
+      "set-cookie": "zaki_design_workbench_sess_01=scoped; Path=/api/design; HttpOnly; SameSite=Strict",
+    },
+    body: JSON.stringify({
+      session: { id: "sess_01", projectId: "project_01", state: "STARTING", generation: 1 },
+      retryAfterMs: 10,
+    }),
+  }));
   await page.route("**/api/design/sessions/sess_01?projectId=project_01", (route) => json(route, {
     session: { id: "sess_01", projectId: "project_01", state: "READY", generation: 1 },
   }));
   await page.route("**/api/design/sessions/sess_01/stop", (route) => json(route, {
     session: { id: "sess_01", projectId: "project_01", state: "STOPPED", generation: 1 },
   }));
+  await page.route("**/api/design/sessions/sess_01/proxy/api/projects/project_01/files", async (route) => {
+    const request = route.request();
+    expect(request.method()).toBe("POST");
+    expect(request.headers().authorization).toBeUndefined();
+    expect(request.headers().cookie).toContain("zaki_design_workbench_sess_01=scoped");
+    expect(request.postDataBuffer()?.byteLength).toBeGreaterThan(0);
+    expect(request.postDataJSON()).toEqual({ name: "browser-proof.html" });
+    await json(route, { ok: true });
+  });
   await page.route("**/api/design/workbench/**", (route) => route.fulfill({
     status: 200,
     contentType: "text/html",
-    body: "<!doctype html><html><body><main><h1>Open Design workbench</h1></main></body></html>",
+    body: `<!doctype html><html><body><main>
+      <h1>Open Design workbench</h1>
+      <p id="proxy-status">Saving through session proxy</p>
+      <script>
+        fetch('/api/design/sessions/sess_01/proxy/api/projects/project_01/files', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json', 'x-zaki-project-id': 'project_01' },
+          body: JSON.stringify({ name: 'browser-proof.html' }),
+        }).then((response) => {
+          if (!response.ok) throw new Error('proxy failed');
+          document.querySelector('#proxy-status').textContent = 'Saved through session proxy';
+        });
+      </script>
+    </main></body></html>`,
   }));
 
   await page.goto("/design");
+  await page.evaluate(() => window.localStorage.removeItem("zaki.auth.token"));
   await page.getByRole("button", { name: /Brand system/i }).click();
   await expect(page.getByTitle("ZAKI Design workbench")).toBeVisible();
-  await expect(page.frames().find((frame) => frame !== page.mainFrame())!.getByRole("heading", { name: "Open Design workbench" })).toBeVisible();
+  const workbench = page.frames().find((frame) => frame !== page.mainFrame())!;
+  await expect(workbench.getByRole("heading", { name: "Open Design workbench" })).toBeVisible();
+  await expect(workbench.getByText("Saved through session proxy")).toBeVisible();
 
   await page.getByRole("button", { name: "Stop" }).click();
   await expect(page.getByRole("heading", { name: "Your design projects" })).toBeVisible();

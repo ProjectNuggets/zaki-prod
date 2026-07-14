@@ -19,6 +19,7 @@ export function buildDesignSessionRouter({
   authorizeProxy,
   settleProxy,
   issueWorkbenchAccess,
+  resolveProxyAccess,
 }) {
   const router = express.Router();
   const lifecycleJson = express.json({ limit: "32kb", strict: true });
@@ -68,7 +69,12 @@ export function buildDesignSessionRouter({
             requestId,
           });
       if (!recoveringStop && typeof issueWorkbenchAccess === "function") {
-        res.append("set-cookie", issueWorkbenchAccess(auth.zakiUser.id));
+        res.append("set-cookie", issueWorkbenchAccess({
+          userId: session.userId,
+          sessionId: session.sessionId,
+          projectId: session.projectId,
+          generation: session.generation,
+        }));
       }
       await updateSessionStateBestEffort(updateSessionState, dbQuery, session, result, requestId);
       return res
@@ -88,7 +94,15 @@ export function buildDesignSessionRouter({
     if (!validOpaqueId(sessionId) || !validOpaqueId(projectId) || !targetPath) {
       return invalidRequest(res, getRequestId(req));
     }
-    const auth = await resolveUser(req, res);
+    const proxyAccess = req.get("authorization")
+      ? null
+      : await resolveProxyAccess?.(req, sessionId);
+    if (proxyAccess && !matchesProxyRequest(proxyAccess, sessionId, projectId)) {
+      return invalidWorkbenchAccess(res, getRequestId(req));
+    }
+    const auth = proxyAccess
+      ? { zakiUser: { id: proxyAccess.userId } }
+      : await resolveUser(req, res);
     if (!auth?.zakiUser?.id) return;
     const requestId = getRequestId(req);
     try {
@@ -100,6 +114,9 @@ export function buildDesignSessionRouter({
         tenantId: "default",
       });
       if (!session) return notFound(res, requestId);
+      if (proxyAccess && proxyAccess.generation !== session.generation) {
+        return invalidWorkbenchAccess(res, requestId);
+      }
       if (!isProxyableSessionState(session.state)) {
         return res.status(409).json({
           code: "design_session_not_writable",
@@ -373,8 +390,8 @@ function proxyBody(req, method) {
 
 function copyResponseHeaders(upstream, res) {
   const allowed = new Set([
-    "cache-control", "content-disposition", "content-language", "content-type",
-    "etag", "last-modified",
+    "accept-ranges", "cache-control", "content-disposition", "content-language",
+    "content-range", "content-type", "etag", "last-modified",
   ]);
   for (const [name, value] of upstream.headers.entries()) {
     if (allowed.has(name.toLowerCase())) res.setHeader(name, value);
@@ -398,6 +415,25 @@ function invalidRequest(res, requestId) {
 
 function notFound(res, requestId) {
   return res.status(404).json({ code: "design_session_not_found", message: "Design session was not found.", requestId });
+}
+
+function invalidWorkbenchAccess(res, requestId) {
+  return res.status(401).json({
+    code: "design_workbench_auth_required",
+    message: "Design workbench access is required.",
+    requestId,
+  });
+}
+
+function matchesProxyRequest(access, sessionId, projectId) {
+  return Boolean(
+    access &&
+    validOpaqueId(access.userId) &&
+    access.sessionId === sessionId &&
+    access.projectId === projectId &&
+    Number.isSafeInteger(access.generation) &&
+    access.generation >= 0
+  );
 }
 
 function validOpaqueId(value) {

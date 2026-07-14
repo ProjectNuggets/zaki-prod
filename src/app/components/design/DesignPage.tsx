@@ -56,6 +56,7 @@ export function DesignPage() {
   });
   const activeSession = sessionStatus.data?.session ?? seedSession;
   const workspaceReady = activeSession && ["READY", "ACTIVE", "IDLE"].includes(activeSession.state);
+  const workspaceUnavailable = activeSession && ["STOPPED", "FAILED"].includes(activeSession.state);
   const stopSession = useMutation({
     mutationFn: () => stopDesignSession(activeSession!.id, selectedProject!.id),
     onSuccess: () => {
@@ -95,7 +96,7 @@ export function DesignPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <V2Badge tone={workspaceReady ? "success" : activeSession?.state === "FAILED" ? "danger" : "accent"}>
+            <V2Badge tone={workspaceReady ? "success" : workspaceUnavailable ? "danger" : "accent"}>
               {activeSession?.state ?? (openSession.isPending ? "REQUESTED" : "STARTING")}
             </V2Badge>
             {activeSession && !["STOPPED", "FAILED"].includes(activeSession.state) ? (
@@ -118,13 +119,13 @@ export function DesignPage() {
           <div className="grid min-h-[640px] flex-1 place-items-center p-6">
             <V2Panel className="w-full max-w-lg">
               <V2PanelHead
-                title={activeSession?.state === "FAILED"
+                title={workspaceUnavailable
                   ? t("design.failedTitle", { defaultValue: "Workspace could not start" })
                   : t("design.startingTitle", { defaultValue: "Preparing your workspace" })}
                 meta={activeSession?.state ?? "REQUESTED"}
               />
               <V2PanelBody className="space-y-4 text-sm text-[var(--v2-ink-2)]">
-                {activeSession?.state === "FAILED" || openSession.isError || sessionStatus.isError ? (
+                {workspaceUnavailable || openSession.isError || sessionStatus.isError ? (
                   <>
                     <p>{t("design.failedBody", { defaultValue: "The isolated Design session did not become ready. You can retry safely." })}</p>
                     <V2Button variant="accent" size="sm" onClick={() => openSession.mutate(selectedProject)}>
