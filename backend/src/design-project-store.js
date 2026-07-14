@@ -26,6 +26,76 @@ function metadataJson(value) {
   return JSON.stringify(value);
 }
 
+function normalizeProjectRow(row) {
+  if (!row?.project_id) return null;
+  return {
+    id: String(row.project_id),
+    name: normalizeText(row.name, "Untitled design workspace"),
+    status: { value: normalizeText(row.status, "active") },
+    metadata:
+      row.metadata_json && typeof row.metadata_json === "object" && !Array.isArray(row.metadata_json)
+        ? row.metadata_json
+        : {},
+    createdAt: row.created_at ?? null,
+    updatedAt: row.updated_at ?? null,
+  };
+}
+
+export async function listDesignProjects({ dbQuery, userId }) {
+  const ownerUserId = normalizeUserId(userId);
+  if (!ownerUserId) throw new Error("invalid_design_project_owner");
+  const result = await dbQuery(
+    `
+      SELECT project_id, name, status, metadata_json, created_at, updated_at
+        FROM zaki_design_projects
+       WHERE owner_user_id = $1
+         AND status <> 'deleted'
+       ORDER BY updated_at DESC, project_id ASC
+    `,
+    [ownerUserId]
+  );
+  return (result?.rows || []).map(normalizeProjectRow).filter(Boolean);
+}
+
+export async function createDesignProject({
+  dbQuery,
+  userId,
+  projectId,
+  name,
+  metadata = {},
+  requestId,
+}) {
+  const ownerUserId = normalizeUserId(userId);
+  const normalizedProjectId = normalizeText(projectId);
+  if (!ownerUserId || !normalizedProjectId) {
+    throw new Error("invalid_design_project_owner");
+  }
+  const result = await dbQuery(
+    `
+      INSERT INTO zaki_design_projects
+        (project_id, owner_user_id, name, status, metadata_json, last_request_id, created_at, updated_at)
+      VALUES ($1, $2, $3, 'active', $4::jsonb, $5, NOW(), NOW())
+      RETURNING project_id, name, status, metadata_json, created_at, updated_at
+    `,
+    [
+      normalizedProjectId,
+      ownerUserId,
+      normalizeText(name, "Untitled design workspace"),
+      metadataJson(metadata),
+      normalizeText(requestId, null),
+    ]
+  );
+  await upsertDesignProjectRole({
+    dbQuery,
+    projectId: normalizedProjectId,
+    userId: ownerUserId,
+    role: "owner",
+  });
+  const project = normalizeProjectRow(result?.rows?.[0]);
+  if (!project) throw new Error("design_project_create_failed");
+  return project;
+}
+
 export function extractDesignProjectFromPayload(payload) {
   const project = payload?.project && typeof payload.project === "object" ? payload.project : null;
   if (!project || typeof project.id !== "string" || !project.id.trim()) return null;

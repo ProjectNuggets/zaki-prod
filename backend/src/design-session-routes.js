@@ -31,7 +31,7 @@ export function buildDesignSessionRouter({
     }
     next();
   });
-  router.post("/ensure", lifecycleJson, async (req, res) => {
+  const ensureHandler = async (req, res) => {
     const projectId = validOpaqueId(req.body?.projectId) ? req.body.projectId : null;
     if (!projectId) return invalidRequest(res, getRequestId(req));
     const auth = await resolveUser(req, res);
@@ -73,7 +73,9 @@ export function buildDesignSessionRouter({
     } catch (error) {
       return sessionFailure(res, error, requestId);
     }
-  });
+  };
+  router.post("/", lifecycleJson, ensureHandler);
+  router.post("/ensure", lifecycleJson, ensureHandler);
 
   router.all("/:sessionId/proxy/*", async (req, res) => {
     const sessionId = req.params.sessionId;
@@ -171,8 +173,8 @@ export function buildDesignSessionRouter({
     }
   });
 
-  router.post("/:sessionId/status", lifecycleJson, async (req, res) => {
-    const input = parseBoundSessionRequest(req.params.sessionId, req.body);
+  const statusHandler = async (req, res, value) => {
+    const input = parseBoundSessionRequest(req.params.sessionId, value);
     if (!input) return invalidRequest(res, getRequestId(req));
     const auth = await resolveUser(req, res);
     if (!auth?.zakiUser?.id) return;
@@ -199,7 +201,9 @@ export function buildDesignSessionRouter({
     } catch (error) {
       return sessionFailure(res, error, requestId);
     }
-  });
+  };
+  router.get("/:sessionId", async (req, res) => statusHandler(req, res, req.query));
+  router.post("/:sessionId/status", lifecycleJson, async (req, res) => statusHandler(req, res, req.body));
 
   router.post("/:sessionId/stop", lifecycleJson, async (req, res) => {
     const input = parseBoundSessionRequest(req.params.sessionId, req.body);

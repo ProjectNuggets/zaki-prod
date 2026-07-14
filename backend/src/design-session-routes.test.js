@@ -37,7 +37,7 @@ describe("Design public session routes", () => {
     }));
 
     const response = await request(app)
-      .post("/api/design/sessions/ensure")
+      .post("/api/design/sessions")
       .send({ projectId: "project_01" });
     expect(response.status).toBe(202);
     expect(response.body).toEqual({
@@ -61,6 +61,100 @@ describe("Design public session routes", () => {
       tenantId: "default",
       desiredGeneration: 7,
       requestId: "req_01",
+    });
+  });
+
+  test("keeps the ensure path as a compatibility alias", async () => {
+    const ensureSession = jest.fn().mockResolvedValue({
+      sessionId: "sess_compat",
+      projectId: "project_compat",
+      userId: "42",
+      tenantId: "default",
+      state: "REQUESTED",
+      generation: 0,
+    });
+    const controllerEnsure = jest.fn().mockResolvedValue({
+      session: {
+        id: "sess_compat",
+        projectId: "project_compat",
+        state: "READY",
+        generation: 0,
+      },
+    });
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession,
+      readSessionBinding: jest.fn(),
+      updateSessionState: jest.fn(),
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: () => "sess_compat",
+      controller: { ensure: controllerEnsure, status: jest.fn(), stop: jest.fn() },
+      getRequestId: () => "req_compat",
+    }));
+
+    const response = await request(app)
+      .post("/api/design/sessions/ensure")
+      .send({ projectId: "project_compat" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.session.id).toBe("sess_compat");
+  });
+
+  test("reads canonical session status with a GET and server-owned binding", async () => {
+    const session = {
+      sessionId: "sess_status",
+      projectId: "project_status",
+      userId: "42",
+      tenantId: "default",
+      state: "STARTING",
+      generation: 3,
+    };
+    const controllerStatus = jest.fn().mockResolvedValue({
+      session: {
+        id: "sess_status",
+        projectId: "project_status",
+        state: "RESTORING",
+        generation: 3,
+      },
+      retryAfterMs: 750,
+    });
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn(),
+      readSessionBinding: jest.fn().mockResolvedValue(session),
+      updateSessionState: jest.fn(),
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: jest.fn(),
+      controller: { ensure: jest.fn(), status: controllerStatus, stop: jest.fn() },
+      getRequestId: () => "req_status",
+    }));
+
+    const response = await request(app)
+      .get("/api/design/sessions/sess_status?projectId=project_status");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      session: {
+        id: "sess_status",
+        projectId: "project_status",
+        state: "RESTORING",
+        generation: 3,
+      },
+      retryAfterMs: 750,
+    });
+    expect(controllerStatus).toHaveBeenCalledWith({
+      sessionId: "sess_status",
+      projectId: "project_status",
+      userId: "42",
+      tenantId: "default",
+      expectedGeneration: 3,
+      requestId: "req_status",
     });
   });
 

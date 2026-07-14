@@ -226,6 +226,7 @@ import {
   createDesignInternalReadSource,
 } from "./design-internal-read-routes.js";
 import { buildDesignSessionRouter } from "./design-session-routes.js";
+import { buildDesignProjectRouter } from "./design-project-routes.js";
 import {
   beginDesignSessionDrain,
   ensureDesignSession,
@@ -233,7 +234,9 @@ import {
   updateDesignSessionObservedState,
 } from "./design-session-store.js";
 import {
+  createDesignProject,
   extractDesignProjectFromPayload,
+  listDesignProjects,
   markDesignProjectActive,
   markDesignProjectDeleted,
   markDesignProjectFailed,
@@ -18442,6 +18445,19 @@ async function settleDesignSessionProxy({ req, authorization, receiptStatus, dur
     idempotencyKey: `${grant.idempotencyKey}:session-proxy-receipt`.slice(0, 180),
   });
 }
+
+app.use(
+  "/api/design/projects",
+  buildDesignProjectRouter({
+    enabled: ZAKI_DESIGN_ENABLED,
+    controllerMode: ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED,
+    resolveUser: requireAuthUser,
+    listProjects: ({ userId }) => listDesignProjects({ dbQuery, userId }),
+    createProject: (input) => createDesignProject({ dbQuery, ...input }),
+    createProjectId: generateDesignProjectId,
+    getRequestId: getOrCreateRequestId,
+  })
+);
 
 app.use(
   "/api/design/sessions",
