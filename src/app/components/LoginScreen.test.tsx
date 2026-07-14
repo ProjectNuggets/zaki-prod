@@ -154,7 +154,14 @@ describe("LoginScreen legal consent", () => {
     await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
 
     expect(screen.queryByText(new RegExp(`policy\\s+${policyVersion}`))).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Terms" })).not.toBeInTheDocument();
+    // No consent CHECKBOX on login (email login does not create an account)...
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    // ...but "Continue with Google" from this screen CAN create a brand-new
+    // account, so the clickwrap notice must be present here to attest to.
+    expect(screen.getByRole("link", { name: "Terms" })).toHaveAttribute(
+      "href",
+      "https://chatzaki.com/terms?from=google"
+    );
 
     await user.type(screen.getByPlaceholderText("Email address"), "user@example.com");
     await user.type(screen.getByPlaceholderText("Password"), "Password123");
@@ -193,17 +200,28 @@ describe("LoginScreen legal consent", () => {
     await user.type(screen.getByPlaceholderText("Password"), "Password123");
     await user.type(screen.getByPlaceholderText("Confirm password"), "Password123");
 
-    expect(screen.getByRole("link", { name: "Terms" })).toHaveAttribute(
-      "href",
-      "https://chatzaki.com/terms?from=signup"
+    // Signup mode shows both attestations: the checkbox (email signup) and the
+    // clickwrap under "Continue with Google". Both must link the same policies.
+    const hrefsFor = (name: string) =>
+      screen.getAllByRole("link", { name }).map((link) => link.getAttribute("href"));
+
+    expect(hrefsFor("Terms")).toEqual(
+      expect.arrayContaining([
+        "https://chatzaki.com/terms?from=signup",
+        "https://chatzaki.com/terms?from=google",
+      ])
     );
-    expect(screen.getByRole("link", { name: "Privacy Notice" })).toHaveAttribute(
-      "href",
-      "https://chatzaki.com/privacy?from=signup"
+    expect(hrefsFor("Privacy Notice")).toEqual(
+      expect.arrayContaining([
+        "https://chatzaki.com/privacy?from=signup",
+        "https://chatzaki.com/privacy?from=google",
+      ])
     );
-    expect(screen.getByRole("link", { name: "Security & Compliance" })).toHaveAttribute(
-      "href",
-      "https://chatzaki.com/compliance?from=signup"
+    expect(hrefsFor("Security & Compliance")).toEqual(
+      expect.arrayContaining([
+        "https://chatzaki.com/compliance?from=signup",
+        "https://chatzaki.com/compliance?from=google",
+      ])
     );
 
     const createButton = screen.getByRole("button", { name: "Create account" });
@@ -244,6 +262,50 @@ describe("LoginScreen legal consent", () => {
       legalConsentAccepted: true,
       legalPolicyVersion: policyVersion,
     });
+  });
+
+  // Regression: "Continue with Google" from the LOGIN screen creates a brand-new
+  // account for a first-time user. Consent used to be sent only in signup mode,
+  // so those accounts were persisted with no legal_consent record at all.
+  it("carries consent through Google from LOGIN mode, not just signup mode", async () => {
+    const user = userEvent.setup();
+    (buildGoogleOAuthStartUrl as unknown as jest.Mock).mockReturnValue("#google-login");
+    renderLoginScreen();
+    await waitFor(() => expect(fetchGoogleOAuthStatus).toHaveBeenCalled());
+
+    // Login mode — no consent checkbox exists here, so the clickwrap notice
+    // beside the button is the attestation.
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/By continuing with Google you agree to the/)
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Continue with Google" }));
+
+    expect(buildGoogleOAuthStartUrl).toHaveBeenCalledWith("/", {
+      legalConsentAccepted: true,
+      legalPolicyVersion: policyVersion,
+    });
+  });
+
+  it("explains a Google signup refused for want of an age check", async () => {
+    window.history.replaceState({}, "", "/?auth=login&error=age_verification_required");
+    renderLoginScreen();
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
+
+    expect(
+      await screen.findByText(/Google does not share your date of birth/)
+    ).toBeInTheDocument();
+  });
+
+  it("explains a Google signup refused for want of consent", async () => {
+    window.history.replaceState({}, "", "/?auth=login&error=google_consent_required");
+    renderLoginScreen();
+    await waitFor(() => expect(fetchLegalConsentStatus).toHaveBeenCalled());
+
+    expect(
+      await screen.findByText(/Please accept Terms, Privacy & Compliance, then continue/)
+    ).toBeInTheDocument();
   });
 
   it("formats and caps the signup birth date input", async () => {
@@ -504,8 +566,14 @@ describe("LoginScreen legal consent", () => {
     expect(screen.queryByText("Return saved.")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Continue with Google/ }));
 
+    // Consent rides along even from LOGIN mode — this click can create a
+    // brand-new account, and that account must never exist without a consent row.
     expect(buildGoogleOAuthStartUrl).toHaveBeenCalledWith(
-      "/settings#settings-memory-data"
+      "/settings#settings-memory-data",
+      {
+        legalConsentAccepted: true,
+        legalPolicyVersion: policyVersion,
+      }
     );
   });
 

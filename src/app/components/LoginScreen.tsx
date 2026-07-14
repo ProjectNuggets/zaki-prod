@@ -229,6 +229,7 @@ const AUTH_COPY = {
     resetHint: "Enter your new password below.",
     consent: {
       prefix: "I agree to the",
+      oauthPrefix: "By continuing with Google you agree to the",
       terms: "Terms",
       privacy: "Privacy Notice",
       compliance: "Security & Compliance",
@@ -291,6 +292,12 @@ const AUTH_COPY = {
       genericResetFailed: "Password reset failed. Please try again.",
       genericLoginFailed: "Login failed. Please try again.",
       captchaRequired: "Complete the verification challenge before creating an account.",
+      googleConsentRequired:
+        "Please accept Terms, Privacy & Compliance, then continue with Google again.",
+      googleAgeUnverifiable:
+        "Google does not share your date of birth, so we cannot verify your age. Please create your account with your email address instead.",
+      googleUnderage: "You are not old enough to create a ZAKI account.",
+      googleOAuthFailed: "Google sign-in failed. Please try again.",
     },
   },
   ar: {
@@ -333,6 +340,7 @@ const AUTH_COPY = {
     resetHint: "أدخل كلمة المرور الجديدة أدناه.",
     consent: {
       prefix: "أوافق على",
+      oauthPrefix: "بالمتابعة باستخدام Google فإنك توافق على",
       terms: "شروط الاستخدام",
       privacy: "إشعار الخصوصية",
       compliance: "الأمان والامتثال",
@@ -395,6 +403,12 @@ const AUTH_COPY = {
       genericResetFailed: "فشلت إعادة تعيين كلمة المرور. حاول مرة أخرى.",
       genericLoginFailed: "فشل تسجيل الدخول. حاول مرة أخرى.",
       captchaRequired: "أكمل تحدي التحقق قبل إنشاء الحساب.",
+      googleConsentRequired:
+        "يرجى الموافقة على الشروط والخصوصية والامتثال ثم المتابعة باستخدام Google مرة أخرى.",
+      googleAgeUnverifiable:
+        "لا يشارك Google تاريخ ميلادك، لذا لا يمكننا التحقق من عمرك. يرجى إنشاء حسابك باستخدام بريدك الإلكتروني.",
+      googleUnderage: "عمرك لا يسمح بإنشاء حساب ZAKI.",
+      googleOAuthFailed: "فشل تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.",
     },
   },
 } as const;
@@ -507,9 +521,28 @@ export function LoginScreen() {
       }
     }
 
-    if (authMode || verified) {
+    // Google OAuth bounced the user back because signup was refused. Explain why
+    // — a blocked signup must never look like a silent failure.
+    const oauthError = String(url.searchParams.get("error") || "").trim();
+    if (oauthError) {
+      const oauthErrorCopy: Record<string, string> = {
+        google_consent_required: copy.errors.googleConsentRequired,
+        google_consent_stale: copy.errors.googleConsentRequired,
+        age_verification_required: copy.errors.googleAgeUnverifiable,
+        minimum_age: copy.errors.googleUnderage,
+        google_oauth_failed: copy.errors.googleOAuthFailed,
+      };
+      const message = oauthErrorCopy[oauthError];
+      if (message) {
+        setError(message);
+        setNotice("");
+      }
+    }
+
+    if (authMode || verified || oauthError) {
       url.searchParams.delete("auth");
       url.searchParams.delete("verified");
+      url.searchParams.delete("error");
       window.history.replaceState({}, "", url.pathname + url.search);
     }
   }, [copy, setModeClean]);
@@ -945,18 +978,49 @@ export function LoginScreen() {
                     setError(copy.errors.consentRequired);
                     return;
                   }
-                  window.location.href =
-                    mode === "signup"
-                      ? buildGoogleOAuthStartUrl(postLoginReturnTo || "/", {
-                          legalConsentAccepted: true,
-                          legalPolicyVersion,
-                        })
-                      : buildGoogleOAuthStartUrl(postLoginReturnTo || "/");
+                  // Consent travels on BOTH entry points. "Continue with Google"
+                  // from the login screen can still create a brand-new account,
+                  // and that account must never exist without a consent record.
+                  // The clickwrap notice below is the attestation in login mode.
+                  window.location.href = buildGoogleOAuthStartUrl(
+                    postLoginReturnTo || "/",
+                    {
+                      legalConsentAccepted: true,
+                      legalPolicyVersion,
+                    }
+                  );
                 }}
               >
                 <span aria-hidden>G</span>
                 {copy.actions.continueWithGoogle}
               </button>
+              <p className="zaki-auth-v2__oauth-legal">
+                {copy.consent.oauthPrefix}{" "}
+                <a
+                  href={isRtl ? "https://chatzaki.com/ar/terms?from=google" : "https://chatzaki.com/terms?from=google"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {copy.consent.terms}
+                </a>
+                {isRtl ? "، " : ", "}
+                <a
+                  href={isRtl ? "https://chatzaki.com/ar/privacy?from=google" : "https://chatzaki.com/privacy?from=google"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {copy.consent.privacy}
+                </a>
+                {isRtl ? "، و" : ", and "}
+                <a
+                  href={isRtl ? "https://chatzaki.com/ar/compliance?from=google" : "https://chatzaki.com/compliance?from=google"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {copy.consent.compliance}
+                </a>
+                .
+              </p>
             </div>
           ) : null}
 
