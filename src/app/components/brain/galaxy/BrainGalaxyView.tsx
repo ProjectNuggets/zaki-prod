@@ -12,6 +12,7 @@ import { GalaxyRenderer, type GalaxyHandle } from "./GalaxyRenderer";
 import { BrainDetailPanel } from "./BrainDetailPanel";
 import { clampQuality, prefersReducedMotion } from "./engine/lod";
 import type { BrainViewMode, GraphRendererOptions, RenderQuality } from "./engine/interface";
+import { brainDisplayText, sanitizeBrainText } from "../brainText";
 
 // What the canvas is scoped to. Default is "overview" (the cluster constellation
 // — clusters-first). Tapping a hub drills into "cluster"; "all" is the opt-in
@@ -160,11 +161,12 @@ export const BrainGalaxyView = forwardRef<GalaxyHandle, BrainGalaxyViewProps>(
       const map = new Map<string, NodeBrief>();
       for (const n of graph.data?.nodes ?? []) {
         // Only show a real LLM theme name — skip "Cluster 19716777" fallbacks.
-        const named = n.community_name && !/^Cluster \d+$/.test(n.community_name);
+        const communityName = sanitizeBrainText(n.community_name);
+        const named = communityName && !/^Cluster \d+$/.test(communityName);
         map.set(n.id, {
-          title: n.display_label || n.summary || n.key || n.id,
+          title: brainDisplayText(n.display_label, n.summary, n.key, n.id),
           kind: KIND_LABEL[n.kind] ?? n.kind,
-          theme: named ? n.community_name! : null,
+          theme: named ? communityName : null,
           createdAt: n.created_at,
           degree: deg.get(n.id) ?? 0,
         });
@@ -179,7 +181,7 @@ export const BrainGalaxyView = forwardRef<GalaxyHandle, BrainGalaxyViewProps>(
         const c = communities.data?.communities.find((x) => x.community_id === cid);
         if (!c) return null;
         return {
-          title: c.name,
+          title: brainDisplayText(c.name, `Theme ${cid}`),
           kind: "Theme",
           theme: null,
           createdAt: undefined,
@@ -235,7 +237,11 @@ export const BrainGalaxyView = forwardRef<GalaxyHandle, BrainGalaxyViewProps>(
           const cid = parseClusterNodeId(id);
           if (cid != null) {
             const c = communities.data?.communities.find((x) => x.community_id === cid);
-            onScopeChange({ kind: "cluster", id: cid, name: c?.name ?? `Cluster ${cid}` });
+            onScopeChange({
+              kind: "cluster",
+              id: cid,
+              name: brainDisplayText(c?.name, `Theme ${cid}`),
+            });
           }
           return;
         }

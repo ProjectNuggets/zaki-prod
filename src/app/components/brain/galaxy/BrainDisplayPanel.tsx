@@ -1,6 +1,7 @@
 import { V2SegmentedControl } from "@/app/components/v2";
 import type { GalaxyScope } from "./BrainGalaxyView";
 import type { BrainViewMode, RenderQuality } from "./engine/interface";
+import { brainDisplayText } from "../brainText";
 
 // Only the two that carry real meaning. Bloom/nebula/motion were decorative
 // gimmicks (and off by default) — removed. Labels + Edges are faithful toggles.
@@ -126,7 +127,7 @@ function ScopeBreadcrumb({
     );
   }
 
-  const here = scope.kind === "cluster" ? scope.name : "Everything";
+  const here = scope.kind === "cluster" ? brainDisplayText(scope.name, "Theme") : "Everything";
   return (
     <div className="zaki-galaxy-panel__scope">
       <button

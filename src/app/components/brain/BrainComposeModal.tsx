@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { useBrainCompose } from "@/queries";
 import type { BrainGraphNode } from "@/lib/api";
 import { useOnlineStatus } from "@/hooks";
+import { brainDisplayText } from "./brainText";
 
 interface Props {
   userId: string;
@@ -50,7 +51,7 @@ export function BrainComposeModal({
     if (open && !title && selectedNodes.length > 0) {
       const seed = selectedNodes
         .slice(0, 2)
-        .map((n) => (n.summary.split(/[\.\!\?]/)[0] ?? "").trim())
+        .map((n) => (brainDisplayText(n.summary, n.key, n.id).split(/[\.\!\?]/)[0] ?? "").trim())
         .filter(Boolean)
         .join(" + ");
       setTitle(seed.slice(0, 80));
@@ -133,15 +134,18 @@ export function BrainComposeModal({
           <div className="flex-1 overflow-y-auto px-4 py-3">
             {selectedNodes.length > 0 && (
               <div className="mb-3 flex flex-wrap gap-1.5">
-                {selectedNodes.map((n) => (
-                  <span
-                    key={n.id}
-                    className="max-w-[14rem] truncate rounded-[2px] bg-white/10 px-2 py-0.5 text-[11px] text-white/70"
-                    title={n.summary}
-                  >
-                    {n.summary}
-                  </span>
-                ))}
+                {selectedNodes.map((n) => {
+                  const summary = brainDisplayText(n.summary, n.key, n.id);
+                  return (
+                    <span
+                      key={n.id}
+                      className="max-w-[14rem] truncate rounded-[2px] bg-white/10 px-2 py-0.5 text-[11px] text-white/70"
+                      title={summary}
+                    >
+                      {summary}
+                    </span>
+                  );
+                })}
               </div>
             )}
 
