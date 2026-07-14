@@ -1990,7 +1990,7 @@
       "placeholders": {
         "agent": {
           "signed": "Describe the outcome, constraints, and where Agent should start.",
-          "guest": "Describe the outcome. Sign in to let Agent plan, use tools, and keep the run."
+          "guest": "Describe the outcome. ZAKI will show you the plan it would follow."
         },
         "brain": {
           "signed": "Ask Brain to find a memory, connect facts, or clean up what ZAKI knows.",
@@ -2009,6 +2009,7 @@
       "capacityWindowLow": "{{hours}}h Agent window is {{percent}}% used. Next room clears {{reset}}.",
       "comingSoonHelper": "{{product}} is coming soon. Use Spaces or Agent to start now.",
       "submitSignIn": "Sign in for {{product}}",
+      "submitAgentPreview": "Preview the plan",
       "submitChat": "Start in Spaces",
       "submitOpen": "Continue in {{product}}",
       "submitComingSoon": "{{product}} coming soon",
@@ -2025,6 +2026,7 @@
       "markers": {
         "free": "Free",
         "signIn": "Sign in",
+        "preview": "Preview",
         "live": "Live",
         "save": "Save",
         "beta": "Beta",
@@ -2069,11 +2071,11 @@
         "agent": {
           "headline": {
             "signed": "If you need a messy goal turned into action, use Agent.",
-            "guest": "If you need Agent to carry work forward, sign in first."
+            "guest": "See the plan Agent would follow, before you sign up."
           },
           "note": {
             "signed": "It can plan, ask approval, use files and browser control, then keep the run in your history.",
-            "guest": "Tools, files, browser control, and durable memory are account-scoped."
+            "guest": "You get the steps. Running them — tools, files, browser control — needs an account."
           }
         },
         "brain": {
@@ -2280,6 +2282,20 @@
       "routing": "Routes honor product state",
       "memory": "Memory is a shared layer with Brain controls"
     }
+  },
+  "agentPreview": {
+    "kicker": "Agent preview",
+    "title": "See the plan before you commit",
+    "subtitle": "Describe a task and ZAKI will show you the steps it would take. Nothing runs until you have an account.",
+    "inputLabel": "Describe the task",
+    "placeholder": "e.g. Research our top 3 competitors and summarise their pricing",
+    "submit": "Preview the plan",
+    "running": "Drafting the plan...",
+    "planKicker": "Proposed plan",
+    "notRunBadge": "Preview — nothing has been run",
+    "planAria": "Proposed plan preview",
+    "saveExplainer": "Save this plan to your account and ZAKI can actually run it for you.",
+    "saveAndContinue": "Save and continue"
   },
   "productGate": {
     "comingSoon": {

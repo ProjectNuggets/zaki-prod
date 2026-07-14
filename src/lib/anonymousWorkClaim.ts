@@ -45,18 +45,36 @@ const NOTHING_TO_CLAIM: AnonymousWorkClaimResult = {
   error: null,
 };
 
-/** The saved work a pending intent refers to, or the newest Spaces item. */
+/**
+ * The lanes whose anonymous work can be carried into an account.
+ *
+ * Spaces was the original. WP-F adds Agent: an anonymous Agent PLAN PREVIEW is a real result
+ * the visitor read and asked us to keep, so it claims through this same path rather than a
+ * parallel one. Both lanes produce the same shape — a prompt and the assistant text it
+ * produced — which is exactly what the import writes.
+ *
+ * Brain is deliberately NOT here: its anonymous story (F8) is a separate decision.
+ */
+const CLAIMABLE_PRODUCT_IDS = new Set<AnonymousWorkItem["productId"]>(["spaces", "agent"]);
+
+export function isClaimableProduct(
+  productId: AnonymousWorkItem["productId"] | undefined | null
+): boolean {
+  return Boolean(productId && CLAIMABLE_PRODUCT_IDS.has(productId));
+}
+
+/** The saved work a pending intent refers to, or the newest claimable item. */
 export function findClaimableWork(
   anonymousWorkId?: string | null,
   items?: AnonymousWorkItem[]
 ): AnonymousWorkItem | null {
   const ledger = items ?? readAnonymousWorkLedger().items;
-  const spacesItems = ledger.filter((item) => item.productId === "spaces");
+  const claimable = ledger.filter((item) => isClaimableProduct(item.productId));
   if (anonymousWorkId) {
-    const match = spacesItems.find((item) => item.id === anonymousWorkId);
+    const match = claimable.find((item) => item.id === anonymousWorkId);
     if (match) return match;
   }
-  return spacesItems[0] ?? null;
+  return claimable[0] ?? null;
 }
 
 /**
@@ -136,7 +154,9 @@ export async function claimPendingAnonymousWork(): Promise<
   AnonymousWorkClaimResult & { pendingIntent: PendingIntent | null }
 > {
   const pendingIntent = readPendingIntent();
-  if (pendingIntent?.productId !== "spaces") {
+  // Spaces chats and WP-F Agent plan previews both carry importable work. Anything else
+  // (a Brain handoff, a coming-soon lane) has nothing to claim.
+  if (!pendingIntent || !isClaimableProduct(pendingIntent.productId)) {
     return { ...NOTHING_TO_CLAIM, pendingIntent };
   }
 

@@ -88,7 +88,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.productStrip": "Choose product",
     "zakiDashboard.command.inputLabel": "Describe what you want ZAKI to do",
     "zakiDashboard.command.placeholders.agent.signed": "Describe the outcome, constraints, and where Agent should start.",
-    "zakiDashboard.command.placeholders.agent.guest": "Describe the outcome. Sign in to let Agent plan, use tools, and keep the run.",
+    "zakiDashboard.command.placeholders.agent.guest": "Describe the outcome. ZAKI will show you the plan it would follow.",
     "zakiDashboard.command.placeholders.brain.signed": "Ask Brain to find a memory, connect facts, or clean up what ZAKI knows.",
     "zakiDashboard.command.placeholders.brain.guest": "Write what you want ZAKI to remember; sign in to save it to Brain.",
     "zakiDashboard.command.placeholders.spaces": "Ask a question, draft a reply, translate text, or compare options.",
@@ -108,6 +108,9 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.submitComingSoon": "{{product}} coming soon",
     "zakiDashboard.command.markers.free": "Free",
     "zakiDashboard.command.markers.signIn": "Sign in",
+    // WP-F: the anon Agent lane is a preview, not a sign-in wall.
+    "zakiDashboard.command.markers.preview": "Preview",
+    "zakiDashboard.command.submitAgentPreview": "Preview the plan",
     "zakiDashboard.command.markers.live": "Live",
     "zakiDashboard.command.markers.save": "Save",
     "zakiDashboard.command.markers.beta": "Beta",
@@ -125,9 +128,9 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.submitOpen": "Continue in {{product}}",
     "zakiDashboard.command.submitSignup": "Save and continue",
     "zakiDashboard.command.details.agent.headline.signed": "If you need a messy goal turned into action, use Agent.",
-    "zakiDashboard.command.details.agent.headline.guest": "If you need Agent to carry work forward, sign in first.",
+    "zakiDashboard.command.details.agent.headline.guest": "See the plan Agent would follow, before you sign up.",
     "zakiDashboard.command.details.agent.note.signed": "It can plan, ask approval, use files and browser control, then keep the run in your history.",
-    "zakiDashboard.command.details.agent.note.guest": "Tools, files, browser control, and durable memory are account-scoped.",
+    "zakiDashboard.command.details.agent.note.guest": "You get the steps. Running them — tools, files, browser control — needs an account.",
     "zakiDashboard.command.details.brain.headline.signed": "If you need to see what ZAKI remembers, use Brain.",
     "zakiDashboard.command.details.brain.headline.guest": "If you need durable memory, sign in for Brain.",
     "zakiDashboard.command.details.brain.note.signed": "Search the graph, inspect saved context, and refine account memory.",
@@ -781,7 +784,10 @@ describe("ZakiDashboard", () => {
     expect(screen.queryByRole("button", { name: "Save this work" })).not.toBeInTheDocument();
   });
 
-  it("routes anonymous Agent command prompts through login with a preserved plan intent", () => {
+  // WP-F — this test used to assert the login wall ("Sign in for Agent" -> /?auth=login).
+  // The spec's tier matrix promises "Agent: anonymous = preview only" (flow F7), so the anon
+  // Agent submit now sends the visitor to the PLAN PREVIEW at /agent, carrying their prompt.
+  it("routes anonymous Agent command prompts to the plan preview, not a login wall", () => {
     useAuthStore.setState({
       token: null,
       user: null,
@@ -789,24 +795,29 @@ describe("ZakiDashboard", () => {
       isLoading: false,
     });
 
-    const { container } = renderDashboard();
+    renderDashboard();
 
     fireEvent.click(screen.getByRole("tab", { name: "Agent" }));
     fireEvent.change(screen.getByLabelText("Describe what you want ZAKI to do"), {
       target: { value: "Plan the cutover checklist" },
     });
 
+    // The copy tells the truth: a preview, not "sign in first".
     expect(screen.getByTestId("zaki-dashboard-product-hint")).toHaveTextContent(
-      "If you need Agent to carry work forward, sign in first."
+      "See the plan Agent would follow, before you sign up."
     );
-    expect(
-      screen.queryByText("Sign in to continue in Agent. We'll keep this prompt through authentication.")
-    ).not.toBeInTheDocument();
-    expect(container.querySelector(".zaki-dashboard-command__helper")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Save this work" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Sign in for Agent" }));
+    // The button no longer offers a login — it offers the taste.
+    expect(screen.queryByRole("button", { name: "Sign in for Agent" })).not.toBeInTheDocument();
 
-    expect(mockNavigate).toHaveBeenCalledWith("/?auth=login&next=%2Fagent");
+    fireEvent.click(screen.getByRole("button", { name: "Preview the plan" }));
+
+    // Straight to the preview surface. No auth detour.
+    expect(mockNavigate).toHaveBeenCalledWith("/agent");
+    expect(mockNavigate).not.toHaveBeenCalledWith("/?auth=login&next=%2Fagent");
+
+    // The prompt survives the navigation via the SAME intent + ledger plumbing Spaces uses.
+    // It is still a "draft" here — no plan has been generated yet. The preview surface promotes
+    // it to a "succeeded" row carrying the plan text once the visitor clicks Save and continue.
     const ledger = JSON.parse(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY) || "{}");
     expect(ledger.items?.[0]).toMatchObject({
       productId: "agent",
@@ -824,7 +835,13 @@ describe("ZakiDashboard", () => {
     });
   });
 
-  it("keeps anonymous Agent login available without showing a usage-upgrade guard", () => {
+  // WP-F — the unit wallet must never gate an anonymous Agent preview.
+  //
+  // Anonymous identities have no wallet (WP-B2): the gate that actually denies them is the
+  // anonymous DAILY counter, enforced at the preview endpoint. An exhausted wallet here is a
+  // number that does not apply to them, and letting it disable the submit would re-introduce
+  // exactly the lie #91 removed from the meter readout.
+  it("does not let an exhausted unit wallet block the anonymous Agent preview", () => {
     useAuthStore.setState({
       token: null,
       user: null,
@@ -839,6 +856,9 @@ describe("ZakiDashboard", () => {
           plan: { tier: "free", label: "Free", source: "anonymous" },
           rolling: { windowHours: 5, limit: 10, used: 10, remaining: 0 },
           weekly: { limit: 100, used: 100, remaining: 0 },
+          // The wallet says the agent lane is unavailable. For an ANON visitor that is not the
+          // enforced gate, so it must not disable the preview.
+          availableNow: { agent: { available: false } },
           products: {},
         },
       },
@@ -849,14 +869,16 @@ describe("ZakiDashboard", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Agent" }));
     fireEvent.change(screen.getByLabelText("Describe what you want ZAKI to do"), {
-      target: { value: "Plan this account work after login" },
+      target: { value: "Plan this account work" },
     });
 
     expect(screen.queryByText("Weekly usage is full.")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Sign in for Agent" })).not.toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Sign in for Agent" }));
 
-    expect(mockNavigate).toHaveBeenCalledWith("/?auth=login&next=%2Fagent");
+    const submit = screen.getByRole("button", { name: "Preview the plan" });
+    expect(submit).not.toBeDisabled();
+    fireEvent.click(submit);
+
+    expect(mockNavigate).toHaveBeenCalledWith("/agent");
   });
 
   it("preserves typed anonymous prompts when using the sign-in entry point", () => {

@@ -13688,3 +13688,295 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
     max-height: calc(100dvh - 20px);
   }
 }
+
+/* ── WP-F — the anonymous Agent plan preview (spec F7) ─────────────────────────────────────
+   The surface a signed-out visitor gets at /agent. Same v2 language as the rest of the shell:
+   mono, hairlines, square corners. It must read as a PREVIEW, so the plan is presented as a
+   static, read-only list — no run controls, no stream affordances, nothing that implies the
+   agent is working. */
+.zaki-agent-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+  font-family: var(--v2-font-mono);
+  color: var(--v2-ink-1);
+}
+
+.zaki-agent-preview__head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.zaki-agent-preview__kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--v2-accent);
+  font-size: var(--v2-text-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.zaki-agent-preview__head h1 {
+  margin: 0;
+  font-size: var(--v2-text-lg);
+  font-weight: 600;
+  line-height: var(--v2-leading-tight);
+  color: var(--v2-ink-1);
+}
+
+.zaki-agent-preview__head p {
+  margin: 0;
+  font-size: var(--v2-text-xs);
+  line-height: var(--v2-leading-normal);
+  color: var(--v2-ink-2);
+}
+
+.zaki-agent-preview__composer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg-raised);
+  padding: 16px;
+}
+
+.zaki-agent-preview__composer textarea {
+  width: 100%;
+  min-height: 84px;
+  resize: vertical;
+  border: 1px solid var(--v2-hairline);
+  border-radius: 0;
+  background: var(--v2-bg-sunken);
+  padding: 12px;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-xs);
+  line-height: var(--v2-leading-normal);
+}
+
+.zaki-agent-preview__composer textarea:focus-visible {
+  outline: 2px solid var(--v2-accent);
+  outline-offset: -2px;
+}
+
+.zaki-agent-preview__composer textarea:disabled {
+  opacity: 0.6;
+}
+
+.zaki-agent-preview__composer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.zaki-agent-preview__submit {
+  display: inline-flex;
+  min-height: 36px;
+  min-width: 132px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+  background: var(--v2-accent);
+  color: var(--v2-ink-on-accent);
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.zaki-agent-preview__submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.zaki-agent-preview__meter {
+  color: var(--v2-ink-3);
+  font-size: var(--v2-text-micro);
+  letter-spacing: 0.04em;
+}
+
+.zaki-agent-preview__error {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg-raised);
+  padding: 16px;
+}
+
+.zaki-agent-preview__error h2 {
+  margin: 0;
+  font-size: var(--v2-text-sm);
+  font-weight: 600;
+  color: var(--v2-ink-1);
+}
+
+.zaki-agent-preview__error p {
+  margin: 0;
+  font-size: var(--v2-text-xs);
+  line-height: var(--v2-leading-normal);
+  color: var(--v2-ink-2);
+}
+
+.zaki-agent-preview__error button {
+  align-self: flex-start;
+  min-height: 32px;
+  border: 1px solid var(--v2-hairline-strong);
+  border-radius: 0;
+  background: transparent;
+  padding: 0 14px;
+  color: var(--v2-ink-1);
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+/* The plan card. Read-only by construction: a list, not a console. */
+.zaki-agent-preview__plan {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border: 1px solid var(--v2-hairline-strong);
+  background: var(--v2-bg-raised);
+  padding: 20px;
+}
+
+.zaki-agent-preview__plan-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.zaki-agent-preview__plan-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--v2-ink-2);
+  font-size: var(--v2-text-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* The honesty badge. This is the one element that must never be missable: it is what stops a
+   plan from reading like a completed run. */
+.zaki-agent-preview__plan-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px dashed var(--v2-hairline-strong);
+  padding: 4px 8px;
+  color: var(--v2-ink-3);
+  font-size: var(--v2-text-micro);
+  letter-spacing: 0.04em;
+}
+
+.zaki-agent-preview__plan-task {
+  margin: 0;
+  border-inline-start: 2px solid var(--v2-accent);
+  padding-inline-start: 12px;
+  color: var(--v2-ink-2);
+  font-size: var(--v2-text-xs);
+  line-height: var(--v2-leading-normal);
+}
+
+.zaki-agent-preview__plan-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: none;
+}
+
+.zaki-agent-preview__plan-steps li {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  align-items: start;
+  gap: 10px;
+}
+
+.zaki-agent-preview__plan-steps li > span {
+  display: inline-flex;
+  height: 24px;
+  width: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--v2-hairline-strong);
+  color: var(--v2-ink-3);
+  font-size: var(--v2-text-micro);
+  font-weight: 600;
+}
+
+.zaki-agent-preview__plan-steps li > p {
+  margin: 0;
+  padding-block-start: 3px;
+  color: var(--v2-ink-1);
+  font-size: var(--v2-text-xs);
+  line-height: var(--v2-leading-normal);
+}
+
+.zaki-agent-preview__plan-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-block-start: 1px solid var(--v2-hairline);
+  padding-block-start: 16px;
+}
+
+.zaki-agent-preview__plan-foot p {
+  margin: 0;
+  flex: 1 1 240px;
+  color: var(--v2-ink-2);
+  font-size: var(--v2-text-micro);
+  line-height: var(--v2-leading-normal);
+}
+
+.zaki-agent-preview__save {
+  display: inline-flex;
+  min-height: 36px;
+  min-width: 148px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+  background: var(--v2-accent);
+  color: var(--v2-ink-on-accent);
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .zaki-agent-preview {
+    padding: 24px 16px 48px;
+  }
+
+  .zaki-agent-preview__submit,
+  .zaki-agent-preview__save {
+    width: 100%;
+  }
+}

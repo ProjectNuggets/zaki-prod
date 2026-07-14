@@ -62,4 +62,26 @@ describe("i18n locale parity", () => {
     expect(enKeys).toContain(key);
     expect(arKeys).toContain(key);
   });
+
+  // WP-F: the anonymous Agent plan-preview copy. This surface is the first thing a signed-out
+  // Arabic visitor sees on /agent, so an English-only string here ships an English wall.
+  it.each([
+    "agentPreview.kicker",
+    "agentPreview.title",
+    "agentPreview.subtitle",
+    "agentPreview.inputLabel",
+    "agentPreview.placeholder",
+    "agentPreview.submit",
+    "agentPreview.running",
+    "agentPreview.planKicker",
+    "agentPreview.notRunBadge",
+    "agentPreview.planAria",
+    "agentPreview.saveExplainer",
+    "agentPreview.saveAndContinue",
+    "zakiDashboard.command.markers.preview",
+    "zakiDashboard.command.submitAgentPreview",
+  ])("%s exists in both locales", (key) => {
+    expect(enKeys).toContain(key);
+    expect(arKeys).toContain(key);
+  });
 });

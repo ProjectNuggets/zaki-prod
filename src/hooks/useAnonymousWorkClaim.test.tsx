@@ -5,6 +5,7 @@ import { useAnonymousWorkClaim } from "./useAnonymousWorkClaim";
 import { useAnonymousWorkClaimStore, useAuthStore } from "@/stores";
 import { readAnonymousWorkLedger, upsertAnonymousWorkItem } from "@/lib/anonymousWork";
 import { claimAnonymousSpacesWork } from "@/lib/api";
+import { saveAgentPlanForClaim } from "@/lib/agentPlanPreview";
 import { PENDING_INTENT_KEY, readPendingIntent } from "@/lib/pendingIntent";
 
 const mockNavigate = jest.fn();
@@ -255,7 +256,7 @@ describe("useAnonymousWorkClaim — the shared post-auth claim", () => {
     expect(readPendingIntent()?.prompt).toBe("Draft the launch memo");
   });
 
-  it("does not claim without a pending Spaces intent", async () => {
+  it("does not claim without a pending claimable intent", async () => {
     seedCompletedAnonymousWork();
     arriveAuthenticatedViaOAuthReturn();
     renderHost();
@@ -264,6 +265,86 @@ describe("useAnonymousWorkClaim — the shared post-auth claim", () => {
       expect(useAnonymousWorkClaimStore.getState().status).toBe("idle");
     });
     expect(claimAnonymousSpacesWork).not.toHaveBeenCalled();
+  });
+
+  // ── WP-F — the anonymous Agent PLAN PREVIEW claims through this SAME path ──────────────
+  //
+  // The whole point of "Save and continue" is that the plan the visitor just read survives
+  // signup. It does that by reusing this claim, not a parallel one. The hazard is #89's own
+  // rule working against us: a DRAFT with no reply imports nothing. A plan is a real result,
+  // so saveAgentPlanForClaim writes it as `status: "succeeded"` with the plan as the reply —
+  // and these tests are what prove the plan actually lands in the account.
+
+  it("imports a saved anonymous Agent PLAN after signup (WP-F Save and continue)", async () => {
+    const plan = saveAgentPlanForClaim({
+      prompt: "Plan the cutover checklist",
+      steps: ["Freeze writes", "Migrate the tables", "Flip the DNS"],
+      planMarkdown:
+        "**Agent plan (preview)**\n\nTask: Plan the cutover checklist\n\n1. Freeze writes\n2. Migrate the tables\n3. Flip the DNS",
+    });
+    expect(plan).toBeTruthy();
+
+    arriveAuthenticatedViaOAuthReturn();
+    renderHost();
+
+    await waitFor(() => {
+      expect(claimAnonymousSpacesWork).toHaveBeenCalledTimes(1);
+    });
+
+    // The claim carries the PLAN as the assistant reply — which is exactly what
+    // buildClaimTurns() needs (a prompt AND a reply) to write two rows instead of zero.
+    const payload = (claimAnonymousSpacesWork as unknown as jest.Mock).mock.calls[0]![0] as {
+      prompt: string;
+      reply: string;
+      workId: string;
+      route: string;
+    };
+    expect(payload.prompt).toBe("Plan the cutover checklist");
+    expect(payload.reply).toContain("Freeze writes");
+    expect(payload.reply).toContain("Flip the DNS");
+    expect(payload.workId).toBe(plan);
+    expect(payload.route).toBe("/agent");
+
+    // And the server confirmed the import, so the store says so.
+    await waitFor(() => {
+      expect(useAnonymousWorkClaimStore.getState().status).toBe("imported");
+    });
+    expect(useAnonymousWorkClaimStore.getState().importedCount).toBe(2);
+  });
+
+  // The guard rail on the guard rail: an Agent row with NO plan is a draft, and #89 must keep
+  // refusing to import it. If this ever starts importing, we are back to shipping empty threads.
+  it("still imports NOTHING for an Agent draft that never got a plan", async () => {
+    const draft = upsertAnonymousWorkItem({
+      productId: "agent",
+      taskKind: "plan",
+      prompt: "Plan the cutover checklist",
+      route: "/agent",
+      status: "draft",
+    });
+    window.localStorage.setItem(
+      PENDING_INTENT_KEY,
+      JSON.stringify({
+        productId: "agent",
+        taskKind: "plan",
+        prompt: "Plan the cutover checklist",
+        source: "dashboard",
+        returnTo: "/agent",
+        anonymousWorkId: draft!.id,
+        createdAt: new Date().toISOString(),
+      })
+    );
+
+    arriveAuthenticatedViaOAuthReturn();
+    renderHost();
+
+    await waitFor(() => {
+      expect(useAnonymousWorkClaimStore.getState().status).toBe("idle");
+    });
+    // No reply -> nothing to keep -> the claim is never even attempted.
+    expect(claimAnonymousSpacesWork).not.toHaveBeenCalled();
+    // And the draft survives locally so the prompt can still be replayed.
+    expect(readAnonymousWorkLedger().items).toHaveLength(1);
   });
 
   it("claims once per session, not once per render", async () => {

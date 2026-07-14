@@ -57,6 +57,7 @@ import {
   type AnonymousWorkProductId,
 } from "@/lib/anonymousWork";
 import { buildProductReturnTo, writePendingIntent } from "@/lib/pendingIntent";
+import { AGENT_PLAN_ROUTE } from "@/lib/agentPlanPreview";
 import { RELEASE_VISIBLE_SPOKES } from "@/lib/productRoutes";
 import { useOnlineStatus } from "@/hooks";
 
@@ -88,8 +89,16 @@ const COMING_SOON_PRODUCT_IDS = new Set<AnonymousWorkProductId>([
   "design",
   "minutes",
 ]);
+// Lanes an anonymous visitor cannot even taste — submit sends them to auth instead of running.
+//
+// WP-F removed "agent" from this set. The spec's tier matrix (§D) promises "Agent: anonymous =
+// preview only" and flow F7 is type -> preview plan -> Save and continue -> auth. Agent's submit
+// used to read "Sign in for Agent" and run nothing at all, which meant the taste the whole funnel
+// is built around never happened for the Agent lane. It now runs a plan PREVIEW (no tools, no
+// execution — see AnonymousAgentPreview and the BFF's /api/anonymous/agent/preview).
+//
+// Brain stays: it is a real surface, and its anonymous story (F8) is a separate decision.
 const AUTH_REQUIRED_PRODUCT_IDS = new Set<AnonymousWorkProductId>([
-  "agent",
   "brain",
 ]);
 
@@ -120,6 +129,26 @@ function isComingSoonProduct(productId: AnonymousWorkProductId) {
 
 function isAuthRequiredProduct(productId: AnonymousWorkProductId) {
   return AUTH_REQUIRED_PRODUCT_IDS.has(productId);
+}
+
+/**
+ * Lanes whose i18n copy has distinct `signed` / `guest` variants (details.<id>.headline.signed
+ * vs .guest). This is the SHAPE OF THE COPY — it is deliberately not the same question as
+ * "is this lane auth-gated".
+ *
+ * These two used to be conflated: the key was picked with isAuthRequiredProduct(). When WP-F
+ * un-gated Agent, that lookup silently fell back to `details.agent.headline` — an OBJECT, not a
+ * string — and blanked the signed-in Agent copy too. Agent still has two voices (preview vs
+ * workbench); it just is not a login wall any more. Keeping the concepts apart is what stops
+ * an access-policy change from corrupting unrelated copy.
+ */
+const SIGNED_GUEST_COPY_PRODUCT_IDS = new Set<AnonymousWorkProductId>([
+  "agent",
+  "brain",
+]);
+
+function hasSignedGuestCopy(productId: AnonymousWorkProductId) {
+  return SIGNED_GUEST_COPY_PRODUCT_IDS.has(productId);
 }
 
 function formatReset(value?: string | null) {
@@ -235,7 +264,7 @@ function getCommandPlaceholder(
   const fallback: Record<AnonymousWorkProductId, string | { signed: string; guest: string }> = {
     agent: {
       signed: "Describe the outcome, constraints, and where Agent should start.",
-      guest: "Describe the outcome. Sign in to let Agent plan, use tools, and keep the run.",
+      guest: "Describe the outcome. ZAKI will show you the plan it would follow.",
     },
     brain: {
       signed: "Ask Brain to find a memory, connect facts, or clean up what ZAKI knows.",
@@ -268,10 +297,10 @@ function getCommandProductDetails(
     agent: {
       headline: signedIn
         ? "If you need a messy goal turned into action, use Agent."
-        : "If you need Agent to carry work forward, sign in first.",
+        : "See the plan Agent would follow, before you sign up.",
       note: signedIn
         ? "It can plan, ask approval, use files and browser control, then keep the run in your history."
-        : "Tools, files, browser control, and durable memory are account-scoped.",
+        : "You get the steps. Running them — tools, files, browser control — needs an account.",
       accessTone: signedIn ? "success" : "accent",
     },
     brain: {
@@ -300,23 +329,14 @@ function getCommandProductDetails(
     },
   };
   const detail = fallback[productId];
+  const variant = hasSignedGuestCopy(productId) ? `.${signedIn ? "signed" : "guest"}` : "";
   return {
-    headline: t(
-      isAuthRequiredProduct(productId)
-        ? `zakiDashboard.command.details.${productId}.headline.${signedIn ? "signed" : "guest"}`
-        : `zakiDashboard.command.details.${productId}.headline`,
-      {
-        defaultValue: detail.headline,
-      }
-    ),
-    note: t(
-      isAuthRequiredProduct(productId)
-        ? `zakiDashboard.command.details.${productId}.note.${signedIn ? "signed" : "guest"}`
-        : `zakiDashboard.command.details.${productId}.note`,
-      {
-        defaultValue: detail.note,
-      }
-    ),
+    headline: t(`zakiDashboard.command.details.${productId}.headline${variant}`, {
+      defaultValue: detail.headline,
+    }),
+    note: t(`zakiDashboard.command.details.${productId}.note${variant}`, {
+      defaultValue: detail.note,
+    }),
     accessTone: detail.accessTone,
   };
 }
@@ -335,6 +355,10 @@ function getCommandProductStateMarker(
   }
   if (productId === "spaces") {
     return t("zakiDashboard.command.markers.free", { defaultValue: "Free" });
+  }
+  // WP-F: a signed-out Agent is a PREVIEW, not "Live" and not a sign-in wall. Say so.
+  if (productId === "agent" && !signedIn) {
+    return t("zakiDashboard.command.markers.preview", { defaultValue: "Preview" });
   }
   if (isAuthRequiredProduct(productId) && !signedIn) {
     return t("zakiDashboard.command.markers.signIn", { defaultValue: "Sign in" });
@@ -357,6 +381,13 @@ function getCommandSubmitLabel(
   if (productId === "spaces") {
     return t("zakiDashboard.command.submitChat", {
       defaultValue: "Start in Spaces",
+    });
+  }
+  // WP-F: this button used to read "Sign in for Agent" and ran nothing. It now runs the plan
+  // preview — the promise it makes is the one the endpoint actually keeps.
+  if (productId === "agent" && !signedIn) {
+    return t("zakiDashboard.command.submitAgentPreview", {
+      defaultValue: "Preview the plan",
     });
   }
   if (isAuthRequiredProduct(productId) && !signedIn) {
@@ -1278,8 +1309,16 @@ export function ZakiDashboard({
   const showSaveWorkCta = !token && !selectedProductComingSoon && !selectedProductAuthRequired && (
     selectedCommandPrompt.length > 0 || anonymousWorkItems.length > 0
   );
+  // The unit wallet gates SIGNED-IN agent runs. It does not gate an anonymous visitor at all —
+  // anonymous identities have no wallet (WP-B2). What gates them is the anonymous daily counter,
+  // enforced at the preview endpoint and surfaced there as a real limit state. Letting the wallet
+  // disable the anon Agent submit would be the same lie #91 removed from the meter readout.
   const agentCapacityBlocked =
-    selectedProductId === "agent" && !meterLoading && !meterUnavailable && isAvailabilityBlocked(agentAvailability);
+    Boolean(token) &&
+    selectedProductId === "agent" &&
+    !meterLoading &&
+    !meterUnavailable &&
+    isAvailabilityBlocked(agentAvailability);
   const creditsExhausted =
     !meterLoading &&
     !meterUnavailable &&
@@ -1479,6 +1518,14 @@ export function ZakiDashboard({
         return;
       }
 
+      // WP-F (F7) — an anonymous visitor selecting Agent gets the PLAN PREVIEW, not a login
+      // wall. The intent written above carries their typed task across the navigation, so the
+      // preview surface runs the words they actually typed.
+      if (!token && selectedProductId === "agent") {
+        navigate(AGENT_PLAN_ROUTE);
+        return;
+      }
+
       if (!token && isAuthRequiredProduct(selectedProductId)) {
         navigate(`/?auth=login&next=${encodeURIComponent(selectedCommandRoute)}`);
         return;
@@ -1543,6 +1590,8 @@ export function ZakiDashboard({
       writeDashboardIntent(item.productId, item.prompt, item.id);
       if (item.productId !== "spaces") {
         const route = item.route || getCommandProductRoute(item.productId);
+        // WP-F: a saved anonymous Agent item reopens the preview surface, which is anon-allowed.
+        // Only the still-gated lanes (Brain) send an anonymous visitor to auth first.
         if (!token && isAuthRequiredProduct(item.productId)) {
           navigate(`/?auth=login&next=${encodeURIComponent(route)}`);
           return;
