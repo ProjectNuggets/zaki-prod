@@ -79,6 +79,14 @@ export function buildDesignControllerCallbackRouter({
           error: { code: "DESIGN_CHECKPOINT_CAS_CONFLICT", message: "Checkpoint generation changed." },
         });
       }
+      if (!["DRAINING", "CHECKPOINTING"].includes(session.state)) {
+        return res.status(409).json({
+          error: {
+            code: "DESIGN_SESSION_NOT_DRAINING",
+            message: "Design session has not entered the drain phase.",
+          },
+        });
+      }
       const generation = input.expectedGeneration + 1;
       const objectKey = designCheckpointObjectKey(input.projectId, generation);
       return res.json({ generation, objectKey });

@@ -1,5 +1,6 @@
 import { describe, expect, jest, test } from "@jest/globals";
 import {
+  beginDesignSessionDrain,
   commitDesignCheckpoint,
   ensureDesignSession,
   readDesignSessionBinding,
@@ -7,6 +8,33 @@ import {
 } from "./design-session-store.js";
 
 describe("design session store", () => {
+  test("atomically moves the authoritative generation into DRAINING", async () => {
+    const query = jest.fn().mockResolvedValue({
+      rows: [{
+        session_id: "sess_01",
+        project_id: "project_01",
+        owner_user_id: "42",
+        tenant_id: "default",
+        state: "DRAINING",
+        checkpoint_generation: "7",
+      }],
+    });
+    const runInTransaction = (callback) => callback({ query });
+
+    await expect(beginDesignSessionDrain({
+      runInTransaction,
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      expectedGeneration: 7,
+      requestId: "req_stop_01",
+    })).resolves.toMatchObject({ state: "DRAINING", generation: 7 });
+    expect(query.mock.calls[0]?.[0]).toContain("state = 'DRAINING'");
+    expect(query.mock.calls[0]?.[0]).toContain("checkpoint_generation = $5");
+    expect(query.mock.calls[0]?.[0]).toContain("state IN ('REQUESTED', 'STARTING', 'RESTORING', 'READY', 'ACTIVE', 'IDLE')");
+  });
+
   test("creates or reuses one authoritative session per owned project", async () => {
     const query = jest
       .fn()

@@ -1,5 +1,6 @@
 import express from "express";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 const OPAQUE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
@@ -8,6 +9,7 @@ export function buildDesignSessionRouter({
   resolveUser,
   ensureSession,
   readSessionBinding,
+  beginSessionDrain,
   updateSessionState,
   runInTransaction,
   dbQuery,
@@ -44,6 +46,15 @@ export function buildDesignSessionRouter({
         requestId,
         createSessionId,
       });
+      if (["DRAINING", "CHECKPOINTING"].includes(session.state)) {
+        return res.status(409).json({
+          code: "design_session_draining",
+          message: "Design session is stopping and cannot be reopened yet.",
+          state: session.state,
+          retryable: true,
+          requestId,
+        });
+      }
       const result = await controller.ensure({
         sessionId: session.sessionId,
         projectId: session.projectId,
@@ -80,6 +91,15 @@ export function buildDesignSessionRouter({
         tenantId: "default",
       });
       if (!session) return notFound(res, requestId);
+      if (!isProxyableSessionState(session.state)) {
+        return res.status(409).json({
+          code: "design_session_not_writable",
+          message: "Design session is not accepting requests.",
+          state: session.state,
+          retryable: ["REQUESTED", "STARTING", "RESTORING", "DRAINING", "CHECKPOINTING"].includes(session.state),
+          requestId,
+        });
+      }
       const method = req.method.toUpperCase();
       const body = proxyBody(req, method);
       const authorization = await authorizeSessionProxy({
@@ -125,9 +145,13 @@ export function buildDesignSessionRouter({
       if (!upstream.body || method === "HEAD" || [204, 304].includes(upstream.status)) {
         return res.end();
       }
-      Readable.fromWeb(upstream.body).pipe(res);
+      await pipeline(Readable.fromWeb(upstream.body), res);
       return undefined;
     } catch (error) {
+      if (res.headersSent) {
+        if (!res.destroyed) res.destroy();
+        return undefined;
+      }
       return sessionFailure(res, error, requestId);
     }
   });
@@ -177,12 +201,31 @@ export function buildDesignSessionRouter({
         tenantId: "default",
       });
       if (!session) return notFound(res, requestId);
-      const result = await controller.stop({
+      const drainingSession = await beginSessionDrain({
+        runInTransaction,
         sessionId: session.sessionId,
         projectId: session.projectId,
         userId: session.userId,
         tenantId: session.tenantId,
         expectedGeneration: session.generation,
+        requestId,
+      });
+      if (drainingSession.state === "STOPPED") {
+        return res.json({
+          session: {
+            id: drainingSession.sessionId,
+            projectId: drainingSession.projectId,
+            state: "STOPPED",
+            generation: drainingSession.generation,
+          },
+        });
+      }
+      const result = await controller.stop({
+        sessionId: drainingSession.sessionId,
+        projectId: drainingSession.projectId,
+        userId: drainingSession.userId,
+        tenantId: drainingSession.tenantId,
+        expectedGeneration: drainingSession.generation,
         requestId,
       });
       await updateSessionStateBestEffort(updateSessionState, dbQuery, session, result, requestId);
@@ -330,4 +373,8 @@ function notFound(res, requestId) {
 
 function validOpaqueId(value) {
   return typeof value === "string" && OPAQUE_ID.test(value);
+}
+
+function isProxyableSessionState(state) {
+  return ["READY", "ACTIVE", "IDLE"].includes(state);
 }

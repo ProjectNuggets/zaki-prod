@@ -84,6 +84,42 @@ describe("Design public session routes", () => {
     expect(resolveUser).not.toHaveBeenCalled();
   });
 
+  test("does not reopen a session while its checkpoint drain is in progress", async () => {
+    const controllerEnsure = jest.fn();
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn().mockResolvedValue({
+        sessionId: "sess_01",
+        projectId: "project_01",
+        userId: "42",
+        tenantId: "default",
+        state: "DRAINING",
+        generation: 7,
+      }),
+      readSessionBinding: jest.fn(),
+      updateSessionState: jest.fn(),
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: jest.fn(),
+      controller: { ensure: controllerEnsure, status: jest.fn(), stop: jest.fn() },
+      getRequestId: () => "req_ensure_draining",
+    }));
+
+    const response = await request(app)
+      .post("/api/design/sessions/ensure")
+      .send({ projectId: "project_01" });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      code: "design_session_draining",
+      state: "DRAINING",
+      retryable: true,
+    });
+    expect(controllerEnsure).not.toHaveBeenCalled();
+  });
+
   test("proxies only through a session binding owned by the authenticated user", async () => {
     const controllerProxy = jest.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), {
       status: 200,
@@ -99,6 +135,7 @@ describe("Design public session routes", () => {
         projectId: "project_01",
         userId: "42",
         tenantId: "default",
+        state: "READY",
         generation: 7,
       }),
       updateSessionState: jest.fn(),
@@ -142,6 +179,7 @@ describe("Design public session routes", () => {
         projectId: "project_01",
         userId: "42",
         tenantId: "default",
+        state: "READY",
         generation: 7,
       }),
       updateSessionState: jest.fn(),
@@ -188,6 +226,7 @@ describe("Design public session routes", () => {
         projectId: "project_01",
         userId: "42",
         tenantId: "default",
+        state: "READY",
         generation: 7,
       }),
       updateSessionState: jest.fn(),
@@ -206,5 +245,131 @@ describe("Design public session routes", () => {
 
     expect(response.status).toBe(200);
     expect(receivedBody).toBe(JSON.stringify({ content }));
+  });
+
+  test("rejects proxy traffic after the session starts draining", async () => {
+    const controllerProxy = jest.fn();
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn(),
+      readSessionBinding: jest.fn().mockResolvedValue({
+        sessionId: "sess_01",
+        projectId: "project_01",
+        userId: "42",
+        tenantId: "default",
+        state: "DRAINING",
+        generation: 7,
+      }),
+      updateSessionState: jest.fn(),
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: jest.fn(),
+      controller: { ensure: jest.fn(), status: jest.fn(), stop: jest.fn(), proxy: controllerProxy },
+      getRequestId: () => "req_proxy_draining",
+    }));
+
+    const response = await request(app)
+      .get("/api/design/sessions/sess_01/proxy/api/projects/project_01")
+      .set("x-zaki-project-id", "project_01");
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      code: "design_session_not_writable",
+      state: "DRAINING",
+      retryable: true,
+    });
+    expect(controllerProxy).not.toHaveBeenCalled();
+  });
+
+  test("marks the authoritative session draining before asking the controller to stop", async () => {
+    const events = [];
+    const session = {
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      state: "READY",
+      generation: 7,
+    };
+    const beginSessionDrain = jest.fn().mockImplementation(async () => {
+      events.push("drain");
+      return { ...session, state: "DRAINING" };
+    });
+    const controllerStop = jest.fn().mockImplementation(async () => {
+      events.push("stop");
+      return { session: { id: "sess_01", projectId: "project_01", state: "STOPPED", generation: 8 } };
+    });
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn(),
+      readSessionBinding: jest.fn().mockResolvedValue(session),
+      beginSessionDrain,
+      updateSessionState: jest.fn(),
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: jest.fn(),
+      controller: { ensure: jest.fn(), status: jest.fn(), stop: controllerStop },
+      getRequestId: () => "req_stop_01",
+    }));
+
+    const response = await request(app)
+      .post("/api/design/sessions/sess_01/stop")
+      .send({ projectId: "project_01" });
+
+    expect(response.status).toBe(200);
+    expect(events).toEqual(["drain", "stop"]);
+    expect(beginSessionDrain).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: "sess_01",
+      expectedGeneration: 7,
+      requestId: "req_stop_01",
+    }));
+  });
+
+  test("contains a controller body failure instead of emitting an unhandled stream error", async () => {
+    const streamError = new Error("controller body reset");
+    const controllerProxy = jest.fn().mockResolvedValue(new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("partial"));
+        controller.error(streamError);
+      },
+    })));
+    const unhandled = jest.fn();
+    process.on("uncaughtException", unhandled);
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn(),
+      readSessionBinding: jest.fn().mockResolvedValue({
+        sessionId: "sess_01",
+        projectId: "project_01",
+        userId: "42",
+        tenantId: "default",
+        state: "READY",
+        generation: 7,
+      }),
+      updateSessionState: jest.fn(),
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: jest.fn(),
+      controller: { ensure: jest.fn(), status: jest.fn(), stop: jest.fn(), proxy: controllerProxy },
+      getRequestId: () => "req_proxy_reset",
+    }));
+
+    try {
+      await request(app)
+        .get("/api/design/sessions/sess_01/proxy/api/projects/project_01")
+        .set("x-zaki-project-id", "project_01")
+        .timeout({ response: 500, deadline: 500 })
+        .catch(() => undefined);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("uncaughtException", unhandled);
+    }
   });
 });

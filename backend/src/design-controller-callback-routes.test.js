@@ -9,7 +9,7 @@ function createApp(overrides = {}) {
     projectId: "project_01",
     userId: "42",
     tenantId: "default",
-    state: "READY",
+    state: overrides.sessionState || "DRAINING",
     generation: 7,
     checkpointSha256: "a".repeat(64),
     checkpointBytes: 1024,
@@ -116,5 +116,27 @@ describe("Design controller callback routes", () => {
       objectKey: "projects/project_01/checkpoints/0000000008.tgz",
       requestId: "req_commit_01",
     }));
+  });
+
+  test("does not grant checkpoint upload before the hub has fenced proxy traffic", async () => {
+    const { app } = createApp({ sessionState: "READY" });
+
+    const response = await request(app)
+      .post("/internal/design/controller/v1/sessions/sess_01/upload-grant")
+      .set("authorization", "Bearer controller-hub-callback-secret")
+      .send({
+        projectId: "project_01",
+        userId: "42",
+        tenantId: "default",
+        expectedGeneration: 7,
+      });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual({
+      error: {
+        code: "DESIGN_SESSION_NOT_DRAINING",
+        message: "Design session has not entered the drain phase.",
+      },
+    });
   });
 });

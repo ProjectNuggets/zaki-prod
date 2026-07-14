@@ -98,6 +98,77 @@ export async function readDesignSessionBinding({
   return result.rows[0] ? normalizeSessionRow(result.rows[0]) : null;
 }
 
+export async function beginDesignSessionDrain({
+  runInTransaction,
+  sessionId,
+  projectId,
+  userId,
+  tenantId,
+  expectedGeneration,
+  requestId,
+}) {
+  const normalized = {
+    sessionId: opaqueId(sessionId, "sessionId"),
+    projectId: opaqueId(projectId, "projectId"),
+    userId: positiveUserId(userId),
+    tenantId: opaqueId(tenantId, "tenantId"),
+    expectedGeneration: generationNumber(expectedGeneration, "expectedGeneration"),
+  };
+  return runInTransaction(async (transaction) => {
+    const updated = await transaction.query(
+      `
+        UPDATE zaki_design_sessions
+           SET state = 'DRAINING',
+               last_request_id = $6,
+               last_seen_at = NOW(),
+               updated_at = NOW()
+         WHERE session_id = $1
+           AND project_id = $2
+           AND owner_user_id = $3
+           AND tenant_id = $4
+           AND checkpoint_generation = $5
+           AND state IN ('REQUESTED', 'STARTING', 'RESTORING', 'READY', 'ACTIVE', 'IDLE')
+         RETURNING session_id, project_id, owner_user_id, tenant_id, state,
+                   checkpoint_generation, checkpoint_sha256, checkpoint_bytes,
+                   checkpoint_object_key
+      `,
+      [
+        normalized.sessionId,
+        normalized.projectId,
+        normalized.userId,
+        normalized.tenantId,
+        normalized.expectedGeneration,
+        nullableText(requestId),
+      ]
+    );
+    if (updated.rows[0]) return normalizeSessionRow(updated.rows[0]);
+
+    const existing = await transaction.query(
+      `
+        SELECT session_id, project_id, owner_user_id, tenant_id, state,
+               checkpoint_generation, checkpoint_sha256, checkpoint_bytes,
+               checkpoint_object_key
+          FROM zaki_design_sessions
+         WHERE session_id = $1
+           AND project_id = $2
+           AND owner_user_id = $3
+           AND tenant_id = $4
+         FOR UPDATE
+      `,
+      [normalized.sessionId, normalized.projectId, normalized.userId, normalized.tenantId]
+    );
+    if (!existing.rows[0]) {
+      throw new DesignSessionStoreError("DESIGN_SESSION_NOT_FOUND", "Design session was not found.", 404);
+    }
+    const session = normalizeSessionRow(existing.rows[0]);
+    if (session.generation !== normalized.expectedGeneration) {
+      throw new DesignSessionStoreError("DESIGN_CHECKPOINT_CAS_CONFLICT", "Checkpoint generation changed.");
+    }
+    if (["DRAINING", "CHECKPOINTING", "STOPPED"].includes(session.state)) return session;
+    throw new DesignSessionStoreError("DESIGN_SESSION_STATE_CONFLICT", "Design session cannot be stopped from its current state.");
+  });
+}
+
 export async function commitDesignCheckpoint({
   runInTransaction,
   sessionId,
@@ -144,6 +215,7 @@ export async function commitDesignCheckpoint({
            AND owner_user_id = $3
            AND tenant_id = $4
            AND checkpoint_generation = $5
+           AND state IN ('DRAINING', 'CHECKPOINTING')
          RETURNING checkpoint_generation
       `,
       [

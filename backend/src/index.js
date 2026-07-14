@@ -226,6 +226,7 @@ import {
 } from "./design-internal-read-routes.js";
 import { buildDesignSessionRouter } from "./design-session-routes.js";
 import {
+  beginDesignSessionDrain,
   ensureDesignSession,
   readDesignSessionBinding,
   updateDesignSessionObservedState,
@@ -18442,6 +18443,7 @@ app.use(
     resolveUser: requireAuthUser,
     ensureSession: ensureDesignSession,
     readSessionBinding: readDesignSessionBinding,
+    beginSessionDrain: beginDesignSessionDrain,
     updateSessionState: updateDesignSessionObservedState,
     runInTransaction: withDbTransaction,
     dbQuery,
