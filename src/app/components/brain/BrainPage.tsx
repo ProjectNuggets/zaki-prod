@@ -216,9 +216,11 @@ export function BrainPage() {
 
   const health = brainHealth({
     requestFailed: initialGraphQuery.isError,
+    hasUsableData: initialGraphQuery.data != null,
     semanticDegraded: initialGraphQuery.data?.semantic_degraded ?? false,
   });
   const brainUnavailable = health === "unavailable";
+  const brainStale = health === "stale";
   const totalNodes = brainUnavailable
     ? 0
     : initialGraphQuery.data?.total_nodes_in_corpus ?? 0;
@@ -286,10 +288,12 @@ export function BrainPage() {
             id: "health",
             label: brainUnavailable
               ? t("brain.status.memoryUnavailable", { defaultValue: "Memory unavailable" })
+              : brainStale
+              ? t("brain.status.cachedData", { defaultValue: "Using cached memory" })
               : semanticDegraded
               ? t("brain.status.semanticDegraded", { defaultValue: "Semantic degraded" })
               : t("brain.status.semanticReady", { defaultValue: "Semantic ready" }),
-            tone: brainUnavailable || semanticDegraded ? "warn" : "success",
+            tone: brainUnavailable || brainStale || semanticDegraded ? "warn" : "success",
           },
         ]}
       />

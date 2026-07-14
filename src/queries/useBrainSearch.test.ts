@@ -33,4 +33,35 @@ describe("sanitizeBrainSearchResponse", () => {
       ],
     });
   });
+
+  it("falls back to a stable key when a result contains only assistant scaffold", () => {
+    const response: BrainSearchResponse = {
+      results: [
+        {
+          id: "memory-2",
+          key: "stable-key",
+          kind: "core",
+          created_at: 2,
+          session_id: null,
+          summary: "<memory_for_turn>private summary</memory_for_turn>",
+          display_label: "[[ZAKI_MEMORY_CONTEXT_V2]]private label[[/ZAKI_MEMORY_CONTEXT_V2]]",
+          community_name: "<memory_context>private theme</memory_context>",
+          source_snippet: "[[ZAKI_DOC_CONTEXT_V1]]private source[[/ZAKI_DOC_CONTEXT_V1]]",
+          valid_to: null,
+        },
+      ],
+    };
+
+    expect(sanitizeBrainSearchResponse(response)).toEqual({
+      results: [
+        expect.objectContaining({
+          id: "memory-2",
+          summary: "stable-key",
+          display_label: undefined,
+          community_name: null,
+          source_snippet: null,
+        }),
+      ],
+    });
+  });
 });

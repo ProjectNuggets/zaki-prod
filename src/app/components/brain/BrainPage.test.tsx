@@ -160,6 +160,20 @@ describe("BrainPage", () => {
     expect(screen.queryByTestId("brain-unavailable-state")).not.toBeInTheDocument();
   });
 
+  it("keeps cached Brain data visible when a background refresh fails", () => {
+    mockGraph = {
+      ...POPULATED,
+      isError: true,
+    };
+
+    renderPage();
+
+    expect(screen.getByTestId("brain-graph-slot")).toBeInTheDocument();
+    expect(screen.getByText("1,234")).toBeInTheDocument();
+    expect(screen.getByText("Using cached memory")).toBeInTheDocument();
+    expect(screen.queryByTestId("brain-unavailable-state")).not.toBeInTheDocument();
+  });
+
   it("renders the empty state when the corpus has zero memories", () => {
     mockGraph = {
       data: { nodes: [], edges: [], total_nodes_in_corpus: 0 },

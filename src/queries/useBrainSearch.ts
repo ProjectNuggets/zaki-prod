@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchBrainSearch, type BrainSearchResponse } from "@/lib/api";
-import { sanitizeAssistantScaffold } from "@/app/components/chat/rendering/scaffoldSanitizer";
+import { brainDisplayText, sanitizeBrainText } from "@/app/components/brain/brainText";
 
 export const brainSearchKeys = {
   results: (userId: string, q: string) => ["brain", "search", userId, q] as const,
@@ -10,19 +10,16 @@ export const brainSearchKeys = {
 export function sanitizeBrainSearchResponse(response: BrainSearchResponse): BrainSearchResponse {
   return {
     ...response,
-    results: response.results.map((result) => ({
-      ...result,
-      summary: sanitizeAssistantScaffold(result.summary),
-      display_label: result.display_label
-        ? sanitizeAssistantScaffold(result.display_label)
-        : result.display_label,
-      community_name: result.community_name
-        ? sanitizeAssistantScaffold(result.community_name) || null
-        : result.community_name,
-      source_snippet: result.source_snippet
-        ? sanitizeAssistantScaffold(result.source_snippet) || null
-        : result.source_snippet,
-    })),
+    results: response.results.map((result) => {
+      const displayLabel = sanitizeBrainText(result.display_label);
+      return {
+        ...result,
+        summary: brainDisplayText(result.summary, result.key, result.id),
+        display_label: displayLabel || undefined,
+        community_name: sanitizeBrainText(result.community_name) || null,
+        source_snippet: sanitizeBrainText(result.source_snippet) || null,
+      };
+    }),
   };
 }
 
