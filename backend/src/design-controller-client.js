@@ -85,11 +85,11 @@ export class DesignControllerClient {
   }
 
   async proxy(input) {
-    const targetPath = validProxyPath(input.targetPath);
     const method = String(input.method || "GET").toUpperCase();
     if (!/^[A-Z]+$/.test(method)) {
       throw new DesignControllerClientError("DESIGN_CONTROLLER_REQUEST_INVALID", "Design proxy method is invalid.", 400);
     }
+    const targetPath = validProxyPath(input.targetPath, method);
     const options = {
       method,
       redirect: "error",
@@ -112,6 +112,28 @@ export class DesignControllerClient {
       options,
       this.timeoutMs,
       "Design controller worker proxy"
+    );
+  }
+
+  async workbench(input) {
+    const targetPath = validWorkbenchPath(input.targetPath);
+    const method = String(input.method || "GET").toUpperCase();
+    if (!["GET", "HEAD"].includes(method)) {
+      throw new DesignControllerClientError("DESIGN_CONTROLLER_REQUEST_INVALID", "Design workbench method is invalid.", 405);
+    }
+    return this.fetchWithTimeout(
+      `${this.baseUrl}/internal/v1/workbench${targetPath}`,
+      {
+        method,
+        redirect: "error",
+        headers: {
+          authorization: `Bearer ${this.token}`,
+          "x-request-id": input.requestId,
+          ...allowedWorkbenchHeaders(input.headers || {}),
+        },
+      },
+      this.timeoutMs,
+      "Design controller workbench"
     );
   }
 
@@ -183,9 +205,39 @@ function allowedProxyHeaders(input) {
   return headers;
 }
 
-function validProxyPath(value) {
+function allowedWorkbenchHeaders(input) {
+  const headers = {};
+  for (const [name, value] of Object.entries(input)) {
+    const normalized = name.toLowerCase();
+    if (["accept", "accept-language", "if-none-match", "if-modified-since"].includes(normalized)
+      && value !== undefined) {
+      headers[normalized] = Array.isArray(value) ? value.join(",") : String(value);
+    }
+  }
+  return headers;
+}
+
+function validWorkbenchPath(value) {
   const raw = String(value || "");
-  if (!raw.startsWith("/api/") && raw !== "/api") {
+  if (!raw.startsWith("/") || raw.startsWith("//") || raw.includes("\r") || raw.includes("\n")) {
+    throw new DesignControllerClientError("DESIGN_CONTROLLER_REQUEST_INVALID", "Design workbench path is invalid.", 400);
+  }
+  try {
+    const url = new URL(raw, "http://workbench.invalid");
+    const segments = url.pathname.split("/").map((segment) => decodeURIComponent(segment));
+    if (segments.includes(".") || segments.includes("..")) throw new Error("dot segment");
+    return `${url.pathname}${url.search}`;
+  } catch {
+    throw new DesignControllerClientError("DESIGN_CONTROLLER_REQUEST_INVALID", "Design workbench path is invalid.", 400);
+  }
+}
+
+function validProxyPath(value, method) {
+  const raw = String(value || "");
+  const isApi = raw.startsWith("/api/") || raw === "/api";
+  const isReadOnlyAsset = ["GET", "HEAD"].includes(method)
+    && ["/artifacts", "/frames"].some((prefix) => raw === prefix || raw.startsWith(`${prefix}/`));
+  if (!isApi && !isReadOnlyAsset) {
     throw new DesignControllerClientError("DESIGN_CONTROLLER_REQUEST_INVALID", "Design proxy path is invalid.", 400);
   }
   try {

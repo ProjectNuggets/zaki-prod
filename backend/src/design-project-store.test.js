@@ -36,7 +36,7 @@ describe("design project store", () => {
   });
 
   test("creates the central project and its owner role without contacting a worker", async () => {
-    const dbQuery = jest.fn()
+    const transactionQuery = jest.fn()
       .mockResolvedValueOnce({
         rows: [{
           project_id: "design-2",
@@ -48,9 +48,10 @@ describe("design project store", () => {
         }],
       })
       .mockResolvedValueOnce({ rows: [] });
+    const runInTransaction = jest.fn((run) => run({ query: transactionQuery }));
 
     await expect(createDesignProject({
-      dbQuery,
+      runInTransaction,
       userId: 42,
       projectId: "design-2",
       name: "Launch system",
@@ -61,16 +62,26 @@ describe("design project store", () => {
       name: "Launch system",
       status: { value: "active" },
     });
-    expect(dbQuery).toHaveBeenCalledTimes(2);
-    expect(dbQuery.mock.calls[0][0]).toContain("INSERT INTO zaki_design_projects");
-    expect(dbQuery.mock.calls[0][1]).toEqual([
+    expect(runInTransaction).toHaveBeenCalledTimes(1);
+    expect(transactionQuery).toHaveBeenCalledTimes(2);
+    expect(transactionQuery.mock.calls[0][0]).toContain("INSERT INTO zaki_design_projects");
+    expect(transactionQuery.mock.calls[0][1]).toEqual([
       "design-2",
       42,
       "Launch system",
       JSON.stringify({ source: "zaki-design" }),
       "req-create",
     ]);
-    expect(dbQuery.mock.calls[1][1]).toEqual(["design-2", 42, "owner"]);
+    expect(transactionQuery.mock.calls[1][1]).toEqual(["design-2", 42, "owner"]);
+  });
+
+  test("requires a transaction boundary for central project creation", async () => {
+    await expect(createDesignProject({
+      userId: 42,
+      projectId: "design-2",
+      name: "Launch system",
+      requestId: "req-create",
+    })).rejects.toThrow("transaction");
   });
 
   test("extracts upstream project payloads", () => {

@@ -227,6 +227,8 @@ import {
 } from "./design-internal-read-routes.js";
 import { buildDesignSessionRouter } from "./design-session-routes.js";
 import { buildDesignProjectRouter } from "./design-project-routes.js";
+import { buildDesignWorkbenchRouter } from "./design-workbench-routes.js";
+import { createDesignWorkbenchAccess } from "./design-workbench-access.js";
 import {
   beginDesignSessionDrain,
   ensureDesignSession,
@@ -18320,6 +18322,7 @@ app.use(
 // =============================================================================
 
 let designSessionController = null;
+let designWorkbenchAccess = null;
 if (ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED) {
   designSessionController = new DesignControllerClient({
     baseUrl: DESIGN_CONTROLLER_BASE_URL,
@@ -18327,6 +18330,7 @@ if (ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED) {
     fetchWithTimeout,
     timeoutMs: DESIGN_CONTROLLER_REQUEST_TIMEOUT_MS,
   });
+  designWorkbenchAccess = createDesignWorkbenchAccess({ secret: DESIGN_CONTROLLER_TOKEN });
   app.use(
     "/internal/design/controller/v1",
     buildDesignControllerCallbackRouter({
@@ -18348,6 +18352,7 @@ const unavailableDesignSessionController = {
   ensure: async () => { throw new Error("Design session controller is disabled."); },
   status: async () => { throw new Error("Design session controller is disabled."); },
   stop: async () => { throw new Error("Design session controller is disabled."); },
+  workbench: async () => { throw new Error("Design session controller is disabled."); },
 };
 
 async function authorizeDesignSessionProxy({ req, res, auth, targetPath, method, requestId }) {
@@ -18447,13 +18452,23 @@ async function settleDesignSessionProxy({ req, authorization, receiptStatus, dur
 }
 
 app.use(
+  "/api/design/workbench",
+  buildDesignWorkbenchRouter({
+    enabled: ZAKI_DESIGN_ENABLED && ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED,
+    resolveAccess: (req) => designWorkbenchAccess?.resolve(req) ?? null,
+    controller: designSessionController || unavailableDesignSessionController,
+    getRequestId: getOrCreateRequestId,
+  })
+);
+
+app.use(
   "/api/design/projects",
   buildDesignProjectRouter({
     enabled: ZAKI_DESIGN_ENABLED,
     controllerMode: ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED,
     resolveUser: requireAuthUser,
     listProjects: ({ userId }) => listDesignProjects({ dbQuery, userId }),
-    createProject: (input) => createDesignProject({ dbQuery, ...input }),
+    createProject: (input) => createDesignProject({ runInTransaction: withDbTransaction, ...input }),
     createProjectId: generateDesignProjectId,
     getRequestId: getOrCreateRequestId,
   })
@@ -18475,6 +18490,7 @@ app.use(
     getRequestId: getOrCreateRequestId,
     authorizeProxy: authorizeDesignSessionProxy,
     settleProxy: settleDesignSessionProxy,
+    issueWorkbenchAccess: (userId) => designWorkbenchAccess?.issue(userId),
   })
 );
 

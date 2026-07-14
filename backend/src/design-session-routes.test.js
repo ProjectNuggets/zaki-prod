@@ -23,6 +23,7 @@ describe("Design public session routes", () => {
       retryAfterMs: 1000,
     });
     const app = express();
+    const issueWorkbenchAccess = jest.fn().mockReturnValue("zaki_design_workbench=scoped; HttpOnly");
     app.use("/api/design/sessions", buildDesignSessionRouter({
       enabled: true,
       resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
@@ -34,6 +35,7 @@ describe("Design public session routes", () => {
       createSessionId: () => "sess_01",
       controller: { ensure: controllerEnsure, status: jest.fn(), stop: jest.fn() },
       getRequestId: () => "req_01",
+      issueWorkbenchAccess,
     }));
 
     const response = await request(app)
@@ -62,6 +64,8 @@ describe("Design public session routes", () => {
       desiredGeneration: 7,
       requestId: "req_01",
     });
+    expect(issueWorkbenchAccess).toHaveBeenCalledWith(42);
+    expect(response.headers["set-cookie"]?.[0]).toContain("zaki_design_workbench=scoped");
   });
 
   test("keeps the ensure path as a compatibility alias", async () => {
@@ -180,6 +184,7 @@ describe("Design public session routes", () => {
 
   test("finalizes a committed checkpoint instead of reopening the session", async () => {
     const controllerEnsure = jest.fn();
+    const issueWorkbenchAccess = jest.fn().mockReturnValue("design_workbench=token");
     const controllerStop = jest.fn().mockResolvedValue({
       session: {
         id: "sess_01",
@@ -206,6 +211,7 @@ describe("Design public session routes", () => {
       runInTransaction: jest.fn(),
       dbQuery: jest.fn(),
       createSessionId: jest.fn(),
+      issueWorkbenchAccess,
       controller: { ensure: controllerEnsure, status: jest.fn(), stop: controllerStop },
       getRequestId: () => "req_ensure_draining",
     }));
@@ -224,6 +230,8 @@ describe("Design public session routes", () => {
       },
     });
     expect(controllerEnsure).not.toHaveBeenCalled();
+    expect(issueWorkbenchAccess).not.toHaveBeenCalled();
+    expect(response.headers["set-cookie"]).toBeUndefined();
     expect(controllerStop).toHaveBeenCalledWith({
       sessionId: "sess_01",
       projectId: "project_01",
@@ -279,6 +287,29 @@ describe("Design public session routes", () => {
       targetPath: "/api/projects/project_01?include=files",
       method: "GET",
     }));
+  });
+
+  test("allows read-only artifact delivery and rejects artifact mutations", async () => {
+    const controllerProxy = jest.fn().mockResolvedValue(new Response("asset"));
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn(),
+      readSessionBinding: jest.fn().mockResolvedValue({
+        sessionId: "sess_01", projectId: "project_01", userId: "42", tenantId: "default",
+        state: "READY", generation: 7,
+      }),
+      updateSessionState: jest.fn(), runInTransaction: jest.fn(), dbQuery: jest.fn(), createSessionId: jest.fn(),
+      controller: { ensure: jest.fn(), status: jest.fn(), stop: jest.fn(), proxy: controllerProxy },
+      getRequestId: () => "req_asset",
+    }));
+
+    expect((await request(app).get("/api/design/sessions/sess_01/proxy/artifacts/site/index.html")
+      .set("x-zaki-project-id", "project_01")).status).toBe(200);
+    expect((await request(app).post("/api/design/sessions/sess_01/proxy/frames/preview.png")
+      .set("x-zaki-project-id", "project_01")).status).toBe(400);
+    expect(controllerProxy).toHaveBeenCalledTimes(1);
   });
 
   test("fails closed before proxying a mutation when the meter denies it", async () => {

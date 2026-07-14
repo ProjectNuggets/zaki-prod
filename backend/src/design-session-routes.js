@@ -18,6 +18,7 @@ export function buildDesignSessionRouter({
   getRequestId,
   authorizeProxy,
   settleProxy,
+  issueWorkbenchAccess,
 }) {
   const router = express.Router();
   const lifecycleJson = express.json({ limit: "32kb", strict: true });
@@ -66,6 +67,9 @@ export function buildDesignSessionRouter({
             desiredGeneration: session.generation,
             requestId,
           });
+      if (!recoveringStop && typeof issueWorkbenchAccess === "function") {
+        res.append("set-cookie", issueWorkbenchAccess(auth.zakiUser.id));
+      }
       await updateSessionStateBestEffort(updateSessionState, dbQuery, session, result, requestId);
       return res
         .status(["READY", "ACTIVE"].includes(result.session.state) ? 200 : 202)
@@ -80,7 +84,7 @@ export function buildDesignSessionRouter({
   router.all("/:sessionId/proxy/*", async (req, res) => {
     const sessionId = req.params.sessionId;
     const projectId = String(req.get("x-zaki-project-id") || "");
-    const targetPath = proxyTargetPath(req, sessionId);
+    const targetPath = proxyTargetPath(req, sessionId, req.method.toUpperCase());
     if (!validOpaqueId(sessionId) || !validOpaqueId(projectId) || !targetPath) {
       return invalidRequest(res, getRequestId(req));
     }
@@ -326,11 +330,14 @@ function parseBoundSessionRequest(sessionId, value) {
   return { sessionId, projectId: value.projectId };
 }
 
-function proxyTargetPath(req, sessionId) {
+function proxyTargetPath(req, sessionId, method) {
   const marker = `/api/design/sessions/${sessionId}/proxy`;
   if (!req.originalUrl.startsWith(marker)) return null;
   const raw = req.originalUrl.slice(marker.length);
-  if (!raw.startsWith("/api/") && raw !== "/api") return null;
+  const isApi = raw.startsWith("/api/") || raw === "/api";
+  const isReadOnlyAsset = ["GET", "HEAD"].includes(method)
+    && ["/artifacts", "/frames"].some((prefix) => raw === prefix || raw.startsWith(`${prefix}/`));
+  if (!isApi && !isReadOnlyAsset) return null;
   try {
     const url = new URL(raw, "http://worker.invalid");
     const segments = url.pathname.split("/").map((segment) => decodeURIComponent(segment));

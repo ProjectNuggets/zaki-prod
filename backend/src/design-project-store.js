@@ -58,7 +58,7 @@ export async function listDesignProjects({ dbQuery, userId }) {
 }
 
 export async function createDesignProject({
-  dbQuery,
+  runInTransaction,
   userId,
   projectId,
   name,
@@ -70,30 +70,36 @@ export async function createDesignProject({
   if (!ownerUserId || !normalizedProjectId) {
     throw new Error("invalid_design_project_owner");
   }
-  const result = await dbQuery(
-    `
-      INSERT INTO zaki_design_projects
-        (project_id, owner_user_id, name, status, metadata_json, last_request_id, created_at, updated_at)
-      VALUES ($1, $2, $3, 'active', $4::jsonb, $5, NOW(), NOW())
-      RETURNING project_id, name, status, metadata_json, created_at, updated_at
-    `,
-    [
-      normalizedProjectId,
-      ownerUserId,
-      normalizeText(name, "Untitled design workspace"),
-      metadataJson(metadata),
-      normalizeText(requestId, null),
-    ]
-  );
-  await upsertDesignProjectRole({
-    dbQuery,
-    projectId: normalizedProjectId,
-    userId: ownerUserId,
-    role: "owner",
+  if (typeof runInTransaction !== "function") {
+    throw new Error("design_project_transaction_required");
+  }
+  return runInTransaction(async (transaction) => {
+    const transactionQuery = transaction.query.bind(transaction);
+    const result = await transactionQuery(
+      `
+        INSERT INTO zaki_design_projects
+          (project_id, owner_user_id, name, status, metadata_json, last_request_id, created_at, updated_at)
+        VALUES ($1, $2, $3, 'active', $4::jsonb, $5, NOW(), NOW())
+        RETURNING project_id, name, status, metadata_json, created_at, updated_at
+      `,
+      [
+        normalizedProjectId,
+        ownerUserId,
+        normalizeText(name, "Untitled design workspace"),
+        metadataJson(metadata),
+        normalizeText(requestId, null),
+      ]
+    );
+    await upsertDesignProjectRole({
+      dbQuery: transactionQuery,
+      projectId: normalizedProjectId,
+      userId: ownerUserId,
+      role: "owner",
+    });
+    const project = normalizeProjectRow(result?.rows?.[0]);
+    if (!project) throw new Error("design_project_create_failed");
+    return project;
   });
-  const project = normalizeProjectRow(result?.rows?.[0]);
-  if (!project) throw new Error("design_project_create_failed");
-  return project;
 }
 
 export function extractDesignProjectFromPayload(payload) {

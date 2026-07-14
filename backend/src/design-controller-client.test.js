@@ -150,6 +150,43 @@ describe("DesignControllerClient", () => {
     expect(options.headers.cookie).toBeUndefined();
   });
 
+  test("allows read-only artifact delivery and rejects artifact mutations", async () => {
+    const fetchWithTimeout = jest.fn().mockResolvedValue(new Response("asset"));
+    const client = new DesignControllerClient({
+      baseUrl: "http://controller.internal:7460", token: "hub-controller-secret", fetchWithTimeout,
+    });
+    const input = {
+      sessionId: "sess_01", projectId: "project_01", userId: "42", tenantId: "default",
+      expectedGeneration: 7, headers: {}, requestId: "req_asset",
+    };
+    await expect(client.proxy({ ...input, targetPath: "/artifacts/site/index.html", method: "GET" }))
+      .resolves.toBeInstanceOf(Response);
+    await expect(client.proxy({ ...input, targetPath: "/frames/preview.png", method: "POST" }))
+      .rejects.toMatchObject({ code: "DESIGN_CONTROLLER_REQUEST_INVALID" });
+    expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  test("fetches only read-only workbench assets with server credentials", async () => {
+    const fetchWithTimeout = jest.fn().mockResolvedValue(new Response("html"));
+    const client = new DesignControllerClient({
+      baseUrl: "http://controller.internal:7460", token: "hub-controller-secret", fetchWithTimeout,
+    });
+    await expect(client.workbench({
+      targetPath: "/_next/static/app.js?v=1", method: "GET", requestId: "req_ui",
+      headers: { cookie: "browser=secret", accept: "text/javascript" },
+    })).resolves.toBeInstanceOf(Response);
+    expect(fetchWithTimeout).toHaveBeenCalledWith(
+      "http://controller.internal:7460/internal/v1/workbench/_next/static/app.js?v=1",
+      expect.objectContaining({ headers: {
+        authorization: "Bearer hub-controller-secret", "x-request-id": "req_ui", accept: "text/javascript",
+      } }),
+      180000,
+      "Design controller workbench"
+    );
+    await expect(client.workbench({ targetPath: "/", method: "POST", requestId: "req_bad" }))
+      .rejects.toMatchObject({ status: 405 });
+  });
+
   test("probes the controller readiness endpoint without sending a bearer", async () => {
     const fetchWithTimeout = jest.fn().mockResolvedValue(new Response('{"ok":true}', {
       status: 200,
