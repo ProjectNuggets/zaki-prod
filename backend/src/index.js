@@ -113,9 +113,12 @@ import {
 } from "./brain-params.js";
 import {
   buildAgentMeterUsageFacts,
+  buildAgentUpstreamTurnContext,
   classifyAgentMeterAction,
   createAgentStreamMeterMetrics,
   estimateAgentMeterUnits,
+  isUnmeteredAgentOnboardingTurn,
+  isVerifiedAgentOnboardingFirstTurn,
   reserveAgentChatUnits,
   resolveAgentReserveUnits,
   settleAgentChatUnits,
@@ -3714,6 +3717,7 @@ const ProductEventSchema = z.object({
     "website_product_complete",
     "website_product_spaces",
     "chat_input",
+    "memory_import",
     "settings",
     "pricing_page",
     "success_page",
@@ -12509,13 +12513,55 @@ const agentChatStreamHandler = async (req, res) => {
     }
 
     const meterAction = classifyAgentMeterAction(payload, originalMessage);
-    const meterDecision = await requireAgentWalletReserveForChat(req, res, {
-      identity: buildAgentMeterIdentity(authResult),
-      action: meterAction,
-      requestId: getOrCreateRequestId(req),
-    });
-    if (!meterDecision.allowed || res.headersSent) {
-      return;
+    let onboardingFirstTurn = false;
+    if (isUnmeteredAgentOnboardingTurn(payload, originalMessage)) {
+      try {
+        const requestId = String(req.requestId || crypto.randomUUID());
+        const sessionKey = buildCanonicalZakiThreadSessionKey(
+          String(userId),
+          ZAKI_BOT_THREAD_ID
+        );
+        const [onboardingResponse, historyResponse] = await Promise.all([
+          sendBotBffUpstreamRequest({
+            method: "GET",
+            path: `/api/v1/users/${encodeURIComponent(userId)}/onboarding`,
+            userId,
+            requestId,
+          }),
+          fetchNullclawUserHistory({
+            baseUrl: nullclawBase,
+            internalToken: NULLCLAW_INTERNAL_TOKEN,
+            userId,
+            requestId,
+            sessionKey,
+            fetchWithTimeout,
+            timeoutMs: ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+          }),
+        ]);
+        const [onboardingPayload, historyPayload] = await Promise.all([
+          onboardingResponse.json().catch(() => null),
+          historyResponse.json().catch(() => null),
+        ]);
+        onboardingFirstTurn = isVerifiedAgentOnboardingFirstTurn({
+          onboardingOk: onboardingResponse.ok,
+          onboardingPayload,
+          historyOk: historyResponse.ok,
+          historyStatus: historyResponse.status,
+          historyPayload,
+        });
+      } catch {
+        onboardingFirstTurn = false;
+      }
+    }
+    if (!onboardingFirstTurn) {
+      const meterDecision = await requireAgentWalletReserveForChat(req, res, {
+        identity: buildAgentMeterIdentity(authResult),
+        action: meterAction,
+        requestId: getOrCreateRequestId(req),
+      });
+      if (!meterDecision.allowed || res.headersSent) {
+        return;
+      }
     }
 
     try {
@@ -12663,7 +12709,7 @@ const agentChatStreamHandler = async (req, res) => {
       ...normalizedPayload,
       message: originalMessage,
       stream: true,
-      context: {
+      context: buildAgentUpstreamTurnContext({
         ...existingContext,
         surface:
           rawSpaceId.toLowerCase() === ZAKI_BOT_SPACE_ID
@@ -12671,8 +12717,10 @@ const agentChatStreamHandler = async (req, res) => {
             : ZAKI_AGENT_SURFACE,
         ...(rawSpaceId ? { space_id: rawSpaceId } : {}),
         ...(rawThreadId ? { thread_id: rawThreadId } : {}),
-      },
+      }, onboardingFirstTurn),
     };
+    delete upstreamPayload.turnKind;
+    delete upstreamPayload.turn_kind;
     const sessionKey = resolveCanonicalChatSessionKey({
       userId,
       payload: normalizedPayload,

@@ -51,6 +51,7 @@ import {
   fetchAgentSessionContext,
   fetchAgentSessionHistory,
   fetchAgentSessionPlan,
+  fetchBotOnboarding,
   fetchBotSettings,
   fetchContextDiagnostics,
   fetchBotRuntimeStatus,
@@ -59,7 +60,9 @@ import {
   listAgentJobs,
   provisionAgent,
   setAgentSessionMode,
+  updateBotOnboarding,
 } from "@/lib/api";
+import { FIRST_RUN_ENGINE_PROMPT } from "@/lib/firstRunCeremony";
 import { PENDING_INTENT_KEY } from "@/lib/pendingIntent";
 import { ANONYMOUS_WORK_LEDGER_KEY, upsertAnonymousWorkItem } from "@/lib/anonymousWork";
 import { ANONYMOUS_SPACES_WORKSPACE_ID } from "@/lib/anonymousSpaces";
@@ -204,6 +207,24 @@ jest.mock("@/lib/api", () => ({
       assistant_mode: "balanced",
       autonomy: "supervised",
     },
+  })),
+  fetchBotOnboarding: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ completed: true, completed_at_s: 1 }),
+      headers: new Headers(),
+    },
+    data: { completed: true, completed_at_s: 1 },
+  })),
+  updateBotOnboarding: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ completed: true, completed_at_s: 1 }),
+      headers: new Headers(),
+    },
+    data: { completed: true, completed_at_s: 1 },
   })),
   fetchContextDiagnostics: jest.fn(async () => ({
     response: {
@@ -1051,6 +1072,26 @@ describe("ChatArea Component", () => {
         autonomy: "supervised",
       },
     }));
+    (fetchBotOnboarding as jest.Mock).mockReset();
+    (fetchBotOnboarding as jest.Mock).mockResolvedValue({
+      response: {
+        ok: true,
+        status: 200,
+        json: async () => ({ completed: true, completed_at_s: 1 }),
+        headers: new Headers(),
+      },
+      data: { completed: true, completed_at_s: 1 },
+    });
+    (updateBotOnboarding as jest.Mock).mockReset();
+    (updateBotOnboarding as jest.Mock).mockResolvedValue({
+      response: {
+        ok: true,
+        status: 200,
+        json: async () => ({ completed: true, completed_at_s: 1 }),
+        headers: new Headers(),
+      },
+      data: { completed: true, completed_at_s: 1 },
+    });
     (fetchBotRuntimeStatus as jest.Mock).mockClear();
     (fetchMemoryActivity as jest.Mock).mockClear();
     (listAgentSessions as jest.Mock).mockClear();
@@ -2658,6 +2699,98 @@ describe("ChatArea Component", () => {
         threadId: "main",
       });
     });
+  });
+
+  it("lets the engine author first-run, then persists the user's name-to-own choice", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+    (fetchAgentMe as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (fetchBotOnboarding as jest.Mock).mockResolvedValue({
+      response: {
+        ok: true,
+        status: 200,
+        json: async () => ({ completed: false, completed_at_s: null, can_start_chat_now: true }),
+        headers: new Headers(),
+      },
+      data: { completed: false, completed_at_s: null, can_start_chat_now: true },
+    });
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/agent/chat/stream") {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: async () => ({ type: "done", message: "Hi — it's my birthday. What should we call each other?" }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+        headers: new Headers(),
+      };
+    });
+    (updateBotOnboarding as jest.Mock).mockImplementation(async (payload: { completed: boolean }) => ({
+      response: {
+        ok: true,
+        status: 200,
+        json: async () => ({ completed: payload.completed, completed_at_s: payload.completed ? 1 : null }),
+        headers: new Headers(),
+      },
+      data: { completed: payload.completed, completed_at_s: payload.completed ? 1 : null },
+    }));
+
+    await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(fetchBotOnboarding).toHaveBeenCalledTimes(1);
+      expect(
+        (apiRequest as jest.Mock).mock.calls.some(([path, options]) => {
+          if (path !== "/api/agent/chat/stream") return false;
+          const body = JSON.parse(String(options?.body || "{}"));
+          return (
+            body.message === FIRST_RUN_ENGINE_PROMPT &&
+            body.turnKind === "onboarding_first_turn"
+          );
+        })
+      ).toBe(true);
+    });
+    expect(screen.queryByText(FIRST_RUN_ENGINE_PROMPT)).not.toBeInTheDocument();
+    expect(await screen.findByTestId("first-run-name-card")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "firstRun.name.label" }), {
+      target: { value: "Nova" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "firstRun.name.submitAria" }));
+
+    await waitFor(() => expect(updateBotOnboarding).toHaveBeenCalledTimes(2));
+    expect((updateBotOnboarding as jest.Mock).mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        completed: false,
+        identity: expect.stringContaining("- **Name:** Nova"),
+      })
+    );
+    expect((updateBotOnboarding as jest.Mock).mock.calls[1]?.[0]).toEqual({ completed: true });
+
+    const namingTurnOrder = (apiRequest as jest.Mock).mock.invocationCallOrder.find(
+      (_order, index) => {
+        const [path, options] = (apiRequest as jest.Mock).mock.calls[index] ?? [];
+        if (path !== "/api/agent/chat/stream") return false;
+        return JSON.parse(String(options?.body || "{}")).message === "I'll call you Nova.";
+      }
+    );
+    expect((updateBotOnboarding as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
+      namingTurnOrder as number
+    );
+    expect(namingTurnOrder).toBeLessThan(
+      (updateBotOnboarding as jest.Mock).mock.invocationCallOrder[1] as number
+    );
   });
 
   it("shows setup progress and keeps the Agent composer locked while provisioning", async () => {

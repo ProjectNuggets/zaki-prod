@@ -10,6 +10,10 @@ jest.mock("react-i18next", () => ({
       if (key === "memory.savedMultiple") return `Saved ${options?.count ?? 0} memories`;
       if (key === "memory.updatedSingle") return "Memory updated";
       if (key === "memory.savedHelper") return "You can undo it now or open memory any time.";
+      if (key === "memory.importedTitle") return `I now remember ${options?.count ?? 0} details from your import`;
+      if (key === "memory.importedHelper") {
+        return `${options?.saved ?? 0} new · ${options?.updated ?? 0} updated · ${options?.known ?? 0} known`;
+      }
       if (key === "memory.undo") return "Undo";
       if (key === "memory.undoRetry") return "Retry undo";
       if (key === "memory.open") return "Open memory";
@@ -35,6 +39,22 @@ describe("MemoryCaptureToast", () => {
     );
 
     expect(screen.getByText("Saved 3 memories")).toBeInTheDocument();
+  });
+
+  it("confirms the real absorption count for a memory import", () => {
+    render(
+      <MemoryCaptureToast
+        position={position}
+        source="import"
+        savedCount={3}
+        supersededCount={1}
+        duplicateCount={2}
+        onDismiss={() => {}}
+      />
+    );
+
+    expect(screen.getByText("I now remember 5 details from your import")).toBeInTheDocument();
+    expect(screen.getByText("2 new · 1 updated · 2 known")).toBeInTheDocument();
   });
 
   it("shows retry copy when undo has failed", () => {

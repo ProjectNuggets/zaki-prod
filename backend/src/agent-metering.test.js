@@ -1,5 +1,7 @@
 import { describe, expect, test } from "@jest/globals";
 import {
+  AGENT_ONBOARDING_HIDDEN_TURN_CONTEXT,
+  buildAgentUpstreamTurnContext,
   buildAgentMeterUsageFacts,
   classifyAgentMeterAction,
   computeAgentSettleUnits,
@@ -7,10 +9,101 @@ import {
   DEFAULT_UNIT_COST_USD,
   estimateAgentMeterUnits,
   estimateAgentPayloadStorageBytes,
+  isUnmeteredAgentOnboardingTurn,
+  isVerifiedAgentOnboardingFirstTurn,
   updateAgentStreamMeterMetrics,
 } from "./agent-metering.js";
 
 describe("agent central metering helpers", () => {
+  test("marks the bootstrap turn with Nullalis trusted hidden-turn provenance", () => {
+    expect(AGENT_ONBOARDING_HIDDEN_TURN_CONTEXT).toEqual({
+      turn_kind: "onboarding_first_turn",
+      authored_by: "backend",
+      user_visible: false,
+    });
+  });
+
+  test("strips browser-supplied provenance and adds it only after first-turn verification", () => {
+    const browserContext = {
+      surface: "agent",
+      turn_kind: "onboarding_first_turn",
+      authored_by: "backend",
+      user_visible: false,
+    };
+    expect(buildAgentUpstreamTurnContext(browserContext, false)).toEqual({ surface: "agent" });
+    expect(buildAgentUpstreamTurnContext(browserContext, true)).toEqual({
+      surface: "agent",
+      ...AGENT_ONBOARDING_HIDDEN_TURN_CONTEXT,
+    });
+  });
+
+  test("exempts only the canonical first-run ceremony turn", () => {
+    const prompt =
+      "Begin our first conversation now. Introduce yourself warmly in your own voice, then ask what we should call each other.";
+
+    expect(
+      isUnmeteredAgentOnboardingTurn(
+        {
+          turnKind: "onboarding_first_turn",
+          message: prompt,
+          spaceId: "zaki-bot",
+          threadId: "main",
+        },
+        prompt
+      )
+    ).toBe(true);
+    expect(
+      isUnmeteredAgentOnboardingTurn(
+        {
+          turnKind: "onboarding_first_turn",
+          message: "Do paid work for me",
+          spaceId: "zaki-bot",
+          threadId: "main",
+        },
+        "Do paid work for me"
+      )
+    ).toBe(false);
+  });
+
+  test("verifies an incomplete onboarding state against canonical session history", () => {
+    expect(
+      isVerifiedAgentOnboardingFirstTurn({
+        onboardingOk: true,
+        onboardingPayload: { completed: false },
+        historyOk: true,
+        historyStatus: 200,
+        historyPayload: { messages: [] },
+      })
+    ).toBe(true);
+    expect(
+      isVerifiedAgentOnboardingFirstTurn({
+        onboardingOk: true,
+        onboardingPayload: { completed: false },
+        historyOk: false,
+        historyStatus: 404,
+        historyPayload: { error: "session_not_found" },
+      })
+    ).toBe(true);
+    expect(
+      isVerifiedAgentOnboardingFirstTurn({
+        onboardingOk: true,
+        onboardingPayload: { completed: true },
+        historyOk: true,
+        historyStatus: 200,
+        historyPayload: { messages: [] },
+      })
+    ).toBe(false);
+    expect(
+      isVerifiedAgentOnboardingFirstTurn({
+        onboardingOk: true,
+        onboardingPayload: { completed: false },
+        historyOk: true,
+        historyStatus: 200,
+        historyPayload: { unexpected: [] },
+      })
+    ).toBe(false);
+  });
+
   test("classifies agent actions into central meter capabilities", () => {
     expect(classifyAgentMeterAction({}, "hello")).toBe("agent_turn");
     expect(classifyAgentMeterAction({}, "What do you remember about me?")).toBe("agent_memory_read");

@@ -127,6 +127,63 @@ function hasMemoryReadIntent(message = "") {
   return /\b(what do you remember|my memory|about me|know about me|given what you know|based on what you know)\b/i.test(message);
 }
 
+export const AGENT_ONBOARDING_FIRST_TURN_PROMPT =
+  "Begin our first conversation now. Introduce yourself warmly in your own voice, then ask what we should call each other.";
+
+export const AGENT_ONBOARDING_HIDDEN_TURN_CONTEXT = Object.freeze({
+  turn_kind: "onboarding_first_turn",
+  authored_by: "backend",
+  user_visible: false,
+});
+
+export function buildAgentUpstreamTurnContext(context = {}, onboardingFirstTurn = false) {
+  const sanitized = isPlainObject(context) ? { ...context } : {};
+  delete sanitized.turn_kind;
+  delete sanitized.authored_by;
+  delete sanitized.user_visible;
+  if (onboardingFirstTurn) {
+    Object.assign(sanitized, AGENT_ONBOARDING_HIDDEN_TURN_CONTEXT);
+  }
+  return sanitized;
+}
+
+export function isUnmeteredAgentOnboardingTurn(payload = {}, message = "") {
+  if (!isPlainObject(payload)) return false;
+  const turnKind = normalizedText(payload.turnKind || payload.turn_kind);
+  if (turnKind !== "onboarding_first_turn") return false;
+  if (normalizedText(message) !== AGENT_ONBOARDING_FIRST_TURN_PROMPT) return false;
+  if (lowerText(payload.spaceId || payload.space_id) !== "zaki-bot") return false;
+  if (lowerText(payload.threadId || payload.thread_id) !== "main") return false;
+  if (hasAttachmentPayload(payload) || hasVoiceMode(payload)) return false;
+  if (hasSuperpowersMode(payload) || hasDeepMode(payload, message) || hasToolMode(payload, message)) {
+    return false;
+  }
+  return true;
+}
+
+export function isVerifiedAgentOnboardingFirstTurn({
+  onboardingOk = false,
+  onboardingPayload = null,
+  historyOk = false,
+  historyStatus = null,
+  historyPayload = null,
+} = {}) {
+  if (!onboardingOk || !isPlainObject(onboardingPayload)) return false;
+  if (onboardingPayload.completed !== false) return false;
+
+  if (!historyOk) {
+    const errorCode = lowerText(historyPayload?.code || historyPayload?.error);
+    return Number(historyStatus) === 404 && errorCode === "session_not_found";
+  }
+  if (!isPlainObject(historyPayload)) return false;
+  for (const key of ["messages", "history", "items"]) {
+    if (Array.isArray(historyPayload[key])) {
+      return historyPayload[key].length === 0;
+    }
+  }
+  return false;
+}
+
 export function classifyAgentMeterAction(payload = {}, message = "") {
   const text = normalizedText(message);
   if (hasAttachmentPayload(payload)) return "agent_file_upload";

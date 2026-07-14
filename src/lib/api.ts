@@ -2517,7 +2517,12 @@ export async function fetchBotOnboarding() {
   return { response, data };
 }
 
-export async function updateBotOnboarding(payload: { completed: boolean }) {
+export type BotOnboardingUpdate = {
+  completed: boolean;
+  identity?: string;
+};
+
+export async function updateBotOnboarding(payload: BotOnboardingUpdate) {
   const response = await backendAuthRequest("/v1/me/bot/onboarding", {
     method: "PUT",
     body: JSON.stringify(payload),

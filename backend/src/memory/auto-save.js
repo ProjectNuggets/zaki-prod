@@ -4,8 +4,8 @@
  * S-tier UX: Save immediately, allow short undo window
  */
 
-import { storeMemory, deleteMemory, findConflict, markMemoryOutdated } from "./operations.js";
-import { dbGet, dbQuery } from "../db.js";
+import { storeMemory, findConflict, markMemoryOutdated } from "./operations.js";
+import { dbGet, dbQuery, withDbTransaction } from "../db.js";
 import { sanitizeExtractedMemories } from "../memory-extraction.js";
 
 const DEFAULT_UNDO_WINDOW_MS = Math.max(
@@ -17,17 +17,24 @@ export function getMemoryUndoWindowMs() {
   return DEFAULT_UNDO_WINDOW_MS;
 }
 
-export async function upsertUndoWindow({ memoryId, userId, expiresAt }) {
+export async function upsertUndoWindow({
+  memoryId,
+  userId,
+  expiresAt,
+  supersededMemoryId = null,
+}) {
   await dbQuery(
-    `INSERT INTO memory_undo_windows (memory_id, user_id, expires_at, used_at, created_at)
-     VALUES ($1, $2, $3, NULL, NOW())
+    `INSERT INTO memory_undo_windows
+       (memory_id, user_id, expires_at, used_at, created_at, superseded_memory_id)
+     VALUES ($1, $2, $3, NULL, NOW(), $4)
      ON CONFLICT (memory_id)
      DO UPDATE SET
        user_id = EXCLUDED.user_id,
        expires_at = EXCLUDED.expires_at,
+       superseded_memory_id = EXCLUDED.superseded_memory_id,
        used_at = NULL,
        created_at = NOW()`,
-    [memoryId, userId, expiresAt]
+    [memoryId, userId, expiresAt, supersededMemoryId]
   );
 }
 
@@ -90,6 +97,7 @@ export async function autoSaveWithUndo({ userId, message, threadId = null }) {
           memoryId: result.id,
           userId,
           expiresAt,
+          supersededMemoryId: conflict?.memoryId || null,
         });
       }
     } catch (err) {
@@ -102,7 +110,7 @@ export async function autoSaveWithUndo({ userId, message, threadId = null }) {
 
 export async function undoMemory({ userId, memoryId }) {
   const windowRow = await dbGet(
-    `SELECT memory_id, user_id, expires_at, used_at
+    `SELECT memory_id, user_id, expires_at, used_at, superseded_memory_id
      FROM memory_undo_windows
      WHERE memory_id = $1`,
     [memoryId]
@@ -131,23 +139,29 @@ export async function undoMemory({ userId, memoryId }) {
     return { error: "Undo window expired", success: false };
   }
 
-  const deleted = await deleteMemory(memoryId, userId);
-  if (!deleted) {
-    await dbQuery(
-      `UPDATE memory_undo_windows
-       SET used_at = NOW()
-       WHERE memory_id = $1 AND used_at IS NULL`,
-      [memoryId]
+  const undone = await withDbTransaction(async (client) => {
+    const deleted = await client.query(
+      `DELETE FROM memories
+       WHERE id = $1 AND user_id = $2
+       RETURNING id`,
+      [memoryId, userId]
     );
-    return { error: "Memory not found", success: false };
-  }
+    if (deleted.rowCount === 0) return false;
 
-  await dbQuery(
-    `UPDATE memory_undo_windows
-     SET used_at = NOW()
-     WHERE memory_id = $1 AND used_at IS NULL`,
-    [memoryId]
-  );
+    if (windowRow.superseded_memory_id) {
+      const restored = await client.query(
+        `UPDATE memories
+         SET status = 'active', updated_at = NOW()
+         WHERE id = $1 AND user_id = $2 AND status = 'outdated'`,
+        [windowRow.superseded_memory_id, userId]
+      );
+      if (restored.rowCount === 0) {
+        throw new Error("Superseded memory could not be restored");
+      }
+    }
+    return true;
+  });
+  if (!undone) return { error: "Memory not found", success: false };
 
   return { success: true };
 }

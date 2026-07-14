@@ -203,15 +203,18 @@ export async function fetchNullclawUserHistory({
   internalToken,
   userId,
   requestId,
+  sessionKey = null,
   spaceId,
   threadId,
   fetchWithTimeout,
   timeoutMs,
 }) {
-  const historyPath =
-    `/api/v1/users/${encodeURIComponent(userId)}/history` +
-    `?space_id=${encodeURIComponent(spaceId)}` +
-    `&thread_id=${encodeURIComponent(threadId)}`;
+  const normalizedSessionKey = String(sessionKey || "").trim();
+  const historyPath = normalizedSessionKey
+    ? `/api/v1/users/${encodeURIComponent(userId)}/sessions/${encodeURIComponent(normalizedSessionKey)}/history`
+    : `/api/v1/users/${encodeURIComponent(userId)}/history` +
+      `?space_id=${encodeURIComponent(spaceId)}` +
+      `&thread_id=${encodeURIComponent(threadId)}`;
   return fetchNullclawPath({
     baseUrl,
     internalToken,
