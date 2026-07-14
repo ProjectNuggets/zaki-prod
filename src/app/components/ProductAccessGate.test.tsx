@@ -13,7 +13,7 @@ jest.mock("react-i18next", () => ({
 function renderGate(
   productId: "design" | "minutes",
   title: string,
-  mode: "coming_soon" | "private_beta" | "waitlist"
+  mode: "coming_soon" | "private_beta"
 ) {
   return render(
     <MemoryRouter>
@@ -33,20 +33,8 @@ describe("ProductAccessGate", () => {
     expect(screen.getByRole("heading", { name: "This product is gated for private access" })).toBeInTheDocument();
     expect(screen.getByText("Private access")).toBeInTheDocument();
     expect(screen.getByText("Launch state: private access")).toBeInTheDocument();
-    expect(screen.getByText("Agent, Chat/Spaces, Design, Minutes")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open dashboard/ })).toHaveAttribute("href", "/");
-  });
-
-  it("labels waitlist products without exposing app access", () => {
-    renderGate("design", "ZAKI Design", "waitlist");
-
-    expect(screen.getByTestId("product-gate-design")).toHaveAttribute(
-      "data-product-gate",
-      "waitlist"
-    );
-    expect(screen.getByRole("heading", { name: "This product is on the waitlist" })).toBeInTheDocument();
-    expect(screen.getByText("Waitlist")).toBeInTheDocument();
-    expect(screen.getByText("Launch state: waitlist")).toBeInTheDocument();
+    // The chat lane is named "Spaces" here too — no "Chat/Spaces" dual naming.
+    expect(screen.getByText("Agent, Spaces, Design, Minutes")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open dashboard/ })).toHaveAttribute("href", "/");
   });
 
@@ -58,5 +46,17 @@ describe("ProductAccessGate", () => {
       "coming_soon"
     );
     expect(screen.getByText("Coming soon")).toBeInTheDocument();
+  });
+
+  it("uses 'Coming soon' for Design too — the 'Waitlist' synonym is gone", () => {
+    // WP-K: Design and Minutes are the same launch state and must read identically.
+    renderGate("design", "ZAKI Design", "coming_soon");
+
+    expect(screen.getByTestId("product-gate-design")).toHaveAttribute(
+      "data-product-gate",
+      "coming_soon"
+    );
+    expect(screen.getByText("Coming soon")).toBeInTheDocument();
+    expect(screen.queryByText(/waitlist/i)).not.toBeInTheDocument();
   });
 });

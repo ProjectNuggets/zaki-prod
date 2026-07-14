@@ -31,7 +31,6 @@ export const RELEASE_TOKEN = "release-qa-token";
 
 export type ReleaseVisibilityTier =
   | "public"
-  | "waitlist"
   | "coming_soon"
   | "support"
   | "hidden";
@@ -47,7 +46,7 @@ export const RELEASE_VISIBILITY: Record<string, ReleaseVisibilityTier> = {
   brain: "support",
   learning: "hidden",
   hire: "hidden",
-  design: "waitlist",
+  design: "coming_soon",
   minutes: "coming_soon",
 };
 
@@ -221,7 +220,7 @@ function releaseBrainGraph(empty = false) {
         kind: "conversation",
         created_at: 1_779_920_000,
         session_id: "session-release",
-        summary: "ZAKI has four visible spokes: Agent, Chat/Spaces, Design, and Minutes; Brain is the Agent memory view.",
+        summary: "ZAKI has four visible spokes: Agent, Spaces, Design, and Minutes; Brain is the Agent memory view.",
         valid_to: null,
         importance: 0.91,
         display_label: "ZAKI V1",

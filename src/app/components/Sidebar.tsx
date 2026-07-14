@@ -2,7 +2,7 @@ import {
   LogoArabicRed, SideBarIcon, SearchIcon, AddIcon, 
   ChevronDownIcon, CenterLogo
 } from "./icons";
-import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain, ShieldCheck, Bot, Library, LayoutGrid, MessageSquare, PenLine, Database, Activity, Upload, User, Clock3, type LucideIcon } from "lucide-react";
+import { MoreHorizontal, Pin, Pencil, Trash2, Folder, Briefcase, BookOpen, GraduationCap, Sparkles, Palette, FileText, Moon, Settings, Globe, HelpCircle, LogOut, Brain, ShieldCheck, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MEMORY_PANEL_REFRESH_EVENTS } from "@/lib/memoryEvents";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
@@ -105,61 +105,11 @@ type AgentControlTab =
 
 const PENDING_AGENT_CONTROLS_TAB_KEY = "zaki:pendingPowerUserTab";
 
-type LearningSubnavEntry = {
-  view: string;
-  label: string;
-  icon: LucideIcon;
-};
-
-const LEARNING_SUBNAV: LearningSubnavEntry[] = [
-  { view: "chat", label: "Chat", icon: MessageSquare },
-  { view: "agents", label: "TutorBot", icon: Bot },
-  { view: "writer", label: "Co-Writer", icon: PenLine },
-  { view: "books", label: "Book", icon: Library },
-  { view: "sources", label: "Knowledge", icon: BookOpen },
-  { view: "space", label: "Space", icon: LayoutGrid },
-];
-
-const LEARNING_VIEW_ALIASES: Record<string, string> = {
-  tutorbot: "agents",
-  "co-writer": "writer",
-  book: "books",
-  knowledge: "sources",
-  notebooks: "space",
-  questions: "space",
-  review: "space",
-  solve: "chat",
-};
-
-function normalizeLearningView(value: string | null) {
-  const normalized = String(value || "chat").trim().toLowerCase();
-  return LEARNING_VIEW_ALIASES[normalized] || normalized || "chat";
-}
-
-const HIRE_SUBNAV: LearningSubnavEntry[] = [
-  { view: "dashboard", label: "Dashboard", icon: Activity },
-  { view: "pipeline", label: "Pipeline", icon: Briefcase },
-  { view: "profile", label: "Profile", icon: User },
-  { view: "import", label: "Import", icon: Upload },
-  { view: "activity", label: "Activity", icon: Clock3 },
-];
-
-function normalizeHireView(value: string | null) {
-  const normalized = String(value || "dashboard").trim().toLowerCase();
-  return HIRE_SUBNAV.some((item) => item.view === normalized) ? normalized : "dashboard";
-}
-
 export function Sidebar({ chrome = "full" }: SidebarProps) {
   const { t, i18n } = useTranslation();
   const contextOnly = chrome === "context";
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
   const location = useLocation();
-  const activeLearningView = normalizeLearningView(
-    new URLSearchParams(location.search).get("view")
-  );
-  const activeHireView = normalizeHireView(
-    new URLSearchParams(location.search).get("view")
-  );
   const fileStatusTone = {
     embedded: {
       chip: "bg-emerald-50 text-emerald-700 border border-emerald-200",
@@ -1374,20 +1324,16 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
             <div className="zaki-sidebar-v2-kicker">
               {sidebarMode === "zaki"
                 ? t("sidebar.context.agent", { defaultValue: "Agent" })
-                : sidebarMode === "learning"
-                ? t("sidebar.context.learn", { defaultValue: "Learn" })
                 : sidebarMode === "brain"
                 ? t("sidebar.context.brain", { defaultValue: "Brain" })
-                : t("sidebar.context.chat", { defaultValue: "Chat" })}
+                : t("sidebar.context.spaces", { defaultValue: "Spaces" })}
             </div>
             <div className="zaki-sidebar-v2-title">
               {sidebarMode === "zaki"
                 ? t("sidebar.context.threads", { defaultValue: "Threads" })
-                : sidebarMode === "learning"
-                ? t("sidebar.context.learningTools", { defaultValue: "Learning tools" })
                 : sidebarMode === "brain"
                 ? t("sidebar.context.memoryGraph", { defaultValue: "Memory graph" })
-                : t("sidebar.context.workspaces", { defaultValue: "Workspaces" })}
+                : t("sidebar.context.spacesList", { defaultValue: "Spaces" })}
             </div>
           </div>
           {sidebarMode === "zaki" ? (
@@ -1553,44 +1499,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
             }}
             isRtl={!!isRtl}
           />
-        ) : sidebarMode === "learning" ? (
-          <div className="flex flex-col gap-1">
-            {LEARNING_SUBNAV.map((item) => {
-              const Icon = item.icon;
-              const active = activeLearningView === item.view;
-              return (
-                <button
-                  key={item.view}
-                  type="button"
-                  onClick={() => {
-                    navigate(`/learn?view=${item.view}`);
-                    window.dispatchEvent(new Event("zaki:close-mobile-sidebar"));
-                  }}
-                  className={cn(
-                    "relative flex w-full items-center gap-2 rounded-lg p-1.5 text-sm font-medium transition-colors",
-                    isRtl ? "flex-row-reverse text-right" : "text-left",
-                    active
-                      ? "bg-zaki-hover text-zaki-primary"
-                      : "text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-primary"
-                  )}
-                  aria-current={active ? "page" : undefined}
-                >
-                  {active && (
-                    <div
-                      className={cn(
-                        "absolute top-1/2 h-[60%] w-[3px] -translate-y-1/2 rounded-r-sm bg-zaki-brand",
-                        isRtl ? "right-0 rounded-l-sm rounded-r-none" : "left-0"
-                      )}
-                    />
-                  )}
-                  <span className="flex size-5 items-center justify-center">
-                    <Icon className="size-4 text-zaki-muted" />
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                </button>
-              );
-            })}
-          </div>
         ) : sidebarMode === "brain" ? (
           <div className="zaki-sidebar-v2-static">
             <button type="button" onClick={() => navigate("/brain")}>
@@ -1614,44 +1522,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
               <Settings className="size-4" />
               <span>{t("sidebar.profile.settings")}</span>
             </button>
-          </div>
-        ) : sidebarMode === "hire" ? (
-          <div className="flex flex-col gap-1">
-            {HIRE_SUBNAV.map((item) => {
-              const Icon = item.icon;
-              const active = activeHireView === item.view;
-              return (
-                <button
-                  key={item.view}
-                  type="button"
-                  onClick={() => {
-                    navigate(`/hire?view=${item.view}`);
-                    window.dispatchEvent(new Event("zaki:close-mobile-sidebar"));
-                  }}
-                  className={cn(
-                    "relative flex w-full items-center gap-2 rounded-lg p-1.5 text-sm font-medium transition-colors",
-                    isRtl ? "flex-row-reverse text-right" : "text-left",
-                    active
-                      ? "bg-zaki-hover text-zaki-primary"
-                      : "text-zaki-secondary hover:bg-zaki-hover hover:text-zaki-primary"
-                  )}
-                  aria-current={active ? "page" : undefined}
-                >
-                  {active && (
-                    <div
-                      className={cn(
-                        "absolute top-1/2 h-[60%] w-[3px] -translate-y-1/2 rounded-r-sm bg-zaki-brand",
-                        isRtl ? "right-0 rounded-l-sm rounded-r-none" : "left-0"
-                      )}
-                    />
-                  )}
-                  <span className="flex size-5 items-center justify-center">
-                    <Icon className="size-4 text-zaki-muted" />
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                </button>
-              );
-            })}
           </div>
         ) : (
           <>

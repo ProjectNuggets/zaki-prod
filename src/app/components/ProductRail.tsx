@@ -1,12 +1,10 @@
 import {
   Brain,
-  BriefcaseBusiness,
   Bot,
   Cable,
   Clock3,
   CreditCard,
   Database,
-  GraduationCap,
   LayoutGrid,
   LogIn,
   LogOut,
@@ -28,22 +26,24 @@ import { toast } from "sonner";
 import { LogoArabicRed } from "./icons";
 
 type ProductRailItem = {
-  id: "dashboard" | "agent" | "chat" | "brain" | "learn" | "hire" | "design" | "minutes";
+  id: "dashboard" | "agent" | "spaces" | "brain" | "design" | "minutes";
   labelKey: string;
   fallback: string;
   shortcut: string;
   icon: typeof LayoutGrid;
-  disabled?: boolean;
+  /**
+   * Marks a spoke that is visible but not live yet. It stays CLICKABLE — it navigates to
+   * the lane's coming-soon gate page. Never render an inert control (spec §A2).
+   */
+  comingSoon?: boolean;
   action: () => void;
 };
 
 function isActiveProduct(pathname: string, itemId: ProductRailItem["id"]) {
   if (itemId === "dashboard") return pathname === "/" || pathname === "/about";
   if (itemId === "agent") return pathname === "/agent";
-  if (itemId === "chat") return pathname === "/spaces" || pathname.startsWith("/spaces/");
+  if (itemId === "spaces") return pathname === "/spaces" || pathname.startsWith("/spaces/");
   if (itemId === "brain") return pathname === "/brain";
-  if (itemId === "learn") return pathname === "/learn";
-  if (itemId === "hire") return pathname === "/hire";
   if (itemId === "design") return pathname === "/design";
   if (itemId === "minutes") return pathname === "/minutes";
   return false;
@@ -100,9 +100,9 @@ export function ProductRail() {
       action: openAgent,
     },
     {
-      id: "chat",
-      labelKey: "productRail.chat",
-      fallback: "Chat",
+      id: "spaces",
+      labelKey: "productRail.spaces",
+      fallback: "Spaces",
       shortcut: "⌘3",
       icon: MessageSquareText,
       action: goToSpaces,
@@ -116,31 +116,13 @@ export function ProductRail() {
       action: openBrain,
     },
     {
-      id: "learn",
-      labelKey: "productRail.learn",
-      fallback: "Learn",
-      shortcut: "⌘5",
-      icon: GraduationCap,
-      disabled: true,
-      action: () => undefined,
-    },
-    {
-      id: "hire",
-      labelKey: "productRail.hire",
-      fallback: "Career",
-      shortcut: "⌘6",
-      icon: BriefcaseBusiness,
-      disabled: true,
-      action: () => undefined,
-    },
-    {
       id: "design",
       labelKey: "productRail.design",
       fallback: "Design",
       shortcut: "⌘5",
       icon: Palette,
-      disabled: true,
-      action: () => undefined,
+      comingSoon: true,
+      action: () => navigate("/design"),
     },
     {
       id: "minutes",
@@ -148,8 +130,8 @@ export function ProductRail() {
       fallback: "Minutes",
       shortcut: "⌘6",
       icon: Clock3,
-      disabled: true,
-      action: () => undefined,
+      comingSoon: true,
+      action: () => navigate("/minutes"),
     },
   ] satisfies ProductRailItem[]).filter(
     (item) => item.id === "dashboard" || isProductVisibleInRelease(item.id)
@@ -255,20 +237,23 @@ export function ProductRail() {
         const Icon = item.icon;
         const active = isActiveProduct(location.pathname, item.id);
         const label = t(item.labelKey, { defaultValue: item.fallback });
+        const comingSoonLabel = t("productRail.comingSoon", { defaultValue: "Coming soon" });
         return (
           <button
             key={item.id}
             type="button"
-            className={cn("zaki-product-rail__button", item.disabled && "is-disabled")}
-            onClick={item.disabled ? undefined : item.action}
+            className={cn("zaki-product-rail__button", item.comingSoon && "is-soon")}
+            onClick={item.action}
             aria-current={active ? "page" : undefined}
-            aria-disabled={item.disabled ? true : undefined}
-            disabled={item.disabled}
-            title={label}
+            data-coming-soon={item.comingSoon ? "true" : undefined}
+            title={item.comingSoon ? `${label} — ${comingSoonLabel}` : label}
           >
             <Icon className="zaki-product-rail__icon" aria-hidden="true" />
             <span className="zaki-product-rail__tip">
               {label}
+              {item.comingSoon ? (
+                <span className="zaki-product-rail__state">{comingSoonLabel}</span>
+              ) : null}
               <span className="zaki-product-rail__kbd">{item.shortcut}</span>
             </span>
           </button>
@@ -338,7 +323,7 @@ export function ProductRail() {
                 {t("productRail.agent", { defaultValue: "Agent" })}
               </button>
               <button type="button" role="menuitem" onClick={() => runMenuAction(goToSpaces)}>
-                {t("productRail.chat", { defaultValue: "Chat" })}
+                {t("productRail.spaces", { defaultValue: "Spaces" })}
               </button>
               <button type="button" role="menuitem" onClick={() => runMenuAction(openBrain)}>
                 {t("productRail.brain", { defaultValue: "Brain" })}

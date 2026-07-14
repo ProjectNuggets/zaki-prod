@@ -30,6 +30,7 @@ import {
   isUsageNearCap,
 } from "@/lib/usageDisplay";
 import { useMeterStatus } from "@/queries/useBilling";
+import { isProductVisibleInRelease } from "@/lib/productRoutes";
 import { SheetShell } from "@/app/components/ui/zaki";
 import {
   downloadAgentExportFile,
@@ -166,13 +167,13 @@ const EXTENSION_TOOL_NAMES = [
 
 // Per-product usage rows, all read from the canonical unit meter (/api/meter/status products{}),
 // not the legacy per-surface /api/usage/quota prompt-count. The meter/registry product ids are
-// spaces/agent/learning (NOT the legacy surface names app_chat/zaki_bot/learn); labels reuse the
-// existing surface strings.
+// spaces/agent (NOT the legacy surface names app_chat/zaki_bot); labels reuse the existing
+// surface strings. Only release-visible products get a row — the meter may still report
+// retired products (e.g. learning), but they must never surface in the UI.
 const USAGE_PRODUCTS: Array<{ productId: string; labelKey: string }> = [
   { productId: "spaces", labelKey: "zakiControls.powerUser.usage.surfaces.app_chat" },
   { productId: "agent", labelKey: "zakiControls.powerUser.usage.surfaces.zaki_bot" },
-  { productId: "learning", labelKey: "zakiControls.powerUser.usage.surfaces.learning" },
-];
+].filter((row) => isProductVisibleInRelease(row.productId));
 
 type AgentDiagnosticsSurface = Awaited<ReturnType<typeof fetchAgentDiagnostics>>["data"];
 

@@ -284,6 +284,16 @@ export const router = createBrowserRouter([
         element: routeSuspense(<SettingsPage />, <SkeletonSettingsPage />),
       },
       {
+        // Legacy alias for the Spaces lane. The lane is named "Spaces" everywhere, but old
+        // links/bookmarks still point at /chat — redirect instead of leaving a dead URL.
+        path: 'chat',
+        element: <Navigate to="/spaces" replace />,
+      },
+      {
+        path: 'chat/*',
+        element: <Navigate to="/spaces" replace />,
+      },
+      {
         path: 'learn',
         element: <Navigate to="/" replace />,
       },
@@ -297,7 +307,7 @@ export const router = createBrowserRouter([
           <ProductAccessGate
             productId="design"
             title="ZAKI Design"
-            mode="waitlist"
+            mode="coming_soon"
           />
         ),
       },

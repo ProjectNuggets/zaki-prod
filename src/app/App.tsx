@@ -60,8 +60,7 @@ function normalizePathname(pathname: string) {
 
 function isGatedProductPath(pathname: string) {
   const normalized = normalizePathname(pathname);
-  const state = getProductLaunchState(normalized.slice(1));
-  return state === "waitlist" || state === "coming_soon";
+  return getProductLaunchState(normalized.slice(1)) === "coming_soon";
 }
 
 function isHiddenProductPath(pathname: string) {

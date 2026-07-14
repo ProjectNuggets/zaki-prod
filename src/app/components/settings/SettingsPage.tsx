@@ -440,7 +440,6 @@ function getUsageLaunchStateLabel(
   const fallback: Record<Exclude<ProductLaunchState, "unknown">, string> = {
     public_app: "Launch: public app",
     private_beta: "Launch: private access",
-    waitlist: "Launch: waitlist",
     coming_soon: "Launch: coming soon",
     hidden: "Launch: hidden",
   };
@@ -3055,7 +3054,7 @@ export function SettingsPage() {
                   })}
                   description={t("settingsModal.memoryData.capturePolicy.helper", {
                     defaultValue:
-                      "Controls only Chat/Spaces memory capture. Agent memory does not have a master on/off switch yet.",
+                      "Controls only Spaces memory capture. Agent memory does not have a master on/off switch yet.",
                   })}
                 >
                   <select
@@ -3085,7 +3084,7 @@ export function SettingsPage() {
                   })}
                   description={t("settingsModal.memoryData.capturePolicy.helper", {
                     defaultValue:
-                      "Controls only Chat/Spaces memory capture. Agent memory does not have a master on/off switch yet.",
+                      "Controls only Spaces memory capture. Agent memory does not have a master on/off switch yet.",
                   })}
                   reason={t("settingsModal.memoryData.capturePolicy.unavailable", {
                     defaultValue: "Memory preferences are not available in this environment.",

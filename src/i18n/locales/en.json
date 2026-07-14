@@ -188,7 +188,6 @@
       "launchState": {
         "public_app": "Launch: public app",
         "private_beta": "Launch: private access",
-        "waitlist": "Launch: waitlist",
         "hidden": "Launch: hidden"
       },
       "helper": "Usage is shown as a calm weekly percentage. Pricing explains the underlying allowance."
@@ -226,7 +225,7 @@
         "sessionMemory": "Session memory"
       },
       "entryPoints": {
-        "spaces": "Spaces / Chat",
+        "spaces": "Spaces",
         "agent": "Agent workbench",
         "learning": "Learning",
         "hire": "Career",
@@ -387,7 +386,7 @@
       "queryExpansionHelper": "Let Agent broaden short memory searches so it can find relevant saved context more reliably.",
       "capturePolicy": {
         "name": "Chat memory capture",
-        "helper": "Controls only Chat/Spaces memory capture. Agent memory does not have a master on/off switch yet.",
+        "helper": "Controls only Spaces memory capture. Agent memory does not have a master on/off switch yet.",
         "unavailable": "Memory preferences are not available in this environment.",
         "options": {
           "balanced": "Save useful Chat context",
@@ -521,8 +520,6 @@
       "saving": "Saving..."
     },
     "brain": "Brain",
-    "learning": "Learn",
-    "hire": "Career",
     "memory": {
       "title": "Your Memory",
       "subtitle": "What ZAKI remembers about you",
@@ -798,13 +795,13 @@
       "errorGeneric": "Voice capture failed",
       "errorNoBrowser": "Voice not supported in this browser"
     },
-      "placeholders": [
-        "Ask anything",
-        "Summarize our last conversation",
-        "Let's brainstorm a plan",
-        "Draft a message or email",
-        "Turn this into a checklist"
-      ],
+    "placeholders": [
+      "Ask anything",
+      "Summarize our last conversation",
+      "Let's brainstorm a plan",
+      "Draft a message or email",
+      "Turn this into a checklist"
+    ],
     "dropFile": "Drop to attach"
   },
   "zakiBootstrapCard": {
@@ -1111,8 +1108,7 @@
       "usage": {
         "surfaces": {
           "app_chat": "Web chat",
-          "zaki_bot": "Agent",
-          "learning": "Learn"
+          "zaki_bot": "Agent"
         },
         "states": {
           "normal": "OK",
@@ -1282,7 +1278,7 @@
     "back": "Back",
     "eyebrow": "Plans",
     "title": "Choose how ZAKI should keep working with you",
-    "subtitle": "Start free in Chat without an account. Upgrade when you want more room for Agent, Chat, Spaces, and Brain. Learn, Design, and Career stay parked until their full flows are ready.",
+    "subtitle": "Start free in Spaces without an account. Upgrade when you want more room for Agent, Spaces, and Brain. Design and Minutes stay parked until their full flows are ready.",
     "subtitleAccessActive": "Your access code unlocks the V1 core for now. Product-specific codes come later.",
     "comparisonNote": "V1 pricing is intentionally simple: free Chat, three paid usage tiers, Brain included with account continuity, and future products clearly marked as coming soon.",
     "highlightsTemplates": {
@@ -1413,11 +1409,10 @@
       "future": {
         "label": "Coming next",
         "price": "Soon",
-        "blurb": "Learn, Design, and Career are visible, but not sold as public products yet.",
+        "blurb": "Design and Minutes are visible as future spokes, but not sold as public products yet.",
         "features": [
-          "Learn returns when learner state is safe",
           "Design launches after project creation is proven",
-          "Career stays user-side and private until ready"
+          "Minutes launches once ingestion, privacy, and retention are finalized"
         ],
         "cta": "Open dashboard"
       }
@@ -1762,12 +1757,11 @@
     "openDashboard": "Open dashboard",
     "dashboard": "Dashboard",
     "agent": "Agent",
-    "chat": "Chat",
+    "spaces": "Spaces",
     "brain": "Brain",
-    "learn": "Learn",
-    "hire": "Career",
     "design": "Design",
     "minutes": "Minutes",
+    "comingSoon": "Coming soon",
     "settings": "Settings",
     "quickSettings": {
       "title": "Quick settings",
@@ -2004,9 +1998,7 @@
         },
         "spaces": "Ask a question, draft a reply, translate text, or compare options.",
         "design": "Sketch the product, page, or brand direction you want to shape.",
-        "minutes": "Bring a meeting recording or notes; Minutes will turn them into decisions and follow-ups.",
-        "learning": "Name the topic and goal; ZAKI can make a study plan or explain the first step.",
-        "hire": "Paste a role, CV note, or career goal; ZAKI can shape the next move."
+        "minutes": "Bring a meeting recording or notes; Minutes will turn them into decisions and follow-ups."
       },
       "saveWork": "Save this work",
       "offlineHelper": "You are offline. We kept this draft here and will send when you reconnect.",
@@ -2015,9 +2007,9 @@
       "authRequiredPromptHelper": "Sign in to continue in {{product}}. We'll keep this prompt through authentication.",
       "agentCreditsLow": "Agent needs room.",
       "capacityWindowLow": "{{hours}}h Agent window is {{percent}}% used. Next room clears {{reset}}.",
-      "comingSoonHelper": "{{product}} is coming soon. Use Chat or Agent to start now.",
+      "comingSoonHelper": "{{product}} is coming soon. Use Spaces or Agent to start now.",
       "submitSignIn": "Sign in for {{product}}",
-      "submitChat": "Start chat",
+      "submitChat": "Start in Spaces",
       "submitOpen": "Continue in {{product}}",
       "submitComingSoon": "{{product}} coming soon",
       "creditsExhaustedTitle": "Weekly usage is full.",
@@ -2036,17 +2028,29 @@
         "live": "Live",
         "save": "Save",
         "beta": "Beta",
-        "waitlist": "Waitlist",
         "comingSoon": "Coming soon"
       },
       "verbs": {
-        "agent": { "signed": "move", "guest": "plan" },
-        "brain": { "signed": "map", "guest": "map" },
-        "spaces": { "signed": "chat", "guest": "chat" },
-        "design": { "signed": "shape", "guest": "shape" },
-        "minutes": { "signed": "capture", "guest": "capture" },
-        "learning": { "signed": "learn", "guest": "study" },
-        "hire": { "signed": "advance", "guest": "advance" }
+        "agent": {
+          "signed": "move",
+          "guest": "plan"
+        },
+        "brain": {
+          "signed": "map",
+          "guest": "map"
+        },
+        "spaces": {
+          "signed": "chat",
+          "guest": "chat"
+        },
+        "design": {
+          "signed": "shape",
+          "guest": "shape"
+        },
+        "minutes": {
+          "signed": "capture",
+          "guest": "capture"
+        }
       },
       "hints": {
         "agent": {
@@ -2058,10 +2062,8 @@
           "guest": "Sign in to open Brain and save or read your memory graph."
         },
         "spaces": "Ask now, draft quickly, or test the platform without setting anything up.",
-        "design": "Design is coming soon. For now, use Chat to shape a brief or Agent to plan the design work.",
-        "minutes": "Minutes is coming soon. For now, use Chat for a summary or Agent to plan follow-up work.",
-        "learning": "Learn is coming soon. For now, use Chat for quick study help or Agent to plan a learning path.",
-        "hire": "Career is gated. For now, use Chat to improve CV copy or Agent to plan your next move."
+        "design": "Design is coming soon. For now, use Spaces to shape a brief or Agent to plan the design work.",
+        "minutes": "Minutes is coming soon. For now, use Spaces for a summary or Agent to plan follow-up work."
       },
       "details": {
         "agent": {
@@ -2085,26 +2087,19 @@
           }
         },
         "spaces": {
-          "headline": "If you need a fast answer, draft, or translation, use Chat.",
+          "headline": "If you need a fast answer, draft, or translation, use Spaces.",
           "note": "No setup. Anonymous usage works until you choose to save."
         },
         "design": {
-          "headline": "If you need a design brief today, use Chat or Agent.",
-          "note": "Design stays waitlisted until the project service is ready."
+          "headline": "If you need a design brief today, use Spaces or Agent.",
+          "note": "Design is coming soon while the project service is finalized."
         },
         "minutes": {
-          "headline": "If you need meeting notes today, use Chat or Agent.",
+          "headline": "If you need meeting notes today, use Spaces or Agent.",
           "note": "Minutes is coming soon while ingestion, privacy, and retention are finalized."
-        },
-        "learning": {
-          "headline": "If you need study help today, use Chat or Agent.",
-          "note": "Learn stays gated until learner state and the beta path are ready."
-        },
-        "hire": {
-          "headline": "If you need CV or career planning today, use Chat or Agent.",
-          "note": "Career stays gated until the private workflow is ready."
         }
-      }
+      },
+      "continueInSpaces": "Continue in Spaces instead"
     },
     "links": {
       "howItWorks": "How it works",
@@ -2207,10 +2202,8 @@
       "notAvailableAria": "{{product}} is not available",
       "names": {
         "agent": "Agent",
-        "spaces": "Chat",
+        "spaces": "Spaces",
         "brain": "Brain",
-        "learning": "Learn",
-        "hire": "Career",
         "design": "Design",
         "minutes": "Minutes"
       },
@@ -2225,10 +2218,8 @@
       },
       "descriptions": {
         "agent": "Personal agent for planning, follow-through, tools, channels, and durable brain memory.",
-        "spaces": "Workspace chat for threads, files, and focused shared context.",
+        "spaces": "Spaces for threads, files, and focused shared context.",
         "brain": "The memory graph made visible: provenance, scopes, conflicts, and governance.",
-        "learning": "Study surface for sources, notebooks, tutors, quizzes, and learner memory.",
-        "hire": "Career support for target roles, CV positioning, fit notes, applications, and career memory.",
         "design": "Future design surface for briefs, assets, iterations, and design memory.",
         "minutes": "Future meeting surface for notes, decisions, owners, and follow-ups."
       }
@@ -2287,7 +2278,7 @@
     "comingSoon": {
       "badge": "Coming soon",
       "heading": "This product is coming soon",
-      "body": "{{product}} is visible in the ZAKI family, but public V1 is focused on Dashboard, Agent, Chat, Brain, and Settings first.",
+      "body": "{{product}} is visible in the ZAKI family, but public V1 is focused on Dashboard, Agent, Spaces, Brain, and Settings first.",
       "action": "Open dashboard"
     },
     "privateBeta": {
@@ -2296,17 +2287,10 @@
       "body": "{{product}} is gated while route access, entitlement, memory boundaries, and signed-in E2E coverage are finalized together.",
       "action": "Open dashboard"
     },
-    "waitlist": {
-      "badge": "Waitlist",
-      "heading": "This product is on the waitlist",
-      "body": "{{product}} is visible as a future ZAKI surface, but it is not a public app product or paid plan yet.",
-      "action": "Open dashboard"
-    },
     "status": {
       "checking": "Checking access",
       "comingSoon": "Launch state: coming soon",
       "privateBeta": "Launch state: private access",
-      "waitlist": "Launch state: waitlist",
       "state": "State: {{state}}",
       "hidden": "Not exposed"
     },
@@ -2315,14 +2299,13 @@
       "meta": "Public V1"
     },
     "facts": {
-      "public": "Public surfaces",
-      "publicValue": "Dashboard, Agent, Chat, Brain, Settings",
+      "public": "Visible spokes",
+      "publicValue": "Agent, Spaces, Design, Minutes",
       "memory": "Memory boundary",
       "memoryValue": "Kept separate until explicitly launched",
       "next": "Next step",
-      "comingSoonValue": "Start today with Chat or Agent from the dashboard; use Brain to manage memory.",
-      "privateBetaValue": "Use Chat or Agent today. Brain stays focused on memory controls while access is finalized.",
-      "waitlistValue": "Visit the product page for context, or start with Chat or Agent today."
+      "comingSoonValue": "Start today with Spaces or Agent from the dashboard; use Brain to manage memory.",
+      "privateBetaValue": "Use Spaces or Agent today. Brain stays focused on memory controls while access is finalized."
     }
   },
   "task": {

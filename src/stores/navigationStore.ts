@@ -2,7 +2,9 @@ import { create } from "zustand";
 import { ZAKI_BOT_SPACE_ID } from "@/lib/zakiBot";
 
 type ViewType = "home" | "about" | "spaces" | "space-detail" | "chat";
-export type SidebarMode = "zaki" | "spaces" | "brain" | "learning" | "hire";
+// "learning" | "hire" were removed with the four-spokes cut (WP-K). Re-adding either here
+// is what would let the retired Learn/Hire subnavs resurface, so keep this union closed.
+export type SidebarMode = "zaki" | "spaces" | "brain";
 
 interface NavigationState {
   view: ViewType;

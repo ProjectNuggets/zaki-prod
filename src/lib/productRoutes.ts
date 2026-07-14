@@ -1,7 +1,8 @@
+// Launch-state vocabulary is deliberately closed. "coming_soon" is the ONE name for
+// a visible-but-not-yet-live spoke; the old "waitlist" synonym is banned (WP-K).
 export type ProductLaunchState =
   | "public_app"
   | "private_beta"
-  | "waitlist"
   | "coming_soon"
   | "hidden"
   | "unknown";
@@ -34,12 +35,14 @@ const PRODUCT_LAUNCH_POLICIES: Record<string, ProductLaunchPolicy> = {
     appRoute: "/agent",
     marketingRoute: "/products/agent",
   },
+  // "spaces" is the canonical id AND the canonical display name for the chat lane.
   spaces: {
     launchState: "public_app",
     releaseRole: "spoke",
     appRoute: "/spaces",
     marketingRoute: "/products/spaces",
   },
+  // Legacy inbound alias only (old marketing links, ?product=chat). Never a display name.
   chat: {
     launchState: "public_app",
     releaseRole: "spoke",
@@ -69,7 +72,7 @@ const PRODUCT_LAUNCH_POLICIES: Record<string, ProductLaunchPolicy> = {
     releaseRole: "hidden",
   },
   design: {
-    launchState: "waitlist",
+    launchState: "coming_soon",
     releaseRole: "spoke",
     appRoute: "/design",
     marketingRoute: "/product",

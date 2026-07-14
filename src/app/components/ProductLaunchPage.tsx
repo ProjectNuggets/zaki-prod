@@ -22,7 +22,7 @@ type LaunchCopy = {
 
 function normalizeProductId(productId?: string | null) {
   const key = String(productId || "").trim().toLowerCase();
-  if (key === "learning") return "learn";
+  // "chat" is a legacy inbound alias; the lane is canonically "spaces".
   if (key === "chat") return "spaces";
   if (key === "zaki-agent" || key === "zaki-bot") return "agent";
   return key || "product";
@@ -55,25 +55,25 @@ const LAUNCH_COPY: Record<string, LaunchCopy> = {
   },
   spaces: {
     id: "spaces",
-    heading: "ZAKI Chat",
+    heading: "ZAKI Spaces",
     badge: "Public app",
     body:
-      "Use Chat for quick questions, drafting, translation, and lightweight thinking without setup.",
-    primaryLabel: "Open Chat",
+      "Use Spaces for quick questions, drafting, translation, and lightweight thinking without setup.",
+    primaryLabel: "Open Spaces",
     primaryHref: "/spaces?source=website_product_spaces&intent=chat",
     policy: "Available now",
-    next: "Start in Chat, then move durable work into Agent or Brain when needed.",
+    next: "Start in Spaces, then move durable work into Agent or Brain when needed.",
   },
   design: {
     id: "design",
     heading: "ZAKI Design",
-    badge: "Waitlist",
+    badge: "Coming soon",
     body:
       "Design is visible as a future product, but it is not sold or exposed as a public app surface yet.",
     primaryLabel: "Open dashboard",
     primaryHref: "/?source=website_product_design&intent=dashboard",
-    policy: "Waitlist",
-    next: "Use Chat or Agent to shape the brief while the Design service and project flow are finalized.",
+    policy: "Coming soon",
+    next: "Use Spaces or Agent to shape the brief while the Design service and project flow are finalized.",
   },
   minutes: {
     id: "minutes",
@@ -84,7 +84,7 @@ const LAUNCH_COPY: Record<string, LaunchCopy> = {
     primaryLabel: "Open dashboard",
     primaryHref: "/?source=website_product_minutes&intent=dashboard",
     policy: "Coming soon",
-    next: "Use Chat or Agent for meeting summaries while the Minutes flow is finalized.",
+    next: "Use Spaces or Agent for meeting summaries while the Minutes flow is finalized.",
   },
 };
 
