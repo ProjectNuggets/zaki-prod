@@ -354,6 +354,49 @@ describe("Design public session routes", () => {
     }));
   });
 
+  test("finalizes an already committed checkpoint on a direct stop retry", async () => {
+    const session = {
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      state: "CHECKPOINTING",
+      generation: 7,
+    };
+    const controllerStop = jest.fn().mockResolvedValue({
+      session: { id: "sess_01", projectId: "project_01", state: "STOPPED", generation: 7 },
+    });
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn(),
+      readSessionBinding: jest.fn().mockResolvedValue(session),
+      beginSessionDrain: jest.fn().mockResolvedValue(session),
+      updateSessionState: jest.fn(),
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: jest.fn(),
+      controller: { ensure: jest.fn(), status: jest.fn(), stop: controllerStop },
+      getRequestId: () => "req_stop_checkpointing",
+    }));
+
+    const response = await request(app)
+      .post("/api/design/sessions/sess_01/stop")
+      .send({ projectId: "project_01" });
+
+    expect(response.status).toBe(200);
+    expect(controllerStop).toHaveBeenCalledWith({
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      expectedGeneration: 7,
+      committedGeneration: 7,
+      requestId: "req_stop_checkpointing",
+    });
+  });
+
   test("settles a metered controller body failure as failed after containing the stream error", async () => {
     const streamError = new Error("controller body reset");
     const controllerProxy = jest.fn().mockResolvedValue(new Response(new ReadableStream({

@@ -241,6 +241,9 @@ export function buildDesignSessionRouter({
         userId: drainingSession.userId,
         tenantId: drainingSession.tenantId,
         expectedGeneration: drainingSession.generation,
+        ...(drainingSession.state === "CHECKPOINTING"
+          ? { committedGeneration: drainingSession.generation }
+          : {}),
         requestId,
       });
       await updateSessionStateBestEffort(updateSessionState, dbQuery, session, result, requestId);
