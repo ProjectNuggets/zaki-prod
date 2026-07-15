@@ -189,7 +189,6 @@ test.describe("V2 production-final app surfaces", () => {
       "settings-automations",
       "settings-suggestions",
       "settings-telos",
-      "settings-connections",
       "settings-channels",
       "settings-secrets",
       "settings-devices",
@@ -203,6 +202,7 @@ test.describe("V2 production-final app surfaces", () => {
       "settings-products-access",
       "settings-providers",
       "settings-developer-access",
+      "settings-connections",
     ]) {
       await expect(page.getByTestId(removedTestId)).toHaveCount(0);
     }
@@ -227,14 +227,8 @@ test.describe("V2 production-final app surfaces", () => {
     await expect(slackPanel.getByText(/workspace OAuth app-install is not available yet/i)).toBeVisible();
     await expect(slackPanel.getByLabel("Slack Bot token")).toHaveAttribute("type", "password");
     await attachViewportShot(page, testInfo, "settings-slack-1440x1000");
-    const connections = page.getByTestId("settings-connections");
-    await expect(connections.getByText("Gmail & Google Drive")).toBeVisible();
-    await expect(connections.getByRole("button", { name: "Connect Gmail" })).toHaveCount(0);
-    await expect(connections.getByText("Managed in chat")).toBeVisible();
-    await expect(connections.getByText(/never asks for an IMAP or SMTP password/i)).toBeVisible();
-    await expect(
-      connections.getByText(/requires approval before private data is sent elsewhere/i),
-    ).toBeVisible();
+    await expect(page.getByText("Gmail & Google Drive")).toHaveCount(0);
+    await expect(page.getByText(/Composio/i)).toHaveCount(0);
     await expect(page.getByTestId("settings-secrets").getByText("telegram_bot_token")).toBeVisible();
     await expect(page.getByTestId("settings-secrets").getByText(/xoxb-|Discord bot token|IMAP password/i)).toHaveCount(0);
     await expect(page.getByTestId("settings-billing").getByText("ZAKI CLI")).toHaveCount(0);
@@ -280,10 +274,9 @@ test.describe("V2 production-final app surfaces", () => {
     await mobileSlackGuidance.scrollIntoViewIfNeeded();
     await expect(mobileSlackGuidance).toBeVisible();
     await attachViewportShot(page, testInfo, "settings-slack-390x844");
-    await page.getByTestId("settings-connections").scrollIntoViewIfNeeded();
-    await expect(page.getByText("Gmail & Google Drive")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Connect Gmail" })).toHaveCount(0);
-    await expect(page.getByText("Managed in chat")).toBeVisible();
+    await expect(page.getByTestId("settings-connections")).toHaveCount(0);
+    await expect(page.getByText("Gmail & Google Drive")).toHaveCount(0);
+    await expect(page.getByText(/Composio/i)).toHaveCount(0);
     await attachViewportShot(page, testInfo, "settings-390x844");
   });
 
