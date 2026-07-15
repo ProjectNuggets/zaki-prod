@@ -40,6 +40,7 @@ import {
   fetchAgentExtensionDiagnostics,
   fetchAgentIntegrations,
   fetchAgentMemoryGovernance,
+  fetchBotHeartbeat,
   fetchBotSettings,
   fetchMemoryPreferences,
   forgetAgentMemory,
@@ -52,6 +53,7 @@ import {
   testAgentChannelControl,
   requestLogout,
   updateBotSettings,
+  updateBotHeartbeat,
   updateMemoryPreferences,
   updateProfile,
   type AgentChannelControlId,
@@ -64,6 +66,7 @@ import {
   type AgentMemoryGovernanceResponse,
   type AgentMemoryPurgePiiResponse,
   type BotTelegramConnectPayload,
+  type BotHeartbeatState,
   type BotSettingsPatch,
   type BotSettingsProfile,
   type MemoryPolicy,
@@ -170,7 +173,7 @@ type AgentSettingsDraft = Required<
 
 const DEFAULT_AGENT_SETTINGS: AgentSettingsDraft = {
   group_activation: "mention",
-  proactive_updates: true,
+  proactive_updates: false,
   voice_replies: false,
   session_timeout_minutes: 30,
   assistant_mode: "balanced",
@@ -295,6 +298,37 @@ function formatUnixDate(value?: number | null) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function getHeartbeatStatusLabel(
+  state: BotHeartbeatState | null,
+  loading: boolean
+): string {
+  if (loading) return "Loading check-in status…";
+  if (!state) return "Unavailable · Try again later";
+  if (!state.enabled || state.status === "disabled") {
+    return "Off · Delivery through Telegram";
+  }
+  if (state.status === "operator_disabled" || state.operator_enabled === false) {
+    return "On · Temporarily unavailable";
+  }
+  if (state.status === "needs_telegram" || state.delivery_ready === false) {
+    return "On · Connect Telegram to receive check-ins";
+  }
+  if (state.last_status === "send_failed") {
+    return "On · Last delivery failed; verify Telegram";
+  }
+  if (state.last_status === "enqueued") {
+    return "On · Last update queued for Telegram";
+  }
+  if (state.last_status === "sent") {
+    const lastRun = formatUnixDate(state.last_run_s);
+    return lastRun ? `On · Last update sent ${lastRun}` : "On · Last update sent";
+  }
+  if (state.last_status === "idle") {
+    return "On · Last check complete, nothing to send";
+  }
+  return `On · Every ${state.interval_minutes ?? 60} min through Telegram`;
 }
 
 // Memory capture policy is bound to the real BFF route GET|PATCH
@@ -547,6 +581,9 @@ export function SettingsPage() {
     useState<AgentSettingsDraft>(DEFAULT_AGENT_SETTINGS);
   const [agentSettingsLoading, setAgentSettingsLoading] = useState(true);
   const [agentSettingsSaving, setAgentSettingsSaving] = useState(false);
+  const [heartbeatState, setHeartbeatState] = useState<BotHeartbeatState | null>(null);
+  const [heartbeatLoading, setHeartbeatLoading] = useState(true);
+  const [heartbeatSaving, setHeartbeatSaving] = useState(false);
   const [sessionTimeoutDraft, setSessionTimeoutDraft] = useState(
     String(DEFAULT_AGENT_SETTINGS.session_timeout_minutes)
   );
@@ -963,6 +1000,29 @@ export function SettingsPage() {
       })
       .finally(() => {
         if (active) setAgentSettingsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setHeartbeatLoading(true);
+    fetchBotHeartbeat()
+      .then(({ response, data }) => {
+        if (!active) return;
+        if (!response.ok || data?.error || typeof data?.enabled !== "boolean") {
+          setHeartbeatState(null);
+          return;
+        }
+        setHeartbeatState(data);
+      })
+      .catch(() => {
+        if (active) setHeartbeatState(null);
+      })
+      .finally(() => {
+        if (active) setHeartbeatLoading(false);
       });
     return () => {
       active = false;
@@ -1635,6 +1695,44 @@ export function SettingsPage() {
     return queued;
   };
 
+  const setProactiveCheckinsEnabled = async (enabled: boolean): Promise<void> => {
+    const previousState = heartbeatState;
+    setHeartbeatSaving(true);
+    try {
+      const { response, data } = await updateBotHeartbeat({ enabled });
+      if (!response.ok || data?.error || typeof data?.enabled !== "boolean") {
+        throw new Error(
+          data?.message ||
+            data?.error ||
+            t("settingsModal.agentSettings.proactiveCheckins.errors.update", {
+              defaultValue: "Unable to update proactive check-ins.",
+            })
+        );
+      }
+      setHeartbeatState(data);
+      toast.success(
+        enabled
+          ? t("settingsModal.agentSettings.proactiveCheckins.success.enabled", {
+              defaultValue: "Proactive check-ins enabled.",
+            })
+          : t("settingsModal.agentSettings.proactiveCheckins.success.disabled", {
+              defaultValue: "Proactive check-ins disabled.",
+            })
+      );
+    } catch (err) {
+      setHeartbeatState(previousState);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("settingsModal.agentSettings.proactiveCheckins.errors.update", {
+              defaultValue: "Unable to update proactive check-ins.",
+            })
+      );
+    } finally {
+      setHeartbeatSaving(false);
+    }
+  };
+
   const isAtAgentDefaults =
     agentSettingsDraft.assistant_mode === AGENT_DEFAULTS_RESET_PATCH.assistant_mode &&
     agentSettingsDraft.autonomy === AGENT_DEFAULTS_RESET_PATCH.autonomy &&
@@ -1642,6 +1740,7 @@ export function SettingsPage() {
     agentSettingsDraft.voice_replies === AGENT_DEFAULTS_RESET_PATCH.voice_replies &&
     agentSettingsDraft.session_timeout_minutes ===
       AGENT_DEFAULTS_RESET_PATCH.session_timeout_minutes;
+  const heartbeatStatusLabel = getHeartbeatStatusLabel(heartbeatState, heartbeatLoading);
 
   const handleResetAgentDefaults = () => {
     if (agentSettingsLoading || agentSettingsSaving || isAtAgentDefaults) return;
@@ -2610,24 +2709,31 @@ export function SettingsPage() {
                 </select>
               </V2SettingsRow>
               <V2SettingsRow
-                name={t("settingsModal.agentSettings.proactiveUpdates.name", {
-                  defaultValue: "Proactive updates",
+                name={t("settingsModal.agentSettings.proactiveCheckins.name", {
+                  defaultValue: "Proactive check-ins",
                 })}
-                description={t("settingsModal.agentSettings.proactiveUpdates.helper", {
+                description={t("settingsModal.agentSettings.proactiveCheckins.helper", {
                   defaultValue:
-                    "Paused for launch while scheduled return delivery is hardened.",
+                    "Periodically check for useful updates. Check-ins are delivered through your connected Telegram account and do not appear in web chat.",
                 })}
               >
-                <input
-                  className="v2-toggle"
-                  type="checkbox"
-                  aria-label={t("settingsModal.agentSettings.proactiveUpdates.name", {
-                    defaultValue: "Proactive updates",
-                  })}
-                  checked={false}
-                  disabled
-                  onChange={() => undefined}
-                />
+                <div className="flex items-center gap-2">
+                  <span className="v2-label" role="status">
+                    {heartbeatStatusLabel}
+                  </span>
+                  <input
+                    className="v2-toggle"
+                    type="checkbox"
+                    aria-label={t("settingsModal.agentSettings.proactiveCheckins.name", {
+                      defaultValue: "Proactive check-ins",
+                    })}
+                    checked={Boolean(heartbeatState?.enabled)}
+                    disabled={heartbeatLoading || heartbeatSaving || !heartbeatState}
+                    onChange={(event) => {
+                      void setProactiveCheckinsEnabled(event.target.checked);
+                    }}
+                  />
+                </div>
               </V2SettingsRow>
               <V2SettingsRow
                 name={t("settingsModal.agentSettings.voiceReplies.name", {

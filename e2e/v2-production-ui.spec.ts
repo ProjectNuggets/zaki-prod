@@ -29,6 +29,29 @@ async function openInspectorIfNeeded(page: Page) {
 
 async function mockSettingsActivation(page: Page) {
   let adoptedKey = "";
+  let heartbeatEnabled = false;
+  await page.route("**/v1/me/bot/heartbeat", async (route) => {
+    if (route.request().method() === "PUT") {
+      const body = route.request().postDataJSON() as { enabled?: boolean } | null;
+      heartbeatEnabled = body?.enabled === true;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        enabled: heartbeatEnabled,
+        operator_enabled: true,
+        effective_enabled: heartbeatEnabled,
+        interval_minutes: 60,
+        delivery_channel: "telegram",
+        delivery_ready: heartbeatEnabled,
+        status: heartbeatEnabled ? "ready" : "disabled",
+        last_run_s: null,
+        last_status: null,
+        last_reason: null,
+      }),
+    });
+  });
   await page.route("**/api/agent/telos", async (route) => {
     await route.fulfill({
       status: 200,
@@ -240,6 +263,14 @@ test.describe("V2 production-final app surfaces", () => {
     await expect(page.getByTestId("settings-billing").getByText("ZAKI CLI")).toHaveCount(0);
     await expect(page.getByRole("combobox", { name: "Default model" })).toBeVisible();
     await expect(page.getByRole("option", { name: /Claude Haiku 4\.5/ })).toHaveCount(1);
+    const proactiveCheckins = page.getByRole("checkbox", { name: "Proactive check-ins" });
+    await expect(proactiveCheckins).not.toBeChecked();
+    await proactiveCheckins.click();
+    await expect(proactiveCheckins).toBeChecked();
+    await expect(
+      page.getByRole("status").filter({ hasText: "On · Every 60 min through Telegram" }),
+    ).toBeVisible();
+    await attachViewportShot(page, testInfo, "settings-proactive-checkins-1440x1000");
     await expect(page.getByTestId("settings-telos").getByText("Active in prompts")).toBeVisible();
     await expect(page.getByTestId("settings-automations").getByText("Dream reflection")).toBeVisible();
     await expect(page.getByTestId("settings-automations").getByText("Learning miner")).toBeVisible();
@@ -260,6 +291,14 @@ test.describe("V2 production-final app surfaces", () => {
     await expect(page.getByTestId("settings-telos")).toBeVisible({ timeout: 20_000 });
     await page.getByTestId("settings-agent").scrollIntoViewIfNeeded();
     await expect(page.getByRole("combobox", { name: "Default model" })).toBeVisible();
+    const proactiveCheckins = page.getByRole("checkbox", { name: "Proactive check-ins" });
+    await expect(proactiveCheckins).not.toBeChecked();
+    await proactiveCheckins.click();
+    await expect(proactiveCheckins).toBeChecked();
+    await expect(
+      page.getByRole("status").filter({ hasText: "On · Every 60 min through Telegram" }),
+    ).toBeVisible();
+    await attachViewportShot(page, testInfo, "settings-proactive-checkins-390x844");
     await page.getByTestId("settings-suggestions").scrollIntoViewIfNeeded();
     await expect(page.getByRole("button", { name: "Adopt" })).toBeVisible();
     await page.getByTestId("settings-automations").scrollIntoViewIfNeeded();

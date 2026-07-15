@@ -29,11 +29,10 @@ export const LOCK_RETRY_MAX_ATTEMPTS = 3;
 export const LOCK_RETRY_MAX_WALL_TIME_MS = 1500;
 export const LOCK_RETRY_FALLBACK_DELAYS_MS = Object.freeze([100, 250, 500]);
 
-// Launch policy: scheduled return delivery is not yet safe enough to expose.
-// Keep this enforcement at the authenticated product boundary so a direct API
-// caller cannot bypass the disabled Settings control through either the tenant
-// preference or per-user heartbeat plane. `false` patches remain valid so stale
-// opt-ins can be cleared upstream.
+// Launch policy for the legacy product_settings background message-tool flag.
+// Proactive check-ins use the separate per-user heartbeat plane, which is
+// default-off and user-controlled through the authenticated heartbeat route.
+// Keep this legacy flag closed until it has a distinct product surface.
 export const PROACTIVE_UPDATES_LAUNCH_ENABLED = false;
 const PROACTIVE_UPDATES_PAUSED_MESSAGE = "Proactive updates are paused for launch.";
 
@@ -173,6 +172,14 @@ const heartbeatStateSchema = z
     enabled: z.boolean(),
     interval_minutes: z.number().int().nonnegative().optional(),
     prompt: z.string().nullable().optional(),
+    operator_enabled: z.boolean().optional(),
+    effective_enabled: z.boolean().optional(),
+    delivery_channel: z.literal("telegram").optional(),
+    delivery_ready: z.boolean().optional(),
+    status: z.enum(["disabled", "operator_disabled", "needs_telegram", "ready"]).optional(),
+    last_run_s: z.number().int().nonnegative().nullable().optional(),
+    last_status: z.string().nullable().optional(),
+    last_reason: z.string().nullable().optional(),
   })
   .strict();
 
@@ -536,13 +543,37 @@ export function sanitizeTelegramConnectionState(status) {
 
 export function sanitizeHeartbeatState(payload) {
   const source = payload && typeof payload === "object" ? payload : {};
+  const intervalMinutes = normalizedIntegerOrNull(
+    source.interval_minutes ?? source.intervalMinutes
+  );
+  const lastRunSeconds =
+    source.last_run_s === null ? null : normalizedIntegerOrNull(source.last_run_s);
   return heartbeatStateSchema.parse({
-    enabled: PROACTIVE_UPDATES_LAUNCH_ENABLED ? Boolean(source.enabled) : false,
-    interval_minutes: normalizedIntegerOrNull(source.interval_minutes ?? source.intervalMinutes) ?? undefined,
-    prompt:
-      typeof source.prompt === "string" || source.prompt === null
-        ? source.prompt ?? null
-        : undefined,
+    enabled: Boolean(source.enabled),
+    ...(intervalMinutes === null ? {} : { interval_minutes: intervalMinutes }),
+    ...(typeof source.prompt === "string" || source.prompt === null
+      ? { prompt: source.prompt ?? null }
+      : {}),
+    ...(typeof source.operator_enabled === "boolean"
+      ? { operator_enabled: source.operator_enabled }
+      : {}),
+    ...(typeof source.effective_enabled === "boolean"
+      ? { effective_enabled: source.effective_enabled }
+      : {}),
+    ...(source.delivery_channel === "telegram" ? { delivery_channel: "telegram" } : {}),
+    ...(typeof source.delivery_ready === "boolean"
+      ? { delivery_ready: source.delivery_ready }
+      : {}),
+    ...(typeof source.status === "string" ? { status: source.status } : {}),
+    ...(lastRunSeconds === null && source.last_run_s !== null
+      ? {}
+      : { last_run_s: lastRunSeconds }),
+    ...(typeof source.last_status === "string" || source.last_status === null
+      ? { last_status: source.last_status ?? null }
+      : {}),
+    ...(typeof source.last_reason === "string" || source.last_reason === null
+      ? { last_reason: source.last_reason ?? null }
+      : {}),
   });
 }
 
@@ -552,12 +583,6 @@ export function validateHeartbeatPatch(payload) {
     return {
       success: false,
       message: parsed.error.issues[0]?.message || "invalid heartbeat payload",
-    };
-  }
-  if (!PROACTIVE_UPDATES_LAUNCH_ENABLED && parsed.data.enabled === true) {
-    return {
-      success: false,
-      message: PROACTIVE_UPDATES_PAUSED_MESSAGE,
     };
   }
   return { success: true, data: parsed.data };

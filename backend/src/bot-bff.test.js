@@ -502,10 +502,24 @@ describe("bot BFF T6 contract", () => {
     );
   });
 
-  it("enforces the proactive launch pause before any heartbeat enable write", async () => {
+  it("forwards heartbeat opt-in and preserves effective delivery status", async () => {
+    const heartbeatState = {
+      enabled: true,
+      operator_enabled: true,
+      effective_enabled: true,
+      interval_minutes: 60,
+      delivery_channel: "telegram",
+      delivery_ready: false,
+      status: "needs_telegram",
+      last_run_s: null,
+      last_status: null,
+      last_reason: null,
+    };
     const { handlers, sendUpstreamRequest } = createHandlers({
-      sendUpstreamRequest: jest.fn(async () => {
-        throw new Error("heartbeat enable must not reach Nullalis");
+      sendUpstreamRequest: jest.fn(async ({ method, body }) => {
+        expect(method).toBe("PUT");
+        expect(body).toEqual({ enabled: true });
+        return jsonResponse(heartbeatState);
       }),
     });
     const req = { body: { enabled: true }, headers: {} };
@@ -513,15 +527,9 @@ describe("bot BFF T6 contract", () => {
 
     await handlers.putHeartbeat(req, res);
 
-    expect(sendUpstreamRequest).not.toHaveBeenCalled();
-    expect(res.statusCode).toBe(400);
-    expect(res.jsonBody).toEqual(
-      expect.objectContaining({
-        error: PRODUCT_ERROR_CODES.SETTINGS_UPDATE_FAILED,
-        message: "Proactive updates are paused for launch.",
-        retryable: false,
-      })
-    );
+    expect(sendUpstreamRequest).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(200);
+    expect(res.jsonBody).toEqual(heartbeatState);
   });
 
   it("roundtrips heartbeat state through the bot BFF", async () => {
@@ -540,7 +548,7 @@ describe("bot BFF T6 contract", () => {
     await handlers.getHeartbeat(getReq, getRes);
     expect(getRes.statusCode).toBe(200);
     expect(getRes.jsonBody).toEqual({
-      enabled: false,
+      enabled: true,
       interval_minutes: 15,
       prompt: "Daily summary",
     });
