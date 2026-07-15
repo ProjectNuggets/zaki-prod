@@ -121,6 +121,7 @@ import {
   type AgentInspectorTabRequest,
 } from "./chat/AgentInspectorRail";
 import type { AgentPlanPanelStep } from "./chat/AgentPlanPanelModel";
+import { buildAgentPlanRetryPrompt } from "./chat/AgentPlanRetry";
 import { BrowserViewFeedPanel } from "./chat/BrowserViewFeedPanel";
 import { ZakiDashboard } from "./chat/views/ZakiDashboard";
 import { V2StatusStrip } from "@/app/components/v2";
@@ -3271,6 +3272,38 @@ function buildNullalisTranscriptFingerprint(entry: NullalisTranscriptEntry) {
   return [entry.kind, normalizeNarrativeKey(entry.text)].join("|");
 }
 
+type AgentInspectorMessage = {
+  id: string;
+  role: string;
+  turnEvents?: Array<{ eventType: string; payload: Record<string, unknown>; ts?: number }>;
+};
+
+export function selectAgentInspectorTranscriptEntries({
+  liveEntries,
+  localTurnSnapshots,
+  messages,
+}: {
+  liveEntries: NullalisTranscriptEntry[];
+  localTurnSnapshots: Record<string, NullalisTranscriptEntry[]>;
+  messages: AgentInspectorMessage[];
+}): NullalisTranscriptEntry[] {
+  if (liveEntries.length) return liveEntries;
+  const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+  if (!latestAssistant) return [];
+  const snapshot = localTurnSnapshots[latestAssistant.id];
+  if (snapshot?.length) return snapshot;
+  if (!Array.isArray(latestAssistant.turnEvents) || !latestAssistant.turnEvents.length) return [];
+  return latestAssistant.turnEvents
+    .map((event) =>
+      extractNullalisTranscriptEntry(
+        event.eventType,
+        event.payload ?? {},
+        typeof event.ts === "number" ? event.ts : Date.now()
+      )
+    )
+    .filter((entry): entry is NullalisTranscriptEntry => Boolean(entry));
+}
+
 export function ChatArea() {
   const queryClient = useQueryClient();
   const { i18n, t } = useTranslation();
@@ -4055,28 +4088,11 @@ export function ChatArea() {
     [agentTaskItems]
   );
   const agentInspectorTranscriptEntries = useMemo(() => {
-    if (nullalisTranscriptEntries.length) return nullalisTranscriptEntries;
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index];
-      if (!message || message.role !== "assistant") continue;
-      const snapshot = localTurnSnapshots[message.id];
-      if (snapshot?.length) return snapshot;
-      const events = (message as {
-        turnEvents?: Array<{ eventType: string; payload: Record<string, unknown>; ts?: number }>;
-      }).turnEvents;
-      if (!Array.isArray(events) || !events.length) continue;
-      const entries = events
-        .map((event) =>
-          extractNullalisTranscriptEntry(
-            event.eventType,
-            event.payload ?? {},
-            typeof event.ts === "number" ? event.ts : Date.now()
-          )
-        )
-        .filter((entry): entry is NullalisTranscriptEntry => Boolean(entry));
-      if (entries.length) return entries;
-    }
-    return [];
+    return selectAgentInspectorTranscriptEntries({
+      liveEntries: nullalisTranscriptEntries,
+      localTurnSnapshots,
+      messages,
+    });
   }, [localTurnSnapshots, messages, nullalisTranscriptEntries]);
   const weeklyUsagePercent = getUsagePercent({
     used: meterResult?.data?.weekly?.used,
@@ -8109,24 +8125,24 @@ export function ChatArea() {
     files: File[],
     turnOptions?: InputAreaSendOptions,
     preferredWorkspaceSlug?: string | null
-  ) => {
+  ): Promise<boolean> => {
     const trimmed = text.trim();
     if (!trimmed) {
       toast.error("Message is empty");
-      return;
+      return false;
     }
     if (!isOnline) {
       toast.error(t("input.offlineToast", {
         defaultValue: "You are offline. Your draft will stay here until the connection returns.",
       }));
-      return;
+      return false;
     }
-    if (isStreaming) return;
+    if (isStreaming) return false;
     setComposerQuickReplyTriggerId(null);
     setComposerQuickReplyVisible(false);
     if (!authUserId && files.length > 0) {
       toast.error("Sign in to upload files to Spaces.");
-      return;
+      return false;
     }
     // Anonymous visitors always have an implicit default workspace (the
     // "Free daily workspace chat" anon space). A fresh anon session — e.g. the
@@ -8144,7 +8160,7 @@ export function ChatArea() {
       (!authUserId ? ANONYMOUS_SPACES_WORKSPACE_ID : null);
     if (!resolvedWorkspaceSlug) {
       toast.error("Select a workspace before sending a message");
-      return;
+      return false;
     }
 
     // A new turn is starting — clear any prior billing-denial card so a stale
@@ -8171,7 +8187,7 @@ export function ChatArea() {
         : null;
     if (isZakiBotTarget) {
       const provisioned = await ensureZakiBotProvisioned();
-      if (!provisioned) return;
+      if (!provisioned) return false;
     }
     // For ZAKI bot without an activeThreadId, generate a new thread slug.
     // The nullalis backend creates the session on first message.
@@ -8209,11 +8225,11 @@ export function ChatArea() {
         );
       } catch (error) {
         toast.error("Unable to start a new chat");
-        return;
+        return false;
       }
     }
 
-    if (!threadId) return;
+    if (!threadId) return false;
     if (anonymousWork && !isZakiBotTarget) {
       upsertAnonymousWorkItem({
         id: anonymousWork.id,
@@ -8518,6 +8534,7 @@ export function ChatArea() {
       }
       // Keep chat UX responsive: memory save runs in background.
       void checkForSavedMemories(trimmed, threadId);
+      return true;
     } catch (error) {
       if (anonymousWork) {
         const productId = isZakiBotTarget ? "agent" : "spaces";
@@ -8539,7 +8556,7 @@ export function ChatArea() {
           finalizeZakiBotProgress("abort");
         }
         updateAssistantError(threadId, assistantMessageId, "Generation stopped.", "aborted");
-        return;
+        return false;
       }
       if (error instanceof ChatRequestError) {
         const { isPaywall, state: paywallState } = classifyBillingDenial(error.code);
@@ -8574,7 +8591,7 @@ export function ChatArea() {
               promptPreserved: isLimitState && Boolean(trimmed),
             })
           );
-          return;
+          return false;
         }
       }
       if (isZakiBotTarget) {
@@ -8589,6 +8606,7 @@ export function ChatArea() {
         error instanceof ChatRequestError ? error.code : "chat_error"
       );
       toast.error(errorMessage);
+      return false;
     } finally {
       if (streamAbortRef.current === streamController) {
         streamAbortRef.current = null;
@@ -8629,12 +8647,9 @@ export function ChatArea() {
 
   const handleRetryAgentPlanStep = useCallback(
     async (step: AgentPlanPanelStep) => {
-      const retryPrompt = t("zakiAgent.planPanel.retryPrompt", {
-        defaultValue:
-          "Retry the failed step \"{{title}}\" as a new continuation. Review the earlier failure, preserve completed work, and request approval before repeating any side effect.",
-        title: step.title,
-      });
-      await handleSend(retryPrompt, []);
+      const retryPrompt = buildAgentPlanRetryPrompt(t, step);
+      const sent = await handleSend(retryPrompt, []);
+      if (!sent) throw new Error("agent_plan_retry_failed");
     },
     [handleSend, t]
   );

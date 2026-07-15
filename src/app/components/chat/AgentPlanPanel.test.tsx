@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom";
 import "@/i18n";
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { AgentPlanPanel } from "./AgentPlanPanel";
 
 jest.mock("@/lib/api", () => ({
@@ -25,6 +25,10 @@ describe("AgentPlanPanel", () => {
       response: { ok: true },
       data: { lists: [], current_list_id: null },
     });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it("loads the proxied session resources and renders their soft-empty payload honestly", async () => {
@@ -123,6 +127,100 @@ describe("AgentPlanPanel", () => {
     expect(await screen.findByText("Run plan unavailable.")).toBeInTheDocument();
     expect(screen.queryByText("invalid_session_key")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Refresh plan" })).toBeInTheDocument();
+  });
+
+  it("does not mislabel a failed plan read as idle when todos are empty", async () => {
+    api.fetchAgentSessionPlan.mockResolvedValue({
+      response: { ok: false, status: 503 },
+      data: { error: "agent_unavailable" },
+    });
+    api.fetchAgentSessionTodos.mockResolvedValue({
+      response: { ok: true, status: 200 },
+      data: { lists: [], current_list_id: null },
+    });
+
+    render(
+      <AgentPlanPanel
+        sessionKey="42:release"
+        transcriptEntries={[]}
+        tasks={[]}
+        isStreaming={false}
+        isOnline
+      />
+    );
+
+    expect(await screen.findByText("Run plan unavailable.")).toBeInTheDocument();
+    expect(screen.queryByText("No run plan yet.")).not.toBeInTheDocument();
+  });
+
+  it("keeps polling single-flight when the plan endpoint is slower than the interval", async () => {
+    jest.useFakeTimers();
+    let resolvePlan!: (value: unknown) => void;
+    let resolveTodos!: (value: unknown) => void;
+    api.fetchAgentSessionPlan.mockImplementation(
+      () => new Promise((resolve) => { resolvePlan = resolve; })
+    );
+    api.fetchAgentSessionTodos.mockImplementation(
+      () => new Promise((resolve) => { resolveTodos = resolve; })
+    );
+
+    render(
+      <AgentPlanPanel
+        sessionKey="42:release"
+        transcriptEntries={[]}
+        tasks={[]}
+        isStreaming
+        isOnline
+      />
+    );
+
+    expect(api.fetchAgentSessionPlan).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      jest.advanceTimersByTime(15_000);
+      await Promise.resolve();
+    });
+    expect(api.fetchAgentSessionPlan).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolvePlan({ response: { ok: true }, data: { active: false, plan: null } });
+      resolveTodos({ response: { ok: true }, data: { lists: [], current_list_id: null } });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(5_000);
+      await Promise.resolve();
+    });
+    expect(api.fetchAgentSessionPlan).toHaveBeenCalledTimes(2);
+  });
+
+  it("starts a fresh bounded polling budget for each run in the same session", async () => {
+    jest.useFakeTimers();
+    const props = {
+      sessionKey: "42:release",
+      transcriptEntries: [],
+      tasks: [],
+      isOnline: true,
+    };
+    const view = render(<AgentPlanPanel {...props} isStreaming={false} />);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    view.rerender(<AgentPlanPanel {...props} isStreaming />);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    for (let index = 0; index < 24; index += 1) {
+      await act(async () => {
+        jest.advanceTimersByTime(5_000);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+    }
+    const callsAfterFirstRun = api.fetchAgentSessionPlan.mock.calls.length;
+
+    view.rerender(<AgentPlanPanel {...props} isStreaming={false} />);
+    view.rerender(<AgentPlanPanel {...props} isStreaming />);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(api.fetchAgentSessionPlan).toHaveBeenCalledTimes(callsAfterFirstRun + 1);
   });
 
   it("disables retry until the current run finishes or the connection returns", async () => {

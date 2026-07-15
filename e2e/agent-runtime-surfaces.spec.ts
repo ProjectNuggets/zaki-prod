@@ -531,7 +531,9 @@ test.describe("Agent runtime surfaces", () => {
         });
         await failedStep.getByRole("button", { name: "Retry from here" }).click();
         await failedStep.getByRole("button", { name: "Start retry" }).click();
-        await expect(page.getByText(/Retry the failed step "Run the schema migration"/)).toBeVisible();
+        await expect(
+          page.getByText(/Retry failed plan step 2 using tool "shell" as a new continuation/)
+        ).toBeVisible();
         await expect(page.getByText("Done.", { exact: true })).toBeVisible();
       }
 

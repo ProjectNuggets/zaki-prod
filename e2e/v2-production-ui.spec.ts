@@ -111,10 +111,16 @@ test.describe("V2 production-final app surfaces", () => {
     await openInspectorIfNeeded(page);
     const inspector = page.locator(".zaki-agent-inspector").first();
     await expect(inspector).toBeVisible();
-    for (const label of ["Artifacts", "Schedules"]) {
+    for (const label of ["Plan", "Artifacts", "Schedules"]) {
       await expect(inspector.getByRole("tab", { name: new RegExp(label, "i") })).toBeVisible();
     }
-    await expect(inspector.getByRole("tab")).toHaveCount(2);
+    await expect(inspector.getByRole("tab")).toHaveCount(3);
+    await expect(inspector.getByRole("tab", { name: "Plan" })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    await expect(inspector.getByRole("region", { name: "Run plan" })).toBeVisible();
+    await inspector.getByRole("tab", { name: "Artifacts" }).click();
     await expect(inspector.getByRole("region", { name: "Artifacts" })).toBeVisible();
     await attachViewportShot(page, testInfo, "agent-1440x1000");
   });

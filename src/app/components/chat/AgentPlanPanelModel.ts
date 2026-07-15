@@ -46,6 +46,11 @@ function safePreview(value: unknown): string {
   return preview && !looksLikeMachineCode(preview) ? preview : "";
 }
 
+function safeToolName(value: unknown): string {
+  const tool = compact(value);
+  return /^[a-zA-Z0-9_.:-]{1,64}$/u.test(tool) ? tool : "";
+}
+
 function normalizeState(value: unknown): AgentPlanStepState {
   const status = compact(value).toLowerCase();
   if (["done", "completed", "complete", "succeeded", "success"].includes(status)) return "done";
@@ -69,7 +74,7 @@ function backendStep(step: AgentTaskPlanStep, position: number): AgentPlanPanelS
     index,
     title: safePreview(step.title || step.description),
     state,
-    tool: compact(step.actual_tool || step.expected_tool) || null,
+    tool: safeToolName(step.actual_tool || step.expected_tool) || null,
     summary: state === "failed" ? null : safePreview(step.result_summary) || null,
     retryable: state === "failed",
   };
@@ -112,7 +117,7 @@ function liveSteps(
         index,
         title: titleFromLiveStep(entry),
         state: entry.resultState === "failed" ? "failed" : "running",
-        tool: compact(entry.tool) || previous?.tool || null,
+        tool: safeToolName(entry.tool) || previous?.tool || null,
         summary: previous?.summary || null,
         retryable: entry.resultState === "failed",
       });
@@ -129,7 +134,7 @@ function liveSteps(
       index,
       title: previous?.title || `Step ${index}`,
       state: failed ? "failed" : "done",
-      tool: compact(entry.tool) || previous?.tool || null,
+      tool: safeToolName(entry.tool) || previous?.tool || null,
       summary: failed ? null : safePreview(entry.resultSummary || entry.text) || previous?.summary || null,
       retryable: failed,
     });
@@ -156,7 +161,7 @@ function failedToolSteps(transcriptEntries: NullalisTranscriptEntry[]): AgentPla
         (entry.kind === "tool" || entry.phase === "error_recovery")
     )
     .reduce<AgentPlanPanelStep[]>((steps, entry) => {
-      const key = entry.toolUseId || entry.groupKey || entry.id;
+      const key = entry.toolUseId ? `tool-use:${entry.toolUseId}` : `event:${entry.id}`;
       if (seen.has(key)) return steps;
       seen.add(key);
       const index = steps.length + 1;
@@ -165,7 +170,7 @@ function failedToolSteps(transcriptEntries: NullalisTranscriptEntry[]): AgentPla
         index,
         title: safePreview(entry.activityLabel || entry.text),
         state: "failed",
-        tool: safePreview(entry.tool) || null,
+        tool: safeToolName(entry.tool) || null,
         summary: null,
         retryable: true,
       });

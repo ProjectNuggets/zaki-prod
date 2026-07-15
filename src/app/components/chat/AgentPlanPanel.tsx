@@ -18,6 +18,12 @@ import {
 const PLAN_POLL_INTERVAL_MS = 5_000;
 const MAX_PLAN_POLLS_PER_RUN = 24;
 
+type ActivePlanRequest = {
+  sessionKey: string;
+  generation: number;
+  promise: Promise<void>;
+};
+
 export type AgentPlanPanelProps = {
   sessionKey: string | null;
   transcriptEntries: NullalisTranscriptEntry[];
@@ -48,73 +54,94 @@ export function AgentPlanPanel({
   const [plan, setPlan] = useState<AgentSessionPlanResponse | null>(null);
   const [todos, setTodos] = useState<AgentSessionTodosResponse | null>(null);
   const [loading, setLoading] = useState(Boolean(sessionKey));
-  const [unavailable, setUnavailable] = useState(false);
+  const [planUnavailable, setPlanUnavailable] = useState(false);
   const [confirmRetryId, setConfirmRetryId] = useState<string | null>(null);
   const [retryBusyId, setRetryBusyId] = useState<string | null>(null);
   const [retryFailedId, setRetryFailedId] = useState<string | null>(null);
-  const requestGenerationRef = useRef(0);
+  const sessionGenerationRef = useRef(0);
+  const activeRequestRef = useRef<ActivePlanRequest | null>(null);
   const pollCountRef = useRef(0);
 
-  const loadPlan = useCallback(async () => {
+  const loadPlan = useCallback((showLoading = true): Promise<void> => {
     if (!sessionKey) {
       setPlan(null);
       setTodos(null);
       setLoading(false);
-      setUnavailable(false);
-      return;
+      setPlanUnavailable(false);
+      return Promise.resolve();
     }
 
-    const generation = ++requestGenerationRef.current;
-    setLoading(true);
-    const [planResult, todosResult] = await Promise.allSettled([
-      fetchAgentSessionPlan(sessionKey),
-      fetchAgentSessionTodos(sessionKey),
-    ]);
-    if (generation !== requestGenerationRef.current) return;
+    const existing = activeRequestRef.current;
+    if (existing?.sessionKey === sessionKey) return existing.promise;
 
-    let planFailed = true;
-    let todosFailed = true;
-    if (planResult.status === "fulfilled" && planResult.value.response.ok) {
-      setPlan(planResult.value.data);
-      planFailed = false;
-    } else {
-      setPlan(null);
-    }
-    if (todosResult.status === "fulfilled" && todosResult.value.response.ok) {
-      setTodos(todosResult.value.data);
-      todosFailed = false;
-    } else {
-      setTodos(null);
-    }
-    setUnavailable(planFailed && todosFailed);
-    setLoading(false);
+    const generation = sessionGenerationRef.current;
+    if (showLoading) setLoading(true);
+    const request = {} as ActivePlanRequest;
+    request.sessionKey = sessionKey;
+    request.generation = generation;
+    request.promise = (async () => {
+      const [planResult, todosResult] = await Promise.allSettled([
+        fetchAgentSessionPlan(sessionKey),
+        fetchAgentSessionTodos(sessionKey),
+      ]);
+      if (generation !== sessionGenerationRef.current) return;
+
+      const planFailed =
+        planResult.status !== "fulfilled" || !planResult.value.response.ok;
+      if (!planFailed && planResult.status === "fulfilled") {
+        setPlan(planResult.value.data);
+      } else {
+        setPlan(null);
+      }
+      if (todosResult.status === "fulfilled" && todosResult.value.response.ok) {
+        setTodos(todosResult.value.data);
+      } else {
+        setTodos(null);
+      }
+      setPlanUnavailable(planFailed);
+    })().finally(() => {
+      if (activeRequestRef.current === request) activeRequestRef.current = null;
+      if (generation === sessionGenerationRef.current) setLoading(false);
+    });
+    activeRequestRef.current = request;
+    return request.promise;
   }, [sessionKey]);
 
   useEffect(() => {
+    sessionGenerationRef.current += 1;
+    activeRequestRef.current = null;
     pollCountRef.current = 0;
     setPlan(null);
     setTodos(null);
     setLoading(Boolean(sessionKey));
-    setUnavailable(false);
+    setPlanUnavailable(false);
     setConfirmRetryId(null);
     setRetryFailedId(null);
-    void loadPlan();
+    void loadPlan(true);
     return () => {
-      requestGenerationRef.current += 1;
+      sessionGenerationRef.current += 1;
     };
   }, [loadPlan]);
 
   useEffect(() => {
     if (!sessionKey || !isStreaming) return;
-    const interval = window.setInterval(() => {
-      if (pollCountRef.current >= MAX_PLAN_POLLS_PER_RUN) {
-        window.clearInterval(interval);
-        return;
-      }
-      pollCountRef.current += 1;
-      void loadPlan();
-    }, PLAN_POLL_INTERVAL_MS);
-    return () => window.clearInterval(interval);
+    pollCountRef.current = 0;
+    let cancelled = false;
+    let timer: number | null = null;
+    const scheduleNextPoll = () => {
+      if (cancelled || pollCountRef.current >= MAX_PLAN_POLLS_PER_RUN) return;
+      timer = window.setTimeout(async () => {
+        if (cancelled) return;
+        pollCountRef.current += 1;
+        await loadPlan(false);
+        scheduleNextPoll();
+      }, PLAN_POLL_INTERVAL_MS);
+    };
+    void loadPlan(false).finally(scheduleNextPoll);
+    return () => {
+      cancelled = true;
+      if (timer != null) window.clearTimeout(timer);
+    };
   }, [isStreaming, loadPlan, sessionKey]);
 
   const model = useMemo(
@@ -167,6 +194,11 @@ export function AgentPlanPanel({
           </div>
           <div className="zaki-agent-plan__source">
             {sourceLabel}
+            {planUnavailable && model.steps.length
+              ? ` · ${t("zakiAgent.planPanel.syncUnavailable", {
+                  defaultValue: "plan sync unavailable",
+                })}`
+              : ""}
             {model.revision != null
               ? ` · ${t("zakiAgent.planPanel.revision", {
                   defaultValue: "revision {{revision}}",
@@ -278,14 +310,14 @@ export function AgentPlanPanel({
           <Loader2 className="size-3.5 animate-spin" aria-hidden />
           {t("zakiAgent.planPanel.loading", { defaultValue: "Loading run plan…" })}
         </div>
-      ) : unavailable ? (
+      ) : planUnavailable ? (
         <div className="zaki-agent-plan__empty is-error" role="status">
           <AlertTriangle className="size-3.5" aria-hidden />
           <div>
             <strong>{t("zakiAgent.planPanel.unavailable", { defaultValue: "Run plan unavailable." })}</strong>
             <span>{t("zakiAgent.planPanel.unavailableBody", { defaultValue: "Your conversation is still available." })}</span>
           </div>
-          <button type="button" onClick={() => void loadPlan()} aria-label={t("zakiAgent.planPanel.refresh", { defaultValue: "Refresh plan" })}>
+          <button type="button" onClick={() => void loadPlan(true)} aria-label={t("zakiAgent.planPanel.refresh", { defaultValue: "Refresh plan" })}>
             <RefreshCw className="size-3" aria-hidden />
             {t("zakiAgent.planPanel.refreshShort", { defaultValue: "Refresh" })}
           </button>

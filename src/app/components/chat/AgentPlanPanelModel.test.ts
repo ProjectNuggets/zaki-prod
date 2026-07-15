@@ -179,6 +179,45 @@ describe("buildAgentPlanPanelModel", () => {
     ]);
   });
 
+  it("preserves separate failures of the same tool when correlation ids are absent", () => {
+    const model = buildAgentPlanPanelModel({
+      plan: { active: false, plan: null },
+      todos: { lists: [], current_list_id: null },
+      transcriptEntries: [
+        entry({
+          id: "shell-failure-1",
+          kind: "tool",
+          source: "tool",
+          phase: "tool_done",
+          text: "First shell call failed",
+          tool: "shell",
+          groupKey: "tool:shell",
+          resultState: "failed",
+          timestamp: 1,
+        }),
+        entry({
+          id: "shell-failure-2",
+          kind: "tool",
+          source: "tool",
+          phase: "tool_done",
+          text: "Second shell call failed",
+          tool: "shell",
+          groupKey: "tool:shell",
+          resultState: "failed",
+          timestamp: 2,
+        }),
+      ],
+      tasks: [],
+      isStreaming: false,
+    });
+
+    expect(model.steps).toHaveLength(2);
+    expect(model.steps.map((step) => step.title)).toEqual([
+      "First shell call failed",
+      "Second shell call failed",
+    ]);
+  });
+
   it("renders the soft-empty endpoint payload as idle rather than an error", () => {
     const model = buildAgentPlanPanelModel({
       plan: { active: false, plan: null },
