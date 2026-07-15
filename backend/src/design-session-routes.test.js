@@ -84,8 +84,17 @@ describe("Design public session routes", () => {
     expect(resolveUser).not.toHaveBeenCalled();
   });
 
-  test("does not reopen a session while its checkpoint drain is in progress", async () => {
+  test("resumes an interrupted stop instead of reopening a draining session", async () => {
     const controllerEnsure = jest.fn();
+    const controllerStop = jest.fn().mockResolvedValue({
+      session: {
+        id: "sess_01",
+        projectId: "project_01",
+        state: "STOPPED",
+        generation: 8,
+      },
+    });
+    const updateSessionState = jest.fn();
     const app = express();
     app.use("/api/design/sessions", buildDesignSessionRouter({
       enabled: true,
@@ -99,11 +108,11 @@ describe("Design public session routes", () => {
         generation: 7,
       }),
       readSessionBinding: jest.fn(),
-      updateSessionState: jest.fn(),
+      updateSessionState,
       runInTransaction: jest.fn(),
       dbQuery: jest.fn(),
       createSessionId: jest.fn(),
-      controller: { ensure: controllerEnsure, status: jest.fn(), stop: jest.fn() },
+      controller: { ensure: controllerEnsure, status: jest.fn(), stop: controllerStop },
       getRequestId: () => "req_ensure_draining",
     }));
 
@@ -111,13 +120,28 @@ describe("Design public session routes", () => {
       .post("/api/design/sessions/ensure")
       .send({ projectId: "project_01" });
 
-    expect(response.status).toBe(409);
-    expect(response.body).toMatchObject({
-      code: "design_session_draining",
-      state: "DRAINING",
-      retryable: true,
+    expect(response.status).toBe(202);
+    expect(response.body).toEqual({
+      session: {
+        id: "sess_01",
+        projectId: "project_01",
+        state: "STOPPED",
+        generation: 8,
+      },
     });
     expect(controllerEnsure).not.toHaveBeenCalled();
+    expect(controllerStop).toHaveBeenCalledWith({
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      expectedGeneration: 7,
+      requestId: "req_ensure_draining",
+    });
+    expect(updateSessionState).toHaveBeenCalledWith(expect.objectContaining({
+      state: "STOPPED",
+      generation: 8,
+    }));
   });
 
   test("proxies only through a session binding owned by the authenticated user", async () => {

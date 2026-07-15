@@ -104,6 +104,8 @@ describe("design session store", () => {
     expect(query.mock.calls[0]?.[0]).toContain("owner_user_id = $3");
     expect(query.mock.calls[0]?.[0]).toContain("checkpoint_generation = $5");
     expect(query.mock.calls[0]?.[0]).toContain("checkpoint_generation = $6");
+    expect(query.mock.calls[0]?.[0]).toContain("state = 'CHECKPOINTING'");
+    expect(query.mock.calls[0]?.[0]).not.toContain("state = 'STOPPED'");
   });
 
   test("reads a callback binding only when the complete tuple matches", async () => {

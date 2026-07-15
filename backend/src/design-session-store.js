@@ -205,8 +205,8 @@ export async function commitDesignCheckpoint({
                checkpoint_bytes = $7,
                checkpoint_sha256 = $8,
                checkpoint_object_key = $9,
-               state = 'STOPPED',
-               stopped_at = NOW(),
+               state = 'CHECKPOINTING',
+               stopped_at = NULL,
                last_request_id = $10,
                updated_at = NOW(),
                last_seen_at = NOW()
@@ -283,7 +283,7 @@ export async function updateDesignSessionObservedState({
              last_request_id = $7,
              last_seen_at = NOW(),
              updated_at = NOW(),
-             stopped_at = CASE WHEN $5 = 'STOPPED' THEN COALESCE(stopped_at, NOW()) ELSE stopped_at END
+             stopped_at = CASE WHEN $5 = 'STOPPED' THEN NOW() ELSE NULL END
        WHERE session_id = $1
          AND project_id = $2
          AND owner_user_id = $3

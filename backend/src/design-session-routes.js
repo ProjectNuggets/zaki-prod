@@ -46,23 +46,24 @@ export function buildDesignSessionRouter({
         requestId,
         createSessionId,
       });
-      if (["DRAINING", "CHECKPOINTING"].includes(session.state)) {
-        return res.status(409).json({
-          code: "design_session_draining",
-          message: "Design session is stopping and cannot be reopened yet.",
-          state: session.state,
-          retryable: true,
-          requestId,
-        });
-      }
-      const result = await controller.ensure({
-        sessionId: session.sessionId,
-        projectId: session.projectId,
-        userId: session.userId,
-        tenantId: session.tenantId,
-        desiredGeneration: session.generation,
-        requestId,
-      });
+      const recoveringStop = ["DRAINING", "CHECKPOINTING"].includes(session.state);
+      const result = recoveringStop
+        ? await controller.stop({
+            sessionId: session.sessionId,
+            projectId: session.projectId,
+            userId: session.userId,
+            tenantId: session.tenantId,
+            expectedGeneration: session.generation,
+            requestId,
+          })
+        : await controller.ensure({
+            sessionId: session.sessionId,
+            projectId: session.projectId,
+            userId: session.userId,
+            tenantId: session.tenantId,
+            desiredGeneration: session.generation,
+            requestId,
+          });
       await updateSessionStateBestEffort(updateSessionState, dbQuery, session, result, requestId);
       return res
         .status(["READY", "ACTIVE"].includes(result.session.state) ? 200 : 202)
