@@ -394,9 +394,9 @@ describe("agent BOT BFF contract", () => {
       { method: "get",    path: "/api/agent/sessions/:sessionKey",          upstreamSuffix: "",         json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_DETAIL_PAYLOAD },
       { method: "post",   path: "/api/agent/sessions/:sessionKey/compact",  upstreamSuffix: "/compact", json: false },
       { method: "get",    path: "/api/agent/sessions/:sessionKey/context",  upstreamSuffix: "/context", json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_CONTEXT_PAYLOAD },
-      { method: "get",    path: "/api/agent/sessions/:sessionKey/todos",    upstreamSuffix: "/todos",   json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_TODOS_PAYLOAD },
+      { method: "get",    path: "/api/agent/sessions/:sessionKey/todos",    upstreamSuffix: "/todos",   json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_TODOS_PAYLOAD, signalUnsupportedRead: true },
       { method: "patch",  path: "/api/agent/sessions/:sessionKey/todos/:listId/items/:itemId", upstreamSuffix: "/todos/:listId/items/:itemId", json: true },
-      { method: "get",    path: "/api/agent/sessions/:sessionKey/plan",     upstreamSuffix: "/plan",    json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_PLAN_PAYLOAD },
+      { method: "get",    path: "/api/agent/sessions/:sessionKey/plan",     upstreamSuffix: "/plan",    json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_PLAN_PAYLOAD, signalUnsupportedRead: true },
       { method: "get",    path: "/api/agent/sessions/:sessionKey/export",   upstreamSuffix: "/export",  json: false },
       { method: "get",    path: "/api/agent/sessions/:sessionKey/history",  upstreamSuffix: "/history", json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_HISTORY_PAYLOAD },
       { method: "post",   path: "/api/agent/sessions/:sessionKey/mode",     upstreamSuffix: "/mode",    json: true  },
@@ -453,6 +453,12 @@ describe("agent BOT BFF contract", () => {
     expect(proxySource.indexOf("options.softEmptyOnMissing")).toBeLessThan(
       proxySource.indexOf('options.responseMode === "json"')
     );
+    expect(proxySource).toContain('res.setHeader(AGENT_READ_SUPPORT_HEADER, "unsupported")');
+    const corsSource = source.slice(
+      source.indexOf("// CORS configuration"),
+      source.indexOf("// REQUEST LOGGING")
+    );
+    expect(corsSource).toContain("AGENT_READ_SUPPORT_HEADER");
   });
 
   it("soft-empties Brain self-anchor for cold corpus accounts", () => {
@@ -846,9 +852,11 @@ describe("agent BOT BFF contract", () => {
       });
       expect(proxyOptionsFor("get", "/api/agent/sessions/:sessionKey/plan")).toEqual({
         softEmptyOnMissing: AGENT_SESSION_IDLE_PLAN_PAYLOAD,
+        signalUnsupportedRead: true,
       });
       expect(proxyOptionsFor("get", "/api/agent/sessions/:sessionKey/todos")).toEqual({
         softEmptyOnMissing: AGENT_SESSION_IDLE_TODOS_PAYLOAD,
+        signalUnsupportedRead: true,
       });
       expect(proxyOptionsFor("get", "/api/agent/sessions/:sessionKey/context")).toEqual({
         softEmptyOnMissing: AGENT_SESSION_IDLE_CONTEXT_PAYLOAD,
@@ -877,25 +885,26 @@ describe("agent BOT BFF contract", () => {
       it("returns the idle payload on upstream 400 invalid_session_key", () => {
         expect(
           resolveSoftEmptyAgentResponse(idle, 400, JSON.stringify({ error: "invalid_session_key" }))
-        ).toEqual({ soft: true, payload: idle });
+        ).toEqual({ soft: true, payload: idle, reason: "unsupported" });
         // Also matches when the engine nests it under `code`.
         expect(
           resolveSoftEmptyAgentResponse(idle, 400, JSON.stringify({ code: "invalid_session_key" }))
-        ).toEqual({ soft: true, payload: idle });
+        ).toEqual({ soft: true, payload: idle, reason: "unsupported" });
         // ...or in a bare/extra-text body.
         expect(
           resolveSoftEmptyAgentResponse(idle, 400, "invalid_session_key")
-        ).toEqual({ soft: true, payload: idle });
+        ).toEqual({ soft: true, payload: idle, reason: "unsupported" });
       });
 
       it("returns the idle payload on any upstream 404 (no active run)", () => {
         expect(resolveSoftEmptyAgentResponse(idle, 404, "")).toEqual({
           soft: true,
           payload: idle,
+          reason: "missing",
         });
         expect(
           resolveSoftEmptyAgentResponse(idle, 404, JSON.stringify({ error: "not_found" }))
-        ).toEqual({ soft: true, payload: idle });
+        ).toEqual({ soft: true, payload: idle, reason: "missing" });
       });
 
       it("passes through a 400 with a DIFFERENT error body unchanged", () => {

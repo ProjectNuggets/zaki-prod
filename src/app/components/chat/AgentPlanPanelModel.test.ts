@@ -113,6 +113,60 @@ describe("buildAgentPlanPanelModel", () => {
     ]);
   });
 
+  it("ignores null coordinates and non-plan completion sentinels", () => {
+    const model = buildAgentPlanPanelModel({
+      plan: { active: false, plan: null },
+      todos: { lists: [], current_list_id: null },
+      transcriptEntries: [
+        entry({
+          id: "step-1",
+          phase: "plan_step",
+          source: "progress",
+          resultState: "running",
+          stepIndex: 0,
+          stepTotal: 2,
+          text: "Step 1/2: Inspect",
+        }),
+        entry({
+          id: "step-2",
+          phase: "plan_step",
+          source: "progress",
+          resultState: "running",
+          stepIndex: 1,
+          stepTotal: 2,
+          timestamp: 2,
+          text: "Step 2/2: Verify",
+        }),
+        entry({
+          id: "ordinary-tool",
+          phase: "tool_done",
+          source: "progress",
+          resultState: "done",
+          stepIndex: null,
+          stepTotal: null,
+          timestamp: 3,
+          text: "Ordinary tool completed",
+        }),
+        entry({
+          id: "plan-complete",
+          phase: "thinking",
+          source: "progress",
+          resultState: "done",
+          stepIndex: 2,
+          stepTotal: 2,
+          timestamp: 4,
+          text: "Plan complete",
+        }),
+      ],
+      tasks: [],
+      isStreaming: true,
+    });
+
+    expect(model.totalSteps).toBe(2);
+    expect(model.steps.map((step) => step.title)).toEqual(["Inspect", "Verify"]);
+    expect(model.steps.map((step) => step.state)).toEqual(["done", "running"]);
+  });
+
   it("uses the persisted checklist before background tasks", () => {
     const todos: AgentSessionTodosResponse = {
       current_list_id: "release",

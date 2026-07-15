@@ -95,12 +95,18 @@ function liveSteps(
     if (entry.source === "done" || entry.phase === "done") {
       runFinishedAt = Math.max(runFinishedAt, entry.timestamp);
     }
+    if (
+      entry.phase !== "plan_step" &&
+      entry.phase !== "tool_done" &&
+      entry.phase !== "error_recovery"
+    ) continue;
+    if (entry.stepIndex == null) continue;
     const wireIndex = Number(entry.stepIndex);
     const hasIndex = Number.isInteger(wireIndex) && wireIndex >= 0;
+    if (!hasIndex) continue;
     if (Number.isInteger(entry.stepTotal) && Number(entry.stepTotal) > 0) {
       total = Math.max(total, Number(entry.stepTotal));
     }
-    if (!hasIndex) continue;
     const index = wireIndex + 1;
     total = Math.max(total, index);
 

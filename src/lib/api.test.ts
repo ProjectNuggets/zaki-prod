@@ -938,13 +938,16 @@ describe("agent runtime API clients", () => {
     );
 
     const { fetchAgentSessionTodos } = await import("@/lib/api");
-    const { data } = await fetchAgentSessionTodos("agent:zaki-bot:user:42:thread:main");
+    const controller = new AbortController();
+    const { data } = await fetchAgentSessionTodos("agent:zaki-bot:user:42:thread:main", {
+      signal: controller.signal,
+    });
 
     expect(data.current_list_id).toBe("list-a");
     expect(data.lists[0].items[0].title).toBe("Wire API");
     expect(mockFetch).toHaveBeenCalledWith(
       "http://test.local/api/agent/sessions/agent%3Azaki-bot%3Auser%3A42%3Athread%3Amain/todos",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET", signal: controller.signal })
     );
   });
 
@@ -989,13 +992,16 @@ describe("agent runtime API clients", () => {
     );
 
     const { fetchAgentSessionPlan } = await import("@/lib/api");
-    const { data } = await fetchAgentSessionPlan("agent:zaki-bot:user:42:thread:main");
+    const controller = new AbortController();
+    const { data } = await fetchAgentSessionPlan("agent:zaki-bot:user:42:thread:main", {
+      signal: controller.signal,
+    });
 
     expect(data.active).toBe(false);
     expect(data.plan).toBeNull();
     expect(mockFetch).toHaveBeenCalledWith(
       "http://test.local/api/agent/sessions/agent%3Azaki-bot%3Auser%3A42%3Athread%3Amain/plan",
-      expect.objectContaining({ method: "GET" })
+      expect.objectContaining({ method: "GET", signal: controller.signal })
     );
   });
 

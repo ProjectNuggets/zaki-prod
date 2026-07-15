@@ -3019,7 +3019,7 @@ describe("ChatArea Component", () => {
       response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
       data: { userId: "1" },
     });
-    (fetchAgentSessionPlan as jest.Mock).mockResolvedValue({
+    (fetchAgentSessionPlan as jest.Mock).mockResolvedValueOnce({
       response: { ok: true, status: 200, json: async () => ({}), headers: new Headers() },
       data: {
         active: true,
@@ -3053,7 +3053,8 @@ describe("ChatArea Component", () => {
     fireEvent.click(within(row).getByRole("button", { name: "zakiAgent.planPanel.retry" }));
     fireEvent.click(within(row).getByRole("button", { name: "zakiAgent.planPanel.retryConfirm" }));
 
-    expect(await within(row).findByText("zakiAgent.planPanel.retryFailed")).toBeInTheDocument();
+    expect(await screen.findByText("zakiAgent.planPanel.retryFailed")).toBeInTheDocument();
+    expect(screen.getByText("Run release checks")).toBeInTheDocument();
   });
 
   it("opens and closes the Agent mobile inspector from the mobile panel event", async () => {

@@ -16,11 +16,14 @@ import {
 } from "./AgentPlanPanelModel";
 
 const PLAN_POLL_INTERVAL_MS = 5_000;
+const PLAN_READ_TIMEOUT_MS = 10_000;
 const MAX_PLAN_POLLS_PER_RUN = 24;
+const AGENT_READ_SUPPORT_HEADER = "X-Zaki-Agent-Read-Support";
 
 type ActivePlanRequest = {
   sessionKey: string;
   generation: number;
+  controller: AbortController;
   promise: Promise<void>;
 };
 
@@ -58,14 +61,29 @@ export function AgentPlanPanel({
   const [confirmRetryId, setConfirmRetryId] = useState<string | null>(null);
   const [retryBusyId, setRetryBusyId] = useState<string | null>(null);
   const [retryFailedId, setRetryFailedId] = useState<string | null>(null);
+  const [retryAttempt, setRetryAttempt] = useState<{
+    step: AgentPlanPanelStep;
+    state: "starting" | "failed";
+  } | null>(null);
   const sessionGenerationRef = useRef(0);
   const activeRequestRef = useRef<ActivePlanRequest | null>(null);
   const pollCountRef = useRef(0);
+  const unsupportedReadsRef = useRef(new Set<"plan" | "todos">());
+
+  const allReadsUnsupported = useCallback(
+    () => unsupportedReadsRef.current.has("plan") && unsupportedReadsRef.current.has("todos"),
+    []
+  );
 
   const loadPlan = useCallback((showLoading = true): Promise<void> => {
     if (!sessionKey) {
       setPlan(null);
       setTodos(null);
+      setLoading(false);
+      setPlanUnavailable(false);
+      return Promise.resolve();
+    }
+    if (allReadsUnsupported()) {
       setLoading(false);
       setPlanUnavailable(false);
       return Promise.resolve();
@@ -79,36 +97,53 @@ export function AgentPlanPanel({
     const request = {} as ActivePlanRequest;
     request.sessionKey = sessionKey;
     request.generation = generation;
+    request.controller = new AbortController();
+    const timeout = window.setTimeout(() => request.controller.abort(), PLAN_READ_TIMEOUT_MS);
     request.promise = (async () => {
+      const skipPlan = unsupportedReadsRef.current.has("plan");
+      const skipTodos = unsupportedReadsRef.current.has("todos");
       const [planResult, todosResult] = await Promise.allSettled([
-        fetchAgentSessionPlan(sessionKey),
-        fetchAgentSessionTodos(sessionKey),
+        skipPlan
+          ? Promise.resolve(null)
+          : fetchAgentSessionPlan(sessionKey, { signal: request.controller.signal }),
+        skipTodos
+          ? Promise.resolve(null)
+          : fetchAgentSessionTodos(sessionKey, { signal: request.controller.signal }),
       ]);
       if (generation !== sessionGenerationRef.current) return;
 
       const planFailed =
-        planResult.status !== "fulfilled" || !planResult.value.response.ok;
-      if (!planFailed && planResult.status === "fulfilled") {
+        !skipPlan &&
+        (planResult.status !== "fulfilled" || !planResult.value?.response.ok);
+      if (!skipPlan && !planFailed && planResult.status === "fulfilled" && planResult.value) {
         setPlan(planResult.value.data);
-      } else {
+        if (planResult.value.response.headers?.get(AGENT_READ_SUPPORT_HEADER) === "unsupported") {
+          unsupportedReadsRef.current.add("plan");
+        }
+      } else if (!skipPlan) {
         setPlan(null);
       }
-      if (todosResult.status === "fulfilled" && todosResult.value.response.ok) {
+      if (!skipTodos && todosResult.status === "fulfilled" && todosResult.value?.response.ok) {
         setTodos(todosResult.value.data);
-      } else {
+        if (todosResult.value.response.headers?.get(AGENT_READ_SUPPORT_HEADER) === "unsupported") {
+          unsupportedReadsRef.current.add("todos");
+        }
+      } else if (!skipTodos) {
         setTodos(null);
       }
       setPlanUnavailable(planFailed);
     })().finally(() => {
+      window.clearTimeout(timeout);
       if (activeRequestRef.current === request) activeRequestRef.current = null;
       if (generation === sessionGenerationRef.current) setLoading(false);
     });
     activeRequestRef.current = request;
     return request.promise;
-  }, [sessionKey]);
+  }, [allReadsUnsupported, sessionKey]);
 
   useEffect(() => {
     sessionGenerationRef.current += 1;
+    activeRequestRef.current?.controller.abort();
     activeRequestRef.current = null;
     pollCountRef.current = 0;
     setPlan(null);
@@ -117,9 +152,13 @@ export function AgentPlanPanel({
     setPlanUnavailable(false);
     setConfirmRetryId(null);
     setRetryFailedId(null);
+    setRetryAttempt(null);
     void loadPlan(true);
     return () => {
       sessionGenerationRef.current += 1;
+      const activeRequest = activeRequestRef.current;
+      activeRequest?.controller.abort();
+      if (activeRequestRef.current === activeRequest) activeRequestRef.current = null;
     };
   }, [loadPlan]);
 
@@ -129,9 +168,9 @@ export function AgentPlanPanel({
     let cancelled = false;
     let timer: number | null = null;
     const scheduleNextPoll = () => {
-      if (cancelled || pollCountRef.current >= MAX_PLAN_POLLS_PER_RUN) return;
+      if (cancelled || allReadsUnsupported() || pollCountRef.current >= MAX_PLAN_POLLS_PER_RUN) return;
       timer = window.setTimeout(async () => {
-        if (cancelled) return;
+        if (cancelled || allReadsUnsupported()) return;
         pollCountRef.current += 1;
         await loadPlan(false);
         scheduleNextPoll();
@@ -142,7 +181,7 @@ export function AgentPlanPanel({
       cancelled = true;
       if (timer != null) window.clearTimeout(timer);
     };
-  }, [isStreaming, loadPlan, sessionKey]);
+  }, [allReadsUnsupported, isStreaming, loadPlan, sessionKey]);
 
   const model = useMemo(
     () => buildAgentPlanPanelModel({ plan, todos, transcriptEntries, tasks, isStreaming }),
@@ -175,11 +214,14 @@ export function AgentPlanPanel({
     if (!onRetryStep || isStreaming || !isOnline || retryBusyId) return;
     setRetryBusyId(step.id);
     setRetryFailedId(null);
+    setRetryAttempt({ step, state: "starting" });
     try {
       await onRetryStep(step);
       setConfirmRetryId(null);
+      setRetryAttempt(null);
     } catch {
       setRetryFailedId(step.id);
+      setRetryAttempt({ step, state: "failed" });
     } finally {
       setRetryBusyId(null);
     }
@@ -335,6 +377,27 @@ export function AgentPlanPanel({
           </div>
         </div>
       )}
+      {retryAttempt && !model.steps.some(
+        (step) => step.id === retryAttempt.step.id && step.state === "failed"
+      ) ? (
+        <div className="zaki-agent-plan__empty is-error" role="status">
+          {retryAttempt.state === "starting" ? (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          ) : (
+            <AlertTriangle className="size-3.5" aria-hidden />
+          )}
+          <div>
+            <strong>{retryAttempt.step.title}</strong>
+            <span>
+              {retryAttempt.state === "starting"
+                ? t("zakiAgent.planPanel.retryStarting", { defaultValue: "Starting…" })
+                : t("zakiAgent.planPanel.retryFailed", {
+                    defaultValue: "Retry could not start. The current run was not changed.",
+                  })}
+            </span>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
