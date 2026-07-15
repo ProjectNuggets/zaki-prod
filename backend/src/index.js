@@ -38,6 +38,7 @@ import {
 } from "./signup-policy.js";
 import { completeEmailSignup } from "./email-signup-user.js";
 import { validateRuntimeConfig } from "./config-validation.js";
+import { bypassDesignOwnedBodyParser } from "./design-body-parser-boundary.js";
 import {
   createMemoryRoutes,
   buildChatMemoryContext,
@@ -2551,8 +2552,14 @@ const stripeWebhookHandler = createStripeWebhookHandler({
 app.post("/api/billing/webhook", express.raw({ type: "application/json" }), stripeWebhookHandler);
 
 // Request size limits to prevent memory exhaustion
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(bypassDesignOwnedBodyParser(
+  express.json({ limit: '10mb' }),
+  { controllerEnabled: ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED },
+));
+app.use(bypassDesignOwnedBodyParser(
+  express.urlencoded({ extended: true, limit: '10mb' }),
+  { controllerEnabled: ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED },
+));
 
 // Normalize JSON parsing failures to API-friendly responses.
 app.use((err, req, res, next) => {
