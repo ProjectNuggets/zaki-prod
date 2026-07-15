@@ -69,6 +69,41 @@ describe("DesignControllerClient", () => {
     })).rejects.toMatchObject({ code: "DESIGN_CONTROLLER_RESPONSE_INVALID" });
   });
 
+  test("sends the committed generation for deletion-only stop finalization", async () => {
+    const fetchWithTimeout = jest.fn().mockResolvedValue(new Response(JSON.stringify({
+      session: {
+        id: "sess_01",
+        projectId: "project_01",
+        state: "STOPPED",
+        generation: 8,
+      },
+    }), { status: 200, headers: { "content-type": "application/json" } }));
+    const client = new DesignControllerClient({
+      baseUrl: "http://controller.internal:7460",
+      token: "hub-controller-secret",
+      fetchWithTimeout,
+    });
+
+    await client.stop({
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      expectedGeneration: 8,
+      committedGeneration: 8,
+      requestId: "req_finalize_01",
+    });
+
+    const [, options] = fetchWithTimeout.mock.calls[0] ?? [];
+    expect(JSON.parse(options.body)).toEqual({
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      expectedGeneration: 8,
+      committedGeneration: 8,
+    });
+  });
+
   test("proxies through the controller while replacing browser credentials with the hub bearer", async () => {
     const fetchWithTimeout = jest.fn().mockResolvedValue(new Response("proxied", {
       status: 200,

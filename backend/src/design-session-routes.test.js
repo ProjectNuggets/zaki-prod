@@ -84,14 +84,14 @@ describe("Design public session routes", () => {
     expect(resolveUser).not.toHaveBeenCalled();
   });
 
-  test("resumes an interrupted stop instead of reopening a draining session", async () => {
+  test("finalizes a committed checkpoint instead of reopening the session", async () => {
     const controllerEnsure = jest.fn();
     const controllerStop = jest.fn().mockResolvedValue({
       session: {
         id: "sess_01",
         projectId: "project_01",
         state: "STOPPED",
-        generation: 8,
+        generation: 7,
       },
     });
     const updateSessionState = jest.fn();
@@ -104,7 +104,7 @@ describe("Design public session routes", () => {
         projectId: "project_01",
         userId: "42",
         tenantId: "default",
-        state: "DRAINING",
+        state: "CHECKPOINTING",
         generation: 7,
       }),
       readSessionBinding: jest.fn(),
@@ -126,7 +126,7 @@ describe("Design public session routes", () => {
         id: "sess_01",
         projectId: "project_01",
         state: "STOPPED",
-        generation: 8,
+        generation: 7,
       },
     });
     expect(controllerEnsure).not.toHaveBeenCalled();
@@ -136,11 +136,12 @@ describe("Design public session routes", () => {
       userId: "42",
       tenantId: "default",
       expectedGeneration: 7,
+      committedGeneration: 7,
       requestId: "req_ensure_draining",
     });
     expect(updateSessionState).toHaveBeenCalledWith(expect.objectContaining({
       state: "STOPPED",
-      generation: 8,
+      generation: 7,
     }));
   });
 

@@ -155,6 +155,9 @@ function lifecycleBindingBody(input) {
     userId: input.userId,
     tenantId: input.tenantId,
     expectedGeneration: input.expectedGeneration,
+    ...(input.committedGeneration === undefined
+      ? {}
+      : { committedGeneration: input.committedGeneration }),
   };
 }
 

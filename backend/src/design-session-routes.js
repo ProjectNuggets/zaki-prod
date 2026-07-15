@@ -47,6 +47,7 @@ export function buildDesignSessionRouter({
         createSessionId,
       });
       const recoveringStop = ["DRAINING", "CHECKPOINTING"].includes(session.state);
+      const finalizingCheckpoint = session.state === "CHECKPOINTING";
       const result = recoveringStop
         ? await controller.stop({
             sessionId: session.sessionId,
@@ -54,6 +55,7 @@ export function buildDesignSessionRouter({
             userId: session.userId,
             tenantId: session.tenantId,
             expectedGeneration: session.generation,
+            ...(finalizingCheckpoint ? { committedGeneration: session.generation } : {}),
             requestId,
           })
         : await controller.ensure({
