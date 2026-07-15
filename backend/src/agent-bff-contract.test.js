@@ -383,6 +383,17 @@ describe("agent BOT BFF contract", () => {
       handlers.heartbeatPutHandler
     );
     expect(app.get).toHaveBeenCalledWith(
+      "/api/agent/heartbeat",
+      handlers.requireAgentContext,
+      handlers.heartbeatGetHandler
+    );
+    expect(app.put).toHaveBeenCalledWith(
+      "/api/agent/heartbeat",
+      handlers.requireAgentContext,
+      handlers.json1mb,
+      handlers.heartbeatPutHandler
+    );
+    expect(app.get).toHaveBeenCalledWith(
       "/v1/me/bot/usage",
       handlers.requireAgentContext,
       handlers.usageHandler

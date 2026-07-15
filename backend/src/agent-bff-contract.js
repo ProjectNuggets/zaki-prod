@@ -464,6 +464,13 @@ export function registerBotBffAliases(app, handlers) {
     json1mb,
     heartbeatPutHandler
   );
+  app.get("/api/agent/heartbeat", requireAgentContext, heartbeatGetHandler);
+  app.put(
+    "/api/agent/heartbeat",
+    requireAgentContext,
+    json1mb,
+    heartbeatPutHandler
+  );
   app.post(
     "/v1/me/bot/telegram/connect",
     requireAgentContext,

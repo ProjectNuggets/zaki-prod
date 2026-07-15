@@ -31,8 +31,9 @@ export const LOCK_RETRY_FALLBACK_DELAYS_MS = Object.freeze([100, 250, 500]);
 
 // Launch policy: scheduled return delivery is not yet safe enough to expose.
 // Keep this enforcement at the authenticated product boundary so a direct API
-// caller cannot bypass the disabled Settings control. `false` patches remain
-// valid so stale tenant opt-ins can be cleared upstream.
+// caller cannot bypass the disabled Settings control through either the tenant
+// preference or per-user heartbeat plane. `false` patches remain valid so stale
+// opt-ins can be cleared upstream.
 export const PROACTIVE_UPDATES_LAUNCH_ENABLED = false;
 const PROACTIVE_UPDATES_PAUSED_MESSAGE = "Proactive updates are paused for launch.";
 
@@ -536,7 +537,7 @@ export function sanitizeTelegramConnectionState(status) {
 export function sanitizeHeartbeatState(payload) {
   const source = payload && typeof payload === "object" ? payload : {};
   return heartbeatStateSchema.parse({
-    enabled: Boolean(source.enabled),
+    enabled: PROACTIVE_UPDATES_LAUNCH_ENABLED ? Boolean(source.enabled) : false,
     interval_minutes: normalizedIntegerOrNull(source.interval_minutes ?? source.intervalMinutes) ?? undefined,
     prompt:
       typeof source.prompt === "string" || source.prompt === null
@@ -551,6 +552,12 @@ export function validateHeartbeatPatch(payload) {
     return {
       success: false,
       message: parsed.error.issues[0]?.message || "invalid heartbeat payload",
+    };
+  }
+  if (!PROACTIVE_UPDATES_LAUNCH_ENABLED && parsed.data.enabled === true) {
+    return {
+      success: false,
+      message: PROACTIVE_UPDATES_PAUSED_MESSAGE,
     };
   }
   return { success: true, data: parsed.data };

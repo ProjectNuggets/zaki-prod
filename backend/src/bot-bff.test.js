@@ -502,6 +502,28 @@ describe("bot BFF T6 contract", () => {
     );
   });
 
+  it("enforces the proactive launch pause before any heartbeat enable write", async () => {
+    const { handlers, sendUpstreamRequest } = createHandlers({
+      sendUpstreamRequest: jest.fn(async () => {
+        throw new Error("heartbeat enable must not reach Nullalis");
+      }),
+    });
+    const req = { body: { enabled: true }, headers: {} };
+    const res = createMockRes();
+
+    await handlers.putHeartbeat(req, res);
+
+    expect(sendUpstreamRequest).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
+    expect(res.jsonBody).toEqual(
+      expect.objectContaining({
+        error: PRODUCT_ERROR_CODES.SETTINGS_UPDATE_FAILED,
+        message: "Proactive updates are paused for launch.",
+        retryable: false,
+      })
+    );
+  });
+
   it("roundtrips heartbeat state through the bot BFF", async () => {
     const { handlers } = createHandlers({
       sendUpstreamRequest: jest.fn(async ({ method, body }) => {
@@ -518,7 +540,7 @@ describe("bot BFF T6 contract", () => {
     await handlers.getHeartbeat(getReq, getRes);
     expect(getRes.statusCode).toBe(200);
     expect(getRes.jsonBody).toEqual({
-      enabled: true,
+      enabled: false,
       interval_minutes: 15,
       prompt: "Daily summary",
     });
