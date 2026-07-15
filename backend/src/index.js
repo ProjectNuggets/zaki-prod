@@ -462,7 +462,7 @@ import {
 import { buildAuthRouter } from "./auth-endpoints.js";
 import { loginHandler as zakiLoginHandler } from "./login-handler.js";
 import {
-  verifyZakiAccessToken,
+  verifyActiveZakiAccessToken,
   tryDecodeJwtPayload,
   mintZakiSession,
   cleanupExpiredSessions,
@@ -475,7 +475,9 @@ import { actualChatUnits, estimateChatUnits, deterministicGrantId } from "./chat
 import { isToolFireEvent, extractGeneratedFile } from "./agent-stream-signals.js";
 import {
   buildClearedGoogleOAuthNonceCookie,
+  buildGoogleOAuthCallbackFailureRedirect,
   buildGoogleOAuthRedirectUri,
+  buildGoogleOAuthStartFailureRedirect,
   buildGoogleOAuthNonceCookie,
   createGoogleOAuthNonce,
   extractGoogleOAuthNonceFromCookieHeader,
@@ -4896,7 +4898,7 @@ function _extractBearer(req) {
 
 async function _resolveZakiUser(token) {
   try {
-    const payload = await verifyZakiAccessToken(token);
+    const payload = await verifyActiveZakiAccessToken(token);
     if (!payload?.sub) return { error: "invalid_token" };
     const userId = Number.parseInt(String(payload.sub), 10);
     if (!Number.isInteger(userId) || userId <= 0) {
@@ -5024,12 +5026,30 @@ async function verifyGoogleIdToken(idToken) {
 }
 
 app.get("/api/auth/google/start", (req, res) => {
-  try {
-    if (!ensureGoogleOAuthConfigured()) {
-      res.status(503).json({ error: "Google OAuth is not configured." });
+  const requestedReturnTo = req.query?.returnTo || req.query?.return_to || "/spaces";
+  const respondToGoogleOAuthStartFailure = ({ errorCode, status, body }) => {
+    const popupRedirect = buildGoogleOAuthStartFailureRedirect({
+      appUrl: getAppUrl(),
+      returnTo: requestedReturnTo,
+      errorCode,
+    });
+    if (popupRedirect) {
+      res.redirect(302, popupRedirect);
       return;
     }
-    const returnTo = sanitizeGoogleOAuthReturnTo(req.query?.returnTo || req.query?.return_to || "/spaces");
+    res.status(status).json(body);
+  };
+
+  try {
+    if (!ensureGoogleOAuthConfigured()) {
+      respondToGoogleOAuthStartFailure({
+        errorCode: "google_oauth_unconfigured",
+        status: 503,
+        body: { error: "Google OAuth is not configured." },
+      });
+      return;
+    }
+    const returnTo = sanitizeGoogleOAuthReturnTo(requestedReturnTo);
     let legalPolicyVersion = null;
     if (String(req.query?.legalConsentAccepted || "").toLowerCase() === "true") {
       const policyVersionResult = validateLegalPolicyVersion(
@@ -5037,7 +5057,11 @@ app.get("/api/auth/google/start", (req, res) => {
         ZAKI_LEGAL_POLICY_VERSION
       );
       if (!policyVersionResult.ok) {
-        res.status(409).json({ success: false, error: policyVersionResult.error });
+        respondToGoogleOAuthStartFailure({
+          errorCode: "google_consent_stale",
+          status: 409,
+          body: { success: false, error: policyVersionResult.error },
+        });
         return;
       }
       legalPolicyVersion = policyVersionResult.version;
@@ -5070,10 +5094,14 @@ app.get("/api/auth/google/start", (req, res) => {
     // reads as gibberish to the user. Emit a machine `code` the client switches on plus a
     // human `message`. The real exception stays in the server log.
     console.error("[GoogleOAuth] start error:", error);
-    res.status(500).json({
-      error: "google_oauth_start_failed",
-      code: "google_oauth_start_failed",
-      message: "We couldn't start Google sign-in. Try again, or use your email and password.",
+    respondToGoogleOAuthStartFailure({
+      errorCode: "google_oauth_start_failed",
+      status: 500,
+      body: {
+        error: "google_oauth_start_failed",
+        code: "google_oauth_start_failed",
+        message: "We couldn't start Google sign-in. Try again, or use your email and password.",
+      },
     });
   }
 });
@@ -5095,9 +5123,28 @@ const GOOGLE_SIGNUP_BLOCKED_CODES = new Set([
 ]);
 
 app.get("/api/auth/google/callback", async (req, res) => {
+  const state = String(req.query?.state || "").trim();
+  const callbackNonce = extractGoogleOAuthNonceFromCookieHeader(req.headers?.cookie);
+  const redirectGoogleOAuthFailure = (errorCode) => {
+    res.setHeader(
+      "Set-Cookie",
+      buildClearedGoogleOAuthNonceCookie({ secure: isSecureCookieRequest(req) })
+    );
+    res.redirect(
+      302,
+      buildGoogleOAuthCallbackFailureRedirect({
+        appUrl: getAppUrl(),
+        state,
+        stateSecret: GOOGLE_OAUTH_STATE_SECRET,
+        cookieNonce: callbackNonce,
+        errorCode,
+      })
+    );
+  };
+
   try {
     if (!ensureGoogleOAuthConfigured()) {
-      res.redirect(302, `${getAppUrl()}/?auth=login&error=google_oauth_unconfigured`);
+      redirectGoogleOAuthFailure("google_oauth_unconfigured");
       return;
     }
     // WP-B10: Google reports a refused/cancelled consent screen by redirecting back with
@@ -5107,18 +5154,12 @@ app.get("/api/auth/google/callback", async (req, res) => {
     const googleError = String(req.query?.error || "").trim();
     if (googleError) {
       const cancelled = googleError === "access_denied";
-      res.redirect(
-        302,
-        `${getAppUrl()}/?auth=login&error=${
-          cancelled ? "google_oauth_cancelled" : "google_oauth_failed"
-        }`
-      );
+      redirectGoogleOAuthFailure(cancelled ? "google_oauth_cancelled" : "google_oauth_failed");
       return;
     }
     const code = String(req.query?.code || "").trim();
-    const state = String(req.query?.state || "").trim();
     if (!code || !state) {
-      res.redirect(302, `${getAppUrl()}/?auth=login&error=google_oauth_missing_code`);
+      redirectGoogleOAuthFailure("google_oauth_missing_code");
       return;
     }
     const { returnTo, nonceHash, legalPolicyVersion } = verifyGoogleOAuthState(
@@ -5126,7 +5167,7 @@ app.get("/api/auth/google/callback", async (req, res) => {
       GOOGLE_OAUTH_STATE_SECRET
     );
     verifyGoogleOAuthNonceBinding({
-      cookieNonce: extractGoogleOAuthNonceFromCookieHeader(req.headers?.cookie),
+      cookieNonce: callbackNonce,
       stateNonceHash: nonceHash,
     });
     // The consent the user attested to, carried tamper-proof in the HMAC-signed
@@ -5182,16 +5223,9 @@ app.get("/api/auth/google/callback", async (req, res) => {
     res.redirect(302, appUrl.toString());
   } catch (error) {
     console.error("[GoogleOAuth] callback error:", error);
-    res.setHeader(
-      "Set-Cookie",
-      buildClearedGoogleOAuthNonceCookie({ secure: isSecureCookieRequest(req) })
-    );
-    const appUrl = new URL("/?auth=login", getAppUrl());
-    appUrl.searchParams.set(
-      "error",
+    redirectGoogleOAuthFailure(
       GOOGLE_SIGNUP_BLOCKED_CODES.has(error?.code) ? error.code : "google_oauth_failed"
     );
-    res.redirect(302, appUrl.toString());
   }
 });
 

@@ -3,6 +3,7 @@
 // Mocking patterns mirror zaki-auth.test.js verbatim.
 
 import { jest } from "@jest/globals";
+import fs from "node:fs/promises";
 
 // --- Mocks (must come before dynamic import) ---
 const dbQueryMock = jest.fn();
@@ -18,12 +19,14 @@ jest.unstable_mockModule("./db.js", () => ({
 }));
 
 const verifyZakiAccessTokenMock = jest.fn();
+const verifyActiveZakiAccessTokenMock = jest.fn();
 const tryDecodeJwtPayloadMock = jest.fn();
 const mintZakiSessionMock = jest.fn();
 const revokeAllSessionsForUserMock = jest.fn();
 
 jest.unstable_mockModule("./zaki-auth.js", () => ({
   verifyZakiAccessToken: verifyZakiAccessTokenMock,
+  verifyActiveZakiAccessToken: verifyActiveZakiAccessTokenMock,
   tryDecodeJwtPayload: tryDecodeJwtPayloadMock,
   mintZakiSession: mintZakiSessionMock,
   revokeAllSessionsForUser: revokeAllSessionsForUserMock,
@@ -72,6 +75,10 @@ beforeEach(() => {
   withDbTransactionMock.mockClear();
   withDbTransactionMock.mockImplementation(async (cb) => cb({ query: dbQueryMock }));
   verifyZakiAccessTokenMock.mockReset();
+  verifyActiveZakiAccessTokenMock.mockReset();
+  verifyActiveZakiAccessTokenMock.mockImplementation((token) =>
+    verifyZakiAccessTokenMock(token)
+  );
   tryDecodeJwtPayloadMock.mockReset();
   mintZakiSessionMock.mockReset();
   revokeAllSessionsForUserMock.mockReset();
@@ -128,7 +135,7 @@ describe("requireAuthUser — ZAKI path (AUTH-01, AUTH-03, AUTH-04)", () => {
     current_period_end: null,
   };
 
-  it("calls verifyZakiAccessToken when iss === 'zaki' and DOES NOT call novaSessionRequest", async () => {
+  it("calls the active ZAKI verifier when iss === 'zaki' and DOES NOT call novaSessionRequest", async () => {
     tryDecodeJwtPayloadMock.mockReturnValue({ iss: "zaki", sub: "42" });
     verifyZakiAccessTokenMock.mockResolvedValue({ iss: "zaki", sub: "42", email: "a@chatzaki.com" });
     dbGetMock.mockResolvedValue(fakeRow);
@@ -139,11 +146,12 @@ describe("requireAuthUser — ZAKI path (AUTH-01, AUTH-03, AUTH-04)", () => {
 
     expect(verifyZakiAccessTokenMock).toHaveBeenCalledTimes(1);
     expect(verifyZakiAccessTokenMock).toHaveBeenCalledWith("zaki-token-here");
+    expect(verifyActiveZakiAccessTokenMock).toHaveBeenCalledWith("zaki-token-here");
     expect(novaSessionRequestMock).not.toHaveBeenCalled();
     expect(result).toMatchObject({ email: "a@chatzaki.com", zakiUser: fakeRow, sessionUser: null });
   });
 
-  it("returns 401 invalid_token when verifyZakiAccessToken returns null", async () => {
+  it("returns 401 invalid_token when the active ZAKI verifier returns null", async () => {
     tryDecodeJwtPayloadMock.mockReturnValue({ iss: "zaki", sub: "42" });
     verifyZakiAccessTokenMock.mockResolvedValue(null);
 
@@ -151,6 +159,20 @@ describe("requireAuthUser — ZAKI path (AUTH-01, AUTH-03, AUTH-04)", () => {
     const res = makeRes();
     const result = await requireAuthUser(req, res);
 
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: "invalid_token" }));
+    expect(result).toBeNull();
+  });
+
+  it("returns 401 invalid_token when a sid-bound candidate session has been revoked", async () => {
+    tryDecodeJwtPayloadMock.mockReturnValue({ iss: "zaki", sub: "42" });
+    verifyActiveZakiAccessTokenMock.mockResolvedValue(null);
+
+    const req = makeReq();
+    const res = makeRes();
+    const result = await requireAuthUser(req, res);
+
+    expect(verifyActiveZakiAccessTokenMock).toHaveBeenCalledWith("test-token");
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: "invalid_token" }));
     expect(result).toBeNull();
@@ -406,7 +428,7 @@ describe("requireBotBffContext — same dual-auth (AUTH-02)", () => {
     current_period_end: null,
   };
 
-  it("calls verifyZakiAccessToken when iss === 'zaki' (does not hit network)", async () => {
+  it("calls the active ZAKI verifier when iss === 'zaki' (does not hit network)", async () => {
     tryDecodeJwtPayloadMock.mockReturnValue({ iss: "zaki", sub: "42" });
     verifyZakiAccessTokenMock.mockResolvedValue({ iss: "zaki", sub: "42", email: "a@chatzaki.com" });
     dbGetMock.mockResolvedValue(fakeRow);
@@ -556,5 +578,18 @@ describe("resolveLegacyPath — SUN-02 cutoff guard", () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+describe("inline index.js ZAKI authorization", () => {
+  it("requires an active sid-bound session on the production resolver too", async () => {
+    const source = await fs.readFile(new URL("./index.js", import.meta.url), "utf8");
+    const resolverStart = source.indexOf("async function _resolveZakiUser(token)");
+    const resolverEnd = source.indexOf("async function _resolveLegacyUser", resolverStart);
+    const resolver = source.slice(resolverStart, resolverEnd);
+
+    expect(resolverStart).toBeGreaterThanOrEqual(0);
+    expect(resolver).toContain("verifyActiveZakiAccessToken(token)");
+    expect(resolver).not.toContain("verifyZakiAccessToken(token)");
   });
 });

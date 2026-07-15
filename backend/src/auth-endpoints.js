@@ -5,7 +5,11 @@ import express from "express";
 import crypto from "node:crypto";
 
 import { dbGet, dbQuery } from "./db.js";
-import { rotateRefreshToken, signAccessTokenForUser } from "./zaki-auth.js";
+import {
+  rotateRefreshToken,
+  signAccessTokenForUser,
+  verifyZakiAccessToken,
+} from "./zaki-auth.js";
 import { COOKIE_NAME, buildRefreshCookie, buildClearedRefreshCookie } from "./zaki-session-cookie.js";
 
 /** Manual cookie parser — no cookie-parser dependency (locked decision). */
@@ -27,6 +31,26 @@ export function parseRefreshCookie(req) {
 
 function sha256Hex(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function parseBearerToken(req) {
+  const header = String(req?.headers?.authorization || "");
+  if (!/^Bearer\s+\S+$/i.test(header)) return null;
+  return header.slice(header.indexOf(" ") + 1).trim();
+}
+
+function getCandidateSessionBinding(payload) {
+  const sessionId = String(payload?.sid || "").trim();
+  const userId = String(payload?.sub || "").trim();
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      sessionId
+    ) ||
+    !/^[1-9][0-9]*$/.test(userId)
+  ) {
+    return null;
+  }
+  return { sessionId, userId };
 }
 
 /**
@@ -52,7 +76,10 @@ async function tryConcurrentRefreshGuard(tokenHash) {
     [tokenHash]
   );
   if (!recent) return null;
-  const accessToken = await signAccessTokenForUser({ id: recent.user_id, email: recent.email });
+  const accessToken = await signAccessTokenForUser(
+    { id: recent.user_id, email: recent.email },
+    recent.id
+  );
   return { accessToken, userId: recent.user_id };
 }
 
@@ -144,6 +171,47 @@ async function handleLogout(req, res) {
 }
 
 /**
+ * Revoke one verified candidate session without reading or changing the shared
+ * refresh cookie. This is intentionally separate from ordinary logout: a stale
+ * reauthentication failure may arrive after a newer tab has replaced that
+ * cookie, so a Set-Cookie clear here could revoke the wrong account.
+ */
+async function handleCandidateLogout(req, res) {
+  try {
+    const token = parseBearerToken(req);
+    if (!token) {
+      res.status(401).json({ error: "candidate_auth_required" });
+      return;
+    }
+
+    const binding = getCandidateSessionBinding(await verifyZakiAccessToken(token));
+    if (!binding) {
+      res.status(401).json({ error: "invalid_candidate_session" });
+      return;
+    }
+
+    const result = await dbQuery(
+      `UPDATE zaki_sessions
+          SET revoked_at = NOW()
+        WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL`,
+      [binding.sessionId, binding.userId]
+    );
+    const revoked = Boolean(result?.rowCount);
+    if (revoked) {
+      console.log(
+        `[ZakiAudit] session_revoke userId=${binding.userId} reason=candidate_auth_failure ip=${req?.ip ?? "unknown"}`
+      );
+    }
+    // Do not set a cookie here. The bearer binds the revocation to B while the
+    // browser's HttpOnly cookie may already belong to a newer account C.
+    res.status(200).json({ success: true, revoked });
+  } catch (err) {
+    console.error("[ZakiAuth] /api/auth/logout/candidate error:", err && err.message);
+    res.status(500).json({ error: "server_error" });
+  }
+}
+
+/**
  * Build the express.Router for /api/auth — mounted via app.use("/api/auth", buildAuthRouter()) in index.js.
  * Returns a fresh router each call so test suites can reset rate-limit state by remounting.
  */
@@ -151,5 +219,6 @@ export function buildAuthRouter() {
   const router = express.Router();
   router.post("/refresh", handleRefresh);
   router.post("/logout", handleLogout);
+  router.post("/logout/candidate", handleCandidateLogout);
   return router;
 }

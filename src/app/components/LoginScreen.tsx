@@ -16,7 +16,14 @@ import {
   buildGoogleOAuthStartUrl,
   fetchGoogleOAuthStatus,
   getFreshAuthToken,
+  requestCandidateSessionLogout,
+  beginCandidateAuthTransaction,
+  completeCandidateAuthTransaction,
+  isCurrentCandidateAuthTransaction,
+  waitForCandidateAuthTransaction,
   GOOGLE_OAUTH_POPUP_COMPLETE_MESSAGE,
+  GOOGLE_OAUTH_POPUP_FAILURE_MESSAGE,
+  type CandidateAuthTransaction,
 } from "@/lib/api";
 import { clearPendingIntent, readPendingIntent } from "@/lib/pendingIntent";
 import { getConfiguredTurnstileSiteKey } from "@/lib/runtimeEnv";
@@ -25,6 +32,8 @@ import { getInitialLegalPolicyVersion } from "@/lib/legalPolicy";
 import { AUTH_COPY } from "./loginCopy";
 
 const TURNSTILE_SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+const GOOGLE_REAUTH_POPUP_POLL_MS = 250;
+const GOOGLE_REAUTH_POPUP_CLOSE_GRACE_MS = 500;
 const PRICING_INTENT_SOURCES = new Set([
   "website_pricing",
   "website_product_agent",
@@ -139,15 +148,61 @@ function getSafeAuthErrorMessage(message: unknown, fallback: string) {
   return text;
 }
 
+type GoogleOAuthErrorCopy = {
+  errors: {
+    googleConsentRequired: string;
+    googleAgeUnverifiable: string;
+    googleUnderage: string;
+    googleOAuthFailed: string;
+    googleOAuthCancelled: string;
+    googleOAuthIncomplete: string;
+    googleOAuthUnavailable: string;
+  };
+};
+
+function getGoogleOAuthFailureCopy(errorCode: unknown, copy: GoogleOAuthErrorCopy) {
+  const oauthErrorCopy: Record<string, string> = {
+    google_consent_required: copy.errors.googleConsentRequired,
+    google_consent_stale: copy.errors.googleConsentRequired,
+    age_verification_required: copy.errors.googleAgeUnverifiable,
+    minimum_age: copy.errors.googleUnderage,
+    google_oauth_failed: copy.errors.googleOAuthFailed,
+    google_oauth_cancelled: copy.errors.googleOAuthCancelled,
+    google_oauth_missing_code: copy.errors.googleOAuthIncomplete,
+    google_oauth_unconfigured: copy.errors.googleOAuthUnavailable,
+    google_oauth_start_failed: copy.errors.googleOAuthUnavailable,
+  };
+  return oauthErrorCopy[String(errorCode || "").trim()] ?? copy.errors.googleOAuthFailed;
+}
+
+
+export type AuthenticatedUser = {
+  id?: number | string;
+  username?: string;
+  fullName?: string | null;
+  role?: string;
+};
+
+export type AuthenticatedSession = {
+  token: string;
+  user: AuthenticatedUser;
+  candidateAuthTransaction?: CandidateAuthTransaction;
+  returnTo?: string;
+};
 
 type LoginScreenProps = {
   presentation?: "page" | "overlay";
-  onAuthenticated?: () => void;
+  onAuthenticated?: (session: AuthenticatedSession) => void;
+  /** Return false when another tab has already superseded this candidate cookie. */
+  onAuthenticationFailed?: () => boolean | void;
+  candidateAuthTransaction?: CandidateAuthTransaction | null;
 };
 
 export function LoginScreen({
   presentation = "page",
   onAuthenticated,
+  onAuthenticationFailed,
+  candidateAuthTransaction = null,
 }: LoginScreenProps = {}) {
   const { i18n } = useTranslation();
   const { setToken, setUser } = useAuthStore();
@@ -183,16 +238,167 @@ export function LoginScreen({
     getInitialLegalPolicyVersion
   );
   const [googleOAuthEnabled, setGoogleOAuthEnabled] = useState(false);
+  const [candidateAuthReady, setCandidateAuthReady] = useState(
+    presentation !== "overlay"
+  );
   const turnstileContainerRef = useRef<HTMLDivElement | null>(null);
   const turnstileWidgetIdRef = useRef<string | null>(null);
   const reauthReturnFocusRef = useRef<HTMLElement | null>(null);
   const googleReauthPopupRef = useRef<Window | null>(null);
+  const googleReauthPopupWatchRef = useRef<number | null>(null);
+  const googleReauthPopupCloseGraceRef = useRef<number | null>(null);
+  const googleReauthPopupAttemptRef = useRef<number | null>(null);
+  const candidateAuthTransactionRef = useRef<CandidateAuthTransaction | null>(null);
+  const ownsCandidateAuthTransactionRef = useRef(false);
+  const reauthAttemptRef = useRef(0);
   const onAuthenticatedRef = useRef(onAuthenticated);
-  const googleOAuthFailureCopyRef = useRef(copy.errors.googleOAuthFailed);
+  const onAuthenticationFailedRef = useRef(onAuthenticationFailed);
+  const googleOAuthCopyRef = useRef<GoogleOAuthErrorCopy>(copy);
   onAuthenticatedRef.current = onAuthenticated;
-  googleOAuthFailureCopyRef.current = copy.errors.googleOAuthFailed;
+  onAuthenticationFailedRef.current = onAuthenticationFailed;
+  googleOAuthCopyRef.current = copy;
   const turnstileSiteKey = getTurnstileSiteKey();
   const postLoginReturnTo = getPostLoginReturnTo(location);
+
+  const stopGoogleReauthPopupWatch = useCallback(() => {
+    if (googleReauthPopupWatchRef.current !== null) {
+      window.clearInterval(googleReauthPopupWatchRef.current);
+      googleReauthPopupWatchRef.current = null;
+    }
+    if (googleReauthPopupCloseGraceRef.current !== null) {
+      window.clearTimeout(googleReauthPopupCloseGraceRef.current);
+      googleReauthPopupCloseGraceRef.current = null;
+    }
+  }, []);
+
+  const watchGoogleReauthPopup = useCallback(
+    (popup: Window, attempt: number) => {
+      stopGoogleReauthPopupWatch();
+      googleReauthPopupRef.current = popup;
+      googleReauthPopupAttemptRef.current = attempt;
+      googleReauthPopupWatchRef.current = window.setInterval(() => {
+        if (
+          googleReauthPopupRef.current !== popup ||
+          googleReauthPopupAttemptRef.current !== attempt ||
+          !popup.closed
+        ) {
+          return;
+        }
+        stopGoogleReauthPopupWatch();
+        // The callback popup posts its result immediately before closing. A
+        // browser can schedule this poll before that cross-window message, so
+        // preserve the trusted popup identity briefly and let the message win.
+        googleReauthPopupCloseGraceRef.current = window.setTimeout(() => {
+          googleReauthPopupCloseGraceRef.current = null;
+          if (
+            googleReauthPopupRef.current !== popup ||
+            googleReauthPopupAttemptRef.current !== attempt
+          ) {
+            return;
+          }
+          googleReauthPopupRef.current = null;
+          googleReauthPopupAttemptRef.current = null;
+          if (reauthAttemptRef.current !== attempt) return;
+          setNotice("");
+          setError(
+            getGoogleOAuthFailureCopy("google_oauth_cancelled", googleOAuthCopyRef.current)
+          );
+        }, GOOGLE_REAUTH_POPUP_CLOSE_GRACE_MS);
+      }, GOOGLE_REAUTH_POPUP_POLL_MS);
+    },
+    [stopGoogleReauthPopupWatch]
+  );
+
+  useEffect(() => {
+    if (presentation !== "overlay") {
+      setCandidateAuthReady(true);
+      return;
+    }
+
+    const transaction = candidateAuthTransaction ?? beginCandidateAuthTransaction();
+    const ownsTransaction = !candidateAuthTransaction;
+    candidateAuthTransactionRef.current = transaction;
+    ownsCandidateAuthTransactionRef.current = ownsTransaction;
+    let active = true;
+    setCandidateAuthReady(false);
+
+    void waitForCandidateAuthTransaction(transaction).then((ready) => {
+      if (
+        active &&
+        ready &&
+        candidateAuthTransactionRef.current === transaction &&
+        isCurrentCandidateAuthTransaction(transaction)
+      ) {
+        setCandidateAuthReady(true);
+      }
+    });
+
+    return () => {
+      active = false;
+      reauthAttemptRef.current += 1;
+      stopGoogleReauthPopupWatch();
+      googleReauthPopupRef.current?.close();
+      googleReauthPopupRef.current = null;
+      googleReauthPopupAttemptRef.current = null;
+      if (candidateAuthTransactionRef.current === transaction) {
+        candidateAuthTransactionRef.current = null;
+        if (ownsTransaction) {
+          completeCandidateAuthTransaction(transaction);
+        }
+      }
+    };
+  }, [
+    candidateAuthTransaction,
+    presentation,
+    stopGoogleReauthPopupWatch,
+  ]);
+
+  /**
+   * A successful credential/OAuth exchange can rotate the browser-wide refresh
+   * cookie before candidate profile verification finishes. If that verification
+   * fails, keeping the old account mounted would let a later reload adopt the
+   * replacement cookie over old account state. Revoke best-effort and hand the
+   * enclosing App a fail-closed account-boundary signal instead.
+   */
+  const failCandidateAuthentication = useCallback(
+    (transaction: CandidateAuthTransaction | null, candidateAccessToken: string | null = null) => {
+      // A continuation can outlive its overlay after another tab has claimed
+      // the browser session. It no longer owns the candidate cookie, so it
+      // must be a no-op rather than revoking that newer account.
+      if (
+        presentation !== "overlay" ||
+        !transaction ||
+        !isCurrentCandidateAuthTransaction(transaction)
+      ) {
+        return;
+      }
+      reauthAttemptRef.current += 1;
+      stopGoogleReauthPopupWatch();
+      googleReauthPopupRef.current?.close();
+      googleReauthPopupRef.current = null;
+      googleReauthPopupAttemptRef.current = null;
+      completeCandidateAuthTransaction(transaction);
+      if (candidateAuthTransactionRef.current === transaction) {
+        candidateAuthTransactionRef.current = null;
+      }
+      setCandidateAuthReady(false);
+      const onAuthenticationFailed = onAuthenticationFailedRef.current;
+      // The parent resets immediately and decides whether this candidate still
+      // owns the shared cookie. Never revoke a session another tab published
+      // while this tab's StorageEvent was still queued.
+      const shouldRevokeCandidateSession = onAuthenticationFailed
+        ? onAuthenticationFailed() !== false
+        : true;
+      if (shouldRevokeCandidateSession && candidateAccessToken) {
+        void requestCandidateSessionLogout(candidateAccessToken);
+      }
+      if (!onAuthenticationFailed) {
+        setToken(null);
+        setUser(null);
+      }
+    },
+    [presentation, setToken, setUser, stopGoogleReauthPopupWatch]
+  );
 
   const setModeClean = useCallback(
     (nextMode: AuthMode) => {
@@ -272,19 +478,8 @@ export function LoginScreen({
     // never be silent again.
     const oauthError = String(url.searchParams.get("error") || "").trim();
     if (oauthError) {
-      const oauthErrorCopy: Record<string, string> = {
-        google_consent_required: copy.errors.googleConsentRequired,
-        google_consent_stale: copy.errors.googleConsentRequired,
-        age_verification_required: copy.errors.googleAgeUnverifiable,
-        minimum_age: copy.errors.googleUnderage,
-        google_oauth_failed: copy.errors.googleOAuthFailed,
-        google_oauth_cancelled: copy.errors.googleOAuthCancelled,
-        google_oauth_missing_code: copy.errors.googleOAuthIncomplete,
-        google_oauth_unconfigured: copy.errors.googleOAuthUnavailable,
-        google_oauth_start_failed: copy.errors.googleOAuthUnavailable,
-      };
       // Never silent: an unrecognized code still gets friendly, actionable copy.
-      setError(oauthErrorCopy[oauthError] ?? copy.errors.googleOAuthFailed);
+      setError(getGoogleOAuthFailureCopy(oauthError, copy));
       setNotice("");
     }
 
@@ -333,34 +528,70 @@ export function LoginScreen({
     if (presentation !== "overlay") return;
     let active = true;
     const handleGooglePopupMessage = (event: MessageEvent) => {
+      const messageType = event.data?.type;
+      const attempt = googleReauthPopupAttemptRef.current;
+      const transaction = candidateAuthTransactionRef.current;
       if (
+        attempt === null ||
+        !transaction ||
         event.origin !== window.location.origin ||
         event.source !== googleReauthPopupRef.current ||
-        event.data?.type !== GOOGLE_OAUTH_POPUP_COMPLETE_MESSAGE
+        (messageType !== GOOGLE_OAUTH_POPUP_COMPLETE_MESSAGE &&
+          messageType !== GOOGLE_OAUTH_POPUP_FAILURE_MESSAGE)
       ) {
         return;
       }
       const popup = googleReauthPopupRef.current;
       googleReauthPopupRef.current = null;
+      googleReauthPopupAttemptRef.current = null;
+      stopGoogleReauthPopupWatch();
       popup?.close();
-      void (async () => {
-        const freshToken = await getFreshAuthToken();
-        if (!active) return;
-        if (!freshToken) {
-          setError(googleOAuthFailureCopyRef.current);
-          return;
+      const isCurrentAttempt = () =>
+        active &&
+        reauthAttemptRef.current === attempt &&
+        candidateAuthTransactionRef.current === transaction &&
+        isCurrentCandidateAuthTransaction(transaction);
+
+      if (messageType === GOOGLE_OAUTH_POPUP_FAILURE_MESSAGE) {
+        if (isCurrentAttempt()) {
+          setNotice("");
+          setError(getGoogleOAuthFailureCopy(event.data?.error, googleOAuthCopyRef.current));
         }
-        setToken(freshToken);
+        return;
+      }
+      setIsLoading(true);
+      void (async () => {
+        let candidateAccessToken: string | null = null;
         try {
-          const { response, data } = await fetchCurrentUser();
-          if (!active) return;
+          candidateAccessToken = await getFreshAuthToken({
+            persist: false,
+            candidateAuthTransaction: transaction,
+          });
+          if (!isCurrentAttempt()) {
+            failCandidateAuthentication(transaction, candidateAccessToken);
+            return;
+          }
+          if (!candidateAccessToken) {
+            setError(getGoogleOAuthFailureCopy("google_oauth_failed", googleOAuthCopyRef.current));
+            failCandidateAuthentication(transaction, candidateAccessToken);
+            return;
+          }
+          const freshToken = candidateAccessToken;
+          // The refresh cookie may now belong to a different Google account. Verify
+          // the candidate token before it touches the mounted session.
+          const { response, data } = await fetchCurrentUser(freshToken);
+          if (!isCurrentAttempt()) {
+            failCandidateAuthentication(transaction, candidateAccessToken);
+            return;
+          }
           if (!response.ok || !data?.success || !data.user) {
-            setError(googleOAuthFailureCopyRef.current);
+            setError(getGoogleOAuthFailureCopy("google_oauth_failed", googleOAuthCopyRef.current));
+            failCandidateAuthentication(transaction, candidateAccessToken);
             return;
           }
           let mergedUser = data.user;
           try {
-            const profileResult = await fetchProfile();
+            const profileResult = await fetchProfile(freshToken);
             if (
               profileResult.response.ok &&
               profileResult.data?.success &&
@@ -375,11 +606,38 @@ export function LoginScreen({
           } catch {
             // The authenticated base profile is sufficient to resume the session.
           }
-          if (!active) return;
-          setUser(mergedUser);
-          onAuthenticatedRef.current?.();
+          if (!isCurrentAttempt()) {
+            failCandidateAuthentication(transaction, candidateAccessToken);
+            return;
+          }
+          const session: AuthenticatedSession = {
+            token: freshToken,
+            user: mergedUser,
+            ...(ownsCandidateAuthTransactionRef.current
+              ? {}
+              : { candidateAuthTransaction: transaction }),
+          };
+          if (onAuthenticatedRef.current) {
+            if (ownsCandidateAuthTransactionRef.current) {
+              completeCandidateAuthTransaction(transaction);
+              candidateAuthTransactionRef.current = null;
+            }
+            onAuthenticatedRef.current(session);
+          } else {
+            completeCandidateAuthTransaction(transaction);
+            candidateAuthTransactionRef.current = null;
+            setToken(session.token);
+            setUser(session.user);
+          }
         } catch {
-          if (active) setError(googleOAuthFailureCopyRef.current);
+          if (isCurrentAttempt()) {
+            setError(getGoogleOAuthFailureCopy("google_oauth_failed", googleOAuthCopyRef.current));
+          }
+          failCandidateAuthentication(transaction, candidateAccessToken);
+        } finally {
+          if (active && reauthAttemptRef.current === attempt) {
+            setIsLoading(false);
+          }
         }
       })();
     };
@@ -387,10 +645,18 @@ export function LoginScreen({
     return () => {
       active = false;
       window.removeEventListener("message", handleGooglePopupMessage);
+      stopGoogleReauthPopupWatch();
       googleReauthPopupRef.current?.close();
       googleReauthPopupRef.current = null;
+      googleReauthPopupAttemptRef.current = null;
     };
-  }, [presentation, setToken, setUser]);
+  }, [
+    failCandidateAuthentication,
+    presentation,
+    setToken,
+    setUser,
+    stopGoogleReauthPopupWatch,
+  ]);
 
   useEffect(() => {
     if (mode !== "signup" || !turnstileSiteKey) {
@@ -485,6 +751,36 @@ export function LoginScreen({
     setNotice("");
     setFieldErrors({});
     setIsLoading(true);
+
+    const transaction =
+      presentation === "overlay" ? candidateAuthTransactionRef.current : null;
+    if (
+      presentation === "overlay" &&
+      (!candidateAuthReady ||
+        !transaction ||
+        !isCurrentCandidateAuthTransaction(transaction))
+    ) {
+      setIsLoading(false);
+      return;
+    }
+
+    const reauthAttempt =
+      presentation === "overlay" ? reauthAttemptRef.current + 1 : null;
+    if (reauthAttempt !== null) {
+      reauthAttemptRef.current = reauthAttempt;
+      stopGoogleReauthPopupWatch();
+      googleReauthPopupRef.current?.close();
+      googleReauthPopupRef.current = null;
+      googleReauthPopupAttemptRef.current = null;
+    }
+    const isCurrentReauthAttempt = () =>
+      presentation !== "overlay" ||
+      (reauthAttempt !== null &&
+        reauthAttemptRef.current === reauthAttempt &&
+        candidateAuthTransactionRef.current === transaction &&
+        isCurrentCandidateAuthTransaction(transaction));
+    let candidateSessionMayHaveChanged = false;
+    let candidateAccessToken: string | null = null;
 
     try {
       if (mode === "reset-request") {
@@ -604,7 +900,17 @@ export function LoginScreen({
         username: email.trim() || undefined,
         password,
       });
-      
+      candidateAccessToken = data?.token ?? null;
+      candidateSessionMayHaveChanged = Boolean(
+        presentation === "overlay" && response.ok && data?.valid && candidateAccessToken
+      );
+      if (!isCurrentReauthAttempt()) {
+        if (candidateSessionMayHaveChanged) {
+          failCandidateAuthentication(transaction, candidateAccessToken);
+        }
+        return;
+      }
+
       if (!response.ok || !data?.valid || !data?.token) {
         const fallback =
           response.status >= 500
@@ -620,35 +926,68 @@ export function LoginScreen({
           normalizedCode,
           data.token
         );
+        if (!isCurrentReauthAttempt()) {
+          failCandidateAuthentication(transaction, candidateAccessToken);
+          return;
+        }
         if (!codeResponse.ok || !codeData?.success) {
           setError(codeData?.error || copy.errors.activationCodeInvalid);
+          failCandidateAuthentication(transaction, candidateAccessToken);
           return;
         }
       }
 
-      setToken(data.token);
-      // Immediately populate the user store so dependent components (spaces, brain, etc.)
-      // don't have to wait for the next page load's hydration effect.
+      let session: AuthenticatedSession;
       try {
-        const { response: ur, data: ud } = await fetchCurrentUser();
-        if (ur.ok && ud?.success && ud.user) {
-          let mergedUser = ud.user;
-          try {
-            const profileResult = await fetchProfile();
-            if (profileResult.response.ok && profileResult.data?.success && profileResult.data.user) {
-              mergedUser = { ...ud.user, fullName: profileResult.data.user.fullName ?? ud.user.fullName ?? null };
-            }
-          } catch {
-            // Keep base user if profile lookup fails
-          }
-          setUser(mergedUser);
+        // The login response proves credentials, but it does not prove which principal
+        // the new token belongs to. Resolve that identity using the candidate token before
+        // mutating the mounted session, otherwise an expired account can be resumed as a
+        // different account when the profile lookup fails.
+        const { response: ur, data: ud } = await fetchCurrentUser(data.token);
+        if (!isCurrentReauthAttempt()) {
+          failCandidateAuthentication(transaction, candidateAccessToken);
+          return;
         }
+        if (!ur.ok || !ud?.success || !ud.user) {
+          setError(copy.errors.genericLoginFailed);
+          failCandidateAuthentication(transaction, candidateAccessToken);
+          return;
+        }
+        let mergedUser = ud.user;
+        try {
+          const profileResult = await fetchProfile(data.token);
+          if (profileResult.response.ok && profileResult.data?.success && profileResult.data.user) {
+            mergedUser = { ...ud.user, fullName: profileResult.data.user.fullName ?? ud.user.fullName ?? null };
+          }
+        } catch {
+          // The authenticated base profile is sufficient to resume the session.
+        }
+        if (!isCurrentReauthAttempt()) {
+          failCandidateAuthentication(transaction, candidateAccessToken);
+          return;
+        }
+        session = {
+          token: data.token,
+          user: mergedUser,
+          ...(transaction && !ownsCandidateAuthTransactionRef.current
+            ? { candidateAuthTransaction: transaction }
+            : {}),
+        };
       } catch {
-        // Non-fatal — user will be populated on next hydration
+        if (isCurrentReauthAttempt()) {
+          setError(copy.errors.genericLoginFailed);
+        }
+        if (candidateSessionMayHaveChanged) {
+          failCandidateAuthentication(transaction, candidateAccessToken);
+        }
+        return;
       }
       setLoginAccessCode("");
       setShowLoginAccessCode(false);
       const returnTo = getPostLoginReturnTo(location);
+      if (presentation !== "overlay" && returnTo) {
+        session.returnTo = returnTo;
+      }
       const explicitNext = getSafeRelativeReturnTo(
         new URLSearchParams(location.search).get("next")
       );
@@ -678,21 +1017,51 @@ export function LoginScreen({
         clearPendingIntent();
       }
 
-      if (onAuthenticated) {
-        onAuthenticated();
+      if (!isCurrentReauthAttempt()) {
+        if (candidateSessionMayHaveChanged) {
+          failCandidateAuthentication(transaction, candidateAccessToken);
+        }
+        return;
+      }
+      if (onAuthenticatedRef.current) {
+        if (transaction && ownsCandidateAuthTransactionRef.current) {
+          completeCandidateAuthTransaction(transaction);
+          candidateAuthTransactionRef.current = null;
+        }
+        onAuthenticatedRef.current(session);
       } else if (returnTo) {
+        if (transaction) {
+          completeCandidateAuthTransaction(transaction);
+          candidateAuthTransactionRef.current = null;
+        }
+        setToken(session.token);
+        setUser(session.user);
         navigate(returnTo, { replace: true });
+      } else {
+        if (transaction) {
+          completeCandidateAuthTransaction(transaction);
+          candidateAuthTransactionRef.current = null;
+        }
+        setToken(session.token);
+        setUser(session.user);
       }
     } catch (err) {
-      setError(
-        mode === "signup"
-          ? copy.errors.genericSignupFailed
-          : mode === "reset-request" || mode === "reset-confirm"
-            ? copy.errors.genericResetFailed
-            : copy.errors.genericLoginFailed
-      );
+      if (isCurrentReauthAttempt()) {
+        setError(
+          mode === "signup"
+            ? copy.errors.genericSignupFailed
+            : mode === "reset-request" || mode === "reset-confirm"
+              ? copy.errors.genericResetFailed
+              : copy.errors.genericLoginFailed
+        );
+      }
+      if (candidateSessionMayHaveChanged) {
+        failCandidateAuthentication(transaction, candidateAccessToken);
+      }
     } finally {
-      setIsLoading(false);
+      if (presentation !== "overlay" || reauthAttemptRef.current === reauthAttempt) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -707,6 +1076,7 @@ export function LoginScreen({
   const modeEyebrow = copy.eyebrow[modeCopyKey];
   const submitDisabled =
     isLoading ||
+    (presentation === "overlay" && !candidateAuthReady) ||
     ((mode === "login" || mode === "signup" || mode === "reset-request") &&
       email.trim().length === 0) ||
     ((mode === "login" || mode === "signup") && password.length === 0) ||
@@ -777,10 +1147,21 @@ export function LoginScreen({
               <button
                 type="button"
                 className="zaki-auth-v2__oauth"
+                disabled={isLoading || (presentation === "overlay" && !candidateAuthReady)}
                 onClick={() => {
                   if (mode === "signup" && !signupLegalConsent) {
                     setError(copy.errors.consentRequired);
                     return;
+                  }
+                  if (presentation === "overlay") {
+                    const transaction = candidateAuthTransactionRef.current;
+                    if (
+                      !candidateAuthReady ||
+                      !transaction ||
+                      !isCurrentCandidateAuthTransaction(transaction)
+                    ) {
+                      return;
+                    }
                   }
                   // Consent travels on BOTH entry points. "Continue with Google"
                   // from the login screen can still create a brand-new account,
@@ -796,6 +1177,12 @@ export function LoginScreen({
                     }
                   );
                   if (presentation === "overlay") {
+                    const attempt = reauthAttemptRef.current + 1;
+                    reauthAttemptRef.current = attempt;
+                    stopGoogleReauthPopupWatch();
+                    googleReauthPopupRef.current?.close();
+                    googleReauthPopupRef.current = null;
+                    googleReauthPopupAttemptRef.current = null;
                     const popup = window.open(
                       oauthUrl,
                       "zaki-google-reauth",
@@ -805,7 +1192,7 @@ export function LoginScreen({
                       setError(copy.errors.googlePopupBlocked);
                       return;
                     }
-                    googleReauthPopupRef.current = popup;
+                    watchGoogleReauthPopup(popup, attempt);
                     popup.focus();
                     return;
                   }

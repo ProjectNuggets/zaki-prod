@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom";
 import { describe, it, expect, beforeEach, jest } from "@jest/globals";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BrowserRouter } from "react-router-dom";
 import { hasExplicitPricingIntent, LoginScreen } from "./LoginScreen";
@@ -18,6 +18,9 @@ import {
   buildGoogleOAuthStartUrl,
   claimAnonymousSpacesWork,
   getFreshAuthToken,
+  isCurrentCandidateAuthTransaction,
+  requestCandidateSessionLogout,
+  requestLogout,
 } from "@/lib/api";
 import { upsertAnonymousWorkItem } from "@/lib/anonymousWork";
 import { PENDING_INTENT_KEY } from "@/lib/pendingIntent";
@@ -45,7 +48,16 @@ jest.mock("@/lib/api", () => ({
   buildGoogleOAuthStartUrl: jest.fn(() => "http://localhost:8787/api/auth/google/start"),
   claimAnonymousSpacesWork: jest.fn(),
   getFreshAuthToken: jest.fn(),
+  requestCandidateSessionLogout: jest.fn(() =>
+    Promise.resolve({ response: { ok: true }, data: { success: true, revoked: true } })
+  ),
+  requestLogout: jest.fn(() => Promise.resolve({ response: { ok: true }, data: { success: true } })),
+  beginCandidateAuthTransaction: jest.fn(() => ({})),
+  completeCandidateAuthTransaction: jest.fn(),
+  isCurrentCandidateAuthTransaction: jest.fn(() => true),
+  waitForCandidateAuthTransaction: jest.fn(() => Promise.resolve(true)),
   GOOGLE_OAUTH_POPUP_COMPLETE_MESSAGE: "zaki:google-oauth-popup-complete",
+  GOOGLE_OAUTH_POPUP_FAILURE_MESSAGE: "zaki:google-oauth-popup-failed",
 }));
 
 describe("LoginScreen legal consent", () => {
@@ -105,6 +117,7 @@ describe("LoginScreen legal consent", () => {
     });
 
     (getFreshAuthToken as unknown as jest.Mock).mockResolvedValue("google-popup-token");
+    (isCurrentCandidateAuthTransaction as unknown as jest.Mock).mockReturnValue(true);
 
     (requestPublicSignup as unknown as jest.Mock).mockResolvedValue({
       response: { ok: true },
@@ -179,23 +192,272 @@ describe("LoginScreen legal consent", () => {
     await waitFor(() => expect(fetchGoogleOAuthStatus).toHaveBeenCalled());
     await user.click(screen.getByRole("button", { name: "Continue with Google" }));
 
-    window.dispatchEvent(
-      new MessageEvent("message", {
-        data: { type: "zaki:google-oauth-popup-complete" },
-        origin: window.location.origin,
-        source: popup,
-      })
-    );
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "zaki:google-oauth-popup-complete" },
+          origin: window.location.origin,
+          source: popup,
+        })
+      );
+    });
 
     await waitFor(() => expect(onAuthenticated).toHaveBeenCalledTimes(1));
     expect(getFreshAuthToken).toHaveBeenCalledTimes(1);
-    expect(setToken).toHaveBeenCalledWith("google-popup-token");
-    expect(setUser).toHaveBeenCalledWith({
-      id: "user-1",
-      username: "user@example.com",
-      fullName: "User Name",
+    expect(onAuthenticated).toHaveBeenCalledWith({
+      token: "google-popup-token",
+      user: {
+        id: "user-1",
+        username: "user@example.com",
+        fullName: "User Name",
+      },
     });
+    expect(setToken).not.toHaveBeenCalled();
+    expect(setUser).not.toHaveBeenCalled();
     expect(popup.close).toHaveBeenCalled();
+  });
+
+  it("keeps preserved work open and explains a trusted Google popup failure", async () => {
+    const user = userEvent.setup();
+    const onAuthenticated = jest.fn();
+    const popup = {
+      close: jest.fn(),
+      focus: jest.fn(),
+    } as unknown as Window;
+    jest.spyOn(window, "open").mockReturnValue(popup);
+    render(
+      <BrowserRouter>
+        <LoginScreen presentation="overlay" onAuthenticated={onAuthenticated} />
+      </BrowserRouter>
+    );
+    await waitFor(() => expect(fetchGoogleOAuthStatus).toHaveBeenCalled());
+    await user.click(screen.getByRole("button", { name: "Continue with Google" }));
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: {
+            type: "zaki:google-oauth-popup-failed",
+            error: "google_oauth_cancelled",
+          },
+          origin: window.location.origin,
+          source: popup,
+        })
+      );
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Google sign-in was cancelled");
+    expect(getFreshAuthToken).not.toHaveBeenCalled();
+    expect(onAuthenticated).not.toHaveBeenCalled();
+    expect(setToken).not.toHaveBeenCalled();
+    expect(setUser).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: /session expired/i })).toBeInTheDocument();
+  });
+
+  it("ignores Google popup failure messages from another origin or window", async () => {
+    const user = userEvent.setup();
+    const popup = {
+      close: jest.fn(),
+      focus: jest.fn(),
+    } as unknown as Window;
+    jest.spyOn(window, "open").mockReturnValue(popup);
+    render(
+      <BrowserRouter>
+        <LoginScreen presentation="overlay" />
+      </BrowserRouter>
+    );
+    await waitFor(() => expect(fetchGoogleOAuthStatus).toHaveBeenCalled());
+    await user.click(screen.getByRole("button", { name: "Continue with Google" }));
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: {
+            type: "zaki:google-oauth-popup-failed",
+            error: "google_oauth_cancelled",
+          },
+          origin: "https://untrusted.example",
+          source: popup,
+        })
+      );
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: {
+            type: "zaki:google-oauth-popup-failed",
+            error: "google_oauth_cancelled",
+          },
+          origin: window.location.origin,
+          source: window,
+        })
+      );
+    });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(getFreshAuthToken).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: /session expired/i })).toBeInTheDocument();
+  });
+
+  it("keeps preserved work open when the Google popup is closed without a result", async () => {
+    jest.useFakeTimers();
+    try {
+      const popup = {
+        close: jest.fn(),
+        focus: jest.fn(),
+        closed: false,
+      };
+      jest.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
+      render(
+        <BrowserRouter>
+          <LoginScreen presentation="overlay" />
+        </BrowserRouter>
+      );
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Continue with Google" }));
+      popup.closed = true;
+      act(() => {
+        jest.advanceTimersByTime(750);
+      });
+
+      expect(screen.getByRole("alert")).toHaveTextContent("Google sign-in was cancelled");
+      expect(screen.getByRole("dialog", { name: /session expired/i })).toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("accepts a valid Google completion message that arrives just after popup close detection", async () => {
+    jest.useFakeTimers();
+    try {
+      const onAuthenticated = jest.fn();
+      const popup = {
+        close: jest.fn(),
+        focus: jest.fn(),
+        closed: false,
+      };
+      jest.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
+      render(
+        <BrowserRouter>
+          <LoginScreen presentation="overlay" onAuthenticated={onAuthenticated} />
+        </BrowserRouter>
+      );
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Continue with Google" }));
+      popup.closed = true;
+      act(() => {
+        jest.advanceTimersByTime(250);
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            data: { type: "zaki:google-oauth-popup-complete" },
+            origin: window.location.origin,
+            source: popup,
+          })
+        );
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(onAuthenticated).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("does not commit Google reauthentication until the profile confirms a user", async () => {
+    const user = userEvent.setup();
+    const onAuthenticated = jest.fn();
+    const popup = {
+      close: jest.fn(),
+      focus: jest.fn(),
+    } as unknown as Window;
+    (fetchCurrentUser as unknown as jest.Mock).mockResolvedValue({
+      response: { ok: false },
+      data: { success: false },
+    });
+    jest.spyOn(window, "open").mockReturnValue(popup);
+    render(
+      <BrowserRouter>
+        <LoginScreen presentation="overlay" onAuthenticated={onAuthenticated} />
+      </BrowserRouter>
+    );
+    await waitFor(() => expect(fetchGoogleOAuthStatus).toHaveBeenCalled());
+    await user.click(screen.getByRole("button", { name: "Continue with Google" }));
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "zaki:google-oauth-popup-complete" },
+          origin: window.location.origin,
+          source: popup,
+        })
+      );
+    });
+
+    await waitFor(() => expect(fetchCurrentUser).toHaveBeenCalled());
+    expect(onAuthenticated).not.toHaveBeenCalled();
+    expect(setToken).toHaveBeenCalledWith(null);
+    expect(setUser).toHaveBeenCalledWith(null);
+    expect(requestCandidateSessionLogout).toHaveBeenCalledWith("google-popup-token");
+    expect(requestLogout).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: /session expired/i })).toBeInTheDocument();
+  });
+
+  it("does not let a stale Google candidate continuation revoke a newer browser session", async () => {
+    const user = userEvent.setup();
+    const onAuthenticationFailed = jest.fn();
+    const popup = {
+      close: jest.fn(),
+      focus: jest.fn(),
+    } as unknown as Window;
+    let resolveCandidateToken: (token: string | null) => void = () => undefined;
+    (getFreshAuthToken as unknown as jest.Mock).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveCandidateToken = resolve;
+        })
+    );
+    jest.spyOn(window, "open").mockReturnValue(popup);
+    render(
+      <BrowserRouter>
+        <LoginScreen
+          presentation="overlay"
+          onAuthenticationFailed={onAuthenticationFailed}
+        />
+      </BrowserRouter>
+    );
+    await waitFor(() => expect(fetchGoogleOAuthStatus).toHaveBeenCalled());
+    await user.click(screen.getByRole("button", { name: "Continue with Google" }));
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "zaki:google-oauth-popup-complete" },
+          origin: window.location.origin,
+          source: popup,
+        })
+      );
+    });
+    await waitFor(() => expect(getFreshAuthToken).toHaveBeenCalled());
+
+    (isCurrentCandidateAuthTransaction as unknown as jest.Mock).mockReturnValue(false);
+    resolveCandidateToken("stale-candidate-token");
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onAuthenticationFailed).not.toHaveBeenCalled();
+    expect(requestLogout).not.toHaveBeenCalled();
+    expect(setToken).not.toHaveBeenCalled();
+    expect(setUser).not.toHaveBeenCalled();
   });
 
   it("keeps Google reauthentication open across preserved-surface rerenders", async () => {
@@ -222,13 +484,15 @@ describe("LoginScreen legal consent", () => {
     );
 
     expect(popup.close).not.toHaveBeenCalled();
-    window.dispatchEvent(
-      new MessageEvent("message", {
-        data: { type: "zaki:google-oauth-popup-complete" },
-        origin: window.location.origin,
-        source: popup,
-      })
-    );
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "zaki:google-oauth-popup-complete" },
+          origin: window.location.origin,
+          source: popup,
+        })
+      );
+    });
 
     await waitFor(() => expect(latestOnAuthenticated).toHaveBeenCalledTimes(1));
     expect(firstOnAuthenticated).not.toHaveBeenCalled();
@@ -248,6 +512,85 @@ describe("LoginScreen legal consent", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent(/allow pop-ups/i);
     expect(screen.getByRole("dialog", { name: /session expired/i })).toBeInTheDocument();
+  });
+
+  it("does not resume preserved work until credential reauthentication confirms a user", async () => {
+    const user = userEvent.setup();
+    const onAuthenticated = jest.fn();
+    (fetchCurrentUser as unknown as jest.Mock).mockResolvedValue({
+      response: { ok: false },
+      data: { success: false },
+    });
+    render(
+      <BrowserRouter>
+        <LoginScreen presentation="overlay" onAuthenticated={onAuthenticated} />
+      </BrowserRouter>
+    );
+    await waitFor(() => expect(fetchGoogleOAuthStatus).toHaveBeenCalled());
+
+    await user.type(screen.getByPlaceholderText("Email address"), "user@example.com");
+    await user.type(screen.getByPlaceholderText("Password"), "Password123");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => expect(fetchCurrentUser).toHaveBeenCalled());
+    expect(onAuthenticated).not.toHaveBeenCalled();
+    expect(setToken).toHaveBeenCalledWith(null);
+    expect(setUser).toHaveBeenCalledWith(null);
+    expect(requestCandidateSessionLogout).toHaveBeenCalledWith("token-123");
+    expect(requestLogout).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: /session expired/i })).toBeInTheDocument();
+  });
+
+  it("revokes a failed credential candidate by its bearer instead of clearing the shared cookie", async () => {
+    const user = userEvent.setup();
+    const onAuthenticationFailed = jest.fn(() => true);
+    (fetchCurrentUser as unknown as jest.Mock).mockResolvedValue({
+      response: { ok: false },
+      data: { success: false },
+    });
+    render(
+      <BrowserRouter>
+        <LoginScreen
+          presentation="overlay"
+          onAuthenticationFailed={onAuthenticationFailed}
+        />
+      </BrowserRouter>
+    );
+    await waitFor(() => expect(fetchGoogleOAuthStatus).toHaveBeenCalled());
+
+    await user.type(screen.getByPlaceholderText("Email address"), "user@example.com");
+    await user.type(screen.getByPlaceholderText("Password"), "Password123");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => expect(onAuthenticationFailed).toHaveBeenCalledTimes(1));
+    expect(requestCandidateSessionLogout).toHaveBeenCalledWith("token-123");
+    expect(requestLogout).not.toHaveBeenCalled();
+  });
+
+  it("does not revoke a failed candidate after the parent observes a newer account owner", async () => {
+    const user = userEvent.setup();
+    const onAuthenticationFailed = jest.fn(() => false);
+    (fetchCurrentUser as unknown as jest.Mock).mockResolvedValue({
+      response: { ok: false },
+      data: { success: false },
+    });
+    render(
+      <BrowserRouter>
+        <LoginScreen
+          presentation="overlay"
+          onAuthenticationFailed={onAuthenticationFailed}
+        />
+      </BrowserRouter>
+    );
+    await waitFor(() => expect(fetchGoogleOAuthStatus).toHaveBeenCalled());
+
+    await user.type(screen.getByPlaceholderText("Email address"), "user@example.com");
+    await user.type(screen.getByPlaceholderText("Password"), "Password123");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => expect(onAuthenticationFailed).toHaveBeenCalledTimes(1));
+    expect(requestCandidateSessionLogout).not.toHaveBeenCalled();
+    expect(requestLogout).not.toHaveBeenCalled();
   });
 
   it("shows verification success notice from redirect query params", async () => {

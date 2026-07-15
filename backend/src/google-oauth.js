@@ -2,6 +2,17 @@ import crypto from "node:crypto";
 
 export const GOOGLE_OAUTH_NONCE_COOKIE_NAME = "zaki_google_oauth_nonce";
 const GOOGLE_OAUTH_NONCE_MAX_AGE_SECONDS = 10 * 60;
+const GOOGLE_OAUTH_FAILURE_CODES = new Set([
+  "google_oauth_unconfigured",
+  "google_oauth_start_failed",
+  "google_oauth_cancelled",
+  "google_oauth_missing_code",
+  "google_oauth_failed",
+  "google_consent_required",
+  "google_consent_stale",
+  "age_verification_required",
+  "minimum_age",
+]);
 
 export function isGoogleOAuthConfigured({ clientId, clientSecret, stateSecret } = {}) {
   return Boolean(
@@ -168,6 +179,57 @@ export function verifyGoogleOAuthNonceBinding({ cookieNonce, stateNonceHash }) {
     throw err;
   }
   return true;
+}
+
+function normalizeGoogleOAuthFailureCode(value) {
+  const code = String(value || "").trim();
+  return GOOGLE_OAUTH_FAILURE_CODES.has(code) ? code : "google_oauth_failed";
+}
+
+/**
+ * Returns a start failure to the popup opener only when the caller requested
+ * the one allowed popup destination. Start failures have no signed state yet,
+ * so every other destination deliberately remains an API response.
+ */
+export function buildGoogleOAuthStartFailureRedirect({ appUrl, returnTo, errorCode } = {}) {
+  if (sanitizeGoogleOAuthReturnTo(returnTo) !== "/?oauthPopup=google") return null;
+
+  try {
+    const popupUrl = new URL("/?oauthPopup=google", appUrl);
+    popupUrl.searchParams.set("error", normalizeGoogleOAuthFailureCode(errorCode));
+    return popupUrl.toString();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Returns an OAuth failure to the popup opener only when the callback's signed
+ * state and nonce cookie both prove that this browser initiated that exact popup
+ * flow. All other failures fall back to the ordinary login page.
+ */
+export function buildGoogleOAuthCallbackFailureRedirect({
+  appUrl,
+  state,
+  stateSecret,
+  cookieNonce,
+  errorCode,
+} = {}) {
+  const fallback = new URL("/?auth=login", appUrl);
+  const safeErrorCode = normalizeGoogleOAuthFailureCode(errorCode);
+  fallback.searchParams.set("error", safeErrorCode);
+
+  try {
+    const { returnTo, nonceHash } = verifyGoogleOAuthState(state, stateSecret);
+    verifyGoogleOAuthNonceBinding({ cookieNonce, stateNonceHash: nonceHash });
+    if (returnTo !== "/?oauthPopup=google") return fallback.toString();
+
+    const popupUrl = new URL(returnTo, appUrl);
+    popupUrl.searchParams.set("error", safeErrorCode);
+    return popupUrl.toString();
+  } catch {
+    return fallback.toString();
+  }
 }
 
 export function validateGoogleIdTokenInfoPayload(data, clientId) {
