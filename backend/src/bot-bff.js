@@ -29,6 +29,13 @@ export const LOCK_RETRY_MAX_ATTEMPTS = 3;
 export const LOCK_RETRY_MAX_WALL_TIME_MS = 1500;
 export const LOCK_RETRY_FALLBACK_DELAYS_MS = Object.freeze([100, 250, 500]);
 
+// Launch policy: scheduled return delivery is not yet safe enough to expose.
+// Keep this enforcement at the authenticated product boundary so a direct API
+// caller cannot bypass the disabled Settings control. `false` patches remain
+// valid so stale tenant opt-ins can be cleared upstream.
+export const PROACTIVE_UPDATES_LAUNCH_ENABLED = false;
+const PROACTIVE_UPDATES_PAUSED_MESSAGE = "Proactive updates are paused for launch.";
+
 // WP-C — the BFF must NEVER emit a bare machine code with no user-facing message.
 // `error` historically carried the machine code (and a lot of server-side code and
 // tests still switch on it), so we keep it — but every envelope now also carries an
@@ -489,7 +496,13 @@ export function validateBotOnboardingUpdate(payload) {
 }
 
 export function sanitizeBotSettingsProfile(payload) {
-  return botSettingsProfileSchema.parse(payload);
+  const profile = botSettingsProfileSchema.parse(payload);
+  return {
+    ...profile,
+    proactive_updates: PROACTIVE_UPDATES_LAUNCH_ENABLED
+      ? profile.proactive_updates
+      : false,
+  };
 }
 
 export function validateBotSettingsPatch(payload) {
@@ -505,6 +518,12 @@ export function validateBotSettingsPatch(payload) {
     return {
       success: false,
       message: parsed.error.issues[0]?.message || "invalid settings payload",
+    };
+  }
+  if (!PROACTIVE_UPDATES_LAUNCH_ENABLED && parsed.data.proactive_updates === true) {
+    return {
+      success: false,
+      message: PROACTIVE_UPDATES_PAUSED_MESSAGE,
     };
   }
   return { success: true, data: parsed.data };

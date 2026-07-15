@@ -437,7 +437,7 @@ describe("bot BFF T6 contract", () => {
   it("roundtrips settings profiles and rejects UI-specific fields", async () => {
     const profile = {
       group_activation: "always",
-      proactive_updates: true,
+      proactive_updates: false,
       voice_replies: false,
       session_timeout_minutes: 45,
       assistant_mode: "deep",
@@ -476,6 +476,28 @@ describe("bot BFF T6 contract", () => {
     expect(invalidRes.jsonBody).toEqual(
       expect.objectContaining({
         error: PRODUCT_ERROR_CODES.SETTINGS_UPDATE_FAILED,
+      })
+    );
+  });
+
+  it("enforces the proactive-updates launch pause before any upstream write", async () => {
+    const { handlers, sendUpstreamRequest } = createHandlers({
+      sendUpstreamRequest: jest.fn(async () => {
+        throw new Error("proactive enable must not reach Nullalis");
+      }),
+    });
+    const req = { body: { proactive_updates: true }, headers: {} };
+    const res = createMockRes();
+
+    await handlers.patchSettings(req, res);
+
+    expect(sendUpstreamRequest).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
+    expect(res.jsonBody).toEqual(
+      expect.objectContaining({
+        error: PRODUCT_ERROR_CODES.SETTINGS_UPDATE_FAILED,
+        message: "Proactive updates are paused for launch.",
+        retryable: false,
       })
     );
   });
@@ -610,6 +632,8 @@ describe("bot BFF T6 contract", () => {
     const res = createMockRes();
 
     await handlers.getSettings(req, res);
+
+    expect(res.jsonBody.proactive_updates).toBe(false);
 
     const webClient = (payload) => payload.group_activation;
     const mobileClient = (payload) => `${payload.session_timeout_minutes}:${payload.voice_replies}`;
