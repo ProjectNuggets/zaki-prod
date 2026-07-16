@@ -373,6 +373,7 @@ export function BrainPage() {
                     prompt: recoveryIntent.prompt,
                     source: "brain_recovery",
                     returnTo: "/spaces",
+                    anonymousHandoff: recoveryIntent.anonymousHandoff,
                     replayMode: "draft",
                   });
                   navigate("/spaces");

@@ -193,6 +193,86 @@ describe("App route hydration", () => {
     );
   });
 
+  it("clears an unmarked prior-account draft during markerless cold hydration", async () => {
+    window.localStorage.setItem(
+      PENDING_INTENT_KEY,
+      JSON.stringify({
+        productId: "spaces",
+        taskKind: "chat",
+        prompt: "Account A private draft",
+        source: "session_expired",
+        returnTo: "/spaces",
+        createdAt: new Date().toISOString(),
+      })
+    );
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/auth/refresh")) {
+        return Promise.resolve(makeResponse({ token: "account-b-token" }));
+      }
+      if (url.includes("/api/profile")) {
+        return Promise.resolve(
+          makeResponse({
+            success: true,
+            user: { id: "account-b", username: "b@example.com", fullName: "Account B" },
+          })
+        );
+      }
+      return Promise.resolve(makeResponse({ success: true, policyVersion: "2027-01-01.v2" }));
+    });
+
+    renderAppAt("/spaces");
+
+    await waitFor(() => {
+      expect(useAuthStore.getState().token).toBe("account-b-token");
+    });
+    expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
+  });
+
+  it("clears an unmarked prior-account draft during markerless credential login", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(
+      PENDING_INTENT_KEY,
+      JSON.stringify({
+        productId: "agent",
+        taskKind: "plan",
+        prompt: "Account A private plan",
+        source: "session_expired",
+        returnTo: "/agent",
+        createdAt: new Date().toISOString(),
+      })
+    );
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/auth/refresh")) {
+        return Promise.resolve(makeResponse({ error: "refresh_revoked" }, 401));
+      }
+      if (url.endsWith("/login")) {
+        return Promise.resolve(makeResponse({ valid: true, token: "account-b-token" }));
+      }
+      if (url.includes("/api/profile")) {
+        return Promise.resolve(
+          makeResponse({
+            success: true,
+            user: { id: "account-b", username: "b@example.com", fullName: "Account B" },
+          })
+        );
+      }
+      return Promise.resolve(makeResponse({ success: true, enabled: true, policyVersion: "2027-01-01.v2" }));
+    });
+
+    renderAppAt("/brain");
+
+    await user.type(await screen.findByPlaceholderText("Email address"), "b@example.com");
+    await user.type(screen.getByPlaceholderText("Password"), "Password123");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => {
+      expect(useAuthStore.getState().token).toBe("account-b-token");
+    });
+    expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
+  });
+
   it("keeps a signed-in /agent deep link on the agent surface when first boot writes the storage principal", async () => {
     // Cold boot on a pre-migration browser: valid refresh cookie but no
     // zaki:account-storage-principal:v1 marker yet. The one-time privacy wipe

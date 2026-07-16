@@ -61,6 +61,33 @@ describe("pending intent", () => {
     expect(readPendingIntent()?.taskKind).toBe("plan");
   });
 
+  it("fails closed for legacy intents and marks explicit anonymous handoffs", () => {
+    expect(
+      writePendingIntent({
+        productId: "spaces",
+        prompt: "Account-scoped draft",
+        source: "session_expired",
+      })?.anonymousHandoff
+    ).toBe(false);
+
+    window.localStorage.setItem(
+      PENDING_INTENT_KEY,
+      JSON.stringify({
+        productId: "agent",
+        prompt: "Legacy draft",
+        returnTo: "/agent",
+        createdAt: new Date().toISOString(),
+      })
+    );
+    expect(readPendingIntent()?.anonymousHandoff).toBe(false);
+
+    consumeWebsiteCommandIntentFromUrl({
+      pathname: "/brain",
+      search: "?source=website_home_command&intent=memory&prompt=Remember+this",
+    });
+    expect(readPendingIntent()?.anonymousHandoff).toBe(true);
+  });
+
   it("defaults replay to a safe draft and preserves an explicit submit mode", () => {
     expect(
       writePendingIntent({

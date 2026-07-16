@@ -44,6 +44,7 @@ import {
   clearPendingIntent,
   consumeWebsiteCommandIntentFromUrl,
   PENDING_INTENT_STORAGE_FAILURE_EVENT,
+  readPendingIntent,
   type PendingIntentStorageFailureDetail,
 } from "@/lib/pendingIntent";
 import {
@@ -209,7 +210,12 @@ function writeAccountStoragePrincipal(principal: string | null | undefined) {
 function clearAccountScopedBrowserState(
   { preserveAnonymousWork = false, preserveSharedLocalStorage = false } = {}
 ) {
-  if (!preserveAnonymousWork && !preserveSharedLocalStorage) clearPendingIntent();
+  // The ledger is anonymous-only, but pending intents can also be private
+  // session-expiry drafts. Preserve one only when its writer explicitly marked
+  // it as an anonymous handoff; legacy/unmarked data fails closed.
+  const preserveAnonymousPendingIntent =
+    preserveAnonymousWork && readPendingIntent()?.anonymousHandoff === true;
+  if (!preserveAnonymousPendingIntent && !preserveSharedLocalStorage) clearPendingIntent();
   if (typeof window === "undefined") return;
 
   try {
@@ -233,7 +239,9 @@ function clearAccountScopedBrowserState(
     for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
       const key = window.localStorage.key(index);
       const isPreservedAnonymousWork =
-        preserveAnonymousWork && (key === ANONYMOUS_WORK_LEDGER_KEY || key === "zaki:pending-intent:v1");
+        preserveAnonymousWork &&
+        (key === ANONYMOUS_WORK_LEDGER_KEY ||
+          (key === "zaki:pending-intent:v1" && preserveAnonymousPendingIntent));
       if (key && !isPreservedAnonymousWork && isAccountScopedLocalStorageKey(key)) {
         window.localStorage.removeItem(key);
       }

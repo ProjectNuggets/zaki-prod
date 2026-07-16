@@ -19,6 +19,8 @@ export type PendingIntent = {
   source: string;
   returnTo: string;
   anonymousWorkId: string | null;
+  /** Explicit provenance required to carry work across an unowned browser. */
+  anonymousHandoff: boolean;
   replayMode: "draft" | "submit";
   createdAt: string;
 };
@@ -144,6 +146,7 @@ export function consumeWebsiteCommandIntentFromUrl(input: {
     prompt,
     source,
     returnTo: buildProductReturnTo(productId),
+    anonymousHandoff: true,
   });
 }
 
@@ -175,6 +178,9 @@ export function readPendingIntent(): PendingIntent | null {
       source: sanitizeText(raw?.source, MAX_SOURCE_LENGTH) || "dashboard",
       returnTo: sanitizeReturnTo(raw?.returnTo, productId),
       anonymousWorkId: sanitizeText(raw?.anonymousWorkId, MAX_WORK_ID_LENGTH) || null,
+      // Unmarked legacy records may be account-private reauthentication drafts.
+      // They deliberately fail closed during the markerless ownership migration.
+      anonymousHandoff: raw?.anonymousHandoff === true,
       replayMode: normalizeReplayMode(raw?.replayMode),
       createdAt: Number.isFinite(createdAtMs)
         ? createdAt.toISOString()
@@ -196,6 +202,7 @@ export function writePendingIntent(input: PendingIntentInput) {
     source: sanitizeText(input.source, MAX_SOURCE_LENGTH) || "dashboard",
     returnTo: sanitizeReturnTo(input.returnTo, input.productId),
     anonymousWorkId: sanitizeText(input.anonymousWorkId, MAX_WORK_ID_LENGTH) || null,
+    anonymousHandoff: input.anonymousHandoff === true,
     replayMode: normalizeReplayMode(input.replayMode),
     createdAt: new Date().toISOString(),
   };
