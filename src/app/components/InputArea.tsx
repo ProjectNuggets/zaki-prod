@@ -92,6 +92,7 @@ export function detectMention(
 export type InputAreaHandle = {
   submitWith: (text: string) => void;
   setDraft: (text: string) => void;
+  getDraft: () => string;
 };
 
 export type ZakiTurnAutonomyLevel = "read_only" | "supervised" | "full";
@@ -936,8 +937,9 @@ export function InputArea({
     () => ({
       submitWith: (text: string) => submitMessage(text),
       setDraft: setComposerDraft,
+      getDraft: () => inputValue,
     }),
-    [submitMessage, composerHandleRef, setComposerDraft]
+    [submitMessage, composerHandleRef, setComposerDraft, inputValue]
   );
 
   // 2026-05-08 — Draft persistence side-effects.

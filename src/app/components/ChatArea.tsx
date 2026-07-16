@@ -23,6 +23,7 @@ import {
 } from "@/lib/usageDisplay";
 import { useOnlineStatus } from "@/hooks";
 import {
+  AUTH_REQUIRED_EVENT,
   autoTitleThread,
   autoTitleAgentSession,
   apiRequest,
@@ -82,7 +83,7 @@ import {
 } from "@/lib/threadTitles";
 import { ANONYMOUS_SPACES_WORKSPACE_ID, createAnonymousThreadId } from "@/lib/anonymousSpaces";
 import { upsertAnonymousWorkItem } from "@/lib/anonymousWork";
-import { clearPendingIntent, readPendingIntent } from "@/lib/pendingIntent";
+import { clearPendingIntent, readPendingIntent, writePendingIntent } from "@/lib/pendingIntent";
 import { openSpacesMemoryViewer, type MemoryViewerTab } from "@/lib/spacesMemory";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import {
@@ -8655,6 +8656,26 @@ export function ChatArea() {
   );
 
   useEffect(() => {
+    const snapshotDraftForReauthentication = () => {
+      const prompt = composerHandleRef.current?.getDraft().trim() || "";
+      if (!prompt) return;
+      const productId = isZakiBotActiveSpace ? "agent" : "spaces";
+      writePendingIntent({
+        productId,
+        taskKind: productId === "agent" ? "plan" : "chat",
+        prompt,
+        source: "session_expired",
+        returnTo: productId === "agent" ? "/agent" : "/spaces",
+        replayMode: "draft",
+      });
+    };
+    window.addEventListener(AUTH_REQUIRED_EVENT, snapshotDraftForReauthentication);
+    return () => {
+      window.removeEventListener(AUTH_REQUIRED_EVENT, snapshotDraftForReauthentication);
+    };
+  }, [isZakiBotActiveSpace]);
+
+  useEffect(() => {
     if (!isAuthReady || !authUserId || isStreaming) return;
     const pendingIntent = readPendingIntent();
     if (!pendingIntent?.prompt) return;
@@ -8674,7 +8695,12 @@ export function ChatArea() {
       if (!activeWorkspaceSlug || isZakiBotActiveSpace) return;
       replayedPendingIntentKeyRef.current = replayKey;
       clearPendingIntent();
-      composerHandleRef.current?.submitWith(pendingIntent.prompt);
+      if (pendingIntent.replayMode === "submit") {
+        composerHandleRef.current?.submitWith(pendingIntent.prompt);
+      } else {
+        composerHandleRef.current?.setDraft(pendingIntent.prompt);
+        window.dispatchEvent(new Event("zaki:focus-composer"));
+      }
     }
   }, [
     activeWorkspaceSlug,

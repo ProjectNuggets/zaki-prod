@@ -6,7 +6,7 @@
 // index.js requireAuthUser — zero route-handler changes.
 
 import {
-  verifyZakiAccessToken as defaultVerifyZakiAccessToken,
+  verifyActiveZakiAccessToken as defaultVerifyActiveZakiAccessToken,
   tryDecodeJwtPayload as defaultTryDecodeJwtPayload,
   mintZakiSession as defaultMintZakiSession,
 } from "./zaki-auth.js";
@@ -33,7 +33,8 @@ export function createRequireAuthUser(deps) {
     zakiAuthOverrides = {},
   } = deps;
 
-  const verifyZakiAccessToken = zakiAuthOverrides.verifyZakiAccessToken || defaultVerifyZakiAccessToken;
+  const verifyActiveZakiAccessToken =
+    zakiAuthOverrides.verifyActiveZakiAccessToken || defaultVerifyActiveZakiAccessToken;
   const tryDecodeJwtPayload = zakiAuthOverrides.tryDecodeJwtPayload || defaultTryDecodeJwtPayload;
   const mintZakiSession = zakiAuthOverrides.mintZakiSession || defaultMintZakiSession;
 
@@ -50,7 +51,7 @@ export function createRequireAuthUser(deps) {
   // ZAKI path: local verify + DB lookup by id (AUTH-01, AUTH-03)
   async function resolveZakiPath(token) {
     try {
-      const payload = await verifyZakiAccessToken(token);
+      const payload = await verifyActiveZakiAccessToken(token);
       if (!payload || !payload.sub) return { error: "invalid_token" };
       const userId = Number.parseInt(String(payload.sub), 10);
       if (!Number.isInteger(userId) || userId <= 0) return { error: "invalid_token" };

@@ -71,6 +71,19 @@ describe("mintZakiSession (OATH-01, OATH-02)", () => {
     expect(payload.exp - payload.iat).toBe(15 * 60);
   });
 
+  it("binds a minted access token to its exact refresh-session row", async () => {
+    dbQueryMock.mockResolvedValue({ rows: [], rowCount: 1 });
+    const { accessToken } = await zakiAuth.mintZakiSession(fakeUser, fakeReq);
+    const { decodeJwt } = await import("jose");
+    const payload = decodeJwt(accessToken);
+    const sessionInsert = dbQueryMock.mock.calls.find(([sql]) =>
+      /INSERT INTO zaki_sessions/i.test(sql)
+    );
+
+    expect(payload.sid).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(sessionInsert?.[1]?.[0]).toBe(payload.sid);
+  });
+
   it("logs [ZakiAudit] session_mint userId=<id> ip=<ip> (AUTH-07)", async () => {
     const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
     dbQueryMock.mockResolvedValue({ rows: [], rowCount: 1 });
@@ -102,6 +115,22 @@ describe("verifyZakiAccessToken (OATH-01)", () => {
   });
 });
 
+describe("verifyActiveZakiAccessToken", () => {
+  it("rejects a sid-bound candidate token after its session is revoked", async () => {
+    dbQueryMock.mockResolvedValue({ rows: [], rowCount: 1 });
+    const { accessToken } = await zakiAuth.mintZakiSession(fakeUser, fakeReq);
+    dbGetMock.mockResolvedValue(null);
+
+    await expect(zakiAuth.verifyActiveZakiAccessToken(accessToken)).resolves.toBeNull();
+    expect(dbGetMock).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /FROM zaki_sessions WHERE id = \$1 AND user_id = \$2 AND revoked_at IS NULL AND expires_at > NOW\(\)/i
+      ),
+      expect.arrayContaining([expect.any(String), "42"])
+    );
+  });
+});
+
 describe("rotateRefreshToken (OATH-07)", () => {
   it("revokes old row and inserts new row inside withDbTransaction", async () => {
     const oldHash = "f".repeat(64);
@@ -118,6 +147,66 @@ describe("rotateRefreshToken (OATH-07)", () => {
     expect(typeof result.accessToken).toBe("string");
     expect(result.refreshToken).toMatch(/^[0-9a-f]{64}$/);
   });
+
+  it("binds a rotated access token to the newly inserted session", async () => {
+    dbQueryMock.mockImplementation(async (sql) => {
+      if (/SELECT.*FOR UPDATE/i.test(sql)) {
+        return {
+          rows: [
+            {
+              id: "719dcf0a-bf61-41cc-ab0e-89da73a787c3",
+              user_id: 42,
+              expires_at: new Date(Date.now() + 86400000),
+              revoked_at: null,
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      return { rows: [], rowCount: 1 };
+    });
+
+    const result = await zakiAuth.rotateRefreshToken("f".repeat(64), fakeUser, fakeReq);
+    const { decodeJwt } = await import("jose");
+    const payload = decodeJwt(result.accessToken);
+    const sessionInsert = dbQueryMock.mock.calls.find(([sql]) =>
+      /INSERT INTO zaki_sessions/i.test(sql)
+    );
+
+    expect(payload.sid).toBe(result.sessionId);
+    expect(sessionInsert?.[1]?.[0]).toBe(result.sessionId);
+    expect(payload.sid).not.toBe("719dcf0a-bf61-41cc-ab0e-89da73a787c3");
+  });
+
+  it("links the revoked source session to its exact replacement", async () => {
+    const oldSessionId = "719dcf0a-bf61-41cc-ab0e-89da73a787c3";
+    dbQueryMock.mockImplementation(async (sql) => {
+      if (/SELECT.*FOR UPDATE/i.test(sql)) {
+        return {
+          rows: [
+            {
+              id: oldSessionId,
+              user_id: 42,
+              expires_at: new Date(Date.now() + 86400000),
+              revoked_at: null,
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      return { rows: [], rowCount: 1 };
+    });
+
+    const result = await zakiAuth.rotateRefreshToken("f".repeat(64), fakeUser, fakeReq);
+
+    expect(dbQueryMock).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /UPDATE zaki_sessions SET revoked_at = NOW\(\), replaced_by_session_id = \$2 WHERE id = \$1/i
+      ),
+      [oldSessionId, result.sessionId]
+    );
+  });
+
   it("throws Error with code SESSION_NOT_FOUND when old row missing", async () => {
     dbQueryMock.mockResolvedValue({ rows: [], rowCount: 0 });
     await expect(zakiAuth.rotateRefreshToken("missing", fakeUser, fakeReq))

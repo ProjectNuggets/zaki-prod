@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { notifyAuthSessionCleared } from "@/lib/authSessionEvents";
 
 interface User {
   id?: number | string;
@@ -19,7 +20,7 @@ interface AuthState {
   logout: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   token: null,        // NOT seeded from localStorage — FE-01
   user: null,
   isHydrating: true,  // Boot starts in hydrating state — FE-02
@@ -29,7 +30,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     if (token) {
       set({ token });
     } else {
+      const hadAuthenticatedSession = Boolean(get().token || get().user);
       set({ token: null, user: null, isHydrating: false, isLoading: false });
+      if (hadAuthenticatedSession) notifyAuthSessionCleared();
     }
   },
 
@@ -37,7 +40,11 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   setHydrating: (isHydrating) => set({ isHydrating, isLoading: isHydrating }),
 
-  logout: () => set({ token: null, user: null, isHydrating: false, isLoading: false }),
+  logout: () => {
+    const hadAuthenticatedSession = Boolean(get().token || get().user);
+    set({ token: null, user: null, isHydrating: false, isLoading: false });
+    if (hadAuthenticatedSession) notifyAuthSessionCleared();
+  },
 }));
 
 export type { AuthState };

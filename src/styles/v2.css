@@ -776,6 +776,41 @@ button.v2-status-strip__item:focus-visible {
   -moz-osx-font-smoothing: grayscale;
 }
 
+.zaki-auth-v2--overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  min-height: 100dvh;
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--v2-bg-sunken) 88%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.zaki-auth-v2--overlay .zaki-auth-v2__topbar {
+  border-bottom: 1px solid var(--v2-hairline);
+  background: var(--v2-bg);
+}
+
+.zaki-auth-v2__reauth {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--v2-accent-hairline);
+  border-bottom: 0;
+  background: var(--v2-accent-faint);
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-prose);
+  font-size: var(--v2-text-xs);
+}
+
+.zaki-auth-v2__reauth strong {
+  color: var(--v2-accent-text);
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-2xs);
+  letter-spacing: var(--v2-tracking-wider);
+  text-transform: uppercase;
+}
+
 .zaki-auth-v2__topbar {
   min-height: 52px;
   display: flex;

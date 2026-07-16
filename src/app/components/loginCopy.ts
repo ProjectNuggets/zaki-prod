@@ -20,6 +20,10 @@ export const AUTH_COPY = {
       product: "ZAKI",
       descriptor: "Secure workspace access",
     },
+    reauth: {
+      title: "Session expired",
+      detail: "Sign in again to continue. Your work is still here.",
+    },
     eyebrow: {
       signup: "Start",
       resetRequest: "Reset",
@@ -126,6 +130,8 @@ export const AUTH_COPY = {
         "We can't verify your age right now, so we're unable to create an account. Please contact support@chatzaki.com.",
       googleUnderage: "You are not old enough to create a ZAKI account.",
       googleOAuthFailed: "Google sign-in failed. Please try again.",
+      googlePopupBlocked:
+        "We couldn't open Google sign-in. Allow pop-ups for ZAKI and try again.",
       // WP-B10 — each of these used to be an UNMAPPED code that produced a blank login
       // form with no message. Every one now names what happened and what to do next.
       googleOAuthCancelled:
@@ -146,6 +152,10 @@ export const AUTH_COPY = {
     chrome: {
       product: "ZAKI",
       descriptor: "دخول آمن إلى مساحة العمل",
+    },
+    reauth: {
+      title: "انتهت الجلسة",
+      detail: "سجّل الدخول مجددًا للمتابعة. عملك ما زال محفوظًا هنا.",
     },
     eyebrow: {
       signup: "ابدأ",
@@ -242,6 +252,8 @@ export const AUTH_COPY = {
         "لا يمكننا التحقق من عمرك حاليًا، لذا يتعذر إنشاء الحساب. يرجى التواصل مع support@chatzaki.com.",
       googleUnderage: "عمرك لا يسمح بإنشاء حساب ZAKI.",
       googleOAuthFailed: "فشل تسجيل الدخول عبر Google. يرجى المحاولة مرة أخرى.",
+      googlePopupBlocked:
+        "تعذر فتح تسجيل الدخول عبر Google. اسمح بالنوافذ المنبثقة لـ ZAKI ثم حاول مرة أخرى.",
       googleOAuthCancelled:
         "تم إلغاء تسجيل الدخول عبر Google. حاول مرة أخرى أو سجّل الدخول ببريدك الإلكتروني وكلمة المرور.",
       googleOAuthIncomplete:

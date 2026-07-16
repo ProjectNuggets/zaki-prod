@@ -1,4 +1,5 @@
 import type { ProductTelemetrySource } from "./productTelemetry";
+import { sanitizeLocalReturnTo } from "./localReturnTo";
 import { getConfiguredApiBase, getConfiguredLegacyApiBase } from "./runtimeEnv";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -92,45 +93,276 @@ export function getAuthToken(): string | null {
   return useAuthStore.getState().token;
 }
 
-export async function getFreshAuthToken(): Promise<string | null> {
-  return (await refreshAccessToken()) || getAuthToken();
+declare const candidate_auth_transaction_brand: unique symbol;
+
+/**
+ * An opaque same-tab lease used while reauthentication verifies a replacement
+ * principal. Callers can obtain a candidate refresh token only while they own
+ * the current lease; ordinary refreshes stay blocked until it is committed or
+ * released.
+ */
+export type CandidateAuthTransaction = {
+  readonly [candidate_auth_transaction_brand]: true;
+};
+
+type FreshAuthTokenOptions =
+  | { persist?: true }
+  | { persist: false; candidateAuthTransaction: CandidateAuthTransaction };
+
+type RefreshResult =
+  | {
+      kind: "token";
+      token: string;
+      requestSessionGeneration: number;
+      sessionGeneration: number;
+    }
+  | { kind: "unavailable" }
+  | { kind: "blocked" }
+  | { kind: "principal_changed" };
+
+type RefreshRequest = {
+  tokenAtStart: string | null;
+  principalAtStart: string | null;
+  sessionGenerationAtStart: number;
+  promise: Promise<RefreshResult>;
+};
+
+type CandidateRefreshRequest = {
+  transaction: CandidateAuthTransaction;
+  promise: Promise<string | null>;
+};
+
+const candidateAuthTransactions = new WeakSet<CandidateAuthTransaction>();
+let activeCandidateAuthTransaction: CandidateAuthTransaction | null = null;
+let authSessionGeneration = 0;
+
+export function beginCandidateAuthTransaction(): CandidateAuthTransaction {
+  const transaction = {} as CandidateAuthTransaction;
+  candidateAuthTransactions.add(transaction);
+  activeCandidateAuthTransaction = transaction;
+  return transaction;
+}
+
+export function isCurrentCandidateAuthTransaction(
+  transaction: CandidateAuthTransaction | null | undefined
+) {
+  return Boolean(
+    transaction &&
+      candidateAuthTransactions.has(transaction) &&
+      activeCandidateAuthTransaction === transaction
+  );
+}
+
+/**
+ * Wait for a refresh that was already in flight before the lease was acquired.
+ * Its response (and any Set-Cookie rotation) must settle before a credential or
+ * OAuth attempt is allowed to replace the browser's refresh cookie.
+ */
+export async function waitForCandidateAuthTransaction(
+  transaction: CandidateAuthTransaction
+): Promise<boolean> {
+  if (!isCurrentCandidateAuthTransaction(transaction)) return false;
+  const ordinaryRefreshAlreadyInFlight = _refreshPromise?.promise;
+  const strictRefreshAlreadyInFlight = _strictRefreshPromise;
+  await Promise.all([
+    ordinaryRefreshAlreadyInFlight ?? Promise.resolve(),
+    strictRefreshAlreadyInFlight ?? Promise.resolve(),
+  ]);
+  return isCurrentCandidateAuthTransaction(transaction);
+}
+
+export function completeCandidateAuthTransaction(
+  transaction: CandidateAuthTransaction | null | undefined
+) {
+  if (isCurrentCandidateAuthTransaction(transaction)) {
+    activeCandidateAuthTransaction = null;
+  }
+}
+
+/**
+ * Increments the request guard after an external caller atomically replaces the
+ * mounted session. Existing requests can then return their original response
+ * instead of retrying under the replacement account.
+ */
+export function markAuthSessionChanged() {
+  authSessionGeneration += 1;
+}
+
+export async function getFreshAuthToken(
+  options: FreshAuthTokenOptions = {}
+): Promise<string | null> {
+  if (options.persist === false) {
+    return refreshCandidateAccessToken(options.candidateAuthTransaction);
+  }
+
+  const refreshed = await refreshAccessToken();
+  if (refreshed.kind === "token") return refreshed.token;
+  return refreshed.kind === "unavailable" ? getAuthToken() : null;
+}
+
+/**
+ * Returns only a newly issued refresh token. Unlike getFreshAuthToken(), this
+ * never falls back to the in-memory bearer and never commits the candidate to
+ * the store. Boot hydration verifies its principal before the App atomically
+ * adopts it.
+ */
+export async function getStrictFreshAuthToken(): Promise<string | null> {
+  if (hasActiveCandidateAuthTransaction()) return null;
+  const tokenAtStart = getAuthToken();
+  const sessionGenerationAtStart = authSessionGeneration;
+
+  if (!_strictRefreshPromise) {
+    _strictRefreshPromise = requestRefreshToken().finally(() => {
+      _strictRefreshPromise = null;
+    });
+  }
+  const token = await _strictRefreshPromise;
+  if (
+    hasActiveCandidateAuthTransaction() ||
+    authSessionGeneration !== sessionGenerationAtStart ||
+    getAuthToken() !== tokenAtStart
+  ) {
+    return null;
+  }
+  return token;
 }
 
 export function setAuthToken(token: string) {
+  markAuthSessionChanged();
   useAuthStore.getState().setToken(token);
 }
 
 export function clearAuthToken() {
+  markAuthSessionChanged();
   useAuthStore.getState().setToken(null);
 }
 
 // Internal: calls POST /api/auth/refresh to rotate token.
 // Returns the new access token string, or null on failure.
 // IMPORTANT: Uses raw fetch — never call apiRequest here (prevents recursive loop).
-// WR-02: module-level singleton collapses concurrent callers onto one in-flight request.
-let _refreshPromise: Promise<string | null> | null = null;
-async function refreshAccessToken(): Promise<string | null> {
-  if (_refreshPromise) return _refreshPromise;
-  _refreshPromise = (async () => {
-    try {
-      const res = await fetch(buildApiUrl("/api/auth/refresh"), {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) return null;
-      const data = (await res.json()) as { token?: string };
-      if (data.token) {
-        useAuthStore.getState().setToken(data.token);
-        return data.token;
+// WR-02: ordinary and candidate refreshes use separate singletons. A mounted
+// request must never join a candidate refresh and persist its token.
+let _refreshPromise: RefreshRequest | null = null;
+let _candidateRefreshPromise: CandidateRefreshRequest | null = null;
+let _strictRefreshPromise: Promise<string | null> | null = null;
+
+async function requestRefreshToken(): Promise<string | null> {
+  try {
+    const res = await fetch(buildApiUrl("/api/auth/refresh"), {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { token?: string };
+    return data.token || null;
+  } catch {
+    return null;
+  }
+}
+
+function hasActiveCandidateAuthTransaction() {
+  return activeCandidateAuthTransaction !== null;
+}
+
+function getPrincipalKey(user: { id?: number | string; username?: string } | null | undefined) {
+  const id = String(user?.id ?? "").trim();
+  if (id) return `id:${id}`;
+  const username = String(user?.username ?? "").trim().toLowerCase();
+  return username ? `username:${username}` : null;
+}
+
+/**
+ * Refresh responses are issued by our same-origin endpoint and contain the
+ * signed ZAKI access JWT. We only use the JWT subject as an identity binding
+ * before adopting the token; authorization remains server-side.
+ */
+function getRefreshTokenPrincipal(token: string): string | null {
+  try {
+    const payload = String(token || "").split(".")[1];
+    if (!payload) return null;
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const paddedBase64 = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const decoded = JSON.parse(atob(paddedBase64)) as { iss?: unknown; sub?: unknown };
+    if (decoded.iss !== "zaki") return null;
+    const subject = String(decoded.sub || "").trim();
+    return subject ? `id:${subject}` : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveRefreshRequest(request: RefreshRequest): Promise<RefreshResult> {
+  const token = await requestRefreshToken();
+  if (
+    hasActiveCandidateAuthTransaction() ||
+    authSessionGeneration !== request.sessionGenerationAtStart ||
+    getAuthToken() !== request.tokenAtStart
+  ) {
+    return { kind: "blocked" };
+  }
+  if (!token) return { kind: "unavailable" };
+
+  // A shared HttpOnly refresh cookie can have been replaced by a different
+  // browser tab. Never persist that token into a tab still rendering the old
+  // principal; force the in-app reauthentication handoff instead.
+  if (
+    !request.principalAtStart ||
+    getRefreshTokenPrincipal(token) !== request.principalAtStart
+  ) {
+    return { kind: "principal_changed" };
+  }
+
+  setAuthToken(token);
+  return {
+    kind: "token",
+    token,
+    requestSessionGeneration: request.sessionGenerationAtStart,
+    sessionGeneration: authSessionGeneration,
+  };
+}
+
+async function refreshAccessToken(): Promise<RefreshResult> {
+  if (hasActiveCandidateAuthTransaction()) return { kind: "blocked" };
+
+  if (!_refreshPromise) {
+    const request = {
+      tokenAtStart: getAuthToken(),
+      principalAtStart: getPrincipalKey(useAuthStore.getState().user),
+      sessionGenerationAtStart: authSessionGeneration,
+      promise: undefined as unknown as Promise<RefreshResult>,
+    } satisfies RefreshRequest;
+    request.promise = resolveRefreshRequest(request);
+    _refreshPromise = request;
+    void request.promise.finally(() => {
+      if (_refreshPromise === request) {
+        _refreshPromise = null;
       }
-      return null;
-    } catch {
-      return null;
-    } finally {
-      _refreshPromise = null;
-    }
-  })();
-  return _refreshPromise;
+    });
+  }
+
+  return _refreshPromise.promise;
+}
+
+async function refreshCandidateAccessToken(
+  transaction: CandidateAuthTransaction
+): Promise<string | null> {
+  if (!isCurrentCandidateAuthTransaction(transaction)) return null;
+
+  if (_candidateRefreshPromise?.transaction !== transaction) {
+    const request: CandidateRefreshRequest = {
+      transaction,
+      promise: requestRefreshToken(),
+    };
+    _candidateRefreshPromise = request;
+    void request.promise.finally(() => {
+      if (_candidateRefreshPromise === request) {
+        _candidateRefreshPromise = null;
+      }
+    });
+  }
+
+  const token = await _candidateRefreshPromise.promise;
+  return isCurrentCandidateAuthTransaction(transaction) ? token : null;
 }
 
 export function buildApiUrl(path: string) {
@@ -157,24 +389,12 @@ export function buildLoginRedirectUrl(returnTo?: string) {
           }`;
   }
   const rawReturnTo = returnTo || currentLocation;
-  const normalizedReturnTo = String(rawReturnTo || "").trim();
-  if (
-    normalizedReturnTo &&
-    normalizedReturnTo !== "/" &&
-    !normalizedReturnTo.startsWith("http://") &&
-    !normalizedReturnTo.startsWith("https://") &&
-    !normalizedReturnTo.startsWith("//")
-  ) {
-    const parsedReturnTo = new URL(
-      normalizedReturnTo.startsWith("/") ? normalizedReturnTo : `/${normalizedReturnTo}`,
-      "https://zaki.local"
-    );
-    parsedReturnTo.searchParams.delete("auth");
-    url.searchParams.set(
-      "next",
-      `${parsedReturnTo.pathname}${parsedReturnTo.search}${parsedReturnTo.hash}`
-    );
-  }
+  const normalizedReturnTo = sanitizeLocalReturnTo(rawReturnTo, {
+    fallback: "",
+    stripSearchParams: ["auth"],
+    allowRoot: false,
+  });
+  if (normalizedReturnTo) url.searchParams.set("next", normalizedReturnTo);
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
@@ -199,6 +419,36 @@ export function redirectToLogin(returnTo?: string) {
   return target;
 }
 
+export const AUTH_REQUIRED_EVENT = "zaki:auth-required";
+export const GOOGLE_OAUTH_POPUP_COMPLETE_MESSAGE = "zaki:google-oauth-popup-complete";
+export const GOOGLE_OAUTH_POPUP_FAILURE_MESSAGE = "zaki:google-oauth-popup-failed";
+
+export type AuthRequiredEventDetail = {
+  loginUrl: string;
+};
+
+/**
+ * Gives the mounted app first refusal on a dead session so it can preserve
+ * drafts and partial output behind an in-app login surface. If nothing handles
+ * the event, retain the safe legacy fallback for non-React callers.
+ */
+export function requestReauthentication(returnTo?: string) {
+  const loginUrl = buildLoginRedirectUrl(returnTo);
+  if (typeof window !== "undefined") {
+    const event = new CustomEvent<AuthRequiredEventDetail>(AUTH_REQUIRED_EVENT, {
+      cancelable: true,
+      detail: { loginUrl },
+    });
+    if (!window.dispatchEvent(event)) {
+      return loginUrl;
+    }
+    markAuthSessionChanged();
+    useAuthStore.getState().logout();
+    redirectToLogin(returnTo);
+  }
+  return loginUrl;
+}
+
 export async function apiRequest(
   path: string,
   options: ApiRequestOptions = {},
@@ -207,6 +457,8 @@ export async function apiRequest(
   const { skipAuth, redirectOnAuthFailure = true, headers, body, ...rest } = options;
   const requestHeaders = new Headers(headers ?? {});
   const token = getAuthToken();
+  const sessionGeneration = authSessionGeneration;
+  const candidateTransaction = activeCandidateAuthTransaction;
 
   if (!skipAuth && token && !requestHeaders.has("Authorization")) {
     requestHeaders.set("Authorization", `Bearer ${token}`);
@@ -225,28 +477,63 @@ export async function apiRequest(
 
   // FE-03: X-Zaki-Session-Upgrade — silently upgrade token in background.
   // Don't await; fire-and-forget so caller gets the response immediately.
-  if (!skipAuth && response.headers.get("X-Zaki-Session-Upgrade") === "1") {
-    void refreshAccessToken();
+  if (
+    !skipAuth &&
+    !candidateTransaction &&
+    response.headers.get("X-Zaki-Session-Upgrade") === "1"
+  ) {
+    void refreshAccessToken().then((refreshed) => {
+      if (refreshed.kind === "principal_changed" && typeof window !== "undefined") {
+        requestReauthentication();
+      }
+    });
   }
 
   // FE-04: 401 retry — attempt one refresh then retry the original request.
   if (!skipAuth && response.status === 401 && !_isRetry) {
-    const newToken = await refreshAccessToken();
-    if (newToken) {
-      const retryResponse = await apiRequest(path, options, true);
+    // The request was sent under a different session, or a candidate identity
+    // is being verified. Returning its original 401 is safer than retrying it
+    // under whichever account now owns the browser cookie.
+    if (
+      candidateTransaction ||
+      hasActiveCandidateAuthTransaction() ||
+      sessionGeneration !== authSessionGeneration ||
+      token !== getAuthToken()
+    ) {
+      return response;
+    }
+
+    const refreshed = await refreshAccessToken();
+    if (refreshed.kind === "principal_changed") {
+      if (redirectOnAuthFailure && typeof window !== "undefined") {
+        requestReauthentication();
+      }
+      return response;
+    }
+    if (
+      refreshed.kind === "blocked" ||
+      (refreshed.kind === "token" &&
+        (hasActiveCandidateAuthTransaction() ||
+          refreshed.requestSessionGeneration !== sessionGeneration ||
+          refreshed.sessionGeneration !== authSessionGeneration))
+    ) {
+      return response;
+    }
+    if (refreshed.kind === "token") {
+      const retryHeaders = new Headers(headers ?? {});
+      retryHeaders.set("Authorization", `Bearer ${refreshed.token}`);
+      const retryResponse = await apiRequest(path, { ...options, headers: retryHeaders }, true);
       // WR-01: if the retry also returns 401, the token is invalid — log out.
       if (retryResponse.status === 401 && typeof window !== "undefined") {
         if (!redirectOnAuthFailure) return retryResponse;
-        useAuthStore.getState().logout();
-        redirectToLogin();
+        requestReauthentication();
       }
       return retryResponse;
     }
     // Refresh failed — redirect to login
     if (!redirectOnAuthFailure) return response;
     if (typeof window !== "undefined") {
-      useAuthStore.getState().logout();
-      redirectToLogin();
+      requestReauthentication();
     }
   }
 
@@ -266,7 +553,7 @@ export async function backendRequest(
     base.endsWith("/api") && normalizedPath.startsWith("/api/")
       ? `${base}${normalizedPath.slice(4)}`
       : `${base}${normalizedPath}`;
-  const { headers, body, ...rest } = options;
+  const { headers, body, credentials = "include", ...rest } = options;
   const requestHeaders = new Headers(headers ?? {});
 
   if (body && !(body instanceof FormData) && !requestHeaders.has("Content-Type")) {
@@ -275,7 +562,7 @@ export async function backendRequest(
 
   return fetch(url, {
     ...rest,
-    credentials: "include", // WR-03: send HttpOnly cookie on backend routes
+    credentials, // WR-03: send HttpOnly cookie on backend routes by default
     headers: requestHeaders,
     body,
   });
@@ -288,30 +575,54 @@ export async function backendAuthRequest(
   const { redirectOnAuthFailure = true, headers, ...rest } = options;
   const requestHeaders = new Headers(headers ?? {});
   const token = getAuthToken();
+  const sessionGeneration = authSessionGeneration;
+  const candidateTransaction = activeCandidateAuthTransaction;
   if (token && !requestHeaders.has("Authorization")) {
     requestHeaders.set("Authorization", `Bearer ${token}`);
   }
   const response = await backendRequest(path, { ...rest, headers: requestHeaders });
   // WR-03: 401 on backend routes — attempt one silent refresh then retry.
   if (response.status === 401) {
-    const newToken = await refreshAccessToken();
-    if (newToken) {
+    if (
+      candidateTransaction ||
+      hasActiveCandidateAuthTransaction() ||
+      sessionGeneration !== authSessionGeneration ||
+      token !== getAuthToken()
+    ) {
+      return response;
+    }
+
+    const refreshed = await refreshAccessToken();
+    if (refreshed.kind === "principal_changed") {
+      if (redirectOnAuthFailure && typeof window !== "undefined") {
+        requestReauthentication();
+      }
+      return response;
+    }
+    if (
+      refreshed.kind === "blocked" ||
+      (refreshed.kind === "token" &&
+        (hasActiveCandidateAuthTransaction() ||
+          refreshed.requestSessionGeneration !== sessionGeneration ||
+          refreshed.sessionGeneration !== authSessionGeneration))
+    ) {
+      return response;
+    }
+    if (refreshed.kind === "token") {
       const retryHeaders = new Headers(headers ?? {});
-      retryHeaders.set("Authorization", `Bearer ${newToken}`);
+      retryHeaders.set("Authorization", `Bearer ${refreshed.token}`);
       const retryResponse = await backendRequest(path, { ...rest, headers: retryHeaders });
       if (retryResponse.status === 401) {
         if (!redirectOnAuthFailure) return retryResponse;
         if (typeof window !== "undefined") {
-          useAuthStore.getState().logout();
-          redirectToLogin();
+          requestReauthentication();
         }
       }
       return retryResponse;
     }
     if (!redirectOnAuthFailure) return response;
     if (typeof window !== "undefined") {
-      useAuthStore.getState().logout();
-      redirectToLogin();
+      requestReauthentication();
     }
   }
   return response;
@@ -537,6 +848,30 @@ export async function requestLogout() {
   return { response, data };
 }
 
+/**
+ * Revokes one failed reauthentication candidate by its signed access token.
+ * This deliberately omits the browser's shared refresh cookie: another tab
+ * may have replaced it between candidate verification and this request.
+ */
+export async function requestCandidateSessionLogout(candidateAccessToken: string) {
+  const response = await backendRequest("/api/auth/logout/candidate", {
+    method: "POST",
+    credentials: "omit",
+    headers: {
+      Authorization: `Bearer ${candidateAccessToken}`,
+    },
+  });
+
+  let data: { success?: boolean; revoked?: boolean; error?: string | null } = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Ignore JSON parsing failures.
+  }
+
+  return { response, data };
+}
+
 export function buildGoogleOAuthStartUrl(
   returnTo?: string,
   consent?: { legalConsentAccepted: boolean; legalPolicyVersion: string }
@@ -578,6 +913,7 @@ export async function requestPublicSignup({
   legalConsentAccepted,
   legalPolicyVersion,
   turnstileToken,
+  returnTo,
 }: {
   email: string;
   password: string;
@@ -585,6 +921,7 @@ export async function requestPublicSignup({
   legalConsentAccepted?: boolean;
   legalPolicyVersion?: string;
   turnstileToken?: string | null;
+  returnTo?: string;
 }) {
   const payload: Record<string, string | boolean> = {
     email,
@@ -599,6 +936,9 @@ export async function requestPublicSignup({
   }
   if (turnstileToken) {
     payload.turnstileToken = turnstileToken;
+  }
+  if (returnTo) {
+    payload.returnTo = returnTo;
   }
 
   const response = await backendRequest("/signup", {
@@ -661,8 +1001,13 @@ export async function confirmPasswordReset({
   return { response, data };
 }
 
-export async function fetchCurrentUser() {
-  const response = await backendAuthRequest("/api/profile", { method: "GET" });
+export async function fetchCurrentUser(accessToken?: string) {
+  const response = accessToken
+    ? await backendRequest("/api/profile", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+    : await backendAuthRequest("/api/profile", { method: "GET" });
   const data = (await response.json()) as {
     success?: boolean;
     user?: { username?: string; role?: string; id?: number | string; fullName?: string | null } | null;
@@ -671,8 +1016,13 @@ export async function fetchCurrentUser() {
   return { response, data };
 }
 
-export async function fetchProfile() {
-  const response = await backendAuthRequest("/api/profile", { method: "GET" });
+export async function fetchProfile(accessToken?: string) {
+  const response = accessToken
+    ? await backendRequest("/api/profile", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+    : await backendAuthRequest("/api/profile", { method: "GET" });
   const data = (await response.json()) as {
     success?: boolean;
     user?: { username?: string; fullName?: string | null } | null;

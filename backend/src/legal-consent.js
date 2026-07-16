@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sanitizeLocalReturnTo } from "./auth-return-to.js";
 
 export const LEGAL_POLICY_VERSION_FALLBACK = "2026-07-12.v4";
 export const MINIMUM_SIGNUP_AGE_FALLBACK = 16;
@@ -33,6 +34,27 @@ export function buildLoginSchema() {
     });
 }
 
+export function sanitizeAuthReturnTo(value) {
+  return sanitizeLocalReturnTo(value, {
+    fallback: "",
+    stripSearchParams: ["auth"],
+    requireLeadingSlash: true,
+    allowRoot: false,
+  });
+}
+
+export function buildVerificationLoginRedirect(appUrl, verifiedState = "success", returnTo = "") {
+  const rawBase = String(appUrl || "").replace(/\/+$/, "");
+  const appBase = rawBase.endsWith("/api") ? rawBase.slice(0, -4) : rawBase;
+  const loginUrl = new URL(appBase.endsWith("/") ? appBase : `${appBase}/`);
+  loginUrl.pathname = "/";
+  loginUrl.searchParams.set("auth", "login");
+  loginUrl.searchParams.set("verified", String(verifiedState || "success"));
+  const safeReturnTo = sanitizeAuthReturnTo(returnTo);
+  if (safeReturnTo) loginUrl.searchParams.set("next", safeReturnTo);
+  return loginUrl.toString();
+}
+
 /**
  * WP-M — the signup schema no longer accepts a date of birth.
  *
@@ -50,6 +72,7 @@ export function buildSignupSchema() {
     email: z.string().email("Invalid email address"),
     password: z.string().min(8, "Password must be at least 8 characters"),
     name: z.string().min(1, "Name is required").max(100),
+    returnTo: z.string().max(240).optional().transform(sanitizeAuthReturnTo),
     ...buildLegalConsentShape(),
   });
 }

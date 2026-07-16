@@ -1431,9 +1431,10 @@ export function ZakiDashboard({
         source: "dashboard",
         returnTo: getCommandProductRoute(productId),
         anonymousWorkId: anonymousWorkId ?? null,
+        anonymousHandoff: !token,
       });
     },
-    []
+    [token]
   );
 
   const persistAnonymousCommandDraft = useCallback(
@@ -1477,6 +1478,7 @@ export function ZakiDashboard({
           source: "dashboard",
           returnTo: route,
           anonymousWorkId,
+          anonymousHandoff: !token,
         });
       }
 
@@ -1489,6 +1491,7 @@ export function ZakiDashboard({
       navigate,
       persistAnonymousCommandDraft,
       selectedProductId,
+      token,
     ]
   );
 

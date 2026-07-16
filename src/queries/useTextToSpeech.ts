@@ -28,10 +28,14 @@ type TtsState = {
   cacheOrder: string[];
   /** The singleton audio element. Created lazily in the browser. */
   audio: HTMLAudioElement | null;
+  /** Invalidates in-flight synthesis when the authenticated account changes. */
+  generation: number;
   /** Toggle play/stop for a given message. */
   toggle: (messageId: string, text: string) => Promise<void>;
   /** Stop any active playback (used on unmount / route change). */
   stop: () => void;
+  /** Remove account-scoped audio state during a principal switch. */
+  reset: () => void;
 };
 
 function base64ToBlobUrl(base64: string, format: string): string {
@@ -57,9 +61,11 @@ export const useTextToSpeechStore = create<TtsState>((set, get) => ({
   cache: {},
   cacheOrder: [],
   audio: null,
+  generation: 0,
 
   toggle: async (messageId, text) => {
     const state = get();
+    const generation = state.generation;
     // Click on the same message that's currently active → stop.
     if (state.activeMessageId === messageId && state.status) {
       state.audio?.pause();
@@ -95,6 +101,7 @@ export const useTextToSpeechStore = create<TtsState>((set, get) => ({
         if (!response.ok || !data?.audio) {
           throw new Error(`synthesizeSpeech ${response.status}`);
         }
+        if (get().generation !== generation || get().activeMessageId !== messageId) return;
         const fresh = base64ToBlobUrl(data.audio, data.format || "mp3");
         blobUrl = fresh;
         set((s) => {
@@ -113,7 +120,7 @@ export const useTextToSpeechStore = create<TtsState>((set, get) => ({
         });
       } catch (err) {
         // Bail out — caller surfaces a toast via the play wrapper.
-        if (get().activeMessageId === messageId) {
+        if (get().generation === generation && get().activeMessageId === messageId) {
           set({ activeMessageId: null, status: null });
         }
         throw err;
@@ -131,16 +138,19 @@ export const useTextToSpeechStore = create<TtsState>((set, get) => ({
 
     // Race guard: another message may have been triggered while we were
     // fetching. If so, drop this play.
-    if (get().activeMessageId !== messageId) return;
+    if (get().generation !== generation || get().activeMessageId !== messageId) return;
+
+    const ownsActivePlayback = () =>
+      get().generation === generation && get().activeMessageId === messageId;
 
     audio.src = blobUrl;
     audio.onended = () => {
-      if (get().activeMessageId === messageId) {
+      if (ownsActivePlayback()) {
         set({ activeMessageId: null, status: null });
       }
     };
     audio.onerror = () => {
-      if (get().activeMessageId === messageId) {
+      if (ownsActivePlayback()) {
         set({ activeMessageId: null, status: null });
       }
     };
@@ -149,7 +159,7 @@ export const useTextToSpeechStore = create<TtsState>((set, get) => ({
       await audio.play();
     } catch {
       // Browsers can refuse audio.play() before user gesture; clear state.
-      if (get().activeMessageId === messageId) {
+      if (ownsActivePlayback()) {
         set({ activeMessageId: null, status: null });
       }
     }
@@ -159,6 +169,28 @@ export const useTextToSpeechStore = create<TtsState>((set, get) => ({
     const state = get();
     if (state.audio) state.audio.pause();
     set({ activeMessageId: null, status: null });
+  },
+
+  reset: () => {
+    const state = get();
+    if (state.audio) {
+      state.audio.pause();
+      state.audio.onended = null;
+      state.audio.onerror = null;
+      state.audio.removeAttribute("src");
+      state.audio.load();
+    }
+    for (const blobUrl of Object.values(state.cache)) {
+      URL.revokeObjectURL(blobUrl);
+    }
+    set({
+      activeMessageId: null,
+      status: null,
+      cache: {},
+      cacheOrder: [],
+      audio: null,
+      generation: state.generation + 1,
+    });
   },
 }));
 

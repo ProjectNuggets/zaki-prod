@@ -4,6 +4,7 @@ import {
   buildSignupSchema,
   validateLegalPolicyVersion,
   buildConsentStatus,
+  buildVerificationLoginRedirect,
   resolveMinimumSignupAge,
   validateMinimumSignupAge,
 } from "./legal-consent.js";
@@ -42,6 +43,61 @@ describe("legal consent auth schemas", () => {
       legalPolicyVersion: "2026-07-12.v4",
     });
     expect(valid.success).toBe(true);
+  });
+
+  it("accepts only a local return target for the email verification round trip", () => {
+    const schema = buildSignupSchema();
+    const base = {
+      email: "user@example.com",
+      password: "Password123",
+      name: "User",
+      legalConsentAccepted: true,
+      legalPolicyVersion: "2026-07-12.v4",
+    };
+
+    expect(schema.parse({ ...base, returnTo: "/brain?panel=clusters#memory" }).returnTo).toBe(
+      "/brain?panel=clusters#memory"
+    );
+    expect(schema.parse({ ...base, returnTo: "https://evil.example/brain" }).returnTo).toBe("");
+    expect(schema.parse({ ...base, returnTo: "//evil.example/brain" }).returnTo).toBe("");
+
+    for (const unsafeReturnTo of [
+      "/./\\evil.example/brain",
+      "/brain/../\\evil.example/brain",
+      "/.//evil.example/brain",
+      "/%5cevil.example/brain",
+      "/%2f%2fevil.example/brain",
+    ]) {
+      expect(schema.parse({ ...base, returnTo: unsafeReturnTo }).returnTo).toBe("");
+    }
+  });
+
+  it("builds the verification result redirect from the server-bound return target", () => {
+    expect(
+      buildVerificationLoginRedirect(
+        "https://app.chatzaki.com/api",
+        "success",
+        "/brain?panel=clusters#memory"
+      )
+    ).toBe(
+      "https://app.chatzaki.com/?auth=login&verified=success&next=%2Fbrain%3Fpanel%3Dclusters%23memory"
+    );
+
+    expect(
+      buildVerificationLoginRedirect(
+        "https://app.chatzaki.com",
+        "expired",
+        "https://evil.example/brain"
+      )
+    ).toBe("https://app.chatzaki.com/?auth=login&verified=expired");
+
+    expect(
+      buildVerificationLoginRedirect(
+        "https://app.chatzaki.com",
+        "success",
+        "/./\\evil.example/brain"
+      )
+    ).toBe("https://app.chatzaki.com/?auth=login&verified=success");
   });
 
   // WP-M (a) — email signup succeeds with NO date of birth in the payload.

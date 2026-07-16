@@ -1,13 +1,16 @@
 import type { AnonymousWorkProductId } from "./anonymousWork";
+import { sanitizeLocalReturnTo } from "./localReturnTo";
 import { getProductActivationRoute } from "./productRoutes";
 
 export const PENDING_INTENT_KEY = "zaki:pending-intent:v1";
+export const PENDING_INTENT_STORAGE_FAILURE_EVENT = "zaki:pending-intent-storage-failed";
+export const PENDING_INTENT_UPDATED_EVENT = "zaki:pending-intent-updated";
 
 const MAX_PROMPT_LENGTH = 1200;
 const MAX_SOURCE_LENGTH = 80;
 const MAX_TASK_KIND_LENGTH = 64;
 const MAX_WORK_ID_LENGTH = 120;
-const PENDING_INTENT_TTL_MS = 30 * 60 * 1000;
+export const PENDING_INTENT_TTL_MS = 24 * 60 * 60 * 1000;
 
 export type PendingIntent = {
   productId: AnonymousWorkProductId;
@@ -16,6 +19,9 @@ export type PendingIntent = {
   source: string;
   returnTo: string;
   anonymousWorkId: string | null;
+  /** Explicit provenance required to carry work across an unowned browser. */
+  anonymousHandoff: boolean;
+  replayMode: "draft" | "submit";
   createdAt: string;
 };
 
@@ -23,6 +29,11 @@ export type PendingIntentInput = Partial<Omit<PendingIntent, "createdAt">> & {
   productId: AnonymousWorkProductId;
   prompt: string;
 };
+
+export type PendingIntentStorageFailureDetail = Pick<
+  PendingIntent,
+  "productId" | "prompt" | "returnTo"
+>;
 
 const WEBSITE_INTENT_PRODUCTS: Record<string, AnonymousWorkProductId> = {
   agent: "agent",
@@ -38,6 +49,27 @@ function getStorage() {
   } catch {
     return null;
   }
+}
+
+function announceStorageFailure(intent: PendingIntent) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent<PendingIntentStorageFailureDetail>(
+      PENDING_INTENT_STORAGE_FAILURE_EVENT,
+      {
+        detail: {
+          productId: intent.productId,
+          prompt: intent.prompt,
+          returnTo: intent.returnTo,
+        },
+      }
+    )
+  );
+}
+
+function announcePendingIntentUpdated() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(PENDING_INTENT_UPDATED_EVENT));
 }
 
 function sanitizeText(value: unknown, maxLength: number) {
@@ -67,7 +99,14 @@ function normalizeProductId(value: unknown): AnonymousWorkProductId | null {
 function sanitizeReturnTo(value: unknown, productId: AnonymousWorkProductId) {
   const fallback = getProductActivationRoute(productId) || "/";
   const route = sanitizeText(value, 240);
-  return route.startsWith("/") && !route.startsWith("//") ? route : fallback;
+  return sanitizeLocalReturnTo(route, {
+    fallback,
+    requireLeadingSlash: true,
+  });
+}
+
+function normalizeReplayMode(value: unknown): PendingIntent["replayMode"] {
+  return value === "submit" ? "submit" : "draft";
 }
 
 export function buildProductReturnTo(productId: AnonymousWorkProductId) {
@@ -107,6 +146,7 @@ export function consumeWebsiteCommandIntentFromUrl(input: {
     prompt,
     source,
     returnTo: buildProductReturnTo(productId),
+    anonymousHandoff: true,
   });
 }
 
@@ -138,6 +178,10 @@ export function readPendingIntent(): PendingIntent | null {
       source: sanitizeText(raw?.source, MAX_SOURCE_LENGTH) || "dashboard",
       returnTo: sanitizeReturnTo(raw?.returnTo, productId),
       anonymousWorkId: sanitizeText(raw?.anonymousWorkId, MAX_WORK_ID_LENGTH) || null,
+      // Unmarked legacy records may be account-private reauthentication drafts.
+      // They deliberately fail closed during the markerless ownership migration.
+      anonymousHandoff: raw?.anonymousHandoff === true,
+      replayMode: normalizeReplayMode(raw?.replayMode),
       createdAt: Number.isFinite(createdAtMs)
         ? createdAt.toISOString()
         : new Date().toISOString(),
@@ -148,9 +192,8 @@ export function readPendingIntent(): PendingIntent | null {
 }
 
 export function writePendingIntent(input: PendingIntentInput) {
-  const storage = getStorage();
   const prompt = sanitizeText(input.prompt, MAX_PROMPT_LENGTH);
-  if (!storage || !prompt) return null;
+  if (!prompt) return null;
 
   const intent: PendingIntent = {
     productId: input.productId,
@@ -159,13 +202,22 @@ export function writePendingIntent(input: PendingIntentInput) {
     source: sanitizeText(input.source, MAX_SOURCE_LENGTH) || "dashboard",
     returnTo: sanitizeReturnTo(input.returnTo, input.productId),
     anonymousWorkId: sanitizeText(input.anonymousWorkId, MAX_WORK_ID_LENGTH) || null,
+    anonymousHandoff: input.anonymousHandoff === true,
+    replayMode: normalizeReplayMode(input.replayMode),
     createdAt: new Date().toISOString(),
   };
+  const storage = getStorage();
+  if (!storage) {
+    announceStorageFailure(intent);
+    return null;
+  }
   try {
     storage.setItem(PENDING_INTENT_KEY, JSON.stringify(intent));
   } catch {
+    announceStorageFailure(intent);
     return null;
   }
+  announcePendingIntentUpdated();
   return intent;
 }
 
