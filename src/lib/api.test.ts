@@ -572,6 +572,16 @@ describe("session-dead 401 redirect target", () => {
     );
     expect(buildLoginRedirectUrl("https://evil.example/settings")).toBe("/?auth=login");
     expect(buildLoginRedirectUrl("//evil.example/settings")).toBe("/?auth=login");
+
+    for (const unsafeReturnTo of [
+      "/./\\evil.example/settings",
+      "/settings/../\\evil.example/settings",
+      "/.//evil.example/settings",
+      "/%5cevil.example/settings",
+      "/%2f%2fevil.example/settings",
+    ]) {
+      expect(buildLoginRedirectUrl(unsafeReturnTo)).toBe("/?auth=login");
+    }
   });
 
   it("does not nest next when already on the login screen", async () => {

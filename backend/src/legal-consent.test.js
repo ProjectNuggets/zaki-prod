@@ -60,6 +60,16 @@ describe("legal consent auth schemas", () => {
     );
     expect(schema.parse({ ...base, returnTo: "https://evil.example/brain" }).returnTo).toBe("");
     expect(schema.parse({ ...base, returnTo: "//evil.example/brain" }).returnTo).toBe("");
+
+    for (const unsafeReturnTo of [
+      "/./\\evil.example/brain",
+      "/brain/../\\evil.example/brain",
+      "/.//evil.example/brain",
+      "/%5cevil.example/brain",
+      "/%2f%2fevil.example/brain",
+    ]) {
+      expect(schema.parse({ ...base, returnTo: unsafeReturnTo }).returnTo).toBe("");
+    }
   });
 
   it("builds the verification result redirect from the server-bound return target", () => {
@@ -80,6 +90,14 @@ describe("legal consent auth schemas", () => {
         "https://evil.example/brain"
       )
     ).toBe("https://app.chatzaki.com/?auth=login&verified=expired");
+
+    expect(
+      buildVerificationLoginRedirect(
+        "https://app.chatzaki.com",
+        "success",
+        "/./\\evil.example/brain"
+      )
+    ).toBe("https://app.chatzaki.com/?auth=login&verified=success");
   });
 
   // WP-M (a) — email signup succeeds with NO date of birth in the payload.

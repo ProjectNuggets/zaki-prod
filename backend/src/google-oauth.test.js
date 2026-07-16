@@ -65,6 +65,16 @@ describe("google-oauth helpers", () => {
     expect(sanitizeGoogleOAuthReturnTo("learn?verified=1")).toBe("/learn");
     expect(sanitizeGoogleOAuthReturnTo("https://evil.example/pricing")).toBe("/spaces");
     expect(sanitizeGoogleOAuthReturnTo("//evil.example/pricing")).toBe("/spaces");
+
+    for (const unsafeReturnTo of [
+      "/./\\evil.example/pricing",
+      "/pricing/../\\evil.example/pricing",
+      "/.//evil.example/pricing",
+      "/%5cevil.example/pricing",
+      "/%2f%2fevil.example/pricing",
+    ]) {
+      expect(sanitizeGoogleOAuthReturnTo(unsafeReturnTo)).toBe("/spaces");
+    }
   });
 
   it("signs and verifies state without accepting tampering or expiry", () => {

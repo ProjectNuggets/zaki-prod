@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sanitizeLocalReturnTo } from "./auth-return-to.js";
 
 export const LEGAL_POLICY_VERSION_FALLBACK = "2026-07-12.v4";
 export const MINIMUM_SIGNUP_AGE_FALLBACK = 16;
@@ -34,19 +35,12 @@ export function buildLoginSchema() {
 }
 
 export function sanitizeAuthReturnTo(value) {
-  const raw = String(value || "").trim();
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.length > 240) {
-    return "";
-  }
-  try {
-    const parsed = new URL(raw, "https://zaki.local");
-    if (parsed.origin !== "https://zaki.local") return "";
-    parsed.searchParams.delete("auth");
-    const normalized = `${parsed.pathname}${parsed.search}${parsed.hash}`;
-    return normalized === "/" ? "" : normalized;
-  } catch {
-    return "";
-  }
+  return sanitizeLocalReturnTo(value, {
+    fallback: "",
+    stripSearchParams: ["auth"],
+    requireLeadingSlash: true,
+    allowRoot: false,
+  });
 }
 
 export function buildVerificationLoginRedirect(appUrl, verifiedState = "success", returnTo = "") {

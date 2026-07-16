@@ -1,4 +1,5 @@
 import type { ProductTelemetrySource } from "./productTelemetry";
+import { sanitizeLocalReturnTo } from "./localReturnTo";
 import { getConfiguredApiBase, getConfiguredLegacyApiBase } from "./runtimeEnv";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -388,24 +389,12 @@ export function buildLoginRedirectUrl(returnTo?: string) {
           }`;
   }
   const rawReturnTo = returnTo || currentLocation;
-  const normalizedReturnTo = String(rawReturnTo || "").trim();
-  if (
-    normalizedReturnTo &&
-    normalizedReturnTo !== "/" &&
-    !normalizedReturnTo.startsWith("http://") &&
-    !normalizedReturnTo.startsWith("https://") &&
-    !normalizedReturnTo.startsWith("//")
-  ) {
-    const parsedReturnTo = new URL(
-      normalizedReturnTo.startsWith("/") ? normalizedReturnTo : `/${normalizedReturnTo}`,
-      "https://zaki.local"
-    );
-    parsedReturnTo.searchParams.delete("auth");
-    url.searchParams.set(
-      "next",
-      `${parsedReturnTo.pathname}${parsedReturnTo.search}${parsedReturnTo.hash}`
-    );
-  }
+  const normalizedReturnTo = sanitizeLocalReturnTo(rawReturnTo, {
+    fallback: "",
+    stripSearchParams: ["auth"],
+    allowRoot: false,
+  });
+  if (normalizedReturnTo) url.searchParams.set("next", normalizedReturnTo);
   return `${url.pathname}${url.search}${url.hash}`;
 }
 

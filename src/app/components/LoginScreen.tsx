@@ -26,6 +26,7 @@ import {
   type CandidateAuthTransaction,
 } from "@/lib/api";
 import { clearPendingIntent, readPendingIntent } from "@/lib/pendingIntent";
+import { sanitizeLocalReturnTo } from "@/lib/localReturnTo";
 import { getConfiguredTurnstileSiteKey } from "@/lib/runtimeEnv";
 import { useAuthStore } from "@/stores";
 import { getInitialLegalPolicyVersion } from "@/lib/legalPolicy";
@@ -94,19 +95,11 @@ export function hasExplicitPricingIntent(input: {
 }
 
 function getSafeRelativeReturnTo(value: string | null) {
-  const raw = String(value || "").trim();
-  if (
-    !raw ||
-    raw.startsWith("http://") ||
-    raw.startsWith("https://") ||
-    raw.startsWith("//")
-  ) {
-    return "";
-  }
-  const parsed = new URL(raw.startsWith("/") ? raw : `/${raw}`, "https://zaki.local");
-  parsed.searchParams.delete("auth");
-  const normalized = `${parsed.pathname}${parsed.search}${parsed.hash}`;
-  return normalized === "/" ? "" : normalized;
+  return sanitizeLocalReturnTo(value, {
+    fallback: "",
+    stripSearchParams: ["auth"],
+    allowRoot: false,
+  });
 }
 
 function getPostLoginReturnTo(location: ReturnType<typeof useLocation>) {

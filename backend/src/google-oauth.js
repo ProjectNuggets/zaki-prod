@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { sanitizeLocalReturnTo } from "./auth-return-to.js";
 
 export const GOOGLE_OAUTH_NONCE_COOKIE_NAME = "zaki_google_oauth_nonce";
 const GOOGLE_OAUTH_NONCE_MAX_AGE_SECONDS = 10 * 60;
@@ -37,22 +38,10 @@ export function buildGoogleOAuthRedirectUri({
 }
 
 export function sanitizeGoogleOAuthReturnTo(value) {
-  const fallback = "/spaces";
-  const raw = String(value || "").trim();
-  if (
-    !raw ||
-    raw.startsWith("http://") ||
-    raw.startsWith("https://") ||
-    raw.startsWith("//")
-  ) {
-    return fallback;
-  }
-
-  const parsed = new URL(raw.startsWith("/") ? raw : `/${raw}`, "https://zaki.local");
-  parsed.searchParams.delete("auth");
-  parsed.searchParams.delete("verified");
-  const sanitized = `${parsed.pathname}${parsed.search}${parsed.hash}`;
-  return sanitized || fallback;
+  return sanitizeLocalReturnTo(value, {
+    fallback: "/spaces",
+    stripSearchParams: ["auth", "verified"],
+  });
 }
 
 export function createGoogleOAuthNonce() {

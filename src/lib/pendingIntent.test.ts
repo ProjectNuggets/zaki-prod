@@ -104,6 +104,14 @@ describe("pending intent", () => {
     });
     expect(readPendingIntent()?.returnTo).toBe("/agent");
 
+    writePendingIntent({
+      productId: "agent",
+      taskKind: "rubric",
+      prompt: "Build a safer rubric",
+      returnTo: "/./\\evil.example/agent",
+    });
+    expect(readPendingIntent()?.returnTo).toBe("/agent");
+
     window.localStorage.setItem(
       PENDING_INTENT_KEY,
       JSON.stringify({ productId: "cli", prompt: "No route" })

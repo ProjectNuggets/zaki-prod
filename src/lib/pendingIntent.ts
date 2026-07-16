@@ -1,4 +1,5 @@
 import type { AnonymousWorkProductId } from "./anonymousWork";
+import { sanitizeLocalReturnTo } from "./localReturnTo";
 import { getProductActivationRoute } from "./productRoutes";
 
 export const PENDING_INTENT_KEY = "zaki:pending-intent:v1";
@@ -90,7 +91,10 @@ function normalizeProductId(value: unknown): AnonymousWorkProductId | null {
 function sanitizeReturnTo(value: unknown, productId: AnonymousWorkProductId) {
   const fallback = getProductActivationRoute(productId) || "/";
   const route = sanitizeText(value, 240);
-  return route.startsWith("/") && !route.startsWith("//") ? route : fallback;
+  return sanitizeLocalReturnTo(route, {
+    fallback,
+    requireLeadingSlash: true,
+  });
 }
 
 function normalizeReplayMode(value: unknown): PendingIntent["replayMode"] {
