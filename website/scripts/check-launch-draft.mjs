@@ -103,6 +103,7 @@ assert.match(html, /nova-nuggets-particle-mark\.png/);
 assert.match(runtimeConfig, /APP_BASE_URL/);
 assert.match(runtimeConfig, /a\[href\^="https:\/\/app\.chatzaki\.com"\]/);
 assert.match(runtimeConfig, /MutationObserver/);
+assert.match(runtimeConfig, /attributeFilter:\s*\["href"\]/);
 
 for (const plan of ["Free", "Personal", "Pro", "Pro MAX"]) assert.match(pricing, new RegExp(`>${plan}<`));
 for (const price of ["$0", "$15", "$45", "$99"]) assert.ok(pricing.includes(price), `pricing includes ${price}`);

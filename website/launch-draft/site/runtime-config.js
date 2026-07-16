@@ -25,9 +25,15 @@
 
   new MutationObserver(function (mutations) {
     mutations.forEach(function (mutation) {
+      if (mutation.type === "attributes") rewriteAppLinks(mutation.target);
       mutation.addedNodes.forEach(function (node) {
         if (node.nodeType === Node.ELEMENT_NODE) rewriteAppLinks(node);
       });
     });
-  }).observe(document.documentElement, { childList: true, subtree: true });
+  }).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["href"],
+    childList: true,
+    subtree: true
+  });
 }());
