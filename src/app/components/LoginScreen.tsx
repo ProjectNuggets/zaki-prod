@@ -120,6 +120,20 @@ function getPostLoginReturnTo(location: ReturnType<typeof useLocation>) {
   return "";
 }
 
+function getGoogleOAuthReturnTo(location: ReturnType<typeof useLocation>) {
+  const postLoginReturnTo = getPostLoginReturnTo(location);
+  if (postLoginReturnTo) return postLoginReturnTo;
+
+  // Credential login can leave a wall sign-in on its current surface because
+  // it commits in-place. A full-page OAuth round trip cannot: it needs that
+  // same local route in its signed callback state.
+  return sanitizeLocalReturnTo(`${location.pathname}${location.search}${location.hash}`, {
+    fallback: "/",
+    stripSearchParams: ["auth"],
+    requireLeadingSlash: true,
+  });
+}
+
 function getDirectProtectedReturnTo(location: ReturnType<typeof useLocation>) {
   const normalizedPath = String(location.pathname || "").replace(/\/+$/, "") || "/";
   if (
@@ -272,6 +286,7 @@ export function LoginScreen({
   googleOAuthCopyRef.current = copy;
   const turnstileSiteKey = getTurnstileSiteKey();
   const postLoginReturnTo = getPostLoginReturnTo(location);
+  const googleOAuthReturnTo = getGoogleOAuthReturnTo(location);
 
   const stopGoogleReauthPopupWatch = useCallback(() => {
     if (googleReauthPopupWatchRef.current !== null) {
@@ -1188,9 +1203,8 @@ export function LoginScreen({
                   const googleReturnTo =
                     presentation === "overlay"
                       ? "/?oauthPopup=google"
-                      : onGoogleOAuthStartedRef.current?.(postLoginReturnTo || "/") ||
-                        postLoginReturnTo ||
-                        "/";
+                      : onGoogleOAuthStartedRef.current?.(googleOAuthReturnTo) ||
+                        googleOAuthReturnTo;
                   // Consent travels on BOTH entry points. "Continue with Google"
                   // from the login screen can still create a brand-new account,
                   // and that account must never exist without a consent record.

@@ -1285,6 +1285,28 @@ describe("App route hydration", () => {
     expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toContain("Remember this launch plan");
   });
 
+  it("preserves the Spaces sign-in wall as the full-page Google OAuth return target", async () => {
+    const user = userEvent.setup();
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/auth/refresh")) {
+        return Promise.resolve(makeResponse({ error: "refresh_revoked" }, 401));
+      }
+      return Promise.resolve(
+        makeResponse({ success: true, enabled: true, policyVersion: "2027-01-01.v2" })
+      );
+    });
+
+    renderAppAt("/spaces?auth=login");
+
+    await user.click(await screen.findByRole("button", { name: "Continue with Google" }));
+
+    const transition = JSON.parse(
+      window.sessionStorage.getItem("zaki:google-oauth-transition:v1") || "{}"
+    );
+    expect(transition.returnTo).toBe("/spaces");
+  });
+
   it("accepts a verified Google callback that replaces the owner captured at OAuth start", async () => {
     window.localStorage.setItem("zaki:account-storage-principal:v1", "id:account-a");
     window.localStorage.setItem("zaki:session-titles", JSON.stringify({ main: "Account A title" }));
