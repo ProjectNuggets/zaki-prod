@@ -547,6 +547,7 @@ function formatEnforcedReset(resetAt?: string | null): string | null {
 
 function CreditMeter({
   t,
+  anonymous,
   loading,
   unavailable,
   weeklyStats,
@@ -554,6 +555,7 @@ function CreditMeter({
   enforced,
 }: {
   t: TranslateFn;
+  anonymous: boolean;
   loading: boolean;
   unavailable: boolean;
   weeklyStats: WindowStats;
@@ -561,7 +563,6 @@ function CreditMeter({
   enforced?: MeterStatusResponse["enforced"];
 }) {
   const roundedPercent = getRoundedUsagePercent(weeklyStats.usedPercent);
-  const isUnavailable = unavailable && !loading;
 
   // ── WP-B2: show the counter the backend ACTUALLY ENFORCES ──────────────────────
   //
@@ -575,6 +576,11 @@ function CreditMeter({
     enforced && enforced.kind !== "unit_wallet" && typeof enforced.limit === "number"
       ? enforced
       : null;
+  // During a rolling deploy an older BFF may still return the obsolete anonymous unit
+  // snapshot without the daily authority. Never resurrect that second meter as a fallback:
+  // fail closed to an unavailable readout until the daily contract is present.
+  const anonymousAuthorityUnavailable = anonymous && !loading && !enforcedCounter;
+  const isUnavailable = (unavailable || anonymousAuthorityUnavailable) && !loading;
 
   if (enforcedCounter && !loading && !isUnavailable) {
     const limit = Number(enforcedCounter.limit) || 0;
@@ -1309,25 +1315,33 @@ export function ZakiDashboard({
   const showSaveWorkCta = !token && !selectedProductComingSoon && !selectedProductAuthRequired && (
     selectedCommandPrompt.length > 0 || anonymousWorkItems.length > 0
   );
-  // The unit wallet gates SIGNED-IN agent runs. It does not gate an anonymous visitor at all —
-  // anonymous identities have no wallet (WP-B2). What gates them is the anonymous daily counter,
-  // enforced at the preview endpoint and surfaced there as a real limit state. Letting the wallet
-  // disable the anon Agent submit would be the same lie #91 removed from the meter readout.
+  // The unit wallet gates SIGNED-IN agent runs. Anonymous Spaces and Agent preview share the
+  // daily allowance instead; never let obsolete anonymous wallet fields influence this decision.
   const agentCapacityBlocked =
     Boolean(token) &&
     selectedProductId === "agent" &&
     !meterLoading &&
     !meterUnavailable &&
     isAvailabilityBlocked(agentAvailability);
+  const anonymousAllowance =
+    !token && meterStatus?.enforced?.kind === "anonymous_daily_prompts"
+      ? meterStatus.enforced
+      : null;
+  const allowanceRemaining = token
+    ? weeklyStats.remaining
+    : anonymousAllowance?.remaining;
+  const allowanceReset = token
+    ? weeklyReset
+    : formatEnforcedReset(anonymousAllowance?.resetAt);
   const creditsExhausted =
     !meterLoading &&
     !meterUnavailable &&
-    typeof weeklyStats.remaining === "number" &&
-    weeklyStats.remaining <= 0;
+    typeof allowanceRemaining === "number" &&
+    allowanceRemaining <= 0;
   const commandBlockedByUsage =
     selectedProductRequiresAuthBeforeRun
       ? false
-      : selectedProductId === "agent"
+      : selectedProductId === "agent" && token
         ? agentCapacityBlocked
         : creditsExhausted;
   const isCommandSubmitDisabled =
@@ -1446,13 +1460,13 @@ export function ZakiDashboard({
         prompt,
         route: productId === "spaces" ? "/spaces" : getCommandProductRoute(productId),
         title: buildAnonymousWorkTitle(prompt),
-        meterRemaining: weeklyStats.remaining,
+        meterRemaining: allowanceRemaining,
         status: "draft",
       });
       refreshAnonymousWork();
       return draft?.id ?? null;
     },
-    [refreshAnonymousWork, token, weeklyStats.remaining]
+    [allowanceRemaining, refreshAnonymousWork, token]
   );
 
   const handleAuthEntry = useCallback(
@@ -1679,9 +1693,11 @@ export function ZakiDashboard({
               : meterStatus?.plan?.label || t("zakiDashboard.meter.free"),
           },
           {
-            id: "weekly-reset",
-            label: t("zakiDashboard.status.weeklyReset"),
-            value: weeklyReset || t("zakiDashboard.meter.resetPending"),
+            id: token ? "weekly-reset" : "daily-reset",
+            label: token
+              ? t("zakiDashboard.status.weeklyReset")
+              : t("zakiDashboard.status.dailyReset", { defaultValue: "Daily reset" }),
+            value: allowanceReset || t("zakiDashboard.meter.resetPending"),
           },
           {
             id: "identity",
@@ -1862,6 +1878,7 @@ export function ZakiDashboard({
               <div className="zaki-dashboard-command__foot">
                 <CreditMeter
                   t={t}
+                  anonymous={!token}
                   loading={meterLoading}
                   unavailable={meterUnavailable}
                   weeklyStats={weeklyStats}
@@ -1931,9 +1948,13 @@ export function ZakiDashboard({
                         percent: rollingUsagePercentRounded,
                         defaultValue: `${rollingWindowHours}h capacity window is ${rollingUsagePercentRounded}% used.`,
                       })
-                    : t("zakiDashboard.command.creditsExhaustedTitle", {
-                        defaultValue: "Weekly usage is full.",
-                      })}
+                    : !token
+                      ? t("zakiDashboard.command.anonymousCreditsExhaustedTitle", {
+                          defaultValue: "Free chats are used up for today.",
+                        })
+                      : t("zakiDashboard.command.creditsExhaustedTitle", {
+                          defaultValue: "Weekly usage is full.",
+                        })}
                 </strong>
                 <span>
                   {agentCapacityBlocked
@@ -1947,10 +1968,15 @@ export function ZakiDashboard({
                           defaultValue:
                             "Your draft stays saved here. More room opens soon.",
                         })
-                    : t("zakiDashboard.command.creditsExhaustedCopy", {
-                        defaultValue:
-                          "Your draft stays saved here. Sign up, wait for the weekly reset, or pick a plan with more room.",
-                      })}
+                    : !token
+                      ? t("zakiDashboard.command.anonymousCreditsExhaustedCopy", {
+                          defaultValue:
+                            "Your draft stays here. Sign in to keep going now, or wait for the daily reset.",
+                        })
+                      : t("zakiDashboard.command.creditsExhaustedCopy", {
+                          defaultValue:
+                            "Your draft stays saved here. Sign up, wait for the weekly reset, or pick a plan with more room.",
+                        })}
                 </span>
                 <div>
                   {!token ? (
@@ -1976,9 +2002,9 @@ export function ZakiDashboard({
                     })}
                   </V2Button>
                   <span className="zaki-dashboard-command__reset-choice">
-                    {weeklyReset
+                    {allowanceReset
                       ? t("zakiDashboard.command.waitForResetDate", {
-                          reset: weeklyReset,
+                          reset: allowanceReset,
                           defaultValue: "Wait for reset {{reset}}",
                         })
                       : t("zakiDashboard.command.waitForReset", {

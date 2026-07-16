@@ -415,6 +415,10 @@ import {
   verifyMeterGrantSignature,
 } from "./meter-contract.js";
 import {
+  buildAnonymousUnitMeterDenial,
+  createAnonymousMeterStatusResponder,
+} from "./anonymous-meter-contract.js";
+import {
   hashAnonymousSessionId,
   readMeterSnapshotForIdentity,
 } from "./platform-meter.js";
@@ -7561,10 +7565,10 @@ async function recordMeterReceiptForGrant({
 //
 // An anonymous visitor's chat never touches the unit wallet: reserveSpacesMeterUnits
 // returns `{ allowed: true }` without reserving (anonymous identities have no wallet).
-// The gate that actually denies them is the anonymous DAILY PROMPT counter — two of
-// them, in fact: a per-anon-session bucket and a per-device bucket, whichever runs out
-// first. Showing an anon "250 of 250 left" from the wallet was advertising headroom
-// that does not gate them and does not exist.
+// The gate that actually denies them is one anonymous DAILY PROMPT allowance. It is
+// enforced across both the durable anonymous session and a device-level abuse dimension;
+// whichever has less room is the same allowance snapshot the visitor sees. Showing an
+// anon "250 of 250 left" from the wallet advertised headroom that did not gate them.
 //
 // `enforced` names the counter that will actually say no, so the UI can stop lying.
 async function buildEnforcedLimitSnapshot(req, res, identity) {
@@ -7608,11 +7612,16 @@ async function buildEnforcedLimitSnapshot(req, res, identity) {
   };
 }
 
+const respondToAnonymousMeterStatus = createAnonymousMeterStatusResponder({
+  readAllowance: buildEnforcedLimitSnapshot,
+});
+
 app.get("/api/meter/status", async (req, res) => {
   try {
     const tenantId = normalizeMeterTenantId(req.query?.tenantId);
     const identity = await resolveMeterIdentity(req, res, { tenantId });
     if (!identity || res.headersSent) return;
+    if (await respondToAnonymousMeterStatus(req, res, identity)) return;
     const platform = buildPlatformForMeterIdentity(identity);
     const registry = buildPlatformProductRegistry();
     const policy = buildPlatformMeterPolicy({ env: process.env });
@@ -7643,11 +7652,6 @@ app.post("/api/meter/grants", express.json({ limit: "1mb" }), async (req, res) =
     const data = validation.data;
     const tenantId = normalizeMeterTenantId(data.tenantId);
     const idempotencyKey = data.idempotencyKey || data.requestId || crypto.randomUUID();
-    const signingSecret = meterSigningSecret();
-    if (!signingSecret) {
-      res.status(503).json({ success: false, error: "meter_grant_signing_unavailable" });
-      return;
-    }
     const providedServiceToken = readMeterServiceToken(req);
     const trustedServiceRequest = hasValidMeterServiceToken(req);
     if (providedServiceToken && !trustedServiceRequest) {
@@ -7660,6 +7664,16 @@ app.post("/api/meter/grants", express.json({ limit: "1mb" }), async (req, res) =
       trustedServiceRequest,
     });
     if (!identity || res.headersSent) return;
+    const anonymousGrantDenial = buildAnonymousUnitMeterDenial(identity);
+    if (anonymousGrantDenial) {
+      res.status(anonymousGrantDenial.status).json(anonymousGrantDenial.body);
+      return;
+    }
+    const signingSecret = meterSigningSecret();
+    if (!signingSecret) {
+      res.status(503).json({ success: false, error: "meter_grant_signing_unavailable" });
+      return;
+    }
     const platform = buildPlatformForMeterIdentity(identity);
     const registry = buildPlatformProductRegistry();
     const policy = buildPlatformMeterPolicy({ env: process.env });
@@ -7838,6 +7852,11 @@ app.post("/api/meter/receipts", express.json({ limit: "1mb" }), async (req, res)
             anonymousSessionId: null,
             anonymousKeyHash: grant.anonymousKeyHash,
           };
+    const anonymousReceiptDenial = buildAnonymousUnitMeterDenial(identity);
+    if (anonymousReceiptDenial) {
+      res.status(anonymousReceiptDenial.status).json(anonymousReceiptDenial.body);
+      return;
+    }
     if (identity.type === "user" && !identity.zakiUser) {
       res.status(404).json({ success: false, error: "grant_user_not_found" });
       return;
