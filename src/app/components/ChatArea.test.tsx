@@ -31,6 +31,7 @@ import {
   isSpacesSendLocked,
   isRetryableChatError,
   resolveTurnRetryable,
+  selectAgentInspectorTranscriptEntries,
   CHAT_RETRYABLE_MAX_ATTEMPTS,
   CHAT_RETRYABLE_BACKOFF_MS,
 } from "./ChatArea";
@@ -49,6 +50,7 @@ import {
   fetchAgentSession,
   fetchAgentSessionContext,
   fetchAgentSessionHistory,
+  fetchAgentSessionPlan,
   fetchBotSettings,
   fetchContextDiagnostics,
   fetchBotRuntimeStatus,
@@ -2951,6 +2953,110 @@ describe("ChatArea Component", () => {
     });
   });
 
+  it("defaults the Agent inspector to Plan and retries a failed step as a visible continuation", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    navState.zakiSessionKey = "agent:zaki-bot:user:1:thread:main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    (fetchAgentMe as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (fetchAgentSessionPlan as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({}), headers: new Headers() },
+      data: {
+        active: true,
+        plan: {
+          plan_id: "plan-1",
+          summary: "Recover the release",
+          steps: [
+            {
+              index: 0,
+              title: "Run release checks",
+              status: "failed",
+              actual_tool: "shell",
+              error_summary: "invalid_session_key",
+            },
+          ],
+        },
+      },
+    });
+
+    await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "zakiAgent.planPanel.tab" })).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
+    });
+    const row = await screen.findByTestId("agent-plan-step-1");
+    expect(row).toHaveTextContent("Run release checks");
+    expect(row).not.toHaveTextContent("invalid_session_key");
+
+    fireEvent.click(within(row).getByRole("button", { name: "zakiAgent.planPanel.retry" }));
+    fireEvent.click(within(row).getByRole("button", { name: "zakiAgent.planPanel.retryConfirm" }));
+
+    await waitFor(() => {
+      expect(apiRequest).toHaveBeenCalledWith(
+        "/api/agent/chat/stream",
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining("zakiAgent.planPanel.retryPrompt"),
+        })
+      );
+    });
+  });
+
+  it("keeps retry failure visible when the continuation request is rejected", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    navState.zakiSessionKey = "agent:zaki-bot:user:1:thread:main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    (fetchAgentMe as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (fetchAgentSessionPlan as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({}), headers: new Headers() },
+      data: {
+        active: true,
+        plan: {
+          plan_id: "plan-1",
+          steps: [
+            { index: 0, title: "Run release checks", status: "failed", actual_tool: "shell" },
+          ],
+        },
+      },
+    });
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/agent/chat/stream") {
+        return {
+          ok: false,
+          status: 400,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: async () => ({ error: "chat_error", message: "Retry rejected" }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({}),
+      };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+    const row = await screen.findByTestId("agent-plan-step-1");
+    fireEvent.click(within(row).getByRole("button", { name: "zakiAgent.planPanel.retry" }));
+    fireEvent.click(within(row).getByRole("button", { name: "zakiAgent.planPanel.retryConfirm" }));
+
+    expect(await screen.findByText("zakiAgent.planPanel.retryFailed")).toBeInTheDocument();
+    expect(screen.getByText("Run release checks")).toBeInTheDocument();
+  });
+
   it("opens and closes the Agent mobile inspector from the mobile panel event", async () => {
     mockMatchMedia(true);
     navState.view = "chat";
@@ -3667,6 +3773,78 @@ describe("ChatArea Component", () => {
       heartbeat: true,
       groupKey: "tool-use:call_1",
     });
+  });
+
+  it("preserves plan step coordinates and marks recovery as a failed step", () => {
+    expect(
+      extractNullalisTranscriptEntry(
+        "progress",
+        {
+          type: "progress",
+          phase: "plan_step",
+          label: "Inspect the repository",
+          step_index: 2,
+          step_total: 4,
+          tool_name: "file_read",
+        },
+        113
+      )
+    ).toMatchObject({
+      kind: "task",
+      phase: "plan_step",
+      stepIndex: 2,
+      stepTotal: 4,
+      tool: "file_read",
+      resultState: "running",
+    });
+
+    expect(
+      extractNullalisTranscriptEntry(
+        "progress",
+        {
+          type: "progress",
+          phase: "error_recovery",
+          label: "The read failed",
+          step_index: 2,
+          step_total: 4,
+          tool_name: "file_read",
+        },
+        114
+      )
+    ).toMatchObject({
+      kind: "status",
+      phase: "error_recovery",
+      stepIndex: 2,
+      stepTotal: 4,
+      tool: "file_read",
+      resultState: "failed",
+    });
+  });
+
+  it("does not reuse an older assistant plan when the latest assistant turn has no plan events", () => {
+    const olderPlanEvent = {
+      eventType: "progress",
+      payload: {
+        type: "progress",
+        phase: "plan_step",
+        label: "Old failed release step",
+        step_index: 0,
+        step_total: 1,
+      },
+      ts: 100,
+    };
+
+    const entries = selectAgentInspectorTranscriptEntries({
+      liveEntries: [],
+      localTurnSnapshots: {},
+      messages: [
+        { id: "assistant-old", role: "assistant", turnEvents: [olderPlanEvent] },
+        { id: "user-new", role: "user" },
+        { id: "assistant-new", role: "assistant" },
+      ],
+    });
+
+    expect(entries).toEqual([]);
   });
 
   it("normalizes nullalis status responses into worklog entries", () => {

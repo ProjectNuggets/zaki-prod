@@ -278,6 +278,7 @@ import {
 import {
   AGENT_CONTROL_CHANNEL_IDS,
   AGENT_LAUNCH_CHANNELS,
+  AGENT_READ_SUPPORT_HEADER,
   AGENT_SESSION_IDLE_DETAIL_PAYLOAD,
   getAgentLaunchChannel,
   buildBotProvisionPayload,
@@ -2634,6 +2635,7 @@ app.use(
       "X-Zaki-Agent-Base",
       "X-Zaki-Mode",
       "X-Zaki-Web-Search",
+      AGENT_READ_SUPPORT_HEADER,
       "X-Zaki-Session-Upgrade",
       "X-Zaki-Quota-Limit",
       "X-Zaki-Quota-Remaining",
@@ -16040,6 +16042,9 @@ async function proxyNullclawRequest(req, res, targetPath, options = {}) {
     if (decision.soft) {
       res.status(200);
       res.setHeader("Content-Type", "application/json; charset=utf-8");
+      if (decision.reason === "unsupported" && options.signalUnsupportedRead) {
+        res.setHeader(AGENT_READ_SUPPORT_HEADER, "unsupported");
+      }
       return res.send(JSON.stringify(decision.payload));
     }
     // Not a soft-empty case (e.g. 400 session_not_owned) — forward the original

@@ -3141,12 +3141,16 @@ export async function fetchAgentSessionContext(sessionKey: string) {
   return { response, data };
 }
 
-export async function fetchAgentSessionTodos(sessionKey: string) {
+export async function fetchAgentSessionTodos(
+  sessionKey: string,
+  options: { signal?: AbortSignal } = {}
+) {
   assertSafeSessionKey(sessionKey);
   const encoded = encodeURIComponent(sessionKey);
   const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/todos`, {
     method: "GET",
     redirectOnAuthFailure: false,
+    signal: options.signal,
   });
   const data = await parseApiJson<AgentSessionTodosResponse>(response);
   return { response, data };
@@ -3178,12 +3182,16 @@ export async function updateAgentSessionTodoItem(
   return { response, data };
 }
 
-export async function fetchAgentSessionPlan(sessionKey: string) {
+export async function fetchAgentSessionPlan(
+  sessionKey: string,
+  options: { signal?: AbortSignal } = {}
+) {
   assertSafeSessionKey(sessionKey);
   const encoded = encodeURIComponent(sessionKey);
   const response = await backendAuthRequest(`/api/agent/sessions/${encoded}/plan`, {
     method: "GET",
     redirectOnAuthFailure: false,
+    signal: options.signal,
   });
   const data = await parseApiJson<AgentSessionPlanResponse>(response);
   return { response, data };

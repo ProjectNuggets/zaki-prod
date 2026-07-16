@@ -56,14 +56,15 @@ export const AGENT_SESSION_IDLE_CONTEXT_PAYLOAD = Object.freeze({
 //   history — src/lib/api.ts fetchAgentSessionHistory; ChatArea treats an empty
 //             messages array as "nothing to reconcile" for a fresh thread.
 export const AGENT_SESSION_IDLE_HISTORY_PAYLOAD = Object.freeze({ messages: [] });
+export const AGENT_READ_SUPPORT_HEADER = "X-Zaki-Agent-Read-Support";
 
 export const AGENT_SESSION_BFF_ROUTES = Object.freeze([
   { method: "get",    path: "/api/agent/sessions/:sessionKey",          upstreamSuffix: "",         json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_DETAIL_PAYLOAD },
   { method: "post",   path: "/api/agent/sessions/:sessionKey/compact",  upstreamSuffix: "/compact", json: false },
   { method: "get",    path: "/api/agent/sessions/:sessionKey/context",  upstreamSuffix: "/context", json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_CONTEXT_PAYLOAD },
-  { method: "get",    path: "/api/agent/sessions/:sessionKey/todos",    upstreamSuffix: "/todos",   json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_TODOS_PAYLOAD },
+  { method: "get",    path: "/api/agent/sessions/:sessionKey/todos",    upstreamSuffix: "/todos",   json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_TODOS_PAYLOAD, signalUnsupportedRead: true },
   { method: "patch",  path: "/api/agent/sessions/:sessionKey/todos/:listId/items/:itemId", upstreamSuffix: "/todos/:listId/items/:itemId", json: true },
-  { method: "get",    path: "/api/agent/sessions/:sessionKey/plan",     upstreamSuffix: "/plan",    json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_PLAN_PAYLOAD },
+  { method: "get",    path: "/api/agent/sessions/:sessionKey/plan",     upstreamSuffix: "/plan",    json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_PLAN_PAYLOAD, signalUnsupportedRead: true },
   { method: "get",    path: "/api/agent/sessions/:sessionKey/export",   upstreamSuffix: "/export",  json: false },
   { method: "get",    path: "/api/agent/sessions/:sessionKey/history",  upstreamSuffix: "/history", json: false, softEmptyOnMissing: AGENT_SESSION_IDLE_HISTORY_PAYLOAD },
   { method: "post",   path: "/api/agent/sessions/:sessionKey/mode",     upstreamSuffix: "/mode",    json: true  },
@@ -480,12 +481,13 @@ export function registerBotBffAliases(app, handlers) {
 
 // Decides whether an upstream response on a soft-empty read
 // should be collapsed into an HTTP 200 + idle payload. Returns
-//   { soft: true, payload }  → reply 200 with `payload` (FE renders "no run")
+//   { soft: true, payload, reason } → reply 200 with `payload` (FE renders "no run")
 //   { soft: false }          → forward the upstream status/body verbatim
 //
 // Narrowly scoped on purpose: ONLY upstream `404` (a legitimate "no active run"
 // for /context) or `400` whose body indicates `invalid_session_key` (the
 // engine's mis-parse of the unimplemented /plan + /todos reads) are softened.
+// The reason lets opted-in callers distinguish an absent route from an idle 404.
 // Any other status (200, 403 session_not_owned, 409, 422, 500, 502, 503) and
 // any other 400 body (e.g. session_not_owned, invalid_title) pass through. When
 // no `softEmptyPayload` is configured (every mutating route) this never softens.
@@ -495,12 +497,12 @@ export function resolveSoftEmptyAgentResponse(softEmptyPayload, upstreamStatus, 
   }
   const status = Number(upstreamStatus);
   if (status === 404) {
-    return { soft: true, payload: softEmptyPayload };
+    return { soft: true, payload: softEmptyPayload, reason: "missing" };
   }
   if (status === 400) {
     const body = String(upstreamBodyText || "").toLowerCase();
     if (body.includes("invalid_session_key")) {
-      return { soft: true, payload: softEmptyPayload };
+      return { soft: true, payload: softEmptyPayload, reason: "unsupported" };
     }
   }
   return { soft: false };
@@ -522,6 +524,7 @@ export function registerAgentSessionBffRoutes(app, handlers) {
     const proxyOptions = {};
     if (route.retry) proxyOptions.retry = true;
     if (route.softEmptyOnMissing) proxyOptions.softEmptyOnMissing = route.softEmptyOnMissing;
+    if (route.signalUnsupportedRead) proxyOptions.signalUnsupportedRead = true;
     const proxyHandler = makeSessionProxyHandler(
       (userId, req) => {
         const suffix = route.upstreamSuffix.replace(/:([A-Za-z0-9_]+)/g, (_, name) =>

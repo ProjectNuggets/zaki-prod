@@ -133,6 +133,8 @@ export type NullalisTranscriptEntry = {
   tool?: string | null;
   toolUseId?: string | null;
   taskId?: string | null;
+  stepIndex?: number | null;
+  stepTotal?: number | null;
   durationMs?: number | null;
   status?: string | null;
   files?: string[];

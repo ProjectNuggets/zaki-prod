@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom";
+import "@/i18n";
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { AgentInspectorRail, type AgentInspectorRailProps } from "./AgentInspectorRail";
@@ -15,6 +16,14 @@ jest.mock("@/lib/api", () => ({
   revokeAgentArtifactShare: jest.fn(),
   shareAgentArtifact: jest.fn(),
   updateAgentCron: jest.fn(),
+  fetchAgentSessionPlan: jest.fn(async () => ({
+    response: { ok: true },
+    data: { active: false, plan: null },
+  })),
+  fetchAgentSessionTodos: jest.fn(async () => ({
+    response: { ok: true },
+    data: { lists: [], current_list_id: null },
+  })),
 }));
 
 const api = jest.requireMock("@/lib/api") as {
@@ -66,19 +75,19 @@ describe("AgentInspectorRail", () => {
     });
   });
 
-  it("renders only Artifacts and Schedules, with Artifacts selected by default", () => {
+  it("renders Plan, Artifacts, and Schedules, with Plan selected by default", () => {
     const onClose = jest.fn();
     renderRail({ onClose });
 
     const tablist = screen.getByRole("tablist", { name: "Agent panels" });
     const tabs = within(tablist).getAllByRole("tab");
-    expect(tabs).toHaveLength(2);
-    expect(within(tablist).getByRole("tab", { name: /Artifacts/i })).toHaveAttribute(
+    expect(tabs).toHaveLength(3);
+    expect(within(tablist).getByRole("tab", { name: /Plan/i })).toHaveAttribute(
       "aria-selected",
       "true"
     );
+    expect(within(tablist).getByRole("tab", { name: /Artifacts/i })).toBeInTheDocument();
     expect(within(tablist).getByRole("tab", { name: /Schedules/i })).toBeInTheDocument();
-    expect(within(tablist).queryByRole("tab", { name: /Plan/i })).not.toBeInTheDocument();
     expect(within(tablist).queryByRole("tab", { name: /Sources/i })).not.toBeInTheDocument();
     expect(within(tablist).queryByRole("tab", { name: /Browser/i })).not.toBeInTheDocument();
 
@@ -86,12 +95,12 @@ describe("AgentInspectorRail", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("falls deleted tab requests back to Artifacts and still honors Schedules", () => {
+  it("falls deleted tab requests back to Plan and still honors Schedules", () => {
     const { rerender } = renderRail({
       tabRequest: { tab: "browser" as never, id: 1 },
     });
 
-    expect(screen.getByRole("tab", { name: /Artifacts/i })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: /Plan/i })).toHaveAttribute(
       "aria-selected",
       "true"
     );
@@ -108,7 +117,7 @@ describe("AgentInspectorRail", () => {
         tabRequest={{ tab: "evidence" as never, id: 3 }}
       />
     );
-    expect(screen.getByRole("tab", { name: /Artifacts/i })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: /Plan/i })).toHaveAttribute(
       "aria-selected",
       "true"
     );
@@ -118,6 +127,7 @@ describe("AgentInspectorRail", () => {
     const onOpenArtifact = jest.fn();
     renderRail({
       onOpenArtifact,
+      tabRequest: { tab: "artifacts", id: 1 },
       artifacts: [
         {
           id: "artifact-1",
@@ -150,6 +160,7 @@ describe("AgentInspectorRail", () => {
 
   it("keeps provisional artifact events in Syncing and does not show recent-scope artifacts", () => {
     renderRail({
+      tabRequest: { tab: "artifacts", id: 1 },
       artifactsScope: "recent",
       artifacts: [
         {
@@ -300,7 +311,7 @@ describe("AgentInspectorRail", () => {
   });
 
   it("renders soft empty and unavailable states", () => {
-    const { rerender } = renderRail();
+    const { rerender } = renderRail({ tabRequest: { tab: "artifacts", id: 1 } });
     expect(screen.getByText("No artifacts in this session yet.")).toBeInTheDocument();
 
     rerender(
