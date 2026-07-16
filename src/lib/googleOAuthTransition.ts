@@ -24,9 +24,9 @@ export type GoogleOAuthTransition = Pick<
   "storagePrincipal" | "returnTo"
 >;
 
-function getSafeReturnTo(value: unknown) {
+function getSafeReturnTo(value: unknown, fallback = "/") {
   return sanitizeLocalReturnTo(value, {
-    fallback: "/",
+    fallback,
     stripSearchParams: ["auth", "verified", GOOGLE_OAUTH_TRANSITION_QUERY],
     requireLeadingSlash: true,
   });
@@ -45,7 +45,7 @@ function parseTransitionRecord(value: string | null): GoogleOAuthTransitionRecor
     const parsed = JSON.parse(value) as Partial<GoogleOAuthTransitionRecord>;
     const nonce = String(parsed.nonce || "").trim();
     const storagePrincipal = String(parsed.storagePrincipal || "").trim();
-    const returnTo = getSafeReturnTo(parsed.returnTo);
+    const returnTo = getSafeReturnTo(parsed.returnTo, "");
     const expiresAt = Number(parsed.expiresAt);
     if (!nonce || !Number.isFinite(expiresAt) || !returnTo) return null;
     return { nonce, storagePrincipal, returnTo, expiresAt };

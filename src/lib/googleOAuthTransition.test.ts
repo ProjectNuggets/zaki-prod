@@ -70,6 +70,21 @@ describe("Google OAuth transition proof", () => {
     expect(window.sessionStorage.getItem(GOOGLE_OAUTH_TRANSITION_STORAGE_KEY)).toBeNull();
   });
 
+  it("rejects a malformed legacy proof instead of defaulting its destination", () => {
+    window.sessionStorage.setItem(
+      GOOGLE_OAUTH_TRANSITION_STORAGE_KEY,
+      JSON.stringify({
+        nonce: "legacy-nonce",
+        storagePrincipal: "id:account-a",
+        expiresAt: Date.now() + 60_000,
+      })
+    );
+
+    expect(
+      consumeGoogleOAuthTransition(`?${GOOGLE_OAUTH_TRANSITION_QUERY}=legacy-nonce`)
+    ).toBeNull();
+  });
+
   it("keeps the callback local and stores the original safe destination separately", () => {
     jest.spyOn(crypto, "randomUUID").mockReturnValue("local-nonce");
 
