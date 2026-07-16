@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Navigate, Route, Routes } from "react-router-dom";
 import App from "./App";
 import { useAuthStore } from "@/stores/authStore";
+import { useNavigationStore } from "@/stores/navigationStore";
+import { ZAKI_BOT_SPACE_ID } from "@/lib/zakiBot";
 import { PENDING_INTENT_KEY, PENDING_INTENT_STORAGE_FAILURE_EVENT } from "@/lib/pendingIntent";
 
 function makeResponse(body: unknown, status = 200): Response {
@@ -189,6 +191,82 @@ describe("App route hydration", () => {
     expect(window.localStorage.getItem("zaki:pinned-threads")).toBe(
       JSON.stringify(["account-a-thread"])
     );
+  });
+
+  it("keeps a signed-in /agent deep link on the agent surface when first boot writes the storage principal", async () => {
+    // Cold boot on a pre-migration browser: valid refresh cookie but no
+    // zaki:account-storage-principal:v1 marker yet. The one-time privacy wipe
+    // may clear account-scoped storage, but it must not bounce the deep link
+    // off the agent surface onto the home dashboard.
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/auth/refresh")) {
+        return Promise.resolve(makeResponse({ token: "account-a-token" }));
+      }
+      if (url.includes("/api/profile")) {
+        return Promise.resolve(
+          makeResponse({
+            success: true,
+            user: { id: "account-a", username: "a@example.com", fullName: "Account A" },
+          })
+        );
+      }
+      return Promise.resolve(makeResponse({ success: true, policyVersion: "2027-01-01.v2" }));
+    });
+
+    renderAppAt("/agent");
+
+    await waitFor(() => {
+      expect(useAuthStore.getState().token).toBe("account-a-token");
+    });
+    expect(window.localStorage.getItem("zaki:account-storage-principal:v1")).toBe(
+      "id:account-a"
+    );
+    await waitFor(() => {
+      expect(useNavigationStore.getState()).toMatchObject({
+        view: "chat",
+        spaceId: ZAKI_BOT_SPACE_ID,
+      });
+    });
+    expect(await screen.findByText("agent plan preview")).toBeInTheDocument();
+  });
+
+  it("keeps a wall sign-in on its current surface when no explicit return target exists", async () => {
+    // A visitor on an anonymous-allowed surface opens the sign-in wall
+    // (?auth=login) without a next handoff. Completing the sign-in must keep
+    // them where they were working, not bounce them to the public home.
+    const user = userEvent.setup();
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/auth/refresh")) {
+        return Promise.resolve(makeResponse({ error: "no_session" }, 401));
+      }
+      if (url.endsWith("/login")) {
+        return Promise.resolve(makeResponse({ valid: true, token: "account-b-token" }));
+      }
+      if (url.includes("/api/profile")) {
+        return Promise.resolve(
+          makeResponse({
+            success: true,
+            user: { id: "account-b", username: "b@example.com", fullName: "Account B" },
+          })
+        );
+      }
+      return Promise.resolve(
+        makeResponse({ success: true, enabled: true, policyVersion: "2027-01-01.v2" })
+      );
+    });
+
+    renderAppAt("/spaces?auth=login");
+
+    await user.type(await screen.findByPlaceholderText("Email address"), "b@example.com");
+    await user.type(screen.getByPlaceholderText("Password"), "Password123");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(await screen.findByText("anonymous spaces")).toBeInTheDocument();
+    expect(screen.queryByText("public home")).not.toBeInTheDocument();
+    expect(useNavigationStore.getState()).toMatchObject({ view: "spaces" });
+    expect(useAuthStore.getState().user).toMatchObject({ id: "account-b" });
   });
 
   it("rejects a late account A boot refresh after a sibling tab publishes account B", async () => {

@@ -253,6 +253,43 @@ function resetAccountScopedStores() {
   useTextToSpeechStore.getState().reset();
 }
 
+/**
+ * Maps the router location onto the navigation store. The location-sync
+ * effect applies it on every URL change, and a legitimate authenticated
+ * commit re-applies it after resetAccountScopedStores() so the account-scope
+ * wipe cannot bounce a deep link (e.g. /agent) onto the home dashboard.
+ */
+function applyLocationToNavigationStore(pathname: string, search: string) {
+  const threadMatch = pathname.match(/^\/spaces\/([^/]+)\/threads\/([^/]+)/);
+  const spaceMatch = pathname.match(/^\/spaces\/([^/]+)$/);
+  const agentThreadId = new URLSearchParams(search).get("thread");
+  const spaceId = threadMatch?.[1] ?? spaceMatch?.[1] ?? null;
+  const threadId = threadMatch?.[2] ?? null;
+
+  const store = useNavigationStore.getState();
+
+  if (pathname === "/about") {
+    store.goToAbout();
+  } else if (pathname === "/agent") {
+    store.goToThread(
+      ZAKI_BOT_SPACE_ID,
+      agentThreadId && agentThreadId.trim() ? agentThreadId.trim() : ZAKI_BOT_THREAD_ID
+    );
+  } else if (pathname === "/brain") {
+    store.setSidebarMode("brain");
+  } else if (isGatedProductPath(pathname) || isHiddenProductPath(pathname)) {
+    store.goHome();
+  } else if (pathname === "/spaces" && !spaceId) {
+    store.goToSpaces();
+  } else if (spaceId && threadId) {
+    store.goToThread(decodeURIComponent(spaceId), decodeURIComponent(threadId));
+  } else if (spaceId) {
+    store.goToSpace(decodeURIComponent(spaceId));
+  } else {
+    store.goHome();
+  }
+}
+
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -307,7 +344,11 @@ export default function App() {
   const oauthPopupNotificationSentRef = useRef(false);
   const reauthPrincipalRef = useRef("");
   const reauthTransactionRef = useRef<CandidateAuthTransaction | null>(null);
-  
+  // Async auth commits (boot hydration, wall/overlay logins) need the URL that
+  // is current when they land, not the one captured when their closure formed.
+  const locationRef = useRef(location);
+  locationRef.current = location;
+
   // UI state from Zustand
   const {
     themePreference,
@@ -375,7 +416,12 @@ export default function App() {
     ) => {
       const nextPrincipal = getPrincipalKey(session.user);
       if (!nextPrincipal) {
-        return { committed: false, preservesMountedWork: false };
+        return {
+          committed: false,
+          preservesMountedWork: false,
+          switchedMountedPrincipal: false,
+          resetAccountScopedState: false,
+        };
       }
 
       const mountedPrincipal = getPrincipalKey(useAuthStore.getState().user);
@@ -385,7 +431,12 @@ export default function App() {
       // reject this stale hydration rather than deleting that account's shared
       // localStorage and writing the old marker back.
       if (source === "hydrate" && storagePrincipal && storagePrincipal !== nextPrincipal) {
-        return { committed: false, preservesMountedWork: false };
+        return {
+          committed: false,
+          preservesMountedWork: false,
+          switchedMountedPrincipal: false,
+          resetAccountScopedState: false,
+        };
       }
       const preservesStoredAccount = storagePrincipal === nextPrincipal;
       const switchesMountedPrincipal = Boolean(
@@ -398,7 +449,9 @@ export default function App() {
           (!storagePrincipal || storagePrincipal === nextPrincipal)
       );
 
-      if (!preservesMountedWork && (!preservesStoredAccount || switchesMountedPrincipal)) {
+      const resetAccountScopedState =
+        !preservesMountedWork && (!preservesStoredAccount || switchesMountedPrincipal);
+      if (resetAccountScopedState) {
         // A first authenticated commit after anonymous work should retain only
         // the explicit anonymous handoff. Any known account owner means the
         // browser data is private and must be cleared before the new principal.
@@ -419,7 +472,12 @@ export default function App() {
         isLoading: false,
       });
       writeAccountStoragePrincipal(nextPrincipal);
-      return { committed: true, preservesMountedWork };
+      return {
+        committed: true,
+        preservesMountedWork,
+        switchedMountedPrincipal: switchesMountedPrincipal,
+        resetAccountScopedState,
+      };
     },
     [resetAccountScope]
   );
@@ -459,36 +517,7 @@ export default function App() {
 
   // Sync navigation store with React Router location (without triggering re-renders)
   useEffect(() => {
-    const path = location.pathname;
-    const threadMatch = path.match(/^\/spaces\/([^/]+)\/threads\/([^/]+)/);
-    const spaceMatch = path.match(/^\/spaces\/([^/]+)$/);
-    const agentThreadId = new URLSearchParams(location.search).get("thread");
-    const spaceId = threadMatch?.[1] ?? spaceMatch?.[1] ?? null;
-    const threadId = threadMatch?.[2] ?? null;
-    
-    // Directly update the store state based on URL
-    const store = useNavigationStore.getState();
-    
-    if (path === '/about') {
-      store.goToAbout();
-    } else if (path === '/agent') {
-      store.goToThread(
-        ZAKI_BOT_SPACE_ID,
-        agentThreadId && agentThreadId.trim() ? agentThreadId.trim() : ZAKI_BOT_THREAD_ID
-      );
-    } else if (path === '/brain') {
-      store.setSidebarMode("brain");
-    } else if (isGatedProductPath(path) || isHiddenProductPath(path)) {
-      store.goHome();
-    } else if (path === '/spaces' && !spaceId) {
-      store.goToSpaces();
-    } else if (spaceId && threadId) {
-      store.goToThread(decodeURIComponent(spaceId), decodeURIComponent(threadId));
-    } else if (spaceId) {
-      store.goToSpace(decodeURIComponent(spaceId));
-    } else {
-      store.goHome();
-    }
+    applyLocationToNavigationStore(location.pathname, location.search);
   }, [location.pathname, location.search]);
 
   useEffect(() => {
@@ -700,6 +729,9 @@ export default function App() {
           );
           if (!commit.committed) {
             failClosedSession({ preserveSharedLocalStorage: true });
+          } else if (commit.resetAccountScopedState) {
+            const { pathname, search } = locationRef.current;
+            applyLocationToNavigationStore(pathname, search);
           }
         }
       } catch {
@@ -841,8 +873,17 @@ export default function App() {
       }
       setReauthRequired(false);
 
+      if (commit.resetAccountScopedState) {
+        const { pathname, search } = locationRef.current;
+        applyLocationToNavigationStore(pathname, search);
+      }
+
       if (!commit.preservesMountedWork) {
-        navigate(session.returnTo || "/", { replace: true });
+        if (session.returnTo) {
+          navigate(session.returnTo, { replace: true });
+        } else if (commit.switchedMountedPrincipal) {
+          navigate("/", { replace: true });
+        }
       }
     } finally {
       reauthPrincipalRef.current = "";
