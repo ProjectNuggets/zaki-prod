@@ -32,7 +32,12 @@ import {
   type RecencyBucket,
 } from "./brainColors";
 import { V2StatusStrip } from "@/app/components/v2";
-import { readPendingIntent, writePendingIntent, type PendingIntent } from "@/lib/pendingIntent";
+import {
+  PENDING_INTENT_UPDATED_EVENT,
+  readPendingIntent,
+  writePendingIntent,
+  type PendingIntent,
+} from "@/lib/pendingIntent";
 
 // V1.11 (2026-05-07) — Brain page UX rework. Pre-V1.11 the graph tab
 // rendered three always-visible columns (filter panel, canvas, side
@@ -106,11 +111,24 @@ export function BrainPage() {
   const [composeOpen, setComposeOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState(initialQ);
   const [debouncedSearch, setDebouncedSearch] = useState(initialQ);
-  const [recoveryIntent] = useState<PendingIntent | null>(() => {
+  const [recoveryIntent, setRecoveryIntent] = useState<PendingIntent | null>(() => {
     const intent = readPendingIntent();
     return intent?.productId === "brain" ? intent : null;
   });
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // App consumes direct website commands after route children have rendered.
+  // Re-read after mount and listen for same-tab writes so a first-load Brain
+  // command is visible instead of remaining only in browser storage.
+  useEffect(() => {
+    const syncRecoveryIntent = () => {
+      const intent = readPendingIntent();
+      setRecoveryIntent(intent?.productId === "brain" ? intent : null);
+    };
+    syncRecoveryIntent();
+    window.addEventListener(PENDING_INTENT_UPDATED_EVENT, syncRecoveryIntent);
+    return () => window.removeEventListener(PENDING_INTENT_UPDATED_EVENT, syncRecoveryIntent);
+  }, []);
 
   // V1.7 graph state
   const [filters, setFilters] = useState<BrainFilters>(DEFAULT_FILTERS);

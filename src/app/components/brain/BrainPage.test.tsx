@@ -1,7 +1,8 @@
 import "@testing-library/jest-dom";
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { useEffect } from "react";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import ar from "@/i18n/locales/ar.json";
 import en from "@/i18n/locales/en.json";
 
@@ -86,12 +87,37 @@ jest.mock("@/app/components/ui/skeleton", () => ({
 }));
 
 import { BrainPage } from "./BrainPage";
-import { PENDING_INTENT_KEY, writePendingIntent } from "@/lib/pendingIntent";
+import {
+  consumeWebsiteCommandIntentFromUrl,
+  PENDING_INTENT_KEY,
+  writePendingIntent,
+} from "@/lib/pendingIntent";
 
 function renderPage(initialEntry = "/brain") {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <BrainPage />
+    </MemoryRouter>,
+  );
+}
+
+function WebsiteCommandIntentBridge() {
+  const location = useLocation();
+
+  useEffect(() => {
+    consumeWebsiteCommandIntentFromUrl({
+      pathname: location.pathname,
+      search: location.search,
+    });
+  }, [location.pathname, location.search]);
+
+  return <BrainPage />;
+}
+
+function renderWebsiteCommandPage(initialEntry: string) {
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <WebsiteCommandIntentBridge />
     </MemoryRouter>,
   );
 }
@@ -138,6 +164,18 @@ describe("BrainPage", () => {
       prompt: "Remember the launch constraints from this note",
       replayMode: "draft",
     });
+  });
+
+  it("shows a direct website Brain command consumed after the page mounts", () => {
+    mockGraph = { ...POPULATED };
+
+    renderWebsiteCommandPage(
+      "/brain?source=website_home_command&intent=memory&prompt=Remember%20this%20launch%20constraint",
+    );
+
+    expect(screen.getByRole("region", { name: /preserved work/i })).toHaveTextContent(
+      "Remember this launch constraint",
+    );
   });
 
   it.each([

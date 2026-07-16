@@ -4,6 +4,7 @@ import { getProductActivationRoute } from "./productRoutes";
 
 export const PENDING_INTENT_KEY = "zaki:pending-intent:v1";
 export const PENDING_INTENT_STORAGE_FAILURE_EVENT = "zaki:pending-intent-storage-failed";
+export const PENDING_INTENT_UPDATED_EVENT = "zaki:pending-intent-updated";
 
 const MAX_PROMPT_LENGTH = 1200;
 const MAX_SOURCE_LENGTH = 80;
@@ -62,6 +63,11 @@ function announceStorageFailure(intent: PendingIntent) {
       }
     )
   );
+}
+
+function announcePendingIntentUpdated() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(PENDING_INTENT_UPDATED_EVENT));
 }
 
 function sanitizeText(value: unknown, maxLength: number) {
@@ -204,6 +210,7 @@ export function writePendingIntent(input: PendingIntentInput) {
     announceStorageFailure(intent);
     return null;
   }
+  announcePendingIntentUpdated();
   return intent;
 }
 
