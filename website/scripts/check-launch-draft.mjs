@@ -60,7 +60,7 @@ htmlDocuments.forEach(({ relative, html }) => {
   assert.match(html, /<meta name="description" content="[^"]+">/, `${relative}: description`);
   assert.match(html, /<link rel="canonical" href="https:\/\/chatzaki\.com\//, `${relative}: canonical`);
   assert.match(html, /<script src="\/env\.js"><\/script>/, `${relative}: environment bootstrap`);
-  assert.match(html, /<script defer src="\/site\/runtime-config\.js"><\/script>/, `${relative}: runtime config`);
+  assert.match(html, /<script defer src="\/site\/runtime-config\.js\?v=5\.0\.0"><\/script>/, `${relative}: runtime config`);
 
   for (const match of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
     const reference = match[1];
@@ -78,6 +78,7 @@ const mascot = read("mascot.js");
 const game = read("game.js");
 const product = read("site/product.js");
 const runtimeConfig = read("site/runtime-config.js");
+const nginx = readFileSync(join(websiteRoot, "nginx.conf"), "utf8");
 const pricing = read("pricing/index.html");
 const policies = read("privacy/index.html") + read("terms/index.html") + read("compliance/index.html");
 const release = JSON.parse(read("release.json"));
@@ -104,6 +105,7 @@ assert.match(runtimeConfig, /APP_BASE_URL/);
 assert.match(runtimeConfig, /a\[href\^="https:\/\/app\.chatzaki\.com"\]/);
 assert.match(runtimeConfig, /MutationObserver/);
 assert.match(runtimeConfig, /attributeFilter:\s*\["href"\]/);
+assert.match(nginx, /location = \/site\/runtime-config\.js \{\s*add_header Cache-Control "no-store" always;/);
 
 for (const plan of ["Free", "Personal", "Pro", "Pro MAX"]) assert.match(pricing, new RegExp(`>${plan}<`));
 for (const price of ["$0", "$15", "$45", "$99"]) assert.ok(pricing.includes(price), `pricing includes ${price}`);

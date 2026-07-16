@@ -7,6 +7,7 @@ RUN npm ci
 
 COPY scripts ./scripts
 COPY launch-draft ./launch-draft
+COPY nginx.conf ./nginx.conf
 RUN npm run build
 
 FROM nginx:1.27-alpine
