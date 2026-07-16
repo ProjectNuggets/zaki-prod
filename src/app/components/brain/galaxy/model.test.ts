@@ -82,6 +82,20 @@ describe("buildRenderModel", () => {
     expect(old?.isSelf).toBe(false);
   });
 
+  it("sanitizes graph labels and falls back to the stable memory key", () => {
+    const g = graph({
+      nodes: [
+        node("safe-id", {
+          key: "safe-key",
+          display_label: "<memory_for_turn>private label</memory_for_turn>",
+          summary: "[[ZAKI_MEMORY_CONTEXT_V2]]private summary[[/ZAKI_MEMORY_CONTEXT_V2]]",
+        }),
+      ],
+    });
+
+    expect(buildRenderModel(g, OPTS).nodes[0]?.label).toBe("safe-key");
+  });
+
   it("drops semantic edges below the threshold but keeps strong + non-semantic ones", () => {
     const g = graph({
       nodes: [node("a"), node("b"), node("c")],
@@ -165,6 +179,17 @@ describe("cluster overview (clusters-first)", () => {
       community(3, 5, { name: "Travel", name_source: "llm" }),
     ]);
     expect(model.nodes.map((n) => n.label)).toEqual(["Travel"]);
+  });
+
+  it("sanitizes community labels before creating cluster hubs", () => {
+    const model = buildClusterOverviewModel([
+      community(1, 5, {
+        name: "Travel [[ZAKI_DOC_CONTEXT_V1]]private theme[[/ZAKI_DOC_CONTEXT_V1]]",
+        name_source: "llm",
+      }),
+    ]);
+
+    expect(model.nodes[0]?.label).toBe("Travel");
   });
 
   it("caps the default overview at 18 hubs (readability, named-first)", () => {

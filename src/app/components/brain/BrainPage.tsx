@@ -7,6 +7,8 @@ import { useBrainGraph, useBrainMe } from "@/queries";
 import { SkeletonBrainPage } from "@/app/components/ui/skeleton";
 import { BrainEmptyState } from "./BrainEmptyState";
 import { BrainSemanticDegradedBanner } from "./BrainSemanticDegradedBanner";
+import { sanitizeBrainText } from "./brainText";
+import { brainHealth } from "./brainHealth";
 import { BrainGalaxyView, type GalaxyScope } from "./galaxy/BrainGalaxyView";
 import { BrainHome } from "./galaxy/BrainHome";
 import { BrainDisplayPanel } from "./galaxy/BrainDisplayPanel";
@@ -212,12 +214,17 @@ export function BrainPage() {
 
   if (!userId || initialGraphQuery.isLoading) return <SkeletonBrainPage />;
 
-  const brainUnavailable = initialGraphQuery.isError;
+  const health = brainHealth({
+    requestFailed: initialGraphQuery.isError,
+    hasUsableData: initialGraphQuery.data != null,
+    semanticDegraded: initialGraphQuery.data?.semantic_degraded ?? false,
+  });
+  const brainUnavailable = health === "unavailable";
+  const brainStale = health === "stale";
   const totalNodes = brainUnavailable
     ? 0
     : initialGraphQuery.data?.total_nodes_in_corpus ?? 0;
-  const semanticDegraded =
-    brainUnavailable || (initialGraphQuery.data?.semantic_degraded ?? false);
+  const semanticDegraded = health === "degraded";
 
   if (!brainUnavailable && totalNodes === 0) {
     return <BrainEmptyState onMigrate={() => navigate("/")} />;
@@ -281,10 +288,12 @@ export function BrainPage() {
             id: "health",
             label: brainUnavailable
               ? t("brain.status.memoryUnavailable", { defaultValue: "Memory unavailable" })
+              : brainStale
+              ? t("brain.status.cachedData", { defaultValue: "Using cached memory" })
               : semanticDegraded
               ? t("brain.status.semanticDegraded", { defaultValue: "Semantic degraded" })
               : t("brain.status.semanticReady", { defaultValue: "Semantic ready" }),
-            tone: brainUnavailable || semanticDegraded ? "warn" : "success",
+            tone: brainUnavailable || brainStale || semanticDegraded ? "warn" : "success",
           },
         ]}
       />
@@ -733,9 +742,10 @@ function legendItems(
     for (const n of nodes) {
       const c = n.community_id;
       if (c == null) continue;
-      const cur = map.get(c) ?? { name: n.community_name || "", count: 0 };
+      const communityName = sanitizeBrainText(n.community_name);
+      const cur = map.get(c) ?? { name: communityName, count: 0 };
       cur.count++;
-      if (n.community_name) cur.name = n.community_name;
+      if (communityName) cur.name = communityName;
       map.set(c, cur);
     }
     // The legend highlights real LLM-named themes; "Cluster 19716777" fallbacks

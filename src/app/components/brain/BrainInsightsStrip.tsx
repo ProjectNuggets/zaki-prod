@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Sparkles, Layers, Database } from "lucide-react";
 import { useBrainCommunities, useBrainTimeline } from "@/queries";
+import { sanitizeBrainText } from "./brainText";
 
 interface Props {
   userId: string;
@@ -56,13 +57,16 @@ export function BrainInsightsStrip({ userId, total }: Props) {
     // unnamed one when there are no named clusters at all.
     const communities = (communitiesQuery.data?.communities ?? [])
       .slice()
-      .filter((c) => !isInternalCodename(c.name))
+      .filter((c) => {
+        const name = sanitizeBrainText(c.name);
+        return Boolean(name) && !isInternalCodename(name);
+      })
       .sort((a, b) => (b.member_count ?? 0) - (a.member_count ?? 0));
     const topCommunity = communities.find((c) => c.name_source === "llm") ?? communities[0];
     return {
       total,
       newThisWeek,
-      topCommunityName: topCommunity?.name ?? null,
+      topCommunityName: sanitizeBrainText(topCommunity?.name) || null,
       topCommunityCount: topCommunity?.member_count ?? 0,
       isLoading: communitiesQuery.isLoading || timelineQuery.isLoading,
     };

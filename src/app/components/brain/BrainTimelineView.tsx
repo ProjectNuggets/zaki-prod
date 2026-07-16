@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useBrainTimeline } from "@/queries";
 import type { BrainTimelineEntry } from "@/lib/api";
+import { brainDisplayText } from "./brainText";
 
 interface Props {
   userId: string;
@@ -205,6 +206,7 @@ interface RowProps {
 
 function TimelineEntryRow({ entry, t, onPick }: RowProps) {
   const isDeprecated = entry.valid_to !== null;
+  const summary = brainDisplayText(entry.summary, entry.key, entry.id, "Memory");
   const kindLabel =
     entry.kind === "core" || entry.kind === "daily" || entry.kind === "conversation"
       ? t(`brain.timeline.kindLabel.${entry.kind}`)
@@ -230,10 +232,10 @@ function TimelineEntryRow({ entry, t, onPick }: RowProps) {
           className="mt-1 block w-full rounded-[2px] text-left text-sm text-zaki-text hover:text-zaki-brand focus:outline-none focus:ring-2 focus:ring-zaki-brand-40"
           onClick={() => onPick(entry.key ?? entry.id)}
         >
-          {entry.summary}
+          {summary}
         </button>
       ) : (
-        <p className="mt-1 text-sm text-zaki-text">{entry.summary}</p>
+        <p className="mt-1 text-sm text-zaki-text">{summary}</p>
       )}
     </li>
   );

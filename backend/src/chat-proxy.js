@@ -104,6 +104,43 @@ export function buildStreamUpstreamPayload(body, enrichedMessage) {
   return payload;
 }
 
+export function classifyChatSseFrame({ eventType = "", payloadText = "", payload = null } = {}) {
+  const normalizedEvent = String(eventType || "").trim().toLowerCase();
+  const payloadType = String(payload?.type || payload?.event || "").trim().toLowerCase();
+  return {
+    sawDone:
+      String(payloadText || "").trim() === "[DONE]" ||
+      normalizedEvent === "done" ||
+      payload?.close === true ||
+      payloadType === "done" ||
+      payloadType === "finalizeresponsestream",
+    sawError:
+      normalizedEvent === "error" ||
+      payload?.error === true ||
+      payloadType === "error" ||
+      String(payload?.status || "").trim().toLowerCase() === "error",
+  };
+}
+
+/**
+ * Imported context is one-shot only after the upstream run has completed.
+ * HTTP success headers alone are insufficient because an SSE response may
+ * still terminate with an error or without its terminal event.
+ */
+export function shouldAcknowledgeImportedThreadContext({
+  upstreamOk = false,
+  hasResponseBody = false,
+  isSse = false,
+  streamMetrics = null,
+  pipeResult = null,
+} = {}) {
+  if (!upstreamOk || !hasResponseBody) return false;
+  if (isSse) {
+    return streamMetrics?.sawDone === true && streamMetrics?.sawError !== true;
+  }
+  return pipeResult?.status === "success";
+}
+
 export function getRequestedResponseFormat(message = "") {
   const text = String(message || "").trim();
   if (!text) return null;

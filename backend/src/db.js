@@ -1,7 +1,18 @@
 import fs from "node:fs";
 import pg from "pg";
+import { startPostgresNotificationListener } from "./db-notifications.js";
 
 let pool = null;
+
+export async function listenForDbNotifications(channel, onPayload, options = {}) {
+  if (!pool) throw new Error("Database is not initialized.");
+  return startPostgresNotificationListener({
+    connect: () => pool.connect(),
+    channel,
+    onPayload,
+    ...options,
+  });
+}
 
 export async function initDb() {
   const connectionString = (process.env.DATABASE_URL || "").trim();
@@ -753,6 +764,20 @@ export async function initDb() {
   await migrationClient.query(`
     ALTER TABLE zaki_anonymous_work_messages
       ADD COLUMN IF NOT EXISTS context_forwarded_at TIMESTAMPTZ;
+  `);
+
+  // A thread-level expiring lease makes imported-context delivery exclusive
+  // across concurrent requests and across app replicas. It is released on a
+  // failed stream and deleted atomically when exact message IDs are finalized.
+  await migrationClient.query(`
+    CREATE TABLE IF NOT EXISTS zaki_imported_context_leases (
+      user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      workspace_slug TEXT NOT NULL,
+      thread_slug TEXT NOT NULL,
+      lease_id UUID NOT NULL,
+      lease_expires_at TIMESTAMPTZ NOT NULL,
+      PRIMARY KEY (user_id, workspace_slug, thread_slug)
+    );
   `);
 
   await migrationClient.query(`

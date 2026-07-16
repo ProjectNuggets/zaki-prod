@@ -14,5 +14,8 @@ describe("anonymous work claim migration", () => {
     expect(dbSource).toMatch(
       /CREATE INDEX IF NOT EXISTS idx_zaki_anonymous_work_messages_pending_context[\s\S]*WHERE context_forwarded_at IS NULL/
     );
+    expect(dbSource).toMatch(
+      /CREATE TABLE IF NOT EXISTS zaki_imported_context_leases[\s\S]*lease_id UUID NOT NULL[\s\S]*lease_expires_at TIMESTAMPTZ NOT NULL/
+    );
   });
 });
