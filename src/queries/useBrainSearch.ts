@@ -1,9 +1,27 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchBrainSearch, type BrainSearchResponse } from "@/lib/api";
+import { brainDisplayText, sanitizeBrainText } from "@/app/components/brain/brainText";
 
 export const brainSearchKeys = {
   results: (userId: string, q: string) => ["brain", "search", userId, q] as const,
 };
+
+/** Brain search feeds both the @mention and pin-memory render lanes. */
+export function sanitizeBrainSearchResponse(response: BrainSearchResponse): BrainSearchResponse {
+  return {
+    ...response,
+    results: response.results.map((result) => {
+      const displayLabel = sanitizeBrainText(result.display_label);
+      return {
+        ...result,
+        summary: brainDisplayText(result.summary, result.key, result.id),
+        display_label: displayLabel || undefined,
+        community_name: sanitizeBrainText(result.community_name) || null,
+        source_snippet: sanitizeBrainText(result.source_snippet) || null,
+      };
+    }),
+  };
+}
 
 /**
  * M2: Fetches matching memories for a search query.
@@ -22,7 +40,7 @@ export function useBrainSearch(userId: string, q: string) {
     queryFn: async () => {
       if (!q || q.length < 2) return null;
       try {
-        return await fetchBrainSearch(userId, q);
+        return sanitizeBrainSearchResponse(await fetchBrainSearch(userId, q));
       } catch {
         // 404 or not-yet-live backend — local matchesSearch filter stays active
         return null;

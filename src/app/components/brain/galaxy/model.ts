@@ -9,6 +9,7 @@ import {
   type ColorPreset,
 } from "../brainColors";
 import { edgeRelevance } from "../graphMath";
+import { brainDisplayText, sanitizeBrainText } from "../brainText";
 import type { RenderEdge, RenderModel, RenderNode } from "./engine/interface";
 
 // ── Cluster-overview ("clusters-first" default) ──────────────────────────────
@@ -44,7 +45,10 @@ export function buildClusterOverviewModel(
   limit: number = CLUSTER_OVERVIEW_LIMIT,
 ): RenderModel {
   const list = (communities ?? []).filter(
-    (c) => c.member_count > 0 && !INTERNAL_CODENAME.test(c.name),
+    (c) => {
+      const name = sanitizeBrainText(c.name);
+      return c.member_count > 0 && Boolean(name) && !INTERNAL_CODENAME.test(name);
+    },
   );
   if (list.length === 0) return { nodes: [], edges: [] };
 
@@ -60,7 +64,7 @@ export function buildClusterOverviewModel(
 
   const nodes: RenderNode[] = top.map((c) => ({
     id: clusterNodeId(c.community_id),
-    label: c.name,
+    label: brainDisplayText(c.name, `Theme ${c.community_id}`),
     // √-scaled so a 10× larger cluster reads as bigger without dwarfing the
     // rest; floored at 0.5 so even small hubs stay legible + clickable.
     importance: maxCount > 0 ? 0.5 + 0.5 * Math.sqrt(c.member_count / maxCount) : 0.7,
@@ -143,7 +147,7 @@ export function buildRenderModel(
       });
     return {
       id: n.id,
-      label: n.display_label || n.summary || n.key || n.id,
+      label: brainDisplayText(n.display_label, n.summary, n.key, n.id),
       importance: ranks.get(n.id) ?? 0.3,
       color,
       kind: n.kind,
