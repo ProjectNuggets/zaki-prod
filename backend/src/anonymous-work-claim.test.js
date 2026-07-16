@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from "@jest/globals";
+import { describe, expect, it, beforeEach, jest } from "@jest/globals";
 import {
   ANONYMOUS_WORK_MAX_REPLY_CHARS,
   IMPORTED_THREAD_CONTEXT_MAX_CHARS,
@@ -7,7 +7,9 @@ import {
   claimRequestHasWork,
   createAnonymousWorkClaimStore,
   createImportedThreadContextProvider,
+  createImportedThreadContextInvalidationPayload,
   importAnonymousWorkClaim,
+  invalidateImportedThreadContextFromNotification,
   mergeImportedThreadHistory,
   parseAnonymousWorkClaimRequest,
   resolveClaimKey,
@@ -22,11 +24,13 @@ import {
 function createFakeStore() {
   const claims = new Map(); // `${userId}:${claimKey}` -> claim row
   const messages = []; // message rows, id ascending
+  const contextInvalidations = [];
   let nextId = 1;
 
   return {
     claims,
     messages,
+    contextInvalidations,
     async findClaim({ userId, claimKey }) {
       return claims.get(`${userId}:${claimKey}`) ?? null;
     },
@@ -75,6 +79,9 @@ function createFakeStore() {
     async setImportedCount({ userId, claimKey, importedCount }) {
       const row = claims.get(`${userId}:${claimKey}`);
       if (row) row.imported_count = importedCount;
+    },
+    async notifyThreadContextChanged(target) {
+      contextInvalidations.push(target);
     },
     async listThreadMessages({ userId, workspaceSlug, threadSlug }) {
       return messages
@@ -185,6 +192,26 @@ describe("anonymous work claim — the import is real", () => {
     });
     expect(rows[1]).toMatchObject({ role: "assistant", thread_slug: "thread-1" });
     expect(rows[1].content).toContain("## Day 1");
+    expect(store.contextInvalidations).toEqual([target]);
+  });
+
+  it("surfaces a failed cross-replica invalidation without undoing the claim", async () => {
+    store.notifyThreadContextChanged = async () => {
+      throw new Error("notify unavailable");
+    };
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const result = await claim(COMPLETE_WORK);
+
+      expect(result.imported).toBe(true);
+      expect(warn).toHaveBeenCalledWith(
+        "[AnonymousSpaces] Failed to publish imported-context invalidation:",
+        "notify unavailable"
+      );
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   // (b) re-claiming the same workId is idempotent
@@ -374,6 +401,215 @@ describe("anonymous work claim — imported turns reach the model context", () =
     expect(marked).toEqual([{ ...thread, messageIds: [11, 12] }]);
     expect(await provider.getThreadContext(thread)).toEqual({ transcript: "", messageIds: [] });
   });
+
+  it("acknowledges only pending rows that fit in the bounded transcript", async () => {
+    const rows = Array.from({ length: 8 }, (_, index) => ({
+      id: index + 1,
+      role: index % 2 === 0 ? "user" : "assistant",
+      content: `turn-${index + 1}`,
+    }));
+    const provider = createImportedThreadContextProvider({
+      store: {
+        async listPendingThreadMessages() {
+          return rows;
+        },
+      },
+    });
+
+    const context = await provider.getThreadContext({
+      userId: 7,
+      workspaceSlug: "space-7",
+      threadSlug: "thread-7",
+    });
+
+    expect(context.transcript).not.toContain("turn-1");
+    expect(context.transcript).not.toContain("turn-2");
+    expect(context.messageIds).toEqual([3, 4, 5, 6, 7, 8]);
+  });
+
+  it("invalidates a cached miss when another replica publishes a claim", async () => {
+    let rows = [];
+    let reads = 0;
+    const provider = createImportedThreadContextProvider({
+      store: {
+        async listPendingThreadMessages() {
+          reads += 1;
+          return rows;
+        },
+      },
+    });
+    const thread = { userId: 7, workspaceSlug: "space-7", threadSlug: "thread-7" };
+
+    expect(await provider.getThreadContext(thread)).toEqual({ transcript: "", messageIds: [] });
+    rows = [
+      { id: 11, role: "user", content: "claimed elsewhere" },
+      { id: 12, role: "assistant", content: "now visible here" },
+    ];
+    invalidateImportedThreadContextFromNotification(
+      provider,
+      createImportedThreadContextInvalidationPayload(thread)
+    );
+
+    expect((await provider.getThreadContext(thread)).messageIds).toEqual([11, 12]);
+    expect(reads).toBe(2);
+  });
+
+  it("does not let an in-flight miss overwrite a newer invalidation", async () => {
+    let rows = [];
+    let reads = 0;
+    let resolveFirstRead;
+    const firstRead = new Promise((resolve) => {
+      resolveFirstRead = resolve;
+    });
+    const provider = createImportedThreadContextProvider({
+      store: {
+        async listPendingThreadMessages() {
+          reads += 1;
+          return reads === 1 ? firstRead : rows;
+        },
+      },
+    });
+    const thread = { userId: 7, workspaceSlug: "space-7", threadSlug: "thread-7" };
+
+    const pendingMiss = provider.getThreadContext(thread);
+    invalidateImportedThreadContextFromNotification(
+      provider,
+      createImportedThreadContextInvalidationPayload(thread)
+    );
+    rows = [{ id: 11, role: "user", content: "claimed during the lookup" }];
+    resolveFirstRead([]);
+    await pendingMiss;
+
+    expect((await provider.getThreadContext(thread)).messageIds).toEqual([11]);
+    expect(reads).toBe(2);
+  });
+
+  it("flushes all cached misses after a notification listener gap", async () => {
+    let rows = [];
+    let reads = 0;
+    const provider = createImportedThreadContextProvider({
+      store: {
+        async listPendingThreadMessages() {
+          reads += 1;
+          return rows;
+        },
+      },
+    });
+    const thread = { userId: 7, workspaceSlug: "space-7", threadSlug: "thread-7" };
+
+    expect(await provider.getThreadContext(thread)).toEqual({ transcript: "", messageIds: [] });
+    rows = [{ id: 11, role: "user", content: "missed while disconnected" }];
+    provider.invalidateAll();
+
+    expect((await provider.getThreadContext(thread)).messageIds).toEqual([11]);
+    expect(reads).toBe(2);
+  });
+
+  it("does not retain positive context after the shared database state changes", async () => {
+    let rows = [{ id: 11, role: "user", content: "pending once" }];
+    let reads = 0;
+    const provider = createImportedThreadContextProvider({
+      store: {
+        async listPendingThreadMessages() {
+          reads += 1;
+          return rows;
+        },
+      },
+    });
+    const thread = { userId: 7, workspaceSlug: "space-7", threadSlug: "thread-7" };
+
+    expect((await provider.getThreadContext(thread)).messageIds).toEqual([11]);
+    rows = [];
+
+    expect(await provider.getThreadContext(thread)).toEqual({ transcript: "", messageIds: [] });
+    expect(reads).toBe(2);
+  });
+
+  it("leases imported context to only one concurrent stream", async () => {
+    const rows = [
+      { id: 11, role: "user", content: "old prompt" },
+      { id: 12, role: "assistant", content: "old answer" },
+    ];
+    let activeLease = null;
+    const provider = createImportedThreadContextProvider({
+      store: {
+        async leasePendingThreadMessages({ leaseId }) {
+          if (activeLease) return [];
+          activeLease = leaseId;
+          return rows;
+        },
+      },
+    });
+    const thread = { userId: 7, workspaceSlug: "space-7", threadSlug: "thread-7" };
+
+    const contexts = await Promise.all([
+      provider.getThreadContext(thread),
+      provider.getThreadContext(thread),
+    ]);
+
+    expect(contexts.filter((context) => context.messageIds.length > 0)).toHaveLength(1);
+    expect(contexts.filter((context) => context.messageIds.length === 0)).toHaveLength(1);
+    expect(contexts.find((context) => context.messageIds.length > 0)?.leaseId).toBe(activeLease);
+  });
+
+  it("releases a failed stream lease so the transcript can be acquired again", async () => {
+    const rows = [{ id: 11, role: "user", content: "retry me" }];
+    let activeLease = null;
+    const releases = [];
+    const provider = createImportedThreadContextProvider({
+      store: {
+        async leasePendingThreadMessages({ leaseId }) {
+          if (activeLease) return [];
+          activeLease = leaseId;
+          return rows;
+        },
+        async releaseThreadMessageLease(input) {
+          releases.push(input);
+          if (input.leaseId === activeLease) activeLease = null;
+        },
+        async notifyThreadContextChanged() {},
+      },
+    });
+    const thread = { userId: 7, workspaceSlug: "space-7", threadSlug: "thread-7" };
+
+    const first = await provider.getThreadContext(thread);
+    await provider.releaseLease({ ...thread, ...first });
+    const second = await provider.getThreadContext(thread);
+
+    expect(releases).toEqual([
+      expect.objectContaining({ ...thread, messageIds: [11], leaseId: first.leaseId }),
+    ]);
+    expect(second.messageIds).toEqual([11]);
+    expect(second.leaseId).not.toBe(first.leaseId);
+  });
+
+  it("finalizes exact IDs under the acquired lease and invalidates other replicas", async () => {
+    const finalized = [];
+    const notifications = [];
+    const provider = createImportedThreadContextProvider({
+      store: {
+        async leasePendingThreadMessages() {
+          return [{ id: 11, role: "user", content: "deliver once" }];
+        },
+        async markThreadMessagesForwarded(input) {
+          finalized.push(input);
+          return 1;
+        },
+        async notifyThreadContextChanged(input) {
+          notifications.push(input);
+        },
+      },
+    });
+    const thread = { userId: 7, workspaceSlug: "space-7", threadSlug: "thread-7" };
+
+    const context = await provider.getThreadContext(thread);
+    await provider.markForwarded({ ...thread, ...context });
+
+    expect(finalized).toEqual([
+      expect.objectContaining({ ...thread, messageIds: [11], leaseId: context.leaseId }),
+    ]);
+    expect(notifications).toEqual([thread]);
+  });
 });
 
 describe("anonymous work claim — SQL store", () => {
@@ -421,7 +657,7 @@ describe("anonymous work claim — SQL store", () => {
     expect(statements[0].text).toContain("ON CONFLICT (user_id, claim_key) DO NOTHING");
   });
 
-  it("selects only pending context rows and marks exact user-scoped IDs forwarded", async () => {
+  it("atomically leases pending rows and finalizes or releases exact user-scoped IDs", async () => {
     const calls = [];
     const store = createAnonymousWorkClaimStore({
       dbGet: async () => null,
@@ -436,14 +672,94 @@ describe("anonymous work claim — SQL store", () => {
     });
     const thread = { userId: 7, workspaceSlug: "SPACE-7", threadSlug: "thread-7" };
 
-    await store.listPendingThreadMessages(thread);
-    await store.markThreadMessagesForwarded({ ...thread, messageIds: [11, 12] });
+    await store.leasePendingThreadMessages({
+      ...thread,
+      leaseId: "11111111-1111-4111-8111-111111111111",
+      leaseMs: 600000,
+    });
+    await store.markThreadMessagesForwarded({
+      ...thread,
+      messageIds: [11, 12],
+      leaseId: "11111111-1111-4111-8111-111111111111",
+    });
+    await store.releaseThreadMessageLease({
+      ...thread,
+      messageIds: [11, 12],
+      leaseId: "22222222-2222-4222-8222-222222222222",
+    });
 
     expect(calls[0].text).toContain("context_forwarded_at IS NULL");
-    expect(calls[0].params).toEqual([7, "space-7", "thread-7"]);
+    expect(calls[0].text).toContain("INSERT INTO zaki_imported_context_leases");
+    expect(calls[0].text).toContain("ON CONFLICT (user_id, workspace_slug, thread_slug)");
+    expect(calls[0].text).toContain("lease_expires_at <= NOW()");
+    expect(calls[0].text).toContain("LIMIT $4");
+    expect(calls[0].params).toEqual([
+      7,
+      "space-7",
+      "thread-7",
+      6,
+      "11111111-1111-4111-8111-111111111111",
+      600000,
+    ]);
+    expect(calls[1].text).toContain("DELETE FROM zaki_imported_context_leases");
     expect(calls[1].text).toContain("SET context_forwarded_at = NOW()");
+    expect(calls[1].text).toContain("lease_id = $5::uuid");
     expect(calls[1].text).toContain("user_id = $1");
-    expect(calls[1].params).toEqual([7, "space-7", "thread-7", [11, 12]]);
+    expect(calls[1].params).toEqual([
+      7,
+      "space-7",
+      "thread-7",
+      [11, 12],
+      "11111111-1111-4111-8111-111111111111",
+    ]);
+    expect(calls[2].text).toContain("DELETE FROM zaki_imported_context_leases");
+    expect(calls[2].text).toContain("lease_id = $4::uuid");
+  });
+
+  it("publishes a Postgres invalidation for every replica after a claim", async () => {
+    const calls = [];
+    const store = createAnonymousWorkClaimStore({
+      dbGet: async () => null,
+      dbAll: async () => [],
+      dbQuery: async (text, params) => {
+        calls.push({ text, params });
+        return { rows: [] };
+      },
+    });
+
+    await store.notifyThreadContextChanged({
+      userId: 7,
+      workspaceSlug: "SPACE-7",
+      threadSlug: "thread-7",
+    });
+
+    expect(calls[0].text).toContain("pg_notify");
+    expect(JSON.parse(calls[0].params[1])).toEqual({
+      userId: "7",
+      workspaceSlug: "space-7",
+      threadSlug: "thread-7",
+    });
+  });
+
+  it("retries a transient Postgres invalidation failure once", async () => {
+    let attempts = 0;
+    const store = createAnonymousWorkClaimStore({
+      dbGet: async () => null,
+      dbAll: async () => [],
+      dbQuery: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("transient notify failure");
+        return { rows: [] };
+      },
+    });
+
+    await store.notifyThreadContextChanged({
+      userId: 7,
+      workspaceSlug: "space-7",
+      threadSlug: "thread-7",
+    });
+
+    expect(attempts).toBe(2);
   });
 
   it("inserts turns with ON CONFLICT DO NOTHING on (user_id, claim_key, position)", async () => {

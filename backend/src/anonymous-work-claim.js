@@ -32,8 +32,10 @@ export const ANONYMOUS_WORK_MAX_TITLE_CHARS = 96;
 export const ANONYMOUS_WORK_MAX_ID_CHARS = 120;
 export const ANONYMOUS_WORK_MAX_ROUTE_CHARS = 240;
 export const IMPORTED_THREAD_CONTEXT_MAX_CHARS = 12000;
+export const IMPORTED_THREAD_CONTEXT_INVALIDATION_CHANNEL = "zaki_imported_context";
 const IMPORTED_THREAD_TURN_MAX_CHARS = 11000;
 const IMPORTED_THREAD_CONTEXT_MAX_TURNS = 6;
+const IMPORTED_THREAD_CONTEXT_LEASE_MS = 10 * 60 * 1000;
 
 /** Single-line text: collapses all whitespace. Used for prompts/titles/ids. */
 export function sanitizeClaimText(value, maxLength) {
@@ -160,8 +162,20 @@ export function buildImportedThreadTranscript(
   importedRows,
   { maxChars = IMPORTED_THREAD_CONTEXT_MAX_CHARS } = {}
 ) {
+  return buildImportedThreadContext(importedRows, { maxChars }).transcript;
+}
+
+/**
+ * Build the bounded model transcript and the exact row IDs represented by it.
+ * Keeping both outputs in one selection pass prevents omitted rows from being
+ * acknowledged as forwarded.
+ */
+export function buildImportedThreadContext(
+  importedRows,
+  { maxChars = IMPORTED_THREAD_CONTEXT_MAX_CHARS } = {}
+) {
   const rows = Array.isArray(importedRows) ? importedRows : [];
-  if (!rows.length) return "";
+  if (!rows.length) return { transcript: "", messageIds: [] };
 
   const header = "Earlier turns imported from this user's signed-out conversation:";
   const turns = rows.slice(-IMPORTED_THREAD_CONTEXT_MAX_TURNS).map((row) => {
@@ -173,21 +187,30 @@ export function buildImportedThreadTranscript(
       .replaceAll("[[", "[ [")
       .replaceAll("]]", "] ]")
       .slice(0, IMPORTED_THREAD_TURN_MAX_CHARS);
-    return content ? `${role}:\n${content}` : "";
+    const id = Number(row?.id);
+    return {
+      id: Number.isSafeInteger(id) && id > 0 ? id : null,
+      text: content ? `${role}:\n${content}` : "",
+    };
   });
 
   const selected = [];
   let used = header.length;
   for (let index = turns.length - 1; index >= 0; index -= 1) {
     const turn = turns[index];
-    if (!turn) continue;
-    const added = turn.length + 2;
+    if (!turn.text) continue;
+    const added = turn.text.length + 2;
     if (used + added > maxChars) break;
     selected.unshift(turn);
     used += added;
   }
 
-  return selected.length ? [header, ...selected].join("\n\n") : "";
+  return {
+    transcript: selected.length ? [header, ...selected.map((turn) => turn.text)].join("\n\n") : "",
+    messageIds: selected
+      .map((turn) => turn.id)
+      .filter((id) => Number.isSafeInteger(id) && id > 0),
+  };
 }
 
 /**
@@ -199,9 +222,12 @@ export function createImportedThreadContextProvider({
   store,
   ttlMs = 30000,
   maxEntries = 1000,
+  leaseMs = IMPORTED_THREAD_CONTEXT_LEASE_MS,
   now = () => Date.now(),
 } = {}) {
   const cache = new Map();
+  const generations = new Map();
+  let cacheGeneration = 0;
   const empty = () => ({ transcript: "", messageIds: [] });
   const keyFor = ({ userId, workspaceSlug, threadSlug }) =>
     JSON.stringify([
@@ -227,16 +253,42 @@ export function createImportedThreadContextProvider({
       return cached.value ?? cached.promise;
     }
     cache.delete(key);
+    const generation = generations.get(key) || 0;
+    const globalGeneration = cacheGeneration;
+
+    if (typeof store.leasePendingThreadMessages === "function") {
+      const leaseId = crypto.randomUUID();
+      const rows = await store.leasePendingThreadMessages({
+        ...target,
+        leaseId,
+        leaseMs: Math.max(1, leaseMs),
+      });
+      const value = buildImportedThreadContext(Array.isArray(rows) ? rows : []);
+      if (value.messageIds.length > 0) return { ...value, leaseId };
+      if (
+        cacheGeneration === globalGeneration &&
+        (generations.get(key) || 0) === generation
+      ) {
+        setCached(key, { value, expiresAt: now() + Math.max(1, ttlMs) });
+      }
+      return value;
+    }
 
     const promise = Promise.resolve(store.listPendingThreadMessages(target)).then((rows) => {
       const safeRows = Array.isArray(rows) ? rows : [];
-      const value = {
-        transcript: buildImportedThreadTranscript(safeRows),
-        messageIds: safeRows
-          .map((row) => Number(row?.id))
-          .filter((id) => Number.isSafeInteger(id) && id > 0),
-      };
-      setCached(key, { value, expiresAt: now() + Math.max(1, ttlMs) });
+      const value = buildImportedThreadContext(safeRows);
+      if (value.messageIds.length > 0) {
+        // Pending context is rare and mutable across replicas. Coalesce only the
+        // in-flight read; resolved positive values must be rechecked against the
+        // shared delivery marker on the next turn.
+        if (cache.get(key)?.promise === promise) cache.delete(key);
+      } else if (
+        cacheGeneration === globalGeneration &&
+        (generations.get(key) || 0) === generation &&
+        cache.get(key)?.promise === promise
+      ) {
+        setCached(key, { value, expiresAt: now() + Math.max(1, ttlMs) });
+      }
       return value;
     });
 
@@ -244,13 +296,21 @@ export function createImportedThreadContextProvider({
     try {
       return await promise;
     } catch (error) {
-      cache.delete(key);
+      if (cache.get(key)?.promise === promise) cache.delete(key);
       throw error;
     }
   }
 
   function invalidateThread(target) {
-    cache.delete(keyFor(target || {}));
+    const key = keyFor(target || {});
+    generations.set(key, (generations.get(key) || 0) + 1);
+    cache.delete(key);
+  }
+
+  function invalidateAll() {
+    cacheGeneration += 1;
+    cache.clear();
+    generations.clear();
   }
 
   async function markForwarded(target) {
@@ -260,15 +320,70 @@ export function createImportedThreadContextProvider({
           .filter((id) => Number.isSafeInteger(id) && id > 0)
       : [];
     if (!messageIds.length) return;
+    const usesLeases = typeof store.leasePendingThreadMessages === "function";
+    const leaseId = String(target?.leaseId || "").trim();
+    if (usesLeases && !leaseId) {
+      throw new Error("Imported thread context lease is required for finalization.");
+    }
 
-    await store.markThreadMessagesForwarded({ ...target, messageIds });
-    setCached(keyFor(target), {
-      value: empty(),
-      expiresAt: now() + Math.max(1, ttlMs),
-    });
+    const forwardedCount = await store.markThreadMessagesForwarded(
+      usesLeases ? { ...target, messageIds, leaseId } : { ...target, messageIds }
+    );
+    if (Number.isFinite(forwardedCount) && forwardedCount !== messageIds.length) {
+      throw new Error("Imported thread context lease no longer owns every message.");
+    }
+    if (usesLeases) {
+      // The bounded batch can leave older imported turns pending. Re-check on
+      // the next turn instead of turning a successful batch into a false miss.
+      invalidateThread(target);
+      if (typeof store.notifyThreadContextChanged === "function") {
+        const notificationTarget = {
+          userId: target?.userId,
+          workspaceSlug: target?.workspaceSlug,
+          threadSlug: target?.threadSlug,
+        };
+        await store.notifyThreadContextChanged(notificationTarget).catch((error) =>
+          console.warn(
+            "[AnonymousSpaces] Failed to publish imported-context finalization:",
+            error?.message || error
+          )
+        );
+      }
+    } else {
+      setCached(keyFor(target), {
+        value: empty(),
+        expiresAt: now() + Math.max(1, ttlMs),
+      });
+    }
   }
 
-  return { getThreadContext, invalidateThread, markForwarded };
+  async function releaseLease(target) {
+    const messageIds = Array.isArray(target?.messageIds)
+      ? target.messageIds
+          .map((id) => Number(id))
+          .filter((id) => Number.isSafeInteger(id) && id > 0)
+      : [];
+    const leaseId = String(target?.leaseId || "").trim();
+    if (!messageIds.length || !leaseId) return;
+
+    await store.releaseThreadMessageLease({ ...target, messageIds, leaseId });
+    invalidateThread(target);
+    if (typeof store.notifyThreadContextChanged === "function") {
+      const notificationTarget = {
+        userId: target?.userId,
+        workspaceSlug: target?.workspaceSlug,
+        threadSlug: target?.threadSlug,
+      };
+      await store.notifyThreadContextChanged(notificationTarget).catch((error) =>
+        console.warn(
+          "[AnonymousSpaces] Failed to publish imported-context lease release:",
+          error?.message || error
+        )
+      );
+    }
+  }
+
+  return { getThreadContext, invalidateThread, invalidateAll, markForwarded, releaseLease };
 }
 
 /**
@@ -279,6 +394,39 @@ export function createImportedThreadContextProvider({
  */
 function normalizeWorkspaceSlug(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+export function createImportedThreadContextInvalidationPayload({
+  userId,
+  workspaceSlug,
+  threadSlug,
+} = {}) {
+  return JSON.stringify({
+    userId: String(userId ?? "").trim(),
+    workspaceSlug: normalizeWorkspaceSlug(workspaceSlug),
+    threadSlug: String(threadSlug || "").trim(),
+  });
+}
+
+export function parseImportedThreadContextInvalidationPayload(payload) {
+  try {
+    const parsed = JSON.parse(String(payload || ""));
+    const target = {
+      userId: String(parsed?.userId ?? "").trim(),
+      workspaceSlug: normalizeWorkspaceSlug(parsed?.workspaceSlug),
+      threadSlug: String(parsed?.threadSlug || "").trim(),
+    };
+    return target.userId && target.workspaceSlug && target.threadSlug ? target : null;
+  } catch {
+    return null;
+  }
+}
+
+export function invalidateImportedThreadContextFromNotification(provider, payload) {
+  const target = parseImportedThreadContextInvalidationPayload(payload);
+  if (!target || typeof provider?.invalidateThread !== "function") return false;
+  provider.invalidateThread(target);
+  return true;
 }
 
 /**
@@ -354,32 +502,115 @@ export function createAnonymousWorkClaimStore({ dbGet, dbAll, dbQuery }) {
       );
     },
 
-    async listPendingThreadMessages({ userId, workspaceSlug, threadSlug }) {
-      return dbAll(
-        `SELECT id, role, content, created_at
-           FROM zaki_anonymous_work_messages
-          WHERE user_id = $1 AND workspace_slug = $2 AND thread_slug = $3
-            AND context_forwarded_at IS NULL
-          ORDER BY id ASC`,
-        [userId, normalizeWorkspaceSlug(workspaceSlug), threadSlug]
+    async leasePendingThreadMessages({
+      userId,
+      workspaceSlug,
+      threadSlug,
+      leaseId,
+      leaseMs,
+    }) {
+      const rows = await dbAll(
+        `WITH acquired_lease AS (
+           INSERT INTO zaki_imported_context_leases (
+             user_id, workspace_slug, thread_slug, lease_id, lease_expires_at
+           )
+           SELECT
+             $1, $2, $3, $5::uuid,
+             NOW() + ($6::bigint * INTERVAL '1 millisecond')
+           WHERE EXISTS (
+             SELECT 1
+               FROM zaki_anonymous_work_messages
+              WHERE user_id = $1 AND workspace_slug = $2 AND thread_slug = $3
+                AND context_forwarded_at IS NULL
+           )
+           ON CONFLICT (user_id, workspace_slug, thread_slug) DO UPDATE
+             SET lease_id = EXCLUDED.lease_id,
+                 lease_expires_at = EXCLUDED.lease_expires_at
+           WHERE zaki_imported_context_leases.lease_expires_at <= NOW()
+           RETURNING lease_id
+         )
+         SELECT messages.id, messages.role, messages.content, messages.created_at
+           FROM zaki_anonymous_work_messages AS messages
+           CROSS JOIN acquired_lease
+          WHERE messages.user_id = $1
+            AND messages.workspace_slug = $2
+            AND messages.thread_slug = $3
+            AND messages.context_forwarded_at IS NULL
+          ORDER BY messages.id DESC
+          LIMIT $4`,
+        [
+          userId,
+          normalizeWorkspaceSlug(workspaceSlug),
+          threadSlug,
+          IMPORTED_THREAD_CONTEXT_MAX_TURNS,
+          leaseId,
+          Math.max(1, Number(leaseMs) || IMPORTED_THREAD_CONTEXT_LEASE_MS),
+        ]
       );
+      return Array.isArray(rows)
+        ? rows.slice().sort((left, right) => Number(left.id) - Number(right.id))
+        : [];
     },
 
-    async markThreadMessagesForwarded({ userId, workspaceSlug, threadSlug, messageIds }) {
+    async markThreadMessagesForwarded({
+      userId,
+      workspaceSlug,
+      threadSlug,
+      messageIds,
+      leaseId,
+    }) {
       const ids = Array.isArray(messageIds)
         ? messageIds
             .map((id) => Number(id))
             .filter((id) => Number.isSafeInteger(id) && id > 0)
         : [];
       if (!ids.length) return;
-      await dbQuery(
-        `UPDATE zaki_anonymous_work_messages
+      const result = await dbQuery(
+        `WITH owned_lease AS (
+           DELETE FROM zaki_imported_context_leases
+            WHERE user_id = $1 AND workspace_slug = $2 AND thread_slug = $3
+              AND lease_id = $5::uuid
+           RETURNING lease_id
+         )
+         UPDATE zaki_anonymous_work_messages AS messages
             SET context_forwarded_at = NOW()
-          WHERE user_id = $1 AND workspace_slug = $2 AND thread_slug = $3
-            AND id = ANY($4::bigint[])
-            AND context_forwarded_at IS NULL`,
-        [userId, normalizeWorkspaceSlug(workspaceSlug), threadSlug, ids]
+           FROM owned_lease
+          WHERE messages.user_id = $1
+            AND messages.workspace_slug = $2
+            AND messages.thread_slug = $3
+            AND messages.id = ANY($4::bigint[])
+            AND messages.context_forwarded_at IS NULL`,
+        [userId, normalizeWorkspaceSlug(workspaceSlug), threadSlug, ids, leaseId]
       );
+      return Number(result?.rowCount) || 0;
+    },
+
+    async releaseThreadMessageLease({
+      userId,
+      workspaceSlug,
+      threadSlug,
+      messageIds,
+      leaseId,
+    }) {
+      if (!Array.isArray(messageIds) || !messageIds.length || !leaseId) return;
+      await dbQuery(
+        `DELETE FROM zaki_imported_context_leases
+          WHERE user_id = $1 AND workspace_slug = $2 AND thread_slug = $3
+            AND lease_id = $4::uuid`,
+        [userId, normalizeWorkspaceSlug(workspaceSlug), threadSlug, leaseId]
+      );
+    },
+
+    async notifyThreadContextChanged(target) {
+      const params = [
+        IMPORTED_THREAD_CONTEXT_INVALIDATION_CHANNEL,
+        createImportedThreadContextInvalidationPayload(target),
+      ];
+      try {
+        await dbQuery("SELECT pg_notify($1, $2)", params);
+      } catch {
+        await dbQuery("SELECT pg_notify($1, $2)", params);
+      }
     },
   };
 }
@@ -450,6 +681,16 @@ export async function importAnonymousWorkClaim({
 
   const importedCount = inserted || turns.length;
   await store.setImportedCount({ userId, claimKey, importedCount });
+  if (importedCount > 0 && typeof store.notifyThreadContextChanged === "function") {
+    await store
+      .notifyThreadContextChanged({ userId, workspaceSlug, threadSlug })
+      .catch((error) =>
+        console.warn(
+          "[AnonymousSpaces] Failed to publish imported-context invalidation:",
+          error?.message || error
+        )
+      );
+  }
 
   return {
     workspaceSlug,
