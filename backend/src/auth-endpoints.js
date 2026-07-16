@@ -56,22 +56,26 @@ function getCandidateSessionBinding(payload) {
 /**
  * AUTH-06 concurrent refresh guard.
  * If primary lookup misses OR rotateRefreshToken throws SESSION_NOT_FOUND,
- * check whether THIS user had a session rotated in the last 5 seconds (i.e. a sibling
- * tab already completed the rotate). If so, mint a new access token for that user
- * and return it — no new session row inserted (the sibling already inserted one).
+ * check whether the presented token's own session was rotated in the last 5 seconds
+ * (i.e. a sibling tab already completed the rotate). The source row points to its
+ * exact replacement, so a historical revoked token can never inherit an unrelated
+ * newer session for the same user. If that replacement is still active, mint an
+ * access token for it — no new session row is inserted.
  * Returns { accessToken, userId } on hit, null on miss.
  */
 async function tryConcurrentRefreshGuard(tokenHash) {
-  // Inner subquery intentionally omits revoked_at IS NULL: the winning tab already
-  // revoked the original token hash, so we must still be able to resolve user_id from it.
   const recent = await dbGet(
-    `SELECT s.id, s.user_id, u.email
-       FROM zaki_sessions s
-       JOIN zaki_users u ON u.id = s.user_id
-       WHERE s.user_id = (SELECT user_id FROM zaki_sessions WHERE refresh_token_hash = $1)
-         AND s.created_at > NOW() - INTERVAL '5 seconds'
-         AND s.revoked_at IS NULL
-       ORDER BY s.created_at DESC
+    `SELECT replacement.id, replacement.user_id, u.email
+       FROM zaki_sessions presented
+       JOIN zaki_sessions replacement
+         ON replacement.id = presented.replaced_by_session_id
+        AND replacement.user_id = presented.user_id
+       JOIN zaki_users u ON u.id = replacement.user_id
+       WHERE presented.refresh_token_hash = $1
+         AND presented.revoked_at > NOW() - INTERVAL '5 seconds'
+         AND replacement.created_at > NOW() - INTERVAL '5 seconds'
+         AND replacement.revoked_at IS NULL
+         AND replacement.expires_at > NOW()
        LIMIT 1`,
     [tokenHash]
   );

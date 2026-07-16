@@ -178,6 +178,35 @@ describe("rotateRefreshToken (OATH-07)", () => {
     expect(payload.sid).not.toBe("719dcf0a-bf61-41cc-ab0e-89da73a787c3");
   });
 
+  it("links the revoked source session to its exact replacement", async () => {
+    const oldSessionId = "719dcf0a-bf61-41cc-ab0e-89da73a787c3";
+    dbQueryMock.mockImplementation(async (sql) => {
+      if (/SELECT.*FOR UPDATE/i.test(sql)) {
+        return {
+          rows: [
+            {
+              id: oldSessionId,
+              user_id: 42,
+              expires_at: new Date(Date.now() + 86400000),
+              revoked_at: null,
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      return { rows: [], rowCount: 1 };
+    });
+
+    const result = await zakiAuth.rotateRefreshToken("f".repeat(64), fakeUser, fakeReq);
+
+    expect(dbQueryMock).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /UPDATE zaki_sessions SET revoked_at = NOW\(\), replaced_by_session_id = \$2 WHERE id = \$1/i
+      ),
+      [oldSessionId, result.sessionId]
+    );
+  });
+
   it("throws Error with code SESSION_NOT_FOUND when old row missing", async () => {
     dbQueryMock.mockResolvedValue({ rows: [], rowCount: 0 });
     await expect(zakiAuth.rotateRefreshToken("missing", fakeUser, fakeReq))

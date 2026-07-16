@@ -1349,6 +1349,7 @@ export async function initDb() {
       refresh_token_hash TEXT UNIQUE NOT NULL,
       expires_at TIMESTAMPTZ NOT NULL,
       revoked_at TIMESTAMPTZ,
+      replaced_by_session_id UUID REFERENCES zaki_sessions(id) ON DELETE SET NULL,
       last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       ip_address TEXT,
       user_agent TEXT,
@@ -1367,6 +1368,13 @@ export async function initDb() {
   await migrationClient.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_zaki_sessions_refresh_hash
       ON zaki_sessions (refresh_token_hash);
+  `);
+  // AUTH-06: retain the exact successor of a rotated refresh session so the
+  // concurrent-refresh guard does not infer identity from unrelated sessions.
+  await migrationClient.query(`
+    ALTER TABLE zaki_sessions
+      ADD COLUMN IF NOT EXISTS replaced_by_session_id UUID
+        REFERENCES zaki_sessions(id) ON DELETE SET NULL;
   `);
   // Phase 04-typ-adapter: TYP-03 — drop typ_session_token from running DBs
   await migrationClient.query(`

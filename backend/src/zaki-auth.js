@@ -148,7 +148,8 @@ export async function verifyActiveZakiAccessToken(token) {
 }
 
 /**
- * Atomically rotate a refresh token: revoke old row, insert new row, sign new access JWT.
+ * Atomically rotate a refresh token: insert a replacement, link+revoke the old row,
+ * then sign a new access JWT.
  * @param {string} oldHash sha256 hex of the presented refresh token
  * @param {{id:number|string, email:string}} zakiUser
  * @param {{ip?:string, headers:object}} req
@@ -167,11 +168,6 @@ export async function rotateRefreshToken(oldHash, zakiUser, req) {
       throw err;
     }
 
-    await client.query(
-      `UPDATE zaki_sessions SET revoked_at = NOW() WHERE id = $1`,
-      [oldSession.rows[0].id]
-    );
-
     const sessionId = crypto.randomUUID();
     const refreshToken = crypto.randomBytes(32).toString("hex");
     const refreshTokenHash = sha256Hex(refreshToken);
@@ -189,6 +185,15 @@ export async function rotateRefreshToken(oldHash, zakiUser, req) {
         req?.ip ?? null,
         req?.headers?.["user-agent"] ?? null,
       ]
+    );
+
+    // The refresh guard must recover only a sibling's replacement session,
+    // never any fresh session belonging to the same user. Insert the target
+    // first so the self-reference is valid, then publish the revoke + link in
+    // the same transaction.
+    await client.query(
+      `UPDATE zaki_sessions SET revoked_at = NOW(), replaced_by_session_id = $2 WHERE id = $1`,
+      [oldSession.rows[0].id, sessionId]
     );
 
     const accessToken = await signAccessToken(zakiUser, sessionId);
@@ -231,7 +236,8 @@ export async function cleanupExpiredSessions() {
 
 /**
  * Sign an access JWT for an existing session's user — used by the concurrent refresh guard
- * (AUTH-06) which has already proven session validity via the recent-rotation lookup.
+ * (AUTH-06) which has already proven session validity through its exact
+ * recent-rotation replacement link.
  * Does NOT insert a new zaki_sessions row.
  */
 export async function signAccessTokenForUser(zakiUser, sessionId = null) {
