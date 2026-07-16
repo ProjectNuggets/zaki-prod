@@ -186,6 +186,8 @@ export type AuthenticatedSession = {
 type LoginScreenProps = {
   presentation?: "page" | "overlay";
   onAuthenticated?: (session: AuthenticatedSession) => void;
+  /** Captures the browser storage owner when an interactive authentication starts. */
+  onAuthenticationStarted?: () => void;
   /** Return false when another tab has already superseded this candidate cookie. */
   onAuthenticationFailed?: () => boolean | void;
   candidateAuthTransaction?: CandidateAuthTransaction | null;
@@ -194,6 +196,7 @@ type LoginScreenProps = {
 export function LoginScreen({
   presentation = "page",
   onAuthenticated,
+  onAuthenticationStarted,
   onAuthenticationFailed,
   candidateAuthTransaction = null,
 }: LoginScreenProps = {}) {
@@ -245,9 +248,11 @@ export function LoginScreen({
   const ownsCandidateAuthTransactionRef = useRef(false);
   const reauthAttemptRef = useRef(0);
   const onAuthenticatedRef = useRef(onAuthenticated);
+  const onAuthenticationStartedRef = useRef(onAuthenticationStarted);
   const onAuthenticationFailedRef = useRef(onAuthenticationFailed);
   const googleOAuthCopyRef = useRef<GoogleOAuthErrorCopy>(copy);
   onAuthenticatedRef.current = onAuthenticated;
+  onAuthenticationStartedRef.current = onAuthenticationStarted;
   onAuthenticationFailedRef.current = onAuthenticationFailed;
   googleOAuthCopyRef.current = copy;
   const turnstileSiteKey = getTurnstileSiteKey();
@@ -757,6 +762,10 @@ export function LoginScreen({
       return;
     }
 
+    if (mode === "login" || mode === "signup") {
+      onAuthenticationStartedRef.current?.();
+    }
+
     const reauthAttempt =
       presentation === "overlay" ? reauthAttemptRef.current + 1 : null;
     if (reauthAttempt !== null) {
@@ -1156,6 +1165,7 @@ export function LoginScreen({
                       return;
                     }
                   }
+                  onAuthenticationStartedRef.current?.();
                   // Consent travels on BOTH entry points. "Continue with Google"
                   // from the login screen can still create a brand-new account,
                   // and that account must never exist without a consent record.

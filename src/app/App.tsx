@@ -349,7 +349,7 @@ export default function App() {
   // is current when they land, not the one captured when their closure formed.
   const locationRef = useRef(location);
   locationRef.current = location;
-
+  const interactiveStoragePrincipalRef = useRef<string | undefined>(undefined);
   // UI state from Zustand
   const {
     themePreference,
@@ -413,7 +413,12 @@ export default function App() {
       {
         allowPreservedWork = false,
         source = "interactive",
-      }: { allowPreservedWork?: boolean; source?: "hydrate" | "interactive" } = {}
+        interactiveStoragePrincipalAtStart,
+      }: {
+        allowPreservedWork?: boolean;
+        source?: "hydrate" | "interactive";
+        interactiveStoragePrincipalAtStart?: string;
+      } = {}
     ) => {
       const nextPrincipal = getPrincipalKey(session.user);
       if (!nextPrincipal) {
@@ -441,15 +446,18 @@ export default function App() {
           rejectedByNewerStorageOwner: false,
         };
       }
-      // An interactive candidate can finish after another tab has replaced the
-      // shared browser owner. It may clear only the account mounted here or
-      // adopt the owner already in storage; any third owner is newer and wins.
+      // An interactive candidate records the owner when authentication starts.
+      // If a different owner appears before its profile verification commits,
+      // that candidate is stale even in a cold tab with no mounted principal.
+      // Without a captured owner, retain the mounted-account guard for legacy
+      // callers that can only prove the principal currently in this tab.
       if (
         source === "interactive" &&
-        mountedPrincipal &&
         storagePrincipal &&
-        storagePrincipal !== mountedPrincipal &&
-        storagePrincipal !== nextPrincipal
+        storagePrincipal !== nextPrincipal &&
+        (interactiveStoragePrincipalAtStart !== undefined
+          ? storagePrincipal !== interactiveStoragePrincipalAtStart
+          : Boolean(mountedPrincipal && storagePrincipal !== mountedPrincipal))
       ) {
         return {
           committed: false,
@@ -888,9 +896,10 @@ export default function App() {
       const commit = commitAuthenticatedSession(session, {
         allowPreservedWork: allowsPreservation,
         source: "interactive",
+        interactiveStoragePrincipalAtStart: interactiveStoragePrincipalRef.current,
       });
       if (!commit.committed) {
-        if (commit.rejectedByNewerStorageOwner && session.candidateAuthTransaction) {
+        if (commit.rejectedByNewerStorageOwner) {
           // This bearer is bound to B's candidate session and deliberately
           // omits the browser refresh cookie, so it cannot revoke C's session.
           void requestCandidateSessionLogout(session.token);
@@ -914,6 +923,7 @@ export default function App() {
       }
     } finally {
       reauthPrincipalRef.current = "";
+      interactiveStoragePrincipalRef.current = undefined;
       if (reauthTransactionRef.current === transaction) clearReauthenticationTransaction();
     }
   };
@@ -935,12 +945,22 @@ export default function App() {
         ? { preserveSharedLocalStorage: true }
         : { clearStoragePrincipal: true }
     );
+    interactiveStoragePrincipalRef.current = undefined;
     navigate("/?auth=login", { replace: true });
     return !hasNewerStorageOwner;
   };
 
+  const captureInteractiveStoragePrincipal = useCallback(() => {
+    interactiveStoragePrincipalRef.current = readAccountStoragePrincipal();
+  }, []);
+
   if (!token && !isHydrating && (hasExplicitAuthIntent || !isAnonymousAllowedRoute)) {
-    return <LoginScreen onAuthenticated={handleAuthenticated} />;
+    return (
+      <LoginScreen
+        onAuthenticated={handleAuthenticated}
+        onAuthenticationStarted={captureInteractiveStoragePrincipal}
+      />
+    );
   }
 
   if (isHydrating) {
@@ -1015,6 +1035,7 @@ export default function App() {
           onAuthenticated={handleAuthenticated}
           onAuthenticationFailed={handleCandidateAuthenticationFailed}
           candidateAuthTransaction={reauthTransactionRef.current}
+          onAuthenticationStarted={captureInteractiveStoragePrincipal}
         />
       ) : null}
       {storageRecovery ? (

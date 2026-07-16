@@ -1186,6 +1186,72 @@ describe("App route hydration", () => {
     ).toBe(true);
   });
 
+  it("rejects a cold candidate account B after account C claims shared storage", async () => {
+    const user = userEvent.setup();
+    let accountBProfileCalls = 0;
+    let resolveCandidateProfile: (response: Response) => void = () => undefined;
+    const candidateProfile = new Promise<Response>((resolve) => {
+      resolveCandidateProfile = resolve;
+    });
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/auth/refresh")) {
+        return Promise.resolve(makeResponse({ error: "refresh_revoked" }, 401));
+      }
+      if (url.endsWith("/login")) {
+        return Promise.resolve(makeResponse({ valid: true, token: "account-b-token" }));
+      }
+      if (url.includes("/api/profile")) {
+        const authorization = new Headers(init?.headers).get("Authorization");
+        if (authorization === "Bearer account-b-token") {
+          accountBProfileCalls += 1;
+          if (accountBProfileCalls === 2) return candidateProfile;
+          return Promise.resolve(
+            makeResponse({
+              success: true,
+              user: { id: "account-b", username: "b@example.com", fullName: "Account B" },
+            })
+          );
+        }
+      }
+      return Promise.resolve(makeResponse({ success: true, enabled: true, policyVersion: "2027-01-01.v2" }));
+    });
+
+    renderAppAt("/brain");
+    await user.type(await screen.findByPlaceholderText("Email address"), "b@example.com");
+    await user.type(screen.getByPlaceholderText("Password"), "Password123");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => expect(accountBProfileCalls).toBe(2));
+
+    // The tab began the credential flow while anonymous. A sibling tab has
+    // since published C, before B's candidate profile finishes.
+    window.localStorage.setItem("zaki:session-titles", JSON.stringify({ main: "Account C title" }));
+    window.localStorage.setItem("zaki:account-storage-principal:v1", "id:account-c");
+    await act(async () => {
+      resolveCandidateProfile(
+        makeResponse({
+          success: true,
+          user: { id: "account-b", username: "b@example.com", fullName: "Account B" },
+        })
+      );
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByPlaceholderText("Email address")).toBeInTheDocument();
+    expect(useAuthStore.getState().token).toBeNull();
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(window.localStorage.getItem("zaki:session-titles")).toBe(
+      JSON.stringify({ main: "Account C title" })
+    );
+    expect(window.localStorage.getItem("zaki:account-storage-principal:v1")).toBe(
+      "id:account-c"
+    );
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).includes("/api/auth/logout/candidate"))
+    ).toBe(true);
+  });
+
   it("keeps account A's surface and draft when reauthentication returns account A", async () => {
     const user = userEvent.setup();
     const popup = {
