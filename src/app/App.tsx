@@ -24,6 +24,7 @@ import {
   GOOGLE_OAUTH_POPUP_FAILURE_MESSAGE,
   markAuthSessionChanged,
   fetchLegalConsentStatus,
+  requestCandidateSessionLogout,
   requestLogout,
   submitLegalReconsent,
   type CandidateAuthTransaction,
@@ -421,6 +422,7 @@ export default function App() {
           preservesMountedWork: false,
           switchedMountedPrincipal: false,
           resetAccountScopedState: false,
+          rejectedByNewerStorageOwner: false,
         };
       }
 
@@ -436,6 +438,25 @@ export default function App() {
           preservesMountedWork: false,
           switchedMountedPrincipal: false,
           resetAccountScopedState: false,
+          rejectedByNewerStorageOwner: false,
+        };
+      }
+      // An interactive candidate can finish after another tab has replaced the
+      // shared browser owner. It may clear only the account mounted here or
+      // adopt the owner already in storage; any third owner is newer and wins.
+      if (
+        source === "interactive" &&
+        mountedPrincipal &&
+        storagePrincipal &&
+        storagePrincipal !== mountedPrincipal &&
+        storagePrincipal !== nextPrincipal
+      ) {
+        return {
+          committed: false,
+          preservesMountedWork: false,
+          switchedMountedPrincipal: false,
+          resetAccountScopedState: false,
+          rejectedByNewerStorageOwner: true,
         };
       }
       const preservesStoredAccount = storagePrincipal === nextPrincipal;
@@ -477,6 +498,7 @@ export default function App() {
         preservesMountedWork,
         switchedMountedPrincipal: switchesMountedPrincipal,
         resetAccountScopedState,
+        rejectedByNewerStorageOwner: false,
       };
     },
     [resetAccountScope]
@@ -868,6 +890,11 @@ export default function App() {
         source: "interactive",
       });
       if (!commit.committed) {
+        if (commit.rejectedByNewerStorageOwner && session.candidateAuthTransaction) {
+          // This bearer is bound to B's candidate session and deliberately
+          // omits the browser refresh cookie, so it cannot revoke C's session.
+          void requestCandidateSessionLogout(session.token);
+        }
         failClosedSession({ preserveSharedLocalStorage: true });
         return;
       }

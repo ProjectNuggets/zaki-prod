@@ -1073,6 +1073,119 @@ describe("App route hydration", () => {
     ).toBe(false);
   });
 
+  it("rejects a verified stale candidate account B after account C claims shared storage", async () => {
+    const user = userEvent.setup();
+    const popup = {
+      close: jest.fn(),
+      focus: jest.fn(),
+    } as unknown as Window;
+    jest.spyOn(window, "open").mockReturnValue(popup);
+    useAuthStore.setState({
+      token: "expired-a-token",
+      user: { id: "account-a", username: "a@example.com" },
+      isHydrating: false,
+      isLoading: false,
+    });
+    window.sessionStorage.setItem("zaki:draft:main", "Account A draft");
+
+    let refreshCalls = 0;
+    let resolveCandidateProfile: (response: Response) => void = () => undefined;
+    const candidateProfile = new Promise<Response>((resolve) => {
+      resolveCandidateProfile = resolve;
+    });
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/auth/refresh")) {
+        refreshCalls += 1;
+        return Promise.resolve(
+          makeResponse({ token: refreshCalls === 1 ? "account-a-token" : "account-b-token" })
+        );
+      }
+      if (url.includes("/api/auth/google/status")) {
+        return Promise.resolve(makeResponse({ success: true, enabled: true }));
+      }
+      if (url.includes("/api/legal/consent-status")) {
+        return Promise.resolve(makeResponse({ success: true, policyVersion: "2027-01-01.v2" }));
+      }
+      if (url.includes("/api/profile")) {
+        const authorization = new Headers(init?.headers).get("Authorization");
+        if (authorization === "Bearer account-b-token") {
+          return candidateProfile;
+        }
+        return Promise.resolve(
+          makeResponse({
+            success: true,
+            user: { id: "account-a", username: "a@example.com", fullName: "Account A" },
+          })
+        );
+      }
+      return Promise.resolve(makeResponse({ success: true }));
+    });
+
+    const rendered = renderAppAt("/brain");
+    rendered.queryClient.setQueryData(["account-a-private"], { title: "Account A query" });
+    expect(await screen.findByText("brain surface")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(window.localStorage.getItem("zaki:account-storage-principal:v1")).toBe(
+        "id:account-a"
+      );
+    });
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent("zaki:auth-required", { cancelable: true }));
+    });
+    await user.click(await screen.findByRole("button", { name: "Continue with Google" }));
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "zaki:google-oauth-popup-complete" },
+          origin: window.location.origin,
+          source: popup,
+        })
+      );
+    });
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(
+          ([input, init]) =>
+            String(input).includes("/api/profile") &&
+            new Headers((init as RequestInit | undefined)?.headers).get("Authorization") ===
+              "Bearer account-b-token"
+        )
+      ).toBe(true);
+    });
+
+    // C's storage write has arrived before its asynchronous StorageEvent. B
+    // must not erase C's persisted work or republish itself as the owner.
+    window.localStorage.setItem("zaki:session-titles", JSON.stringify({ main: "Account C title" }));
+    window.localStorage.setItem("zaki:account-storage-principal:v1", "id:account-c");
+    await act(async () => {
+      resolveCandidateProfile(
+        makeResponse({
+          success: true,
+          user: { id: "account-b", username: "b@example.com", fullName: "Account B" },
+        })
+      );
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByPlaceholderText("Email address")).toBeInTheDocument();
+    expect(useAuthStore.getState().token).toBeNull();
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(rendered.queryClient.getQueryData(["account-a-private"])).toBeUndefined();
+    expect(window.sessionStorage.getItem("zaki:draft:main")).toBeNull();
+    expect(window.localStorage.getItem("zaki:session-titles")).toBe(
+      JSON.stringify({ main: "Account C title" })
+    );
+    expect(window.localStorage.getItem("zaki:account-storage-principal:v1")).toBe(
+      "id:account-c"
+    );
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).includes("/api/auth/logout/candidate"))
+    ).toBe(true);
+  });
+
   it("keeps account A's surface and draft when reauthentication returns account A", async () => {
     const user = userEvent.setup();
     const popup = {
