@@ -1127,6 +1127,14 @@ describe("ZakiDashboard", () => {
         title: "Strategy chat",
         threadId: "anon-123",
         route: "/spaces/zaky/threads/anon-123",
+        turns: [
+          {
+            id: expect.any(String),
+            prompt: "Continue the anonymous strategy chat",
+            reply: "Here is the strategy:\n\n1. step one\n2. step two",
+            status: "succeeded",
+          },
+        ],
       });
     });
 

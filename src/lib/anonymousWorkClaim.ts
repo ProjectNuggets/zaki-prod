@@ -89,6 +89,13 @@ export function findClaimableWork(
  */
 export function isImportableWork(item: AnonymousWorkItem | null): boolean {
   if (!item) return false;
+  const hasImportableTurn = item.turns?.some(
+    (turn) =>
+      (turn.status === "succeeded" || turn.status === "interrupted") &&
+      turn.prompt.trim() &&
+      turn.reply.trim()
+  );
+  if (item.turns?.length) return Boolean(hasImportableTurn);
   return Boolean(item.prompt?.trim() && (item.reply?.trim() || item.replyPreview?.trim()));
 }
 
@@ -102,6 +109,20 @@ export async function claimAnonymousWork(
   { shouldCommit = () => true }: ClaimCommitOptions = {}
 ): Promise<AnonymousWorkClaimResult> {
   try {
+    const turns = (item.turns ?? []).flatMap((turn) =>
+      (turn.status === "succeeded" || turn.status === "interrupted") &&
+      turn.prompt.trim() &&
+      turn.reply.trim()
+        ? [
+            {
+              id: turn.id,
+              prompt: turn.prompt,
+              reply: turn.reply,
+              status: turn.status,
+            },
+          ]
+        : []
+    );
     const { response, data } = await claimAnonymousSpacesWork({
       workId: item.id,
       prompt: item.prompt,
@@ -110,6 +131,7 @@ export async function claimAnonymousWork(
       title: item.title || item.prompt,
       threadId: item.threadId,
       route: item.route,
+      ...(turns.length ? { turns } : {}),
     });
 
     if (!response.ok || !data?.success) {

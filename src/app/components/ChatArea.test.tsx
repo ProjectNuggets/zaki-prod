@@ -61,7 +61,7 @@ import {
   setAgentSessionMode,
 } from "@/lib/api";
 import { PENDING_INTENT_KEY } from "@/lib/pendingIntent";
-import { ANONYMOUS_WORK_LEDGER_KEY } from "@/lib/anonymousWork";
+import { ANONYMOUS_WORK_LEDGER_KEY, upsertAnonymousWorkItem } from "@/lib/anonymousWork";
 import { ANONYMOUS_SPACES_WORKSPACE_ID } from "@/lib/anonymousSpaces";
 import { toast } from "sonner";
 
@@ -2414,6 +2414,216 @@ describe("ChatArea Component", () => {
     expect(ledger.items?.[0]?.route).toContain(
       `/spaces/${ANONYMOUS_SPACES_WORKSPACE_ID}`
     );
+  });
+
+  it("establishes the anonymous thread route before waiting for the first reply chunk", async () => {
+    navState.view = "chat";
+    navState.spaceId = null;
+    navState.threadId = null;
+    authState = { user: null, isLoading: false };
+    let finishStream: (() => void) | null = null;
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (path.endsWith("/thread/new")) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ thread: { slug: "created-thread" } }),
+        };
+      }
+      if (path.includes("/stream-chat")) {
+        return new Promise((resolve) => {
+          finishStream = () =>
+            resolve({
+              ok: true,
+              status: 200,
+              headers: new Headers({ "content-type": "application/json" }),
+              json: async () => ({ type: "textResponse", textResponse: "Done" }),
+            });
+        });
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({}),
+      };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "Route this chat immediately" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    await waitFor(() => {
+      expect(navState.goToThread).toHaveBeenCalledWith(
+        ANONYMOUS_SPACES_WORKSPACE_ID,
+        "created-thread"
+      );
+    });
+    expect(finishStream).not.toBeNull();
+    await act(async () => {
+      finishStream?.();
+    });
+  });
+
+  it("hydrates an anonymous thread transcript from the browser ledger after refresh", async () => {
+    navState.view = "chat";
+    navState.spaceId = ANONYMOUS_SPACES_WORKSPACE_ID;
+    navState.threadId = "saved-thread";
+    authState = { user: null, isLoading: false };
+    const saved = upsertAnonymousWorkItem({
+      productId: "spaces",
+      taskKind: "chat",
+      prompt: "What did we decide?",
+      reply: "We decided to ship the focused launch first.",
+      threadId: "saved-thread",
+      route: `/spaces/${ANONYMOUS_SPACES_WORKSPACE_ID}/threads/saved-thread`,
+      turnId: "saved-turn",
+      status: "succeeded",
+    });
+    upsertAnonymousWorkItem({
+      id: saved!.id,
+      productId: "spaces",
+      taskKind: "chat",
+      prompt: "What remains?",
+      reply: "The release checklist is partially complete.",
+      threadId: "saved-thread",
+      route: `/spaces/${ANONYMOUS_SPACES_WORKSPACE_ID}/threads/saved-thread`,
+      turnId: "interrupted-turn",
+      status: "interrupted",
+    });
+
+    await renderChatAreaAndWaitForEffects();
+
+    expect(await screen.findByText("What did we decide?")).toBeInTheDocument();
+    expect(screen.getByText("We decided to ship the focused launch first.")).toBeInTheDocument();
+    expect(screen.getByText("What remains?")).toBeInTheDocument();
+    expect(screen.getByText("The release checklist is partially complete.")).toBeInTheDocument();
+  });
+
+  it("persists consecutive anonymous sends as distinct turns in the same thread", async () => {
+    navState.view = "chat";
+    navState.spaceId = ANONYMOUS_SPACES_WORKSPACE_ID;
+    navState.threadId = "existing-thread";
+    authState = { user: null, isLoading: false };
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (path.includes("/stream-chat")) {
+        const body = JSON.parse(
+          String((apiRequest as jest.Mock).mock.calls.at(-1)?.[1]?.body || "{}")
+        );
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: async () => ({
+            type: "textResponse",
+            textResponse: body.message === "First prompt" ? "First answer" : "Second answer",
+          }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({}),
+      };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+    const composer = screen.getByRole("combobox");
+    const send = screen.getByRole("button", { name: "input.sendAria" });
+    fireEvent.change(composer, { target: { value: "First prompt" } });
+    fireEvent.click(send);
+    await screen.findByText("First answer");
+
+    fireEvent.change(composer, { target: { value: "Second prompt" } });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+    await screen.findByText("Second answer");
+
+    const ledger = JSON.parse(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY) || "{}");
+    expect(ledger.items?.[0]?.turns).toEqual([
+      expect.objectContaining({ prompt: "First prompt", reply: "First answer" }),
+      expect.objectContaining({ prompt: "Second prompt", reply: "Second answer" }),
+    ]);
+  });
+
+  it("keeps a streamed anonymous partial reply when the visitor presses Stop", async () => {
+    navState.view = "chat";
+    navState.spaceId = ANONYMOUS_SPACES_WORKSPACE_ID;
+    navState.threadId = "stopped-thread";
+    authState = { user: null, isLoading: false };
+    const encoder = new TextEncoder();
+    (apiRequest as jest.Mock).mockImplementation(
+      async (path: string, options?: { signal?: AbortSignal }) => {
+        if (path.includes("/stream-chat")) {
+          return {
+            ok: true,
+            status: 200,
+            headers: new Headers({ "content-type": "text/event-stream" }),
+            body: {
+              getReader() {
+                let readCount = 0;
+                return {
+                  read() {
+                    readCount += 1;
+                    if (readCount === 1) {
+                      return Promise.resolve({
+                        done: false,
+                        value: encoder.encode(
+                          'data: {"type":"textResponseChunk","textResponse":"Partial answer"}\n\n'
+                        ),
+                      });
+                    }
+                    return new Promise((_resolve, reject) => {
+                      options?.signal?.addEventListener(
+                        "abort",
+                        () => reject(new DOMException("Stopped", "AbortError")),
+                        { once: true }
+                      );
+                    });
+                  },
+                  cancel: jest.fn(),
+                };
+              },
+            },
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({}),
+        };
+      }
+    );
+
+    await renderChatAreaAndWaitForEffects();
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "Start a reply I can stop" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+    const stop = await screen.findByRole("button", { name: "input.stopAria" });
+    await waitFor(() => {
+      const ledger = JSON.parse(
+        window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY) || "{}"
+      );
+      expect(ledger.items?.[0]?.turns?.[0]?.reply).toBe("Partial answer");
+    });
+    fireEvent.click(stop);
+
+    await waitFor(() => {
+      const ledger = JSON.parse(
+        window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY) || "{}"
+      );
+      expect(ledger.items?.[0]?.turns?.[0]).toMatchObject({
+        prompt: "Start a reply I can stop",
+        reply: "Partial answer",
+        status: "interrupted",
+      });
+    });
   });
 
   it("waits for auth hydration before auto-provisioning the ZAKI bot route", async () => {

@@ -82,7 +82,10 @@ import {
   stripThreadDisplayName,
 } from "@/lib/threadTitles";
 import { ANONYMOUS_SPACES_WORKSPACE_ID, createAnonymousThreadId } from "@/lib/anonymousSpaces";
-import { upsertAnonymousWorkItem } from "@/lib/anonymousWork";
+import {
+  recoverAnonymousThreadTurnsAfterReload,
+  upsertAnonymousWorkItem,
+} from "@/lib/anonymousWork";
 import { clearPendingIntent, readPendingIntent, writePendingIntent } from "@/lib/pendingIntent";
 import { openSpacesMemoryViewer, type MemoryViewerTab } from "@/lib/spacesMemory";
 import { trackProductEvent } from "@/lib/productTelemetry";
@@ -3873,7 +3876,10 @@ export function ChatArea() {
       (agentMobileInspectorOpen || hasLiveBrowserFrame) &&
       !agentFocusMode
   );
-  const isAnonymousSpacesActive = !authUserId && !isZakiBotActiveSpace;
+  const isAnonymousSpacesActive =
+    !authUserId &&
+    !isZakiBotActiveSpace &&
+    (!activeWorkspaceSlug || activeWorkspaceSlug === ANONYMOUS_SPACES_WORKSPACE_ID);
   const quotaSurface: UsageQuotaSurface = isZakiBotActiveSpace ? "zaki_bot" : "app_chat";
   const activeSpace =
     spacesList.find((space) => space.id === activeWorkspaceSlug) ??
@@ -4884,6 +4890,37 @@ export function ChatArea() {
     isZakiBotActiveSpace || isAnonymousSpacesActive ? null : activeWorkspaceSlug,
     isZakiBotActiveSpace || isAnonymousSpacesActive ? null : activeThreadId
   );
+
+  useEffect(() => {
+    if (!isAnonymousSpacesActive || !activeThreadId) return;
+    const turns = recoverAnonymousThreadTurnsAfterReload(activeThreadId);
+    if (!turns.length) return;
+    const hydrated = turns.flatMap<Message>((turn) => [
+      {
+        id: `anonymous-${turn.id}-user`,
+        role: "user",
+        content: turn.prompt,
+        createdAt: turn.createdAt,
+      },
+      ...(turn.reply
+        ? [
+            {
+              id: `anonymous-${turn.id}-assistant`,
+              role: "assistant" as const,
+              content: turn.reply,
+              createdAt: turn.updatedAt,
+              error: turn.status === "interrupted" || turn.status === "failed",
+              errorCode: turn.status === "interrupted" ? "aborted" : null,
+            },
+          ]
+        : []),
+    ]);
+    setMessagesByThread((previous) =>
+      previous[activeThreadId]?.length
+        ? previous
+        : { ...previous, [activeThreadId]: hydrated }
+    );
+  }, [activeThreadId, isAnonymousSpacesActive]);
 
   useEffect(() => {
     spacesListRef.current = spacesList;
@@ -6619,6 +6656,7 @@ export function ChatArea() {
     signal,
     disableResponseEnvelope = false,
     turnOptions = null,
+    onContent,
   }: {
     workspaceSlug: string;
     threadSlug: string;
@@ -6627,6 +6665,7 @@ export function ChatArea() {
     signal?: AbortSignal;
     disableResponseEnvelope?: boolean;
     turnOptions?: InputAreaSendOptions["zaki"] | null;
+    onContent?: (content: string) => void;
   }) => {
     const activeSpace = spacesList.find((s) => s.id === workspaceSlug);
     const instructions = activeSpace?.instructions ?? "";
@@ -7305,6 +7344,7 @@ export function ChatArea() {
           assistantId,
           normalized
         );
+        onContent?.(normalized);
         return buildStreamResult(normalized);
       }
       if (result.done) {
@@ -7343,6 +7383,7 @@ export function ChatArea() {
       if (!chunk) return;
       turnContent.received = true;
       accumulated += chunk;
+      onContent?.(accumulated);
       if (renderRaf != null) return;
       renderRaf = window.requestAnimationFrame(() => {
         renderRaf = null;
@@ -7494,6 +7535,7 @@ export function ChatArea() {
     if (finalized && finalized !== accumulated) {
       updateAssistantContent(threadSlug, assistantId, finalized);
     }
+    onContent?.(finalized || accumulated);
     return buildStreamResult(finalized || accumulated);
   }, [
     appendAssistantAgentStep,
@@ -8170,6 +8212,9 @@ export function ChatArea() {
     setPaywallCardData(null);
 
     const isZakiBotTarget = isZakiBotSpaceId(resolvedWorkspaceSlug);
+    const anonymousTurnId = !authUserId
+      ? `anonymous-turn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      : null;
     const anonymousWork =
       !authUserId
         ? upsertAnonymousWorkItem({
@@ -8182,6 +8227,7 @@ export function ChatArea() {
                 ? `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(activeThreadId)}`
                 : `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}`,
             threadId: activeThreadId,
+            turnId: anonymousTurnId ?? undefined,
             meterRemaining: null,
             status: "draft",
           })
@@ -8193,6 +8239,7 @@ export function ChatArea() {
     // For ZAKI bot without an activeThreadId, generate a new thread slug.
     // The nullalis backend creates the session on first message.
     const generatedZakiThread = isZakiBotTarget && !activeThreadId;
+    let createdSpacesThread = false;
     let threadId = activeThreadId || (isZakiBotTarget ? `thread-${Date.now()}` : null);
     if (!threadId) {
       try {
@@ -8215,6 +8262,7 @@ export function ChatArea() {
           thread?: { slug?: string; id?: string; name?: string; label?: string };
         };
         threadId = data.thread?.slug ?? data.thread?.id ?? `thread-${Date.now()}`;
+        createdSpacesThread = true;
         const threadName = stripThreadDisplayName(data.thread?.name ?? data.thread?.label);
         const label = isDefaultThreadLabel(threadName)
           ? DEFAULT_THREAD_LABEL
@@ -8231,6 +8279,12 @@ export function ChatArea() {
     }
 
     if (!threadId) return false;
+    if (createdSpacesThread && !isZakiBotTarget) {
+      goToThread(resolvedWorkspaceSlug, threadId);
+      navigate(
+        `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`
+      );
+    }
     if (anonymousWork && !isZakiBotTarget) {
       upsertAnonymousWorkItem({
         id: anonymousWork.id,
@@ -8239,6 +8293,7 @@ export function ChatArea() {
         prompt: trimmed,
         route: `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
         threadId,
+        turnId: anonymousTurnId ?? undefined,
         meterRemaining: null,
         status: "draft",
       });
@@ -8427,6 +8482,28 @@ export function ChatArea() {
     const sendText = attachmentMarkers
       ? `${attachmentMarkers}\n\n${trimmed}`
       : trimmed;
+    let anonymousPartialReply = "";
+    let lastAnonymousPersistAt = 0;
+    const persistAnonymousPartial = (content: string) => {
+      anonymousPartialReply = content;
+      if (!anonymousWork || isZakiBotTarget || !anonymousTurnId) return;
+      const now = Date.now();
+      if (now - lastAnonymousPersistAt < 250) return;
+      lastAnonymousPersistAt = now;
+      upsertAnonymousWorkItem({
+        id: anonymousWork.id,
+        productId: "spaces",
+        taskKind: "chat",
+        prompt: trimmed,
+        replyPreview: content,
+        reply: content,
+        route: `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
+        threadId,
+        turnId: anonymousTurnId,
+        meterRemaining: null,
+        status: "streaming",
+      });
+    };
 
     try {
       // P1-12: bounded auto-reconnect/replay of the SAME turn when the BFF
@@ -8447,6 +8524,7 @@ export function ChatArea() {
             assistantId: assistantMessageId,
             signal: streamController.signal,
             turnOptions: isZakiBotTarget ? turnOptions?.zaki ?? null : null,
+            onContent: !authUserId && !isZakiBotTarget ? persistAnonymousPartial : undefined,
           });
           break;
         } catch (streamError) {
@@ -8529,6 +8607,7 @@ export function ChatArea() {
             ? "/agent"
             : `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
           threadId,
+          turnId: anonymousTurnId ?? undefined,
           meterRemaining: null,
           status: "succeeded",
         });
@@ -8544,12 +8623,18 @@ export function ChatArea() {
           productId,
           taskKind: isZakiBotTarget ? "plan" : "chat",
           prompt: trimmed,
+          replyPreview: anonymousPartialReply,
+          reply: anonymousPartialReply,
           route: isZakiBotTarget
             ? "/agent"
             : `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
           threadId,
+          turnId: anonymousTurnId ?? undefined,
           meterRemaining: null,
-          status: "failed",
+          status:
+            isAbortError(error) || anonymousPartialReply.trim()
+              ? "interrupted"
+              : "failed",
         });
       }
       if (isAbortError(error)) {
@@ -9437,7 +9522,7 @@ export function ChatArea() {
 
   // Load thread history from React Query
   useEffect(() => {
-    if (isZakiBotActiveSpace) return;
+    if (isZakiBotActiveSpace || isAnonymousSpacesActive) return;
     if (!activeThreadId || !activeWorkspaceSlug) return;
     if (!historyData || historyLoadedRef.current[activeThreadId]) return;
     if (messagesByThread[activeThreadId]?.length) {
@@ -9462,6 +9547,7 @@ export function ChatArea() {
     activeThreadId,
     activeWorkspaceSlug,
     historyData,
+    isAnonymousSpacesActive,
     isZakiBotActiveSpace,
     messagesByThread,
   ]);
