@@ -178,6 +178,23 @@ describe("BrainPage", () => {
     );
   });
 
+  it("keeps a direct website Brain command visible for an empty corpus", () => {
+    mockGraph = {
+      data: { nodes: [], edges: [], total_nodes_in_corpus: 0 },
+      isLoading: false,
+      isError: false,
+    };
+
+    renderWebsiteCommandPage(
+      "/brain?source=website_home_command&intent=memory&prompt=Remember%20this%20first%20memory",
+    );
+
+    expect(screen.getByTestId("brain-empty-state")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: /preserved work/i })).toHaveTextContent(
+      "Remember this first memory",
+    );
+  });
+
   it.each([
     ["English", en],
     ["Arabic", ar],

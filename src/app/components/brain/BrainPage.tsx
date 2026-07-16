@@ -248,10 +248,7 @@ export function BrainPage() {
     ? 0
     : initialGraphQuery.data?.total_nodes_in_corpus ?? 0;
   const semanticDegraded = health === "degraded";
-
-  if (!brainUnavailable && totalNodes === 0) {
-    return <BrainEmptyState onMigrate={() => navigate("/")} />;
-  }
+  const brainEmpty = !brainUnavailable && totalNodes === 0;
 
   // Memory key → node id. The galaxy focuses by node id, but the time scrubber
   // (and timeline) hand us memory keys. Built from the page's graph fetch.
@@ -391,19 +388,22 @@ export function BrainPage() {
 
         {brainUnavailable ? (
           <BrainUnavailableState />
-        ) : null}
-
-        {!brainUnavailable && semanticDegraded && !degradedDismissed && (
-          <div className="zaki-brain-v2__banner">
-            <BrainSemanticDegradedBanner onDismiss={() => setDegradedDismissed(true)} />
-          </div>
+        ) : brainEmpty ? (
+          <BrainEmptyState onMigrate={() => navigate("/")} />
+        ) : (
+          <>
+            {semanticDegraded && !degradedDismissed && (
+              <div className="zaki-brain-v2__banner">
+                <BrainSemanticDegradedBanner onDismiss={() => setDegradedDismissed(true)} />
+              </div>
+            )}
+            <BrainInsightsStrip userId={userId} total={totalNodes} />
+          </>
         )}
-
-        {!brainUnavailable ? <BrainInsightsStrip userId={userId} total={totalNodes} /> : null}
 
       </div>
 
-      {brainUnavailable ? null : (
+      {brainUnavailable || brainEmpty ? null : (
         <>
         {/*
           V1.11 (2026-05-07) — Graph row goes wide. Pre-V1.11 the graph
