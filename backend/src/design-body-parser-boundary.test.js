@@ -42,4 +42,21 @@ describe("Design body parser boundary", () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ name: "Legacy direct project" });
   });
+
+  test("keeps Agent, Chat, and Billing request bodies on the global path while the controller is disabled", async () => {
+    const app = express();
+    app.use(bypassDesignOwnedBodyParser(
+      express.json({ limit: "10mb" }),
+      { controllerEnabled: false },
+    ));
+    for (const path of ["/api/agent", "/api/chat", "/api/billing"]) {
+      app.post(path, (req, res) => res.json(req.body));
+    }
+
+    for (const path of ["/api/agent", "/api/chat", "/api/billing"]) {
+      const response = await request(app).post(path).send({ path });
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ path });
+    }
+  });
 });
