@@ -312,6 +312,7 @@ import { buildBackendHealthStatus, buildBackendReadyStatus } from "./health-read
 import { prepareAndApplySecret } from "./nullalis-secrets.js";
 import {
   buildAgentRuntimeEntitlementFields,
+  buildEntitlementFields,
 } from "./nullalis-entitlement.js";
 import {
   APP_CHAT_SURFACE,
