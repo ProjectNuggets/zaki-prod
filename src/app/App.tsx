@@ -954,25 +954,142 @@ export default function App() {
     interactiveStoragePrincipalRef.current = readAccountStoragePrincipal();
   }, []);
 
+  const renderStorageRecoveryDialog = () => {
+    if (!storageRecovery) return null;
+    return (
+      <AlertDialogPrimitive.Root open>
+        <AlertDialogPrimitive.Portal>
+          <AlertDialogPrimitive.Overlay className="fixed inset-0 z-[110] bg-black/60" />
+          <AlertDialogPrimitive.Content
+            asChild
+            onOpenAutoFocus={(event) => {
+              const activeElement = document.activeElement;
+              storageRecoveryReturnFocusRef.current =
+                activeElement instanceof HTMLElement && activeElement !== document.body
+                  ? activeElement
+                  : null;
+              event.preventDefault();
+              storageRecoveryActionRef.current?.focus();
+            }}
+            onCloseAutoFocus={(event) => {
+              const returnFocus = storageRecoveryReturnFocusRef.current;
+              storageRecoveryReturnFocusRef.current = null;
+              if (returnFocus?.isConnected) {
+                event.preventDefault();
+                returnFocus.focus();
+              }
+            }}
+          >
+            <section className="fixed left-1/2 top-1/2 z-[110] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 border border-[var(--v2-accent-hairline)] bg-[var(--v2-bg)] p-4 shadow-2xl">
+              <p className="font-mono-ui text-[10px] uppercase tracking-[0.12em] text-[var(--v2-accent-text)]">
+                {t("app.recovery.eyebrow")}
+              </p>
+              <AlertDialogPrimitive.Title asChild>
+                <h2 className="mt-2 font-mono-ui text-lg text-[var(--v2-ink-1)]">
+                  {t("app.recovery.title")}
+                </h2>
+              </AlertDialogPrimitive.Title>
+              <AlertDialogPrimitive.Description asChild>
+                <p className="mt-2 text-sm text-[var(--v2-ink-2)]">
+                  {t("app.recovery.body")}
+                </p>
+              </AlertDialogPrimitive.Description>
+              <textarea
+                ref={storageRecoveryTextRef}
+                className="mt-4 min-h-28 w-full resize-y border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg-sunken)] p-3 font-mono-ui text-xs text-[var(--v2-ink-1)]"
+                readOnly
+                value={storageRecovery.prompt}
+                aria-label={t("app.recovery.workLabel")}
+              />
+              {storageRecoveryError ? (
+                <p className="mt-2 text-xs text-[var(--v2-danger)]" role="alert">
+                  {storageRecoveryError}
+                </p>
+              ) : null}
+              <div className="mt-4 flex flex-wrap justify-end gap-2">
+                {storageRecoveryError ? (
+                  <>
+                    <button
+                      type="button"
+                      className="v2-btn v2-btn--ghost v2-btn--sm"
+                      onClick={() => {
+                        storageRecoveryTextRef.current?.focus();
+                        storageRecoveryTextRef.current?.select();
+                      }}
+                    >
+                      {t("app.recovery.selectWork")}
+                    </button>
+                    <button
+                      ref={storageRecoveryActionRef}
+                      type="button"
+                      className="v2-btn v2-btn--accent v2-btn--sm"
+                      onClick={() => {
+                        setStorageRecovery(null);
+                        setStorageRecoveryError("");
+                        navigate("/spaces");
+                      }}
+                    >
+                      {t("app.recovery.openSpacesManually")}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    ref={storageRecoveryActionRef}
+                    type="button"
+                    className="v2-btn v2-btn--accent v2-btn--sm"
+                    onClick={() => {
+                      const writeText = navigator.clipboard?.writeText;
+                      if (!writeText) {
+                        setStorageRecoveryError(t("app.recovery.copyFailed"));
+                        return;
+                      }
+                      void writeText.call(navigator.clipboard, storageRecovery.prompt)
+                        .then(() => {
+                          setStorageRecovery(null);
+                          setStorageRecoveryError("");
+                          navigate("/spaces");
+                        })
+                        .catch(() => {
+                          setStorageRecoveryError(t("app.recovery.copyFailed"));
+                        });
+                    }}
+                  >
+                    {t("app.recovery.copyAndOpenSpaces")}
+                  </button>
+                )}
+              </div>
+            </section>
+          </AlertDialogPrimitive.Content>
+        </AlertDialogPrimitive.Portal>
+      </AlertDialogPrimitive.Root>
+    );
+  };
+
   if (!token && !isHydrating && (hasExplicitAuthIntent || !isAnonymousAllowedRoute)) {
     return (
-      <LoginScreen
-        onAuthenticated={handleAuthenticated}
-        onAuthenticationStarted={captureInteractiveStoragePrincipal}
-      />
+      <>
+        <LoginScreen
+          onAuthenticated={handleAuthenticated}
+          onAuthenticationStarted={captureInteractiveStoragePrincipal}
+        />
+        {renderStorageRecoveryDialog()}
+      </>
     );
   }
 
   if (isHydrating) {
     return (
-      <div className="zaki-v2-loading" data-v2-stage={appStage}>
-        <div className="flex flex-col items-center gap-4">
-          <div className="zaki-v2-loading__mark" aria-hidden="true" />
-          <div className="zaki-v2-loading__label">
-            {t("app.loadingSession")}
+      <>
+        <div className="zaki-v2-loading" data-v2-stage={appStage}>
+          <div className="flex flex-col items-center gap-4">
+            <div className="zaki-v2-loading__mark" aria-hidden="true" />
+            <div className="zaki-v2-loading__label">
+              {t("app.loadingSession")}
+            </div>
           </div>
         </div>
-      </div>
+        {renderStorageRecoveryDialog()}
+      </>
     );
   }
 
@@ -986,6 +1103,7 @@ export default function App() {
           </ErrorBoundary>
         </main>
         <Toaster />
+        {renderStorageRecoveryDialog()}
       </>
     );
   }
@@ -1038,113 +1156,7 @@ export default function App() {
           onAuthenticationStarted={captureInteractiveStoragePrincipal}
         />
       ) : null}
-      {storageRecovery ? (
-        <AlertDialogPrimitive.Root open>
-          <AlertDialogPrimitive.Portal>
-            <AlertDialogPrimitive.Overlay className="fixed inset-0 z-[110] bg-black/60" />
-            <AlertDialogPrimitive.Content
-              asChild
-              onOpenAutoFocus={(event) => {
-                const activeElement = document.activeElement;
-                storageRecoveryReturnFocusRef.current =
-                  activeElement instanceof HTMLElement && activeElement !== document.body
-                    ? activeElement
-                    : null;
-                event.preventDefault();
-                storageRecoveryActionRef.current?.focus();
-              }}
-              onCloseAutoFocus={(event) => {
-                const returnFocus = storageRecoveryReturnFocusRef.current;
-                storageRecoveryReturnFocusRef.current = null;
-                if (returnFocus?.isConnected) {
-                  event.preventDefault();
-                  returnFocus.focus();
-                }
-              }}
-            >
-              <section className="fixed left-1/2 top-1/2 z-[110] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 border border-[var(--v2-accent-hairline)] bg-[var(--v2-bg)] p-4 shadow-2xl">
-                <p className="font-mono-ui text-[10px] uppercase tracking-[0.12em] text-[var(--v2-accent-text)]">
-                  {t("app.recovery.eyebrow")}
-                </p>
-                <AlertDialogPrimitive.Title asChild>
-                  <h2 className="mt-2 font-mono-ui text-lg text-[var(--v2-ink-1)]">
-                    {t("app.recovery.title")}
-                  </h2>
-                </AlertDialogPrimitive.Title>
-                <AlertDialogPrimitive.Description asChild>
-                  <p className="mt-2 text-sm text-[var(--v2-ink-2)]">
-                    {t("app.recovery.body")}
-                  </p>
-                </AlertDialogPrimitive.Description>
-                <textarea
-                  ref={storageRecoveryTextRef}
-                  className="mt-4 min-h-28 w-full resize-y border border-[var(--v2-hairline-strong)] bg-[var(--v2-bg-sunken)] p-3 font-mono-ui text-xs text-[var(--v2-ink-1)]"
-                  readOnly
-                  value={storageRecovery.prompt}
-                  aria-label={t("app.recovery.workLabel")}
-                />
-                {storageRecoveryError ? (
-                  <p className="mt-2 text-xs text-[var(--v2-danger)]" role="alert">
-                    {storageRecoveryError}
-                  </p>
-                ) : null}
-                <div className="mt-4 flex flex-wrap justify-end gap-2">
-                  {storageRecoveryError ? (
-                    <>
-                      <button
-                        type="button"
-                        className="v2-btn v2-btn--ghost v2-btn--sm"
-                        onClick={() => {
-                          storageRecoveryTextRef.current?.focus();
-                          storageRecoveryTextRef.current?.select();
-                        }}
-                      >
-                        {t("app.recovery.selectWork")}
-                      </button>
-                      <button
-                        ref={storageRecoveryActionRef}
-                        type="button"
-                        className="v2-btn v2-btn--accent v2-btn--sm"
-                        onClick={() => {
-                          setStorageRecovery(null);
-                          setStorageRecoveryError("");
-                          navigate("/spaces");
-                        }}
-                      >
-                        {t("app.recovery.openSpacesManually")}
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      ref={storageRecoveryActionRef}
-                      type="button"
-                      className="v2-btn v2-btn--accent v2-btn--sm"
-                      onClick={() => {
-                        const writeText = navigator.clipboard?.writeText;
-                        if (!writeText) {
-                          setStorageRecoveryError(t("app.recovery.copyFailed"));
-                          return;
-                        }
-                        void writeText.call(navigator.clipboard, storageRecovery.prompt)
-                          .then(() => {
-                            setStorageRecovery(null);
-                            setStorageRecoveryError("");
-                            navigate("/spaces");
-                          })
-                          .catch(() => {
-                            setStorageRecoveryError(t("app.recovery.copyFailed"));
-                          });
-                      }}
-                    >
-                      {t("app.recovery.copyAndOpenSpaces")}
-                    </button>
-                  )}
-                </div>
-              </section>
-            </AlertDialogPrimitive.Content>
-          </AlertDialogPrimitive.Portal>
-        </AlertDialogPrimitive.Root>
-      ) : null}
+      {renderStorageRecoveryDialog()}
       {legalReconsentRequired && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4">
           <div className="zaki-legal-reconsent-v2 w-full max-w-lg p-6">

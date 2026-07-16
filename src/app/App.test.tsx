@@ -1285,6 +1285,26 @@ describe("App route hydration", () => {
     expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toContain("Remember this launch plan");
   });
 
+  it("shows direct Brain command recovery when storage is blocked before gated login", async () => {
+    fetchMock.mockResolvedValue(makeResponse({ error: "refresh_revoked" }, 401));
+    const setItem = Storage.prototype.setItem;
+    jest.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string
+    ) {
+      if (key === PENDING_INTENT_KEY) throw new Error("storage disabled");
+      return setItem.call(this, key, value);
+    });
+
+    renderAppAt("/brain?source=website_home_command&intent=memory&prompt=Recover+this+memory+prompt");
+
+    expect(await screen.findByPlaceholderText("Email address")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("alertdialog", { name: /work could not be saved/i })
+    ).toHaveTextContent("Recover this memory prompt");
+  });
+
   it("keeps account A's surface and draft when reauthentication returns account A", async () => {
     const user = userEvent.setup();
     const popup = {
