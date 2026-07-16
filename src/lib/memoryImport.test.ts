@@ -50,6 +50,42 @@ describe("absorbMemoryImport", () => {
     expect(result.saved).toHaveLength(capture.mock.calls.length);
   });
 
+  it("reports undoable partial state when a later chunk fails after an earlier save", async () => {
+    const importLines = Array.from(
+      { length: 9 },
+      (_, index) => `[2026-07-${String(index + 1).padStart(2, "0")}] - Detail ${index + 1}.`
+    );
+    const capture = jest
+      .fn()
+      .mockResolvedValueOnce({
+        response: { ok: true } as Response,
+        data: {
+          saved: [{
+            id: "saved-before-failure",
+            content: "saved chunk",
+            type: "preference",
+            state: "saved_reversible" as const,
+            undoUntil: "2026-07-14T16:00:00.000Z",
+          }],
+          superseded: [],
+          duplicates: [],
+          skipped: [],
+        },
+      })
+      .mockResolvedValueOnce({ response: { ok: false } as Response, data: null });
+
+    await expect(
+      absorbMemoryImport(importLines.join("\n"), "thread-1", capture as never)
+    ).rejects.toMatchObject({
+      name: "MemoryImportPartialError",
+      partial: {
+        saved: [expect.objectContaining({ id: "saved-before-failure" })],
+        absorbedCount: 1,
+      },
+    });
+    expect(capture).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects an import when the backend absorbed nothing", async () => {
     const capture = jest.fn(async () => ({
       response: { ok: true } as Response,

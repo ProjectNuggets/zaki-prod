@@ -46,6 +46,7 @@ describe("memory undo", () => {
     });
     transactionQueryMock
       .mockResolvedValueOnce({ rowCount: 1 })
+      .mockResolvedValueOnce({ rowCount: 1 })
       .mockResolvedValueOnce({ rowCount: 1 });
 
     const { undoMemory } = await loadAutoSaveModule();
@@ -64,6 +65,11 @@ describe("memory undo", () => {
       2,
       expect.stringContaining("status = 'active'"),
       ["mem-old", "user@example.com"]
+    );
+    expect(transactionQueryMock).toHaveBeenNthCalledWith(
+      3,
+      expect.stringMatching(/UPDATE memory_undo_windows[\s\S]*used_at = NOW\(\)/),
+      ["mem-new", "user@example.com"]
     );
   });
 });

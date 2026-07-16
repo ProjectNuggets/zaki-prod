@@ -159,6 +159,17 @@ export async function undoMemory({ userId, memoryId }) {
         throw new Error("Superseded memory could not be restored");
       }
     }
+
+    const consumed = await client.query(
+      `UPDATE memory_undo_windows
+       SET used_at = NOW()
+       WHERE memory_id = $1 AND user_id = $2 AND used_at IS NULL
+       RETURNING memory_id`,
+      [memoryId, userId]
+    );
+    if (consumed.rowCount === 0) {
+      throw new Error("Undo window could not be consumed");
+    }
     return true;
   });
   if (!undone) return { error: "Memory not found", success: false };

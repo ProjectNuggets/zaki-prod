@@ -13,6 +13,33 @@ export type MemoryImportAbsorption = {
   absorbedCount: number;
 };
 
+export class MemoryImportPartialError extends Error {
+  readonly partial: MemoryImportAbsorption;
+
+  constructor(partial: MemoryImportAbsorption) {
+    super(
+      `Imported ${partial.absorbedCount} ${partial.absorbedCount === 1 ? "memory" : "memories"} before the import stopped. Undo the saved memories before retrying.`
+    );
+    this.name = "MemoryImportPartialError";
+    this.partial = partial;
+  }
+}
+
+function buildMemoryImportAbsorption({
+  saved,
+  superseded,
+  duplicates,
+  skipped,
+}: Omit<MemoryImportAbsorption, "absorbedCount">): MemoryImportAbsorption {
+  return {
+    saved,
+    superseded,
+    duplicates,
+    skipped,
+    absorbedCount: saved.length + duplicates.length,
+  };
+}
+
 export async function settleMemoryUndosNewestFirst<TMemory, TResult>(
   memories: readonly TMemory[],
   undo: (memory: TMemory) => Promise<TResult>
@@ -77,20 +104,29 @@ export async function absorbMemoryImport(
   const skipped: MemoryCaptureResponse["skipped"] = [];
 
   for (const message of chunks) {
-    const { response, data } = await capture({ message, threadId });
-    if (!response.ok || !data) {
-      throw new Error("Memory import failed");
+    try {
+      const { response, data } = await capture({ message, threadId });
+      if (!response.ok || !data) {
+        throw new Error("Memory import failed");
+      }
+      if (Array.isArray(data.saved)) saved.push(...data.saved);
+      if (Array.isArray(data.superseded)) superseded.push(...data.superseded);
+      if (Array.isArray(data.duplicates)) duplicates.push(...data.duplicates);
+      if (Array.isArray(data.skipped)) skipped.push(...data.skipped);
+    } catch (error) {
+      const partial = buildMemoryImportAbsorption({ saved, superseded, duplicates, skipped });
+      if (partial.absorbedCount > 0) {
+        throw new MemoryImportPartialError(partial);
+      }
+      throw error instanceof Error ? error : new Error("Memory import failed");
     }
-    if (Array.isArray(data.saved)) saved.push(...data.saved);
-    if (Array.isArray(data.superseded)) superseded.push(...data.superseded);
-    if (Array.isArray(data.duplicates)) duplicates.push(...data.duplicates);
-    if (Array.isArray(data.skipped)) skipped.push(...data.skipped);
   }
-  const absorbedCount = saved.length + duplicates.length;
 
-  if (absorbedCount === 0) {
+  const absorption = buildMemoryImportAbsorption({ saved, superseded, duplicates, skipped });
+
+  if (absorption.absorbedCount === 0) {
     throw new Error("No memories were absorbed");
   }
 
-  return { saved, superseded, duplicates, skipped, absorbedCount };
+  return absorption;
 }

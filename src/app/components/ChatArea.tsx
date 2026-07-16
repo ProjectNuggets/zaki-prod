@@ -89,7 +89,11 @@ import {
   recoverAnonymousThreadTurnsAfterReload,
   upsertAnonymousWorkItem,
 } from "@/lib/anonymousWork";
-import { absorbMemoryImport, settleMemoryUndosNewestFirst } from "@/lib/memoryImport";
+import {
+  absorbMemoryImport,
+  MemoryImportPartialError,
+  settleMemoryUndosNewestFirst,
+} from "@/lib/memoryImport";
 import { clearPendingIntent, readPendingIntent, writePendingIntent } from "@/lib/pendingIntent";
 import { openSpacesMemoryViewer, type MemoryViewerTab } from "@/lib/spacesMemory";
 import { trackProductEvent } from "@/lib/productTelemetry";
@@ -10882,10 +10886,16 @@ export function ChatArea() {
         isOpen={memoryImportOpen}
         onClose={() => setMemoryImportOpen(false)}
         onImport={async (dump) => {
-          const { saved, superseded, duplicates } = await absorbMemoryImport(
-            dump,
-            activeThreadId
-          );
+          let partialError: MemoryImportPartialError | null = null;
+          let absorption;
+          try {
+            absorption = await absorbMemoryImport(dump, activeThreadId);
+          } catch (error) {
+            if (!(error instanceof MemoryImportPartialError)) throw error;
+            partialError = error;
+            absorption = error.partial;
+          }
+          const { saved, superseded, duplicates } = absorption;
           setMemoryError(null);
           setMemoryToastUndoError(null);
           setMemoryToastPartialUndoCount(0);
@@ -10919,6 +10929,7 @@ export function ChatArea() {
               });
             }
           }
+          if (partialError) throw partialError;
         }}
       />
 

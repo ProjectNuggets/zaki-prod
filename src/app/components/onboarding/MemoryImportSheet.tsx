@@ -91,11 +91,13 @@ export function MemoryImportSheet({ isOpen, onClose, onImport }: Props) {
     try {
       await onImport(trimmed);
       onClose();
-    } catch {
+    } catch (error) {
       toast.error(
-        t("memoryImport.importError", {
-          defaultValue: "Couldn't absorb that import. Check the response and try again.",
-        }),
+        error instanceof Error && error.message
+          ? error.message
+          : t("memoryImport.importError", {
+              defaultValue: "Couldn't absorb that import. Check the response and try again.",
+            }),
       );
     } finally {
       setSubmitting(false);
