@@ -1841,6 +1841,14 @@
   "brain": {
     "title": "Your Brain",
     "subtitle": "Everything ZAKI remembers",
+    "status": {
+      "cachedData": "Using cached memory"
+    },
+    "recovery": {
+      "ariaLabel": "Preserved work",
+      "title": "Your work is still here",
+      "continueInSpaces": "Continue in Spaces"
+    },
     "tabs": {
       "timeline": "Timeline",
       "graph": "Graph"

@@ -1841,6 +1841,14 @@
   "brain": {
     "title": "ذاكرتك",
     "subtitle": "كل ما يتذكره ZAKI",
+    "status": {
+      "cachedData": "يتم استخدام الذاكرة المخزنة مؤقتًا"
+    },
+    "recovery": {
+      "ariaLabel": "العمل المحفوظ",
+      "title": "لا يزال عملك هنا",
+      "continueInSpaces": "المتابعة في المساحات"
+    },
     "tabs": {
       "timeline": "الجدول الزمني",
       "graph": "الرسم البياني"

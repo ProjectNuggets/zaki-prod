@@ -2,6 +2,8 @@ import "@testing-library/jest-dom";
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import ar from "@/i18n/locales/ar.json";
+import en from "@/i18n/locales/en.json";
 
 // ── i18n: return defaultValue (with {{var}} interpolation) or the key ──
 jest.mock("react-i18next", () => ({
@@ -136,6 +138,16 @@ describe("BrainPage", () => {
       prompt: "Remember the launch constraints from this note",
       replayMode: "draft",
     });
+  });
+
+  it.each([
+    ["English", en],
+    ["Arabic", ar],
+  ])("provides cached-memory and recovery copy in %s", (_localeName, locale) => {
+    expect(locale.brain.status.cachedData).toBeTruthy();
+    expect(locale.brain.recovery.ariaLabel).toBeTruthy();
+    expect(locale.brain.recovery.title).toBeTruthy();
+    expect(locale.brain.recovery.continueInSpaces).toBeTruthy();
   });
 
   it("shows the skeleton while the initial graph probe is loading", () => {
