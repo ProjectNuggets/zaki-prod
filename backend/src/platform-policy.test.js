@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@jest/globals";
 import {
+  DATA_SCOPE_IDS,
   MEMORY_SCOPE_IDS,
   PLATFORM_PLAN_IDS,
   PLATFORM_PLAN_LADDER,
@@ -109,6 +110,71 @@ describe("platform policy", () => {
     expect(catalog.find((product) => product.id === ZAKI_PRODUCT_IDS.CLI)).toEqual(
       expect.objectContaining({ lifecycle: "future" })
     );
+  });
+
+  it("registers Minutes as current but default-disabled across platform contracts", () => {
+    const minutesCatalogEntry = buildPlatformProductCatalog({ includeFuture: false }).find(
+      (product) => product.id === ZAKI_PRODUCT_IDS.MINUTES
+    );
+    expect(minutesCatalogEntry).toEqual(
+      expect.objectContaining({
+        registryId: "minutes",
+        lifecycle: "current",
+        defaultState: PRODUCT_OPERATIONAL_STATES.DISABLED,
+        route: "/minutes",
+        quotaPolicyId: "minutes_meetings",
+        dataScope: DATA_SCOPE_IDS.MINUTES_STORE,
+        memoryScope: MEMORY_SCOPE_IDS.PERSONAL_BRAIN,
+      })
+    );
+
+    const defaultRegistryEntry = buildPlatformProductRegistry({ env: {} }).products.find(
+      (product) => product.productId === "minutes"
+    );
+    expect(defaultRegistryEntry).toEqual(
+      expect.objectContaining({
+        state: PRODUCT_OPERATIONAL_STATES.DISABLED,
+        lifecycle: "current",
+        route: "/minutes",
+        quotaPolicyId: "minutes_meetings",
+        dataScope: DATA_SCOPE_IDS.MINUTES_STORE,
+        memoryScope: MEMORY_SCOPE_IDS.PERSONAL_BRAIN,
+      })
+    );
+
+    const enabledRegistryEntry = buildPlatformProductRegistry({
+      env: { ZAKI_PRODUCT_STATE_MINUTES: PRODUCT_OPERATIONAL_STATES.ENABLED },
+    }).products.find((product) => product.productId === "minutes");
+    expect(enabledRegistryEntry?.state).toBe(PRODUCT_OPERATIONAL_STATES.ENABLED);
+
+    const planPolicy = buildPlatformPlanPolicy({ env: {} });
+    expect(planPolicy.plans.free.products[ZAKI_PRODUCT_IDS.MINUTES]).toEqual(
+      expect.objectContaining({
+        available: true,
+        lifecycle: "current",
+        quotaPolicyId: "minutes_meetings",
+        dataScope: DATA_SCOPE_IDS.MINUTES_STORE,
+        memoryScope: MEMORY_SCOPE_IDS.PERSONAL_BRAIN,
+      })
+    );
+
+    const entitlement = buildPlatformEntitlementSummary({ env: {} });
+    expect(entitlement.products[ZAKI_PRODUCT_IDS.MINUTES]).toEqual(
+      expect.objectContaining({
+        available: true,
+        lifecycle: "current",
+        quotaPolicyId: "minutes_meetings",
+        dataScope: DATA_SCOPE_IDS.MINUTES_STORE,
+        memoryScope: MEMORY_SCOPE_IDS.PERSONAL_BRAIN,
+      })
+    );
+
+    const defaultMeter = buildPlatformMeterPolicy({ env: {} });
+    expect(defaultMeter.products[ZAKI_PRODUCT_IDS.MINUTES].weight).toBe(1);
+    const configuredMeter = buildPlatformMeterPolicy({
+      env: { ZAKI_METER_PRODUCT_WEIGHT_MINUTES: "1.25" },
+    });
+    expect(configuredMeter.products[ZAKI_PRODUCT_IDS.MINUTES].weight).toBe(1.25);
   });
 
   it("builds the central operational product registry", () => {

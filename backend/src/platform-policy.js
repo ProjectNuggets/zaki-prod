@@ -24,10 +24,15 @@ export const ZAKI_PRODUCT_IDS = Object.freeze({
   LEARN: "learn",
   HIRE: "hire",
   DESIGN: "design",
+  MINUTES: "minutes",
   BRAIN: "brain",
   CLI: "cli",
   LOCAL_APP: "local_app",
   EXTENSIONS: "extensions",
+});
+
+export const DATA_SCOPE_IDS = Object.freeze({
+  MINUTES_STORE: "minutes_store",
 });
 
 export const MEMORY_SCOPE_IDS = Object.freeze({
@@ -87,6 +92,7 @@ const CURRENT_PRODUCTS = Object.freeze([
   ZAKI_PRODUCT_IDS.AGENT,
   ZAKI_PRODUCT_IDS.LEARN,
   ZAKI_PRODUCT_IDS.HIRE,
+  ZAKI_PRODUCT_IDS.MINUTES,
   ZAKI_PRODUCT_IDS.BRAIN,
 ]);
 
@@ -159,6 +165,22 @@ const PRODUCT_DEFINITIONS = Object.freeze({
     quotaPolicyId: "design_studio",
     memoryScope: MEMORY_SCOPE_IDS.DESIGN_MEMORY,
   }),
+  [ZAKI_PRODUCT_IDS.MINUTES]: Object.freeze({
+    id: ZAKI_PRODUCT_IDS.MINUTES,
+    registryId: "minutes",
+    label: "ZAKI Minutes",
+    productKind: "product",
+    lifecycle: "current",
+    defaultState: PRODUCT_OPERATIONAL_STATES.DISABLED,
+    visibleInSettings: true,
+    route: "/minutes",
+    entryPoint: "Meetings",
+    quotaPolicyId: "minutes_meetings",
+    // Raw meeting/audio/transcript/summary data stays in the spoke. Only
+    // agent-governed distillates enter the personal Brain memory scope.
+    dataScope: DATA_SCOPE_IDS.MINUTES_STORE,
+    memoryScope: MEMORY_SCOPE_IDS.PERSONAL_BRAIN,
+  }),
   [ZAKI_PRODUCT_IDS.BRAIN]: Object.freeze({
     id: ZAKI_PRODUCT_IDS.BRAIN,
     registryId: "brain",
@@ -219,6 +241,7 @@ const PRODUCT_STATE_ENV_KEYS = Object.freeze({
   [ZAKI_PRODUCT_IDS.LEARN]: "ZAKI_PRODUCT_STATE_LEARNING",
   [ZAKI_PRODUCT_IDS.HIRE]: "ZAKI_PRODUCT_STATE_HIRE",
   [ZAKI_PRODUCT_IDS.DESIGN]: "ZAKI_PRODUCT_STATE_DESIGN",
+  [ZAKI_PRODUCT_IDS.MINUTES]: "ZAKI_PRODUCT_STATE_MINUTES",
   [ZAKI_PRODUCT_IDS.BRAIN]: "ZAKI_PRODUCT_STATE_BRAIN",
   [ZAKI_PRODUCT_IDS.CLI]: "ZAKI_PRODUCT_STATE_CLI",
   [ZAKI_PRODUCT_IDS.LOCAL_APP]: "ZAKI_PRODUCT_STATE_LOCAL_APP",
@@ -231,6 +254,7 @@ const DEFAULT_PRODUCT_METER_WEIGHTS = Object.freeze({
   [ZAKI_PRODUCT_IDS.LEARN]: 1,
   [ZAKI_PRODUCT_IDS.HIRE]: 1,
   [ZAKI_PRODUCT_IDS.DESIGN]: 1.5,
+  [ZAKI_PRODUCT_IDS.MINUTES]: 1,
   [ZAKI_PRODUCT_IDS.BRAIN]: 0.05,
   [ZAKI_PRODUCT_IDS.CLI]: 0.75,
   [ZAKI_PRODUCT_IDS.LOCAL_APP]: 0.75,
@@ -361,6 +385,7 @@ export function buildPlatformProductRegistry({
         route: product.route || null,
         entryPoint: product.entryPoint || product.label,
         quotaPolicyId: product.quotaPolicyId,
+        ...(product.dataScope ? { dataScope: product.dataScope } : {}),
         memoryScope: product.memoryScope,
       };
     })
@@ -383,6 +408,7 @@ function buildProductAccessMap(products) {
         available: product.lifecycle === "current",
         lifecycle: product.lifecycle,
         quotaPolicyId: product.quotaPolicyId,
+        ...(product.dataScope ? { dataScope: product.dataScope } : {}),
         memoryScope: product.memoryScope,
       },
     ])
@@ -558,6 +584,7 @@ export function buildPlatformEntitlementSummary({
           available: product.lifecycle === "current",
           lifecycle: product.lifecycle,
           quotaPolicyId: product.quotaPolicyId,
+          ...(product.dataScope ? { dataScope: product.dataScope } : {}),
           memoryScope: product.memoryScope,
         },
       ])
