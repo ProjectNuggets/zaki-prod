@@ -495,10 +495,10 @@ export function fieldNoteForPath(pathname: string) {
 }
 
 export const proofPoints = [
-  { value: "90 days", label: "assessment to measurable workflow evidence" },
+  { value: "90 days", label: "reference assessment-to-evidence window" },
   { value: "EUR 6k/week", label: "reference productivity benchmark" },
-  { value: "3 departments", label: "using managed ZAKI agents" },
-  { value: "private boundary", label: "customer data kept inside perimeter" },
+  { value: "3 departments", label: "scope of the anonymized reference" },
+  { value: "private boundary", label: "reference data kept inside customer perimeter" },
 ];
 
 export const commandRoomLanes = [
