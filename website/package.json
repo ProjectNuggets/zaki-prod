@@ -1,42 +1,15 @@
 {
   "name": "@zaki/website",
   "private": true,
-  "version": "0.2.0",
+  "version": "5.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 4173",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "build": "vite build && npm run build:ssr && npm run prerender && node scripts/validate-prerender.mjs",
-    "build:dev": "vite build",
-    "build:ssr": "vite build --ssr src/entry-server.tsx --outDir dist-ssr",
-    "prerender": "node scripts/prerender.mjs",
-    "preview": "vite preview --host 0.0.0.0 --port 4173"
+    "dev": "node scripts/serve-launch-draft.mjs",
+    "test": "node scripts/check-launch-draft.mjs launch-draft",
+    "typecheck": "node --check scripts/build-launch-draft.mjs && node --check scripts/check-launch-draft.mjs && node --check scripts/serve-launch-draft.mjs && node --check launch-draft/mascot.js && node --check launch-draft/game.js && node --check launch-draft/zee-run.js && node --check launch-draft/site/product.js && npm test",
+    "build": "node scripts/build-launch-draft.mjs && node scripts/check-launch-draft.mjs dist"
   },
-  "dependencies": {
-    "@fontsource/dm-mono": "^5.2.7",
-    "@fontsource/ibm-plex-sans-arabic": "^5.2.9",
-    "@fontsource/plus-jakarta-sans": "^5.2.8",
-    "@radix-ui/react-accordion": "^1.2.12",
-    "@radix-ui/react-separator": "^1.1.8",
-    "@radix-ui/react-slot": "1.2.4",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "gsap": "3.13.0",
-    "lucide-react": "0.577.0",
-    "react": "^18.3.1",
-    "react-cookie-consent": "^9.0.0",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "7.13.1",
-    "tailwind-merge": "^3.5.0",
-    "typescript": "^5.9.3"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "4.7.0",
-    "autoprefixer": "^10.4.21",
-    "postcss": "^8.5.6",
-    "tailwindcss": "^3.4.17",
-    "vite": "6.4.1"
+  "engines": {
+    "node": ">=20"
   }
 }
