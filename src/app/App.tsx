@@ -798,7 +798,6 @@ export default function App() {
               navigate(googleOAuthTransition.returnTo, { replace: true });
             }
           }
-          }
         }
       } catch {
         if (
