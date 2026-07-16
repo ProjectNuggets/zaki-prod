@@ -270,20 +270,6 @@ jest.mock("@/lib/api", () => ({
     response: { ok: true },
     data: { status: "revoked", device_id: "device_1" },
   })),
-  fetchAgentIntegrations: jest.fn(async () => ({
-    response: { ok: true },
-    data: {
-      integrations: [
-        {
-          kind: "composio",
-          label: "Composio",
-          configured: true,
-          user_manageable: false,
-          managed_by: "operator",
-        },
-      ],
-    },
-  })),
   fetchAgentMemoryGovernance: jest.fn(async () => ({
     response: { ok: true },
     data: { total: 12, pii: { phone: 1, email: 1, all: 2 } },
@@ -1150,7 +1136,7 @@ describe("SettingsPage", () => {
 
     expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeInTheDocument();
     expect(screen.getByTestId("settings-account")).toBeInTheDocument();
-    expect(screen.getByTestId("settings-connections")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-connections")).not.toBeInTheDocument();
     expect(screen.getByTestId("settings-channels")).toBeInTheDocument();
     expect(screen.getByTestId("settings-secrets")).toBeInTheDocument();
     expect(screen.queryByTestId("settings-providers")).not.toBeInTheDocument();
@@ -1179,7 +1165,6 @@ describe("SettingsPage", () => {
       "settings-account",
       "settings-billing",
       "settings-agent",
-      "settings-connections",
       "settings-channels",
       "settings-secrets",
       "settings-devices",
@@ -1217,19 +1202,9 @@ describe("SettingsPage", () => {
     expect(channelsSection.getAllByText("Discord")).toHaveLength(1);
     expect(channelsSection.queryByText("Email")).not.toBeInTheDocument();
     expect(channelsSection.getAllByText("WhatsApp")).toHaveLength(1);
-    const connectionsSection = within(screen.getByTestId("settings-connections"));
-    expect(connectionsSection.getByText("Gmail & Google Drive")).toBeInTheDocument();
-    expect(connectionsSection.queryByRole("button", { name: "Connect Gmail" })).not.toBeInTheDocument();
-    expect(connectionsSection.queryByText("OAuth setup blocked")).not.toBeInTheDocument();
-    expect(connectionsSection.getByText("Composio available")).toBeInTheDocument();
-    expect(connectionsSection.getByText("Managed in chat")).toBeInTheDocument();
-    expect(
-      connectionsSection.getByText(/ZAKI gives you a secure Composio OAuth link in the conversation/i)
-    ).toBeInTheDocument();
-    expect(connectionsSection.getByText(/never asks for an IMAP or SMTP password/i)).toBeInTheDocument();
-    expect(
-      connectionsSection.getByText(/requires approval before private data is sent elsewhere/i)
-    ).toBeInTheDocument();
+    expect(screen.queryByText("Gmail & Google Drive")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Composio/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Managed in chat")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/IMAP password/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/SMTP password/i)).not.toBeInTheDocument();
     expect(within(screen.getByTestId("settings-memory-data")).getByText("Chat memory capture")).toBeInTheDocument();
@@ -1328,7 +1303,7 @@ describe("SettingsPage", () => {
     const connectionsRender = await renderSettingsPage("/settings#settings-connections");
     await waitFor(() => {
       expect(screen.getByTestId("settings-location")).toHaveTextContent(
-        "/settings#settings-connections"
+        "/settings#settings-account"
       );
     });
     connectionsRender.unmount();
@@ -1336,7 +1311,7 @@ describe("SettingsPage", () => {
     const oauthRender = await renderSettingsPage("/settings?section=oauth");
     await waitFor(() => {
       expect(screen.getByTestId("settings-location")).toHaveTextContent(
-        "/settings#settings-connections"
+        "/settings#settings-account"
       );
     });
     oauthRender.unmount();
