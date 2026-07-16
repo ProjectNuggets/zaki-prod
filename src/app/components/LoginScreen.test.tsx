@@ -1132,6 +1132,32 @@ describe("LoginScreen legal consent", () => {
     );
   });
 
+  it("uses the app's one-use callback route for a full-page Google account switch", async () => {
+    const user = userEvent.setup();
+    const onGoogleOAuthStarted = jest.fn(
+      () => "/brain?zaki_oauth_transition=oauth-switch-a-to-b"
+    );
+    (buildGoogleOAuthStartUrl as unknown as jest.Mock).mockReturnValueOnce("#google-switch");
+    window.history.replaceState({}, "", "/brain?source=website_home_command");
+
+    render(
+      <BrowserRouter>
+        <LoginScreen onGoogleOAuthStarted={onGoogleOAuthStarted} />
+      </BrowserRouter>
+    );
+    await waitFor(() => expect(fetchGoogleOAuthStatus).toHaveBeenCalled());
+    await user.click(screen.getByRole("button", { name: /Continue with Google/ }));
+
+    expect(onGoogleOAuthStarted).toHaveBeenCalledWith("/brain?source=website_home_command");
+    expect(buildGoogleOAuthStartUrl).toHaveBeenCalledWith(
+      "/brain?zaki_oauth_transition=oauth-switch-a-to-b",
+      {
+        legalConsentAccepted: true,
+        legalPolicyVersion: policyVersion,
+      }
+    );
+  });
+
   it("ignores stale pending intent on ordinary login and stays on the dashboard", async () => {
     const user = userEvent.setup();
     window.history.replaceState({}, "", "/?auth=login");

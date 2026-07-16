@@ -198,6 +198,8 @@ type LoginScreenProps = {
   onAuthenticated?: (session: AuthenticatedSession) => void;
   /** Captures the browser storage owner when an interactive authentication starts. */
   onAuthenticationStarted?: () => void;
+  /** Returns the callback route for a full-page Google OAuth handoff. */
+  onGoogleOAuthStarted?: (returnTo: string) => string;
   /** Return false when another tab has already superseded this candidate cookie. */
   onAuthenticationFailed?: () => boolean | void;
   candidateAuthTransaction?: CandidateAuthTransaction | null;
@@ -207,6 +209,7 @@ export function LoginScreen({
   presentation = "page",
   onAuthenticated,
   onAuthenticationStarted,
+  onGoogleOAuthStarted,
   onAuthenticationFailed,
   candidateAuthTransaction = null,
 }: LoginScreenProps = {}) {
@@ -259,10 +262,12 @@ export function LoginScreen({
   const reauthAttemptRef = useRef(0);
   const onAuthenticatedRef = useRef(onAuthenticated);
   const onAuthenticationStartedRef = useRef(onAuthenticationStarted);
+  const onGoogleOAuthStartedRef = useRef(onGoogleOAuthStarted);
   const onAuthenticationFailedRef = useRef(onAuthenticationFailed);
   const googleOAuthCopyRef = useRef<GoogleOAuthErrorCopy>(copy);
   onAuthenticatedRef.current = onAuthenticated;
   onAuthenticationStartedRef.current = onAuthenticationStarted;
+  onGoogleOAuthStartedRef.current = onGoogleOAuthStarted;
   onAuthenticationFailedRef.current = onAuthenticationFailed;
   googleOAuthCopyRef.current = copy;
   const turnstileSiteKey = getTurnstileSiteKey();
@@ -1180,14 +1185,18 @@ export function LoginScreen({
                     }
                   }
                   onAuthenticationStartedRef.current?.();
+                  const googleReturnTo =
+                    presentation === "overlay"
+                      ? "/?oauthPopup=google"
+                      : onGoogleOAuthStartedRef.current?.(postLoginReturnTo || "/") ||
+                        postLoginReturnTo ||
+                        "/";
                   // Consent travels on BOTH entry points. "Continue with Google"
                   // from the login screen can still create a brand-new account,
                   // and that account must never exist without a consent record.
                   // The clickwrap notice below is the attestation in login mode.
                   const oauthUrl = buildGoogleOAuthStartUrl(
-                    presentation === "overlay"
-                      ? "/?oauthPopup=google"
-                      : postLoginReturnTo || "/",
+                    googleReturnTo,
                     {
                       legalConsentAccepted: true,
                       legalPolicyVersion,

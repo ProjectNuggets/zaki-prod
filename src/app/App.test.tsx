@@ -1285,6 +1285,101 @@ describe("App route hydration", () => {
     expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toContain("Remember this launch plan");
   });
 
+  it("accepts a verified Google callback that replaces the owner captured at OAuth start", async () => {
+    window.localStorage.setItem("zaki:account-storage-principal:v1", "id:account-a");
+    window.localStorage.setItem("zaki:session-titles", JSON.stringify({ main: "Account A title" }));
+    window.sessionStorage.setItem(
+      "zaki:google-oauth-transition:v1",
+      JSON.stringify({
+        nonce: "oauth-switch-a-to-b",
+        storagePrincipal: "id:account-a",
+        returnTo: "/brain",
+        expiresAt: Date.now() + 60_000,
+      })
+    );
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/auth/refresh")) {
+        return Promise.resolve(makeResponse({ token: "account-b-token" }));
+      }
+      if (url.includes("/api/profile")) {
+        const authorization = new Headers(init?.headers).get("Authorization");
+        if (authorization === "Bearer account-b-token") {
+          return Promise.resolve(
+            makeResponse({
+              success: true,
+              user: { id: "account-b", username: "b@example.com", fullName: "Account B" },
+            })
+          );
+        }
+      }
+      return Promise.resolve(makeResponse({ success: true, policyVersion: "2027-01-01.v2" }));
+    });
+
+    renderAppAt("/brain?zaki_oauth_transition=oauth-switch-a-to-b");
+
+    await waitFor(() => {
+      expect(useAuthStore.getState().token).toBe("account-b-token");
+    });
+    expect(await screen.findByText("brain surface")).toBeInTheDocument();
+    expect(useAuthStore.getState()).toMatchObject({
+      token: "account-b-token",
+      user: { id: "account-b", username: "b@example.com" },
+    });
+    expect(window.localStorage.getItem("zaki:account-storage-principal:v1")).toBe(
+      "id:account-b"
+    );
+    expect(window.localStorage.getItem("zaki:session-titles")).toBeNull();
+    expect(window.sessionStorage.getItem("zaki:google-oauth-transition:v1")).toBeNull();
+  });
+
+  it("rejects a Google callback when another tab claims storage after OAuth starts", async () => {
+    window.localStorage.setItem("zaki:account-storage-principal:v1", "id:account-c");
+    window.localStorage.setItem("zaki:session-titles", JSON.stringify({ main: "Account C title" }));
+    window.sessionStorage.setItem(
+      "zaki:google-oauth-transition:v1",
+      JSON.stringify({
+        nonce: "oauth-switch-a-to-b",
+        storagePrincipal: "id:account-a",
+        returnTo: "/brain",
+        expiresAt: Date.now() + 60_000,
+      })
+    );
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/auth/refresh")) {
+        return Promise.resolve(makeResponse({ token: "account-b-token" }));
+      }
+      if (url.includes("/api/profile")) {
+        const authorization = new Headers(init?.headers).get("Authorization");
+        if (authorization === "Bearer account-b-token") {
+          return Promise.resolve(
+            makeResponse({
+              success: true,
+              user: { id: "account-b", username: "b@example.com", fullName: "Account B" },
+            })
+          );
+        }
+      }
+      return Promise.resolve(makeResponse({ success: true, policyVersion: "2027-01-01.v2" }));
+    });
+
+    renderAppAt("/brain?zaki_oauth_transition=oauth-switch-a-to-b");
+
+    expect(await screen.findByPlaceholderText("Email address")).toBeInTheDocument();
+    expect(useAuthStore.getState().token).toBeNull();
+    expect(window.localStorage.getItem("zaki:account-storage-principal:v1")).toBe(
+      "id:account-c"
+    );
+    expect(window.localStorage.getItem("zaki:session-titles")).toBe(
+      JSON.stringify({ main: "Account C title" })
+    );
+    expect(window.sessionStorage.getItem("zaki:google-oauth-transition:v1")).toBeNull();
+    expect(
+      fetchMock.mock.calls.some(([input]) => String(input).includes("/api/auth/logout/candidate"))
+    ).toBe(true);
+  });
+
   it("shows direct Brain command recovery when storage is blocked before gated login", async () => {
     fetchMock.mockResolvedValue(makeResponse({ error: "refresh_revoked" }, 401));
     const setItem = Storage.prototype.setItem;

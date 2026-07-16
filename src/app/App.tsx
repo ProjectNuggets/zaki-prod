@@ -46,6 +46,10 @@ import {
   PENDING_INTENT_STORAGE_FAILURE_EVENT,
   type PendingIntentStorageFailureDetail,
 } from "@/lib/pendingIntent";
+import {
+  beginGoogleOAuthTransition,
+  consumeGoogleOAuthTransition,
+} from "@/lib/googleOAuthTransition";
 import { ANONYMOUS_WORK_LEDGER_KEY } from "@/lib/anonymousWork";
 import { getInitialLegalPolicyVersion } from "@/lib/legalPolicy";
 import { getProductLaunchState } from "@/lib/productRoutes";
@@ -350,6 +354,7 @@ export default function App() {
   const locationRef = useRef(location);
   locationRef.current = location;
   const interactiveStoragePrincipalRef = useRef<string | undefined>(undefined);
+  const initialGoogleOAuthSearchRef = useRef(location.search);
   // UI state from Zustand
   const {
     themePreference,
@@ -413,10 +418,12 @@ export default function App() {
       {
         allowPreservedWork = false,
         source = "interactive",
+        googleOAuthStoragePrincipalAtStart,
         interactiveStoragePrincipalAtStart,
       }: {
         allowPreservedWork?: boolean;
         source?: "hydrate" | "interactive";
+        googleOAuthStoragePrincipalAtStart?: string;
         interactiveStoragePrincipalAtStart?: string;
       } = {}
     ) => {
@@ -437,7 +444,12 @@ export default function App() {
       // session. If another tab has already claimed a different principal,
       // reject this stale hydration rather than deleting that account's shared
       // localStorage and writing the old marker back.
-      if (source === "hydrate" && storagePrincipal && storagePrincipal !== nextPrincipal) {
+      if (
+        source === "hydrate" &&
+        storagePrincipal &&
+        storagePrincipal !== nextPrincipal &&
+        storagePrincipal !== googleOAuthStoragePrincipalAtStart
+      ) {
         return {
           committed: false,
           preservesMountedWork: false,
@@ -696,6 +708,13 @@ export default function App() {
         // run an ordinary hydration that could mutate shared account state
         // before the popup tells its opener about that error.
         if (isGoogleOAuthPopup && googleOAuthPopupFailureCode) return;
+        // A regular Google callback reloads the page, so an in-memory
+        // interactive guard cannot survive it. This same-tab, one-use proof is
+        // carried in the server-signed OAuth return route and still requires
+        // the current storage owner to match the owner at click time.
+        const googleOAuthTransition = consumeGoogleOAuthTransition(
+          initialGoogleOAuthSearchRef.current
+        );
         const freshToken = await getStrictFreshAuthToken();
         if (!isMounted) return;
         if (!freshToken) {
@@ -755,13 +774,30 @@ export default function App() {
           }
           const commit = commitAuthenticatedSession(
             { token: freshToken, user: mergedUser },
-            { allowPreservedWork: true, source: "hydrate" }
+            {
+              allowPreservedWork: true,
+              source: "hydrate",
+              googleOAuthStoragePrincipalAtStart:
+                googleOAuthTransition?.storagePrincipal,
+            }
           );
           if (!commit.committed) {
+            if (googleOAuthTransition) {
+              // The callback minted B's browser-wide refresh session. If C
+              // claimed ownership after A began this OAuth handoff, revoke B
+              // by its bearer without reading or clearing C's refresh cookie.
+              void requestCandidateSessionLogout(freshToken);
+            }
             failClosedSession({ preserveSharedLocalStorage: true });
-          } else if (commit.resetAccountScopedState) {
-            const { pathname, search } = locationRef.current;
-            applyLocationToNavigationStore(pathname, search);
+          } else {
+            if (commit.resetAccountScopedState) {
+              const { pathname, search } = locationRef.current;
+              applyLocationToNavigationStore(pathname, search);
+            }
+            if (googleOAuthTransition) {
+              navigate(googleOAuthTransition.returnTo, { replace: true });
+            }
+          }
           }
         }
       } catch {
@@ -792,6 +828,7 @@ export default function App() {
     failClosedSession,
     googleOAuthPopupFailureCode,
     isGoogleOAuthPopup,
+    navigate,
     notifyGoogleOAuthPopup,
   ]);
 
@@ -954,6 +991,13 @@ export default function App() {
     interactiveStoragePrincipalRef.current = readAccountStoragePrincipal();
   }, []);
 
+  const beginFullPageGoogleOAuthTransition = useCallback((returnTo: string) => {
+    return beginGoogleOAuthTransition(
+      returnTo,
+      interactiveStoragePrincipalRef.current ?? readAccountStoragePrincipal()
+    );
+  }, []);
+
   const renderStorageRecoveryDialog = () => {
     if (!storageRecovery) return null;
     return (
@@ -1071,6 +1115,7 @@ export default function App() {
         <LoginScreen
           onAuthenticated={handleAuthenticated}
           onAuthenticationStarted={captureInteractiveStoragePrincipal}
+          onGoogleOAuthStarted={beginFullPageGoogleOAuthTransition}
         />
         {renderStorageRecoveryDialog()}
       </>
