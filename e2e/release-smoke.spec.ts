@@ -47,7 +47,7 @@ test.describe("ZAKI V1 release smoke (signed-in)", () => {
     });
   }
 
-  test("backend-unavailable: refresh 502 falls back to login, not a crash", async ({ page }) => {
+  test("backend-unavailable: refresh 502 falls back to anonymous preview, not a crash", async ({ page }) => {
     // Re-arm the shell with the gateway down. signInForRelease already ran in
     // beforeEach; this overrides the auth/refresh route for this test.
     await page.unroute("**/api/auth/refresh");
@@ -58,11 +58,14 @@ test.describe("ZAKI V1 release smoke (signed-in)", () => {
     await page.goto("/agent", { waitUntil: "domcontentloaded" });
     // Failure must be user-safe: no ErrorBoundary crash...
     await expect(page.getByText(ERROR_BOUNDARY_TEXT)).toHaveCount(0);
-    // ...and we must fall back to login, not the signed-in shell. Access
-    // tokens are memory-only, so a 502 refresh yields a logged-out app.
-    await expect(page.getByRole("heading", { name: "Sign in to ZAKI" })).toBeVisible({ timeout: 20_000 });
-    await expect(page.locator(".zaki-auth-v2")).toBeVisible();
-    await expect(page.locator(".zaki-app.zaki-app-v2")).toHaveCount(0);
+    // ...and we must fall back to the public Agent preview, not retain a
+    // signed-in session. Access tokens are memory-only, so a 502 refresh
+    // leaves /agent on its intentionally public, tool-less route fork.
+    await expect(
+      page.getByRole("heading", { name: "See the plan before you commit" }),
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("Agent preview", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send message" })).toHaveCount(0);
   });
 
   test("first-run Agent provisioning failure is visible and retryable", async ({ page }, testInfo) => {

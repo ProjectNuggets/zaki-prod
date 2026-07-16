@@ -11,7 +11,14 @@ import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import { WebSocketServer, WebSocket as UpstreamWebSocket } from "ws";
 import { z } from "zod";
-import { initDb, dbAll, dbGet, dbQuery, withDbTransaction } from "./db.js";
+import {
+  initDb,
+  dbAll,
+  dbGet,
+  dbQuery,
+  listenForDbNotifications,
+  withDbTransaction,
+} from "./db.js";
 import {
   ACCESS_CODE_MAX_DURATION_DAYS,
   clampAccessCodeDurationDays,
@@ -47,9 +54,11 @@ import { createSessionEndHandler } from "./memory/session-end-route.js";
 import { shouldSkipChatMemoryContext } from "./memory/injection-gate.js";
 import {
   buildStreamUpstreamPayload,
+  classifyChatSseFrame,
   composeContextEnvelope,
   extractStreamMessage,
   getRequestedResponseFormat,
+  shouldAcknowledgeImportedThreadContext,
 } from "./chat-proxy.js";
 import { fetchWorkspaceDocContext } from "./doc-grounding.js";
 import {
@@ -435,7 +444,9 @@ import {
   claimRequestHasWork,
   createAnonymousWorkClaimStore,
   createImportedThreadContextProvider,
+  IMPORTED_THREAD_CONTEXT_INVALIDATION_CHANNEL,
   importAnonymousWorkClaim,
+  invalidateImportedThreadContextFromNotification,
   mergeImportedThreadHistory,
   parseAnonymousWorkClaimRequest,
   resolveClaimKey,
@@ -1219,6 +1230,7 @@ async function pipeSseWithAgentLinks(readable, res, req, label = "Stream") {
     assistantOutputChars: 0,
     events: 0,
     sawError: false,
+    sawDone: false,
     sawToolCall: false,
     generatedFiles: [],
   };
@@ -1235,11 +1247,15 @@ async function pipeSseWithAgentLinks(readable, res, req, label = "Stream") {
     const lines = normalized.split("\n");
     const dataLines = [];
     const outLines = [];
+    let eventType = "";
 
     for (const rawLine of lines) {
       const line = rawLine.trimEnd();
       if (line.startsWith("data:")) {
         dataLines.push(line.slice(5).trimStart());
+      } else if (line.startsWith("event:")) {
+        eventType = line.slice(6).trim().toLowerCase();
+        outLines.push(line);
       } else if (line.length) {
         outLines.push(line);
       }
@@ -1248,6 +1264,9 @@ async function pipeSseWithAgentLinks(readable, res, req, label = "Stream") {
     if (dataLines.length > 0) {
       const payloadText = dataLines.join("\n");
       let wrote = false;
+      const terminalSignal = classifyChatSseFrame({ eventType, payloadText });
+      metrics.sawDone = metrics.sawDone || terminalSignal.sawDone;
+      metrics.sawError = metrics.sawError || terminalSignal.sawError;
       if (payloadText && payloadText !== "[DONE]") {
         try {
           const payload = JSON.parse(payloadText);
@@ -1271,10 +1290,9 @@ async function pipeSseWithAgentLinks(readable, res, req, label = "Stream") {
             metrics.assistantOutputChars += assistantChunk.length;
           }
           metrics.events += 1;
-          metrics.sawError =
-            metrics.sawError ||
-            payload?.type === "error" ||
-            payload?.error === true;
+          const parsedSignal = classifyChatSseFrame({ eventType, payloadText, payload });
+          metrics.sawError = metrics.sawError || parsedSignal.sawError;
+          metrics.sawDone = metrics.sawDone || parsedSignal.sawDone;
           if (isToolFireEvent(payload)) metrics.sawToolCall = true;
           const __gf = extractGeneratedFile(payload);
           if (__gf) metrics.generatedFiles.push(__gf);
@@ -2944,6 +2962,7 @@ const anonymousWorkClaimStore = createAnonymousWorkClaimStore({ dbGet, dbAll, db
 const importedThreadContextProvider = createImportedThreadContextProvider({
   store: anonymousWorkClaimStore,
 });
+let stopImportedThreadContextNotifications = null;
 
 function sendSpacesProvisioningFailure(res, error, { stream = false } = {}) {
   const payload = buildSpacesProvisioningErrorPayload(error);
@@ -4314,6 +4333,28 @@ try {
 } catch (err) {
   console.error("[boot] initDb failed:", err?.stack || err?.message || err);
   process.exit(1);
+}
+try {
+  stopImportedThreadContextNotifications = await listenForDbNotifications(
+    IMPORTED_THREAD_CONTEXT_INVALIDATION_CHANNEL,
+    (payload) => {
+      invalidateImportedThreadContextFromNotification(importedThreadContextProvider, payload);
+    },
+    {
+      onConnected: () => importedThreadContextProvider.invalidateAll(),
+      onDisconnected: () => importedThreadContextProvider.invalidateAll(),
+      onError: (error) =>
+        console.warn(
+          "[AnonymousSpaces] Imported-context invalidation listener reconnecting:",
+          error?.message || error
+        ),
+    }
+  );
+} catch (error) {
+  console.warn(
+    "[AnonymousSpaces] Imported-context invalidation listener unavailable:",
+    error?.message || error
+  );
 }
 await ensureSuperAdminMembersSeed();
 await loadRuntimeRateLimitSettings();
@@ -11418,6 +11459,8 @@ app.post(
 const streamChatHandler = async (req, res) => {
   console.log(`[Chat] Received message request for ${req.params.slug}/${req.params.threadSlug}`);
   const meterStartedAtMs = Date.now();
+  let importedThreadLease = null;
+  let importedThreadLeaseSettled = false;
   try {
     const apiBase = getApiBase();
     if (!apiBase) {
@@ -11578,6 +11621,16 @@ const streamChatHandler = async (req, res) => {
     };
     const importedThreadContextPromise = importedThreadContextProvider
       .getThreadContext(importedThreadTarget)
+      .then((context) => {
+        if (context?.leaseId && context?.messageIds?.length > 0) {
+          importedThreadLease = {
+            ...importedThreadTarget,
+            messageIds: context.messageIds,
+            leaseId: context.leaseId,
+          };
+        }
+        return context;
+      })
       .catch((error) => {
         console.warn(
           "[AnonymousSpaces] Imported model context lookup skipped:",
@@ -11785,22 +11838,6 @@ const streamChatHandler = async (req, res) => {
       }
     }
 
-    if (upstreamResponse.ok && importedThreadContext.messageIds.length > 0) {
-      try {
-        await importedThreadContextProvider.markForwarded({
-          ...importedThreadTarget,
-          messageIds: importedThreadContext.messageIds,
-        });
-      } catch (error) {
-        // Safe failure mode: keep the rows pending so a later turn retries the
-        // bounded transcript rather than losing conversation continuity.
-        console.warn(
-          "[AnonymousSpaces] Imported model context mark skipped:",
-          error?.message || error
-        );
-      }
-    }
-
     console.log("[Chat] Upstream response", {
       ...chatLogContext,
       upstreamStatus: upstreamResponse.status,
@@ -11866,8 +11903,10 @@ const streamChatHandler = async (req, res) => {
       }
     }
 
+    let streamMetrics = null;
+    let pipeResult = null;
     if (isSse) {
-      const streamMetrics = await pipeSseWithAgentLinks(nodeStream, res, req, "Chat stream");
+      streamMetrics = await pipeSseWithAgentLinks(nodeStream, res, req, "Chat stream");
       await recordSpacesMeterReceiptBestEffort(req, {
         status: upstreamResponse.ok && !streamMetrics?.sawError ? "success" : "failed",
         durationMs: Date.now() - meterStartedAtMs,
@@ -11882,13 +11921,40 @@ const streamChatHandler = async (req, res) => {
       } catch (e) { console.warn("[GeneratedFiles] capture failed:", e.message); }
     } else {
       // Awaitable pipe so we settle on the ACTUAL outcome (success/failed/cancelled), not before it runs.
-      const pipeResult = await pipeReadableToResponseWithCompletion(nodeStream, res, "Chat stream");
+      pipeResult = await pipeReadableToResponseWithCompletion(nodeStream, res, "Chat stream");
       await recordSpacesMeterReceiptBestEffort(req, {
         status: upstreamResponse.ok && pipeResult.status === "success" ? "success" : "failed",
         durationMs: Date.now() - meterStartedAtMs,
         message: originalMessage,
         model: "typ-chat",
       });
+    }
+
+    if (
+      importedThreadContext.messageIds.length > 0 &&
+      shouldAcknowledgeImportedThreadContext({
+        upstreamOk: upstreamResponse.ok,
+        hasResponseBody: true,
+        isSse,
+        streamMetrics,
+        pipeResult,
+      })
+    ) {
+      try {
+        await importedThreadContextProvider.markForwarded({
+          ...importedThreadTarget,
+          messageIds: importedThreadContext.messageIds,
+          leaseId: importedThreadContext.leaseId,
+        });
+        importedThreadLeaseSettled = true;
+      } catch (error) {
+        // Safe failure mode: keep the rows pending so a later turn retries the
+        // bounded transcript rather than losing conversation continuity.
+        console.warn(
+          "[AnonymousSpaces] Imported model context mark skipped:",
+          error?.message || error
+        );
+      }
     }
   } catch (error) {
     await recordSpacesMeterReceiptBestEffort(req, {
@@ -11924,6 +11990,19 @@ const streamChatHandler = async (req, res) => {
       error: message,
       code: timedOut ? "upstream_timeout" : "chat_error",
     });
+  } finally {
+    if (importedThreadLease && !importedThreadLeaseSettled) {
+      try {
+        await importedThreadContextProvider.releaseLease(importedThreadLease);
+      } catch (error) {
+        // A failed release remains safe: the database lease expires, making the
+        // transcript available to a later turn without allowing concurrent use.
+        console.warn(
+          "[AnonymousSpaces] Imported model context lease release skipped:",
+          error?.message || error
+        );
+      }
+    }
   }
 };
 
@@ -21035,6 +21114,17 @@ function beginGracefulShutdown(signal) {
   isDraining = true;
   shutdownSignal = signal;
   console.log(`[Shutdown] Received ${signal}. Draining zaki-api before exit.`);
+
+  if (stopImportedThreadContextNotifications) {
+    const stopNotifications = stopImportedThreadContextNotifications;
+    stopImportedThreadContextNotifications = null;
+    void stopNotifications().catch((error) =>
+      console.warn(
+        "[AnonymousSpaces] Imported-context invalidation listener shutdown failed:",
+        error?.message || error
+      )
+    );
+  }
 
   for (const client of agentProxyWss.clients) {
     client.close(1001, "server_shutdown");

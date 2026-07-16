@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useBrainDiff } from "@/queries";
+import { brainDisplayText } from "./brainText";
 
 interface Props {
   userId: string;
@@ -177,7 +178,7 @@ function DiffColumn({ title, tone, items, onPick }: DiffColumnProps) {
               onClick={() => onPick(it.key)}
               className="block w-full truncate rounded-zaki-md px-1 py-0.5 text-left text-xs text-white/85 hover:bg-white/5"
             >
-              {it.summary}
+              {brainDisplayText(it.summary, it.key, "Memory")}
             </button>
           </li>
         ))}

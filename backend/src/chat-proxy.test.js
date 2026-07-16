@@ -1,9 +1,11 @@
 import { describe, expect, it, test } from "@jest/globals";
 import {
   buildStreamUpstreamPayload,
+  classifyChatSseFrame,
   composeContextEnvelope,
   extractStreamMessage,
   getRequestedResponseFormat,
+  shouldAcknowledgeImportedThreadContext,
 } from "./chat-proxy.js";
 
 describe("chat proxy payload helpers", () => {
@@ -148,6 +150,39 @@ test("composeContextEnvelope carries imported prior conversation without memory"
   expect(env).toContain("USER:\nold question");
   expect(env).toContain("ASSISTANT:\nold answer");
   expect((env.match(/ZAKI_MEMORY_CONTEXT_V2/g) || []).length).toBe(2);
+});
+
+test("imported context is acknowledged only after a successful terminal stream", () => {
+  expect(
+    shouldAcknowledgeImportedThreadContext({
+      upstreamOk: true,
+      hasResponseBody: true,
+      isSse: true,
+      streamMetrics: { sawDone: false, sawError: true },
+    })
+  ).toBe(false);
+  expect(
+    shouldAcknowledgeImportedThreadContext({
+      upstreamOk: true,
+      hasResponseBody: true,
+      isSse: true,
+      streamMetrics: { sawDone: true, sawError: false },
+    })
+  ).toBe(true);
+});
+
+test("a terminal SSE error frame is not classified as a successful completion", () => {
+  expect(
+    classifyChatSseFrame({
+      eventType: "done",
+      payload: { status: "error" },
+    })
+  ).toEqual({ sawDone: true, sawError: true });
+  expect(
+    classifyChatSseFrame({
+      payload: { type: "finalizeResponseStream" },
+    })
+  ).toEqual({ sawDone: true, sawError: false });
 });
 
 test("composeContextEnvelope without guardrail and without memory returns empty", () => {

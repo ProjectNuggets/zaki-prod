@@ -14,6 +14,7 @@ import {
   BrainRecomputeConflictError,
 } from "@/queries";
 import { colorForCommunity } from "./brainColors";
+import { brainDisplayText } from "./brainText";
 
 interface Props {
   userId: string;
@@ -128,7 +129,7 @@ export function BrainCommunityLegend({
                     isFallback ? "italic text-white/55" : ""
                   }`}
                 >
-                  {c.name}
+                  {brainDisplayText(c.name, `Theme ${c.community_id}`)}
                 </span>
                 <span className="shrink-0 text-white/55">{c.member_count}</span>
               </button>

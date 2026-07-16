@@ -87,7 +87,7 @@ describe("Spaces continuity contract", () => {
     expect(chatsHandlerSource).toContain("listThreadMessages");
   });
 
-  test("pending imported turns are fed to the model once on the authenticated stream path", () => {
+  test("pending imported turns are acknowledged only after the authenticated stream completes", () => {
     const source = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
     const streamHandlerSource = source.slice(
       source.indexOf("const streamChatHandler = async"),
@@ -99,9 +99,24 @@ describe("Spaces continuity contract", () => {
     expect(streamHandlerSource).toMatch(
       /composeContextEnvelope\(\{[\s\S]*importedTranscript/
     );
-    expect(streamHandlerSource).toMatch(
-      /if \(upstreamResponse\.ok[\s\S]*markForwarded/
+    expect(streamHandlerSource).toContain("shouldAcknowledgeImportedThreadContext");
+    expect(streamHandlerSource.indexOf("markForwarded")).toBeGreaterThan(
+      streamHandlerSource.indexOf("pipeSseWithAgentLinks")
     );
+    expect(streamHandlerSource).toContain("releaseLease");
+    expect(streamHandlerSource).toMatch(/finally\s*\{/);
+    expect(streamHandlerSource).toMatch(/markForwarded\(\{[\s\S]*leaseId/);
+  });
+
+  test("anonymous-work claims invalidate imported-context misses on every replica", () => {
+    const source = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
+    const listenerIndex = source.indexOf("listenForDbNotifications(");
+
+    expect(listenerIndex).toBeGreaterThan(source.indexOf("await initDb()"));
+    expect(source.slice(listenerIndex, listenerIndex + 1200)).toContain(
+      "invalidateImportedThreadContextFromNotification"
+    );
+    expect(source.slice(listenerIndex, listenerIndex + 1200)).toContain("invalidateAll");
   });
 
   test("the post-auth claim is shared by every sign-in path, not just credential login", () => {

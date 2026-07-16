@@ -4,6 +4,7 @@ import { useBrainCommunities } from "@/queries";
 import { colorForCommunity } from "../brainColors";
 import { BrainDetailPanel } from "./BrainDetailPanel";
 import { BrainTimelineView } from "../BrainTimelineView";
+import { brainDisplayText, sanitizeBrainText } from "../brainText";
 
 // Brain Home — the search-first landing surface (replaces the graph as the
 // overview). Research: a force-graph is decorative at thousands of nodes;
@@ -16,7 +17,7 @@ const INTERNAL_CODENAME = /\b(nullalis|null[\s_-]?alis|panther|neptune)\b/i;
 const VISIBLE_THEME_LIMIT = 24;
 
 function labelOf(n: BrainGraphNode): string {
-  return n.display_label || n.summary || n.key || n.id;
+  return brainDisplayText(n.display_label, n.summary, n.key, n.id);
 }
 
 interface ThemeCard {
@@ -63,7 +64,10 @@ export function BrainHome({ userId, graph, graphLoading, onPickMemoryKey }: Brai
 
   const cards = useMemo<ThemeCard[]>(() => {
     const list = (communities.data?.communities ?? []).filter(
-      (c) => c.member_count > 0 && !INTERNAL_CODENAME.test(c.name),
+      (c) => {
+        const name = sanitizeBrainText(c.name);
+        return c.member_count > 0 && Boolean(name) && !INTERNAL_CODENAME.test(name);
+      },
     );
     const toCard = (c: (typeof list)[number]): ThemeCard => {
       const members = membersByCommunity.get(c.community_id) ?? [];
@@ -73,7 +77,11 @@ export function BrainHome({ userId, graph, graphLoading, onPickMemoryKey }: Brai
       // faceted browse handles clusters whose members exceed the cap.
       // Unnamed cluster → borrow its most important member as a provisional
       // title so the user never sees a raw "Cluster 19716777".
-      const title = named ? c.name : members[0] ? labelOf(members[0]) : `Untitled theme`;
+      const title = named
+        ? brainDisplayText(c.name, `Theme ${c.community_id}`)
+        : members[0]
+          ? labelOf(members[0])
+          : `Untitled theme`;
       return {
         id: c.community_id,
         title,
