@@ -1252,6 +1252,39 @@ describe("App route hydration", () => {
     ).toBe(true);
   });
 
+  it("keeps a direct Brain command through anonymous credential login", async () => {
+    const user = userEvent.setup();
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/auth/refresh")) {
+        return Promise.resolve(makeResponse({ error: "refresh_revoked" }, 401));
+      }
+      if (url.endsWith("/login")) {
+        return Promise.resolve(makeResponse({ valid: true, token: "account-b-token" }));
+      }
+      if (url.includes("/api/profile")) {
+        const authorization = new Headers(init?.headers).get("Authorization");
+        if (authorization === "Bearer account-b-token") {
+          return Promise.resolve(
+            makeResponse({
+              success: true,
+              user: { id: "account-b", username: "b@example.com", fullName: "Account B" },
+            })
+          );
+        }
+      }
+      return Promise.resolve(makeResponse({ success: true, enabled: true, policyVersion: "2027-01-01.v2" }));
+    });
+
+    renderAppAt("/brain?source=website_home_command&intent=memory&prompt=Remember+this+launch+plan");
+    await user.type(await screen.findByPlaceholderText("Email address"), "b@example.com");
+    await user.type(screen.getByPlaceholderText("Password"), "Password123");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(await screen.findByText("brain surface")).toBeInTheDocument();
+    expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toContain("Remember this launch plan");
+  });
+
   it("keeps account A's surface and draft when reauthentication returns account A", async () => {
     const user = userEvent.setup();
     const popup = {

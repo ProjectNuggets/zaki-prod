@@ -132,6 +132,16 @@ function getDirectProtectedReturnTo(location: ReturnType<typeof useLocation>) {
   return getSafeRelativeReturnTo(`${location.pathname}${location.search}${location.hash}`);
 }
 
+function isSameReturnRoute(left: string, right: string) {
+  try {
+    const leftPath = new URL(left, "https://zaki.local").pathname.replace(/\/+$/, "") || "/";
+    const rightPath = new URL(right, "https://zaki.local").pathname.replace(/\/+$/, "") || "/";
+    return leftPath === rightPath;
+  } catch {
+    return false;
+  }
+}
+
 function getSafeAuthErrorMessage(message: unknown, fallback: string) {
   const text = String(message || "").trim();
   if (!text) return fallback;
@@ -995,6 +1005,7 @@ export function LoginScreen({
       );
       const pendingIntent = readPendingIntent();
       const pendingReturnTo = getSafeRelativeReturnTo(pendingIntent?.returnTo ?? null);
+      const directProtectedReturnTo = getDirectProtectedReturnTo(location);
 
       // The anonymous-work claim does NOT run here any more. It runs in App's
       // post-auth effect, which EVERY sign-in path reaches — credential login
@@ -1013,7 +1024,10 @@ export function LoginScreen({
       // An intent this login is NOT honoring is stale — it would ambush the user
       // with an unrelated prompt later — so that one still gets dropped.
       const honorsPendingIntent = Boolean(
-        pendingReturnTo && explicitNext && explicitNext === pendingReturnTo
+        pendingReturnTo &&
+          ((explicitNext && explicitNext === pendingReturnTo) ||
+            (directProtectedReturnTo &&
+              isSameReturnRoute(directProtectedReturnTo, pendingReturnTo)))
       );
       if (pendingReturnTo && !honorsPendingIntent) {
         clearPendingIntent();
