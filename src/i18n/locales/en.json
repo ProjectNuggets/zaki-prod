@@ -286,6 +286,30 @@
         "name": "Proactive updates",
         "helper": "Allow Nullalis to send outbound updates where a connected channel and approval policy permit it."
       },
+      "proactiveCheckins": {
+        "name": "Proactive check-ins",
+        "helper": "Periodically check for useful updates. Check-ins are delivered through your connected Telegram account and do not appear in web chat.",
+        "success": {
+          "enabled": "Proactive check-ins are on.",
+          "disabled": "Proactive check-ins are off."
+        },
+        "errors": {
+          "update": "Could not update proactive check-ins. Try again."
+        },
+        "status": {
+          "loading": "Loading check-in status…",
+          "unavailable": "Unavailable · Try again later",
+          "off": "Off · Delivery through Telegram",
+          "operatorDisabled": "On · Temporarily unavailable",
+          "needsTelegram": "On · Connect Telegram to receive check-ins",
+          "sendFailed": "On · Last delivery failed; verify Telegram",
+          "enqueued": "On · Last update queued for Telegram",
+          "sentAt": "On · Last update sent {{when}}",
+          "sent": "On · Last update sent",
+          "idle": "On · Last check complete, nothing to send",
+          "activeEvery": "On · Every {{minutes}} min through Telegram"
+        }
+      },
       "voiceReplies": {
         "name": "Voice replies",
         "helper": "Use text-to-speech replies for supported voice-note or audio-capable channel turns."

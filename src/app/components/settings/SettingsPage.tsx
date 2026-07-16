@@ -302,33 +302,52 @@ function formatUnixDate(value?: number | null) {
 
 function getHeartbeatStatusLabel(
   state: BotHeartbeatState | null,
-  loading: boolean
+  loading: boolean,
+  t: (key: string, options?: Record<string, unknown>) => string
 ): string {
-  if (loading) return "Loading check-in status…";
-  if (!state) return "Unavailable · Try again later";
+  const key = (suffix: string) =>
+    `settingsModal.agentSettings.proactiveCheckins.status.${suffix}`;
+  if (loading) {
+    return t(key("loading"), { defaultValue: "Loading check-in status…" });
+  }
+  if (!state) {
+    return t(key("unavailable"), { defaultValue: "Unavailable · Try again later" });
+  }
   if (!state.enabled || state.status === "disabled") {
-    return "Off · Delivery through Telegram";
+    return t(key("off"), { defaultValue: "Off · Delivery through Telegram" });
   }
   if (state.status === "operator_disabled" || state.operator_enabled === false) {
-    return "On · Temporarily unavailable";
+    return t(key("operatorDisabled"), { defaultValue: "On · Temporarily unavailable" });
   }
   if (state.status === "needs_telegram" || state.delivery_ready === false) {
-    return "On · Connect Telegram to receive check-ins";
+    return t(key("needsTelegram"), {
+      defaultValue: "On · Connect Telegram to receive check-ins",
+    });
   }
   if (state.last_status === "send_failed") {
-    return "On · Last delivery failed; verify Telegram";
+    return t(key("sendFailed"), {
+      defaultValue: "On · Last delivery failed; verify Telegram",
+    });
   }
   if (state.last_status === "enqueued") {
-    return "On · Last update queued for Telegram";
+    return t(key("enqueued"), { defaultValue: "On · Last update queued for Telegram" });
   }
   if (state.last_status === "sent") {
     const lastRun = formatUnixDate(state.last_run_s);
-    return lastRun ? `On · Last update sent ${lastRun}` : "On · Last update sent";
+    return lastRun
+      ? t(key("sentAt"), {
+          defaultValue: "On · Last update sent {{when}}",
+          when: lastRun,
+        })
+      : t(key("sent"), { defaultValue: "On · Last update sent" });
   }
   if (state.last_status === "idle") {
-    return "On · Last check complete, nothing to send";
+    return t(key("idle"), { defaultValue: "On · Last check complete, nothing to send" });
   }
-  return `On · Every ${state.interval_minutes ?? 60} min through Telegram`;
+  return t(key("activeEvery"), {
+    defaultValue: "On · Every {{minutes}} min through Telegram",
+    minutes: state.interval_minutes ?? 60,
+  });
 }
 
 // Memory capture policy is bound to the real BFF route GET|PATCH
@@ -1740,7 +1759,7 @@ export function SettingsPage() {
     agentSettingsDraft.voice_replies === AGENT_DEFAULTS_RESET_PATCH.voice_replies &&
     agentSettingsDraft.session_timeout_minutes ===
       AGENT_DEFAULTS_RESET_PATCH.session_timeout_minutes;
-  const heartbeatStatusLabel = getHeartbeatStatusLabel(heartbeatState, heartbeatLoading);
+  const heartbeatStatusLabel = getHeartbeatStatusLabel(heartbeatState, heartbeatLoading, t);
 
   const handleResetAgentDefaults = () => {
     if (agentSettingsLoading || agentSettingsSaving || isAtAgentDefaults) return;
