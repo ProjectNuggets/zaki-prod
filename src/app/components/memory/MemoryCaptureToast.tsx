@@ -6,8 +6,10 @@ type MemoryToastTone = "saved";
 interface MemoryCaptureToastProps {
   position: { left: number; width: number; bottom: number };
   tone?: MemoryToastTone;
+  source?: "chat" | "import";
   savedCount: number;
   supersededCount?: number;
+  duplicateCount?: number;
   onUndo?: () => void;
   onOpenMemory?: () => void;
   onDismiss: () => void;
@@ -18,8 +20,10 @@ interface MemoryCaptureToastProps {
 
 export function MemoryCaptureToast({
   position,
+  source = "chat",
   savedCount,
   supersededCount = 0,
+  duplicateCount = 0,
   onUndo,
   onOpenMemory,
   onDismiss,
@@ -29,8 +33,15 @@ export function MemoryCaptureToast({
 }: MemoryCaptureToastProps) {
   const { t } = useTranslation();
 
+  const newSavedCount = Math.max(0, savedCount - supersededCount);
+  const absorbedCount = savedCount + duplicateCount;
   const title =
-    savedCount > 1
+    source === "import"
+      ? t("memory.importedTitle", {
+          count: absorbedCount,
+          defaultValue: `I now remember ${absorbedCount} details from your import`,
+        })
+      : savedCount > 1
       ? t("memory.savedMultiple", { count: savedCount })
       : supersededCount > 0 && savedCount === 0
         ? t("memory.updatedSingle", { defaultValue: "Memory updated" })
@@ -41,7 +52,14 @@ export function MemoryCaptureToast({
       ? t("memory.undoPartialError", { count: partialUndoCount })
       : undoError
         ? undoError
-        : t("memory.savedHelper");
+        : source === "import"
+          ? t("memory.importedHelper", {
+              saved: newSavedCount,
+              updated: supersededCount,
+              known: duplicateCount,
+              defaultValue: `${newSavedCount} new · ${supersededCount} updated · ${duplicateCount} already known. Stored in your Brain.`,
+            })
+          : t("memory.savedHelper");
 
   return (
     <div
@@ -52,7 +70,7 @@ export function MemoryCaptureToast({
         bottom: position.bottom,
       }}
     >
-      <div className="rounded-2xl border border-zaki-subtle bg-white/95 px-3 py-2.5 text-xs text-zaki-secondary shadow-[0px_10px_24px_rgba(15,15,15,0.08)] backdrop-blur-sm">
+      <div className="border border-zaki-subtle bg-white/95 px-3 py-2.5 font-mono text-xs text-zaki-secondary shadow-[0px_10px_24px_rgba(15,15,15,0.08)] backdrop-blur-sm">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-zaki-primary">
             <span className="inline-flex size-5 items-center justify-center rounded-full bg-zaki-hover text-zaki-brand">

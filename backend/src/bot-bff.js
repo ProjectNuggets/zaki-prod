@@ -97,7 +97,12 @@ const botOnboardingStateSchema = z
   })
   .strict();
 
-const botOnboardingUpdateSchema = z.object({ completed: z.boolean() }).strict();
+const botOnboardingUpdateSchema = z
+  .object({
+    completed: z.boolean(),
+    identity: z.string().trim().min(1).max(16_000).optional(),
+  })
+  .strict();
 
 const botSettingsProfileSchema = z
   .object({

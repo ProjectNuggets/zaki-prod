@@ -1326,6 +1326,11 @@ export async function initDb() {
     `);
 
     await migrationClient.query(`
+      ALTER TABLE memory_undo_windows
+      ADD COLUMN IF NOT EXISTS superseded_memory_id UUID REFERENCES memories(id) ON DELETE SET NULL;
+    `);
+
+    await migrationClient.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_undo_windows_memory_id
       ON memory_undo_windows(memory_id);
     `);

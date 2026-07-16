@@ -9,6 +9,7 @@ import {
   normalizeBotUsageSummaryFromQuota,
   resolveProductErrorMessage,
   sanitizeBotOnboardingState,
+  validateBotOnboardingUpdate,
   validateBotSettingsPatch,
 } from "./bot-bff.js";
 
@@ -215,6 +216,23 @@ describe("bot BFF T6 contract", () => {
       minimum_required: ["telegram", "model_provider"],
       operator_configure_model_provider: true,
       setup: null,
+    });
+  });
+
+  it("accepts the engine identity document when the user names their agent", () => {
+    const identity = "# IDENTITY.md - ZAKI BOT Identity\n\n- **Name:** Nova";
+
+    expect(
+      validateBotOnboardingUpdate({
+        completed: true,
+        identity,
+      })
+    ).toEqual({
+      success: true,
+      data: {
+        completed: true,
+        identity,
+      },
     });
   });
 

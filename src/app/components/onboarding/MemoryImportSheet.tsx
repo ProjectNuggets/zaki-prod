@@ -1,9 +1,9 @@
 // 2026-05-09 — Memory import sheet (paste from ChatGPT/Claude/Gemini).
 //
 // New users can ask another AI for a structured memory dump using the
-// canonical prompt below, then paste it back here. ZAKI ingests it as
-// the first user turn — the agent owns the actual remember tool calls,
-// so this is just a structured first-message shortcut.
+// canonical prompt below, then paste it back here. Import waits for the
+// authenticated memory-capture route and only closes after absorption is
+// confirmed with backend counts.
 //
 // Surfaces:
 //   - Dashboard memory-scope panel
@@ -91,11 +91,13 @@ export function MemoryImportSheet({ isOpen, onClose, onImport }: Props) {
     try {
       await onImport(trimmed);
       onClose();
-    } catch {
+    } catch (error) {
       toast.error(
-        t("memoryImport.importError", {
-          defaultValue: "Couldn't send the import. Try again.",
-        }),
+        error instanceof Error && error.message
+          ? error.message
+          : t("memoryImport.importError", {
+              defaultValue: "Couldn't absorb that import. Check the response and try again.",
+            }),
       );
     } finally {
       setSubmitting(false);
@@ -190,7 +192,7 @@ export function MemoryImportSheet({ isOpen, onClose, onImport }: Props) {
             className="inline-flex items-center gap-1.5 rounded-full bg-zaki-brand px-4 py-2 text-xs font-semibold text-white shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all hover:-translate-y-0.5 hover:bg-zaki-brand-hover disabled:opacity-50 disabled:hover:translate-y-0"
           >
             {submitting ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
-            {t("memoryImport.importAction", { defaultValue: "Send to ZAKI" })}
+            {t("memoryImport.importAction", { defaultValue: "Absorb into Brain" })}
           </button>
         </div>
       </div>

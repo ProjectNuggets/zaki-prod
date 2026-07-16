@@ -1501,6 +1501,8 @@
     "saved": "memory saved",
     "savedSingle": "Memory updated",
     "savedMultiple": "Saved {{count}} memories",
+    "importedTitle": "I now remember {{count}} details from your import",
+    "importedHelper": "{{saved}} new · {{updated}} updated · {{known}} already known. Stored in your Brain.",
     "toReview": "memory to review",
     "reviewNotice": "Something may be worth remembering",
     "conflictNotice": "A memory may conflict with what ZAKI already knows",
@@ -2468,8 +2470,22 @@
     "copyAction": "Copy prompt",
     "copied": "Copied",
     "copyError": "Couldn't copy. Select the prompt and copy manually.",
-    "importAction": "Send to ZAKI",
-    "importError": "Couldn't send the import. Try again."
+    "importAction": "Absorb into Brain",
+    "importError": "Couldn't absorb that import. Check the response and try again."
+  },
+  "firstRun": {
+    "name": {
+      "kicker": "First breath · make it yours",
+      "title": "What will you call your ZAKI?",
+      "helper": "This becomes its identity everywhere you meet it. Keep ZAKI or choose a name of your own.",
+      "label": "Name your agent",
+      "submit": "Choose name",
+      "submitAria": "Make {{name}} mine",
+      "saving": "Saving name…",
+      "savingShort": "Saving",
+      "error": "Your agent could not save that name. Try again.",
+      "turnError": "Your agent saved that name, but could not continue the conversation. Try again."
+    }
   },
   "chatErrors": {
     "rateLimited": {

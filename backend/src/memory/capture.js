@@ -126,6 +126,7 @@ export async function processChatMemoryCapture({
       memoryId: stored.id,
       userId,
       expiresAt: undoUntil,
+      supersededMemoryId: conflictMemory?.memoryId || null,
     });
     saved.push({
       id: stored.id,

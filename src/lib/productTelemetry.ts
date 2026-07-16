@@ -21,6 +21,7 @@ export type ProductTelemetrySource =
   | "website_product_complete"
   | "website_product_spaces"
   | "chat_input"
+  | "memory_import"
   | "settings"
   | "pricing_page"
   | "success_page";
@@ -33,6 +34,7 @@ export const PRODUCT_TELEMETRY_SOURCES = [
   "website_product_complete",
   "website_product_spaces",
   "chat_input",
+  "memory_import",
   "settings",
   "pricing_page",
   "success_page",

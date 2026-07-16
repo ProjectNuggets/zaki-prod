@@ -119,6 +119,27 @@ describe("agent client", () => {
     );
   });
 
+  test("uses the canonical session history route when a session key is provided", async () => {
+    const fetchWithTimeout = jest.fn().mockResolvedValue({ ok: true, status: 200 });
+
+    await fetchNullclawUserHistory({
+      baseUrl: "http://nullclaw:3000",
+      internalToken: "secret",
+      userId: "9",
+      requestId: "req-canonical-history",
+      sessionKey: "agent:zaki-bot:user:9:thread:main",
+      fetchWithTimeout,
+      timeoutMs: 5000,
+    });
+
+    expect(fetchWithTimeout).toHaveBeenCalledWith(
+      "http://nullclaw:3000/api/v1/users/9/sessions/agent%3Azaki-bot%3Auser%3A9%3Athread%3Amain/history",
+      expect.objectContaining({ method: "GET" }),
+      5000,
+      "Agent history request"
+    );
+  });
+
   test("throws when base URL or token is missing", async () => {
     const fetchWithTimeout = jest.fn();
 
