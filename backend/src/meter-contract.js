@@ -30,6 +30,7 @@ const PRODUCT_ALIASES = Object.freeze({
   learn: { productId: "learning", internalProductId: ZAKI_PRODUCT_IDS.LEARN },
   hire: { productId: "hire", internalProductId: ZAKI_PRODUCT_IDS.HIRE },
   design: { productId: "design", internalProductId: ZAKI_PRODUCT_IDS.DESIGN },
+  minutes: { productId: "minutes", internalProductId: ZAKI_PRODUCT_IDS.MINUTES },
   brain: { productId: "brain", internalProductId: ZAKI_PRODUCT_IDS.BRAIN },
 });
 
