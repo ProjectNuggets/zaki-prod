@@ -198,8 +198,23 @@ describe("BrainPage", () => {
   it.each([
     ["English", en],
     ["Arabic", ar],
-  ])("provides cached-memory and recovery copy in %s", (_localeName, locale) => {
-    expect(locale.brain.status.cachedData).toBeTruthy();
+  ])("provides complete Brain status and recovery copy in %s", (_localeName, locale) => {
+    const status = locale.brain.status as Record<string, string>;
+    for (const key of [
+      "ariaLabel",
+      "scope",
+      "userScoped",
+      "memories",
+      "view",
+      "unavailable",
+      "graphOverview",
+      "memoryUnavailable",
+      "cachedData",
+      "semanticDegraded",
+      "semanticReady",
+    ]) {
+      expect(status[key]?.trim()).toBeTruthy();
+    }
     expect(locale.brain.recovery.ariaLabel).toBeTruthy();
     expect(locale.brain.recovery.title).toBeTruthy();
     expect(locale.brain.recovery.continueInSpaces).toBeTruthy();

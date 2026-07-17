@@ -1869,7 +1869,17 @@
     "title": "ذاكرتك",
     "subtitle": "كل ما يتذكره ZAKI",
     "status": {
-      "cachedData": "يتم استخدام الذاكرة المخزنة مؤقتًا"
+      "ariaLabel": "حالة الدماغ",
+      "scope": "النطاق",
+      "userScoped": "الدماغ الشخصي",
+      "memories": "الذكريات",
+      "view": "العرض",
+      "unavailable": "غير متاح",
+      "graphOverview": "الرسم البياني + النظرة العامة",
+      "memoryUnavailable": "الذاكرة غير متاحة",
+      "cachedData": "يتم استخدام الذاكرة المخزنة مؤقتًا",
+      "semanticDegraded": "الفهرسة الدلالية محدودة",
+      "semanticReady": "الفهرسة الدلالية جاهزة"
     },
     "recovery": {
       "ariaLabel": "العمل المحفوظ",
