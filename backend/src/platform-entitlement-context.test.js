@@ -1,27 +1,23 @@
 import { describe, expect, it } from "@jest/globals";
 import {
+  buildPlatformForMeterIdentity,
   resolveEffectivePlatformEntitlement,
   resolvePlatformWalletPlanForUser,
 } from "./platform-entitlement-context.js";
-import { buildPlatformEntitlementSummary } from "./platform-policy.js";
 
-// Mirror of the BFF plan{} builder used by /api/meter/status,
-// /api/entitlements and /api/usage/summary — the exact source the dashboard
-// status strip reads `plan.label` from. Kept here so the regression covers the
-// real chain (effective entitlement → platform summary → displayed label).
+// Exercise the exact meter-platform builder used by the BFF so these regressions
+// cover the real chain (effective entitlement → platform summary → displayed label).
 function displayedPlanForUser(zakiUser, options) {
-  const effective = resolveEffectivePlatformEntitlement(zakiUser, options);
-  const summary = buildPlatformEntitlementSummary({
-    commercialPlanId: effective.commercial?.planId || "spaces_free",
-    effectiveTier: effective.tier,
-    source: effective.source,
-    premium: effective.premium,
-    env: {},
-  });
-  return summary.plan;
+  return buildPlatformForMeterIdentity({ type: "user", zakiUser }, options).plan;
 }
 
 describe("platform entitlement context", () => {
+  it("builds the anonymous meter platform from the production resolver", () => {
+    expect(buildPlatformForMeterIdentity({ type: "anonymous" }, { env: {} }).plan).toEqual(
+      expect.objectContaining({ id: "free", source: "anonymous", premium: false })
+    );
+  });
+
   it("preserves canonical effective entitlement when no local bypass is configured", () => {
     const effective = resolveEffectivePlatformEntitlement(
       {
