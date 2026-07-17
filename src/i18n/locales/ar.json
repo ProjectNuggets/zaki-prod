@@ -712,6 +712,7 @@
   },
   "chat": {
     "streamingStatus": "زاكي يرد…",
+    "anonymousReplyInterrupted": "انقطع هذا الرد قبل وصوله. أعد إرسال الرسالة للمتابعة.",
     "thinking": "جاري التفكير",
     "researching": "جارٍ البحث",
     "thinkingPhrases": [

@@ -2544,6 +2544,30 @@ describe("ChatArea Component", () => {
     expect(screen.getByText("The release checklist is partially complete.")).toBeInTheDocument();
   });
 
+  it("renders an honest interrupted marker when a hydrated anonymous turn lost its reply", async () => {
+    navState.view = "chat";
+    navState.spaceId = ANONYMOUS_SPACES_WORKSPACE_ID;
+    navState.threadId = "lost-reply-thread";
+    authState = { user: null, isLoading: false };
+    // The launch-close sweep's dashboard handoff left exactly this ledger
+    // shape behind: a metered turn whose stream died before any content.
+    upsertAnonymousWorkItem({
+      productId: "spaces",
+      taskKind: "chat",
+      prompt: "Draft a launch checklist",
+      reply: "",
+      threadId: "lost-reply-thread",
+      route: `/spaces/${ANONYMOUS_SPACES_WORKSPACE_ID}/threads/lost-reply-thread`,
+      turnId: "lost-turn",
+      status: "interrupted",
+    });
+
+    await renderChatAreaAndWaitForEffects();
+
+    expect(await screen.findByText("Draft a launch checklist")).toBeInTheDocument();
+    expect(screen.getByText("chat.anonymousReplyInterrupted")).toBeInTheDocument();
+  });
+
   it("persists consecutive anonymous sends as distinct turns in the same thread", async () => {
     navState.view = "chat";
     navState.spaceId = ANONYMOUS_SPACES_WORKSPACE_ID;
