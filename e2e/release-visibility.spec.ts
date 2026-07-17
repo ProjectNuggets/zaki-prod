@@ -94,6 +94,78 @@ test.describe("ZAKI release product visibility", () => {
     });
   });
 
+  test("mobile dashboard keeps every product tab and status item discoverable", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.locator(".zaki-app-v2")).toBeVisible({ timeout: 20_000 });
+
+    const strip = page.getByTestId("zaki-dashboard-command-strip");
+    const statusStrip = page.locator(".zaki-dashboard-v2 > .v2-status-strip");
+    const viewports = [
+      { width: 320, height: 844 },
+      { width: 375, height: 844 },
+      RELEASE_VIEWPORTS.mobile,
+    ] as const;
+
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+
+      await expect
+        .poll(() =>
+          strip.evaluate((element) => {
+            const host = element.getBoundingClientRect();
+            const tabs = Array.from(element.querySelectorAll<HTMLElement>("[role='tab']"));
+            return {
+              hasHorizontalOverflow: element.scrollWidth > element.clientWidth + 1,
+              everyTabContained: tabs.every((tab) => {
+                const rect = tab.getBoundingClientRect();
+                return rect.left >= host.left - 1 && rect.right <= host.right + 1;
+              }),
+              everyTabIsTouchSized: tabs.every((tab) => tab.getBoundingClientRect().height >= 44),
+              everyTabLabelUnclipped: tabs.every((tab) => {
+                const label = tab.querySelector<HTMLElement>(
+                  ".zaki-dashboard-command__product-name"
+                );
+                return label != null && label.scrollWidth <= label.clientWidth + 1;
+              }),
+            };
+          })
+        )
+        .toEqual({
+          hasHorizontalOverflow: false,
+          everyTabContained: true,
+          everyTabIsTouchSized: true,
+          everyTabLabelUnclipped: true,
+        });
+
+      await expect
+        .poll(() =>
+          statusStrip.evaluate((element) => {
+            const host = element.getBoundingClientRect();
+            const items = Array.from(
+              element.querySelectorAll<HTMLElement>(".v2-status-strip__item")
+            );
+            return {
+              hasHorizontalOverflow: element.scrollWidth > element.clientWidth + 1,
+              everyItemContained: items.every((item) => {
+                const rect = item.getBoundingClientRect();
+                return rect.left >= host.left - 1 && rect.right <= host.right + 1;
+              }),
+            };
+          })
+        )
+        .toEqual({ hasHorizontalOverflow: false, everyItemContained: true });
+
+      await strip.getByRole("tab", { name: "Minutes" }).click();
+      await expect(strip.getByRole("tab", { name: "Minutes" })).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
+      await expect(page.getByTestId("zaki-dashboard-product-hint")).toContainText(
+        "Minutes is coming soon"
+      );
+    }
+  });
+
   test("hidden routes redirect home while Design and Minutes render their release gates", async ({ page }) => {
     for (const path of ["/learn", "/hire"]) {
       await page.goto(path, { waitUntil: "domcontentloaded" });
