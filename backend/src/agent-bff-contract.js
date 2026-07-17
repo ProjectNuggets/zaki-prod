@@ -465,6 +465,13 @@ export function registerBotBffAliases(app, handlers) {
     json1mb,
     heartbeatPutHandler
   );
+  app.get("/api/agent/heartbeat", requireAgentContext, heartbeatGetHandler);
+  app.put(
+    "/api/agent/heartbeat",
+    requireAgentContext,
+    json1mb,
+    heartbeatPutHandler
+  );
   app.post(
     "/v1/me/bot/telegram/connect",
     requireAgentContext,
@@ -519,7 +526,11 @@ export function resolveSoftEmptyAgentResponse(softEmptyPayload, upstreamStatus, 
 // through to the underlying proxy. `agentJson1mb` is the JSON body parser; it is
 // applied only for routes that opt in via `json: true`.
 export function registerAgentSessionBffRoutes(app, handlers) {
-  const { requireAgentContext, agentJson1mb, makeSessionProxyHandler } = handlers;
+  const {
+    requireAgentContext,
+    agentJson1mb,
+    makeSessionProxyHandler,
+  } = handlers;
   for (const route of AGENT_SESSION_BFF_ROUTES) {
     const proxyOptions = {};
     if (route.retry) proxyOptions.retry = true;

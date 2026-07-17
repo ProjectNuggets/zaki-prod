@@ -1,5 +1,5 @@
 import { describe, expect, it, jest, beforeEach } from "@jest/globals";
-import { render, waitFor } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { useAnonymousWorkClaim } from "./useAnonymousWorkClaim";
 import { useAnonymousWorkClaimStore, useAuthStore } from "@/stores";
@@ -70,11 +70,13 @@ function seedCompletedAnonymousWork() {
 
 /** The token arrives from session hydration — no LoginScreen, no credential form. */
 function arriveAuthenticatedViaOAuthReturn() {
-  useAuthStore.setState({
-    token: "google-oauth-token",
-    user: { id: 7, username: "google@example.com" },
-    isHydrating: false,
-    isLoading: false,
+  act(() => {
+    useAuthStore.setState({
+      token: "google-oauth-token",
+      user: { id: 7, username: "google@example.com" },
+      isHydrating: false,
+      isLoading: false,
+    });
   });
 }
 
@@ -148,6 +150,53 @@ describe("useAnonymousWorkClaim — the shared post-auth claim", () => {
     await waitFor(() => {
       expect(claimAnonymousSpacesWork).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("sends the complete eligible anonymous transcript to the claim endpoint", async () => {
+    const savedWork = upsertAnonymousWorkItem({
+      productId: "spaces",
+      taskKind: "chat",
+      prompt: "First question",
+      reply: "First answer",
+      route: "/spaces/zaky/threads/anon-abc",
+      threadId: "anon-abc",
+      turnId: "turn-one",
+      status: "succeeded",
+    });
+    upsertAnonymousWorkItem({
+      id: savedWork!.id,
+      productId: "spaces",
+      taskKind: "chat",
+      prompt: "Second question",
+      reply: "Partial second answer",
+      route: "/spaces/zaky/threads/anon-abc",
+      threadId: "anon-abc",
+      turnId: "turn-two",
+      status: "interrupted",
+    });
+    seedPendingSpacesIntent(savedWork!.id);
+    arriveAuthenticatedViaOAuthReturn();
+    renderHost();
+
+    await waitFor(() => expect(claimAnonymousSpacesWork).toHaveBeenCalledTimes(1));
+    expect(claimAnonymousSpacesWork).toHaveBeenCalledWith(
+      expect.objectContaining({
+        turns: [
+          expect.objectContaining({
+            id: "turn-one",
+            prompt: "First question",
+            reply: "First answer",
+            status: "succeeded",
+          }),
+          expect.objectContaining({
+            id: "turn-two",
+            prompt: "Second question",
+            reply: "Partial second answer",
+            status: "interrupted",
+          }),
+        ],
+      })
+    );
   });
 
   // (c) The ledger is the ONLY copy of the conversation. It is consumed only
@@ -254,6 +303,32 @@ describe("useAnonymousWorkClaim — the shared post-auth claim", () => {
     // actually gets an answer, instead of landing in an empty thread.
     expect(readPendingIntent()).not.toBeNull();
     expect(readPendingIntent()?.prompt).toBe("Draft the launch memo");
+  });
+
+  it("does not import a v2 streaming partial through the legacy reply fallback", async () => {
+    const streaming = upsertAnonymousWorkItem({
+      productId: "spaces",
+      taskKind: "chat",
+      prompt: "Draft the launch memo",
+      replyPreview: "Here is the unfinished",
+      reply: "Here is the unfinished",
+      title: "Launch memo",
+      route: "/spaces/zaky/threads/anon-abc",
+      threadId: "anon-abc",
+      turnId: "turn-streaming",
+      status: "streaming",
+    });
+    seedPendingSpacesIntent(streaming!.id);
+
+    arriveAuthenticatedViaOAuthReturn();
+    renderHost();
+
+    await waitFor(() => {
+      expect(useAnonymousWorkClaimStore.getState().status).toBe("idle");
+    });
+    expect(claimAnonymousSpacesWork).not.toHaveBeenCalled();
+    expect(readAnonymousWorkLedger().items).toHaveLength(1);
+    expect(readPendingIntent()?.anonymousWorkId).toBe(streaming!.id);
   });
 
   it("does not claim without a pending claimable intent", async () => {
@@ -378,5 +453,48 @@ describe("useAnonymousWorkClaim — the shared post-auth claim", () => {
 
     await waitFor(() => expect(useAnonymousWorkClaimStore.getState().status).toBe("idle"));
     expect(claimAnonymousSpacesWork).not.toHaveBeenCalled();
+  });
+
+  it("does not apply an account A claim after the mounted session switches to account B", async () => {
+    const savedWork = seedCompletedAnonymousWork();
+    seedPendingSpacesIntent(savedWork!.id);
+    let accountBWork: ReturnType<typeof seedCompletedAnonymousWork>;
+    let resolveClaim: (value: typeof IMPORTED_OK) => void = () => undefined;
+    const pendingClaim = new Promise<typeof IMPORTED_OK>((resolve) => {
+      resolveClaim = resolve;
+    });
+    (claimAnonymousSpacesWork as unknown as jest.Mock).mockImplementationOnce(() => pendingClaim);
+    useAuthStore.setState({
+      token: "account-a-token",
+      user: { id: "account-a", username: "a@example.com" },
+      isHydrating: false,
+      isLoading: false,
+    });
+    renderHost();
+
+    await waitFor(() => expect(claimAnonymousSpacesWork).toHaveBeenCalledTimes(1));
+
+    // App clears the browser handoff before it atomically commits B. Resolve A's
+    // already-started request in the narrow window before React effect cleanup.
+    act(() => {
+      useAuthStore.setState({
+        token: "account-b-token",
+        user: { id: "account-b", username: "b@example.com" },
+        isHydrating: true,
+        isLoading: true,
+      });
+      accountBWork = seedCompletedAnonymousWork();
+      seedPendingSpacesIntent(accountBWork!.id);
+      useAnonymousWorkClaimStore.getState().reset();
+      resolveClaim(IMPORTED_OK);
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(useAnonymousWorkClaimStore.getState().status).toBe("idle");
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(readPendingIntent()?.anonymousWorkId).toBe(accountBWork!.id);
+    expect(readAnonymousWorkLedger().items).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: accountBWork!.id })])
+    );
   });
 });

@@ -662,7 +662,6 @@ export function Sidebar({ chrome = "full" }: SidebarProps) {
         setExpandedSpace(detail.spaceId);
       }
       setActiveItem(detail.id);
-      goToThread(detail.spaceId ?? expandedSpace ?? "", detail.id);
     };
 
     window.addEventListener("zaki:thread-created", handleThreadCreated);

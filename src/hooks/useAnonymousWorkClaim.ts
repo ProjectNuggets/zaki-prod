@@ -34,16 +34,21 @@ export function useAnonymousWorkClaim() {
     claimedForTokenRef.current = token;
 
     let isMounted = true;
+    const tokenAtClaimStart = token;
+    const isCurrentSession = () =>
+      useAuthStore.getState().token === tokenAtClaimStart &&
+      !useAuthStore.getState().isHydrating;
     const { setClaiming, setResult } = useAnonymousWorkClaimStore.getState();
 
     void (async () => {
       // A Spaces chat or a WP-F Agent plan preview — the two handoffs that carry real,
       // importable anonymous work. Everything else has nothing to claim.
       if (!isClaimableProduct(readPendingIntent()?.productId)) return;
+      if (!isCurrentSession()) return;
 
       setClaiming();
-      const result = await claimPendingAnonymousWork();
-      if (!isMounted) return;
+      const result = await claimPendingAnonymousWork({ shouldCommit: isCurrentSession });
+      if (!isMounted || !isCurrentSession()) return;
 
       setResult(result);
 

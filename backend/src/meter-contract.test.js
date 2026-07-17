@@ -8,14 +8,17 @@ import {
   isMeterGrantExpired,
   normalizeMeterAction,
   resolveMeterCapabilityForAction,
+  resolveMeterProduct,
   signMeterGrant,
   verifyMeterGrantSignature,
 } from "./meter-contract.js";
 import {
   PLATFORM_METER_CAPABILITIES,
   PRODUCT_OPERATIONAL_STATES,
+  ZAKI_PRODUCT_IDS,
   buildPlatformEntitlementSummary,
   buildPlatformMeterPolicy,
+  buildPlatformProductRegistry,
 } from "./platform-policy.js";
 
 const SECRET = "b".repeat(64);
@@ -131,6 +134,83 @@ describe("central meter contract", () => {
     );
     expect(decision.signedGrant).toContain(".");
     expect(decision.maxUnits).toBeGreaterThan(0);
+  });
+
+  it("keeps Minutes default-disabled while supporting metered activation", () => {
+    expect(resolveMeterProduct("minutes")).toEqual({
+      productId: "minutes",
+      internalProductId: ZAKI_PRODUCT_IDS.MINUTES,
+    });
+
+    const registryEntry = buildPlatformProductRegistry({ env: {} }).products.find(
+      (product) => product.productId === "minutes"
+    );
+    expect(registryEntry?.state).toBe(PRODUCT_OPERATIONAL_STATES.DISABLED);
+
+    const disabledDecision = buildMeterGrantDecision({
+      identity: { type: "user", userId: 42 },
+      product: "minutes",
+      productState: registryEntry?.state,
+      action: "meeting_capture",
+      platform: platformFor("pro"),
+      meterSnapshot: meterSnapshotFor(),
+      policy: buildPlatformMeterPolicy({ env: {} }),
+      signingSecret: SECRET,
+    });
+    expect(disabledDecision).toEqual(
+      expect.objectContaining({
+        allowed: false,
+        status: 403,
+        reason: "product_disabled",
+        productId: "minutes",
+        internalProductId: ZAKI_PRODUCT_IDS.MINUTES,
+        productState: PRODUCT_OPERATIONAL_STATES.DISABLED,
+      })
+    );
+
+    const enabledDecision = buildMeterGrantDecision({
+      tenantId: "tenant-1",
+      identity: { type: "user", userId: 42 },
+      product: "minutes",
+      productState: PRODUCT_OPERATIONAL_STATES.ENABLED,
+      action: "meeting_capture",
+      estimatedUnits: 2,
+      requestId: "minutes-request-1",
+      idempotencyKey: "minutes-idempotency-1",
+      platform: platformFor("pro"),
+      meterSnapshot: meterSnapshotFor(),
+      policy: buildPlatformMeterPolicy({ env: {} }),
+      signingSecret: SECRET,
+      grantId: "00000000-0000-4000-8000-000000000004",
+      nowDate: new Date("2026-05-22T10:00:00.000Z"),
+    });
+    expect(enabledDecision).toEqual(
+      expect.objectContaining({
+        allowed: true,
+        productId: "minutes",
+        internalProductId: ZAKI_PRODUCT_IDS.MINUTES,
+        productState: PRODUCT_OPERATIONAL_STATES.ENABLED,
+        maxUnits: 2,
+      })
+    );
+
+    const receipt = buildMeterReceiptDebit({
+      product: "minutes",
+      action: "meeting_capture",
+      status: "success",
+      usageFacts: { durationMs: 60_000, externalApiCalls: 1 },
+      maxUnits: enabledDecision.maxUnits,
+      policy: buildPlatformMeterPolicy({ env: {} }),
+    });
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        valid: true,
+        productId: "minutes",
+        internalProductId: ZAKI_PRODUCT_IDS.MINUTES,
+        weightedUnits: 1.5,
+        maxExceeded: false,
+      })
+    );
   });
 
   it("adds per-product usage windows to meter status without per-product limits", () => {

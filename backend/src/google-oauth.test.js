@@ -1,6 +1,8 @@
 import { describe, expect, it } from "@jest/globals";
 import {
   buildClearedGoogleOAuthNonceCookie,
+  buildGoogleOAuthCallbackFailureRedirect,
+  buildGoogleOAuthStartFailureRedirect,
   buildGoogleOAuthRedirectUri,
   buildGoogleOAuthNonceCookie,
   extractGoogleOAuthNonceFromCookieHeader,
@@ -63,6 +65,16 @@ describe("google-oauth helpers", () => {
     expect(sanitizeGoogleOAuthReturnTo("learn?verified=1")).toBe("/learn");
     expect(sanitizeGoogleOAuthReturnTo("https://evil.example/pricing")).toBe("/spaces");
     expect(sanitizeGoogleOAuthReturnTo("//evil.example/pricing")).toBe("/spaces");
+
+    for (const unsafeReturnTo of [
+      "/./\\evil.example/pricing",
+      "/pricing/../\\evil.example/pricing",
+      "/.//evil.example/pricing",
+      "/%5cevil.example/pricing",
+      "/%2f%2fevil.example/pricing",
+    ]) {
+      expect(sanitizeGoogleOAuthReturnTo(unsafeReturnTo)).toBe("/spaces");
+    }
   });
 
   it("signs and verifies state without accepting tampering or expiry", () => {
@@ -100,6 +112,108 @@ describe("google-oauth helpers", () => {
     expect(() =>
       verifyGoogleOAuthNonceBinding({ cookieNonce: "", stateNonceHash: nonceHash })
     ).toThrow(/nonce is missing/i);
+  });
+
+  it("returns a Google OAuth failure to a verified popup callback", () => {
+    const nonce = "nonce-value";
+    const state = signGoogleOAuthStatePayload(
+      {
+        returnTo: "/?oauthPopup=google",
+        exp: Date.now() + 10 * 60_000,
+        nonceHash: hashGoogleOAuthNonce(nonce),
+      },
+      "state-secret"
+    );
+
+    expect(
+      buildGoogleOAuthCallbackFailureRedirect({
+        appUrl: "https://app.example",
+        state,
+        stateSecret: "state-secret",
+        cookieNonce: nonce,
+        errorCode: "google_oauth_cancelled",
+      })
+    ).toBe("https://app.example/?oauthPopup=google&error=google_oauth_cancelled");
+  });
+
+  it("never trusts an unverified callback state to target the OAuth popup", () => {
+    const nonce = "nonce-value";
+    const popupState = signGoogleOAuthStatePayload(
+      {
+        returnTo: "/?oauthPopup=google",
+        exp: Date.now() + 10 * 60_000,
+        nonceHash: hashGoogleOAuthNonce(nonce),
+      },
+      "state-secret"
+    );
+    const nonPopupState = signGoogleOAuthStatePayload(
+      {
+        returnTo: "/spaces",
+        exp: Date.now() + 10 * 60_000,
+        nonceHash: hashGoogleOAuthNonce(nonce),
+      },
+      "state-secret"
+    );
+    const popupWithExtraQueryState = signGoogleOAuthStatePayload(
+      {
+        returnTo: "/?oauthPopup=google&extra=1",
+        exp: Date.now() + 10 * 60_000,
+        nonceHash: hashGoogleOAuthNonce(nonce),
+      },
+      "state-secret"
+    );
+    const fallback = "https://app.example/?auth=login&error=google_oauth_cancelled";
+
+    for (const input of [
+      { state: popupState, cookieNonce: "wrong-nonce" },
+      { state: `${popupState}tampered`, cookieNonce: nonce },
+      { state: nonPopupState, cookieNonce: nonce },
+      { state: popupWithExtraQueryState, cookieNonce: nonce },
+      { state: "", cookieNonce: nonce },
+    ]) {
+      expect(
+        buildGoogleOAuthCallbackFailureRedirect({
+          appUrl: "https://app.example",
+          state: input.state,
+          stateSecret: "state-secret",
+          cookieNonce: input.cookieNonce,
+          errorCode: "google_oauth_cancelled",
+        })
+      ).toBe(fallback);
+    }
+  });
+
+  it("returns start failures to the popup only for an exact popup return target", () => {
+    expect(
+      buildGoogleOAuthStartFailureRedirect({
+        appUrl: "https://app.example",
+        returnTo: "/?oauthPopup=google",
+        errorCode: "google_oauth_start_failed",
+      })
+    ).toBe("https://app.example/?oauthPopup=google&error=google_oauth_start_failed");
+
+    expect(
+      buildGoogleOAuthStartFailureRedirect({
+        appUrl: "https://app.example",
+        returnTo: "/?oauthPopup=google",
+        errorCode: "attacker_controlled_error",
+      })
+    ).toBe("https://app.example/?oauthPopup=google&error=google_oauth_failed");
+
+    for (const returnTo of [
+      "/spaces",
+      "/?oauthPopup=google&extra=1",
+      "/?oauthPopup=google#fragment",
+      "https://evil.example/?oauthPopup=google",
+    ]) {
+      expect(
+        buildGoogleOAuthStartFailureRedirect({
+          appUrl: "https://app.example",
+          returnTo,
+          errorCode: "google_oauth_unconfigured",
+        })
+      ).toBeNull();
+    }
   });
 
   it("builds and clears the OAuth nonce cookie with callback-only scope", () => {

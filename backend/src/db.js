@@ -151,9 +151,13 @@ export async function initDb() {
       token TEXT UNIQUE NOT NULL,
       expires_at BIGINT NOT NULL,
       used_at BIGINT,
+      return_to TEXT,
       created_at TIMESTAMPTZ NOT NULL
     );
   `);
+  await migrationClient.query(
+    "ALTER TABLE verification_tokens ADD COLUMN IF NOT EXISTS return_to TEXT;"
+  );
 
   await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -1350,6 +1354,11 @@ export async function initDb() {
     `);
 
     await migrationClient.query(`
+      ALTER TABLE memory_undo_windows
+      ADD COLUMN IF NOT EXISTS superseded_memory_id UUID REFERENCES memories(id) ON DELETE SET NULL;
+    `);
+
+    await migrationClient.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_undo_windows_memory_id
       ON memory_undo_windows(memory_id);
     `);
@@ -1373,6 +1382,7 @@ export async function initDb() {
       refresh_token_hash TEXT UNIQUE NOT NULL,
       expires_at TIMESTAMPTZ NOT NULL,
       revoked_at TIMESTAMPTZ,
+      replaced_by_session_id UUID REFERENCES zaki_sessions(id) ON DELETE SET NULL,
       last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       ip_address TEXT,
       user_agent TEXT,
@@ -1391,6 +1401,13 @@ export async function initDb() {
   await migrationClient.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_zaki_sessions_refresh_hash
       ON zaki_sessions (refresh_token_hash);
+  `);
+  // AUTH-06: retain the exact successor of a rotated refresh session so the
+  // concurrent-refresh guard does not infer identity from unrelated sessions.
+  await migrationClient.query(`
+    ALTER TABLE zaki_sessions
+      ADD COLUMN IF NOT EXISTS replaced_by_session_id UUID
+        REFERENCES zaki_sessions(id) ON DELETE SET NULL;
   `);
   // Phase 04-typ-adapter: TYP-03 — drop typ_session_token from running DBs
   await migrationClient.query(`

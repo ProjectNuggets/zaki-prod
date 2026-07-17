@@ -23,6 +23,7 @@ import {
 } from "@/lib/usageDisplay";
 import { useOnlineStatus } from "@/hooks";
 import {
+  AUTH_REQUIRED_EVENT,
   autoTitleThread,
   autoTitleAgentSession,
   apiRequest,
@@ -40,6 +41,7 @@ import {
   fetchAgentArtifact,
   fetchBotRuntimeStatus,
   fetchAgentExtensionDiagnostics,
+  fetchBotOnboarding,
   fetchBotSettings,
   listAgentArtifacts,
   listAgentCron,
@@ -50,6 +52,7 @@ import {
   fetchUsageQuota,
   getApiBase,
   provisionAgent,
+  updateBotOnboarding,
   uploadAgentAttachment,
   type AgentSessionMode,
   type MemoryActivity,
@@ -63,6 +66,7 @@ import {
   type AgentSessionContext,
   type MeterAvailableNow,
   type MeterStatusResponse,
+  type BotOnboardingState,
 } from "@/lib/api";
 import {
   assistantModeToReasoningEffort,
@@ -81,8 +85,16 @@ import {
   stripThreadDisplayName,
 } from "@/lib/threadTitles";
 import { ANONYMOUS_SPACES_WORKSPACE_ID, createAnonymousThreadId } from "@/lib/anonymousSpaces";
-import { upsertAnonymousWorkItem } from "@/lib/anonymousWork";
-import { clearPendingIntent, readPendingIntent } from "@/lib/pendingIntent";
+import {
+  recoverAnonymousThreadTurnsAfterReload,
+  upsertAnonymousWorkItem,
+} from "@/lib/anonymousWork";
+import {
+  absorbMemoryImport,
+  MemoryImportPartialError,
+  settleMemoryUndosNewestFirst,
+} from "@/lib/memoryImport";
+import { clearPendingIntent, readPendingIntent, writePendingIntent } from "@/lib/pendingIntent";
 import { openSpacesMemoryViewer, type MemoryViewerTab } from "@/lib/spacesMemory";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import {
@@ -172,6 +184,14 @@ import {
   resolveErrorMessage,
 } from "@/lib/userFacingErrors";
 import { MemoryImportSheet } from "./onboarding/MemoryImportSheet";
+import { FirstRunNameCard } from "./onboarding/FirstRunNameCard";
+import {
+  FIRST_RUN_ENGINE_PROMPT,
+  buildBotIdentityDocument,
+  shouldStartEngineFirstTurn,
+  runFirstRunNameCompletion,
+  type FirstRunCeremonyPhase,
+} from "@/lib/firstRunCeremony";
 import { AgentArtifactCanvas } from "./agent/AgentArtifactCanvas";
 import {
   createZakiBotThread,
@@ -3668,6 +3688,8 @@ export function ChatArea() {
     MemoryCaptureResponse["saved"]
   >([]);
   const [recentSupersededCount, setRecentSupersededCount] = useState(0);
+  const [recentDuplicateCount, setRecentDuplicateCount] = useState(0);
+  const [memoryToastSource, setMemoryToastSource] = useState<"chat" | "import">("chat");
   const [showMemoryToast, setShowMemoryToast] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [memoryToastUndoError, setMemoryToastUndoError] = useState<string | null>(null);
@@ -3699,6 +3721,11 @@ export function ChatArea() {
   const { data: entitlementsResult } = useEntitlements();
   const { data: meterResult } = useMeterStatus();
   const [memoryImportOpen, setMemoryImportOpen] = useState(false);
+  const [botOnboarding, setBotOnboarding] = useState<BotOnboardingState | null>(null);
+  const [firstRunPhase, setFirstRunPhase] = useState<FirstRunCeremonyPhase>("idle");
+  const [firstRunError, setFirstRunError] = useState<string | null>(null);
+  const firstRunStartedRef = useRef<string | null>(null);
+  const firstRunNamingCheckpointRef = useRef<{ key: string; name: string } | null>(null);
   const [activationProgress, setActivationProgress] = useState<ActivationProgress>({
     firstMessageSent: false,
     firstMemorySaved: false,
@@ -3872,7 +3899,10 @@ export function ChatArea() {
       (agentMobileInspectorOpen || hasLiveBrowserFrame) &&
       !agentFocusMode
   );
-  const isAnonymousSpacesActive = !authUserId && !isZakiBotActiveSpace;
+  const isAnonymousSpacesActive =
+    !authUserId &&
+    !isZakiBotActiveSpace &&
+    (!activeWorkspaceSlug || activeWorkspaceSlug === ANONYMOUS_SPACES_WORKSPACE_ID);
   const quotaSurface: UsageQuotaSurface = isZakiBotActiveSpace ? "zaki_bot" : "app_chat";
   const activeSpace =
     spacesList.find((space) => space.id === activeWorkspaceSlug) ??
@@ -4883,6 +4913,37 @@ export function ChatArea() {
     isZakiBotActiveSpace || isAnonymousSpacesActive ? null : activeWorkspaceSlug,
     isZakiBotActiveSpace || isAnonymousSpacesActive ? null : activeThreadId
   );
+
+  useEffect(() => {
+    if (!isAnonymousSpacesActive || !activeThreadId) return;
+    const turns = recoverAnonymousThreadTurnsAfterReload(activeThreadId);
+    if (!turns.length) return;
+    const hydrated = turns.flatMap<Message>((turn) => [
+      {
+        id: `anonymous-${turn.id}-user`,
+        role: "user",
+        content: turn.prompt,
+        createdAt: turn.createdAt,
+      },
+      ...(turn.reply
+        ? [
+            {
+              id: `anonymous-${turn.id}-assistant`,
+              role: "assistant" as const,
+              content: turn.reply,
+              createdAt: turn.updatedAt,
+              error: turn.status === "interrupted" || turn.status === "failed",
+              errorCode: turn.status === "interrupted" ? "aborted" : null,
+            },
+          ]
+        : []),
+    ]);
+    setMessagesByThread((previous) =>
+      previous[activeThreadId]?.length
+        ? previous
+        : { ...previous, [activeThreadId]: hydrated }
+    );
+  }, [activeThreadId, isAnonymousSpacesActive]);
 
   useEffect(() => {
     spacesListRef.current = spacesList;
@@ -6618,6 +6679,8 @@ export function ChatArea() {
     signal,
     disableResponseEnvelope = false,
     turnOptions = null,
+    onContent,
+    turnKind = null,
   }: {
     workspaceSlug: string;
     threadSlug: string;
@@ -6626,6 +6689,8 @@ export function ChatArea() {
     signal?: AbortSignal;
     disableResponseEnvelope?: boolean;
     turnOptions?: InputAreaSendOptions["zaki"] | null;
+    onContent?: (content: string) => void;
+    turnKind?: "onboarding_first_turn" | null;
   }) => {
     const activeSpace = spacesList.find((s) => s.id === workspaceSlug);
     const instructions = activeSpace?.instructions ?? "";
@@ -6644,6 +6709,7 @@ export function ChatArea() {
           message,
           threadId: threadSlug,
           spaceId: workspaceSlug,
+          ...(turnKind ? { turnKind } : {}),
           ...(turnOptions?.autonomy ? { autonomy: turnOptions.autonomy } : {}),
           ...(turnOptions?.reasoning_effort
             ? { reasoning_effort: turnOptions.reasoning_effort }
@@ -7304,6 +7370,7 @@ export function ChatArea() {
           assistantId,
           normalized
         );
+        onContent?.(normalized);
         return buildStreamResult(normalized);
       }
       if (result.done) {
@@ -7342,6 +7409,7 @@ export function ChatArea() {
       if (!chunk) return;
       turnContent.received = true;
       accumulated += chunk;
+      onContent?.(accumulated);
       if (renderRaf != null) return;
       renderRaf = window.requestAnimationFrame(() => {
         renderRaf = null;
@@ -7493,6 +7561,7 @@ export function ChatArea() {
     if (finalized && finalized !== accumulated) {
       updateAssistantContent(threadSlug, assistantId, finalized);
     }
+    onContent?.(finalized || accumulated);
     return buildStreamResult(finalized || accumulated);
   }, [
     appendAssistantAgentStep,
@@ -7538,6 +7607,8 @@ export function ChatArea() {
     setShowMemoryToast(false);
     setRecentSavedMemories([]);
     setRecentSupersededCount(0);
+    setRecentDuplicateCount(0);
+    setMemoryToastSource("chat");
     setMemoryToastUndoError(null);
     setMemoryToastPartialUndoCount(0);
     clearMemoryToastDismiss();
@@ -7554,13 +7625,19 @@ export function ChatArea() {
     ({
       saved,
       supersededCount = 0,
+      duplicateCount = 0,
+      source = "chat",
     }: {
       saved: MemoryCaptureResponse["saved"];
       supersededCount?: number;
+      duplicateCount?: number;
+      source?: "chat" | "import";
     }) => {
-      const shouldShow = saved.length > 0 || supersededCount > 0;
+      const shouldShow = saved.length > 0 || supersededCount > 0 || duplicateCount > 0;
       setRecentSavedMemories(saved);
       setRecentSupersededCount(supersededCount);
+      setRecentDuplicateCount(duplicateCount);
+      setMemoryToastSource(source);
       setShowMemoryToast(shouldShow);
 
       if (!shouldShow) {
@@ -7800,11 +7877,12 @@ export function ChatArea() {
       queuedMemoryCheckRef.current = null;
       memoryInFlightRef.current = false;
       if (
-        showMemoryToast ||
-        recentSavedMemories.length > 0 ||
-        recentSupersededCount > 0 ||
-        memoryToastUndoError ||
-        memoryToastPartialUndoCount > 0
+        memoryToastSource !== "import" &&
+        (showMemoryToast ||
+          recentSavedMemories.length > 0 ||
+          recentSupersededCount > 0 ||
+          memoryToastUndoError ||
+          memoryToastPartialUndoCount > 0)
       ) {
         dismissMemoryToast();
       }
@@ -7824,6 +7902,7 @@ export function ChatArea() {
     dismissMemoryToast,
     isMemoryPipelineEnabled,
     memoryError,
+    memoryToastSource,
     memoryToastPartialUndoCount,
     memoryToastUndoError,
     recentSavedMemories.length,
@@ -8029,6 +8108,38 @@ export function ChatArea() {
   }, [authUserId, ensureZakiBotProvisioned, isAuthReady, isZakiBotActiveSpace]);
 
   useEffect(() => {
+    if (!isAuthReady || !authUserId || !isZakiBotActiveSpace || !zakiBotProvisionReady) {
+      setBotOnboarding(null);
+      setFirstRunPhase("idle");
+      setFirstRunError(null);
+      firstRunStartedRef.current = null;
+      return;
+    }
+
+    let cancelled = false;
+    setFirstRunPhase("checking");
+    setFirstRunError(null);
+    void fetchBotOnboarding()
+      .then(({ response, data }) => {
+        if (cancelled) return;
+        if (!response.ok || data?.error) {
+          setFirstRunPhase("unavailable");
+          return;
+        }
+        setBotOnboarding(data);
+        setFirstRunPhase(data?.completed ? "complete" : "checking");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFirstRunPhase("unavailable");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUserId, isAuthReady, isZakiBotActiveSpace, zakiBotProvisionReady]);
+
+  useEffect(() => {
     if (isZakiBotActiveSpace) return;
     clearZakiBotProgressVisuals();
   }, [clearZakiBotProgressVisuals, isZakiBotActiveSpace]);
@@ -8124,7 +8235,8 @@ export function ChatArea() {
     text: string,
     files: File[],
     turnOptions?: InputAreaSendOptions,
-    preferredWorkspaceSlug?: string | null
+    preferredWorkspaceSlug?: string | null,
+    presentation?: { hideUserMessage?: boolean; firstRun?: boolean }
   ): Promise<boolean> => {
     const trimmed = text.trim();
     if (!trimmed) {
@@ -8169,6 +8281,9 @@ export function ChatArea() {
     setPaywallCardData(null);
 
     const isZakiBotTarget = isZakiBotSpaceId(resolvedWorkspaceSlug);
+    const anonymousTurnId = !authUserId
+      ? `anonymous-turn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      : null;
     const anonymousWork =
       !authUserId
         ? upsertAnonymousWorkItem({
@@ -8181,6 +8296,7 @@ export function ChatArea() {
                 ? `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(activeThreadId)}`
                 : `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}`,
             threadId: activeThreadId,
+            turnId: anonymousTurnId ?? undefined,
             meterRemaining: null,
             status: "draft",
           })
@@ -8192,6 +8308,7 @@ export function ChatArea() {
     // For ZAKI bot without an activeThreadId, generate a new thread slug.
     // The nullalis backend creates the session on first message.
     const generatedZakiThread = isZakiBotTarget && !activeThreadId;
+    let createdSpacesThread = false;
     let threadId = activeThreadId || (isZakiBotTarget ? `thread-${Date.now()}` : null);
     if (!threadId) {
       try {
@@ -8214,6 +8331,7 @@ export function ChatArea() {
           thread?: { slug?: string; id?: string; name?: string; label?: string };
         };
         threadId = data.thread?.slug ?? data.thread?.id ?? `thread-${Date.now()}`;
+        createdSpacesThread = true;
         const threadName = stripThreadDisplayName(data.thread?.name ?? data.thread?.label);
         const label = isDefaultThreadLabel(threadName)
           ? DEFAULT_THREAD_LABEL
@@ -8230,6 +8348,12 @@ export function ChatArea() {
     }
 
     if (!threadId) return false;
+    if (createdSpacesThread && !isZakiBotTarget) {
+      goToThread(resolvedWorkspaceSlug, threadId);
+      navigate(
+        `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`
+      );
+    }
     if (anonymousWork && !isZakiBotTarget) {
       upsertAnonymousWorkItem({
         id: anonymousWork.id,
@@ -8238,6 +8362,7 @@ export function ChatArea() {
         prompt: trimmed,
         route: `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
         threadId,
+        turnId: anonymousTurnId ?? undefined,
         meterRemaining: null,
         status: "draft",
       });
@@ -8266,7 +8391,7 @@ export function ChatArea() {
       }
     }
 
-    if (authUserId && !activationProgress.firstMessageSent) {
+    if (authUserId && !activationProgress.firstMessageSent && !presentation?.firstRun) {
       const nextProgress = markFirstMessageSent(authUserId);
       setActivationProgress(nextProgress);
       void trackProductEvent({
@@ -8309,13 +8434,15 @@ export function ChatArea() {
         ...prev,
         [threadId]: [
           ...(prev[threadId] ?? []),
-          {
-            id: userMessageId,
-            role: "user" as const,
-            content: trimmed,
-            createdAt: userCreatedAt,
-            attachments: attachmentsForMessage,
-          },
+          ...(presentation?.hideUserMessage
+            ? []
+            : [{
+                id: userMessageId,
+                role: "user" as const,
+                content: trimmed,
+                createdAt: userCreatedAt,
+                attachments: attachmentsForMessage,
+              }]),
           {
             id: assistantMessageId,
             role: "assistant" as const,
@@ -8426,6 +8553,28 @@ export function ChatArea() {
     const sendText = attachmentMarkers
       ? `${attachmentMarkers}\n\n${trimmed}`
       : trimmed;
+    let anonymousPartialReply = "";
+    let lastAnonymousPersistAt = 0;
+    const persistAnonymousPartial = (content: string) => {
+      anonymousPartialReply = content;
+      if (!anonymousWork || isZakiBotTarget || !anonymousTurnId) return;
+      const now = Date.now();
+      if (now - lastAnonymousPersistAt < 250) return;
+      lastAnonymousPersistAt = now;
+      upsertAnonymousWorkItem({
+        id: anonymousWork.id,
+        productId: "spaces",
+        taskKind: "chat",
+        prompt: trimmed,
+        replyPreview: content,
+        reply: content,
+        route: `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
+        threadId,
+        turnId: anonymousTurnId,
+        meterRemaining: null,
+        status: "streaming",
+      });
+    };
 
     try {
       // P1-12: bounded auto-reconnect/replay of the SAME turn when the BFF
@@ -8446,6 +8595,8 @@ export function ChatArea() {
             assistantId: assistantMessageId,
             signal: streamController.signal,
             turnOptions: isZakiBotTarget ? turnOptions?.zaki ?? null : null,
+            onContent: !authUserId && !isZakiBotTarget ? persistAnonymousPartial : undefined,
+            turnKind: presentation?.firstRun ? "onboarding_first_turn" : null,
           });
           break;
         } catch (streamError) {
@@ -8477,7 +8628,7 @@ export function ChatArea() {
       if (isZakiBotTarget && assistantReply) {
         setComposerQuickReplyTriggerId(assistantMessageId);
       }
-      if (isZakiBotTarget && turnSessionKey) {
+      if (isZakiBotTarget && turnSessionKey && !presentation?.firstRun) {
         void maybeAutoTitleSession(turnSessionKey, {
           userMessage: trimmed,
           assistantMessage: assistantReply,
@@ -8528,12 +8679,15 @@ export function ChatArea() {
             ? "/agent"
             : `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
           threadId,
+          turnId: anonymousTurnId ?? undefined,
           meterRemaining: null,
           status: "succeeded",
         });
       }
       // Keep chat UX responsive: memory save runs in background.
-      void checkForSavedMemories(trimmed, threadId);
+      if (!presentation?.firstRun) {
+        void checkForSavedMemories(trimmed, threadId);
+      }
       return true;
     } catch (error) {
       if (anonymousWork) {
@@ -8543,12 +8697,18 @@ export function ChatArea() {
           productId,
           taskKind: isZakiBotTarget ? "plan" : "chat",
           prompt: trimmed,
+          replyPreview: anonymousPartialReply,
+          reply: anonymousPartialReply,
           route: isZakiBotTarget
             ? "/agent"
             : `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
           threadId,
+          turnId: anonymousTurnId ?? undefined,
           meterRemaining: null,
-          status: "failed",
+          status:
+            isAbortError(error) || anonymousPartialReply.trim()
+              ? "interrupted"
+              : "failed",
         });
       }
       if (isAbortError(error)) {
@@ -8655,6 +8815,177 @@ export function ChatArea() {
   );
 
   useEffect(() => {
+    const snapshotDraftForReauthentication = () => {
+      const prompt = composerHandleRef.current?.getDraft().trim() || "";
+      if (!prompt) return;
+      const productId = isZakiBotActiveSpace ? "agent" : "spaces";
+      writePendingIntent({
+        productId,
+        taskKind: productId === "agent" ? "plan" : "chat",
+        prompt,
+        source: "session_expired",
+        returnTo: productId === "agent" ? "/agent" : "/spaces",
+        replayMode: "draft",
+      });
+    };
+    window.addEventListener(AUTH_REQUIRED_EVENT, snapshotDraftForReauthentication);
+    return () => {
+      window.removeEventListener(AUTH_REQUIRED_EVENT, snapshotDraftForReauthentication);
+    };
+  }, [isZakiBotActiveSpace]);
+
+  useEffect(() => {
+    if (
+      !isAuthReady ||
+      !authUserId ||
+      !isZakiBotActiveSpace ||
+      !zakiBotProvisionReady ||
+      !activeThreadId ||
+      agentHistoryHydratedThreadId !== activeThreadId ||
+      !botOnboarding ||
+      botOnboarding.completed ||
+      isStreaming
+    ) {
+      return;
+    }
+
+    if (messages.length > 0) {
+      setFirstRunPhase((current) =>
+        current === "saving_name" ? current : "awaiting_name"
+      );
+      return;
+    }
+
+    if (!shouldStartEngineFirstTurn({ onboarding: botOnboarding, messageCount: messages.length })) {
+      setFirstRunPhase("unavailable");
+      return;
+    }
+
+    const ceremonyKey = `${authUserId}:${activeThreadId}`;
+    if (firstRunStartedRef.current === ceremonyKey) return;
+    firstRunStartedRef.current = ceremonyKey;
+    setFirstRunPhase("starting");
+    void handleSend(
+      FIRST_RUN_ENGINE_PROMPT,
+      [],
+      undefined,
+      ZAKI_BOT_SPACE_ID,
+      { hideUserMessage: true, firstRun: true }
+    ).then((succeeded) => {
+      setFirstRunPhase(succeeded ? "awaiting_name" : "unavailable");
+      if (!succeeded) {
+        firstRunStartedRef.current = null;
+      }
+    });
+  }, [
+    activeThreadId,
+    agentHistoryHydratedThreadId,
+    authUserId,
+    botOnboarding,
+    handleSend,
+    isAuthReady,
+    isStreaming,
+    isZakiBotActiveSpace,
+    messages.length,
+    zakiBotProvisionReady,
+  ]);
+
+  const completeFirstRunName = useCallback(
+    async (name: string) => {
+      if (firstRunPhase === "saving_name") return;
+      setFirstRunPhase("saving_name");
+      setFirstRunError(null);
+      try {
+        const checkpointKey = `zaki:firstRunName:${authUserId}:${activeThreadId || "main"}`;
+        let completedOnboarding: BotOnboardingState | null = null;
+        await runFirstRunNameCompletion({
+          name,
+          readNamingCheckpoint: () => {
+            try {
+              return window.sessionStorage.getItem(checkpointKey);
+            } catch {
+              const checkpoint = firstRunNamingCheckpointRef.current;
+              return checkpoint?.key === checkpointKey ? checkpoint.name : null;
+            }
+          },
+          writeNamingCheckpoint: (checkpointName) => {
+            firstRunNamingCheckpointRef.current = { key: checkpointKey, name: checkpointName };
+            try {
+              window.sessionStorage.setItem(checkpointKey, checkpointName);
+            } catch {
+              // The in-memory checkpoint still prevents a duplicate turn in this tab.
+            }
+          },
+          clearNamingCheckpoint: () => {
+            firstRunNamingCheckpointRef.current = null;
+            try {
+              window.sessionStorage.removeItem(checkpointKey);
+            } catch {
+              // Best-effort cleanup only.
+            }
+          },
+          persistIdentity: async () => {
+            const identityUpdate = await updateBotOnboarding({
+              completed: false,
+              identity: buildBotIdentityDocument(name),
+            });
+            if (
+              !identityUpdate.response.ok ||
+              identityUpdate.data?.error ||
+              identityUpdate.data?.completed !== false
+            ) {
+              throw new Error(
+                identityUpdate.data?.message ||
+                  t("firstRun.name.error", {
+                    defaultValue: "Your agent could not save that name. Try again.",
+                  })
+              );
+            }
+          },
+          sendNamingTurn: async () => {
+            const namingTurnSucceeded = await handleSend(`I'll call you ${name}.`, []);
+            if (!namingTurnSucceeded) {
+              throw new Error(
+                t("firstRun.name.turnError", {
+                  defaultValue: "Your agent saved that name, but could not continue the conversation. Try again.",
+                })
+              );
+            }
+          },
+          persistCompletion: async () => {
+            const completionUpdate = await updateBotOnboarding({ completed: true });
+            if (
+              !completionUpdate.response.ok ||
+              completionUpdate.data?.error ||
+              completionUpdate.data?.completed !== true
+            ) {
+              throw new Error(
+                completionUpdate.data?.message ||
+                  t("firstRun.name.error", {
+                    defaultValue: "Your agent could not save that name. Try again.",
+                  })
+              );
+            }
+            completedOnboarding = completionUpdate.data;
+          },
+        });
+        setBotOnboarding(completedOnboarding);
+        setFirstRunPhase("complete");
+      } catch (error) {
+        setFirstRunError(
+          error instanceof Error
+            ? error.message
+            : t("firstRun.name.error", {
+                defaultValue: "Your agent could not save that name. Try again.",
+              })
+        );
+        setFirstRunPhase("awaiting_name");
+      }
+    },
+    [activeThreadId, authUserId, firstRunPhase, handleSend, t]
+  );
+
+  useEffect(() => {
     if (!isAuthReady || !authUserId || isStreaming) return;
     const pendingIntent = readPendingIntent();
     if (!pendingIntent?.prompt) return;
@@ -8674,7 +9005,12 @@ export function ChatArea() {
       if (!activeWorkspaceSlug || isZakiBotActiveSpace) return;
       replayedPendingIntentKeyRef.current = replayKey;
       clearPendingIntent();
-      composerHandleRef.current?.submitWith(pendingIntent.prompt);
+      if (pendingIntent.replayMode === "submit") {
+        composerHandleRef.current?.submitWith(pendingIntent.prompt);
+      } else {
+        composerHandleRef.current?.setDraft(pendingIntent.prompt);
+        window.dispatchEvent(new Event("zaki:focus-composer"));
+      }
     }
   }, [
     activeWorkspaceSlug,
@@ -9411,7 +9747,7 @@ export function ChatArea() {
 
   // Load thread history from React Query
   useEffect(() => {
-    if (isZakiBotActiveSpace) return;
+    if (isZakiBotActiveSpace || isAnonymousSpacesActive) return;
     if (!activeThreadId || !activeWorkspaceSlug) return;
     if (!historyData || historyLoadedRef.current[activeThreadId]) return;
     if (messagesByThread[activeThreadId]?.length) {
@@ -9436,6 +9772,7 @@ export function ChatArea() {
     activeThreadId,
     activeWorkspaceSlug,
     historyData,
+    isAnonymousSpacesActive,
     isZakiBotActiveSpace,
     messagesByThread,
   ]);
@@ -10281,6 +10618,14 @@ export function ChatArea() {
               className="zaki-input-float relative z-20"
               style={{ transform: `translateY(${inputOffset}px)` }}
             >
+              {isAgentSurface &&
+              (firstRunPhase === "awaiting_name" || firstRunPhase === "saving_name") ? (
+                <FirstRunNameCard
+                  phase={firstRunPhase}
+                  onComplete={completeFirstRunName}
+                  error={firstRunError}
+                />
+              ) : null}
               {/* Single source of truth for ApprovalRequiredCard. The
                   timeline copy was dropped in 18328cd so the decided
                   state has one owner. Surfaces directly above the
@@ -10541,7 +10886,50 @@ export function ChatArea() {
         isOpen={memoryImportOpen}
         onClose={() => setMemoryImportOpen(false)}
         onImport={async (dump) => {
-          handleSend(dump, []);
+          let partialError: MemoryImportPartialError | null = null;
+          let absorption;
+          try {
+            absorption = await absorbMemoryImport(dump, activeThreadId);
+          } catch (error) {
+            if (!(error instanceof MemoryImportPartialError)) throw error;
+            partialError = error;
+            absorption = error.partial;
+          }
+          const { saved, superseded, duplicates } = absorption;
+          setMemoryError(null);
+          setMemoryToastUndoError(null);
+          setMemoryToastPartialUndoCount(0);
+          presentMemoryToast({
+            saved,
+            supersededCount: superseded.length,
+            duplicateCount: duplicates.length,
+            source: "import",
+          });
+          if (saved.length > 0 && authUserId && !activationProgress.firstMemorySaved) {
+            const nextProgress = markFirstMemorySaved(authUserId);
+            setActivationProgress(nextProgress);
+            void trackProductEvent({
+              event: "first_memory_saved",
+              source: "memory_import",
+              language: isRtl ? "ar" : "en",
+              plan: null,
+              interval: null,
+            }).catch(() => {
+              // Best-effort telemetry only.
+            });
+            if (nextProgress.completed) {
+              void trackProductEvent({
+                event: "activation_completed",
+                source: "memory_import",
+                language: isRtl ? "ar" : "en",
+                plan: null,
+                interval: null,
+              }).catch(() => {
+                // Best-effort telemetry only.
+              });
+            }
+          }
+          if (partialError) throw partialError;
         }}
       />
 
@@ -10563,8 +10951,10 @@ export function ChatArea() {
       {showMemoryToast && authUserId && (
         <MemoryCaptureToast
           position={toastPosition}
+          source={memoryToastSource}
           savedCount={recentSavedMemories.length}
           supersededCount={recentSupersededCount}
+          duplicateCount={recentDuplicateCount}
           processing={isUndoingMemoryToast}
           onUndo={
             recentSavedMemories.length > 0
@@ -10574,8 +10964,9 @@ export function ChatArea() {
                   setMemoryToastUndoError(null);
                   setMemoryToastPartialUndoCount(0);
                   try {
-                    const results = await Promise.allSettled(
-                      recentSavedMemories.map((memory) =>
+                    const results = await settleMemoryUndosNewestFirst(
+                      recentSavedMemories,
+                      (memory) =>
                         apiRequest(`/api/memory/undo/${memory.id}`, {
                           method: "POST",
                         }).then(async (response) => {
@@ -10588,27 +10979,22 @@ export function ChatArea() {
                           } catch {
                             data = null;
                           }
-                          return {
-                            id: memory.id,
-                            ok: response.ok && data?.success !== false,
-                            error:
-                              typeof data?.error === "string" && data.error.trim()
-                                ? data.error.trim()
-                                : null,
-                          };
+                          const error =
+                            typeof data?.error === "string" && data.error.trim()
+                              ? data.error.trim()
+                              : null;
+                          if (!response.ok || data?.success === false) {
+                            throw new Error(error || t("memory.undoFailed"));
+                          }
+                          return { id: memory.id };
                         })
-                      )
                     );
 
-                    const failedIds = new Set<string>();
+                    const succeededIds = new Set<string>();
                     let firstError: string | null = null;
                     for (const result of results) {
-                      if (result.status === "fulfilled" && result.value.ok) continue;
                       if (result.status === "fulfilled") {
-                        failedIds.add(result.value.id);
-                        if (!firstError && result.value.error) {
-                          firstError = result.value.error;
-                        }
+                        succeededIds.add(result.value.id);
                         continue;
                       }
                       if (!firstError && result.reason instanceof Error) {
@@ -10616,15 +11002,17 @@ export function ChatArea() {
                       }
                     }
 
-                    if (failedIds.size === 0) {
+                    if (succeededIds.size === recentSavedMemories.length) {
                       dismissMemoryToast();
                       requestMemoryStatusSync(true);
                       return;
                     }
 
-                    const failedMemories = recentSavedMemories.filter((memory) => failedIds.has(memory.id));
-                    const partialUndoCount = recentSavedMemories.length - failedMemories.length;
-                    setRecentSavedMemories(failedMemories);
+                    const remainingMemories = recentSavedMemories.filter(
+                      (memory) => !succeededIds.has(memory.id)
+                    );
+                    const partialUndoCount = succeededIds.size;
+                    setRecentSavedMemories(remainingMemories);
                     setMemoryToastPartialUndoCount(partialUndoCount);
                     setMemoryToastUndoError(
                       firstError ||
@@ -10634,7 +11022,7 @@ export function ChatArea() {
                             : "memory.undoFailed"
                         )
                     );
-                    setShowMemoryToast(failedMemories.length > 0);
+                    setShowMemoryToast(remainingMemories.length > 0);
                     requestMemoryStatusSync(true);
                   } finally {
                     setIsUndoingMemoryToast(false);
@@ -10644,7 +11032,11 @@ export function ChatArea() {
           }
           onOpenMemory={() => {
             dismissMemoryToast();
-            openMemoryViewer();
+            if (memoryToastSource === "import") {
+              openAgentMemorySurface();
+            } else {
+              openMemoryViewer();
+            }
           }}
           onDismiss={dismissMemoryToast}
           undoError={memoryToastUndoError}

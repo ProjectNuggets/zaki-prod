@@ -51,6 +51,7 @@ import {
   fetchAgentSessionContext,
   fetchAgentSessionHistory,
   fetchAgentSessionPlan,
+  fetchBotOnboarding,
   fetchBotSettings,
   fetchContextDiagnostics,
   fetchBotRuntimeStatus,
@@ -59,9 +60,11 @@ import {
   listAgentJobs,
   provisionAgent,
   setAgentSessionMode,
+  updateBotOnboarding,
 } from "@/lib/api";
+import { FIRST_RUN_ENGINE_PROMPT } from "@/lib/firstRunCeremony";
 import { PENDING_INTENT_KEY } from "@/lib/pendingIntent";
-import { ANONYMOUS_WORK_LEDGER_KEY } from "@/lib/anonymousWork";
+import { ANONYMOUS_WORK_LEDGER_KEY, upsertAnonymousWorkItem } from "@/lib/anonymousWork";
 import { ANONYMOUS_SPACES_WORKSPACE_ID } from "@/lib/anonymousSpaces";
 import { toast } from "sonner";
 
@@ -74,6 +77,7 @@ jest.mock("sonner", () => ({
 }));
 
 jest.mock("@/lib/api", () => ({
+  AUTH_REQUIRED_EVENT: "zaki:auth-required",
   apiRequest: jest.fn(async () => ({
     ok: true,
     status: 200,
@@ -203,6 +207,24 @@ jest.mock("@/lib/api", () => ({
       assistant_mode: "balanced",
       autonomy: "supervised",
     },
+  })),
+  fetchBotOnboarding: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ completed: true, completed_at_s: 1 }),
+      headers: new Headers(),
+    },
+    data: { completed: true, completed_at_s: 1 },
+  })),
+  updateBotOnboarding: jest.fn(async () => ({
+    response: {
+      ok: true,
+      status: 200,
+      json: async () => ({ completed: true, completed_at_s: 1 }),
+      headers: new Headers(),
+    },
+    data: { completed: true, completed_at_s: 1 },
   })),
   fetchContextDiagnostics: jest.fn(async () => ({
     response: {
@@ -1050,6 +1072,26 @@ describe("ChatArea Component", () => {
         autonomy: "supervised",
       },
     }));
+    (fetchBotOnboarding as jest.Mock).mockReset();
+    (fetchBotOnboarding as jest.Mock).mockResolvedValue({
+      response: {
+        ok: true,
+        status: 200,
+        json: async () => ({ completed: true, completed_at_s: 1 }),
+        headers: new Headers(),
+      },
+      data: { completed: true, completed_at_s: 1 },
+    });
+    (updateBotOnboarding as jest.Mock).mockReset();
+    (updateBotOnboarding as jest.Mock).mockResolvedValue({
+      response: {
+        ok: true,
+        status: 200,
+        json: async () => ({ completed: true, completed_at_s: 1 }),
+        headers: new Headers(),
+      },
+      data: { completed: true, completed_at_s: 1 },
+    });
     (fetchBotRuntimeStatus as jest.Mock).mockClear();
     (fetchMemoryActivity as jest.Mock).mockClear();
     (listAgentSessions as jest.Mock).mockClear();
@@ -2239,6 +2281,35 @@ describe("ChatArea Component", () => {
     expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
   });
 
+  it("snapshots the current Agent draft before an expired-session login handoff", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+
+    await renderChatAreaAndWaitForEffects();
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "Do not lose this Agent draft" },
+    });
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("zaki:auth-required", {
+          cancelable: true,
+          detail: { loginUrl: "/?auth=login&next=%2Fagent" },
+        })
+      );
+    });
+
+    expect(JSON.parse(window.localStorage.getItem(PENDING_INTENT_KEY) || "null")).toMatchObject({
+      productId: "agent",
+      prompt: "Do not lose this Agent draft",
+      replayMode: "draft",
+      returnTo: "/agent",
+    });
+  });
+
   it("replays a matching post-auth Spaces intent by sending it into the active thread", async () => {
     navState.view = "chat";
     navState.spaceId = "space-1";
@@ -2251,6 +2322,7 @@ describe("ChatArea Component", () => {
         taskKind: "chat",
         prompt: "Summarize this workspace",
         returnTo: "/spaces",
+        replayMode: "submit",
         createdAt: new Date().toISOString(),
       })
     );
@@ -2281,6 +2353,35 @@ describe("ChatArea Component", () => {
         })
       );
     });
+    expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
+  });
+
+  it("restores an interrupted Spaces intent as a draft without sending it twice", async () => {
+    navState.view = "chat";
+    navState.spaceId = "space-1";
+    navState.threadId = "thread-1";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    window.localStorage.setItem(
+      PENDING_INTENT_KEY,
+      JSON.stringify({
+        productId: "spaces",
+        taskKind: "chat",
+        prompt: "Keep this interrupted draft",
+        returnTo: "/spaces",
+        replayMode: "draft",
+        createdAt: new Date().toISOString(),
+      })
+    );
+
+    await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(screen.getByRole("combobox")).toHaveValue("Keep this interrupted draft");
+    });
+    expect(apiRequest).not.toHaveBeenCalledWith(
+      expect.stringContaining("/stream-chat"),
+      expect.anything()
+    );
     expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
   });
 
@@ -2356,6 +2457,216 @@ describe("ChatArea Component", () => {
     );
   });
 
+  it("establishes the anonymous thread route before waiting for the first reply chunk", async () => {
+    navState.view = "chat";
+    navState.spaceId = null;
+    navState.threadId = null;
+    authState = { user: null, isLoading: false };
+    let finishStream: (() => void) | null = null;
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (path.endsWith("/thread/new")) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ thread: { slug: "created-thread" } }),
+        };
+      }
+      if (path.includes("/stream-chat")) {
+        return new Promise((resolve) => {
+          finishStream = () =>
+            resolve({
+              ok: true,
+              status: 200,
+              headers: new Headers({ "content-type": "application/json" }),
+              json: async () => ({ type: "textResponse", textResponse: "Done" }),
+            });
+        });
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({}),
+      };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "Route this chat immediately" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+
+    await waitFor(() => {
+      expect(navState.goToThread).toHaveBeenCalledWith(
+        ANONYMOUS_SPACES_WORKSPACE_ID,
+        "created-thread"
+      );
+    });
+    expect(finishStream).not.toBeNull();
+    await act(async () => {
+      finishStream?.();
+    });
+  });
+
+  it("hydrates an anonymous thread transcript from the browser ledger after refresh", async () => {
+    navState.view = "chat";
+    navState.spaceId = ANONYMOUS_SPACES_WORKSPACE_ID;
+    navState.threadId = "saved-thread";
+    authState = { user: null, isLoading: false };
+    const saved = upsertAnonymousWorkItem({
+      productId: "spaces",
+      taskKind: "chat",
+      prompt: "What did we decide?",
+      reply: "We decided to ship the focused launch first.",
+      threadId: "saved-thread",
+      route: `/spaces/${ANONYMOUS_SPACES_WORKSPACE_ID}/threads/saved-thread`,
+      turnId: "saved-turn",
+      status: "succeeded",
+    });
+    upsertAnonymousWorkItem({
+      id: saved!.id,
+      productId: "spaces",
+      taskKind: "chat",
+      prompt: "What remains?",
+      reply: "The release checklist is partially complete.",
+      threadId: "saved-thread",
+      route: `/spaces/${ANONYMOUS_SPACES_WORKSPACE_ID}/threads/saved-thread`,
+      turnId: "interrupted-turn",
+      status: "interrupted",
+    });
+
+    await renderChatAreaAndWaitForEffects();
+
+    expect(await screen.findByText("What did we decide?")).toBeInTheDocument();
+    expect(screen.getByText("We decided to ship the focused launch first.")).toBeInTheDocument();
+    expect(screen.getByText("What remains?")).toBeInTheDocument();
+    expect(screen.getByText("The release checklist is partially complete.")).toBeInTheDocument();
+  });
+
+  it("persists consecutive anonymous sends as distinct turns in the same thread", async () => {
+    navState.view = "chat";
+    navState.spaceId = ANONYMOUS_SPACES_WORKSPACE_ID;
+    navState.threadId = "existing-thread";
+    authState = { user: null, isLoading: false };
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (path.includes("/stream-chat")) {
+        const body = JSON.parse(
+          String((apiRequest as jest.Mock).mock.calls.at(-1)?.[1]?.body || "{}")
+        );
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: async () => ({
+            type: "textResponse",
+            textResponse: body.message === "First prompt" ? "First answer" : "Second answer",
+          }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({}),
+      };
+    });
+
+    await renderChatAreaAndWaitForEffects();
+    const composer = screen.getByRole("combobox");
+    const send = screen.getByRole("button", { name: "input.sendAria" });
+    fireEvent.change(composer, { target: { value: "First prompt" } });
+    fireEvent.click(send);
+    await screen.findByText("First answer");
+
+    fireEvent.change(composer, { target: { value: "Second prompt" } });
+    await waitFor(() => expect(send).not.toBeDisabled());
+    fireEvent.click(send);
+    await screen.findByText("Second answer");
+
+    const ledger = JSON.parse(window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY) || "{}");
+    expect(ledger.items?.[0]?.turns).toEqual([
+      expect.objectContaining({ prompt: "First prompt", reply: "First answer" }),
+      expect.objectContaining({ prompt: "Second prompt", reply: "Second answer" }),
+    ]);
+  });
+
+  it("keeps a streamed anonymous partial reply when the visitor presses Stop", async () => {
+    navState.view = "chat";
+    navState.spaceId = ANONYMOUS_SPACES_WORKSPACE_ID;
+    navState.threadId = "stopped-thread";
+    authState = { user: null, isLoading: false };
+    const encoder = new TextEncoder();
+    (apiRequest as jest.Mock).mockImplementation(
+      async (path: string, options?: { signal?: AbortSignal }) => {
+        if (path.includes("/stream-chat")) {
+          return {
+            ok: true,
+            status: 200,
+            headers: new Headers({ "content-type": "text/event-stream" }),
+            body: {
+              getReader() {
+                let readCount = 0;
+                return {
+                  read() {
+                    readCount += 1;
+                    if (readCount === 1) {
+                      return Promise.resolve({
+                        done: false,
+                        value: encoder.encode(
+                          'data: {"type":"textResponseChunk","textResponse":"Partial answer"}\n\n'
+                        ),
+                      });
+                    }
+                    return new Promise((_resolve, reject) => {
+                      options?.signal?.addEventListener(
+                        "abort",
+                        () => reject(new DOMException("Stopped", "AbortError")),
+                        { once: true }
+                      );
+                    });
+                  },
+                  cancel: jest.fn(),
+                };
+              },
+            },
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({}),
+        };
+      }
+    );
+
+    await renderChatAreaAndWaitForEffects();
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "Start a reply I can stop" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+    const stop = await screen.findByRole("button", { name: "input.stopAria" });
+    await waitFor(() => {
+      const ledger = JSON.parse(
+        window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY) || "{}"
+      );
+      expect(ledger.items?.[0]?.turns?.[0]?.reply).toBe("Partial answer");
+    });
+    fireEvent.click(stop);
+
+    await waitFor(() => {
+      const ledger = JSON.parse(
+        window.localStorage.getItem(ANONYMOUS_WORK_LEDGER_KEY) || "{}"
+      );
+      expect(ledger.items?.[0]?.turns?.[0]).toMatchObject({
+        prompt: "Start a reply I can stop",
+        reply: "Partial answer",
+        status: "interrupted",
+      });
+    });
+  });
+
   it("waits for auth hydration before auto-provisioning the ZAKI bot route", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
@@ -2388,6 +2699,98 @@ describe("ChatArea Component", () => {
         threadId: "main",
       });
     });
+  });
+
+  it("lets the engine author first-run, then persists the user's name-to-own choice", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    window.sessionStorage.setItem("zaki:agentUserId", "1");
+    (fetchAgentMe as jest.Mock).mockResolvedValue({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (fetchBotOnboarding as jest.Mock).mockResolvedValue({
+      response: {
+        ok: true,
+        status: 200,
+        json: async () => ({ completed: false, completed_at_s: null, can_start_chat_now: true }),
+        headers: new Headers(),
+      },
+      data: { completed: false, completed_at_s: null, can_start_chat_now: true },
+    });
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/agent/chat/stream") {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "application/json" }),
+          json: async () => ({ type: "done", message: "Hi — it's my birthday. What should we call each other?" }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+        headers: new Headers(),
+      };
+    });
+    (updateBotOnboarding as jest.Mock).mockImplementation(async (payload: { completed: boolean }) => ({
+      response: {
+        ok: true,
+        status: 200,
+        json: async () => ({ completed: payload.completed, completed_at_s: payload.completed ? 1 : null }),
+        headers: new Headers(),
+      },
+      data: { completed: payload.completed, completed_at_s: payload.completed ? 1 : null },
+    }));
+
+    await renderChatAreaAndWaitForEffects();
+
+    await waitFor(() => {
+      expect(fetchBotOnboarding).toHaveBeenCalledTimes(1);
+      expect(
+        (apiRequest as jest.Mock).mock.calls.some(([path, options]) => {
+          if (path !== "/api/agent/chat/stream") return false;
+          const body = JSON.parse(String(options?.body || "{}"));
+          return (
+            body.message === FIRST_RUN_ENGINE_PROMPT &&
+            body.turnKind === "onboarding_first_turn"
+          );
+        })
+      ).toBe(true);
+    });
+    expect(screen.queryByText(FIRST_RUN_ENGINE_PROMPT)).not.toBeInTheDocument();
+    expect(await screen.findByTestId("first-run-name-card")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "firstRun.name.label" }), {
+      target: { value: "Nova" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "firstRun.name.submitAria" }));
+
+    await waitFor(() => expect(updateBotOnboarding).toHaveBeenCalledTimes(2));
+    expect((updateBotOnboarding as jest.Mock).mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        completed: false,
+        identity: expect.stringContaining("- **Name:** Nova"),
+      })
+    );
+    expect((updateBotOnboarding as jest.Mock).mock.calls[1]?.[0]).toEqual({ completed: true });
+
+    const namingTurnOrder = (apiRequest as jest.Mock).mock.invocationCallOrder.find(
+      (_order, index) => {
+        const [path, options] = (apiRequest as jest.Mock).mock.calls[index] ?? [];
+        if (path !== "/api/agent/chat/stream") return false;
+        return JSON.parse(String(options?.body || "{}")).message === "I'll call you Nova.";
+      }
+    );
+    expect((updateBotOnboarding as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
+      namingTurnOrder as number
+    );
+    expect(namingTurnOrder).toBeLessThan(
+      (updateBotOnboarding as jest.Mock).mock.invocationCallOrder[1] as number
+    );
   });
 
   it("shows setup progress and keeps the Agent composer locked while provisioning", async () => {

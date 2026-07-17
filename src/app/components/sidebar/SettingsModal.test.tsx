@@ -14,6 +14,7 @@ import {
   deleteAgentChannelBinding,
   disconnectBotTelegram,
   disconnectAgentChannelControl,
+  fetchBotHeartbeat,
   fetchAgentChannelControls,
   fetchAgentExtensionDevices,
   listAgentSecrets,
@@ -22,6 +23,7 @@ import {
   putAgentSecret,
   requestLogout,
   testAgentChannelControl,
+  updateBotHeartbeat,
   updateBotSettings,
   updateMemoryPreferences,
   upsertAgentChannelBinding,
@@ -40,13 +42,28 @@ jest.mock("@/lib/api", () => ({
     response: { ok: true },
     data: {
       group_activation: "mention",
-      proactive_updates: true,
+      proactive_updates: false,
       voice_replies: false,
       session_timeout_minutes: 30,
       assistant_mode: "balanced",
       dream_enabled: true,
       query_expansion_enabled: false,
       selected_model: null,
+    },
+  })),
+  fetchBotHeartbeat: jest.fn(async () => ({
+    response: { ok: true },
+    data: {
+      enabled: false,
+      operator_enabled: true,
+      effective_enabled: false,
+      interval_minutes: 60,
+      delivery_channel: "telegram",
+      delivery_ready: false,
+      status: "disabled",
+      last_run_s: null,
+      last_status: null,
+      last_reason: null,
     },
   })),
   fetchMemoryPreferences: jest.fn(async () => ({
@@ -316,7 +333,7 @@ jest.mock("@/lib/api", () => ({
     response: { ok: true },
     data: {
       group_activation: payload?.group_activation ?? "mention",
-      proactive_updates: payload?.proactive_updates ?? true,
+      proactive_updates: payload?.proactive_updates ?? false,
       voice_replies: payload?.voice_replies ?? false,
       session_timeout_minutes: payload?.session_timeout_minutes ?? 30,
       assistant_mode: payload?.assistant_mode ?? "balanced",
@@ -324,6 +341,21 @@ jest.mock("@/lib/api", () => ({
       dream_enabled: payload?.dream_enabled ?? true,
       query_expansion_enabled: payload?.query_expansion_enabled ?? false,
       selected_model: payload?.selected_model ?? null,
+    },
+  })),
+  updateBotHeartbeat: jest.fn(async ({ enabled }) => ({
+    response: { ok: true },
+    data: {
+      enabled,
+      operator_enabled: true,
+      effective_enabled: enabled,
+      interval_minutes: 60,
+      delivery_channel: "telegram",
+      delivery_ready: false,
+      status: enabled ? "needs_telegram" : "disabled",
+      last_run_s: null,
+      last_status: null,
+      last_reason: null,
     },
   })),
   updateProfile: jest.fn(async () => ({
@@ -1498,9 +1530,13 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("sends precise Agent settings PATCH payloads and keeps return-loop delivery paused", async () => {
+  it("sends precise Agent settings PATCH payloads and opts into proactive check-ins separately", async () => {
     const updateBotSettingsMock = updateBotSettings as jest.MockedFunction<typeof updateBotSettings>;
+    const updateBotHeartbeatMock = updateBotHeartbeat as jest.MockedFunction<
+      typeof updateBotHeartbeat
+    >;
     updateBotSettingsMock.mockClear();
+    updateBotHeartbeatMock.mockClear();
     await renderSettingsPage();
 
     await waitFor(() => {
@@ -1528,8 +1564,17 @@ describe("SettingsPage", () => {
       expect(updateBotSettingsMock).toHaveBeenCalledWith({ group_activation: "always" });
     });
 
-    expect(screen.getByLabelText("Proactive updates")).toBeDisabled();
-    fireEvent.click(screen.getByLabelText("Proactive updates"));
+    const proactiveCheckins = screen.getByLabelText("Proactive check-ins");
+    expect(proactiveCheckins).toBeEnabled();
+    expect(proactiveCheckins).not.toBeChecked();
+    expect(screen.getByText("Off · Delivery through Telegram")).toBeInTheDocument();
+    fireEvent.click(proactiveCheckins);
+    await waitFor(() => {
+      expect(updateBotHeartbeatMock).toHaveBeenCalledWith({ enabled: true });
+    });
+    await waitFor(() => {
+      expect(screen.getByText("On · Connect Telegram to receive check-ins")).toBeInTheDocument();
+    });
     expect(updateBotSettingsMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ proactive_updates: expect.any(Boolean) })
     );
@@ -1553,6 +1598,33 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(updateBotSettingsMock).toHaveBeenCalledWith({ session_timeout_minutes: 45 });
     });
+  });
+
+  it("surfaces the latest proactive check-in delivery failure", async () => {
+    const fetchBotHeartbeatMock = fetchBotHeartbeat as jest.MockedFunction<
+      typeof fetchBotHeartbeat
+    >;
+    fetchBotHeartbeatMock.mockResolvedValueOnce({
+      response: { ok: true } as Response,
+      data: {
+        enabled: true,
+        operator_enabled: true,
+        effective_enabled: true,
+        interval_minutes: 60,
+        delivery_channel: "telegram",
+        delivery_ready: true,
+        status: "ready",
+        last_run_s: 1_800_000_000,
+        last_status: "send_failed",
+        last_reason: "no_target",
+      },
+    });
+
+    await renderSettingsPage();
+
+    expect(
+      await screen.findByText("On · Last delivery failed; verify Telegram")
+    ).toBeInTheDocument();
   });
 
   it("restores Agent tenant defaults from the header Reset to defaults action", async () => {

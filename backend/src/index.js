@@ -31,6 +31,7 @@ import {
   buildLegalConsentShape,
   validateLegalPolicyVersion,
   buildConsentStatus,
+  buildVerificationLoginRedirect,
 } from "./legal-consent.js";
 import {
   resolveSignupAgePolicy,
@@ -113,9 +114,12 @@ import {
 } from "./brain-params.js";
 import {
   buildAgentMeterUsageFacts,
+  buildAgentUpstreamTurnContext,
   classifyAgentMeterAction,
   createAgentStreamMeterMetrics,
   estimateAgentMeterUnits,
+  isUnmeteredAgentOnboardingTurn,
+  isVerifiedAgentOnboardingFirstTurn,
   reserveAgentChatUnits,
   resolveAgentReserveUnits,
   settleAgentChatUnits,
@@ -330,6 +334,7 @@ import { buildBackendHealthStatus, buildBackendReadyStatus } from "./health-read
 import { prepareAndApplySecret } from "./nullalis-secrets.js";
 import {
   buildAgentRuntimeEntitlementFields,
+  buildEntitlementFields,
 } from "./nullalis-entitlement.js";
 import {
   APP_CHAT_SURFACE,
@@ -429,6 +434,10 @@ import {
   verifyMeterGrantSignature,
 } from "./meter-contract.js";
 import {
+  buildAnonymousUnitMeterDenial,
+  createAnonymousMeterStatusResponder,
+} from "./anonymous-meter-contract.js";
+import {
   hashAnonymousSessionId,
   readMeterSnapshotForIdentity,
 } from "./platform-meter.js";
@@ -470,6 +479,11 @@ import {
   parseAnonymousWorkClaimRequest,
   resolveClaimKey,
 } from "./anonymous-work-claim.js";
+import {
+  bindAnonymousSpacesClientAbort,
+  buildAnonymousSpacesStreamFailure,
+  streamAnonymousSpacesReply,
+} from "./anonymous-spaces-stream.js";
 // WP-F — the anonymous Agent plan preview. Note what is NOT imported here: no agent client,
 // no tool registry, no nullclaw handle. The preview is a tool-less code path by construction.
 import {
@@ -480,7 +494,7 @@ import {
 import { buildAuthRouter } from "./auth-endpoints.js";
 import { loginHandler as zakiLoginHandler } from "./login-handler.js";
 import {
-  verifyZakiAccessToken,
+  verifyActiveZakiAccessToken,
   tryDecodeJwtPayload,
   mintZakiSession,
   cleanupExpiredSessions,
@@ -493,7 +507,9 @@ import { actualChatUnits, estimateChatUnits, deterministicGrantId } from "./chat
 import { isToolFireEvent, extractGeneratedFile } from "./agent-stream-signals.js";
 import {
   buildClearedGoogleOAuthNonceCookie,
+  buildGoogleOAuthCallbackFailureRedirect,
   buildGoogleOAuthRedirectUri,
+  buildGoogleOAuthStartFailureRedirect,
   buildGoogleOAuthNonceCookie,
   createGoogleOAuthNonce,
   extractGoogleOAuthNonceFromCookieHeader,
@@ -2674,6 +2690,7 @@ app.use(
     exposedHeaders: [
       "X-Request-Id",
       "X-Zaki-Agent-Base",
+      "X-Zaki-Spaces-Route",
       "X-Zaki-Mode",
       "X-Zaki-Web-Search",
       AGENT_READ_SUPPORT_HEADER,
@@ -3766,6 +3783,7 @@ const ProductEventSchema = z.object({
     "website_product_complete",
     "website_product_spaces",
     "chat_input",
+    "memory_import",
     "settings",
     "pricing_page",
     "success_page",
@@ -4956,7 +4974,7 @@ function _extractBearer(req) {
 
 async function _resolveZakiUser(token) {
   try {
-    const payload = await verifyZakiAccessToken(token);
+    const payload = await verifyActiveZakiAccessToken(token);
     if (!payload?.sub) return { error: "invalid_token" };
     const userId = Number.parseInt(String(payload.sub), 10);
     if (!Number.isInteger(userId) || userId <= 0) {
@@ -5084,12 +5102,30 @@ async function verifyGoogleIdToken(idToken) {
 }
 
 app.get("/api/auth/google/start", (req, res) => {
-  try {
-    if (!ensureGoogleOAuthConfigured()) {
-      res.status(503).json({ error: "Google OAuth is not configured." });
+  const requestedReturnTo = req.query?.returnTo || req.query?.return_to || "/spaces";
+  const respondToGoogleOAuthStartFailure = ({ errorCode, status, body }) => {
+    const popupRedirect = buildGoogleOAuthStartFailureRedirect({
+      appUrl: getAppUrl(),
+      returnTo: requestedReturnTo,
+      errorCode,
+    });
+    if (popupRedirect) {
+      res.redirect(302, popupRedirect);
       return;
     }
-    const returnTo = sanitizeGoogleOAuthReturnTo(req.query?.returnTo || req.query?.return_to || "/spaces");
+    res.status(status).json(body);
+  };
+
+  try {
+    if (!ensureGoogleOAuthConfigured()) {
+      respondToGoogleOAuthStartFailure({
+        errorCode: "google_oauth_unconfigured",
+        status: 503,
+        body: { error: "Google OAuth is not configured." },
+      });
+      return;
+    }
+    const returnTo = sanitizeGoogleOAuthReturnTo(requestedReturnTo);
     let legalPolicyVersion = null;
     if (String(req.query?.legalConsentAccepted || "").toLowerCase() === "true") {
       const policyVersionResult = validateLegalPolicyVersion(
@@ -5097,7 +5133,11 @@ app.get("/api/auth/google/start", (req, res) => {
         ZAKI_LEGAL_POLICY_VERSION
       );
       if (!policyVersionResult.ok) {
-        res.status(409).json({ success: false, error: policyVersionResult.error });
+        respondToGoogleOAuthStartFailure({
+          errorCode: "google_consent_stale",
+          status: 409,
+          body: { success: false, error: policyVersionResult.error },
+        });
         return;
       }
       legalPolicyVersion = policyVersionResult.version;
@@ -5130,10 +5170,14 @@ app.get("/api/auth/google/start", (req, res) => {
     // reads as gibberish to the user. Emit a machine `code` the client switches on plus a
     // human `message`. The real exception stays in the server log.
     console.error("[GoogleOAuth] start error:", error);
-    res.status(500).json({
-      error: "google_oauth_start_failed",
-      code: "google_oauth_start_failed",
-      message: "We couldn't start Google sign-in. Try again, or use your email and password.",
+    respondToGoogleOAuthStartFailure({
+      errorCode: "google_oauth_start_failed",
+      status: 500,
+      body: {
+        error: "google_oauth_start_failed",
+        code: "google_oauth_start_failed",
+        message: "We couldn't start Google sign-in. Try again, or use your email and password.",
+      },
     });
   }
 });
@@ -5155,9 +5199,28 @@ const GOOGLE_SIGNUP_BLOCKED_CODES = new Set([
 ]);
 
 app.get("/api/auth/google/callback", async (req, res) => {
+  const state = String(req.query?.state || "").trim();
+  const callbackNonce = extractGoogleOAuthNonceFromCookieHeader(req.headers?.cookie);
+  const redirectGoogleOAuthFailure = (errorCode) => {
+    res.setHeader(
+      "Set-Cookie",
+      buildClearedGoogleOAuthNonceCookie({ secure: isSecureCookieRequest(req) })
+    );
+    res.redirect(
+      302,
+      buildGoogleOAuthCallbackFailureRedirect({
+        appUrl: getAppUrl(),
+        state,
+        stateSecret: GOOGLE_OAUTH_STATE_SECRET,
+        cookieNonce: callbackNonce,
+        errorCode,
+      })
+    );
+  };
+
   try {
     if (!ensureGoogleOAuthConfigured()) {
-      res.redirect(302, `${getAppUrl()}/?auth=login&error=google_oauth_unconfigured`);
+      redirectGoogleOAuthFailure("google_oauth_unconfigured");
       return;
     }
     // WP-B10: Google reports a refused/cancelled consent screen by redirecting back with
@@ -5167,18 +5230,12 @@ app.get("/api/auth/google/callback", async (req, res) => {
     const googleError = String(req.query?.error || "").trim();
     if (googleError) {
       const cancelled = googleError === "access_denied";
-      res.redirect(
-        302,
-        `${getAppUrl()}/?auth=login&error=${
-          cancelled ? "google_oauth_cancelled" : "google_oauth_failed"
-        }`
-      );
+      redirectGoogleOAuthFailure(cancelled ? "google_oauth_cancelled" : "google_oauth_failed");
       return;
     }
     const code = String(req.query?.code || "").trim();
-    const state = String(req.query?.state || "").trim();
     if (!code || !state) {
-      res.redirect(302, `${getAppUrl()}/?auth=login&error=google_oauth_missing_code`);
+      redirectGoogleOAuthFailure("google_oauth_missing_code");
       return;
     }
     const { returnTo, nonceHash, legalPolicyVersion } = verifyGoogleOAuthState(
@@ -5186,7 +5243,7 @@ app.get("/api/auth/google/callback", async (req, res) => {
       GOOGLE_OAUTH_STATE_SECRET
     );
     verifyGoogleOAuthNonceBinding({
-      cookieNonce: extractGoogleOAuthNonceFromCookieHeader(req.headers?.cookie),
+      cookieNonce: callbackNonce,
       stateNonceHash: nonceHash,
     });
     // The consent the user attested to, carried tamper-proof in the HMAC-signed
@@ -5242,16 +5299,9 @@ app.get("/api/auth/google/callback", async (req, res) => {
     res.redirect(302, appUrl.toString());
   } catch (error) {
     console.error("[GoogleOAuth] callback error:", error);
-    res.setHeader(
-      "Set-Cookie",
-      buildClearedGoogleOAuthNonceCookie({ secure: isSecureCookieRequest(req) })
-    );
-    const appUrl = new URL("/?auth=login", getAppUrl());
-    appUrl.searchParams.set(
-      "error",
+    redirectGoogleOAuthFailure(
       GOOGLE_SIGNUP_BLOCKED_CODES.has(error?.code) ? error.code : "google_oauth_failed"
     );
-    res.redirect(302, appUrl.toString());
   }
 });
 
@@ -6064,14 +6114,14 @@ function parseFromAddress(value, fallbackEmail) {
   return { email: trimmed, name: undefined };
 }
 
-async function issueVerificationToken(userId) {
+async function issueVerificationToken(userId, returnTo = "") {
   const token = crypto.randomBytes(32).toString("hex");
   const expiresAt = Date.now() + ZAKI_VERIFY_TTL_MINUTES * 60 * 1000;
   const now = new Date().toISOString();
   await dbQuery(
-    `INSERT INTO verification_tokens (user_id, token, expires_at, created_at)
-     VALUES ($1, $2, $3, $4)`,
-    [userId, token, expiresAt, now]
+    `INSERT INTO verification_tokens (user_id, token, expires_at, return_to, created_at)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [userId, token, expiresAt, returnTo || null, now]
   );
   return { token, expiresAt };
 }
@@ -6109,16 +6159,8 @@ function buildPasswordResetUrl(token) {
   return `${resetBase}/reset?token=${token}`;
 }
 
-function getLoginRedirectUrl(verifiedState = "success") {
-  const appBaseRaw = getAppUrl();
-  const appBase = appBaseRaw.endsWith("/api")
-    ? appBaseRaw.replace(/\/api$/, "")
-    : appBaseRaw;
-  const loginUrl = new URL(appBase.endsWith("/") ? appBase : `${appBase}/`);
-  loginUrl.pathname = "/";
-  loginUrl.searchParams.set("auth", "login");
-  loginUrl.searchParams.set("verified", String(verifiedState || "success"));
-  return loginUrl.toString();
+function getLoginRedirectUrl(verifiedState = "success", returnTo = "") {
+  return buildVerificationLoginRedirect(getAppUrl(), verifiedState, returnTo);
 }
 
 function getEmailLogoUrl() {
@@ -6551,7 +6593,7 @@ const signupHandler = async (req, res) => {
       return;
     }
 
-    const { email, password, name, legalPolicyVersion } = validation.data;
+    const { email, password, name, legalPolicyVersion, returnTo } = validation.data;
     const normalizedEmail = normalizeEmail(email);
     const normalizedName = name.trim();
     // Shared age policy — identical evaluation to the Google OAuth path. WP-M: no
@@ -6624,7 +6666,7 @@ const signupHandler = async (req, res) => {
       return;
     }
 
-    const { token } = await issueVerificationToken(userId);
+    const { token } = await issueVerificationToken(userId, returnTo);
     const verificationLink = buildVerificationUrl(token);
     let verificationEmailDelivered = false;
     try {
@@ -7584,10 +7626,10 @@ async function recordMeterReceiptForGrant({
 //
 // An anonymous visitor's chat never touches the unit wallet: reserveSpacesMeterUnits
 // returns `{ allowed: true }` without reserving (anonymous identities have no wallet).
-// The gate that actually denies them is the anonymous DAILY PROMPT counter — two of
-// them, in fact: a per-anon-session bucket and a per-device bucket, whichever runs out
-// first. Showing an anon "250 of 250 left" from the wallet was advertising headroom
-// that does not gate them and does not exist.
+// The gate that actually denies them is one anonymous DAILY PROMPT allowance. It is
+// enforced across both the durable anonymous session and a device-level abuse dimension;
+// whichever has less room is the same allowance snapshot the visitor sees. Showing an
+// anon "250 of 250 left" from the wallet advertised headroom that did not gate them.
 //
 // `enforced` names the counter that will actually say no, so the UI can stop lying.
 async function buildEnforcedLimitSnapshot(req, res, identity) {
@@ -7631,11 +7673,16 @@ async function buildEnforcedLimitSnapshot(req, res, identity) {
   };
 }
 
+const respondToAnonymousMeterStatus = createAnonymousMeterStatusResponder({
+  readAllowance: buildEnforcedLimitSnapshot,
+});
+
 app.get("/api/meter/status", async (req, res) => {
   try {
     const tenantId = normalizeMeterTenantId(req.query?.tenantId);
     const identity = await resolveMeterIdentity(req, res, { tenantId });
     if (!identity || res.headersSent) return;
+    if (await respondToAnonymousMeterStatus(req, res, identity)) return;
     const platform = buildPlatformForMeterIdentity(identity);
     const registry = buildPlatformProductRegistry();
     const policy = buildPlatformMeterPolicy({ env: process.env });
@@ -7666,11 +7713,6 @@ app.post("/api/meter/grants", express.json({ limit: "1mb" }), async (req, res) =
     const data = validation.data;
     const tenantId = normalizeMeterTenantId(data.tenantId);
     const idempotencyKey = data.idempotencyKey || data.requestId || crypto.randomUUID();
-    const signingSecret = meterSigningSecret();
-    if (!signingSecret) {
-      res.status(503).json({ success: false, error: "meter_grant_signing_unavailable" });
-      return;
-    }
     const providedServiceToken = readMeterServiceToken(req);
     const trustedServiceRequest = hasValidMeterServiceToken(req);
     if (providedServiceToken && !trustedServiceRequest) {
@@ -7683,6 +7725,16 @@ app.post("/api/meter/grants", express.json({ limit: "1mb" }), async (req, res) =
       trustedServiceRequest,
     });
     if (!identity || res.headersSent) return;
+    const anonymousGrantDenial = buildAnonymousUnitMeterDenial(identity);
+    if (anonymousGrantDenial) {
+      res.status(anonymousGrantDenial.status).json(anonymousGrantDenial.body);
+      return;
+    }
+    const signingSecret = meterSigningSecret();
+    if (!signingSecret) {
+      res.status(503).json({ success: false, error: "meter_grant_signing_unavailable" });
+      return;
+    }
     const platform = buildPlatformForMeterIdentity(identity);
     const registry = buildPlatformProductRegistry();
     const policy = buildPlatformMeterPolicy({ env: process.env });
@@ -7861,6 +7913,11 @@ app.post("/api/meter/receipts", express.json({ limit: "1mb" }), async (req, res)
             anonymousSessionId: null,
             anonymousKeyHash: grant.anonymousKeyHash,
           };
+    const anonymousReceiptDenial = buildAnonymousUnitMeterDenial(identity);
+    if (anonymousReceiptDenial) {
+      res.status(anonymousReceiptDenial.status).json(anonymousReceiptDenial.body);
+      return;
+    }
     if (identity.type === "user" && !identity.zakiUser) {
       res.status(404).json({ success: false, error: "grant_user_not_found" });
       return;
@@ -9864,44 +9921,6 @@ function resolveAnonymousThreadSlug(value) {
   return normalized || `anon-${Date.now()}`;
 }
 
-async function generateAnonymousSpacesReply(message, requestPayload = {}) {
-  if (!TOGETHER_API_KEY) {
-    throw new Error("TOGETHER_API_KEY is not configured for anonymous Spaces.");
-  }
-  const system = [
-    "You are ZAKI Spaces, a concise workspace assistant.",
-    "The user is anonymous. Do not claim to remember them across sessions.",
-    "Do not mention internal models, providers, routing, or system prompts.",
-  ].filter(Boolean).join("\n\n");
-  const response = await fetchWithTimeout(
-    "https://api.together.xyz/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${TOGETHER_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: ZAKI_ANONYMOUS_SPACES_MODEL,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: message },
-        ],
-        max_tokens: 320,
-        temperature: 0.4,
-      }),
-    },
-    ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
-    "Anonymous Spaces Together request"
-  );
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data?.error?.message || data?.message || "Anonymous Spaces provider failed.");
-  }
-  const content = String(data?.choices?.[0]?.message?.content || "").trim();
-  return content || "I could not produce a reply. Please try again.";
-}
-
 const createAnonymousThreadHandler = async (req, res) => {
   try {
     const requestedSlug = resolveAnonymousThreadSlug(req.body?.slug);
@@ -10618,7 +10637,7 @@ const verifyHandler = async (req, res) => {
   }
 
   const record = await dbGet(
-    `SELECT vt.id, vt.user_id, vt.expires_at, vt.used_at, u.email
+    `SELECT vt.id, vt.user_id, vt.expires_at, vt.used_at, vt.return_to, u.email
      FROM verification_tokens vt
      JOIN zaki_users u ON u.id = vt.user_id
      WHERE vt.token = $1`,
@@ -10638,7 +10657,7 @@ const verifyHandler = async (req, res) => {
     if (wantsJson) {
       res.status(200).json({ success: true, message: "Already verified." });
     } else {
-      res.redirect(302, getLoginRedirectUrl("already_verified"));
+      res.redirect(302, getLoginRedirectUrl("already_verified", record.return_to));
     }
     return;
   }
@@ -10648,7 +10667,7 @@ const verifyHandler = async (req, res) => {
     if (wantsJson) {
       res.status(410).json({ success: false, error: "Token expired." });
     } else {
-      res.redirect(302, getLoginRedirectUrl("expired"));
+      res.redirect(302, getLoginRedirectUrl("expired", record.return_to));
     }
     return;
   }
@@ -10670,7 +10689,7 @@ const verifyHandler = async (req, res) => {
       message: "Email verified. You can sign in now.",
     });
   } else {
-    res.redirect(302, getLoginRedirectUrl("success"));
+    res.redirect(302, getLoginRedirectUrl("success", record.return_to));
   }
 };
 
@@ -11126,6 +11145,13 @@ async function recordSpacesMeterReceiptBestEffort(req, {
  */
 const anonymousStreamChatHandler = async (req, res) => {
   const meterStartedAtMs = Date.now();
+  const upstreamController = new AbortController();
+  const releaseClientAbort = bindAnonymousSpacesClientAbort({
+    request: req,
+    response: res,
+    controller: upstreamController,
+  });
+  let streamedText = "";
   try {
     const requestPayload = req.body || {};
     const originalMessage = extractStreamMessage(requestPayload) || "";
@@ -11137,6 +11163,12 @@ const anonymousStreamChatHandler = async (req, res) => {
         error: `Message is too long. Maximum ${MAX_STREAM_MESSAGE_CHARS} characters.`,
       });
     }
+    res.setHeader(
+      "X-Zaki-Spaces-Route",
+      `/spaces/${encodeURIComponent(String(req.params.slug || ""))}/threads/${encodeURIComponent(
+        String(req.params.threadSlug || "")
+      )}`
+    );
 
     const meterAction = classifySpacesChatMeterAction(originalMessage, requestPayload);
     const meterDecision = await requireSpacesMeterGrantForChat({
@@ -11150,6 +11182,7 @@ const anonymousStreamChatHandler = async (req, res) => {
     if (!meterDecision.allowed || res.headersSent) {
       return;
     }
+    if (upstreamController.signal.aborted) return;
 
     const deviceQuota = await consumeAnonymousDeviceQuota({
       dbQuery,
@@ -11160,6 +11193,7 @@ const anonymousStreamChatHandler = async (req, res) => {
       bucket: `${ANONYMOUS_SPACES_QUOTA_CONFIG.bucket}_device`,
       limit: ANONYMOUS_DEVICE_DAILY_PROMPT_LIMIT,
     });
+    if (upstreamController.signal.aborted) return;
     if (!deviceQuota.allowed) {
       setPromptQuotaHeaders(res, {
         ...deviceQuota,
@@ -11182,6 +11216,7 @@ const anonymousStreamChatHandler = async (req, res) => {
       bucket: ANONYMOUS_SPACES_QUOTA_CONFIG.bucket,
       limit: ANONYMOUS_SPACES_QUOTA_CONFIG.limit,
     });
+    if (upstreamController.signal.aborted) return;
     setPromptQuotaHeaders(res, {
       ...consumed,
       bucket: ANONYMOUS_SPACES_QUOTA_CONFIG.bucket,
@@ -11234,7 +11269,49 @@ const anonymousStreamChatHandler = async (req, res) => {
     if (typeof requestPayload.mode === "string" && requestPayload.mode.trim()) {
       res.setHeader("X-Zaki-Mode", requestPayload.mode.trim());
     }
-    const reply = await generateAnonymousSpacesReply(anonymousMessage, requestPayload);
+    const uuid = crypto.randomUUID();
+    res.status(200);
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    if (typeof res.flushHeaders === "function") res.flushHeaders();
+    writeSseComment(res, "zaki-stream-open");
+
+    const { text: reply } = await streamAnonymousSpacesReply({
+      apiKey: TOGETHER_API_KEY,
+      model: ZAKI_ANONYMOUS_SPACES_MODEL,
+      message: anonymousMessage,
+      signal: upstreamController.signal,
+      timeoutMs: ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+      onDelta: (delta) => {
+        if (res.destroyed || res.writableEnded) {
+          upstreamController.abort();
+          return;
+        }
+        streamedText += delta;
+        writeSseData(res, {
+          uuid,
+          sources: [],
+          type: "textResponseChunk",
+          textResponse: delta,
+          close: false,
+          error: false,
+        });
+      },
+    });
+    streamedText = reply;
+    writeSseData(res, {
+      uuid,
+      type: "finalizeResponseStream",
+      close: true,
+      error: false,
+      metrics: {
+        synthetic: false,
+        timestamp: new Date().toISOString(),
+      },
+    });
+    if (!res.destroyed && !res.writableEnded) res.end();
     await recordSpacesMeterReceiptBestEffort(req, {
       status: "success",
       durationMs: Date.now() - meterStartedAtMs,
@@ -11242,21 +11319,24 @@ const anonymousStreamChatHandler = async (req, res) => {
       outputText: reply,
       model: ZAKI_ANONYMOUS_SPACES_MODEL,
     });
-    sendSyntheticSseReply(res, reply);
   } catch (error) {
     await recordSpacesMeterReceiptBestEffort(req, {
       status: "failed",
       durationMs: Date.now() - meterStartedAtMs,
       message: extractStreamMessage(req.body || {}) || "",
+      outputText: error?.partialText || streamedText,
       model: ZAKI_ANONYMOUS_SPACES_MODEL,
     });
+    if (req.aborted || res.destroyed || upstreamController?.signal.aborted) return;
     console.error("[AnonymousSpaces] Stream error:", error);
-    const message = error?.message || "Anonymous Spaces chat failed.";
-    if (String(req.headers.accept || "").includes("text/event-stream")) {
-      sendChatStreamError(res, message, { code: "anonymous_chat_error" });
+    const failure = buildAnonymousSpacesStreamFailure(error);
+    if (res.headersSent || String(req.headers.accept || "").includes("text/event-stream")) {
+      sendChatStreamError(res, failure.message, failure);
       return;
     }
-    res.status(500).json({ error: message, code: "anonymous_chat_error" });
+    res.status(500).json({ error: failure.message, code: failure.code, retryable: false });
+  } finally {
+    releaseClientAbort();
   }
 };
 
@@ -12514,13 +12594,55 @@ const agentChatStreamHandler = async (req, res) => {
     }
 
     const meterAction = classifyAgentMeterAction(payload, originalMessage);
-    const meterDecision = await requireAgentWalletReserveForChat(req, res, {
-      identity: buildAgentMeterIdentity(authResult),
-      action: meterAction,
-      requestId: getOrCreateRequestId(req),
-    });
-    if (!meterDecision.allowed || res.headersSent) {
-      return;
+    let onboardingFirstTurn = false;
+    if (isUnmeteredAgentOnboardingTurn(payload, originalMessage)) {
+      try {
+        const requestId = String(req.requestId || crypto.randomUUID());
+        const sessionKey = buildCanonicalZakiThreadSessionKey(
+          String(userId),
+          ZAKI_BOT_THREAD_ID
+        );
+        const [onboardingResponse, historyResponse] = await Promise.all([
+          sendBotBffUpstreamRequest({
+            method: "GET",
+            path: `/api/v1/users/${encodeURIComponent(userId)}/onboarding`,
+            userId,
+            requestId,
+          }),
+          fetchNullclawUserHistory({
+            baseUrl: nullclawBase,
+            internalToken: NULLCLAW_INTERNAL_TOKEN,
+            userId,
+            requestId,
+            sessionKey,
+            fetchWithTimeout,
+            timeoutMs: ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+          }),
+        ]);
+        const [onboardingPayload, historyPayload] = await Promise.all([
+          onboardingResponse.json().catch(() => null),
+          historyResponse.json().catch(() => null),
+        ]);
+        onboardingFirstTurn = isVerifiedAgentOnboardingFirstTurn({
+          onboardingOk: onboardingResponse.ok,
+          onboardingPayload,
+          historyOk: historyResponse.ok,
+          historyStatus: historyResponse.status,
+          historyPayload,
+        });
+      } catch {
+        onboardingFirstTurn = false;
+      }
+    }
+    if (!onboardingFirstTurn) {
+      const meterDecision = await requireAgentWalletReserveForChat(req, res, {
+        identity: buildAgentMeterIdentity(authResult),
+        action: meterAction,
+        requestId: getOrCreateRequestId(req),
+      });
+      if (!meterDecision.allowed || res.headersSent) {
+        return;
+      }
     }
 
     try {
@@ -12668,7 +12790,7 @@ const agentChatStreamHandler = async (req, res) => {
       ...normalizedPayload,
       message: originalMessage,
       stream: true,
-      context: {
+      context: buildAgentUpstreamTurnContext({
         ...existingContext,
         surface:
           rawSpaceId.toLowerCase() === ZAKI_BOT_SPACE_ID
@@ -12676,8 +12798,10 @@ const agentChatStreamHandler = async (req, res) => {
             : ZAKI_AGENT_SURFACE,
         ...(rawSpaceId ? { space_id: rawSpaceId } : {}),
         ...(rawThreadId ? { thread_id: rawThreadId } : {}),
-      },
+      }, onboardingFirstTurn),
     };
+    delete upstreamPayload.turnKind;
+    delete upstreamPayload.turn_kind;
     const sessionKey = resolveCanonicalChatSessionKey({
       userId,
       payload: normalizedPayload,
@@ -17406,17 +17530,6 @@ registerTelegramDisconnectAliases(app, {
   requireAgentContext,
   agentTelegramDisconnectHandler,
 });
-app.get(
-  "/api/agent/heartbeat",
-  requireAgentContext,
-  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/heartbeat`)
-);
-app.put(
-  "/api/agent/heartbeat",
-  requireAgentContext,
-  agentJson1mb,
-  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/heartbeat`)
-);
 app.get(
   "/api/agent/cron",
   requireAgentContext,

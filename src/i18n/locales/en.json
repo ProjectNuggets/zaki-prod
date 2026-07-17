@@ -286,6 +286,30 @@
         "name": "Proactive updates",
         "helper": "Allow Nullalis to send outbound updates where a connected channel and approval policy permit it."
       },
+      "proactiveCheckins": {
+        "name": "Proactive check-ins",
+        "helper": "Periodically check for useful updates. Check-ins are delivered through your connected Telegram account and do not appear in web chat.",
+        "success": {
+          "enabled": "Proactive check-ins are on.",
+          "disabled": "Proactive check-ins are off."
+        },
+        "errors": {
+          "update": "Could not update proactive check-ins. Try again."
+        },
+        "status": {
+          "loading": "Loading check-in status…",
+          "unavailable": "Unavailable · Try again later",
+          "off": "Off · Delivery through Telegram",
+          "operatorDisabled": "On · Temporarily unavailable",
+          "needsTelegram": "On · Connect Telegram to receive check-ins",
+          "sendFailed": "On · Last delivery failed; verify Telegram",
+          "enqueued": "On · Last update queued for Telegram",
+          "sentAt": "On · Last update sent {{when}}",
+          "sent": "On · Last update sent",
+          "idle": "On · Last check complete, nothing to send",
+          "activeEvery": "On · Every {{minutes}} min through Telegram"
+        }
+      },
       "voiceReplies": {
         "name": "Voice replies",
         "helper": "Use text-to-speech replies for supported voice-note or audio-capable channel turns."
@@ -1501,6 +1525,8 @@
     "saved": "memory saved",
     "savedSingle": "Memory updated",
     "savedMultiple": "Saved {{count}} memories",
+    "importedTitle": "I now remember {{count}} details from your import",
+    "importedHelper": "{{saved}} new · {{updated}} updated · {{known}} already known. Stored in your Brain.",
     "toReview": "memory to review",
     "reviewNotice": "Something may be worth remembering",
     "conflictNotice": "A memory may conflict with what ZAKI already knows",
@@ -1784,6 +1810,16 @@
   "app": {
     "loadingSession": "Loading session...",
     "openNavigationMenu": "Open navigation menu",
+    "recovery": {
+      "eyebrow": "Storage unavailable",
+      "title": "Work could not be saved",
+      "body": "Your browser blocked local storage. Copy this text now and continue in a new Space so it is not lost.",
+      "workLabel": "Unsaved work",
+      "copyFailed": "Automatic copy failed. Select and copy the text manually before continuing.",
+      "copyAndOpenSpaces": "Copy and open Spaces",
+      "selectWork": "Select work",
+      "openSpacesManually": "Open Spaces after copying"
+    },
     "legal": {
       "title": "Updated terms require your consent",
       "body": "We updated Terms, Privacy & Compliance (policy {{policyVersion}}). Please review and accept to continue using ZAKI.",
@@ -1831,6 +1867,14 @@
   "brain": {
     "title": "Your Brain",
     "subtitle": "Everything ZAKI remembers",
+    "status": {
+      "cachedData": "Using cached memory"
+    },
+    "recovery": {
+      "ariaLabel": "Preserved work",
+      "title": "Your work is still here",
+      "continueInSpaces": "Continue in Spaces"
+    },
     "tabs": {
       "timeline": "Timeline",
       "graph": "Graph"
@@ -2000,6 +2044,7 @@
       "syncing": "Syncing",
       "plan": "Plan",
       "weeklyReset": "Weekly reset",
+      "dailyReset": "Daily reset",
       "identity": "Identity",
       "agentLive": "Agent live · #{{id}}"
     },
@@ -2055,6 +2100,8 @@
       "submitComingSoon": "{{product}} coming soon",
       "creditsExhaustedTitle": "Weekly usage is full.",
       "creditsExhaustedCopy": "Your draft stays saved here. Sign up, wait for the weekly reset, or pick a plan with more room.",
+      "anonymousCreditsExhaustedTitle": "Free chats are used up for today.",
+      "anonymousCreditsExhaustedCopy": "Your draft stays here. Sign in to keep going now, or wait for the daily reset.",
       "capacityWindowTitle": "{{hours}}h Agent window is {{percent}}% used.",
       "capacityWindowCopy": "Your draft stays saved here. More room opens at {{reset}}.",
       "capacityWindowCopySoon": "Your draft stays saved here. More room opens soon.",
@@ -2476,8 +2523,22 @@
     "copyAction": "Copy prompt",
     "copied": "Copied",
     "copyError": "Couldn't copy. Select the prompt and copy manually.",
-    "importAction": "Send to ZAKI",
-    "importError": "Couldn't send the import. Try again."
+    "importAction": "Absorb into Brain",
+    "importError": "Couldn't absorb that import. Check the response and try again."
+  },
+  "firstRun": {
+    "name": {
+      "kicker": "First breath · make it yours",
+      "title": "What will you call your ZAKI?",
+      "helper": "This becomes its identity everywhere you meet it. Keep ZAKI or choose a name of your own.",
+      "label": "Name your agent",
+      "submit": "Choose name",
+      "submitAria": "Make {{name}} mine",
+      "saving": "Saving name…",
+      "savingShort": "Saving",
+      "error": "Your agent could not save that name. Try again.",
+      "turnError": "Your agent saved that name, but could not continue the conversation. Try again."
+    }
   },
   "chatErrors": {
     "rateLimited": {

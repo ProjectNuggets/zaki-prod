@@ -2,6 +2,7 @@ import { jest } from "@jest/globals";
 import express from "express";
 import request from "supertest";
 import crypto from "node:crypto";
+import { SignJWT, decodeJwt } from "jose";
 
 const dbQueryMock = jest.fn();
 const dbGetMock = jest.fn();
@@ -34,6 +35,19 @@ function makeApp() {
   app.use(express.json());
   app.use("/api/auth", buildAuthRouter());
   return app;
+}
+
+async function signCandidateAccessToken({ userId, sessionId }) {
+  return new SignJWT({
+    email: "alfred@chatzaki.com",
+    ...(sessionId ? { sid: sessionId } : {}),
+  })
+    .setProtectedHeader({ alg: "HS256", kid: "test-v1" })
+    .setIssuer("zaki")
+    .setSubject(String(userId))
+    .setIssuedAt()
+    .setExpirationTime("15m")
+    .sign(new Uint8Array(Buffer.from("a".repeat(64), "hex")));
 }
 
 describe("POST /api/auth/refresh (OATH-07)", () => {
@@ -103,19 +117,95 @@ describe("POST /api/auth/logout (OATH-08)", () => {
   });
 });
 
+describe("POST /api/auth/logout/candidate", () => {
+  it("revokes only the bearer-bound candidate session and never clears a newer refresh cookie", async () => {
+    const candidateSessionId = "2e1ef5a9-7908-4420-8c23-7965f808b999";
+    const candidateAccessToken = await signCandidateAccessToken({
+      userId: 42,
+      sessionId: candidateSessionId,
+    });
+    dbQueryMock.mockResolvedValue({ rows: [], rowCount: 1 });
+
+    const res = await request(makeApp())
+      .post("/api/auth/logout/candidate")
+      .set("Authorization", `Bearer ${candidateAccessToken}`)
+      // Model account C claiming the browser's shared refresh cookie after
+      // candidate B already holds its access token.
+      .set("Cookie", `zaki_refresh=${crypto.randomBytes(32).toString("hex")}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ success: true, revoked: true });
+    expect(dbQueryMock).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /UPDATE\s+zaki_sessions\s+SET\s+revoked_at\s+=\s+NOW\(\)\s+WHERE\s+id\s+=\s+\$1\s+AND\s+user_id\s+=\s+\$2\s+AND\s+revoked_at\s+IS\s+NULL/i
+      ),
+      [candidateSessionId, "42"]
+    );
+    // This endpoint must be safe even if a newer tab has already replaced the
+    // shared HttpOnly cookie. Clearing it in a delayed response would log C out.
+    expect(res.headers["set-cookie"]).toBeUndefined();
+  });
+
+  it("rejects a sid-less bearer without mutating or clearing the shared cookie", async () => {
+    const sidLessToken = await signCandidateAccessToken({ userId: 42 });
+
+    const res = await request(makeApp())
+      .post("/api/auth/logout/candidate")
+      .set("Authorization", `Bearer ${sidLessToken}`)
+      .set("Cookie", `zaki_refresh=${crypto.randomBytes(32).toString("hex")}`);
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: "invalid_candidate_session" });
+    expect(dbQueryMock).not.toHaveBeenCalled();
+    expect(res.headers["set-cookie"]).toBeUndefined();
+  });
+});
+
 describe("POST /api/auth/refresh — concurrent refresh guard (AUTH-06)", () => {
-  it("returns existing token when same user has a session created in the last 5 seconds", async () => {
+  it("returns existing token when the presented session has a recent linked replacement", async () => {
     const rawToken = crypto.randomBytes(32).toString("hex");
     // First dbGet (the standard lookup) returns null → falls into guard path
     dbGetMock.mockResolvedValueOnce(null);
-    // Second dbGet (the guard's secondary lookup) returns a recent session
-    dbGetMock.mockResolvedValueOnce({ id: "sess-recent", user_id: 42, email: "alfred@chatzaki.com" });
+    // Second dbGet (the guard's secondary lookup) returns the linked replacement.
+    const recentSessionId = "053f526d-a5d1-48df-a2b3-4ad8d114a6dc";
+    dbGetMock.mockResolvedValueOnce({ id: recentSessionId, user_id: 42, email: "alfred@chatzaki.com" });
     const res = await request(makeApp()).post("/api/auth/refresh").set("Cookie", `zaki_refresh=${rawToken}`);
     expect(res.status).toBe(200);
     expect(typeof res.body.token).toBe("string");
+    expect(decodeJwt(res.body.token).sid).toBe(recentSessionId);
     // The guard SQL should reference NOW() - INTERVAL '5 seconds' — assert dbGet was called with that pattern
     const guardCall = dbGetMock.mock.calls.find(([sql]) => /INTERVAL '5 seconds'/i.test(sql));
     expect(guardCall).toBeDefined();
+    expect(guardCall?.[0]).toMatch(/replaced_by_session_id/i);
+    expect(guardCall?.[0]).toMatch(
+      /presented\.revoked_at\s*>\s*NOW\(\)\s*-\s*INTERVAL '5 seconds'/i
+    );
+  });
+
+  it("rejects a historical revoked token when it has no linked replacement session", async () => {
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const unrelatedRecentSession = {
+      id: "053f526d-a5d1-48df-a2b3-4ad8d114a6dc",
+      user_id: 42,
+      email: "alfred@chatzaki.com",
+    };
+    let lookupCount = 0;
+    dbGetMock.mockImplementation(async (sql) => {
+      lookupCount += 1;
+      if (lookupCount === 1) return null; // primary active-session lookup
+
+      // Model a historical revoked token for user 42 alongside a newly active
+      // but unrelated session. Only a query that follows an explicit rotation
+      // link may recover a sibling-tab refresh.
+      return /replaced_by_session_id/i.test(sql) ? null : unrelatedRecentSession;
+    });
+
+    const res = await request(makeApp())
+      .post("/api/auth/refresh")
+      .set("Cookie", `zaki_refresh=${rawToken}`);
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ error: "invalid_refresh_token" });
   });
 
   it("returns 401 invalid_refresh_token when guard's secondary lookup also returns null", async () => {

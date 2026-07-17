@@ -61,6 +61,51 @@ describe("pending intent", () => {
     expect(readPendingIntent()?.taskKind).toBe("plan");
   });
 
+  it("fails closed for legacy intents and marks explicit anonymous handoffs", () => {
+    expect(
+      writePendingIntent({
+        productId: "spaces",
+        prompt: "Account-scoped draft",
+        source: "session_expired",
+      })?.anonymousHandoff
+    ).toBe(false);
+
+    window.localStorage.setItem(
+      PENDING_INTENT_KEY,
+      JSON.stringify({
+        productId: "agent",
+        prompt: "Legacy draft",
+        returnTo: "/agent",
+        createdAt: new Date().toISOString(),
+      })
+    );
+    expect(readPendingIntent()?.anonymousHandoff).toBe(false);
+
+    consumeWebsiteCommandIntentFromUrl({
+      pathname: "/brain",
+      search: "?source=website_home_command&intent=memory&prompt=Remember+this",
+    });
+    expect(readPendingIntent()?.anonymousHandoff).toBe(true);
+  });
+
+  it("defaults replay to a safe draft and preserves an explicit submit mode", () => {
+    expect(
+      writePendingIntent({
+        productId: "agent",
+        prompt: "Continue my interrupted work",
+      })?.replayMode
+    ).toBe("draft");
+
+    expect(
+      writePendingIntent({
+        productId: "spaces",
+        prompt: "Start this new chat",
+        replayMode: "submit",
+      })?.replayMode
+    ).toBe("submit");
+    expect(readPendingIntent()?.replayMode).toBe("submit");
+  });
+
   it("sanitizes unsafe return routes and ignores malformed data", () => {
     // WP-K: retired products are no longer valid intent product ids at all, so a
     // "hire" intent is rejected outright rather than resolving to the dashboard.
@@ -83,6 +128,14 @@ describe("pending intent", () => {
       taskKind: "rubric",
       prompt: "Build a rubric",
       returnTo: "https://evil.example/agent",
+    });
+    expect(readPendingIntent()?.returnTo).toBe("/agent");
+
+    writePendingIntent({
+      productId: "agent",
+      taskKind: "rubric",
+      prompt: "Build a safer rubric",
+      returnTo: "/./\\evil.example/agent",
     });
     expect(readPendingIntent()?.returnTo).toBe("/agent");
 
@@ -110,7 +163,7 @@ describe("pending intent", () => {
     expect(intent?.returnTo).toBe("/spaces");
   });
 
-  it("ignores intents older than the short redirect handoff window", () => {
+  it("keeps intents across OAuth and email verification for up to 24 hours", () => {
     window.localStorage.setItem(
       PENDING_INTENT_KEY,
       JSON.stringify({
@@ -122,10 +175,10 @@ describe("pending intent", () => {
       })
     );
 
-    jest.spyOn(Date, "now").mockReturnValue(Date.parse("2026-06-01T10:29:00.000Z"));
+    jest.spyOn(Date, "now").mockReturnValue(Date.parse("2026-06-02T09:59:00.000Z"));
     expect(readPendingIntent()?.prompt).toBe("Summarize my notebook");
 
-    jest.spyOn(Date, "now").mockReturnValue(Date.parse("2026-06-01T10:31:00.000Z"));
+    jest.spyOn(Date, "now").mockReturnValue(Date.parse("2026-06-02T10:01:00.000Z"));
     expect(readPendingIntent()).toBeNull();
   });
 
@@ -139,6 +192,31 @@ describe("pending intent", () => {
     clearPendingIntent();
 
     expect(readPendingIntent()).toBeNull();
+  });
+
+  it("announces the exact work when browser storage cannot preserve it", () => {
+    const handleFailure = jest.fn();
+    window.addEventListener("zaki:pending-intent-storage-failed", handleFailure);
+    jest.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("storage disabled");
+    });
+
+    try {
+      expect(
+        writePendingIntent({
+          productId: "brain",
+          prompt: "Keep this memory note visible",
+          returnTo: "/brain",
+        })
+      ).toBeNull();
+      expect(handleFailure).toHaveBeenCalledTimes(1);
+      expect((handleFailure.mock.calls[0][0] as CustomEvent).detail).toMatchObject({
+        productId: "brain",
+        prompt: "Keep this memory note visible",
+      });
+    } finally {
+      window.removeEventListener("zaki:pending-intent-storage-failed", handleFailure);
+    }
   });
 
   it("builds canonical product return routes for the visible spokes", () => {
