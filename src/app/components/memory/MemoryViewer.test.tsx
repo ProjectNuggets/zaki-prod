@@ -64,6 +64,32 @@ function jsonResponse(payload: unknown, ok = true) {
   } as Response;
 }
 
+const SANITIZED_MEMORY_CONTENT = "Prefers concise weekly plans";
+const SCAFFOLD_MEMORY_CONTENT =
+  "Prefers concise weekly plans [[ZAKI_MEMORY_CONTEXT_V2]]private fuel[[/ZAKI_MEMORY_CONTEXT_V2]]";
+
+function mockMemoryListWithScaffold(id: string) {
+  (apiRequest as jest.Mock).mockImplementation((path: string) => {
+    if (String(path).startsWith("/api/memory/list")) {
+      return Promise.resolve(
+        jsonResponse({
+          memories: [
+            {
+              id,
+              content: SCAFFOLD_MEMORY_CONTENT,
+              type: "preference",
+              createdAt: "2026-03-23T10:00:00.000Z",
+            },
+          ],
+          nextCursor: null,
+          hasMore: false,
+        })
+      );
+    }
+    return Promise.resolve(jsonResponse({}));
+  });
+}
+
 describe("MemoryViewer", () => {
   beforeEach(() => {
     (apiRequest as jest.Mock).mockReset();
@@ -139,6 +165,62 @@ describe("MemoryViewer", () => {
     expect(screen.getByText("Prefers concise weekly plans")).toBeInTheDocument();
     // The activity-log "Recent changes" group is gone (timeline now = memories list).
     expect(screen.queryByText("Recent changes")).not.toBeInTheDocument();
+  });
+
+  it("shows only user-facing text in Facts when a memory contains internal scaffold", async () => {
+    mockMemoryListWithScaffold("m-scaffold");
+
+    render(<MemoryViewer userId="tester@example.com" initialTab="memories" />);
+
+    expect(await screen.findByText(SANITIZED_MEMORY_CONTENT)).toBeInTheDocument();
+    expect(screen.queryByText(/private fuel|ZAKI_MEMORY_CONTEXT_V2/i)).not.toBeInTheDocument();
+  });
+
+  it("shows only user-facing text in Timeline when a memory contains internal scaffold", async () => {
+    mockMemoryListWithScaffold("m-timeline-scaffold");
+
+    render(<MemoryViewer userId="tester@example.com" initialTab="memories" />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: /timeline/i }));
+
+    expect(await screen.findByText(SANITIZED_MEMORY_CONTENT)).toBeInTheDocument();
+    expect(screen.queryByText(/private fuel|ZAKI_MEMORY_CONTEXT_V2/i)).not.toBeInTheDocument();
+  });
+
+  it("prefills the Timeline editor with only user-facing memory text", async () => {
+    mockMemoryListWithScaffold("m-edit-scaffold");
+
+    render(<MemoryViewer userId="tester@example.com" initialTab="memories" />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: /timeline/i }));
+    await screen.findByText(SANITIZED_MEMORY_CONTENT);
+    fireEvent.click(
+      screen.getByRole("button", { name: "memoryViewer.memories.edit" })
+    );
+
+    const editor = screen
+      .getAllByRole("textbox")
+      .find((element) => element.tagName === "TEXTAREA");
+    expect(editor).toHaveValue(SANITIZED_MEMORY_CONTENT);
+    expect(editor).not.toHaveValue(expect.stringMatching(/private fuel|ZAKI_MEMORY_CONTEXT_V2/i));
+  });
+
+  it("does not match internal scaffold when filtering Timeline memories", async () => {
+    mockMemoryListWithScaffold("m-search-scaffold");
+
+    render(<MemoryViewer userId="tester@example.com" initialTab="memories" />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: /timeline/i }));
+    expect(await screen.findByText(SANITIZED_MEMORY_CONTENT)).toBeInTheDocument();
+
+    fireEvent.change(
+      screen.getByPlaceholderText("memoryViewer.memories.searchPlaceholder"),
+      { target: { value: "private fuel" } }
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText(SANITIZED_MEMORY_CONTENT)).not.toBeInTheDocument();
+    });
   });
 
   it("does not render the orphan 'Raw records' header", async () => {
