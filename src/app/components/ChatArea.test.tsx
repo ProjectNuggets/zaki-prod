@@ -2725,7 +2725,7 @@ describe("ChatArea Component", () => {
     });
   });
 
-  it("lets the engine author first-run, then persists the user's name-to-own choice", async () => {
+  it("lets naming happen naturally in the first reply without a dedicated card", async () => {
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
@@ -2786,35 +2786,22 @@ describe("ChatArea Component", () => {
       ).toBe(true);
     });
     expect(screen.queryByText(FIRST_RUN_ENGINE_PROMPT)).not.toBeInTheDocument();
-    expect(await screen.findByTestId("first-run-name-card")).toBeInTheDocument();
+    expect(screen.queryByTestId("first-run-name-card")).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole("textbox", { name: "firstRun.name.label" }), {
-      target: { value: "Nova" },
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "Call yourself Nova. I'm Sam." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "firstRun.name.submitAria" }));
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
 
-    await waitFor(() => expect(updateBotOnboarding).toHaveBeenCalledTimes(2));
-    expect((updateBotOnboarding as jest.Mock).mock.calls[0]?.[0]).toEqual(
-      expect.objectContaining({
-        completed: false,
-        identity: expect.stringContaining("- **Name:** Nova"),
-      })
-    );
-    expect((updateBotOnboarding as jest.Mock).mock.calls[1]?.[0]).toEqual({ completed: true });
-
-    const namingTurnOrder = (apiRequest as jest.Mock).mock.invocationCallOrder.find(
-      (_order, index) => {
-        const [path, options] = (apiRequest as jest.Mock).mock.calls[index] ?? [];
+    await waitFor(() => expect(updateBotOnboarding).toHaveBeenCalledWith({ completed: true }));
+    expect(updateBotOnboarding).toHaveBeenCalledTimes(1);
+    expect(
+      (apiRequest as jest.Mock).mock.calls.some(([path, options]) => {
         if (path !== "/api/agent/chat/stream") return false;
-        return JSON.parse(String(options?.body || "{}")).message === "I'll call you Nova.";
-      }
-    );
-    expect((updateBotOnboarding as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
-      namingTurnOrder as number
-    );
-    expect(namingTurnOrder).toBeLessThan(
-      (updateBotOnboarding as jest.Mock).mock.invocationCallOrder[1] as number
-    );
+        const body = JSON.parse(String(options?.body || "{}"));
+        return body.message === "Call yourself Nova. I'm Sam." && body.turnKind == null;
+      })
+    ).toBe(true);
   });
 
   it("shows setup progress and keeps the Agent composer locked while provisioning", async () => {

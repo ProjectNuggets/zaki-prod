@@ -2537,20 +2537,6 @@
     "importAction": "Absorb into Brain",
     "importError": "Couldn't absorb that import. Check the response and try again."
   },
-  "firstRun": {
-    "name": {
-      "kicker": "First breath · make it yours",
-      "title": "What will you call your ZAKI?",
-      "helper": "This becomes its identity everywhere you meet it. Keep ZAKI or choose a name of your own.",
-      "label": "Name your agent",
-      "submit": "Choose name",
-      "submitAria": "Make {{name}} mine",
-      "saving": "Saving name…",
-      "savingShort": "Saving",
-      "error": "Your agent could not save that name. Try again.",
-      "turnError": "Your agent saved that name, but could not continue the conversation. Try again."
-    }
-  },
   "chatErrors": {
     "rateLimited": {
       "title": "Too many requests",
