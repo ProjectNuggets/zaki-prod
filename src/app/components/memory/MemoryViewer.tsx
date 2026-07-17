@@ -25,6 +25,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { apiRequest, patchMemory } from "@/lib/api";
+import { sanitizeBrainText } from "@/app/components/brain/brainText";
 import { SkeletonMemoryViewer } from "../ui/skeleton";
 import { useMemoryPolicy } from "./MemoryModeToggle";
 import { EmptyState, InlineConfirm, type MemoryRole } from "@/app/components/ui/zaki";
@@ -169,6 +170,10 @@ function normalizeCreatedAt(value?: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return new Date().toISOString();
   return parsed.toISOString();
+}
+
+function memoryDisplayContent(memory: Pick<MemoryRecord, "content">): string {
+  return sanitizeBrainText(memory.content);
 }
 
 function formatDateLabel(value: string, locale?: string) {
@@ -351,7 +356,7 @@ export function MemoryViewer({
 
   const beginEditMemory = (memory: MemoryRecord) => {
     setEditingMemoryId(memory.id);
-    setEditContent(memory.content);
+    setEditContent(memoryDisplayContent(memory));
     setEditType(memory.type);
     setEditStatus(memory.status === "outdated" ? "outdated" : "active");
   };
@@ -425,7 +430,9 @@ export function MemoryViewer({
       .filter((memory) => {
         const matchesSearch =
           searchQuery.trim().length === 0 ||
-          memory.content.toLowerCase().includes(searchQuery.trim().toLowerCase());
+          memoryDisplayContent(memory)
+            .toLowerCase()
+            .includes(searchQuery.trim().toLowerCase());
         const matchesType = typeFilter === "all" || memory.type === typeFilter;
         return matchesSearch && matchesType;
       })
@@ -473,7 +480,7 @@ export function MemoryViewer({
       if (memory.type === "episodic") continue; // episodic is Timeline-only, not Facts
       const bucket = grouped.get(getSummaryGroupForMemory(memory));
       if (!bucket) continue;
-      const content = String(memory.content || "").trim();
+      const content = memoryDisplayContent(memory);
       if (!content || bucket.includes(content)) continue;
       if (bucket.length < 3) {
         bucket.push(content);
@@ -688,7 +695,7 @@ export function MemoryViewer({
                               </div>
                             ) : (
                               <p className="mt-2 text-sm text-zaki-primary leading-relaxed">
-                                {memory.content}
+                                {memoryDisplayContent(memory)}
                               </p>
                             )}
 
