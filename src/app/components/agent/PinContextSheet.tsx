@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 import { Brain, Loader2, Pin, X } from "lucide-react";
 import { toast } from "sonner";
 import { SheetShell } from "@/app/components/ui/zaki";
+import { brainDisplayText, sanitizeBrainText } from "@/app/components/brain/brainText";
 import { cn } from "@/lib/utils";
 import { useBrainSearch } from "@/queries/useBrainSearch";
 import { fetchBrainMemory, type BrainGraphNode } from "@/lib/api";
@@ -70,7 +71,7 @@ export function PinContextSheet({
       );
       return;
     }
-    const label = (memory.display_label || memory.summary || "").trim();
+    const label = brainDisplayText(memory.display_label, memory.summary, memory.key, memory.id);
     setPinningId(memory.id);
     try {
       // Capture the full memory body at pin time so outgoing turns
@@ -83,7 +84,10 @@ export function PinContextSheet({
       } catch {
         // 404 / fallback path — keep the summary.
       }
-      onPin({ id: memory.id, label, content });
+      // A full memory body can contain internal Agent context that search
+      // summaries never expose. Sanitize before this reaches sessionStorage
+      // and the prefix for every subsequent turn.
+      onPin({ id: memory.id, label, content: sanitizeBrainText(content) || undefined });
       toast.success(
         t("pinContext.pinned", {
           defaultValue: "Pinned. ZAKI will keep this in mind.",
