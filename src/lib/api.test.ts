@@ -1013,20 +1013,18 @@ describe("agent runtime API clients", () => {
     );
   });
 
-  it("calls the S7 Agent settings control-plane routes", async () => {
+  it("calls the Agent channel-control routes", async () => {
     mockFetch
       .mockResolvedValueOnce(makeResponse(200, { channels: [] }))
       .mockResolvedValueOnce(makeResponse(200, { channel: "slack", status: "connected" }))
       .mockResolvedValueOnce(makeResponse(200, { channel: "slack", last_test: { ok: true } }))
-      .mockResolvedValueOnce(makeResponse(200, { status: "disconnected", channel: "slack" }))
-      .mockResolvedValueOnce(makeResponse(200, { integrations: [] }));
+      .mockResolvedValueOnce(makeResponse(200, { status: "disconnected", channel: "slack" }));
 
     const {
       fetchAgentChannelControls,
       connectAgentChannelControl,
       testAgentChannelControl,
       disconnectAgentChannelControl,
-      fetchAgentIntegrations,
     } = await import("@/lib/api");
 
     await fetchAgentChannelControls();
@@ -1036,8 +1034,8 @@ describe("agent runtime API clients", () => {
     });
     await testAgentChannelControl("slack");
     await disconnectAgentChannelControl("slack");
-    await fetchAgentIntegrations();
 
+    expect(mockFetch).toHaveBeenCalledTimes(4);
     expect(mockFetch).toHaveBeenNthCalledWith(
       1,
       "http://test.local/api/agent/channel-control",
@@ -1063,11 +1061,6 @@ describe("agent runtime API clients", () => {
       4,
       "http://test.local/api/agent/channel-control/slack/disconnect",
       expect.objectContaining({ method: "POST" })
-    );
-    expect(mockFetch).toHaveBeenNthCalledWith(
-      5,
-      "http://test.local/api/agent/integrations",
-      expect.objectContaining({ method: "GET" })
     );
   });
 
