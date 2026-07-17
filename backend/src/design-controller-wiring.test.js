@@ -24,6 +24,14 @@ describe("Design controller dark-mode wiring", () => {
     expect(designSection).toContain(
       "enabled: ZAKI_DESIGN_ENABLED && ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED"
     );
+    expect(designSection).toContain("resolveBillingUserById: resolveDesignBillingUserById");
+    const proxyAuthorization = designSection.slice(
+      designSection.indexOf("async function authorizeDesignSessionProxy"),
+      designSection.indexOf("async function settleDesignSessionProxy")
+    );
+    expect(proxyAuthorization).toContain("auth, session, targetPath");
+    expect(proxyAuthorization).toContain("userId: session.userId");
+    expect(proxyAuthorization).toContain("tenantId: session.tenantId");
 
     for (const corePrefix of ["/api/agent", "/api/chat", "/api/billing"]) {
       expect(designSection).not.toContain(`"${corePrefix}`);

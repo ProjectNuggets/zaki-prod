@@ -18321,6 +18321,17 @@ app.use(
 // DESIGN ENGINE BFF
 // =============================================================================
 
+async function resolveDesignBillingUserById(userId) {
+  const numericUserId = Number(userId);
+  if (!Number.isSafeInteger(numericUserId) || numericUserId <= 0) return null;
+  const zakiUser = await dbGet(
+    `SELECT ${_ZAKI_USER_COLS} FROM zaki_users WHERE id = $1`,
+    [numericUserId]
+  );
+  if (!zakiUser?.verified || Number(zakiUser.id) !== numericUserId) return null;
+  return zakiUser;
+}
+
 let designSessionController = null;
 let designWorkbenchAccess = null;
 if (ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED) {
@@ -18355,7 +18366,7 @@ const unavailableDesignSessionController = {
   workbench: async () => { throw new Error("Design session controller is disabled."); },
 };
 
-async function authorizeDesignSessionProxy({ req, res, auth, targetPath, method, requestId }) {
+async function authorizeDesignSessionProxy({ req, res, auth, session, targetPath, method, requestId }) {
   const blockedReason = getBlockedHostedDesignPathReason(targetPath);
   if (blockedReason) {
     return {
@@ -18373,6 +18384,24 @@ async function authorizeDesignSessionProxy({ req, res, auth, targetPath, method,
   };
   const action = classifyDesignMeterActionForIngress(meterRequest);
   if (!action) return { allowed: true, action: null, grant: null };
+
+  if (
+    !auth?.zakiUser?.id ||
+    !session?.userId ||
+    !session?.tenantId ||
+    String(auth.zakiUser.id) !== String(session.userId)
+  ) {
+    return {
+      allowed: false,
+      status: 503,
+      body: {
+        code: "design_billing_identity_unavailable",
+        message: "Design billing identity is temporarily unavailable.",
+        retryable: true,
+        requestId,
+      },
+    };
+  }
 
   const hasContentLength = req.headers?.["content-length"] !== undefined;
   const declaredBytes = Number(req.headers?.["content-length"] || 0);
@@ -18404,14 +18433,15 @@ async function authorizeDesignSessionProxy({ req, res, auth, targetPath, method,
 
   const identity = {
     type: "user",
-    tenantId: "default",
-    userId: auth.zakiUser.id,
+    tenantId: session.tenantId,
+    userId: session.userId,
     zakiUser: auth.zakiUser,
     anonymousSessionId: null,
     anonymousKeyHash: null,
   };
   const result = await issueMeterGrantForIdentity({
     identity,
+    tenantId: session.tenantId,
     product: "design",
     action,
     estimatedUnits: estimateDesignMeterUnitsForIngress(meterRequest, action),
@@ -18479,6 +18509,7 @@ app.use(
   buildDesignSessionRouter({
     enabled: ZAKI_DESIGN_ENABLED && ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED,
     resolveUser: requireAuthUser,
+    resolveBillingUserById: resolveDesignBillingUserById,
     ensureSession: ensureDesignSession,
     readSessionBinding: readDesignSessionBinding,
     beginSessionDrain: beginDesignSessionDrain,

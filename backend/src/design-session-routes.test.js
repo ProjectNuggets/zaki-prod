@@ -3,6 +3,8 @@ import request from "supertest";
 import { describe, expect, jest, test } from "@jest/globals";
 import { buildDesignSessionRouter } from "./design-session-routes.js";
 import { createDesignWorkbenchAccess } from "./design-workbench-access.js";
+import { resolveDesignQuotaPolicy } from "./design-quota.js";
+import { resolvePlatformWalletPlanForUser } from "./platform-entitlement-context.js";
 
 describe("Design public session routes", () => {
   test("authenticates the user, owns the binding in the hub, then asks the controller to ensure it", async () => {
@@ -329,7 +331,7 @@ describe("Design public session routes", () => {
     }));
   });
 
-  test("accepts a matching session-bound workbench credential without a browser bearer", async () => {
+  test("hydrates canonical billing identity for a session-bound workbench credential", async () => {
     let receivedBody = "";
     const controllerProxy = jest.fn().mockImplementation(async (input) => {
       for await (const chunk of input.body) receivedBody += chunk.toString();
@@ -341,6 +343,26 @@ describe("Design public session routes", () => {
     const resolveUser = jest.fn(async (_req, res) => {
       res.status(401).json({ error: "auth_required" });
       return null;
+    });
+    const billingUser = {
+      id: 42,
+      verified: true,
+      plan_tier: "personal",
+      plan_status: "active",
+      current_period_end: "2099-01-01T00:00:00.000Z",
+    };
+    const resolveBillingUserById = jest.fn().mockResolvedValue(billingUser);
+    const authorizeProxy = jest.fn(async ({ auth }) => {
+      const nowDate = new Date("2026-07-17T00:00:00.000Z");
+      const walletPlan = resolvePlatformWalletPlanForUser(auth.zakiUser, { env: {}, nowDate });
+      const quotaTier = resolveDesignQuotaPolicy(auth.zakiUser, { env: {}, nowDate }).tier;
+      return walletPlan === "personal" && quotaTier === "personal"
+        ? { allowed: true, action: "design_file_write", grant: null }
+        : {
+            allowed: false,
+            status: 503,
+            body: { code: "design_billing_identity_unavailable" },
+          };
     });
     const workbenchAccess = createDesignWorkbenchAccess({
       secret: "controller-secret-at-least-16",
@@ -356,6 +378,7 @@ describe("Design public session routes", () => {
     app.use("/api/design/sessions", buildDesignSessionRouter({
       enabled: true,
       resolveUser,
+      resolveBillingUserById,
       resolveProxyAccess: (req) => workbenchAccess.resolve(req),
       ensureSession: jest.fn(),
       readSessionBinding: jest.fn().mockResolvedValue({
@@ -372,7 +395,7 @@ describe("Design public session routes", () => {
       createSessionId: jest.fn(),
       controller: { ensure: jest.fn(), status: jest.fn(), stop: jest.fn(), proxy: controllerProxy },
       getRequestId: () => "req_proxy_cookie",
-      authorizeProxy: jest.fn().mockResolvedValue({ allowed: true, action: "design_file_write", grant: null }),
+      authorizeProxy,
     }));
 
     const response = await request(app)
@@ -384,6 +407,10 @@ describe("Design public session routes", () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ ok: true });
     expect(resolveUser).not.toHaveBeenCalled();
+    expect(resolveBillingUserById).toHaveBeenCalledWith("42");
+    expect(authorizeProxy).toHaveBeenCalledWith(expect.objectContaining({
+      auth: { zakiUser: billingUser },
+    }));
     expect(controllerProxy).toHaveBeenCalledWith(expect.objectContaining({
       sessionId: "sess_01",
       projectId: "project_01",

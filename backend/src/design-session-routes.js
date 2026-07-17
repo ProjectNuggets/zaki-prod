@@ -8,6 +8,7 @@ const OPAQUE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 export function buildDesignSessionRouter({
   enabled,
   resolveUser,
+  resolveBillingUserById,
   ensureSession,
   readSessionBinding,
   beginSessionDrain,
@@ -104,22 +105,28 @@ export function buildDesignSessionRouter({
     if (proxyAccess && !matchesProxyRequest(proxyAccess, sessionId, projectId)) {
       return invalidWorkbenchAccess(res, getRequestId(req));
     }
-    const auth = proxyAccess
-      ? { zakiUser: { id: proxyAccess.userId } }
-      : await resolveUser(req, res);
-    if (!auth?.zakiUser?.id) return;
+    let auth = proxyAccess ? null : await resolveUser(req, res);
+    const ownerUserId = proxyAccess?.userId || auth?.zakiUser?.id;
+    if (!ownerUserId) return;
     const requestId = getRequestId(req);
     try {
       const session = await readSessionBinding({
         dbQuery,
         sessionId,
         projectId,
-        userId: auth.zakiUser.id,
+        userId: ownerUserId,
         tenantId: "default",
       });
       if (!session) return notFound(res, requestId);
       if (proxyAccess && proxyAccess.generation !== session.generation) {
         return invalidWorkbenchAccess(res, requestId);
+      }
+      if (proxyAccess) {
+        const zakiUser = await resolveBillingUserById?.(session.userId);
+        if (!zakiUser || String(zakiUser.id) !== session.userId) {
+          return invalidWorkbenchAccess(res, requestId);
+        }
+        auth = { zakiUser };
       }
       if (!isProxyableSessionState(session.state)) {
         return res.status(409).json({
