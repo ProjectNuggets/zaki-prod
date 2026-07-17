@@ -6,10 +6,9 @@ import { createDesignSessionProxyAuthorizer } from "./design-session-metering.js
 import { readDesignSessionBinding } from "./design-session-store.js";
 import { createDesignWorkbenchAccess } from "./design-workbench-access.js";
 import {
-  resolveEffectivePlatformEntitlement,
+  buildPlatformForMeterIdentity,
   resolvePlatformWalletPlanForUser,
 } from "./platform-entitlement-context.js";
-import { buildPlatformEntitlementSummary } from "./platform-policy.js";
 
 const RUN = process.env.LEDGER_TEST_DATABASE_URL;
 const d = RUN ? describe : describe.skip;
@@ -74,13 +73,7 @@ d("Design session billing identity — real PostgreSQL wallet boundary", () => {
 
   test("a paid cookie mutation preserves the paid wallet through the production authorizer", async () => {
     const issueMeterGrantForIdentity = jest.fn(async ({ identity }) => {
-      const effective = resolveEffectivePlatformEntitlement(identity.zakiUser);
-      const platform = buildPlatformEntitlementSummary({
-        commercialPlanId: effective.commercial?.planId || "spaces_free",
-        effectiveTier: effective.tier,
-        source: effective.source,
-        premium: effective.premium,
-      });
+      const platform = buildPlatformForMeterIdentity(identity);
       const planId = resolvePlatformWalletPlanForUser(identity.zakiUser);
       expect(platform.plan.id).toBe(planId);
       await ensureWallet({ userId: identity.userId, planId, env: {} });

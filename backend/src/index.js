@@ -416,6 +416,7 @@ import {
   isPaidActive,
 } from "./effective-entitlements.js";
 import {
+  buildPlatformForMeterIdentity,
   resolveEffectivePlatformEntitlement,
   resolvePlatformWalletPlanForUser,
 } from "./platform-entitlement-context.js";
@@ -7161,35 +7162,6 @@ function hasValidMeterServiceToken(req) {
 
 function normalizeMeterTenantId(value) {
   return String(value || "default").trim().slice(0, 120) || "default";
-}
-
-function resolveMeterEntitlementStartedAt(zakiUser, effective) {
-  const source = String(effective?.source || "").trim();
-  if (source !== "subscription" && source !== "access_code") return null;
-  return zakiUser?.meter_entitlement_started_at || zakiUser?.billing_updated_at || null;
-}
-
-function buildPlatformForMeterIdentity(identity) {
-  if (identity?.type === "user") {
-    const effective = resolveEffectivePlatformEntitlement(identity.zakiUser);
-    const commercial = effective.commercial || {};
-    return buildPlatformEntitlementSummary({
-      commercialPlanId: commercial.planId || "spaces_free",
-      effectiveTier: effective.tier,
-      source: effective.source,
-      premium: effective.premium,
-      weeklyAllowanceEntitlementStartedAt: resolveMeterEntitlementStartedAt(
-        identity.zakiUser,
-        effective
-      ),
-    });
-  }
-  return buildPlatformEntitlementSummary({
-    commercialPlanId: "spaces_free",
-    effectiveTier: "free",
-    source: "anonymous",
-    premium: false,
-  });
 }
 
 async function resolveMeterIdentity(
