@@ -39,6 +39,7 @@ import {
 } from "./signup-policy.js";
 import { completeEmailSignup } from "./email-signup-user.js";
 import { validateRuntimeConfig } from "./config-validation.js";
+import { bypassDesignOwnedBodyParser } from "./design-body-parser-boundary.js";
 import {
   createMemoryRoutes,
   buildChatMemoryContext,
@@ -222,8 +223,33 @@ import {
   fetchDesignProxyPath,
   probeDesignReady,
 } from "./design-client.js";
+import { DesignControllerClient } from "./design-controller-client.js";
+import { buildDesignControllerCallbackRouter } from "./design-controller-callback-routes.js";
 import {
+  buildDesignInternalReadRouter,
+  createDesignInternalReadSource,
+} from "./design-internal-read-routes.js";
+import { buildDesignSessionRouter } from "./design-session-routes.js";
+import {
+  buildDesignMeterDenialPayload,
+  buildDesignPathBlockedPayload,
+  createDesignSessionProxyAuthorizer,
+  readDesignIdempotencyKey,
+  setDesignMeterHeaders,
+} from "./design-session-metering.js";
+import { buildDesignProjectRouter } from "./design-project-routes.js";
+import { buildDesignWorkbenchRouter } from "./design-workbench-routes.js";
+import { createDesignWorkbenchAccess } from "./design-workbench-access.js";
+import {
+  beginDesignSessionDrain,
+  ensureDesignSession,
+  readDesignSessionBinding,
+  updateDesignSessionObservedState,
+} from "./design-session-store.js";
+import {
+  createDesignProject,
   extractDesignProjectFromPayload,
+  listDesignProjects,
   markDesignProjectActive,
   markDesignProjectDeleted,
   markDesignProjectFailed,
@@ -652,6 +678,18 @@ const DESIGN_ENGINE_INTERNAL_TOKEN = (
   ""
 ).trim();
 const ZAKI_DESIGN_ENABLED = isDesignEnabled(process.env.ZAKI_DESIGN_ENABLED);
+const ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED = isDesignEnabled(
+  process.env.ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED
+);
+const DESIGN_CONTROLLER_BASE_URL = (
+  process.env.ZAKI_DESIGN_CONTROLLER_BASE_URL || ""
+).trim().replace(/\/+$/, "");
+const DESIGN_CONTROLLER_TOKEN = (
+  process.env.ZAKI_DESIGN_CONTROLLER_TOKEN || ""
+).trim();
+const DESIGN_HUB_CALLBACK_TOKEN = (
+  process.env.ZAKI_DESIGN_HUB_CALLBACK_TOKEN || ""
+).trim();
 const ZAKI_LEARNING_WEBHOOK_BASE_URL = (
   process.env.ZAKI_LEARNING_WEBHOOK_BASE_URL ||
   ZAKI_AGENT_WEBHOOK_BASE_URL ||
@@ -665,6 +703,10 @@ const LEARNING_ENGINE_REQUEST_TIMEOUT_MS = Math.max(
 const DESIGN_ENGINE_REQUEST_TIMEOUT_MS = Math.max(
   1_000,
   Number(process.env.DESIGN_ENGINE_REQUEST_TIMEOUT_MS || 60_000)
+);
+const DESIGN_CONTROLLER_REQUEST_TIMEOUT_MS = Math.min(
+  180_000,
+  Math.max(1_000, Number(process.env.ZAKI_DESIGN_CONTROLLER_TIMEOUT_MS || 180_000))
 );
 const ZAKI_DESIGN_MAX_REQUEST_BYTES = Math.max(
   1_000,
@@ -2538,8 +2580,14 @@ const stripeWebhookHandler = createStripeWebhookHandler({
 app.post("/api/billing/webhook", express.raw({ type: "application/json" }), stripeWebhookHandler);
 
 // Request size limits to prevent memory exhaustion
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(bypassDesignOwnedBodyParser(
+  express.json({ limit: '10mb' }),
+  { controllerEnabled: ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED },
+));
+app.use(bypassDesignOwnedBodyParser(
+  express.urlencoded({ extended: true, limit: '10mb' }),
+  { controllerEnabled: ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED },
+));
 
 // Normalize JSON parsing failures to API-friendly responses.
 app.use((err, req, res, next) => {
@@ -3517,9 +3565,17 @@ async function getBackendReadinessDependencies() {
   const learningConfigured = Boolean(
     getLearningBase(LEARNING_ENGINE_BASE_URL) && LEARNING_ENGINE_INTERNAL_TOKEN
   );
-  const designConfigured = Boolean(
+  const directDesignConfigured = Boolean(
     getDesignBase(DESIGN_ENGINE_BASE_URL) && DESIGN_ENGINE_INTERNAL_TOKEN
   );
+  const controllerDesignConfigured = Boolean(
+    DESIGN_CONTROLLER_BASE_URL &&
+    DESIGN_CONTROLLER_TOKEN &&
+    DESIGN_HUB_CALLBACK_TOKEN
+  );
+  const designConfigured = ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED
+    ? controllerDesignConfigured
+    : directDesignConfigured;
   const dependencies = {};
   if (!ZAKI_LEARNING_ENABLED) {
     dependencies.learning = {
@@ -3580,6 +3636,18 @@ async function getBackendReadinessDependencies() {
     };
   } else {
     try {
+      if (ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED) {
+        const readiness = await designSessionController.ready();
+        dependencies.design = {
+          ok: readiness.ok,
+          enabled: true,
+          configured: true,
+          topology: "session-controller",
+          status: readiness.ok ? "ready" : "unavailable",
+          upstreamStatus: readiness.upstreamStatus,
+        };
+        return dependencies;
+      }
       const response = await probeDesignReady({
         baseUrl: DESIGN_ENGINE_BASE_URL,
         internalToken: DESIGN_ENGINE_INTERNAL_TOKEN,
@@ -14720,6 +14788,15 @@ function assertDesignRouteEnabled(req, res) {
     res.status(404).json(buildDesignDisabledPayload(requestId));
     return false;
   }
+  if (ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED) {
+    res.status(404).json({
+      code: "design_session_required",
+      error: "Design session is required.",
+      message: "Use the session-scoped Design API for an ephemeral worker.",
+      requestId,
+    });
+    return false;
+  }
   if (!getDesignBase(DESIGN_ENGINE_BASE_URL)) {
     res
       .status(500)
@@ -14778,15 +14855,6 @@ function designProjectIdFromTargetPath(method, targetPath) {
   const normalizedPath = String(targetPath || "").split("?")[0];
   const match = /^\/api\/projects\/([^/]+)$/.exec(normalizedPath);
   return match?.[1] ? decodeURIComponent(match[1]) : null;
-}
-
-function buildDesignPathBlockedPayload(reason, requestId) {
-  return {
-    code: "design_path_not_available",
-    error: "Design endpoint is not available.",
-    message: reason,
-    requestId,
-  };
 }
 
 async function prepareDesignCentralProjectRecord(req, res, preparedBody) {
@@ -14935,42 +15003,6 @@ function buildDesignMeterIdentity(req) {
   };
 }
 
-function readDesignIdempotencyKey(req, action) {
-  const headerValue =
-    req.headers?.["idempotency-key"] ||
-    req.headers?.["x-idempotency-key"];
-  const raw = Array.isArray(headerValue) ? headerValue[0] : headerValue;
-  const normalizedHeader = String(raw || "").trim();
-  if (normalizedHeader) return normalizedHeader.slice(0, 180);
-  return `${getOrCreateRequestId(req)}:${normalizeMeterAction(action)}`.slice(0, 180);
-}
-
-function setDesignMeterHeaders(res, grant, meter) {
-  if (!grant || res.headersSent) return;
-  res.setHeader("X-Zaki-Meter-Grant-Id", grant.grantId);
-  res.setHeader("X-Zaki-Meter-Product", "design");
-  res.setHeader("X-Zaki-Meter-Action", grant.action);
-  if (meter?.plan?.tier) res.setHeader("X-Zaki-Meter-Plan", meter.plan.tier);
-  if (meter?.rolling?.remaining !== null && meter?.rolling?.remaining !== undefined) {
-    res.setHeader("X-Zaki-Meter-Rolling-Remaining", String(meter.rolling.remaining));
-  }
-  if (meter?.weekly?.remaining !== null && meter?.weekly?.remaining !== undefined) {
-    res.setHeader("X-Zaki-Meter-Weekly-Remaining", String(meter.weekly.remaining));
-  }
-}
-
-function buildDesignMeterDenialPayload(result, requestId) {
-  return {
-    code: result?.error || "design_meter_denied",
-    error: "Design usage is not available.",
-    message: result?.message || "Design usage is not currently available.",
-    product: result?.product || "design",
-    productState: result?.productState || null,
-    meter: result?.meter || null,
-    requestId,
-  };
-}
-
 async function requireDesignMeterGrantForIngress(req) {
   const action = classifyDesignMeterActionForIngress(req);
   if (!action) return { allowed: true, action: null, grant: null };
@@ -14992,7 +15024,7 @@ async function requireDesignMeterGrantForIngress(req) {
     action,
     estimatedUnits: estimateDesignMeterUnitsForIngress(req, action),
     requestId,
-    idempotencyKey: readDesignIdempotencyKey(req, action),
+    idempotencyKey: readDesignIdempotencyKey(req, action, requestId),
     metadata: {
       surface: "design",
       route: String(req.originalUrl || req.url || "").split("?")[0],
@@ -18364,6 +18396,119 @@ app.use(
 // DESIGN ENGINE BFF
 // =============================================================================
 
+async function resolveDesignBillingUserById(userId) {
+  const numericUserId = Number(userId);
+  if (!Number.isSafeInteger(numericUserId) || numericUserId <= 0) return null;
+  const zakiUser = await dbGet(
+    `SELECT ${_ZAKI_USER_COLS} FROM zaki_users WHERE id = $1`,
+    [numericUserId]
+  );
+  if (!zakiUser?.verified || Number(zakiUser.id) !== numericUserId) return null;
+  return zakiUser;
+}
+
+let designSessionController = null;
+let designWorkbenchAccess = null;
+if (ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED) {
+  designSessionController = new DesignControllerClient({
+    baseUrl: DESIGN_CONTROLLER_BASE_URL,
+    token: DESIGN_CONTROLLER_TOKEN,
+    fetchWithTimeout,
+    timeoutMs: DESIGN_CONTROLLER_REQUEST_TIMEOUT_MS,
+  });
+  designWorkbenchAccess = createDesignWorkbenchAccess({ secret: DESIGN_CONTROLLER_TOKEN });
+  app.use(
+    "/internal/design/controller/v1",
+    buildDesignControllerCallbackRouter({
+      callbackToken: DESIGN_HUB_CALLBACK_TOKEN,
+      dbQuery,
+      runInTransaction: withDbTransaction,
+    })
+  );
+  app.use(
+    "/internal/design/read/v1",
+    buildDesignInternalReadRouter({
+      callbackToken: DESIGN_HUB_CALLBACK_TOKEN,
+      source: createDesignInternalReadSource({ dbQuery }),
+    })
+  );
+}
+
+const unavailableDesignSessionController = {
+  ensure: async () => { throw new Error("Design session controller is disabled."); },
+  status: async () => { throw new Error("Design session controller is disabled."); },
+  stop: async () => { throw new Error("Design session controller is disabled."); },
+  workbench: async () => { throw new Error("Design session controller is disabled."); },
+};
+
+const authorizeDesignSessionProxy = createDesignSessionProxyAuthorizer({
+  absoluteMaxRequestBytes: ZAKI_DESIGN_MAX_REQUEST_BYTES,
+  issueMeterGrantForIdentity,
+});
+
+async function settleDesignSessionProxy({ req, authorization, receiptStatus, durationMs }) {
+  const grant = authorization?.grant;
+  if (!grant?.grantId || !authorization.action) return;
+  await recordMeterReceiptForGrant({
+    grant,
+    product: "design",
+    action: authorization.action,
+    status: receiptStatus,
+    rawUsageFacts: {
+      durationMs,
+      storageBytes: Number(req.headers?.["content-length"] || 0) || 0,
+      model: "design-session-worker",
+    },
+    idempotencyKey: `${grant.idempotencyKey}:session-proxy-receipt`.slice(0, 180),
+  });
+}
+
+app.use(
+  "/api/design/workbench",
+  buildDesignWorkbenchRouter({
+    enabled: ZAKI_DESIGN_ENABLED && ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED,
+    resolveAccess: (req, sessionId) => designWorkbenchAccess?.resolve(req, sessionId) ?? null,
+    controller: designSessionController || unavailableDesignSessionController,
+    getRequestId: getOrCreateRequestId,
+  })
+);
+
+app.use(
+  "/api/design/projects",
+  buildDesignProjectRouter({
+    enabled: ZAKI_DESIGN_ENABLED,
+    controllerMode: ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED,
+    resolveUser: requireAuthUser,
+    listProjects: ({ userId }) => listDesignProjects({ dbQuery, userId }),
+    createProject: (input) => createDesignProject({ runInTransaction: withDbTransaction, ...input }),
+    createProjectId: generateDesignProjectId,
+    getRequestId: getOrCreateRequestId,
+  })
+);
+
+app.use(
+  "/api/design/sessions",
+  buildDesignSessionRouter({
+    enabled: ZAKI_DESIGN_ENABLED && ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED,
+    resolveUser: requireAuthUser,
+    resolveBillingUserById: resolveDesignBillingUserById,
+    ensureSession: ensureDesignSession,
+    readSessionBinding: readDesignSessionBinding,
+    beginSessionDrain: beginDesignSessionDrain,
+    updateSessionState: updateDesignSessionObservedState,
+    runInTransaction: withDbTransaction,
+    dbQuery,
+    createSessionId: () => `design-session-${crypto.randomUUID()}`,
+    controller: designSessionController || unavailableDesignSessionController,
+    getRequestId: getOrCreateRequestId,
+    authorizeProxy: authorizeDesignSessionProxy,
+    settleProxy: settleDesignSessionProxy,
+    issueWorkbenchAccess: (binding) => designWorkbenchAccess?.issue(binding),
+    revokeWorkbenchAccess: (sessionId) => designWorkbenchAccess?.revoke(sessionId),
+    resolveProxyAccess: (req, sessionId) => designWorkbenchAccess?.resolve(req, sessionId) ?? null,
+  })
+);
+
 app.use("/api/design", requireDesignQuotaForIngress);
 
 app.get("/api/internal/design/status", async (req, res) => {
@@ -18373,19 +18518,38 @@ app.get("/api/internal/design/status", async (req, res) => {
 
     const requestId = getOrCreateRequestId(req);
     const userId = resolveCanonicalDesignUserId(authResult);
-    const configured = Boolean(getDesignBase(DESIGN_ENGINE_BASE_URL) && DESIGN_ENGINE_INTERNAL_TOKEN);
+    const directConfigured = Boolean(getDesignBase(DESIGN_ENGINE_BASE_URL) && DESIGN_ENGINE_INTERNAL_TOKEN);
+    const controllerConfigured = Boolean(
+      DESIGN_CONTROLLER_BASE_URL && DESIGN_CONTROLLER_TOKEN && DESIGN_HUB_CALLBACK_TOKEN
+    );
+    const configured = ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED
+      ? controllerConfigured
+      : directConfigured;
     const body = {
       ok: false,
       enabled: ZAKI_DESIGN_ENABLED,
       configured,
+      topology: ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED ? "session-controller" : "direct-daemon",
       baseUrlConfigured: Boolean(getDesignBase(DESIGN_ENGINE_BASE_URL)),
       internalTokenConfigured: Boolean(DESIGN_ENGINE_INTERNAL_TOKEN),
+      controllerBaseUrlConfigured: Boolean(DESIGN_CONTROLLER_BASE_URL),
+      controllerTokenConfigured: Boolean(DESIGN_CONTROLLER_TOKEN),
+      callbackTokenConfigured: Boolean(DESIGN_HUB_CALLBACK_TOKEN),
       requestTimeoutMs: DESIGN_ENGINE_REQUEST_TIMEOUT_MS,
       requestId,
     };
 
     if (!ZAKI_DESIGN_ENABLED || !configured || !userId) {
       return res.status(200).json(body);
+    }
+
+    if (ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED) {
+      const readiness = await designSessionController.ready();
+      return res.status(200).json({
+        ...body,
+        ok: readiness.ok,
+        upstreamStatus: readiness.upstreamStatus,
+      });
     }
 
     const upstream = await probeDesignReady({
@@ -18409,6 +18573,30 @@ app.get("/api/internal/design/status", async (req, res) => {
 });
 
 app.get("/api/design/health", requireDesignContext, async (req, res) => {
+  if (ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED) {
+    if (!ZAKI_DESIGN_ENABLED) {
+      return res.status(404).json(buildDesignDisabledPayload(getOrCreateRequestId(req)));
+    }
+    try {
+      const readiness = await designSessionController.ready();
+      return res.status(readiness.ok ? 200 : 503).json({
+        ok: readiness.ok,
+        enabled: true,
+        configured: true,
+        topology: "session-controller",
+        upstreamStatus: readiness.upstreamStatus,
+        requestId: getOrCreateRequestId(req),
+      });
+    } catch {
+      return res.status(503).json({
+        code: "design_unavailable",
+        error: "Design is unavailable.",
+        message: "Design session controller is temporarily unavailable.",
+        retryable: true,
+        requestId: getOrCreateRequestId(req),
+      });
+    }
+  }
   if (!assertDesignRouteEnabled(req, res)) return;
   try {
     const upstream = await probeDesignReady({

@@ -373,6 +373,20 @@ describe("runtime config validation", () => {
     );
   });
 
+  it("requires the complete split-token controller contract when the Design session controller is enabled", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_DESIGN_ENABLED: "false",
+        ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED: "true",
+      })
+    );
+    expect(report.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "ZAKI_DESIGN_CONTROLLER_BASE_URL" }),
+      expect.objectContaining({ key: "ZAKI_DESIGN_CONTROLLER_TOKEN" }),
+      expect.objectContaining({ key: "ZAKI_DESIGN_HUB_CALLBACK_TOKEN" }),
+    ]));
+  });
+
   it("requires hire engine base and token when hire is enabled", () => {
     const report = validateRuntimeConfig(
       createBaseEnv({

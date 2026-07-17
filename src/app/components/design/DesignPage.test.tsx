@@ -1,0 +1,113 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { DesignPage } from "./DesignPage";
+
+const mockEnsure = jest.fn();
+const mockStop = jest.fn();
+const mockStatus = jest.fn();
+
+jest.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (_key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? _key }),
+}));
+
+jest.mock("@/lib/designApi", () => ({
+  getDesignHealth: jest.fn().mockResolvedValue({ ok: true, enabled: true, configured: true }),
+  listDesignProjects: jest.fn().mockResolvedValue({ projects: [{ id: "project_01", name: "Brand system" }] }),
+  createDesignProject: jest.fn(),
+  ensureDesignSession: (...args: unknown[]) => mockEnsure(...args),
+  getDesignSession: (...args: unknown[]) => mockStatus(...args),
+  stopDesignSession: (...args: unknown[]) => mockStop(...args),
+  designWorkbenchUrl: (session: { id: string; projectId: string }, projectName: string) => {
+    const query = new URLSearchParams({
+      sessionId: session.id,
+      projectId: session.projectId,
+      projectName,
+    });
+    return `/api/design/workbench/projects/${session.projectId}?${query.toString()}`;
+  },
+}));
+
+function renderPage() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  return render(<QueryClientProvider client={client}><DesignPage /></QueryClientProvider>);
+}
+
+describe("DesignPage hosted lifecycle", () => {
+  beforeEach(() => {
+    mockEnsure.mockReset().mockResolvedValue({
+      session: { id: "sess_01", projectId: "project_01", state: "READY", generation: 1 },
+    });
+    mockStop.mockReset().mockResolvedValue({
+      session: { id: "sess_01", projectId: "project_01", state: "STOPPED", generation: 1 },
+    });
+    mockStatus.mockReset().mockResolvedValue({
+      session: { id: "sess_01", projectId: "project_01", state: "READY", generation: 1 },
+    });
+  });
+
+  it("opens an isolated project workbench and stops it before returning", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Brand system/i }));
+
+    await waitFor(() => expect(mockEnsure).toHaveBeenCalledWith("project_01"));
+    const frame = await screen.findByTitle("ZAKI Design workbench");
+    expect(frame).toHaveAttribute(
+      "src",
+      "/api/design/workbench/projects/project_01?sessionId=sess_01&projectId=project_01&projectName=Brand+system",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    await waitFor(() => expect(mockStop).toHaveBeenCalledWith("sess_01", "project_01"));
+    expect(await screen.findByText("Your design projects")).toBeInTheDocument();
+  });
+
+  it("does not allow leaving while session admission is still pending", async () => {
+    let resolveEnsure!: (value: unknown) => void;
+    mockEnsure.mockImplementation(() => new Promise((resolve) => { resolveEnsure = resolve; }));
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Brand system/i }));
+
+    expect(await screen.findByRole("button", { name: "Back to projects" })).toBeDisabled();
+    resolveEnsure({ session: { id: "sess_01", projectId: "project_01", state: "READY", generation: 1 } });
+    expect(await screen.findByTitle("ZAKI Design workbench")).toBeVisible();
+  });
+
+  it("offers a safe retry when the admitted worker is already stopped", async () => {
+    mockEnsure.mockResolvedValueOnce({
+      session: { id: "sess_01", projectId: "project_01", state: "STARTING", generation: 1 },
+      retryAfterMs: 10,
+    });
+    mockStatus.mockResolvedValueOnce({
+      session: { id: "sess_01", projectId: "project_01", state: "STOPPED", generation: 1 },
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Brand system/i }));
+
+    expect(await screen.findByRole("button", { name: "Retry" })).toBeVisible();
+    expect(screen.queryByText("Restoring project files and starting an isolated worker.")).not.toBeInTheDocument();
+  });
+
+  it("opens the workbench when retry readmits the same stopped session", async () => {
+    mockEnsure
+      .mockResolvedValueOnce({
+        session: { id: "sess_01", projectId: "project_01", state: "STARTING", generation: 1 },
+        retryAfterMs: 10,
+      })
+      .mockResolvedValueOnce({
+        session: { id: "sess_01", projectId: "project_01", state: "READY", generation: 1 },
+      });
+    mockStatus.mockResolvedValueOnce({
+      session: { id: "sess_01", projectId: "project_01", state: "STOPPED", generation: 1 },
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Brand system/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByTitle("ZAKI Design workbench")).toHaveAttribute(
+      "src",
+      "/api/design/workbench/projects/project_01?sessionId=sess_01&projectId=project_01&projectName=Brand+system",
+    );
+  });
+});

@@ -9,6 +9,23 @@ export type DesignProject = {
   updatedAt?: number;
 };
 
+export type DesignSessionState =
+  | "REQUESTED" | "STARTING" | "RESTORING" | "READY" | "ACTIVE" | "IDLE"
+  | "DRAINING" | "CHECKPOINTING" | "STOPPED" | "FAILED";
+
+export type DesignSession = {
+  id: string;
+  projectId: string;
+  state: DesignSessionState;
+  generation: number;
+  failureCode?: string;
+};
+
+export type DesignSessionResponse = {
+  session: DesignSession;
+  retryAfterMs?: number;
+};
+
 type DesignRequestOptions = {
   method?: string;
   body?: Record<string, unknown>;
@@ -62,4 +79,33 @@ export function createDesignProject(input: { name: string; prompt?: string }) {
       },
     },
   });
+}
+
+export function ensureDesignSession(projectId: string) {
+  return designRequest<DesignSessionResponse>("/api/design/sessions", {
+    method: "POST",
+    body: { projectId },
+  });
+}
+
+export function getDesignSession(sessionId: string, projectId: string) {
+  return designRequest<DesignSessionResponse>(
+    `/api/design/sessions/${encodeURIComponent(sessionId)}?projectId=${encodeURIComponent(projectId)}`,
+  );
+}
+
+export function stopDesignSession(sessionId: string, projectId: string) {
+  return designRequest<DesignSessionResponse>(
+    `/api/design/sessions/${encodeURIComponent(sessionId)}/stop`,
+    { method: "POST", body: { projectId } },
+  );
+}
+
+export function designWorkbenchUrl(session: DesignSession, projectName: string) {
+  const query = new URLSearchParams({
+    sessionId: session.id,
+    projectId: session.projectId,
+    projectName,
+  });
+  return `/api/design/workbench/projects/${encodeURIComponent(session.projectId)}?${query.toString()}`;
 }

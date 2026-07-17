@@ -68,6 +68,10 @@ const SettingsPage = lazy(() =>
   import('./app/components/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
 
+const DesignRoute = lazy(() =>
+  import('./app/components/design/DesignRoute').then((m) => ({ default: m.DesignRoute })),
+);
+
 // Brain is the first lazy-loaded route: its WebGL "Galaxy" renderer (three +
 // d3-force-3d) is heavy and only needed on /brain, so it is code-split into
 // its own chunk and loaded on demand behind a Suspense fallback.
@@ -338,13 +342,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'design',
-        element: routeSuspense(
-          <ProductAccessGate
-            productId="design"
-            title="ZAKI Design"
-            mode="coming_soon"
-          />
-        ),
+        element: routeSuspense(<DesignRoute />),
       },
       {
         path: 'minutes',

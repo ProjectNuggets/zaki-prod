@@ -67,8 +67,12 @@ export function validateRuntimeConfig(env = process.env) {
   const learningBaseUrl = normalize(env.LEARNING_ENGINE_BASE_URL);
   const learningInternalToken = normalize(env.LEARNING_ENGINE_INTERNAL_TOKEN);
   const designEnabled = isTruthyBoolean(env.ZAKI_DESIGN_ENABLED);
+  const designControllerEnabled = isTruthyBoolean(env.ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED);
   const designBaseUrl = normalize(env.DESIGN_ENGINE_BASE_URL);
   const designInternalToken = normalize(env.DESIGN_ENGINE_INTERNAL_TOKEN || env.ZAKI_DESIGN_INTERNAL_TOKEN);
+  const designControllerBaseUrl = normalize(env.ZAKI_DESIGN_CONTROLLER_BASE_URL);
+  const designControllerToken = normalize(env.ZAKI_DESIGN_CONTROLLER_TOKEN);
+  const designHubCallbackToken = normalize(env.ZAKI_DESIGN_HUB_CALLBACK_TOKEN);
   const hireEnabled = isTruthyBoolean(env.ZAKI_HIRE_ENABLED);
   const hireBaseUrl = normalize(env.HIRE_ENGINE_BASE_URL || env.ZAKI_HIRE_ENGINE_BASE_URL);
   const hireInternalToken = normalize(env.HIRE_ENGINE_INTERNAL_TOKEN || env.ZAKI_HIRE_ENGINE_INTERNAL_TOKEN);
@@ -253,7 +257,23 @@ export function validateRuntimeConfig(env = process.env) {
       "Learning engine config is present, but ZAKI_LEARNING_ENABLED is not true."
     );
   }
-  if (designEnabled) {
+  if (designControllerEnabled) {
+    if (!designControllerBaseUrl) {
+      pushIssue(errors, "ZAKI_DESIGN_CONTROLLER_BASE_URL", "Design controller base URL is required when its gate is enabled.");
+    } else if (!hasHttpUrl(designControllerBaseUrl)) {
+      pushIssue(errors, "ZAKI_DESIGN_CONTROLLER_BASE_URL", "Design controller base URL must start with http:// or https://.");
+    }
+    if (!designControllerToken) {
+      pushIssue(errors, "ZAKI_DESIGN_CONTROLLER_TOKEN", "Hub-to-controller token is required when the Design controller is enabled.");
+    }
+    if (!designHubCallbackToken) {
+      pushIssue(errors, "ZAKI_DESIGN_HUB_CALLBACK_TOKEN", "Controller-to-hub token is required when the Design controller is enabled.");
+    }
+    if (designControllerToken && designHubCallbackToken && designControllerToken === designHubCallbackToken) {
+      pushIssue(errors, "ZAKI_DESIGN_HUB_CALLBACK_TOKEN", "Design directional bearer tokens must be distinct.");
+    }
+  }
+  if (designEnabled && !designControllerEnabled) {
     if (!designBaseUrl) {
       pushIssue(
         errors,
@@ -274,7 +294,7 @@ export function validateRuntimeConfig(env = process.env) {
         "DESIGN_ENGINE_INTERNAL_TOKEN is required when ZAKI_DESIGN_ENABLED=true."
       );
     }
-  } else if (designBaseUrl || designInternalToken) {
+  } else if (!designEnabled && !designControllerEnabled && (designBaseUrl || designInternalToken)) {
     pushIssue(
       warnings,
       "ZAKI_DESIGN_ENABLED",

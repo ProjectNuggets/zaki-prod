@@ -1,162 +1,250 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, FilePlus2, Palette, RefreshCw, Wand2 } from "lucide-react";
-import { createDesignProject, getDesignHealth, listDesignProjects } from "@/lib/designApi";
-import { billingKeys, useMeterStatus } from "@/queries";
-import { useProductRegistry } from "@/queries/useProducts";
+import { ArrowLeft, LoaderCircle, Palette, Plus, RefreshCw, Square } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { V2Badge, V2Button, V2Panel, V2PanelBody, V2PanelHead } from "@/app/components/v2";
+import {
+  createDesignProject,
+  designWorkbenchUrl,
+  ensureDesignSession,
+  getDesignHealth,
+  getDesignSession,
+  listDesignProjects,
+  stopDesignSession,
+  type DesignProject,
+  type DesignSessionResponse,
+} from "@/lib/designApi";
 
-const DESIGN_PRODUCT_ID = "design";
+const TERMINAL_STATES = new Set(["READY", "ACTIVE", "IDLE", "STOPPED", "FAILED"]);
 
 export function DesignPage() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [name, setName] = useState("New design workspace");
-  const [prompt, setPrompt] = useState("");
-  const productRegistry = useProductRegistry();
-  const meterStatus = useMeterStatus();
-  const health = useQuery({
-    queryKey: ["design", "health"],
-    queryFn: getDesignHealth,
-    retry: false,
-  });
-  const projects = useQuery({
-    queryKey: ["design", "projects"],
-    queryFn: listDesignProjects,
+  const [name, setName] = useState("");
+  const [selectedProject, setSelectedProject] = useState<DesignProject | null>(null);
+  const [initialSession, setInitialSession] = useState<DesignSessionResponse | null>(null);
+
+  const health = useQuery({ queryKey: ["design", "health"], queryFn: getDesignHealth, retry: false });
+  const projects = useQuery({ queryKey: ["design", "projects"], queryFn: listDesignProjects });
+  const openSession = useMutation({
+    mutationFn: (project: DesignProject) => ensureDesignSession(project.id),
+    onMutate: (project) => {
+      setSelectedProject(project);
+      setInitialSession(null);
+    },
+    onSuccess: (result) => {
+      queryClient.removeQueries({ queryKey: ["design", "session"] });
+      setInitialSession(result);
+    },
   });
   const createProject = useMutation({
     mutationFn: createDesignProject,
-    onSuccess: () => {
-      setPrompt("");
+    onSuccess: ({ project }) => {
+      setName("");
       void queryClient.invalidateQueries({ queryKey: ["design", "projects"] });
-      void queryClient.invalidateQueries({ queryKey: billingKeys.meterStatus });
+      openSession.mutate(project);
     },
   });
 
-  const designProduct = useMemo(
-    () =>
-      (productRegistry.data?.data?.products ?? []).find(
-        (product) => product.productId === DESIGN_PRODUCT_ID,
-      ) ?? null,
-    [productRegistry.data?.data?.products],
-  );
-  const designMeter = meterStatus.data?.data?.products?.[DESIGN_PRODUCT_ID] ?? null;
+  const seedSession = initialSession?.session ?? null;
+  const sessionStatus = useQuery({
+    queryKey: ["design", "session", seedSession?.id, selectedProject?.id],
+    queryFn: () => getDesignSession(seedSession!.id, selectedProject!.id),
+    enabled: Boolean(seedSession && selectedProject && !TERMINAL_STATES.has(seedSession.state)),
+    refetchInterval: (query) => {
+      const value = query.state.data;
+      if (value && TERMINAL_STATES.has(value.session.state)) return false;
+      return Math.max(500, Math.min(value?.retryAfterMs ?? initialSession?.retryAfterMs ?? 1000, 5000));
+    },
+  });
+  const activeSession = sessionStatus.data?.session ?? seedSession;
+  const workspaceReady = activeSession && ["READY", "ACTIVE", "IDLE"].includes(activeSession.state);
+  const workspaceUnavailable = activeSession && ["STOPPED", "FAILED"].includes(activeSession.state);
+  const stopSession = useMutation({
+    mutationFn: () => stopDesignSession(activeSession!.id, selectedProject!.id),
+    onSuccess: () => {
+      setSelectedProject(null);
+      setInitialSession(null);
+    },
+  });
+
   const projectList = projects.data?.projects ?? [];
-  const designRuntimeReady = designProduct?.state === "enabled" && health.data?.ok === true;
+  const workspaceUrl = useMemo(
+    () => workspaceReady && selectedProject && activeSession
+      ? designWorkbenchUrl(activeSession, selectedProject.name)
+      : null,
+    [activeSession, selectedProject, workspaceReady],
+  );
+
+  if (selectedProject) {
+    return (
+      <main className="flex min-h-0 flex-1 flex-col bg-[var(--v2-bg)] text-[var(--v2-ink-1)]" data-product-id="design">
+        <header className="flex min-h-14 items-center justify-between gap-3 border-b border-[var(--v2-hairline)] bg-[var(--v2-bg-raised)] px-4 py-2">
+          <div className="flex min-w-0 items-center gap-3">
+            <V2Button
+              size="sm"
+              iconOnly
+              aria-label={t("design.back", { defaultValue: "Back to projects" })}
+              onClick={() => {
+                if (activeSession && !["STOPPED", "FAILED"].includes(activeSession.state)) stopSession.mutate();
+                else { setSelectedProject(null); setInitialSession(null); }
+              }}
+              disabled={openSession.isPending || stopSession.isPending}
+            >
+              <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden />
+            </V2Button>
+            <div className="min-w-0">
+              <h1 className="truncate text-sm font-semibold">{selectedProject.name}</h1>
+              <p className="truncate font-mono text-[10px] text-[var(--v2-ink-3)]">{selectedProject.id}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <V2Badge tone={workspaceReady ? "success" : workspaceUnavailable ? "danger" : "accent"}>
+              {activeSession?.state ?? (openSession.isPending ? "REQUESTED" : "STARTING")}
+            </V2Badge>
+            {activeSession && !["STOPPED", "FAILED"].includes(activeSession.state) ? (
+              <V2Button size="sm" onClick={() => stopSession.mutate()} disabled={stopSession.isPending}>
+                <Square className="size-3.5" aria-hidden />
+                {t("design.stop", { defaultValue: "Stop" })}
+              </V2Button>
+            ) : null}
+          </div>
+        </header>
+
+        {workspaceUrl ? (
+          <iframe
+            className="min-h-[640px] flex-1 border-0 bg-white"
+            src={workspaceUrl}
+            title={t("design.workbenchTitle", { defaultValue: "ZAKI Design workbench" })}
+            allow="clipboard-read; clipboard-write"
+          />
+        ) : (
+          <div className="grid min-h-[640px] flex-1 place-items-center p-6">
+            <V2Panel className="w-full max-w-lg">
+              <V2PanelHead
+                title={workspaceUnavailable
+                  ? t("design.failedTitle", { defaultValue: "Workspace could not start" })
+                  : t("design.startingTitle", { defaultValue: "Preparing your workspace" })}
+                meta={activeSession?.state ?? "REQUESTED"}
+              />
+              <V2PanelBody className="space-y-4 text-sm text-[var(--v2-ink-2)]">
+                {workspaceUnavailable || openSession.isError || sessionStatus.isError ? (
+                  <>
+                    <p>{t("design.failedBody", { defaultValue: "The isolated Design session did not become ready. You can retry safely." })}</p>
+                    <V2Button variant="accent" size="sm" onClick={() => openSession.mutate(selectedProject)}>
+                      <RefreshCw className="size-3.5" aria-hidden />
+                      {t("design.retry", { defaultValue: "Retry" })}
+                    </V2Button>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <LoaderCircle className="size-5 animate-spin text-[var(--v2-accent)]" aria-hidden />
+                    <p>{t("design.startingBody", { defaultValue: "Restoring project files and starting an isolated worker." })}</p>
+                  </div>
+                )}
+              </V2PanelBody>
+            </V2Panel>
+          </div>
+        )}
+      </main>
+    );
+  }
 
   return (
-    <main
-      className="min-h-screen bg-zaki-base text-zaki-text"
-      data-product-id={DESIGN_PRODUCT_ID}
-    >
-      <section className="border-b border-zaki-border bg-zaki-surface/70">
-        <div className="mx-auto flex max-w-7xl flex-col gap-6 px-5 py-6 md:flex-row md:items-end md:justify-between">
-          <div className="max-w-3xl">
-            <div className="mb-3 flex items-center gap-2 text-sm font-medium text-zaki-muted">
-              <Palette className="h-4 w-4" aria-hidden="true" />
-              <span>ZAKI Design</span>
+    <main className="min-h-full bg-[var(--v2-bg)] p-4 text-[var(--v2-ink-1)] md:p-6" data-product-id="design">
+      <div className="mx-auto max-w-6xl space-y-5">
+        <header className="flex flex-col justify-between gap-4 border-b border-[var(--v2-hairline)] pb-5 md:flex-row md:items-end">
+          <div>
+            <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--v2-ink-3)]">
+              <Palette className="size-4 text-[var(--v2-accent)]" aria-hidden />
+              {t("design.kicker", { defaultValue: "ZAKI Design" })}
             </div>
-            <h1 className="text-3xl font-semibold tracking-normal text-zaki-text md:text-4xl">
-              Design workspaces for product, brand, decks, and web prototypes.
+            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
+              {t("design.title", { defaultValue: "Your design projects" })}
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-zaki-muted">
-              Create tenant-isolated Open Design projects through ZAKI central auth, billing, and metering.
+            <p className="mt-2 max-w-2xl text-sm text-[var(--v2-ink-3)]">
+              {t("design.subtitle", { defaultValue: "Open a project to start its isolated workspace. Files are restored per user and saved when the session stops." })}
             </p>
           </div>
-          <div className="grid min-w-[280px] gap-2 text-sm">
-            <StatusLine label="Product" value={designProduct?.state ?? "loading"} />
-            <StatusLine label="Engine" value={health.data?.ok ? "ready" : health.isError ? "unavailable" : "checking"} />
-            <StatusLine label="Central meter" value={designMeter?.state ?? designProduct?.state ?? "unknown"} />
-          </div>
-        </div>
-      </section>
+          <V2Badge tone={health.data?.ok ? "success" : health.isError ? "danger" : "accent"}>
+            {health.data?.ok
+              ? t("design.engineReady", { defaultValue: "Engine ready" })
+              : health.isError
+                ? t("design.engineUnavailable", { defaultValue: "Engine unavailable" })
+                : t("design.engineChecking", { defaultValue: "Checking engine" })}
+          </V2Badge>
+        </header>
 
-      <section className="mx-auto grid max-w-7xl gap-5 px-5 py-6 lg:grid-cols-[360px_minmax(0,1fr)]">
-        <form
-          className="rounded-zaki-lg border border-zaki-border bg-zaki-surface p-4 shadow-sm"
-          onSubmit={(event) => {
-            event.preventDefault();
-            createProject.mutate({ name: name.trim() || "Untitled design workspace", prompt: prompt.trim() });
-          }}
-        >
-          <div className="mb-4 flex items-center gap-2">
-            <FilePlus2 className="h-4 w-4 text-zaki-accent" aria-hidden="true" />
-            <h2 className="text-sm font-semibold text-zaki-text">New workspace</h2>
-          </div>
-          <label className="block text-xs font-medium text-zaki-muted" htmlFor="design-name">
-            Name
-          </label>
-          <input
-            id="design-name"
-            className="mt-2 w-full rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 text-sm outline-none focus:border-zaki-accent"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-          <label className="mt-4 block text-xs font-medium text-zaki-muted" htmlFor="design-prompt">
-            Brief
-          </label>
-          <textarea
-            id="design-prompt"
-            className="mt-2 min-h-[160px] w-full resize-y rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2 text-sm leading-6 outline-none focus:border-zaki-accent"
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            placeholder="Product surface, audience, brand cues, constraints, and output format."
-          />
-          <button
-            type="submit"
-            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-zaki-md bg-zaki-accent px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-            disabled={createProject.isPending || !designRuntimeReady}
-          >
-            <Wand2 className="h-4 w-4" aria-hidden="true" />
-            {createProject.isPending ? "Creating" : "Create workspace"}
-          </button>
-          {createProject.isError ? (
-            <p className="mt-3 text-xs text-red-600">{createProject.error.message}</p>
-          ) : null}
-        </form>
-
-        <div className="rounded-zaki-lg border border-zaki-border bg-zaki-surface shadow-sm">
-          <div className="flex items-center justify-between border-b border-zaki-border px-4 py-3">
-            <div>
-              <h2 className="text-sm font-semibold text-zaki-text">Workspaces</h2>
-              <p className="mt-1 text-xs text-zaki-muted">{projectList.length} tenant-scoped projects</p>
-            </div>
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 rounded-zaki-md border border-zaki-border px-3 py-2 text-xs font-medium text-zaki-text"
-              onClick={() => projects.refetch()}
+        <V2Panel>
+          <V2PanelHead title={t("design.newProject", { defaultValue: "New project" })} meta={t("design.projectScope", { defaultValue: "Private to your account" })} />
+          <V2PanelBody>
+            <form
+              className="flex flex-col gap-3 sm:flex-row"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const trimmed = name.trim();
+                if (trimmed) createProject.mutate({ name: trimmed });
+              }}
             >
-              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-              Refresh
-            </button>
-          </div>
-          <div className="divide-y divide-zaki-border">
-            {projectList.length ? projectList.map((project) => (
-              <article key={project.id} className="flex items-center justify-between gap-4 px-4 py-4">
-                <div>
-                  <h3 className="text-sm font-semibold text-zaki-text">{project.name}</h3>
-                  <p className="mt-1 text-xs text-zaki-muted">{project.id}</p>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-zaki-muted">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
-                  {project.status?.value ?? "ready"}
-                </div>
-              </article>
+              <label className="sr-only" htmlFor="design-project-name">{t("design.projectName", { defaultValue: "Project name" })}</label>
+              <input
+                id="design-project-name"
+                className="v2-input min-w-0 flex-1"
+                value={name}
+                maxLength={160}
+                onChange={(event) => setName(event.target.value)}
+                placeholder={t("design.projectPlaceholder", { defaultValue: "Website redesign" })}
+              />
+              <V2Button type="submit" variant="accent" disabled={!name.trim() || createProject.isPending || health.data?.ok !== true}>
+                {createProject.isPending ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : <Plus className="size-4" aria-hidden />}
+                {t("design.createAndOpen", { defaultValue: "Create and open" })}
+              </V2Button>
+            </form>
+            {createProject.isError ? <p className="mt-3 text-xs text-[var(--v2-danger)]">{createProject.error.message}</p> : null}
+          </V2PanelBody>
+        </V2Panel>
+
+        <V2Panel>
+          <V2PanelHead>
+            <div className="flex w-full items-center justify-between gap-3">
+              <div>
+                <span>{t("design.projects", { defaultValue: "Projects" })}</span>
+                <span className="ms-2 font-mono text-[10px] text-[var(--v2-ink-3)]">{projectList.length}</span>
+              </div>
+              <V2Button size="sm" onClick={() => projects.refetch()} disabled={projects.isFetching}>
+                <RefreshCw className={`size-3.5 ${projects.isFetching ? "animate-spin" : ""}`} aria-hidden />
+                {t("design.refresh", { defaultValue: "Refresh" })}
+              </V2Button>
+            </div>
+          </V2PanelHead>
+          <div className="divide-y divide-[var(--v2-hairline)]">
+            {projects.isError ? (
+              <div className="p-5 text-sm text-[var(--v2-danger)]">{projects.error.message}</div>
+            ) : projectList.length ? projectList.map((project) => (
+              <button
+                key={project.id}
+                type="button"
+                className="flex w-full items-center justify-between gap-4 px-4 py-4 text-start transition-colors hover:bg-[var(--v2-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--v2-accent)]"
+                onClick={() => openSession.mutate(project)}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold">{project.name}</span>
+                  <span className="mt-1 block truncate font-mono text-[10px] text-[var(--v2-ink-3)]">{project.id}</span>
+                </span>
+                <span className="font-mono text-[10px] uppercase tracking-wide text-[var(--v2-accent)]">
+                  {t("design.open", { defaultValue: "Open" })}
+                </span>
+              </button>
             )) : (
-              <div className="px-4 py-12 text-center text-sm text-zaki-muted">
-                No design workspaces yet.
+              <div className="p-10 text-center text-sm text-[var(--v2-ink-3)]">
+                {projects.isLoading
+                  ? t("design.loadingProjects", { defaultValue: "Loading projects…" })
+                  : t("design.empty", { defaultValue: "No projects yet. Create one above." })}
               </div>
             )}
           </div>
-        </div>
-      </section>
+        </V2Panel>
+      </div>
     </main>
-  );
-}
-
-function StatusLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between rounded-zaki-md border border-zaki-border bg-zaki-base px-3 py-2">
-      <span className="text-zaki-muted">{label}</span>
-      <span className="font-medium text-zaki-text">{value}</span>
-    </div>
   );
 }
