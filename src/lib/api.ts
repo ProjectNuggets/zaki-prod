@@ -2386,12 +2386,28 @@ export type AgentHeartbeatState = BotApiError & {
   enabled?: boolean;
   interval_minutes?: number;
   prompt?: string | null;
+  operator_enabled?: boolean;
+  effective_enabled?: boolean;
+  delivery_channel?: "telegram";
+  delivery_ready?: boolean;
+  status?: "disabled" | "operator_disabled" | "needs_telegram" | "ready";
+  last_run_s?: number | null;
+  last_status?: string | null;
+  last_reason?: string | null;
 };
 
 export type BotHeartbeatState = BotApiError & {
   enabled?: boolean;
   interval_minutes?: number;
   prompt?: string | null;
+  operator_enabled?: boolean;
+  effective_enabled?: boolean;
+  delivery_channel?: "telegram";
+  delivery_ready?: boolean;
+  status?: "disabled" | "operator_disabled" | "needs_telegram" | "ready";
+  last_run_s?: number | null;
+  last_status?: string | null;
+  last_reason?: string | null;
 };
 
 export type ThreadAutoTitleRequest = {

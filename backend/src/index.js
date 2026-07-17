@@ -17461,17 +17461,6 @@ registerTelegramDisconnectAliases(app, {
   agentTelegramDisconnectHandler,
 });
 app.get(
-  "/api/agent/heartbeat",
-  requireAgentContext,
-  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/heartbeat`)
-);
-app.put(
-  "/api/agent/heartbeat",
-  requireAgentContext,
-  agentJson1mb,
-  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/heartbeat`)
-);
-app.get(
   "/api/agent/cron",
   requireAgentContext,
   agentCronListHandler
