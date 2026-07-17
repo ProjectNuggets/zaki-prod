@@ -1163,109 +1163,51 @@ describe("SettingsPage", () => {
     mockBillingConfigured = mockDefaultBillingConfigured;
   });
 
-  it("renders the route-level V2 settings surface with configurable sections only", async () => {
+  it("renders only the category selected by the settings hash", async () => {
+    const accountRender = await renderSettingsPage();
+
+    expect(screen.getByTestId("settings-account")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-billing")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Account" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    accountRender.unmount();
+
+    await renderSettingsPage("/settings#settings-privacy");
+
+    expect(screen.getByTestId("settings-privacy")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-account")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Privacy" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+  });
+
+  it("renders the route-level V2 settings nav with configurable categories only", async () => {
     await renderSettingsPage();
 
-    expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeInTheDocument();
-    expect(screen.getByTestId("settings-account")).toBeInTheDocument();
-    expect(screen.queryByTestId("settings-connections")).not.toBeInTheDocument();
-    expect(screen.getByTestId("settings-channels")).toBeInTheDocument();
-    expect(screen.getByTestId("settings-secrets")).toBeInTheDocument();
-    expect(screen.queryByTestId("settings-providers")).not.toBeInTheDocument();
-    expect(screen.getByTestId("settings-devices")).toBeInTheDocument();
-    expect(screen.getByTestId("settings-billing")).toBeInTheDocument();
-    expect(screen.queryByTestId("settings-products-access")).not.toBeInTheDocument();
-    expect(screen.getByTestId("settings-agent")).toBeInTheDocument();
-    expect(screen.queryByTestId("settings-spaces")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("settings-brain")).not.toBeInTheDocument();
-    expect(screen.getByTestId("settings-platform-usage")).toBeInTheDocument();
-    expect(screen.getByTestId("settings-memory-data")).toBeInTheDocument();
-    expect(screen.queryByTestId("settings-developer-access")).not.toBeInTheDocument();
-    expect(screen.getByTestId("settings-privacy")).toBeInTheDocument();
-
-    expect(screen.getByRole("link", { name: "Plan & Usage" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Products" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Agent" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /Spaces/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Brain" })).not.toBeInTheDocument();
-    expect(screen.getByText("Personal")).toBeInTheDocument();
-    expect(screen.getByText("Data")).toBeInTheDocument();
+    const nav = within(screen.getByRole("navigation", { name: "Settings sections" }));
+    for (const name of [
+      "Account",
+      "Your goals",
+      "Suggestions",
+      "Plan & Usage",
+      "Agent",
+      "Automations",
+      "Channels",
+      "Devices",
+      "Memory & Privacy",
+      "Privacy",
+    ]) {
+      expect(nav.getByRole("link", { name })).toBeInTheDocument();
+    }
+    expect(nav.queryByRole("link", { name: "Products" })).not.toBeInTheDocument();
+    expect(nav.queryByRole("link", { name: /Spaces/ })).not.toBeInTheDocument();
+    expect(nav.queryByRole("link", { name: "Brain" })).not.toBeInTheDocument();
     expect(
       within(screen.getByTestId("settings-account")).getByRole("button", { name: "Sign out" })
     ).toBeInTheDocument();
-    const routeOrder = [
-      "settings-account",
-      "settings-billing",
-      "settings-agent",
-      "settings-channels",
-      "settings-secrets",
-      "settings-devices",
-      "settings-memory-data",
-      "settings-privacy",
-    ].map((testId) => screen.getByTestId(testId));
-    for (let index = 0; index < routeOrder.length - 1; index += 1) {
-      expect(
-        routeOrder[index].compareDocumentPosition(routeOrder[index + 1]) &
-          Node.DOCUMENT_POSITION_FOLLOWING
-      ).toBeTruthy();
-    }
-
-    expect(within(screen.getByTestId("settings-billing")).queryByText("ZAKI Learn")).not.toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-billing")).queryByText("ZAKI Career")).not.toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-billing")).getByText("ZAKI Design")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-billing")).getAllByText("Launch: public app").length).toBeGreaterThan(0);
-    expect(within(screen.getByTestId("settings-billing")).queryByText("Launch: private access")).not.toBeInTheDocument();
-    // WP-K: Design reads "coming soon" like every other not-yet-live spoke.
-    expect(within(screen.getByTestId("settings-billing")).queryByText("Launch: waitlist")).not.toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-billing")).getByText("Launch: coming soon")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-billing")).queryByText("ZAKI CLI")).not.toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-billing")).getByText("Additional capacity")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-billing")).getByTestId("settings-weekly-meter")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-billing")).getByTestId("settings-burst-meter")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-billing")).queryByRole("button", { name: /Buy 500 units/ })).not.toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-agent")).queryByText("Assistant mode")).not.toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-agent")).getByText("Reasoning effort")).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-agent")).getByText("Session timeout")).toBeInTheDocument();
-    expect(screen.queryByText("Agent model default")).not.toBeInTheDocument();
-    expect(screen.queryByText("OpenAI-compatible provider")).not.toBeInTheDocument();
-    const channelsSection = within(screen.getByTestId("settings-channels"));
-    expect(channelsSection.getByText("Telegram")).toBeInTheDocument();
-    expect(channelsSection.getAllByText("Slack")).toHaveLength(1);
-    expect(channelsSection.getAllByText("Discord")).toHaveLength(1);
-    expect(channelsSection.queryByText("Email")).not.toBeInTheDocument();
-    expect(channelsSection.getAllByText("WhatsApp")).toHaveLength(1);
-    expect(screen.queryByText("Gmail & Google Drive")).not.toBeInTheDocument();
-    expect(screen.queryByText(/Composio/i)).not.toBeInTheDocument();
-    expect(screen.queryByText("Managed in chat")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/IMAP password/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/SMTP password/i)).not.toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-memory-data")).getByText("Chat memory capture")).toBeInTheDocument();
-    expect(
-      within(screen.getByTestId("settings-memory-data")).getByText("Improve Agent memories automatically")
-    ).toBeInTheDocument();
-    expect(within(screen.getByTestId("settings-memory-data")).getByText("Improve Agent recall")).toBeInTheDocument();
-
-    await waitFor(() => {
-      // Status label semantics are owned by the channel-liveness work (#81):
-      // "Connected" / "Needs attention" via lastLiveTestFailed(). The earlier
-      // "Credentials saved" rename on this branch is superseded by that logic.
-      expect(within(screen.getByTestId("settings-channels")).getAllByText("Connected").length).toBeGreaterThan(0);
-      // Chip trim (settings-batch spec, item #14): the collapsed row shows at
-      // most two chips — status + credentials. Ownership ("Your tokens") and the
-      // bindings-count chip are demoted to the expanded tray's summary grid.
-      // Demoted, not deleted — the expanded-tray coverage below proves the info
-      // is still reachable.
-      expect(within(screen.getByTestId("settings-channels")).queryByText("1 bindings")).not.toBeInTheDocument();
-      expect(within(screen.getByTestId("settings-channels")).queryByText("Your tokens")).not.toBeInTheDocument();
-      expect(within(screen.getByTestId("settings-channels")).queryByText(/U123/)).not.toBeInTheDocument();
-      expect(within(screen.getByTestId("settings-secrets")).getByText("telegram_bot_token")).toBeInTheDocument();
-      expect(within(screen.getByTestId("settings-secrets")).getByText("Metadata only")).toBeInTheDocument();
-      expect(within(screen.getByTestId("settings-devices")).getAllByText("Not paired").length).toBeGreaterThan(0);
-      expect(within(screen.getByTestId("settings-devices")).getByRole("link", { name: "Download extension" })).toHaveAttribute(
-        "href",
-        "/downloads/zaki-browser-extension.zip"
-      );
-    });
   });
 
   it("normalizes legacy settings query sections to canonical hashes", async () => {
@@ -1454,75 +1396,17 @@ describe("SettingsPage", () => {
     expect(billing.getByText("Deferred")).toBeInTheDocument();
   });
 
-  it("updates the active sidebar section when the settings page scrolls", async () => {
+  it("switches the active category and hash from the settings nav", async () => {
     await renderSettingsPage("/settings#settings-billing");
 
-    const scroller = document.querySelector<HTMLElement>(".zaki-settings-v2");
-    expect(scroller).toBeTruthy();
-    Object.defineProperty(scroller, "getBoundingClientRect", {
-      configurable: true,
-      value: () => ({
-        bottom: 800,
-        height: 800,
-        left: 0,
-        right: 1200,
-        top: 0,
-        width: 1200,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      }),
-    });
-
-    for (const section of document.querySelectorAll<HTMLElement>(".v2-settings-block")) {
-      Object.defineProperty(section, "getBoundingClientRect", {
-        configurable: true,
-        value: () => ({
-          bottom: 2400,
-          height: 320,
-          left: 280,
-          right: 1100,
-          top: 2080,
-          width: 820,
-          x: 280,
-          y: 2080,
-          toJSON: () => ({}),
-        }),
-      });
-    }
-
-    Object.defineProperty(screen.getByTestId("settings-billing"), "getBoundingClientRect", {
-      configurable: true,
-      value: () => ({
-        bottom: -80,
-        height: 320,
-        left: 280,
-        right: 1100,
-        top: -400,
-        width: 820,
-        x: 280,
-        y: -400,
-        toJSON: () => ({}),
-      }),
-    });
-    Object.defineProperty(screen.getByTestId("settings-channels"), "getBoundingClientRect", {
-      configurable: true,
-      value: () => ({
-        bottom: 420,
-        height: 320,
-        left: 280,
-        right: 1100,
-        top: 100,
-        width: 820,
-        x: 280,
-        y: 100,
-        toJSON: () => ({}),
-      }),
-    });
-
-    fireEvent.scroll(scroller);
+    fireEvent.click(screen.getByRole("link", { name: "Channels" }));
 
     await waitFor(() => {
+      expect(screen.getByTestId("settings-location")).toHaveTextContent(
+        "/settings#settings-channels"
+      );
+      expect(screen.getByTestId("settings-channels")).toBeInTheDocument();
+      expect(screen.queryByTestId("settings-billing")).not.toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Channels" })).toHaveAttribute(
         "aria-current",
         "page"
@@ -1537,7 +1421,7 @@ describe("SettingsPage", () => {
     >;
     updateBotSettingsMock.mockClear();
     updateBotHeartbeatMock.mockClear();
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-agent");
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-agent")).toBeInTheDocument();
@@ -1620,7 +1504,7 @@ describe("SettingsPage", () => {
       },
     });
 
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-agent");
 
     expect(
       await screen.findByText("On · Last delivery failed; verify Telegram")
@@ -1632,7 +1516,7 @@ describe("SettingsPage", () => {
     const toastSuccessMock = toast.success as jest.MockedFunction<typeof toast.success>;
     updateBotSettingsMock.mockClear();
     toastSuccessMock.mockClear();
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-agent");
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-agent")).toBeInTheDocument();
@@ -1674,7 +1558,7 @@ describe("SettingsPage", () => {
   });
 
   it("keeps the Agent settings tab focused on controls instead of navigation chips", async () => {
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-agent");
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-agent")).toBeInTheDocument();
@@ -1689,7 +1573,7 @@ describe("SettingsPage", () => {
   it("rejects Agent session timeout values outside the BFF contract before PATCH", async () => {
     const updateBotSettingsMock = updateBotSettings as jest.MockedFunction<typeof updateBotSettings>;
     updateBotSettingsMock.mockClear();
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-agent");
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-agent")).toBeInTheDocument();
@@ -1708,7 +1592,7 @@ describe("SettingsPage", () => {
   });
 
   it("keeps memory governance editable only in Memory & Data", async () => {
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-agent");
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-agent")).toBeInTheDocument();
@@ -1721,6 +1605,12 @@ describe("SettingsPage", () => {
       within(screen.getByTestId("settings-agent")).queryByLabelText("Agent query expansion")
     ).not.toBeInTheDocument();
     expect(screen.queryByTestId("settings-brain")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("link", { name: "Memory & Privacy" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-memory-data")).toBeInTheDocument();
+    });
+
     expect(
       within(screen.getByTestId("settings-memory-data")).getByLabelText("Improve Agent memories automatically")
     ).toBeInTheDocument();
@@ -1753,7 +1643,7 @@ describe("SettingsPage", () => {
       };
     });
 
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-memory-data");
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-memory-data")).toBeInTheDocument();
@@ -1806,7 +1696,7 @@ describe("SettingsPage", () => {
     const updateBotSettingsMock = updateBotSettings as jest.MockedFunction<typeof updateBotSettings>;
     updateMemoryPreferencesMock.mockClear();
     updateBotSettingsMock.mockClear();
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-memory-data");
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-memory-data")).toBeInTheDocument();
@@ -1842,7 +1732,7 @@ describe("SettingsPage", () => {
     >;
     upsertBindingMock.mockClear();
     deleteBindingMock.mockClear();
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-channels");
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-channels")).toBeInTheDocument();
@@ -1919,7 +1809,7 @@ describe("SettingsPage", () => {
     testMock.mockClear();
     disconnectMock.mockClear();
     disconnectTelegramMock.mockClear();
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-channels");
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-channel-slack")).toBeInTheDocument();
@@ -2020,7 +1910,7 @@ describe("SettingsPage", () => {
     });
     (toast.error as jest.Mock).mockClear();
     (toast.success as jest.Mock).mockClear();
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-channels");
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-channel-telegram")).toBeInTheDocument();
@@ -2070,7 +1960,7 @@ describe("SettingsPage", () => {
       },
     });
 
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-channels");
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-channel-slack")).toBeInTheDocument();
@@ -2092,7 +1982,7 @@ describe("SettingsPage", () => {
       data: { channel: "slack" },
     });
 
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-channels");
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-channel-slack")).toBeInTheDocument();
@@ -2136,7 +2026,7 @@ describe("SettingsPage", () => {
         })
     );
 
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-channels");
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-channel-slack")).toBeInTheDocument();
@@ -2174,7 +2064,7 @@ describe("SettingsPage", () => {
       typeof fetchAgentChannelControls
     >;
     connectMock.mockClear();
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-channels");
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-channel-discord")).toBeInTheDocument();
@@ -2278,7 +2168,7 @@ describe("SettingsPage", () => {
         ],
       },
     });
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-channels");
 
     fireEvent.click(
       within(screen.getByTestId("settings-channel-telegram")).getByRole("button", {
@@ -2312,7 +2202,7 @@ describe("SettingsPage", () => {
       data: { error: "channel_controls_unavailable" },
     });
 
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-channels");
 
     await waitFor(() => {
       expect(
@@ -2359,7 +2249,7 @@ describe("SettingsPage", () => {
       },
     });
 
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-channels");
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-channel-slack")).toBeInTheDocument();
@@ -2397,7 +2287,7 @@ describe("SettingsPage", () => {
     >;
     putSecretMock.mockClear();
     pairDeviceMock.mockClear();
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-secrets");
 
     await waitFor(() => {
       expect(screen.getByTestId("settings-secrets")).toBeInTheDocument();
@@ -2417,6 +2307,11 @@ describe("SettingsPage", () => {
 
     await waitFor(() => {
       expect(putSecretMock).toHaveBeenCalledWith("SLACK_BOT_TOKEN", " xoxb-secret ");
+    });
+
+    fireEvent.click(screen.getByRole("link", { name: "Devices" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-devices")).toBeInTheDocument();
     });
 
     const devices = within(screen.getByTestId("settings-devices"));
@@ -2447,7 +2342,7 @@ describe("SettingsPage", () => {
       data: { error: "extension_devices_unavailable" },
     });
 
-    await renderSettingsPage();
+    await renderSettingsPage("/settings#settings-secrets");
 
     await waitFor(() => {
       expect(
@@ -2461,6 +2356,7 @@ describe("SettingsPage", () => {
     expect(secrets.queryByRole("button", { name: "Save secret" })).not.toBeInTheDocument();
     expect(secrets.queryByPlaceholderText("OPENAI_API_KEY")).not.toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("link", { name: "Devices" }));
     await waitFor(() => {
       expect(
         within(screen.getByTestId("settings-devices")).getByText(

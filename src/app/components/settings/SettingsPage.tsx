@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -253,6 +261,18 @@ const SETTINGS_HASH_COMPAT_MAP: Record<string, (typeof SETTINGS_NAV_HASHES)[numb
 
 function isSettingsNavHash(hash: string): hash is (typeof SETTINGS_NAV_HASHES)[number] {
   return (SETTINGS_NAV_HASHES as readonly string[]).includes(hash);
+}
+
+function ActiveSettingsSection({
+  activeHref,
+  href,
+  children,
+}: {
+  activeHref: (typeof SETTINGS_NAV_HASHES)[number];
+  href: (typeof SETTINGS_NAV_HASHES)[number];
+  children: ReactNode;
+}) {
+  return activeHref === href ? children : null;
 }
 
 const AGENT_GROUP_ACTIVATION_MODES: Array<NonNullable<BotSettingsProfile["group_activation"]>> = [
@@ -533,9 +553,9 @@ export function SettingsPage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const [activeSettingsHref, setActiveSettingsHref] = useState<(typeof SETTINGS_NAV_HASHES)[number]>(
-    () => (isSettingsNavHash(location.hash) ? location.hash : "#settings-account")
-  );
+  const activeSettingsHref = isSettingsNavHash(location.hash)
+    ? location.hash
+    : "#settings-account";
   const user = useAuthStore((state) => state.user);
   const setUser = useAuthStore((state) => state.setUser);
   const logout = useAuthStore((state) => state.logout);
@@ -694,67 +714,6 @@ export function SettingsPage() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [location.hash, location.pathname, location.search, navigate]);
-
-  useEffect(() => {
-    if (isSettingsNavHash(location.hash)) {
-      setActiveSettingsHref(location.hash);
-    }
-  }, [location.hash]);
-
-  useEffect(() => {
-    const scroller = document.querySelector<HTMLElement>(".zaki-settings-v2");
-    if (!scroller) return;
-
-    let frame: number | null = null;
-
-    const updateActiveSection = () => {
-      frame = null;
-      const scrollerRect = scroller.getBoundingClientRect();
-      const anchorY = scrollerRect.top + Math.min(220, Math.max(120, scrollerRect.height * 0.24));
-      let nextHref: (typeof SETTINGS_NAV_HASHES)[number] = SETTINGS_NAV_HASHES[0];
-      let firstVisibleHref: (typeof SETTINGS_NAV_HASHES)[number] | null = null;
-
-      for (const href of SETTINGS_NAV_HASHES) {
-        const section = document.getElementById(href.slice(1));
-        if (!section) continue;
-
-        const rect = section.getBoundingClientRect();
-        const isVisible =
-          rect.bottom > scrollerRect.top + 64 && rect.top < scrollerRect.bottom - 64;
-
-        if (isVisible && firstVisibleHref === null) {
-          firstVisibleHref = href;
-        }
-
-        if (rect.top <= anchorY && rect.bottom > scrollerRect.top + 64) {
-          nextHref = href;
-        }
-      }
-
-      if (nextHref === SETTINGS_NAV_HASHES[0] && firstVisibleHref !== null) {
-        nextHref = firstVisibleHref;
-      }
-
-      setActiveSettingsHref((current) => (current === nextHref ? current : nextHref));
-    };
-
-    const scheduleUpdate = () => {
-      if (frame !== null) return;
-      frame = window.requestAnimationFrame(updateActiveSection);
-    };
-
-    updateActiveSection();
-    scroller.addEventListener("scroll", scheduleUpdate, { passive: true });
-    window.addEventListener("resize", scheduleUpdate);
-
-    return () => {
-      if (frame !== null) {
-        window.cancelAnimationFrame(frame);
-      }
-      scroller.removeEventListener("scroll", scheduleUpdate);
-      window.removeEventListener("resize", scheduleUpdate);
-    };
-  }, []);
 
   useEffect(() => {
     agentSettingsDraftRef.current = agentSettingsDraft;
@@ -2085,6 +2044,10 @@ export function SettingsPage() {
             ariaLabel={t("settingsModal.nav.label")}
             items={navItems}
             activeHref={activeSettingsHref}
+            onSelect={(href) => {
+              if (!isSettingsNavHash(href)) return;
+              navigate(`${location.pathname}${location.search}${href}`);
+            }}
           />
 
           <main className="zaki-settings-v2__main" aria-labelledby="settings-page-title">
@@ -2095,7 +2058,8 @@ export function SettingsPage() {
               </div>
             </header>
 
-            <V2SettingsBlock id="settings-account" data-testid="settings-account" title={t("settingsModal.sections.account")}>
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-account">
+              <V2SettingsBlock id="settings-account" data-testid="settings-account" title={t("settingsModal.sections.account")}>
               <V2SettingsRow
                 name={t("settingsModal.profile.displayName")}
                 description={t("settingsModal.profile.displayNameHelper", {
@@ -2164,13 +2128,19 @@ export function SettingsPage() {
                     : t("settingsModal.account.signOut", { defaultValue: "Sign out" })}
                 </V2Button>
               </V2SettingsRow>
-            </V2SettingsBlock>
+              </V2SettingsBlock>
+            </ActiveSettingsSection>
 
-            <SettingsTelosSection />
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-telos">
+              <SettingsTelosSection />
+            </ActiveSettingsSection>
 
-            <SettingsSuggestionsSection />
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-suggestions">
+              <SettingsSuggestionsSection />
+            </ActiveSettingsSection>
 
-            <V2SettingsBlock
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-billing">
+              <V2SettingsBlock
               id="settings-billing"
               data-testid="settings-billing"
               title={t("settingsModal.sections.billing", { defaultValue: "Plan & Usage" })}
@@ -2537,9 +2507,11 @@ export function SettingsPage() {
                   <V2Badge>{t("settingsModal.plan.topups.statusOnly", { defaultValue: "Deferred" })}</V2Badge>
                 </div>
               </div>
-            </V2SettingsBlock>
+              </V2SettingsBlock>
+            </ActiveSettingsSection>
 
-            <V2SettingsBlock
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-agent">
+              <V2SettingsBlock
               id="settings-agent"
               data-testid="settings-agent"
               title={t("settingsModal.sections.agent", { defaultValue: "Agent" })}
@@ -2793,32 +2765,38 @@ export function SettingsPage() {
                   </V2Badge>
                 </div>
               </V2SettingsRow>
-            </V2SettingsBlock>
+              </V2SettingsBlock>
+            </ActiveSettingsSection>
 
-            <SettingsAutomationsSection />
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-automations">
+              <SettingsAutomationsSection />
+            </ActiveSettingsSection>
 
-            <SettingsChannelsSection
-              agentChannelsById={agentChannelsById}
-              agentChannelsLoading={agentChannelsLoading}
-              channelControlsById={channelControlsById}
-              channelControlsLoading={channelControlsLoading}
-              channelControlsAvailable={channelControlsAvailable}
-              expandedChannelId={expandedChannelId}
-              setExpandedChannelId={setExpandedChannelId}
-              channelBindingDrafts={channelBindingDrafts}
-              channelActivationDrafts={channelActivationDrafts}
-              channelAction={channelAction}
-              channelControlAction={channelControlAction}
-              updateChannelBindingDraft={updateChannelBindingDraft}
-              updateChannelActivationDraft={updateChannelActivationDraft}
-              handleSaveChannelBinding={handleSaveChannelBinding}
-              handleDeleteChannelBinding={handleDeleteChannelBinding}
-              handleConnectChannelControl={handleConnectChannelControl}
-              handleTestChannelControl={handleTestChannelControl}
-              handleDisconnectChannelControl={handleDisconnectChannelControl}
-            />
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-channels">
+              <SettingsChannelsSection
+                agentChannelsById={agentChannelsById}
+                agentChannelsLoading={agentChannelsLoading}
+                channelControlsById={channelControlsById}
+                channelControlsLoading={channelControlsLoading}
+                channelControlsAvailable={channelControlsAvailable}
+                expandedChannelId={expandedChannelId}
+                setExpandedChannelId={setExpandedChannelId}
+                channelBindingDrafts={channelBindingDrafts}
+                channelActivationDrafts={channelActivationDrafts}
+                channelAction={channelAction}
+                channelControlAction={channelControlAction}
+                updateChannelBindingDraft={updateChannelBindingDraft}
+                updateChannelActivationDraft={updateChannelActivationDraft}
+                handleSaveChannelBinding={handleSaveChannelBinding}
+                handleDeleteChannelBinding={handleDeleteChannelBinding}
+                handleConnectChannelControl={handleConnectChannelControl}
+                handleTestChannelControl={handleTestChannelControl}
+                handleDisconnectChannelControl={handleDisconnectChannelControl}
+              />
+            </ActiveSettingsSection>
 
-            <V2SettingsBlock
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-secrets">
+              <V2SettingsBlock
               id="settings-secrets"
               data-testid="settings-secrets"
               title={t("settingsModal.sections.secrets", { defaultValue: "Advanced credentials" })}
@@ -2929,9 +2907,11 @@ export function SettingsPage() {
                   })}
                 </p>
               ) : null}
-            </V2SettingsBlock>
+              </V2SettingsBlock>
+            </ActiveSettingsSection>
 
-            <V2SettingsBlock
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-devices">
+              <V2SettingsBlock
               id="settings-devices"
               data-testid="settings-devices"
               title={t("settingsModal.sections.devices", {
@@ -3113,9 +3093,11 @@ export function SettingsPage() {
                   </p>
                 ) : null}
               </div>
-            </V2SettingsBlock>
+              </V2SettingsBlock>
+            </ActiveSettingsSection>
 
-            <V2SettingsBlock
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-memory-data">
+              <V2SettingsBlock
               id="settings-memory-data"
               data-testid="settings-memory-data"
               title={t("settingsModal.sections.memoryData")}
@@ -3362,9 +3344,11 @@ export function SettingsPage() {
                     : t("settingsModal.privacy.exportAllData")}
                 </V2Button>
               </div>
-            </V2SettingsBlock>
+              </V2SettingsBlock>
+            </ActiveSettingsSection>
 
-            <V2SettingsBlock
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-privacy">
+              <V2SettingsBlock
               id="settings-privacy"
               data-testid="settings-privacy"
               title={t("settingsModal.sections.privacy")}
@@ -3378,7 +3362,8 @@ export function SettingsPage() {
                   {t("settingsModal.privacy.deleteAccount")}
                 </V2Button>
               </V2SettingsRow>
-            </V2SettingsBlock>
+              </V2SettingsBlock>
+            </ActiveSettingsSection>
           </main>
         </div>
       </div>

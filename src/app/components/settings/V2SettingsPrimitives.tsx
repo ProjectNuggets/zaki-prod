@@ -17,6 +17,7 @@ export function V2SettingsNav({
   ariaLabel,
   className,
   activeHref,
+  onSelect,
 }: {
   eyebrow: ReactNode;
   title: ReactNode;
@@ -24,6 +25,7 @@ export function V2SettingsNav({
   ariaLabel: string;
   className?: string;
   activeHref?: string;
+  onSelect?: (href: string) => void;
 }) {
   const navRef = useRef<HTMLElement | null>(null);
 
@@ -52,6 +54,14 @@ export function V2SettingsNav({
                 href={href}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(isActive && "is-active", tone !== "default" && `is-${tone}`)}
+                onClick={
+                  onSelect
+                    ? (event) => {
+                        event.preventDefault();
+                        onSelect(href);
+                      }
+                    : undefined
+                }
               >
                 <Icon className="size-3.5" aria-hidden="true" />
                 <span>{label}</span>
