@@ -421,6 +421,61 @@ describe("Design public session routes", () => {
     expect(receivedBody).toBe(JSON.stringify({ name: "concept.html" }));
   });
 
+  test.each([
+    ["missing", null],
+    ["mismatched", { id: 99, verified: true, plan_tier: "personal", plan_status: "active" }],
+  ])("rejects a %s canonical billing row before metering or proxy delivery", async (_case, billingUser) => {
+    const authorizeProxy = jest.fn();
+    const controllerProxy = jest.fn();
+    const workbenchAccess = createDesignWorkbenchAccess({
+      secret: "controller-secret-at-least-16",
+      secure: false,
+    });
+    const cookie = workbenchAccess.issue({
+      userId: "42",
+      sessionId: "sess_01",
+      projectId: "project_01",
+      generation: 7,
+    }).split(";")[0];
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn(),
+      resolveBillingUserById: jest.fn().mockResolvedValue(billingUser),
+      resolveProxyAccess: (req, sessionId) => workbenchAccess.resolve(req, sessionId),
+      ensureSession: jest.fn(),
+      readSessionBinding: jest.fn().mockResolvedValue({
+        sessionId: "sess_01",
+        projectId: "project_01",
+        userId: "42",
+        tenantId: "default",
+        state: "READY",
+        generation: 7,
+      }),
+      updateSessionState: jest.fn(),
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: jest.fn(),
+      controller: { ensure: jest.fn(), status: jest.fn(), stop: jest.fn(), proxy: controllerProxy },
+      getRequestId: () => "req_proxy_invalid_billing",
+      authorizeProxy,
+    }));
+
+    const response = await request(app)
+      .post("/api/design/sessions/sess_01/proxy/api/projects/project_01/files")
+      .set("x-zaki-project-id", "project_01")
+      .set("cookie", cookie)
+      .send({ name: "concept.html" });
+
+    expect(response.status).toBe(401);
+    expect(response.body).toMatchObject({
+      code: "design_workbench_auth_required",
+      requestId: "req_proxy_invalid_billing",
+    });
+    expect(authorizeProxy).not.toHaveBeenCalled();
+    expect(controllerProxy).not.toHaveBeenCalled();
+  });
+
   test("allows read-only artifact delivery and rejects artifact mutations", async () => {
     const controllerProxy = jest.fn().mockResolvedValue(new Response("asset", {
       status: 206,
