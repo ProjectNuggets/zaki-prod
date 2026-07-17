@@ -184,13 +184,9 @@ import {
   resolveErrorMessage,
 } from "@/lib/userFacingErrors";
 import { MemoryImportSheet } from "./onboarding/MemoryImportSheet";
-import { FirstRunNameCard } from "./onboarding/FirstRunNameCard";
 import {
   FIRST_RUN_ENGINE_PROMPT,
-  buildBotIdentityDocument,
   shouldStartEngineFirstTurn,
-  runFirstRunNameCompletion,
-  type FirstRunCeremonyPhase,
 } from "@/lib/firstRunCeremony";
 import { AgentArtifactCanvas } from "./agent/AgentArtifactCanvas";
 import {
@@ -3722,10 +3718,7 @@ export function ChatArea() {
   const { data: meterResult } = useMeterStatus();
   const [memoryImportOpen, setMemoryImportOpen] = useState(false);
   const [botOnboarding, setBotOnboarding] = useState<BotOnboardingState | null>(null);
-  const [firstRunPhase, setFirstRunPhase] = useState<FirstRunCeremonyPhase>("idle");
-  const [firstRunError, setFirstRunError] = useState<string | null>(null);
   const firstRunStartedRef = useRef<string | null>(null);
-  const firstRunNamingCheckpointRef = useRef<{ key: string; name: string } | null>(null);
   const [activationProgress, setActivationProgress] = useState<ActivationProgress>({
     firstMessageSent: false,
     firstMemorySaved: false,
@@ -8128,29 +8121,18 @@ export function ChatArea() {
   useEffect(() => {
     if (!isAuthReady || !authUserId || !isZakiBotActiveSpace || !zakiBotProvisionReady) {
       setBotOnboarding(null);
-      setFirstRunPhase("idle");
-      setFirstRunError(null);
       firstRunStartedRef.current = null;
       return;
     }
 
     let cancelled = false;
-    setFirstRunPhase("checking");
-    setFirstRunError(null);
     void fetchBotOnboarding()
       .then(({ response, data }) => {
         if (cancelled) return;
-        if (!response.ok || data?.error) {
-          setFirstRunPhase("unavailable");
-          return;
-        }
+        if (!response.ok || data?.error) return;
         setBotOnboarding(data);
-        setFirstRunPhase(data?.completed ? "complete" : "checking");
       })
-      .catch(() => {
-        if (cancelled) return;
-        setFirstRunPhase("unavailable");
-      });
+      .catch(() => {});
 
     return () => {
       cancelled = true;
@@ -8706,6 +8688,17 @@ export function ChatArea() {
       if (!presentation?.firstRun) {
         void checkForSavedMemories(trimmed, threadId);
       }
+      if (isZakiBotTarget && !presentation?.firstRun && botOnboarding?.completed === false) {
+        void updateBotOnboarding({ completed: true })
+          .then(({ response, data }) => {
+            if (!response.ok || data?.error || data?.completed !== true) return;
+            setBotOnboarding(data);
+          })
+          .catch(() => {
+            // The conversation succeeded. Leave onboarding incomplete so the next
+            // reply can retry this idempotent marker without interrupting the user.
+          });
+      }
       return true;
     } catch (error) {
       if (anonymousWork) {
@@ -8801,6 +8794,7 @@ export function ChatArea() {
     activationProgress.firstMessageSent,
     agentUserId,
     authUserId,
+    botOnboarding,
     checkForSavedMemories,
     clearZakiBotProgressVisuals,
     ensureZakiSessionUi,
@@ -8868,21 +8862,16 @@ export function ChatArea() {
     }
 
     if (messages.length > 0) {
-      setFirstRunPhase((current) =>
-        current === "saving_name" ? current : "awaiting_name"
-      );
       return;
     }
 
     if (!shouldStartEngineFirstTurn({ onboarding: botOnboarding, messageCount: messages.length })) {
-      setFirstRunPhase("unavailable");
       return;
     }
 
     const ceremonyKey = `${authUserId}:${activeThreadId}`;
     if (firstRunStartedRef.current === ceremonyKey) return;
     firstRunStartedRef.current = ceremonyKey;
-    setFirstRunPhase("starting");
     void handleSend(
       FIRST_RUN_ENGINE_PROMPT,
       [],
@@ -8890,7 +8879,6 @@ export function ChatArea() {
       ZAKI_BOT_SPACE_ID,
       { hideUserMessage: true, firstRun: true }
     ).then((succeeded) => {
-      setFirstRunPhase(succeeded ? "awaiting_name" : "unavailable");
       if (!succeeded) {
         firstRunStartedRef.current = null;
       }
@@ -8907,101 +8895,6 @@ export function ChatArea() {
     messages.length,
     zakiBotProvisionReady,
   ]);
-
-  const completeFirstRunName = useCallback(
-    async (name: string) => {
-      if (firstRunPhase === "saving_name") return;
-      setFirstRunPhase("saving_name");
-      setFirstRunError(null);
-      try {
-        const checkpointKey = `zaki:firstRunName:${authUserId}:${activeThreadId || "main"}`;
-        let completedOnboarding: BotOnboardingState | null = null;
-        await runFirstRunNameCompletion({
-          name,
-          readNamingCheckpoint: () => {
-            try {
-              return window.sessionStorage.getItem(checkpointKey);
-            } catch {
-              const checkpoint = firstRunNamingCheckpointRef.current;
-              return checkpoint?.key === checkpointKey ? checkpoint.name : null;
-            }
-          },
-          writeNamingCheckpoint: (checkpointName) => {
-            firstRunNamingCheckpointRef.current = { key: checkpointKey, name: checkpointName };
-            try {
-              window.sessionStorage.setItem(checkpointKey, checkpointName);
-            } catch {
-              // The in-memory checkpoint still prevents a duplicate turn in this tab.
-            }
-          },
-          clearNamingCheckpoint: () => {
-            firstRunNamingCheckpointRef.current = null;
-            try {
-              window.sessionStorage.removeItem(checkpointKey);
-            } catch {
-              // Best-effort cleanup only.
-            }
-          },
-          persistIdentity: async () => {
-            const identityUpdate = await updateBotOnboarding({
-              completed: false,
-              identity: buildBotIdentityDocument(name),
-            });
-            if (
-              !identityUpdate.response.ok ||
-              identityUpdate.data?.error ||
-              identityUpdate.data?.completed !== false
-            ) {
-              throw new Error(
-                identityUpdate.data?.message ||
-                  t("firstRun.name.error", {
-                    defaultValue: "Your agent could not save that name. Try again.",
-                  })
-              );
-            }
-          },
-          sendNamingTurn: async () => {
-            const namingTurnSucceeded = await handleSend(`I'll call you ${name}.`, []);
-            if (!namingTurnSucceeded) {
-              throw new Error(
-                t("firstRun.name.turnError", {
-                  defaultValue: "Your agent saved that name, but could not continue the conversation. Try again.",
-                })
-              );
-            }
-          },
-          persistCompletion: async () => {
-            const completionUpdate = await updateBotOnboarding({ completed: true });
-            if (
-              !completionUpdate.response.ok ||
-              completionUpdate.data?.error ||
-              completionUpdate.data?.completed !== true
-            ) {
-              throw new Error(
-                completionUpdate.data?.message ||
-                  t("firstRun.name.error", {
-                    defaultValue: "Your agent could not save that name. Try again.",
-                  })
-              );
-            }
-            completedOnboarding = completionUpdate.data;
-          },
-        });
-        setBotOnboarding(completedOnboarding);
-        setFirstRunPhase("complete");
-      } catch (error) {
-        setFirstRunError(
-          error instanceof Error
-            ? error.message
-            : t("firstRun.name.error", {
-                defaultValue: "Your agent could not save that name. Try again.",
-              })
-        );
-        setFirstRunPhase("awaiting_name");
-      }
-    },
-    [activeThreadId, authUserId, firstRunPhase, handleSend, t]
-  );
 
   useEffect(() => {
     if (!isAuthReady || !authUserId || isStreaming) return;
@@ -10636,14 +10529,6 @@ export function ChatArea() {
               className="zaki-input-float relative z-20"
               style={{ transform: `translateY(${inputOffset}px)` }}
             >
-              {isAgentSurface &&
-              (firstRunPhase === "awaiting_name" || firstRunPhase === "saving_name") ? (
-                <FirstRunNameCard
-                  phase={firstRunPhase}
-                  onComplete={completeFirstRunName}
-                  error={firstRunError}
-                />
-              ) : null}
               {/* Single source of truth for ApprovalRequiredCard. The
                   timeline copy was dropped in 18328cd so the decided
                   state has one owner. Surfaces directly above the

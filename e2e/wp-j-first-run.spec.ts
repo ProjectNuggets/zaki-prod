@@ -22,16 +22,11 @@ async function mockFirstRunAgent(page: Page) {
 
   await page.route("**/v1/me/bot/onboarding", async (route) => {
     if (route.request().method() === "PUT") {
-      const body = route.request().postDataJSON() as { completed?: boolean; identity?: string };
-      if (body.identity) {
-        expect(body.completed).toBe(false);
-        expect(body.identity).toContain("- **Name:**");
-      } else {
-        expect(body.completed).toBe(true);
-      }
+      const body = route.request().postDataJSON() as { completed?: boolean };
+      expect(body).toEqual({ completed: true });
       await json(route, {
-        completed: body.completed === true,
-        completed_at_s: body.completed === true ? 1_784_000_000 : null,
+        completed: true,
+        completed_at_s: 1_784_000_000,
       });
       return;
     }
@@ -102,7 +97,7 @@ async function mockFirstRunAgent(page: Page) {
 
 test.describe("WP-J first-run ceremony", () => {
   for (const [device, viewport] of Object.entries(RELEASE_VIEWPORTS)) {
-    test(`${device} engine first turn and name-to-own`, async ({ page }, testInfo) => {
+    test(`${device} engine first turn leaves the ordinary composer ready`, async ({ page }, testInfo) => {
       test.skip(
         testInfo.project.name !== "chromium-desktop",
         "The test owns its required desktop/mobile viewports and runs once.",
@@ -112,7 +107,8 @@ test.describe("WP-J first-run ceremony", () => {
       await page.goto("/agent", { waitUntil: "domcontentloaded" });
 
       await expect(page.getByText(ENGINE_GREETING)).toBeVisible({ timeout: 20_000 });
-      await expect(page.getByTestId("first-run-name-card")).toBeVisible();
+      await expect(page.getByTestId("first-run-name-card")).toHaveCount(0);
+      await expect(page.getByRole("combobox")).toBeVisible();
       await expect(page.getByText("Begin our first conversation now.")).toHaveCount(0);
 
       await page.screenshot({
@@ -122,14 +118,14 @@ test.describe("WP-J first-run ceremony", () => {
     });
   }
 
-  test("persists the chosen identity before continuing the conversation", async ({ page }, testInfo) => {
+  test("completes onboarding after the user's natural first reply", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "chromium-desktop", "Runs once on desktop Chromium.");
     await mockFirstRunAgent(page);
     await page.goto("/agent", { waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("first-run-name-card")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(ENGINE_GREETING)).toBeVisible({ timeout: 20_000 });
 
-    await page.getByRole("textbox", { name: "Name your agent" }).fill("Nova");
-    await page.getByRole("button", { name: "Make Nova mine" }).click();
+    await page.getByRole("combobox").fill("Call yourself Nova. I'm Sam.");
+    await page.getByRole("button", { name: "Send message" }).click();
 
     await expect(page.getByText("Nova it is. I’m yours — let’s begin.")).toBeVisible();
     await expect(page.getByTestId("first-run-name-card")).toHaveCount(0);
