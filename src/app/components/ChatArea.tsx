@@ -4936,14 +4936,32 @@ export function ChatArea() {
               errorCode: turn.status === "interrupted" ? "aborted" : null,
             },
           ]
-        : []),
+        : turn.status === "interrupted" || turn.status === "failed"
+          ? [
+              // A metered turn whose stream died before any content arrived.
+              // Without this marker the transcript hydrates as a bare user
+              // bubble — a silently incomplete conversation (launch-close
+              // sweep, Defect 2 aftermath of the dashboard-handoff abort).
+              {
+                id: `anonymous-${turn.id}-assistant`,
+                role: "assistant" as const,
+                content: t("chat.anonymousReplyInterrupted", {
+                  defaultValue:
+                    "This reply was interrupted before it arrived. Send the message again to continue.",
+                }),
+                createdAt: turn.updatedAt,
+                error: true,
+                errorCode: turn.status === "interrupted" ? "aborted" : "chat_error",
+              },
+            ]
+          : []),
     ]);
     setMessagesByThread((previous) =>
       previous[activeThreadId]?.length
         ? previous
         : { ...previous, [activeThreadId]: hydrated }
     );
-  }, [activeThreadId, isAnonymousSpacesActive]);
+  }, [activeThreadId, isAnonymousSpacesActive, t]);
 
   useEffect(() => {
     spacesListRef.current = spacesList;

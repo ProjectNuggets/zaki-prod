@@ -81,7 +81,18 @@ const AnonymousAgentPreview = lazy(() =>
   })),
 );
 
-function HomeRoute() {
+/**
+ * One shared element type for EVERY route that renders ChatArea (the command
+ * dashboard on `/` and all Spaces surfaces). React preserves a mounted
+ * component only while the element type at the route outlet is unchanged;
+ * giving `/` its own wrapper component made the dashboard → new-thread
+ * navigation remount ChatArea, and its unmount cleanup aborted the in-flight
+ * anonymous first turn AFTER the BFF had metered it — the visitor paid a
+ * unit and never received the reply. Keeping a single element type keeps the
+ * same ChatArea instance (and its stream) alive across that handoff.
+ * `src/routes.test.tsx` pins this invariant.
+ */
+function ChatAreaRoute() {
   return routeSuspense(<ChatArea />, <SkeletonChatShell />);
 }
 
@@ -100,7 +111,7 @@ function AgentRoute() {
   if (!token) {
     return routeSuspense(<AnonymousAgentPreview />, <SkeletonChatShell />);
   }
-  return routeSuspense(<ChatArea />, <SkeletonChatShell />);
+  return <ChatAreaRoute />;
 }
 
 function ProductRoute({ locale = "en" }: { locale?: "en" | "ar" }) {
@@ -145,7 +156,7 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <HomeRoute />, // Command dashboard for anonymous and signed-in users
+        element: <ChatAreaRoute />, // Command dashboard for anonymous and signed-in users
       },
       {
         path: 'agent',
@@ -153,23 +164,23 @@ export const router = createBrowserRouter([
       },
       {
         path: 'spaces',
-        element: routeSuspense(<ChatArea />, <SkeletonChatShell />), // Will show spaces view
+        element: <ChatAreaRoute />, // Will show spaces view
       },
       {
         path: 'spaces/:spaceId',
-        element: routeSuspense(<ChatArea />, <SkeletonChatShell />), // Will show space detail
+        element: <ChatAreaRoute />, // Will show space detail
       },
       {
         path: 'spaces/:spaceId/threads/:threadId',
-        element: routeSuspense(<ChatArea />, <SkeletonChatShell />), // Will show chat view
+        element: <ChatAreaRoute />, // Will show chat view
       },
       {
         path: 'about',
-        element: routeSuspense(<ChatArea />, <SkeletonChatShell />),
+        element: <ChatAreaRoute />,
       },
       {
         path: 'reset',
-        element: routeSuspense(<ChatArea />, <SkeletonChatShell />),
+        element: <ChatAreaRoute />,
       },
       {
         path: 'artifact/:shareCode',

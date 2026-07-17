@@ -712,6 +712,7 @@
   },
   "chat": {
     "streamingStatus": "ZAKI is replying…",
+    "anonymousReplyInterrupted": "This reply was interrupted before it arrived. Send the message again to continue.",
     "thinking": "Thinking",
     "researching": "Researching",
     "thinkingPhrases": [
