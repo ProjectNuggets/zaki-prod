@@ -2337,19 +2337,6 @@ export type AgentExtensionDevicesResponse = BotApiError & {
   devices?: AgentExtensionDevice[];
 };
 
-export type AgentIntegrationsResponse = BotApiError & {
-  integrations?: Array<{
-    kind: "composio" | "openapi" | "mcp_client" | string;
-    label: string;
-    configured?: boolean;
-    user_manageable?: boolean;
-    managed_by?: string;
-    count?: number;
-    detail?: Record<string, unknown>;
-    items?: Array<Record<string, unknown>>;
-  }>;
-};
-
 export type AgentMemoryGovernanceResponse = BotApiError & {
   total?: number;
   pii?: {
@@ -2667,12 +2654,6 @@ export async function disconnectAgentChannelControl(channel: AgentChannelControl
     { method: "POST" }
   );
   const data = await parseApiJson<BotApiError & { status?: string; channel?: string }>(response);
-  return { response, data };
-}
-
-export async function fetchAgentIntegrations() {
-  const response = await backendAuthRequest("/api/agent/integrations", { method: "GET" });
-  const data = await parseApiJson<AgentIntegrationsResponse>(response);
   return { response, data };
 }
 
