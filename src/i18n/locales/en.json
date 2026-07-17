@@ -1869,7 +1869,17 @@
     "title": "Your Brain",
     "subtitle": "Everything ZAKI remembers",
     "status": {
-      "cachedData": "Using cached memory"
+      "ariaLabel": "Brain status",
+      "scope": "Scope",
+      "userScoped": "Personal brain",
+      "memories": "Memories",
+      "view": "View",
+      "unavailable": "Unavailable",
+      "graphOverview": "Graph + overview",
+      "memoryUnavailable": "Memory unavailable",
+      "cachedData": "Using cached memory",
+      "semanticDegraded": "Semantic degraded",
+      "semanticReady": "Semantic ready"
     },
     "recovery": {
       "ariaLabel": "Preserved work",
