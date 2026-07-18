@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore, useUIStore } from "@/stores";
+import { LocaleSwitcher } from "./LocaleSwitcher";
 
 function getInitials(name: string) {
   const parts = name.split(/[\s.@_-]+/).filter(Boolean);
@@ -190,6 +191,7 @@ export function AppTopbar() {
             </div>
           </>
         ) : null}
+        <LocaleSwitcher />
         <button
           type="button"
           className="zaki-app-topbar__toggle"

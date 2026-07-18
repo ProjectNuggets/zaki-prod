@@ -1,7 +1,9 @@
 {
   "language": {
     "english": "English",
-    "arabic": "Arabic"
+    "arabic": "Arabic",
+    "switchToEnglish": "Switch to English",
+    "switchToArabic": "Switch to Arabic"
   },
   "settings": {
     "language": "Language"
