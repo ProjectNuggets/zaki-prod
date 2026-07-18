@@ -11,6 +11,16 @@ export function LocaleSwitcher({ mobile = false }: LocaleSwitcherProps) {
   const label = isArabic
     ? t("language.switchToEnglish", { defaultValue: "Switch to English" })
     : t("language.switchToArabic", { defaultValue: "Switch to Arabic" });
+  const changeLocale = async () => {
+    await i18n.changeLanguage(targetLocale);
+    const url = new URL(window.location.href);
+    url.searchParams.set("lang", targetLocale);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${url.pathname}${url.search}${url.hash}`
+    );
+  };
 
   return (
     <button
@@ -22,7 +32,7 @@ export function LocaleSwitcher({ mobile = false }: LocaleSwitcherProps) {
       }
       aria-label={label}
       data-locale-target={targetLocale}
-      onClick={() => void i18n.changeLanguage(targetLocale)}
+      onClick={() => void changeLocale()}
     >
       {targetLocale.toUpperCase()}
     </button>

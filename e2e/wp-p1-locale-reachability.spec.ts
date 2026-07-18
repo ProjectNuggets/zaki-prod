@@ -30,6 +30,10 @@ test.describe("WP-P1 locale reachability", () => {
     await expect
       .poll(() => page.evaluate(() => window.localStorage.getItem("i18nextLng")))
       .toBe("en");
+    await expect(page).toHaveURL(/\?lang=en(?:&|$)/);
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
 
     await page.evaluate(() => window.localStorage.setItem("i18nextLng", "ar"));
     await page.goto("/", { waitUntil: "domcontentloaded" });
