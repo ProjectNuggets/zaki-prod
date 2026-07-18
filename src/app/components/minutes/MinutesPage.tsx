@@ -1,11 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
 import { CalendarDays, Clock3, FileText, RefreshCw, Search, ShieldCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
 import { V2Badge, V2Button, V2Panel, V2PanelBody, V2PanelHead } from "@/app/components/v2";
+import { requestReauthentication } from "@/lib/api";
 import { MinutesApiError, listMinutes, readMinutesItem, searchMinutes, type MinutesIndexResponse, type MinutesItem, type MinutesMetadata } from "@/lib/minutesApi";
+import { useAuthStore } from "@/stores";
 
 function dateLabel(value: string, locale?: string) {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
@@ -14,6 +15,10 @@ function dateLabel(value: string, locale?: string) {
 function kindLabel(kind: MinutesMetadata["kind"], t: TFunction) {
   const labels = { meeting: "Meeting", transcript: "Transcript", summary: "Summary" } as const;
   return t(`minutes.kind.${kind}`, { defaultValue: labels[kind] });
+}
+
+function isMinutesAuthError(error: unknown) {
+  return error instanceof MinutesApiError && error.status === 401;
 }
 
 function detailBody(item: MinutesItem, t: TFunction, locale?: string) {
@@ -39,6 +44,8 @@ function detailBody(item: MinutesItem, t: TFunction, locale?: string) {
 
 export function MinutesPage() {
   const { t, i18n } = useTranslation();
+  const sessionToken = useAuthStore((state) => state.token);
+  const previousSessionToken = useRef(sessionToken);
   const locale = i18n.resolvedLanguage || i18n.language;
   const [selected, setSelected] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -71,8 +78,24 @@ export function MinutesPage() {
       nextCursor: page.next_cursor,
     })),
   });
+  useEffect(() => {
+    if (previousSessionToken.current === sessionToken) return;
+    previousSessionToken.current = sessionToken;
+    setSelected(null);
+    setSearchQuery("");
+    setSearchSession(null);
+    setPagination(null);
+    detail.reset();
+    search.reset();
+    loadOlder.reset();
+    void index.refetch();
+  }, [detail, index, loadOlder, search, sessionToken]);
   const openDetail = (itemId: string, variant: "full" | "summary" = "full") => detail.mutate({ itemId, variant });
-  const indexAuthError = index.error instanceof MinutesApiError && index.error.status === 401;
+  const indexAuthError = isMinutesAuthError(index.error);
+  const authError = indexAuthError
+    || isMinutesAuthError(search.error)
+    || isMinutesAuthError(detail.error)
+    || isMinutesAuthError(loadOlder.error);
   const items = useMemo(() => {
     const byId = new Map<string, MinutesMetadata>();
     for (const item of [...(index.data?.items ?? []), ...(pagination?.items ?? [])]) byId.set(item.id, item);
@@ -83,6 +106,23 @@ export function MinutesPage() {
   const meetings = useMemo(() => items.filter((item) => item.kind === "meeting"), [items]);
   const related = (meeting: MinutesMetadata, kind: "summary" | "transcript") =>
     items.find((item) => item.kind === kind && item.meeting_id === meeting.id);
+  const selectedMetadata = selected
+    ? items.find((item) => item.id === selected) ?? searchSession?.items.find((item) => item.id === selected)
+    : undefined;
+  const detailTooLarge = detail.error instanceof MinutesApiError && detail.error.code === "minutes_item_too_large";
+  const canOfferSummaryFallback = detailTooLarge
+    && detail.variables?.variant === "full"
+    && selectedMetadata?.kind === "transcript";
+  const renderDetailError = () => {
+    if (canOfferSummaryFallback) {
+      return <V2Panel><V2PanelHead title={t("minutes.tooLargeTitle", { defaultValue: "Transcript exceeds the read limit" })} meta={t("minutes.summaryFallbackMeta", { defaultValue: "Summary fallback" })} /><V2PanelBody className="space-y-4"><p className="text-sm text-[var(--v2-ink-2)]">{t("minutes.tooLargeBody", { defaultValue: "This transcript is too large to open in full." })}</p><V2Button size="sm" variant="primary" onClick={() => selected && openDetail(selected, "summary")}>{t("minutes.openSummaryInstead", { defaultValue: "Open summary instead" })}</V2Button></V2PanelBody></V2Panel>;
+    }
+    if (detailTooLarge) {
+      const summaryFailed = detail.variables?.variant === "summary";
+      return <V2Panel><V2PanelHead title={summaryFailed ? t("minutes.summaryLimitTitle", { defaultValue: "Summary cannot be opened" }) : t("minutes.itemLimitTitle", { defaultValue: "This item exceeds the read limit" })} meta={t("minutes.readLimitMeta", { defaultValue: "Read limit" })} /><V2PanelBody><p className="text-sm text-[var(--v2-ink-2)]">{summaryFailed ? t("minutes.summaryLimitBody", { defaultValue: "Neither the full transcript nor its summary can be opened within the current read limit." }) : t("minutes.itemLimitBody", { defaultValue: "This item cannot be opened within the current read limit." })}</p></V2PanelBody></V2Panel>;
+    }
+    return <V2Panel><V2PanelHead title={t("minutes.detailErrorTitle", { defaultValue: "This item is not available" })} meta={t("minutes.readFailedMeta", { defaultValue: "Read failed" })} /><V2PanelBody><V2Button size="sm" onClick={() => selected && openDetail(selected, detail.variables?.variant ?? "full")}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></V2PanelBody></V2Panel>;
+  };
 
   return <main className="min-h-full bg-[var(--v2-bg)] p-4 text-[var(--v2-ink-1)] md:p-6" data-product-id="minutes">
     <div className="mx-auto max-w-7xl space-y-5">
@@ -95,7 +135,7 @@ export function MinutesPage() {
         <V2Badge><ShieldCheck className="size-3 text-[var(--v2-accent)]" aria-hidden />{t("minutes.readOnly", { defaultValue: "Read only" })}</V2Badge>
       </header>
 
-      {!indexAuthError ? <section className="border border-[var(--v2-hairline)] bg-[var(--v2-bg-raised)] p-3">
+      {!authError ? <section className="border border-[var(--v2-hairline)] bg-[var(--v2-bg-raised)] p-3">
         <form
           className="flex flex-col gap-2 sm:flex-row"
           onSubmit={(event) => {
@@ -143,16 +183,17 @@ export function MinutesPage() {
       </section> : null}
 
       {index.isLoading ? <section aria-label={t("minutes.loading", { defaultValue: "Loading Minutes" })} className="grid gap-px bg-[var(--v2-hairline)] md:grid-cols-[minmax(260px,0.8fr)_1.6fr]"><div className="h-72 animate-pulse bg-[var(--v2-bg-raised)]" /><div className="h-72 animate-pulse bg-[var(--v2-bg-raised)]" /></section> : null}
-      {indexAuthError ? <V2Panel><V2PanelBody className="space-y-4"><div><p className="font-mono text-[10px] uppercase tracking-wider text-[var(--v2-ink-2)]">{t("minutes.authRequiredMeta", { defaultValue: "Auth required" })}</p><h2 className="mt-2 text-lg font-semibold">{t("minutes.authTitle", { defaultValue: "Your Minutes session ended" })}</h2></div><p className="text-sm text-[var(--v2-ink-2)]">{t("minutes.authBody", { defaultValue: "Sign in again to continue reviewing your retained meetings." })}</p><Link className="v2-btn v2-btn--primary v2-btn--sm inline-flex" to="/?next=%2Fminutes">{t("minutes.signInAgain", { defaultValue: "Sign in again" })}</Link></V2PanelBody></V2Panel> : null}
+      {authError ? <V2Panel><V2PanelBody className="space-y-4"><div><p className="font-mono text-[10px] uppercase tracking-wider text-[var(--v2-ink-2)]">{t("minutes.authRequiredMeta", { defaultValue: "Auth required" })}</p><h2 className="mt-2 text-lg font-semibold">{t("minutes.authTitle", { defaultValue: "Your Minutes session ended" })}</h2></div><p className="text-sm text-[var(--v2-ink-2)]">{t("minutes.authBody", { defaultValue: "Sign in again to continue reviewing your retained meetings." })}</p><V2Button size="sm" variant="primary" onClick={() => requestReauthentication("/minutes")}>{t("minutes.signInAgain", { defaultValue: "Sign in again" })}</V2Button></V2PanelBody></V2Panel> : null}
       {index.isError && !indexAuthError ? <V2Panel><V2PanelHead title={t("minutes.errorTitle", { defaultValue: "Minutes could not be loaded" })} meta={t("minutes.readFailedMeta", { defaultValue: "Read failed" })} /><V2PanelBody className="space-y-4"><p className="text-sm text-[var(--v2-ink-2)]">{t("minutes.errorBody", { defaultValue: "The read service is temporarily unavailable. Your meeting data was not changed." })}</p><V2Button size="sm" onClick={() => index.refetch()}><RefreshCw className="size-3.5" aria-hidden />{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></V2PanelBody></V2Panel> : null}
-      {!index.isLoading && !index.isError && meetings.length === 0 ? <V2Panel><V2PanelHead title={t("minutes.emptyTitle", { defaultValue: "No captured meetings yet" })} meta={t("minutes.emptyMeta", { defaultValue: "0 meetings" })} /><V2PanelBody><p className="text-sm text-[var(--v2-ink-2)]">{t("minutes.emptyBody", { defaultValue: "When a consented meeting is captured, its transcript and summary will appear here with their retention dates." })}</p></V2PanelBody></V2Panel> : null}
+      {!authError && !index.isLoading && !index.isError && meetings.length === 0 && hasOlder ? <V2Panel><V2PanelHead title={t("minutes.partialArchiveTitle", { defaultValue: "More meeting records are available" })} meta={t("minutes.partialArchiveMeta", { defaultValue: "Partial archive" })} /><V2PanelBody className="space-y-4"><p className="text-sm text-[var(--v2-ink-2)]">{t("minutes.partialArchiveBody", { defaultValue: "This page contains related Minutes items. Load the next page to continue to the meeting list." })}</p>{loadOlder.isError ? <p className="text-xs text-[var(--v2-danger)]">{t("minutes.loadOlderError", { defaultValue: "Older meetings could not be loaded. The meetings above are still available." })}</p> : null}<V2Button size="sm" disabled={loadOlder.isPending} onClick={() => nextCursor && loadOlder.mutate(nextCursor)}>{loadOlder.isPending ? t("minutes.loadingOlder", { defaultValue: "Loading older meetings…" }) : t("minutes.loadOlder", { defaultValue: "Load older meetings" })}</V2Button></V2PanelBody></V2Panel> : null}
+      {!authError && !index.isLoading && !index.isError && meetings.length === 0 && !hasOlder ? <V2Panel><V2PanelHead title={t("minutes.emptyTitle", { defaultValue: "No captured meetings yet" })} meta={t("minutes.emptyMeta", { defaultValue: "0 meetings" })} /><V2PanelBody><p className="text-sm text-[var(--v2-ink-2)]">{t("minutes.emptyBody", { defaultValue: "When a consented meeting is captured, its transcript and summary will appear here with their retention dates." })}</p></V2PanelBody></V2Panel> : null}
 
-      {meetings.length > 0 ? <section className="grid min-h-[520px] gap-px bg-[var(--v2-hairline)] lg:grid-cols-[minmax(290px,0.78fr)_1.4fr]">
+      {!authError && meetings.length > 0 ? <section className="grid min-h-[520px] gap-px bg-[var(--v2-hairline)] lg:grid-cols-[minmax(290px,0.78fr)_1.4fr]">
         <div className="bg-[var(--v2-bg-raised)] p-3"><div className="mb-3 flex items-center justify-between px-2 font-mono text-[10px] uppercase tracking-wider text-[var(--v2-ink-2)]"><span>{t("minutes.meetings", { defaultValue: "Meetings" })}</span><span>{meetings.length}</span></div><ul className="space-y-2">{meetings.map((meeting) => {
           const summary = related(meeting, "summary"); const transcript = related(meeting, "transcript");
           return <li key={meeting.id} className="border border-[var(--v2-hairline)] bg-[var(--v2-bg)] p-4"><h2 className="text-sm font-semibold">{meeting.title}</h2><p className="mt-1 font-mono text-[10px] text-[var(--v2-ink-3)]">{dateLabel(meeting.occurred_at, locale)}</p><div className="mt-4 flex flex-wrap gap-2">{summary ? <V2Button size="sm" variant="primary" onClick={() => openDetail(summary.id)}>{t("minutes.openSummary", { defaultValue: "Open summary" })}</V2Button> : null}{transcript ? <V2Button size="sm" onClick={() => openDetail(transcript.id)}>{t("minutes.openTranscript", { defaultValue: "Open transcript" })}</V2Button> : null}<V2Button size="sm" onClick={() => openDetail(meeting.id)}>{t("minutes.openMeeting", { defaultValue: "Meeting details" })}</V2Button></div>{!summary ? <p className="mt-3 text-xs text-[var(--v2-ink-2)]">{t("minutes.partialSummary", { defaultValue: "Summary not available yet." })}</p> : null}</li>;
         })}</ul>{loadOlder.isError ? <p className="mt-3 text-xs text-[var(--v2-danger)]">{t("minutes.loadOlderError", { defaultValue: "Older meetings could not be loaded. The meetings above are still available." })}</p> : null}{hasOlder ? <V2Button className="mt-3 w-full" size="sm" disabled={loadOlder.isPending} onClick={() => nextCursor && loadOlder.mutate(nextCursor)}>{loadOlder.isPending ? t("minutes.loadingOlder", { defaultValue: "Loading older meetings…" }) : t("minutes.loadOlder", { defaultValue: "Load older meetings" })}</V2Button> : null}</div>
-        <div className="bg-[var(--v2-bg)] p-5 md:p-7">{detail.isPending ? <div className="h-56 animate-pulse border border-[var(--v2-hairline)] bg-[var(--v2-bg-raised)]" aria-label={t("minutes.loadingDetail", { defaultValue: "Loading meeting detail" })} /> : detail.isError ? detail.error instanceof MinutesApiError && detail.error.code === "minutes_item_too_large" ? <V2Panel><V2PanelHead title={t("minutes.tooLargeTitle", { defaultValue: "Transcript exceeds the read limit" })} meta={t("minutes.summaryAvailableMeta", { defaultValue: "Summary available" })} /><V2PanelBody className="space-y-4"><p className="text-sm text-[var(--v2-ink-2)]">{t("minutes.tooLargeBody", { defaultValue: "This transcript is too large to open in full." })}</p><V2Button size="sm" variant="primary" onClick={() => selected && openDetail(selected, "summary")}>{t("minutes.openSummaryInstead", { defaultValue: "Open summary instead" })}</V2Button></V2PanelBody></V2Panel> : <V2Panel><V2PanelHead title={t("minutes.detailErrorTitle", { defaultValue: "This item is not available" })} meta={t("minutes.readFailedMeta", { defaultValue: "Read failed" })} /><V2PanelBody><V2Button size="sm" onClick={() => selected && openDetail(selected)}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></V2PanelBody></V2Panel> : detail.data ? <article><div className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-[var(--v2-hairline)] pb-4"><div><div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase text-[var(--v2-ink-3)]"><FileText className="size-3.5" aria-hidden />{kindLabel(detail.data.item.kind, t)}</div><h2 className="text-xl font-semibold">{detail.data.item.title}</h2></div><V2Badge><CalendarDays className="size-3" aria-hidden />{t("minutes.retainedUntil", { defaultValue: "Retained until" })} {dateLabel(detail.data.item.retention.expires_at, locale)}</V2Badge></div>{"capture_notice" in detail.data.item ? <div className="mb-6 flex flex-wrap items-center justify-between gap-2 border border-[var(--v2-hairline)] bg-[var(--v2-bg-raised)] px-3 py-2"><span className="flex items-center gap-2 text-xs font-medium"><ShieldCheck className="size-4 text-[var(--v2-accent)]" aria-hidden />{t("minutes.captureVerified", { defaultValue: "Visible capture verified" })}</span><span className="font-mono text-[10px] text-[var(--v2-ink-2)]">{detail.data.item.capture_notice.policy_version}</span></div> : null}{detailBody(detail.data.item, t, locale)}</article> : <div className="grid h-full min-h-72 place-items-center text-center"><div><FileText className="mx-auto mb-3 size-7 text-[var(--v2-ink-4)]" aria-hidden /><p className="text-sm text-[var(--v2-ink-3)]">{t("minutes.selectPrompt", { defaultValue: "Choose a summary or transcript to review it here." })}</p></div></div>}</div>
+        <div className="bg-[var(--v2-bg)] p-5 md:p-7">{detail.isPending ? <div className="h-56 animate-pulse border border-[var(--v2-hairline)] bg-[var(--v2-bg-raised)]" aria-label={t("minutes.loadingDetail", { defaultValue: "Loading meeting detail" })} /> : detail.isError ? renderDetailError() : detail.data ? <article><div className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-[var(--v2-hairline)] pb-4"><div><div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase text-[var(--v2-ink-3)]"><FileText className="size-3.5" aria-hidden />{kindLabel(detail.data.item.kind, t)}</div><h2 className="text-xl font-semibold">{detail.data.item.title}</h2></div><V2Badge><CalendarDays className="size-3" aria-hidden />{t("minutes.retainedUntil", { defaultValue: "Retained until" })} {dateLabel(detail.data.item.retention.expires_at, locale)}</V2Badge></div>{"capture_notice" in detail.data.item ? <div className="mb-6 flex flex-wrap items-center justify-between gap-2 border border-[var(--v2-hairline)] bg-[var(--v2-bg-raised)] px-3 py-2"><span className="flex items-center gap-2 text-xs font-medium"><ShieldCheck className="size-4 text-[var(--v2-accent)]" aria-hidden />{t("minutes.captureVerified", { defaultValue: "Visible capture verified" })}</span><span className="font-mono text-[10px] text-[var(--v2-ink-2)]">{detail.data.item.capture_notice.policy_version}</span></div> : null}{detailBody(detail.data.item, t, locale)}</article> : <div className="grid h-full min-h-72 place-items-center text-center"><div><FileText className="mx-auto mb-3 size-7 text-[var(--v2-ink-4)]" aria-hidden /><p className="text-sm text-[var(--v2-ink-3)]">{t("minutes.selectPrompt", { defaultValue: "Choose a summary or transcript to review it here." })}</p></div></div>}</div>
       </section> : null}
     </div>
   </main>;
