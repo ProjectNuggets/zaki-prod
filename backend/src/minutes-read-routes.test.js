@@ -182,6 +182,32 @@ describe("Minutes authenticated read BFF routes", () => {
     expect(client.fetchSearch).not.toHaveBeenCalled();
   });
 
+  test("preserves the auth-first 4 KB parser boundary for route case variants", async () => {
+    const client = {
+      fetchSearch: jest.fn().mockResolvedValue(jsonResponse({ items: [], truncated: false })),
+    };
+    const app = express();
+    app.use(bypassMinutesReadBodyParser(express.json({ limit: "10mb" })));
+    app.use("/api/minutes", buildMinutesReadRouter({
+      enabled: true,
+      baseUrl: "http://minutes-api:8056",
+      readToken: "m".repeat(32),
+      timeoutMs: 5_000,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      getRequestId: () => "req-case-variant-01",
+      fetchWithTimeout: jest.fn(),
+      client,
+    }));
+
+    const response = await request(app)
+      .post("/API/MINUTES/search")
+      .send({ query: "project alpha", padding: "x".repeat(5_000) });
+
+    expect(response.status).toBe(413);
+    expect(response.body.code).toBe("minutes_request_too_large");
+    expect(client.fetchSearch).not.toHaveBeenCalled();
+  });
+
   test("rejects arbitrary downstream paths and all read-plane mutations", async () => {
     const { app, client } = buildApp();
     expect((await request(app).get("/api/minutes/proxy/api/admin/users")).status).toBe(404);

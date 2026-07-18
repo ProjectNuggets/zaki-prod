@@ -35,7 +35,7 @@ export function bypassMinutesReadBodyParser(parser) {
     throw new TypeError("Body parser middleware is required.");
   }
   return (req, res, next) => {
-    const path = String(req.path || "");
+    const path = String(req.path || "").toLowerCase();
     if (path === "/api/minutes" || path.startsWith("/api/minutes/")) return next();
     return parser(req, res, next);
   };

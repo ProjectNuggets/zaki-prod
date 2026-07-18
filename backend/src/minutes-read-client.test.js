@@ -87,6 +87,19 @@ describe("Minutes read client", () => {
     );
   });
 
+  test("rejects non-string item variants before network work", async () => {
+    const fetchWithTimeout = jest.fn();
+
+    await expect(fetchMinutesItem({
+      ...BASE_OPTIONS,
+      itemId: "transcript:17",
+      variant: ["full"],
+      fetchWithTimeout,
+    })).rejects.toThrow("invalid_minutes_read_variant");
+
+    expect(fetchWithTimeout).not.toHaveBeenCalled();
+  });
+
   test("translates BFF POST-search input to the sealed upstream GET without accepting a path", async () => {
     const fetchWithTimeout = jest.fn().mockResolvedValue({ ok: true, status: 200 });
 
@@ -104,6 +117,18 @@ describe("Minutes read client", () => {
       5_000,
       "Minutes read search request"
     );
+  });
+
+  test("rejects non-string search queries before network work", async () => {
+    const fetchWithTimeout = jest.fn();
+
+    await expect(fetchMinutesSearch({
+      ...BASE_OPTIONS,
+      query: { term: "project alpha" },
+      fetchWithTimeout,
+    })).rejects.toThrow("invalid_minutes_read_query");
+
+    expect(fetchWithTimeout).not.toHaveBeenCalled();
   });
 
   test("fails before network work for invalid credentials, identity, controls, and item ids", async () => {

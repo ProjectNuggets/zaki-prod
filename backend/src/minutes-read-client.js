@@ -142,11 +142,13 @@ export async function fetchMinutesIndex(options) {
 export async function fetchMinutesItem(options) {
   const config = requiredConfig(options);
   const itemId = typeof options.itemId === "string" ? options.itemId : "";
-  const variant = options.variant === undefined ? "full" : String(options.variant);
+  const variant = options.variant === undefined ? "full" : options.variant;
   if (itemId.length > 160 || !MINUTES_IDENTIFIER.test(itemId)) {
     throw new Error("invalid_minutes_read_item_id");
   }
-  if (!new Set(["full", "summary"]).has(variant)) throw new Error("invalid_minutes_read_variant");
+  if (typeof variant !== "string" || !new Set(["full", "summary"]).has(variant)) {
+    throw new Error("invalid_minutes_read_variant");
+  }
   return request(
     config,
     `/api/zaki/read/v1/${config.userId}/item/${encodeURIComponent(itemId)}?variant=${variant}`,
@@ -156,7 +158,7 @@ export async function fetchMinutesItem(options) {
 
 export async function fetchMinutesSearch(options) {
   const config = requiredConfig(options);
-  const query = String(options.query || "").trim();
+  const query = typeof options.query === "string" ? options.query.trim() : "";
   if (!query || query.length > 512 || hasControlCharacter(query)) {
     throw new Error("invalid_minutes_read_query");
   }
