@@ -27,7 +27,7 @@ export function getMinutesReadBase(rawBaseUrl) {
 
 function requiredConfig({ baseUrl, readToken, userId, requestId, fetchWithTimeout, timeoutMs }) {
   const resolvedBase = getMinutesReadBase(baseUrl);
-  if (!resolvedBase) throw new Error("MINUTES_READ_BASE_URL is not configured.");
+  if (!resolvedBase) throw new Error("MINUTES_ENGINE_BASE_URL is not configured.");
 
   const token = String(readToken || "");
   if (
@@ -36,7 +36,7 @@ function requiredConfig({ baseUrl, readToken, userId, requestId, fetchWithTimeou
     token !== token.trim() ||
     [...token].some((character) => character.codePointAt(0) < 0x20 || character.codePointAt(0) > 0x7e)
   ) {
-    throw new Error("MINUTES_READ_TOKEN is invalid.");
+    throw new Error("MINUTES_ENGINE_READ_TOKEN is invalid.");
   }
 
   const normalizedUserId = String(userId || "");
@@ -61,6 +61,7 @@ function requiredConfig({ baseUrl, readToken, userId, requestId, fetchWithTimeou
 
 function optionalCursor(value) {
   if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") throw new Error("invalid_minutes_read_cursor");
   const cursor = String(value);
   if (cursor.length > 2_048 || CONTROL_CHARACTER.test(cursor)) {
     throw new Error("invalid_minutes_read_cursor");
@@ -70,6 +71,7 @@ function optionalCursor(value) {
 
 function optionalSince(value) {
   if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") throw new Error("invalid_minutes_read_since");
   const since = String(value);
   if (since.length > 80 || CONTROL_CHARACTER.test(since) || !Number.isFinite(Date.parse(since))) {
     throw new Error("invalid_minutes_read_since");
@@ -78,6 +80,14 @@ function optionalSince(value) {
 }
 
 function boundedLimit(value, maximum, fallback) {
+  if (
+    value !== undefined &&
+    value !== null &&
+    value !== "" &&
+    !(typeof value === "number" || (typeof value === "string" && /^[1-9][0-9]*$/.test(value)))
+  ) {
+    throw new Error("invalid_minutes_read_limit");
+  }
   const limit = value === undefined || value === null || value === "" ? fallback : Number(value);
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > maximum) {
     throw new Error("invalid_minutes_read_limit");
