@@ -1,6 +1,12 @@
 const MINUTES_ITEM_ID = /^(meeting|transcript|summary):[1-9][0-9]*$/;
 const REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
-const CONTROL_CHARACTER = /[\u0000-\u001F\u007F]/;
+
+function hasControlCharacter(value) {
+  return [...String(value)].some((character) => {
+    const codePoint = character.codePointAt(0);
+    return codePoint <= 0x1f || codePoint === 0x7f;
+  });
+}
 
 export function getMinutesReadBase(rawBaseUrl) {
   const raw = String(rawBaseUrl || "").trim();
@@ -63,7 +69,7 @@ function optionalCursor(value) {
   if (value === undefined || value === null || value === "") return null;
   if (typeof value !== "string") throw new Error("invalid_minutes_read_cursor");
   const cursor = String(value);
-  if (cursor.length > 2_048 || CONTROL_CHARACTER.test(cursor)) {
+  if (cursor.length > 2_048 || hasControlCharacter(cursor)) {
     throw new Error("invalid_minutes_read_cursor");
   }
   return cursor;
@@ -73,7 +79,7 @@ function optionalSince(value) {
   if (value === undefined || value === null || value === "") return null;
   if (typeof value !== "string") throw new Error("invalid_minutes_read_since");
   const since = String(value);
-  if (since.length > 80 || CONTROL_CHARACTER.test(since) || !Number.isFinite(Date.parse(since))) {
+  if (since.length > 80 || hasControlCharacter(since) || !Number.isFinite(Date.parse(since))) {
     throw new Error("invalid_minutes_read_since");
   }
   return since;
@@ -149,7 +155,7 @@ export async function fetchMinutesItem(options) {
 export async function fetchMinutesSearch(options) {
   const config = requiredConfig(options);
   const query = String(options.query || "").trim();
-  if (!query || query.length > 512 || CONTROL_CHARACTER.test(query)) {
+  if (!query || query.length > 512 || hasControlCharacter(query)) {
     throw new Error("invalid_minutes_read_query");
   }
   const params = new URLSearchParams();

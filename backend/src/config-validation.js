@@ -29,6 +29,32 @@ function hasHttpUrl(value) {
   return /^https?:\/\//i.test(normalize(value));
 }
 
+function hasHttpOrigin(value) {
+  try {
+    const parsed = new URL(normalize(value));
+    return (
+      ["http:", "https:"].includes(parsed.protocol) &&
+      !parsed.username &&
+      !parsed.password &&
+      parsed.pathname === "/" &&
+      !parsed.search &&
+      !parsed.hash
+    );
+  } catch {
+    return false;
+  }
+}
+
+function hasDedicatedReadToken(value) {
+  const token = String(value ?? "");
+  return (
+    token.length >= 32 &&
+    token.length <= 512 &&
+    token === token.trim() &&
+    /^[\x20-\x7e]+$/.test(token)
+  );
+}
+
 function hasUnsafeOrigin(origin) {
   return /^file:\/\//i.test(origin) || /localhost|127\.0\.0\.1/i.test(origin);
 }
@@ -66,6 +92,9 @@ export function validateRuntimeConfig(env = process.env) {
   const learningEnabled = isTruthyBoolean(env.ZAKI_LEARNING_ENABLED);
   const learningBaseUrl = normalize(env.LEARNING_ENGINE_BASE_URL);
   const learningInternalToken = normalize(env.LEARNING_ENGINE_INTERNAL_TOKEN);
+  const minutesEnabled = isTruthyBoolean(env.ZAKI_MINUTES_ENABLED);
+  const minutesBaseUrl = normalize(env.MINUTES_ENGINE_BASE_URL);
+  const minutesReadToken = String(env.MINUTES_ENGINE_READ_TOKEN ?? "");
   const designEnabled = isTruthyBoolean(env.ZAKI_DESIGN_ENABLED);
   const designControllerEnabled = isTruthyBoolean(env.ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED);
   const designBaseUrl = normalize(env.DESIGN_ENGINE_BASE_URL);
@@ -255,6 +284,34 @@ export function validateRuntimeConfig(env = process.env) {
       warnings,
       "ZAKI_LEARNING_ENABLED",
       "Learning engine config is present, but ZAKI_LEARNING_ENABLED is not true."
+    );
+  }
+  if (minutesEnabled) {
+    if (!minutesBaseUrl) {
+      pushIssue(
+        errors,
+        "MINUTES_ENGINE_BASE_URL",
+        "MINUTES_ENGINE_BASE_URL is required when ZAKI_MINUTES_ENABLED=true."
+      );
+    } else if (!hasHttpOrigin(minutesBaseUrl)) {
+      pushIssue(
+        errors,
+        "MINUTES_ENGINE_BASE_URL",
+        "MINUTES_ENGINE_BASE_URL must be a fixed HTTP(S) origin without credentials, path, query, or fragment."
+      );
+    }
+    if (!hasDedicatedReadToken(minutesReadToken)) {
+      pushIssue(
+        errors,
+        "MINUTES_ENGINE_READ_TOKEN",
+        "MINUTES_ENGINE_READ_TOKEN must be a dedicated 32-512 character printable ASCII token without surrounding whitespace."
+      );
+    }
+  } else if (minutesBaseUrl || minutesReadToken) {
+    pushIssue(
+      warnings,
+      "ZAKI_MINUTES_ENABLED",
+      "Minutes read config is present, but ZAKI_MINUTES_ENABLED is not true."
     );
   }
   if (designControllerEnabled) {

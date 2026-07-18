@@ -17,6 +17,30 @@ const DEFAULT_CLIENT = Object.freeze({
   fetchSearch: fetchMinutesSearch,
 });
 
+const CLIENT_INPUT_ERRORS = new Set([
+  "invalid_minutes_read_cursor",
+  "invalid_minutes_read_since",
+  "invalid_minutes_read_limit",
+  "invalid_minutes_read_item_id",
+  "invalid_minutes_read_variant",
+  "invalid_minutes_read_query",
+]);
+
+export function isMinutesEnabled(value) {
+  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+}
+
+export function bypassMinutesReadBodyParser(parser) {
+  if (typeof parser !== "function") {
+    throw new TypeError("Body parser middleware is required.");
+  }
+  return (req, res, next) => {
+    const path = String(req.path || "");
+    if (path === "/api/minutes" || path.startsWith("/api/minutes/")) return next();
+    return parser(req, res, next);
+  };
+}
+
 function errorPayload(code, message, requestId, retryable) {
   return { code, message, requestId, retryable };
 }
@@ -64,14 +88,7 @@ function mapUpstreamFailure(res, response, requestId) {
 }
 
 function isClientInputError(error) {
-  return new Set([
-    "invalid_minutes_read_cursor",
-    "invalid_minutes_read_since",
-    "invalid_minutes_read_limit",
-    "invalid_minutes_read_item_id",
-    "invalid_minutes_read_variant",
-    "invalid_minutes_read_query",
-  ]).has(String(error?.message || ""));
+  return CLIENT_INPUT_ERRORS.has(String(error?.message || ""));
 }
 
 function isConfigError(error) {

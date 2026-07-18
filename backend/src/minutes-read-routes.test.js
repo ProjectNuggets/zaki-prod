@@ -1,7 +1,10 @@
 import express from "express";
 import request from "supertest";
 import { describe, expect, jest, test } from "@jest/globals";
-import { buildMinutesReadRouter } from "./minutes-read-routes.js";
+import {
+  buildMinutesReadRouter,
+  bypassMinutesReadBodyParser,
+} from "./minutes-read-routes.js";
 
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -51,6 +54,31 @@ function buildApp(overrides = {}) {
 }
 
 describe("Minutes authenticated read BFF routes", () => {
+  test("authenticates before parsing the search body", async () => {
+    const resolveUser = jest.fn().mockImplementation(async (_req, res) => {
+      res.status(401).json({ error: "unauthorized" });
+      return null;
+    });
+    const app = express();
+    app.use(bypassMinutesReadBodyParser(express.json({ limit: "10mb" })));
+    app.use("/api/minutes", buildMinutesReadRouter({
+      enabled: true,
+      baseUrl: "http://minutes-api:8056",
+      readToken: "m".repeat(32),
+      resolveUser,
+      getRequestId: () => "req-auth-first-01",
+      fetchWithTimeout: jest.fn(),
+    }));
+
+    const response = await request(app)
+      .post("/api/minutes/search")
+      .set("content-type", "application/json")
+      .send('{"query":');
+
+    expect(response.status).toBe(401);
+    expect(resolveUser).toHaveBeenCalledTimes(1);
+  });
+
   test("stays fail-closed while the Minutes operator gate is disabled", async () => {
     const { app, client, resolveUser } = buildApp({ enabled: false });
     const response = await request(app).get("/api/minutes/index");
