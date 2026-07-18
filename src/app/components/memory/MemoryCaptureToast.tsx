@@ -32,11 +32,12 @@ export function MemoryCaptureToast({
   partialUndoCount = 0,
 }: MemoryCaptureToastProps) {
   const { t } = useTranslation();
+  const isImport = source === "import";
 
   const newSavedCount = Math.max(0, savedCount - supersededCount);
   const absorbedCount = savedCount + duplicateCount;
   const title =
-    source === "import"
+    isImport
       ? t("memory.importedTitle", {
           count: absorbedCount,
           defaultValue: `I now remember ${absorbedCount} details from your import`,
@@ -52,7 +53,7 @@ export function MemoryCaptureToast({
       ? t("memory.undoPartialError", { count: partialUndoCount })
       : undoError
         ? undoError
-        : source === "import"
+        : isImport
           ? t("memory.importedHelper", {
               saved: newSavedCount,
               updated: supersededCount,
@@ -63,15 +64,23 @@ export function MemoryCaptureToast({
 
   return (
     <div
-      className="fixed z-30"
-      style={{
-        left: position.left,
-        width: position.width,
-        bottom: position.bottom,
-      }}
+      className={
+        isImport
+          ? "fixed left-1/2 top-1/2 z-50 w-[min(440px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2"
+          : "fixed z-30"
+      }
+      style={
+        isImport
+          ? undefined
+          : {
+              left: position.left,
+              width: position.width,
+              bottom: position.bottom,
+            }
+      }
     >
-      <div className="border border-zaki-subtle bg-white/95 px-3 py-2.5 font-mono text-xs text-zaki-secondary shadow-[0px_10px_24px_rgba(15,15,15,0.08)] backdrop-blur-sm">
-        <div className="min-w-0">
+      <div className="border border-zaki-subtle bg-zaki-raised/95 px-3 py-2.5 font-mono text-xs text-zaki-secondary shadow-[0px_10px_24px_rgba(15,15,15,0.08)] backdrop-blur-sm dark:bg-[#141210]/95">
+        <div className="min-w-0" role="status" aria-live="polite" aria-atomic="true">
           <div className="flex items-center gap-2 text-zaki-primary">
             <span className="inline-flex size-5 items-center justify-center rounded-full bg-zaki-hover text-zaki-brand">
               <Brain className="size-3" />

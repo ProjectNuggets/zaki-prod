@@ -55,6 +55,13 @@ describe("MemoryCaptureToast", () => {
 
     expect(screen.getByText("I now remember 5 details from your import")).toBeInTheDocument();
     expect(screen.getByText("2 new · 1 updated · 2 known")).toBeInTheDocument();
+
+    const confirmation = screen.getByRole("status");
+    const placement = confirmation.closest(".fixed");
+    expect(confirmation.querySelector("button")).toBeNull();
+    expect(confirmation.parentElement).toHaveClass("bg-zaki-raised/95", "dark:bg-[#141210]/95");
+    expect(placement).toHaveClass("left-1/2", "top-1/2", "-translate-x-1/2", "-translate-y-1/2");
+    expect(placement).not.toHaveStyle({ left: "0px", width: "320px", bottom: "16px" });
   });
 
   it("shows retry copy when undo has failed", () => {
