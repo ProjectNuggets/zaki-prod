@@ -1,4 +1,4 @@
-const MINUTES_ITEM_ID = /^(meeting|transcript|summary):[1-9][0-9]*$/;
+const MINUTES_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 const REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
 
 function hasControlCharacter(value) {
@@ -141,9 +141,11 @@ export async function fetchMinutesIndex(options) {
 
 export async function fetchMinutesItem(options) {
   const config = requiredConfig(options);
-  const itemId = String(options.itemId || "");
+  const itemId = typeof options.itemId === "string" ? options.itemId : "";
   const variant = options.variant === undefined ? "full" : String(options.variant);
-  if (!MINUTES_ITEM_ID.test(itemId)) throw new Error("invalid_minutes_read_item_id");
+  if (itemId.length > 160 || !MINUTES_IDENTIFIER.test(itemId)) {
+    throw new Error("invalid_minutes_read_item_id");
+  }
   if (!new Set(["full", "summary"]).has(variant)) throw new Error("invalid_minutes_read_variant");
   return request(
     config,

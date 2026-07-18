@@ -18389,6 +18389,7 @@ app.use("/api/minutes", buildMinutesReadRouter({
   resolveUser: requireAuthUser,
   getRequestId: getOrCreateRequestId,
   fetchWithTimeout,
+  recordFailure: (event) => logStructured("warn", "minutes.read.failed", event),
 }));
 
 // =============================================================================

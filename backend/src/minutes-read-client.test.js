@@ -69,6 +69,24 @@ describe("Minutes read client", () => {
     );
   });
 
+  test("accepts every contract-valid opaque item identifier", async () => {
+    const fetchWithTimeout = jest.fn().mockResolvedValue({ ok: true, status: 200 });
+
+    await fetchMinutesItem({
+      ...BASE_OPTIONS,
+      itemId: "transcript_example_01",
+      variant: "full",
+      fetchWithTimeout,
+    });
+
+    expect(fetchWithTimeout).toHaveBeenCalledWith(
+      "http://minutes-api:8056/api/zaki/read/v1/42/item/transcript_example_01?variant=full",
+      expect.objectContaining({ method: "GET", redirect: "error" }),
+      5_000,
+      "Minutes read item request"
+    );
+  });
+
   test("translates BFF POST-search input to the sealed upstream GET without accepting a path", async () => {
     const fetchWithTimeout = jest.fn().mockResolvedValue({ ok: true, status: 200 });
 

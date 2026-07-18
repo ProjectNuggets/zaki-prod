@@ -23,6 +23,7 @@ describe("Minutes read-plane startup wiring", () => {
     expect(minutesSection).toContain("enabled: ZAKI_MINUTES_ENABLED");
     expect(minutesSection).toContain("resolveUser: requireAuthUser");
     expect(minutesSection).toContain("readToken: MINUTES_ENGINE_READ_TOKEN");
+    expect(minutesSection).toContain('logStructured("warn", "minutes.read.failed", event)');
     expect(minutesSection).not.toContain("webhook");
     expect(minutesSection).not.toContain("meter");
     expect(minutesSection).not.toContain("provision");

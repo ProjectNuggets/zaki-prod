@@ -102,6 +102,15 @@ function isConfigError(error) {
   ].includes(String(error?.message || ""));
 }
 
+function emitFailure(dependencies, event) {
+  try {
+    const pending = dependencies.recordFailure?.(event);
+    pending?.catch?.(() => {});
+  } catch {
+    // Telemetry must never alter the read response.
+  }
+}
+
 async function authenticate(req, res, next, dependencies) {
   const requestId = dependencies.getRequestId(req);
   res.set("Cache-Control", "no-store");
@@ -131,12 +140,22 @@ function clientOptions(dependencies, context) {
   };
 }
 
-async function serveRead(req, res, dependencies, read, parse) {
+async function serveRead(req, res, dependencies, operation, read, parse) {
   const context = req.minutesReadContext;
   if (!context) return;
+  const startedAt = Date.now();
+  let upstreamStatus = null;
   try {
     const upstream = await read(context);
+    upstreamStatus = Number(upstream?.status) || null;
     if (!upstream?.ok) {
+      emitFailure(dependencies, {
+        requestId: context.requestId,
+        operation,
+        failure: "upstream_status",
+        upstreamStatus,
+        durationMs: Date.now() - startedAt,
+      });
       mapUpstreamFailure(res, upstream, context.requestId);
       return;
     }
@@ -148,13 +167,34 @@ async function serveRead(req, res, dependencies, read, parse) {
       return;
     }
     if (isConfigError(error)) {
+      emitFailure(dependencies, {
+        requestId: context.requestId,
+        operation,
+        failure: "minutes_config_invalid",
+        upstreamStatus,
+        durationMs: Date.now() - startedAt,
+      });
       sendError(res, 503, "minutes_unavailable", "Minutes is not configured.", context.requestId, true);
       return;
     }
     if (error instanceof MinutesReadContractError) {
+      emitFailure(dependencies, {
+        requestId: context.requestId,
+        operation,
+        failure: error.code || "minutes_upstream_contract_invalid",
+        upstreamStatus,
+        durationMs: Date.now() - startedAt,
+      });
       sendError(res, 502, "minutes_invalid_response", "Minutes returned an invalid response.", context.requestId, true);
       return;
     }
+    emitFailure(dependencies, {
+      requestId: context.requestId,
+      operation,
+      failure: "minutes_unavailable",
+      upstreamStatus,
+      durationMs: Date.now() - startedAt,
+    });
     sendError(res, 503, "minutes_unavailable", "Minutes is temporarily unavailable.", context.requestId, true);
   }
 }
@@ -167,6 +207,7 @@ export function buildMinutesReadRouter({
   resolveUser,
   getRequestId,
   fetchWithTimeout,
+  recordFailure,
   client = DEFAULT_CLIENT,
 }) {
   if (typeof resolveUser !== "function") throw new Error("Minutes auth resolver is required.");
@@ -179,6 +220,7 @@ export function buildMinutesReadRouter({
     resolveUser,
     getRequestId,
     fetchWithTimeout,
+    recordFailure,
     client,
   };
   const requireMinutesUser = (req, res, next) => authenticate(req, res, next, dependencies);
@@ -199,6 +241,7 @@ export function buildMinutesReadRouter({
       req,
       res,
       dependencies,
+      "index",
       (context) => client.fetchIndex({
         ...clientOptions(dependencies, context),
         since: req.query.since,
@@ -214,6 +257,7 @@ export function buildMinutesReadRouter({
       req,
       res,
       dependencies,
+      "item",
       (context) => client.fetchItem({
         ...clientOptions(dependencies, context),
         itemId: req.params.itemId,
@@ -228,6 +272,7 @@ export function buildMinutesReadRouter({
       req,
       res,
       dependencies,
+      "search",
       (context) => client.fetchSearch({
         ...clientOptions(dependencies, context),
         query: req.body?.query,
@@ -241,6 +286,16 @@ export function buildMinutesReadRouter({
   router.use((error, req, res, next) => {
     if (!req.minutesReadContext || res.headersSent) {
       next(error);
+      return;
+    }
+    if (error?.type === "entity.too.large" || error?.status === 413) {
+      sendError(
+        res,
+        413,
+        "minutes_request_too_large",
+        "The Minutes request is too large.",
+        req.minutesReadContext.requestId
+      );
       return;
     }
     sendError(

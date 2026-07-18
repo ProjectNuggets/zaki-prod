@@ -11,6 +11,18 @@ export class MinutesReadContractError extends Error {
   }
 }
 
+function boundedContractString(minimum, maximum) {
+  return z.string().superRefine((value, context) => {
+    const length = Array.from(value).length;
+    if (length < minimum || length > maximum) {
+      context.addIssue({
+        code: "custom",
+        message: `expected ${minimum}-${maximum} Unicode code points`,
+      });
+    }
+  });
+}
+
 const Identifier = z.string()
   .min(1)
   .max(160)
@@ -21,7 +33,7 @@ const Sensitivity = z.literal("sensitive_pii");
 const CaptureNotice = z.object({
   bot_visible: z.literal(true),
   tenant_attested_at: DateTime,
-  policy_version: z.string().min(1).max(80),
+  policy_version: boundedContractString(1, 80),
 }).strict();
 
 const TranscriptRetention = z.object({
@@ -35,8 +47,8 @@ const SummaryRetention = z.object({
 }).strict();
 
 const SpeakerTurn = z.object({
-  speaker: z.string().min(1).max(200),
-  text: z.string().min(1).max(65_536),
+  speaker: boundedContractString(1, 200),
+  text: boundedContractString(1, 65_536),
   started_at: DateTime,
   ended_at: DateTime.optional(),
 }).strict().superRefine((turn, context) => {
@@ -51,7 +63,7 @@ const SpeakerTurn = z.object({
 
 const TranscriptContent = z.object({
   format: z.literal("speaker_turns"),
-  language: z.string().min(2).max(35).optional(),
+  language: boundedContractString(2, 35).optional(),
   turns: z.array(SpeakerTurn).min(1).max(4_096),
 }).strict().superRefine((content, context) => {
   let previousStart = Number.NEGATIVE_INFINITY;
@@ -70,14 +82,14 @@ const TranscriptContent = z.object({
 
 const SummaryContent = z.object({
   format: z.literal("summary"),
-  text: z.string().min(1).max(262_144),
+  text: boundedContractString(1, 262_144),
 }).strict();
 
 const MeetingContent = z.object({
   platform: z.enum(["google_meet", "teams", "zoom", "jitsi"]),
   started_at: DateTime,
   ended_at: DateTime,
-  attendees: z.array(z.string().min(1).max(500)).max(1_000),
+  attendees: z.array(boundedContractString(1, 500)).max(1_000),
 }).strict().superRefine((content, context) => {
   if (Date.parse(content.ended_at) < Date.parse(content.started_at)) {
     context.addIssue({
@@ -90,7 +102,7 @@ const MeetingContent = z.object({
 
 const CommonMetadata = {
   id: Identifier,
-  title: z.string().min(1).max(500),
+  title: boundedContractString(1, 500),
   occurred_at: DateTime,
   updated_at: DateTime,
   sensitivity: Sensitivity,
@@ -144,7 +156,7 @@ const SummaryItem = z.object({
 const IndexResponse = z.object({
   items: z.array(z.union([MeetingMetadata, TranscriptMetadata, SummaryMetadata])).max(200),
   truncated: z.boolean(),
-  next_cursor: z.string().min(1).max(2_048).optional(),
+  next_cursor: boundedContractString(1, 2_048).optional(),
 }).strict().superRefine((response, context) => {
   if (response.truncated !== Boolean(response.next_cursor)) {
     context.addIssue({
@@ -173,17 +185,40 @@ function parseContract(schema, value) {
   return result.data;
 }
 
-export function parseMinutesIndexResponse(value) {
-  return parseContract(IndexResponse, value);
+function assertUnexpiredRetention(items, nowMs) {
+  for (const item of items) {
+    if (Date.parse(item.retention.expires_at) <= nowMs) {
+      throw new MinutesReadContractError(
+        "Minutes upstream returned expired data.",
+        "minutes_upstream_retention_expired"
+      );
+    }
+  }
 }
 
-export function parseMinutesItemResponse(value) {
-  return parseContract(ItemResponse, value);
+export function parseMinutesIndexResponse(value, { nowMs = Date.now() } = {}) {
+  const response = parseContract(IndexResponse, value);
+  assertUnexpiredRetention(response.items, nowMs);
+  return response;
+}
+
+export function parseMinutesItemResponse(value, { nowMs = Date.now() } = {}) {
+  const response = parseContract(ItemResponse, value);
+  assertUnexpiredRetention([response.item], nowMs);
+  return response;
 }
 
 function responseHeader(response, name) {
   if (typeof response?.headers?.get === "function") return response.headers.get(name);
   return response?.headers?.[name] ?? response?.headers?.[name.toLowerCase()] ?? null;
+}
+
+async function cancelResponseBody(response) {
+  try {
+    await response?.body?.cancel?.();
+  } catch {
+    // Rejection is already authoritative; cleanup failure must not expose content.
+  }
 }
 
 async function readBodyWithLimit(response) {
@@ -220,6 +255,7 @@ async function readBodyWithLimit(response) {
 
 export async function readMinutesResponseJson(response) {
   if (response?.redirected || (response?.status >= 300 && response?.status < 400)) {
+    await cancelResponseBody(response);
     throw new MinutesReadContractError(
       "Minutes upstream redirect was rejected.",
       "minutes_upstream_redirect_rejected"
@@ -227,6 +263,7 @@ export async function readMinutesResponseJson(response) {
   }
   const contentType = String(responseHeader(response, "content-type") || "").toLowerCase();
   if (!contentType.startsWith("application/json")) {
+    await cancelResponseBody(response);
     throw new MinutesReadContractError(
       "Minutes upstream response was not JSON.",
       "minutes_upstream_invalid_content_type"
@@ -236,6 +273,7 @@ export async function readMinutesResponseJson(response) {
   if (rawContentLength !== null && rawContentLength !== "") {
     const contentLength = Number(rawContentLength);
     if (Number.isFinite(contentLength) && contentLength > MINUTES_READ_RESPONSE_MAX_BYTES) {
+      await cancelResponseBody(response);
       throw new MinutesReadContractError(
         "Minutes upstream response exceeded the read cap.",
         "minutes_upstream_response_too_large"

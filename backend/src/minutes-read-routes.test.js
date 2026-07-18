@@ -30,7 +30,7 @@ function buildApp(overrides = {}) {
         sensitivity: "sensitive_pii",
         retention: {
           scope: "minutes.summary",
-          expires_at: "2026-10-01T00:00:00.000Z",
+          expires_at: "2099-10-01T00:00:00.000Z",
         },
         content: { format: "summary", text: "Decisions and action items." },
       },
@@ -48,6 +48,7 @@ function buildApp(overrides = {}) {
     resolveUser,
     getRequestId: () => "req-browser-01",
     fetchWithTimeout: jest.fn(),
+    recordFailure: overrides.recordFailure,
     client,
   }));
   return { app, client, resolveUser };
@@ -166,6 +167,21 @@ describe("Minutes authenticated read BFF routes", () => {
     expect(client.fetchSearch).not.toHaveBeenCalled();
   });
 
+  test("preserves 413 semantics for search bodies above the parser cap", async () => {
+    const { app, client } = buildApp();
+    const response = await request(app)
+      .post("/api/minutes/search")
+      .set("content-type", "application/json")
+      .send(JSON.stringify({ query: "x".repeat(5_000) }));
+
+    expect(response.status).toBe(413);
+    expect(response.body).toMatchObject({
+      code: "minutes_request_too_large",
+      requestId: "req-browser-01",
+    });
+    expect(client.fetchSearch).not.toHaveBeenCalled();
+  });
+
   test("rejects arbitrary downstream paths and all read-plane mutations", async () => {
     const { app, client } = buildApp();
     expect((await request(app).get("/api/minutes/proxy/api/admin/users")).status).toBe(404);
@@ -199,5 +215,95 @@ describe("Minutes authenticated read BFF routes", () => {
     expect(invalid.status).toBe(502);
     expect(invalid.body.code).toBe("minutes_invalid_response");
     expect(JSON.stringify(invalid.body)).not.toContain("leak");
+  });
+
+  test("records content-free failure telemetry for upstream failures", async () => {
+    const recordFailure = jest.fn();
+    const { app } = buildApp({
+      recordFailure,
+      client: {
+        fetchSearch: jest.fn().mockResolvedValue(jsonResponse({ secret: "never-record" }, 401)),
+      },
+    });
+
+    await request(app)
+      .post("/api/minutes/search")
+      .send({ query: "sensitive acquisition discussion" });
+
+    expect(recordFailure).toHaveBeenCalledWith({
+      requestId: "req-browser-01",
+      operation: "search",
+      failure: "upstream_status",
+      upstreamStatus: 401,
+      durationMs: expect.any(Number),
+    });
+    expect(JSON.stringify(recordFailure.mock.calls)).not.toContain("sensitive acquisition");
+    expect(JSON.stringify(recordFailure.mock.calls)).not.toContain("never-record");
+    expect(JSON.stringify(recordFailure.mock.calls)).not.toContain("mmmmmmmm");
+  });
+
+  test("records the stable contract error code without recording response content", async () => {
+    const recordFailure = jest.fn();
+    const { app } = buildApp({
+      recordFailure,
+      client: {
+        fetchItem: jest.fn().mockResolvedValue(jsonResponse({ native_vexa_id: "private-source" })),
+      },
+    });
+
+    await request(app).get("/api/minutes/items/transcript_example_01");
+
+    expect(recordFailure).toHaveBeenCalledWith({
+      requestId: "req-browser-01",
+      operation: "item",
+      failure: "minutes_upstream_contract_invalid",
+      upstreamStatus: 200,
+      durationMs: expect.any(Number),
+    });
+    expect(JSON.stringify(recordFailure.mock.calls)).not.toContain("private-source");
+  });
+
+  test("records a stable availability code without recording thrown error detail", async () => {
+    const recordFailure = jest.fn();
+    const { app } = buildApp({
+      recordFailure,
+      client: {
+        fetchIndex: jest.fn().mockRejectedValue(new Error("socket failed for private query text")),
+      },
+    });
+
+    await request(app).get("/api/minutes/index");
+
+    expect(recordFailure).toHaveBeenCalledWith({
+      requestId: "req-browser-01",
+      operation: "index",
+      failure: "minutes_unavailable",
+      upstreamStatus: null,
+      durationMs: expect.any(Number),
+    });
+    expect(JSON.stringify(recordFailure.mock.calls)).not.toContain("private query text");
+  });
+
+  test("records configuration failures without recording configuration values", async () => {
+    const recordFailure = jest.fn();
+    const { app } = buildApp({
+      recordFailure,
+      client: {
+        fetchIndex: jest.fn().mockRejectedValue(
+          new Error("MINUTES_ENGINE_READ_TOKEN is invalid.")
+        ),
+      },
+    });
+
+    await request(app).get("/api/minutes/index");
+
+    expect(recordFailure).toHaveBeenCalledWith({
+      requestId: "req-browser-01",
+      operation: "index",
+      failure: "minutes_config_invalid",
+      upstreamStatus: null,
+      durationMs: expect.any(Number),
+    });
+    expect(JSON.stringify(recordFailure.mock.calls)).not.toContain("READ_TOKEN");
   });
 });
