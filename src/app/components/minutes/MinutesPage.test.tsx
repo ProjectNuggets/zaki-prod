@@ -7,6 +7,8 @@ import { MinutesPage } from "./MinutesPage";
 const mockList = jest.fn();
 const mockRead = jest.fn();
 const mockSearch = jest.fn();
+const mockRequestReauthentication = jest.fn();
+let mockToken = "session-a";
 
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -25,14 +27,24 @@ jest.mock("@/lib/minutesApi", () => ({
     }
   },
 }));
+jest.mock("@/lib/api", () => ({
+  requestReauthentication: (...args: unknown[]) => mockRequestReauthentication(...args),
+}));
+jest.mock("@/stores", () => ({
+  useAuthStore: (selector: (state: { token: string }) => unknown) => selector({ token: mockToken }),
+}));
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<MemoryRouter><QueryClientProvider client={client}><MinutesPage /></QueryClientProvider></MemoryRouter>);
+  const tree = () => <MemoryRouter><QueryClientProvider client={client}><MinutesPage /></QueryClientProvider></MemoryRouter>;
+  const view = render(tree());
+  return { ...view, rerenderPage: () => view.rerender(tree()) };
 }
 
 describe("MinutesPage read surface", () => {
   beforeEach(() => {
+    mockToken = "session-a";
+    mockRequestReauthentication.mockReset();
     mockList.mockReset().mockResolvedValue({
       items: [
         { id: "meeting:41", kind: "meeting", title: "Launch review", occurred_at: "2026-07-17T09:00:00Z", updated_at: "2026-07-17T10:00:00Z", sensitivity: "sensitive_pii", retention: { scope: "minutes.transcript", expires_at: "2027-07-17T10:00:00Z" } },
@@ -120,6 +132,22 @@ describe("MinutesPage read surface", () => {
     ]);
   });
 
+  it("terminates the limit state when the summary variant also exceeds the read cap", async () => {
+    mockRead
+      .mockRejectedValueOnce(new MinutesApiError(413, "minutes_item_too_large", "too large"))
+      .mockRejectedValueOnce(new MinutesApiError(413, "minutes_item_too_large", "summary too large"));
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Open transcript" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open summary instead" }));
+
+    expect(await screen.findByText("Summary cannot be opened")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open summary instead" })).not.toBeInTheDocument();
+    expect(mockRead.mock.calls).toEqual([
+      ["transcript:41", "full"],
+      ["transcript:41", "summary"],
+    ]);
+  });
+
   it("surfaces the sealed visible-capture attestation on transcript detail", async () => {
     mockRead.mockResolvedValueOnce({
       item: {
@@ -148,7 +176,89 @@ describe("MinutesPage read surface", () => {
     renderPage();
 
     expect(await screen.findByRole("heading", { name: "Your Minutes session ended" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Sign in again" })).toHaveAttribute("href", "/?next=%2Fminutes");
+    fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
+    expect(mockRequestReauthentication).toHaveBeenCalledWith("/minutes");
+  });
+
+  it("turns a search-time 401 into the same session recovery state", async () => {
+    mockSearch.mockRejectedValueOnce(new MinutesApiError(401, "unauthorized", "signed out"));
+    renderPage();
+    await screen.findByRole("heading", { name: "Launch review" });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search Minutes" }), {
+      target: { value: "launch" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(await screen.findByRole("heading", { name: "Your Minutes session ended" })).toBeInTheDocument();
+    expect(screen.queryByText("Search is unavailable. Your meeting list is still here.")).not.toBeInTheDocument();
+  });
+
+  it("turns a detail-time 401 into the same session recovery state", async () => {
+    mockRead.mockRejectedValueOnce(new MinutesApiError(401, "unauthorized", "signed out"));
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Open transcript" }));
+
+    expect(await screen.findByRole("heading", { name: "Your Minutes session ended" })).toBeInTheDocument();
+    expect(screen.queryByText("This item is not available")).not.toBeInTheDocument();
+  });
+
+  it("turns an archive-continuation 401 into the same session recovery state", async () => {
+    mockList
+      .mockReset()
+      .mockResolvedValueOnce({
+        items: [
+          { id: "meeting:41", kind: "meeting", title: "Launch review", occurred_at: "2026-07-17T09:00:00Z", updated_at: "2026-07-17T10:00:00Z", sensitivity: "sensitive_pii", retention: { scope: "minutes.transcript", expires_at: "2027-07-17T10:00:00Z" } },
+        ],
+        truncated: true,
+        next_cursor: "page-2",
+      })
+      .mockRejectedValueOnce(new MinutesApiError(401, "unauthorized", "signed out"));
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Load older meetings" }));
+
+    expect(await screen.findByRole("heading", { name: "Your Minutes session ended" })).toBeInTheDocument();
+    expect(screen.queryByText("Older meetings could not be loaded. The meetings above are still available.")).not.toBeInTheDocument();
+  });
+
+  it("recovers the archive after an in-app reauthentication replaces the session", async () => {
+    mockList
+      .mockReset()
+      .mockRejectedValueOnce(new MinutesApiError(401, "unauthorized", "signed out"))
+      .mockResolvedValueOnce({ items: [], truncated: false });
+    const { rerenderPage } = renderPage();
+    expect(await screen.findByRole("heading", { name: "Your Minutes session ended" })).toBeInTheDocument();
+
+    mockToken = "session-b";
+    rerenderPage();
+
+    expect(await screen.findByText("No captured meetings yet")).toBeInTheDocument();
+    expect(mockList).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps an item-based continuation reachable when the current page has no meeting row", async () => {
+    mockList
+      .mockReset()
+      .mockResolvedValueOnce({
+        items: [
+          { id: "transcript:41", kind: "transcript", meeting_id: "meeting:41", title: "Launch review transcript", occurred_at: "2026-07-17T09:00:00Z", updated_at: "2026-07-17T10:00:00Z", sensitivity: "sensitive_pii", retention: { scope: "minutes.transcript", expires_at: "2027-07-17T10:00:00Z" } },
+        ],
+        truncated: true,
+        next_cursor: "page-2",
+      })
+      .mockResolvedValueOnce({
+        items: [
+          { id: "meeting:41", kind: "meeting", title: "Launch review", occurred_at: "2026-07-17T09:00:00Z", updated_at: "2026-07-17T10:00:00Z", sensitivity: "sensitive_pii", retention: { scope: "minutes.transcript", expires_at: "2027-07-17T10:00:00Z" } },
+        ],
+        truncated: false,
+      });
+    renderPage();
+
+    expect(await screen.findByText("More meeting records are available")).toBeInTheDocument();
+    expect(screen.queryByText("No captured meetings yet")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Load older meetings" }));
+
+    expect(await screen.findByRole("heading", { name: "Launch review" })).toBeInTheDocument();
+    expect(mockList).toHaveBeenNthCalledWith(2, { cursor: "page-2", limit: 50 });
   });
 
   it("continues a truncated archive without hiding a partial older meeting", async () => {
