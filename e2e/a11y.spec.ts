@@ -85,7 +85,7 @@ test.describe("Accessibility (axe) — critical violations gate", () => {
   test("Settings (/settings) has no critical a11y violations", async ({ page }) => {
     await page.goto("/settings", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("settings-account")).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId("settings-privacy")).toBeVisible();
+    await expect(page.getByTestId("settings-privacy")).toHaveCount(0);
     await settle(page);
 
     const results = await new AxeBuilder({ page }).analyze();
@@ -93,7 +93,7 @@ test.describe("Accessibility (axe) — critical violations gate", () => {
   });
 
   test("TypeToConfirmDialog (delete account) has no critical a11y violations", async ({ page }) => {
-    await page.goto("/settings", { waitUntil: "domcontentloaded" });
+    await page.goto("/settings#settings-privacy", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("settings-privacy")).toBeVisible({ timeout: 20_000 });
     await settle(page);
 
