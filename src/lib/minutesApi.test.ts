@@ -27,9 +27,9 @@ describe("Minutes browser API", () => {
     await searchMinutes("launch review", 20);
 
     expect(request.mock.calls).toEqual([
-      ["/api/minutes/index?limit=50", { method: "GET" }],
-      ["/api/minutes/items/summary%3A41?variant=full", { method: "GET" }],
-      ["/api/minutes/search", { method: "POST", body: JSON.stringify({ query: "launch review", limit: 20 }) }],
+      ["/api/minutes/index?limit=50", { method: "GET", redirectOnAuthFailure: false }],
+      ["/api/minutes/items/summary%3A41?variant=full", { method: "GET", redirectOnAuthFailure: false }],
+      ["/api/minutes/search", { method: "POST", body: JSON.stringify({ query: "launch review", limit: 20 }), redirectOnAuthFailure: false }],
     ]);
   });
 });

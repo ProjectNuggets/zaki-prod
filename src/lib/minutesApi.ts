@@ -1,23 +1,51 @@
 import { backendAuthRequest } from "@/lib/api";
 
 export type MinutesKind = "meeting" | "transcript" | "summary";
-export type MinutesRetention = { scope: "minutes.transcript" | "minutes.summary"; expires_at: string };
-export type MinutesMetadata = {
+type MinutesCommonMetadata = {
   id: string;
-  kind: MinutesKind;
   title: string;
-  meeting_id?: string;
   occurred_at: string;
   updated_at: string;
   sensitivity: "sensitive_pii";
-  retention: MinutesRetention;
 };
-export type MinutesItem = MinutesMetadata & {
-  content:
-    | { format: "summary"; text: string }
-    | { format: "speaker_turns"; language?: string; turns: Array<{ speaker: string; text: string; started_at: string; ended_at?: string }> }
-    | { platform: string; started_at: string; ended_at: string; attendees: string[] };
+type MinutesTranscriptRetention = { scope: "minutes.transcript"; expires_at: string };
+type MinutesSummaryRetention = { scope: "minutes.summary"; expires_at: string };
+export type MinutesRetention = MinutesTranscriptRetention | MinutesSummaryRetention;
+export type MinutesCaptureNotice = {
+  bot_visible: true;
+  tenant_attested_at: string;
+  policy_version: string;
 };
+export type MinutesMetadata =
+  | (MinutesCommonMetadata & { kind: "meeting"; retention: MinutesTranscriptRetention })
+  | (MinutesCommonMetadata & { kind: "transcript"; meeting_id: string; retention: MinutesTranscriptRetention })
+  | (MinutesCommonMetadata & { kind: "summary"; meeting_id: string; retention: MinutesSummaryRetention });
+type MinutesSummaryContent = { format: "summary"; text: string };
+type MinutesTranscriptContent = {
+  format: "speaker_turns";
+  language?: string;
+  turns: Array<{ speaker: string; text: string; started_at: string; ended_at?: string }>;
+};
+export type MinutesItem =
+  | (MinutesCommonMetadata & {
+      kind: "meeting";
+      capture_notice: MinutesCaptureNotice;
+      retention: MinutesTranscriptRetention;
+      content: { platform: "google_meet" | "teams" | "zoom" | "jitsi"; started_at: string; ended_at: string; attendees: string[] };
+    })
+  | (MinutesCommonMetadata & {
+      kind: "transcript";
+      meeting_id: string;
+      capture_notice: MinutesCaptureNotice;
+      retention: MinutesTranscriptRetention;
+      content: MinutesTranscriptContent | MinutesSummaryContent;
+    })
+  | (MinutesCommonMetadata & {
+      kind: "summary";
+      meeting_id: string;
+      retention: MinutesSummaryRetention;
+      content: MinutesSummaryContent;
+    });
 export type MinutesIndexResponse = { items: MinutesMetadata[]; truncated: boolean; next_cursor?: string };
 export type MinutesItemResponse = { item: MinutesItem; truncated: false };
 
@@ -29,7 +57,7 @@ export class MinutesApiError extends Error {
 }
 
 async function minutesRequest<T>(path: string, init: RequestInit): Promise<T> {
-  const response = await backendAuthRequest(path, init);
+  const response = await backendAuthRequest(path, { ...init, redirectOnAuthFailure: false });
   let payload: unknown = null;
   try { payload = await response.json(); } catch { /* user-safe fallback below */ }
   if (!response.ok) {
