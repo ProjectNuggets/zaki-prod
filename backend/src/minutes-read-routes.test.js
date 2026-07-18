@@ -124,6 +124,36 @@ describe("Minutes authenticated read BFF routes", () => {
     }));
   });
 
+  test("rejects an upstream item whose opaque id differs from the requested item", async () => {
+    const { app } = buildApp({
+      client: {
+        fetchItem: jest.fn().mockResolvedValue(jsonResponse({
+          item: {
+            id: "summary:18",
+            kind: "summary",
+            title: "Wrong meeting summary",
+            meeting_id: "meeting:18",
+            occurred_at: "2026-07-18T09:00:00.000Z",
+            updated_at: "2026-07-18T10:00:00.000Z",
+            sensitivity: "sensitive_pii",
+            retention: {
+              scope: "minutes.summary",
+              expires_at: "2099-10-01T00:00:00.000Z",
+            },
+            content: { format: "summary", text: "Valid shape, wrong item." },
+          },
+          truncated: false,
+        })),
+      },
+    });
+
+    const response = await request(app).get("/api/minutes/items/summary%3A17?variant=full");
+
+    expect(response.status).toBe(502);
+    expect(response.body.code).toBe("minutes_invalid_response");
+    expect(JSON.stringify(response.body)).not.toContain("wrong item");
+  });
+
   test("accepts search only as bounded browser POST JSON", async () => {
     const { app, client } = buildApp();
     const response = await request(app)

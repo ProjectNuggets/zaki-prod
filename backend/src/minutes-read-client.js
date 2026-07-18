@@ -1,5 +1,9 @@
+import { z } from "zod";
+import { isValidMinutesReadToken } from "./minutes-read-secret.js";
+
 const MINUTES_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 const REQUEST_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
+const ISO_DATE_TIME = z.string().datetime({ offset: true });
 
 function hasControlCharacter(value) {
   return [...String(value)].some((character) => {
@@ -36,12 +40,7 @@ function requiredConfig({ baseUrl, readToken, userId, requestId, fetchWithTimeou
   if (!resolvedBase) throw new Error("MINUTES_ENGINE_BASE_URL is not configured.");
 
   const token = String(readToken || "");
-  if (
-    token.length < 32 ||
-    token.length > 512 ||
-    token !== token.trim() ||
-    [...token].some((character) => character.codePointAt(0) < 0x20 || character.codePointAt(0) > 0x7e)
-  ) {
+  if (!isValidMinutesReadToken(token)) {
     throw new Error("MINUTES_ENGINE_READ_TOKEN is invalid.");
   }
 
@@ -79,7 +78,7 @@ function optionalSince(value) {
   if (value === undefined || value === null || value === "") return null;
   if (typeof value !== "string") throw new Error("invalid_minutes_read_since");
   const since = String(value);
-  if (since.length > 80 || hasControlCharacter(since) || !Number.isFinite(Date.parse(since))) {
+  if (since.length > 80 || hasControlCharacter(since) || !ISO_DATE_TIME.safeParse(since).success) {
     throw new Error("invalid_minutes_read_since");
   }
   return since;

@@ -1,4 +1,6 @@
 import { LEGAL_POLICY_VERSION_FALLBACK } from "./legal-consent.js";
+import path from "node:path";
+import { isValidMinutesReadToken } from "./minutes-read-secret.js";
 
 const PROD = "production";
 
@@ -45,16 +47,6 @@ function hasHttpOrigin(value) {
   }
 }
 
-function hasDedicatedReadToken(value) {
-  const token = String(value ?? "");
-  return (
-    token.length >= 32 &&
-    token.length <= 512 &&
-    token === token.trim() &&
-    /^[\x20-\x7e]+$/.test(token)
-  );
-}
-
 function hasUnsafeOrigin(origin) {
   return /^file:\/\//i.test(origin) || /localhost|127\.0\.0\.1/i.test(origin);
 }
@@ -95,6 +87,7 @@ export function validateRuntimeConfig(env = process.env) {
   const minutesEnabled = isTruthyBoolean(env.ZAKI_MINUTES_ENABLED);
   const minutesBaseUrl = normalize(env.MINUTES_ENGINE_BASE_URL);
   const minutesReadToken = String(env.MINUTES_ENGINE_READ_TOKEN ?? "");
+  const minutesReadTokenFile = normalize(env.MINUTES_ENGINE_READ_TOKEN_FILE);
   const designEnabled = isTruthyBoolean(env.ZAKI_DESIGN_ENABLED);
   const designControllerEnabled = isTruthyBoolean(env.ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED);
   const designBaseUrl = normalize(env.DESIGN_ENGINE_BASE_URL);
@@ -300,14 +293,34 @@ export function validateRuntimeConfig(env = process.env) {
         "MINUTES_ENGINE_BASE_URL must be a fixed HTTP(S) origin without credentials, path, query, or fragment."
       );
     }
-    if (!hasDedicatedReadToken(minutesReadToken)) {
+    if (minutesReadTokenFile && !path.isAbsolute(minutesReadTokenFile)) {
+      pushIssue(
+        errors,
+        "MINUTES_ENGINE_READ_TOKEN_FILE",
+        "MINUTES_ENGINE_READ_TOKEN_FILE must be an absolute secret-file path."
+      );
+    }
+    if (isProduction && minutesReadToken) {
       pushIssue(
         errors,
         "MINUTES_ENGINE_READ_TOKEN",
-        "MINUTES_ENGINE_READ_TOKEN must be a dedicated 32-512 character printable ASCII token without surrounding whitespace."
+        "MINUTES_ENGINE_READ_TOKEN cannot carry a production credential; use MINUTES_ENGINE_READ_TOKEN_FILE."
       );
     }
-  } else if (minutesBaseUrl || minutesReadToken) {
+    if (isProduction && !minutesReadTokenFile) {
+      pushIssue(
+        errors,
+        "MINUTES_ENGINE_READ_TOKEN_FILE",
+        "MINUTES_ENGINE_READ_TOKEN_FILE is required in production when ZAKI_MINUTES_ENABLED=true."
+      );
+    } else if (!minutesReadTokenFile && !isValidMinutesReadToken(minutesReadToken)) {
+      pushIssue(
+        errors,
+        "MINUTES_ENGINE_READ_TOKEN",
+        "MINUTES_ENGINE_READ_TOKEN must be a dedicated 32-512 character printable ASCII local-development token without surrounding whitespace."
+      );
+    }
+  } else if (minutesBaseUrl || minutesReadToken || minutesReadTokenFile) {
     pushIssue(
       warnings,
       "ZAKI_MINUTES_ENABLED",

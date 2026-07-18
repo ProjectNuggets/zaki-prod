@@ -422,6 +422,31 @@ describe("runtime config validation", () => {
     ]));
   });
 
+  it("requires file-projected Minutes credentials in production and rejects env-carried secrets", () => {
+    const envSecret = validateRuntimeConfig(
+      createBaseEnv({
+        NODE_ENV: "production",
+        ZAKI_MINUTES_ENABLED: "true",
+        MINUTES_ENGINE_BASE_URL: "http://zaki-minutes-engine:8056",
+        MINUTES_ENGINE_READ_TOKEN: "m".repeat(32),
+      })
+    );
+    expect(envSecret.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "MINUTES_ENGINE_READ_TOKEN" }),
+      expect.objectContaining({ key: "MINUTES_ENGINE_READ_TOKEN_FILE" }),
+    ]));
+
+    const projected = validateRuntimeConfig(
+      createBaseEnv({
+        NODE_ENV: "production",
+        ZAKI_MINUTES_ENABLED: "true",
+        MINUTES_ENGINE_BASE_URL: "http://zaki-minutes-engine:8056",
+        MINUTES_ENGINE_READ_TOKEN_FILE: "/run/secrets/zaki-read/minutes",
+      })
+    );
+    expect(projected.errors.find((issue) => issue.key.startsWith("MINUTES_ENGINE"))).toBeUndefined();
+  });
+
   it("requires the complete split-token controller contract when the Design session controller is enabled", () => {
     const report = validateRuntimeConfig(
       createBaseEnv({

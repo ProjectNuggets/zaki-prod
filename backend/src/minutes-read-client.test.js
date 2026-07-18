@@ -131,6 +131,18 @@ describe("Minutes read client", () => {
     expect(fetchWithTimeout).not.toHaveBeenCalled();
   });
 
+  test("rejects parseable but non-ISO index timestamps before network work", async () => {
+    const fetchWithTimeout = jest.fn();
+
+    await expect(fetchMinutesIndex({
+      ...BASE_OPTIONS,
+      since: "July 1, 2026",
+      fetchWithTimeout,
+    })).rejects.toThrow("invalid_minutes_read_since");
+
+    expect(fetchWithTimeout).not.toHaveBeenCalled();
+  });
+
   test("fails before network work for invalid credentials, identity, controls, and item ids", async () => {
     const fetchWithTimeout = jest.fn();
     const cases = [

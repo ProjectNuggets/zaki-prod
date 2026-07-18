@@ -201,6 +201,7 @@ import {
   bypassMinutesReadBodyParser,
   isMinutesEnabled,
 } from "./minutes-read-routes.js";
+import { resolveMinutesReadToken } from "./minutes-read-secret.js";
 import {
   buildDesignConfigErrorPayload,
   buildDesignDisabledPayload,
@@ -678,8 +679,15 @@ const ZAKI_LEARNING_ENABLED = isLearningEnabled(process.env.ZAKI_LEARNING_ENABLE
 const MINUTES_ENGINE_BASE_URL = (process.env.MINUTES_ENGINE_BASE_URL || "")
   .trim()
   .replace(/\/+$/, "");
-const MINUTES_ENGINE_READ_TOKEN = process.env.MINUTES_ENGINE_READ_TOKEN || "";
 const ZAKI_MINUTES_ENABLED = isMinutesEnabled(process.env.ZAKI_MINUTES_ENABLED);
+function getMinutesEngineReadToken() {
+  if (!ZAKI_MINUTES_ENABLED) return "";
+  return resolveMinutesReadToken({
+    tokenFile: process.env.MINUTES_ENGINE_READ_TOKEN_FILE,
+    fallbackToken: process.env.MINUTES_ENGINE_READ_TOKEN,
+    readFileSync: fs.readFileSync,
+  });
+}
 const minutesRequestTimeout = Number(process.env.MINUTES_ENGINE_REQUEST_TIMEOUT_MS || 10_000);
 const MINUTES_ENGINE_REQUEST_TIMEOUT_MS = Number.isFinite(minutesRequestTimeout)
   ? Math.min(30_000, Math.max(1_000, minutesRequestTimeout))
@@ -18384,7 +18392,7 @@ app.use(
 app.use("/api/minutes", buildMinutesReadRouter({
   enabled: ZAKI_MINUTES_ENABLED,
   baseUrl: MINUTES_ENGINE_BASE_URL,
-  readToken: MINUTES_ENGINE_READ_TOKEN,
+  readToken: getMinutesEngineReadToken(),
   timeoutMs: MINUTES_ENGINE_REQUEST_TIMEOUT_MS,
   resolveUser: requireAuthUser,
   getRequestId: getOrCreateRequestId,

@@ -263,7 +263,16 @@ export function buildMinutesReadRouter({
         itemId: req.params.itemId,
         variant: req.query.variant,
       }),
-      parseMinutesItemResponse
+      (payload) => {
+        const parsed = parseMinutesItemResponse(payload);
+        if (parsed.item.id !== req.params.itemId) {
+          throw new MinutesReadContractError(
+            "Minutes upstream returned a different item.",
+            "minutes_upstream_item_mismatch"
+          );
+        }
+        return parsed;
+      }
     );
   });
 
