@@ -12,13 +12,13 @@ function MinutesIntroduction() {
   return <main className="min-h-full bg-[var(--v2-bg)] p-4 text-[var(--v2-ink-1)] md:p-8" data-product-id="minutes">
     <div className="mx-auto grid max-w-5xl gap-px bg-[var(--v2-hairline)] lg:grid-cols-[1.25fr_0.75fr]">
       <section className="bg-[var(--v2-bg)] p-7 md:p-12">
-        <div className="mb-5 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--v2-accent)]"><Clock3 className="size-4" aria-hidden />{t("minutes.intro.kicker", { defaultValue: "ZAKI Minutes" })}</div>
+        <div className="mb-5 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--v2-ink-2)]"><Clock3 className="size-4 text-[var(--v2-accent)]" aria-hidden />{t("minutes.intro.kicker", { defaultValue: "ZAKI Minutes" })}</div>
         <h1 className="max-w-xl text-3xl font-semibold tracking-tight md:text-5xl">{t("minutes.intro.title", { defaultValue: "Your meetings, made reviewable" })}</h1>
         <p className="mt-5 max-w-xl text-sm leading-7 text-[var(--v2-ink-2)]">{t("minutes.intro.body", { defaultValue: "Minutes keeps consented meeting captures in a private, retention-bounded archive with speaker-attributed transcripts and concise summaries." })}</p>
-        <Link className="v2-btn v2-btn--accent v2-btn--sm mt-7" to="/?next=%2Fminutes">{t("minutes.intro.signIn", { defaultValue: "Sign in to open Minutes" })}<ArrowRight className="size-3.5" aria-hidden /></Link>
+        <Link className="v2-btn v2-btn--primary v2-btn--sm mt-7" to="/?next=%2Fminutes">{t("minutes.intro.signIn", { defaultValue: "Sign in to open Minutes" })}<ArrowRight className="size-3.5" aria-hidden /></Link>
       </section>
       <V2Panel className="rounded-none border-0 bg-[var(--v2-bg-raised)]">
-        <V2PanelHead title={t("minutes.intro.policyTitle", { defaultValue: "Capture boundary" })} meta="READ ONLY" />
+        <V2PanelHead title={t("minutes.intro.policyTitle", { defaultValue: "Capture boundary" })} meta={t("minutes.readOnlyMeta", { defaultValue: "Read only" })} />
         <V2PanelBody className="space-y-5">
           <div className="flex items-center gap-3"><ShieldCheck className="size-5 text-[var(--v2-accent)]" aria-hidden /><div><strong className="block text-sm">{t("minutes.intro.visibleBot", { defaultValue: "Visible capture" })}</strong><span className="text-xs text-[var(--v2-ink-3)]">{t("minutes.intro.visibleBotBody", { defaultValue: "Only attested ZAKI Notetaker meetings appear." })}</span></div></div>
           <div className="flex items-center gap-3"><FileText className="size-5 text-[var(--v2-accent)]" aria-hidden /><div><strong className="block text-sm">{t("minutes.intro.retention", { defaultValue: "Named retention" })}</strong><span className="text-xs text-[var(--v2-ink-3)]">{t("minutes.intro.retentionBody", { defaultValue: "Every transcript and summary shows its expiry." })}</span></div></div>

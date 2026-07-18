@@ -1,24 +1,34 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import { MinutesApiError } from "@/lib/minutesApi";
 import { MinutesPage } from "./MinutesPage";
 
 const mockList = jest.fn();
 const mockRead = jest.fn();
+const mockSearch = jest.fn();
 
 jest.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (_key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? _key }),
+  useTranslation: () => ({
+    t: (_key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? _key,
+    i18n: { resolvedLanguage: "en", language: "en" },
+  }),
 }));
 
 jest.mock("@/lib/minutesApi", () => ({
   listMinutes: (...args: unknown[]) => mockList(...args),
   readMinutesItem: (...args: unknown[]) => mockRead(...args),
-  searchMinutes: jest.fn(),
-  MinutesApiError: class MinutesApiError extends Error {},
+  searchMinutes: (...args: unknown[]) => mockSearch(...args),
+  MinutesApiError: class MinutesApiError extends Error {
+    constructor(public status: number, public code: string, message: string) {
+      super(message);
+    }
+  },
 }));
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}><MinutesPage /></QueryClientProvider>);
+  return render(<MemoryRouter><QueryClientProvider client={client}><MinutesPage /></QueryClientProvider></MemoryRouter>);
 }
 
 describe("MinutesPage read surface", () => {
@@ -35,6 +45,12 @@ describe("MinutesPage read surface", () => {
       item: { id: "summary:41", kind: "summary", title: "Launch review", meeting_id: "meeting:41", occurred_at: "2026-07-17T09:00:00Z", updated_at: "2026-07-17T10:00:00Z", sensitivity: "sensitive_pii", retention: { scope: "minutes.summary", expires_at: "2027-07-17T10:00:00Z" }, content: { format: "summary", text: "Decision log" } },
       truncated: false,
     });
+    mockSearch.mockReset().mockResolvedValue({
+      items: [
+        { id: "summary:41", kind: "summary", meeting_id: "meeting:41", title: "Launch review", occurred_at: "2026-07-17T09:00:00Z", updated_at: "2026-07-17T10:00:00Z", sensitivity: "sensitive_pii", retention: { scope: "minutes.summary", expires_at: "2027-07-17T10:00:00Z" } },
+      ],
+      truncated: false,
+    });
   });
 
   it("moves from the meeting list to a bounded summary detail", async () => {
@@ -43,5 +59,119 @@ describe("MinutesPage read surface", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open summary" }));
     expect(await screen.findByText("Decision log")).toBeInTheDocument();
     expect(mockRead).toHaveBeenCalledWith("summary:41", "full");
+  });
+
+  it("searches through the BFF and opens a metadata-only result", async () => {
+    renderPage();
+    await screen.findByRole("heading", { name: "Launch review" });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search Minutes" }), {
+      target: { value: "launch decision" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(await screen.findByRole("button", { name: "Open result: Launch review" })).toBeInTheDocument();
+    expect(mockSearch).toHaveBeenCalledWith("launch decision", 20);
+    fireEvent.click(screen.getByRole("button", { name: "Open result: Launch review" }));
+    expect(await screen.findByText("Decision log")).toBeInTheDocument();
+  });
+
+  it("continues truncated search results with the opaque cursor", async () => {
+    mockSearch
+      .mockReset()
+      .mockResolvedValueOnce({
+        items: [
+          { id: "summary:41", kind: "summary", meeting_id: "meeting:41", title: "Launch review", occurred_at: "2026-07-17T09:00:00Z", updated_at: "2026-07-17T10:00:00Z", sensitivity: "sensitive_pii", retention: { scope: "minutes.summary", expires_at: "2027-07-17T10:00:00Z" } },
+        ],
+        truncated: true,
+        next_cursor: "search-page-2",
+      })
+      .mockResolvedValueOnce({
+        items: [
+          { id: "summary:12", kind: "summary", meeting_id: "meeting:12", title: "Earlier planning", occurred_at: "2026-06-12T09:00:00Z", updated_at: "2026-06-12T10:00:00Z", sensitivity: "sensitive_pii", retention: { scope: "minutes.summary", expires_at: "2027-06-12T10:00:00Z" } },
+        ],
+        truncated: false,
+      });
+    renderPage();
+    await screen.findByRole("heading", { name: "Launch review" });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search Minutes" }), { target: { value: "planning" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Load more search results" }));
+    expect(await screen.findByRole("button", { name: "Open result: Earlier planning" })).toBeInTheDocument();
+    expect(mockSearch).toHaveBeenNthCalledWith(2, "planning", 20, "search-page-2");
+  });
+
+  it("offers the sealed summary variant when a transcript exceeds the item cap", async () => {
+    mockRead
+      .mockRejectedValueOnce(new MinutesApiError(413, "minutes_item_too_large", "too large"))
+      .mockResolvedValueOnce({
+        item: { id: "transcript:41", kind: "transcript", title: "Launch review", meeting_id: "meeting:41", occurred_at: "2026-07-17T09:00:00Z", updated_at: "2026-07-17T10:00:00Z", sensitivity: "sensitive_pii", retention: { scope: "minutes.transcript", expires_at: "2027-07-17T10:00:00Z" }, content: { format: "summary", text: "Decision log" } },
+        truncated: false,
+      });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Open transcript" }));
+
+    expect(await screen.findByText("This transcript is too large to open in full.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open summary instead" }));
+    expect(await screen.findByText("Decision log")).toBeInTheDocument();
+    expect(mockRead.mock.calls).toEqual([
+      ["transcript:41", "full"],
+      ["transcript:41", "summary"],
+    ]);
+  });
+
+  it("surfaces the sealed visible-capture attestation on transcript detail", async () => {
+    mockRead.mockResolvedValueOnce({
+      item: {
+        id: "transcript:41",
+        kind: "transcript",
+        title: "Launch review",
+        meeting_id: "meeting:41",
+        occurred_at: "2026-07-17T09:00:00Z",
+        updated_at: "2026-07-17T10:00:00Z",
+        sensitivity: "sensitive_pii",
+        retention: { scope: "minutes.transcript", expires_at: "2027-07-17T10:00:00Z" },
+        capture_notice: { bot_visible: true, tenant_attested_at: "2026-07-17T08:55:00Z", policy_version: "minutes-consent-v1" },
+        content: { format: "speaker_turns", turns: [{ speaker: "Nova", text: "Ship the read boundary.", started_at: "2026-07-17T09:00:00Z" }] },
+      },
+      truncated: false,
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Open transcript" }));
+    expect(await screen.findByText("Visible capture verified")).toBeInTheDocument();
+    expect(screen.getByText("minutes-consent-v1")).toBeInTheDocument();
+  });
+
+  it("turns an expired browser session into an explicit sign-in recovery", async () => {
+    mockList.mockRejectedValueOnce(new MinutesApiError(401, "unauthorized", "signed out"));
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Your Minutes session ended" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Sign in again" })).toHaveAttribute("href", "/?next=%2Fminutes");
+  });
+
+  it("continues a truncated archive without hiding a partial older meeting", async () => {
+    mockList
+      .mockReset()
+      .mockResolvedValueOnce({
+        items: [
+          { id: "meeting:41", kind: "meeting", title: "Launch review", occurred_at: "2026-07-17T09:00:00Z", updated_at: "2026-07-17T10:00:00Z", sensitivity: "sensitive_pii", retention: { scope: "minutes.transcript", expires_at: "2027-07-17T10:00:00Z" } },
+        ],
+        truncated: true,
+        next_cursor: "page-2",
+      })
+      .mockResolvedValueOnce({
+        items: [
+          { id: "meeting:12", kind: "meeting", title: "Earlier planning", occurred_at: "2026-06-12T09:00:00Z", updated_at: "2026-06-12T10:00:00Z", sensitivity: "sensitive_pii", retention: { scope: "minutes.transcript", expires_at: "2027-06-12T10:00:00Z" } },
+        ],
+        truncated: false,
+      });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Load older meetings" }));
+    expect(await screen.findByRole("heading", { name: "Earlier planning" })).toBeInTheDocument();
+    expect(screen.getAllByText("Summary not available yet.")).toHaveLength(2);
+    expect(mockList).toHaveBeenNthCalledWith(2, { cursor: "page-2", limit: 50 });
   });
 });
