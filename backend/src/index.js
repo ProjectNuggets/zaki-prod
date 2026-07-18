@@ -201,6 +201,12 @@ import {
   shouldConsumeLearningWsQuota,
 } from "./learning-bff-contract.js";
 import {
+  buildMinutesReadRouter,
+  bypassMinutesReadBodyParser,
+  isMinutesEnabled,
+} from "./minutes-read-routes.js";
+import { resolveMinutesReadToken } from "./minutes-read-secret.js";
+import {
   buildDesignConfigErrorPayload,
   buildDesignDisabledPayload,
   classifyDesignMeterActionForIngress,
@@ -674,6 +680,22 @@ const LEARNING_ENGINE_INTERNAL_TOKEN = (
   process.env.LEARNING_ENGINE_INTERNAL_TOKEN || ""
 ).trim();
 const ZAKI_LEARNING_ENABLED = isLearningEnabled(process.env.ZAKI_LEARNING_ENABLED);
+const MINUTES_ENGINE_BASE_URL = (process.env.MINUTES_ENGINE_BASE_URL || "")
+  .trim()
+  .replace(/\/+$/, "");
+const ZAKI_MINUTES_ENABLED = isMinutesEnabled(process.env.ZAKI_MINUTES_ENABLED);
+function getMinutesEngineReadToken() {
+  if (!ZAKI_MINUTES_ENABLED) return "";
+  return resolveMinutesReadToken({
+    tokenFile: process.env.MINUTES_ENGINE_READ_TOKEN_FILE,
+    fallbackToken: process.env.MINUTES_ENGINE_READ_TOKEN,
+    readFileSync: fs.readFileSync,
+  });
+}
+const minutesRequestTimeout = Number(process.env.MINUTES_ENGINE_REQUEST_TIMEOUT_MS || 10_000);
+const MINUTES_ENGINE_REQUEST_TIMEOUT_MS = Number.isFinite(minutesRequestTimeout)
+  ? Math.min(30_000, Math.max(1_000, minutesRequestTimeout))
+  : 10_000;
 const DESIGN_ENGINE_BASE_URL = (process.env.DESIGN_ENGINE_BASE_URL || "")
   .trim()
   .replace(/\/+$/, "");
@@ -2585,14 +2607,14 @@ const stripeWebhookHandler = createStripeWebhookHandler({
 app.post("/api/billing/webhook", express.raw({ type: "application/json" }), stripeWebhookHandler);
 
 // Request size limits to prevent memory exhaustion
-app.use(bypassDesignOwnedBodyParser(
+app.use(bypassMinutesReadBodyParser(bypassDesignOwnedBodyParser(
   express.json({ limit: '10mb' }),
   { controllerEnabled: ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED },
-));
-app.use(bypassDesignOwnedBodyParser(
+)));
+app.use(bypassMinutesReadBodyParser(bypassDesignOwnedBodyParser(
   express.urlencoded({ extended: true, limit: '10mb' }),
   { controllerEnabled: ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED },
-));
+)));
 
 // Normalize JSON parsing failures to API-friendly responses.
 app.use((err, req, res, next) => {
@@ -18367,6 +18389,20 @@ app.use(
     },
   })
 );
+
+// =============================================================================
+// MINUTES READ BFF
+// =============================================================================
+app.use("/api/minutes", buildMinutesReadRouter({
+  enabled: ZAKI_MINUTES_ENABLED,
+  baseUrl: MINUTES_ENGINE_BASE_URL,
+  readToken: getMinutesEngineReadToken(),
+  timeoutMs: MINUTES_ENGINE_REQUEST_TIMEOUT_MS,
+  resolveUser: requireAuthUser,
+  getRequestId: getOrCreateRequestId,
+  fetchWithTimeout,
+  recordFailure: (event) => logStructured("warn", "minutes.read.failed", event),
+}));
 
 // =============================================================================
 // DESIGN ENGINE BFF

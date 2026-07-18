@@ -1,4 +1,6 @@
 import { LEGAL_POLICY_VERSION_FALLBACK } from "./legal-consent.js";
+import path from "node:path";
+import { isValidMinutesReadToken } from "./minutes-read-secret.js";
 
 const PROD = "production";
 
@@ -27,6 +29,22 @@ function hasHttpsUrl(value) {
 
 function hasHttpUrl(value) {
   return /^https?:\/\//i.test(normalize(value));
+}
+
+function hasHttpOrigin(value) {
+  try {
+    const parsed = new URL(normalize(value));
+    return (
+      ["http:", "https:"].includes(parsed.protocol) &&
+      !parsed.username &&
+      !parsed.password &&
+      parsed.pathname === "/" &&
+      !parsed.search &&
+      !parsed.hash
+    );
+  } catch {
+    return false;
+  }
 }
 
 function hasUnsafeOrigin(origin) {
@@ -66,6 +84,10 @@ export function validateRuntimeConfig(env = process.env) {
   const learningEnabled = isTruthyBoolean(env.ZAKI_LEARNING_ENABLED);
   const learningBaseUrl = normalize(env.LEARNING_ENGINE_BASE_URL);
   const learningInternalToken = normalize(env.LEARNING_ENGINE_INTERNAL_TOKEN);
+  const minutesEnabled = isTruthyBoolean(env.ZAKI_MINUTES_ENABLED);
+  const minutesBaseUrl = normalize(env.MINUTES_ENGINE_BASE_URL);
+  const minutesReadToken = String(env.MINUTES_ENGINE_READ_TOKEN ?? "");
+  const minutesReadTokenFile = normalize(env.MINUTES_ENGINE_READ_TOKEN_FILE);
   const designEnabled = isTruthyBoolean(env.ZAKI_DESIGN_ENABLED);
   const designControllerEnabled = isTruthyBoolean(env.ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED);
   const designBaseUrl = normalize(env.DESIGN_ENGINE_BASE_URL);
@@ -255,6 +277,54 @@ export function validateRuntimeConfig(env = process.env) {
       warnings,
       "ZAKI_LEARNING_ENABLED",
       "Learning engine config is present, but ZAKI_LEARNING_ENABLED is not true."
+    );
+  }
+  if (minutesEnabled) {
+    if (!minutesBaseUrl) {
+      pushIssue(
+        errors,
+        "MINUTES_ENGINE_BASE_URL",
+        "MINUTES_ENGINE_BASE_URL is required when ZAKI_MINUTES_ENABLED=true."
+      );
+    } else if (!hasHttpOrigin(minutesBaseUrl)) {
+      pushIssue(
+        errors,
+        "MINUTES_ENGINE_BASE_URL",
+        "MINUTES_ENGINE_BASE_URL must be a fixed HTTP(S) origin without credentials, path, query, or fragment."
+      );
+    }
+    if (minutesReadTokenFile && !path.isAbsolute(minutesReadTokenFile)) {
+      pushIssue(
+        errors,
+        "MINUTES_ENGINE_READ_TOKEN_FILE",
+        "MINUTES_ENGINE_READ_TOKEN_FILE must be an absolute secret-file path."
+      );
+    }
+    if (isProduction && minutesReadToken) {
+      pushIssue(
+        errors,
+        "MINUTES_ENGINE_READ_TOKEN",
+        "MINUTES_ENGINE_READ_TOKEN cannot carry a production credential; use MINUTES_ENGINE_READ_TOKEN_FILE."
+      );
+    }
+    if (isProduction && !minutesReadTokenFile) {
+      pushIssue(
+        errors,
+        "MINUTES_ENGINE_READ_TOKEN_FILE",
+        "MINUTES_ENGINE_READ_TOKEN_FILE is required in production when ZAKI_MINUTES_ENABLED=true."
+      );
+    } else if (!minutesReadTokenFile && !isValidMinutesReadToken(minutesReadToken)) {
+      pushIssue(
+        errors,
+        "MINUTES_ENGINE_READ_TOKEN",
+        "MINUTES_ENGINE_READ_TOKEN must be a dedicated 32-512 character printable ASCII local-development token without surrounding whitespace."
+      );
+    }
+  } else if (minutesBaseUrl || minutesReadToken || minutesReadTokenFile) {
+    pushIssue(
+      warnings,
+      "ZAKI_MINUTES_ENABLED",
+      "Minutes read config is present, but ZAKI_MINUTES_ENABLED is not true."
     );
   }
   if (designControllerEnabled) {

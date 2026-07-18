@@ -373,6 +373,80 @@ describe("runtime config validation", () => {
     );
   });
 
+  it("requires a fixed Minutes read origin and dedicated token when enabled", () => {
+    const missing = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_MINUTES_ENABLED: "true",
+        MINUTES_ENGINE_BASE_URL: "",
+        MINUTES_ENGINE_READ_TOKEN: "",
+      })
+    );
+    expect(missing.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "MINUTES_ENGINE_BASE_URL" }),
+      expect.objectContaining({ key: "MINUTES_ENGINE_READ_TOKEN" }),
+    ]));
+
+    const unsafe = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_MINUTES_ENABLED: "true",
+        MINUTES_ENGINE_BASE_URL: "https://user:secret@minutes.example.test/api/zaki/read/v1",
+        MINUTES_ENGINE_READ_TOKEN: "short",
+      })
+    );
+    expect(unsafe.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "MINUTES_ENGINE_BASE_URL" }),
+      expect.objectContaining({ key: "MINUTES_ENGINE_READ_TOKEN" }),
+    ]));
+  });
+
+  it("accepts sealed Minutes read config and warns when credentials are staged behind the disabled gate", () => {
+    const enabled = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_MINUTES_ENABLED: "true",
+        MINUTES_ENGINE_BASE_URL: "http://zaki-minutes-engine:8056",
+        MINUTES_ENGINE_READ_TOKEN: "m".repeat(32),
+      })
+    );
+    expect(enabled.errors.find((issue) => issue.key.startsWith("MINUTES_ENGINE"))).toBeUndefined();
+
+    const disabled = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_MINUTES_ENABLED: "false",
+        MINUTES_ENGINE_BASE_URL: "http://zaki-minutes-engine:8056",
+        MINUTES_ENGINE_READ_TOKEN: "m".repeat(32),
+      })
+    );
+    expect(disabled.errors.find((issue) => issue.key.startsWith("MINUTES_ENGINE"))).toBeUndefined();
+    expect(disabled.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "ZAKI_MINUTES_ENABLED" }),
+    ]));
+  });
+
+  it("requires file-projected Minutes credentials in production and rejects env-carried secrets", () => {
+    const envSecret = validateRuntimeConfig(
+      createBaseEnv({
+        NODE_ENV: "production",
+        ZAKI_MINUTES_ENABLED: "true",
+        MINUTES_ENGINE_BASE_URL: "http://zaki-minutes-engine:8056",
+        MINUTES_ENGINE_READ_TOKEN: "m".repeat(32),
+      })
+    );
+    expect(envSecret.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "MINUTES_ENGINE_READ_TOKEN" }),
+      expect.objectContaining({ key: "MINUTES_ENGINE_READ_TOKEN_FILE" }),
+    ]));
+
+    const projected = validateRuntimeConfig(
+      createBaseEnv({
+        NODE_ENV: "production",
+        ZAKI_MINUTES_ENABLED: "true",
+        MINUTES_ENGINE_BASE_URL: "http://zaki-minutes-engine:8056",
+        MINUTES_ENGINE_READ_TOKEN_FILE: "/run/secrets/zaki-read/minutes",
+      })
+    );
+    expect(projected.errors.find((issue) => issue.key.startsWith("MINUTES_ENGINE"))).toBeUndefined();
+  });
+
   it("requires the complete split-token controller contract when the Design session controller is enabled", () => {
     const report = validateRuntimeConfig(
       createBaseEnv({
