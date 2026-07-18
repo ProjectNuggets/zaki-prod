@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { MinutesApiError } from "@/lib/minutesApi";
+import { MinutesApiError, type MinutesIndexResponse } from "@/lib/minutesApi";
 import { MinutesPage } from "./MinutesPage";
 
 const mockList = jest.fn();
@@ -234,6 +234,60 @@ describe("MinutesPage read surface", () => {
 
     expect(await screen.findByText("No captured meetings yet")).toBeInTheDocument();
     expect(mockList).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not expose the previous session archive while the replacement session loads", async () => {
+    let resolveReplacementArchive: ((value: MinutesIndexResponse) => void) | undefined;
+    mockList
+      .mockReset()
+      .mockResolvedValueOnce({
+        items: [
+          { id: "meeting:private-a", kind: "meeting", title: "Account A confidential", occurred_at: "2026-07-17T09:00:00Z", updated_at: "2026-07-17T10:00:00Z", sensitivity: "sensitive_pii", retention: { scope: "minutes.transcript", expires_at: "2027-07-17T10:00:00Z" } },
+        ],
+        truncated: false,
+      })
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveReplacementArchive = resolve;
+      }));
+    const { rerenderPage } = renderPage();
+    expect(await screen.findByRole("heading", { name: "Account A confidential" })).toBeInTheDocument();
+
+    mockToken = "session-b";
+    rerenderPage();
+
+    expect(screen.queryByRole("heading", { name: "Account A confidential" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Loading Minutes")).toBeInTheDocument();
+
+    resolveReplacementArchive?.({ items: [], truncated: false });
+    expect(await screen.findByText("No captured meetings yet")).toBeInTheDocument();
+  });
+
+  it("ignores a previous session search that resolves after the session changes", async () => {
+    let resolveAccountASearch: ((value: MinutesIndexResponse) => void) | undefined;
+    mockList.mockReset().mockResolvedValue({ items: [], truncated: false });
+    mockSearch.mockReset().mockImplementationOnce(() => new Promise((resolve) => {
+      resolveAccountASearch = resolve;
+    }));
+    const { rerenderPage } = renderPage();
+    await screen.findByText("No captured meetings yet");
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search Minutes" }), {
+      target: { value: "account a" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    mockToken = "session-b";
+    rerenderPage();
+    await screen.findByText("No captured meetings yet");
+    await act(async () => {
+      resolveAccountASearch?.({
+        items: [
+          { id: "summary:private-a", kind: "summary", meeting_id: "meeting:private-a", title: "Account A search secret", occurred_at: "2026-07-17T09:00:00Z", updated_at: "2026-07-17T10:00:00Z", sensitivity: "sensitive_pii", retention: { scope: "minutes.summary", expires_at: "2027-07-17T10:00:00Z" } },
+        ],
+        truncated: false,
+      });
+    });
+
+    expect(screen.queryByRole("button", { name: "Open result: Account A search secret" })).not.toBeInTheDocument();
   });
 
   it("keeps an item-based continuation reachable when the current page has no meeting row", async () => {
