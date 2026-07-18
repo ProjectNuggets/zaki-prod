@@ -38,6 +38,10 @@ import {
   evaluateSignupAgePolicy,
 } from "./signup-policy.js";
 import { completeEmailSignup } from "./email-signup-user.js";
+import {
+  appendTransactionalEmailLegalHtml,
+  appendTransactionalEmailLegalText,
+} from "./transactional-email-legal.js";
 import { validateRuntimeConfig } from "./config-validation.js";
 import { bypassDesignOwnedBodyParser } from "./design-body-parser-boundary.js";
 import {
@@ -6257,7 +6261,7 @@ function buildEmailShell({
             </tr>
             <tr>
               <td style="padding:18px 28px 24px 28px;border-top:1px solid #f4eadf;">
-                ${footerHtml}
+                ${appendTransactionalEmailLegalHtml(footerHtml)}
               </td>
             </tr>
           </table>
@@ -6337,7 +6341,7 @@ async function sendVerificationEmail(email, token) {
   const verifyUrl = buildVerificationUrl(token);
   const logoUrl = getEmailLogoUrl();
   const subject = "Verify your email to start with ZAKI";
-  const text = [
+  const text = appendTransactionalEmailLegalText([
     "Welcome to ZAKI.",
     "Confirm your email to activate your account:",
     verifyUrl,
@@ -6346,7 +6350,7 @@ async function sendVerificationEmail(email, token) {
     "",
     "If this was not you, you can ignore this email.",
     "Support: support@chatzaki.com",
-  ].join("\n");
+  ]).join("\n");
   const html = buildVerificationEmailHtml({ verifyUrl, logoUrl });
 
   if (ZAKI_EMAIL_MODE.toLowerCase() === "resend") {
@@ -6403,7 +6407,7 @@ async function sendPasswordResetEmail(email, token) {
   const resetUrl = buildPasswordResetUrl(token);
   const logoUrl = getEmailLogoUrl();
   const subject = "Reset your ZAKI password";
-  const text = [
+  const text = appendTransactionalEmailLegalText([
     "Forgot your password? No problem.",
     "Use this secure link to set a new password and get back into ZAKI:",
     resetUrl,
@@ -6412,7 +6416,7 @@ async function sendPasswordResetEmail(email, token) {
     "",
     "If you did not request this, you can ignore this email.",
     "Support: support@chatzaki.com",
-  ].join("\n");
+  ]).join("\n");
   const html = buildPasswordResetEmailHtml({ resetUrl, logoUrl });
 
   if (ZAKI_EMAIL_MODE.toLowerCase() === "resend") {
@@ -6524,7 +6528,7 @@ async function sendAccessCodePurchaseEmail({
   const pricingUrl = `${appBase.replace(/\/+$/, "")}/pricing`;
   const logoUrl = getEmailLogoUrl();
   const subject = "Your ZAKI gift code is inside";
-  const text = [
+  const text = appendTransactionalEmailLegalText([
     "Thanks for supporting ZAKI.",
     `Your access code: ${code}`,
     `Pack: ${campaign}`,
@@ -6532,7 +6536,7 @@ async function sendAccessCodePurchaseEmail({
     `Redeem here: ${pricingUrl}`,
     "",
     "Need help? support@chatzaki.com",
-  ].join("\n");
+  ]).join("\n");
   const html = buildAccessCodePurchaseEmailHtml({
     logoUrl,
     code,
