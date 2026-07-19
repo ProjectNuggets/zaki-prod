@@ -1991,6 +1991,9 @@ export type MeterAvailableNow = {
   shortfall?: number | null;
   available?: boolean;
   resetAt?: string | null;
+  /** Server-computed: user still has units but fewer than the worst-case reserve, so this is
+   *  likely their last admitted turn before the window resets. Drives the pre-turn warning. */
+  lastTurnWarning?: boolean | null;
 };
 
 export type MeterStatusResponse = {

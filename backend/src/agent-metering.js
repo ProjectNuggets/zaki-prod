@@ -504,6 +504,10 @@ export async function reserveAgentChatUnits({
     reservedUnits,
     reserveIdempotencyKey: idempotencyKey,
     expiresAt,
+    // Agent turns only. The reserve is a worst-case ceiling, so refusing a user who still has
+    // units left blocks them with most of their window unspent. Spaces and the demo gate do NOT
+    // set this — their reserve is message-derived, so it is a real estimate worth gating on.
+    admitOnPositiveBalance: true,
   };
   try {
     await ensureWallet({
