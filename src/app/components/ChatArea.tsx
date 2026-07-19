@@ -7,6 +7,7 @@ import {
   Download,
   Brain,
   ChevronDown,
+  Clock,
   LoaderCircle,
   RefreshCw,
 } from "lucide-react";
@@ -166,7 +167,7 @@ import type {
   DocSource,
 } from "@/types";
 import { useMessages } from "@/queries/useThreads";
-import { useEntitlements, useMeterStatus } from "@/queries/useBilling";
+import { billingKeys, useEntitlements, useMeterStatus } from "@/queries/useBilling";
 import { spaceKeys } from "@/queries/useSpaces";
 import { useZakiSessions, zakiSessionKeys } from "@/queries/useZakiSessions";
 import { buildZakiSessionRepairTitle, prepareAutoTitleExchange } from "@/lib/sessionAutoTitle";
@@ -326,7 +327,26 @@ export function buildAgentComposerUsageState({
   availability?: MeterAvailableNow | null;
 }) {
   const locked = isAgentActive && isMeterAvailabilityBlocked(availability);
-  return { locked };
+  const lastTurnWarning =
+    isAgentActive && !locked && availability?.lastTurnWarning === true;
+  return {
+    locked,
+    lastTurnWarning,
+    resetAt: lastTurnWarning ? availability?.resetAt ?? null : null,
+  };
+}
+
+function formatAgentCapacityReset(
+  resetAt: string | null,
+  locale?: string,
+): string | null {
+  if (!resetAt) return null;
+  const parsed = new Date(resetAt);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Intl.DateTimeFormat(locale || undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parsed);
 }
 
 // Spaces (non-agent) composer send-lock. Authenticated users are gated by the pooled unit wallet
@@ -4125,6 +4145,18 @@ export function ChatArea() {
     availability: agentAvailability,
   });
   const agentCapacityBlocked = agentComposerUsageState.locked;
+  const agentCapacityResetLabel = useMemo(
+    () =>
+      formatAgentCapacityReset(
+        agentComposerUsageState.resetAt,
+        i18n.resolvedLanguage || i18n.language,
+      ),
+    [
+      agentComposerUsageState.resetAt,
+      i18n.language,
+      i18n.resolvedLanguage,
+    ],
+  );
   const isExistingSignedInAgentThread =
     isZakiBotActiveSpace && Boolean(authUserId) && Boolean(activeThreadId);
   const isActiveAgentHistoryHydrated =
@@ -8774,6 +8806,12 @@ export function ChatArea() {
       toast.error(errorMessage);
       return false;
     } finally {
+      if (isZakiBotTarget) {
+        // The warning describes the NEXT admission decision. A completed, failed, or
+        // aborted Agent turn can settle/refund the wallet differently, so discard the
+        // pre-turn snapshot before the composer offers another send.
+        await queryClient.invalidateQueries({ queryKey: billingKeys.meterStatus });
+      }
       if (streamAbortRef.current === streamController) {
         streamAbortRef.current = null;
       }
@@ -10581,6 +10619,28 @@ export function ChatArea() {
                     items={composerQuickReplyItems}
                     disabled={!composerQuickReplyVisible}
                   />
+                </div>
+              ) : null}
+              {agentComposerUsageState.lastTurnWarning ? (
+                <div
+                  className="zaki-agent-last-turn-warning"
+                  data-testid="zaki-agent-last-turn-warning"
+                  data-reset-at={agentComposerUsageState.resetAt ?? undefined}
+                  role="status"
+                  aria-live="polite"
+                >
+                  <Clock className="size-3.5 shrink-0" aria-hidden="true" />
+                  <span>
+                    {agentCapacityResetLabel
+                      ? t("input.zaki.lastTurnWarning", {
+                          reset: agentCapacityResetLabel,
+                          defaultValue: `This is likely your last turn before this capacity window resets. Capacity returns ${agentCapacityResetLabel}.`,
+                        })
+                      : t("input.zaki.lastTurnWarningWithoutReset", {
+                          defaultValue:
+                            "This is likely your last turn before this capacity window resets.",
+                        })}
+                  </span>
                 </div>
               ) : null}
               <InputArea

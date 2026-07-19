@@ -434,6 +434,14 @@ jest.mock("@/stores", () => ({
   useZakiSessionUiStore: jest.fn(),
 }));
 
+let mockMeterStatusData: Record<string, unknown> = {
+  unlimited: false,
+  limit: 10,
+  used: 0,
+  remaining: 10,
+  resetAt: "2026-05-10T00:00:00.000Z",
+};
+
 jest.mock("@/queries/useThreads", () => ({
   useMessages: jest.fn(),
 }));
@@ -459,6 +467,9 @@ jest.mock("@/queries", () => ({
 }));
 
 jest.mock("@/queries/useBilling", () => ({
+  billingKeys: {
+    meterStatus: ["billing", "meterStatus"],
+  },
   useEntitlements: () => ({
     data: {
       data: {
@@ -470,13 +481,7 @@ jest.mock("@/queries/useBilling", () => ({
   }),
   useMeterStatus: () => ({
     data: {
-      data: {
-        unlimited: false,
-        limit: 10,
-        used: 0,
-        remaining: 10,
-        resetAt: "2026-05-10T00:00:00.000Z",
-      },
+      data: mockMeterStatusData,
     },
   }),
   useCheckout: () => ({
@@ -798,7 +803,7 @@ describe("P1-12 chat-stream retryable classification (isRetryableChatError)", ()
     );
   });
 
-  it("locks the Agent composer without rendering a rolling-window composer badge", () => {
+  it("locks the Agent composer without rendering a pre-turn warning", () => {
     const state = buildAgentComposerUsageState({
       isAgentActive: true,
       availability: {
@@ -811,6 +816,8 @@ describe("P1-12 chat-stream retryable classification (isRetryableChatError)", ()
 
     expect(state).toEqual({
       locked: true,
+      lastTurnWarning: false,
+      resetAt: null,
     });
   });
 
@@ -827,6 +834,25 @@ describe("P1-12 chat-stream retryable classification (isRetryableChatError)", ()
 
     expect(state).toEqual({
       locked: true,
+      lastTurnWarning: false,
+      resetAt: null,
+    });
+  });
+
+  it("surfaces the admitted Agent's server-authored last-turn warning and reset", () => {
+    const state = buildAgentComposerUsageState({
+      isAgentActive: true,
+      availability: {
+        available: true,
+        lastTurnWarning: true,
+        resetAt: "2026-07-19T16:30:00.000Z",
+      },
+    });
+
+    expect(state).toEqual({
+      locked: false,
+      lastTurnWarning: true,
+      resetAt: "2026-07-19T16:30:00.000Z",
     });
   });
 
@@ -834,15 +860,19 @@ describe("P1-12 chat-stream retryable classification (isRetryableChatError)", ()
     const state = buildAgentComposerUsageState({
       isAgentActive: false,
       availability: {
-        available: false,
+        available: true,
         constraint: "rolling",
         requiredReserveUnits: 40,
-        effectiveRemaining: 0,
+        effectiveRemaining: 20,
+        lastTurnWarning: true,
+        resetAt: "2026-07-19T16:30:00.000Z",
       },
     });
 
     expect(state).toEqual({
       locked: false,
+      lastTurnWarning: false,
+      resetAt: null,
     });
   });
 
@@ -990,6 +1020,13 @@ describe("ChatArea Component", () => {
 
   beforeEach(() => {
     cleanup();
+    mockMeterStatusData = {
+      unlimited: false,
+      limit: 10,
+      used: 0,
+      remaining: 10,
+      resetAt: "2026-05-10T00:00:00.000Z",
+    };
     consoleLogSpy = jest.spyOn(console, "log").mockImplementation(() => undefined);
     consoleErrorSpy = jest.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
       const message = String(args[0] ?? "");
@@ -2853,6 +2890,88 @@ describe("ChatArea Component", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("agent-provision-state")).not.toBeInTheDocument();
     });
+  });
+
+  it("renders the admitted last-turn warning above an unlocked Agent composer", async () => {
+    navState.view = "chat";
+    navState.spaceId = "zaki-bot";
+    navState.threadId = "main";
+    authState = { user: { username: "nova@test.com" }, isLoading: false };
+    mockMeterStatusData = {
+      weekly: { limit: 250, used: 225, remaining: 25 },
+      availableNow: {
+        agent: {
+          available: true,
+          lastTurnWarning: true,
+          resetAt: "2026-07-19T16:30:00.000Z",
+        },
+      },
+    };
+    (fetchAgentMe as jest.Mock).mockResolvedValueOnce({
+      response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
+      data: { userId: "1" },
+    });
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/agent/chat/stream") {
+        return makeSseStreamResponse([
+          'event: token\ndata: {"delta":"Done"}\n\n',
+          'event: done\ndata: {"type":"done"}\n\n',
+        ]);
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+        headers: new Headers(),
+      };
+    });
+
+    const view = await renderChatAreaAndWaitForEffects();
+    const originalInvalidateQueries = view.queryClient.invalidateQueries.bind(view.queryClient);
+    let finishMeterRefresh: (() => void) | null = null;
+    const invalidateQueries = jest
+      .spyOn(view.queryClient, "invalidateQueries")
+      .mockImplementation((filters, options) => {
+        if (filters?.queryKey?.[0] === "billing") {
+          return new Promise<void>((resolve) => {
+            finishMeterRefresh = resolve;
+          });
+        }
+        return originalInvalidateQueries(filters, options);
+      });
+
+    const warning = await screen.findByTestId("zaki-agent-last-turn-warning");
+    expect(warning).toHaveAttribute("role", "status");
+    expect(warning).toHaveAttribute("data-reset-at", "2026-07-19T16:30:00.000Z");
+
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "Use the remaining turn carefully" },
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "input.sendAria" })).toBeEnabled();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+    await waitFor(() => {
+      expect(invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ["billing", "meterStatus"],
+      });
+    });
+    expect(
+      screen.getByRole("button", { name: "input.stopAria" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("combobox")).toBeDisabled();
+    await act(async () => {
+      finishMeterRefresh?.();
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "input.sendAria" }),
+      ).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "Try another turn" },
+    });
+    expect(screen.getByRole("button", { name: "input.sendAria" })).toBeEnabled();
   });
 
   it("surfaces provisioning failure and retries from a persistent Agent setup state", async () => {

@@ -802,6 +802,8 @@
       "contextCompactAria": "Context at {{percent}} percent. Click to compact.",
       "contextCompactHint": "Click to compact and free space.",
       "contextCompactBusy": "Compacting...",
+      "lastTurnWarning": "This is likely your last turn before this capacity window resets. Capacity returns {{reset}}.",
+      "lastTurnWarningWithoutReset": "This is likely your last turn before this capacity window resets.",
       "approvals": "Approvals",
       "approvalsAria": "{{count}} pending approvals",
       "browser": "Browser",
