@@ -6,10 +6,8 @@ type MemoryToastTone = "saved";
 interface MemoryCaptureToastProps {
   position: { left: number; width: number; bottom: number };
   tone?: MemoryToastTone;
-  source?: "chat" | "import";
   savedCount: number;
   supersededCount?: number;
-  duplicateCount?: number;
   onUndo?: () => void;
   onOpenMemory?: () => void;
   onDismiss: () => void;
@@ -20,10 +18,8 @@ interface MemoryCaptureToastProps {
 
 export function MemoryCaptureToast({
   position,
-  source = "chat",
   savedCount,
   supersededCount = 0,
-  duplicateCount = 0,
   onUndo,
   onOpenMemory,
   onDismiss,
@@ -32,17 +28,13 @@ export function MemoryCaptureToast({
   partialUndoCount = 0,
 }: MemoryCaptureToastProps) {
   const { t } = useTranslation();
-  const isImport = source === "import";
 
-  const newSavedCount = Math.max(0, savedCount - supersededCount);
-  const absorbedCount = savedCount + duplicateCount;
+  // WP-MEM6: the import no longer routes through this toast. It is a sequence of ordinary agent
+  // turns now, confirmed by ZAKI's own reply and the memory_store tool rows in the thread — so the
+  // "import" variant (a centred modal claiming "I now remember N details") has been removed. This
+  // component serves ordinary chat auto-capture only.
   const title =
-    isImport
-      ? t("memory.importedTitle", {
-          count: absorbedCount,
-          defaultValue: `I now remember ${absorbedCount} details from your import`,
-        })
-      : savedCount > 1
+    savedCount > 1
       ? t("memory.savedMultiple", { count: savedCount })
       : supersededCount > 0 && savedCount === 0
         ? t("memory.updatedSingle", { defaultValue: "Memory updated" })
@@ -53,31 +45,16 @@ export function MemoryCaptureToast({
       ? t("memory.undoPartialError", { count: partialUndoCount })
       : undoError
         ? undoError
-        : isImport
-          ? t("memory.importedHelper", {
-              saved: newSavedCount,
-              updated: supersededCount,
-              known: duplicateCount,
-              defaultValue: `${newSavedCount} new · ${supersededCount} updated · ${duplicateCount} already known. Stored in your Brain.`,
-            })
-          : t("memory.savedHelper");
+        : t("memory.savedHelper");
 
   return (
     <div
-      className={
-        isImport
-          ? "fixed left-1/2 top-1/2 z-50 w-[min(440px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2"
-          : "fixed z-30"
-      }
-      style={
-        isImport
-          ? undefined
-          : {
-              left: position.left,
-              width: position.width,
-              bottom: position.bottom,
-            }
-      }
+      className="fixed z-30"
+      style={{
+        left: position.left,
+        width: position.width,
+        bottom: position.bottom,
+      }}
     >
       <div className="border border-zaki-subtle bg-zaki-raised/95 px-3 py-2.5 font-mono text-xs text-zaki-secondary shadow-[0px_10px_24px_rgba(15,15,15,0.08)] backdrop-blur-sm dark:bg-[#141210]/95">
         <div className="min-w-0" role="status" aria-live="polite" aria-atomic="true">
