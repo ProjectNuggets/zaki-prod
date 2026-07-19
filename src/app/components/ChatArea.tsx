@@ -14,7 +14,7 @@ import {
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import {
@@ -91,6 +91,7 @@ import {
   upsertAnonymousWorkItem,
 } from "@/lib/anonymousWork";
 import {
+  AGENT_MESSAGE_MAX_CHARS,
   buildMemoryImportTurn,
   splitMemoryImportBySection,
   settleMemoryUndosNewestFirst,
@@ -3338,6 +3339,7 @@ export function selectAgentInspectorTranscriptEntries({
 export function ChatArea() {
   const queryClient = useQueryClient();
   const { i18n, t } = useTranslation();
+  const location = useLocation();
   const navigate = useNavigate();
   const isOnline = useOnlineStatus();
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
@@ -3501,18 +3503,10 @@ export function ChatArea() {
     useState<string | null>(null);
   const currentTurnAssistantIdRef = useRef<string | null>(null);
   const prevIsStreamingRef = useRef(false);
-  // WP-MEM6 — both refs are load-bearing for the sequential memory-import loop.
-  //
-  // isStreamingRef: setIsStreaming(false) runs in handleSend's finally, in the SAME tick the promise
-  // resolves, so React has not re-rendered when the loop's next iteration fires. A fresh handleSend
-  // would still read isStreaming === true from its closure and hit the SILENT `return false` guard —
-  // sections 2..n would vanish with no error and the user would get a fraction of their memories.
-  // Also closes a pre-existing double-send race on fast composer double-clicks.
+  // Synchronous companion to `isStreaming`. React state does not update until the next render, so
+  // this closes the ordinary composer double-submit race and lets size-bounded import parts run in
+  // strict sequence without observing a stale `isStreaming` closure.
   const isStreamingRef = useRef(false);
-  // handleSendRef: handleSend closes over activeThreadId, which is null at click time. Calling the
-  // click-time closure for every section would make each one generate its own thread — n orphan
-  // threads with no shared context. The ref always holds a handleSend with the current thread.
-  const handleSendRef = useRef<typeof handleSend | null>(null);
   const [localTurnSnapshots, setLocalTurnSnapshots] = useState<
     Record<string, NullalisTranscriptEntry[]>
   >({});
@@ -3529,6 +3523,9 @@ export function ChatArea() {
   // never reaches the agent.
   const [queryModeEnabled, setQueryModeEnabled] = useState(false);
   const streamAbortRef = useRef<AbortController | null>(null);
+  const consumedMemoryImportRouteDraftRef = useRef<string | null>(null);
+  const activeMemoryImportDraftRef = useRef<string | null>(null);
+  const queuedMemoryImportTurnsRef = useRef<string[] | null>(null);
   const agentCancelInFlightRef = useRef(false);
   const zakiBotProcessClearTimerRef = useRef<number | null>(null);
   const zakiBotProvisionedRef = useRef(false);
@@ -8856,17 +8853,104 @@ export function ChatArea() {
     zakiSessionKey,
   ]);
 
-  // Keep the ref pointing at the CURRENT handleSend so the memory-import loop always sends into the
-  // thread that now exists, rather than the null-thread closure captured at click time.
-  useEffect(() => {
-    handleSendRef.current = handleSend;
-  }, [handleSend]);
-
   const handleRetryAgentPlanStep = useCallback(
     async (step: AgentPlanPanelStep) => {
       const retryPrompt = buildAgentPlanRetryPrompt(t, step);
       const sent = await handleSend(retryPrompt, []);
       if (!sent) throw new Error("agent_plan_retry_failed");
+    },
+    [handleSend, t]
+  );
+
+  const handleComposerSend = useCallback(
+    async (text: string, files: File[], turnOptions?: InputAreaSendOptions): Promise<boolean> => {
+      const composer = composerHandleRef.current;
+      const activeImportDraft = activeMemoryImportDraftRef.current;
+      const composerDraft = composer?.getDraft().trim() ?? "";
+      const wireText = text.trim();
+      const isMemoryImportSend =
+        Boolean(activeImportDraft) &&
+        Boolean(composerDraft) &&
+        (wireText === composerDraft || wireText.endsWith(composerDraft));
+
+      if (!isMemoryImportSend) {
+        activeMemoryImportDraftRef.current = null;
+        queuedMemoryImportTurnsRef.current = null;
+        return handleSend(text, files, turnOptions);
+      }
+
+      let turns = queuedMemoryImportTurnsRef.current;
+      if (!turns) {
+        try {
+          if (wireText.length <= AGENT_MESSAGE_MAX_CHARS) {
+            // Preserve the ordinary composer path exactly, including any user-pinned context.
+            turns = [text];
+          } else {
+            // Pinned context is not part of the imported profile and can push an otherwise valid
+            // paste over the BFF cap. Size and split the visible draft, not that transient prefix.
+            const sections = splitMemoryImportBySection(composerDraft);
+            turns =
+              sections.length > 1
+                ? sections.map((section, index) =>
+                    buildMemoryImportTurn(section, index + 1, sections.length)
+                  )
+                : sections;
+          }
+        } catch (error) {
+          activeMemoryImportDraftRef.current = composerDraft;
+          queuedMemoryImportTurnsRef.current = null;
+          // InputArea clears its local value immediately after invoking `onSend`. Yield once so the
+          // validated draft restoration wins that update and no private profile text is lost.
+          await Promise.resolve();
+          composer?.setDraft(composerDraft);
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : t("memoryImport.sendFailed", {
+                  defaultValue: "Couldn't send that import. Try again.",
+                }),
+            // This error asks the user to edit a potentially very large profile. Keep the named
+            // failure visible long enough to read before returning to the restored composer draft.
+            { duration: 12_000 }
+          );
+          return false;
+        }
+      }
+
+      for (const [index, turn] of turns.entries()) {
+        const sent = await handleSend(
+          turn,
+          index === 0 ? files : [],
+          turnOptions,
+          ZAKI_BOT_SPACE_ID
+        );
+        if (!sent) {
+          const remainingTurns = turns.slice(index);
+          const restoreOrdinaryDraft = index === 0 && turns.length === 1;
+          const restoredDraft = restoreOrdinaryDraft
+            ? composerDraft
+            : remainingTurns[0] ?? "";
+          queuedMemoryImportTurnsRef.current = restoreOrdinaryDraft ? null : remainingTurns;
+          activeMemoryImportDraftRef.current = restoredDraft || null;
+          if (restoredDraft) {
+            composer?.setDraft(restoredDraft);
+          }
+          if (index > 0) {
+            toast.error(
+              t("memoryImport.partialSendFailed", {
+                part: index + 1,
+                total: turns.length,
+                defaultValue: `Part ${index + 1} of ${turns.length} didn't send. The next unsent part is back in your composer.`,
+              })
+            );
+          }
+          return false;
+        }
+      }
+
+      activeMemoryImportDraftRef.current = null;
+      queuedMemoryImportTurnsRef.current = null;
+      return true;
     },
     [handleSend, t]
   );
@@ -8975,6 +9059,53 @@ export function ChatArea() {
     isAuthReady,
     isStreaming,
     isZakiBotActiveSpace,
+  ]);
+
+  useEffect(() => {
+    const routeState = location.state as { memoryImportDraft?: unknown } | null;
+    const memoryImportDraft =
+      typeof routeState?.memoryImportDraft === "string"
+        ? routeState.memoryImportDraft.trim()
+        : "";
+    if (
+      !memoryImportDraft ||
+      consumedMemoryImportRouteDraftRef.current === memoryImportDraft ||
+      !isAuthReady ||
+      !authUserId ||
+      !isZakiBotActiveSpace ||
+      isAgentComposerBootstrapping ||
+      isStreaming ||
+      // The first-run prompt is hidden but still creates a user message before the engine greeting
+      // arrives. Waiting only for `messages.length > 0` can expose the import draft while that
+      // ceremony still owns the send lane; require its assistant reply before unlocking handoff.
+      (botOnboarding?.completed === false &&
+        !messages.some(
+          (message) => message.role === "assistant" && Boolean(message.content.trim())
+        ))
+    ) {
+      return;
+    }
+    const composer = composerHandleRef.current;
+    if (!composer) return;
+
+    consumedMemoryImportRouteDraftRef.current = memoryImportDraft;
+    activeMemoryImportDraftRef.current = memoryImportDraft;
+    queuedMemoryImportTurnsRef.current = null;
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+    composer.setDraft(memoryImportDraft);
+    window.dispatchEvent(new Event("zaki:focus-composer"));
+  }, [
+    authUserId,
+    botOnboarding,
+    isAgentComposerBootstrapping,
+    isAuthReady,
+    isStreaming,
+    isZakiBotActiveSpace,
+    location.pathname,
+    location.search,
+    location.state,
+    messages.length,
+    navigate,
   ]);
 
   const handleStopStreaming = useCallback(() => {
@@ -10657,7 +10788,7 @@ export function ChatArea() {
               ) : null}
               <InputArea
                 composerHandleRef={composerHandleRef}
-                onSend={handleSend}
+                onSend={handleComposerSend}
                 onCompact={handleCompactSession}
                 isCompacting={isCompacting}
                 agentUserId={isZakiBotActiveSpace ? agentUserId : null}
@@ -10855,35 +10986,12 @@ export function ChatArea() {
       <MemoryImportSheet
         isOpen={memoryImportOpen}
         onClose={() => setMemoryImportOpen(false)}
-        onImport={async (dump) => {
-          // WP-MEM6: the import has no transport of its own any more. Each section goes through the
-          // NORMAL agent send path, so it lands in the store the agent and Brain actually read.
-          // Sequential on purpose: the turns share one thread and later sections should see the
-          // earlier ones. Anything already stored stays stored if a later section fails.
-          const sections = splitMemoryImportBySection(dump);
-          for (const [i, section] of sections.entries()) {
-            const send = handleSendRef.current;
-            if (!send) {
-              throw new Error(
-                t("memoryImport.sendFailed", {
-                  defaultValue: "Couldn't send that import. Try again.",
-                })
-              );
-            }
-            const sent = await send(
-              buildMemoryImportTurn(section, i + 1, sections.length),
-              [],
-              undefined,
-              ZAKI_BOT_SPACE_ID
-            );
-            if (!sent) {
-              throw new Error(
-                t("memoryImport.sendFailed", {
-                  defaultValue: "Couldn't send that import. Try again.",
-                })
-              );
-            }
-          }
+        onImport={(dump) => {
+          // WP-MEM6 owner shape: the sheet prepares an ordinary reply; it never sends on the
+          // user's behalf. Router state survives the dashboard -> Agent remount without putting a
+          // private profile in the URL or durable local storage. The Agent route consumes it into
+          // the canonical composer, where the user can review and press Send.
+          navigate("/agent", { state: { memoryImportDraft: dump } });
         }}
       />
 

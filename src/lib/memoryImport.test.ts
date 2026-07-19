@@ -16,16 +16,23 @@ function dumpWith(headers: string[], entriesPerSection = 2): string {
 }
 
 describe("splitMemoryImportBySection", () => {
-  it("splits the five canonical sections the import prompt asks for", () => {
-    const out = splitMemoryImportBySection(dumpWith(HEADERS));
-    expect(out).toHaveLength(5);
-    expect(out[1]).toContain("Identity");
-    expect(out[1]).toContain("fact 1-0");
+  it("keeps a structured import under the server cap as one ordinary reply", () => {
+    const dump = dumpWith(HEADERS);
+    expect(splitMemoryImportBySection(dump)).toEqual([dump]);
   });
 
   it("tolerates the header shapes real models actually emit", () => {
     const out = splitMemoryImportBySection(
-      ["## Identity", "[2026-07-18] - a", "**2. Work**", "[2026-07-18] - b", "PROJECTS", "[2026-07-18] - c", "4) Preferences:", "[2026-07-18] - d"].join("\n")
+      [
+        "## Identity",
+        `[2026-07-18] - ${"a".repeat(2100)}`,
+        "**2. Work**",
+        `[2026-07-18] - ${"b".repeat(2100)}`,
+        "PROJECTS",
+        `[2026-07-18] - ${"c".repeat(2100)}`,
+        "4) Preferences:",
+        `[2026-07-18] - ${"d".repeat(2100)}`,
+      ].join("\n")
     );
     expect(out).toHaveLength(4);
   });
@@ -63,7 +70,7 @@ describe("splitMemoryImportBySection", () => {
   });
 
   it("throws rather than silently truncating a single unsplittable line", () => {
-    expect(() => splitMemoryImportBySection(`Identity\n${"x".repeat(7100)}\nWork\n[2026-07-18] - b`)).toThrow(
+    expect(() => splitMemoryImportBySection(`Identity\n${"x".repeat(8100)}\nWork\n[2026-07-18] - b`)).toThrow(
       /too long/i
     );
   });
@@ -125,20 +132,11 @@ describe("settleMemoryUndosNewestFirst", () => {
   });
 });
 
-describe("WP-MEM6 regression: the loop contract the refs exist to protect", () => {
-  // These do not exercise React, but they pin the invariants the two ChatArea refs were added for.
-  // If either ref is removed, the loop silently sends fewer turns than there are sections — the
-  // user loses memories with NO error — so the section count is the contract worth asserting.
-  it("produces one turn per section, each independently sendable", () => {
+describe("WP-MEM6 size-bound turn contract", () => {
+  it("does not manufacture multiple turns for a normal-sized structured reply", () => {
     const dump = ["Identity", "[2026-07-18] - a", "Work", "[2026-07-18] - b", "Projects", "[2026-07-18] - c"].join("\n");
     const sections = splitMemoryImportBySection(dump);
-    expect(sections).toHaveLength(3);
-    const turns = sections.map((s, i) => buildMemoryImportTurn(s, i + 1, sections.length));
-    expect(turns).toHaveLength(3);
-    turns.forEach((turn, i) => {
-      expect(turn).toContain(`part ${i + 1} of 3`);
-      expect(turn.length).toBeLessThan(8000); // server MAX_STREAM_MESSAGE_CHARS
-    });
+    expect(sections).toEqual([dump]);
   });
 
   it("keeps every turn under the server cap even for a large real-world export", () => {

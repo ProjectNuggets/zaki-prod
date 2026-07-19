@@ -13,6 +13,9 @@
 /** Section headers the import prompt asks the foreign model to emit (MemoryImportSheet). */
 const SECTION_HEADERS = ["instructions", "identity", "work", "projects", "preferences"] as const;
 
+/** Mirrors `MAX_STREAM_MESSAGE_CHARS` in the BFF. Normal imports stay one ordinary user reply. */
+export const AGENT_MESSAGE_MAX_CHARS = 8000;
+
 /**
  * Tolerant header matcher. The foreign model is *asked* for these headers but nothing guarantees the
  * formatting, so accept the shapes real models actually produce: "## Identity", "**2. Identity**",
@@ -72,8 +75,10 @@ function splitOversizedSection(header: string | null, body: string[]): string[] 
 /**
  * Split a pasted dump into agent-sized turns on SEMANTIC boundaries.
  *
- * The previous implementation chunked blindly at 6000 chars / 8 non-empty lines, which could cut a
- * section away from the header that gave its entries meaning. Here a chunk is a section.
+ * A normal-sized reply is returned verbatim as one turn. Only a reply that exceeds the BFF's turn
+ * budget reaches the splitter. The previous implementation chunked every structured import (and
+ * previously chunked blindly at 6000 chars / 8 non-empty lines), even when one ordinary turn fit.
+ * Here oversized chunks follow section boundaries.
  *
  * If the dump has fewer than two recognisable headers we do NOT guess — the whole dump goes as one
  * turn (still size-bounded). A wrong split is worse than no split.
@@ -81,6 +86,7 @@ function splitOversizedSection(header: string | null, body: string[]): string[] 
 export function splitMemoryImportBySection(dump: string): string[] {
   const normalized = String(dump || "").replace(/\r\n/g, "\n").trim();
   if (!normalized) return [];
+  if (normalized.length <= AGENT_MESSAGE_MAX_CHARS) return [normalized];
 
   const lines = normalized.split("\n");
   const headerIndexes = lines.reduce<number[]>((acc, line, i) => {

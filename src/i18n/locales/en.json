@@ -2601,7 +2601,7 @@
   },
   "memoryImport": {
     "title": "Bring your memory",
-    "subtitle": "Ask another assistant for a structured dump, then paste it here. ZAKI will save what matters.",
+    "subtitle": "Ask another assistant for a structured dump, then carry its response into your Agent reply.",
     "step1Label": "Step 1: copy this prompt",
     "step1Hint": "Paste this into ChatGPT, Claude, Gemini, or any assistant that knows you.",
     "step2Label": "Step 2: paste the response",
@@ -2609,9 +2609,10 @@
     "copyAction": "Copy prompt",
     "copied": "Copied",
     "copyError": "Couldn't copy. Select the prompt and copy manually.",
-    "importAction": "Absorb into Brain",
-    "importError": "Couldn't absorb that import. Check the response and try again.",
-    "sendFailed": "Couldn't send that import. Try again."
+    "importAction": "Continue in Agent",
+    "importError": "Couldn't continue in Agent. Try again.",
+    "sendFailed": "Couldn't send that import. Try again.",
+    "partialSendFailed": "Part {{part}} of {{total}} didn't send. The next unsent part is back in your composer."
   },
   "chatErrors": {
     "rateLimited": {
