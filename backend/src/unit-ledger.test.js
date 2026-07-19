@@ -207,6 +207,46 @@ describe("unit-ledger: settleHold / releaseHold", () => {
     expect(r).toMatchObject({ ok: false, reason: "invalid_settled_units" });
   });
 
+  // WP-BILL2. The receipt half is inert on its own: the wallet UPDATE is refund-only, so recording a
+  // true cost without debiting it leaves weekly_used_units parked at the reserve and the user is
+  // never refused a later turn. These pin the DEBIT.
+  it("recordTrueCost debits the overage (negative delta = weekly_used_units goes UP)", async () => {
+    const { client, walletUpdate } = makeClient({ hold: { ...HOLD } });
+    const r = await settleHold(
+      { holdId: "hold-1", settleIdempotencyKey: "k", settledUnits: 40, recordTrueCost: true },
+      client
+    );
+    expect(r.refund).toMatchObject({ settledUnits: 40, overageUnits: 25, refundRecurring: 0, refundTopup: 0 });
+    expect(walletUpdate().params).toEqual([42, -25, 0]); // GREATEST(0, used - (-25)) = used + 25
+  });
+
+  it("without recordTrueCost an over-reserve turn is still clamped (spaces is unchanged)", async () => {
+    const { client, walletUpdate } = makeClient({ hold: { ...HOLD } });
+    const r = await settleHold({ holdId: "hold-1", settleIdempotencyKey: "k", settledUnits: 40 }, client);
+    expect(r.refund).toMatchObject({ settledUnits: 15, overageUnits: 0 });
+    expect(walletUpdate().params).toEqual([42, 0, 0]); // no refund, no debit
+  });
+
+  it("recordTrueCost still refunds normally when the turn came in UNDER reserve", async () => {
+    const { client, walletUpdate } = makeClient({ hold: { ...HOLD } });
+    const r = await settleHold(
+      { holdId: "hold-1", settleIdempotencyKey: "k", settledUnits: 8, recordTrueCost: true },
+      client
+    );
+    expect(r.refund).toMatchObject({ settledUnits: 8, overageUnits: 0, refundTopup: 5, refundRecurring: 2 });
+    expect(walletUpdate().params).toEqual([42, 2, 5]);
+  });
+
+  it("recordTrueCost never debits on a release (failed turn is a FULL refund, not a charge)", async () => {
+    const { client, walletUpdate } = makeClient({ hold: { ...HOLD } });
+    const r = await settleHold(
+      { holdId: "hold-1", settleIdempotencyKey: "k", settledUnits: 40, finalState: "released", recordTrueCost: true },
+      client
+    );
+    expect(r.refund).toMatchObject({ settledUnits: 0, overageUnits: 0, refundRecurring: 10, refundTopup: 5 });
+    expect(walletUpdate().params).toEqual([42, 10, 5]);
+  });
+
   it("releaseHold fully refunds (settled 0)", async () => {
     const { client, walletUpdate } = makeClient({ hold: { ...HOLD } });
     const r = await releaseHold({ holdId: "hold-1", settleIdempotencyKey: "k" }, client);

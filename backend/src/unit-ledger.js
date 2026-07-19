@@ -308,10 +308,15 @@ export async function reserveUnits(
 /**
  * Settle (or release) a reserved hold. Idempotent (no-op if already terminal). Refunds top-up-first.
  * For finalState='settled', settledUnits must be a finite number. settledUnits=0 + 'released' = full refund.
+ *
+ * recordTrueCost (WP-BILL2): default-off. When off, settledUnits is capped at reserved, so a turn
+ * that cost more than its reserve is recorded — and billed — as the reserve. When on, the true cost
+ * is recorded and the overage is DEBITED here, which is the half that actually matters: the receipt
+ * alone would not drain the wallet, so the user would never be refused a subsequent turn.
  * @returns {Promise<{ok:boolean, hold?:object, refund?:object, idempotent?:boolean, reason?:string}>}
  */
 export async function settleHold(
-  { holdId, settleIdempotencyKey, settledUnits, finalState = "settled", provider = null, providerModel = null, providerCostUsdMicros = null, providerInputTokens = null, providerOutputTokens = null },
+  { holdId, settleIdempotencyKey, settledUnits, finalState = "settled", recordTrueCost = false, provider = null, providerModel = null, providerCostUsdMicros = null, providerInputTokens = null, providerOutputTokens = null },
   client
 ) {
   if (!TERMINAL_STATES.has(finalState)) return { ok: false, reason: "invalid_final_state" };
@@ -330,8 +335,13 @@ export async function settleHold(
       // only 'settled' consumes units; 'released'/'expired' are full refunds
       settledUnits: finalState === "settled" ? Number(settledUnits) : 0,
       funding,
+      recordTrueCost: recordTrueCost && finalState === "settled",
     });
 
+    // refundRecurring and overageUnits are mutually exclusive — one of (reserved-settled) and
+    // (settled-reserved) is always 0 — so one signed delta covers both: positive refunds, negative
+    // debits. GREATEST(0,..) still floors the refund direction and never clamps a debit.
+    const recurringDelta = refund.refundRecurring - refund.overageUnits;
     await c.query(
       `UPDATE zaki_unit_wallets
          SET weekly_used_units = GREATEST(0, weekly_used_units - $2),
@@ -339,7 +349,7 @@ export async function settleHold(
              version = version + 1,
              updated_at = NOW()
        WHERE user_id = $1`,
-      [hold.user_id, refund.refundRecurring, refund.refundTopup]
+      [hold.user_id, recurringDelta, refund.refundTopup]
     );
 
     const state = finalState; // 'settled' | 'released' | 'expired'
