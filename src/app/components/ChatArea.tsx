@@ -311,16 +311,11 @@ type ChatDenialDetails = {
 
 export function isMeterAvailabilityBlocked(availability?: MeterAvailableNow | null) {
   if (!availability) return false;
-  if (availability.available === false) return true;
-  const remaining =
-    typeof availability.effectiveRemaining === "number"
-      ? availability.effectiveRemaining
-      : null;
-  const required =
-    typeof availability.requiredReserveUnits === "number"
-      ? availability.requiredReserveUnits
-      : null;
-  return remaining != null && required != null && remaining < required;
+  // The server is the single authority on admission (meter-capacity.js). This used to re-derive the
+  // rule client-side as `remaining < requiredReserveUnits`, which is how the composer stayed locked
+  // even when the backend would have admitted the turn — the same rule existed in three places and
+  // they drifted. Trust `available`; do not reimplement the policy here.
+  return availability.available === false;
 }
 
 export function buildAgentComposerUsageState({

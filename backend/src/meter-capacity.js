@@ -42,6 +42,16 @@ export function computeAvailableNow({
         ? "weekly"
         : null;
   const shortfall = roundUnits(Math.max(0, requiredReserveUnits - effectiveRemaining));
+  // Owner metering decision 2026-07-18: the reserve is a worst-case ceiling, not an entitlement to
+  // spend. Admission is "does the user have ANY units left", not "can the user afford the ceiling" —
+  // the latter refused users with most of their window unspent whenever a tier's allowance sat below
+  // the reserve. The shortfall is still reported (it drives the last-turn warning) but no longer
+  // gates. The turn after the wallet drains to zero is the one that is refused.
+  const available = effectiveRemaining > 0;
+  // True when this is very likely the user's final admitted turn: they still have units (so they are
+  // admitted) but fewer than the worst-case reserve, so the settle may drain them. Surfaced so the UI
+  // can warn BEFORE the turn instead of dead-ending after it.
+  const lastTurnWarning = available && shortfall > 0;
 
   return {
     requiredReserveUnits,
@@ -50,10 +60,14 @@ export function computeAvailableNow({
     topupUnits: roundUnits(topupUnits),
     effectiveRemaining,
     limitingWindow,
-    constraint: shortfall > 0 ? limitingWindow || "unknown" : null,
+    constraint: available ? null : limitingWindow || "unknown",
     shortfall,
-    available: shortfall <= 0,
-    resetAt: shortfall > 0 ? pickResetAt(limitingWindow, weekly, rolling) : null,
+    available,
+    lastTurnWarning,
+    // The reset instant is now also needed while the user is still ADMITTED (the warning names when
+    // capacity returns), so it is no longer conditional on being blocked.
+    resetAt:
+      available && !lastTurnWarning ? null : pickResetAt(limitingWindow, weekly, rolling),
   };
 }
 

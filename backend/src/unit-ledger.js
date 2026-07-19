@@ -149,7 +149,17 @@ export async function applyWeeklyResetLocked(c, wallet) {
  * @returns {Promise<{ok:boolean, hold?:object, funding?:object, remaining?:number, idempotent?:boolean, reason?:string, shortfall?:number}>}
  */
 export async function reserveUnits(
-  { userId, grantId, productId, action, reservedUnits, reserveIdempotencyKey, expiresAt, allowOverdraw = false },
+  {
+    userId,
+    grantId,
+    productId,
+    action,
+    reservedUnits,
+    reserveIdempotencyKey,
+    expiresAt,
+    allowOverdraw = false,
+    admitOnPositiveBalance = false,
+  },
   client
 ) {
   const run = async (c) => {
@@ -215,7 +225,16 @@ export async function reserveUnits(
       // weekly_used_units has only a >= 0 CHECK, so over-the-cap debits are permitted, and routing
       // the overflow through fromRecurring keeps the funding_json refund-correct at settle.
       // Live (interactive) reserves never set this flag → the 429 gate is unchanged for them.
-      if (!allowOverdraw) {
+      //
+      // admitOnPositiveBalance (owner metering decision 2026-07-18): the flat reserve is a
+      // worst-case ceiling, NOT an entitlement to spend. Gating admission on it meant a tier whose
+      // allowance was below the reserve got exactly ONE turn per window and was then refused with
+      // most of its balance unspent. So: while the user still has ANY units, admit the turn and
+      // absorb the shortfall; the NEXT turn is refused once the wallet is drained to zero.
+      // This deliberately reuses the overdraw funding path below rather than adding a second debit
+      // route — same top-up-first ordering, same refund-correct funding_json.
+      const hasPositiveBalance = Number(rem.remaining) > 0;
+      if (!allowOverdraw && !(admitOnPositiveBalance && hasPositiveBalance)) {
         return {
           ok: false,
           reason: "insufficient_units",

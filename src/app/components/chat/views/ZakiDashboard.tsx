@@ -218,16 +218,10 @@ function getWindowStats(window?: MeterWindowSnapshot | null): WindowStats {
 
 function isAvailabilityBlocked(availability?: MeterAvailableNow | null) {
   if (!availability) return false;
-  if (availability.available === false) return true;
-  const remaining =
-    typeof availability.effectiveRemaining === "number"
-      ? availability.effectiveRemaining
-      : null;
-  const required =
-    typeof availability.requiredReserveUnits === "number"
-      ? availability.requiredReserveUnits
-      : null;
-  return remaining != null && required != null && remaining < required;
+  // Server is the single authority on admission — see the matching note in ChatArea.tsx. This was a
+  // verbatim duplicate of that rule; two copies of an admission policy is how the flat reserve gate
+  // survived a partial migration.
+  return availability.available === false;
 }
 
 function getCommandProductName(t: TranslateFn, productId: AnonymousWorkProductId) {
