@@ -1,4 +1,5 @@
 import { deterministicGrantId as defaultDeterministicGrantId } from "./chat-meter.js";
+import { withDbTransaction as defaultWithDbTransaction } from "./db.js";
 import {
   ensureWallet as defaultEnsureWallet,
   releaseHold as defaultReleaseHold,
@@ -42,6 +43,11 @@ export async function reserveMinutesCapture({
   ensureWallet = defaultEnsureWallet,
   reserveUnits = defaultReserveUnits,
   deterministicGrantId = defaultDeterministicGrantId,
+  // Control-plane callers can attach a durable pre-spawn record to the same
+  // database transaction as the debit.  This is intentionally a callback
+  // instead of a Minutes-state import so the ledger remains product-neutral.
+  onReserved,
+  runInTransaction = defaultWithDbTransaction,
   nowMs = Date.now(),
 } = {}) {
   const userId = String(zakiUser?.id || "");
@@ -73,22 +79,59 @@ export async function reserveMinutesCapture({
     expiresAt: new Date(nowMs + holdTtlMs).toISOString(),
   };
 
+  const reserveWith = async (client) => {
+    const callReserve = () => client ? reserveUnits(reserveArgs, client) : reserveUnits(reserveArgs);
+    const callEnsureWallet = (args) => client ? ensureWallet(args, client) : ensureWallet(args);
+    let result;
+    try {
+      result = await callReserve();
+      if (!result?.ok && result?.reason === "no_wallet") {
+        await callEnsureWallet({
+          userId,
+          planId: typeof resolvePlan === "function" ? resolvePlan(zakiUser) : "free",
+        });
+        result = await callReserve();
+      }
+    } catch (cause) {
+      throw new MinutesControlMeteringError("Minutes metering is unavailable.", { cause });
+    }
+
+    if (result?.ok && result.hold) {
+      let recoveryIntent;
+      if (typeof onReserved === "function") {
+        // If this throws, the outer transaction rolls back both the hold and
+        // its recovery intent.  Calling the engine without that pair would
+        // leave no durable owner for an ambiguous create response.
+        recoveryIntent = await onReserved({ hold: result.hold, idempotent: Boolean(result.idempotent), reservedUnits }, client);
+      }
+      return {
+        ok: true,
+        hold: result.hold,
+        idempotent: Boolean(result.idempotent),
+        reservedUnits,
+        recoveryIntent,
+      };
+    }
+    return result;
+  };
+
   let result;
   try {
-    result = await reserveUnits(reserveArgs);
-    if (!result?.ok && result?.reason === "no_wallet") {
-      await ensureWallet({
-        userId,
-        planId: typeof resolvePlan === "function" ? resolvePlan(zakiUser) : "free",
-      });
-      result = await reserveUnits(reserveArgs);
-    }
+    result = typeof onReserved === "function"
+      ? await runInTransaction((client) => reserveWith(client))
+      : await reserveWith(null);
   } catch (cause) {
+    if (cause instanceof MinutesControlMeteringError) throw cause;
     throw new MinutesControlMeteringError("Minutes metering is unavailable.", { cause });
   }
 
   if (result?.ok && result.hold) {
-    return { hold: result.hold, idempotent: Boolean(result.idempotent), reservedUnits };
+    return {
+      hold: result.hold,
+      idempotent: Boolean(result.idempotent),
+      reservedUnits,
+      recoveryIntent: result.recoveryIntent,
+    };
   }
   if (result?.reason === "insufficient_units") {
     throw new MinutesControlMeteringError("Minutes capture quota is exhausted.", {
@@ -120,11 +163,11 @@ export async function settleMinutesCapture({ holdId, idempotencyKey, capturedSec
       // ledger deliberately defaults this off for products that bill caps.
       recordTrueCost: true,
     }, client);
-    if (result?.ok && result?.idempotent && result?.hold?.state === "expired") {
-      // Configuration keeps this unreachable in normal operation (the hold
-      // outlives the engine maximum plus callback grace). Do not silently
-      // acknowledge a late terminal callback after an expiry refunded it.
-      throw new MinutesControlMeteringError("Minutes capture hold expired before terminal settlement.", {
+    if (result?.ok && result?.idempotent && result?.hold?.state !== "settled") {
+      // Do not acknowledge a terminal capture after any non-settlement path
+      // (expiry or release) has refunded its reservation. A caller must keep
+      // the recovery record pending for explicit reconciliation instead.
+      throw new MinutesControlMeteringError("Minutes capture hold was refunded before terminal settlement.", {
         code: "upstream_unavailable",
         status: 503,
         retryable: true,
@@ -143,13 +186,13 @@ export async function settleMinutesCapture({ holdId, idempotencyKey, capturedSec
   }
 }
 
-export async function releaseMinutesCapture({ holdId, idempotencyKey, releaseHold = defaultReleaseHold } = {}) {
+export async function releaseMinutesCapture({ holdId, idempotencyKey, client, releaseHold = defaultReleaseHold } = {}) {
   if (!holdId || !idempotencyKey) return null;
   try {
     return await releaseHold({
       holdId,
       settleIdempotencyKey: `minutes-control:release:${String(idempotencyKey)}`,
-    });
+    }, client);
   } catch {
     // A failed release deliberately leaves the hold for the unit-ledger expiry
     // sweeper; callers must not turn an uncertain upstream capture into free use.

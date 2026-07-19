@@ -494,6 +494,7 @@ describe("runtime config validation", () => {
       expect.objectContaining({ key: "ZAKI_MINUTES_ENABLED" }),
       expect.objectContaining({ key: "MINUTES_ENGINE_CONTROL_TOKEN" }),
       expect.objectContaining({ key: "MINUTES_ENGINE_CALLBACK_HMAC_KEY" }),
+      expect.objectContaining({ key: "MINUTES_CONTROL_RECOVERY_KEY" }),
       expect.objectContaining({ key: "MINUTES_CONTROL_CAPTURE_RESERVE_UNITS" }),
     ]));
 
@@ -506,6 +507,7 @@ describe("runtime config validation", () => {
         MINUTES_ENGINE_READ_TOKEN: "m".repeat(32),
         MINUTES_ENGINE_CONTROL_TOKEN: "c".repeat(32),
         MINUTES_ENGINE_CALLBACK_HMAC_KEY: "h".repeat(32),
+        MINUTES_CONTROL_RECOVERY_KEY: "r".repeat(32),
         MINUTES_CONTROL_CAPTURE_RESERVE_UNITS: "60",
         MINUTES_CONTROL_TOKEN_TTL_SECONDS: "60",
       })
@@ -524,6 +526,7 @@ describe("runtime config validation", () => {
         MINUTES_ENGINE_READ_TOKEN_FILE: "/run/secrets/zaki-read/minutes",
         MINUTES_ENGINE_CONTROL_TOKEN_FILE: "/run/secrets/zaki-control/signing-key",
         MINUTES_ENGINE_CALLBACK_HMAC_KEY_FILE: "/run/secrets/zaki-control/callback-key",
+        MINUTES_CONTROL_RECOVERY_KEY_FILE: "/run/secrets/zaki-control/recovery-key",
         MINUTES_CONTROL_CAPTURE_RESERVE_UNITS: "60",
       })
     );

@@ -2,6 +2,7 @@ import { describe, expect, jest, test } from "@jest/globals";
 import {
   mintMinutesControlAccessToken,
   resolveMinutesCallbackHmacKey,
+  resolveMinutesControlRecoveryKey,
   resolveMinutesControlToken,
   verifyMinutesControlAccessToken,
 } from "./minutes-control-secret.js";
@@ -16,6 +17,11 @@ describe("Minutes control credential loading", () => {
     })).toBe("f".repeat(32));
     expect(resolveMinutesCallbackHmacKey({
       tokenFile: "/run/secrets/zaki-control/callback",
+      fallbackToken: "ignore-me".repeat(4),
+      readFileSync,
+    })).toBe("f".repeat(32));
+    expect(resolveMinutesControlRecoveryKey({
+      tokenFile: "/run/secrets/zaki-control/recovery",
       fallbackToken: "ignore-me".repeat(4),
       readFileSync,
     })).toBe("f".repeat(32));

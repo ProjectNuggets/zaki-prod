@@ -42,6 +42,8 @@ function buildApp(overrides = {}) {
   const reserveCapture = overrides.reserveCapture || jest.fn().mockResolvedValue({ hold: { id: HOLD_ID } });
   const recordCapture = overrides.recordCapture || jest.fn().mockResolvedValue({ capture_id: "capture-01" });
   const recordCompensation = overrides.recordCompensation || jest.fn().mockResolvedValue({ capture_id: "capture-01" });
+  const markRecoveryCapture = overrides.markRecoveryCapture || jest.fn().mockResolvedValue({ recovery_id: "recovery-01" });
+  const markRecoveryPreSpawnOutcome = overrides.markRecoveryPreSpawnOutcome || jest.fn().mockResolvedValue({ recovery_id: "recovery-01" });
   const applyCallback = overrides.applyCallback || jest.fn().mockResolvedValue({ status: "accepted" });
   const app = express();
   app.use(bypassMinutesReadBodyParser(express.json({ limit: "10mb" })));
@@ -49,6 +51,7 @@ function buildApp(overrides = {}) {
     enabled: overrides.enabled ?? true,
     baseUrl: "http://minutes-api:8056",
     controlSigningKey: "c".repeat(32),
+    recoveryEncryptionKey: overrides.recoveryEncryptionKey || "r".repeat(32),
     callbackHmacKey: overrides.callbackHmacKey ?? CALLBACK_SECRET,
     timeoutMs: 5_000,
     policy: {
@@ -59,18 +62,31 @@ function buildApp(overrides = {}) {
     captureHoldTtlMs: overrides.captureHoldTtlMs ?? 3_900_000,
     captureMaxSeconds: overrides.captureMaxSeconds ?? 3_600,
     resolveUser,
-    getRequestId: () => "req-control-01",
+    getRequestId: overrides.getRequestId || (() => "req-control-01"),
     fetchWithTimeout: jest.fn(),
     reserveCapture,
     recordCapture,
     recordCompensation,
+    markRecoveryCapture,
+    markRecoveryPreSpawnOutcome,
+    decryptRecoveryRequest: overrides.decryptRecoveryRequest,
     applyCallback,
     forgetMeeting: overrides.forgetMeeting || jest.fn(),
     releaseCapture: overrides.releaseCapture || jest.fn(),
     client,
     now: () => new Date("2026-05-28T13:46:40.000Z"),
   }));
-  return { app, client, resolveUser, reserveCapture, recordCapture, recordCompensation, applyCallback };
+  return {
+    app,
+    client,
+    resolveUser,
+    reserveCapture,
+    recordCapture,
+    recordCompensation,
+    markRecoveryCapture,
+    markRecoveryPreSpawnOutcome,
+    applyCallback,
+  };
 }
 
 function signedCallback(envelope) {
@@ -177,6 +193,120 @@ describe("Minutes control BFF routes", () => {
     expect(recordCapture).toHaveBeenCalledWith(expect.objectContaining({ reservationId: HOLD_ID, userId: "42" }));
   });
 
+  test("reuses the durable request id for a browser idempotency retry", async () => {
+    const originalRequestId = "req-capture-original";
+    const reserveCapture = jest.fn().mockResolvedValue({
+      hold: { id: HOLD_ID },
+      recoveryIntent: { recovery_id: "recovery-01", request_id: originalRequestId, state: "prepared" },
+    });
+    const decryptRecoveryRequest = jest.fn().mockReturnValue({
+      platform: "google_meet",
+      meetingUrl: "https://meet.google.com/abc-defg-hij",
+      captureAttestation: {
+        bot_visible: true,
+        bot_display_name: "ZAKI Notetaker",
+        policy_version: "minutes-capture-consent-v1",
+        attested_at: "2026-05-28T13:46:40.000Z",
+        attested_by_user_id: "42",
+      },
+      metering: { reservation_id: HOLD_ID, unit: "bot_minute", reserved_units: 60 },
+    });
+    const createCapture = jest.fn().mockResolvedValue(jsonResponse({
+      api_version: "zaki-control.v1", request_id: originalRequestId, operation_id: "op-capture-01",
+      subject: { tenant_id: "default", user_id: "42" }, capture_id: "capture-01", meeting_id: "meeting-01",
+      state: "requested", metering: { reservation_id: HOLD_ID },
+    }, 202));
+    const { app } = buildApp({
+      reserveCapture,
+      decryptRecoveryRequest,
+      client: { createCapture },
+      getRequestId: () => "req-browser-retry",
+    });
+
+    const response = await request(app)
+      .post("/api/minutes/captures")
+      .send({
+        platform: "google_meet",
+        meeting_url: "https://meet.google.com/abc-defg-hij",
+        visible_bot_attested: true,
+        idempotency_key: "capture-01",
+      });
+
+    expect(response.status).toBe(202);
+    expect(createCapture).toHaveBeenCalledWith(expect.objectContaining({ requestId: originalRequestId }));
+    expect(decryptRecoveryRequest).toHaveBeenCalledWith(expect.objectContaining({
+      recovery: expect.objectContaining({ recovery_id: "recovery-01" }),
+    }));
+  });
+
+  test("does not create again from a durably blocked recovery intent", async () => {
+    const reserveCapture = jest.fn().mockResolvedValue({
+      hold: { id: HOLD_ID },
+      recoveryIntent: { recovery_id: "recovery-01", request_id: "req-control-01", state: "blocked" },
+    });
+    const decryptRecoveryRequest = jest.fn();
+    const createCapture = jest.fn();
+    const { app } = buildApp({ reserveCapture, decryptRecoveryRequest, client: { createCapture } });
+
+    const response = await request(app)
+      .post("/api/minutes/captures")
+      .send({
+        platform: "google_meet",
+        meeting_url: "https://meet.google.com/abc-defg-hij",
+        visible_bot_attested: true,
+        idempotency_key: "capture-01",
+      });
+
+    expect(response.status).toBe(503);
+    expect(createCapture).not.toHaveBeenCalled();
+    expect(decryptRecoveryRequest).not.toHaveBeenCalled();
+  });
+
+  test("leaves a browser-side create rejection for the leased reconciler instead of releasing its hold", async () => {
+    const reserveCapture = jest.fn().mockResolvedValue({
+      hold: { id: HOLD_ID },
+      recoveryIntent: { recovery_id: "recovery-01", request_id: "req-control-01", state: "prepared" },
+    });
+    const markRecoveryPreSpawnOutcome = jest.fn().mockResolvedValue({ state: "create_uncertain" });
+    const releaseCapture = jest.fn();
+    const createCapture = jest.fn().mockResolvedValue(new Response("{}", { status: 400 }));
+    const { app } = buildApp({
+      reserveCapture,
+      markRecoveryPreSpawnOutcome,
+      releaseCapture,
+      decryptRecoveryRequest: jest.fn().mockReturnValue({
+        platform: "google_meet",
+        meetingUrl: "https://meet.google.com/abc-defg-hij",
+        captureAttestation: {
+          bot_visible: true,
+          bot_display_name: "ZAKI Notetaker",
+          policy_version: "minutes-capture-consent-v1",
+          attested_at: "2026-05-28T13:46:40.000Z",
+          attested_by_user_id: "42",
+        },
+        metering: { reservation_id: HOLD_ID, unit: "bot_minute", reserved_units: 60 },
+      }),
+      client: { createCapture },
+    });
+
+    const response = await request(app)
+      .post("/api/minutes/captures")
+      .send({
+        platform: "google_meet",
+        meeting_url: "https://meet.google.com/abc-defg-hij",
+        visible_bot_attested: true,
+        idempotency_key: "capture-01",
+      });
+
+    expect(response.status).toBe(400);
+    expect(markRecoveryPreSpawnOutcome).toHaveBeenCalledWith(expect.objectContaining({
+      recoveryId: "recovery-01",
+      state: "create_uncertain",
+      errorCode: "engine_create_rejected",
+    }));
+    expect(releaseCapture).not.toHaveBeenCalled();
+  });
+
   test("fails closed before reservation when the configured hold cannot fund the engine maximum", async () => {
     const { app, reserveCapture, client } = buildApp({ captureMaxSeconds: 3_601, captureReserveUnits: 60 });
     const response = await request(app)
@@ -228,6 +358,58 @@ describe("Minutes control BFF routes", () => {
     expect(recordCompensation).toHaveBeenLastCalledWith(expect.objectContaining({ stopState: "stop_requested" }));
     expect(releaseCapture).not.toHaveBeenCalled();
     expect(client.createCapture).toHaveBeenCalledTimes(1);
+  });
+
+  test("keeps the pre-spawn recovery owner when both primary and legacy compensation writes fail", async () => {
+    const recordCapture = jest.fn().mockRejectedValue(new Error("primary write failed"));
+    const recordCompensation = jest.fn().mockRejectedValue(new Error("legacy compensation write failed"));
+    const markRecoveryCapture = jest.fn().mockResolvedValue({ recovery_id: "recovery-01" });
+    const stopCapture = jest.fn().mockRejectedValue(new Error("stop timeout"));
+    const reserveCapture = jest.fn().mockResolvedValue({
+      hold: { id: HOLD_ID },
+      recoveryIntent: { recovery_id: "recovery-01" },
+    });
+    const releaseCapture = jest.fn();
+    const { app } = buildApp({
+      reserveCapture,
+      recordCapture,
+      recordCompensation,
+      markRecoveryCapture,
+      decryptRecoveryRequest: jest.fn().mockReturnValue({
+        platform: "google_meet",
+        meetingUrl: "https://meet.google.com/abc-defg-hij",
+        captureAttestation: {
+          bot_visible: true,
+          bot_display_name: "ZAKI Notetaker",
+          policy_version: "minutes-capture-consent-v1",
+          attested_at: "2026-05-28T13:46:40.000Z",
+          attested_by_user_id: "42",
+        },
+        metering: { reservation_id: HOLD_ID, unit: "bot_minute", reserved_units: 60 },
+      }),
+      releaseCapture,
+      client: { stopCapture },
+    });
+
+    const response = await request(app)
+      .post("/api/minutes/captures")
+      .send({
+        platform: "google_meet",
+        meeting_url: "https://meet.google.com/abc-defg-hij",
+        visible_bot_attested: true,
+        idempotency_key: "capture-double-write-failure",
+      });
+
+    expect(response.status).toBe(503);
+    expect(recordCapture).toHaveBeenCalledWith(expect.objectContaining({ recoveryIntentId: "recovery-01" }));
+    expect(recordCompensation).toHaveBeenCalledWith(expect.objectContaining({ stopState: "stop_pending" }));
+    expect(markRecoveryCapture).toHaveBeenCalledWith(expect.objectContaining({
+      recoveryId: "recovery-01",
+      captureId: "capture-01",
+      state: "stop_pending",
+    }));
+    expect(markRecoveryCapture).toHaveBeenLastCalledWith(expect.objectContaining({ state: "stop_pending" }));
+    expect(releaseCapture).not.toHaveBeenCalled();
   });
 
   test("rejects invalid raw callbacks before invoking state or wallet work", async () => {

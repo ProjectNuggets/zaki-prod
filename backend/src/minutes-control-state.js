@@ -1,6 +1,11 @@
 import { dbQuery as defaultDbQuery, withDbTransaction as defaultWithDbTransaction } from "./db.js";
 import { minutesControlPayloadFingerprint } from "./minutes-control-contract.js";
 import { settleMinutesCapture as defaultSettleMinutesCapture } from "./minutes-control-metering.js";
+import {
+  MINUTES_CONTROL_RECOVERY_DDL,
+  findMinutesControlRecoveryForCallback,
+  markMinutesControlRecoveryCallback,
+} from "./minutes-control-recovery.js";
 
 export const MINUTES_CONTROL_STATE_DDL = `
 CREATE TABLE IF NOT EXISTS zaki_minutes_control_captures (
@@ -62,6 +67,8 @@ CREATE TABLE IF NOT EXISTS zaki_minutes_control_usage_sequences (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (capture_id, sequence)
 );
+
+${MINUTES_CONTROL_RECOVERY_DDL}
 `;
 
 const TRANSITIONS = new Map([
@@ -123,11 +130,126 @@ async function bindMeetingId(client, capture, meetingId) {
   return rows(result)[0] || capture;
 }
 
+async function bindRecoveryIntentToCapture(client, {
+  recoveryIntentId,
+  response,
+  userId,
+  tenantId,
+  reservationId,
+  recoveryState = "tracking",
+  recoveryLeaseOwner,
+} = {}) {
+  if (!recoveryIntentId) return null;
+  const recoveryParams = [recoveryIntentId];
+  const recoveryLeaseClause = recoveryLeaseOwner ? " AND lease_owner = $2::uuid" : "";
+  if (recoveryLeaseOwner) recoveryParams.push(recoveryLeaseOwner);
+  const recovery = rows(await client.query(
+    `SELECT * FROM zaki_minutes_control_recoveries WHERE recovery_id = $1${recoveryLeaseClause} FOR UPDATE`,
+    recoveryParams
+  ))[0];
+  if (
+    !recovery ||
+    !validSame(recovery.user_id, userId) ||
+    !validSame(recovery.tenant_id, tenantId) ||
+    !validSame(recovery.reservation_id, reservationId) ||
+    (recovery.capture_id && !validSame(recovery.capture_id, response.capture_id)) ||
+    (recovery.operation_id && !validSame(recovery.operation_id, response.operation_id)) ||
+    recovery.state === "terminal" ||
+    recovery.state === "blocked"
+  ) {
+    throw new MinutesControlStateError("Minutes recovery intent conflicted with a capture response.", {
+      code: "upstream_unavailable",
+      status: 503,
+      retryable: true,
+    });
+  }
+  // A browser retry may race a leased reconciler that has already discovered
+  // the same idempotent capture and started its stop path. It may verify the
+  // binding above, but cannot rewind the worker's state back to `tracking`.
+  if (!recoveryLeaseOwner && recovery.capture_id) return recovery;
+  const updated = rows(await client.query(
+    `UPDATE zaki_minutes_control_recoveries
+       SET capture_id = $2,
+           operation_id = $3,
+           meeting_id = COALESCE(meeting_id, $4),
+           state = $5,
+           next_attempt_at = NOW() + INTERVAL '1 minute',
+           last_error_code = NULL,
+           last_error_at = NULL,
+           updated_at = NOW()
+     WHERE recovery_id = $1
+     RETURNING *`,
+    [recoveryIntentId, response.capture_id, response.operation_id, response.meeting_id || null, recoveryState]
+  ))[0];
+  if (!updated) {
+    throw new MinutesControlStateError("Minutes recovery intent could not be updated.", {
+      code: "upstream_unavailable",
+      status: 503,
+      retryable: true,
+    });
+  }
+  return updated;
+}
+
+async function recordMinutesControlCaptureInTransaction(client, {
+  response,
+  userId,
+  tenantId,
+  reservationId,
+  recoveryIntentId,
+  recoveryState,
+  recoveryLeaseOwner,
+} = {}) {
+  const inserted = await client.query(
+    `INSERT INTO zaki_minutes_control_captures
+       (capture_id, user_id, tenant_id, operation_id, reservation_id, meeting_id, state)
+     VALUES ($1, $2, $3, $4, $5, $6, 'requested')
+     ON CONFLICT (capture_id) DO NOTHING
+     RETURNING *`,
+    [response.capture_id, userId, tenantId, response.operation_id, reservationId, response.meeting_id || null]
+  );
+  const created = rows(inserted)[0];
+  const existing = created || rows(await client.query(
+    `SELECT * FROM zaki_minutes_control_captures WHERE capture_id = $1 FOR UPDATE`,
+    [response.capture_id]
+  ))[0];
+  if (
+    !existing ||
+    !validSame(existing.user_id, userId) ||
+    !validSame(existing.tenant_id, tenantId) ||
+    !validSame(existing.operation_id, response.operation_id) ||
+    !validSame(existing.reservation_id, reservationId)
+  ) {
+    throw new MinutesControlStateError("Minutes capture replay conflicted with a stored capture.");
+  }
+  const bound = response.meeting_id ? await bindMeetingId(client, existing, response.meeting_id) : existing;
+  await bindRecoveryIntentToCapture(client, {
+    recoveryIntentId,
+    response,
+    userId,
+    tenantId,
+    reservationId,
+    recoveryState,
+    recoveryLeaseOwner,
+  });
+  // A retry may reach normal persistence after the legacy compensation record
+  // was written. The recovery intent remains until terminal settlement; only
+  // the obsolete one-shot marker can be removed here.
+  await client.query(
+    `DELETE FROM zaki_minutes_control_compensations WHERE capture_id = $1`,
+    [response.capture_id]
+  );
+  return bound;
+}
+
 export async function recordMinutesControlCapture({
   response,
   userId,
   tenantId = "default",
   reservationId,
+  recoveryIntentId,
+  recoveryState = "tracking",
+  recoveryLeaseOwner,
   runInTransaction = defaultWithDbTransaction,
 } = {}) {
   if (!response?.capture_id || !response?.operation_id || !reservationId) {
@@ -137,39 +259,15 @@ export async function recordMinutesControlCapture({
       retryable: true,
     });
   }
-  return runInTransaction(async (client) => {
-    const inserted = await client.query(
-      `INSERT INTO zaki_minutes_control_captures
-         (capture_id, user_id, tenant_id, operation_id, reservation_id, meeting_id, state)
-       VALUES ($1, $2, $3, $4, $5, $6, 'requested')
-       ON CONFLICT (capture_id) DO NOTHING
-       RETURNING *`,
-      [response.capture_id, userId, tenantId, response.operation_id, reservationId, response.meeting_id || null]
-    );
-    const created = rows(inserted)[0];
-    const existing = created || rows(await client.query(
-      `SELECT * FROM zaki_minutes_control_captures WHERE capture_id = $1 FOR UPDATE`,
-      [response.capture_id]
-    ))[0];
-    if (
-      !existing ||
-      !validSame(existing.user_id, userId) ||
-      !validSame(existing.tenant_id, tenantId) ||
-      !validSame(existing.operation_id, response.operation_id) ||
-      !validSame(existing.reservation_id, reservationId)
-    ) {
-      throw new MinutesControlStateError("Minutes capture replay conflicted with a stored capture.");
-    }
-    const bound = response.meeting_id ? await bindMeetingId(client, existing, response.meeting_id) : existing;
-    // A retry may reach normal persistence after the compensation record was
-    // written. The capture is then durable in the primary table, so remove the
-    // temporary reconciliation marker in the same transaction.
-    await client.query(
-      `DELETE FROM zaki_minutes_control_compensations WHERE capture_id = $1`,
-      [response.capture_id]
-    );
-    return bound;
-  });
+  return runInTransaction((client) => recordMinutesControlCaptureInTransaction(client, {
+    response,
+    userId,
+    tenantId,
+    reservationId,
+    recoveryIntentId,
+    recoveryState,
+    recoveryLeaseOwner,
+  }));
 }
 
 export async function recordMinutesControlCompensation({
@@ -218,31 +316,35 @@ export async function recordMinutesControlCompensation({
 
 async function promoteMinutesControlCompensation(client, envelope) {
   const data = envelope.data;
-  const compensation = rows(await client.query(
-    `SELECT * FROM zaki_minutes_control_compensations WHERE capture_id = $1 FOR UPDATE`,
+  // Read the legacy marker without a row lock, then acquire the primary
+  // capture first. Capture writers use this same order (capture → marker),
+  // which avoids a callback/persistence deadlock during the narrow promotion
+  // race.
+  const candidate = rows(await client.query(
+    `SELECT * FROM zaki_minutes_control_compensations WHERE capture_id = $1`,
     [data.capture_id]
   ))[0];
-  if (!compensation) return null;
-  assertedCaptureBinding(compensation, data);
-  if (compensation.meeting_id && data.meeting_id && !validSame(compensation.meeting_id, data.meeting_id)) {
+  if (!candidate) return null;
+  assertedCaptureBinding(candidate, data);
+  if (candidate.meeting_id && data.meeting_id && !validSame(candidate.meeting_id, data.meeting_id)) {
     throw new MinutesControlStateError("Minutes compensation meeting identity changed.");
   }
   const state = envelope.event_type === "minutes.capture.status"
     ? data.state
-    : compensation.stop_state === "stop_requested" ? "stopping" : "requested";
-  const meetingId = data.meeting_id || compensation.meeting_id || null;
+    : candidate.stop_state === "stop_requested" ? "stopping" : "requested";
+  const meetingId = data.meeting_id || candidate.meeting_id || null;
   const inserted = rows(await client.query(
     `INSERT INTO zaki_minutes_control_captures
        (capture_id, user_id, tenant_id, operation_id, reservation_id, meeting_id, state)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
-     ON CONFLICT (capture_id) DO NOTHING
-     RETURNING *`,
+    ON CONFLICT (capture_id) DO NOTHING
+    RETURNING *`,
     [
-      compensation.capture_id,
-      compensation.user_id,
-      compensation.tenant_id,
-      compensation.operation_id,
-      compensation.reservation_id,
+      candidate.capture_id,
+      candidate.user_id,
+      candidate.tenant_id,
+      candidate.operation_id,
+      candidate.reservation_id,
       meetingId,
       state,
     ]
@@ -252,10 +354,77 @@ async function promoteMinutesControlCompensation(client, envelope) {
     [data.capture_id]
   ))[0];
   assertedCaptureBinding(capture, data);
+  const compensation = rows(await client.query(
+    `SELECT * FROM zaki_minutes_control_compensations WHERE capture_id = $1 FOR UPDATE`,
+    [data.capture_id]
+  ))[0];
+  if (!compensation) return capture;
+  assertedCaptureBinding(compensation, data);
+  if (compensation.meeting_id && data.meeting_id && !validSame(compensation.meeting_id, data.meeting_id)) {
+    throw new MinutesControlStateError("Minutes compensation meeting identity changed.");
+  }
   await client.query(
     `DELETE FROM zaki_minutes_control_compensations WHERE capture_id = $1`,
     [data.capture_id]
   );
+  return capture;
+}
+
+async function promoteMinutesControlRecovery(client, envelope) {
+  const data = envelope.data;
+  // Take the primary-capture lock before the recovery lock. This matches
+  // post-create persistence and prevents a callback from holding recovery
+  // while waiting on an uncommitted capture insert.
+  const candidate = await findMinutesControlRecoveryForCallback({
+    client,
+    captureId: data.capture_id,
+    operationId: data.operation_id,
+  });
+  if (!candidate) return null;
+  assertedCaptureBinding(candidate, data);
+  if (candidate.meeting_id && data.meeting_id && !validSame(candidate.meeting_id, data.meeting_id)) {
+    throw new MinutesControlStateError("Minutes recovery meeting identity changed.");
+  }
+  const state = envelope.event_type === "minutes.capture.status"
+    ? data.state
+    : candidate.state === "stop_requested" ? "stopping" : "requested";
+  const meetingId = data.meeting_id || candidate.meeting_id || null;
+  const inserted = rows(await client.query(
+    `INSERT INTO zaki_minutes_control_captures
+       (capture_id, user_id, tenant_id, operation_id, reservation_id, meeting_id, state)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    ON CONFLICT (capture_id) DO NOTHING
+    RETURNING *`,
+    [
+      candidate.capture_id,
+      candidate.user_id,
+      candidate.tenant_id,
+      candidate.operation_id,
+      candidate.reservation_id,
+      meetingId,
+      state,
+    ]
+  ))[0];
+  const capture = inserted || rows(await client.query(
+    `SELECT * FROM zaki_minutes_control_captures WHERE capture_id = $1 FOR UPDATE`,
+    [data.capture_id]
+  ))[0];
+  assertedCaptureBinding(capture, data);
+  const recovery = rows(await client.query(
+    `SELECT * FROM zaki_minutes_control_recoveries WHERE recovery_id = $1 FOR UPDATE`,
+    [candidate.recovery_id]
+  ))[0];
+  if (!recovery) {
+    throw new MinutesControlStateError("Minutes recovery disappeared during callback promotion.", {
+      code: "upstream_unavailable",
+      status: 503,
+      retryable: true,
+    });
+  }
+  assertedCaptureBinding(recovery, data);
+  if (recovery.meeting_id && data.meeting_id && !validSame(recovery.meeting_id, data.meeting_id)) {
+    throw new MinutesControlStateError("Minutes recovery meeting identity changed.");
+  }
   return capture;
 }
 
@@ -304,7 +473,7 @@ async function applyUsageCallback(client, capture, data, settleCapture) {
 
   // Once the first terminal usage has settled, later callbacks remain auditable
   // through the event table but intentionally have no state or wallet effect.
-  if (Boolean(bound.usage_terminal)) return { capture: bound, applied: false };
+  if (bound.usage_terminal === true) return { capture: bound, applied: false };
 
   if (metering.sequence < Number(bound.usage_sequence)) {
     if (metering.captured_seconds_total > Number(bound.captured_seconds_total)) {
@@ -340,6 +509,12 @@ async function applyUsageCallback(client, capture, data, settleCapture) {
       capturedSecondsTotal: metering.captured_seconds_total,
       client,
     });
+    await markMinutesControlRecoveryCallback({
+      client,
+      captureId: updated.capture_id,
+      terminal: true,
+      capturedSecondsTotal: metering.captured_seconds_total,
+    });
   }
   return { capture: updated, applied: true };
 }
@@ -364,6 +539,7 @@ export async function applyMinutesControlCallback({
     ))[0];
     if (!capture) {
       capture = await promoteMinutesControlCompensation(client, envelope);
+      if (!capture) capture = await promoteMinutesControlRecovery(client, envelope);
       if (!capture) {
         // The engine may beat the capture-response persistence by a few milliseconds.
         // No event is recorded in this transaction, so a normal engine retry can apply it.
@@ -408,8 +584,130 @@ export async function applyMinutesControlCallback({
   });
 }
 
+// The engine's status endpoint is the fallback when a signed terminal callback
+// is delayed or lost.  Its response is authenticated and contract-validated by
+// the caller; this transaction then settles the same hold and terminalizes the
+// durable recovery record together.  A later callback is still recorded, but
+// cannot charge twice because `usage_terminal` is already true.
+export async function settleRecoveredMinutesControlCapture({
+  recoveryId,
+  leaseOwner,
+  response,
+  settleCapture = defaultSettleMinutesCapture,
+  runInTransaction = defaultWithDbTransaction,
+} = {}) {
+  if (!recoveryId || !leaseOwner || !response?.capture_id || !response?.metering?.terminal) {
+    throw new MinutesControlStateError("Minutes recovered terminal state is invalid.", {
+      code: "upstream_unavailable",
+      status: 503,
+      retryable: true,
+    });
+  }
+  return runInTransaction(async (client) => {
+    // Keep the capture → recovery lock order used by callback handling and
+    // capture recording. A terminal callback can then settle concurrently
+    // without taking the two durable rows in reverse order.
+    const capture = rows(await client.query(
+      `SELECT * FROM zaki_minutes_control_captures WHERE capture_id = $1 FOR UPDATE`,
+      [response.capture_id]
+    ))[0];
+    const recovery = rows(await client.query(
+      `SELECT * FROM zaki_minutes_control_recoveries
+        WHERE recovery_id = $1 AND lease_owner = $2::uuid
+        FOR UPDATE`,
+      [recoveryId, leaseOwner]
+    ))[0];
+    if (
+      !recovery ||
+      !validSame(recovery.capture_id, response.capture_id) ||
+      !validSame(recovery.reservation_id, response.metering.reservation_id) ||
+      recovery.state === "terminal"
+    ) {
+      throw new MinutesControlStateError("Minutes recovery lease was lost before terminal settlement.", {
+        code: "upstream_unavailable",
+        status: 503,
+        retryable: true,
+      });
+    }
+    if (
+      !capture ||
+      !validSame(capture.user_id, recovery.user_id) ||
+      !validSame(capture.tenant_id, recovery.tenant_id) ||
+      !validSame(capture.reservation_id, recovery.reservation_id)
+    ) {
+      throw new MinutesControlStateError("Minutes recovery terminal capture is not bound locally.", {
+        code: "upstream_unavailable",
+        status: 503,
+        retryable: true,
+      });
+    }
+    if (capture.usage_terminal !== true) {
+      const updated = rows(await client.query(
+        `UPDATE zaki_minutes_control_captures
+           SET state = $2,
+               failure_code = $3,
+               captured_seconds_total = $4,
+               usage_terminal = TRUE,
+               updated_at = NOW()
+         WHERE capture_id = $1
+         RETURNING *`,
+        [
+          capture.capture_id,
+          response.state,
+          response.failure_code || null,
+          response.metering.captured_seconds_total,
+        ]
+      ))[0] || capture;
+      await settleCapture({
+        holdId: updated.reservation_id,
+        idempotencyKey: `recovery-${recovery.recovery_id}`,
+        capturedSecondsTotal: response.metering.captured_seconds_total,
+        client,
+      });
+    }
+    const terminal = rows(await client.query(
+      `UPDATE zaki_minutes_control_recoveries
+         SET state = 'terminal',
+             terminal_captured_seconds = $2,
+             terminal_at = COALESCE(terminal_at, NOW()),
+             lease_owner = NULL,
+             lease_expires_at = NULL,
+             last_error_code = NULL,
+             last_error_at = NULL,
+             updated_at = NOW()
+       WHERE recovery_id = $1 AND lease_owner = $3::uuid
+       RETURNING *`,
+      [recovery.recovery_id, response.metering.captured_seconds_total, leaseOwner]
+    ))[0];
+    if (!terminal) {
+      throw new MinutesControlStateError("Minutes recovery terminal receipt was lost.", {
+        code: "upstream_unavailable",
+        status: 503,
+        retryable: true,
+      });
+    }
+    return terminal;
+  });
+}
+
 export async function forgetMinutesControlMeeting({ userId, tenantId = "default", meetingId, dbQuery = defaultDbQuery } = {}) {
   if (!userId || !meetingId) return { rowCount: 0 };
+  await dbQuery(
+    `DELETE FROM zaki_minutes_control_recoveries AS recovery
+      WHERE recovery.user_id = $1
+        AND recovery.tenant_id = $2
+        AND (
+          recovery.meeting_id = $3 OR
+          EXISTS (
+            SELECT 1 FROM zaki_minutes_control_captures AS capture
+             WHERE capture.capture_id = recovery.capture_id
+               AND capture.user_id = $1
+               AND capture.tenant_id = $2
+               AND capture.meeting_id = $3
+          )
+        )`,
+    [userId, tenantId, meetingId]
+  );
   const result = await dbQuery(
     `DELETE FROM zaki_minutes_control_captures
       WHERE user_id = $1 AND tenant_id = $2 AND meeting_id = $3`,
@@ -430,6 +728,8 @@ export async function hasMinutesControlAccountState({ userId, tenantId = "defaul
        SELECT 1 FROM zaki_minutes_control_captures WHERE user_id = $1 AND tenant_id = $2
        UNION ALL
        SELECT 1 FROM zaki_minutes_control_compensations WHERE user_id = $1 AND tenant_id = $2
+       UNION ALL
+       SELECT 1 FROM zaki_minutes_control_recoveries WHERE user_id = $1 AND tenant_id = $2
      ) AS has_minutes_control_state`,
     [userId, tenantId]
   );

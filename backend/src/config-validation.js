@@ -3,6 +3,7 @@ import path from "node:path";
 import { isValidMinutesReadToken } from "./minutes-read-secret.js";
 import {
   isValidMinutesCallbackHmacKey,
+  isValidMinutesControlRecoveryKey,
   isValidMinutesControlSigningKey,
 } from "./minutes-control-secret.js";
 import {
@@ -110,6 +111,8 @@ export function validateRuntimeConfig(env = process.env) {
   const minutesControlSigningKeyFile = normalize(env.MINUTES_ENGINE_CONTROL_TOKEN_FILE);
   const minutesCallbackHmacKey = String(env.MINUTES_ENGINE_CALLBACK_HMAC_KEY ?? "");
   const minutesCallbackHmacKeyFile = normalize(env.MINUTES_ENGINE_CALLBACK_HMAC_KEY_FILE);
+  const minutesRecoveryKey = String(env.MINUTES_CONTROL_RECOVERY_KEY ?? "");
+  const minutesRecoveryKeyFile = normalize(env.MINUTES_CONTROL_RECOVERY_KEY_FILE);
   const minutesControlReserveUnits = normalize(env.MINUTES_CONTROL_CAPTURE_RESERVE_UNITS);
   const minutesControlTokenTtlSeconds = normalize(env.MINUTES_CONTROL_TOKEN_TTL_SECONDS || "60");
   const minutesControlHoldTtlMs = normalize(env.MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS || String(6 * 60 * 60 * 1_000));
@@ -395,6 +398,7 @@ export function validateRuntimeConfig(env = process.env) {
     for (const [fileKey, fileValue] of [
       ["MINUTES_ENGINE_CONTROL_TOKEN_FILE", minutesControlSigningKeyFile],
       ["MINUTES_ENGINE_CALLBACK_HMAC_KEY_FILE", minutesCallbackHmacKeyFile],
+      ["MINUTES_CONTROL_RECOVERY_KEY_FILE", minutesRecoveryKeyFile],
     ]) {
       if (fileValue && !path.isAbsolute(fileValue)) {
         pushIssue(errors, fileKey, `${fileKey} must be an absolute secret-file path.`);
@@ -406,6 +410,9 @@ export function validateRuntimeConfig(env = process.env) {
     if (isProduction && minutesCallbackHmacKey) {
       pushIssue(errors, "MINUTES_ENGINE_CALLBACK_HMAC_KEY", "MINUTES_ENGINE_CALLBACK_HMAC_KEY cannot carry a production credential; use MINUTES_ENGINE_CALLBACK_HMAC_KEY_FILE.");
     }
+    if (isProduction && minutesRecoveryKey) {
+      pushIssue(errors, "MINUTES_CONTROL_RECOVERY_KEY", "MINUTES_CONTROL_RECOVERY_KEY cannot carry a production credential; use MINUTES_CONTROL_RECOVERY_KEY_FILE.");
+    }
     if (isProduction && !minutesControlSigningKeyFile) {
       pushIssue(errors, "MINUTES_ENGINE_CONTROL_TOKEN_FILE", "MINUTES_ENGINE_CONTROL_TOKEN_FILE is required in production when Minutes control is active.");
     } else if (!minutesControlSigningKeyFile && !isValidMinutesControlSigningKey(minutesControlSigningKey)) {
@@ -415,6 +422,11 @@ export function validateRuntimeConfig(env = process.env) {
       pushIssue(errors, "MINUTES_ENGINE_CALLBACK_HMAC_KEY_FILE", "MINUTES_ENGINE_CALLBACK_HMAC_KEY_FILE is required in production when Minutes control is active.");
     } else if (!minutesCallbackHmacKeyFile && !isValidMinutesCallbackHmacKey(minutesCallbackHmacKey)) {
       pushIssue(errors, "MINUTES_ENGINE_CALLBACK_HMAC_KEY", "MINUTES_ENGINE_CALLBACK_HMAC_KEY must be a 32-512 character printable HMAC key.");
+    }
+    if (isProduction && !minutesRecoveryKeyFile) {
+      pushIssue(errors, "MINUTES_CONTROL_RECOVERY_KEY_FILE", "MINUTES_CONTROL_RECOVERY_KEY_FILE is required in production when Minutes control is active.");
+    } else if (!minutesRecoveryKeyFile && !isValidMinutesControlRecoveryKey(minutesRecoveryKey)) {
+      pushIssue(errors, "MINUTES_CONTROL_RECOVERY_KEY", "MINUTES_CONTROL_RECOVERY_KEY must be a dedicated 32-512 character printable encryption key.");
     }
     if (!isSafeIntegerInRange(minutesControlReserveUnits, 1, 1_000_000)) {
       pushIssue(errors, "MINUTES_CONTROL_CAPTURE_RESERVE_UNITS", "MINUTES_CONTROL_CAPTURE_RESERVE_UNITS must be an integer from 1 to 1000000 when Minutes control is active.");

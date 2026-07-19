@@ -214,9 +214,11 @@ import {
   isMinutesControlEnabled,
 } from "./minutes-control-routes.js";
 import { hasMinutesControlAccountState } from "./minutes-control-state.js";
+import { reconcileMinutesControlRecoveries } from "./minutes-control-reconciler.js";
 import { resolveMinutesControlAccountErasure } from "./minutes-control-account-erasure.js";
 import {
   resolveMinutesCallbackHmacKey,
+  resolveMinutesControlRecoveryKey,
   resolveMinutesControlSigningKey,
 } from "./minutes-control-secret.js";
 import {
@@ -728,6 +730,14 @@ function getMinutesEngineCallbackHmacKey() {
   return resolveMinutesCallbackHmacKey({
     tokenFile: process.env.MINUTES_ENGINE_CALLBACK_HMAC_KEY_FILE,
     fallbackToken: process.env.MINUTES_ENGINE_CALLBACK_HMAC_KEY,
+    readFileSync: fs.readFileSync,
+  });
+}
+function getMinutesControlRecoveryEncryptionKey() {
+  if (!ZAKI_MINUTES_CONTROL_ACTIVE) return "";
+  return resolveMinutesControlRecoveryKey({
+    tokenFile: process.env.MINUTES_CONTROL_RECOVERY_KEY_FILE,
+    fallbackToken: process.env.MINUTES_CONTROL_RECOVERY_KEY,
     readFileSync: fs.readFileSync,
   });
 }
@@ -18559,6 +18569,7 @@ app.use("/api/minutes", buildMinutesControlRouter({
   enabled: ZAKI_MINUTES_CONTROL_ACTIVE,
   baseUrl: MINUTES_ENGINE_BASE_URL,
   controlSigningKey: getMinutesEngineControlSigningKey(),
+  recoveryEncryptionKey: getMinutesControlRecoveryEncryptionKey(),
   callbackHmacKey: getMinutesEngineCallbackHmacKey(),
   timeoutMs: MINUTES_ENGINE_REQUEST_TIMEOUT_MS,
   tokenTtlSeconds: MINUTES_CONTROL_TOKEN_TTL_SECONDS,
@@ -21707,6 +21718,41 @@ server.listen(PORT, () => {
     runLedgerSweep();
     setInterval(runLedgerSweep, LEDGER_SWEEP_INTERVAL_MS);
   }, 45_000);
+
+  // A completed engine request can be lost between the network response and
+  // Hub persistence.  Every Minutes create reserves a durable, encrypted
+  // recovery intent first; this leased sweep is its crash/restart owner.  It
+  // is deliberately behind the exact same evidence gate as the browser routes
+  // and callback verifier, so dark deployments never make engine calls.
+  if (ZAKI_MINUTES_CONTROL_ACTIVE) {
+    const MINUTES_RECOVERY_SWEEP_INTERVAL_MS = 30_000;
+    let minutesRecoveryRunning = false;
+    const runMinutesRecoverySweep = async () => {
+      if (minutesRecoveryRunning) return;
+      minutesRecoveryRunning = true;
+      try {
+        const result = await reconcileMinutesControlRecoveries({
+          baseUrl: MINUTES_ENGINE_BASE_URL,
+          controlSigningKey: getMinutesEngineControlSigningKey(),
+          recoveryEncryptionKey: getMinutesControlRecoveryEncryptionKey(),
+          fetchWithTimeout,
+          timeoutMs: MINUTES_ENGINE_REQUEST_TIMEOUT_MS,
+          tokenTtlSeconds: MINUTES_CONTROL_TOKEN_TTL_SECONDS,
+        });
+        if (result.claimed > 0 || result.failed > 0 || result.blocked > 0) {
+          logStructured("warn", "minutes.control.recovery_sweep", result);
+        }
+      } catch (err) {
+        logStructured("error", "minutes.control.recovery_sweep_failed", { message: err?.message || String(err) });
+      } finally {
+        minutesRecoveryRunning = false;
+      }
+    };
+    setTimeout(() => {
+      void runMinutesRecoverySweep();
+      setInterval(() => { void runMinutesRecoverySweep(); }, MINUTES_RECOVERY_SWEEP_INTERVAL_MS);
+    }, 20_000);
+  }
 
   // Agent-usage reconciliation sweep (Wave 2 metering completeness): debit the unit wallet for
   // DAEMON (cron/heartbeat/channel) agent turns the engine recorded in zaki_bot.turn_usage but that

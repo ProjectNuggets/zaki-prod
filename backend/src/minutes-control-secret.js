@@ -26,6 +26,13 @@ export function isValidMinutesCallbackHmacKey(value) {
   return isPrintableSecret(value);
 }
 
+// This key protects encrypted pre-spawn requests at rest. It intentionally is
+// not the engine-scoped signing key: rotating the latter must never strand an
+// ambiguous capture whose retry body is still needed for reconciliation.
+export function isValidMinutesControlRecoveryKey(value) {
+  return isPrintableSecret(value);
+}
+
 function resolveSecret({ tokenFile, fallbackToken, readFileSync, fileName, tokenName, validate }) {
   const resolvedFile = String(tokenFile || "").trim();
   let token = String(fallbackToken ?? "");
@@ -55,6 +62,17 @@ export function resolveMinutesControlToken({ tokenFile, fallbackToken, readFileS
 }
 
 export const resolveMinutesControlSigningKey = resolveMinutesControlToken;
+
+export function resolveMinutesControlRecoveryKey({ tokenFile, fallbackToken, readFileSync }) {
+  return resolveSecret({
+    tokenFile,
+    fallbackToken,
+    readFileSync,
+    fileName: "MINUTES_CONTROL_RECOVERY_KEY_FILE",
+    tokenName: "MINUTES_CONTROL_RECOVERY_KEY",
+    validate: isValidMinutesControlRecoveryKey,
+  });
+}
 
 function base64urlJson(value) {
   return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");

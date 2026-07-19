@@ -1,6 +1,5 @@
 import { describe, expect, jest, test } from "@jest/globals";
 import {
-  MinutesControlMeteringError,
   minutesUnitsFromCapturedSeconds,
   reserveMinutesCapture,
   settleMinutesCapture,
@@ -46,6 +45,28 @@ describe("Minutes capture metering", () => {
     });
   });
 
+  test("runs a pre-spawn recovery write inside the same transaction as the hold", async () => {
+    const client = { query: jest.fn() };
+    const runInTransaction = jest.fn(async (work) => work(client));
+    const reserveUnits = jest.fn().mockResolvedValue({ ok: true, hold: { id: "hold-atomic" } });
+    const onReserved = jest.fn().mockResolvedValue({ recovery_id: "recovery-atomic" });
+
+    const result = await reserveMinutesCapture({
+      zakiUser: { id: 42 },
+      tenantId: "default",
+      idempotencyKey: "capture-atomic",
+      reservedUnits: 60,
+      reserveUnits,
+      runInTransaction,
+      onReserved,
+    });
+
+    expect(runInTransaction).toHaveBeenCalledTimes(1);
+    expect(reserveUnits).toHaveBeenCalledWith(expect.any(Object), client);
+    expect(onReserved).toHaveBeenCalledWith(expect.objectContaining({ hold: { id: "hold-atomic" } }), client);
+    expect(result).toMatchObject({ hold: { id: "hold-atomic" }, recoveryIntent: { recovery_id: "recovery-atomic" } });
+  });
+
   test("settles the true cumulative cost when capture duration exceeds its initial hold", async () => {
     const settleHold = jest.fn().mockResolvedValue({ ok: true, hold: { state: "settled" } });
     await settleMinutesCapture({
@@ -62,12 +83,12 @@ describe("Minutes capture metering", () => {
     }), undefined);
   });
 
-  test("refuses to acknowledge a terminal callback after the paid hold expired", async () => {
+  test.each(["expired", "released"])("refuses to acknowledge a terminal callback after the paid hold was %s", async (state) => {
     await expect(settleMinutesCapture({
       holdId: "hold-01",
       idempotencyKey: "event-late",
       capturedSecondsTotal: 60,
-      settleHold: jest.fn().mockResolvedValue({ ok: true, idempotent: true, hold: { state: "expired" } }),
+      settleHold: jest.fn().mockResolvedValue({ ok: true, idempotent: true, hold: { state } }),
     })).rejects.toMatchObject({
       code: "upstream_unavailable",
       status: 503,

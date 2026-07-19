@@ -382,6 +382,15 @@ export async function sweepExpiredHolds({ limit = 500 } = {}) {
   const due = await dbAll(
     `SELECT id FROM zaki_meter_holds
       WHERE state = 'reserved' AND expires_at < NOW()
+        -- A Minutes recovery row means the engine outcome is still unknown.
+        -- Never refund that hold underneath its durable reconciler; a terminal
+        -- receipt or an explicit lease-fenced rejection is required first.
+        AND NOT EXISTS (
+          SELECT 1
+            FROM zaki_minutes_control_recoveries AS recovery
+           WHERE recovery.reservation_id = zaki_meter_holds.id
+             AND recovery.state <> 'terminal'
+        )
       ORDER BY expires_at ASC
       LIMIT $1`,
     [limit]
