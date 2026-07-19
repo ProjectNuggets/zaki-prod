@@ -802,6 +802,8 @@
       "contextCompactAria": "السياق عند {{percent}} بالمئة. اضغط للتقليص.",
       "contextCompactHint": "اضغط لتقليص السياق وتوفير مساحة.",
       "contextCompactBusy": "جارٍ التقليص...",
+      "lastTurnWarning": "من المرجّح أن تكون هذه آخر جولة لك قبل إعادة ضبط نافذة السعة. تعود السعة في {{reset}}.",
+      "lastTurnWarningWithoutReset": "من المرجّح أن تكون هذه آخر جولة لك قبل إعادة ضبط نافذة السعة.",
       "approvals": "الموافقات",
       "approvalsAria": "{{count}} موافقات معلقة",
       "browser": "المتصفح",

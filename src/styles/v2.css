@@ -6962,6 +6962,25 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   padding: 0 24px;
 }
 
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-last-turn-warning {
+  width: min(100%, 852px);
+  margin: 0 auto 8px;
+  border: 1px solid color-mix(in srgb, var(--v2-warn) 52%, var(--v2-hairline));
+  background: var(--v2-warn-faint);
+  color: var(--v2-ink-2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-last-turn-warning svg {
+  color: var(--v2-warn);
+}
+
 .zaki-app-v2 .zaki-agent-v2 .zaki-agent-provision-state {
   width: min(100%, 852px);
   min-height: 44px;
@@ -8699,6 +8718,11 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
   .zaki-app-v2 .zaki-agent-v2 .zaki-approval-card-slot {
     padding: 0 14px;
+    margin-bottom: 6px;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-agent-last-turn-warning {
+    width: calc(100% - 28px);
     margin-bottom: 6px;
   }
 

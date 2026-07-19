@@ -57,6 +57,8 @@ describe("i18n locale parity", () => {
     "paywall.limit.upgradeCta",
     "paywall.limit.promptSaved",
     "paywall.limit.resets",
+    "input.zaki.lastTurnWarning",
+    "input.zaki.lastTurnWarningWithoutReset",
     "zakiDashboard.meter.enforcedDaily",
     "zakiDashboard.meter.enforcedUsed",
   ])("%s exists in both locales", (key) => {

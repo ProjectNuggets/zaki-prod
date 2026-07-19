@@ -7,6 +7,7 @@ import {
   Download,
   Brain,
   ChevronDown,
+  Clock,
   LoaderCircle,
   RefreshCw,
 } from "lucide-react";
@@ -326,7 +327,26 @@ export function buildAgentComposerUsageState({
   availability?: MeterAvailableNow | null;
 }) {
   const locked = isAgentActive && isMeterAvailabilityBlocked(availability);
-  return { locked };
+  const lastTurnWarning =
+    isAgentActive && !locked && availability?.lastTurnWarning === true;
+  return {
+    locked,
+    lastTurnWarning,
+    resetAt: lastTurnWarning ? availability?.resetAt ?? null : null,
+  };
+}
+
+function formatAgentCapacityReset(
+  resetAt: string | null,
+  locale?: string,
+): string | null {
+  if (!resetAt) return null;
+  const parsed = new Date(resetAt);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Intl.DateTimeFormat(locale || undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parsed);
 }
 
 // Spaces (non-agent) composer send-lock. Authenticated users are gated by the pooled unit wallet
@@ -4125,6 +4145,10 @@ export function ChatArea() {
     availability: agentAvailability,
   });
   const agentCapacityBlocked = agentComposerUsageState.locked;
+  const agentCapacityResetLabel = formatAgentCapacityReset(
+    agentComposerUsageState.resetAt,
+    i18n.resolvedLanguage || i18n.language,
+  );
   const isExistingSignedInAgentThread =
     isZakiBotActiveSpace && Boolean(authUserId) && Boolean(activeThreadId);
   const isActiveAgentHistoryHydrated =
@@ -10581,6 +10605,28 @@ export function ChatArea() {
                     items={composerQuickReplyItems}
                     disabled={!composerQuickReplyVisible}
                   />
+                </div>
+              ) : null}
+              {agentComposerUsageState.lastTurnWarning ? (
+                <div
+                  className="zaki-agent-last-turn-warning"
+                  data-testid="zaki-agent-last-turn-warning"
+                  data-reset-at={agentComposerUsageState.resetAt ?? undefined}
+                  role="status"
+                  aria-live="polite"
+                >
+                  <Clock className="size-3.5 shrink-0" aria-hidden="true" />
+                  <span>
+                    {agentCapacityResetLabel
+                      ? t("input.zaki.lastTurnWarning", {
+                          reset: agentCapacityResetLabel,
+                          defaultValue: `This is likely your last turn before this capacity window resets. Capacity returns ${agentCapacityResetLabel}.`,
+                        })
+                      : t("input.zaki.lastTurnWarningWithoutReset", {
+                          defaultValue:
+                            "This is likely your last turn before this capacity window resets.",
+                        })}
+                  </span>
                 </div>
               ) : null}
               <InputArea
