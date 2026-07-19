@@ -143,49 +143,52 @@ test.describe("WP-J first-run ceremony", () => {
     await expect(page.getByTestId("first-run-name-card")).toHaveCount(0);
   });
 
-  test("waits for memory absorption and confirms the backend count", async ({ page }, testInfo) => {
+  test("sends the import through the agent, never the Hub capture store", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "chromium-desktop", "Runs once on desktop Chromium.");
     await signInForRelease(page);
-    const productEvents: Array<{ event?: string; source?: string }> = [];
-    await page.route("**/api/telemetry/product-event", async (route) => {
-      productEvents.push(route.request().postDataJSON() as { event?: string; source?: string });
-      await json(route, { success: true });
-    });
+    await mockFirstRunAgent(page);
+
+    // WP-MEM6. This used to POST /api/memory/capture, which writes the Hub store (public.memories,
+    // keyed by email) — a store the AGENT cannot read. Users imported a profile, were told it was
+    // stored, and the agent knew none of it. Counting the calls means a regression fails loudly here
+    // instead of quietly reintroducing an unreadable write.
+    let captureCalls = 0;
     await page.route("**/api/memory/capture", async (route) => {
+      captureCalls += 1;
+      await json(route, { saved: [], superseded: [], duplicates: [], skipped: [] });
+    });
+
+    // Registered after mockFirstRunAgent so this handler wins and can record what was sent. The
+    // first-run bootstrap turn fires on mount and races the import, so exclude it the same way the
+    // shared mock detects it — otherwise this asserts on arrival order, which is not the contract.
+    const sentMessages: string[] = [];
+    await page.route("**/api/agent/chat/stream", async (route) => {
+      const body = route.request().postDataJSON() as { message?: string };
+      const firstRun = body.message?.startsWith("Begin our first conversation now.");
+      if (!firstRun) sentMessages.push(body.message ?? "");
       await json(route, {
-        saved: [
-          {
-            id: "11111111-1111-4111-8111-111111111111",
-            content: "Prefers concise answers",
-            type: "preference",
-            state: "saved_reversible",
-            undoUntil: "2026-07-14T16:00:00.000Z",
-          },
-          {
-            id: "22222222-2222-4222-8222-222222222222",
-            content: "Lives in Berlin",
-            type: "identity",
-            state: "saved_reversible",
-            undoUntil: "2026-07-14T16:00:00.000Z",
-          },
-        ],
-        superseded: [],
-        duplicates: [{ content: "Uses TypeScript", type: "preference" }],
-        skipped: [],
+        type: "done",
+        message: firstRun ? ENGINE_GREETING : "Saved.",
       });
     });
+
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
     await page.getByRole("button", { name: "Import memory" }).click();
     await page
       .getByPlaceholder("Paste the assistant's reply here.")
-      .fill("Zaki: here are my facts. Save and update your memory accordingly.\nPrefers concise answers.");
+      .fill(
+        "Identity\n[2026-07-18] - Lives in Berlin\n\nPreferences\n[2026-07-18] - Prefers concise answers",
+      );
     await page.getByRole("button", { name: "Absorb into Brain" }).click();
 
-    await expect(page.getByText("I now remember 3 details from your import")).toBeVisible();
-    await expect(page.getByText("2 new · 0 updated · 1 already known. Stored in your Brain.")).toBeVisible();
-    await expect
-      .poll(() => productEvents.some((event) => event.event === "first_memory_saved"))
-      .toBe(true);
+    // Two headers -> two turns, each carrying its own header: the split is on meaning, not on a
+    // character count, so entries never arrive detached from the heading that explains them.
+    await expect.poll(() => sentMessages.length, { timeout: 15_000 }).toBe(2);
+    expect(sentMessages[0]).toContain("Identity");
+    expect(sentMessages[0]).toContain("Lives in Berlin");
+    expect(sentMessages[1]).toContain("Preferences");
+    expect(sentMessages[1]).toContain("Prefers concise answers");
+    expect(captureCalls).toBe(0);
   });
 });
