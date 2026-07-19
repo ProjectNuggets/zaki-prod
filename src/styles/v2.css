@@ -12205,7 +12205,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-product-gate__facts dt {
-  color: var(--v2-ink-3);
+  color: var(--v2-ink-2);
   font-family: var(--v2-font-mono);
   font-size: 10px;
   letter-spacing: 0.14em;

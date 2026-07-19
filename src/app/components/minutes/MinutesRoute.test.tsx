@@ -34,12 +34,12 @@ describe("MinutesRoute activation boundary", () => {
     mockRegistryRefetch.mockReset();
   });
 
-  it("shows an anonymous introduction with a sign-in handoff even if the operator gate is enabled", () => {
+  it("keeps anonymous visitors on the coming-soon gate even if the operator gate is enabled", () => {
     mockToken = "";
     mockProductState = "enabled";
     render(<MemoryRouter><MinutesRoute /></MemoryRouter>);
-    expect(screen.getByRole("heading", { name: "Your meetings, made reviewable" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Sign in to open Minutes" })).toHaveAttribute("href", "/?next=%2Fminutes");
+    expect(screen.getByTestId("product-gate-minutes")).toHaveAttribute("data-product-gate", "coming_soon");
+    expect(screen.queryByRole("link", { name: "Sign in to open Minutes" })).not.toBeInTheDocument();
     expect(screen.queryByText("minutes read page")).not.toBeInTheDocument();
   });
 
