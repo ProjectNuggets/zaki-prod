@@ -467,6 +467,9 @@ jest.mock("@/queries", () => ({
 }));
 
 jest.mock("@/queries/useBilling", () => ({
+  billingKeys: {
+    meterStatus: ["billing", "meterStatus"],
+  },
   useEntitlements: () => ({
     data: {
       data: {
@@ -2908,8 +2911,34 @@ describe("ChatArea Component", () => {
       response: { ok: true, status: 200, json: async () => ({ userId: "1" }) },
       data: { userId: "1" },
     });
+    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+      if (path === "/api/agent/chat/stream") {
+        return makeSseStreamResponse([
+          'event: token\ndata: {"delta":"Done"}\n\n',
+          'event: done\ndata: {"type":"done"}\n\n',
+        ]);
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+        headers: new Headers(),
+      };
+    });
 
-    await renderChatAreaAndWaitForEffects();
+    const view = await renderChatAreaAndWaitForEffects();
+    const originalInvalidateQueries = view.queryClient.invalidateQueries.bind(view.queryClient);
+    let finishMeterRefresh: (() => void) | null = null;
+    const invalidateQueries = jest
+      .spyOn(view.queryClient, "invalidateQueries")
+      .mockImplementation((filters, options) => {
+        if (filters?.queryKey?.[0] === "billing") {
+          return new Promise<void>((resolve) => {
+            finishMeterRefresh = resolve;
+          });
+        }
+        return originalInvalidateQueries(filters, options);
+      });
 
     const warning = await screen.findByTestId("zaki-agent-last-turn-warning");
     expect(warning).toHaveAttribute("role", "status");
@@ -2921,6 +2950,28 @@ describe("ChatArea Component", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "input.sendAria" })).toBeEnabled();
     });
+    fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+    await waitFor(() => {
+      expect(invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ["billing", "meterStatus"],
+      });
+    });
+    expect(
+      screen.getByRole("button", { name: "input.stopAria" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("combobox")).toBeDisabled();
+    await act(async () => {
+      finishMeterRefresh?.();
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "input.sendAria" }),
+      ).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByRole("combobox"), {
+      target: { value: "Try another turn" },
+    });
+    expect(screen.getByRole("button", { name: "input.sendAria" })).toBeEnabled();
   });
 
   it("surfaces provisioning failure and retries from a persistent Agent setup state", async () => {

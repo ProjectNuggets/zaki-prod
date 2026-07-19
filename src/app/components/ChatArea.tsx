@@ -167,7 +167,7 @@ import type {
   DocSource,
 } from "@/types";
 import { useMessages } from "@/queries/useThreads";
-import { useEntitlements, useMeterStatus } from "@/queries/useBilling";
+import { billingKeys, useEntitlements, useMeterStatus } from "@/queries/useBilling";
 import { spaceKeys } from "@/queries/useSpaces";
 import { useZakiSessions, zakiSessionKeys } from "@/queries/useZakiSessions";
 import { buildZakiSessionRepairTitle, prepareAutoTitleExchange } from "@/lib/sessionAutoTitle";
@@ -4145,9 +4145,17 @@ export function ChatArea() {
     availability: agentAvailability,
   });
   const agentCapacityBlocked = agentComposerUsageState.locked;
-  const agentCapacityResetLabel = formatAgentCapacityReset(
-    agentComposerUsageState.resetAt,
-    i18n.resolvedLanguage || i18n.language,
+  const agentCapacityResetLabel = useMemo(
+    () =>
+      formatAgentCapacityReset(
+        agentComposerUsageState.resetAt,
+        i18n.resolvedLanguage || i18n.language,
+      ),
+    [
+      agentComposerUsageState.resetAt,
+      i18n.language,
+      i18n.resolvedLanguage,
+    ],
   );
   const isExistingSignedInAgentThread =
     isZakiBotActiveSpace && Boolean(authUserId) && Boolean(activeThreadId);
@@ -8798,6 +8806,12 @@ export function ChatArea() {
       toast.error(errorMessage);
       return false;
     } finally {
+      if (isZakiBotTarget) {
+        // The warning describes the NEXT admission decision. A completed, failed, or
+        // aborted Agent turn can settle/refund the wallet differently, so discard the
+        // pre-turn snapshot before the composer offers another send.
+        await queryClient.invalidateQueries({ queryKey: billingKeys.meterStatus });
+      }
       if (streamAbortRef.current === streamController) {
         streamAbortRef.current = null;
       }
