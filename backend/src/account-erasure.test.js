@@ -210,4 +210,66 @@ describe("account erasure", () => {
     expect(serializedReceiptFields).not.toContain("/private/path");
     expect(serializedReceiptFields).toContain("vectorRowsRemoved");
   });
+
+  test("requires the Minutes raw-store erasure receipt before deleting the Hub account", async () => {
+    const transactionQuery = jest.fn(async (sql) => {
+      if (sql.includes("INSERT INTO zaki_account_erasure_receipts")) return { rows: [{ id: 92 }] };
+      return { rows: [], rowCount: 1 };
+    });
+    const deleteMinutes = jest.fn().mockResolvedValue({
+      attempted: true,
+      ok: true,
+      receipt: {
+        receiptId: "minutes-receipt-01",
+        counts: { meetingRows: 1, transcriptRows: 2, summaryRows: 1, recordingObjects: 0 },
+      },
+    });
+    const result = await eraseAccountData({
+      zakiUser: { id: 42, email: "private@example.com" },
+      memoryKey: "private@example.com",
+      requestId: "req-minutes-erase",
+      purgeNullalis: jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        data: {
+          status: "ok", sessions_evicted: 0, sessions_skipped_active: 0,
+          pg_user_row_deleted: true, vector_rows_removed: 0, pg_embedding_rows_removed: 0,
+          filesystem_removed: true, errors: [],
+        },
+      }),
+      deleteTypUser: jest.fn(),
+      cleanupBilling: jest.fn(),
+      deleteLearning: jest.fn().mockResolvedValue({ attempted: false, deleted: [] }),
+      deleteMinutes,
+      runInTransaction: async (callback) => callback({ query: transactionQuery }),
+    });
+    expect(deleteMinutes).toHaveBeenCalledWith(expect.objectContaining({ requestId: "req-minutes-erase" }));
+    expect(result.minutes).toMatchObject({ attempted: true, ok: true });
+    const receiptCall = transactionQuery.mock.calls.find(([sql]) => sql.includes("INSERT INTO zaki_account_erasure_receipts"));
+    expect(JSON.stringify(receiptCall[1])).toContain("minutes-receipt-01");
+    expect(JSON.stringify(receiptCall[1])).not.toContain("private@example.com");
+  });
+
+  test("fails loudly before Hub deletion when Minutes erasure cannot be confirmed", async () => {
+    const transactionQuery = jest.fn();
+    await expect(eraseAccountData({
+      zakiUser: { id: 42 },
+      requestId: "req-minutes-failure",
+      purgeNullalis: jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        data: {
+          status: "ok", sessions_evicted: 0, sessions_skipped_active: 0,
+          pg_user_row_deleted: true, vector_rows_removed: 0, pg_embedding_rows_removed: 0,
+          filesystem_removed: true, errors: [],
+        },
+      }),
+      deleteTypUser: jest.fn(),
+      cleanupBilling: jest.fn(),
+      deleteLearning: jest.fn().mockResolvedValue({ attempted: false, deleted: [] }),
+      deleteMinutes: jest.fn().mockResolvedValue({ attempted: true, ok: false, status: 503, retryable: true }),
+      runInTransaction: async (callback) => callback({ query: transactionQuery }),
+    })).rejects.toMatchObject({ code: "minutes_purge_failed", retryable: true });
+    expect(transactionQuery).not.toHaveBeenCalled();
+  });
 });

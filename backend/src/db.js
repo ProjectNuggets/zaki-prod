@@ -1446,6 +1446,17 @@ export async function initDb() {
     console.warn("[DB] Unit ledger table creation failed:", err.message);
   }
 
+  // Minutes control stays runtime-disabled until explicit staging evidence, but
+  // its callback ledger needs durable idempotency state before that gate opens.
+  // This DDL contains only opaque IDs and metering state—never meeting content.
+  try {
+    const { MINUTES_CONTROL_STATE_DDL } = await import("./minutes-control-state.js");
+    await migrationClient.query(MINUTES_CONTROL_STATE_DDL);
+    console.log("[DB] Minutes control state tables ready");
+  } catch (err) {
+    console.warn("[DB] Minutes control state table creation failed:", err.message);
+  }
+
   // --- V1 beta cutover audit + reversible workspace archive registry ---
   // Dynamic import keeps this DDL colocated with the service while avoiding import cycles.
   try {

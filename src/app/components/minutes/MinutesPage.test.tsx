@@ -7,6 +7,7 @@ import { MinutesPage } from "./MinutesPage";
 const mockList = jest.fn();
 const mockRead = jest.fn();
 const mockSearch = jest.fn();
+const mockControl = jest.fn();
 const mockRequestReauthentication = jest.fn();
 let mockToken = "session-a";
 
@@ -21,6 +22,7 @@ jest.mock("@/lib/minutesApi", () => ({
   listMinutes: (...args: unknown[]) => mockList(...args),
   readMinutesItem: (...args: unknown[]) => mockRead(...args),
   searchMinutes: (...args: unknown[]) => mockSearch(...args),
+  getMinutesControl: (...args: unknown[]) => mockControl(...args),
   MinutesApiError: class MinutesApiError extends Error {
     constructor(public status: number, public code: string, message: string) {
       super(message);
@@ -63,6 +65,7 @@ describe("MinutesPage read surface", () => {
       ],
       truncated: false,
     });
+    mockControl.mockReset().mockRejectedValue(new MinutesApiError(404, "minutes_control_disabled", "not enabled"));
   });
 
   it("moves from the meeting list to a bounded summary detail", async () => {

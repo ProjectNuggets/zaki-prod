@@ -32,5 +32,5 @@ export function MinutesRoute() {
   if (registry.isError || (registry.data && !registry.data.response.ok)) return <MinutesAvailabilityFailure reason="registry" onRetry={() => void registry.refetch()} />;
   if (product?.state === "maintenance" || product?.state === "degraded") return <MinutesAvailabilityFailure reason="operational" onRetry={() => void registry.refetch()} />;
   if (product?.state !== "enabled" && product?.state !== "readOnly") return <ProductAccessGate productId="minutes" title="ZAKI Minutes" mode="coming_soon" />;
-  return <MinutesPage />;
+  return <MinutesPage controlsEnabled={product?.state === "enabled"} />;
 }

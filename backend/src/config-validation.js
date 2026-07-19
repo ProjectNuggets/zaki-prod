@@ -1,6 +1,10 @@
 import { LEGAL_POLICY_VERSION_FALLBACK } from "./legal-consent.js";
 import path from "node:path";
 import { isValidMinutesReadToken } from "./minutes-read-secret.js";
+import {
+  isValidMinutesCallbackHmacKey,
+  isValidMinutesControlSigningKey,
+} from "./minutes-control-secret.js";
 
 const PROD = "production";
 
@@ -51,6 +55,11 @@ function hasUnsafeOrigin(origin) {
   return /^file:\/\//i.test(origin) || /localhost|127\.0\.0\.1/i.test(origin);
 }
 
+function isSafeIntegerInRange(value, min, max) {
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number >= min && number <= max;
+}
+
 function pushIssue(list, key, message) {
   list.push({ key, message });
 }
@@ -90,6 +99,19 @@ export function validateRuntimeConfig(env = process.env) {
   const minutesBaseUrl = normalize(env.MINUTES_ENGINE_BASE_URL);
   const minutesReadToken = String(env.MINUTES_ENGINE_READ_TOKEN ?? "");
   const minutesReadTokenFile = normalize(env.MINUTES_ENGINE_READ_TOKEN_FILE);
+  const minutesControlEnabled = isTruthyBoolean(env.ZAKI_MINUTES_CONTROL_ENABLED);
+  const minutesControlStagingReady = isTruthyBoolean(env.ZAKI_MINUTES_CONTROL_STAGING_READY);
+  const minutesControlSigningKey = String(env.MINUTES_ENGINE_CONTROL_TOKEN ?? "");
+  const minutesControlSigningKeyFile = normalize(env.MINUTES_ENGINE_CONTROL_TOKEN_FILE);
+  const minutesCallbackHmacKey = String(env.MINUTES_ENGINE_CALLBACK_HMAC_KEY ?? "");
+  const minutesCallbackHmacKeyFile = normalize(env.MINUTES_ENGINE_CALLBACK_HMAC_KEY_FILE);
+  const minutesControlReserveUnits = normalize(env.MINUTES_CONTROL_CAPTURE_RESERVE_UNITS);
+  const minutesControlTokenTtlSeconds = normalize(env.MINUTES_CONTROL_TOKEN_TTL_SECONDS || "60");
+  const minutesControlHoldTtlMs = normalize(env.MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS || String(6 * 60 * 60 * 1_000));
+  const minutesControlPolicyVersion = normalize(env.MINUTES_CONTROL_POLICY_VERSION || "minutes-capture-consent-v1");
+  const minutesControlAudioRetentionDays = normalize(env.MINUTES_CONTROL_AUDIO_RETENTION_DAYS || "0");
+  const minutesControlTranscriptRetentionDays = normalize(env.MINUTES_CONTROL_TRANSCRIPT_RETENTION_DAYS || "30");
+  const minutesControlSummaryRetentionDays = normalize(env.MINUTES_CONTROL_SUMMARY_RETENTION_DAYS || "30");
   const designEnabled = isTruthyBoolean(env.ZAKI_DESIGN_ENABLED);
   const designControllerEnabled = isTruthyBoolean(env.ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED);
   const designBaseUrl = normalize(env.DESIGN_ENGINE_BASE_URL);
@@ -341,6 +363,80 @@ export function validateRuntimeConfig(env = process.env) {
       warnings,
       "ZAKI_MINUTES_ENABLED",
       "Minutes read config is present, but ZAKI_MINUTES_ENABLED is not true."
+    );
+  }
+  const minutesControlActive = minutesControlEnabled && minutesControlStagingReady;
+  if (minutesControlStagingReady && !minutesControlEnabled) {
+    pushIssue(
+      errors,
+      "ZAKI_MINUTES_CONTROL_STAGING_READY",
+      "ZAKI_MINUTES_CONTROL_STAGING_READY requires ZAKI_MINUTES_CONTROL_ENABLED=true."
+    );
+  }
+  if (minutesControlActive) {
+    if (!minutesBaseUrl) {
+      pushIssue(errors, "MINUTES_ENGINE_BASE_URL", "MINUTES_ENGINE_BASE_URL is required when Minutes control is active.");
+    } else if (!hasHttpOrigin(minutesBaseUrl)) {
+      pushIssue(errors, "MINUTES_ENGINE_BASE_URL", "MINUTES_ENGINE_BASE_URL must be a fixed HTTP(S) origin without credentials, path, query, or fragment.");
+    }
+    for (const [fileKey, fileValue] of [
+      ["MINUTES_ENGINE_CONTROL_TOKEN_FILE", minutesControlSigningKeyFile],
+      ["MINUTES_ENGINE_CALLBACK_HMAC_KEY_FILE", minutesCallbackHmacKeyFile],
+    ]) {
+      if (fileValue && !path.isAbsolute(fileValue)) {
+        pushIssue(errors, fileKey, `${fileKey} must be an absolute secret-file path.`);
+      }
+    }
+    if (isProduction && minutesControlSigningKey) {
+      pushIssue(errors, "MINUTES_ENGINE_CONTROL_TOKEN", "MINUTES_ENGINE_CONTROL_TOKEN cannot carry a production signing secret; use MINUTES_ENGINE_CONTROL_TOKEN_FILE.");
+    }
+    if (isProduction && minutesCallbackHmacKey) {
+      pushIssue(errors, "MINUTES_ENGINE_CALLBACK_HMAC_KEY", "MINUTES_ENGINE_CALLBACK_HMAC_KEY cannot carry a production credential; use MINUTES_ENGINE_CALLBACK_HMAC_KEY_FILE.");
+    }
+    if (isProduction && !minutesControlSigningKeyFile) {
+      pushIssue(errors, "MINUTES_ENGINE_CONTROL_TOKEN_FILE", "MINUTES_ENGINE_CONTROL_TOKEN_FILE is required in production when Minutes control is active.");
+    } else if (!minutesControlSigningKeyFile && !isValidMinutesControlSigningKey(minutesControlSigningKey)) {
+      pushIssue(errors, "MINUTES_ENGINE_CONTROL_TOKEN", "MINUTES_ENGINE_CONTROL_TOKEN must be a 32-512 character printable signing secret for scoped control tokens.");
+    }
+    if (isProduction && !minutesCallbackHmacKeyFile) {
+      pushIssue(errors, "MINUTES_ENGINE_CALLBACK_HMAC_KEY_FILE", "MINUTES_ENGINE_CALLBACK_HMAC_KEY_FILE is required in production when Minutes control is active.");
+    } else if (!minutesCallbackHmacKeyFile && !isValidMinutesCallbackHmacKey(minutesCallbackHmacKey)) {
+      pushIssue(errors, "MINUTES_ENGINE_CALLBACK_HMAC_KEY", "MINUTES_ENGINE_CALLBACK_HMAC_KEY must be a 32-512 character printable HMAC key.");
+    }
+    if (!isSafeIntegerInRange(minutesControlReserveUnits, 1, 1_000_000)) {
+      pushIssue(errors, "MINUTES_CONTROL_CAPTURE_RESERVE_UNITS", "MINUTES_CONTROL_CAPTURE_RESERVE_UNITS must be an integer from 1 to 1000000 when Minutes control is active.");
+    }
+    if (!isSafeIntegerInRange(minutesControlTokenTtlSeconds, 30, 300)) {
+      pushIssue(errors, "MINUTES_CONTROL_TOKEN_TTL_SECONDS", "MINUTES_CONTROL_TOKEN_TTL_SECONDS must be an integer from 30 to 300.");
+    }
+    if (!isSafeIntegerInRange(minutesControlHoldTtlMs, 60_000, 24 * 60 * 60 * 1_000)) {
+      pushIssue(errors, "MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS", "MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS must be an integer from 60000 to 86400000.");
+    }
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(minutesControlPolicyVersion)) {
+      pushIssue(errors, "MINUTES_CONTROL_POLICY_VERSION", "MINUTES_CONTROL_POLICY_VERSION must be a 1-160 character control-policy identifier.");
+    }
+    if (!isSafeIntegerInRange(minutesControlAudioRetentionDays, 0, 365)) {
+      pushIssue(errors, "MINUTES_CONTROL_AUDIO_RETENTION_DAYS", "MINUTES_CONTROL_AUDIO_RETENTION_DAYS must be an integer from 0 to 365.");
+    }
+    if (!isSafeIntegerInRange(minutesControlTranscriptRetentionDays, 1, 3_650)) {
+      pushIssue(errors, "MINUTES_CONTROL_TRANSCRIPT_RETENTION_DAYS", "MINUTES_CONTROL_TRANSCRIPT_RETENTION_DAYS must be an integer from 1 to 3650.");
+    }
+    if (!isSafeIntegerInRange(minutesControlSummaryRetentionDays, 1, 3_650)) {
+      pushIssue(errors, "MINUTES_CONTROL_SUMMARY_RETENTION_DAYS", "MINUTES_CONTROL_SUMMARY_RETENTION_DAYS must be an integer from 1 to 3650.");
+    } else if (
+      isSafeIntegerInRange(minutesControlTranscriptRetentionDays, 1, 3_650) &&
+      Number(minutesControlSummaryRetentionDays) > Number(minutesControlTranscriptRetentionDays)
+    ) {
+      pushIssue(errors, "MINUTES_CONTROL_SUMMARY_RETENTION_DAYS", "MINUTES_CONTROL_SUMMARY_RETENTION_DAYS cannot exceed MINUTES_CONTROL_TRANSCRIPT_RETENTION_DAYS.");
+    }
+  } else if (
+    minutesControlEnabled || minutesControlStagingReady || minutesControlSigningKey || minutesControlSigningKeyFile ||
+    minutesCallbackHmacKey || minutesCallbackHmacKeyFile || minutesControlReserveUnits
+  ) {
+    pushIssue(
+      warnings,
+      "ZAKI_MINUTES_CONTROL_STAGING_READY",
+      "Minutes control remains dark until both ZAKI_MINUTES_CONTROL_ENABLED and ZAKI_MINUTES_CONTROL_STAGING_READY are true."
     );
   }
   if (designControllerEnabled) {

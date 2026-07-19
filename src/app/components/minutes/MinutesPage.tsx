@@ -7,6 +7,7 @@ import { V2Badge, V2Button, V2Panel, V2PanelBody, V2PanelHead } from "@/app/comp
 import { requestReauthentication } from "@/lib/api";
 import { MinutesApiError, listMinutes, readMinutesItem, searchMinutes, type MinutesIndexResponse, type MinutesItem, type MinutesMetadata } from "@/lib/minutesApi";
 import { useAuthStore } from "@/stores";
+import { MinutesControls } from "./MinutesControls";
 
 function dateLabel(value: string, locale?: string) {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
@@ -46,7 +47,7 @@ function detailBody(item: MinutesItem, t: TFunction, locale?: string) {
   </dl>;
 }
 
-export function MinutesPage() {
+export function MinutesPage({ controlsEnabled = false }: { controlsEnabled?: boolean }) {
   const { t, i18n } = useTranslation();
   const sessionToken = useAuthStore((state) => state.token);
   const previousSessionToken = useRef(sessionToken);
@@ -152,8 +153,16 @@ export function MinutesPage() {
           <h1 className="text-2xl font-semibold tracking-tight">{t("minutes.title", { defaultValue: "Minutes" })}</h1>
           <p className="mt-2 max-w-2xl text-sm text-[var(--v2-ink-2)]">{t("minutes.subtitle", { defaultValue: "Review captured meetings, speaker-attributed transcripts, and retained summaries." })}</p>
         </div>
-        <V2Badge><ShieldCheck className="size-3 text-[var(--v2-accent)]" aria-hidden />{t("minutes.readOnly", { defaultValue: "Read only" })}</V2Badge>
+        <V2Badge><ShieldCheck className="size-3 text-[var(--v2-accent)]" aria-hidden />{t("minutes.ownerScoped", { defaultValue: "Owner-scoped archive" })}</V2Badge>
       </header>
+
+      {controlsEnabled && !authError ? <MinutesControls
+        meetings={meetings.map((meeting) => ({ id: meeting.id, title: meeting.title }))}
+        onForgot={() => {
+          setSelected(null);
+          void index.refetch();
+        }}
+      /> : null}
 
       {!authError ? <section className="border border-[var(--v2-hairline)] bg-[var(--v2-bg-raised)] p-3">
         <form

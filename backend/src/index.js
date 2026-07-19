@@ -209,6 +209,15 @@ import {
 } from "./minutes-read-routes.js";
 import { resolveMinutesReadToken } from "./minutes-read-secret.js";
 import {
+  buildMinutesControlRouter,
+  eraseMinutesAccountForErasure,
+  isMinutesControlEnabled,
+} from "./minutes-control-routes.js";
+import {
+  resolveMinutesCallbackHmacKey,
+  resolveMinutesControlSigningKey,
+} from "./minutes-control-secret.js";
+import {
   buildDesignConfigErrorPayload,
   buildDesignDisabledPayload,
   classifyDesignMeterActionForIngress,
@@ -694,6 +703,65 @@ function getMinutesEngineReadToken() {
     readFileSync: fs.readFileSync,
   });
 }
+const ZAKI_MINUTES_CONTROL_ENABLED = isMinutesControlEnabled(
+  process.env.ZAKI_MINUTES_CONTROL_ENABLED
+);
+const ZAKI_MINUTES_CONTROL_STAGING_READY = isMinutesControlEnabled(
+  process.env.ZAKI_MINUTES_CONTROL_STAGING_READY
+);
+// No Minutes control endpoint is live from either flag alone. The second gate is
+// an operator's evidence checkpoint for a deployed, contract-conformant engine.
+const ZAKI_MINUTES_CONTROL_ACTIVE =
+  ZAKI_MINUTES_CONTROL_ENABLED && ZAKI_MINUTES_CONTROL_STAGING_READY;
+function getMinutesEngineControlSigningKey() {
+  if (!ZAKI_MINUTES_CONTROL_ACTIVE) return "";
+  return resolveMinutesControlSigningKey({
+    tokenFile: process.env.MINUTES_ENGINE_CONTROL_TOKEN_FILE,
+    fallbackToken: process.env.MINUTES_ENGINE_CONTROL_TOKEN,
+    readFileSync: fs.readFileSync,
+  });
+}
+function getMinutesEngineCallbackHmacKey() {
+  if (!ZAKI_MINUTES_CONTROL_ACTIVE) return "";
+  return resolveMinutesCallbackHmacKey({
+    tokenFile: process.env.MINUTES_ENGINE_CALLBACK_HMAC_KEY_FILE,
+    fallbackToken: process.env.MINUTES_ENGINE_CALLBACK_HMAC_KEY,
+    readFileSync: fs.readFileSync,
+  });
+}
+function boundedMinutesControlNumber(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(number)));
+}
+const MINUTES_CONTROL_CAPTURE_RESERVE_UNITS = boundedMinutesControlNumber(
+  process.env.MINUTES_CONTROL_CAPTURE_RESERVE_UNITS,
+  0,
+  0,
+  1_000_000
+);
+const MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS = boundedMinutesControlNumber(
+  process.env.MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS,
+  6 * 60 * 60 * 1_000,
+  60_000,
+  24 * 60 * 60 * 1_000
+);
+const MINUTES_CONTROL_TOKEN_TTL_SECONDS = boundedMinutesControlNumber(
+  process.env.MINUTES_CONTROL_TOKEN_TTL_SECONDS,
+  60,
+  30,
+  300
+);
+const MINUTES_CONTROL_POLICY = Object.freeze({
+  capture_notice_policy_version: String(
+    process.env.MINUTES_CONTROL_POLICY_VERSION || "minutes-capture-consent-v1"
+  ).trim(),
+  retention: {
+    audio_days: boundedMinutesControlNumber(process.env.MINUTES_CONTROL_AUDIO_RETENTION_DAYS, 0, 0, 365),
+    transcript_days: boundedMinutesControlNumber(process.env.MINUTES_CONTROL_TRANSCRIPT_RETENTION_DAYS, 30, 1, 3_650),
+    summary_days: boundedMinutesControlNumber(process.env.MINUTES_CONTROL_SUMMARY_RETENTION_DAYS, 30, 1, 3_650),
+  },
+});
 const minutesRequestTimeout = Number(process.env.MINUTES_ENGINE_REQUEST_TIMEOUT_MS || 10_000);
 const MINUTES_ENGINE_REQUEST_TIMEOUT_MS = Number.isFinite(minutesRequestTimeout)
   ? Math.min(30_000, Math.max(1_000, minutesRequestTimeout))
@@ -8585,6 +8653,7 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
       cleanupBilling: ({ zakiUser: user }) =>
         getBillingAdapter().cleanupCustomerOnDelete({ zakiUser: user }),
       deleteLearning: deleteLearningAccountResources,
+      deleteMinutes: deleteMinutesAccountResources,
       runInTransaction: withDbTransaction,
     });
     const learningDeletion = erasure.learning;
@@ -15635,6 +15704,32 @@ async function deleteLearningAccountResources({ zakiUser, requestId }) {
   return { attempted: true, deleted };
 }
 
+async function deleteMinutesAccountResources({ zakiUser, requestId }) {
+  // A disabled control plane has never been permitted to create captures in this
+  // environment, so there is no raw-store credential to invoke. Once evidence
+  // opens the gate, account deletion requires the engine's content-free receipt.
+  if (!ZAKI_MINUTES_CONTROL_ACTIVE) {
+    return { attempted: false, ok: true, reason: "minutes_control_not_ready" };
+  }
+  try {
+    return await eraseMinutesAccountForErasure({
+      baseUrl: MINUTES_ENGINE_BASE_URL,
+      controlSigningKey: getMinutesEngineControlSigningKey(),
+      userId: String(zakiUser?.id || ""),
+      tenantId: "default",
+      requestId,
+      fetchWithTimeout,
+      timeoutMs: MINUTES_ENGINE_REQUEST_TIMEOUT_MS,
+    });
+  } catch (error) {
+    logStructured("warn", "minutes.account_erasure.failed", {
+      requestId: requestId || null,
+      failure: error?.code || "minutes_control_unavailable",
+    });
+    throw error;
+  }
+}
+
 async function pipeLearningResponse(req, res, upstream) {
   const requestId = getOrCreateRequestId(req);
   if (!upstream.ok) {
@@ -18445,6 +18540,29 @@ app.use(
     },
   })
 );
+
+// =============================================================================
+// MINUTES CONTROL BFF
+// =============================================================================
+// The evidence gate intentionally remains false in all current environments.
+// This router is mounted ahead of read so its signed raw callback path is not
+// consumed by a generic JSON parser or the read-plane router.
+app.use("/api/minutes", buildMinutesControlRouter({
+  enabled: ZAKI_MINUTES_CONTROL_ACTIVE,
+  baseUrl: MINUTES_ENGINE_BASE_URL,
+  controlSigningKey: getMinutesEngineControlSigningKey(),
+  callbackHmacKey: getMinutesEngineCallbackHmacKey(),
+  timeoutMs: MINUTES_ENGINE_REQUEST_TIMEOUT_MS,
+  tokenTtlSeconds: MINUTES_CONTROL_TOKEN_TTL_SECONDS,
+  policy: MINUTES_CONTROL_POLICY,
+  captureReserveUnits: MINUTES_CONTROL_CAPTURE_RESERVE_UNITS,
+  captureHoldTtlMs: MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS,
+  resolveUser: requireAuthUser,
+  getRequestId: getOrCreateRequestId,
+  fetchWithTimeout,
+  resolvePlan: resolvePlatformWalletPlanForUser,
+  recordFailure: (event) => logStructured("warn", "minutes.control.failed", event),
+}));
 
 // =============================================================================
 // MINUTES READ BFF
