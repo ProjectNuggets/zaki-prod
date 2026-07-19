@@ -1,100 +1,91 @@
-import { absorbMemoryImport, settleMemoryUndosNewestFirst } from "./memoryImport";
+import { describe, expect, it } from "@jest/globals";
+import {
+  buildMemoryImportTurn,
+  settleMemoryUndosNewestFirst,
+  splitMemoryImportBySection,
+} from "./memoryImport";
 
-describe("absorbMemoryImport", () => {
-  it("returns the real absorbed count from saved, updated, and already-known memories", async () => {
-    const capture = jest.fn(async () => ({
-      response: { ok: true } as Response,
-      data: {
-        saved: [{ id: "1" }],
-        superseded: [{ memoryId: "2" }],
-        duplicates: [{ content: "known" }, { content: "known too" }],
-        skipped: [],
-      },
-    }));
+const HEADERS = ["Instructions", "Identity", "Work", "Projects", "Preferences"];
 
-    const result = await absorbMemoryImport("memory dump", "thread-1", capture as never);
+function dumpWith(headers: string[], entriesPerSection = 2): string {
+  return headers
+    .map((h, i) =>
+      [h, ...Array.from({ length: entriesPerSection }, (_, n) => `[2026-07-18] - fact ${i}-${n}`)].join("\n")
+    )
+    .join("\n\n");
+}
 
-    expect(capture).toHaveBeenCalledWith({ message: "memory dump", threadId: "thread-1" });
-    expect(result.absorbedCount).toBe(3);
+describe("splitMemoryImportBySection", () => {
+  it("splits the five canonical sections the import prompt asks for", () => {
+    const out = splitMemoryImportBySection(dumpWith(HEADERS));
+    expect(out).toHaveLength(5);
+    expect(out[1]).toContain("Identity");
+    expect(out[1]).toContain("fact 1-0");
   });
 
-  it("sends a bulk export in bounded chunks without dropping any import lines", async () => {
-    const importLines = Array.from(
-      { length: 25 },
-      (_, index) => `[2026-07-${String(index + 1).padStart(2, "0")}] - I prefer tool ${index + 1}.`
+  it("tolerates the header shapes real models actually emit", () => {
+    const out = splitMemoryImportBySection(
+      ["## Identity", "[2026-07-18] - a", "**2. Work**", "[2026-07-18] - b", "PROJECTS", "[2026-07-18] - c", "4) Preferences:", "[2026-07-18] - d"].join("\n")
     );
-    const capture = jest.fn(async (_payload: { message: string; threadId: string | null }) => ({
-      response: { ok: true } as Response,
-      data: {
-        saved: [{
-          id: String(capture.mock.calls.length),
-          content: "saved chunk",
-          type: "preference",
-          state: "saved_reversible" as const,
-          undoUntil: "2026-07-14T16:00:00.000Z",
-        }],
-        superseded: [],
-        duplicates: [],
-        skipped: [],
-      },
-    }));
-
-    const result = await absorbMemoryImport(importLines.join("\n"), "thread-1", capture as never);
-
-    expect(capture.mock.calls.length).toBeGreaterThan(1);
-    const sentChunks = capture.mock.calls.map(([payload]) => payload.message);
-    expect(sentChunks.every((chunk) => chunk.length <= 6_000)).toBe(true);
-    for (const line of importLines) {
-      expect(sentChunks.some((chunk) => chunk.includes(line))).toBe(true);
-    }
-    expect(result.saved).toHaveLength(capture.mock.calls.length);
+    expect(out).toHaveLength(4);
   });
 
-  it("reports undoable partial state when a later chunk fails after an earlier save", async () => {
-    const importLines = Array.from(
-      { length: 9 },
-      (_, index) => `[2026-07-${String(index + 1).padStart(2, "0")}] - Detail ${index + 1}.`
-    );
-    const capture = jest
-      .fn()
-      .mockResolvedValueOnce({
-        response: { ok: true } as Response,
-        data: {
-          saved: [{
-            id: "saved-before-failure",
-            content: "saved chunk",
-            type: "preference",
-            state: "saved_reversible" as const,
-            undoUntil: "2026-07-14T16:00:00.000Z",
-          }],
-          superseded: [],
-          duplicates: [],
-          skipped: [],
-        },
-      })
-      .mockResolvedValueOnce({ response: { ok: false } as Response, data: null });
-
-    await expect(
-      absorbMemoryImport(importLines.join("\n"), "thread-1", capture as never)
-    ).rejects.toMatchObject({
-      name: "MemoryImportPartialError",
-      partial: {
-        saved: [expect.objectContaining({ id: "saved-before-failure" })],
-        absorbedCount: 1,
-      },
-    });
-    expect(capture).toHaveBeenCalledTimes(2);
+  it("sends the whole dump as ONE turn when there is not enough structure to split on", () => {
+    // A wrong split is worse than no split — we must not guess.
+    const out = splitMemoryImportBySection("Identity\n[2026-07-18] - only one header here");
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("only one header here");
   });
 
-  it("rejects an import when the backend absorbed nothing", async () => {
-    const capture = jest.fn(async () => ({
-      response: { ok: true } as Response,
-      data: { saved: [], superseded: [], duplicates: [], skipped: [{ reason: "policy" }] },
-    }));
-
-    await expect(absorbMemoryImport("memory dump", null, capture as never)).rejects.toThrow(
-      "No memories were absorbed"
+  it("keeps a preamble before the first header instead of dropping it", () => {
+    const out = splitMemoryImportBySection(
+      ["here is my export", "Identity", "[2026-07-18] - a", "Work", "[2026-07-18] - b"].join("\n")
     );
+    expect(out.join("\n")).toContain("here is my export");
+  });
+
+  it("never emits a chunk that the server would reject, and repeats the header on each part", () => {
+    const big = ["Projects", ...Array.from({ length: 400 }, (_, n) => `[2026-07-18] - project entry number ${n} with some descriptive text`)].join("\n");
+    const out = splitMemoryImportBySection(`Identity\n[2026-07-18] - a\n\n${big}`);
+    const projectParts = out.filter((p) => p.startsWith("Projects"));
+    expect(projectParts.length).toBeGreaterThan(1);
+    // 8000 is the server cap (MAX_STREAM_MESSAGE_CHARS); the prefix must still fit.
+    out.forEach((chunk) => expect(buildMemoryImportTurn(chunk, 1, out.length).length).toBeLessThan(8000));
+  });
+
+  it("loses no content — every entry survives into some chunk", () => {
+    const dump = dumpWith(HEADERS, 5);
+    const joined = splitMemoryImportBySection(dump).join("\n");
+    dump
+      .split("\n")
+      .filter((l) => l.startsWith("[2026-07-18]"))
+      .forEach((entry) => expect(joined).toContain(entry));
+  });
+
+  it("throws rather than silently truncating a single unsplittable line", () => {
+    expect(() => splitMemoryImportBySection(`Identity\n${"x".repeat(7100)}\nWork\n[2026-07-18] - b`)).toThrow(
+      /too long/i
+    );
+  });
+
+  it("returns nothing for an empty paste", () => {
+    expect(splitMemoryImportBySection("   \n  ")).toEqual([]);
+  });
+});
+
+describe("buildMemoryImportTurn", () => {
+  it("states the entry count so the ask is checkable, and preserves the body verbatim", () => {
+    const section = "Identity\n[2026-07-18] - a\n[2026-07-18] - b\n[2026-07-18] - c";
+    const turn = buildMemoryImportTurn(section, 2, 5);
+    expect(turn).toContain("part 2 of 5");
+    expect(turn).toContain("3 entries");
+    expect(turn.endsWith(section)).toBe(true);
+  });
+
+  it("omits the part suffix for a single-turn import and singularises one entry", () => {
+    const turn = buildMemoryImportTurn("Identity\n[2026-07-18] - only", 1, 1);
+    expect(turn).not.toContain("part 1 of 1");
+    expect(turn).toContain("1 entry");
   });
 });
 
@@ -131,5 +122,33 @@ describe("settleMemoryUndosNewestFirst", () => {
     expect(order).toEqual(["new", "middle"]);
     expect(results[0]).toEqual({ status: "fulfilled", value: "new" });
     expect(results[1]).toEqual({ status: "rejected", reason: expect.any(Error) });
+  });
+});
+
+describe("WP-MEM6 regression: the loop contract the refs exist to protect", () => {
+  // These do not exercise React, but they pin the invariants the two ChatArea refs were added for.
+  // If either ref is removed, the loop silently sends fewer turns than there are sections — the
+  // user loses memories with NO error — so the section count is the contract worth asserting.
+  it("produces one turn per section, each independently sendable", () => {
+    const dump = ["Identity", "[2026-07-18] - a", "Work", "[2026-07-18] - b", "Projects", "[2026-07-18] - c"].join("\n");
+    const sections = splitMemoryImportBySection(dump);
+    expect(sections).toHaveLength(3);
+    const turns = sections.map((s, i) => buildMemoryImportTurn(s, i + 1, sections.length));
+    expect(turns).toHaveLength(3);
+    turns.forEach((turn, i) => {
+      expect(turn).toContain(`part ${i + 1} of 3`);
+      expect(turn.length).toBeLessThan(8000); // server MAX_STREAM_MESSAGE_CHARS
+    });
+  });
+
+  it("keeps every turn under the server cap even for a large real-world export", () => {
+    const big = ["Identity", "[2026-07-18] - name is Sam"]
+      .concat(["Projects"], Array.from({ length: 300 }, (_, n) => `[2026-07-18] - project ${n} with a reasonably long description of the work`))
+      .join("\n");
+    const sections = splitMemoryImportBySection(big);
+    expect(sections.length).toBeGreaterThan(2);
+    sections.forEach((s, i) =>
+      expect(buildMemoryImportTurn(s, i + 1, sections.length).length).toBeLessThan(8000)
+    );
   });
 });

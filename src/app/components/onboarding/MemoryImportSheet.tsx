@@ -87,10 +87,12 @@ export function MemoryImportSheet({ isOpen, onClose, onImport }: Props) {
   const handleImport = async () => {
     const trimmed = dump.trim();
     if (!trimmed) return;
+    // WP-MEM6: close first. The import is now a sequence of ordinary agent turns rendered in the
+    // thread — the user should watch them stream, not stare at a modal spinner blocking the view.
     setSubmitting(true);
+    onClose();
     try {
       await onImport(trimmed);
-      onClose();
     } catch (error) {
       toast.error(
         error instanceof Error && error.message

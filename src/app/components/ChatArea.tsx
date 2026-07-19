@@ -91,8 +91,8 @@ import {
   upsertAnonymousWorkItem,
 } from "@/lib/anonymousWork";
 import {
-  absorbMemoryImport,
-  MemoryImportPartialError,
+  buildMemoryImportTurn,
+  splitMemoryImportBySection,
   settleMemoryUndosNewestFirst,
 } from "@/lib/memoryImport";
 import { clearPendingIntent, readPendingIntent, writePendingIntent } from "@/lib/pendingIntent";
@@ -3501,6 +3501,18 @@ export function ChatArea() {
     useState<string | null>(null);
   const currentTurnAssistantIdRef = useRef<string | null>(null);
   const prevIsStreamingRef = useRef(false);
+  // WP-MEM6 — both refs are load-bearing for the sequential memory-import loop.
+  //
+  // isStreamingRef: setIsStreaming(false) runs in handleSend's finally, in the SAME tick the promise
+  // resolves, so React has not re-rendered when the loop's next iteration fires. A fresh handleSend
+  // would still read isStreaming === true from its closure and hit the SILENT `return false` guard —
+  // sections 2..n would vanish with no error and the user would get a fraction of their memories.
+  // Also closes a pre-existing double-send race on fast composer double-clicks.
+  const isStreamingRef = useRef(false);
+  // handleSendRef: handleSend closes over activeThreadId, which is null at click time. Calling the
+  // click-time closure for every section would make each one generate its own thread — n orphan
+  // threads with no shared context. The ref always holds a handleSend with the current thread.
+  const handleSendRef = useRef<typeof handleSend | null>(null);
   const [localTurnSnapshots, setLocalTurnSnapshots] = useState<
     Record<string, NullalisTranscriptEntry[]>
   >({});
@@ -3699,8 +3711,6 @@ export function ChatArea() {
     MemoryCaptureResponse["saved"]
   >([]);
   const [recentSupersededCount, setRecentSupersededCount] = useState(0);
-  const [recentDuplicateCount, setRecentDuplicateCount] = useState(0);
-  const [memoryToastSource, setMemoryToastSource] = useState<"chat" | "import">("chat");
   const [showMemoryToast, setShowMemoryToast] = useState(false);
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [memoryToastUndoError, setMemoryToastUndoError] = useState<string | null>(null);
@@ -7645,8 +7655,6 @@ export function ChatArea() {
     setShowMemoryToast(false);
     setRecentSavedMemories([]);
     setRecentSupersededCount(0);
-    setRecentDuplicateCount(0);
-    setMemoryToastSource("chat");
     setMemoryToastUndoError(null);
     setMemoryToastPartialUndoCount(0);
     clearMemoryToastDismiss();
@@ -7664,18 +7672,14 @@ export function ChatArea() {
       saved,
       supersededCount = 0,
       duplicateCount = 0,
-      source = "chat",
     }: {
       saved: MemoryCaptureResponse["saved"];
       supersededCount?: number;
       duplicateCount?: number;
-      source?: "chat" | "import";
     }) => {
       const shouldShow = saved.length > 0 || supersededCount > 0 || duplicateCount > 0;
       setRecentSavedMemories(saved);
       setRecentSupersededCount(supersededCount);
-      setRecentDuplicateCount(duplicateCount);
-      setMemoryToastSource(source);
       setShowMemoryToast(shouldShow);
 
       if (!shouldShow) {
@@ -7915,7 +7919,6 @@ export function ChatArea() {
       queuedMemoryCheckRef.current = null;
       memoryInFlightRef.current = false;
       if (
-        memoryToastSource !== "import" &&
         (showMemoryToast ||
           recentSavedMemories.length > 0 ||
           recentSupersededCount > 0 ||
@@ -7940,7 +7943,6 @@ export function ChatArea() {
     dismissMemoryToast,
     isMemoryPipelineEnabled,
     memoryError,
-    memoryToastSource,
     memoryToastPartialUndoCount,
     memoryToastUndoError,
     recentSavedMemories.length,
@@ -8276,7 +8278,7 @@ export function ChatArea() {
       }));
       return false;
     }
-    if (isStreaming) return false;
+    if (isStreamingRef.current) return false;
     setComposerQuickReplyTriggerId(null);
     setComposerQuickReplyVisible(false);
     if (!authUserId && files.length > 0) {
@@ -8524,6 +8526,7 @@ export function ChatArea() {
     setStreamingIndicatorMode("thinking");
     setTurnStartedAt(Date.now());
     setTurnDurationMs(null);
+    isStreamingRef.current = true;
     setIsStreaming(true);
     const streamController = new AbortController();
     streamAbortRef.current = streamController;
@@ -8713,7 +8716,9 @@ export function ChatArea() {
       }
       // Keep chat UX responsive: memory save runs in background.
       if (!presentation?.firstRun) {
-        void checkForSavedMemories(trimmed, threadId);
+        // WP-MEM6: agent turns write memory through the engine (memory_store). Running the Hub
+        // capture pipeline here too would re-create the dual-store split this WP exists to remove.
+        if (!isZakiBotTarget) void checkForSavedMemories(trimmed, threadId);
       }
       if (isZakiBotTarget && !presentation?.firstRun && botOnboarding?.completed === false) {
         void updateBotOnboarding({ completed: true })
@@ -8818,6 +8823,7 @@ export function ChatArea() {
       if (!isZakiBotTarget) {
         setStreamingIndicatorMode("thinking");
       }
+      isStreamingRef.current = false;
       setIsStreaming(false);
     }
   }, [
@@ -8849,6 +8855,12 @@ export function ChatArea() {
     updateAssistantError,
     zakiSessionKey,
   ]);
+
+  // Keep the ref pointing at the CURRENT handleSend so the memory-import loop always sends into the
+  // thread that now exists, rather than the null-thread closure captured at click time.
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  }, [handleSend]);
 
   const handleRetryAgentPlanStep = useCallback(
     async (step: AgentPlanPanelStep) => {
@@ -10844,50 +10856,34 @@ export function ChatArea() {
         isOpen={memoryImportOpen}
         onClose={() => setMemoryImportOpen(false)}
         onImport={async (dump) => {
-          let partialError: MemoryImportPartialError | null = null;
-          let absorption;
-          try {
-            absorption = await absorbMemoryImport(dump, activeThreadId);
-          } catch (error) {
-            if (!(error instanceof MemoryImportPartialError)) throw error;
-            partialError = error;
-            absorption = error.partial;
-          }
-          const { saved, superseded, duplicates } = absorption;
-          setMemoryError(null);
-          setMemoryToastUndoError(null);
-          setMemoryToastPartialUndoCount(0);
-          presentMemoryToast({
-            saved,
-            supersededCount: superseded.length,
-            duplicateCount: duplicates.length,
-            source: "import",
-          });
-          if (saved.length > 0 && authUserId && !activationProgress.firstMemorySaved) {
-            const nextProgress = markFirstMemorySaved(authUserId);
-            setActivationProgress(nextProgress);
-            void trackProductEvent({
-              event: "first_memory_saved",
-              source: "memory_import",
-              language: isRtl ? "ar" : "en",
-              plan: null,
-              interval: null,
-            }).catch(() => {
-              // Best-effort telemetry only.
-            });
-            if (nextProgress.completed) {
-              void trackProductEvent({
-                event: "activation_completed",
-                source: "memory_import",
-                language: isRtl ? "ar" : "en",
-                plan: null,
-                interval: null,
-              }).catch(() => {
-                // Best-effort telemetry only.
-              });
+          // WP-MEM6: the import has no transport of its own any more. Each section goes through the
+          // NORMAL agent send path, so it lands in the store the agent and Brain actually read.
+          // Sequential on purpose: the turns share one thread and later sections should see the
+          // earlier ones. Anything already stored stays stored if a later section fails.
+          const sections = splitMemoryImportBySection(dump);
+          for (const [i, section] of sections.entries()) {
+            const send = handleSendRef.current;
+            if (!send) {
+              throw new Error(
+                t("memoryImport.sendFailed", {
+                  defaultValue: "Couldn't send that import. Try again.",
+                })
+              );
+            }
+            const sent = await send(
+              buildMemoryImportTurn(section, i + 1, sections.length),
+              [],
+              undefined,
+              ZAKI_BOT_SPACE_ID
+            );
+            if (!sent) {
+              throw new Error(
+                t("memoryImport.sendFailed", {
+                  defaultValue: "Couldn't send that import. Try again.",
+                })
+              );
             }
           }
-          if (partialError) throw partialError;
         }}
       />
 
@@ -10909,10 +10905,8 @@ export function ChatArea() {
       {showMemoryToast && authUserId && (
         <MemoryCaptureToast
           position={toastPosition}
-          source={memoryToastSource}
           savedCount={recentSavedMemories.length}
           supersededCount={recentSupersededCount}
-          duplicateCount={recentDuplicateCount}
           processing={isUndoingMemoryToast}
           onUndo={
             recentSavedMemories.length > 0
@@ -10990,11 +10984,7 @@ export function ChatArea() {
           }
           onOpenMemory={() => {
             dismissMemoryToast();
-            if (memoryToastSource === "import") {
-              openAgentMemorySurface();
-            } else {
-              openMemoryViewer();
-            }
+            openMemoryViewer();
           }}
           onDismiss={dismissMemoryToast}
           undoError={memoryToastUndoError}
