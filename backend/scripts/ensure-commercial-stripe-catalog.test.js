@@ -3,6 +3,7 @@ import {
   CATALOG_VERSION,
   PRODUCTS,
   envNameForPlan,
+  yearlyEnvNameForPlan,
   buildCommercialPortalConfigurationPayload,
 } from "./ensure-commercial-stripe-catalog.js";
 
@@ -18,7 +19,7 @@ describe("ensure commercial Stripe catalog", () => {
     );
     expect(byPlan.personal.monthlyUnitAmount).toBe(1500);
     expect(byPlan.pro.monthlyUnitAmount).toBe(4500);
-    expect(byPlan.pro_max.monthlyUnitAmount).toBe(9900);
+    expect(byPlan.pro_max.monthlyUnitAmount).toBe(9500);
     expect(byPlan.personal.name).toBe("ZAKI Personal");
     expect(byPlan.pro.name).toBe("ZAKI Pro");
     expect(byPlan.pro_max.name).toBe("ZAKI Pro Max");
@@ -32,15 +33,27 @@ describe("ensure commercial Stripe catalog", () => {
     expect(envNameForPlan("personal")).toBe("STRIPE_PRICE_PERSONAL");
     expect(envNameForPlan("pro")).toBe("STRIPE_PRICE_PRO");
     expect(envNameForPlan("pro_max")).toBe("STRIPE_PRICE_PRO_MAX");
+    expect(yearlyEnvNameForPlan("personal")).toBe("STRIPE_PRICE_PERSONAL_YEARLY");
+    expect(yearlyEnvNameForPlan("pro")).toBe("STRIPE_PRICE_PRO_YEARLY");
+    expect(yearlyEnvNameForPlan("pro_max")).toBe("STRIPE_PRICE_PRO_MAX_YEARLY");
   });
 
   it("builds a portal configuration that allows commercial plan updates", () => {
     const payload = buildCommercialPortalConfigurationPayload({
       appUrl: "https://app.chatzaki.com/",
       products: [
-        { productId: "prod_personal", priceId: "price_personal" },
-        { productId: "prod_pro", priceId: "price_pro" },
+        {
+          productId: "prod_personal",
+          priceId: "price_personal",
+          priceIds: ["price_personal", "price_personal_year", "", "price_personal_year"],
+        },
+        {
+          productId: "prod_pro",
+          priceId: "price_pro",
+          priceIds: ["price_pro", "price_pro_year"],
+        },
         { productId: "prod_pro_max", priceId: "price_pro_max" },
+        { productId: "prod_blank", priceId: "", priceIds: ["", " "] },
       ],
     });
 
@@ -51,8 +64,11 @@ describe("ensure commercial Stripe catalog", () => {
       proration_behavior: "create_prorations",
     });
     expect(payload.features.subscription_update.products).toEqual([
-      { product: "prod_personal", prices: ["price_personal"] },
-      { product: "prod_pro", prices: ["price_pro"] },
+      {
+        product: "prod_personal",
+        prices: ["price_personal", "price_personal_year"],
+      },
+      { product: "prod_pro", prices: ["price_pro", "price_pro_year"] },
       { product: "prod_pro_max", prices: ["price_pro_max"] },
     ]);
     expect(payload.features.payment_method_update.enabled).toBe(true);

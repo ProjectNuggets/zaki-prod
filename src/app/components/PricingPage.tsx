@@ -205,7 +205,14 @@ export function PricingPage() {
     // stricter because only explicitly configured Stripe yearly Prices are valid.
     if (interval === "monthly") return true;
     if (!billingConfigLoaded) return true;
-    return Boolean(billingConfig?.pricingAvailability?.[plan]?.[interval]);
+    if (!billingConfig?.pricingAvailability?.[plan]?.[interval]) return false;
+    const price = billingConfig?.pricingCatalog?.[plan]?.[interval];
+    return Boolean(
+      price?.priceId &&
+        typeof price.unitAmount === "number" &&
+        Number.isFinite(price.unitAmount) &&
+        price.currency
+    );
   };
 
   const getPlanPriceLabel = (plan: CommercialPaidPlan) => {
@@ -242,7 +249,7 @@ export function PricingPage() {
   }, [billingConfig?.pricingCatalog]);
 
   const yearlyBillingAvailable = PAID_PLAN_IDS.some((plan) =>
-    Boolean(billingConfig?.pricingAvailability?.[plan]?.yearly)
+    isPlanIntervalAvailable(plan, "yearly")
   );
 
   const accessCodePriceLabel = (() => {
@@ -514,8 +521,7 @@ export function PricingPage() {
     );
     const checkoutPlan = card.plan;
     const intervalAvailable = isPlanIntervalAvailable(checkoutPlan);
-    const emphasized =
-      billingInterval === "yearly" ? checkoutPlan === "personal" : Boolean(card.emphasized);
+    const emphasized = Boolean(card.emphasized);
 
     if (hasSubscription && current) {
       return (
@@ -725,8 +731,7 @@ export function PricingPage() {
               ? getPlanPriceLabel(card.plan)
               : t(`pricingPage.plans.${card.translationKey}.price`);
             const allowanceLabel = getPlanAllowanceLabel(card);
-            const emphasized =
-              billingInterval === "yearly" ? card.plan === "personal" : Boolean(card.emphasized);
+            const emphasized = Boolean(card.emphasized);
             return (
               <div
                 key={card.id}

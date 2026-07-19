@@ -50,7 +50,7 @@ async function main() {
   const plans = [
     { plan: "personal", price: requiredPrice("STRIPE_PRICE_PERSONAL"), expectedAmount: 1500 },
     { plan: "pro", price: requiredPrice("STRIPE_PRICE_PRO"), expectedAmount: 4500 },
-    { plan: "pro_max", price: requiredPrice("STRIPE_PRICE_PRO_MAX"), expectedAmount: 9900 },
+    { plan: "pro_max", price: requiredPrice("STRIPE_PRICE_PRO_MAX"), expectedAmount: 9500 },
   ];
 
   const results = [];

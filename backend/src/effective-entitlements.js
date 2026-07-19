@@ -18,7 +18,7 @@ const COMMERCIAL_SUBSCRIPTION_PLANS = new Set(["agent", "learn", "hire", "comple
 
 function normalizeRawTier(tier) {
   // Pass the real tier through untouched. The historic `pro -> personal`
-  // collapse here is what made every €45 Pro subscriber resolve as Personal
+  // collapse here is what made every $45 USD Pro subscriber resolve as Personal
   // (Bug 2); the V1 ladder treats pro/pro_max as their own tiers.
   return String(tier || "").trim().toLowerCase() || "free";
 }

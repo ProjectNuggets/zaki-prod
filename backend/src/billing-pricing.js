@@ -43,7 +43,9 @@ export function buildStripePricingCatalog({
   personalMonthly = "",
   personalYearly = "",
   proMonthly = "",
+  proYearly = "",
   proMaxMonthly = "",
+  proMaxYearly = "",
 } = {}) {
   const priceByPlanInterval = {
     student: {
@@ -56,11 +58,11 @@ export function buildStripePricingCatalog({
     },
     pro: {
       monthly: normalizePriceId(proMonthly),
-      yearly: "",
+      yearly: normalizePriceId(proYearly),
     },
     pro_max: {
       monthly: normalizePriceId(proMaxMonthly),
-      yearly: "",
+      yearly: normalizePriceId(proMaxYearly),
     },
   };
 
@@ -120,6 +122,18 @@ export function resolveStripePriceDetailsById(catalog, priceId) {
   const interval = normalizeBillingInterval(found.interval, "monthly");
   if (!STRIPE_BILLING_PLANS.includes(tier)) return null;
   return { tier, interval };
+}
+
+export function buildStripePricingDisplayRefs(catalog, accessMonthly = "") {
+  const refs = STRIPE_BILLING_PLANS.flatMap((tier) =>
+    BILLING_INTERVALS.map((interval) => [
+      tier,
+      interval,
+      normalizePriceId(catalog?.priceByPlanInterval?.[tier]?.[interval]),
+    ])
+  );
+  refs.push(["access", "monthly", normalizePriceId(accessMonthly)]);
+  return refs.filter(([, , priceId]) => Boolean(priceId));
 }
 
 export function buildTopupPackCatalog(rawJson = "") {

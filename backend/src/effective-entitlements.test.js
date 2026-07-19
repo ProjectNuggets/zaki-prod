@@ -308,7 +308,7 @@ describe("effective entitlements", () => {
     expect(isPaidActive("pro_max", "inactive")).toBe(false);
   });
 
-  it("surfaces Pro (€45) as its own tier with premium + agent access, METERED (Bug 2)", () => {
+  it("surfaces Pro ($45 USD) as its own tier with premium + agent access, METERED (Bug 2)", () => {
     const effective = getEffectiveEntitlementState(
       { plan_tier: "pro", plan_status: "active", access_expires_at: null },
       new Date("2026-03-17T00:00:00.000Z")
@@ -328,7 +328,7 @@ describe("effective entitlements", () => {
     expect(effective.products.spaces.quota).toBe("metered");
   });
 
-  it("surfaces Pro Max (€99) as its own tier with premium + agent access, METERED (Bug 3)", () => {
+  it("surfaces Pro Max ($95 USD) as its own tier with premium + agent access, METERED (Bug 3)", () => {
     const effective = getEffectiveEntitlementState(
       { plan_tier: "pro_max", plan_status: "active", access_expires_at: null },
       new Date("2026-03-17T00:00:00.000Z")

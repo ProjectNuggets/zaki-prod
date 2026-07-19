@@ -4,6 +4,7 @@ import {
   STRIPE_BILLING_PLANS,
   STRIPE_COMMERCIAL_PLANS,
   buildTopupPackCatalog,
+  buildStripePricingDisplayRefs,
   buildStripePricingCatalog,
   isCheckoutablePlan,
   normalizeBillingInterval,
@@ -34,22 +35,26 @@ describe("billing pricing helpers", () => {
       personalMonthly: "price_personal_month",
       personalYearly: "",
       proMonthly: "price_pro_month",
+      proYearly: "price_pro_year",
       proMaxMonthly: "price_pro_max_month",
+      proMaxYearly: "price_pro_max_year",
     });
 
     expect(catalog.hasAnyStripePrice).toBe(true);
     expect(catalog.pricingAvailability).toEqual({
       student: { monthly: true, yearly: true },
       personal: { monthly: true, yearly: false },
-      pro: { monthly: true, yearly: false },
-      pro_max: { monthly: true, yearly: false },
+      pro: { monthly: true, yearly: true },
+      pro_max: { monthly: true, yearly: true },
     });
     expect(catalog.tierByPrice).toEqual({
       price_student_month: "student",
       price_student_year: "student",
       price_personal_month: "personal",
       price_pro_month: "pro",
+      price_pro_year: "pro",
       price_pro_max_month: "pro_max",
+      price_pro_max_year: "pro_max",
     });
   });
 
@@ -59,7 +64,9 @@ describe("billing pricing helpers", () => {
       studentYearly: "price_student_year",
       personalMonthly: "price_personal_month",
       proMonthly: "price_pro_month",
+      proYearly: "price_pro_year",
       proMaxMonthly: "price_pro_max_month",
+      proMaxYearly: "price_pro_max_year",
     });
 
     expect(
@@ -94,10 +101,22 @@ describe("billing pricing helpers", () => {
     ).toBe("price_pro_month");
     expect(
       resolveStripePriceForSelection(catalog, {
+        plan: "pro",
+        interval: "yearly",
+      })
+    ).toBe("price_pro_year");
+    expect(
+      resolveStripePriceForSelection(catalog, {
         plan: "pro_max",
         interval: "monthly",
       })
     ).toBe("price_pro_max_month");
+    expect(
+      resolveStripePriceForSelection(catalog, {
+        plan: "pro_max",
+        interval: "yearly",
+      })
+    ).toBe("price_pro_max_year");
   });
 
   it("rejects removed legacy plans (agent/learn/complete) when resolving a price", () => {
@@ -154,7 +173,9 @@ describe("billing pricing helpers", () => {
       personalMonthly: "price_personal_month",
       personalYearly: "price_personal_year",
       proMonthly: "price_pro_month",
+      proYearly: "price_pro_year",
       proMaxMonthly: "price_pro_max_month",
+      proMaxYearly: "price_pro_max_year",
     });
 
     expect(resolveStripePriceDetailsById(catalog, "price_student_year")).toEqual({
@@ -169,11 +190,40 @@ describe("billing pricing helpers", () => {
       tier: "pro",
       interval: "monthly",
     });
+    expect(resolveStripePriceDetailsById(catalog, "price_pro_year")).toEqual({
+      tier: "pro",
+      interval: "yearly",
+    });
     expect(resolveStripePriceDetailsById(catalog, "price_pro_max_month")).toEqual({
       tier: "pro_max",
       interval: "monthly",
     });
+    expect(resolveStripePriceDetailsById(catalog, "price_pro_max_year")).toEqual({
+      tier: "pro_max",
+      interval: "yearly",
+    });
     expect(resolveStripePriceDetailsById(catalog, "unknown")).toBeNull();
+  });
+
+  it("builds display retrieval refs for every configured paid interval", () => {
+    const catalog = buildStripePricingCatalog({
+      personalMonthly: "price_personal_month",
+      personalYearly: "price_personal_year",
+      proMonthly: "price_pro_month",
+      proYearly: "price_pro_year",
+      proMaxMonthly: "price_pro_max_month",
+      proMaxYearly: "price_pro_max_year",
+    });
+
+    expect(buildStripePricingDisplayRefs(catalog, "price_access_month")).toEqual([
+      ["personal", "monthly", "price_personal_month"],
+      ["personal", "yearly", "price_personal_year"],
+      ["pro", "monthly", "price_pro_month"],
+      ["pro", "yearly", "price_pro_year"],
+      ["pro_max", "monthly", "price_pro_max_month"],
+      ["pro_max", "yearly", "price_pro_max_year"],
+      ["access", "monthly", "price_access_month"],
+    ]);
   });
 
   it("builds a config-driven top-up catalog and omits invalid packs", () => {
