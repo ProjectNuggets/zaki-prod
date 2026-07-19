@@ -11,6 +11,8 @@ import {
   resolveStripePriceDetailsById,
   resolveStripePriceForSelection,
   resolveTopupPack,
+  stripePriceMatchesBillingInterval,
+  stripeRecurringIntervalForBillingInterval,
 } from "./billing-pricing.js";
 
 describe("billing pricing helpers", () => {
@@ -26,6 +28,31 @@ describe("billing pricing helpers", () => {
     expect(normalizeBillingInterval("yearly")).toBe("yearly");
     expect(normalizeBillingInterval("MONTHLY")).toBe("monthly");
     expect(normalizeBillingInterval("invalid")).toBe("monthly");
+  });
+
+  it("requires configured Stripe Prices to match their selected billing interval", () => {
+    const monthly = { active: true, recurring: { interval: "month", interval_count: 1 } };
+    const yearly = { active: true, recurring: { interval: "year", interval_count: 1 } };
+
+    expect(stripeRecurringIntervalForBillingInterval("monthly")).toBe("month");
+    expect(stripeRecurringIntervalForBillingInterval("yearly")).toBe("year");
+    expect(stripePriceMatchesBillingInterval(monthly, "monthly")).toBe(true);
+    expect(stripePriceMatchesBillingInterval(yearly, "yearly")).toBe(true);
+    expect(stripePriceMatchesBillingInterval(monthly, "yearly")).toBe(false);
+    expect(stripePriceMatchesBillingInterval(yearly, "monthly")).toBe(false);
+    expect(stripePriceMatchesBillingInterval({ ...yearly, active: false }, "yearly")).toBe(false);
+    expect(
+      stripePriceMatchesBillingInterval(
+        { active: true, recurring: { interval: "month", interval_count: 2 } },
+        "monthly"
+      )
+    ).toBe(false);
+    expect(
+      stripePriceMatchesBillingInterval(
+        { active: true, recurring: { interval: "year", interval_count: 2 } },
+        "yearly"
+      )
+    ).toBe(false);
   });
 
   it("builds availability and lookup maps from configured prices", () => {

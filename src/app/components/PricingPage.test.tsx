@@ -456,6 +456,39 @@ describe("PricingPage", () => {
     });
   });
 
+  it("omits the global yearly savings claim when available tiers have different discounts", () => {
+    billingConfigData.data.configured.pricingAvailability = {
+      personal: { monthly: true, yearly: true },
+      pro: { monthly: true, yearly: true },
+      pro_max: { monthly: true, yearly: true },
+    };
+    billingConfigData.data.configured.pricingCatalog = {
+      personal: {
+        monthly: { priceId: "price_personal_month", unitAmount: 1500, currency: "usd" },
+        yearly: { priceId: "price_personal_year", unitAmount: 14400, currency: "usd" },
+      },
+      pro: {
+        monthly: { priceId: "price_pro_month", unitAmount: 4500, currency: "usd" },
+        yearly: { priceId: "price_pro_year", unitAmount: 43200, currency: "usd" },
+      },
+      pro_max: {
+        monthly: { priceId: "price_pro_max_month", unitAmount: 9500, currency: "usd" },
+        yearly: { priceId: "price_pro_max_year", unitAmount: 102600, currency: "usd" },
+      },
+    };
+
+    render(
+      <MemoryRouter initialEntries={["/pricing"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("button", { name: "Yearly" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Yearly .*save/ })).not.toBeInTheDocument();
+  });
+
   it("fails yearly checkout closed when Stripe display data is unavailable", () => {
     billingConfigData.data.configured.pricingAvailability.pro.yearly = true;
     billingConfigData.data.configured.pricingCatalog = {

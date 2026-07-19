@@ -81,6 +81,7 @@ import {
   buildStripePricingDisplayRefs,
   normalizeBillingInterval,
   resolveTopupPack,
+  stripePriceMatchesBillingInterval,
   resolveStripePriceDetailsById,
   resolveStripePriceForSelection,
 } from "./billing-pricing.js";
@@ -1888,6 +1889,7 @@ async function getStripePricingDisplayCatalog() {
   const results = await Promise.allSettled(
     priceRefs.map(async ([tier, interval, priceId]) => {
       const price = await stripe.prices.retrieve(priceId);
+      if (!stripePriceMatchesBillingInterval(price, interval)) return null;
       return {
         tier,
         interval,
@@ -1931,6 +1933,38 @@ async function getStripePricingDisplayCatalog() {
   };
 
   return catalog;
+}
+
+function applyStripeDisplayAvailability(configured, pricingCatalog) {
+  if (configured.provider !== "stripe" || !pricingCatalog) return configured;
+  return {
+    ...configured,
+    pricingAvailability: Object.fromEntries(
+      Object.entries(configured.pricingAvailability || {}).map(([plan, availability]) => [
+        plan,
+        {
+          ...availability,
+          // Monthly retains its established availability behavior. Yearly must
+          // be both configured and verified as an active annual Stripe Price.
+          yearly: Boolean(availability?.yearly && pricingCatalog?.[plan]?.yearly?.priceId),
+        },
+      ])
+    ),
+  };
+}
+
+async function assertStripePriceMatchesBillingInterval({ priceId, interval }) {
+  const selectedInterval = normalizeBillingInterval(interval, "monthly");
+  const price = await stripe.prices.retrieve(priceId);
+  if (stripePriceMatchesBillingInterval(price, selectedInterval)) return price;
+
+  const err = new Error(
+    `Selected ${selectedInterval} billing interval is not configured with an active Stripe ${
+      selectedInterval === "yearly" ? "yearly" : "monthly"
+    } Price.`
+  );
+  err.status = 503;
+  throw err;
 }
 
 function sendBillingUnavailable(res, capability) {
@@ -5824,6 +5858,11 @@ const billingAdapters = {
         throw err;
       }
 
+      await assertStripePriceMatchesBillingInterval({
+        priceId,
+        interval: selectedInterval,
+      });
+
       const customerId = await ensureStripeCustomerId({ email, zakiUser });
       const appUrl = getAppUrl();
       const session = await stripe.checkout.sessions.create({
@@ -5868,6 +5907,11 @@ const billingAdapters = {
         err.status = 400;
         throw err;
       }
+
+      await assertStripePriceMatchesBillingInterval({
+        priceId,
+        interval: selectedInterval,
+      });
 
       const customerId = await ensureStripeCustomerId({ email, zakiUser });
       const { subscription, item } = await resolveStripeSubscriptionForPlanChange({
@@ -8694,7 +8738,11 @@ async function buildBillingDisplayConfig() {
       },
     ])
   );
-  return { configured, pricingCatalog, platformPlanAllowances };
+  return {
+    configured: applyStripeDisplayAvailability(configured, pricingCatalog),
+    pricingCatalog,
+    platformPlanAllowances,
+  };
 }
 
 app.post("/api/billing/checkout", express.json({ limit: "1mb" }), async (req, res) => {

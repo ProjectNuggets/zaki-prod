@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 import Stripe from "stripe";
 import dotenv from "dotenv";
 
@@ -29,8 +30,8 @@ function requireLiveStripeKey() {
   return key;
 }
 
-function requiredPrice(name) {
-  const value = String(process.env[name] || "").trim();
+function requiredPrice(name, env = process.env) {
+  const value = String(env[name] || "").trim();
   if (!value) throw new Error(`${name} is required.`);
   return value;
 }
@@ -41,17 +42,67 @@ function requiredConfig(name) {
   return value;
 }
 
+function configuredPrice(name, env = process.env) {
+  return String(env[name] || "").trim();
+}
+
+export function buildCommercialSmokePlans(env = process.env) {
+  const monthlyPlans = [
+    {
+      plan: "personal",
+      interval: "monthly",
+      price: requiredPrice("STRIPE_PRICE_PERSONAL", env),
+      expectedAmount: 1500,
+    },
+    {
+      plan: "pro",
+      interval: "monthly",
+      price: requiredPrice("STRIPE_PRICE_PRO", env),
+      expectedAmount: 4500,
+    },
+    {
+      plan: "pro_max",
+      interval: "monthly",
+      price: requiredPrice("STRIPE_PRICE_PRO_MAX", env),
+      expectedAmount: 9500,
+    },
+  ];
+  const yearlyPlans = [
+    ["personal", "STRIPE_PRICE_PERSONAL_YEARLY"],
+    ["pro", "STRIPE_PRICE_PRO_YEARLY"],
+    ["pro_max", "STRIPE_PRICE_PRO_MAX_YEARLY"],
+  ].flatMap(([plan, envName]) => {
+    const price = configuredPrice(envName, env);
+    return price
+      ? [{ plan, interval: "yearly", price, expectedAmount: null, envName }]
+      : [];
+  });
+  return [...monthlyPlans, ...yearlyPlans];
+}
+
+export function validateCommercialSmokePrice(price, item) {
+  if (!price.livemode) throw new Error(`${item.plan} ${item.interval} price is not live.`);
+  if (!price.active) throw new Error(`${item.plan} ${item.interval} price is inactive.`);
+  if (price.currency !== "usd") throw new Error(`${item.plan} ${item.interval} price must be USD.`);
+  if (typeof item.expectedAmount === "number" && price.unit_amount !== item.expectedAmount) {
+    throw new Error(`${item.plan} ${item.interval} price amount mismatch: ${price.unit_amount}.`);
+  }
+  const expectedStripeInterval = item.interval === "yearly" ? "year" : "month";
+  if (price.recurring?.interval !== expectedStripeInterval) {
+    throw new Error(`${item.plan} price must recur ${expectedStripeInterval}ly.`);
+  }
+  if (price.recurring?.interval_count !== 1) {
+    throw new Error(`${item.plan} ${item.interval} price must recur exactly once per interval.`);
+  }
+}
+
 async function main() {
   loadEnvFiles();
   const stripe = new Stripe(requireLiveStripeKey(), { apiVersion: "2024-06-20" });
   const portalConfigurationId = requiredConfig("STRIPE_BILLING_PORTAL_CONFIGURATION");
   const successUrl = process.env.ZAKI_APP_URL || "https://app.chatzaki.com/billing/success";
   const cancelUrl = process.env.ZAKI_APP_URL || "https://app.chatzaki.com/pricing";
-  const plans = [
-    { plan: "personal", price: requiredPrice("STRIPE_PRICE_PERSONAL"), expectedAmount: 1500 },
-    { plan: "pro", price: requiredPrice("STRIPE_PRICE_PRO"), expectedAmount: 4500 },
-    { plan: "pro_max", price: requiredPrice("STRIPE_PRICE_PRO_MAX"), expectedAmount: 9500 },
-  ];
+  const plans = buildCommercialSmokePlans(process.env);
 
   const results = [];
   const portalConfiguration = await stripe.billingPortal.configurations.retrieve(
@@ -66,36 +117,31 @@ async function main() {
   for (const item of plans) {
     if (!portalPriceIds.has(item.price)) {
       throw new Error(
-        `${item.plan} price is missing from STRIPE_BILLING_PORTAL_CONFIGURATION subscription updates.`
+        `${item.plan} ${item.interval} price is missing from STRIPE_BILLING_PORTAL_CONFIGURATION subscription updates.`
       );
     }
   }
 
   for (const item of plans) {
     const price = await stripe.prices.retrieve(item.price, { expand: ["product"] });
-    if (!price.livemode) throw new Error(`${item.plan} price is not live.`);
-    if (price.currency !== "usd") throw new Error(`${item.plan} price must be USD.`);
-    if (price.unit_amount !== item.expectedAmount) {
-      throw new Error(`${item.plan} price amount mismatch: ${price.unit_amount}.`);
-    }
-    if (price.recurring?.interval !== "month") {
-      throw new Error(`${item.plan} price must be monthly.`);
-    }
+    validateCommercialSmokePrice(price, item);
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       line_items: [{ price: item.price, quantity: 1 }],
-      success_url: `${successUrl}?checkout=success&plan=${item.plan}&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${cancelUrl}?checkout=cancelled&plan=${item.plan}`,
-      customer_email: `billing-smoke+${item.plan}@chatzaki.com`,
+      success_url: `${successUrl}?checkout=success&plan=${item.plan}&interval=${item.interval}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${cancelUrl}?checkout=cancelled&plan=${item.plan}&interval=${item.interval}`,
+      customer_email: `billing-smoke+${item.plan}-${item.interval}@chatzaki.com`,
       metadata: {
         zaki_smoke_test: "commercial_checkout",
         plan_tier: item.plan,
+        billing_interval: item.interval,
       },
       subscription_data: {
         metadata: {
           zaki_smoke_test: "commercial_checkout",
           plan_tier: item.plan,
+          billing_interval: item.interval,
         },
       },
     });
@@ -103,6 +149,7 @@ async function main() {
     await stripe.checkout.sessions.expire(session.id);
     results.push({
       plan: item.plan,
+      interval: item.interval,
       priceId: item.price,
       amount: price.unit_amount,
       currency: price.currency,
@@ -131,7 +178,9 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  console.error(error?.message || error);
-  process.exitCode = 1;
-});
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error?.message || error);
+    process.exitCode = 1;
+  });
+}

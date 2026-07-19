@@ -231,7 +231,19 @@ export function PricingPage() {
   };
 
   const yearlySavingsPercent = useMemo(() => {
-    const percentages = PAID_PLAN_IDS.flatMap((plan) => {
+    const availableYearlyPlans = PAID_PLAN_IDS.filter((plan) => {
+      const yearly = billingConfig?.pricingCatalog?.[plan]?.yearly;
+      return Boolean(
+        billingConfig?.pricingAvailability?.[plan]?.yearly &&
+          yearly?.priceId &&
+          typeof yearly.unitAmount === "number" &&
+          Number.isFinite(yearly.unitAmount) &&
+          yearly.currency
+      );
+    });
+    if (availableYearlyPlans.length === 0) return null;
+
+    const percentages = availableYearlyPlans.map((plan) => {
       const monthly = billingConfig?.pricingCatalog?.[plan]?.monthly?.unitAmount;
       const yearly = billingConfig?.pricingCatalog?.[plan]?.yearly?.unitAmount;
       if (
@@ -241,12 +253,13 @@ export function PricingPage() {
         yearly <= 0 ||
         yearly >= monthly * 12
       ) {
-        return [];
+        return null;
       }
-      return [Math.round((1 - yearly / (monthly * 12)) * 100)];
+      return Math.round((1 - yearly / (monthly * 12)) * 100);
     });
-    return percentages.length > 0 ? Math.max(...percentages) : null;
-  }, [billingConfig?.pricingCatalog]);
+    if (percentages.some((percent) => percent === null)) return null;
+    return percentages.every((percent) => percent === percentages[0]) ? percentages[0] : null;
+  }, [billingConfig?.pricingAvailability, billingConfig?.pricingCatalog]);
 
   const yearlyBillingAvailable = PAID_PLAN_IDS.some((plan) =>
     isPlanIntervalAvailable(plan, "yearly")
