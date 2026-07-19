@@ -4,8 +4,67 @@
 // Hire/Career remain implemented behind the scenes but are hidden from every release surface.
 // WP-K also locks: the chat lane is named "Spaces" everywhere, and no rail control is inert.
 
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { RELEASE_VIEWPORTS, signInForRelease } from "./support/release-harness";
+import {
+  RELEASE_PRODUCT_REGISTRY,
+  RELEASE_VIEWPORTS,
+  mockReleaseShell,
+  signInForRelease,
+} from "./support/release-harness";
+
+test.describe("Anonymous future-product gates", () => {
+  test("Design and Minutes stay gated even when internal product flags are enabled", async ({ page }, testInfo) => {
+    const productRegistry = {
+      ...RELEASE_PRODUCT_REGISTRY,
+      products: RELEASE_PRODUCT_REGISTRY.products.map((product) =>
+        product.productId === "design" || product.productId === "minutes"
+          ? { ...product, state: "enabled" as const }
+          : product
+      ),
+    };
+
+    await mockReleaseShell(page, { productRegistry });
+    // This handler is deliberately registered last: Playwright gives it
+    // precedence over the signed-in shell fixture's refresh response.
+    await page.route("**/api/auth/refresh", async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "authentication_required" }),
+      });
+    });
+
+    await page.setViewportSize(
+      testInfo.project.name === "chromium-mobile"
+        ? RELEASE_VIEWPORTS.mobile
+        : RELEASE_VIEWPORTS.desktop
+    );
+
+    for (const product of ["design", "minutes"] as const) {
+      await page.goto(`/${product}`, { waitUntil: "domcontentloaded" });
+
+      const gate = page.getByTestId(`product-gate-${product}`);
+      await expect(gate).toBeVisible({ timeout: 20_000 });
+      await expect(gate).toHaveAttribute("data-product-gate", "coming_soon");
+      await expect(page.locator(`[data-product-id="${product}"]`)).toHaveCount(0);
+      await expect(page.getByText("Sign in to open Minutes")).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+      const accessibility = await new AxeBuilder({ page }).analyze();
+      expect(
+        accessibility.violations.filter((violation) =>
+          ["critical", "serious"].includes(violation.impact ?? "")
+        )
+      ).toEqual([]);
+
+      await page.screenshot({
+        path: `e2e/__screenshots__/future-products/${testInfo.project.name}-${product}-anonymous-gate.png`,
+        fullPage: false,
+      });
+    }
+  });
+});
 
 test.describe("ZAKI release product visibility", () => {
   test.beforeEach(async ({ page }) => {

@@ -7,7 +7,6 @@ import {
   SkeletonSettingsPage,
   SkeletonSpaceGrid,
 } from './app/components/ui/skeleton';
-import { ProductAccessGate } from './app/components/ProductAccessGate';
 import { ProductLaunchPage } from './app/components/ProductLaunchPage';
 import { useAuthStore } from './stores';
 import { getCanonicalAppProductRoute, getProductLaunchState } from './lib/productRoutes';
@@ -70,6 +69,10 @@ const SettingsPage = lazy(() =>
 
 const DesignRoute = lazy(() =>
   import('./app/components/design/DesignRoute').then((m) => ({ default: m.DesignRoute })),
+);
+
+const MinutesRoute = lazy(() =>
+  import('./app/components/minutes/MinutesRoute').then((m) => ({ default: m.MinutesRoute })),
 );
 
 // Brain is the first lazy-loaded route: its WebGL "Galaxy" renderer (three +
@@ -346,13 +349,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'minutes',
-        element: routeSuspense(
-          <ProductAccessGate
-            productId="minutes"
-            title="ZAKI Minutes"
-            mode="coming_soon"
-          />
-        ),
+        element: routeSuspense(<MinutesRoute />),
       },
     ],
   },
