@@ -598,10 +598,17 @@ export async function settleAgentChatUnits({
     const settleResult = await settleHold({
       holdId: hold.id,
       settleIdempotencyKey: `${idempotencyKey}:settle`,
-      // Passed uncapped: the ledger's computeSettleRefund clamps settledUnits to reserved_units
-      // (Math.min). costOverflow above flags the calibration signal; do NOT clamp here.
       settledUnits: sawError ? 0 : units,
       finalState: sawError ? "released" : "settled",
+      // WP-BILL2: record the TRUE cost, not the reserve. The flat ZAKI_AGENT_RESERVE_UNITS is a
+      // placeholder, not a price — a tool-heavy turn can cost multiples of it, and clamping the
+      // settle to the reserve billed that turn as 60 units forever. costOverflow (above, still
+      // emitted for calibration) was the only trace it left. Opting in makes the ledger debit the
+      // difference so the wallet reflects real spend and the NEXT turn is refused on a true
+      // balance. Deliberately per-call, not a ledger default: the spaces surface reserves an
+      // input-only ESTIMATE and settles on input+output, so flipping this globally would silently
+      // start billing every spaces user for output tokens.
+      recordTrueCost: true,
       provider: AGENT_PROVIDER,
       providerModel: AGENT_PROVIDER_MODEL,
       providerCostUsdMicros: costMicros,
