@@ -4,6 +4,24 @@ import { startPostgresNotificationListener } from "./db-notifications.js";
 
 let pool = null;
 
+function enabledFlag(value) {
+  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+}
+
+// The control BFF cannot safely run without both its wallet hold tables and
+// callback/idempotency tables. Keep this local to db.js to avoid importing the
+// control router (which itself imports database-backed state).
+export function isMinutesControlSchemaRequired(env = process.env) {
+  return enabledFlag(env.ZAKI_MINUTES_CONTROL_ENABLED) && enabledFlag(env.ZAKI_MINUTES_CONTROL_STAGING_READY);
+}
+
+export function failClosedMinutesControlSchema(schema, cause, env = process.env) {
+  if (!isMinutesControlSchemaRequired(env)) return;
+  const error = new Error(`Minutes control is active but required ${schema} schema migration failed.`);
+  error.cause = cause;
+  throw error;
+}
+
 export async function listenForDbNotifications(channel, onPayload, options = {}) {
   if (!pool) throw new Error("Database is not initialized.");
   return startPostgresNotificationListener({
@@ -1444,6 +1462,7 @@ export async function initDb() {
     console.log("[DB] Unit ledger tables ready (zaki_unit_wallets, zaki_meter_holds)");
   } catch (err) {
     console.warn("[DB] Unit ledger table creation failed:", err.message);
+    failClosedMinutesControlSchema("unit-ledger", err);
   }
 
   // Minutes control stays runtime-disabled until explicit staging evidence, but
@@ -1455,6 +1474,7 @@ export async function initDb() {
     console.log("[DB] Minutes control state tables ready");
   } catch (err) {
     console.warn("[DB] Minutes control state table creation failed:", err.message);
+    failClosedMinutesControlSchema("control-state", err);
   }
 
   // --- V1 beta cutover audit + reversible workspace archive registry ---

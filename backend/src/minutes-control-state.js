@@ -25,6 +25,24 @@ CREATE INDEX IF NOT EXISTS idx_zaki_minutes_control_captures_meeting
   ON zaki_minutes_control_captures (tenant_id, user_id, meeting_id)
   WHERE meeting_id IS NOT NULL;
 
+-- An engine capture can succeed during a transient failure while the Hub is
+-- persisting its callback binding. This contains only opaque identifiers so a
+-- later signed callback can promote the capture and settle the same hold.
+CREATE TABLE IF NOT EXISTS zaki_minutes_control_compensations (
+  capture_id TEXT PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
+  operation_id TEXT NOT NULL,
+  reservation_id UUID NOT NULL REFERENCES zaki_meter_holds(id) ON DELETE RESTRICT,
+  meeting_id TEXT,
+  stop_state TEXT NOT NULL CHECK (stop_state IN ('stop_pending','stop_requested','stop_uncertain')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (tenant_id, user_id, operation_id)
+);
+CREATE INDEX IF NOT EXISTS idx_zaki_minutes_control_compensations_subject
+  ON zaki_minutes_control_compensations (tenant_id, user_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS zaki_minutes_control_callback_events (
   event_id TEXT PRIMARY KEY,
   canonical_event_sha256 TEXT NOT NULL,
@@ -47,7 +65,7 @@ CREATE TABLE IF NOT EXISTS zaki_minutes_control_usage_sequences (
 `;
 
 const TRANSITIONS = new Map([
-  ["requested", new Set(["joining", "failed"])],
+  ["requested", new Set(["joining", "stopping", "completed", "failed"])],
   ["joining", new Set(["awaiting_admission", "active", "failed"])],
   ["awaiting_admission", new Set(["active", "failed"])],
   ["active", new Set(["stopping", "completed", "failed"])],
@@ -73,6 +91,8 @@ function rows(result) {
 function validSame(left, right) {
   return String(left ?? "") === String(right ?? "");
 }
+
+const COMPENSATION_STOP_STATES = new Set(["stop_pending", "stop_requested", "stop_uncertain"]);
 
 function assertedCaptureBinding(capture, data) {
   const subject = data?.subject || {};
@@ -127,8 +147,7 @@ export async function recordMinutesControlCapture({
       [response.capture_id, userId, tenantId, response.operation_id, reservationId, response.meeting_id || null]
     );
     const created = rows(inserted)[0];
-    if (created) return created;
-    const existing = rows(await client.query(
+    const existing = created || rows(await client.query(
       `SELECT * FROM zaki_minutes_control_captures WHERE capture_id = $1 FOR UPDATE`,
       [response.capture_id]
     ))[0];
@@ -141,9 +160,103 @@ export async function recordMinutesControlCapture({
     ) {
       throw new MinutesControlStateError("Minutes capture replay conflicted with a stored capture.");
     }
-    if (response.meeting_id) return bindMeetingId(client, existing, response.meeting_id);
-    return existing;
+    const bound = response.meeting_id ? await bindMeetingId(client, existing, response.meeting_id) : existing;
+    // A retry may reach normal persistence after the compensation record was
+    // written. The capture is then durable in the primary table, so remove the
+    // temporary reconciliation marker in the same transaction.
+    await client.query(
+      `DELETE FROM zaki_minutes_control_compensations WHERE capture_id = $1`,
+      [response.capture_id]
+    );
+    return bound;
   });
+}
+
+export async function recordMinutesControlCompensation({
+  captureId,
+  operationId,
+  meetingId,
+  reservationId,
+  userId,
+  tenantId = "default",
+  stopState,
+  runInTransaction = defaultWithDbTransaction,
+} = {}) {
+  if (!captureId || !operationId || !reservationId || !userId || !COMPENSATION_STOP_STATES.has(stopState)) {
+    throw new MinutesControlStateError("Minutes capture compensation is invalid.", {
+      code: "upstream_unavailable",
+      status: 503,
+      retryable: true,
+    });
+  }
+  return runInTransaction(async (client) => {
+    const recorded = rows(await client.query(
+      `INSERT INTO zaki_minutes_control_compensations
+         (capture_id, user_id, tenant_id, operation_id, reservation_id, meeting_id, stop_state)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (capture_id) DO UPDATE
+         SET meeting_id = COALESCE(zaki_minutes_control_compensations.meeting_id, EXCLUDED.meeting_id),
+             stop_state = EXCLUDED.stop_state,
+             updated_at = NOW()
+       WHERE zaki_minutes_control_compensations.user_id = EXCLUDED.user_id
+         AND zaki_minutes_control_compensations.tenant_id = EXCLUDED.tenant_id
+         AND zaki_minutes_control_compensations.operation_id = EXCLUDED.operation_id
+         AND zaki_minutes_control_compensations.reservation_id = EXCLUDED.reservation_id
+       RETURNING *`,
+      [captureId, userId, tenantId, operationId, reservationId, meetingId || null, stopState]
+    ))[0];
+    if (!recorded) {
+      throw new MinutesControlStateError("Minutes capture compensation conflicted with stored state.", {
+        code: "upstream_unavailable",
+        status: 503,
+        retryable: true,
+      });
+    }
+    return recorded;
+  });
+}
+
+async function promoteMinutesControlCompensation(client, envelope) {
+  const data = envelope.data;
+  const compensation = rows(await client.query(
+    `SELECT * FROM zaki_minutes_control_compensations WHERE capture_id = $1 FOR UPDATE`,
+    [data.capture_id]
+  ))[0];
+  if (!compensation) return null;
+  assertedCaptureBinding(compensation, data);
+  if (compensation.meeting_id && data.meeting_id && !validSame(compensation.meeting_id, data.meeting_id)) {
+    throw new MinutesControlStateError("Minutes compensation meeting identity changed.");
+  }
+  const state = envelope.event_type === "minutes.capture.status"
+    ? data.state
+    : compensation.stop_state === "stop_requested" ? "stopping" : "requested";
+  const meetingId = data.meeting_id || compensation.meeting_id || null;
+  const inserted = rows(await client.query(
+    `INSERT INTO zaki_minutes_control_captures
+       (capture_id, user_id, tenant_id, operation_id, reservation_id, meeting_id, state)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (capture_id) DO NOTHING
+     RETURNING *`,
+    [
+      compensation.capture_id,
+      compensation.user_id,
+      compensation.tenant_id,
+      compensation.operation_id,
+      compensation.reservation_id,
+      meetingId,
+      state,
+    ]
+  ))[0];
+  const capture = inserted || rows(await client.query(
+    `SELECT * FROM zaki_minutes_control_captures WHERE capture_id = $1 FOR UPDATE`,
+    [data.capture_id]
+  ))[0];
+  assertedCaptureBinding(capture, data);
+  await client.query(
+    `DELETE FROM zaki_minutes_control_compensations WHERE capture_id = $1`,
+    [data.capture_id]
+  );
+  return capture;
 }
 
 function canTransition(from, to) {
@@ -245,18 +358,21 @@ export async function applyMinutesControlCallback({
   }
   const fingerprint = minutesControlPayloadFingerprint(envelope);
   return runInTransaction(async (client) => {
-    const capture = rows(await client.query(
+    let capture = rows(await client.query(
       `SELECT * FROM zaki_minutes_control_captures WHERE capture_id = $1 FOR UPDATE`,
       [envelope.data.capture_id]
     ))[0];
     if (!capture) {
-      // The engine may beat the capture-response persistence by a few milliseconds.
-      // No event is recorded in this transaction, so a normal engine retry can apply it.
-      throw new MinutesControlStateError("Minutes callback capture is not ready.", {
-        code: "upstream_unavailable",
-        status: 503,
-        retryable: true,
-      });
+      capture = await promoteMinutesControlCompensation(client, envelope);
+      if (!capture) {
+        // The engine may beat the capture-response persistence by a few milliseconds.
+        // No event is recorded in this transaction, so a normal engine retry can apply it.
+        throw new MinutesControlStateError("Minutes callback capture is not ready.", {
+          code: "upstream_unavailable",
+          status: 503,
+          retryable: true,
+        });
+      }
     }
     assertedCaptureBinding(capture, envelope.data);
     const eventInsert = await client.query(
@@ -294,9 +410,28 @@ export async function applyMinutesControlCallback({
 
 export async function forgetMinutesControlMeeting({ userId, tenantId = "default", meetingId, dbQuery = defaultDbQuery } = {}) {
   if (!userId || !meetingId) return { rowCount: 0 };
-  return dbQuery(
+  const result = await dbQuery(
     `DELETE FROM zaki_minutes_control_captures
       WHERE user_id = $1 AND tenant_id = $2 AND meeting_id = $3`,
     [userId, tenantId, meetingId]
   );
+  await dbQuery(
+    `DELETE FROM zaki_minutes_control_compensations
+      WHERE user_id = $1 AND tenant_id = $2 AND meeting_id = $3`,
+    [userId, tenantId, meetingId]
+  );
+  return result;
+}
+
+export async function hasMinutesControlAccountState({ userId, tenantId = "default", dbQuery = defaultDbQuery } = {}) {
+  if (!userId) return false;
+  const result = await dbQuery(
+    `SELECT EXISTS (
+       SELECT 1 FROM zaki_minutes_control_captures WHERE user_id = $1 AND tenant_id = $2
+       UNION ALL
+       SELECT 1 FROM zaki_minutes_control_compensations WHERE user_id = $1 AND tenant_id = $2
+     ) AS has_minutes_control_state`,
+    [userId, tenantId]
+  );
+  return Boolean(rows(result)[0]?.has_minutes_control_state);
 }

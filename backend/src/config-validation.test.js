@@ -491,6 +491,7 @@ describe("runtime config validation", () => {
       })
     );
     expect(missing.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "ZAKI_MINUTES_ENABLED" }),
       expect.objectContaining({ key: "MINUTES_ENGINE_CONTROL_TOKEN" }),
       expect.objectContaining({ key: "MINUTES_ENGINE_CALLBACK_HMAC_KEY" }),
       expect.objectContaining({ key: "MINUTES_CONTROL_CAPTURE_RESERVE_UNITS" }),
@@ -500,7 +501,9 @@ describe("runtime config validation", () => {
       createBaseEnv({
         ZAKI_MINUTES_CONTROL_ENABLED: "true",
         ZAKI_MINUTES_CONTROL_STAGING_READY: "true",
+        ZAKI_MINUTES_ENABLED: "true",
         MINUTES_ENGINE_BASE_URL: "http://zaki-minutes-engine:8056",
+        MINUTES_ENGINE_READ_TOKEN: "m".repeat(32),
         MINUTES_ENGINE_CONTROL_TOKEN: "c".repeat(32),
         MINUTES_ENGINE_CALLBACK_HMAC_KEY: "h".repeat(32),
         MINUTES_CONTROL_CAPTURE_RESERVE_UNITS: "60",
@@ -516,7 +519,9 @@ describe("runtime config validation", () => {
         NODE_ENV: "production",
         ZAKI_MINUTES_CONTROL_ENABLED: "true",
         ZAKI_MINUTES_CONTROL_STAGING_READY: "true",
+        ZAKI_MINUTES_ENABLED: "true",
         MINUTES_ENGINE_BASE_URL: "http://zaki-minutes-engine:8056",
+        MINUTES_ENGINE_READ_TOKEN_FILE: "/run/secrets/zaki-read/minutes",
         MINUTES_ENGINE_CONTROL_TOKEN_FILE: "/run/secrets/zaki-control/signing-key",
         MINUTES_ENGINE_CALLBACK_HMAC_KEY_FILE: "/run/secrets/zaki-control/callback-key",
         MINUTES_CONTROL_CAPTURE_RESERVE_UNITS: "60",
@@ -530,7 +535,9 @@ describe("runtime config validation", () => {
       createBaseEnv({
         ZAKI_MINUTES_CONTROL_ENABLED: "true",
         ZAKI_MINUTES_CONTROL_STAGING_READY: "true",
+        ZAKI_MINUTES_ENABLED: "true",
         MINUTES_ENGINE_BASE_URL: "http://zaki-minutes-engine:8056",
+        MINUTES_ENGINE_READ_TOKEN: "m".repeat(32),
         MINUTES_ENGINE_CONTROL_TOKEN: "c".repeat(32),
         MINUTES_ENGINE_CALLBACK_HMAC_KEY: "h".repeat(32),
         MINUTES_CONTROL_CAPTURE_RESERVE_UNITS: "60",
@@ -547,6 +554,27 @@ describe("runtime config validation", () => {
       expect.objectContaining({ key: "MINUTES_CONTROL_POLICY_VERSION" }),
       expect.objectContaining({ key: "MINUTES_CONTROL_AUDIO_RETENTION_DAYS" }),
       expect.objectContaining({ key: "MINUTES_CONTROL_SUMMARY_RETENTION_DAYS" }),
+    ]));
+  });
+
+  it("requires the read plane and a prepaid window that covers the engine maximum", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_MINUTES_CONTROL_ENABLED: "true",
+        ZAKI_MINUTES_CONTROL_STAGING_READY: "true",
+        ZAKI_MINUTES_ENABLED: "true",
+        MINUTES_ENGINE_BASE_URL: "http://zaki-minutes-engine:8056",
+        MINUTES_ENGINE_READ_TOKEN: "m".repeat(32),
+        MINUTES_ENGINE_CONTROL_TOKEN: "c".repeat(32),
+        MINUTES_ENGINE_CALLBACK_HMAC_KEY: "h".repeat(32),
+        MINUTES_CONTROL_MAX_CAPTURE_SECONDS: "3601",
+        MINUTES_CONTROL_CAPTURE_RESERVE_UNITS: "60",
+        MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS: "3900000",
+      })
+    );
+    expect(report.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "MINUTES_CONTROL_CAPTURE_RESERVE_UNITS" }),
+      expect.objectContaining({ key: "MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS" }),
     ]));
   });
 

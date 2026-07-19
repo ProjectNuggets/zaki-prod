@@ -213,6 +213,8 @@ import {
   eraseMinutesAccountForErasure,
   isMinutesControlEnabled,
 } from "./minutes-control-routes.js";
+import { hasMinutesControlAccountState } from "./minutes-control-state.js";
+import { resolveMinutesControlAccountErasure } from "./minutes-control-account-erasure.js";
 import {
   resolveMinutesCallbackHmacKey,
   resolveMinutesControlSigningKey,
@@ -712,7 +714,7 @@ const ZAKI_MINUTES_CONTROL_STAGING_READY = isMinutesControlEnabled(
 // No Minutes control endpoint is live from either flag alone. The second gate is
 // an operator's evidence checkpoint for a deployed, contract-conformant engine.
 const ZAKI_MINUTES_CONTROL_ACTIVE =
-  ZAKI_MINUTES_CONTROL_ENABLED && ZAKI_MINUTES_CONTROL_STAGING_READY;
+  ZAKI_MINUTES_ENABLED && ZAKI_MINUTES_CONTROL_ENABLED && ZAKI_MINUTES_CONTROL_STAGING_READY;
 function getMinutesEngineControlSigningKey() {
   if (!ZAKI_MINUTES_CONTROL_ACTIVE) return "";
   return resolveMinutesControlSigningKey({
@@ -745,6 +747,12 @@ const MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS = boundedMinutesControlNumber(
   6 * 60 * 60 * 1_000,
   60_000,
   24 * 60 * 60 * 1_000
+);
+const MINUTES_CONTROL_MAX_CAPTURE_SECONDS = boundedMinutesControlNumber(
+  process.env.MINUTES_CONTROL_MAX_CAPTURE_SECONDS,
+  60 * 60,
+  60,
+  4 * 60 * 60
 );
 const MINUTES_CONTROL_TOKEN_TTL_SECONDS = boundedMinutesControlNumber(
   process.env.MINUTES_CONTROL_TOKEN_TTL_SECONDS,
@@ -15705,21 +15713,21 @@ async function deleteLearningAccountResources({ zakiUser, requestId }) {
 }
 
 async function deleteMinutesAccountResources({ zakiUser, requestId }) {
-  // A disabled control plane has never been permitted to create captures in this
-  // environment, so there is no raw-store credential to invoke. Once evidence
-  // opens the gate, account deletion requires the engine's content-free receipt.
-  if (!ZAKI_MINUTES_CONTROL_ACTIVE) {
-    return { attempted: false, ok: true, reason: "minutes_control_not_ready" };
-  }
   try {
-    return await eraseMinutesAccountForErasure({
-      baseUrl: MINUTES_ENGINE_BASE_URL,
-      controlSigningKey: getMinutesEngineControlSigningKey(),
-      userId: String(zakiUser?.id || ""),
-      tenantId: "default",
+    return await resolveMinutesControlAccountErasure({
+      controlActive: ZAKI_MINUTES_CONTROL_ACTIVE,
+      zakiUser,
       requestId,
-      fetchWithTimeout,
-      timeoutMs: MINUTES_ENGINE_REQUEST_TIMEOUT_MS,
+      hasAccountState: hasMinutesControlAccountState,
+      eraseAccount: async ({ zakiUser: subject, requestId: erasureRequestId }) => eraseMinutesAccountForErasure({
+        baseUrl: MINUTES_ENGINE_BASE_URL,
+        controlSigningKey: getMinutesEngineControlSigningKey(),
+        userId: String(subject?.id || ""),
+        tenantId: "default",
+        requestId: erasureRequestId,
+        fetchWithTimeout,
+        timeoutMs: MINUTES_ENGINE_REQUEST_TIMEOUT_MS,
+      }),
     });
   } catch (error) {
     logStructured("warn", "minutes.account_erasure.failed", {
@@ -18557,6 +18565,7 @@ app.use("/api/minutes", buildMinutesControlRouter({
   policy: MINUTES_CONTROL_POLICY,
   captureReserveUnits: MINUTES_CONTROL_CAPTURE_RESERVE_UNITS,
   captureHoldTtlMs: MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS,
+  captureMaxSeconds: MINUTES_CONTROL_MAX_CAPTURE_SECONDS,
   resolveUser: requireAuthUser,
   getRequestId: getOrCreateRequestId,
   fetchWithTimeout,

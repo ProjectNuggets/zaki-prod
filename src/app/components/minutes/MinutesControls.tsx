@@ -60,7 +60,7 @@ function ConsentForm({
   const consent = useMutation({
     mutationFn: saveMinutesConsent,
     onSuccess: (result, input) => {
-      if (result.state === "ready") onReady(input.captureEnabled);
+      onReady(result.state === "ready" && input.captureEnabled);
     },
   });
   const validRetention = Number.isInteger(retention.audio_days) && retention.audio_days >= 0 && retention.audio_days <= 365 &&
@@ -105,7 +105,6 @@ function CaptureForm({ enabled }: { enabled: boolean }) {
   const { t } = useTranslation();
   const [platform, setPlatform] = useState<"google_meet" | "zoom" | "teams" | "jitsi">("google_meet");
   const [meetingUrl, setMeetingUrl] = useState("");
-  const [botDisplayName, setBotDisplayName] = useState("ZAKI Minutes");
   const [visibleBotAttested, setVisibleBotAttested] = useState(false);
   const [capture, setCapture] = useState<MinutesCaptureResult | null>(null);
   const requestCapture = useMutation({ mutationFn: requestMinutesCapture, onSuccess: setCapture });
@@ -119,7 +118,7 @@ function CaptureForm({ enabled }: { enabled: boolean }) {
   return <section aria-labelledby="minutes-capture-heading" className="border-b border-[var(--v2-hairline)] py-5">
     <div className="mb-3">
       <h3 id="minutes-capture-heading" className="text-sm font-semibold">{t("minutes.requestCaptureTitle", { defaultValue: "Request a visible bot" })}</h3>
-      <p className="mt-1 text-xs leading-5 text-[var(--v2-ink-2)]">{t("minutes.requestCaptureBody", { defaultValue: "The bot must be visibly present and attendees must be notified before it joins." })}</p>
+      <p className="mt-1 text-xs leading-5 text-[var(--v2-ink-2)]">{t("minutes.requestCaptureBody", { defaultValue: "ZAKI Notetaker must be visibly present and attendees must be notified before it joins." })}</p>
     </div>
     <form
       className="grid gap-3"
@@ -128,7 +127,6 @@ function CaptureForm({ enabled }: { enabled: boolean }) {
         requestCapture.mutate({
           platform,
           meetingUrl,
-          botDisplayName,
           visibleBotAttested: true,
           idempotencyKey: idempotencyKey("minutes-capture"),
         });
@@ -138,10 +136,9 @@ function CaptureForm({ enabled }: { enabled: boolean }) {
         <label className="grid gap-1 text-xs text-[var(--v2-ink-2)]"><span>{t("minutes.platform", { defaultValue: "Platform" })}</span><select value={platform} onChange={(event) => setPlatform(event.target.value as typeof platform)} className="min-h-10 border border-[var(--v2-hairline)] bg-[var(--v2-bg)] px-2 text-sm text-[var(--v2-ink-1)]"><option value="google_meet">Google Meet</option><option value="zoom">Zoom</option><option value="teams">Microsoft Teams</option><option value="jitsi">Jitsi</option></select></label>
         <label className="grid gap-1 text-xs text-[var(--v2-ink-2)]"><span>{t("minutes.meetingUrl", { defaultValue: "Meeting URL" })}</span><input required type="url" value={meetingUrl} onChange={(event) => setMeetingUrl(event.target.value)} placeholder="https://…" className="min-h-10 border border-[var(--v2-hairline)] bg-[var(--v2-bg)] px-2 text-sm text-[var(--v2-ink-1)] outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--v2-accent)]" /></label>
       </div>
-      <label className="grid gap-1 text-xs text-[var(--v2-ink-2)]"><span>{t("minutes.botDisplayName", { defaultValue: "Visible bot name" })}</span><input required maxLength={80} value={botDisplayName} onChange={(event) => setBotDisplayName(event.target.value)} className="min-h-10 border border-[var(--v2-hairline)] bg-[var(--v2-bg)] px-2 text-sm text-[var(--v2-ink-1)] outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--v2-accent)]" /></label>
       <label className="flex items-start gap-2 text-sm text-[var(--v2-ink-1)]"><input required type="checkbox" checked={visibleBotAttested} onChange={(event) => setVisibleBotAttested(event.target.checked)} className="mt-1 size-4 accent-[var(--v2-accent)]" /><span>{t("minutes.visibleBotAttestation", { defaultValue: "I confirm the bot will be visible and attendees will be told before capture starts." })}</span></label>
       {requestCapture.isError ? <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]"><CircleAlert className="size-3.5" aria-hidden />{t("minutes.captureUnavailable", { defaultValue: "The capture request could not be sent." })}<V2Button size="sm" type="button" onClick={() => requestCapture.variables && requestCapture.mutate(requestCapture.variables)}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div> : null}
-      <V2Button type="submit" size="sm" variant="primary" disabled={!meetingUrl || !botDisplayName || !visibleBotAttested || requestCapture.isPending}><Bot className="size-3.5" aria-hidden />{requestCapture.isPending ? t("minutes.requestingCapture", { defaultValue: "Requesting…" }) : t("minutes.requestCapture", { defaultValue: "Request capture" })}</V2Button>
+      <V2Button type="submit" size="sm" variant="primary" disabled={!meetingUrl || !visibleBotAttested || requestCapture.isPending}><Bot className="size-3.5" aria-hidden />{requestCapture.isPending ? t("minutes.requestingCapture", { defaultValue: "Requesting…" }) : t("minutes.requestCapture", { defaultValue: "Request capture" })}</V2Button>
     </form>
     {capture ? <div className="mt-4 border border-[var(--v2-hairline)] bg-[var(--v2-bg)] p-3" aria-live="polite"><p className="text-sm font-medium">{t("minutes.captureRequested", { defaultValue: "Capture requested" })}</p><p className="mt-1 font-mono text-[10px] text-[var(--v2-ink-2)]">{capture.captureId}</p>{status.data ? <p className="mt-2 text-xs text-[var(--v2-ink-2)]">{t("minutes.captureState", { defaultValue: "State" })}: {status.data.state}{status.data.failureCode ? ` (${status.data.failureCode})` : ""}</p> : null}{status.isError ? <div role="alert" className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]">{t("minutes.captureStatusUnavailable", { defaultValue: "Capture status is unavailable." })}<V2Button size="sm" onClick={() => status.variables && status.mutate(status.variables)}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div> : null}{stop.isError ? <div role="alert" className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]">{t("minutes.stopUnavailable", { defaultValue: "The stop request could not be sent." })}<V2Button size="sm" onClick={() => stop.variables && stop.mutate(stop.variables)}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div> : null}{stop.isSuccess ? <p role="status" className="mt-2 text-xs text-[var(--v2-accent)]">{t("minutes.stopRequested", { defaultValue: "Stop request sent. Check status for completion." })}</p> : null}<div className="mt-3 flex flex-wrap gap-2"><V2Button size="sm" onClick={() => status.mutate(capture.captureId)}><RefreshCw className="size-3.5" aria-hidden />{t("minutes.checkCaptureStatus", { defaultValue: "Check status" })}</V2Button><V2Button size="sm" disabled={Boolean(status.data?.terminal) || stop.isPending} onClick={() => stop.mutate({ captureId: capture.captureId, idempotencyKey: idempotencyKey("minutes-stop") })}><Square className="size-3.5" aria-hidden />{t("minutes.stopCapture", { defaultValue: "Stop capture" })}</V2Button></div></div> : null}
   </section>;

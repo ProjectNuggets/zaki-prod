@@ -115,7 +115,21 @@ export async function settleMinutesCapture({ holdId, idempotencyKey, capturedSec
       settleIdempotencyKey: `minutes-control:settle:${String(idempotencyKey || "")}`,
       settledUnits,
       finalState: "settled",
+      // Minutes bills final cumulative bot time, including a bounded overage
+      // if the provider reports more than the original reservation. The
+      // ledger deliberately defaults this off for products that bill caps.
+      recordTrueCost: true,
     }, client);
+    if (result?.ok && result?.idempotent && result?.hold?.state === "expired") {
+      // Configuration keeps this unreachable in normal operation (the hold
+      // outlives the engine maximum plus callback grace). Do not silently
+      // acknowledge a late terminal callback after an expiry refunded it.
+      throw new MinutesControlMeteringError("Minutes capture hold expired before terminal settlement.", {
+        code: "upstream_unavailable",
+        status: 503,
+        retryable: true,
+      });
+    }
     if (!result?.ok) {
       throw new MinutesControlMeteringError("Minutes metering could not be finalized.", {
         code: "upstream_unavailable",

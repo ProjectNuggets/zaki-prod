@@ -5,6 +5,53 @@ export const MINUTES_CONTROL_API_VERSION = "zaki-control.v1";
 export const MINUTES_CONTROL_RESPONSE_MAX_BYTES = 65_536;
 export const MINUTES_CONTROL_CALLBACK_MAX_BYTES = 65_536;
 export const MINUTES_CONTROL_CALLBACK_WINDOW_SECONDS = 300;
+// The engine currently seals its visible-bot identity to this exact value.
+// Keep it server-owned: browser input must never be able to alter the identity
+// that the engine attests and invokes.
+export const MINUTES_CONTROL_NOTETAKER_NAME = "ZAKI Notetaker";
+// These bounds mirror the engine's ControlConfig safe range. The Hub uses the
+// same deployment variable so its prepaid hold always spans the engine's
+// maximum possible runtime plus time for the terminal usage callback.
+export const MINUTES_CONTROL_MAX_CAPTURE_SECONDS_MIN = 60;
+export const MINUTES_CONTROL_MAX_CAPTURE_SECONDS_MAX = 4 * 60 * 60;
+export const MINUTES_CONTROL_CAPTURE_SETTLEMENT_GRACE_MS = 5 * 60 * 1_000;
+
+export function requiredMinutesCaptureReservedUnits(maxCaptureSeconds) {
+  const seconds = Number(maxCaptureSeconds);
+  if (
+    !Number.isSafeInteger(seconds) ||
+    seconds < MINUTES_CONTROL_MAX_CAPTURE_SECONDS_MIN ||
+    seconds > MINUTES_CONTROL_MAX_CAPTURE_SECONDS_MAX
+  ) {
+    return null;
+  }
+  return Math.ceil(seconds / 60);
+}
+
+export function validateMinutesCaptureFundingWindow({
+  maxCaptureSeconds,
+  reservedUnits,
+  holdTtlMs,
+  settlementGraceMs = MINUTES_CONTROL_CAPTURE_SETTLEMENT_GRACE_MS,
+} = {}) {
+  const requiredUnits = requiredMinutesCaptureReservedUnits(maxCaptureSeconds);
+  const reserve = Number(reservedUnits);
+  const holdTtl = Number(holdTtlMs);
+  const grace = Number(settlementGraceMs);
+  const requiredHoldTtlMs = requiredUnits === null || !Number.isSafeInteger(grace) || grace < 0
+    ? null
+    : Number(maxCaptureSeconds) * 1_000 + grace;
+  return {
+    ok: requiredUnits !== null &&
+      Number.isSafeInteger(reserve) &&
+      reserve === requiredUnits &&
+      Number.isSafeInteger(holdTtl) &&
+      requiredHoldTtlMs !== null &&
+      holdTtl >= requiredHoldTtlMs,
+    requiredUnits,
+    requiredHoldTtlMs,
+  };
+}
 
 export class MinutesControlContractError extends Error {
   constructor(message, code = "minutes_control_upstream_contract_invalid", status = 502, options = {}) {
@@ -69,7 +116,7 @@ const Policy = z.strictObject({
 
 const CaptureAttestation = z.strictObject({
   bot_visible: z.literal(true),
-  bot_display_name: z.string().min(1).max(80),
+  bot_display_name: z.literal(MINUTES_CONTROL_NOTETAKER_NAME),
   policy_version: Identifier,
   attested_at: DateTime,
   attested_by_user_id: UserId,
@@ -78,7 +125,7 @@ const CaptureAttestation = z.strictObject({
 const MeterReservation = z.strictObject({
   reservation_id: Identifier,
   unit: z.literal("bot_minute"),
-  reserved_units: z.number().int().min(0).max(1_000_000),
+  reserved_units: z.number().int().min(1).max(1_000_000),
 });
 
 const UsageMetering = z.strictObject({
@@ -273,7 +320,6 @@ const BrowserConsentInput = z.strictObject({
 const BrowserCaptureInput = z.strictObject({
   platform: z.enum(["google_meet", "zoom", "teams", "jitsi"]),
   meeting_url: z.string().url().max(2_048).regex(/^https:\/\//),
-  bot_display_name: z.string().min(1).max(80),
   visible_bot_attested: z.literal(true),
   idempotency_key: Identifier,
 }).superRefine((value, context) => {

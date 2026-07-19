@@ -33,7 +33,7 @@ describe("Minutes control service client", () => {
       meetingUrl: "https://meet.google.com/abc-defg-hij",
       captureAttestation: {
         bot_visible: true,
-        bot_display_name: "ZAKI Minutes",
+        bot_display_name: "ZAKI Notetaker",
         policy_version: "consent-v1",
         attested_at: "2026-07-19T10:00:00.000Z",
         attested_by_user_id: "42",

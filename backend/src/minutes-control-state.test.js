@@ -3,6 +3,8 @@ import { minutesControlPayloadFingerprint } from "./minutes-control-contract.js"
 import {
   MinutesControlStateError,
   applyMinutesControlCallback,
+  hasMinutesControlAccountState,
+  recordMinutesControlCompensation,
   recordMinutesControlCapture,
 } from "./minutes-control-state.js";
 
@@ -86,6 +88,65 @@ describe("Minutes control callback state", () => {
       capturedSecondsTotal: 61,
       client,
     }));
+  });
+
+  test("persists a compensation marker and promotes it when the stopped engine callback arrives", async () => {
+    const compensation = {
+      capture_id: "capture-01",
+      user_id: "42",
+      tenant_id: "default",
+      operation_id: "op-capture-01",
+      reservation_id: HOLD_ID,
+      meeting_id: "meeting-01",
+      stop_state: "stop_requested",
+    };
+    const promoted = { ...CAPTURE, state: "stopping" };
+    const client = {
+      query: jest.fn().mockImplementation(async (sql) => {
+        if (sql.includes("SELECT * FROM zaki_minutes_control_captures")) return { rows: [] };
+        if (sql.includes("SELECT * FROM zaki_minutes_control_compensations")) return { rows: [compensation] };
+        if (sql.includes("INSERT INTO zaki_minutes_control_captures")) return { rows: [promoted] };
+        if (sql.includes("DELETE FROM zaki_minutes_control_compensations")) return { rows: [] };
+        if (sql.includes("INSERT INTO zaki_minutes_control_callback_events")) return { rows: [{ event_id: "event-01" }] };
+        throw new Error(`unexpected query: ${sql}`);
+      }),
+    };
+    const result = await applyMinutesControlCallback({
+      envelope: callback({
+        event_type: "minutes.capture.status",
+        data: {
+          subject: { tenant_id: "default", user_id: "42" },
+          operation_id: "op-capture-01",
+          capture_id: "capture-01",
+          meeting_id: "meeting-01",
+          state: "stopping",
+        },
+      }),
+      runInTransaction: runWith(client),
+    });
+    expect(result).toEqual({ status: "accepted", eventId: "event-01" });
+    expect(client.query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO zaki_minutes_control_captures"), expect.any(Array));
+    expect(client.query).toHaveBeenCalledWith(expect.stringContaining("DELETE FROM zaki_minutes_control_compensations"), ["capture-01"]);
+  });
+
+  test("records opaque compensation state and detects account-erasure evidence", async () => {
+    const client = { query: jest.fn().mockResolvedValue({ rows: [{ capture_id: "capture-01" }] }) };
+    await expect(recordMinutesControlCompensation({
+      captureId: "capture-01",
+      operationId: "op-capture-01",
+      reservationId: HOLD_ID,
+      userId: "42",
+      stopState: "stop_pending",
+      runInTransaction: runWith(client),
+    })).resolves.toMatchObject({ capture_id: "capture-01" });
+    expect(client.query).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO zaki_minutes_control_compensations"), expect.arrayContaining([
+      "capture-01", "42", "default", "op-capture-01", HOLD_ID, null, "stop_pending",
+    ]));
+
+    await expect(hasMinutesControlAccountState({
+      userId: "42",
+      dbQuery: jest.fn().mockResolvedValue({ rows: [{ has_minutes_control_state: true }] }),
+    })).resolves.toBe(true);
   });
 
   test("returns duplicate without a second state or wallet effect for the same event", async () => {

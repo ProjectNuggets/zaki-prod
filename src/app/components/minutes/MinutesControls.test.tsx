@@ -97,6 +97,7 @@ describe("MinutesControls", () => {
       idempotencyKey: expect.stringMatching(/^minutes-consent-/),
     }));
     expect(await screen.findByRole("heading", { name: "Request a visible bot" })).toBeInTheDocument();
+    expect(screen.getByText(/ZAKI Notetaker must be visibly present/)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Meeting URL"), { target: { value: "https://meet.google.com/abc-defg-hij" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "I confirm the bot will be visible and attendees will be told before capture starts." }));
@@ -106,11 +107,27 @@ describe("MinutesControls", () => {
     expect(mockCapture.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
       platform: "google_meet",
       meetingUrl: "https://meet.google.com/abc-defg-hij",
-      botDisplayName: "ZAKI Minutes",
       visibleBotAttested: true,
       idempotencyKey: expect.stringMatching(/^minutes-capture-/),
     }));
     expect(await screen.findByText("Capture requested")).toBeInTheDocument();
+  });
+
+  test("hides the capture form after a saved consent disables capture", async () => {
+    renderControls();
+
+    expect(await screen.findByRole("heading", { name: "Minutes controls" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Allow ZAKI Minutes to request a visible capture bot." }));
+    fireEvent.click(screen.getByRole("button", { name: "Save consent" }));
+    expect(await screen.findByRole("heading", { name: "Request a visible bot" })).toBeInTheDocument();
+
+    mockConsent.mockResolvedValueOnce({ state: "disabled", policyVersion: "minutes-capture-consent-v1" });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Allow ZAKI Minutes to request a visible capture bot." }));
+    fireEvent.click(screen.getByRole("button", { name: "Save consent" }));
+
+    await waitFor(() => expect(mockConsent).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("heading", { name: "Request a visible bot" })).not.toBeInTheDocument();
+    expect(screen.getByText("Enable capture consent to request a meeting bot.")).toBeInTheDocument();
   });
 
   test("uses an explicit confirmation and a safe receipt for retained-meeting deletion", async () => {

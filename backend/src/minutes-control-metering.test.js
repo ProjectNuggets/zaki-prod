@@ -3,6 +3,7 @@ import {
   MinutesControlMeteringError,
   minutesUnitsFromCapturedSeconds,
   reserveMinutesCapture,
+  settleMinutesCapture,
 } from "./minutes-control-metering.js";
 
 describe("Minutes capture metering", () => {
@@ -42,6 +43,35 @@ describe("Minutes capture metering", () => {
       code: "quota_exhausted",
       status: 429,
       retryable: false,
+    });
+  });
+
+  test("settles the true cumulative cost when capture duration exceeds its initial hold", async () => {
+    const settleHold = jest.fn().mockResolvedValue({ ok: true, hold: { state: "settled" } });
+    await settleMinutesCapture({
+      holdId: "hold-01",
+      idempotencyKey: "event-01",
+      capturedSecondsTotal: 7_201,
+      settleHold,
+    });
+    expect(settleHold).toHaveBeenCalledWith(expect.objectContaining({
+      holdId: "hold-01",
+      settledUnits: 121,
+      finalState: "settled",
+      recordTrueCost: true,
+    }), undefined);
+  });
+
+  test("refuses to acknowledge a terminal callback after the paid hold expired", async () => {
+    await expect(settleMinutesCapture({
+      holdId: "hold-01",
+      idempotencyKey: "event-late",
+      capturedSecondsTotal: 60,
+      settleHold: jest.fn().mockResolvedValue({ ok: true, idempotent: true, hold: { state: "expired" } }),
+    })).rejects.toMatchObject({
+      code: "upstream_unavailable",
+      status: 503,
+      retryable: true,
     });
   });
 });

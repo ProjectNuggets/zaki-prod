@@ -111,6 +111,19 @@ export type MinutesControlStatus = {
   };
 };
 
+function isMinutesControlStatus(value: unknown): value is MinutesControlStatus {
+  if (!value || typeof value !== "object") return false;
+  const control = value as { available?: unknown; policy?: { capture_notice_policy_version?: unknown; retention?: unknown } };
+  const retention = control.policy?.retention;
+  if (!retention || typeof retention !== "object") return false;
+  const windows = retention as Partial<MinutesControlRetention>;
+  return control.available === true &&
+    typeof control.policy?.capture_notice_policy_version === "string" &&
+    typeof windows.audio_days === "number" && Number.isInteger(windows.audio_days) && windows.audio_days >= 0 && windows.audio_days <= 365 &&
+    typeof windows.transcript_days === "number" && Number.isInteger(windows.transcript_days) && windows.transcript_days >= 1 && windows.transcript_days <= 3_650 &&
+    typeof windows.summary_days === "number" && Number.isInteger(windows.summary_days) && windows.summary_days >= 1 && windows.summary_days <= windows.transcript_days;
+}
+
 export type MinutesConsentResult = { state: "ready" | "disabled"; policyVersion: string };
 export type MinutesCaptureResult = {
   captureId: string;
@@ -137,8 +150,12 @@ export type MinutesForgetResult = {
   };
 };
 
-export function getMinutesControl() {
-  return minutesRequest<MinutesControlStatus>("/api/minutes/control", { method: "GET" });
+export async function getMinutesControl() {
+  const control = await minutesRequest<unknown>("/api/minutes/control", { method: "GET" });
+  if (!isMinutesControlStatus(control)) {
+    throw new MinutesApiError(502, "minutes_control_invalid_response", "Minutes controls are temporarily unavailable.", true);
+  }
+  return control;
 }
 
 export function saveMinutesConsent(input: {
@@ -161,7 +178,6 @@ export function saveMinutesConsent(input: {
 export function requestMinutesCapture(input: {
   platform: "google_meet" | "zoom" | "teams" | "jitsi";
   meetingUrl: string;
-  botDisplayName: string;
   visibleBotAttested: true;
   idempotencyKey: string;
 }) {
@@ -170,7 +186,6 @@ export function requestMinutesCapture(input: {
     body: JSON.stringify({
       platform: input.platform,
       meeting_url: input.meetingUrl,
-      bot_display_name: input.botDisplayName,
       visible_bot_attested: input.visibleBotAttested,
       idempotency_key: input.idempotencyKey,
     }),

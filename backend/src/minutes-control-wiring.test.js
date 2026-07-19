@@ -17,7 +17,7 @@ describe("Minutes control-plane startup wiring", () => {
     expect(controlSection).toContain("callbackHmacKey: getMinutesEngineCallbackHmacKey()");
     expect(controlSection).toContain("resolveUser: requireAuthUser");
     expect(indexSource.indexOf("// MINUTES CONTROL BFF")).toBeLessThan(indexSource.indexOf("// MINUTES READ BFF"));
-    expect(indexSource).toContain("ZAKI_MINUTES_CONTROL_ENABLED && ZAKI_MINUTES_CONTROL_STAGING_READY");
+    expect(indexSource).toContain("ZAKI_MINUTES_ENABLED && ZAKI_MINUTES_CONTROL_ENABLED && ZAKI_MINUTES_CONTROL_STAGING_READY");
   });
 
   test("documents a default-off, evidence-gated server-only control configuration", () => {
@@ -26,6 +26,7 @@ describe("Minutes control-plane startup wiring", () => {
     expect(envExample).toContain("MINUTES_ENGINE_CONTROL_TOKEN_FILE=");
     expect(envExample).toContain("MINUTES_ENGINE_CALLBACK_HMAC_KEY_FILE=");
     expect(envExample).toContain("MINUTES_CONTROL_CAPTURE_RESERVE_UNITS=");
+    expect(envExample).toContain("MINUTES_CONTROL_MAX_CAPTURE_SECONDS=3600");
     expect(envExample).not.toContain("MINUTES_ENGINE_CONTROL_TOKEN=https://");
   });
 });

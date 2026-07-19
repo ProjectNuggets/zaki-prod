@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import express from "express";
 import {
   MINUTES_CONTROL_API_VERSION,
+  MINUTES_CONTROL_NOTETAKER_NAME,
   MinutesControlContractError,
   assertMinutesControlResponseBinding,
   parseMinutesBrowserCapture,
@@ -13,6 +14,7 @@ import {
   parseMinutesErasureResponse,
   parseMinutesStatusResponse,
   readMinutesControlResponseJson,
+  validateMinutesCaptureFundingWindow,
   verifyMinutesCallbackSignature,
 } from "./minutes-control-contract.js";
 import {
@@ -31,6 +33,7 @@ import {
   MinutesControlStateError,
   applyMinutesControlCallback as defaultApplyMinutesControlCallback,
   forgetMinutesControlMeeting as defaultForgetMinutesControlMeeting,
+  recordMinutesControlCompensation as defaultRecordMinutesControlCompensation,
   recordMinutesControlCapture as defaultRecordMinutesControlCapture,
 } from "./minutes-control-state.js";
 
@@ -180,6 +183,69 @@ async function parseUpstreamSuccess(upstream, parseResponse, context, expected =
   });
 }
 
+function captureCompensationIdempotencyKey(captureId) {
+  return `minutes-compensate-${createHash("sha256")
+    .update(String(captureId || ""), "utf8")
+    .digest("hex")}`;
+}
+
+async function compensateUnpersistedCapture({ dependencies, context, response, reservation }) {
+  const idempotencyKey = captureCompensationIdempotencyKey(response.capture_id);
+  const compensation = {
+    captureId: response.capture_id,
+    operationId: response.operation_id,
+    meetingId: response.meeting_id,
+    reservationId: reservation.hold.id,
+    userId: context.userId,
+    tenantId: context.tenantId,
+  };
+  let compensationRecorded = false;
+  try {
+    await dependencies.recordCompensation({ ...compensation, stopState: "stop_pending" });
+    compensationRecorded = true;
+  } catch (error) {
+    emitFailure(dependencies, {
+      requestId: context.requestId,
+      operation: "capture_compensation_record",
+      failure: error?.code || "unavailable",
+    });
+  }
+
+  let stopState = "stop_uncertain";
+  try {
+    const upstream = await dependencies.client.stopCapture({
+      ...clientOptions(dependencies, context),
+      captureId: response.capture_id,
+      idempotencyKey,
+      label: "Minutes capture persistence compensation",
+    });
+    if (!upstream?.ok) {
+      discardBody(upstream);
+      throw new Error("minutes_capture_compensation_stop_failed");
+    }
+    await parseUpstreamSuccess(upstream, parseMinutesStatusResponse, context, { captureId: response.capture_id });
+    stopState = "stop_requested";
+  } catch (error) {
+    emitFailure(dependencies, {
+      requestId: context.requestId,
+      operation: "capture_compensation_stop",
+      failure: error?.code || "unavailable",
+    });
+  }
+
+  if (compensationRecorded) {
+    try {
+      await dependencies.recordCompensation({ ...compensation, stopState });
+    } catch (error) {
+      emitFailure(dependencies, {
+        requestId: context.requestId,
+        operation: "capture_compensation_update",
+        failure: error?.code || "unavailable",
+      });
+    }
+  }
+}
+
 function controlUnavailable(res, dependencies, req) {
   const requestId = dependencies.getRequestId(req);
   res.set("Cache-Control", "no-store");
@@ -215,6 +281,7 @@ export function buildMinutesControlRouter({
   policy,
   captureReserveUnits,
   captureHoldTtlMs,
+  captureMaxSeconds = 60 * 60,
   resolveUser,
   getRequestId,
   fetchWithTimeout,
@@ -222,6 +289,7 @@ export function buildMinutesControlRouter({
   reserveCapture = defaultReserveMinutesCapture,
   releaseCapture = defaultReleaseMinutesCapture,
   recordCapture = defaultRecordMinutesControlCapture,
+  recordCompensation = defaultRecordMinutesControlCompensation,
   forgetMeeting = defaultForgetMinutesControlMeeting,
   applyCallback = defaultApplyMinutesControlCallback,
   recordFailure,
@@ -232,8 +300,8 @@ export function buildMinutesControlRouter({
   if (typeof getRequestId !== "function") throw new Error("Minutes control request-id resolver is required.");
   const dependencies = {
     enabled: Boolean(enabled), baseUrl, controlSigningKey, callbackHmacKey, authHeaderName, timeoutMs, tokenTtlSeconds, policy,
-    captureReserveUnits, captureHoldTtlMs, resolveUser, getRequestId, fetchWithTimeout, resolvePlan,
-    reserveCapture, releaseCapture, recordCapture, forgetMeeting, applyCallback, recordFailure, client, now,
+    captureReserveUnits, captureHoldTtlMs, captureMaxSeconds, resolveUser, getRequestId, fetchWithTimeout, resolvePlan,
+    reserveCapture, releaseCapture, recordCapture, recordCompensation, forgetMeeting, applyCallback, recordFailure, client, now,
   };
   const router = express.Router();
   const browserJson = express.json({ limit: "16kb", strict: true });
@@ -356,6 +424,16 @@ export function buildMinutesControlRouter({
     let reservation;
     let input;
     try {
+      const fundingWindow = validateMinutesCaptureFundingWindow({
+        maxCaptureSeconds: dependencies.captureMaxSeconds,
+        reservedUnits: Number(dependencies.captureReserveUnits),
+        holdTtlMs: Number(dependencies.captureHoldTtlMs),
+      });
+      if (!fundingWindow.ok) {
+        emitFailure(dependencies, { requestId: context.requestId, operation: "capture", failure: "invalid_metering_window" });
+        sendBrowserError(res, 503, "minutes_control_unavailable", "Minutes controls are temporarily unavailable.", context.requestId, true);
+        return;
+      }
       input = parseMinutesBrowserCapture(req.body);
       reservation = await dependencies.reserveCapture({
         zakiUser: context.zakiUser,
@@ -373,7 +451,7 @@ export function buildMinutesControlRouter({
         meetingUrl: input.meeting_url,
         captureAttestation: {
           bot_visible: true,
-          bot_display_name: input.bot_display_name,
+          bot_display_name: MINUTES_CONTROL_NOTETAKER_NAME,
           policy_version: policyView.capture_notice_policy_version,
           attested_at: dependencies.now().toISOString(),
           attested_by_user_id: context.userId,
@@ -395,12 +473,27 @@ export function buildMinutesControlRouter({
       if (String(response.metering.reservation_id) !== String(reservation.hold.id)) {
         throw new MinutesControlContractError("Minutes upstream changed the capture reservation.", "minutes_control_upstream_binding_mismatch");
       }
-      await dependencies.recordCapture({
-        response,
-        userId: context.userId,
-        tenantId: context.tenantId,
-        reservationId: reservation.hold.id,
-      });
+      try {
+        await dependencies.recordCapture({
+          response,
+          userId: context.userId,
+          tenantId: context.tenantId,
+          reservationId: reservation.hold.id,
+        });
+      } catch (error) {
+        // The engine has already created a real capture. Keep the paid hold in
+        // place, durably record reconciliation when possible, and issue the
+        // engine's idempotent stop before returning an unavailable response.
+        // Never release the hold here: stop is asynchronous and a failed or
+        // delayed compensation must not turn an untracked capture into free use.
+        await compensateUnpersistedCapture({ dependencies, context, response, reservation });
+        throw new MinutesControlStateError("Minutes capture persistence failed after engine creation.", {
+          code: "upstream_unavailable",
+          status: 503,
+          retryable: true,
+          cause: error,
+        });
+      }
       res.status(202).json({
         captureId: response.capture_id,
         meetingId: response.meeting_id,

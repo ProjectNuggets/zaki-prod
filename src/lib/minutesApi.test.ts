@@ -62,7 +62,6 @@ describe("Minutes browser API", () => {
     await requestMinutesCapture({
       platform: "google_meet",
       meetingUrl: "https://meet.google.com/abc-defg-hij",
-      botDisplayName: "ZAKI Minutes",
       visibleBotAttested: true,
       idempotencyKey: "capture-01",
     });
@@ -87,7 +86,6 @@ describe("Minutes browser API", () => {
         body: JSON.stringify({
           platform: "google_meet",
           meeting_url: "https://meet.google.com/abc-defg-hij",
-          bot_display_name: "ZAKI Minutes",
           visible_bot_attested: true,
           idempotency_key: "capture-01",
         }),
@@ -107,5 +105,15 @@ describe("Minutes browser API", () => {
     ]);
     expect(JSON.stringify(request.mock.calls)).not.toContain("MINUTES_ENGINE");
     expect(JSON.stringify(request.mock.calls)).not.toContain("X-Zaki-Control-Token");
+  });
+
+  it("treats a malformed successful control response as unavailable instead of crashing the Minutes route", async () => {
+    request.mockResolvedValueOnce(ok({ success: true }));
+
+    await expect(getMinutesControl()).rejects.toMatchObject({
+      status: 502,
+      code: "minutes_control_invalid_response",
+      retryable: true,
+    });
   });
 });

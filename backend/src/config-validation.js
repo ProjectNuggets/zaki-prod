@@ -5,6 +5,11 @@ import {
   isValidMinutesCallbackHmacKey,
   isValidMinutesControlSigningKey,
 } from "./minutes-control-secret.js";
+import {
+  MINUTES_CONTROL_MAX_CAPTURE_SECONDS_MAX,
+  MINUTES_CONTROL_MAX_CAPTURE_SECONDS_MIN,
+  validateMinutesCaptureFundingWindow,
+} from "./minutes-control-contract.js";
 
 const PROD = "production";
 
@@ -108,6 +113,7 @@ export function validateRuntimeConfig(env = process.env) {
   const minutesControlReserveUnits = normalize(env.MINUTES_CONTROL_CAPTURE_RESERVE_UNITS);
   const minutesControlTokenTtlSeconds = normalize(env.MINUTES_CONTROL_TOKEN_TTL_SECONDS || "60");
   const minutesControlHoldTtlMs = normalize(env.MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS || String(6 * 60 * 60 * 1_000));
+  const minutesControlMaxCaptureSeconds = normalize(env.MINUTES_CONTROL_MAX_CAPTURE_SECONDS || "3600");
   const minutesControlPolicyVersion = normalize(env.MINUTES_CONTROL_POLICY_VERSION || "minutes-capture-consent-v1");
   const minutesControlAudioRetentionDays = normalize(env.MINUTES_CONTROL_AUDIO_RETENTION_DAYS || "0");
   const minutesControlTranscriptRetentionDays = normalize(env.MINUTES_CONTROL_TRANSCRIPT_RETENTION_DAYS || "30");
@@ -374,6 +380,13 @@ export function validateRuntimeConfig(env = process.env) {
     );
   }
   if (minutesControlActive) {
+    if (!minutesEnabled) {
+      pushIssue(
+        errors,
+        "ZAKI_MINUTES_ENABLED",
+        "ZAKI_MINUTES_ENABLED=true is required when Minutes control is active so the read and control planes launch together."
+      );
+    }
     if (!minutesBaseUrl) {
       pushIssue(errors, "MINUTES_ENGINE_BASE_URL", "MINUTES_ENGINE_BASE_URL is required when Minutes control is active.");
     } else if (!hasHttpOrigin(minutesBaseUrl)) {
@@ -411,6 +424,40 @@ export function validateRuntimeConfig(env = process.env) {
     }
     if (!isSafeIntegerInRange(minutesControlHoldTtlMs, 60_000, 24 * 60 * 60 * 1_000)) {
       pushIssue(errors, "MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS", "MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS must be an integer from 60000 to 86400000.");
+    }
+    if (!isSafeIntegerInRange(
+      minutesControlMaxCaptureSeconds,
+      MINUTES_CONTROL_MAX_CAPTURE_SECONDS_MIN,
+      MINUTES_CONTROL_MAX_CAPTURE_SECONDS_MAX
+    )) {
+      pushIssue(
+        errors,
+        "MINUTES_CONTROL_MAX_CAPTURE_SECONDS",
+        `MINUTES_CONTROL_MAX_CAPTURE_SECONDS must be an integer from ${MINUTES_CONTROL_MAX_CAPTURE_SECONDS_MIN} to ${MINUTES_CONTROL_MAX_CAPTURE_SECONDS_MAX}.`
+      );
+    }
+    const fundingWindow = validateMinutesCaptureFundingWindow({
+      maxCaptureSeconds: Number(minutesControlMaxCaptureSeconds),
+      reservedUnits: Number(minutesControlReserveUnits),
+      holdTtlMs: Number(minutesControlHoldTtlMs),
+    });
+    if (fundingWindow.requiredUnits !== null && isSafeIntegerInRange(minutesControlReserveUnits, 1, 1_000_000) && !fundingWindow.ok) {
+      pushIssue(
+        errors,
+        "MINUTES_CONTROL_CAPTURE_RESERVE_UNITS",
+        `MINUTES_CONTROL_CAPTURE_RESERVE_UNITS must equal ${fundingWindow.requiredUnits} to fund MINUTES_CONTROL_MAX_CAPTURE_SECONDS.`
+      );
+    }
+    if (
+      fundingWindow.requiredHoldTtlMs !== null &&
+      isSafeIntegerInRange(minutesControlHoldTtlMs, 60_000, 24 * 60 * 60 * 1_000) &&
+      Number(minutesControlHoldTtlMs) < fundingWindow.requiredHoldTtlMs
+    ) {
+      pushIssue(
+        errors,
+        "MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS",
+        `MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS must cover the maximum capture plus terminal-settlement grace (${fundingWindow.requiredHoldTtlMs}ms).`
+      );
     }
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(minutesControlPolicyVersion)) {
       pushIssue(errors, "MINUTES_CONTROL_POLICY_VERSION", "MINUTES_CONTROL_POLICY_VERSION must be a 1-160 character control-policy identifier.");

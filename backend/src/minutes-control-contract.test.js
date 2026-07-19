@@ -2,10 +2,12 @@ import { createHmac } from "node:crypto";
 import { describe, expect, test } from "@jest/globals";
 import {
   MINUTES_CONTROL_CALLBACK_WINDOW_SECONDS,
+  MINUTES_CONTROL_NOTETAKER_NAME,
   MinutesControlContractError,
   assertMinutesControlResponseBinding,
   meetingUrlMatchesPlatform,
   parseMinutesBrowserCapture,
+  parseMinutesCaptureRequest,
   parseMinutesCallbackEnvelope,
   parseMinutesStatusResponse,
   readMinutesControlResponseJson,
@@ -19,7 +21,6 @@ describe("Minutes zaki-control.v1 adapter contract", () => {
     const input = {
       platform: "google_meet",
       meeting_url: "https://meet.google.com/abc-defg-hij",
-      bot_display_name: "ZAKI Minutes",
       visible_bot_attested: true,
       idempotency_key: "capture-01",
     };
@@ -30,6 +31,33 @@ describe("Minutes zaki-control.v1 adapter contract", () => {
     expect(() => parseMinutesBrowserCapture({ ...input, meeting_url: "https://evil.example/abc-defg-hij" })).toThrow(
       expect.objectContaining({ code: "minutes_control_invalid_request" })
     );
+    expect(() => parseMinutesBrowserCapture({ ...input, bot_display_name: "browser-controlled" })).toThrow(
+      expect.objectContaining({ code: "minutes_control_invalid_request" })
+    );
+  });
+
+  test("seals the engine's exact ZAKI Notetaker identity in a server-owned attestation", () => {
+    const request = {
+      api_version: "zaki-control.v1",
+      request_id: "request-01",
+      idempotency_key: "capture-01",
+      subject: SUBJECT,
+      platform: "google_meet",
+      meeting_url: "https://meet.google.com/abc-defg-hij",
+      capture_attestation: {
+        bot_visible: true,
+        bot_display_name: MINUTES_CONTROL_NOTETAKER_NAME,
+        policy_version: "minutes-capture-consent-v1",
+        attested_at: "2026-07-19T10:00:00.000Z",
+        attested_by_user_id: "42",
+      },
+      metering: { reservation_id: "hold-01", unit: "bot_minute", reserved_units: 60 },
+    };
+    expect(parseMinutesCaptureRequest(request)).toEqual(request);
+    expect(() => parseMinutesCaptureRequest({
+      ...request,
+      capture_attestation: { ...request.capture_attestation, bot_display_name: "ZAKI Minutes" },
+    })).toThrow(MinutesControlContractError);
   });
 
   test("keeps the engine's provider URL recognition strict", () => {
