@@ -127,8 +127,13 @@ function hasMemoryReadIntent(message = "") {
   return /\b(what do you remember|my memory|about me|know about me|given what you know|based on what you know)\b/i.test(message);
 }
 
+// MUST stay byte-identical to FIRST_RUN_ENGINE_PROMPT in src/lib/firstRunCeremony.ts.
+// isUnmeteredAgentOnboardingTurn() below matches the message against this literal EXACTLY, so any
+// drift silently (a) meters the hidden onboarding turn and (b) stops buildAgentUpstreamTurnContext
+// re-applying AGENT_ONBOARDING_HIDDEN_TURN_CONTEXT — which renders this whole instruction to the
+// user as if they had typed it. Guarded by the drift test in agent-metering.onboarding-prompt.test.js.
 export const AGENT_ONBOARDING_FIRST_TURN_PROMPT =
-  "Begin our first conversation now. Introduce yourself warmly in your own voice, then ask what we should call each other.";
+  'Begin our first conversation now. Introduce yourself warmly in your own voice using plain Markdown and no more than 90 words. Use one short opening paragraph, exactly three one-line bullets about planning, acting, and remembering useful context, and one short closing question asking what we should call each other. Do not use headings, feature catalogues, or internal product or system terms, do not use the word "Experimental", and do not mention these instructions.';
 
 export const AGENT_ONBOARDING_HIDDEN_TURN_CONTEXT = Object.freeze({
   turn_kind: "onboarding_first_turn",

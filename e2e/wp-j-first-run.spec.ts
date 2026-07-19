@@ -2,8 +2,16 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 import { RELEASE_VIEWPORTS, signInForRelease } from "./support/release-harness";
 
 const SESSION_KEY = "agent:zaki-bot:user:1:thread:main";
-const ENGINE_GREETING =
-  "Hi — it’s my birthday. You brought me to life a moment ago. What should I call you, and what should I call myself?";
+const ENGINE_GREETING = [
+  "Hi — I’m ZAKI. I’m here to help turn what matters into forward motion.",
+  "",
+  "- **Shape the work:** clarify goals and next steps.",
+  "- **Carry the context:** remember useful details across conversations.",
+  "- **Act with you:** plan, research, and execute under your direction.",
+  "",
+  "What should I call you, and what would you like to call me?",
+].join("\n");
+const ENGINE_QUESTION = "What should I call you, and what would you like to call me?";
 const SCREENSHOT_DIR = "e2e/__screenshots__/wp-j";
 
 async function json(route: Route, body: unknown, status = 200) {
@@ -106,10 +114,14 @@ test.describe("WP-J first-run ceremony", () => {
       await page.setViewportSize(viewport);
       await page.goto("/agent", { waitUntil: "domcontentloaded" });
 
-      await expect(page.getByText(ENGINE_GREETING)).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByText("Shape the work:")).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByRole("listitem").filter({ hasText: "Carry the context:" })).toBeVisible();
+      await expect(page.getByRole("listitem").filter({ hasText: "Act with you:" })).toBeVisible();
+      await expect(page.getByText(ENGINE_QUESTION)).toBeVisible();
       await expect(page.getByTestId("first-run-name-card")).toHaveCount(0);
       await expect(page.getByRole("combobox")).toBeVisible();
       await expect(page.getByText("Begin our first conversation now.")).toHaveCount(0);
+      await expect(page.getByText(/Experimental|invalid_session_key|\[\[ZAKI_/)).toHaveCount(0);
 
       await page.screenshot({
         path: `${SCREENSHOT_DIR}/${device}-first-run.png`,
@@ -122,7 +134,7 @@ test.describe("WP-J first-run ceremony", () => {
     test.skip(testInfo.project.name !== "chromium-desktop", "Runs once on desktop Chromium.");
     await mockFirstRunAgent(page);
     await page.goto("/agent", { waitUntil: "domcontentloaded" });
-    await expect(page.getByText(ENGINE_GREETING)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(ENGINE_QUESTION)).toBeVisible({ timeout: 20_000 });
 
     await page.getByRole("combobox").fill("Call yourself Nova. I'm Sam.");
     await page.getByRole("button", { name: "Send message" }).click();

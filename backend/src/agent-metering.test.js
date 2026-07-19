@@ -1,5 +1,6 @@
 import { describe, expect, test } from "@jest/globals";
 import {
+  AGENT_ONBOARDING_FIRST_TURN_PROMPT,
   AGENT_ONBOARDING_HIDDEN_TURN_CONTEXT,
   buildAgentUpstreamTurnContext,
   buildAgentMeterUsageFacts,
@@ -38,8 +39,9 @@ describe("agent central metering helpers", () => {
   });
 
   test("exempts only the canonical first-run ceremony turn", () => {
-    const prompt =
-      "Begin our first conversation now. Introduce yourself warmly in your own voice, then ask what we should call each other.";
+    // Use the shipped constant, not a copy. A hardcoded literal here is what let the backend
+    // constant drift from the frontend prompt while this suite stayed green.
+    const prompt = AGENT_ONBOARDING_FIRST_TURN_PROMPT;
 
     expect(
       isUnmeteredAgentOnboardingTurn(

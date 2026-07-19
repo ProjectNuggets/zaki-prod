@@ -2726,6 +2726,15 @@ describe("ChatArea Component", () => {
   });
 
   it("lets naming happen naturally in the first reply without a dedicated card", async () => {
+    const engineFirstTurn = [
+      "Hi — I’m ZAKI. I’m here to help turn what matters into forward motion.",
+      "",
+      "- **Shape the work:** clarify goals and next steps.",
+      "- **Carry the context:** remember useful details across conversations.",
+      "- **Act with you:** plan, research, and execute under your direction.",
+      "",
+      "What should I call you, and what would you like to call me?",
+    ].join("\n");
     navState.view = "chat";
     navState.spaceId = "zaki-bot";
     navState.threadId = "main";
@@ -2744,13 +2753,17 @@ describe("ChatArea Component", () => {
       },
       data: { completed: false, completed_at_s: null, can_start_chat_now: true },
     });
-    (apiRequest as jest.Mock).mockImplementation(async (path: string) => {
+    (apiRequest as jest.Mock).mockImplementation(async (path: string, options?: RequestInit) => {
       if (path === "/api/agent/chat/stream") {
+        const body = JSON.parse(String(options?.body || "{}"));
         return {
           ok: true,
           status: 200,
           headers: new Headers({ "content-type": "application/json" }),
-          json: async () => ({ type: "done", message: "Hi — it's my birthday. What should we call each other?" }),
+          json: async () => ({
+            type: "done",
+            message: body.turnKind === "onboarding_first_turn" ? engineFirstTurn : "Nova it is — let’s begin.",
+          }),
         };
       }
       return {
@@ -2775,7 +2788,7 @@ describe("ChatArea Component", () => {
     await waitFor(() => {
       expect(fetchBotOnboarding).toHaveBeenCalledTimes(1);
       expect(
-        (apiRequest as jest.Mock).mock.calls.some(([path, options]) => {
+        (apiRequest as jest.Mock).mock.calls.filter(([path, options]) => {
           if (path !== "/api/agent/chat/stream") return false;
           const body = JSON.parse(String(options?.body || "{}"));
           return (
@@ -2783,10 +2796,17 @@ describe("ChatArea Component", () => {
             body.turnKind === "onboarding_first_turn"
           );
         })
-      ).toBe(true);
+      ).toHaveLength(1);
     });
+    expect(await screen.findByText("Shape the work:")).toBeInTheDocument();
+    expect(screen.getByText("Carry the context:")).toBeInTheDocument();
+    expect(screen.getByText("Act with you:")).toBeInTheDocument();
+    expect(
+      screen.getByText("What should I call you, and what would you like to call me?"),
+    ).toBeInTheDocument();
     expect(screen.queryByText(FIRST_RUN_ENGINE_PROMPT)).not.toBeInTheDocument();
     expect(screen.queryByTestId("first-run-name-card")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Experimental|invalid_session_key|\[\[ZAKI_/)).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("combobox"), {
       target: { value: "Call yourself Nova. I'm Sam." },
