@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useNavigationStore, useUIStore } from "@/stores";
 import { ZAKI_BOT_THREAD_ID } from "@/lib/zakiBot";
+import { LocaleSwitcher } from "./LocaleSwitcher";
 
 export function MobileHeader() {
   const { t } = useTranslation();
@@ -56,6 +57,7 @@ export function MobileHeader() {
 
       {isAgentRoute ? (
         <div className="zaki-mobile-topbar__actions">
+          <LocaleSwitcher mobile />
           <button
             type="button"
             className="zaki-mobile-topbar__button"
@@ -76,7 +78,7 @@ export function MobileHeader() {
           </button>
         </div>
       ) : (
-        <div className="w-11" />
+        <LocaleSwitcher mobile />
       )}
     </header>
   );
