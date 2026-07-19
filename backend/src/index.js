@@ -209,6 +209,19 @@ import {
 } from "./minutes-read-routes.js";
 import { resolveMinutesReadToken } from "./minutes-read-secret.js";
 import {
+  buildMinutesControlRouter,
+  eraseMinutesAccountForErasure,
+  isMinutesControlEnabled,
+} from "./minutes-control-routes.js";
+import { hasMinutesControlAccountState } from "./minutes-control-state.js";
+import { reconcileMinutesControlRecoveries } from "./minutes-control-reconciler.js";
+import { resolveMinutesControlAccountErasure } from "./minutes-control-account-erasure.js";
+import {
+  resolveMinutesCallbackHmacKey,
+  resolveMinutesControlRecoveryKey,
+  resolveMinutesControlSigningKey,
+} from "./minutes-control-secret.js";
+import {
   buildDesignConfigErrorPayload,
   buildDesignDisabledPayload,
   classifyDesignMeterActionForIngress,
@@ -694,6 +707,79 @@ function getMinutesEngineReadToken() {
     readFileSync: fs.readFileSync,
   });
 }
+const ZAKI_MINUTES_CONTROL_ENABLED = isMinutesControlEnabled(
+  process.env.ZAKI_MINUTES_CONTROL_ENABLED
+);
+const ZAKI_MINUTES_CONTROL_STAGING_READY = isMinutesControlEnabled(
+  process.env.ZAKI_MINUTES_CONTROL_STAGING_READY
+);
+// No Minutes control endpoint is live from either flag alone. The second gate is
+// an operator's evidence checkpoint for a deployed, contract-conformant engine.
+const ZAKI_MINUTES_CONTROL_ACTIVE =
+  ZAKI_MINUTES_ENABLED && ZAKI_MINUTES_CONTROL_ENABLED && ZAKI_MINUTES_CONTROL_STAGING_READY;
+function getMinutesEngineControlSigningKey() {
+  if (!ZAKI_MINUTES_CONTROL_ACTIVE) return "";
+  return resolveMinutesControlSigningKey({
+    tokenFile: process.env.MINUTES_ENGINE_CONTROL_TOKEN_FILE,
+    fallbackToken: process.env.MINUTES_ENGINE_CONTROL_TOKEN,
+    readFileSync: fs.readFileSync,
+  });
+}
+function getMinutesEngineCallbackHmacKey() {
+  if (!ZAKI_MINUTES_CONTROL_ACTIVE) return "";
+  return resolveMinutesCallbackHmacKey({
+    tokenFile: process.env.MINUTES_ENGINE_CALLBACK_HMAC_KEY_FILE,
+    fallbackToken: process.env.MINUTES_ENGINE_CALLBACK_HMAC_KEY,
+    readFileSync: fs.readFileSync,
+  });
+}
+function getMinutesControlRecoveryEncryptionKey() {
+  if (!ZAKI_MINUTES_CONTROL_ACTIVE) return "";
+  return resolveMinutesControlRecoveryKey({
+    tokenFile: process.env.MINUTES_CONTROL_RECOVERY_KEY_FILE,
+    fallbackToken: process.env.MINUTES_CONTROL_RECOVERY_KEY,
+    readFileSync: fs.readFileSync,
+  });
+}
+function boundedMinutesControlNumber(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(number)));
+}
+const MINUTES_CONTROL_CAPTURE_RESERVE_UNITS = boundedMinutesControlNumber(
+  process.env.MINUTES_CONTROL_CAPTURE_RESERVE_UNITS,
+  0,
+  0,
+  1_000_000
+);
+const MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS = boundedMinutesControlNumber(
+  process.env.MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS,
+  6 * 60 * 60 * 1_000,
+  60_000,
+  24 * 60 * 60 * 1_000
+);
+const MINUTES_CONTROL_MAX_CAPTURE_SECONDS = boundedMinutesControlNumber(
+  process.env.MINUTES_CONTROL_MAX_CAPTURE_SECONDS,
+  60 * 60,
+  60,
+  4 * 60 * 60
+);
+const MINUTES_CONTROL_TOKEN_TTL_SECONDS = boundedMinutesControlNumber(
+  process.env.MINUTES_CONTROL_TOKEN_TTL_SECONDS,
+  60,
+  30,
+  300
+);
+const MINUTES_CONTROL_POLICY = Object.freeze({
+  capture_notice_policy_version: String(
+    process.env.MINUTES_CONTROL_POLICY_VERSION || "minutes-capture-consent-v1"
+  ).trim(),
+  retention: {
+    audio_days: boundedMinutesControlNumber(process.env.MINUTES_CONTROL_AUDIO_RETENTION_DAYS, 0, 0, 365),
+    transcript_days: boundedMinutesControlNumber(process.env.MINUTES_CONTROL_TRANSCRIPT_RETENTION_DAYS, 30, 1, 3_650),
+    summary_days: boundedMinutesControlNumber(process.env.MINUTES_CONTROL_SUMMARY_RETENTION_DAYS, 30, 1, 3_650),
+  },
+});
 const minutesRequestTimeout = Number(process.env.MINUTES_ENGINE_REQUEST_TIMEOUT_MS || 10_000);
 const MINUTES_ENGINE_REQUEST_TIMEOUT_MS = Number.isFinite(minutesRequestTimeout)
   ? Math.min(30_000, Math.max(1_000, minutesRequestTimeout))
@@ -8585,6 +8671,7 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
       cleanupBilling: ({ zakiUser: user }) =>
         getBillingAdapter().cleanupCustomerOnDelete({ zakiUser: user }),
       deleteLearning: deleteLearningAccountResources,
+      deleteMinutes: deleteMinutesAccountResources,
       runInTransaction: withDbTransaction,
     });
     const learningDeletion = erasure.learning;
@@ -15635,6 +15722,32 @@ async function deleteLearningAccountResources({ zakiUser, requestId }) {
   return { attempted: true, deleted };
 }
 
+async function deleteMinutesAccountResources({ zakiUser, requestId }) {
+  try {
+    return await resolveMinutesControlAccountErasure({
+      controlActive: ZAKI_MINUTES_CONTROL_ACTIVE,
+      zakiUser,
+      requestId,
+      hasAccountState: hasMinutesControlAccountState,
+      eraseAccount: async ({ zakiUser: subject, requestId: erasureRequestId }) => eraseMinutesAccountForErasure({
+        baseUrl: MINUTES_ENGINE_BASE_URL,
+        controlSigningKey: getMinutesEngineControlSigningKey(),
+        userId: String(subject?.id || ""),
+        tenantId: "default",
+        requestId: erasureRequestId,
+        fetchWithTimeout,
+        timeoutMs: MINUTES_ENGINE_REQUEST_TIMEOUT_MS,
+      }),
+    });
+  } catch (error) {
+    logStructured("warn", "minutes.account_erasure.failed", {
+      requestId: requestId || null,
+      failure: error?.code || "minutes_control_unavailable",
+    });
+    throw error;
+  }
+}
+
 async function pipeLearningResponse(req, res, upstream) {
   const requestId = getOrCreateRequestId(req);
   if (!upstream.ok) {
@@ -18445,6 +18558,31 @@ app.use(
     },
   })
 );
+
+// =============================================================================
+// MINUTES CONTROL BFF
+// =============================================================================
+// The evidence gate intentionally remains false in all current environments.
+// This router is mounted ahead of read so its signed raw callback path is not
+// consumed by a generic JSON parser or the read-plane router.
+app.use("/api/minutes", buildMinutesControlRouter({
+  enabled: ZAKI_MINUTES_CONTROL_ACTIVE,
+  baseUrl: MINUTES_ENGINE_BASE_URL,
+  controlSigningKey: getMinutesEngineControlSigningKey(),
+  recoveryEncryptionKey: getMinutesControlRecoveryEncryptionKey(),
+  callbackHmacKey: getMinutesEngineCallbackHmacKey(),
+  timeoutMs: MINUTES_ENGINE_REQUEST_TIMEOUT_MS,
+  tokenTtlSeconds: MINUTES_CONTROL_TOKEN_TTL_SECONDS,
+  policy: MINUTES_CONTROL_POLICY,
+  captureReserveUnits: MINUTES_CONTROL_CAPTURE_RESERVE_UNITS,
+  captureHoldTtlMs: MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS,
+  captureMaxSeconds: MINUTES_CONTROL_MAX_CAPTURE_SECONDS,
+  resolveUser: requireAuthUser,
+  getRequestId: getOrCreateRequestId,
+  fetchWithTimeout,
+  resolvePlan: resolvePlatformWalletPlanForUser,
+  recordFailure: (event) => logStructured("warn", "minutes.control.failed", event),
+}));
 
 // =============================================================================
 // MINUTES READ BFF
@@ -21580,6 +21718,41 @@ server.listen(PORT, () => {
     runLedgerSweep();
     setInterval(runLedgerSweep, LEDGER_SWEEP_INTERVAL_MS);
   }, 45_000);
+
+  // A completed engine request can be lost between the network response and
+  // Hub persistence.  Every Minutes create reserves a durable, encrypted
+  // recovery intent first; this leased sweep is its crash/restart owner.  It
+  // is deliberately behind the exact same evidence gate as the browser routes
+  // and callback verifier, so dark deployments never make engine calls.
+  if (ZAKI_MINUTES_CONTROL_ACTIVE) {
+    const MINUTES_RECOVERY_SWEEP_INTERVAL_MS = 30_000;
+    let minutesRecoveryRunning = false;
+    const runMinutesRecoverySweep = async () => {
+      if (minutesRecoveryRunning) return;
+      minutesRecoveryRunning = true;
+      try {
+        const result = await reconcileMinutesControlRecoveries({
+          baseUrl: MINUTES_ENGINE_BASE_URL,
+          controlSigningKey: getMinutesEngineControlSigningKey(),
+          recoveryEncryptionKey: getMinutesControlRecoveryEncryptionKey(),
+          fetchWithTimeout,
+          timeoutMs: MINUTES_ENGINE_REQUEST_TIMEOUT_MS,
+          tokenTtlSeconds: MINUTES_CONTROL_TOKEN_TTL_SECONDS,
+        });
+        if (result.claimed > 0 || result.failed > 0 || result.blocked > 0) {
+          logStructured("warn", "minutes.control.recovery_sweep", result);
+        }
+      } catch (err) {
+        logStructured("error", "minutes.control.recovery_sweep_failed", { message: err?.message || String(err) });
+      } finally {
+        minutesRecoveryRunning = false;
+      }
+    };
+    setTimeout(() => {
+      void runMinutesRecoverySweep();
+      setInterval(() => { void runMinutesRecoverySweep(); }, MINUTES_RECOVERY_SWEEP_INTERVAL_MS);
+    }, 20_000);
+  }
 
   // Agent-usage reconciliation sweep (Wave 2 metering completeness): debit the unit wallet for
   // DAEMON (cron/heartbeat/channel) agent turns the engine recorded in zaki_bot.turn_usage but that

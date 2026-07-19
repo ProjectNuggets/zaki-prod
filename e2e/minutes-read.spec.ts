@@ -66,6 +66,16 @@ test("signed-in Minutes archive is bounded, responsive, and privacy-labelled", a
     expect(route.request().headers()["x-zaki-read-token"]).toBeUndefined();
     await json(route, { items: metadata, truncated: false });
   });
+  // The archive test exercises the read plane only. Mirror the default-false
+  // control BFF response so the harness never invents a malformed 200 control
+  // payload (or an active capture panel) above the archive on small screens.
+  await page.route("**/api/minutes/control", async (route) => {
+    await json(route, {
+      code: "minutes_control_disabled",
+      message: "Minutes controls are not available.",
+      retryable: false,
+    }, 404);
+  });
   await page.route("**/api/minutes/items/**", async (route) => {
     expect(route.request().method()).toBe("GET");
     expect(route.request().url()).toContain("transcript%3A41?variant=full");

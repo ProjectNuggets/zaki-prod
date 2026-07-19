@@ -23,7 +23,11 @@ jest.mock("@/queries/useProducts", () => ({
     },
   }),
 }));
-jest.mock("./MinutesPage", () => ({ MinutesPage: () => <div>minutes read page</div> }));
+jest.mock("./MinutesPage", () => ({
+  MinutesPage: ({ controlsEnabled }: { controlsEnabled?: boolean }) => (
+    <div data-controls-enabled={String(Boolean(controlsEnabled))}>minutes read page</div>
+  ),
+}));
 
 describe("MinutesRoute activation boundary", () => {
   beforeEach(() => {
@@ -48,6 +52,15 @@ describe("MinutesRoute activation boundary", () => {
     mockProductState = "enabled";
     render(<MemoryRouter><MinutesRoute /></MemoryRouter>);
     expect(screen.getByText("minutes read page")).toBeInTheDocument();
+    expect(screen.getByText("minutes read page")).toHaveAttribute("data-controls-enabled", "true");
+  });
+
+  it("keeps the control surface absent when the product registry is read-only", () => {
+    mockToken = "signed-session";
+    mockProductState = "readOnly";
+    render(<MemoryRouter><MinutesRoute /></MemoryRouter>);
+
+    expect(screen.getByText("minutes read page")).toHaveAttribute("data-controls-enabled", "false");
   });
 
   it("renders a recoverable failure instead of coming-soon copy when the registry request fails", () => {

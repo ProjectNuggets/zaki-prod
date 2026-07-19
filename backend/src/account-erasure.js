@@ -82,6 +82,7 @@ export async function eraseAccountData({
   deleteTypUser,
   cleanupBilling,
   deleteLearning,
+  deleteMinutes,
   runInTransaction,
 }) {
   let purge;
@@ -145,6 +146,27 @@ export async function eraseAccountData({
     reason: "unknown",
   };
   const learning = await deleteLearning({ zakiUser, requestId });
+  let minutes = { attempted: false, ok: true, reason: "minutes_control_not_ready" };
+  if (typeof deleteMinutes === "function") {
+    try {
+      minutes = await deleteMinutes({ zakiUser, requestId });
+    } catch (cause) {
+      throw new AccountErasureError("Minutes account purge is unavailable.", {
+        code: "minutes_purge_unavailable",
+        status: 502,
+        retryable: true,
+        cause,
+      });
+    }
+    if (!minutes?.ok) {
+      throw new AccountErasureError("Minutes account purge failed.", {
+        code: "minutes_purge_failed",
+        status: 502,
+        retryable: Boolean(minutes?.retryable),
+        details: { upstreamStatus: Number(minutes?.status) || null },
+      });
+    }
+  }
 
   return runInTransaction(async (transaction) => {
     const query = transaction.query.bind(transaction);
@@ -197,6 +219,20 @@ export async function eraseAccountData({
           ? learning.deleted.map((item) => item?.resource).filter(Boolean)
           : [],
       },
+      minutes: {
+        attempted: Boolean(minutes?.attempted),
+        ok: Boolean(minutes?.ok),
+        reason: minutes?.reason || null,
+        receiptId: minutes?.receipt?.receiptId || null,
+        counts: minutes?.receipt?.counts
+          ? {
+              meetingRows: Number(minutes.receipt.counts.meetingRows || 0),
+              transcriptRows: Number(minutes.receipt.counts.transcriptRows || 0),
+              summaryRows: Number(minutes.receipt.counts.summaryRows || 0),
+              recordingObjects: Number(minutes.receipt.counts.recordingObjects || 0),
+            }
+          : null,
+      },
     };
     const receiptResult = await query(
       `INSERT INTO zaki_account_erasure_receipts
@@ -215,6 +251,7 @@ export async function eraseAccountData({
       engine,
       typ,
       learning,
+      minutes,
       receiptId: receiptResult?.rows?.[0]?.id || null,
     };
   });

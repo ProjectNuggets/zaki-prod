@@ -50,7 +50,12 @@ export type MinutesIndexResponse = { items: MinutesMetadata[]; truncated: boolea
 export type MinutesItemResponse = { item: MinutesItem; truncated: false };
 
 export class MinutesApiError extends Error {
-  constructor(public readonly status: number, public readonly code: string, message: string) {
+  constructor(
+    public readonly status: number,
+    public readonly code: string,
+    message: string,
+    public readonly retryable = false,
+  ) {
     super(message);
     this.name = "MinutesApiError";
   }
@@ -62,7 +67,12 @@ async function minutesRequest<T>(path: string, init: RequestInit): Promise<T> {
   try { payload = await response.json(); } catch { /* user-safe fallback below */ }
   if (!response.ok) {
     const body = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
-    throw new MinutesApiError(response.status, String(body.code || "minutes_failed"), String(body.message || "Minutes could not be loaded."));
+    throw new MinutesApiError(
+      response.status,
+      String(body.code || "minutes_failed"),
+      String(body.message || "Minutes could not be loaded."),
+      Boolean(body.retryable),
+    );
   }
   return payload as T;
 }
@@ -85,4 +95,119 @@ export function searchMinutes(query: string, limit = 20, cursor?: string) {
     method: "POST",
     body: JSON.stringify({ query, limit, ...(cursor ? { cursor } : {}) }),
   });
+}
+
+export type MinutesControlRetention = {
+  audio_days: number;
+  transcript_days: number;
+  summary_days: number;
+};
+
+export type MinutesControlStatus = {
+  available: true;
+  policy: {
+    capture_notice_policy_version: string;
+    retention: MinutesControlRetention;
+  };
+};
+
+function isMinutesControlStatus(value: unknown): value is MinutesControlStatus {
+  if (!value || typeof value !== "object") return false;
+  const control = value as { available?: unknown; policy?: { capture_notice_policy_version?: unknown; retention?: unknown } };
+  const retention = control.policy?.retention;
+  if (!retention || typeof retention !== "object") return false;
+  const windows = retention as Partial<MinutesControlRetention>;
+  return control.available === true &&
+    typeof control.policy?.capture_notice_policy_version === "string" &&
+    typeof windows.audio_days === "number" && Number.isInteger(windows.audio_days) && windows.audio_days >= 0 && windows.audio_days <= 365 &&
+    typeof windows.transcript_days === "number" && Number.isInteger(windows.transcript_days) && windows.transcript_days >= 1 && windows.transcript_days <= 3_650 &&
+    typeof windows.summary_days === "number" && Number.isInteger(windows.summary_days) && windows.summary_days >= 1 && windows.summary_days <= windows.transcript_days;
+}
+
+export type MinutesConsentResult = { state: "ready" | "disabled"; policyVersion: string };
+export type MinutesCaptureResult = {
+  captureId: string;
+  meetingId?: string;
+  state: "requested";
+};
+export type MinutesCaptureStatus = {
+  captureId: string;
+  meetingId?: string;
+  state: "requested" | "joining" | "awaiting_admission" | "active" | "stopping" | "completed" | "failed";
+  failureCode?: string;
+  capturedSecondsTotal: number;
+  terminal: boolean;
+};
+export type MinutesForgetResult = {
+  status: "completed" | "already_absent";
+  receiptId: string;
+  erasedAt: string;
+  counts: {
+    meetingRows: number;
+    transcriptRows: number;
+    summaryRows: number;
+    recordingObjects: number;
+  };
+};
+
+export async function getMinutesControl() {
+  const control = await minutesRequest<unknown>("/api/minutes/control", { method: "GET" });
+  if (!isMinutesControlStatus(control)) {
+    throw new MinutesApiError(502, "minutes_control_invalid_response", "Minutes controls are temporarily unavailable.", true);
+  }
+  return control;
+}
+
+export function saveMinutesConsent(input: {
+  captureEnabled: boolean;
+  agentReadEnabled: boolean;
+  retention: MinutesControlRetention;
+  idempotencyKey: string;
+}) {
+  return minutesRequest<MinutesConsentResult>("/api/minutes/control/consent", {
+    method: "POST",
+    body: JSON.stringify({
+      capture_enabled: input.captureEnabled,
+      agent_read_enabled: input.agentReadEnabled,
+      retention: input.retention,
+      idempotency_key: input.idempotencyKey,
+    }),
+  });
+}
+
+export function requestMinutesCapture(input: {
+  platform: "google_meet";
+  meetingUrl: string;
+  visibleBotAttested: true;
+  idempotencyKey: string;
+}) {
+  return minutesRequest<MinutesCaptureResult>("/api/minutes/captures", {
+    method: "POST",
+    body: JSON.stringify({
+      platform: input.platform,
+      meeting_url: input.meetingUrl,
+      visible_bot_attested: input.visibleBotAttested,
+      idempotency_key: input.idempotencyKey,
+    }),
+  });
+}
+
+export function getMinutesCaptureStatus(captureId: string) {
+  return minutesRequest<MinutesCaptureStatus>(`/api/minutes/captures/${encodeURIComponent(captureId)}`, {
+    method: "GET",
+  });
+}
+
+export function stopMinutesCapture(captureId: string, idempotencyKey: string) {
+  return minutesRequest<Pick<MinutesCaptureStatus, "captureId" | "meetingId" | "state" | "terminal">>(
+    `/api/minutes/captures/${encodeURIComponent(captureId)}/stop`,
+    { method: "POST", body: JSON.stringify({ idempotency_key: idempotencyKey }) },
+  );
+}
+
+export function forgetMinutesMeeting(meetingId: string, idempotencyKey: string) {
+  return minutesRequest<MinutesForgetResult>(
+    `/api/minutes/meetings/${encodeURIComponent(meetingId)}/forget`,
+    { method: "POST", body: JSON.stringify({ idempotency_key: idempotencyKey }) },
+  );
 }
