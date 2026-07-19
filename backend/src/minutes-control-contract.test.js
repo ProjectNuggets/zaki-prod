@@ -31,6 +31,9 @@ describe("Minutes zaki-control.v1 adapter contract", () => {
     expect(() => parseMinutesBrowserCapture({ ...input, meeting_url: "https://evil.example/abc-defg-hij" })).toThrow(
       expect.objectContaining({ code: "minutes_control_invalid_request" })
     );
+    expect(() => parseMinutesBrowserCapture({ ...input, platform: "zoom", meeting_url: "https://acme.zoom.us/j/12345678901" })).toThrow(
+      expect.objectContaining({ code: "minutes_control_invalid_request" })
+    );
     expect(() => parseMinutesBrowserCapture({ ...input, bot_display_name: "browser-controlled" })).toThrow(
       expect.objectContaining({ code: "minutes_control_invalid_request" })
     );

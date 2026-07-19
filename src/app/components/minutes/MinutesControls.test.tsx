@@ -98,6 +98,8 @@ describe("MinutesControls", () => {
     }));
     expect(await screen.findByRole("heading", { name: "Request a visible bot" })).toBeInTheDocument();
     expect(screen.getByText(/ZAKI Notetaker must be visibly present/)).toBeInTheDocument();
+    expect(screen.getByText("Google Meet")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Platform" })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Meeting URL"), { target: { value: "https://meet.google.com/abc-defg-hij" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "I confirm the bot will be visible and attendees will be told before capture starts." }));

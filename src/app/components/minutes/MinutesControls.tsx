@@ -103,7 +103,6 @@ function ConsentForm({
 
 function CaptureForm({ enabled }: { enabled: boolean }) {
   const { t } = useTranslation();
-  const [platform, setPlatform] = useState<"google_meet" | "zoom" | "teams" | "jitsi">("google_meet");
   const [meetingUrl, setMeetingUrl] = useState("");
   const [visibleBotAttested, setVisibleBotAttested] = useState(false);
   const [capture, setCapture] = useState<MinutesCaptureResult | null>(null);
@@ -125,7 +124,7 @@ function CaptureForm({ enabled }: { enabled: boolean }) {
       onSubmit={(event) => {
         event.preventDefault();
         requestCapture.mutate({
-          platform,
+          platform: "google_meet",
           meetingUrl,
           visibleBotAttested: true,
           idempotencyKey: idempotencyKey("minutes-capture"),
@@ -133,7 +132,7 @@ function CaptureForm({ enabled }: { enabled: boolean }) {
       }}
     >
       <div className="grid gap-2 sm:grid-cols-[10rem_1fr]">
-        <label className="grid gap-1 text-xs text-[var(--v2-ink-2)]"><span>{t("minutes.platform", { defaultValue: "Platform" })}</span><select value={platform} onChange={(event) => setPlatform(event.target.value as typeof platform)} className="min-h-10 border border-[var(--v2-hairline)] bg-[var(--v2-bg)] px-2 text-sm text-[var(--v2-ink-1)]"><option value="google_meet">Google Meet</option><option value="zoom">Zoom</option><option value="teams">Microsoft Teams</option><option value="jitsi">Jitsi</option></select></label>
+        <p className="grid gap-1 text-xs text-[var(--v2-ink-2)]"><span>{t("minutes.platform", { defaultValue: "Platform" })}</span><span className="min-h-10 border border-[var(--v2-hairline)] bg-[var(--v2-bg)] px-2 py-2 text-sm text-[var(--v2-ink-1)]">Google Meet</span></p>
         <label className="grid gap-1 text-xs text-[var(--v2-ink-2)]"><span>{t("minutes.meetingUrl", { defaultValue: "Meeting URL" })}</span><input required type="url" value={meetingUrl} onChange={(event) => setMeetingUrl(event.target.value)} placeholder="https://…" className="min-h-10 border border-[var(--v2-hairline)] bg-[var(--v2-bg)] px-2 text-sm text-[var(--v2-ink-1)] outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--v2-accent)]" /></label>
       </div>
       <label className="flex items-start gap-2 text-sm text-[var(--v2-ink-1)]"><input required type="checkbox" checked={visibleBotAttested} onChange={(event) => setVisibleBotAttested(event.target.checked)} className="mt-1 size-4 accent-[var(--v2-accent)]" /><span>{t("minutes.visibleBotAttestation", { defaultValue: "I confirm the bot will be visible and attendees will be told before capture starts." })}</span></label>

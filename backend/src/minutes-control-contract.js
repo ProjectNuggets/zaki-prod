@@ -318,7 +318,10 @@ const BrowserConsentInput = z.strictObject({
 });
 
 const BrowserCaptureInput = z.strictObject({
-  platform: z.enum(["google_meet", "zoom", "teams", "jitsi"]),
+  // Staging launches a single provider only. The runtime's egress policy is
+  // intentionally Google-Meet-specific, so accepting another platform here
+  // would reserve a hold for a bot that cannot safely join it.
+  platform: z.literal("google_meet"),
   meeting_url: z.string().url().max(2_048).regex(/^https:\/\//),
   visible_bot_attested: z.literal(true),
   idempotency_key: Identifier,
