@@ -1,4 +1,4 @@
-import { backendAuthRequest } from "@/lib/api";
+import { backendAuthRequest, getBackendBase } from "@/lib/api";
 
 export type DesignProject = {
   id: string;
@@ -101,11 +101,27 @@ export function stopDesignSession(sessionId: string, projectId: string) {
   );
 }
 
+/**
+ * Absolute URL for the workbench iframe.
+ *
+ * This was relative, which resolved against the APP origin (app-staging.chatzaki.ai) rather than the
+ * API. The app origin does not proxy /api, so the SPA catch-all answered with index.html and the
+ * iframe rendered the whole ZAKI dashboard inside the Design page — ZAKI nested in ZAKI, with no way
+ * back out. The route only ever existed on the backend.
+ *
+ * Same-origin is not required and never was: app-* and api-* share the chatzaki.ai registrable
+ * domain, so they are the same SITE, and the workbench cookie (SameSite=Strict, Path=/api/design) is
+ * still sent on this subresource request.
+ */
 export function designWorkbenchUrl(session: DesignSession, projectName: string) {
   const query = new URLSearchParams({
     sessionId: session.id,
     projectId: session.projectId,
     projectName,
   });
-  return `/api/design/workbench/projects/${encodeURIComponent(session.projectId)}?${query.toString()}`;
+  const path = `/api/design/workbench/projects/${encodeURIComponent(session.projectId)}?${query.toString()}`;
+  const base = getBackendBase();
+  if (!base) return path;
+  // Mirror backendRequest's de-duplication: a base already ending in /api must not yield /api/api.
+  return base.endsWith("/api") ? `${base}${path.slice(4)}` : `${base}${path}`;
 }

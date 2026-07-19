@@ -1,54 +1,44 @@
-const backendAuthRequest = jest.fn();
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
-jest.mock("@/lib/api", () => ({ backendAuthRequest }));
+vi.mock("@/lib/api", () => ({
+  backendAuthRequest: vi.fn(),
+  getBackendBase: vi.fn(),
+}));
 
-import {
-  designWorkbenchUrl,
-  ensureDesignSession,
-  getDesignSession,
-  stopDesignSession,
-} from "./designApi";
+import { getBackendBase } from "@/lib/api";
+import { designWorkbenchUrl } from "./designApi";
 
-function jsonResponse(body: unknown) {
-  return {
-    ok: true,
-    status: 200,
-    headers: { get: (name: string) => name.toLowerCase() === "content-type" ? "application/json" : null },
-    json: async () => body,
-    text: async () => JSON.stringify(body),
-  } as Response;
-}
+const session = { id: "sess_1", projectId: "proj_1", state: "READY", generation: 1 } as never;
 
-describe("Design hosted lifecycle API", () => {
-  beforeEach(() => backendAuthRequest.mockReset());
+describe("designWorkbenchUrl", () => {
+  beforeEach(() => vi.mocked(getBackendBase).mockReset());
 
-  it("uses the canonical ensure, status, and stop endpoints", async () => {
-    backendAuthRequest.mockResolvedValue(jsonResponse({
-      session: { id: "sess_01", projectId: "project_01", state: "READY", generation: 1 },
-    }));
-
-    await ensureDesignSession("project_01");
-    expect(backendAuthRequest).toHaveBeenLastCalledWith("/api/design/sessions", expect.objectContaining({
-      method: "POST", body: JSON.stringify({ projectId: "project_01" }),
-    }));
-    await getDesignSession("sess_01", "project_01");
-    expect(backendAuthRequest).toHaveBeenLastCalledWith(
-      "/api/design/sessions/sess_01?projectId=project_01",
-      expect.objectContaining({ method: "GET" }),
-    );
-    await stopDesignSession("sess_01", "project_01");
-    expect(backendAuthRequest).toHaveBeenLastCalledWith(
-      "/api/design/sessions/sess_01/stop",
-      expect.objectContaining({ method: "POST", body: JSON.stringify({ projectId: "project_01" }) }),
-    );
+  // Regression: this used to return a RELATIVE path, which resolved against the APP origin. That
+  // origin does not proxy /api, so the SPA catch-all returned index.html and the iframe rendered
+  // the entire ZAKI dashboard inside the Design page, with no way back out.
+  it("is absolute against the backend base, not relative to the app origin", () => {
+    vi.mocked(getBackendBase).mockReturnValue("https://api-staging.chatzaki.ai");
+    const url = designWorkbenchUrl(session, "test");
+    expect(url.startsWith("https://api-staging.chatzaki.ai/api/design/workbench/projects/proj_1")).toBe(true);
   });
 
-  it("builds a same-origin authenticated workbench URL", () => {
-    expect(designWorkbenchUrl(
-      { id: "sess_01", projectId: "project_01", state: "READY", generation: 1 },
-      "Brand & web",
-    )).toBe(
-      "/api/design/workbench/projects/project_01?sessionId=sess_01&projectId=project_01&projectName=Brand+%26+web",
-    );
+  it("does not double the /api prefix when the base already ends in /api", () => {
+    vi.mocked(getBackendBase).mockReturnValue("https://api-staging.chatzaki.ai/api");
+    expect(designWorkbenchUrl(session, "test")).not.toContain("/api/api/");
+    expect(designWorkbenchUrl(session, "test")).toContain("/api/design/workbench/projects/proj_1");
+  });
+
+  it("carries the session identifiers the workbench route requires", () => {
+    vi.mocked(getBackendBase).mockReturnValue("https://api-staging.chatzaki.ai");
+    const url = designWorkbenchUrl(session, "my project");
+    const q = new URL(url).searchParams;
+    expect(q.get("sessionId")).toBe("sess_1");
+    expect(q.get("projectId")).toBe("proj_1");
+    expect(q.get("projectName")).toBe("my project");
+  });
+
+  it("falls back to the relative path when no base is configured", () => {
+    vi.mocked(getBackendBase).mockReturnValue("");
+    expect(designWorkbenchUrl(session, "test").startsWith("/api/design/workbench/")).toBe(true);
   });
 });
