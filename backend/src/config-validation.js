@@ -78,7 +78,9 @@ export function validateRuntimeConfig(env = process.env) {
   const stripePricePersonalYearly = normalize(env.STRIPE_PRICE_PERSONAL_YEARLY);
   const stripePricePersonalMonthly = normalize(env.STRIPE_PRICE_PERSONAL);
   const stripePriceProMonthly = normalize(env.STRIPE_PRICE_PRO);
+  const stripePriceProYearly = normalize(env.STRIPE_PRICE_PRO_YEARLY);
   const stripePriceProMaxMonthly = normalize(env.STRIPE_PRICE_PRO_MAX);
+  const stripePriceProMaxYearly = normalize(env.STRIPE_PRICE_PRO_MAX_YEARLY);
   const stripePriceAccessCodeMonthly = normalize(env.STRIPE_PRICE_ACCESS_CODE_MONTHLY);
   const stripeBillingPortalConfiguration = normalize(env.STRIPE_BILLING_PORTAL_CONFIGURATION);
   const learningEnabled = isTruthyBoolean(env.ZAKI_LEARNING_ENABLED);
@@ -208,6 +210,20 @@ export function validateRuntimeConfig(env = process.env) {
       warnings,
       "STRIPE_PRICE_PERSONAL_YEARLY",
       "STRIPE_PRICE_PERSONAL_YEARLY is not set. Personal yearly checkout will be unavailable."
+    );
+  }
+  if (billingProvider === "stripe" && !stripePriceProYearly) {
+    pushIssue(
+      warnings,
+      "STRIPE_PRICE_PRO_YEARLY",
+      "STRIPE_PRICE_PRO_YEARLY is not set. Pro yearly checkout will be unavailable."
+    );
+  }
+  if (billingProvider === "stripe" && !stripePriceProMaxYearly) {
+    pushIssue(
+      warnings,
+      "STRIPE_PRICE_PRO_MAX_YEARLY",
+      "STRIPE_PRICE_PRO_MAX_YEARLY is not set. Pro Max yearly checkout will be unavailable."
     );
   }
   if (billingProvider === "stripe" && !stripePricePersonalMonthly) {

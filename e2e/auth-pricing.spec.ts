@@ -13,6 +13,7 @@ async function mockAuthAndPricing(page: Page) {
     token: "paid-user-token-123",
     tier: "free",
     status: "inactive",
+    interval: "monthly",
     loggedIn: false,
   };
 
@@ -90,7 +91,7 @@ async function mockAuthAndPricing(page: Page) {
       plan: {
         tier: state.tier,
         status: state.status,
-        interval: state.tier === "free" ? null : "monthly",
+        interval: state.tier === "free" ? null : state.interval,
         cancelAtPeriodEnd: false,
       },
       access: {
@@ -123,16 +124,33 @@ async function mockAuthAndPricing(page: Page) {
           pro: { monthly: true, yearly: true },
           pro_max: { monthly: true, yearly: true },
         },
+        pricingCatalog: {
+          personal: {
+            monthly: { priceId: "price_personal_month", unitAmount: 1500, currency: "usd" },
+            yearly: { priceId: "price_personal_year", unitAmount: 14400, currency: "usd" },
+          },
+          pro: {
+            monthly: { priceId: "price_pro_month", unitAmount: 4500, currency: "usd" },
+            yearly: { priceId: "price_pro_year", unitAmount: 43200, currency: "usd" },
+          },
+          pro_max: {
+            monthly: { priceId: "price_pro_max_month", unitAmount: 9500, currency: "usd" },
+            yearly: { priceId: "price_pro_max_year", unitAmount: 91200, currency: "usd" },
+          },
+        },
       },
     });
   });
 
   await page.route("**/api/billing/checkout", async (route) => {
+    const body = route.request().postDataJSON() as { plan?: string; interval?: string };
+    expect(body).toMatchObject({ plan: "pro", interval: "yearly" });
     state.tier = "pro";
     state.status = "active";
+    state.interval = "yearly";
     await json(route, {
       success: true,
-      url: "/pricing/success?billing=success&plan=pro&interval=monthly",
+      url: "/pricing/success?billing=success&plan=pro&interval=yearly",
     });
   });
 
@@ -157,7 +175,7 @@ test("user can sign in on pricing route and complete provider-selected checkout"
   // multi-provider modal are gone — Stripe is the only valid checkout provider
   // for the canonical paid tiers, so a single provider auto-starts.
   await page.goto(
-    "/pricing?auth=signup&plan=pro&interval=monthly&autostart=1&source=website_pricing"
+    "/pricing?auth=signup&plan=pro&interval=yearly&autostart=1&source=website_pricing"
   );
 
   await expect(page.getByRole("heading", { name: "Create a ZAKI account" })).toBeVisible();

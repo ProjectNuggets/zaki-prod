@@ -17,6 +17,8 @@ describe("runtime config validation", () => {
       createBaseEnv({
         STRIPE_PRICE_STUDENT_YEARLY: "",
         STRIPE_PRICE_PERSONAL_YEARLY: "",
+        STRIPE_PRICE_PRO_YEARLY: "",
+        STRIPE_PRICE_PRO_MAX_YEARLY: "",
         STRIPE_PRICE_PERSONAL: "",
         STRIPE_PRICE_PRO: "",
         STRIPE_PRICE_PRO_MAX: "",
@@ -33,6 +35,8 @@ describe("runtime config validation", () => {
         expect.objectContaining({ key: "STRIPE_PRICE_STUDENT" }),
         expect.objectContaining({ key: "STRIPE_PRICE_STUDENT_YEARLY" }),
         expect.objectContaining({ key: "STRIPE_PRICE_PERSONAL_YEARLY" }),
+        expect.objectContaining({ key: "STRIPE_PRICE_PRO_YEARLY" }),
+        expect.objectContaining({ key: "STRIPE_PRICE_PRO_MAX_YEARLY" }),
         expect.objectContaining({ key: "STRIPE_PRICE_PERSONAL" }),
         expect.objectContaining({ key: "STRIPE_PRICE_PRO" }),
         expect.objectContaining({ key: "STRIPE_PRICE_PRO_MAX" }),
@@ -89,7 +93,9 @@ describe("runtime config validation", () => {
         STRIPE_PRICE_PERSONAL: "price_personal_monthly",
         STRIPE_PRICE_PERSONAL_YEARLY: "price_personal_yearly",
         STRIPE_PRICE_PRO: "price_pro_monthly",
+        STRIPE_PRICE_PRO_YEARLY: "price_pro_yearly",
         STRIPE_PRICE_PRO_MAX: "price_pro_max_monthly",
+        STRIPE_PRICE_PRO_MAX_YEARLY: "price_pro_max_yearly",
         STRIPE_PRICE_ACCESS_CODE_MONTHLY: "price_access_code_monthly",
         ZAKI_BILLING_ALERT_WEBHOOK_URL: "https://alerts.example.com/metering",
       })
@@ -125,6 +131,8 @@ describe("runtime config validation", () => {
         STRIPE_PRICE_STUDENT: "",
         STRIPE_PRICE_STUDENT_YEARLY: "",
         STRIPE_PRICE_PERSONAL_YEARLY: "",
+        STRIPE_PRICE_PRO_YEARLY: "",
+        STRIPE_PRICE_PRO_MAX_YEARLY: "",
         STRIPE_PRICE_ACCESS_CODE_MONTHLY: "",
       })
     );
@@ -135,12 +143,16 @@ describe("runtime config validation", () => {
     expect(errorKeys).not.toContain("STRIPE_PRICE_STUDENT");
     expect(errorKeys).not.toContain("STRIPE_PRICE_STUDENT_YEARLY");
     expect(errorKeys).not.toContain("STRIPE_PRICE_PERSONAL_YEARLY");
+    expect(errorKeys).not.toContain("STRIPE_PRICE_PRO_YEARLY");
+    expect(errorKeys).not.toContain("STRIPE_PRICE_PRO_MAX_YEARLY");
     expect(errorKeys).not.toContain("STRIPE_PRICE_ACCESS_CODE_MONTHLY");
     expect(report.warnings).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ key: "STRIPE_PRICE_STUDENT" }),
         expect.objectContaining({ key: "STRIPE_PRICE_STUDENT_YEARLY" }),
         expect.objectContaining({ key: "STRIPE_PRICE_PERSONAL_YEARLY" }),
+        expect.objectContaining({ key: "STRIPE_PRICE_PRO_YEARLY" }),
+        expect.objectContaining({ key: "STRIPE_PRICE_PRO_MAX_YEARLY" }),
         expect.objectContaining({ key: "STRIPE_PRICE_ACCESS_CODE_MONTHLY" }),
       ])
     );
@@ -187,6 +199,8 @@ describe("runtime config validation", () => {
     expect(warningKeys).not.toContain("STRIPE_PRICE_STUDENT");
     expect(warningKeys).not.toContain("STRIPE_PRICE_STUDENT_YEARLY");
     expect(warningKeys).not.toContain("STRIPE_PRICE_PERSONAL_YEARLY");
+    expect(warningKeys).not.toContain("STRIPE_PRICE_PRO_YEARLY");
+    expect(warningKeys).not.toContain("STRIPE_PRICE_PRO_MAX_YEARLY");
     expect(warningKeys).not.toContain("STRIPE_PRICE_PERSONAL");
     expect(warningKeys).not.toContain("STRIPE_PRICE_PRO");
     expect(warningKeys).not.toContain("STRIPE_PRICE_PRO_MAX");

@@ -205,7 +205,14 @@ export function PricingPage() {
     // stricter because only explicitly configured Stripe yearly Prices are valid.
     if (interval === "monthly") return true;
     if (!billingConfigLoaded) return true;
-    return Boolean(billingConfig?.pricingAvailability?.[plan]?.[interval]);
+    if (!billingConfig?.pricingAvailability?.[plan]?.[interval]) return false;
+    const price = billingConfig?.pricingCatalog?.[plan]?.[interval];
+    return Boolean(
+      price?.priceId &&
+        typeof price.unitAmount === "number" &&
+        Number.isFinite(price.unitAmount) &&
+        price.currency
+    );
   };
 
   const getPlanPriceLabel = (plan: CommercialPaidPlan) => {
@@ -224,7 +231,19 @@ export function PricingPage() {
   };
 
   const yearlySavingsPercent = useMemo(() => {
-    const percentages = PAID_PLAN_IDS.flatMap((plan) => {
+    const availableYearlyPlans = PAID_PLAN_IDS.filter((plan) => {
+      const yearly = billingConfig?.pricingCatalog?.[plan]?.yearly;
+      return Boolean(
+        billingConfig?.pricingAvailability?.[plan]?.yearly &&
+          yearly?.priceId &&
+          typeof yearly.unitAmount === "number" &&
+          Number.isFinite(yearly.unitAmount) &&
+          yearly.currency
+      );
+    });
+    if (availableYearlyPlans.length === 0) return null;
+
+    const percentages = availableYearlyPlans.map((plan) => {
       const monthly = billingConfig?.pricingCatalog?.[plan]?.monthly?.unitAmount;
       const yearly = billingConfig?.pricingCatalog?.[plan]?.yearly?.unitAmount;
       if (
@@ -234,15 +253,16 @@ export function PricingPage() {
         yearly <= 0 ||
         yearly >= monthly * 12
       ) {
-        return [];
+        return null;
       }
-      return [Math.round((1 - yearly / (monthly * 12)) * 100)];
+      return Math.round((1 - yearly / (monthly * 12)) * 100);
     });
-    return percentages.length > 0 ? Math.max(...percentages) : null;
-  }, [billingConfig?.pricingCatalog]);
+    if (percentages.some((percent) => percent === null)) return null;
+    return percentages.every((percent) => percent === percentages[0]) ? percentages[0] : null;
+  }, [billingConfig?.pricingAvailability, billingConfig?.pricingCatalog]);
 
   const yearlyBillingAvailable = PAID_PLAN_IDS.some((plan) =>
-    Boolean(billingConfig?.pricingAvailability?.[plan]?.yearly)
+    isPlanIntervalAvailable(plan, "yearly")
   );
 
   const accessCodePriceLabel = (() => {
@@ -514,8 +534,7 @@ export function PricingPage() {
     );
     const checkoutPlan = card.plan;
     const intervalAvailable = isPlanIntervalAvailable(checkoutPlan);
-    const emphasized =
-      billingInterval === "yearly" ? checkoutPlan === "personal" : Boolean(card.emphasized);
+    const emphasized = Boolean(card.emphasized);
 
     if (hasSubscription && current) {
       return (
@@ -725,8 +744,7 @@ export function PricingPage() {
               ? getPlanPriceLabel(card.plan)
               : t(`pricingPage.plans.${card.translationKey}.price`);
             const allowanceLabel = getPlanAllowanceLabel(card);
-            const emphasized =
-              billingInterval === "yearly" ? card.plan === "personal" : Boolean(card.emphasized);
+            const emphasized = Boolean(card.emphasized);
             return (
               <div
                 key={card.id}

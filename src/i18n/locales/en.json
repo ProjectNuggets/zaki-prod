@@ -1314,7 +1314,7 @@
       "free": "Chat Free: weekly usage included",
       "personal": "Personal: $15/month",
       "pro": "Pro: $45/month",
-      "pro_max": "Pro Max: $99/month"
+      "pro_max": "Pro Max: $95/month"
     },
     "currentPlan": "You’re currently on {{plan}}",
     "currentPlanSignedOut": "You’re viewing plans signed out",
@@ -1416,7 +1416,7 @@
       },
       "pro_max": {
         "label": "Pro Max",
-        "price": "$99 / month",
+        "price": "$95 / month",
         "blurb": "The highest current limits and first access when gated products are ready.",
         "features": [
           "Highest weekly and burst limits",

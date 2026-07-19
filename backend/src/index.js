@@ -78,8 +78,10 @@ import {
   STRIPE_BILLING_PLANS,
   buildTopupPackCatalog,
   buildStripePricingCatalog,
+  buildStripePricingDisplayRefs,
   normalizeBillingInterval,
   resolveTopupPack,
+  stripePriceMatchesBillingInterval,
   resolveStripePriceDetailsById,
   resolveStripePriceForSelection,
 } from "./billing-pricing.js";
@@ -817,7 +819,11 @@ const STRIPE_PRICE_PERSONAL_YEARLY = (process.env.STRIPE_PRICE_PERSONAL_YEARLY |
 // New commercial tiers. Deployed sandbox secrets use these exact names with NO
 // `_MONTHLY` suffix: STRIPE_PRICE_PERSONAL / STRIPE_PRICE_PRO / STRIPE_PRICE_PRO_MAX.
 const STRIPE_PRICE_PRO = (process.env.STRIPE_PRICE_PRO || "").trim();
+const STRIPE_PRICE_PRO_YEARLY = (process.env.STRIPE_PRICE_PRO_YEARLY || "").trim();
 const STRIPE_PRICE_PRO_MAX = (process.env.STRIPE_PRICE_PRO_MAX || "").trim();
+const STRIPE_PRICE_PRO_MAX_YEARLY = (
+  process.env.STRIPE_PRICE_PRO_MAX_YEARLY || ""
+).trim();
 const STRIPE_PRICE_ACCESS_CODE_MONTHLY = (
   process.env.STRIPE_PRICE_ACCESS_CODE_MONTHLY || ""
 ).trim();
@@ -1137,7 +1143,9 @@ const stripePricingCatalog = buildStripePricingCatalog({
   personalMonthly: STRIPE_PRICE_PERSONAL,
   personalYearly: STRIPE_PRICE_PERSONAL_YEARLY,
   proMonthly: STRIPE_PRICE_PRO,
+  proYearly: STRIPE_PRICE_PRO_YEARLY,
   proMaxMonthly: STRIPE_PRICE_PRO_MAX,
+  proMaxYearly: STRIPE_PRICE_PRO_MAX_YEARLY,
 });
 const PRICE_BY_PLAN_INTERVAL = stripePricingCatalog.priceByPlanInterval;
 const PRICE_DETAILS_BY_ID = stripePricingCatalog.priceDetailsById;
@@ -1831,8 +1839,14 @@ function getBillingConfigStatus() {
   if (!PRICE_BY_PLAN_INTERVAL.pro.monthly) {
     missing.push("stripe_price_pro");
   }
+  if (!PRICE_BY_PLAN_INTERVAL.pro.yearly) {
+    missing.push("stripe_price_pro_yearly");
+  }
   if (!PRICE_BY_PLAN_INTERVAL.pro_max.monthly) {
     missing.push("stripe_price_pro_max");
+  }
+  if (!PRICE_BY_PLAN_INTERVAL.pro_max.yearly) {
+    missing.push("stripe_price_pro_max_yearly");
   }
   if (!STRIPE_WEBHOOK_SECRET) {
     missing.push("stripe_webhook_secret");
@@ -1867,19 +1881,15 @@ async function getStripePricingDisplayCatalog() {
     return stripePricingDisplayCache.value;
   }
 
-  const priceRefs = [
-    ["student", "monthly", PRICE_BY_PLAN_INTERVAL.student.monthly],
-    ["student", "yearly", PRICE_BY_PLAN_INTERVAL.student.yearly],
-    ["personal", "monthly", PRICE_BY_PLAN_INTERVAL.personal.monthly],
-    ["personal", "yearly", PRICE_BY_PLAN_INTERVAL.personal.yearly],
-    ["pro", "monthly", PRICE_BY_PLAN_INTERVAL.pro.monthly],
-    ["pro_max", "monthly", PRICE_BY_PLAN_INTERVAL.pro_max.monthly],
-    ["access", "monthly", STRIPE_PRICE_ACCESS_CODE_MONTHLY],
-  ].filter(([, , priceId]) => String(priceId || "").trim());
+  const priceRefs = buildStripePricingDisplayRefs(
+    stripePricingCatalog,
+    STRIPE_PRICE_ACCESS_CODE_MONTHLY
+  );
 
   const results = await Promise.allSettled(
     priceRefs.map(async ([tier, interval, priceId]) => {
       const price = await stripe.prices.retrieve(priceId);
+      if (!stripePriceMatchesBillingInterval(price, interval)) return null;
       return {
         tier,
         interval,
@@ -1923,6 +1933,38 @@ async function getStripePricingDisplayCatalog() {
   };
 
   return catalog;
+}
+
+function applyStripeDisplayAvailability(configured, pricingCatalog) {
+  if (configured.provider !== "stripe" || !pricingCatalog) return configured;
+  return {
+    ...configured,
+    pricingAvailability: Object.fromEntries(
+      Object.entries(configured.pricingAvailability || {}).map(([plan, availability]) => [
+        plan,
+        {
+          ...availability,
+          // Monthly retains its established availability behavior. Yearly must
+          // be both configured and verified as an active annual Stripe Price.
+          yearly: Boolean(availability?.yearly && pricingCatalog?.[plan]?.yearly?.priceId),
+        },
+      ])
+    ),
+  };
+}
+
+async function assertStripePriceMatchesBillingInterval({ priceId, interval }) {
+  const selectedInterval = normalizeBillingInterval(interval, "monthly");
+  const price = await stripe.prices.retrieve(priceId);
+  if (stripePriceMatchesBillingInterval(price, selectedInterval)) return price;
+
+  const err = new Error(
+    `Selected ${selectedInterval} billing interval is not configured with an active Stripe ${
+      selectedInterval === "yearly" ? "yearly" : "monthly"
+    } Price.`
+  );
+  err.status = 503;
+  throw err;
 }
 
 function sendBillingUnavailable(res, capability) {
@@ -4735,7 +4777,7 @@ function resolveTier(tier) {
   // V1 ladder: personal / pro / pro_max are first-class paid tiers. This used to
   // collapse `pro -> personal`, which made every caller that WRITES plan_tier
   // (Stripe/Creem webhooks, cancel-at-period-end) store the wrong tier — so the
-  // €45 Pro plan provisioned a 600u Personal wallet and surfaced as Personal on
+  // $45 USD Pro provisioned a 600u Personal wallet and surfaced as Personal on
   // /api/entitlements (Bug 2). Keep the real tier; downstream sizing/labels
   // depend on it. Wallet/policy normalization (normalizePlatformPlanId) and
   // effective-entitlements own any further mapping. Canonical impl lives in
@@ -5816,6 +5858,11 @@ const billingAdapters = {
         throw err;
       }
 
+      await assertStripePriceMatchesBillingInterval({
+        priceId,
+        interval: selectedInterval,
+      });
+
       const customerId = await ensureStripeCustomerId({ email, zakiUser });
       const appUrl = getAppUrl();
       const session = await stripe.checkout.sessions.create({
@@ -5860,6 +5907,11 @@ const billingAdapters = {
         err.status = 400;
         throw err;
       }
+
+      await assertStripePriceMatchesBillingInterval({
+        priceId,
+        interval: selectedInterval,
+      });
 
       const customerId = await ensureStripeCustomerId({ email, zakiUser });
       const { subscription, item } = await resolveStripeSubscriptionForPlanChange({
@@ -8686,7 +8738,11 @@ async function buildBillingDisplayConfig() {
       },
     ])
   );
-  return { configured, pricingCatalog, platformPlanAllowances };
+  return {
+    configured: applyStripeDisplayAvailability(configured, pricingCatalog),
+    pricingCatalog,
+    platformPlanAllowances,
+  };
 }
 
 app.post("/api/billing/checkout", express.json({ limit: "1mb" }), async (req, res) => {
