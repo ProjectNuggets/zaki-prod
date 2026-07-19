@@ -40,7 +40,7 @@ export function MemoryCaptureToast({
     isImport
       ? t("memory.importedTitle", {
           count: absorbedCount,
-          defaultValue: `I now remember ${absorbedCount} details from your import`,
+          defaultValue: `Saved ${absorbedCount} details from your import`,
         })
       : savedCount > 1
       ? t("memory.savedMultiple", { count: savedCount })
@@ -58,7 +58,7 @@ export function MemoryCaptureToast({
               saved: newSavedCount,
               updated: supersededCount,
               known: duplicateCount,
-              defaultValue: `${newSavedCount} new · ${supersededCount} updated · ${duplicateCount} already known. Stored in your Brain.`,
+              defaultValue: `${newSavedCount} new · ${supersededCount} updated · ${duplicateCount} already known. Saved to chat memory.`,
             })
           : t("memory.savedHelper");
 
