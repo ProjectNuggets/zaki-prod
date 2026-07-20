@@ -1,9 +1,8 @@
 // 2026-05-09 — Memory import sheet (paste from ChatGPT/Claude/Gemini).
 //
-// New users can ask another AI for a structured memory dump using the
-// canonical prompt below, then paste it back here. Import waits for the
-// authenticated memory-capture route and only closes after absorption is
-// confirmed with backend counts.
+// Users can ask another AI for a structured memory dump using the canonical
+// prompt below, then carry that response into the ordinary Agent composer.
+// The sheet never writes memory or sends a message on the user's behalf.
 //
 // Surfaces:
 //   - Dashboard memory-scope panel
@@ -52,7 +51,7 @@ Then wrap the entire export in a single code block. After the code block, state 
 type Props = {
   isOpen: boolean;
   onClose: () => void;
-  /** Fires when the user has pasted their dump and pressed "Import." */
+  /** Carries the pasted response into the ordinary Agent composer. */
   onImport: (dump: string) => Promise<void> | void;
 };
 
@@ -87,16 +86,18 @@ export function MemoryImportSheet({ isOpen, onClose, onImport }: Props) {
   const handleImport = async () => {
     const trimmed = dump.trim();
     if (!trimmed) return;
+    // WP-MEM6: close before the dashboard -> Agent route handoff. The destination composer owns
+    // the draft from here; this sheet never claims that anything has already been stored.
     setSubmitting(true);
+    onClose();
     try {
       await onImport(trimmed);
-      onClose();
     } catch (error) {
       toast.error(
         error instanceof Error && error.message
           ? error.message
           : t("memoryImport.importError", {
-              defaultValue: "Couldn't absorb that import. Check the response and try again.",
+              defaultValue: "Couldn't continue in Agent. Try again.",
             }),
       );
     } finally {
@@ -113,7 +114,7 @@ export function MemoryImportSheet({ isOpen, onClose, onImport }: Props) {
       title={t("memoryImport.title", { defaultValue: "Bring your memory" })}
       subtitle={t("memoryImport.subtitle", {
         defaultValue:
-          "Ask another assistant for a structured dump, then paste it here. ZAKI will save what matters.",
+          "Ask another assistant for a structured dump, then carry its response into your Agent reply.",
       })}
       icon={<Brain className="size-4" />}
       width="lg"
@@ -192,7 +193,7 @@ export function MemoryImportSheet({ isOpen, onClose, onImport }: Props) {
             className="inline-flex items-center gap-1.5 rounded-full bg-zaki-brand px-4 py-2 text-xs font-semibold text-white shadow-[0_8px_24px_rgba(241,2,2,0.25)] transition-all hover:-translate-y-0.5 hover:bg-zaki-brand-hover disabled:opacity-50 disabled:hover:translate-y-0"
           >
             {submitting ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
-            {t("memoryImport.importAction", { defaultValue: "Absorb into Brain" })}
+            {t("memoryImport.importAction", { defaultValue: "Continue in Agent" })}
           </button>
         </div>
       </div>
