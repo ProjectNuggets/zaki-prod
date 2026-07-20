@@ -328,8 +328,8 @@ export async function markMinutesControlRecoveryCapture({
        AND user_id = $2
        AND tenant_id = $3
        AND reservation_id = $4
-       AND (capture_id IS NULL OR capture_id = $5)
-       AND (operation_id IS NULL OR operation_id = $6)
+       AND (capture_id IS NULL OR capture_id = $5::text)
+       AND (operation_id IS NULL OR operation_id = $6::text)
        -- A blocked recovery has already taken its only safe automatic refund
        -- path. Never let a late browser response resurrect it and bind a
        -- capture to a released reservation.
@@ -369,7 +369,7 @@ export async function markMinutesControlRecoveryPreSpawnOutcome({
            next_attempt_at = CASE WHEN $2 = 'blocked' THEN next_attempt_at
                                   ELSE NOW() + ($3 * INTERVAL '1 millisecond') END,
            last_error_code = $4,
-           last_error_at = CASE WHEN $4 IS NULL THEN NULL ELSE NOW() END,
+           last_error_at = CASE WHEN $4::text IS NULL THEN NULL ELSE NOW() END,
            updated_at = NOW()
      WHERE recovery_id = $1
        AND state IN ('prepared','create_uncertain')
@@ -566,9 +566,9 @@ export async function rescheduleMinutesControlRecovery({
            lease_owner = NULL,
            lease_expires_at = NULL,
            last_error_code = $5,
-           last_error_at = CASE WHEN $5 IS NULL THEN NULL ELSE NOW() END,
-           terminal_captured_seconds = COALESCE($6, terminal_captured_seconds),
-           terminal_at = CASE WHEN $7 THEN COALESCE(terminal_at, NOW()) ELSE terminal_at END,
+           last_error_at = CASE WHEN $5::text IS NULL THEN NULL ELSE NOW() END,
+           terminal_captured_seconds = COALESCE($6::bigint, terminal_captured_seconds),
+           terminal_at = CASE WHEN $7::boolean THEN COALESCE(terminal_at, NOW()) ELSE terminal_at END,
            updated_at = NOW()
      WHERE recovery_id = $1
        AND lease_owner = $2::uuid
