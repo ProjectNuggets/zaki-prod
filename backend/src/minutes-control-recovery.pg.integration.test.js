@@ -25,13 +25,18 @@ beforeAll(async () => {
   if (!RUN) return;
   pool = new pg.Pool({ connectionString: RUN });
   recovery = await import("./minutes-control-recovery.js");
+  // This suite owns the table: the app's real DDL (which the pg lane may have
+  // applied first) carries NOT NULLs and FKs irrelevant to the class under
+  // test (extended-protocol type inference), so recreate the FK-less mirror.
+  await pool.query(`DROP TABLE IF EXISTS zaki_minutes_control_recoveries CASCADE`);
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS zaki_minutes_control_recoveries (
+    CREATE TABLE zaki_minutes_control_recoveries (
       recovery_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id BIGINT NOT NULL,
       tenant_id TEXT NOT NULL DEFAULT 'default',
       idempotency_key TEXT NOT NULL,
       request_id TEXT NOT NULL,
+      request_sha256 TEXT NOT NULL,
       reservation_id UUID NOT NULL,
       request_ciphertext BYTEA NOT NULL,
       request_iv BYTEA NOT NULL,
@@ -64,11 +69,11 @@ async function seed({ state, captureId = null, operationId = null }) {
   const reservationId = randomUUID();
   await pool.query(
     `INSERT INTO zaki_minutes_control_recoveries
-       (recovery_id, user_id, tenant_id, idempotency_key, request_id, reservation_id,
+       (recovery_id, user_id, tenant_id, idempotency_key, request_id, request_sha256, reservation_id,
         request_ciphertext, request_iv, request_tag, state, capture_id, operation_id,
         next_attempt_at)
-     VALUES ($1, 1, 'itest', $2, $3, $4, '\\x00', '\\x00', '\\x00', $5, $6, $7, NOW() - INTERVAL '1 second')`,
-    [recoveryId, `idem-${recoveryId}`, `req-${recoveryId}`, reservationId, state, captureId, operationId]
+     VALUES ($1, 1, 'itest', $2, $3, $4, $5, '\\x00', '\\x00', '\\x00', $6, $7, $8, NOW() - INTERVAL '1 second')`,
+    [recoveryId, `idem-${recoveryId}`, `req-${recoveryId}`, "a".repeat(64), reservationId, state, captureId, operationId]
   );
   return { recoveryId, reservationId };
 }
