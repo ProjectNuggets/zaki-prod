@@ -9,7 +9,7 @@ import { MinutesPage } from "./MinutesPage";
 function MinutesAvailabilityFailure({ onRetry, reason }: { onRetry: () => void; reason: "registry" | "operational" }) {
   const { t } = useTranslation();
   const registryFailure = reason === "registry";
-  return <main className="min-h-full bg-[var(--v2-bg)] p-4 text-[var(--v2-ink-1)] md:p-8" data-product-id="minutes">
+  return <main className="h-full min-h-0 overflow-y-auto bg-[var(--v2-bg)] p-4 text-[var(--v2-ink-1)] md:p-8" data-product-id="minutes">
     <V2Panel className="mx-auto max-w-2xl">
       <V2PanelBody className="space-y-4">
         <div>
