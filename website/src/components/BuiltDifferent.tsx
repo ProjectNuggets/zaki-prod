@@ -10,7 +10,7 @@ const metrics = [
     sublabel: { en: "Agent, Chat/Spaces, Design, Minutes", ar: "Agent وChat/Spaces وDesign وMinutes" },
   },
   {
-    value: 3,
+    value: 2,
     suffix: "",
     label: { en: "Live spokes", ar: "مسارات مباشرة" },
     sublabel: { en: "Agent and Chat/Spaces", ar: "Agent وChat/Spaces" },

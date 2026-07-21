@@ -66,7 +66,7 @@ export const content = {
             "Persistent memory across sessions",
           ],
           ctaLabel: "Open Agent",
-          ctaHref: "/product/#waitlist",
+          ctaHref: appHandoffUrl("/agent", "website_agent_live", "agent"),
         },
         {
           stage: "Future lanes",
@@ -525,7 +525,7 @@ export const content = {
           "Account continuity through Agent and visible memory through Brain.",
         ],
         cta: "Open Agent",
-        href: "/product/#waitlist",
+        href: appHandoffUrl("/agent", "website_agent_live", "agent"),
       },
       botPremium: {
         heading: "Future ZAKI lanes",
@@ -693,8 +693,8 @@ export const content = {
             "مراحل عمل مرئية وإجراءات قابلة للمراجعة",
             "ذاكرة مستمرة عبر الجلسات",
           ],
-          ctaLabel: "انضم إلى البيتا",
-          ctaHref: "/product/#waitlist",
+          ctaLabel: "افتح Agent",
+          ctaHref: appHandoffUrl("/agent", "website_agent_live", "agent"),
         },
         {
           stage: "المرحلة 3",
@@ -722,7 +722,7 @@ export const content = {
         "Design قائمة انتظار وMinutes قريبًا",
         "لا يُعلن أي مسار قبل اكتماله من البداية إلى النهاية",
       ],
-      primaryCta: "انضم إلى البيتا",
+      primaryCta: "افتح Agent",
       secondaryCta: "اقرأ عن زكي",
     },
     chatProduct: {
@@ -779,9 +779,9 @@ export const content = {
       ],
       cta: "🚀 اشترك الآن",
       secondary: "انزل للأسفل واختر مسار الوصول العام المناسب.",
-      campaignLabel: "✨ قريبًا: دائرة زكي المقرّبة",
+      campaignLabel: "✨ قريبًا: المسارات المقيّدة",
       campaignTeaser:
-        "حملة محدودة للداعمين الأوائل ممن يؤمنون أن الذكاء الاصطناعي يجب أن يكون شخصيًا، واعيًا ثقافيًا، وتحت تحكم المستخدم بالكامل. 🧠🌍🔐",
+        "تحديثات Design وMinutes مع تقدّمهما عبر بوابات الإصدار.",
       instagramNote:
         "سجّل الدخول لترى الخطط والوصول المتاحين لحسابك.",
     },
@@ -873,7 +873,7 @@ export const content = {
           tag: "milestone",
           title: "تقوية العزل وضبط الحصص",
           description:
-            "قوّينا العزل متعدد المستخدمين، وثبّتنا البث، وأضفنا حصصًا يومية تجعل البيتا العامة أكثر انضباطًا وأمانًا.",
+            "قوّينا العزل متعدد المستخدمين، وثبّتنا البث، وأضفنا حصصًا يومية تجعل السطح العام أكثر انضباطًا وأمانًا.",
           dateLabel: "الإصدار الحالي",
           emoji: "🛡️",
           status: "done",
@@ -1142,18 +1142,18 @@ export const content = {
       },
       note: "السعة أسبوعية ومشتركة عبر أسطح المنتج العام الأساسي.",
       botBeta: {
-        heading: "تحديثات زكي العامة",
-        badge: "بيتا مفتوحة",
+        heading: "ZAKI Agent",
+        badge: "استمرارية الحساب",
         description:
-          "زكي يحتفظ بالسياق بين الجلسات، ويُظهر مراحل عمله، ويحتفظ بذاكرة لكل مستخدم. البيتا محدودة عمدًا بـ ذاكرة ومتابعة عبر Agent حتى يختبر المستخدم الاتجاه دون أن يخلط بينه وبين المنتج النهائي.",
+          "زكي يحتفظ بالسياق بين الجلسات، ويُظهر مراحل عمله، ويحتفظ بذاكرة لكل مستخدم. المسارات القادمة تبقى مقيّدة حتى تتفق الخدمة الخلفية والصلاحيات والواجهة والاختبارات.",
         bullets: [
           "ذاكرة ومتابعة عبر Agent",
           "ذاكرة مستمرة تنتقل بين الجلسات",
           "مراحل عمل مرئية تشاهد فيها ما يفعله زكي",
           "استخدام مجاني محدود وخطط مدفوعة بسعة أكبر.",
         ],
-        cta: "انضم إلى البيتا",
-        href: "/product/#waitlist",
+        cta: "افتح Agent",
+        href: appHandoffUrl("/agent", "website_agent_live", "agent"),
       },
       botPremium: {
         heading: "المسارات القادمة",
