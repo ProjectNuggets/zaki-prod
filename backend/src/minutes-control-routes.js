@@ -704,9 +704,15 @@ export function buildMinutesControlRouter({
     if (!context) return;
     try {
       const input = parseMinutesBrowserIdempotency(req.body);
+      // The archive UI hands back the READ-plane item id (`meeting:<n>`); the engine's
+      // erasure API wants the bare meeting id. Forwarding the namespaced shape verbatim
+      // made the engine erase NOTHING while answering success-shaped — the owner clicked
+      // forget, saw "requested", and the meeting persisted forever. Normalize here, at
+      // the one choke point every client shape passes through.
+      const meetingId = String(req.params.meetingId || "").replace(/^meeting:/, "");
       const upstream = await dependencies.client.eraseMeeting({
         ...clientOptions(dependencies, context),
-        meetingId: req.params.meetingId,
+        meetingId,
         idempotencyKey: input.idempotency_key,
       });
       if (!upstream?.ok) {
@@ -714,10 +720,10 @@ export function buildMinutesControlRouter({
         return;
       }
       const response = await parseUpstreamSuccess(upstream, parseMinutesErasureResponse, context, { scope: "meeting" });
-      if (response.target_id !== req.params.meetingId) {
+      if (response.target_id !== meetingId) {
         throw new MinutesControlContractError("Minutes upstream erased a different meeting.", "minutes_control_upstream_binding_mismatch");
       }
-      await dependencies.forgetMeeting({ userId: context.userId, tenantId: context.tenantId, meetingId: req.params.meetingId });
+      await dependencies.forgetMeeting({ userId: context.userId, tenantId: context.tenantId, meetingId });
       res.status(200).json({ status: response.status, ...safeReceipt(response) });
     } catch (error) {
       if (isControlInputError(error)) {

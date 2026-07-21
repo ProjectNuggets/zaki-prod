@@ -458,3 +458,31 @@ describe("Minutes control BFF routes", () => {
     expect(applyCallback).not.toHaveBeenCalled();
   });
 });
+
+describe("forget meeting id normalization", () => {
+  test("the read-plane item id shape (meeting:6) erases the bare meeting id", async () => {
+    // The archive UI hands back its read-plane item id; forwarding it verbatim made the
+    // engine erase NOTHING while answering success-shaped (owner round-3 finding).
+    const forgetMeeting = jest.fn();
+    const { app, client } = buildApp({
+      forgetMeeting,
+      client: {
+        eraseMeeting: jest.fn().mockResolvedValue(jsonResponse({
+          api_version: "zaki-control.v1", request_id: "req-control-01", operation_id: "op-erase-01",
+          subject: { tenant_id: "default", user_id: "42" },
+          scope: "meeting", target_id: "6", status: "completed",
+          receipt: {
+            receipt_id: "erase-01", erased_at: "2026-05-28T13:46:40.000Z",
+            counts: { meeting_rows: 1, transcript_rows: 0, summary_rows: 0, recording_objects: 0 },
+          },
+        })),
+      },
+    });
+    const response = await request(app)
+      .post("/api/minutes/meetings/meeting%3A6/forget")
+      .send({ idempotency_key: "forget-1" });
+    expect(response.status).toBe(200);
+    expect(client.eraseMeeting).toHaveBeenCalledWith(expect.objectContaining({ meetingId: "6" }));
+    expect(forgetMeeting).toHaveBeenCalledWith(expect.objectContaining({ meetingId: "6" }));
+  });
+});
