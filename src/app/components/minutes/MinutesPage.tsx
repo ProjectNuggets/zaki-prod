@@ -145,7 +145,11 @@ export function MinutesPage({ controlsEnabled = false }: { controlsEnabled?: boo
     return <V2Panel><V2PanelHead title={t("minutes.detailErrorTitle", { defaultValue: "This item is not available" })} meta={t("minutes.readFailedMeta", { defaultValue: "Read failed" })} /><V2PanelBody><V2Button size="sm" onClick={() => selected && openDetail(selected, detail.variables?.variant ?? "full")}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></V2PanelBody></V2Panel>;
   };
 
-  return <main className="min-h-full bg-[var(--v2-bg)] p-4 text-[var(--v2-ink-1)] md:p-6" data-product-id="minutes">
+  // The app shell is a FIXED-HEIGHT overflow-hidden chain (.zaki-main-panel / .zaki-main-inner):
+  // every product owns its scroll region. Minutes never created one, so everything below the
+  // fold — including each meeting card's OPEN TRANSCRIPT button — was simply unreachable
+  // (owner round-7: "the meeting page does not scroll so i cant get to the button").
+  return <main className="h-full min-h-0 overflow-y-auto bg-[var(--v2-bg)] p-4 text-[var(--v2-ink-1)] md:p-6" data-product-id="minutes">
     <div className="mx-auto max-w-7xl space-y-5">
       <header className="flex flex-col justify-between gap-4 border-b border-[var(--v2-hairline)] pb-5 md:flex-row md:items-end">
         <div>
