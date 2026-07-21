@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { MinutesApiError, type MinutesIndexResponse } from "@/lib/minutesApi";
 import { MinutesPage } from "./MinutesPage";
@@ -40,7 +40,7 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const tree = () => <MemoryRouter><QueryClientProvider client={client}><MinutesPage /></QueryClientProvider></MemoryRouter>;
   const view = render(tree());
-  return { ...view, rerenderPage: () => view.rerender(tree()) };
+  return { ...view, queryClient: client, rerenderPage: () => view.rerender(tree()) };
 }
 
 describe("MinutesPage read surface", () => {
@@ -74,6 +74,46 @@ describe("MinutesPage read surface", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open summary" }));
     expect(await screen.findByText("Decision log")).toBeInTheDocument();
     expect(mockRead).toHaveBeenCalledWith("summary:41", "full");
+  });
+
+  it("surfaces a newly captured meeting from the visible-tab poll, with no manual refresh", async () => {
+    jest.useFakeTimers();
+    try {
+      renderPage();
+      expect(await screen.findByRole("heading", { name: "Launch review" })).toBeInTheDocument();
+      const firstPage = await mockList.mock.results[0].value;
+      mockList.mockResolvedValue({
+        ...firstPage,
+        items: [
+          { id: "meeting:42", kind: "meeting", title: "Standup", occurred_at: "2026-07-18T09:00:00Z", updated_at: "2026-07-18T09:30:00Z", sensitivity: "sensitive_pii", retention: { scope: "minutes.transcript", expires_at: "2027-07-18T09:30:00Z" } },
+          ...firstPage.items,
+        ],
+      });
+      await act(async () => { jest.advanceTimersByTime(30_000); });
+      expect(await screen.findByRole("heading", { name: "Standup" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Launch review" })).toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("keeps the archive readable when a background poll fails, instead of blanking the page", async () => {
+    jest.useFakeTimers();
+    try {
+      mockList.mockReset().mockResolvedValue({ items: [], truncated: false });
+      const { queryClient } = renderPage();
+      expect(await screen.findByText("No captured meetings yet")).toBeInTheDocument();
+      mockList.mockRejectedValue(new MinutesApiError(503, "minutes_unavailable", "read plane down"));
+      await act(async () => { jest.advanceTimersByTime(30_000); });
+      expect(mockList).toHaveBeenCalledTimes(2);
+      // The failure is only observable as an absence, so settle the query and the re-render before asserting.
+      await waitFor(() => expect(queryClient.getQueryCache().find({ queryKey: ["minutes", "index", 0] })?.state.status).toBe("error"));
+      await act(async () => {});
+      expect(screen.getByText("No captured meetings yet")).toBeInTheDocument();
+      expect(screen.queryByText("Minutes could not be loaded")).not.toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it("searches through the BFF and opens a metadata-only result", async () => {
