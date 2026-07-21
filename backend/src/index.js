@@ -18635,7 +18635,7 @@ if (ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED) {
     "/internal/design/read/v1",
     buildDesignInternalReadRouter({
       callbackToken: DESIGN_HUB_CALLBACK_TOKEN,
-      source: createDesignInternalReadSource({ dbQuery }),
+      source: createDesignInternalReadSource({ dbQuery, cursorSecret: DESIGN_HUB_CALLBACK_TOKEN }),
     })
   );
 }
