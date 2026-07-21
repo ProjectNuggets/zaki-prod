@@ -2,6 +2,10 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 import { RELEASE_VIEWPORTS, signInForRelease } from "./support/release-harness";
 
 const SESSION_KEY = "agent:zaki-bot:user:1:thread:main";
+// Derived, not duplicated: `composerReadyToSend` waits on ENGINE_QUESTION, so it must stay a
+// substring of the greeting this file mocks. Restructuring the greeting can no longer drift
+// the wait out from under five tests.
+const ENGINE_QUESTION = "What should I call you, and what would you like to call me?";
 const ENGINE_GREETING = [
   "Hi — I’m ZAKI. I’m here to help turn what matters into forward motion.",
   "",
@@ -9,9 +13,8 @@ const ENGINE_GREETING = [
   "- **Carry the context:** remember useful details across conversations.",
   "- **Act with you:** plan, research, and execute under your direction.",
   "",
-  "What should I call you, and what would you like to call me?",
+  ENGINE_QUESTION,
 ].join("\n");
-const ENGINE_QUESTION = "What should I call you, and what would you like to call me?";
 const SCREENSHOT_DIR = "e2e/__screenshots__/wp-j";
 const MEMORY_IMPORT_SCREENSHOT_DIR = "e2e/__screenshots__/wp-mem6";
 
@@ -102,6 +105,31 @@ async function mockFirstRunAgent(page: Page) {
       message: firstRun ? ENGINE_GREETING : "Nova it is. I’m yours — let’s begin.",
     });
   });
+}
+
+/**
+ * The first-run ceremony takes the send lane once `botOnboarding` resolves, and holds it
+ * until the engine greeting arrives. The import handoff's draft effect gates on
+ * `isStreaming` — React state, not the synchronous `isStreamingRef` — and skips its
+ * assistant-reply requirement entirely while `botOnboarding` is still null
+ * (ChatArea.tsx:9075-9084). So the draft can land before the ceremony arms: a filled
+ * composer says nothing about whether the lane is free, and `toHaveValue()` passes on a
+ * disabled textarea besides.
+ *
+ * Once the lane is held the composer renders `disabled` and the button is relabelled
+ * "Stop generating" (InputArea.tsx:1970), so a Send click simply auto-waits. The flake is
+ * the skew *before* that renders — `isStreamingRef.current` is already true while the
+ * button still reads "Send message", and handleSend swallows the click
+ * (ChatArea.tsx:8278, `return false` — no toast, no request), leaving `sentMessages` empty.
+ *
+ * Waiting for the greeting closes both windows: it proves the ceremony finished, after
+ * which `messages.length > 0` (ChatArea.tsx:8993) keeps it from re-arming.
+ */
+async function composerReadyToSend(page: Page) {
+  await expect(page.getByText(ENGINE_QUESTION)).toBeVisible({ timeout: 20_000 });
+  // Same ceiling as the greeting wait. On the second call in a test the greeting is already
+  // on screen, so this is the only live guard — it must not be the one with the short budget.
+  await expect(page.getByRole("combobox")).toBeEnabled({ timeout: 20_000 });
 }
 
 test.describe("WP-J first-run ceremony", () => {
@@ -220,6 +248,7 @@ test.describe("WP-J first-run ceremony", () => {
     expect(sentMessages).toEqual([]);
     expect(captureCalls).toBe(0);
 
+    await composerReadyToSend(page);
     await page.getByRole("button", { name: "Send message" }).click();
 
     await expect.poll(() => sentMessages).toEqual([dump]);
@@ -278,6 +307,7 @@ test.describe("WP-J first-run ceremony", () => {
     await expect(page.getByRole("combobox")).toHaveValue(dump, { timeout: 20_000 });
     expect(sentMessages).toEqual([]);
 
+    await composerReadyToSend(page);
     await page.getByRole("button", { name: "Send message" }).click();
 
     await expect.poll(() => sentMessages.length).toBe(2);
@@ -332,12 +362,14 @@ test.describe("WP-J first-run ceremony", () => {
     await page.getByRole("button", { name: "Continue in Agent" }).click();
     await expect(page.getByRole("combobox")).toHaveValue(dump, { timeout: 20_000 });
 
+    await composerReadyToSend(page);
     await page.getByRole("button", { name: "Send message" }).click();
 
     await expect.poll(() => sentMessages.length).toBe(2);
     await expect(page.getByRole("combobox")).toHaveValue(/Preferences/);
     await expect(page.getByRole("combobox")).not.toHaveValue(/Identity/);
 
+    await composerReadyToSend(page);
     await page.getByRole("button", { name: "Send message" }).click();
 
     await expect.poll(() => sentMessages.length).toBe(3);
@@ -370,6 +402,7 @@ test.describe("WP-J first-run ceremony", () => {
     await page.getByRole("button", { name: "Continue in Agent" }).click();
     await expect(page.getByRole("combobox")).toHaveValue(dump, { timeout: 20_000 });
 
+    await composerReadyToSend(page);
     await page.getByRole("button", { name: "Send message" }).click();
 
     await expect(page.getByText("One line of this import is too long to send. Shorten it and try again.")).toBeVisible();
