@@ -51,6 +51,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.status.syncing": "Syncing",
     "zakiDashboard.status.plan": "Plan",
     "zakiDashboard.status.weeklyReset": "Weekly reset",
+    "zakiDashboard.status.dailyReset": "Daily reset",
     "zakiDashboard.status.identity": "Identity",
     "zakiDashboard.status.agentLive": "Agent live · #{{id}}",
     "zakiDashboard.actions.askAgent": "Ask Agent",
@@ -117,6 +118,8 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.command.markers.comingSoon": "Coming soon",
     "zakiDashboard.command.creditsExhaustedTitle": "Weekly usage is full.",
     "zakiDashboard.command.creditsExhaustedCopy": "Your draft stays saved here. Sign up, wait for the weekly reset, or pick a plan with more room.",
+    "zakiDashboard.command.anonymousCreditsExhaustedTitle": "Free chats are used up for today.",
+    "zakiDashboard.command.anonymousCreditsExhaustedCopy": "Your draft stays here. Sign in to keep going now, or wait for the daily reset.",
     "zakiDashboard.command.capacityWindowTitle": "{{hours}}h Agent window is {{percent}}% used.",
     "zakiDashboard.command.capacityWindowCopy": "Your draft stays saved here. More room opens at {{reset}}.",
     "zakiDashboard.command.capacityWindowCopySoon": "Your draft stays saved here. More room opens soon.",
@@ -144,6 +147,7 @@ const tMock = (key: string, options?: Record<string, unknown>) => {
     "zakiDashboard.links.howItWorks": "How it works",
     "zakiDashboard.links.waysToBuy": "Plans",
     "zakiDashboard.links.fullPalette": "Product overview",
+    "zakiControls.powerUser.usage.unavailable": "Usage unavailable",
     "zakiDashboard.intro.kicker": "First run",
     "zakiDashboard.intro.title": "ZAKI is the intelligence layer for everyday work.",
     "zakiDashboard.intro.progress": "Intro slides",
@@ -463,10 +467,16 @@ function setupQueries() {
       data: {
         success: true,
         identity: { type: "anonymous", anonymousSessionId: "anon-1" },
-        plan: { tier: "free", label: "Free", source: "anonymous" },
-        rolling: { windowHours: 5, limit: 10, used: 1, remaining: 9 },
-        weekly: { limit: 100, used: 3, remaining: 97 },
-        products: {},
+        plan: { tier: "anonymous", label: "Anonymous", source: "anonymous_daily_allowance" },
+        enforced: {
+          kind: "anonymous_daily_prompts",
+          surface: "spaces",
+          period: "day",
+          limit: 10,
+          used: 3,
+          remaining: 7,
+          resetAt: "2026-07-15T00:00:00.000Z",
+        },
       },
     },
     isLoading: false,
@@ -751,11 +761,13 @@ describe("ZakiDashboard", () => {
     expect(mockUseAnonymousMeterStatus).toHaveBeenCalledWith(true);
     expect(screen.getAllByText("Anonymous free session").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Free").length).toBeGreaterThan(0);
-    expect(within(screen.getByTestId("zaki-dashboard-command-meter")).getByText("≈ 4 agent runs · or 97 chats")).toBeInTheDocument();
-    expect(within(screen.getByTestId("zaki-dashboard-command-meter")).getByText("97 of 100 left")).toBeInTheDocument();
+    expect(within(screen.getByTestId("zaki-dashboard-command-meter")).getByText("7 of 10 free chats left today")).toBeInTheDocument();
+    expect(within(screen.getByTestId("zaki-dashboard-command-meter")).getByText("3 of 10 used")).toBeInTheDocument();
     expect(screen.getByTestId("zaki-dashboard-command-meter")).toHaveAccessibleName(
-      "About 4 agent runs or 97 chats left — 97 of 100 weekly usage remaining."
+      "7 of 10 free chats remaining today."
     );
+    expect(screen.getByText("Daily reset")).toBeInTheDocument();
+    expect(screen.queryByText("Weekly reset")).not.toBeInTheDocument();
   });
 
   it("uses the same command product order for anonymous users", () => {
@@ -1004,7 +1016,7 @@ describe("ZakiDashboard", () => {
       taskKind: "chat",
       prompt: "Let's test the platform flow",
       status: "draft",
-      meterRemaining: 97,
+      meterRemaining: 7,
     });
     const intent = JSON.parse(window.localStorage.getItem(PENDING_INTENT_KEY) || "{}");
     expect(intent).toMatchObject({
@@ -1127,6 +1139,14 @@ describe("ZakiDashboard", () => {
         title: "Strategy chat",
         threadId: "anon-123",
         route: "/spaces/zaky/threads/anon-123",
+        turns: [
+          {
+            id: expect.any(String),
+            prompt: "Continue the anonymous strategy chat",
+            reply: "Here is the strategy:\n\n1. step one\n2. step two",
+            status: "succeeded",
+          },
+        ],
       });
     });
 
@@ -1208,7 +1228,7 @@ describe("ZakiDashboard", () => {
     expect(window.localStorage.getItem(PENDING_INTENT_KEY)).toBeNull();
   });
 
-  it("keeps the prompt visible and offers choices when weekly usage is full", () => {
+  it("keeps the prompt visible and offers choices when anonymous daily usage is full", () => {
     useAuthStore.setState({
       token: null,
       user: null,
@@ -1220,10 +1240,16 @@ describe("ZakiDashboard", () => {
         data: {
           success: true,
           identity: { type: "anonymous", anonymousSessionId: "anon-empty" },
-          plan: { tier: "free", label: "Free", source: "anonymous" },
-          rolling: { windowHours: 5, limit: 10, used: 10, remaining: 0 },
-          weekly: { limit: 100, used: 100, remaining: 0 },
-          products: {},
+          plan: { tier: "anonymous", label: "Anonymous", source: "anonymous_daily_allowance" },
+          enforced: {
+            kind: "anonymous_daily_prompts",
+            surface: "spaces",
+            period: "day",
+            limit: 10,
+            used: 10,
+            remaining: 0,
+            resetAt: "2026-07-15T00:00:00.000Z",
+          },
         },
       },
       isLoading: false,
@@ -1236,10 +1262,10 @@ describe("ZakiDashboard", () => {
       target: { value: "Do not lose this exhausted-credit prompt" },
     });
 
-    expect(screen.getByText("Weekly usage is full.")).toBeInTheDocument();
-    expect(within(screen.getByTestId("zaki-dashboard-command-meter")).getByText("0 of 100 left")).toBeInTheDocument();
+    expect(screen.getByText("Free chats are used up for today.")).toBeInTheDocument();
+    expect(within(screen.getByTestId("zaki-dashboard-command-meter")).getByText("0 of 10 free chats left today")).toBeInTheDocument();
     expect(screen.getByTestId("zaki-dashboard-command-meter")).toHaveAccessibleName(
-      "About 0 agent runs or 0 chats left — 0 of 100 weekly usage remaining."
+      "0 of 10 free chats remaining today."
     );
     expect(screen.getByRole("button", { name: "Start in Spaces" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Save and sign up" }));
@@ -1413,6 +1439,31 @@ describe("ZakiDashboard", () => {
 
     // ...and NEVER the wallet number that doesn't gate them. This is the lie the meter
     // used to tell: "≈ 250 chats · 250 of 250 left".
+    expect(meter.textContent).not.toContain("250");
+    expect(meter.textContent).not.toMatch(/agent runs/i);
+  });
+
+  it("never falls back to obsolete wallet units for an anonymous visitor", async () => {
+    useAuthStore.setState({ token: null, user: null, isHydrating: false, isLoading: false });
+    mockUseAnonymousMeterStatus.mockReturnValue({
+      data: {
+        data: {
+          success: true,
+          identity: { type: "anonymous", anonymousSessionId: "anon-old-bff" },
+          plan: { tier: "free", label: "Free", source: "anonymous" },
+          weekly: { limit: 250, used: 0, remaining: 250 },
+          rolling: { windowHours: 5, limit: 55, used: 0, remaining: 55 },
+          products: {},
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    renderDashboard();
+
+    const meter = await screen.findByTestId("zaki-dashboard-command-meter");
+    expect(within(meter).getByText("Usage unavailable")).toBeInTheDocument();
     expect(meter.textContent).not.toContain("250");
     expect(meter.textContent).not.toMatch(/agent runs/i);
   });

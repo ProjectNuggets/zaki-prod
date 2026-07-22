@@ -37,6 +37,11 @@ export type AnonymousWorkClaimResult = {
   error: string | null;
 };
 
+type ClaimCommitOptions = {
+  /** Prevent stale async work from mutating a newer authenticated account's browser state. */
+  shouldCommit?: () => boolean;
+};
+
 const NOTHING_TO_CLAIM: AnonymousWorkClaimResult = {
   status: "idle",
   importedCount: 0,
@@ -84,6 +89,13 @@ export function findClaimableWork(
  */
 export function isImportableWork(item: AnonymousWorkItem | null): boolean {
   if (!item) return false;
+  const hasImportableTurn = item.turns?.some(
+    (turn) =>
+      (turn.status === "succeeded" || turn.status === "interrupted") &&
+      turn.prompt.trim() &&
+      turn.reply.trim()
+  );
+  if (item.turns?.length) return Boolean(hasImportableTurn);
   return Boolean(item.prompt?.trim() && (item.reply?.trim() || item.replyPreview?.trim()));
 }
 
@@ -93,9 +105,24 @@ export function isImportableWork(item: AnonymousWorkItem | null): boolean {
  * be claimed into a second thread.
  */
 export async function claimAnonymousWork(
-  item: AnonymousWorkItem
+  item: AnonymousWorkItem,
+  { shouldCommit = () => true }: ClaimCommitOptions = {}
 ): Promise<AnonymousWorkClaimResult> {
   try {
+    const turns = (item.turns ?? []).flatMap((turn) =>
+      (turn.status === "succeeded" || turn.status === "interrupted") &&
+      turn.prompt.trim() &&
+      turn.reply.trim()
+        ? [
+            {
+              id: turn.id,
+              prompt: turn.prompt,
+              reply: turn.reply,
+              status: turn.status,
+            },
+          ]
+        : []
+    );
     const { response, data } = await claimAnonymousSpacesWork({
       workId: item.id,
       prompt: item.prompt,
@@ -104,6 +131,7 @@ export async function claimAnonymousWork(
       title: item.title || item.prompt,
       threadId: item.threadId,
       route: item.route,
+      ...(turns.length ? { turns } : {}),
     });
 
     if (!response.ok || !data?.success) {
@@ -121,7 +149,7 @@ export async function claimAnonymousWork(
 
     // The work is in the account (imported now, or by an earlier claim). Only
     // now is it safe to drop the browser's copy.
-    if (imported || data.alreadyClaimed) {
+    if ((imported || data.alreadyClaimed) && shouldCommit()) {
       removeAnonymousWorkItems([item.id]);
     }
 
@@ -143,6 +171,23 @@ export async function claimAnonymousWork(
   }
 }
 
+function isSamePendingIntent(
+  current: PendingIntent | null,
+  expected: PendingIntent
+) {
+  return Boolean(
+    current &&
+      current.productId === expected.productId &&
+      current.taskKind === expected.taskKind &&
+      current.prompt === expected.prompt &&
+      current.source === expected.source &&
+      current.returnTo === expected.returnTo &&
+      current.anonymousWorkId === expected.anonymousWorkId &&
+      current.replayMode === expected.replayMode &&
+      current.createdAt === expected.createdAt
+  );
+}
+
 /**
  * The post-auth claim, shared by every sign-in path.
  *
@@ -150,7 +195,9 @@ export async function claimAnonymousWork(
  * intent is consumed here ONLY when the import made a replay redundant; if
  * nothing was imported it is deliberately left in place for ChatArea to replay.
  */
-export async function claimPendingAnonymousWork(): Promise<
+export async function claimPendingAnonymousWork(
+  { shouldCommit = () => true }: ClaimCommitOptions = {}
+): Promise<
   AnonymousWorkClaimResult & { pendingIntent: PendingIntent | null }
 > {
   const pendingIntent = readPendingIntent();
@@ -167,11 +214,15 @@ export async function claimPendingAnonymousWork(): Promise<
     return { ...NOTHING_TO_CLAIM, pendingIntent };
   }
 
-  const result = await claimAnonymousWork(item);
+  const result = await claimAnonymousWork(item, { shouldCommit });
 
   // The conversation is now IN the thread. Replaying the prompt on top of it
   // would duplicate the question and bill a second answer, so retire the intent.
-  if (result.status === "imported") {
+  if (
+    result.status === "imported" &&
+    shouldCommit() &&
+    isSamePendingIntent(readPendingIntent(), pendingIntent)
+  ) {
     clearPendingIntent();
   }
 

@@ -1,16 +1,23 @@
 import "@testing-library/jest-dom";
-import { describe, expect, it, jest } from "@jest/globals";
+import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { AppTopbar } from "./AppTopbar";
 
+const changeLanguage = jest.fn<() => Promise<unknown>>().mockResolvedValue(undefined);
+
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (_key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? _key,
+    i18n: { language: "en", changeLanguage },
   }),
 }));
 
 describe("AppTopbar", () => {
+  beforeEach(() => {
+    changeLanguage.mockClear();
+  });
+
   it("exposes Agent focus and panel controls only on the Agent route", () => {
     const focusHandler = jest.fn();
     const panelHandler = jest.fn();
@@ -84,5 +91,17 @@ describe("AppTopbar", () => {
     expect(screen.queryByTestId("agent-inspector-toggle")).not.toBeInTheDocument();
     expect(screen.queryByTestId("agent-share-toggle")).not.toBeInTheDocument();
     expect(screen.queryByTestId("agent-more-toggle")).not.toBeInTheDocument();
+  });
+
+  it("lets an anonymous visitor switch the interface to Arabic", () => {
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AppTopbar />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to Arabic" }));
+
+    expect(changeLanguage).toHaveBeenCalledWith("ar");
   });
 });

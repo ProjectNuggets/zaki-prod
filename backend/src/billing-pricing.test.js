@@ -4,12 +4,15 @@ import {
   STRIPE_BILLING_PLANS,
   STRIPE_COMMERCIAL_PLANS,
   buildTopupPackCatalog,
+  buildStripePricingDisplayRefs,
   buildStripePricingCatalog,
   isCheckoutablePlan,
   normalizeBillingInterval,
   resolveStripePriceDetailsById,
   resolveStripePriceForSelection,
   resolveTopupPack,
+  stripePriceMatchesBillingInterval,
+  stripeRecurringIntervalForBillingInterval,
 } from "./billing-pricing.js";
 
 describe("billing pricing helpers", () => {
@@ -27,6 +30,31 @@ describe("billing pricing helpers", () => {
     expect(normalizeBillingInterval("invalid")).toBe("monthly");
   });
 
+  it("requires configured Stripe Prices to match their selected billing interval", () => {
+    const monthly = { active: true, recurring: { interval: "month", interval_count: 1 } };
+    const yearly = { active: true, recurring: { interval: "year", interval_count: 1 } };
+
+    expect(stripeRecurringIntervalForBillingInterval("monthly")).toBe("month");
+    expect(stripeRecurringIntervalForBillingInterval("yearly")).toBe("year");
+    expect(stripePriceMatchesBillingInterval(monthly, "monthly")).toBe(true);
+    expect(stripePriceMatchesBillingInterval(yearly, "yearly")).toBe(true);
+    expect(stripePriceMatchesBillingInterval(monthly, "yearly")).toBe(false);
+    expect(stripePriceMatchesBillingInterval(yearly, "monthly")).toBe(false);
+    expect(stripePriceMatchesBillingInterval({ ...yearly, active: false }, "yearly")).toBe(false);
+    expect(
+      stripePriceMatchesBillingInterval(
+        { active: true, recurring: { interval: "month", interval_count: 2 } },
+        "monthly"
+      )
+    ).toBe(false);
+    expect(
+      stripePriceMatchesBillingInterval(
+        { active: true, recurring: { interval: "year", interval_count: 2 } },
+        "yearly"
+      )
+    ).toBe(false);
+  });
+
   it("builds availability and lookup maps from configured prices", () => {
     const catalog = buildStripePricingCatalog({
       studentMonthly: "price_student_month",
@@ -34,22 +62,26 @@ describe("billing pricing helpers", () => {
       personalMonthly: "price_personal_month",
       personalYearly: "",
       proMonthly: "price_pro_month",
+      proYearly: "price_pro_year",
       proMaxMonthly: "price_pro_max_month",
+      proMaxYearly: "price_pro_max_year",
     });
 
     expect(catalog.hasAnyStripePrice).toBe(true);
     expect(catalog.pricingAvailability).toEqual({
       student: { monthly: true, yearly: true },
       personal: { monthly: true, yearly: false },
-      pro: { monthly: true, yearly: false },
-      pro_max: { monthly: true, yearly: false },
+      pro: { monthly: true, yearly: true },
+      pro_max: { monthly: true, yearly: true },
     });
     expect(catalog.tierByPrice).toEqual({
       price_student_month: "student",
       price_student_year: "student",
       price_personal_month: "personal",
       price_pro_month: "pro",
+      price_pro_year: "pro",
       price_pro_max_month: "pro_max",
+      price_pro_max_year: "pro_max",
     });
   });
 
@@ -59,7 +91,9 @@ describe("billing pricing helpers", () => {
       studentYearly: "price_student_year",
       personalMonthly: "price_personal_month",
       proMonthly: "price_pro_month",
+      proYearly: "price_pro_year",
       proMaxMonthly: "price_pro_max_month",
+      proMaxYearly: "price_pro_max_year",
     });
 
     expect(
@@ -94,10 +128,22 @@ describe("billing pricing helpers", () => {
     ).toBe("price_pro_month");
     expect(
       resolveStripePriceForSelection(catalog, {
+        plan: "pro",
+        interval: "yearly",
+      })
+    ).toBe("price_pro_year");
+    expect(
+      resolveStripePriceForSelection(catalog, {
         plan: "pro_max",
         interval: "monthly",
       })
     ).toBe("price_pro_max_month");
+    expect(
+      resolveStripePriceForSelection(catalog, {
+        plan: "pro_max",
+        interval: "yearly",
+      })
+    ).toBe("price_pro_max_year");
   });
 
   it("rejects removed legacy plans (agent/learn/complete) when resolving a price", () => {
@@ -154,7 +200,9 @@ describe("billing pricing helpers", () => {
       personalMonthly: "price_personal_month",
       personalYearly: "price_personal_year",
       proMonthly: "price_pro_month",
+      proYearly: "price_pro_year",
       proMaxMonthly: "price_pro_max_month",
+      proMaxYearly: "price_pro_max_year",
     });
 
     expect(resolveStripePriceDetailsById(catalog, "price_student_year")).toEqual({
@@ -169,11 +217,40 @@ describe("billing pricing helpers", () => {
       tier: "pro",
       interval: "monthly",
     });
+    expect(resolveStripePriceDetailsById(catalog, "price_pro_year")).toEqual({
+      tier: "pro",
+      interval: "yearly",
+    });
     expect(resolveStripePriceDetailsById(catalog, "price_pro_max_month")).toEqual({
       tier: "pro_max",
       interval: "monthly",
     });
+    expect(resolveStripePriceDetailsById(catalog, "price_pro_max_year")).toEqual({
+      tier: "pro_max",
+      interval: "yearly",
+    });
     expect(resolveStripePriceDetailsById(catalog, "unknown")).toBeNull();
+  });
+
+  it("builds display retrieval refs for every configured paid interval", () => {
+    const catalog = buildStripePricingCatalog({
+      personalMonthly: "price_personal_month",
+      personalYearly: "price_personal_year",
+      proMonthly: "price_pro_month",
+      proYearly: "price_pro_year",
+      proMaxMonthly: "price_pro_max_month",
+      proMaxYearly: "price_pro_max_year",
+    });
+
+    expect(buildStripePricingDisplayRefs(catalog, "price_access_month")).toEqual([
+      ["personal", "monthly", "price_personal_month"],
+      ["personal", "yearly", "price_personal_year"],
+      ["pro", "monthly", "price_pro_month"],
+      ["pro", "yearly", "price_pro_year"],
+      ["pro_max", "monthly", "price_pro_max_month"],
+      ["pro_max", "yearly", "price_pro_max_year"],
+      ["access", "monthly", "price_access_month"],
+    ]);
   });
 
   it("builds a config-driven top-up catalog and omits invalid packs", () => {

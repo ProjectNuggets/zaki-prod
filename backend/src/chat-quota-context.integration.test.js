@@ -92,7 +92,7 @@ describe("chat gate call-site — paid tiers are METERED with the right wallet/e
     expect(weeklyAllowanceForTier("free")).toBe(100);
   });
 
-  it("pro_max unlocks agent (€99 product access) while pro_max Spaces stays metered", () => {
+  it("pro_max unlocks agent ($95 USD product access) while pro_max Spaces stays metered", () => {
     const user = paidUser("pro_max");
     // Agent surface: the product they bought is unlimited on its own surface.
     expect(isChatTurnUnlimited(user, { surface: ZAKI_BOT_SURFACE, env: ENV })).toBe(true);

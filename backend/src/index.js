@@ -31,13 +31,19 @@ import {
   buildLegalConsentShape,
   validateLegalPolicyVersion,
   buildConsentStatus,
+  buildVerificationLoginRedirect,
 } from "./legal-consent.js";
 import {
   resolveSignupAgePolicy,
   evaluateSignupAgePolicy,
 } from "./signup-policy.js";
 import { completeEmailSignup } from "./email-signup-user.js";
+import {
+  appendTransactionalEmailLegalHtml,
+  appendTransactionalEmailLegalText,
+} from "./transactional-email-legal.js";
 import { validateRuntimeConfig } from "./config-validation.js";
+import { bypassDesignOwnedBodyParser } from "./design-body-parser-boundary.js";
 import {
   createMemoryRoutes,
   buildChatMemoryContext,
@@ -72,8 +78,10 @@ import {
   STRIPE_BILLING_PLANS,
   buildTopupPackCatalog,
   buildStripePricingCatalog,
+  buildStripePricingDisplayRefs,
   normalizeBillingInterval,
   resolveTopupPack,
+  stripePriceMatchesBillingInterval,
   resolveStripePriceDetailsById,
   resolveStripePriceForSelection,
 } from "./billing-pricing.js";
@@ -112,9 +120,12 @@ import {
 } from "./brain-params.js";
 import {
   buildAgentMeterUsageFacts,
+  buildAgentUpstreamTurnContext,
   classifyAgentMeterAction,
   createAgentStreamMeterMetrics,
   estimateAgentMeterUnits,
+  isUnmeteredAgentOnboardingTurn,
+  isVerifiedAgentOnboardingFirstTurn,
   reserveAgentChatUnits,
   resolveAgentReserveUnits,
   settleAgentChatUnits,
@@ -192,6 +203,25 @@ import {
   shouldConsumeLearningWsQuota,
 } from "./learning-bff-contract.js";
 import {
+  buildMinutesReadRouter,
+  bypassMinutesReadBodyParser,
+  isMinutesEnabled,
+} from "./minutes-read-routes.js";
+import { resolveMinutesReadToken } from "./minutes-read-secret.js";
+import {
+  buildMinutesControlRouter,
+  eraseMinutesAccountForErasure,
+  isMinutesControlEnabled,
+} from "./minutes-control-routes.js";
+import { hasMinutesControlAccountState } from "./minutes-control-state.js";
+import { reconcileMinutesControlRecoveries } from "./minutes-control-reconciler.js";
+import { resolveMinutesControlAccountErasure } from "./minutes-control-account-erasure.js";
+import {
+  resolveMinutesCallbackHmacKey,
+  resolveMinutesControlRecoveryKey,
+  resolveMinutesControlSigningKey,
+} from "./minutes-control-secret.js";
+import {
   buildDesignConfigErrorPayload,
   buildDesignDisabledPayload,
   classifyDesignMeterActionForIngress,
@@ -218,8 +248,34 @@ import {
   fetchDesignProxyPath,
   probeDesignReady,
 } from "./design-client.js";
+import { DesignControllerClient } from "./design-controller-client.js";
+import { buildDesignControllerCallbackRouter } from "./design-controller-callback-routes.js";
 import {
+  buildDesignInternalReadRouter,
+  createDesignInternalReadSource,
+  resolveDesignReadCursorSecrets,
+} from "./design-internal-read-routes.js";
+import { buildDesignSessionRouter } from "./design-session-routes.js";
+import {
+  buildDesignMeterDenialPayload,
+  buildDesignPathBlockedPayload,
+  createDesignSessionProxyAuthorizer,
+  readDesignIdempotencyKey,
+  setDesignMeterHeaders,
+} from "./design-session-metering.js";
+import { buildDesignProjectRouter } from "./design-project-routes.js";
+import { buildDesignWorkbenchRouter } from "./design-workbench-routes.js";
+import { createDesignWorkbenchAccess } from "./design-workbench-access.js";
+import {
+  beginDesignSessionDrain,
+  ensureDesignSession,
+  readDesignSessionBinding,
+  updateDesignSessionObservedState,
+} from "./design-session-store.js";
+import {
+  createDesignProject,
   extractDesignProjectFromPayload,
+  listDesignProjects,
   markDesignProjectActive,
   markDesignProjectDeleted,
   markDesignProjectFailed,
@@ -311,6 +367,7 @@ import { buildBackendHealthStatus, buildBackendReadyStatus } from "./health-read
 import { prepareAndApplySecret } from "./nullalis-secrets.js";
 import {
   buildAgentRuntimeEntitlementFields,
+  buildEntitlementFields,
 } from "./nullalis-entitlement.js";
 import {
   APP_CHAT_SURFACE,
@@ -385,6 +442,7 @@ import {
   isPaidActive,
 } from "./effective-entitlements.js";
 import {
+  buildPlatformForMeterIdentity,
   resolveEffectivePlatformEntitlement,
   resolvePlatformWalletPlanForUser,
 } from "./platform-entitlement-context.js";
@@ -409,6 +467,10 @@ import {
   resolveMeterProduct,
   verifyMeterGrantSignature,
 } from "./meter-contract.js";
+import {
+  buildAnonymousUnitMeterDenial,
+  createAnonymousMeterStatusResponder,
+} from "./anonymous-meter-contract.js";
 import {
   hashAnonymousSessionId,
   readMeterSnapshotForIdentity,
@@ -451,6 +513,11 @@ import {
   parseAnonymousWorkClaimRequest,
   resolveClaimKey,
 } from "./anonymous-work-claim.js";
+import {
+  bindAnonymousSpacesClientAbort,
+  buildAnonymousSpacesStreamFailure,
+  streamAnonymousSpacesReply,
+} from "./anonymous-spaces-stream.js";
 // WP-F — the anonymous Agent plan preview. Note what is NOT imported here: no agent client,
 // no tool registry, no nullclaw handle. The preview is a tool-less code path by construction.
 import {
@@ -461,7 +528,7 @@ import {
 import { buildAuthRouter } from "./auth-endpoints.js";
 import { loginHandler as zakiLoginHandler } from "./login-handler.js";
 import {
-  verifyZakiAccessToken,
+  verifyActiveZakiAccessToken,
   tryDecodeJwtPayload,
   mintZakiSession,
   cleanupExpiredSessions,
@@ -474,7 +541,9 @@ import { actualChatUnits, estimateChatUnits, deterministicGrantId } from "./chat
 import { isToolFireEvent, extractGeneratedFile } from "./agent-stream-signals.js";
 import {
   buildClearedGoogleOAuthNonceCookie,
+  buildGoogleOAuthCallbackFailureRedirect,
   buildGoogleOAuthRedirectUri,
+  buildGoogleOAuthStartFailureRedirect,
   buildGoogleOAuthNonceCookie,
   createGoogleOAuthNonce,
   extractGoogleOAuthNonceFromCookieHeader,
@@ -627,6 +696,95 @@ const LEARNING_ENGINE_INTERNAL_TOKEN = (
   process.env.LEARNING_ENGINE_INTERNAL_TOKEN || ""
 ).trim();
 const ZAKI_LEARNING_ENABLED = isLearningEnabled(process.env.ZAKI_LEARNING_ENABLED);
+const MINUTES_ENGINE_BASE_URL = (process.env.MINUTES_ENGINE_BASE_URL || "")
+  .trim()
+  .replace(/\/+$/, "");
+const ZAKI_MINUTES_ENABLED = isMinutesEnabled(process.env.ZAKI_MINUTES_ENABLED);
+function getMinutesEngineReadToken() {
+  if (!ZAKI_MINUTES_ENABLED) return "";
+  return resolveMinutesReadToken({
+    tokenFile: process.env.MINUTES_ENGINE_READ_TOKEN_FILE,
+    fallbackToken: process.env.MINUTES_ENGINE_READ_TOKEN,
+    readFileSync: fs.readFileSync,
+  });
+}
+const ZAKI_MINUTES_CONTROL_ENABLED = isMinutesControlEnabled(
+  process.env.ZAKI_MINUTES_CONTROL_ENABLED
+);
+const ZAKI_MINUTES_CONTROL_STAGING_READY = isMinutesControlEnabled(
+  process.env.ZAKI_MINUTES_CONTROL_STAGING_READY
+);
+// No Minutes control endpoint is live from either flag alone. The second gate is
+// an operator's evidence checkpoint for a deployed, contract-conformant engine.
+const ZAKI_MINUTES_CONTROL_ACTIVE =
+  ZAKI_MINUTES_ENABLED && ZAKI_MINUTES_CONTROL_ENABLED && ZAKI_MINUTES_CONTROL_STAGING_READY;
+function getMinutesEngineControlSigningKey() {
+  if (!ZAKI_MINUTES_CONTROL_ACTIVE) return "";
+  return resolveMinutesControlSigningKey({
+    tokenFile: process.env.MINUTES_ENGINE_CONTROL_TOKEN_FILE,
+    fallbackToken: process.env.MINUTES_ENGINE_CONTROL_TOKEN,
+    readFileSync: fs.readFileSync,
+  });
+}
+function getMinutesEngineCallbackHmacKey() {
+  if (!ZAKI_MINUTES_CONTROL_ACTIVE) return "";
+  return resolveMinutesCallbackHmacKey({
+    tokenFile: process.env.MINUTES_ENGINE_CALLBACK_HMAC_KEY_FILE,
+    fallbackToken: process.env.MINUTES_ENGINE_CALLBACK_HMAC_KEY,
+    readFileSync: fs.readFileSync,
+  });
+}
+function getMinutesControlRecoveryEncryptionKey() {
+  if (!ZAKI_MINUTES_CONTROL_ACTIVE) return "";
+  return resolveMinutesControlRecoveryKey({
+    tokenFile: process.env.MINUTES_CONTROL_RECOVERY_KEY_FILE,
+    fallbackToken: process.env.MINUTES_CONTROL_RECOVERY_KEY,
+    readFileSync: fs.readFileSync,
+  });
+}
+function boundedMinutesControlNumber(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(number)));
+}
+const MINUTES_CONTROL_CAPTURE_RESERVE_UNITS = boundedMinutesControlNumber(
+  process.env.MINUTES_CONTROL_CAPTURE_RESERVE_UNITS,
+  0,
+  0,
+  1_000_000
+);
+const MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS = boundedMinutesControlNumber(
+  process.env.MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS,
+  6 * 60 * 60 * 1_000,
+  60_000,
+  24 * 60 * 60 * 1_000
+);
+const MINUTES_CONTROL_MAX_CAPTURE_SECONDS = boundedMinutesControlNumber(
+  process.env.MINUTES_CONTROL_MAX_CAPTURE_SECONDS,
+  60 * 60,
+  60,
+  4 * 60 * 60
+);
+const MINUTES_CONTROL_TOKEN_TTL_SECONDS = boundedMinutesControlNumber(
+  process.env.MINUTES_CONTROL_TOKEN_TTL_SECONDS,
+  60,
+  30,
+  300
+);
+const MINUTES_CONTROL_POLICY = Object.freeze({
+  capture_notice_policy_version: String(
+    process.env.MINUTES_CONTROL_POLICY_VERSION || "minutes-capture-consent-v1"
+  ).trim(),
+  retention: {
+    audio_days: boundedMinutesControlNumber(process.env.MINUTES_CONTROL_AUDIO_RETENTION_DAYS, 0, 0, 365),
+    transcript_days: boundedMinutesControlNumber(process.env.MINUTES_CONTROL_TRANSCRIPT_RETENTION_DAYS, 30, 1, 3_650),
+    summary_days: boundedMinutesControlNumber(process.env.MINUTES_CONTROL_SUMMARY_RETENTION_DAYS, 30, 1, 3_650),
+  },
+});
+const minutesRequestTimeout = Number(process.env.MINUTES_ENGINE_REQUEST_TIMEOUT_MS || 10_000);
+const MINUTES_ENGINE_REQUEST_TIMEOUT_MS = Number.isFinite(minutesRequestTimeout)
+  ? Math.min(30_000, Math.max(1_000, minutesRequestTimeout))
+  : 10_000;
 const DESIGN_ENGINE_BASE_URL = (process.env.DESIGN_ENGINE_BASE_URL || "")
   .trim()
   .replace(/\/+$/, "");
@@ -636,6 +794,30 @@ const DESIGN_ENGINE_INTERNAL_TOKEN = (
   ""
 ).trim();
 const ZAKI_DESIGN_ENABLED = isDesignEnabled(process.env.ZAKI_DESIGN_ENABLED);
+const ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED = isDesignEnabled(
+  process.env.ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED
+);
+const DESIGN_CONTROLLER_BASE_URL = (
+  process.env.ZAKI_DESIGN_CONTROLLER_BASE_URL || ""
+).trim().replace(/\/+$/, "");
+const DESIGN_CONTROLLER_TOKEN = (
+  process.env.ZAKI_DESIGN_CONTROLLER_TOKEN || ""
+).trim();
+const DESIGN_HUB_CALLBACK_TOKEN = (
+  process.env.ZAKI_DESIGN_HUB_CALLBACK_TOKEN || ""
+).trim();
+const ZAKI_DESIGN_READ_ENABLED = process.env.ZAKI_DESIGN_READ_ENABLED === "true";
+// Dedicated Design read cursor secret (never the callback token — key
+// separation). Fails startup loudly if the read plane is enabled without it;
+// resolves to null (read routes not mounted) when the plane is off and no
+// secret is configured. `_PREVIOUS` is accepted for decrypt only, so rotating
+// the secret does not kill outstanding pagination.
+const DESIGN_READ_CURSOR_SECRETS = resolveDesignReadCursorSecrets({
+  readEnabled: ZAKI_DESIGN_READ_ENABLED,
+  secret: process.env.DESIGN_READ_CURSOR_SECRET,
+  previousSecret: process.env.DESIGN_READ_CURSOR_SECRET_PREVIOUS,
+  callbackToken: DESIGN_HUB_CALLBACK_TOKEN,
+});
 const ZAKI_LEARNING_WEBHOOK_BASE_URL = (
   process.env.ZAKI_LEARNING_WEBHOOK_BASE_URL ||
   ZAKI_AGENT_WEBHOOK_BASE_URL ||
@@ -649,6 +831,10 @@ const LEARNING_ENGINE_REQUEST_TIMEOUT_MS = Math.max(
 const DESIGN_ENGINE_REQUEST_TIMEOUT_MS = Math.max(
   1_000,
   Number(process.env.DESIGN_ENGINE_REQUEST_TIMEOUT_MS || 60_000)
+);
+const DESIGN_CONTROLLER_REQUEST_TIMEOUT_MS = Math.min(
+  180_000,
+  Math.max(1_000, Number(process.env.ZAKI_DESIGN_CONTROLLER_TIMEOUT_MS || 180_000))
 );
 const ZAKI_DESIGN_MAX_REQUEST_BYTES = Math.max(
   1_000,
@@ -732,7 +918,11 @@ const STRIPE_PRICE_PERSONAL_YEARLY = (process.env.STRIPE_PRICE_PERSONAL_YEARLY |
 // New commercial tiers. Deployed sandbox secrets use these exact names with NO
 // `_MONTHLY` suffix: STRIPE_PRICE_PERSONAL / STRIPE_PRICE_PRO / STRIPE_PRICE_PRO_MAX.
 const STRIPE_PRICE_PRO = (process.env.STRIPE_PRICE_PRO || "").trim();
+const STRIPE_PRICE_PRO_YEARLY = (process.env.STRIPE_PRICE_PRO_YEARLY || "").trim();
 const STRIPE_PRICE_PRO_MAX = (process.env.STRIPE_PRICE_PRO_MAX || "").trim();
+const STRIPE_PRICE_PRO_MAX_YEARLY = (
+  process.env.STRIPE_PRICE_PRO_MAX_YEARLY || ""
+).trim();
 const STRIPE_PRICE_ACCESS_CODE_MONTHLY = (
   process.env.STRIPE_PRICE_ACCESS_CODE_MONTHLY || ""
 ).trim();
@@ -1052,7 +1242,9 @@ const stripePricingCatalog = buildStripePricingCatalog({
   personalMonthly: STRIPE_PRICE_PERSONAL,
   personalYearly: STRIPE_PRICE_PERSONAL_YEARLY,
   proMonthly: STRIPE_PRICE_PRO,
+  proYearly: STRIPE_PRICE_PRO_YEARLY,
   proMaxMonthly: STRIPE_PRICE_PRO_MAX,
+  proMaxYearly: STRIPE_PRICE_PRO_MAX_YEARLY,
 });
 const PRICE_BY_PLAN_INTERVAL = stripePricingCatalog.priceByPlanInterval;
 const PRICE_DETAILS_BY_ID = stripePricingCatalog.priceDetailsById;
@@ -1746,8 +1938,14 @@ function getBillingConfigStatus() {
   if (!PRICE_BY_PLAN_INTERVAL.pro.monthly) {
     missing.push("stripe_price_pro");
   }
+  if (!PRICE_BY_PLAN_INTERVAL.pro.yearly) {
+    missing.push("stripe_price_pro_yearly");
+  }
   if (!PRICE_BY_PLAN_INTERVAL.pro_max.monthly) {
     missing.push("stripe_price_pro_max");
+  }
+  if (!PRICE_BY_PLAN_INTERVAL.pro_max.yearly) {
+    missing.push("stripe_price_pro_max_yearly");
   }
   if (!STRIPE_WEBHOOK_SECRET) {
     missing.push("stripe_webhook_secret");
@@ -1782,19 +1980,15 @@ async function getStripePricingDisplayCatalog() {
     return stripePricingDisplayCache.value;
   }
 
-  const priceRefs = [
-    ["student", "monthly", PRICE_BY_PLAN_INTERVAL.student.monthly],
-    ["student", "yearly", PRICE_BY_PLAN_INTERVAL.student.yearly],
-    ["personal", "monthly", PRICE_BY_PLAN_INTERVAL.personal.monthly],
-    ["personal", "yearly", PRICE_BY_PLAN_INTERVAL.personal.yearly],
-    ["pro", "monthly", PRICE_BY_PLAN_INTERVAL.pro.monthly],
-    ["pro_max", "monthly", PRICE_BY_PLAN_INTERVAL.pro_max.monthly],
-    ["access", "monthly", STRIPE_PRICE_ACCESS_CODE_MONTHLY],
-  ].filter(([, , priceId]) => String(priceId || "").trim());
+  const priceRefs = buildStripePricingDisplayRefs(
+    stripePricingCatalog,
+    STRIPE_PRICE_ACCESS_CODE_MONTHLY
+  );
 
   const results = await Promise.allSettled(
     priceRefs.map(async ([tier, interval, priceId]) => {
       const price = await stripe.prices.retrieve(priceId);
+      if (!stripePriceMatchesBillingInterval(price, interval)) return null;
       return {
         tier,
         interval,
@@ -1838,6 +2032,38 @@ async function getStripePricingDisplayCatalog() {
   };
 
   return catalog;
+}
+
+function applyStripeDisplayAvailability(configured, pricingCatalog) {
+  if (configured.provider !== "stripe" || !pricingCatalog) return configured;
+  return {
+    ...configured,
+    pricingAvailability: Object.fromEntries(
+      Object.entries(configured.pricingAvailability || {}).map(([plan, availability]) => [
+        plan,
+        {
+          ...availability,
+          // Monthly retains its established availability behavior. Yearly must
+          // be both configured and verified as an active annual Stripe Price.
+          yearly: Boolean(availability?.yearly && pricingCatalog?.[plan]?.yearly?.priceId),
+        },
+      ])
+    ),
+  };
+}
+
+async function assertStripePriceMatchesBillingInterval({ priceId, interval }) {
+  const selectedInterval = normalizeBillingInterval(interval, "monthly");
+  const price = await stripe.prices.retrieve(priceId);
+  if (stripePriceMatchesBillingInterval(price, selectedInterval)) return price;
+
+  const err = new Error(
+    `Selected ${selectedInterval} billing interval is not configured with an active Stripe ${
+      selectedInterval === "yearly" ? "yearly" : "monthly"
+    } Price.`
+  );
+  err.status = 503;
+  throw err;
 }
 
 function sendBillingUnavailable(res, capability) {
@@ -2522,8 +2748,14 @@ const stripeWebhookHandler = createStripeWebhookHandler({
 app.post("/api/billing/webhook", express.raw({ type: "application/json" }), stripeWebhookHandler);
 
 // Request size limits to prevent memory exhaustion
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(bypassMinutesReadBodyParser(bypassDesignOwnedBodyParser(
+  express.json({ limit: '10mb' }),
+  { controllerEnabled: ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED },
+)));
+app.use(bypassMinutesReadBodyParser(bypassDesignOwnedBodyParser(
+  express.urlencoded({ extended: true, limit: '10mb' }),
+  { controllerEnabled: ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED },
+)));
 
 // Normalize JSON parsing failures to API-friendly responses.
 app.use((err, req, res, next) => {
@@ -2633,6 +2865,7 @@ app.use(
     exposedHeaders: [
       "X-Request-Id",
       "X-Zaki-Agent-Base",
+      "X-Zaki-Spaces-Route",
       "X-Zaki-Mode",
       "X-Zaki-Web-Search",
       AGENT_READ_SUPPORT_HEADER,
@@ -3500,9 +3733,17 @@ async function getBackendReadinessDependencies() {
   const learningConfigured = Boolean(
     getLearningBase(LEARNING_ENGINE_BASE_URL) && LEARNING_ENGINE_INTERNAL_TOKEN
   );
-  const designConfigured = Boolean(
+  const directDesignConfigured = Boolean(
     getDesignBase(DESIGN_ENGINE_BASE_URL) && DESIGN_ENGINE_INTERNAL_TOKEN
   );
+  const controllerDesignConfigured = Boolean(
+    DESIGN_CONTROLLER_BASE_URL &&
+    DESIGN_CONTROLLER_TOKEN &&
+    DESIGN_HUB_CALLBACK_TOKEN
+  );
+  const designConfigured = ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED
+    ? controllerDesignConfigured
+    : directDesignConfigured;
   const dependencies = {};
   if (!ZAKI_LEARNING_ENABLED) {
     dependencies.learning = {
@@ -3563,6 +3804,18 @@ async function getBackendReadinessDependencies() {
     };
   } else {
     try {
+      if (ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED) {
+        const readiness = await designSessionController.ready();
+        dependencies.design = {
+          ok: readiness.ok,
+          enabled: true,
+          configured: true,
+          topology: "session-controller",
+          status: readiness.ok ? "ready" : "unavailable",
+          upstreamStatus: readiness.upstreamStatus,
+        };
+        return dependencies;
+      }
       const response = await probeDesignReady({
         baseUrl: DESIGN_ENGINE_BASE_URL,
         internalToken: DESIGN_ENGINE_INTERNAL_TOKEN,
@@ -3705,6 +3958,7 @@ const ProductEventSchema = z.object({
     "website_product_complete",
     "website_product_spaces",
     "chat_input",
+    "memory_import",
     "settings",
     "pricing_page",
     "success_page",
@@ -4622,7 +4876,7 @@ function resolveTier(tier) {
   // V1 ladder: personal / pro / pro_max are first-class paid tiers. This used to
   // collapse `pro -> personal`, which made every caller that WRITES plan_tier
   // (Stripe/Creem webhooks, cancel-at-period-end) store the wrong tier — so the
-  // €45 Pro plan provisioned a 600u Personal wallet and surfaced as Personal on
+  // $45 USD Pro provisioned a 600u Personal wallet and surfaced as Personal on
   // /api/entitlements (Bug 2). Keep the real tier; downstream sizing/labels
   // depend on it. Wallet/policy normalization (normalizePlatformPlanId) and
   // effective-entitlements own any further mapping. Canonical impl lives in
@@ -4895,7 +5149,7 @@ function _extractBearer(req) {
 
 async function _resolveZakiUser(token) {
   try {
-    const payload = await verifyZakiAccessToken(token);
+    const payload = await verifyActiveZakiAccessToken(token);
     if (!payload?.sub) return { error: "invalid_token" };
     const userId = Number.parseInt(String(payload.sub), 10);
     if (!Number.isInteger(userId) || userId <= 0) {
@@ -5023,12 +5277,30 @@ async function verifyGoogleIdToken(idToken) {
 }
 
 app.get("/api/auth/google/start", (req, res) => {
-  try {
-    if (!ensureGoogleOAuthConfigured()) {
-      res.status(503).json({ error: "Google OAuth is not configured." });
+  const requestedReturnTo = req.query?.returnTo || req.query?.return_to || "/spaces";
+  const respondToGoogleOAuthStartFailure = ({ errorCode, status, body }) => {
+    const popupRedirect = buildGoogleOAuthStartFailureRedirect({
+      appUrl: getAppUrl(),
+      returnTo: requestedReturnTo,
+      errorCode,
+    });
+    if (popupRedirect) {
+      res.redirect(302, popupRedirect);
       return;
     }
-    const returnTo = sanitizeGoogleOAuthReturnTo(req.query?.returnTo || req.query?.return_to || "/spaces");
+    res.status(status).json(body);
+  };
+
+  try {
+    if (!ensureGoogleOAuthConfigured()) {
+      respondToGoogleOAuthStartFailure({
+        errorCode: "google_oauth_unconfigured",
+        status: 503,
+        body: { error: "Google OAuth is not configured." },
+      });
+      return;
+    }
+    const returnTo = sanitizeGoogleOAuthReturnTo(requestedReturnTo);
     let legalPolicyVersion = null;
     if (String(req.query?.legalConsentAccepted || "").toLowerCase() === "true") {
       const policyVersionResult = validateLegalPolicyVersion(
@@ -5036,7 +5308,11 @@ app.get("/api/auth/google/start", (req, res) => {
         ZAKI_LEGAL_POLICY_VERSION
       );
       if (!policyVersionResult.ok) {
-        res.status(409).json({ success: false, error: policyVersionResult.error });
+        respondToGoogleOAuthStartFailure({
+          errorCode: "google_consent_stale",
+          status: 409,
+          body: { success: false, error: policyVersionResult.error },
+        });
         return;
       }
       legalPolicyVersion = policyVersionResult.version;
@@ -5069,10 +5345,14 @@ app.get("/api/auth/google/start", (req, res) => {
     // reads as gibberish to the user. Emit a machine `code` the client switches on plus a
     // human `message`. The real exception stays in the server log.
     console.error("[GoogleOAuth] start error:", error);
-    res.status(500).json({
-      error: "google_oauth_start_failed",
-      code: "google_oauth_start_failed",
-      message: "We couldn't start Google sign-in. Try again, or use your email and password.",
+    respondToGoogleOAuthStartFailure({
+      errorCode: "google_oauth_start_failed",
+      status: 500,
+      body: {
+        error: "google_oauth_start_failed",
+        code: "google_oauth_start_failed",
+        message: "We couldn't start Google sign-in. Try again, or use your email and password.",
+      },
     });
   }
 });
@@ -5094,9 +5374,28 @@ const GOOGLE_SIGNUP_BLOCKED_CODES = new Set([
 ]);
 
 app.get("/api/auth/google/callback", async (req, res) => {
+  const state = String(req.query?.state || "").trim();
+  const callbackNonce = extractGoogleOAuthNonceFromCookieHeader(req.headers?.cookie);
+  const redirectGoogleOAuthFailure = (errorCode) => {
+    res.setHeader(
+      "Set-Cookie",
+      buildClearedGoogleOAuthNonceCookie({ secure: isSecureCookieRequest(req) })
+    );
+    res.redirect(
+      302,
+      buildGoogleOAuthCallbackFailureRedirect({
+        appUrl: getAppUrl(),
+        state,
+        stateSecret: GOOGLE_OAUTH_STATE_SECRET,
+        cookieNonce: callbackNonce,
+        errorCode,
+      })
+    );
+  };
+
   try {
     if (!ensureGoogleOAuthConfigured()) {
-      res.redirect(302, `${getAppUrl()}/?auth=login&error=google_oauth_unconfigured`);
+      redirectGoogleOAuthFailure("google_oauth_unconfigured");
       return;
     }
     // WP-B10: Google reports a refused/cancelled consent screen by redirecting back with
@@ -5106,18 +5405,12 @@ app.get("/api/auth/google/callback", async (req, res) => {
     const googleError = String(req.query?.error || "").trim();
     if (googleError) {
       const cancelled = googleError === "access_denied";
-      res.redirect(
-        302,
-        `${getAppUrl()}/?auth=login&error=${
-          cancelled ? "google_oauth_cancelled" : "google_oauth_failed"
-        }`
-      );
+      redirectGoogleOAuthFailure(cancelled ? "google_oauth_cancelled" : "google_oauth_failed");
       return;
     }
     const code = String(req.query?.code || "").trim();
-    const state = String(req.query?.state || "").trim();
     if (!code || !state) {
-      res.redirect(302, `${getAppUrl()}/?auth=login&error=google_oauth_missing_code`);
+      redirectGoogleOAuthFailure("google_oauth_missing_code");
       return;
     }
     const { returnTo, nonceHash, legalPolicyVersion } = verifyGoogleOAuthState(
@@ -5125,7 +5418,7 @@ app.get("/api/auth/google/callback", async (req, res) => {
       GOOGLE_OAUTH_STATE_SECRET
     );
     verifyGoogleOAuthNonceBinding({
-      cookieNonce: extractGoogleOAuthNonceFromCookieHeader(req.headers?.cookie),
+      cookieNonce: callbackNonce,
       stateNonceHash: nonceHash,
     });
     // The consent the user attested to, carried tamper-proof in the HMAC-signed
@@ -5181,16 +5474,9 @@ app.get("/api/auth/google/callback", async (req, res) => {
     res.redirect(302, appUrl.toString());
   } catch (error) {
     console.error("[GoogleOAuth] callback error:", error);
-    res.setHeader(
-      "Set-Cookie",
-      buildClearedGoogleOAuthNonceCookie({ secure: isSecureCookieRequest(req) })
-    );
-    const appUrl = new URL("/?auth=login", getAppUrl());
-    appUrl.searchParams.set(
-      "error",
+    redirectGoogleOAuthFailure(
       GOOGLE_SIGNUP_BLOCKED_CODES.has(error?.code) ? error.code : "google_oauth_failed"
     );
-    res.redirect(302, appUrl.toString());
   }
 });
 
@@ -5671,6 +5957,11 @@ const billingAdapters = {
         throw err;
       }
 
+      await assertStripePriceMatchesBillingInterval({
+        priceId,
+        interval: selectedInterval,
+      });
+
       const customerId = await ensureStripeCustomerId({ email, zakiUser });
       const appUrl = getAppUrl();
       const session = await stripe.checkout.sessions.create({
@@ -5715,6 +6006,11 @@ const billingAdapters = {
         err.status = 400;
         throw err;
       }
+
+      await assertStripePriceMatchesBillingInterval({
+        priceId,
+        interval: selectedInterval,
+      });
 
       const customerId = await ensureStripeCustomerId({ email, zakiUser });
       const { subscription, item } = await resolveStripeSubscriptionForPlanChange({
@@ -6003,14 +6299,14 @@ function parseFromAddress(value, fallbackEmail) {
   return { email: trimmed, name: undefined };
 }
 
-async function issueVerificationToken(userId) {
+async function issueVerificationToken(userId, returnTo = "") {
   const token = crypto.randomBytes(32).toString("hex");
   const expiresAt = Date.now() + ZAKI_VERIFY_TTL_MINUTES * 60 * 1000;
   const now = new Date().toISOString();
   await dbQuery(
-    `INSERT INTO verification_tokens (user_id, token, expires_at, created_at)
-     VALUES ($1, $2, $3, $4)`,
-    [userId, token, expiresAt, now]
+    `INSERT INTO verification_tokens (user_id, token, expires_at, return_to, created_at)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [userId, token, expiresAt, returnTo || null, now]
   );
   return { token, expiresAt };
 }
@@ -6048,16 +6344,8 @@ function buildPasswordResetUrl(token) {
   return `${resetBase}/reset?token=${token}`;
 }
 
-function getLoginRedirectUrl(verifiedState = "success") {
-  const appBaseRaw = getAppUrl();
-  const appBase = appBaseRaw.endsWith("/api")
-    ? appBaseRaw.replace(/\/api$/, "")
-    : appBaseRaw;
-  const loginUrl = new URL(appBase.endsWith("/") ? appBase : `${appBase}/`);
-  loginUrl.pathname = "/";
-  loginUrl.searchParams.set("auth", "login");
-  loginUrl.searchParams.set("verified", String(verifiedState || "success"));
-  return loginUrl.toString();
+function getLoginRedirectUrl(verifiedState = "success", returnTo = "") {
+  return buildVerificationLoginRedirect(getAppUrl(), verifiedState, returnTo);
 }
 
 function getEmailLogoUrl() {
@@ -6146,7 +6434,7 @@ function buildEmailShell({
             </tr>
             <tr>
               <td style="padding:18px 28px 24px 28px;border-top:1px solid #f4eadf;">
-                ${footerHtml}
+                ${appendTransactionalEmailLegalHtml(footerHtml)}
               </td>
             </tr>
           </table>
@@ -6226,7 +6514,7 @@ async function sendVerificationEmail(email, token) {
   const verifyUrl = buildVerificationUrl(token);
   const logoUrl = getEmailLogoUrl();
   const subject = "Verify your email to start with ZAKI";
-  const text = [
+  const text = appendTransactionalEmailLegalText([
     "Welcome to ZAKI.",
     "Confirm your email to activate your account:",
     verifyUrl,
@@ -6235,7 +6523,7 @@ async function sendVerificationEmail(email, token) {
     "",
     "If this was not you, you can ignore this email.",
     "Support: support@chatzaki.com",
-  ].join("\n");
+  ]).join("\n");
   const html = buildVerificationEmailHtml({ verifyUrl, logoUrl });
 
   if (ZAKI_EMAIL_MODE.toLowerCase() === "resend") {
@@ -6292,7 +6580,7 @@ async function sendPasswordResetEmail(email, token) {
   const resetUrl = buildPasswordResetUrl(token);
   const logoUrl = getEmailLogoUrl();
   const subject = "Reset your ZAKI password";
-  const text = [
+  const text = appendTransactionalEmailLegalText([
     "Forgot your password? No problem.",
     "Use this secure link to set a new password and get back into ZAKI:",
     resetUrl,
@@ -6301,7 +6589,7 @@ async function sendPasswordResetEmail(email, token) {
     "",
     "If you did not request this, you can ignore this email.",
     "Support: support@chatzaki.com",
-  ].join("\n");
+  ]).join("\n");
   const html = buildPasswordResetEmailHtml({ resetUrl, logoUrl });
 
   if (ZAKI_EMAIL_MODE.toLowerCase() === "resend") {
@@ -6413,7 +6701,7 @@ async function sendAccessCodePurchaseEmail({
   const pricingUrl = `${appBase.replace(/\/+$/, "")}/pricing`;
   const logoUrl = getEmailLogoUrl();
   const subject = "Your ZAKI gift code is inside";
-  const text = [
+  const text = appendTransactionalEmailLegalText([
     "Thanks for supporting ZAKI.",
     `Your access code: ${code}`,
     `Pack: ${campaign}`,
@@ -6421,7 +6709,7 @@ async function sendAccessCodePurchaseEmail({
     `Redeem here: ${pricingUrl}`,
     "",
     "Need help? support@chatzaki.com",
-  ].join("\n");
+  ]).join("\n");
   const html = buildAccessCodePurchaseEmailHtml({
     logoUrl,
     code,
@@ -6490,7 +6778,7 @@ const signupHandler = async (req, res) => {
       return;
     }
 
-    const { email, password, name, legalPolicyVersion } = validation.data;
+    const { email, password, name, legalPolicyVersion, returnTo } = validation.data;
     const normalizedEmail = normalizeEmail(email);
     const normalizedName = name.trim();
     // Shared age policy — identical evaluation to the Google OAuth path. WP-M: no
@@ -6563,7 +6851,7 @@ const signupHandler = async (req, res) => {
       return;
     }
 
-    const { token } = await issueVerificationToken(userId);
+    const { token } = await issueVerificationToken(userId, returnTo);
     const verificationLink = buildVerificationUrl(token);
     let verificationEmailDelivered = false;
     try {
@@ -7053,35 +7341,6 @@ function normalizeMeterTenantId(value) {
   return String(value || "default").trim().slice(0, 120) || "default";
 }
 
-function resolveMeterEntitlementStartedAt(zakiUser, effective) {
-  const source = String(effective?.source || "").trim();
-  if (source !== "subscription" && source !== "access_code") return null;
-  return zakiUser?.meter_entitlement_started_at || zakiUser?.billing_updated_at || null;
-}
-
-function buildPlatformForMeterIdentity(identity) {
-  if (identity?.type === "user") {
-    const effective = resolveEffectivePlatformEntitlement(identity.zakiUser);
-    const commercial = effective.commercial || {};
-    return buildPlatformEntitlementSummary({
-      commercialPlanId: commercial.planId || "spaces_free",
-      effectiveTier: effective.tier,
-      source: effective.source,
-      premium: effective.premium,
-      weeklyAllowanceEntitlementStartedAt: resolveMeterEntitlementStartedAt(
-        identity.zakiUser,
-        effective
-      ),
-    });
-  }
-  return buildPlatformEntitlementSummary({
-    commercialPlanId: "spaces_free",
-    effectiveTier: "free",
-    source: "anonymous",
-    premium: false,
-  });
-}
-
 async function resolveMeterIdentity(
   req,
   res,
@@ -7523,10 +7782,10 @@ async function recordMeterReceiptForGrant({
 //
 // An anonymous visitor's chat never touches the unit wallet: reserveSpacesMeterUnits
 // returns `{ allowed: true }` without reserving (anonymous identities have no wallet).
-// The gate that actually denies them is the anonymous DAILY PROMPT counter — two of
-// them, in fact: a per-anon-session bucket and a per-device bucket, whichever runs out
-// first. Showing an anon "250 of 250 left" from the wallet was advertising headroom
-// that does not gate them and does not exist.
+// The gate that actually denies them is one anonymous DAILY PROMPT allowance. It is
+// enforced across both the durable anonymous session and a device-level abuse dimension;
+// whichever has less room is the same allowance snapshot the visitor sees. Showing an
+// anon "250 of 250 left" from the wallet advertised headroom that did not gate them.
 //
 // `enforced` names the counter that will actually say no, so the UI can stop lying.
 async function buildEnforcedLimitSnapshot(req, res, identity) {
@@ -7570,11 +7829,16 @@ async function buildEnforcedLimitSnapshot(req, res, identity) {
   };
 }
 
+const respondToAnonymousMeterStatus = createAnonymousMeterStatusResponder({
+  readAllowance: buildEnforcedLimitSnapshot,
+});
+
 app.get("/api/meter/status", async (req, res) => {
   try {
     const tenantId = normalizeMeterTenantId(req.query?.tenantId);
     const identity = await resolveMeterIdentity(req, res, { tenantId });
     if (!identity || res.headersSent) return;
+    if (await respondToAnonymousMeterStatus(req, res, identity)) return;
     const platform = buildPlatformForMeterIdentity(identity);
     const registry = buildPlatformProductRegistry();
     const policy = buildPlatformMeterPolicy({ env: process.env });
@@ -7605,11 +7869,6 @@ app.post("/api/meter/grants", express.json({ limit: "1mb" }), async (req, res) =
     const data = validation.data;
     const tenantId = normalizeMeterTenantId(data.tenantId);
     const idempotencyKey = data.idempotencyKey || data.requestId || crypto.randomUUID();
-    const signingSecret = meterSigningSecret();
-    if (!signingSecret) {
-      res.status(503).json({ success: false, error: "meter_grant_signing_unavailable" });
-      return;
-    }
     const providedServiceToken = readMeterServiceToken(req);
     const trustedServiceRequest = hasValidMeterServiceToken(req);
     if (providedServiceToken && !trustedServiceRequest) {
@@ -7622,6 +7881,16 @@ app.post("/api/meter/grants", express.json({ limit: "1mb" }), async (req, res) =
       trustedServiceRequest,
     });
     if (!identity || res.headersSent) return;
+    const anonymousGrantDenial = buildAnonymousUnitMeterDenial(identity);
+    if (anonymousGrantDenial) {
+      res.status(anonymousGrantDenial.status).json(anonymousGrantDenial.body);
+      return;
+    }
+    const signingSecret = meterSigningSecret();
+    if (!signingSecret) {
+      res.status(503).json({ success: false, error: "meter_grant_signing_unavailable" });
+      return;
+    }
     const platform = buildPlatformForMeterIdentity(identity);
     const registry = buildPlatformProductRegistry();
     const policy = buildPlatformMeterPolicy({ env: process.env });
@@ -7800,6 +8069,11 @@ app.post("/api/meter/receipts", express.json({ limit: "1mb" }), async (req, res)
             anonymousSessionId: null,
             anonymousKeyHash: grant.anonymousKeyHash,
           };
+    const anonymousReceiptDenial = buildAnonymousUnitMeterDenial(identity);
+    if (anonymousReceiptDenial) {
+      res.status(anonymousReceiptDenial.status).json(anonymousReceiptDenial.body);
+      return;
+    }
     if (identity.type === "user" && !identity.zakiUser) {
       res.status(404).json({ success: false, error: "grant_user_not_found" });
       return;
@@ -8410,6 +8684,7 @@ app.post("/api/account/delete", express.json({ limit: "100kb" }), async (req, re
       cleanupBilling: ({ zakiUser: user }) =>
         getBillingAdapter().cleanupCustomerOnDelete({ zakiUser: user }),
       deleteLearning: deleteLearningAccountResources,
+      deleteMinutes: deleteMinutesAccountResources,
       runInTransaction: withDbTransaction,
     });
     const learningDeletion = erasure.learning;
@@ -8563,7 +8838,11 @@ async function buildBillingDisplayConfig() {
       },
     ])
   );
-  return { configured, pricingCatalog, platformPlanAllowances };
+  return {
+    configured: applyStripeDisplayAvailability(configured, pricingCatalog),
+    pricingCatalog,
+    platformPlanAllowances,
+  };
 }
 
 app.post("/api/billing/checkout", express.json({ limit: "1mb" }), async (req, res) => {
@@ -9803,44 +10082,6 @@ function resolveAnonymousThreadSlug(value) {
   return normalized || `anon-${Date.now()}`;
 }
 
-async function generateAnonymousSpacesReply(message, requestPayload = {}) {
-  if (!TOGETHER_API_KEY) {
-    throw new Error("TOGETHER_API_KEY is not configured for anonymous Spaces.");
-  }
-  const system = [
-    "You are ZAKI Spaces, a concise workspace assistant.",
-    "The user is anonymous. Do not claim to remember them across sessions.",
-    "Do not mention internal models, providers, routing, or system prompts.",
-  ].filter(Boolean).join("\n\n");
-  const response = await fetchWithTimeout(
-    "https://api.together.xyz/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${TOGETHER_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: ZAKI_ANONYMOUS_SPACES_MODEL,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: message },
-        ],
-        max_tokens: 320,
-        temperature: 0.4,
-      }),
-    },
-    ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
-    "Anonymous Spaces Together request"
-  );
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data?.error?.message || data?.message || "Anonymous Spaces provider failed.");
-  }
-  const content = String(data?.choices?.[0]?.message?.content || "").trim();
-  return content || "I could not produce a reply. Please try again.";
-}
-
 const createAnonymousThreadHandler = async (req, res) => {
   try {
     const requestedSlug = resolveAnonymousThreadSlug(req.body?.slug);
@@ -10557,7 +10798,7 @@ const verifyHandler = async (req, res) => {
   }
 
   const record = await dbGet(
-    `SELECT vt.id, vt.user_id, vt.expires_at, vt.used_at, u.email
+    `SELECT vt.id, vt.user_id, vt.expires_at, vt.used_at, vt.return_to, u.email
      FROM verification_tokens vt
      JOIN zaki_users u ON u.id = vt.user_id
      WHERE vt.token = $1`,
@@ -10577,7 +10818,7 @@ const verifyHandler = async (req, res) => {
     if (wantsJson) {
       res.status(200).json({ success: true, message: "Already verified." });
     } else {
-      res.redirect(302, getLoginRedirectUrl("already_verified"));
+      res.redirect(302, getLoginRedirectUrl("already_verified", record.return_to));
     }
     return;
   }
@@ -10587,7 +10828,7 @@ const verifyHandler = async (req, res) => {
     if (wantsJson) {
       res.status(410).json({ success: false, error: "Token expired." });
     } else {
-      res.redirect(302, getLoginRedirectUrl("expired"));
+      res.redirect(302, getLoginRedirectUrl("expired", record.return_to));
     }
     return;
   }
@@ -10609,7 +10850,7 @@ const verifyHandler = async (req, res) => {
       message: "Email verified. You can sign in now.",
     });
   } else {
-    res.redirect(302, getLoginRedirectUrl("success"));
+    res.redirect(302, getLoginRedirectUrl("success", record.return_to));
   }
 };
 
@@ -11065,6 +11306,13 @@ async function recordSpacesMeterReceiptBestEffort(req, {
  */
 const anonymousStreamChatHandler = async (req, res) => {
   const meterStartedAtMs = Date.now();
+  const upstreamController = new AbortController();
+  const releaseClientAbort = bindAnonymousSpacesClientAbort({
+    request: req,
+    response: res,
+    controller: upstreamController,
+  });
+  let streamedText = "";
   try {
     const requestPayload = req.body || {};
     const originalMessage = extractStreamMessage(requestPayload) || "";
@@ -11076,6 +11324,12 @@ const anonymousStreamChatHandler = async (req, res) => {
         error: `Message is too long. Maximum ${MAX_STREAM_MESSAGE_CHARS} characters.`,
       });
     }
+    res.setHeader(
+      "X-Zaki-Spaces-Route",
+      `/spaces/${encodeURIComponent(String(req.params.slug || ""))}/threads/${encodeURIComponent(
+        String(req.params.threadSlug || "")
+      )}`
+    );
 
     const meterAction = classifySpacesChatMeterAction(originalMessage, requestPayload);
     const meterDecision = await requireSpacesMeterGrantForChat({
@@ -11089,6 +11343,7 @@ const anonymousStreamChatHandler = async (req, res) => {
     if (!meterDecision.allowed || res.headersSent) {
       return;
     }
+    if (upstreamController.signal.aborted) return;
 
     const deviceQuota = await consumeAnonymousDeviceQuota({
       dbQuery,
@@ -11099,6 +11354,7 @@ const anonymousStreamChatHandler = async (req, res) => {
       bucket: `${ANONYMOUS_SPACES_QUOTA_CONFIG.bucket}_device`,
       limit: ANONYMOUS_DEVICE_DAILY_PROMPT_LIMIT,
     });
+    if (upstreamController.signal.aborted) return;
     if (!deviceQuota.allowed) {
       setPromptQuotaHeaders(res, {
         ...deviceQuota,
@@ -11121,6 +11377,7 @@ const anonymousStreamChatHandler = async (req, res) => {
       bucket: ANONYMOUS_SPACES_QUOTA_CONFIG.bucket,
       limit: ANONYMOUS_SPACES_QUOTA_CONFIG.limit,
     });
+    if (upstreamController.signal.aborted) return;
     setPromptQuotaHeaders(res, {
       ...consumed,
       bucket: ANONYMOUS_SPACES_QUOTA_CONFIG.bucket,
@@ -11173,7 +11430,49 @@ const anonymousStreamChatHandler = async (req, res) => {
     if (typeof requestPayload.mode === "string" && requestPayload.mode.trim()) {
       res.setHeader("X-Zaki-Mode", requestPayload.mode.trim());
     }
-    const reply = await generateAnonymousSpacesReply(anonymousMessage, requestPayload);
+    const uuid = crypto.randomUUID();
+    res.status(200);
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    if (typeof res.flushHeaders === "function") res.flushHeaders();
+    writeSseComment(res, "zaki-stream-open");
+
+    const { text: reply } = await streamAnonymousSpacesReply({
+      apiKey: TOGETHER_API_KEY,
+      model: ZAKI_ANONYMOUS_SPACES_MODEL,
+      message: anonymousMessage,
+      signal: upstreamController.signal,
+      timeoutMs: ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+      onDelta: (delta) => {
+        if (res.destroyed || res.writableEnded) {
+          upstreamController.abort();
+          return;
+        }
+        streamedText += delta;
+        writeSseData(res, {
+          uuid,
+          sources: [],
+          type: "textResponseChunk",
+          textResponse: delta,
+          close: false,
+          error: false,
+        });
+      },
+    });
+    streamedText = reply;
+    writeSseData(res, {
+      uuid,
+      type: "finalizeResponseStream",
+      close: true,
+      error: false,
+      metrics: {
+        synthetic: false,
+        timestamp: new Date().toISOString(),
+      },
+    });
+    if (!res.destroyed && !res.writableEnded) res.end();
     await recordSpacesMeterReceiptBestEffort(req, {
       status: "success",
       durationMs: Date.now() - meterStartedAtMs,
@@ -11181,21 +11480,24 @@ const anonymousStreamChatHandler = async (req, res) => {
       outputText: reply,
       model: ZAKI_ANONYMOUS_SPACES_MODEL,
     });
-    sendSyntheticSseReply(res, reply);
   } catch (error) {
     await recordSpacesMeterReceiptBestEffort(req, {
       status: "failed",
       durationMs: Date.now() - meterStartedAtMs,
       message: extractStreamMessage(req.body || {}) || "",
+      outputText: error?.partialText || streamedText,
       model: ZAKI_ANONYMOUS_SPACES_MODEL,
     });
+    if (req.aborted || res.destroyed || upstreamController?.signal.aborted) return;
     console.error("[AnonymousSpaces] Stream error:", error);
-    const message = error?.message || "Anonymous Spaces chat failed.";
-    if (String(req.headers.accept || "").includes("text/event-stream")) {
-      sendChatStreamError(res, message, { code: "anonymous_chat_error" });
+    const failure = buildAnonymousSpacesStreamFailure(error);
+    if (res.headersSent || String(req.headers.accept || "").includes("text/event-stream")) {
+      sendChatStreamError(res, failure.message, failure);
       return;
     }
-    res.status(500).json({ error: message, code: "anonymous_chat_error" });
+    res.status(500).json({ error: failure.message, code: failure.code, retryable: false });
+  } finally {
+    releaseClientAbort();
   }
 };
 
@@ -12453,13 +12755,55 @@ const agentChatStreamHandler = async (req, res) => {
     }
 
     const meterAction = classifyAgentMeterAction(payload, originalMessage);
-    const meterDecision = await requireAgentWalletReserveForChat(req, res, {
-      identity: buildAgentMeterIdentity(authResult),
-      action: meterAction,
-      requestId: getOrCreateRequestId(req),
-    });
-    if (!meterDecision.allowed || res.headersSent) {
-      return;
+    let onboardingFirstTurn = false;
+    if (isUnmeteredAgentOnboardingTurn(payload, originalMessage)) {
+      try {
+        const requestId = String(req.requestId || crypto.randomUUID());
+        const sessionKey = buildCanonicalZakiThreadSessionKey(
+          String(userId),
+          ZAKI_BOT_THREAD_ID
+        );
+        const [onboardingResponse, historyResponse] = await Promise.all([
+          sendBotBffUpstreamRequest({
+            method: "GET",
+            path: `/api/v1/users/${encodeURIComponent(userId)}/onboarding`,
+            userId,
+            requestId,
+          }),
+          fetchNullclawUserHistory({
+            baseUrl: nullclawBase,
+            internalToken: NULLCLAW_INTERNAL_TOKEN,
+            userId,
+            requestId,
+            sessionKey,
+            fetchWithTimeout,
+            timeoutMs: ZAKI_STREAM_UPSTREAM_TIMEOUT_MS,
+          }),
+        ]);
+        const [onboardingPayload, historyPayload] = await Promise.all([
+          onboardingResponse.json().catch(() => null),
+          historyResponse.json().catch(() => null),
+        ]);
+        onboardingFirstTurn = isVerifiedAgentOnboardingFirstTurn({
+          onboardingOk: onboardingResponse.ok,
+          onboardingPayload,
+          historyOk: historyResponse.ok,
+          historyStatus: historyResponse.status,
+          historyPayload,
+        });
+      } catch {
+        onboardingFirstTurn = false;
+      }
+    }
+    if (!onboardingFirstTurn) {
+      const meterDecision = await requireAgentWalletReserveForChat(req, res, {
+        identity: buildAgentMeterIdentity(authResult),
+        action: meterAction,
+        requestId: getOrCreateRequestId(req),
+      });
+      if (!meterDecision.allowed || res.headersSent) {
+        return;
+      }
     }
 
     try {
@@ -12607,7 +12951,7 @@ const agentChatStreamHandler = async (req, res) => {
       ...normalizedPayload,
       message: originalMessage,
       stream: true,
-      context: {
+      context: buildAgentUpstreamTurnContext({
         ...existingContext,
         surface:
           rawSpaceId.toLowerCase() === ZAKI_BOT_SPACE_ID
@@ -12615,8 +12959,10 @@ const agentChatStreamHandler = async (req, res) => {
             : ZAKI_AGENT_SURFACE,
         ...(rawSpaceId ? { space_id: rawSpaceId } : {}),
         ...(rawThreadId ? { thread_id: rawThreadId } : {}),
-      },
+      }, onboardingFirstTurn),
     };
+    delete upstreamPayload.turnKind;
+    delete upstreamPayload.turn_kind;
     const sessionKey = resolveCanonicalChatSessionKey({
       userId,
       payload: normalizedPayload,
@@ -14596,6 +14942,15 @@ function assertDesignRouteEnabled(req, res) {
     res.status(404).json(buildDesignDisabledPayload(requestId));
     return false;
   }
+  if (ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED) {
+    res.status(404).json({
+      code: "design_session_required",
+      error: "Design session is required.",
+      message: "Use the session-scoped Design API for an ephemeral worker.",
+      requestId,
+    });
+    return false;
+  }
   if (!getDesignBase(DESIGN_ENGINE_BASE_URL)) {
     res
       .status(500)
@@ -14654,15 +15009,6 @@ function designProjectIdFromTargetPath(method, targetPath) {
   const normalizedPath = String(targetPath || "").split("?")[0];
   const match = /^\/api\/projects\/([^/]+)$/.exec(normalizedPath);
   return match?.[1] ? decodeURIComponent(match[1]) : null;
-}
-
-function buildDesignPathBlockedPayload(reason, requestId) {
-  return {
-    code: "design_path_not_available",
-    error: "Design endpoint is not available.",
-    message: reason,
-    requestId,
-  };
 }
 
 async function prepareDesignCentralProjectRecord(req, res, preparedBody) {
@@ -14811,42 +15157,6 @@ function buildDesignMeterIdentity(req) {
   };
 }
 
-function readDesignIdempotencyKey(req, action) {
-  const headerValue =
-    req.headers?.["idempotency-key"] ||
-    req.headers?.["x-idempotency-key"];
-  const raw = Array.isArray(headerValue) ? headerValue[0] : headerValue;
-  const normalizedHeader = String(raw || "").trim();
-  if (normalizedHeader) return normalizedHeader.slice(0, 180);
-  return `${getOrCreateRequestId(req)}:${normalizeMeterAction(action)}`.slice(0, 180);
-}
-
-function setDesignMeterHeaders(res, grant, meter) {
-  if (!grant || res.headersSent) return;
-  res.setHeader("X-Zaki-Meter-Grant-Id", grant.grantId);
-  res.setHeader("X-Zaki-Meter-Product", "design");
-  res.setHeader("X-Zaki-Meter-Action", grant.action);
-  if (meter?.plan?.tier) res.setHeader("X-Zaki-Meter-Plan", meter.plan.tier);
-  if (meter?.rolling?.remaining !== null && meter?.rolling?.remaining !== undefined) {
-    res.setHeader("X-Zaki-Meter-Rolling-Remaining", String(meter.rolling.remaining));
-  }
-  if (meter?.weekly?.remaining !== null && meter?.weekly?.remaining !== undefined) {
-    res.setHeader("X-Zaki-Meter-Weekly-Remaining", String(meter.weekly.remaining));
-  }
-}
-
-function buildDesignMeterDenialPayload(result, requestId) {
-  return {
-    code: result?.error || "design_meter_denied",
-    error: "Design usage is not available.",
-    message: result?.message || "Design usage is not currently available.",
-    product: result?.product || "design",
-    productState: result?.productState || null,
-    meter: result?.meter || null,
-    requestId,
-  };
-}
-
 async function requireDesignMeterGrantForIngress(req) {
   const action = classifyDesignMeterActionForIngress(req);
   if (!action) return { allowed: true, action: null, grant: null };
@@ -14868,7 +15178,7 @@ async function requireDesignMeterGrantForIngress(req) {
     action,
     estimatedUnits: estimateDesignMeterUnitsForIngress(req, action),
     requestId,
-    idempotencyKey: readDesignIdempotencyKey(req, action),
+    idempotencyKey: readDesignIdempotencyKey(req, action, requestId),
     metadata: {
       surface: "design",
       route: String(req.originalUrl || req.url || "").split("?")[0],
@@ -15423,6 +15733,32 @@ async function deleteLearningAccountResources({ zakiUser, requestId }) {
   }
 
   return { attempted: true, deleted };
+}
+
+async function deleteMinutesAccountResources({ zakiUser, requestId }) {
+  try {
+    return await resolveMinutesControlAccountErasure({
+      controlActive: ZAKI_MINUTES_CONTROL_ACTIVE,
+      zakiUser,
+      requestId,
+      hasAccountState: hasMinutesControlAccountState,
+      eraseAccount: async ({ zakiUser: subject, requestId: erasureRequestId }) => eraseMinutesAccountForErasure({
+        baseUrl: MINUTES_ENGINE_BASE_URL,
+        controlSigningKey: getMinutesEngineControlSigningKey(),
+        userId: String(subject?.id || ""),
+        tenantId: "default",
+        requestId: erasureRequestId,
+        fetchWithTimeout,
+        timeoutMs: MINUTES_ENGINE_REQUEST_TIMEOUT_MS,
+      }),
+    });
+  } catch (error) {
+    logStructured("warn", "minutes.account_erasure.failed", {
+      requestId: requestId || null,
+      failure: error?.code || "minutes_control_unavailable",
+    });
+    throw error;
+  }
 }
 
 async function pipeLearningResponse(req, res, upstream) {
@@ -17337,17 +17673,6 @@ registerTelegramDisconnectAliases(app, {
   agentTelegramDisconnectHandler,
 });
 app.get(
-  "/api/agent/heartbeat",
-  requireAgentContext,
-  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/heartbeat`)
-);
-app.put(
-  "/api/agent/heartbeat",
-  requireAgentContext,
-  agentJson1mb,
-  makeAgentUserProxyHandler((userId) => `/api/v1/users/${encodeURIComponent(userId)}/heartbeat`)
-);
-app.get(
   "/api/agent/cron",
   requireAgentContext,
   agentCronListHandler
@@ -18248,8 +18573,165 @@ app.use(
 );
 
 // =============================================================================
+// MINUTES CONTROL BFF
+// =============================================================================
+// The evidence gate intentionally remains false in all current environments.
+// This router is mounted ahead of read so its signed raw callback path is not
+// consumed by a generic JSON parser or the read-plane router.
+app.use("/api/minutes", buildMinutesControlRouter({
+  enabled: ZAKI_MINUTES_CONTROL_ACTIVE,
+  baseUrl: MINUTES_ENGINE_BASE_URL,
+  controlSigningKey: getMinutesEngineControlSigningKey(),
+  recoveryEncryptionKey: getMinutesControlRecoveryEncryptionKey(),
+  callbackHmacKey: getMinutesEngineCallbackHmacKey(),
+  timeoutMs: MINUTES_ENGINE_REQUEST_TIMEOUT_MS,
+  tokenTtlSeconds: MINUTES_CONTROL_TOKEN_TTL_SECONDS,
+  policy: MINUTES_CONTROL_POLICY,
+  captureReserveUnits: MINUTES_CONTROL_CAPTURE_RESERVE_UNITS,
+  captureHoldTtlMs: MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS,
+  captureMaxSeconds: MINUTES_CONTROL_MAX_CAPTURE_SECONDS,
+  resolveUser: requireAuthUser,
+  getRequestId: getOrCreateRequestId,
+  fetchWithTimeout,
+  resolvePlan: resolvePlatformWalletPlanForUser,
+  recordFailure: (event) => logStructured("warn", "minutes.control.failed", event),
+}));
+
+// =============================================================================
+// MINUTES READ BFF
+// =============================================================================
+app.use("/api/minutes", buildMinutesReadRouter({
+  enabled: ZAKI_MINUTES_ENABLED,
+  baseUrl: MINUTES_ENGINE_BASE_URL,
+  readToken: getMinutesEngineReadToken(),
+  timeoutMs: MINUTES_ENGINE_REQUEST_TIMEOUT_MS,
+  resolveUser: requireAuthUser,
+  getRequestId: getOrCreateRequestId,
+  fetchWithTimeout,
+  recordFailure: (event) => logStructured("warn", "minutes.read.failed", event),
+}));
+
+// =============================================================================
 // DESIGN ENGINE BFF
 // =============================================================================
+
+async function resolveDesignBillingUserById(userId) {
+  const numericUserId = Number(userId);
+  if (!Number.isSafeInteger(numericUserId) || numericUserId <= 0) return null;
+  const zakiUser = await dbGet(
+    `SELECT ${_ZAKI_USER_COLS} FROM zaki_users WHERE id = $1`,
+    [numericUserId]
+  );
+  if (!zakiUser?.verified || Number(zakiUser.id) !== numericUserId) return null;
+  return zakiUser;
+}
+
+let designSessionController = null;
+let designWorkbenchAccess = null;
+if (ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED) {
+  designSessionController = new DesignControllerClient({
+    baseUrl: DESIGN_CONTROLLER_BASE_URL,
+    token: DESIGN_CONTROLLER_TOKEN,
+    fetchWithTimeout,
+    timeoutMs: DESIGN_CONTROLLER_REQUEST_TIMEOUT_MS,
+  });
+  designWorkbenchAccess = createDesignWorkbenchAccess({ secret: DESIGN_CONTROLLER_TOKEN });
+  app.use(
+    "/internal/design/controller/v1",
+    buildDesignControllerCallbackRouter({
+      callbackToken: DESIGN_HUB_CALLBACK_TOKEN,
+      dbQuery,
+      runInTransaction: withDbTransaction,
+    })
+  );
+  // Mounted only when the dedicated cursor secret exists: the read plane never
+  // borrows the callback token as a cursor key (resolveDesignReadCursorSecrets
+  // has already thrown at startup if ZAKI_DESIGN_READ_ENABLED=true without it).
+  if (DESIGN_READ_CURSOR_SECRETS) {
+    app.use(
+      "/internal/design/read/v1",
+      buildDesignInternalReadRouter({
+        callbackToken: DESIGN_HUB_CALLBACK_TOKEN,
+        source: createDesignInternalReadSource({ dbQuery, ...DESIGN_READ_CURSOR_SECRETS }),
+      })
+    );
+  }
+}
+
+const unavailableDesignSessionController = {
+  ensure: async () => { throw new Error("Design session controller is disabled."); },
+  status: async () => { throw new Error("Design session controller is disabled."); },
+  stop: async () => { throw new Error("Design session controller is disabled."); },
+  workbench: async () => { throw new Error("Design session controller is disabled."); },
+};
+
+const authorizeDesignSessionProxy = createDesignSessionProxyAuthorizer({
+  absoluteMaxRequestBytes: ZAKI_DESIGN_MAX_REQUEST_BYTES,
+  issueMeterGrantForIdentity,
+});
+
+async function settleDesignSessionProxy({ req, authorization, receiptStatus, durationMs }) {
+  const grant = authorization?.grant;
+  if (!grant?.grantId || !authorization.action) return;
+  await recordMeterReceiptForGrant({
+    grant,
+    product: "design",
+    action: authorization.action,
+    status: receiptStatus,
+    rawUsageFacts: {
+      durationMs,
+      storageBytes: Number(req.headers?.["content-length"] || 0) || 0,
+      model: "design-session-worker",
+    },
+    idempotencyKey: `${grant.idempotencyKey}:session-proxy-receipt`.slice(0, 180),
+  });
+}
+
+app.use(
+  "/api/design/workbench",
+  buildDesignWorkbenchRouter({
+    enabled: ZAKI_DESIGN_ENABLED && ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED,
+    resolveAccess: (req, sessionId) => designWorkbenchAccess?.resolve(req, sessionId) ?? null,
+    controller: designSessionController || unavailableDesignSessionController,
+    getRequestId: getOrCreateRequestId,
+  })
+);
+
+app.use(
+  "/api/design/projects",
+  buildDesignProjectRouter({
+    enabled: ZAKI_DESIGN_ENABLED,
+    controllerMode: ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED,
+    resolveUser: requireAuthUser,
+    listProjects: ({ userId }) => listDesignProjects({ dbQuery, userId }),
+    createProject: (input) => createDesignProject({ runInTransaction: withDbTransaction, ...input }),
+    createProjectId: generateDesignProjectId,
+    getRequestId: getOrCreateRequestId,
+  })
+);
+
+app.use(
+  "/api/design/sessions",
+  buildDesignSessionRouter({
+    enabled: ZAKI_DESIGN_ENABLED && ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED,
+    resolveUser: requireAuthUser,
+    resolveBillingUserById: resolveDesignBillingUserById,
+    ensureSession: ensureDesignSession,
+    readSessionBinding: readDesignSessionBinding,
+    beginSessionDrain: beginDesignSessionDrain,
+    updateSessionState: updateDesignSessionObservedState,
+    runInTransaction: withDbTransaction,
+    dbQuery,
+    createSessionId: () => `design-session-${crypto.randomUUID()}`,
+    controller: designSessionController || unavailableDesignSessionController,
+    getRequestId: getOrCreateRequestId,
+    authorizeProxy: authorizeDesignSessionProxy,
+    settleProxy: settleDesignSessionProxy,
+    issueWorkbenchAccess: (binding) => designWorkbenchAccess?.issue(binding),
+    revokeWorkbenchAccess: (sessionId) => designWorkbenchAccess?.revoke(sessionId),
+    resolveProxyAccess: (req, sessionId) => designWorkbenchAccess?.resolve(req, sessionId) ?? null,
+  })
+);
 
 app.use("/api/design", requireDesignQuotaForIngress);
 
@@ -18260,19 +18742,38 @@ app.get("/api/internal/design/status", async (req, res) => {
 
     const requestId = getOrCreateRequestId(req);
     const userId = resolveCanonicalDesignUserId(authResult);
-    const configured = Boolean(getDesignBase(DESIGN_ENGINE_BASE_URL) && DESIGN_ENGINE_INTERNAL_TOKEN);
+    const directConfigured = Boolean(getDesignBase(DESIGN_ENGINE_BASE_URL) && DESIGN_ENGINE_INTERNAL_TOKEN);
+    const controllerConfigured = Boolean(
+      DESIGN_CONTROLLER_BASE_URL && DESIGN_CONTROLLER_TOKEN && DESIGN_HUB_CALLBACK_TOKEN
+    );
+    const configured = ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED
+      ? controllerConfigured
+      : directConfigured;
     const body = {
       ok: false,
       enabled: ZAKI_DESIGN_ENABLED,
       configured,
+      topology: ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED ? "session-controller" : "direct-daemon",
       baseUrlConfigured: Boolean(getDesignBase(DESIGN_ENGINE_BASE_URL)),
       internalTokenConfigured: Boolean(DESIGN_ENGINE_INTERNAL_TOKEN),
+      controllerBaseUrlConfigured: Boolean(DESIGN_CONTROLLER_BASE_URL),
+      controllerTokenConfigured: Boolean(DESIGN_CONTROLLER_TOKEN),
+      callbackTokenConfigured: Boolean(DESIGN_HUB_CALLBACK_TOKEN),
       requestTimeoutMs: DESIGN_ENGINE_REQUEST_TIMEOUT_MS,
       requestId,
     };
 
     if (!ZAKI_DESIGN_ENABLED || !configured || !userId) {
       return res.status(200).json(body);
+    }
+
+    if (ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED) {
+      const readiness = await designSessionController.ready();
+      return res.status(200).json({
+        ...body,
+        ok: readiness.ok,
+        upstreamStatus: readiness.upstreamStatus,
+      });
     }
 
     const upstream = await probeDesignReady({
@@ -18296,6 +18797,30 @@ app.get("/api/internal/design/status", async (req, res) => {
 });
 
 app.get("/api/design/health", requireDesignContext, async (req, res) => {
+  if (ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED) {
+    if (!ZAKI_DESIGN_ENABLED) {
+      return res.status(404).json(buildDesignDisabledPayload(getOrCreateRequestId(req)));
+    }
+    try {
+      const readiness = await designSessionController.ready();
+      return res.status(readiness.ok ? 200 : 503).json({
+        ok: readiness.ok,
+        enabled: true,
+        configured: true,
+        topology: "session-controller",
+        upstreamStatus: readiness.upstreamStatus,
+        requestId: getOrCreateRequestId(req),
+      });
+    } catch {
+      return res.status(503).json({
+        code: "design_unavailable",
+        error: "Design is unavailable.",
+        message: "Design session controller is temporarily unavailable.",
+        retryable: true,
+        requestId: getOrCreateRequestId(req),
+      });
+    }
+  }
   if (!assertDesignRouteEnabled(req, res)) return;
   try {
     const upstream = await probeDesignReady({
@@ -21211,6 +21736,41 @@ server.listen(PORT, () => {
     runLedgerSweep();
     setInterval(runLedgerSweep, LEDGER_SWEEP_INTERVAL_MS);
   }, 45_000);
+
+  // A completed engine request can be lost between the network response and
+  // Hub persistence.  Every Minutes create reserves a durable, encrypted
+  // recovery intent first; this leased sweep is its crash/restart owner.  It
+  // is deliberately behind the exact same evidence gate as the browser routes
+  // and callback verifier, so dark deployments never make engine calls.
+  if (ZAKI_MINUTES_CONTROL_ACTIVE) {
+    const MINUTES_RECOVERY_SWEEP_INTERVAL_MS = 30_000;
+    let minutesRecoveryRunning = false;
+    const runMinutesRecoverySweep = async () => {
+      if (minutesRecoveryRunning) return;
+      minutesRecoveryRunning = true;
+      try {
+        const result = await reconcileMinutesControlRecoveries({
+          baseUrl: MINUTES_ENGINE_BASE_URL,
+          controlSigningKey: getMinutesEngineControlSigningKey(),
+          recoveryEncryptionKey: getMinutesControlRecoveryEncryptionKey(),
+          fetchWithTimeout,
+          timeoutMs: MINUTES_ENGINE_REQUEST_TIMEOUT_MS,
+          tokenTtlSeconds: MINUTES_CONTROL_TOKEN_TTL_SECONDS,
+        });
+        if (result.claimed > 0 || result.failed > 0 || result.blocked > 0) {
+          logStructured("warn", "minutes.control.recovery_sweep", result);
+        }
+      } catch (err) {
+        logStructured("error", "minutes.control.recovery_sweep_failed", { message: err?.message || String(err) });
+      } finally {
+        minutesRecoveryRunning = false;
+      }
+    };
+    setTimeout(() => {
+      void runMinutesRecoverySweep();
+      setInterval(() => { void runMinutesRecoverySweep(); }, MINUTES_RECOVERY_SWEEP_INTERVAL_MS);
+    }, 20_000);
+  }
 
   // Agent-usage reconciliation sweep (Wave 2 metering completeness): debit the unit wallet for
   // DAEMON (cron/heartbeat/channel) agent turns the engine recorded in zaki_bot.turn_usage but that

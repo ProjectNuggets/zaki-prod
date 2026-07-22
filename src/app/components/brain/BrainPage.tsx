@@ -32,6 +32,12 @@ import {
   type RecencyBucket,
 } from "./brainColors";
 import { V2StatusStrip } from "@/app/components/v2";
+import {
+  PENDING_INTENT_UPDATED_EVENT,
+  readPendingIntent,
+  writePendingIntent,
+  type PendingIntent,
+} from "@/lib/pendingIntent";
 
 // V1.11 (2026-05-07) — Brain page UX rework. Pre-V1.11 the graph tab
 // rendered three always-visible columns (filter panel, canvas, side
@@ -105,7 +111,24 @@ export function BrainPage() {
   const [composeOpen, setComposeOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState(initialQ);
   const [debouncedSearch, setDebouncedSearch] = useState(initialQ);
+  const [recoveryIntent, setRecoveryIntent] = useState<PendingIntent | null>(() => {
+    const intent = readPendingIntent();
+    return intent?.productId === "brain" ? intent : null;
+  });
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // App consumes direct website commands after route children have rendered.
+  // Re-read after mount and listen for same-tab writes so a first-load Brain
+  // command is visible instead of remaining only in browser storage.
+  useEffect(() => {
+    const syncRecoveryIntent = () => {
+      const intent = readPendingIntent();
+      setRecoveryIntent(intent?.productId === "brain" ? intent : null);
+    };
+    syncRecoveryIntent();
+    window.addEventListener(PENDING_INTENT_UPDATED_EVENT, syncRecoveryIntent);
+    return () => window.removeEventListener(PENDING_INTENT_UPDATED_EVENT, syncRecoveryIntent);
+  }, []);
 
   // V1.7 graph state
   const [filters, setFilters] = useState<BrainFilters>(DEFAULT_FILTERS);
@@ -225,10 +248,7 @@ export function BrainPage() {
     ? 0
     : initialGraphQuery.data?.total_nodes_in_corpus ?? 0;
   const semanticDegraded = health === "degraded";
-
-  if (!brainUnavailable && totalNodes === 0) {
-    return <BrainEmptyState onMigrate={() => navigate("/")} />;
-  }
+  const brainEmpty = !brainUnavailable && totalNodes === 0;
 
   // Memory key → node id. The galaxy focuses by node id, but the time scrubber
   // (and timeline) hand us memory keys. Built from the page's graph fetch.
@@ -326,21 +346,65 @@ export function BrainPage() {
           </div>
         </header>
 
-        {brainUnavailable ? (
-          <BrainUnavailableState />
+        {recoveryIntent ? (
+          <section
+            className="border border-[var(--v2-accent-hairline)] bg-[var(--v2-accent-faint)] p-3"
+            role="region"
+            aria-label={t("brain.recovery.ariaLabel", {
+              defaultValue: "Preserved work",
+            })}
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div className="min-w-0">
+                <p className="font-mono-ui text-[10px] uppercase tracking-[0.12em] text-[var(--v2-accent-text)]">
+                  {t("brain.recovery.title", { defaultValue: "Your work is still here" })}
+                </p>
+                <p className="mt-1 whitespace-pre-wrap break-words text-sm text-[var(--v2-ink-1)]">
+                  {recoveryIntent.prompt}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="v2-btn v2-btn--accent v2-btn--sm shrink-0"
+                onClick={() => {
+                  writePendingIntent({
+                    productId: "spaces",
+                    taskKind: "chat",
+                    prompt: recoveryIntent.prompt,
+                    source: "brain_recovery",
+                    returnTo: "/spaces",
+                    anonymousHandoff: recoveryIntent.anonymousHandoff,
+                    replayMode: "draft",
+                  });
+                  navigate("/spaces");
+                }}
+              >
+                {t("brain.recovery.continueInSpaces", {
+                  defaultValue: "Continue in Spaces",
+                })}
+              </button>
+            </div>
+          </section>
         ) : null}
 
-        {!brainUnavailable && semanticDegraded && !degradedDismissed && (
-          <div className="zaki-brain-v2__banner">
-            <BrainSemanticDegradedBanner onDismiss={() => setDegradedDismissed(true)} />
-          </div>
+        {brainUnavailable ? (
+          <BrainUnavailableState />
+        ) : brainEmpty ? (
+          <BrainEmptyState onMigrate={() => navigate("/")} />
+        ) : (
+          <>
+            {semanticDegraded && !degradedDismissed && (
+              <div className="zaki-brain-v2__banner">
+                <BrainSemanticDegradedBanner onDismiss={() => setDegradedDismissed(true)} />
+              </div>
+            )}
+            <BrainInsightsStrip userId={userId} total={totalNodes} />
+          </>
         )}
-
-        {!brainUnavailable ? <BrainInsightsStrip userId={userId} total={totalNodes} /> : null}
 
       </div>
 
-      {brainUnavailable ? null : (
+      {brainUnavailable || brainEmpty ? null : (
         <>
         {/*
           V1.11 (2026-05-07) — Graph row goes wide. Pre-V1.11 the graph

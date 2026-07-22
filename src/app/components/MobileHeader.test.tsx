@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { MobileHeader } from "./MobileHeader";
 
 const toggleMobileSidebar = jest.fn();
+const changeLanguage = jest.fn<() => Promise<unknown>>().mockResolvedValue(undefined);
 
 jest.mock("@/stores", () => ({
   useUIStore: (selector?: (state: { toggleMobileSidebar: () => void }) => unknown) => {
@@ -22,6 +23,7 @@ jest.mock("@/stores", () => ({
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (_key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? _key,
+    i18n: { language: "en", changeLanguage },
   }),
 }));
 
@@ -42,5 +44,17 @@ describe("MobileHeader", () => {
     } finally {
       window.removeEventListener("zaki:open-agent-mobile-inspector", handler);
     }
+  });
+
+  it("lets an anonymous visitor switch the mobile interface to Arabic", () => {
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <MobileHeader />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to Arabic" }));
+
+    expect(changeLanguage).toHaveBeenCalledWith("ar");
   });
 });

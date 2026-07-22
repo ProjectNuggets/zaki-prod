@@ -99,6 +99,7 @@ export function saveAgentPlanForClaim(plan: AgentPlanPreview): string | null {
     source: "agent_preview",
     returnTo: AGENT_PLAN_ROUTE,
     anonymousWorkId: item.id,
+    anonymousHandoff: true,
   });
 
   return item.id;

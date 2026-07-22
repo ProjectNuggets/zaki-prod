@@ -7,7 +7,6 @@ import {
   SkeletonSettingsPage,
   SkeletonSpaceGrid,
 } from './app/components/ui/skeleton';
-import { ProductAccessGate } from './app/components/ProductAccessGate';
 import { ProductLaunchPage } from './app/components/ProductLaunchPage';
 import { useAuthStore } from './stores';
 import { getCanonicalAppProductRoute, getProductLaunchState } from './lib/productRoutes';
@@ -68,6 +67,14 @@ const SettingsPage = lazy(() =>
   import('./app/components/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
 
+const DesignRoute = lazy(() =>
+  import('./app/components/design/DesignRoute').then((m) => ({ default: m.DesignRoute })),
+);
+
+const MinutesRoute = lazy(() =>
+  import('./app/components/minutes/MinutesRoute').then((m) => ({ default: m.MinutesRoute })),
+);
+
 // Brain is the first lazy-loaded route: its WebGL "Galaxy" renderer (three +
 // d3-force-3d) is heavy and only needed on /brain, so it is code-split into
 // its own chunk and loaded on demand behind a Suspense fallback.
@@ -81,7 +88,18 @@ const AnonymousAgentPreview = lazy(() =>
   })),
 );
 
-function HomeRoute() {
+/**
+ * One shared element type for EVERY route that renders ChatArea (the command
+ * dashboard on `/` and all Spaces surfaces). React preserves a mounted
+ * component only while the element type at the route outlet is unchanged;
+ * giving `/` its own wrapper component made the dashboard → new-thread
+ * navigation remount ChatArea, and its unmount cleanup aborted the in-flight
+ * anonymous first turn AFTER the BFF had metered it — the visitor paid a
+ * unit and never received the reply. Keeping a single element type keeps the
+ * same ChatArea instance (and its stream) alive across that handoff.
+ * `src/routes.test.tsx` pins this invariant.
+ */
+function ChatAreaRoute() {
   return routeSuspense(<ChatArea />, <SkeletonChatShell />);
 }
 
@@ -100,7 +118,7 @@ function AgentRoute() {
   if (!token) {
     return routeSuspense(<AnonymousAgentPreview />, <SkeletonChatShell />);
   }
-  return routeSuspense(<ChatArea />, <SkeletonChatShell />);
+  return <ChatAreaRoute />;
 }
 
 function ProductRoute({ locale = "en" }: { locale?: "en" | "ar" }) {
@@ -145,7 +163,7 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <HomeRoute />, // Command dashboard for anonymous and signed-in users
+        element: <ChatAreaRoute />, // Command dashboard for anonymous and signed-in users
       },
       {
         path: 'agent',
@@ -153,23 +171,23 @@ export const router = createBrowserRouter([
       },
       {
         path: 'spaces',
-        element: routeSuspense(<ChatArea />, <SkeletonChatShell />), // Will show spaces view
+        element: <ChatAreaRoute />, // Will show spaces view
       },
       {
         path: 'spaces/:spaceId',
-        element: routeSuspense(<ChatArea />, <SkeletonChatShell />), // Will show space detail
+        element: <ChatAreaRoute />, // Will show space detail
       },
       {
         path: 'spaces/:spaceId/threads/:threadId',
-        element: routeSuspense(<ChatArea />, <SkeletonChatShell />), // Will show chat view
+        element: <ChatAreaRoute />, // Will show chat view
       },
       {
         path: 'about',
-        element: routeSuspense(<ChatArea />, <SkeletonChatShell />),
+        element: <ChatAreaRoute />,
       },
       {
         path: 'reset',
-        element: routeSuspense(<ChatArea />, <SkeletonChatShell />),
+        element: <ChatAreaRoute />,
       },
       {
         path: 'artifact/:shareCode',
@@ -327,23 +345,11 @@ export const router = createBrowserRouter([
       },
       {
         path: 'design',
-        element: routeSuspense(
-          <ProductAccessGate
-            productId="design"
-            title="ZAKI Design"
-            mode="coming_soon"
-          />
-        ),
+        element: routeSuspense(<DesignRoute />),
       },
       {
         path: 'minutes',
-        element: routeSuspense(
-          <ProductAccessGate
-            productId="minutes"
-            title="ZAKI Minutes"
-            mode="coming_soon"
-          />
-        ),
+        element: routeSuspense(<MinutesRoute />),
       },
     ],
   },

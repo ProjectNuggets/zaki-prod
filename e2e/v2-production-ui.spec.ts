@@ -27,8 +27,36 @@ async function openInspectorIfNeeded(page: Page) {
   }
 }
 
+async function openSettingsCategory(page: Page, name: string | RegExp, testId: string) {
+  await page.getByRole("link", { name, exact: typeof name === "string" }).click();
+  await expect(page.getByTestId(testId)).toBeVisible({ timeout: 20_000 });
+}
+
 async function mockSettingsActivation(page: Page) {
   let adoptedKey = "";
+  let heartbeatEnabled = false;
+  await page.route("**/v1/me/bot/heartbeat", async (route) => {
+    if (route.request().method() === "PUT") {
+      const body = route.request().postDataJSON() as { enabled?: boolean } | null;
+      heartbeatEnabled = body?.enabled === true;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        enabled: heartbeatEnabled,
+        operator_enabled: true,
+        effective_enabled: heartbeatEnabled,
+        interval_minutes: 60,
+        delivery_channel: "telegram",
+        delivery_ready: heartbeatEnabled,
+        status: heartbeatEnabled ? "ready" : "disabled",
+        last_run_s: null,
+        last_status: null,
+        last_reason: null,
+      }),
+    });
+  });
   await page.route("**/api/agent/telos", async (route) => {
     await route.fulfill({
       status: 200,
@@ -187,22 +215,21 @@ test.describe("V2 production-final app surfaces", () => {
     await page.setViewportSize(RELEASE_VIEWPORTS.desktop);
     await page.goto("/settings", { waitUntil: "domcontentloaded" });
 
-    for (const testId of [
-      "settings-account",
-      "settings-billing",
-      "settings-platform-usage",
-      "settings-agent",
-      "settings-automations",
-      "settings-suggestions",
-      "settings-telos",
-      "settings-channels",
-      "settings-secrets",
-      "settings-devices",
-      "settings-memory-data",
-      "settings-memory-governance",
-      "settings-privacy",
+    await expect(page.getByTestId("settings-account")).toBeVisible({ timeout: 20_000 });
+    for (const { name, testId } of [
+      { name: "Your goals", testId: "settings-telos" },
+      { name: "Suggestions", testId: "settings-suggestions" },
+      { name: "Plan & Usage", testId: "settings-billing" },
+      { name: "Agent", testId: "settings-agent" },
+      { name: "Automations", testId: "settings-automations" },
+      { name: "Channels", testId: "settings-channels" },
+      { name: /Advanced credentials/, testId: "settings-secrets" },
+      { name: /devices$/i, testId: "settings-devices" },
+      { name: "Memory & Privacy", testId: "settings-memory-data" },
+      { name: "Privacy", testId: "settings-privacy" },
     ]) {
-      await expect(page.getByTestId(testId)).toBeVisible({ timeout: 20_000 });
+      await openSettingsCategory(page, name, testId);
+      await expect(page.getByTestId("settings-account")).toHaveCount(0);
     }
     for (const removedTestId of [
       "settings-products-access",
@@ -212,6 +239,7 @@ test.describe("V2 production-final app surfaces", () => {
     ]) {
       await expect(page.getByTestId(removedTestId)).toHaveCount(0);
     }
+    await openSettingsCategory(page, "Channels", "settings-channels");
     await expect(page.getByTestId("settings-channels").getByText("Telegram", { exact: true })).toBeVisible();
     await expect(page.getByTestId("settings-channels").getByText("Slack", { exact: true }).first()).toBeVisible();
     await expect(page.getByTestId("settings-channels").getByText("Discord", { exact: true }).first()).toBeVisible();
@@ -235,15 +263,29 @@ test.describe("V2 production-final app surfaces", () => {
     await attachViewportShot(page, testInfo, "settings-slack-1440x1000");
     await expect(page.getByText("Gmail & Google Drive")).toHaveCount(0);
     await expect(page.getByText(/Composio/i)).toHaveCount(0);
+    await openSettingsCategory(page, /Advanced credentials/, "settings-secrets");
     await expect(page.getByTestId("settings-secrets").getByText("telegram_bot_token")).toBeVisible();
     await expect(page.getByTestId("settings-secrets").getByText(/xoxb-|Discord bot token|IMAP password/i)).toHaveCount(0);
+    await openSettingsCategory(page, "Plan & Usage", "settings-billing");
     await expect(page.getByTestId("settings-billing").getByText("ZAKI CLI")).toHaveCount(0);
+    await openSettingsCategory(page, "Agent", "settings-agent");
     await expect(page.getByRole("combobox", { name: "Default model" })).toBeVisible();
     await expect(page.getByRole("option", { name: /Claude Haiku 4\.5/ })).toHaveCount(1);
+    const proactiveCheckins = page.getByRole("checkbox", { name: "Proactive check-ins" });
+    await expect(proactiveCheckins).not.toBeChecked();
+    await proactiveCheckins.click();
+    await expect(proactiveCheckins).toBeChecked();
+    await expect(
+      page.getByRole("status").filter({ hasText: "On · Every 60 min through Telegram" }),
+    ).toBeVisible();
+    await attachViewportShot(page, testInfo, "settings-proactive-checkins-1440x1000");
+    await openSettingsCategory(page, "Your goals", "settings-telos");
     await expect(page.getByTestId("settings-telos").getByText("Active in prompts")).toBeVisible();
+    await openSettingsCategory(page, "Automations", "settings-automations");
     await expect(page.getByTestId("settings-automations").getByText("Dream reflection")).toBeVisible();
     await expect(page.getByTestId("settings-automations").getByText("Learning miner")).toBeVisible();
     await expect(page.getByTestId("settings-automations").getByText("Weekday brief")).toBeVisible();
+    await openSettingsCategory(page, "Suggestions", "settings-suggestions");
     const suggestions = page.getByTestId("settings-suggestions");
     await expect(suggestions.getByText("Lead with outcomes")).toBeVisible();
     await suggestions.getByRole("button", { name: "Adopt" }).click();
@@ -257,22 +299,28 @@ test.describe("V2 production-final app surfaces", () => {
     await page.setViewportSize(RELEASE_VIEWPORTS.mobile);
     await page.goto("/settings", { waitUntil: "domcontentloaded" });
 
-    await expect(page.getByTestId("settings-telos")).toBeVisible({ timeout: 20_000 });
-    await page.getByTestId("settings-agent").scrollIntoViewIfNeeded();
+    await openSettingsCategory(page, "Agent", "settings-agent");
     await expect(page.getByRole("combobox", { name: "Default model" })).toBeVisible();
-    await page.getByTestId("settings-suggestions").scrollIntoViewIfNeeded();
+    const proactiveCheckins = page.getByRole("checkbox", { name: "Proactive check-ins" });
+    await expect(proactiveCheckins).not.toBeChecked();
+    await proactiveCheckins.click();
+    await expect(proactiveCheckins).toBeChecked();
+    await expect(
+      page.getByRole("status").filter({ hasText: "On · Every 60 min through Telegram" }),
+    ).toBeVisible();
+    await attachViewportShot(page, testInfo, "settings-proactive-checkins-390x844");
+    await openSettingsCategory(page, "Suggestions", "settings-suggestions");
     await expect(page.getByRole("button", { name: "Adopt" })).toBeVisible();
-    await page.getByTestId("settings-automations").scrollIntoViewIfNeeded();
+    await openSettingsCategory(page, "Automations", "settings-automations");
     await expect(
       page.getByTestId("settings-automations").getByText("Dream reflection", { exact: true }),
     ).toBeVisible();
-    await page.getByTestId("settings-channel-telegram").scrollIntoViewIfNeeded();
+    await openSettingsCategory(page, "Channels", "settings-channels");
     await page.getByTestId("settings-channel-telegram").getByRole("button", { name: "Manage Telegram" }).click();
     const mobileTelegramPanel = page.getByTestId("settings-channel-panel-telegram");
     await mobileTelegramPanel.getByRole("button", { name: "Test Telegram connection" }).click();
     await expect(mobileTelegramPanel.getByText("Provider connection verified.")).toBeVisible();
     await attachViewportShot(page, testInfo, "settings-telegram-liveness-390x844");
-    await page.getByTestId("settings-channel-slack").scrollIntoViewIfNeeded();
     await page.getByTestId("settings-channel-slack").getByRole("button", { name: "Manage Slack" }).click();
     const mobileSlackGuidance = page
       .getByTestId("settings-channel-panel-slack")

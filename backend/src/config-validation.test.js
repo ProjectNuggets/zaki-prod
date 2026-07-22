@@ -17,6 +17,8 @@ describe("runtime config validation", () => {
       createBaseEnv({
         STRIPE_PRICE_STUDENT_YEARLY: "",
         STRIPE_PRICE_PERSONAL_YEARLY: "",
+        STRIPE_PRICE_PRO_YEARLY: "",
+        STRIPE_PRICE_PRO_MAX_YEARLY: "",
         STRIPE_PRICE_PERSONAL: "",
         STRIPE_PRICE_PRO: "",
         STRIPE_PRICE_PRO_MAX: "",
@@ -33,6 +35,8 @@ describe("runtime config validation", () => {
         expect.objectContaining({ key: "STRIPE_PRICE_STUDENT" }),
         expect.objectContaining({ key: "STRIPE_PRICE_STUDENT_YEARLY" }),
         expect.objectContaining({ key: "STRIPE_PRICE_PERSONAL_YEARLY" }),
+        expect.objectContaining({ key: "STRIPE_PRICE_PRO_YEARLY" }),
+        expect.objectContaining({ key: "STRIPE_PRICE_PRO_MAX_YEARLY" }),
         expect.objectContaining({ key: "STRIPE_PRICE_PERSONAL" }),
         expect.objectContaining({ key: "STRIPE_PRICE_PRO" }),
         expect.objectContaining({ key: "STRIPE_PRICE_PRO_MAX" }),
@@ -89,7 +93,9 @@ describe("runtime config validation", () => {
         STRIPE_PRICE_PERSONAL: "price_personal_monthly",
         STRIPE_PRICE_PERSONAL_YEARLY: "price_personal_yearly",
         STRIPE_PRICE_PRO: "price_pro_monthly",
+        STRIPE_PRICE_PRO_YEARLY: "price_pro_yearly",
         STRIPE_PRICE_PRO_MAX: "price_pro_max_monthly",
+        STRIPE_PRICE_PRO_MAX_YEARLY: "price_pro_max_yearly",
         STRIPE_PRICE_ACCESS_CODE_MONTHLY: "price_access_code_monthly",
         ZAKI_BILLING_ALERT_WEBHOOK_URL: "https://alerts.example.com/metering",
       })
@@ -125,6 +131,8 @@ describe("runtime config validation", () => {
         STRIPE_PRICE_STUDENT: "",
         STRIPE_PRICE_STUDENT_YEARLY: "",
         STRIPE_PRICE_PERSONAL_YEARLY: "",
+        STRIPE_PRICE_PRO_YEARLY: "",
+        STRIPE_PRICE_PRO_MAX_YEARLY: "",
         STRIPE_PRICE_ACCESS_CODE_MONTHLY: "",
       })
     );
@@ -135,12 +143,16 @@ describe("runtime config validation", () => {
     expect(errorKeys).not.toContain("STRIPE_PRICE_STUDENT");
     expect(errorKeys).not.toContain("STRIPE_PRICE_STUDENT_YEARLY");
     expect(errorKeys).not.toContain("STRIPE_PRICE_PERSONAL_YEARLY");
+    expect(errorKeys).not.toContain("STRIPE_PRICE_PRO_YEARLY");
+    expect(errorKeys).not.toContain("STRIPE_PRICE_PRO_MAX_YEARLY");
     expect(errorKeys).not.toContain("STRIPE_PRICE_ACCESS_CODE_MONTHLY");
     expect(report.warnings).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ key: "STRIPE_PRICE_STUDENT" }),
         expect.objectContaining({ key: "STRIPE_PRICE_STUDENT_YEARLY" }),
         expect.objectContaining({ key: "STRIPE_PRICE_PERSONAL_YEARLY" }),
+        expect.objectContaining({ key: "STRIPE_PRICE_PRO_YEARLY" }),
+        expect.objectContaining({ key: "STRIPE_PRICE_PRO_MAX_YEARLY" }),
         expect.objectContaining({ key: "STRIPE_PRICE_ACCESS_CODE_MONTHLY" }),
       ])
     );
@@ -187,6 +199,8 @@ describe("runtime config validation", () => {
     expect(warningKeys).not.toContain("STRIPE_PRICE_STUDENT");
     expect(warningKeys).not.toContain("STRIPE_PRICE_STUDENT_YEARLY");
     expect(warningKeys).not.toContain("STRIPE_PRICE_PERSONAL_YEARLY");
+    expect(warningKeys).not.toContain("STRIPE_PRICE_PRO_YEARLY");
+    expect(warningKeys).not.toContain("STRIPE_PRICE_PRO_MAX_YEARLY");
     expect(warningKeys).not.toContain("STRIPE_PRICE_PERSONAL");
     expect(warningKeys).not.toContain("STRIPE_PRICE_PRO");
     expect(warningKeys).not.toContain("STRIPE_PRICE_PRO_MAX");
@@ -371,6 +385,214 @@ describe("runtime config validation", () => {
     expect(report.warnings).toEqual(
       expect.arrayContaining([expect.objectContaining({ key: "ZAKI_LEARNING_ENABLED" })])
     );
+  });
+
+  it("requires a fixed Minutes read origin and dedicated token when enabled", () => {
+    const missing = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_MINUTES_ENABLED: "true",
+        MINUTES_ENGINE_BASE_URL: "",
+        MINUTES_ENGINE_READ_TOKEN: "",
+      })
+    );
+    expect(missing.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "MINUTES_ENGINE_BASE_URL" }),
+      expect.objectContaining({ key: "MINUTES_ENGINE_READ_TOKEN" }),
+    ]));
+
+    const unsafe = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_MINUTES_ENABLED: "true",
+        MINUTES_ENGINE_BASE_URL: "https://user:secret@minutes.example.test/api/zaki/read/v1",
+        MINUTES_ENGINE_READ_TOKEN: "short",
+      })
+    );
+    expect(unsafe.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "MINUTES_ENGINE_BASE_URL" }),
+      expect.objectContaining({ key: "MINUTES_ENGINE_READ_TOKEN" }),
+    ]));
+  });
+
+  it("accepts sealed Minutes read config and warns when credentials are staged behind the disabled gate", () => {
+    const enabled = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_MINUTES_ENABLED: "true",
+        MINUTES_ENGINE_BASE_URL: "http://zaki-minutes-engine:8056",
+        MINUTES_ENGINE_READ_TOKEN: "m".repeat(32),
+      })
+    );
+    expect(enabled.errors.find((issue) => issue.key.startsWith("MINUTES_ENGINE"))).toBeUndefined();
+
+    const disabled = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_MINUTES_ENABLED: "false",
+        MINUTES_ENGINE_BASE_URL: "http://zaki-minutes-engine:8056",
+        MINUTES_ENGINE_READ_TOKEN: "m".repeat(32),
+      })
+    );
+    expect(disabled.errors.find((issue) => issue.key.startsWith("MINUTES_ENGINE"))).toBeUndefined();
+    expect(disabled.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "ZAKI_MINUTES_ENABLED" }),
+    ]));
+  });
+
+  it("requires file-projected Minutes credentials in production and rejects env-carried secrets", () => {
+    const envSecret = validateRuntimeConfig(
+      createBaseEnv({
+        NODE_ENV: "production",
+        ZAKI_MINUTES_ENABLED: "true",
+        MINUTES_ENGINE_BASE_URL: "http://zaki-minutes-engine:8056",
+        MINUTES_ENGINE_READ_TOKEN: "m".repeat(32),
+      })
+    );
+    expect(envSecret.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "MINUTES_ENGINE_READ_TOKEN" }),
+      expect.objectContaining({ key: "MINUTES_ENGINE_READ_TOKEN_FILE" }),
+    ]));
+
+    const projected = validateRuntimeConfig(
+      createBaseEnv({
+        NODE_ENV: "production",
+        ZAKI_MINUTES_ENABLED: "true",
+        MINUTES_ENGINE_BASE_URL: "http://zaki-minutes-engine:8056",
+        MINUTES_ENGINE_READ_TOKEN_FILE: "/run/secrets/zaki-read/minutes",
+      })
+    );
+    expect(projected.errors.find((issue) => issue.key.startsWith("MINUTES_ENGINE"))).toBeUndefined();
+  });
+
+  it("keeps Minutes control dark until the separate staging-evidence gate is set", () => {
+    const dark = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_MINUTES_CONTROL_ENABLED: "true",
+        ZAKI_MINUTES_CONTROL_STAGING_READY: "false",
+        MINUTES_ENGINE_CONTROL_TOKEN: "c".repeat(32),
+      })
+    );
+    expect(dark.errors.find((issue) => issue.key === "MINUTES_ENGINE_CONTROL_TOKEN")).toBeUndefined();
+    expect(dark.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "ZAKI_MINUTES_CONTROL_STAGING_READY" }),
+    ]));
+
+    const invalidEvidence = validateRuntimeConfig(
+      createBaseEnv({ ZAKI_MINUTES_CONTROL_STAGING_READY: "true" })
+    );
+    expect(invalidEvidence.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "ZAKI_MINUTES_CONTROL_STAGING_READY" }),
+    ]));
+  });
+
+  it("requires complete scoped-token, callback-HMAC, and reserve configuration once Minutes control is active", () => {
+    const missing = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_MINUTES_CONTROL_ENABLED: "true",
+        ZAKI_MINUTES_CONTROL_STAGING_READY: "true",
+        MINUTES_ENGINE_BASE_URL: "http://zaki-minutes-engine:8056",
+      })
+    );
+    expect(missing.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "ZAKI_MINUTES_ENABLED" }),
+      expect.objectContaining({ key: "MINUTES_ENGINE_CONTROL_TOKEN" }),
+      expect.objectContaining({ key: "MINUTES_ENGINE_CALLBACK_HMAC_KEY" }),
+      expect.objectContaining({ key: "MINUTES_CONTROL_RECOVERY_KEY" }),
+      expect.objectContaining({ key: "MINUTES_CONTROL_CAPTURE_RESERVE_UNITS" }),
+    ]));
+
+    const configured = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_MINUTES_CONTROL_ENABLED: "true",
+        ZAKI_MINUTES_CONTROL_STAGING_READY: "true",
+        ZAKI_MINUTES_ENABLED: "true",
+        MINUTES_ENGINE_BASE_URL: "http://zaki-minutes-engine:8056",
+        MINUTES_ENGINE_READ_TOKEN: "m".repeat(32),
+        MINUTES_ENGINE_CONTROL_TOKEN: "c".repeat(32),
+        MINUTES_ENGINE_CALLBACK_HMAC_KEY: "h".repeat(32),
+        MINUTES_CONTROL_RECOVERY_KEY: "r".repeat(32),
+        MINUTES_CONTROL_CAPTURE_RESERVE_UNITS: "60",
+        MINUTES_CONTROL_TOKEN_TTL_SECONDS: "60",
+      })
+    );
+    expect(configured.errors.find((issue) => issue.key.includes("MINUTES_CONTROL") || issue.key === "MINUTES_ENGINE_BASE_URL")).toBeUndefined();
+  });
+
+  it("requires projected Minutes control signing and callback keys in production", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        NODE_ENV: "production",
+        ZAKI_MINUTES_CONTROL_ENABLED: "true",
+        ZAKI_MINUTES_CONTROL_STAGING_READY: "true",
+        ZAKI_MINUTES_ENABLED: "true",
+        MINUTES_ENGINE_BASE_URL: "http://zaki-minutes-engine:8056",
+        MINUTES_ENGINE_READ_TOKEN_FILE: "/run/secrets/zaki-read/minutes",
+        MINUTES_ENGINE_CONTROL_TOKEN_FILE: "/run/secrets/zaki-control/signing-key",
+        MINUTES_ENGINE_CALLBACK_HMAC_KEY_FILE: "/run/secrets/zaki-control/callback-key",
+        MINUTES_CONTROL_RECOVERY_KEY_FILE: "/run/secrets/zaki-control/recovery-key",
+        MINUTES_CONTROL_CAPTURE_RESERVE_UNITS: "60",
+      })
+    );
+    expect(report.errors.find((issue) => issue.key.includes("MINUTES_CONTROL") || issue.key === "MINUTES_ENGINE_CALLBACK_HMAC_KEY_FILE")).toBeUndefined();
+  });
+
+  it("rejects an active Minutes control policy that would violate the sealed retention contract", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_MINUTES_CONTROL_ENABLED: "true",
+        ZAKI_MINUTES_CONTROL_STAGING_READY: "true",
+        ZAKI_MINUTES_ENABLED: "true",
+        MINUTES_ENGINE_BASE_URL: "http://zaki-minutes-engine:8056",
+        MINUTES_ENGINE_READ_TOKEN: "m".repeat(32),
+        MINUTES_ENGINE_CONTROL_TOKEN: "c".repeat(32),
+        MINUTES_ENGINE_CALLBACK_HMAC_KEY: "h".repeat(32),
+        MINUTES_CONTROL_CAPTURE_RESERVE_UNITS: "60",
+        MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS: "10",
+        MINUTES_CONTROL_POLICY_VERSION: "not a valid policy id",
+        MINUTES_CONTROL_AUDIO_RETENTION_DAYS: "366",
+        MINUTES_CONTROL_TRANSCRIPT_RETENTION_DAYS: "20",
+        MINUTES_CONTROL_SUMMARY_RETENTION_DAYS: "21",
+      })
+    );
+
+    expect(report.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS" }),
+      expect.objectContaining({ key: "MINUTES_CONTROL_POLICY_VERSION" }),
+      expect.objectContaining({ key: "MINUTES_CONTROL_AUDIO_RETENTION_DAYS" }),
+      expect.objectContaining({ key: "MINUTES_CONTROL_SUMMARY_RETENTION_DAYS" }),
+    ]));
+  });
+
+  it("requires the read plane and a prepaid window that covers the engine maximum", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_MINUTES_CONTROL_ENABLED: "true",
+        ZAKI_MINUTES_CONTROL_STAGING_READY: "true",
+        ZAKI_MINUTES_ENABLED: "true",
+        MINUTES_ENGINE_BASE_URL: "http://zaki-minutes-engine:8056",
+        MINUTES_ENGINE_READ_TOKEN: "m".repeat(32),
+        MINUTES_ENGINE_CONTROL_TOKEN: "c".repeat(32),
+        MINUTES_ENGINE_CALLBACK_HMAC_KEY: "h".repeat(32),
+        MINUTES_CONTROL_MAX_CAPTURE_SECONDS: "3601",
+        MINUTES_CONTROL_CAPTURE_RESERVE_UNITS: "60",
+        MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS: "3900000",
+      })
+    );
+    expect(report.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "MINUTES_CONTROL_CAPTURE_RESERVE_UNITS" }),
+      expect.objectContaining({ key: "MINUTES_CONTROL_CAPTURE_HOLD_TTL_MS" }),
+    ]));
+  });
+
+  it("requires the complete split-token controller contract when the Design session controller is enabled", () => {
+    const report = validateRuntimeConfig(
+      createBaseEnv({
+        ZAKI_DESIGN_ENABLED: "false",
+        ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED: "true",
+      })
+    );
+    expect(report.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "ZAKI_DESIGN_CONTROLLER_BASE_URL" }),
+      expect.objectContaining({ key: "ZAKI_DESIGN_CONTROLLER_TOKEN" }),
+      expect.objectContaining({ key: "ZAKI_DESIGN_HUB_CALLBACK_TOKEN" }),
+    ]));
   });
 
   it("requires hire engine base and token when hire is enabled", () => {

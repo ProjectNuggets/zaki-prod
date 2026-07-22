@@ -38,8 +38,8 @@ const PRODUCTS = Object.freeze([
     plan: "pro_max",
     name: "ZAKI Pro Max",
     description: "Pro Max tier — the highest weekly allowance for the heaviest ZAKI workloads.",
-    monthlyUnitAmount: 9900,
-    lookupKey: "zaki_pro_max_monthly_2026_06",
+    monthlyUnitAmount: 9500,
+    lookupKey: "zaki_pro_max_monthly_2026_07_95",
   },
 ]);
 
@@ -137,10 +137,16 @@ async function findOrCreateMonthlyPrice(stripe, spec, productId) {
 }
 
 function buildCommercialPortalConfigurationPayload({ products, appUrl }) {
-  const normalizedProducts = products.map((item) => ({
-    product: item.productId,
-    prices: [item.priceId],
-  }));
+  const normalizedProducts = products.map((item) => {
+    const candidates = Array.isArray(item.priceIds) ? item.priceIds : [item.priceId];
+    const prices = [
+      ...new Set(candidates.map((priceId) => String(priceId || "").trim()).filter(Boolean)),
+    ];
+    return {
+      product: String(item.productId || "").trim(),
+      prices,
+    };
+  }).filter((item) => item.product && item.prices.length > 0);
   return {
     active: true,
     default_return_url: `${String(appUrl || "https://app.chatzaki.com").replace(/\/+$/, "")}/pricing?billing=manage`,
@@ -203,6 +209,10 @@ function envNameForPlan(plan) {
   );
 }
 
+function yearlyEnvNameForPlan(plan) {
+  return `STRIPE_PRICE_${String(plan || "").trim().toUpperCase()}_YEARLY`;
+}
+
 async function main() {
   loadEnv();
   const stripe = new Stripe(requireStripeSecretKey(), { apiVersion: "2024-06-20" });
@@ -216,6 +226,8 @@ async function main() {
       spec,
       product.id
     );
+    const yearlyEnv = yearlyEnvNameForPlan(spec.plan);
+    const yearlyPriceId = String(process.env[yearlyEnv] || "").trim();
     results.push({
       plan: spec.plan,
       env: envNameForPlan(spec.plan),
@@ -223,7 +235,10 @@ async function main() {
       productName: product.name,
       productCreated,
       priceId: price.id,
+      priceIds: [price.id, yearlyPriceId].filter(Boolean),
       priceCreated,
+      yearlyEnv,
+      yearlyPriceId: yearlyPriceId || null,
       unitAmount: price.unit_amount,
       currency: price.currency,
       interval: price.recurring?.interval || null,
@@ -247,6 +262,11 @@ async function main() {
         },
         envSnippet: {
           ...Object.fromEntries(results.map((item) => [item.env, item.priceId])),
+          ...Object.fromEntries(
+            results
+              .filter((item) => item.yearlyPriceId)
+              .map((item) => [item.yearlyEnv, item.yearlyPriceId])
+          ),
           STRIPE_BILLING_PORTAL_CONFIGURATION: configuration.id,
         },
       },
@@ -276,6 +296,7 @@ export {
   CATALOG_VERSION,
   PRODUCTS,
   envNameForPlan,
+  yearlyEnvNameForPlan,
   buildCommercialPortalConfigurationPayload,
   findOrCreatePortalConfiguration,
 };

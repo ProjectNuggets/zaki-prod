@@ -29,6 +29,10 @@ export function MemoryCaptureToast({
 }: MemoryCaptureToastProps) {
   const { t } = useTranslation();
 
+  // WP-MEM6: the import no longer routes through this toast. It is a sequence of ordinary agent
+  // turns now, confirmed by ZAKI's own reply and the memory_store tool rows in the thread — so the
+  // "import" variant (a centred modal claiming "I now remember N details") has been removed. This
+  // component serves ordinary chat auto-capture only.
   const title =
     savedCount > 1
       ? t("memory.savedMultiple", { count: savedCount })
@@ -52,8 +56,8 @@ export function MemoryCaptureToast({
         bottom: position.bottom,
       }}
     >
-      <div className="rounded-2xl border border-zaki-subtle bg-white/95 px-3 py-2.5 text-xs text-zaki-secondary shadow-[0px_10px_24px_rgba(15,15,15,0.08)] backdrop-blur-sm">
-        <div className="min-w-0">
+      <div className="border border-zaki-subtle bg-zaki-raised/95 px-3 py-2.5 font-mono text-xs text-zaki-secondary shadow-[0px_10px_24px_rgba(15,15,15,0.08)] backdrop-blur-sm dark:bg-[#141210]/95">
+        <div className="min-w-0" role="status" aria-live="polite" aria-atomic="true">
           <div className="flex items-center gap-2 text-zaki-primary">
             <span className="inline-flex size-5 items-center justify-center rounded-full bg-zaki-hover text-zaki-brand">
               <Brain className="size-3" />

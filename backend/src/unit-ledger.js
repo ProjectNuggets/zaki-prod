@@ -149,7 +149,17 @@ export async function applyWeeklyResetLocked(c, wallet) {
  * @returns {Promise<{ok:boolean, hold?:object, funding?:object, remaining?:number, idempotent?:boolean, reason?:string, shortfall?:number}>}
  */
 export async function reserveUnits(
-  { userId, grantId, productId, action, reservedUnits, reserveIdempotencyKey, expiresAt, allowOverdraw = false },
+  {
+    userId,
+    grantId,
+    productId,
+    action,
+    reservedUnits,
+    reserveIdempotencyKey,
+    expiresAt,
+    allowOverdraw = false,
+    admitOnPositiveBalance = false,
+  },
   client
 ) {
   const run = async (c) => {
@@ -215,7 +225,16 @@ export async function reserveUnits(
       // weekly_used_units has only a >= 0 CHECK, so over-the-cap debits are permitted, and routing
       // the overflow through fromRecurring keeps the funding_json refund-correct at settle.
       // Live (interactive) reserves never set this flag → the 429 gate is unchanged for them.
-      if (!allowOverdraw) {
+      //
+      // admitOnPositiveBalance (owner metering decision 2026-07-18): the flat reserve is a
+      // worst-case ceiling, NOT an entitlement to spend. Gating admission on it meant a tier whose
+      // allowance was below the reserve got exactly ONE turn per window and was then refused with
+      // most of its balance unspent. So: while the user still has ANY units, admit the turn and
+      // absorb the shortfall; the NEXT turn is refused once the wallet is drained to zero.
+      // This deliberately reuses the overdraw funding path below rather than adding a second debit
+      // route — same top-up-first ordering, same refund-correct funding_json.
+      const hasPositiveBalance = Number(rem.remaining) > 0;
+      if (!allowOverdraw && !(admitOnPositiveBalance && hasPositiveBalance)) {
         return {
           ok: false,
           reason: "insufficient_units",
@@ -289,10 +308,15 @@ export async function reserveUnits(
 /**
  * Settle (or release) a reserved hold. Idempotent (no-op if already terminal). Refunds top-up-first.
  * For finalState='settled', settledUnits must be a finite number. settledUnits=0 + 'released' = full refund.
+ *
+ * recordTrueCost (WP-BILL2): default-off. When off, settledUnits is capped at reserved, so a turn
+ * that cost more than its reserve is recorded — and billed — as the reserve. When on, the true cost
+ * is recorded and the overage is DEBITED here, which is the half that actually matters: the receipt
+ * alone would not drain the wallet, so the user would never be refused a subsequent turn.
  * @returns {Promise<{ok:boolean, hold?:object, refund?:object, idempotent?:boolean, reason?:string}>}
  */
 export async function settleHold(
-  { holdId, settleIdempotencyKey, settledUnits, finalState = "settled", provider = null, providerModel = null, providerCostUsdMicros = null, providerInputTokens = null, providerOutputTokens = null },
+  { holdId, settleIdempotencyKey, settledUnits, finalState = "settled", recordTrueCost = false, provider = null, providerModel = null, providerCostUsdMicros = null, providerInputTokens = null, providerOutputTokens = null },
   client
 ) {
   if (!TERMINAL_STATES.has(finalState)) return { ok: false, reason: "invalid_final_state" };
@@ -311,8 +335,13 @@ export async function settleHold(
       // only 'settled' consumes units; 'released'/'expired' are full refunds
       settledUnits: finalState === "settled" ? Number(settledUnits) : 0,
       funding,
+      recordTrueCost: recordTrueCost && finalState === "settled",
     });
 
+    // refundRecurring and overageUnits are mutually exclusive — one of (reserved-settled) and
+    // (settled-reserved) is always 0 — so one signed delta covers both: positive refunds, negative
+    // debits. GREATEST(0,..) still floors the refund direction and never clamps a debit.
+    const recurringDelta = refund.refundRecurring - refund.overageUnits;
     await c.query(
       `UPDATE zaki_unit_wallets
          SET weekly_used_units = GREATEST(0, weekly_used_units - $2),
@@ -320,7 +349,7 @@ export async function settleHold(
              version = version + 1,
              updated_at = NOW()
        WHERE user_id = $1`,
-      [hold.user_id, refund.refundRecurring, refund.refundTopup]
+      [hold.user_id, recurringDelta, refund.refundTopup]
     );
 
     const state = finalState; // 'settled' | 'released' | 'expired'
@@ -353,6 +382,15 @@ export async function sweepExpiredHolds({ limit = 500 } = {}) {
   const due = await dbAll(
     `SELECT id FROM zaki_meter_holds
       WHERE state = 'reserved' AND expires_at < NOW()
+        -- A Minutes recovery row means the engine outcome is still unknown.
+        -- Never refund that hold underneath its durable reconciler; a terminal
+        -- receipt or an explicit lease-fenced rejection is required first.
+        AND NOT EXISTS (
+          SELECT 1
+            FROM zaki_minutes_control_recoveries AS recovery
+           WHERE recovery.reservation_id = zaki_meter_holds.id
+             AND recovery.state <> 'terminal'
+        )
       ORDER BY expires_at ASC
       LIMIT $1`,
     [limit]

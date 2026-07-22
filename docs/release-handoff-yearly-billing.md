@@ -1,7 +1,7 @@
-# Release Handoff: Yearly Billing Foundation (Student + Personal)
+# Release Handoff: Yearly Billing (Student + Personal + Pro + Pro Max)
 
 ## Scope delivered
-- Added yearly interval support for `student` and `personal` checkout.
+- Added yearly interval support for `student`, `personal`, `pro`, and `pro_max` checkout.
 - Added per-tier interval availability in billing config.
 - Added interval exposure in entitlements response.
 - Kept paid-user behavior unchanged: active paid users are blocked from duplicate checkout and should switch in billing portal.
@@ -11,6 +11,8 @@
 - New env vars:
   - `STRIPE_PRICE_STUDENT_YEARLY`
   - `STRIPE_PRICE_PERSONAL_YEARLY`
+  - `STRIPE_PRICE_PRO_YEARLY`
+  - `STRIPE_PRICE_PRO_MAX_YEARLY`
 - New interval-aware Stripe pricing catalog and lookup helpers.
 - `POST /api/billing/checkout` now accepts optional `interval` (`monthly` default).
 - Student eligibility is `.edu` or manual verification (`student_verified`) for monthly + yearly.
@@ -24,7 +26,7 @@
 ## Frontend changes
 - Pricing page supports monthly/yearly selection for paid plans.
 - Uses backend `pricingAvailability` for per-tier fallback.
-- If yearly is unavailable for a tier, that tier gracefully falls back to monthly.
+- If yearly is unavailable for a tier, that yearly choice is disabled; it never falls back to monthly checkout.
 - Checkout payload now includes `interval`.
 - Yearly checkout path restricted to Stripe provider.
 
@@ -35,6 +37,8 @@ Provide these before enabling pricing in production:
 - Personal monthly Stripe price ID -> `STRIPE_PRICE_PERSONAL=price_1T6CFu1CujkYBN77O7JWWFhc`
 - Personal yearly Stripe price ID -> `STRIPE_PRICE_PERSONAL_YEARLY=price_1T6CHR1CujkYBN77SaxD21T7`
 - Access-code purchase Stripe price ID -> `STRIPE_PRICE_ACCESS_CODE_MONTHLY=price_1T6CIm1CujkYBN778pLtnDoJ`
+- Pro yearly Stripe price ID -> `STRIPE_PRICE_PRO_YEARLY` (owner-provided; no amount is inferred in code)
+- Pro Max yearly Stripe price ID -> `STRIPE_PRICE_PRO_MAX_YEARLY` (owner-provided; no amount is inferred in code)
 
 ## Deployment sequence
 1. Deploy backend + frontend with yearly env vars unset (safe no-op for yearly).
@@ -67,6 +71,8 @@ Provide these before enabling pricing in production:
 5. Student yearly rejected for non-`.edu` and not manually verified.
 6. Personal monthly checkout succeeds.
 7. Personal yearly checkout succeeds.
-8. Missing yearly env for one tier blocks only that tier yearly path.
-9. Webhook updates plan tier/status and interval correctly.
-10. Active paid user gets portal-first switching path (no duplicate checkout).
+8. Pro yearly checkout succeeds.
+9. Pro Max yearly checkout succeeds.
+10. Missing yearly env for one tier blocks only that tier yearly path.
+11. Webhook updates plan tier/status and interval correctly.
+12. Active paid user gets portal-first switching path (no duplicate checkout).

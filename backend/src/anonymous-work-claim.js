@@ -31,6 +31,7 @@ export const ANONYMOUS_WORK_MAX_REPLY_CHARS = 20000;
 export const ANONYMOUS_WORK_MAX_TITLE_CHARS = 96;
 export const ANONYMOUS_WORK_MAX_ID_CHARS = 120;
 export const ANONYMOUS_WORK_MAX_ROUTE_CHARS = 240;
+export const ANONYMOUS_WORK_MAX_TURNS = 6;
 export const IMPORTED_THREAD_CONTEXT_MAX_CHARS = 12000;
 export const IMPORTED_THREAD_CONTEXT_INVALIDATION_CHANNEL = "zaki_imported_context";
 const IMPORTED_THREAD_TURN_MAX_CHARS = 11000;
@@ -76,6 +77,31 @@ export function parseAnonymousWorkClaimRequest(body) {
   // Prefer the full reply; fall back to the legacy preview so ledgers written
   // before the full-text field existed still import their (truncated) answer.
   const reply = fullReply || replyPreview;
+  const turns = (Array.isArray(source.turns) ? source.turns : [])
+    .slice(-ANONYMOUS_WORK_MAX_TURNS)
+    .map((turn) => {
+      const candidate = turn && typeof turn === "object" ? turn : {};
+      const turnPrompt = sanitizeClaimText(
+        candidate.prompt,
+        ANONYMOUS_WORK_MAX_PROMPT_CHARS
+      );
+      const turnReply = sanitizeClaimRichText(
+        candidate.reply,
+        ANONYMOUS_WORK_MAX_REPLY_CHARS
+      );
+      const status = ["draft", "streaming", "succeeded", "interrupted", "failed"].includes(
+        candidate.status
+      )
+        ? candidate.status
+        : "draft";
+      return {
+        id: sanitizeClaimText(candidate.id, ANONYMOUS_WORK_MAX_ID_CHARS) || null,
+        prompt: turnPrompt,
+        reply: turnReply,
+        status,
+      };
+    })
+    .filter((turn) => turn.prompt);
 
   return {
     prompt,
@@ -85,12 +111,15 @@ export function parseAnonymousWorkClaimRequest(body) {
     title: sanitizeClaimText(source.title, ANONYMOUS_WORK_MAX_TITLE_CHARS) || null,
     sourceThreadId: sanitizeClaimText(source.threadId, ANONYMOUS_WORK_MAX_ID_CHARS) || null,
     sourceRoute: sanitizeClaimText(source.route, ANONYMOUS_WORK_MAX_ROUTE_CHARS) || null,
+    turns,
   };
 }
 
 /** True when the request references any saved work at all (else the caller 400s). */
 export function claimRequestHasWork(request) {
-  return Boolean(request?.prompt || request?.reply || request?.sourceRoute);
+  return Boolean(
+    request?.prompt || request?.reply || request?.sourceRoute || request?.turns?.length
+  );
 }
 
 /**
@@ -100,6 +129,18 @@ export function claimRequestHasWork(request) {
  * reply, which is exactly the empty-thread bug this fixes. Those replay instead.
  */
 export function buildClaimTurns(request) {
+  if (Array.isArray(request?.turns) && request.turns.length) {
+    const eligible = request.turns.filter(
+      (turn) =>
+        (turn?.status === "succeeded" || turn?.status === "interrupted") &&
+        String(turn?.prompt || "").trim() &&
+        String(turn?.reply || "").trim()
+    );
+    return eligible.flatMap((turn, index) => [
+      { role: "user", content: turn.prompt, position: index * 2 },
+      { role: "assistant", content: turn.reply, position: index * 2 + 1 },
+    ]);
+  }
   const prompt = String(request?.prompt || "").trim();
   const reply = String(request?.reply || "").trim();
   if (!prompt || !reply) return [];
@@ -120,7 +161,11 @@ export function resolveClaimKey(request) {
   if (workId) return `work:${workId}`;
   const digest = crypto
     .createHash("sha256")
-    .update(`${String(request?.prompt || "")}\u0000${String(request?.reply || "")}`)
+    .update(
+      Array.isArray(request?.turns) && request.turns.length
+        ? JSON.stringify(request.turns)
+        : `${String(request?.prompt || "")}\u0000${String(request?.reply || "")}`
+    )
     .digest("hex");
   return `content:${digest}`;
 }

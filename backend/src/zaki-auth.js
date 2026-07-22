@@ -11,6 +11,7 @@ const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;       // 15 minutes
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const CLEANUP_AGE_INTERVAL = "7 days";
 const MAX_ACTIVE_SESSIONS_PER_USER = 20; // Revoke oldest sessions beyond this cap
+const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // Lazy load — DO NOT cache at module scope (tests set env after import). See Pitfall 1.
 function getSigningKey() {
@@ -36,8 +37,11 @@ function sha256Hex(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
 
-async function signAccessToken(zakiUser) {
-  return new SignJWT({ email: zakiUser.email })
+async function signAccessToken(zakiUser, sessionId = null) {
+  return new SignJWT({
+    email: zakiUser.email,
+    ...(sessionId ? { sid: String(sessionId) } : {}),
+  })
     .setProtectedHeader({ alg: "HS256", kid: getKid() })
     .setIssuer("zaki")
     .setSubject(String(zakiUser.id))
@@ -51,18 +55,20 @@ async function signAccessToken(zakiUser) {
  * Mint a new ZAKI session: insert zaki_sessions row + sign access JWT.
  * @param {{id:number|string, email:string}} zakiUser
  * @param {{ip?:string, headers:object}} req
- * @returns {Promise<{accessToken:string, refreshToken:string, refreshTokenHash:string}>}
+ * @returns {Promise<{accessToken:string, refreshToken:string, refreshTokenHash:string, sessionId:string}>}
  */
 export async function mintZakiSession(zakiUser, req) {
+  const sessionId = crypto.randomUUID();
   const refreshToken = crypto.randomBytes(32).toString("hex");
   const refreshTokenHash = sha256Hex(refreshToken);
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
 
   await dbQuery(
     `INSERT INTO zaki_sessions
-       (user_id, refresh_token_hash, expires_at, ip_address, user_agent)
-     VALUES ($1, $2, $3, $4, $5)`,
+       (id, user_id, refresh_token_hash, expires_at, ip_address, user_agent)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
     [
+      sessionId,
       zakiUser.id,
       refreshTokenHash,
       expiresAt,
@@ -89,8 +95,8 @@ export async function mintZakiSession(zakiUser, req) {
 
   console.log(`[ZakiAudit] session_mint userId=${zakiUser.id} ip=${req?.ip ?? "unknown"}`);
 
-  const accessToken = await signAccessToken(zakiUser);
-  return { accessToken, refreshToken, refreshTokenHash };
+  const accessToken = await signAccessToken(zakiUser, sessionId);
+  return { accessToken, refreshToken, refreshTokenHash, sessionId };
 }
 
 /**
@@ -110,11 +116,44 @@ export async function verifyZakiAccessToken(token) {
 }
 
 /**
- * Atomically rotate a refresh token: revoke old row, insert new row, sign new access JWT.
+ * Verifies a signed ZAKI access token and, for newly issued sid-bound tokens,
+ * confirms that the exact refresh session remains active. This makes a
+ * candidate-session revocation take effect immediately instead of leaving its
+ * access token usable until the short JWT expiry.
+ *
+ * Tokens issued before the sid claim was introduced remain valid for their
+ * existing 15-minute lifetime so a rolling deploy does not drop active users.
+ */
+export async function verifyActiveZakiAccessToken(token) {
+  const payload = await verifyZakiAccessToken(token);
+  if (!payload) return null;
+
+  const sessionId = String(payload.sid || "").trim();
+  if (!sessionId) return payload;
+
+  const userId = String(payload.sub || "").trim();
+  if (!SESSION_ID_PATTERN.test(sessionId) || !/^[1-9][0-9]*$/.test(userId)) {
+    return null;
+  }
+
+  try {
+    const session = await dbGet(
+      `SELECT id FROM zaki_sessions WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL AND expires_at > NOW()`,
+      [sessionId, userId]
+    );
+    return session ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Atomically rotate a refresh token: insert a replacement, link+revoke the old row,
+ * then sign a new access JWT.
  * @param {string} oldHash sha256 hex of the presented refresh token
  * @param {{id:number|string, email:string}} zakiUser
  * @param {{ip?:string, headers:object}} req
- * @returns {Promise<{accessToken:string, refreshToken:string, refreshTokenHash:string}>}
+ * @returns {Promise<{accessToken:string, refreshToken:string, refreshTokenHash:string, sessionId:string}>}
  * @throws {Error} with .code === "SESSION_NOT_FOUND" when no active session matches
  */
 export async function rotateRefreshToken(oldHash, zakiUser, req) {
@@ -129,20 +168,17 @@ export async function rotateRefreshToken(oldHash, zakiUser, req) {
       throw err;
     }
 
-    await client.query(
-      `UPDATE zaki_sessions SET revoked_at = NOW() WHERE id = $1`,
-      [oldSession.rows[0].id]
-    );
-
+    const sessionId = crypto.randomUUID();
     const refreshToken = crypto.randomBytes(32).toString("hex");
     const refreshTokenHash = sha256Hex(refreshToken);
     const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
 
     await client.query(
       `INSERT INTO zaki_sessions
-         (user_id, refresh_token_hash, expires_at, ip_address, user_agent)
-       VALUES ($1, $2, $3, $4, $5)`,
+         (id, user_id, refresh_token_hash, expires_at, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
       [
+        sessionId,
         zakiUser.id,
         refreshTokenHash,
         expiresAt,
@@ -151,8 +187,17 @@ export async function rotateRefreshToken(oldHash, zakiUser, req) {
       ]
     );
 
-    const accessToken = await signAccessToken(zakiUser);
-    return { accessToken, refreshToken, refreshTokenHash };
+    // The refresh guard must recover only a sibling's replacement session,
+    // never any fresh session belonging to the same user. Insert the target
+    // first so the self-reference is valid, then publish the revoke + link in
+    // the same transaction.
+    await client.query(
+      `UPDATE zaki_sessions SET revoked_at = NOW(), replaced_by_session_id = $2 WHERE id = $1`,
+      [oldSession.rows[0].id, sessionId]
+    );
+
+    const accessToken = await signAccessToken(zakiUser, sessionId);
+    return { accessToken, refreshToken, refreshTokenHash, sessionId };
   });
 }
 
@@ -191,9 +236,10 @@ export async function cleanupExpiredSessions() {
 
 /**
  * Sign an access JWT for an existing session's user — used by the concurrent refresh guard
- * (AUTH-06) which has already proven session validity via the recent-rotation lookup.
+ * (AUTH-06) which has already proven session validity through its exact
+ * recent-rotation replacement link.
  * Does NOT insert a new zaki_sessions row.
  */
-export async function signAccessTokenForUser(zakiUser) {
-  return signAccessToken(zakiUser);
+export async function signAccessTokenForUser(zakiUser, sessionId = null) {
+  return signAccessToken(zakiUser, sessionId);
 }

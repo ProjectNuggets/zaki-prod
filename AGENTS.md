@@ -2,9 +2,9 @@
 
 Scope: entire `zaki-prod` repository.
 
-This repo is the commercial ZAKI web app and BFF. It coordinates product
-surfaces across ZAKI Agent, Chat/Spaces, Brain, Learn, Hire, Design, billing,
-usage, identity, and settings.
+This repo is the commercial ZAKI web app and BFF. It coordinates the visible
+Agent, Chat/Spaces, Design, and Minutes spokes; the Agent Brain view; retained
+hidden product engines; billing, usage, identity, and settings.
 
 ## 0. Platform coordination (read this FIRST)
 
@@ -50,23 +50,27 @@ Key Nullalis docs:
 
 ## 2. Product Visibility
 
-V1 public surfaces:
+The user-facing product set is exactly four spokes:
 
-- ZAKI Agent
-- ZAKI Chat/Spaces
-- Brain
+- ZAKI Agent — live
+- ZAKI Chat/Spaces — live
+- ZAKI Design — coming soon
+- ZAKI Minutes — coming soon
 
-Private beta or gated:
+Brain is the Agent memory view. It remains user-facing as part of Agent and is
+not a separate spoke.
+
+Hidden from all user-facing surfaces for the current release:
 
 - Learn
+- Hire/Career
 
-Repo-local and not deployed:
+Keep the Learn and Hire engines, BFF contracts, and operator-only controls in
+place. Release visibility must prevent their navigation, routes, settings rows,
+pricing/marketing copy, and website/waitlist entry points from reappearing.
 
-- Hire
+Other hidden future clients:
 
-Waitlist / coming soon:
-
-- Design
 - CLI
 - Local app
 - Additional extensions beyond the V1 browser extension
@@ -74,11 +78,10 @@ Waitlist / coming soon:
 Execution order for product work:
 
 1. Agent
-2. Brain
-3. Learning
-4. Design
-5. Hire
-6. Hidden operator page
+2. Brain (Agent memory view)
+3. Design
+4. Minutes
+5. Hidden operator page
 
 Do not expose a product as generally available unless product visibility,
 entitlement, meter state, route, and UI copy all agree.

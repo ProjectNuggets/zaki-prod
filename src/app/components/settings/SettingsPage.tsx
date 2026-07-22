@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -38,6 +46,7 @@ import {
   fetchAgentExtensionDevices,
   fetchAgentExtensionDiagnostics,
   fetchAgentMemoryGovernance,
+  fetchBotHeartbeat,
   fetchBotSettings,
   fetchMemoryPreferences,
   forgetAgentMemory,
@@ -50,6 +59,7 @@ import {
   testAgentChannelControl,
   requestLogout,
   updateBotSettings,
+  updateBotHeartbeat,
   updateMemoryPreferences,
   updateProfile,
   type AgentChannelControlId,
@@ -61,6 +71,7 @@ import {
   type AgentMemoryGovernanceResponse,
   type AgentMemoryPurgePiiResponse,
   type BotTelegramConnectPayload,
+  type BotHeartbeatState,
   type BotSettingsPatch,
   type BotSettingsProfile,
   type MemoryPolicy,
@@ -166,7 +177,7 @@ type AgentSettingsDraft = Required<
 
 const DEFAULT_AGENT_SETTINGS: AgentSettingsDraft = {
   group_activation: "mention",
-  proactive_updates: true,
+  proactive_updates: false,
   voice_replies: false,
   session_timeout_minutes: 30,
   assistant_mode: "balanced",
@@ -252,6 +263,18 @@ function isSettingsNavHash(hash: string): hash is (typeof SETTINGS_NAV_HASHES)[n
   return (SETTINGS_NAV_HASHES as readonly string[]).includes(hash);
 }
 
+function ActiveSettingsSection({
+  activeHref,
+  href,
+  children,
+}: {
+  activeHref: (typeof SETTINGS_NAV_HASHES)[number];
+  href: (typeof SETTINGS_NAV_HASHES)[number];
+  children: ReactNode;
+}) {
+  return activeHref === href ? children : null;
+}
+
 const AGENT_GROUP_ACTIVATION_MODES: Array<NonNullable<BotSettingsProfile["group_activation"]>> = [
   "mention",
   "always",
@@ -290,6 +313,56 @@ function formatUnixDate(value?: number | null) {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+  });
+}
+
+function getHeartbeatStatusLabel(
+  state: BotHeartbeatState | null,
+  loading: boolean,
+  t: (key: string, options?: Record<string, unknown>) => string
+): string {
+  const key = (suffix: string) =>
+    `settingsModal.agentSettings.proactiveCheckins.status.${suffix}`;
+  if (loading) {
+    return t(key("loading"), { defaultValue: "Loading check-in status…" });
+  }
+  if (!state) {
+    return t(key("unavailable"), { defaultValue: "Unavailable · Try again later" });
+  }
+  if (!state.enabled || state.status === "disabled") {
+    return t(key("off"), { defaultValue: "Off · Delivery through Telegram" });
+  }
+  if (state.status === "operator_disabled" || state.operator_enabled === false) {
+    return t(key("operatorDisabled"), { defaultValue: "On · Temporarily unavailable" });
+  }
+  if (state.status === "needs_telegram" || state.delivery_ready === false) {
+    return t(key("needsTelegram"), {
+      defaultValue: "On · Connect Telegram to receive check-ins",
+    });
+  }
+  if (state.last_status === "send_failed") {
+    return t(key("sendFailed"), {
+      defaultValue: "On · Last delivery failed; verify Telegram",
+    });
+  }
+  if (state.last_status === "enqueued") {
+    return t(key("enqueued"), { defaultValue: "On · Last update queued for Telegram" });
+  }
+  if (state.last_status === "sent") {
+    const lastRun = formatUnixDate(state.last_run_s);
+    return lastRun
+      ? t(key("sentAt"), {
+          defaultValue: "On · Last update sent {{when}}",
+          when: lastRun,
+        })
+      : t(key("sent"), { defaultValue: "On · Last update sent" });
+  }
+  if (state.last_status === "idle") {
+    return t(key("idle"), { defaultValue: "On · Last check complete, nothing to send" });
+  }
+  return t(key("activeEvery"), {
+    defaultValue: "On · Every {{minutes}} min through Telegram",
+    minutes: state.interval_minutes ?? 60,
   });
 }
 
@@ -480,9 +553,9 @@ export function SettingsPage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const [activeSettingsHref, setActiveSettingsHref] = useState<(typeof SETTINGS_NAV_HASHES)[number]>(
-    () => (isSettingsNavHash(location.hash) ? location.hash : "#settings-account")
-  );
+  const activeSettingsHref = isSettingsNavHash(location.hash)
+    ? location.hash
+    : "#settings-account";
   const user = useAuthStore((state) => state.user);
   const setUser = useAuthStore((state) => state.setUser);
   const logout = useAuthStore((state) => state.logout);
@@ -538,6 +611,9 @@ export function SettingsPage() {
     useState<AgentSettingsDraft>(DEFAULT_AGENT_SETTINGS);
   const [agentSettingsLoading, setAgentSettingsLoading] = useState(true);
   const [agentSettingsSaving, setAgentSettingsSaving] = useState(false);
+  const [heartbeatState, setHeartbeatState] = useState<BotHeartbeatState | null>(null);
+  const [heartbeatLoading, setHeartbeatLoading] = useState(true);
+  const [heartbeatSaving, setHeartbeatSaving] = useState(false);
   const [sessionTimeoutDraft, setSessionTimeoutDraft] = useState(
     String(DEFAULT_AGENT_SETTINGS.session_timeout_minutes)
   );
@@ -638,67 +714,6 @@ export function SettingsPage() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [location.hash, location.pathname, location.search, navigate]);
-
-  useEffect(() => {
-    if (isSettingsNavHash(location.hash)) {
-      setActiveSettingsHref(location.hash);
-    }
-  }, [location.hash]);
-
-  useEffect(() => {
-    const scroller = document.querySelector<HTMLElement>(".zaki-settings-v2");
-    if (!scroller) return;
-
-    let frame: number | null = null;
-
-    const updateActiveSection = () => {
-      frame = null;
-      const scrollerRect = scroller.getBoundingClientRect();
-      const anchorY = scrollerRect.top + Math.min(220, Math.max(120, scrollerRect.height * 0.24));
-      let nextHref: (typeof SETTINGS_NAV_HASHES)[number] = SETTINGS_NAV_HASHES[0];
-      let firstVisibleHref: (typeof SETTINGS_NAV_HASHES)[number] | null = null;
-
-      for (const href of SETTINGS_NAV_HASHES) {
-        const section = document.getElementById(href.slice(1));
-        if (!section) continue;
-
-        const rect = section.getBoundingClientRect();
-        const isVisible =
-          rect.bottom > scrollerRect.top + 64 && rect.top < scrollerRect.bottom - 64;
-
-        if (isVisible && firstVisibleHref === null) {
-          firstVisibleHref = href;
-        }
-
-        if (rect.top <= anchorY && rect.bottom > scrollerRect.top + 64) {
-          nextHref = href;
-        }
-      }
-
-      if (nextHref === SETTINGS_NAV_HASHES[0] && firstVisibleHref !== null) {
-        nextHref = firstVisibleHref;
-      }
-
-      setActiveSettingsHref((current) => (current === nextHref ? current : nextHref));
-    };
-
-    const scheduleUpdate = () => {
-      if (frame !== null) return;
-      frame = window.requestAnimationFrame(updateActiveSection);
-    };
-
-    updateActiveSection();
-    scroller.addEventListener("scroll", scheduleUpdate, { passive: true });
-    window.addEventListener("resize", scheduleUpdate);
-
-    return () => {
-      if (frame !== null) {
-        window.cancelAnimationFrame(frame);
-      }
-      scroller.removeEventListener("scroll", scheduleUpdate);
-      window.removeEventListener("resize", scheduleUpdate);
-    };
-  }, []);
 
   useEffect(() => {
     agentSettingsDraftRef.current = agentSettingsDraft;
@@ -930,6 +945,29 @@ export function SettingsPage() {
       })
       .finally(() => {
         if (active) setAgentSettingsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setHeartbeatLoading(true);
+    fetchBotHeartbeat()
+      .then(({ response, data }) => {
+        if (!active) return;
+        if (!response.ok || data?.error || typeof data?.enabled !== "boolean") {
+          setHeartbeatState(null);
+          return;
+        }
+        setHeartbeatState(data);
+      })
+      .catch(() => {
+        if (active) setHeartbeatState(null);
+      })
+      .finally(() => {
+        if (active) setHeartbeatLoading(false);
       });
     return () => {
       active = false;
@@ -1596,6 +1634,44 @@ export function SettingsPage() {
     return queued;
   };
 
+  const setProactiveCheckinsEnabled = async (enabled: boolean): Promise<void> => {
+    const previousState = heartbeatState;
+    setHeartbeatSaving(true);
+    try {
+      const { response, data } = await updateBotHeartbeat({ enabled });
+      if (!response.ok || data?.error || typeof data?.enabled !== "boolean") {
+        throw new Error(
+          data?.message ||
+            data?.error ||
+            t("settingsModal.agentSettings.proactiveCheckins.errors.update", {
+              defaultValue: "Unable to update proactive check-ins.",
+            })
+        );
+      }
+      setHeartbeatState(data);
+      toast.success(
+        enabled
+          ? t("settingsModal.agentSettings.proactiveCheckins.success.enabled", {
+              defaultValue: "Proactive check-ins enabled.",
+            })
+          : t("settingsModal.agentSettings.proactiveCheckins.success.disabled", {
+              defaultValue: "Proactive check-ins disabled.",
+            })
+      );
+    } catch (err) {
+      setHeartbeatState(previousState);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("settingsModal.agentSettings.proactiveCheckins.errors.update", {
+              defaultValue: "Unable to update proactive check-ins.",
+            })
+      );
+    } finally {
+      setHeartbeatSaving(false);
+    }
+  };
+
   const isAtAgentDefaults =
     agentSettingsDraft.assistant_mode === AGENT_DEFAULTS_RESET_PATCH.assistant_mode &&
     agentSettingsDraft.autonomy === AGENT_DEFAULTS_RESET_PATCH.autonomy &&
@@ -1603,6 +1679,7 @@ export function SettingsPage() {
     agentSettingsDraft.voice_replies === AGENT_DEFAULTS_RESET_PATCH.voice_replies &&
     agentSettingsDraft.session_timeout_minutes ===
       AGENT_DEFAULTS_RESET_PATCH.session_timeout_minutes;
+  const heartbeatStatusLabel = getHeartbeatStatusLabel(heartbeatState, heartbeatLoading, t);
 
   const handleResetAgentDefaults = () => {
     if (agentSettingsLoading || agentSettingsSaving || isAtAgentDefaults) return;
@@ -1967,6 +2044,10 @@ export function SettingsPage() {
             ariaLabel={t("settingsModal.nav.label")}
             items={navItems}
             activeHref={activeSettingsHref}
+            onSelect={(href) => {
+              if (!isSettingsNavHash(href)) return;
+              navigate(`${location.pathname}${location.search}${href}`);
+            }}
           />
 
           <main className="zaki-settings-v2__main" aria-labelledby="settings-page-title">
@@ -1977,7 +2058,8 @@ export function SettingsPage() {
               </div>
             </header>
 
-            <V2SettingsBlock id="settings-account" data-testid="settings-account" title={t("settingsModal.sections.account")}>
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-account">
+              <V2SettingsBlock id="settings-account" data-testid="settings-account" title={t("settingsModal.sections.account")}>
               <V2SettingsRow
                 name={t("settingsModal.profile.displayName")}
                 description={t("settingsModal.profile.displayNameHelper", {
@@ -2046,13 +2128,19 @@ export function SettingsPage() {
                     : t("settingsModal.account.signOut", { defaultValue: "Sign out" })}
                 </V2Button>
               </V2SettingsRow>
-            </V2SettingsBlock>
+              </V2SettingsBlock>
+            </ActiveSettingsSection>
 
-            <SettingsTelosSection />
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-telos">
+              <SettingsTelosSection />
+            </ActiveSettingsSection>
 
-            <SettingsSuggestionsSection />
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-suggestions">
+              <SettingsSuggestionsSection />
+            </ActiveSettingsSection>
 
-            <V2SettingsBlock
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-billing">
+              <V2SettingsBlock
               id="settings-billing"
               data-testid="settings-billing"
               title={t("settingsModal.sections.billing", { defaultValue: "Plan & Usage" })}
@@ -2419,9 +2507,11 @@ export function SettingsPage() {
                   <V2Badge>{t("settingsModal.plan.topups.statusOnly", { defaultValue: "Deferred" })}</V2Badge>
                 </div>
               </div>
-            </V2SettingsBlock>
+              </V2SettingsBlock>
+            </ActiveSettingsSection>
 
-            <V2SettingsBlock
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-agent">
+              <V2SettingsBlock
               id="settings-agent"
               data-testid="settings-agent"
               title={t("settingsModal.sections.agent", { defaultValue: "Agent" })}
@@ -2571,24 +2661,31 @@ export function SettingsPage() {
                 </select>
               </V2SettingsRow>
               <V2SettingsRow
-                name={t("settingsModal.agentSettings.proactiveUpdates.name", {
-                  defaultValue: "Proactive updates",
+                name={t("settingsModal.agentSettings.proactiveCheckins.name", {
+                  defaultValue: "Proactive check-ins",
                 })}
-                description={t("settingsModal.agentSettings.proactiveUpdates.helper", {
+                description={t("settingsModal.agentSettings.proactiveCheckins.helper", {
                   defaultValue:
-                    "Paused for launch while scheduled return delivery is hardened.",
+                    "Periodically check for useful updates. Check-ins are delivered through your connected Telegram account and do not appear in web chat.",
                 })}
               >
-                <input
-                  className="v2-toggle"
-                  type="checkbox"
-                  aria-label={t("settingsModal.agentSettings.proactiveUpdates.name", {
-                    defaultValue: "Proactive updates",
-                  })}
-                  checked={false}
-                  disabled
-                  onChange={() => undefined}
-                />
+                <div className="flex items-center gap-2">
+                  <span className="v2-label" role="status">
+                    {heartbeatStatusLabel}
+                  </span>
+                  <input
+                    className="v2-toggle"
+                    type="checkbox"
+                    aria-label={t("settingsModal.agentSettings.proactiveCheckins.name", {
+                      defaultValue: "Proactive check-ins",
+                    })}
+                    checked={Boolean(heartbeatState?.enabled)}
+                    disabled={heartbeatLoading || heartbeatSaving || !heartbeatState}
+                    onChange={(event) => {
+                      void setProactiveCheckinsEnabled(event.target.checked);
+                    }}
+                  />
+                </div>
               </V2SettingsRow>
               <V2SettingsRow
                 name={t("settingsModal.agentSettings.voiceReplies.name", {
@@ -2668,32 +2765,38 @@ export function SettingsPage() {
                   </V2Badge>
                 </div>
               </V2SettingsRow>
-            </V2SettingsBlock>
+              </V2SettingsBlock>
+            </ActiveSettingsSection>
 
-            <SettingsAutomationsSection />
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-automations">
+              <SettingsAutomationsSection />
+            </ActiveSettingsSection>
 
-            <SettingsChannelsSection
-              agentChannelsById={agentChannelsById}
-              agentChannelsLoading={agentChannelsLoading}
-              channelControlsById={channelControlsById}
-              channelControlsLoading={channelControlsLoading}
-              channelControlsAvailable={channelControlsAvailable}
-              expandedChannelId={expandedChannelId}
-              setExpandedChannelId={setExpandedChannelId}
-              channelBindingDrafts={channelBindingDrafts}
-              channelActivationDrafts={channelActivationDrafts}
-              channelAction={channelAction}
-              channelControlAction={channelControlAction}
-              updateChannelBindingDraft={updateChannelBindingDraft}
-              updateChannelActivationDraft={updateChannelActivationDraft}
-              handleSaveChannelBinding={handleSaveChannelBinding}
-              handleDeleteChannelBinding={handleDeleteChannelBinding}
-              handleConnectChannelControl={handleConnectChannelControl}
-              handleTestChannelControl={handleTestChannelControl}
-              handleDisconnectChannelControl={handleDisconnectChannelControl}
-            />
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-channels">
+              <SettingsChannelsSection
+                agentChannelsById={agentChannelsById}
+                agentChannelsLoading={agentChannelsLoading}
+                channelControlsById={channelControlsById}
+                channelControlsLoading={channelControlsLoading}
+                channelControlsAvailable={channelControlsAvailable}
+                expandedChannelId={expandedChannelId}
+                setExpandedChannelId={setExpandedChannelId}
+                channelBindingDrafts={channelBindingDrafts}
+                channelActivationDrafts={channelActivationDrafts}
+                channelAction={channelAction}
+                channelControlAction={channelControlAction}
+                updateChannelBindingDraft={updateChannelBindingDraft}
+                updateChannelActivationDraft={updateChannelActivationDraft}
+                handleSaveChannelBinding={handleSaveChannelBinding}
+                handleDeleteChannelBinding={handleDeleteChannelBinding}
+                handleConnectChannelControl={handleConnectChannelControl}
+                handleTestChannelControl={handleTestChannelControl}
+                handleDisconnectChannelControl={handleDisconnectChannelControl}
+              />
+            </ActiveSettingsSection>
 
-            <V2SettingsBlock
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-secrets">
+              <V2SettingsBlock
               id="settings-secrets"
               data-testid="settings-secrets"
               title={t("settingsModal.sections.secrets", { defaultValue: "Advanced credentials" })}
@@ -2804,9 +2907,11 @@ export function SettingsPage() {
                   })}
                 </p>
               ) : null}
-            </V2SettingsBlock>
+              </V2SettingsBlock>
+            </ActiveSettingsSection>
 
-            <V2SettingsBlock
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-devices">
+              <V2SettingsBlock
               id="settings-devices"
               data-testid="settings-devices"
               title={t("settingsModal.sections.devices", {
@@ -2988,9 +3093,11 @@ export function SettingsPage() {
                   </p>
                 ) : null}
               </div>
-            </V2SettingsBlock>
+              </V2SettingsBlock>
+            </ActiveSettingsSection>
 
-            <V2SettingsBlock
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-memory-data">
+              <V2SettingsBlock
               id="settings-memory-data"
               data-testid="settings-memory-data"
               title={t("settingsModal.sections.memoryData")}
@@ -3237,9 +3344,11 @@ export function SettingsPage() {
                     : t("settingsModal.privacy.exportAllData")}
                 </V2Button>
               </div>
-            </V2SettingsBlock>
+              </V2SettingsBlock>
+            </ActiveSettingsSection>
 
-            <V2SettingsBlock
+            <ActiveSettingsSection activeHref={activeSettingsHref} href="#settings-privacy">
+              <V2SettingsBlock
               id="settings-privacy"
               data-testid="settings-privacy"
               title={t("settingsModal.sections.privacy")}
@@ -3253,7 +3362,8 @@ export function SettingsPage() {
                   {t("settingsModal.privacy.deleteAccount")}
                 </V2Button>
               </V2SettingsRow>
-            </V2SettingsBlock>
+              </V2SettingsBlock>
+            </ActiveSettingsSection>
           </main>
         </div>
       </div>

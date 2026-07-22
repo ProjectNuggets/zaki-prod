@@ -150,6 +150,31 @@ describe("anonymous work claim — what can honestly be imported", () => {
     );
     expect(turns).toEqual([]);
   });
+
+  it("imports an ordered multi-turn transcript while excluding unfinished drafts", () => {
+    const turns = buildClaimTurns(
+      parseAnonymousWorkClaimRequest({
+        workId: "transcript-1",
+        turns: [
+          { id: "one", prompt: "first question", reply: "first answer", status: "succeeded" },
+          {
+            id: "two",
+            prompt: "second question",
+            reply: "partial second answer",
+            status: "interrupted",
+          },
+          { id: "three", prompt: "unfinished question", reply: "", status: "draft" },
+        ],
+      })
+    );
+
+    expect(turns).toEqual([
+      { role: "user", content: "first question", position: 0 },
+      { role: "assistant", content: "first answer", position: 1 },
+      { role: "user", content: "second question", position: 2 },
+      { role: "assistant", content: "partial second answer", position: 3 },
+    ]);
+  });
 });
 
 describe("anonymous work claim — the import is real", () => {

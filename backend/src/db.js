@@ -4,6 +4,24 @@ import { startPostgresNotificationListener } from "./db-notifications.js";
 
 let pool = null;
 
+function enabledFlag(value) {
+  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+}
+
+// The control BFF cannot safely run without both its wallet hold tables and
+// callback/idempotency tables. Keep this local to db.js to avoid importing the
+// control router (which itself imports database-backed state).
+export function isMinutesControlSchemaRequired(env = process.env) {
+  return enabledFlag(env.ZAKI_MINUTES_CONTROL_ENABLED) && enabledFlag(env.ZAKI_MINUTES_CONTROL_STAGING_READY);
+}
+
+export function failClosedMinutesControlSchema(schema, cause, env = process.env) {
+  if (!isMinutesControlSchemaRequired(env)) return;
+  const error = new Error(`Minutes control is active but required ${schema} schema migration failed.`);
+  error.cause = cause;
+  throw error;
+}
+
 export async function listenForDbNotifications(channel, onPayload, options = {}) {
   if (!pool) throw new Error("Database is not initialized.");
   return startPostgresNotificationListener({
@@ -151,9 +169,13 @@ export async function initDb() {
       token TEXT UNIQUE NOT NULL,
       expires_at BIGINT NOT NULL,
       used_at BIGINT,
+      return_to TEXT,
       created_at TIMESTAMPTZ NOT NULL
     );
   `);
+  await migrationClient.query(
+    "ALTER TABLE verification_tokens ADD COLUMN IF NOT EXISTS return_to TEXT;"
+  );
 
   await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -442,6 +464,34 @@ export async function initDb() {
   await migrationClient.query(`
     CREATE INDEX IF NOT EXISTS idx_zaki_design_project_audit_user_created
     ON zaki_design_project_audit_events(user_id, created_at DESC);
+  `);
+
+  await migrationClient.query(`
+    CREATE TABLE IF NOT EXISTS zaki_design_sessions (
+      session_id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL UNIQUE REFERENCES zaki_design_projects(project_id) ON DELETE CASCADE,
+      owner_user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+      tenant_id TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT 'REQUESTED'
+        CHECK (state IN (
+          'REQUESTED', 'STARTING', 'RESTORING', 'READY', 'ACTIVE',
+          'IDLE', 'DRAINING', 'CHECKPOINTING', 'STOPPED', 'FAILED'
+        )),
+      checkpoint_generation BIGINT NOT NULL DEFAULT 0 CHECK (checkpoint_generation >= 0),
+      checkpoint_sha256 TEXT,
+      checkpoint_bytes BIGINT CHECK (checkpoint_bytes IS NULL OR checkpoint_bytes >= 0),
+      checkpoint_object_key TEXT,
+      last_request_id TEXT,
+      last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      stopped_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await migrationClient.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_design_sessions_owner_state
+    ON zaki_design_sessions(owner_user_id, state, updated_at DESC);
   `);
 
   await migrationClient.query(`
@@ -1322,6 +1372,11 @@ export async function initDb() {
     `);
 
     await migrationClient.query(`
+      ALTER TABLE memory_undo_windows
+      ADD COLUMN IF NOT EXISTS superseded_memory_id UUID REFERENCES memories(id) ON DELETE SET NULL;
+    `);
+
+    await migrationClient.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_undo_windows_memory_id
       ON memory_undo_windows(memory_id);
     `);
@@ -1345,6 +1400,7 @@ export async function initDb() {
       refresh_token_hash TEXT UNIQUE NOT NULL,
       expires_at TIMESTAMPTZ NOT NULL,
       revoked_at TIMESTAMPTZ,
+      replaced_by_session_id UUID REFERENCES zaki_sessions(id) ON DELETE SET NULL,
       last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       ip_address TEXT,
       user_agent TEXT,
@@ -1363,6 +1419,13 @@ export async function initDb() {
   await migrationClient.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_zaki_sessions_refresh_hash
       ON zaki_sessions (refresh_token_hash);
+  `);
+  // AUTH-06: retain the exact successor of a rotated refresh session so the
+  // concurrent-refresh guard does not infer identity from unrelated sessions.
+  await migrationClient.query(`
+    ALTER TABLE zaki_sessions
+      ADD COLUMN IF NOT EXISTS replaced_by_session_id UUID
+        REFERENCES zaki_sessions(id) ON DELETE SET NULL;
   `);
   // Phase 04-typ-adapter: TYP-03 — drop typ_session_token from running DBs
   await migrationClient.query(`
@@ -1399,6 +1462,19 @@ export async function initDb() {
     console.log("[DB] Unit ledger tables ready (zaki_unit_wallets, zaki_meter_holds)");
   } catch (err) {
     console.warn("[DB] Unit ledger table creation failed:", err.message);
+    failClosedMinutesControlSchema("unit-ledger", err);
+  }
+
+  // Minutes control stays runtime-disabled until explicit staging evidence, but
+  // its callback ledger needs durable idempotency state before that gate opens.
+  // This DDL contains only opaque IDs and metering state—never meeting content.
+  try {
+    const { MINUTES_CONTROL_STATE_DDL } = await import("./minutes-control-state.js");
+    await migrationClient.query(MINUTES_CONTROL_STATE_DDL);
+    console.log("[DB] Minutes control state tables ready");
+  } catch (err) {
+    console.warn("[DB] Minutes control state table creation failed:", err.message);
+    failClosedMinutesControlSchema("control-state", err);
   }
 
   // --- V1 beta cutover audit + reversible workspace archive registry ---

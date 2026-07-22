@@ -342,6 +342,10 @@ describe("platform meter", () => {
 
     expect(payload.weekly.remaining).toBe(100);
     expect(payload.rolling.remaining).toBe(20);
+    // WP-BILL1: 20 units remaining against a 40-unit reserve is now ADMITTED, not refused. The
+    // reserve is a worst-case ceiling, not an entitlement to spend — refusing here is exactly the
+    // bug that gave a tier one turn per window and then blocked it with balance unspent. The
+    // shortfall is still reported and now drives lastTurnWarning instead of gating.
     expect(payload.availableNow.agent).toEqual(
       expect.objectContaining({
         requiredReserveUnits: 40,
@@ -349,9 +353,40 @@ describe("platform meter", () => {
         rollingRemaining: 20,
         effectiveRemaining: 20,
         limitingWindow: "rolling",
-        constraint: "rolling",
+        constraint: null,
         shortfall: 20,
+        available: true,
+        lastTurnWarning: true,
+      })
+    );
+  });
+
+  it("refuses Agent capacity only once the balance is actually drained", () => {
+    const payload = buildMeterStatusPayload({
+      identity: { type: "user", tenantId: "tenant-a", userId: 42 },
+      platform: { plan: { id: "free", label: "Free" } },
+      productRegistry: { products: [] },
+      // The realistic drain: the 5h rolling window is spent while the weekly still has units.
+      meterSnapshot: {
+        weekly: {
+          limit: 100,
+          used: 0,
+          remaining: 100,
+          recurringRemaining: 100,
+          topupUnits: 0,
+          resetAt: "2026-06-24T00:00:00.000Z",
+        },
+        rolling: { limit: 20, used: 20, remaining: 0, resetAt: "2026-06-17T15:00:00.000Z" },
+      },
+      agentRequiredUnits: 40,
+    });
+
+    expect(payload.availableNow.agent).toEqual(
+      expect.objectContaining({
+        effectiveRemaining: 0,
         available: false,
+        lastTurnWarning: false,
+        constraint: "rolling",
       })
     );
   });

@@ -97,7 +97,9 @@ function createDependencies({ event, constructError = null, markResult = true, a
       price_personal: "personal",
       price_personal_yearly: "personal",
       price_pro: "pro",
+      price_pro_yearly: "pro",
       price_pro_max: "pro_max",
+      price_pro_max_yearly: "pro_max",
     },
     fulfillAccessCodePurchaseCheckoutSession: jest.fn(async () => ({ handled: false })),
     fulfillTopupCheckoutSession: jest.fn(async () => ({ handled: false })),
@@ -296,7 +298,9 @@ describe("stripe webhook handler integration", () => {
   it.each([
     ["price_personal", "personal", 1000],
     ["price_pro", "pro", 3000],
+    ["price_pro_yearly", "pro", 3000],
     ["price_pro_max", "pro_max", 7500],
+    ["price_pro_max_yearly", "pro_max", 7500],
   ])(
     "stores %s subscription as %s and provisions the %s-unit wallet (Bug 2)",
     async (priceId, expectedTier, expectedWeeklyAllowance) => {
@@ -345,13 +349,14 @@ describe("stripe webhook handler integration", () => {
   );
 
   it.each([
-    ["customer.subscription.created", "2026-01-01T00:00:00.000Z", "2027-01-01T00:00:00.000Z"],
-    ["customer.subscription.updated", "2027-01-01T00:00:00.000Z", "2028-01-01T00:00:00.000Z"],
+    ["personal", "price_personal_yearly", "customer.subscription.created", "2026-01-01T00:00:00.000Z", "2027-01-01T00:00:00.000Z"],
+    ["pro", "price_pro_yearly", "customer.subscription.updated", "2027-01-01T00:00:00.000Z", "2028-01-01T00:00:00.000Z"],
+    ["pro_max", "price_pro_max_yearly", "customer.subscription.updated", "2028-01-01T00:00:00.000Z", "2029-01-01T00:00:00.000Z"],
   ])(
     "persists Stripe's full annual period for %s without a monthly fallback",
-    async (eventType, periodStartIso, periodEndIso) => {
+    async (expectedTier, priceId, eventType, periodStartIso, periodEndIso) => {
       const event = {
-        id: `evt_personal_yearly_${eventType.endsWith("created") ? "created" : "renewed"}`,
+        id: `evt_${expectedTier}_yearly_${eventType.endsWith("created") ? "created" : "renewed"}`,
         type: eventType,
         created: Math.floor(Date.parse(periodStartIso) / 1000),
         data: {
@@ -362,7 +367,7 @@ describe("stripe webhook handler integration", () => {
             cancel_at_period_end: false,
             current_period_start: Math.floor(Date.parse(periodStartIso) / 1000),
             current_period_end: Math.floor(Date.parse(periodEndIso) / 1000),
-            items: { data: [{ price: { id: "price_personal_yearly" } }] },
+            items: { data: [{ price: { id: priceId } }] },
             metadata: { billing_interval: "yearly" },
           },
         },
@@ -383,15 +388,15 @@ describe("stripe webhook handler integration", () => {
       expect(deps.dbQuery).toHaveBeenCalledWith(
         expect.stringContaining("current_period_end = $6"),
         expect.arrayContaining([
-          "price_personal_yearly",
-          "personal",
+          priceId,
+          expectedTier,
           "active",
           periodEndIso,
           periodStartIso,
         ])
       );
       expect(ensureWalletMock).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: 91, planId: "personal" })
+        expect.objectContaining({ userId: 91, planId: expectedTier })
       );
     }
   );

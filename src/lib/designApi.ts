@@ -1,4 +1,4 @@
-import { backendAuthRequest } from "@/lib/api";
+import { backendAuthRequest, getBackendBase } from "@/lib/api";
 
 export type DesignProject = {
   id: string;
@@ -7,6 +7,23 @@ export type DesignProject = {
   metadata?: Record<string, unknown>;
   createdAt?: number;
   updatedAt?: number;
+};
+
+export type DesignSessionState =
+  | "REQUESTED" | "STARTING" | "RESTORING" | "READY" | "ACTIVE" | "IDLE"
+  | "DRAINING" | "CHECKPOINTING" | "STOPPED" | "FAILED";
+
+export type DesignSession = {
+  id: string;
+  projectId: string;
+  state: DesignSessionState;
+  generation: number;
+  failureCode?: string;
+};
+
+export type DesignSessionResponse = {
+  session: DesignSession;
+  retryAfterMs?: number;
 };
 
 type DesignRequestOptions = {
@@ -62,4 +79,49 @@ export function createDesignProject(input: { name: string; prompt?: string }) {
       },
     },
   });
+}
+
+export function ensureDesignSession(projectId: string) {
+  return designRequest<DesignSessionResponse>("/api/design/sessions", {
+    method: "POST",
+    body: { projectId },
+  });
+}
+
+export function getDesignSession(sessionId: string, projectId: string) {
+  return designRequest<DesignSessionResponse>(
+    `/api/design/sessions/${encodeURIComponent(sessionId)}?projectId=${encodeURIComponent(projectId)}`,
+  );
+}
+
+export function stopDesignSession(sessionId: string, projectId: string) {
+  return designRequest<DesignSessionResponse>(
+    `/api/design/sessions/${encodeURIComponent(sessionId)}/stop`,
+    { method: "POST", body: { projectId } },
+  );
+}
+
+/**
+ * Absolute URL for the workbench iframe.
+ *
+ * This was relative, which resolved against the APP origin (app-staging.chatzaki.ai) rather than the
+ * API. The app origin does not proxy /api, so the SPA catch-all answered with index.html and the
+ * iframe rendered the whole ZAKI dashboard inside the Design page — ZAKI nested in ZAKI, with no way
+ * back out. The route only ever existed on the backend.
+ *
+ * Same-origin is not required and never was: app-* and api-* share the chatzaki.ai registrable
+ * domain, so they are the same SITE, and the workbench cookie (SameSite=Strict, Path=/api/design) is
+ * still sent on this subresource request.
+ */
+export function designWorkbenchUrl(session: DesignSession, projectName: string) {
+  const query = new URLSearchParams({
+    sessionId: session.id,
+    projectId: session.projectId,
+    projectName,
+  });
+  const path = `/api/design/workbench/projects/${encodeURIComponent(session.projectId)}?${query.toString()}`;
+  const base = getBackendBase();
+  if (!base) return path;
+  // Mirror backendRequest's de-duplication: a base already ending in /api must not yield /api/api.
+  return base.endsWith("/api") ? `${base}${path.slice(4)}` : `${base}${path}`;
 }

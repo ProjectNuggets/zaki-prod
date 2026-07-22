@@ -207,6 +207,12 @@ describe("memory capture", () => {
     expect(result.saved).toEqual([
       expect.objectContaining({ content: "Lives in Hamburg", superseded: true }),
     ]);
+    expect(upsertUndoWindowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        memoryId: "mem-1",
+        supersededMemoryId: "mem-old",
+      })
+    );
   });
 
   it("skips duplicates without storing or superseding", async () => {

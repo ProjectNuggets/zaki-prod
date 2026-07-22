@@ -7,13 +7,14 @@ import {
   Download,
   Brain,
   ChevronDown,
+  Clock,
   LoaderCircle,
   RefreshCw,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { CSSProperties } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import {
@@ -23,6 +24,7 @@ import {
 } from "@/lib/usageDisplay";
 import { useOnlineStatus } from "@/hooks";
 import {
+  AUTH_REQUIRED_EVENT,
   autoTitleThread,
   autoTitleAgentSession,
   apiRequest,
@@ -40,6 +42,7 @@ import {
   fetchAgentArtifact,
   fetchBotRuntimeStatus,
   fetchAgentExtensionDiagnostics,
+  fetchBotOnboarding,
   fetchBotSettings,
   listAgentArtifacts,
   listAgentCron,
@@ -50,6 +53,7 @@ import {
   fetchUsageQuota,
   getApiBase,
   provisionAgent,
+  updateBotOnboarding,
   uploadAgentAttachment,
   type AgentSessionMode,
   type MemoryActivity,
@@ -63,6 +67,7 @@ import {
   type AgentSessionContext,
   type MeterAvailableNow,
   type MeterStatusResponse,
+  type BotOnboardingState,
 } from "@/lib/api";
 import {
   assistantModeToReasoningEffort,
@@ -81,8 +86,17 @@ import {
   stripThreadDisplayName,
 } from "@/lib/threadTitles";
 import { ANONYMOUS_SPACES_WORKSPACE_ID, createAnonymousThreadId } from "@/lib/anonymousSpaces";
-import { upsertAnonymousWorkItem } from "@/lib/anonymousWork";
-import { clearPendingIntent, readPendingIntent } from "@/lib/pendingIntent";
+import {
+  recoverAnonymousThreadTurnsAfterReload,
+  upsertAnonymousWorkItem,
+} from "@/lib/anonymousWork";
+import {
+  AGENT_MESSAGE_MAX_CHARS,
+  buildMemoryImportTurn,
+  splitMemoryImportBySection,
+  settleMemoryUndosNewestFirst,
+} from "@/lib/memoryImport";
+import { clearPendingIntent, readPendingIntent, writePendingIntent } from "@/lib/pendingIntent";
 import { openSpacesMemoryViewer, type MemoryViewerTab } from "@/lib/spacesMemory";
 import { trackProductEvent } from "@/lib/productTelemetry";
 import {
@@ -154,7 +168,7 @@ import type {
   DocSource,
 } from "@/types";
 import { useMessages } from "@/queries/useThreads";
-import { useEntitlements, useMeterStatus } from "@/queries/useBilling";
+import { billingKeys, useEntitlements, useMeterStatus } from "@/queries/useBilling";
 import { spaceKeys } from "@/queries/useSpaces";
 import { useZakiSessions, zakiSessionKeys } from "@/queries/useZakiSessions";
 import { buildZakiSessionRepairTitle, prepareAutoTitleExchange } from "@/lib/sessionAutoTitle";
@@ -172,6 +186,10 @@ import {
   resolveErrorMessage,
 } from "@/lib/userFacingErrors";
 import { MemoryImportSheet } from "./onboarding/MemoryImportSheet";
+import {
+  FIRST_RUN_ENGINE_PROMPT,
+  shouldStartEngineFirstTurn,
+} from "@/lib/firstRunCeremony";
 import { AgentArtifactCanvas } from "./agent/AgentArtifactCanvas";
 import {
   createZakiBotThread,
@@ -295,16 +313,11 @@ type ChatDenialDetails = {
 
 export function isMeterAvailabilityBlocked(availability?: MeterAvailableNow | null) {
   if (!availability) return false;
-  if (availability.available === false) return true;
-  const remaining =
-    typeof availability.effectiveRemaining === "number"
-      ? availability.effectiveRemaining
-      : null;
-  const required =
-    typeof availability.requiredReserveUnits === "number"
-      ? availability.requiredReserveUnits
-      : null;
-  return remaining != null && required != null && remaining < required;
+  // The server is the single authority on admission (meter-capacity.js). This used to re-derive the
+  // rule client-side as `remaining < requiredReserveUnits`, which is how the composer stayed locked
+  // even when the backend would have admitted the turn — the same rule existed in three places and
+  // they drifted. Trust `available`; do not reimplement the policy here.
+  return availability.available === false;
 }
 
 export function buildAgentComposerUsageState({
@@ -315,7 +328,26 @@ export function buildAgentComposerUsageState({
   availability?: MeterAvailableNow | null;
 }) {
   const locked = isAgentActive && isMeterAvailabilityBlocked(availability);
-  return { locked };
+  const lastTurnWarning =
+    isAgentActive && !locked && availability?.lastTurnWarning === true;
+  return {
+    locked,
+    lastTurnWarning,
+    resetAt: lastTurnWarning ? availability?.resetAt ?? null : null,
+  };
+}
+
+function formatAgentCapacityReset(
+  resetAt: string | null,
+  locale?: string,
+): string | null {
+  if (!resetAt) return null;
+  const parsed = new Date(resetAt);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Intl.DateTimeFormat(locale || undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parsed);
 }
 
 // Spaces (non-agent) composer send-lock. Authenticated users are gated by the pooled unit wallet
@@ -3307,6 +3339,7 @@ export function selectAgentInspectorTranscriptEntries({
 export function ChatArea() {
   const queryClient = useQueryClient();
   const { i18n, t } = useTranslation();
+  const location = useLocation();
   const navigate = useNavigate();
   const isOnline = useOnlineStatus();
   const isRtl = i18n.language?.toLowerCase().startsWith("ar");
@@ -3470,6 +3503,10 @@ export function ChatArea() {
     useState<string | null>(null);
   const currentTurnAssistantIdRef = useRef<string | null>(null);
   const prevIsStreamingRef = useRef(false);
+  // Synchronous companion to `isStreaming`. React state does not update until the next render, so
+  // this closes the ordinary composer double-submit race and lets size-bounded import parts run in
+  // strict sequence without observing a stale `isStreaming` closure.
+  const isStreamingRef = useRef(false);
   const [localTurnSnapshots, setLocalTurnSnapshots] = useState<
     Record<string, NullalisTranscriptEntry[]>
   >({});
@@ -3486,6 +3523,9 @@ export function ChatArea() {
   // never reaches the agent.
   const [queryModeEnabled, setQueryModeEnabled] = useState(false);
   const streamAbortRef = useRef<AbortController | null>(null);
+  const consumedMemoryImportRouteDraftRef = useRef<string | null>(null);
+  const activeMemoryImportDraftRef = useRef<string | null>(null);
+  const queuedMemoryImportTurnsRef = useRef<string[] | null>(null);
   const agentCancelInFlightRef = useRef(false);
   const zakiBotProcessClearTimerRef = useRef<number | null>(null);
   const zakiBotProvisionedRef = useRef(false);
@@ -3699,6 +3739,8 @@ export function ChatArea() {
   const { data: entitlementsResult } = useEntitlements();
   const { data: meterResult } = useMeterStatus();
   const [memoryImportOpen, setMemoryImportOpen] = useState(false);
+  const [botOnboarding, setBotOnboarding] = useState<BotOnboardingState | null>(null);
+  const firstRunStartedRef = useRef<string | null>(null);
   const [activationProgress, setActivationProgress] = useState<ActivationProgress>({
     firstMessageSent: false,
     firstMemorySaved: false,
@@ -3872,7 +3914,10 @@ export function ChatArea() {
       (agentMobileInspectorOpen || hasLiveBrowserFrame) &&
       !agentFocusMode
   );
-  const isAnonymousSpacesActive = !authUserId && !isZakiBotActiveSpace;
+  const isAnonymousSpacesActive =
+    !authUserId &&
+    !isZakiBotActiveSpace &&
+    (!activeWorkspaceSlug || activeWorkspaceSlug === ANONYMOUS_SPACES_WORKSPACE_ID);
   const quotaSurface: UsageQuotaSurface = isZakiBotActiveSpace ? "zaki_bot" : "app_chat";
   const activeSpace =
     spacesList.find((space) => space.id === activeWorkspaceSlug) ??
@@ -4107,6 +4152,18 @@ export function ChatArea() {
     availability: agentAvailability,
   });
   const agentCapacityBlocked = agentComposerUsageState.locked;
+  const agentCapacityResetLabel = useMemo(
+    () =>
+      formatAgentCapacityReset(
+        agentComposerUsageState.resetAt,
+        i18n.resolvedLanguage || i18n.language,
+      ),
+    [
+      agentComposerUsageState.resetAt,
+      i18n.language,
+      i18n.resolvedLanguage,
+    ],
+  );
   const isExistingSignedInAgentThread =
     isZakiBotActiveSpace && Boolean(authUserId) && Boolean(activeThreadId);
   const isActiveAgentHistoryHydrated =
@@ -4883,6 +4940,55 @@ export function ChatArea() {
     isZakiBotActiveSpace || isAnonymousSpacesActive ? null : activeWorkspaceSlug,
     isZakiBotActiveSpace || isAnonymousSpacesActive ? null : activeThreadId
   );
+
+  useEffect(() => {
+    if (!isAnonymousSpacesActive || !activeThreadId) return;
+    const turns = recoverAnonymousThreadTurnsAfterReload(activeThreadId);
+    if (!turns.length) return;
+    const hydrated = turns.flatMap<Message>((turn) => [
+      {
+        id: `anonymous-${turn.id}-user`,
+        role: "user",
+        content: turn.prompt,
+        createdAt: turn.createdAt,
+      },
+      ...(turn.reply
+        ? [
+            {
+              id: `anonymous-${turn.id}-assistant`,
+              role: "assistant" as const,
+              content: turn.reply,
+              createdAt: turn.updatedAt,
+              error: turn.status === "interrupted" || turn.status === "failed",
+              errorCode: turn.status === "interrupted" ? "aborted" : null,
+            },
+          ]
+        : turn.status === "interrupted" || turn.status === "failed"
+          ? [
+              // A metered turn whose stream died before any content arrived.
+              // Without this marker the transcript hydrates as a bare user
+              // bubble — a silently incomplete conversation (launch-close
+              // sweep, Defect 2 aftermath of the dashboard-handoff abort).
+              {
+                id: `anonymous-${turn.id}-assistant`,
+                role: "assistant" as const,
+                content: t("chat.anonymousReplyInterrupted", {
+                  defaultValue:
+                    "This reply was interrupted before it arrived. Send the message again to continue.",
+                }),
+                createdAt: turn.updatedAt,
+                error: true,
+                errorCode: turn.status === "interrupted" ? "aborted" : "chat_error",
+              },
+            ]
+          : []),
+    ]);
+    setMessagesByThread((previous) =>
+      previous[activeThreadId]?.length
+        ? previous
+        : { ...previous, [activeThreadId]: hydrated }
+    );
+  }, [activeThreadId, isAnonymousSpacesActive, t]);
 
   useEffect(() => {
     spacesListRef.current = spacesList;
@@ -6618,6 +6724,8 @@ export function ChatArea() {
     signal,
     disableResponseEnvelope = false,
     turnOptions = null,
+    onContent,
+    turnKind = null,
   }: {
     workspaceSlug: string;
     threadSlug: string;
@@ -6626,6 +6734,8 @@ export function ChatArea() {
     signal?: AbortSignal;
     disableResponseEnvelope?: boolean;
     turnOptions?: InputAreaSendOptions["zaki"] | null;
+    onContent?: (content: string) => void;
+    turnKind?: "onboarding_first_turn" | null;
   }) => {
     const activeSpace = spacesList.find((s) => s.id === workspaceSlug);
     const instructions = activeSpace?.instructions ?? "";
@@ -6644,6 +6754,7 @@ export function ChatArea() {
           message,
           threadId: threadSlug,
           spaceId: workspaceSlug,
+          ...(turnKind ? { turnKind } : {}),
           ...(turnOptions?.autonomy ? { autonomy: turnOptions.autonomy } : {}),
           ...(turnOptions?.reasoning_effort
             ? { reasoning_effort: turnOptions.reasoning_effort }
@@ -7304,6 +7415,7 @@ export function ChatArea() {
           assistantId,
           normalized
         );
+        onContent?.(normalized);
         return buildStreamResult(normalized);
       }
       if (result.done) {
@@ -7342,6 +7454,7 @@ export function ChatArea() {
       if (!chunk) return;
       turnContent.received = true;
       accumulated += chunk;
+      onContent?.(accumulated);
       if (renderRaf != null) return;
       renderRaf = window.requestAnimationFrame(() => {
         renderRaf = null;
@@ -7493,6 +7606,7 @@ export function ChatArea() {
     if (finalized && finalized !== accumulated) {
       updateAssistantContent(threadSlug, assistantId, finalized);
     }
+    onContent?.(finalized || accumulated);
     return buildStreamResult(finalized || accumulated);
   }, [
     appendAssistantAgentStep,
@@ -7554,11 +7668,13 @@ export function ChatArea() {
     ({
       saved,
       supersededCount = 0,
+      duplicateCount = 0,
     }: {
       saved: MemoryCaptureResponse["saved"];
       supersededCount?: number;
+      duplicateCount?: number;
     }) => {
-      const shouldShow = saved.length > 0 || supersededCount > 0;
+      const shouldShow = saved.length > 0 || supersededCount > 0 || duplicateCount > 0;
       setRecentSavedMemories(saved);
       setRecentSupersededCount(supersededCount);
       setShowMemoryToast(shouldShow);
@@ -7800,11 +7916,11 @@ export function ChatArea() {
       queuedMemoryCheckRef.current = null;
       memoryInFlightRef.current = false;
       if (
-        showMemoryToast ||
-        recentSavedMemories.length > 0 ||
-        recentSupersededCount > 0 ||
-        memoryToastUndoError ||
-        memoryToastPartialUndoCount > 0
+        (showMemoryToast ||
+          recentSavedMemories.length > 0 ||
+          recentSupersededCount > 0 ||
+          memoryToastUndoError ||
+          memoryToastPartialUndoCount > 0)
       ) {
         dismissMemoryToast();
       }
@@ -8029,6 +8145,27 @@ export function ChatArea() {
   }, [authUserId, ensureZakiBotProvisioned, isAuthReady, isZakiBotActiveSpace]);
 
   useEffect(() => {
+    if (!isAuthReady || !authUserId || !isZakiBotActiveSpace || !zakiBotProvisionReady) {
+      setBotOnboarding(null);
+      firstRunStartedRef.current = null;
+      return;
+    }
+
+    let cancelled = false;
+    void fetchBotOnboarding()
+      .then(({ response, data }) => {
+        if (cancelled) return;
+        if (!response.ok || data?.error) return;
+        setBotOnboarding(data);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUserId, isAuthReady, isZakiBotActiveSpace, zakiBotProvisionReady]);
+
+  useEffect(() => {
     if (isZakiBotActiveSpace) return;
     clearZakiBotProgressVisuals();
   }, [clearZakiBotProgressVisuals, isZakiBotActiveSpace]);
@@ -8124,7 +8261,8 @@ export function ChatArea() {
     text: string,
     files: File[],
     turnOptions?: InputAreaSendOptions,
-    preferredWorkspaceSlug?: string | null
+    preferredWorkspaceSlug?: string | null,
+    presentation?: { hideUserMessage?: boolean; firstRun?: boolean }
   ): Promise<boolean> => {
     const trimmed = text.trim();
     if (!trimmed) {
@@ -8137,7 +8275,7 @@ export function ChatArea() {
       }));
       return false;
     }
-    if (isStreaming) return false;
+    if (isStreamingRef.current) return false;
     setComposerQuickReplyTriggerId(null);
     setComposerQuickReplyVisible(false);
     if (!authUserId && files.length > 0) {
@@ -8169,6 +8307,9 @@ export function ChatArea() {
     setPaywallCardData(null);
 
     const isZakiBotTarget = isZakiBotSpaceId(resolvedWorkspaceSlug);
+    const anonymousTurnId = !authUserId
+      ? `anonymous-turn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      : null;
     const anonymousWork =
       !authUserId
         ? upsertAnonymousWorkItem({
@@ -8181,6 +8322,7 @@ export function ChatArea() {
                 ? `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(activeThreadId)}`
                 : `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}`,
             threadId: activeThreadId,
+            turnId: anonymousTurnId ?? undefined,
             meterRemaining: null,
             status: "draft",
           })
@@ -8192,6 +8334,7 @@ export function ChatArea() {
     // For ZAKI bot without an activeThreadId, generate a new thread slug.
     // The nullalis backend creates the session on first message.
     const generatedZakiThread = isZakiBotTarget && !activeThreadId;
+    let createdSpacesThread = false;
     let threadId = activeThreadId || (isZakiBotTarget ? `thread-${Date.now()}` : null);
     if (!threadId) {
       try {
@@ -8214,6 +8357,7 @@ export function ChatArea() {
           thread?: { slug?: string; id?: string; name?: string; label?: string };
         };
         threadId = data.thread?.slug ?? data.thread?.id ?? `thread-${Date.now()}`;
+        createdSpacesThread = true;
         const threadName = stripThreadDisplayName(data.thread?.name ?? data.thread?.label);
         const label = isDefaultThreadLabel(threadName)
           ? DEFAULT_THREAD_LABEL
@@ -8230,6 +8374,12 @@ export function ChatArea() {
     }
 
     if (!threadId) return false;
+    if (createdSpacesThread && !isZakiBotTarget) {
+      goToThread(resolvedWorkspaceSlug, threadId);
+      navigate(
+        `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`
+      );
+    }
     if (anonymousWork && !isZakiBotTarget) {
       upsertAnonymousWorkItem({
         id: anonymousWork.id,
@@ -8238,6 +8388,7 @@ export function ChatArea() {
         prompt: trimmed,
         route: `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
         threadId,
+        turnId: anonymousTurnId ?? undefined,
         meterRemaining: null,
         status: "draft",
       });
@@ -8266,7 +8417,7 @@ export function ChatArea() {
       }
     }
 
-    if (authUserId && !activationProgress.firstMessageSent) {
+    if (authUserId && !activationProgress.firstMessageSent && !presentation?.firstRun) {
       const nextProgress = markFirstMessageSent(authUserId);
       setActivationProgress(nextProgress);
       void trackProductEvent({
@@ -8309,13 +8460,15 @@ export function ChatArea() {
         ...prev,
         [threadId]: [
           ...(prev[threadId] ?? []),
-          {
-            id: userMessageId,
-            role: "user" as const,
-            content: trimmed,
-            createdAt: userCreatedAt,
-            attachments: attachmentsForMessage,
-          },
+          ...(presentation?.hideUserMessage
+            ? []
+            : [{
+                id: userMessageId,
+                role: "user" as const,
+                content: trimmed,
+                createdAt: userCreatedAt,
+                attachments: attachmentsForMessage,
+              }]),
           {
             id: assistantMessageId,
             role: "assistant" as const,
@@ -8370,6 +8523,7 @@ export function ChatArea() {
     setStreamingIndicatorMode("thinking");
     setTurnStartedAt(Date.now());
     setTurnDurationMs(null);
+    isStreamingRef.current = true;
     setIsStreaming(true);
     const streamController = new AbortController();
     streamAbortRef.current = streamController;
@@ -8426,6 +8580,28 @@ export function ChatArea() {
     const sendText = attachmentMarkers
       ? `${attachmentMarkers}\n\n${trimmed}`
       : trimmed;
+    let anonymousPartialReply = "";
+    let lastAnonymousPersistAt = 0;
+    const persistAnonymousPartial = (content: string) => {
+      anonymousPartialReply = content;
+      if (!anonymousWork || isZakiBotTarget || !anonymousTurnId) return;
+      const now = Date.now();
+      if (now - lastAnonymousPersistAt < 250) return;
+      lastAnonymousPersistAt = now;
+      upsertAnonymousWorkItem({
+        id: anonymousWork.id,
+        productId: "spaces",
+        taskKind: "chat",
+        prompt: trimmed,
+        replyPreview: content,
+        reply: content,
+        route: `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
+        threadId,
+        turnId: anonymousTurnId,
+        meterRemaining: null,
+        status: "streaming",
+      });
+    };
 
     try {
       // P1-12: bounded auto-reconnect/replay of the SAME turn when the BFF
@@ -8446,6 +8622,8 @@ export function ChatArea() {
             assistantId: assistantMessageId,
             signal: streamController.signal,
             turnOptions: isZakiBotTarget ? turnOptions?.zaki ?? null : null,
+            onContent: !authUserId && !isZakiBotTarget ? persistAnonymousPartial : undefined,
+            turnKind: presentation?.firstRun ? "onboarding_first_turn" : null,
           });
           break;
         } catch (streamError) {
@@ -8477,7 +8655,7 @@ export function ChatArea() {
       if (isZakiBotTarget && assistantReply) {
         setComposerQuickReplyTriggerId(assistantMessageId);
       }
-      if (isZakiBotTarget && turnSessionKey) {
+      if (isZakiBotTarget && turnSessionKey && !presentation?.firstRun) {
         void maybeAutoTitleSession(turnSessionKey, {
           userMessage: trimmed,
           assistantMessage: assistantReply,
@@ -8528,12 +8706,28 @@ export function ChatArea() {
             ? "/agent"
             : `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
           threadId,
+          turnId: anonymousTurnId ?? undefined,
           meterRemaining: null,
           status: "succeeded",
         });
       }
       // Keep chat UX responsive: memory save runs in background.
-      void checkForSavedMemories(trimmed, threadId);
+      if (!presentation?.firstRun) {
+        // WP-MEM6: agent turns write memory through the engine (memory_store). Running the Hub
+        // capture pipeline here too would re-create the dual-store split this WP exists to remove.
+        if (!isZakiBotTarget) void checkForSavedMemories(trimmed, threadId);
+      }
+      if (isZakiBotTarget && !presentation?.firstRun && botOnboarding?.completed === false) {
+        void updateBotOnboarding({ completed: true })
+          .then(({ response, data }) => {
+            if (!response.ok || data?.error || data?.completed !== true) return;
+            setBotOnboarding(data);
+          })
+          .catch(() => {
+            // The conversation succeeded. Leave onboarding incomplete so the next
+            // reply can retry this idempotent marker without interrupting the user.
+          });
+      }
       return true;
     } catch (error) {
       if (anonymousWork) {
@@ -8543,12 +8737,18 @@ export function ChatArea() {
           productId,
           taskKind: isZakiBotTarget ? "plan" : "chat",
           prompt: trimmed,
+          replyPreview: anonymousPartialReply,
+          reply: anonymousPartialReply,
           route: isZakiBotTarget
             ? "/agent"
             : `/spaces/${encodeURIComponent(resolvedWorkspaceSlug)}/threads/${encodeURIComponent(threadId)}`,
           threadId,
+          turnId: anonymousTurnId ?? undefined,
           meterRemaining: null,
-          status: "failed",
+          status:
+            isAbortError(error) || anonymousPartialReply.trim()
+              ? "interrupted"
+              : "failed",
         });
       }
       if (isAbortError(error)) {
@@ -8608,12 +8808,19 @@ export function ChatArea() {
       toast.error(errorMessage);
       return false;
     } finally {
+      if (isZakiBotTarget) {
+        // The warning describes the NEXT admission decision. A completed, failed, or
+        // aborted Agent turn can settle/refund the wallet differently, so discard the
+        // pre-turn snapshot before the composer offers another send.
+        await queryClient.invalidateQueries({ queryKey: billingKeys.meterStatus });
+      }
       if (streamAbortRef.current === streamController) {
         streamAbortRef.current = null;
       }
       if (!isZakiBotTarget) {
         setStreamingIndicatorMode("thinking");
       }
+      isStreamingRef.current = false;
       setIsStreaming(false);
     }
   }, [
@@ -8623,6 +8830,7 @@ export function ChatArea() {
     activationProgress.firstMessageSent,
     agentUserId,
     authUserId,
+    botOnboarding,
     checkForSavedMemories,
     clearZakiBotProgressVisuals,
     ensureZakiSessionUi,
@@ -8654,6 +8862,169 @@ export function ChatArea() {
     [handleSend, t]
   );
 
+  const handleComposerSend = useCallback(
+    async (text: string, files: File[], turnOptions?: InputAreaSendOptions): Promise<boolean> => {
+      const composer = composerHandleRef.current;
+      const activeImportDraft = activeMemoryImportDraftRef.current;
+      const composerDraft = composer?.getDraft().trim() ?? "";
+      const wireText = text.trim();
+      const isMemoryImportSend =
+        Boolean(activeImportDraft) &&
+        Boolean(composerDraft) &&
+        (wireText === composerDraft || wireText.endsWith(composerDraft));
+
+      if (!isMemoryImportSend) {
+        activeMemoryImportDraftRef.current = null;
+        queuedMemoryImportTurnsRef.current = null;
+        return handleSend(text, files, turnOptions);
+      }
+
+      let turns = queuedMemoryImportTurnsRef.current;
+      if (!turns) {
+        try {
+          if (wireText.length <= AGENT_MESSAGE_MAX_CHARS) {
+            // Preserve the ordinary composer path exactly, including any user-pinned context.
+            turns = [text];
+          } else {
+            // Pinned context is not part of the imported profile and can push an otherwise valid
+            // paste over the BFF cap. Size and split the visible draft, not that transient prefix.
+            const sections = splitMemoryImportBySection(composerDraft);
+            turns =
+              sections.length > 1
+                ? sections.map((section, index) =>
+                    buildMemoryImportTurn(section, index + 1, sections.length)
+                  )
+                : sections;
+          }
+        } catch (error) {
+          activeMemoryImportDraftRef.current = composerDraft;
+          queuedMemoryImportTurnsRef.current = null;
+          // InputArea clears its local value immediately after invoking `onSend`. Yield once so the
+          // validated draft restoration wins that update and no private profile text is lost.
+          await Promise.resolve();
+          composer?.setDraft(composerDraft);
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : t("memoryImport.sendFailed", {
+                  defaultValue: "Couldn't send that import. Try again.",
+                }),
+            // This error asks the user to edit a potentially very large profile. Keep the named
+            // failure visible long enough to read before returning to the restored composer draft.
+            { duration: 12_000 }
+          );
+          return false;
+        }
+      }
+
+      for (const [index, turn] of turns.entries()) {
+        const sent = await handleSend(
+          turn,
+          index === 0 ? files : [],
+          turnOptions,
+          ZAKI_BOT_SPACE_ID
+        );
+        if (!sent) {
+          const remainingTurns = turns.slice(index);
+          const restoreOrdinaryDraft = index === 0 && turns.length === 1;
+          const restoredDraft = restoreOrdinaryDraft
+            ? composerDraft
+            : remainingTurns[0] ?? "";
+          queuedMemoryImportTurnsRef.current = restoreOrdinaryDraft ? null : remainingTurns;
+          activeMemoryImportDraftRef.current = restoredDraft || null;
+          if (restoredDraft) {
+            composer?.setDraft(restoredDraft);
+          }
+          if (index > 0) {
+            toast.error(
+              t("memoryImport.partialSendFailed", {
+                part: index + 1,
+                total: turns.length,
+                defaultValue: `Part ${index + 1} of ${turns.length} didn't send. The next unsent part is back in your composer.`,
+              })
+            );
+          }
+          return false;
+        }
+      }
+
+      activeMemoryImportDraftRef.current = null;
+      queuedMemoryImportTurnsRef.current = null;
+      return true;
+    },
+    [handleSend, t]
+  );
+
+  useEffect(() => {
+    const snapshotDraftForReauthentication = () => {
+      const prompt = composerHandleRef.current?.getDraft().trim() || "";
+      if (!prompt) return;
+      const productId = isZakiBotActiveSpace ? "agent" : "spaces";
+      writePendingIntent({
+        productId,
+        taskKind: productId === "agent" ? "plan" : "chat",
+        prompt,
+        source: "session_expired",
+        returnTo: productId === "agent" ? "/agent" : "/spaces",
+        replayMode: "draft",
+      });
+    };
+    window.addEventListener(AUTH_REQUIRED_EVENT, snapshotDraftForReauthentication);
+    return () => {
+      window.removeEventListener(AUTH_REQUIRED_EVENT, snapshotDraftForReauthentication);
+    };
+  }, [isZakiBotActiveSpace]);
+
+  useEffect(() => {
+    if (
+      !isAuthReady ||
+      !authUserId ||
+      !isZakiBotActiveSpace ||
+      !zakiBotProvisionReady ||
+      !activeThreadId ||
+      agentHistoryHydratedThreadId !== activeThreadId ||
+      !botOnboarding ||
+      botOnboarding.completed ||
+      isStreaming
+    ) {
+      return;
+    }
+
+    if (messages.length > 0) {
+      return;
+    }
+
+    if (!shouldStartEngineFirstTurn({ onboarding: botOnboarding, messageCount: messages.length })) {
+      return;
+    }
+
+    const ceremonyKey = `${authUserId}:${activeThreadId}`;
+    if (firstRunStartedRef.current === ceremonyKey) return;
+    firstRunStartedRef.current = ceremonyKey;
+    void handleSend(
+      FIRST_RUN_ENGINE_PROMPT,
+      [],
+      undefined,
+      ZAKI_BOT_SPACE_ID,
+      { hideUserMessage: true, firstRun: true }
+    ).then((succeeded) => {
+      if (!succeeded) {
+        firstRunStartedRef.current = null;
+      }
+    });
+  }, [
+    activeThreadId,
+    agentHistoryHydratedThreadId,
+    authUserId,
+    botOnboarding,
+    handleSend,
+    isAuthReady,
+    isStreaming,
+    isZakiBotActiveSpace,
+    messages.length,
+    zakiBotProvisionReady,
+  ]);
+
   useEffect(() => {
     if (!isAuthReady || !authUserId || isStreaming) return;
     const pendingIntent = readPendingIntent();
@@ -8674,7 +9045,12 @@ export function ChatArea() {
       if (!activeWorkspaceSlug || isZakiBotActiveSpace) return;
       replayedPendingIntentKeyRef.current = replayKey;
       clearPendingIntent();
-      composerHandleRef.current?.submitWith(pendingIntent.prompt);
+      if (pendingIntent.replayMode === "submit") {
+        composerHandleRef.current?.submitWith(pendingIntent.prompt);
+      } else {
+        composerHandleRef.current?.setDraft(pendingIntent.prompt);
+        window.dispatchEvent(new Event("zaki:focus-composer"));
+      }
     }
   }, [
     activeWorkspaceSlug,
@@ -8683,6 +9059,53 @@ export function ChatArea() {
     isAuthReady,
     isStreaming,
     isZakiBotActiveSpace,
+  ]);
+
+  useEffect(() => {
+    const routeState = location.state as { memoryImportDraft?: unknown } | null;
+    const memoryImportDraft =
+      typeof routeState?.memoryImportDraft === "string"
+        ? routeState.memoryImportDraft.trim()
+        : "";
+    if (
+      !memoryImportDraft ||
+      consumedMemoryImportRouteDraftRef.current === memoryImportDraft ||
+      !isAuthReady ||
+      !authUserId ||
+      !isZakiBotActiveSpace ||
+      isAgentComposerBootstrapping ||
+      isStreaming ||
+      // The first-run prompt is hidden but still creates a user message before the engine greeting
+      // arrives. Waiting only for `messages.length > 0` can expose the import draft while that
+      // ceremony still owns the send lane; require its assistant reply before unlocking handoff.
+      (botOnboarding?.completed === false &&
+        !messages.some(
+          (message) => message.role === "assistant" && Boolean(message.content.trim())
+        ))
+    ) {
+      return;
+    }
+    const composer = composerHandleRef.current;
+    if (!composer) return;
+
+    consumedMemoryImportRouteDraftRef.current = memoryImportDraft;
+    activeMemoryImportDraftRef.current = memoryImportDraft;
+    queuedMemoryImportTurnsRef.current = null;
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+    composer.setDraft(memoryImportDraft);
+    window.dispatchEvent(new Event("zaki:focus-composer"));
+  }, [
+    authUserId,
+    botOnboarding,
+    isAgentComposerBootstrapping,
+    isAuthReady,
+    isStreaming,
+    isZakiBotActiveSpace,
+    location.pathname,
+    location.search,
+    location.state,
+    messages.length,
+    navigate,
   ]);
 
   const handleStopStreaming = useCallback(() => {
@@ -9411,7 +9834,7 @@ export function ChatArea() {
 
   // Load thread history from React Query
   useEffect(() => {
-    if (isZakiBotActiveSpace) return;
+    if (isZakiBotActiveSpace || isAnonymousSpacesActive) return;
     if (!activeThreadId || !activeWorkspaceSlug) return;
     if (!historyData || historyLoadedRef.current[activeThreadId]) return;
     if (messagesByThread[activeThreadId]?.length) {
@@ -9436,6 +9859,7 @@ export function ChatArea() {
     activeThreadId,
     activeWorkspaceSlug,
     historyData,
+    isAnonymousSpacesActive,
     isZakiBotActiveSpace,
     messagesByThread,
   ]);
@@ -10340,9 +10764,31 @@ export function ChatArea() {
                   />
                 </div>
               ) : null}
+              {agentComposerUsageState.lastTurnWarning ? (
+                <div
+                  className="zaki-agent-last-turn-warning"
+                  data-testid="zaki-agent-last-turn-warning"
+                  data-reset-at={agentComposerUsageState.resetAt ?? undefined}
+                  role="status"
+                  aria-live="polite"
+                >
+                  <Clock className="size-3.5 shrink-0" aria-hidden="true" />
+                  <span>
+                    {agentCapacityResetLabel
+                      ? t("input.zaki.lastTurnWarning", {
+                          reset: agentCapacityResetLabel,
+                          defaultValue: `This is likely your last turn before this capacity window resets. Capacity returns ${agentCapacityResetLabel}.`,
+                        })
+                      : t("input.zaki.lastTurnWarningWithoutReset", {
+                          defaultValue:
+                            "This is likely your last turn before this capacity window resets.",
+                        })}
+                  </span>
+                </div>
+              ) : null}
               <InputArea
                 composerHandleRef={composerHandleRef}
-                onSend={handleSend}
+                onSend={handleComposerSend}
                 onCompact={handleCompactSession}
                 isCompacting={isCompacting}
                 agentUserId={isZakiBotActiveSpace ? agentUserId : null}
@@ -10540,8 +10986,12 @@ export function ChatArea() {
       <MemoryImportSheet
         isOpen={memoryImportOpen}
         onClose={() => setMemoryImportOpen(false)}
-        onImport={async (dump) => {
-          handleSend(dump, []);
+        onImport={(dump) => {
+          // WP-MEM6 owner shape: the sheet prepares an ordinary reply; it never sends on the
+          // user's behalf. Router state survives the dashboard -> Agent remount without putting a
+          // private profile in the URL or durable local storage. The Agent route consumes it into
+          // the canonical composer, where the user can review and press Send.
+          navigate("/agent", { state: { memoryImportDraft: dump } });
         }}
       />
 
@@ -10574,8 +11024,9 @@ export function ChatArea() {
                   setMemoryToastUndoError(null);
                   setMemoryToastPartialUndoCount(0);
                   try {
-                    const results = await Promise.allSettled(
-                      recentSavedMemories.map((memory) =>
+                    const results = await settleMemoryUndosNewestFirst(
+                      recentSavedMemories,
+                      (memory) =>
                         apiRequest(`/api/memory/undo/${memory.id}`, {
                           method: "POST",
                         }).then(async (response) => {
@@ -10588,27 +11039,22 @@ export function ChatArea() {
                           } catch {
                             data = null;
                           }
-                          return {
-                            id: memory.id,
-                            ok: response.ok && data?.success !== false,
-                            error:
-                              typeof data?.error === "string" && data.error.trim()
-                                ? data.error.trim()
-                                : null,
-                          };
+                          const error =
+                            typeof data?.error === "string" && data.error.trim()
+                              ? data.error.trim()
+                              : null;
+                          if (!response.ok || data?.success === false) {
+                            throw new Error(error || t("memory.undoFailed"));
+                          }
+                          return { id: memory.id };
                         })
-                      )
                     );
 
-                    const failedIds = new Set<string>();
+                    const succeededIds = new Set<string>();
                     let firstError: string | null = null;
                     for (const result of results) {
-                      if (result.status === "fulfilled" && result.value.ok) continue;
                       if (result.status === "fulfilled") {
-                        failedIds.add(result.value.id);
-                        if (!firstError && result.value.error) {
-                          firstError = result.value.error;
-                        }
+                        succeededIds.add(result.value.id);
                         continue;
                       }
                       if (!firstError && result.reason instanceof Error) {
@@ -10616,15 +11062,17 @@ export function ChatArea() {
                       }
                     }
 
-                    if (failedIds.size === 0) {
+                    if (succeededIds.size === recentSavedMemories.length) {
                       dismissMemoryToast();
                       requestMemoryStatusSync(true);
                       return;
                     }
 
-                    const failedMemories = recentSavedMemories.filter((memory) => failedIds.has(memory.id));
-                    const partialUndoCount = recentSavedMemories.length - failedMemories.length;
-                    setRecentSavedMemories(failedMemories);
+                    const remainingMemories = recentSavedMemories.filter(
+                      (memory) => !succeededIds.has(memory.id)
+                    );
+                    const partialUndoCount = succeededIds.size;
+                    setRecentSavedMemories(remainingMemories);
                     setMemoryToastPartialUndoCount(partialUndoCount);
                     setMemoryToastUndoError(
                       firstError ||
@@ -10634,7 +11082,7 @@ export function ChatArea() {
                             : "memory.undoFailed"
                         )
                     );
-                    setShowMemoryToast(failedMemories.length > 0);
+                    setShowMemoryToast(remainingMemories.length > 0);
                     requestMemoryStatusSync(true);
                   } finally {
                     setIsUndoingMemoryToast(false);

@@ -111,8 +111,8 @@ async function mockAuthAndPricing(page: Page) {
         checkoutProviders: [{ key: "stripe", label: "Stripe", enabled: true }],
         pricingAvailability: {
           personal: { monthly: true, yearly: true },
-          pro: { monthly: true, yearly: false },
-          pro_max: { monthly: true, yearly: false },
+          pro: { monthly: true, yearly: true },
+          pro_max: { monthly: true, yearly: true },
         },
         pricingCatalog: {
           personal: {
@@ -121,11 +121,11 @@ async function mockAuthAndPricing(page: Page) {
           },
           pro: {
             monthly: { priceId: "price_pro_month", unitAmount: 4500, currency: "usd" },
-            yearly: null,
+            yearly: { priceId: "price_pro_year", unitAmount: 43200, currency: "usd" },
           },
           pro_max: {
-            monthly: { priceId: "price_pro_max_month", unitAmount: 9900, currency: "usd" },
-            yearly: null,
+            monthly: { priceId: "price_pro_max_month", unitAmount: 9500, currency: "usd" },
+            yearly: { priceId: "price_pro_max_year", unitAmount: 91200, currency: "usd" },
           },
         },
       },
@@ -161,7 +161,7 @@ test("pricing page displays the commercial plan prices and gift-code purchase", 
   await expect(page.getByText("Pro", { exact: true })).toBeVisible();
   await expect(page.getByText("$45 / month", { exact: true })).toBeVisible();
   await expect(page.getByText("Pro Max", { exact: true })).toBeVisible();
-  await expect(page.getByText("$99 / month", { exact: true })).toBeVisible();
+  await expect(page.getByText("$95 / month", { exact: true })).toBeVisible();
   await expect(page.getByText("ZAKI Agent", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Buy an access code", { exact: true })).toBeVisible();
   await expect(page.getByText("$15 one-time", { exact: true })).toBeVisible();
@@ -173,8 +173,12 @@ test("pricing page displays the commercial plan prices and gift-code purchase", 
     "true"
   );
   await expect(page.getByText("$144 / year", { exact: true })).toBeVisible();
+  await expect(page.getByText("$432 / year", { exact: true })).toBeVisible();
+  await expect(page.getByText("$912 / year", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Choose Personal" })).toBeEnabled();
-  await expect(page.getByRole("button", { name: "Yearly not available" }).first()).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Choose Pro", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Choose Pro Max", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Yearly not available" })).toHaveCount(0);
 
   await page.screenshot({
     path: testInfo.outputPath(`pricing-yearly-${testInfo.project.name}.png`),

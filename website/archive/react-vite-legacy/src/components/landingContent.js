@@ -36,9 +36,9 @@ export const content = {
       helper: "Spaces work in Arabic, English, or both. They are the structured workspaces inside the app.",
     },
     productSplit: {
-      heading: "Three stages. One product ladder.",
+      heading: "Four spokes. One product system.",
       subheading:
-        "Chat is live now. Agent and Brain carry continuity. Learn and Hire stay private beta, and Design stays waitlist until their flows are ready.",
+        "Agent, Chat/Spaces, Design, and Minutes are the four visible spokes. Design stays waitlist and Minutes stays coming soon; Brain is the Agent memory view.",
       cards: [
         {
           stage: "Surface 1",
@@ -66,7 +66,7 @@ export const content = {
             "Persistent memory across sessions",
           ],
           ctaLabel: "Open Agent",
-          ctaHref: "/product/#waitlist",
+          ctaHref: appHandoffUrl("/agent", "website_agent_live", "agent"),
         },
         {
           stage: "Future lanes",
@@ -140,8 +140,8 @@ export const content = {
       description:
         "ZAKI is live. Start in Chat, then use Agent when memory and follow-through matter.",
       socialProof: {
-        label: "300+ early users joined in week one",
-        hoverLabel: "Join the early community shaping ZAKI before full rollout.",
+        label: "The public core is live",
+        hoverLabel: "Start with Chat or sign in for account continuity.",
         avatars: ["AN", "SK", "RM", "LM"],
       },
       highlights: [
@@ -151,11 +151,11 @@ export const content = {
       ],
       cta: "Open Agent",
       secondary: "Jump to plans below to choose the right public access path.",
-      campaignLabel: "Coming soon: gated product lanes",
+      campaignLabel: "Coming next: gated spokes",
       campaignTeaser:
-        "Updates for Learn, Design, and Hire as they move from gated lanes toward launch-ready surfaces.",
+        "Updates for Design and Minutes as they move through their release gates.",
       instagramNote:
-        "Want a free access code?\nDM us on Instagram after follow + share to request access codes:",
+        "Sign in to see the plans and access currently available to your account.",
     },
     why: {
       heading: "Most AI answers well. Very little of it becomes a real counterpart.",
@@ -394,7 +394,7 @@ export const content = {
             "Spaces are the live product layer.\nThey give users a disciplined workspace for Arabic-English daily work.\nThat practical layer is how we earn the right to build the next product step.",
         },
         {
-          pill: "Learn",
+          pill: "Continuity",
           title: "Persistence changes the relationship",
           description:
             "When context carries forward, AI becomes more useful, more trainable, and more accountable.\nMemory continuity, review loops, and user control matter more than one-off answers.\nThat is what ZAKI is testing in public.",
@@ -454,7 +454,7 @@ export const content = {
           description: "Plan faster, write sharper, and make clearer decisions with context-aware support.",
         },
         {
-          title: "Learning",
+          title: "Study",
           description: "Summarize, explain, and translate ideas in a way that stays relevant to your context.",
         },
         {
@@ -525,7 +525,7 @@ export const content = {
           "Account continuity through Agent and visible memory through Brain.",
         ],
         cta: "Open Agent",
-        href: "/product/#waitlist",
+        href: appHandoffUrl("/agent", "website_agent_live", "agent"),
       },
       botPremium: {
         heading: "Future ZAKI lanes",
@@ -553,7 +553,7 @@ export const content = {
         {
           question: "Is ZAKI free? What does it cost?",
           answer:
-            "Free to start — Chat runs on a free weekly allowance, no card. Paid plans are $15, $45, and $99 a month, and every plan unlocks the whole platform: Agent, Spaces, and Memory. What changes between tiers is the ceiling — more runs, longer memory retention, more concurrent work — and it's one shared allowance across everything, so there are no per-message meters and no separate quota per product.",
+            "Free to start — Chat has a free weekly allowance and Agent has bounded free use, with no card required. Paid plans are $15, $45, and $99 a month and add a larger shared weekly allowance across Agent and Chat/Spaces, with Brain as the Agent memory view. Design stays waitlist and Minutes stays coming soon.",
         },
         {
           question: "Can I see and control what ZAKI remembers?",
@@ -641,12 +641,12 @@ export const content = {
     hero: {
       title: "Spaces للعمل. وزكي للاستمرارية.",
       subtitle:
-        "Spaces تمنحك إنتاجية منظمة اليوم. وزكي هو البيتا العامة لذكاء شخصي مستمر بذاكرة متواصلة، ومراحل عمل مرئية، وسياق يمتد مع الوقت.",
+        "Chat وSpaces تمنحانك عملًا منظمًا اليوم، وAgent يضيف ذاكرة حساب ومراحل عمل مرئية وسياقًا يمتد مع الوقت.",
       betaLine:
-        "تحديثات زكي مفتوحة الآن. الوصول المبكر يتضمن ذاكرة ومتابعة عبر Agent للتجربة.",
-      hint: "Spaces متاحة الآن. تحديثات زكي مفتوحة.",
-      cta: "انضم إلى البيتا",
-      pricingCta: "جرّب Spaces",
+        "ابدأ مع Chat مجانًا، وسجّل الدخول عندما يحتاج العمل إلى استمرارية وذاكرة.",
+      hint: "Chat وAgent وSpaces وBrain متاحة الآن.",
+      cta: "افتح Agent",
+      pricingCta: "ابدأ Chat",
       tertiaryCta: "ما هو زكي؟",
       placeholder: "كيف يمكنني مساعدتك اليوم؟",
       rotatingPrompts: [
@@ -664,18 +664,18 @@ export const content = {
       helper: "Spaces تعمل بالعربية والإنجليزية أو بالاثنين. وهي مساحات العمل المنظمة داخل التطبيق.",
     },
     productSplit: {
-      heading: "ثلاث مراحل. سلّم منتج واحد.",
+      heading: "أربعة مسارات. نظام منتج واحد.",
       subheading:
-        "Spaces متاحة ومدفوعة الآن. البيتا العامة لزكي مفتوحة. والنسخة المميزة تأتي لاحقًا بعد التعلّم من البيتا.",
+        "Agent وChat/Spaces وDesign وMinutes هي المسارات الأربعة المرئية. Design قائمة انتظار وMinutes قريبًا، وBrain هو عرض ذاكرة Agent.",
       cards: [
         {
           stage: "المرحلة 1",
           title: "Spaces",
           badge: "متاح الآن",
           description:
-            "مساحة عمل ذكاء اصطناعي مدفوعة للإنتاجية اليومية المنظّمة. منضبطة، مهيكلة، وجاهزة للاستخدام اليوم.",
+            "مساحة عمل ذكاء اصطناعي منظّمة للإنتاجية اليومية، متاحة ضمن المنتج العام الأساسي.",
           bullets: [
-            "وصول غير محدود للدردشة مع الاشتراك المدفوع",
+            "استخدام مجاني محدود وخطط مدفوعة بسعة أسبوعية أكبر",
             "المساحات تفصل العمل والبحث والتخطيط بوضوح",
             "تحكم أوضح في الذاكرة والبيانات",
           ],
@@ -684,28 +684,28 @@ export const content = {
         },
         {
           stage: "المرحلة 2",
-          title: "تحديثات زكي العامة",
-          badge: "بيتا مفتوحة",
+          title: "ZAKI Agent",
+          badge: "متاح الآن",
           description:
-            "ذكاء مستمر تجريبي بذاكرة ومراحل عمل مرئية. أول خطوة علنية تتجاوز شكل الدردشة عديمة الذاكرة.",
+            "وكيل شخصي بذاكرة حساب ومراحل عمل مرئية ومتابعة عبر الجلسات.",
           bullets: [
-            "ذاكرة ومتابعة عبر Agent أثناء البيتا",
-            "تجريبي ومحدود ومبكر عن قصد",
+            "استخدام مجاني محدود وخطط مدفوعة بسعة أكبر",
+            "مراحل عمل مرئية وإجراءات قابلة للمراجعة",
             "ذاكرة مستمرة عبر الجلسات",
           ],
-          ctaLabel: "انضم إلى البيتا",
-          ctaHref: "/product/#waitlist",
+          ctaLabel: "افتح Agent",
+          ctaHref: appHandoffUrl("/agent", "website_agent_live", "agent"),
         },
         {
           stage: "المرحلة 3",
-          title: "زكي المميز",
-          badge: "لاحقًا",
+          title: "Design وMinutes",
+          badge: "مقيّدة",
           description:
-            "النسخة الكاملة تأتي بعد البيتا: تحكم أعمق، واعتمادية أقوى، وتجربة مشغّل شخصي أكثر نضجًا.",
+            "Design قائمة انتظار وMinutes قريبًا حتى تكتمل مساراتهما من البداية إلى النهاية.",
           bullets: [
-            "الاشتراكات تبدأ بعد البيتا العامة",
-            "النسخة المميزة تتشكل من تعلّم البيتا",
-            "هنا يصبح المنتج أعمق وأكثر اعتمادية",
+            "لا تُباع كمنتجات مكتملة",
+            "تُفتح بعد اتفاق الصلاحيات والواجهة والاختبارات",
+            "حالتها واضحة داخل الموقع",
           ],
           ctaLabel: "شاهد الرؤية",
           ctaHref: "/product/",
@@ -713,16 +713,16 @@ export const content = {
       ],
     },
     beta: {
-      heading: "البيتا العامة: ماذا تتوقع؟",
+      heading: "حالة المنتج الآن",
       warning:
-        "زكي تجريبي بالتصميم. إنه البيتا العامة لذكاء مستمر بذاكرة واستمرارية، وليس منتجًا ذاتي التشغيل مكتملًا.",
+        "Agent وChat/Spaces هما المساران المباشران، وDesign قائمة انتظار وMinutes قريبًا. Brain هو عرض ذاكرة Agent.",
       bullets: [
-        "البيتا العامة مفتوحة الآن مع ذاكرة ومتابعة عبر Agent",
-        "زكي مجاني في البيتا، بينما تبقى Spaces طبقة العمل المدفوعة مقابل 13 دولارًا شهريًا",
-        "هذا ليس المنتج النهائي، بل أرض الاختبار",
-        "ملاحظاتك تشكّل النسخة المميزة القادمة مباشرة",
+        "Chat مجاني للبدء وAgent متاح بحد مجاني مقيد",
+        "الخطط المدفوعة هي 15 و45 و99 دولارًا شهريًا",
+        "Design قائمة انتظار وMinutes قريبًا",
+        "لا يُعلن أي مسار قبل اكتماله من البداية إلى النهاية",
       ],
-      primaryCta: "انضم إلى البيتا",
+      primaryCta: "افتح Agent",
       secondaryCta: "اقرأ عن زكي",
     },
     chatProduct: {
@@ -746,7 +746,7 @@ export const content = {
         "خيط مستمر مع ذاكرة واسترجاع",
         "مراحل عمل مرئية أثناء التنفيذ",
         "مبني لعلاقة مستمرة لا لطلبات منفصلة فقط",
-        "البيتا العامة تتضمن ذاكرة ومتابعة عبر Agent",
+        "Agent متاح بذاكرة حساب ومتابعة عبر الجلسات",
       ],
       bridgeLine:
         "معظم الذكاء الاصطناعي ينساك لحظة انتهاء الجلسة. زكي يختبر ماذا يحدث عندما لا يضيع السياق مع الوقت، لا بين Prompt وآخر فقط، بل عبر الوقت والقنوات والعمل المتكرر.",
@@ -768,8 +768,8 @@ export const content = {
       description:
         "زكي أصبح متاحًا الآن. اشترك وابدأ تجربة شخصية مع ذاكرة تتطور معك.",
       socialProof: {
-        label: "انضم أكثر من 300 مستخدم مبكر خلال الأسبوع الأول",
-        hoverLabel: "انضم إلى المجتمع المبكر الذي يشكّل زكي قبل الإطلاق الكامل.",
+        label: "المنتج العام الأساسي متاح الآن",
+        hoverLabel: "ابدأ مع Chat أو سجّل الدخول لاستمرارية الحساب.",
         avatars: ["أن", "سك", "رم", "لم"],
       },
       highlights: [
@@ -779,11 +779,11 @@ export const content = {
       ],
       cta: "🚀 اشترك الآن",
       secondary: "انزل للأسفل واختر مسار الوصول العام المناسب.",
-      campaignLabel: "✨ قريبًا: دائرة زكي المقرّبة",
+      campaignLabel: "✨ قريبًا: المسارات المقيّدة",
       campaignTeaser:
-        "حملة محدودة للداعمين الأوائل ممن يؤمنون أن الذكاء الاصطناعي يجب أن يكون شخصيًا، واعيًا ثقافيًا، وتحت تحكم المستخدم بالكامل. 🧠🌍🔐",
+        "تحديثات Design وMinutes مع تقدّمهما عبر بوابات الإصدار.",
       instagramNote:
-        "بدك كود وصول مجاني؟\nراسلنا على إنستغرام بعد المتابعة + المشاركة لطلب أكواد الوصول:",
+        "سجّل الدخول لترى الخطط والوصول المتاحين لحسابك.",
     },
     why: {
       heading: "الذكاء الاصطناعي يجيب جيدًا. لكن القليل منه يصبح نظيرًا رقميًا حقيقيًا.",
@@ -808,12 +808,12 @@ export const content = {
     geo: {
       definitionHeading: "ما هو زكي بالضبط؟",
       definitionText:
-        "زكي هو طبقة الذكاء المستمر. وSpaces هي مساحات العمل المدفوعة المتاحة الآن للتنفيذ اليومي المنظّم. استخدم زكي للاستمرارية، واستخدم Spaces للعمل المنظّم.",
+        "زكي هو طبقة الذكاء المستمر، وSpaces هي مساحات العمل المنظمة داخل المنتج العام الأساسي. استخدم Agent للاستمرارية، وSpaces للعمل المنظّم.",
       statsHeading: "لماذا يختار الناس زكي؟",
       statsSource: "السلّم الذي يقف خلف العلامة.",
       stats: [
         "Spaces متاحة الآن للاستخدام اليومي المنظّم",
-        "البيتا العامة مفتوحة الآن مع ذاكرة ومتابعة عبر Agent",
+        "Agent متاح الآن مع ذاكرة حساب ومتابعة عبر الجلسات",
         "الذاكرة والتخصيص تحت تحكم أوضح للمستخدم",
         "الاستمرارية والانضباط التشغيلي مدمجان في البنية"
       ],
@@ -873,7 +873,7 @@ export const content = {
           tag: "milestone",
           title: "تقوية العزل وضبط الحصص",
           description:
-            "قوّينا العزل متعدد المستخدمين، وثبّتنا البث، وأضفنا حصصًا يومية تجعل البيتا العامة أكثر انضباطًا وأمانًا.",
+            "قوّينا العزل متعدد المستخدمين، وثبّتنا البث، وأضفنا حصصًا يومية تجعل السطح العام أكثر انضباطًا وأمانًا.",
           dateLabel: "الإصدار الحالي",
           emoji: "🛡️",
           status: "done",
@@ -1093,9 +1093,9 @@ export const content = {
       note: "زكي يذهب أبعد من ذلك، لكن Spaces تغطي طبقة الاستخدام اليومي الآن.",
     },
     pricing: {
-      heading: "ابدأ بـ Spaces. وجرّب زكي مجانًا.",
+      heading: "ابدأ مجانًا. ادفع عندما تحتاج سعة أكبر.",
       subheading:
-        "Spaces هي طبقة العمل المدفوعة المتاحة الآن مقابل 13 دولارًا شهريًا. وزكي هو البيتا العامة لذكاء مستمر بذاكرة واستمرارية، مع ذاكرة ومتابعة عبر Agent أثناء البيتا.",
+        "Chat مجاني للبدء وAgent يتيح استخدامًا مجانيًا محدودًا. الخطط المدفوعة 15 و45 و99 دولارًا شهريًا وتضيف سعة أسبوعية مشتركة أكبر.",
       interval: {
         monthly: "شهري",
         yearly: "سنوي",
@@ -1103,29 +1103,29 @@ export const content = {
       plans: [
         {
           tier: "chat",
-          label: "طالب",
-          priceMonthly: "$8 / شهر",
-          priceYearly: "$96 / سنة",
-          blurb: "للدراسة المركزة والكتابة الأوضح ومساندة أفضل عبر المقررات.",
+          label: "مجاني",
+          priceMonthly: "$0",
+          priceYearly: "لا تحتاج بطاقة",
+          blurb: "للدردشة الفورية والاستخدام المحدود لـ Agent.",
           features: [
-            "نماذج متقدمة لإجابات أفضل",
-            "استجابات بأولوية في الأوقات المزدحمة",
-            "مساعدة أقوى مع الملاحظات والمسودات وجلسات الدراسة"
+            "سعة أسبوعية مجانية لـ Chat",
+            "استخدام محدود لـ Agent",
+            "استمرارية الحساب بعد تسجيل الدخول"
           ],
-          cta: "اختر خطة الطالب",
+          cta: "ابدأ مجانًا",
         },
         {
           tier: "personal",
-          label: "شخصي",
-          priceMonthly: "$13 / شهر",
-          priceYearly: "$150 / سنة",
-          blurb: "للعمل والحياة اليومية عندما تريد أن يبدو زكي كمساعدك الشخصي.",
+          label: "الخطط المدفوعة",
+          priceMonthly: "تبدأ من $15 / شهر",
+          priceYearly: "السعر النهائي يظهر عند الدفع",
+          blurb: "سعة أسبوعية أكبر عبر Agent وChat وSpaces وBrain.",
           features: [
-            "نماذج متقدمة بمنطق أغنى",
-            "استجابات بأولوية وسياق أقوى",
-            "ذاكرة أكثر شخصية ودعم أقرب لأسلوب المساعد الشخصي"
+            "Personal بسعر 15 دولارًا شهريًا",
+            "Pro بسعر 45 دولارًا شهريًا",
+            "Pro Max بسعر 99 دولارًا شهريًا"
           ],
-          cta: "اختر الخطة الشخصية",
+          cta: "شاهد الخطط",
         },
       ],
       oneTimeCode: {
@@ -1140,30 +1140,30 @@ export const content = {
         ],
         cta: "اشترِ كود هدية لشهر",
       },
-      note: "خطة الطالب تتطلب بريد .edu أو تحققًا يدويًا مع إثبات دراسة.",
+      note: "السعة أسبوعية ومشتركة عبر أسطح المنتج العام الأساسي.",
       botBeta: {
-        heading: "تحديثات زكي العامة",
-        badge: "بيتا مفتوحة",
+        heading: "ZAKI Agent",
+        badge: "استمرارية الحساب",
         description:
-          "زكي يحتفظ بالسياق بين الجلسات، ويُظهر مراحل عمله، ويحتفظ بذاكرة لكل مستخدم. البيتا محدودة عمدًا بـ ذاكرة ومتابعة عبر Agent حتى يختبر المستخدم الاتجاه دون أن يخلط بينه وبين المنتج النهائي.",
+          "زكي يحتفظ بالسياق بين الجلسات، ويُظهر مراحل عمله، ويحتفظ بذاكرة لكل مستخدم. المسارات القادمة تبقى مقيّدة حتى تتفق الخدمة الخلفية والصلاحيات والواجهة والاختبارات.",
         bullets: [
           "ذاكرة ومتابعة عبر Agent",
           "ذاكرة مستمرة تنتقل بين الجلسات",
           "مراحل عمل مرئية تشاهد فيها ما يفعله زكي",
-          "مجاني الآن. الاشتراكات تبدأ بعد البيتا.",
+          "استخدام مجاني محدود وخطط مدفوعة بسعة أكبر.",
         ],
-        cta: "انضم إلى البيتا",
-        href: "/product/#waitlist",
+        cta: "افتح Agent",
+        href: appHandoffUrl("/agent", "website_agent_live", "agent"),
       },
       botPremium: {
-        heading: "زكي المميز",
-        badge: "لاحقًا",
+        heading: "المسارات القادمة",
+        badge: "مقيّدة",
         description:
-          "المنتج المميز يأتي بعد البيتا. هناك تبدأ الاشتراكات، وتظهر النسخة الكاملة بتجربة أعمق وأكثر نضجًا.",
+          "Design قائمة انتظار وMinutes قريبًا حتى تكتمل مساراتهما.",
         bullets: [
-          "الاشتراكات لاحقًا",
-          "يتشكل من تعلم البيتا",
-          "المنتج الكامل",
+          "لا تُباع كمنتجات مكتملة",
+          "تُفتح بعد اجتياز بوابات الإصدار",
+          "حالتها معلنة بوضوح",
         ],
         cta: "شاهد خارطة الطريق",
         href: "/product/",

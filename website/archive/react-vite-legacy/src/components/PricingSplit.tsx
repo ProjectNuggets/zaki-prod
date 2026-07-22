@@ -119,8 +119,8 @@ export function PricingSplit({ locale, t: _t }: { locale: Locale; t: WebsiteCont
     ? ["ذاكرة واستمرارية للحساب", "موافقات أدوات قبل الأفعال الحساسة", "متابعات وجلسات وسياق قابل للمراجعة", "Brain يعرض الذاكرة ومصدرها"]
     : ["Account memory and continuity", "Tool approvals before sensitive actions", "Follow-ups, sessions, and reviewable context", "Brain shows memory and provenance"];
   const futureFeatureItems = isArabic
-    ? ["Learn يبقى وصولًا خاصًا", "Design يبقى قائمة انتظار", "Hire يبقى بيتا خاصة", "لا وعود عامة حتى تكتمل المسارات"]
-    : ["Learn stays private access", "Design stays waitlist", "Hire stays private beta", "No public promises until flows are complete"];
+    ? ["Design يبقى قائمة انتظار", "Minutes يبقى قريبًا", "لا وعود عامة حتى تكتمل المسارات"]
+    : ["Design stays waitlist", "Minutes stays coming soon", "No public promises until flows are complete"];
   const chatStats = [
     { value: "$0", label: isArabic ? "للبدء" : "To start" },
     { value: "10", label: isArabic ? "رسائل / يوم" : "Msgs / day" },
@@ -141,7 +141,7 @@ export function PricingSplit({ locale, t: _t }: { locale: Locale; t: WebsiteCont
           <div className="mb-8 max-w-[62ch]">
             <div className="mb-4 flex items-center gap-3">
               <img src="/assets/zaki-logo.png" alt="" className="size-8 rounded-[8px] shadow-[0_2px_8px_rgba(0,0,0,0.08)]" />
-              <p className="font-mono-ui text-[11px] uppercase tracking-[0.28em] text-zk-accent">
+              <p className="font-mono-ui text-[11px] uppercase tracking-[0.28em] text-zk-accent-hover">
                 {isArabic ? "الوصول" : "Access"}
               </p>
             </div>
@@ -150,8 +150,8 @@ export function PricingSplit({ locale, t: _t }: { locale: Locale; t: WebsiteCont
             </h2>
             <p className="mt-4 text-[15px] leading-[1.8] text-zk-text-secondary md:text-base">
               {isArabic
-                ? "الموقع لا يبيع مسارًا قديمًا. Chat هو المدخل المجاني، Agent هو سطح الاستمرارية، وLearn وHire بيتا خاصة وDesign قائمة انتظار."
-                : "This site no longer sells the old ladder. Chat is the free entry point, Agent is the continuity surface, Learn and Hire stay private beta, and Design stays waitlist."}
+                ? "Agent وChat/Spaces هما المساران المباشران. Design قائمة انتظار، وMinutes قريبًا، وBrain هو عرض ذاكرة Agent."
+                : "Agent and Chat/Spaces are live. Design is waitlist, Minutes is coming soon, and Brain is the Agent memory view."}
             </p>
           </div>
         </Reveal>
@@ -275,8 +275,8 @@ export function PricingSplit({ locale, t: _t }: { locale: Locale; t: WebsiteCont
                 </h3>
                 <p className="mt-4 text-[14px] leading-[1.75] text-zk-text-secondary">
                   {isArabic
-                    ? "Learn وHire يبقيان بيتا خاصة، وDesign قائمة انتظار، حتى تتفق الواجهة والصلاحيات والاختبارات."
-                    : "Learn and Hire remain private beta, and Design remains waitlist, until UI, entitlement, and tests agree."}
+                    ? "Design يبقى قائمة انتظار، وMinutes يبقى قريبًا، حتى تتفق الواجهة والصلاحيات والاختبارات."
+                    : "Design stays waitlist, and Minutes stays coming soon until UI, entitlement, and tests agree."}
                 </p>
                 <PricingFeatureList items={futureFeatureItems} />
                 <PricingSupportPanel eyebrow={isArabic ? "تحديثات" : "Updates"}>

@@ -125,7 +125,7 @@ export function ProductAccessGate({
                 </dd>
               </div>
             </dl>
-            <Link className="v2-btn v2-btn--accent v2-btn--sm" to="/">
+            <Link className="v2-btn v2-btn--primary v2-btn--sm" to="/">
               <LockKeyhole className="size-3.5" aria-hidden />
               {t(`productGate.${modeKey}.action`, { defaultValue: copy.action })}
               <ArrowRight className="size-3.5" aria-hidden />

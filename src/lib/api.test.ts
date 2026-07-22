@@ -10,11 +10,13 @@
 const mockSetToken = jest.fn();
 const mockLogout = jest.fn();
 let _storeToken: string | null = null;
+let _storeUser: { id?: string; username?: string } | null = null;
 
 jest.mock("@/stores/authStore", () => ({
   useAuthStore: {
     getState: () => ({
       token: _storeToken,
+      user: _storeUser,
       setToken: mockSetToken,
       logout: mockLogout,
     }),
@@ -54,11 +56,21 @@ function makeResponse(
   } as unknown as Response;
 }
 
+function makeZakiAccessToken(subject = "user-1") {
+  const payload = btoa(JSON.stringify({ iss: "zaki", sub: subject }))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  return `eyJhbGciOiJIUzI1NiJ9.${payload}.signature`;
+}
+
 beforeEach(async () => {
   jest.clearAllMocks();
+  mockFetch.mockReset();
+  mockSetToken.mockReset();
+  mockLogout.mockReset();
   _storeToken = null;
-  mockSetToken.mockClear();
-  mockLogout.mockClear();
+  _storeUser = { id: "user-1", username: "user@example.com" };
   mockLoginRedirect.mockClear();
   window.history.replaceState({}, "", "/settings#settings-memory-data");
   const { __setLoginRedirectDispatcherForTests } = await import("@/lib/api");
@@ -80,6 +92,165 @@ describe("getAuthToken", () => {
     _storeToken = null;
     const { getAuthToken } = await import("@/lib/api");
     expect(getAuthToken()).toBeNull();
+  });
+});
+
+describe("getFreshAuthToken", () => {
+  it("does not use a cached bearer when strict hydration refresh fails", async () => {
+    _storeToken = "revoked-in-memory-token";
+    mockFetch.mockResolvedValueOnce(makeResponse(401, { error: "Refresh revoked" }));
+
+    const { getStrictFreshAuthToken } = await import("@/lib/api");
+
+    await expect(getStrictFreshAuthToken()).resolves.toBeNull();
+  });
+
+  it("rejects a candidate refresh request that does not own the active transaction", async () => {
+    const { getFreshAuthToken } = await import("@/lib/api");
+
+    await expect(
+      getFreshAuthToken({ persist: false, candidateAuthTransaction: {} as never })
+    ).resolves.toBeNull();
+
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("can read a candidate refresh token without committing it to the active session", async () => {
+    _storeToken = "expired-token";
+    mockFetch.mockResolvedValueOnce(makeResponse(200, { token: "candidate-token" }));
+
+    const { beginCandidateAuthTransaction, completeCandidateAuthTransaction, getFreshAuthToken } =
+      await import("@/lib/api");
+    const transaction = beginCandidateAuthTransaction();
+    try {
+      await expect(
+        getFreshAuthToken({ persist: false, candidateAuthTransaction: transaction })
+      ).resolves.toBe("candidate-token");
+    } finally {
+      completeCandidateAuthTransaction(transaction);
+    }
+
+    expect(mockSetToken).not.toHaveBeenCalled();
+  });
+
+  it("does not let a mounted request adopt a pending candidate account refresh", async () => {
+    const {
+      apiRequest,
+      beginCandidateAuthTransaction,
+      completeCandidateAuthTransaction,
+      getFreshAuthToken,
+    } = await import("@/lib/api");
+    const transaction = beginCandidateAuthTransaction();
+    try {
+      _storeToken = "account-a-token";
+      let resolveCandidateRefresh: (response: Response) => void = () => undefined;
+      const candidateRefresh = new Promise<Response>((resolve) => {
+        resolveCandidateRefresh = resolve;
+      });
+      mockFetch
+        .mockImplementationOnce(() => candidateRefresh)
+        .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
+        .mockResolvedValueOnce(makeResponse(200, { data: "must-not-retry-as-account-b" }));
+      mockSetToken.mockImplementation((token: string | null) => {
+        _storeToken = token;
+      });
+
+      const candidateToken = getFreshAuthToken({
+        persist: false,
+        candidateAuthTransaction: transaction,
+      });
+      const mountedRequest = apiRequest("/api/protected", {
+        method: "GET",
+        redirectOnAuthFailure: false,
+      });
+
+      resolveCandidateRefresh(makeResponse(200, { token: "account-b-token" }));
+
+      await expect(mountedRequest).resolves.toMatchObject({ status: 401 });
+      await expect(candidateToken).resolves.toBe("account-b-token");
+
+      expect(mockSetToken).not.toHaveBeenCalled();
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(new Headers(mockFetch.mock.calls[1][1]?.headers).get("Authorization")).toBe(
+        "Bearer account-a-token"
+      );
+    } finally {
+      completeCandidateAuthTransaction(transaction);
+    }
+  });
+
+  it("waits for an older refresh before allowing a candidate transaction to proceed", async () => {
+    _storeToken = "account-a-token";
+    let resolveRefresh: (response: Response) => void = () => undefined;
+    const pendingRefresh = new Promise<Response>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    mockFetch
+      .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
+      .mockImplementationOnce(() => pendingRefresh);
+
+    const {
+      apiRequest,
+      beginCandidateAuthTransaction,
+      completeCandidateAuthTransaction,
+      waitForCandidateAuthTransaction,
+    } = await import("@/lib/api");
+    const mountedRequest = apiRequest("/api/protected", {
+      method: "GET",
+      redirectOnAuthFailure: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    const transaction = beginCandidateAuthTransaction();
+    try {
+      const candidateReady = waitForCandidateAuthTransaction(transaction);
+      resolveRefresh(makeResponse(200, { token: "late-account-a-token" }));
+
+      await expect(candidateReady).resolves.toBe(true);
+      await expect(mountedRequest).resolves.toMatchObject({ status: 401 });
+      expect(mockSetToken).not.toHaveBeenCalled();
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    } finally {
+      completeCandidateAuthTransaction(transaction);
+    }
+  });
+
+  it("waits for an older strict hydration refresh before allowing a candidate transaction to proceed", async () => {
+    _storeToken = "account-a-token";
+    let resolveStrictRefresh: (response: Response) => void = () => undefined;
+    const pendingStrictRefresh = new Promise<Response>((resolve) => {
+      resolveStrictRefresh = resolve;
+    });
+    mockFetch.mockImplementationOnce(() => pendingStrictRefresh);
+
+    const {
+      beginCandidateAuthTransaction,
+      completeCandidateAuthTransaction,
+      getStrictFreshAuthToken,
+      waitForCandidateAuthTransaction,
+    } = await import("@/lib/api");
+    const strictRefresh = getStrictFreshAuthToken();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    const transaction = beginCandidateAuthTransaction();
+    try {
+      const candidateReady = waitForCandidateAuthTransaction(transaction);
+      let settled = false;
+      void candidateReady.then(() => {
+        settled = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(settled).toBe(false);
+
+      resolveStrictRefresh(makeResponse(200, { token: "late-account-a-token" }));
+
+      await expect(strictRefresh).resolves.toBeNull();
+      await expect(candidateReady).resolves.toBe(true);
+    } finally {
+      completeCandidateAuthTransaction(transaction);
+    }
   });
 });
 
@@ -130,6 +301,29 @@ describe("requestLogout", () => {
         method: "POST",
         credentials: "include",
       })
+    );
+  });
+});
+
+describe("requestCandidateSessionLogout", () => {
+  it("revokes only the exact candidate bearer without sending the shared refresh cookie", async () => {
+    mockFetch.mockResolvedValueOnce(makeResponse(200, { success: true, revoked: true }));
+
+    const { requestCandidateSessionLogout } = await import("@/lib/api");
+    const { response, data } = await requestCandidateSessionLogout("candidate-token-b");
+
+    expect(response.ok).toBe(true);
+    expect(data).toEqual({ success: true, revoked: true });
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://test.local/api/auth/logout/candidate",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "omit",
+      })
+    );
+    const requestOptions = mockFetch.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(requestOptions.headers).get("Authorization")).toBe(
+      "Bearer candidate-token-b"
     );
   });
 });
@@ -199,7 +393,7 @@ describe("apiRequest — 401 retry", () => {
     _storeToken = "expired-token";
     mockFetch
       .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
-      .mockResolvedValueOnce(makeResponse(200, { token: "new-token" }))
+      .mockResolvedValueOnce(makeResponse(200, { token: makeZakiAccessToken() }))
       .mockResolvedValueOnce(makeResponse(200, { data: "success" }));
 
     const { apiRequest } = await import("@/lib/api");
@@ -217,7 +411,7 @@ describe("apiRequest — 401 retry", () => {
     _storeToken = "expired-token";
     mockFetch
       .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
-      .mockResolvedValueOnce(makeResponse(200, { token: "new-token" }))
+      .mockResolvedValueOnce(makeResponse(200, { token: makeZakiAccessToken() }))
       .mockResolvedValueOnce(makeResponse(401, { error: "Still unauthorized" }));
 
     const { apiRequest } = await import("@/lib/api");
@@ -255,6 +449,67 @@ describe("apiRequest — 401 retry", () => {
     expect(res.status).toBe(401);
     expect(mockFetch).toHaveBeenCalledTimes(1); // No refresh attempt
   });
+
+  it("does not retry a request whose mounted session changed before its 401 arrived", async () => {
+    _storeToken = "account-a-token";
+    let resolveProtectedRequest: (response: Response) => void = () => undefined;
+    const pendingProtectedRequest = new Promise<Response>((resolve) => {
+      resolveProtectedRequest = resolve;
+    });
+    mockFetch.mockImplementationOnce(() => pendingProtectedRequest);
+
+    const { apiRequest, markAuthSessionChanged } = await import("@/lib/api");
+    const request = apiRequest("/api/protected", { method: "GET", redirectOnAuthFailure: false });
+
+    _storeToken = "account-b-token";
+    markAuthSessionChanged();
+    resolveProtectedRequest(makeResponse(401, { error: "Unauthorized" }));
+
+    await expect(request).resolves.toMatchObject({ status: 401 });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockSetToken).not.toHaveBeenCalled();
+  });
+
+  it("retries every concurrent request that joined the same same-principal refresh", async () => {
+    _storeToken = "expired-token";
+    mockFetch
+      .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
+      .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
+      .mockResolvedValueOnce(makeResponse(200, { token: makeZakiAccessToken() }))
+      .mockResolvedValueOnce(makeResponse(200, { request: "first" }))
+      .mockResolvedValueOnce(makeResponse(200, { request: "second" }));
+
+    const { apiRequest } = await import("@/lib/api");
+    const [first, second] = await Promise.all([
+      apiRequest("/api/protected/one", { method: "GET" }),
+      apiRequest("/api/protected/two", { method: "GET" }),
+    ]);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(mockFetch).toHaveBeenCalledTimes(5);
+    expect(
+      mockFetch.mock.calls.filter(([url]) => String(url).includes("/api/auth/refresh"))
+    ).toHaveLength(1);
+  });
+
+  it("does not adopt a refreshed token whose principal belongs to another tab", async () => {
+    _storeToken = "expired-account-a-token";
+    _storeUser = { id: "account-a", username: "a@example.com" };
+    mockFetch
+      .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
+      .mockResolvedValueOnce(makeResponse(200, { token: makeZakiAccessToken("account-b") }));
+
+    const { apiRequest } = await import("@/lib/api");
+    const response = await apiRequest("/api/protected", {
+      method: "GET",
+      redirectOnAuthFailure: false,
+    });
+
+    expect(response.status).toBe(401);
+    expect(mockSetToken).not.toHaveBeenCalled();
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
 });
 
 // --------------------------------------------------------------------------
@@ -267,6 +522,48 @@ describe("apiRequest — 401 retry", () => {
 // the marketing homepage with no login. The helper also carries next=/settings...
 // so users return to the protected Settings section after re-authentication.
 describe("session-dead 401 redirect target", () => {
+  it("retries concurrent backend-auth requests that share one same-principal refresh", async () => {
+    _storeToken = "expired-token";
+    mockFetch
+      .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
+      .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
+      .mockResolvedValueOnce(makeResponse(200, { token: makeZakiAccessToken() }))
+      .mockResolvedValueOnce(makeResponse(200, { request: "first" }))
+      .mockResolvedValueOnce(makeResponse(200, { request: "second" }));
+
+    const { backendAuthRequest } = await import("@/lib/api");
+    const [first, second] = await Promise.all([
+      backendAuthRequest("/api/profile/one", { method: "GET" }),
+      backendAuthRequest("/api/profile/two", { method: "GET" }),
+    ]);
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(
+      mockFetch.mock.calls.filter(([url]) => String(url).includes("/api/auth/refresh"))
+    ).toHaveLength(1);
+  });
+
+  it("keeps the mounted app alive when it handles the reauthentication request", async () => {
+    _storeToken = "expired-token";
+    mockFetch
+      .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
+      .mockResolvedValueOnce(makeResponse(401, { error: "Refresh also failed" }));
+    const handleAuthRequired = jest.fn((event: Event) => event.preventDefault());
+    window.addEventListener("zaki:auth-required", handleAuthRequired);
+
+    try {
+      const { apiRequest } = await import("@/lib/api");
+      await apiRequest("/api/protected", { method: "GET" });
+
+      expect(handleAuthRequired).toHaveBeenCalledTimes(1);
+      expect(mockLogout).not.toHaveBeenCalled();
+      expect(mockLoginRedirect).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("zaki:auth-required", handleAuthRequired);
+    }
+  });
+
   it("builds safe login redirects with protected return targets", async () => {
     const { buildLoginRedirectUrl } = await import("@/lib/api");
 
@@ -275,6 +572,16 @@ describe("session-dead 401 redirect target", () => {
     );
     expect(buildLoginRedirectUrl("https://evil.example/settings")).toBe("/?auth=login");
     expect(buildLoginRedirectUrl("//evil.example/settings")).toBe("/?auth=login");
+
+    for (const unsafeReturnTo of [
+      "/./\\evil.example/settings",
+      "/settings/../\\evil.example/settings",
+      "/.//evil.example/settings",
+      "/%5cevil.example/settings",
+      "/%2f%2fevil.example/settings",
+    ]) {
+      expect(buildLoginRedirectUrl(unsafeReturnTo)).toBe("/?auth=login");
+    }
   });
 
   it("does not nest next when already on the login screen", async () => {
@@ -294,7 +601,7 @@ describe("session-dead 401 redirect target", () => {
     _storeToken = "expired-token";
     mockFetch
       .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
-      .mockResolvedValueOnce(makeResponse(200, { token: "new-token" }))
+      .mockResolvedValueOnce(makeResponse(200, { token: makeZakiAccessToken() }))
       .mockResolvedValueOnce(makeResponse(401, { error: "Still unauthorized" }));
 
     const { apiRequest } = await import("@/lib/api");
@@ -340,7 +647,7 @@ describe("session-dead 401 redirect target", () => {
     _storeToken = "expired-token";
     mockFetch
       .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
-      .mockResolvedValueOnce(makeResponse(200, { token: "new-token" }))
+      .mockResolvedValueOnce(makeResponse(200, { token: makeZakiAccessToken() }))
       .mockResolvedValueOnce(makeResponse(401, { error: "Still unauthorized" }));
 
     const { backendAuthRequest } = await import("@/lib/api");
@@ -373,7 +680,7 @@ describe("session-dead 401 redirect target", () => {
     _storeToken = "expired-token";
     mockFetch
       .mockResolvedValueOnce(makeResponse(401, { error: "Unauthorized" }))
-      .mockResolvedValueOnce(makeResponse(200, { token: "new-token" }))
+      .mockResolvedValueOnce(makeResponse(200, { token: makeZakiAccessToken() }))
       .mockResolvedValueOnce(makeResponse(401, { error: "Still unauthorized" }));
 
     const { backendAuthRequest } = await import("@/lib/api");
@@ -387,17 +694,13 @@ describe("session-dead 401 redirect target", () => {
     expect(mockLoginRedirect).not.toHaveBeenCalled();
   });
 
-  it("every dead-session logout branch uses the canonical login redirect helper, never bare /", () => {
+  it("the dead-session fallback never navigates to the bare marketing route", () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const fs = require("fs") as typeof import("fs");
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const path = require("path") as typeof import("path");
     const source = fs.readFileSync(path.join(__dirname, "api.ts"), "utf8");
 
-    const loginRedirects = source.match(/redirectToLogin\(\);/g) ?? [];
-    expect(loginRedirects.length).toBe(4);
-
-    // No dead-session logout branch may navigate to the bare marketing homepage.
     expect(source).not.toMatch(/window\.location\.href\s*=\s*"\/";/);
   });
 });
@@ -526,6 +829,7 @@ describe("requestPublicSignup", () => {
       legalConsentAccepted: true,
       legalPolicyVersion: "2026-07-12.v4",
       turnstileToken: "turnstile-token",
+      returnTo: "/brain?panel=clusters",
     });
 
     expect(mockFetch).toHaveBeenCalledWith(
@@ -539,6 +843,7 @@ describe("requestPublicSignup", () => {
           legalConsentAccepted: true,
           legalPolicyVersion: "2026-07-12.v4",
           turnstileToken: "turnstile-token",
+          returnTo: "/brain?panel=clusters",
         }),
       })
     );
@@ -708,20 +1013,18 @@ describe("agent runtime API clients", () => {
     );
   });
 
-  it("calls the S7 Agent settings control-plane routes", async () => {
+  it("calls the Agent channel-control routes", async () => {
     mockFetch
       .mockResolvedValueOnce(makeResponse(200, { channels: [] }))
       .mockResolvedValueOnce(makeResponse(200, { channel: "slack", status: "connected" }))
       .mockResolvedValueOnce(makeResponse(200, { channel: "slack", last_test: { ok: true } }))
-      .mockResolvedValueOnce(makeResponse(200, { status: "disconnected", channel: "slack" }))
-      .mockResolvedValueOnce(makeResponse(200, { integrations: [] }));
+      .mockResolvedValueOnce(makeResponse(200, { status: "disconnected", channel: "slack" }));
 
     const {
       fetchAgentChannelControls,
       connectAgentChannelControl,
       testAgentChannelControl,
       disconnectAgentChannelControl,
-      fetchAgentIntegrations,
     } = await import("@/lib/api");
 
     await fetchAgentChannelControls();
@@ -731,8 +1034,8 @@ describe("agent runtime API clients", () => {
     });
     await testAgentChannelControl("slack");
     await disconnectAgentChannelControl("slack");
-    await fetchAgentIntegrations();
 
+    expect(mockFetch).toHaveBeenCalledTimes(4);
     expect(mockFetch).toHaveBeenNthCalledWith(
       1,
       "http://test.local/api/agent/channel-control",
@@ -758,11 +1061,6 @@ describe("agent runtime API clients", () => {
       4,
       "http://test.local/api/agent/channel-control/slack/disconnect",
       expect.objectContaining({ method: "POST" })
-    );
-    expect(mockFetch).toHaveBeenNthCalledWith(
-      5,
-      "http://test.local/api/agent/integrations",
-      expect.objectContaining({ method: "GET" })
     );
   });
 

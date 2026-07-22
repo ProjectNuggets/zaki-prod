@@ -1,5 +1,6 @@
 export const ANONYMOUS_WORK_LEDGER_KEY = "zaki:anonymous-work:v1";
-export const ANONYMOUS_WORK_LEDGER_VERSION = 1;
+// Keep the storage key stable so v1 rows can be migrated in place on read.
+export const ANONYMOUS_WORK_LEDGER_VERSION = 2;
 
 const MAX_ITEMS = 20;
 const EXPIRY_MS = 30 * 24 * 60 * 60 * 1000;
@@ -11,6 +12,8 @@ const MAX_REPLY_PREVIEW_LENGTH = 800;
 // that exists — it is what the claim carries into the account. Matches
 // ANONYMOUS_WORK_MAX_REPLY_CHARS on the backend.
 const MAX_REPLY_LENGTH = 20000;
+const MAX_TRANSCRIPT_TURNS = 6;
+const MAX_TRANSCRIPT_CHARS = 64000;
 const MAX_TITLE_LENGTH = 96;
 const MAX_ROUTE_LENGTH = 240;
 const MAX_TASK_KIND_LENGTH = 64;
@@ -24,7 +27,21 @@ export type AnonymousWorkProductId =
   | "design"
   | "minutes";
 
-export type AnonymousWorkStatus = "draft" | "succeeded" | "failed";
+export type AnonymousWorkStatus =
+  | "draft"
+  | "streaming"
+  | "succeeded"
+  | "interrupted"
+  | "failed";
+
+export type AnonymousWorkTurn = {
+  id: string;
+  prompt: string;
+  reply: string;
+  createdAt: string;
+  updatedAt: string;
+  status: AnonymousWorkStatus;
+};
 
 export type AnonymousWorkItem = {
   id: string;
@@ -42,6 +59,8 @@ export type AnonymousWorkItem = {
   updatedAt: string;
   meterRemaining: number | null;
   status?: AnonymousWorkStatus;
+  /** Ordered signed-out conversation turns. Missing only on pre-v2 callers. */
+  turns?: AnonymousWorkTurn[];
 };
 
 export type AnonymousWorkLedger = {
@@ -51,10 +70,12 @@ export type AnonymousWorkLedger = {
 };
 
 type AnonymousWorkInput = Partial<
-  Omit<AnonymousWorkItem, "createdAt" | "updatedAt">
+  Omit<AnonymousWorkItem, "createdAt" | "updatedAt" | "turns">
 > & {
   productId: AnonymousWorkProductId;
   prompt: string;
+  /** Stable identity for one generation attempt within a Spaces thread. */
+  turnId?: string;
 };
 
 function getStorage() {
@@ -127,6 +148,48 @@ function normalizeProductId(value: unknown): AnonymousWorkProductId | null {
   return null;
 }
 
+function normalizeStatus(value: unknown): AnonymousWorkStatus | null {
+  return value === "draft" ||
+    value === "streaming" ||
+    value === "succeeded" ||
+    value === "interrupted" ||
+    value === "failed"
+    ? value
+    : null;
+}
+
+function normalizeTurn(value: unknown, fallback: Partial<AnonymousWorkTurn> = {}) {
+  const raw = value && typeof value === "object" ? (value as Partial<AnonymousWorkTurn>) : {};
+  const prompt = sanitizeText(raw.prompt ?? fallback.prompt, MAX_PROMPT_LENGTH);
+  if (!prompt) return null;
+  const createdAt = new Date(String(raw.createdAt || fallback.createdAt || ""));
+  const updatedAt = new Date(String(raw.updatedAt || fallback.updatedAt || ""));
+  const fallbackNow = nowIso();
+  return {
+    id: sanitizeText(raw.id ?? fallback.id, 120) || makeId(),
+    prompt,
+    reply: sanitizeRichText(raw.reply ?? fallback.reply, MAX_REPLY_LENGTH),
+    createdAt: Number.isFinite(createdAt.getTime()) ? createdAt.toISOString() : fallbackNow,
+    updatedAt: Number.isFinite(updatedAt.getTime()) ? updatedAt.toISOString() : fallbackNow,
+    status: normalizeStatus(raw.status ?? fallback.status) || "draft",
+  } satisfies AnonymousWorkTurn;
+}
+
+function boundTurns(turns: AnonymousWorkTurn[]) {
+  const newest = turns.slice(-MAX_TRANSCRIPT_TURNS);
+  const selected: AnonymousWorkTurn[] = [];
+  let used = 0;
+  for (let index = newest.length - 1; index >= 0; index -= 1) {
+    const turn = newest[index];
+    if (!turn) continue;
+    const cost = turn.prompt.length + turn.reply.length;
+    if (selected.length && used + cost > MAX_TRANSCRIPT_CHARS) break;
+    selected.unshift(turn);
+    used += cost;
+  }
+  return selected;
+}
+
 export function buildAnonymousWorkTitle(prompt: string) {
   const cleaned = sanitizeText(prompt, MAX_TITLE_LENGTH);
   if (!cleaned) return "Untitled";
@@ -145,10 +208,23 @@ function normalizeItem(value: unknown, now = Date.now()): AnonymousWorkItem | nu
   const updatedMs = updatedAt.getTime();
   if (!Number.isFinite(updatedMs) || now - updatedMs > EXPIRY_MS) return null;
 
-  const status =
-    raw.status === "draft" || raw.status === "succeeded" || raw.status === "failed"
-      ? raw.status
-      : undefined;
+  const status = normalizeStatus(raw.status) ?? undefined;
+  const rawTurns = (raw as AnonymousWorkItem).turns;
+  const turns = boundTurns(
+    (Array.isArray(rawTurns) && rawTurns.length
+      ? rawTurns.map((turn) => normalizeTurn(turn))
+      : [
+          normalizeTurn(null, {
+            id: `${sanitizeText(raw.id, 120) || "legacy"}-turn-1`,
+            prompt,
+            reply: sanitizeRichText(raw.reply || raw.replyPreview, MAX_REPLY_LENGTH),
+            createdAt: Number.isFinite(createdAt.getTime()) ? createdAt.toISOString() : nowIso(now),
+            updatedAt: updatedAt.toISOString(),
+            status: status || "draft",
+          }),
+        ]
+    ).filter((turn): turn is AnonymousWorkTurn => Boolean(turn))
+  );
 
   return {
     id: sanitizeText(raw.id, 120) || makeId(),
@@ -164,6 +240,7 @@ function normalizeItem(value: unknown, now = Date.now()): AnonymousWorkItem | nu
     updatedAt: updatedAt.toISOString(),
     meterRemaining: sanitizeMeterRemaining(raw.meterRemaining),
     ...(status ? { status } : {}),
+    turns,
   };
 }
 
@@ -223,6 +300,59 @@ export function writeAnonymousWorkLedger(items: AnonymousWorkItem[], now = Date.
   return ledger;
 }
 
+/** Return the browser-local transcript for one anonymous Spaces thread. */
+export function readAnonymousThreadTurns(threadId: string, now = Date.now()) {
+  const normalizedThreadId = sanitizeText(threadId, 120);
+  if (!normalizedThreadId) return [];
+  const item = readAnonymousWorkLedger(now).items.find(
+    (candidate) =>
+      candidate.productId === "spaces" && candidate.threadId === normalizedThreadId
+  );
+  return item?.turns ? [...item.turns] : [];
+}
+
+/**
+ * A browser reload destroys the in-flight fetch before its catch handler can
+ * persist `interrupted`. Recover that orphaned state when the thread hydrates.
+ */
+export function recoverAnonymousThreadTurnsAfterReload(
+  threadId: string,
+  now = Date.now()
+) {
+  const normalizedThreadId = sanitizeText(threadId, 120);
+  if (!normalizedThreadId) return [];
+  const ledger = readAnonymousWorkLedger(now);
+  const item = ledger.items.find(
+    (candidate) =>
+      candidate.productId === "spaces" && candidate.threadId === normalizedThreadId
+  );
+  if (!item?.turns) return [];
+  if (!item.turns.some((turn) => turn.status === "streaming")) {
+    return [...item.turns];
+  }
+
+  const recoveredAt = nowIso(now);
+  const turns = item.turns.map((turn) =>
+    turn.status === "streaming"
+      ? { ...turn, status: "interrupted" as const, updatedAt: recoveredAt }
+      : turn
+  );
+  writeAnonymousWorkLedger(
+    ledger.items.map((candidate) =>
+      candidate.id === item.id
+        ? {
+            ...candidate,
+            updatedAt: recoveredAt,
+            ...(candidate.status === "streaming" ? { status: "interrupted" as const } : {}),
+            turns,
+          }
+        : candidate
+    ),
+    now
+  );
+  return turns;
+}
+
 export function upsertAnonymousWorkItem(input: AnonymousWorkInput, now = Date.now()) {
   const ledger = readAnonymousWorkLedger(now);
   const existing = input.id
@@ -236,14 +366,36 @@ export function upsertAnonymousWorkItem(input: AnonymousWorkInput, now = Date.no
   const prompt = sanitizeText(input.prompt, MAX_PROMPT_LENGTH);
   if (!prompt) return null;
 
+  const existingTurns = existing?.turns ?? [];
+  const requestedTurnId = sanitizeText(input.turnId, 120);
+  const fallbackTurn = existingTurns[existingTurns.length - 1];
+  const turnId = requestedTurnId || fallbackTurn?.id || `${id}-turn-1`;
+  const matchingTurn = existingTurns.find((turn) => turn.id === turnId);
+  const nextTurn = normalizeTurn(null, {
+    id: turnId,
+    prompt,
+    reply:
+      sanitizeRichText(input.reply, MAX_REPLY_LENGTH) || matchingTurn?.reply || "",
+    createdAt: matchingTurn?.createdAt || nowIso(now),
+    updatedAt: nowIso(now),
+    status: normalizeStatus(input.status) || matchingTurn?.status || "draft",
+  });
+  const turns = boundTurns(
+    nextTurn
+      ? [
+          ...existingTurns.filter((turn) => turn.id !== turnId),
+          nextTurn,
+        ]
+      : existingTurns
+  );
+
   const item: AnonymousWorkItem = {
     id,
     productId: input.productId,
     taskKind: sanitizeText(input.taskKind, MAX_TASK_KIND_LENGTH) || existing?.taskKind || "plan",
     prompt,
     replyPreview: sanitizeText(input.replyPreview, MAX_REPLY_PREVIEW_LENGTH),
-    reply:
-      sanitizeRichText(input.reply, MAX_REPLY_LENGTH) || existing?.reply || "",
+    reply: nextTurn?.reply || "",
     route: sanitizeRoute(input.route || existing?.route || "/"),
     threadId: sanitizeText(input.threadId, 120) || existing?.threadId || null,
     title: sanitizeText(input.title, MAX_TITLE_LENGTH) || existing?.title || buildAnonymousWorkTitle(prompt),
@@ -251,6 +403,7 @@ export function upsertAnonymousWorkItem(input: AnonymousWorkInput, now = Date.no
     updatedAt: nowIso(now),
     meterRemaining: sanitizeMeterRemaining(input.meterRemaining ?? existing?.meterRemaining),
     ...(input.status ? { status: input.status } : existing?.status ? { status: existing.status } : {}),
+    turns,
   };
 
   writeAnonymousWorkLedger(

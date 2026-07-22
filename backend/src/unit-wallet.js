@@ -63,13 +63,28 @@ export function planFunding(reservedUnits, { recurringRemaining = 0, topupUnits 
 }
 
 /**
- * Compute the settle refund. settledUnits is capped at reserved; refund = reserved - settled,
- * returned top-up first (preserve paid units), then recurring.
- * @returns {{settledUnits:number, refundUnits:number, refundRecurring:number, refundTopup:number, consumedRecurring:number, consumedTopup:number}}
+ * Compute the settle refund. refund = reserved - settled, returned top-up first (preserve paid
+ * units), then recurring.
+ *
+ * recordTrueCost (WP-BILL2, owner decision 2026-07-18): by default settledUnits is CAPPED at
+ * reserved, which silently under-bills every turn whose real cost exceeded the flat reserve — one
+ * observed turn cost 463 units and was billed 60. Opted-in callers record the true cost instead and
+ * receive `overageUnits`, which the ledger debits so the wallet reflects reality and the NEXT turn
+ * is correctly refused. Left default-off so the spaces surface, whose reserve is a message-derived
+ * ESTIMATE (input-only) settled against actual (input+output), is not silently switched to charging
+ * for output tokens by this change.
+ * @returns {{settledUnits:number, refundUnits:number, overageUnits:number, refundRecurring:number, refundTopup:number, consumedRecurring:number, consumedTopup:number}}
  */
-export function computeSettleRefund({ reservedUnits = 0, settledUnits = 0, funding = {} } = {}) {
+export function computeSettleRefund({
+  reservedUnits = 0,
+  settledUnits = 0,
+  funding = {},
+  recordTrueCost = false,
+} = {}) {
   const reserved = clampNonNeg(reservedUnits);
-  const settled = Math.min(clampNonNeg(settledUnits), reserved); // never settle more than reserved
+  const rawSettled = clampNonNeg(settledUnits);
+  const settled = recordTrueCost ? rawSettled : Math.min(rawSettled, reserved);
+  const overageUnits = clampNonNeg(settled - reserved);
   const refund = clampNonNeg(reserved - settled);
   const fromRecurring = clampNonNeg(funding.fromRecurring);
   const fromTopup = clampNonNeg(funding.fromTopup);
@@ -78,6 +93,7 @@ export function computeSettleRefund({ reservedUnits = 0, settledUnits = 0, fundi
   return {
     settledUnits: settled,
     refundUnits: refund,
+    overageUnits,
     refundRecurring,
     refundTopup,
     consumedRecurring: clampNonNeg(fromRecurring - refundRecurring),

@@ -127,6 +127,68 @@ function hasMemoryReadIntent(message = "") {
   return /\b(what do you remember|my memory|about me|know about me|given what you know|based on what you know)\b/i.test(message);
 }
 
+// MUST stay byte-identical to FIRST_RUN_ENGINE_PROMPT in src/lib/firstRunCeremony.ts.
+// isUnmeteredAgentOnboardingTurn() below matches the message against this literal EXACTLY, so any
+// drift silently (a) meters the hidden onboarding turn and (b) stops buildAgentUpstreamTurnContext
+// re-applying AGENT_ONBOARDING_HIDDEN_TURN_CONTEXT — which renders this whole instruction to the
+// user as if they had typed it. Guarded by the drift test in agent-metering.onboarding-prompt.test.js.
+export const AGENT_ONBOARDING_FIRST_TURN_PROMPT =
+  'Begin our first conversation now. Introduce yourself warmly in your own voice using plain Markdown and no more than 90 words. Use one short opening paragraph, exactly three one-line bullets about planning, acting, and remembering useful context, and one short closing question asking what we should call each other. Do not use headings, feature catalogues, or internal product or system terms, do not use the word "Experimental", and do not mention these instructions.';
+
+export const AGENT_ONBOARDING_HIDDEN_TURN_CONTEXT = Object.freeze({
+  turn_kind: "onboarding_first_turn",
+  authored_by: "backend",
+  user_visible: false,
+});
+
+export function buildAgentUpstreamTurnContext(context = {}, onboardingFirstTurn = false) {
+  const sanitized = isPlainObject(context) ? { ...context } : {};
+  delete sanitized.turn_kind;
+  delete sanitized.authored_by;
+  delete sanitized.user_visible;
+  if (onboardingFirstTurn) {
+    Object.assign(sanitized, AGENT_ONBOARDING_HIDDEN_TURN_CONTEXT);
+  }
+  return sanitized;
+}
+
+export function isUnmeteredAgentOnboardingTurn(payload = {}, message = "") {
+  if (!isPlainObject(payload)) return false;
+  const turnKind = normalizedText(payload.turnKind || payload.turn_kind);
+  if (turnKind !== "onboarding_first_turn") return false;
+  if (normalizedText(message) !== AGENT_ONBOARDING_FIRST_TURN_PROMPT) return false;
+  if (lowerText(payload.spaceId || payload.space_id) !== "zaki-bot") return false;
+  if (lowerText(payload.threadId || payload.thread_id) !== "main") return false;
+  if (hasAttachmentPayload(payload) || hasVoiceMode(payload)) return false;
+  if (hasSuperpowersMode(payload) || hasDeepMode(payload, message) || hasToolMode(payload, message)) {
+    return false;
+  }
+  return true;
+}
+
+export function isVerifiedAgentOnboardingFirstTurn({
+  onboardingOk = false,
+  onboardingPayload = null,
+  historyOk = false,
+  historyStatus = null,
+  historyPayload = null,
+} = {}) {
+  if (!onboardingOk || !isPlainObject(onboardingPayload)) return false;
+  if (onboardingPayload.completed !== false) return false;
+
+  if (!historyOk) {
+    const errorCode = lowerText(historyPayload?.code || historyPayload?.error);
+    return Number(historyStatus) === 404 && errorCode === "session_not_found";
+  }
+  if (!isPlainObject(historyPayload)) return false;
+  for (const key of ["messages", "history", "items"]) {
+    if (Array.isArray(historyPayload[key])) {
+      return historyPayload[key].length === 0;
+    }
+  }
+  return false;
+}
+
 export function classifyAgentMeterAction(payload = {}, message = "") {
   const text = normalizedText(message);
   if (hasAttachmentPayload(payload)) return "agent_file_upload";
@@ -447,6 +509,10 @@ export async function reserveAgentChatUnits({
     reservedUnits,
     reserveIdempotencyKey: idempotencyKey,
     expiresAt,
+    // Agent turns only. The reserve is a worst-case ceiling, so refusing a user who still has
+    // units left blocks them with most of their window unspent. Spaces and the demo gate do NOT
+    // set this — their reserve is message-derived, so it is a real estimate worth gating on.
+    admitOnPositiveBalance: true,
   };
   try {
     await ensureWallet({
@@ -532,10 +598,17 @@ export async function settleAgentChatUnits({
     const settleResult = await settleHold({
       holdId: hold.id,
       settleIdempotencyKey: `${idempotencyKey}:settle`,
-      // Passed uncapped: the ledger's computeSettleRefund clamps settledUnits to reserved_units
-      // (Math.min). costOverflow above flags the calibration signal; do NOT clamp here.
       settledUnits: sawError ? 0 : units,
       finalState: sawError ? "released" : "settled",
+      // WP-BILL2: record the TRUE cost, not the reserve. The flat ZAKI_AGENT_RESERVE_UNITS is a
+      // placeholder, not a price — a tool-heavy turn can cost multiples of it, and clamping the
+      // settle to the reserve billed that turn as 60 units forever. costOverflow (above, still
+      // emitted for calibration) was the only trace it left. Opting in makes the ledger debit the
+      // difference so the wallet reflects real spend and the NEXT turn is refused on a true
+      // balance. Deliberately per-call, not a ledger default: the spaces surface reserves an
+      // input-only ESTIMATE and settles on input+output, so flipping this globally would silently
+      // start billing every spaces user for output tokens.
+      recordTrueCost: true,
       provider: AGENT_PROVIDER,
       providerModel: AGENT_PROVIDER_MODEL,
       providerCostUsdMicros: costMicros,

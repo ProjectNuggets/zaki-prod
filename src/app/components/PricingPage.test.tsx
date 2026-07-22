@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom";
 import { describe, it, expect, beforeEach, jest } from "@jest/globals";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { toast } from "sonner";
 import { PricingPage } from "./PricingPage";
@@ -47,6 +47,7 @@ jest.mock("react-i18next", () => ({
       "pricingPage.signInToChoose": "Sign in for {{plan}}",
       "pricingPage.choose": "Choose {{plan}}",
       "pricingPage.managePlan": "Manage plan",
+      "pricingPage.recommendedBadge": "Recommended",
       "pricingPage.billingCadence": "Billing cadence",
       "pricingPage.interval.monthly": "Monthly",
       "pricingPage.interval.yearly": "Yearly",
@@ -66,7 +67,7 @@ jest.mock("react-i18next", () => ({
       "pricingPage.plans.pro.price": "$45 / month",
       "pricingPage.plans.pro.features": ["Larger allowance and generous burst"],
       "pricingPage.plans.pro_max.label": "Pro Max",
-      "pricingPage.plans.pro_max.price": "$99 / month",
+      "pricingPage.plans.pro_max.price": "$95 / month",
       "pricingPage.plans.pro_max.features": ["Highest weekly and burst limits"],
       "pricingPage.allowance.weekly": "{{allowance}} units/week",
     };
@@ -360,6 +361,7 @@ describe("PricingPage", () => {
 
   it("starts configured Personal yearly checkout and frames the Stripe discount", async () => {
     billingConfigData.data.configured.pricingAvailability.personal.yearly = true;
+    billingConfigData.data.configured.pricingAvailability.pro.yearly = true;
     billingConfigData.data.configured.pricingCatalog = {
       personal: {
         monthly: { priceId: "price_personal_month", unitAmount: 1500, currency: "usd" },
@@ -367,10 +369,10 @@ describe("PricingPage", () => {
       },
       pro: {
         monthly: { priceId: "price_pro_month", unitAmount: 4500, currency: "usd" },
-        yearly: null,
+        yearly: { priceId: "price_pro_year", unitAmount: 43200, currency: "usd" },
       },
       pro_max: {
-        monthly: { priceId: "price_pro_max_month", unitAmount: 9900, currency: "usd" },
+        monthly: { priceId: "price_pro_max_month", unitAmount: 9500, currency: "usd" },
         yearly: null,
       },
     };
@@ -390,7 +392,7 @@ describe("PricingPage", () => {
       "true"
     );
     expect(screen.getByText("$144 / year")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Yearly not available" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Yearly not available" })).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Choose Personal" }));
 
@@ -399,6 +401,117 @@ describe("PricingPage", () => {
         expect.objectContaining({ plan: "personal", interval: "yearly", provider: "stripe" })
       );
     });
+  });
+
+  it("keeps Pro recommended and starts its configured yearly Stripe checkout", async () => {
+    billingConfigData.data.configured.pricingAvailability = {
+      personal: { monthly: true, yearly: true },
+      pro: { monthly: true, yearly: true },
+      pro_max: { monthly: true, yearly: true },
+    };
+    billingConfigData.data.configured.pricingCatalog = {
+      personal: {
+        monthly: { priceId: "price_personal_month", unitAmount: 1500, currency: "usd" },
+        yearly: { priceId: "price_personal_year", unitAmount: 14400, currency: "usd" },
+      },
+      pro: {
+        monthly: { priceId: "price_pro_month", unitAmount: 4500, currency: "usd" },
+        yearly: { priceId: "price_pro_year", unitAmount: 43200, currency: "usd" },
+      },
+      pro_max: {
+        monthly: { priceId: "price_pro_max_month", unitAmount: 9500, currency: "usd" },
+        yearly: { priceId: "price_pro_max_year", unitAmount: 91200, currency: "usd" },
+      },
+    };
+
+    render(
+      <MemoryRouter initialEntries={["/pricing?interval=yearly"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const recommendedCard = screen.getByText("Recommended").closest(".zaki-pricing-page__plan");
+    expect(recommendedCard).not.toBeNull();
+    expect(within(recommendedCard as HTMLElement).getByText("Pro")).toBeInTheDocument();
+    expect(screen.getByText("$432 / year")).toBeInTheDocument();
+    expect(screen.getByText("$912 / year")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose Pro" }));
+
+    await waitFor(() => {
+      expect(checkoutMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ plan: "pro", interval: "yearly", provider: "stripe" })
+      );
+    });
+
+    checkoutMutateAsync.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Choose Pro Max" }));
+
+    await waitFor(() => {
+      expect(checkoutMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ plan: "pro_max", interval: "yearly", provider: "stripe" })
+      );
+    });
+  });
+
+  it("omits the global yearly savings claim when available tiers have different discounts", () => {
+    billingConfigData.data.configured.pricingAvailability = {
+      personal: { monthly: true, yearly: true },
+      pro: { monthly: true, yearly: true },
+      pro_max: { monthly: true, yearly: true },
+    };
+    billingConfigData.data.configured.pricingCatalog = {
+      personal: {
+        monthly: { priceId: "price_personal_month", unitAmount: 1500, currency: "usd" },
+        yearly: { priceId: "price_personal_year", unitAmount: 14400, currency: "usd" },
+      },
+      pro: {
+        monthly: { priceId: "price_pro_month", unitAmount: 4500, currency: "usd" },
+        yearly: { priceId: "price_pro_year", unitAmount: 43200, currency: "usd" },
+      },
+      pro_max: {
+        monthly: { priceId: "price_pro_max_month", unitAmount: 9500, currency: "usd" },
+        yearly: { priceId: "price_pro_max_year", unitAmount: 102600, currency: "usd" },
+      },
+    };
+
+    render(
+      <MemoryRouter initialEntries={["/pricing"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("button", { name: "Yearly" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Yearly .*save/ })).not.toBeInTheDocument();
+  });
+
+  it("fails yearly checkout closed when Stripe display data is unavailable", () => {
+    billingConfigData.data.configured.pricingAvailability.pro.yearly = true;
+    billingConfigData.data.configured.pricingCatalog = {
+      pro: {
+        monthly: { priceId: "price_pro_month", unitAmount: 4500, currency: "usd" },
+        yearly: null,
+      },
+    };
+
+    render(
+      <MemoryRouter initialEntries={["/pricing?interval=yearly"]}>
+        <Routes>
+          <Route path="/pricing" element={<PricingPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const proCard = screen.getByText("Pro").closest(".zaki-pricing-page__plan");
+    expect(proCard).not.toBeNull();
+    expect(
+      within(proCard as HTMLElement).getByRole("button", { name: "Yearly not available" })
+    ).toBeDisabled();
+    expect(within(proCard as HTMLElement).queryByText("$45 / month")).not.toBeInTheDocument();
   });
 
   it("exposes only canonical paid checkout plans", () => {
@@ -414,6 +527,7 @@ describe("PricingPage", () => {
     expect(screen.getByText("Personal")).toBeInTheDocument();
     expect(screen.getByText("Pro")).toBeInTheDocument();
     expect(screen.getByText("Pro Max")).toBeInTheDocument();
+    expect(screen.getByText("$95 / month")).toBeInTheDocument();
     expect(screen.queryByText("ZAKI Learn")).not.toBeInTheDocument();
     expect(screen.queryByText("ZAKI Complete")).not.toBeInTheDocument();
     expect(screen.queryByText("ZAKI Agent")).not.toBeInTheDocument();

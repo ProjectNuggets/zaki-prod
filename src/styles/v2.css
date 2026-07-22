@@ -776,6 +776,41 @@ button.v2-status-strip__item:focus-visible {
   -moz-osx-font-smoothing: grayscale;
 }
 
+.zaki-auth-v2--overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  min-height: 100dvh;
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--v2-bg-sunken) 88%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.zaki-auth-v2--overlay .zaki-auth-v2__topbar {
+  border-bottom: 1px solid var(--v2-hairline);
+  background: var(--v2-bg);
+}
+
+.zaki-auth-v2__reauth {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--v2-accent-hairline);
+  border-bottom: 0;
+  background: var(--v2-accent-faint);
+  color: var(--v2-ink-2);
+  font-family: var(--v2-font-prose);
+  font-size: var(--v2-text-xs);
+}
+
+.zaki-auth-v2__reauth strong {
+  color: var(--v2-accent-text);
+  font-family: var(--v2-font-mono);
+  font-size: var(--v2-text-2xs);
+  letter-spacing: var(--v2-tracking-wider);
+  text-transform: uppercase;
+}
+
 .zaki-auth-v2__topbar {
   min-height: 52px;
   display: flex;
@@ -6927,6 +6962,25 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   padding: 0 24px;
 }
 
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-last-turn-warning {
+  width: min(100%, 852px);
+  margin: 0 auto 8px;
+  border: 1px solid color-mix(in srgb, var(--v2-warn) 52%, var(--v2-hairline));
+  background: var(--v2-warn-faint);
+  color: var(--v2-ink-2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  font-family: var(--v2-font-mono);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.zaki-app-v2 .zaki-agent-v2 .zaki-agent-last-turn-warning svg {
+  color: var(--v2-warn);
+}
+
 .zaki-app-v2 .zaki-agent-v2 .zaki-agent-provision-state {
   width: min(100%, 852px);
   min-height: 44px;
@@ -8664,6 +8718,11 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
   .zaki-app-v2 .zaki-agent-v2 .zaki-approval-card-slot {
     padding: 0 14px;
+    margin-bottom: 6px;
+  }
+
+  .zaki-app-v2 .zaki-agent-v2 .zaki-agent-last-turn-warning {
+    width: calc(100% - 28px);
     margin-bottom: 6px;
   }
 
@@ -12170,7 +12229,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 }
 
 .zaki-product-gate__facts dt {
-  color: var(--v2-ink-3);
+  color: var(--v2-ink-2);
   font-family: var(--v2-font-mono);
   font-size: 10px;
   letter-spacing: 0.14em;
@@ -13812,12 +13871,17 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   }
 
   .zaki-dashboard-v2 .v2-status-strip {
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-    overflow-x: auto;
-    padding: 7px 10px;
-    scroll-padding-inline: 10px;
-    white-space: nowrap;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 12px;
+    overflow-x: visible;
+    padding: 8px 10px;
+    white-space: normal;
+  }
+
+  .zaki-dashboard-v2 .v2-status-strip__item {
+    min-width: 0;
+    flex-wrap: wrap;
   }
 
   .zaki-dashboard-v2__wrap {
@@ -13879,27 +13943,21 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   }
 
   .zaki-dashboard-command__strip {
-    display: flex;
-    overflow-x: auto;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    overflow-x: visible;
     border-color: var(--v2-hairline-strong);
-    scroll-padding-inline: 1px;
-    scroll-snap-type: x mandatory;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .zaki-dashboard-command__strip::-webkit-scrollbar {
-    display: none;
   }
 
   .zaki-dashboard-command__product,
   .zaki-dashboard-command__product:nth-child(2n),
   .zaki-dashboard-command__product:nth-child(3n) {
-    flex: 0 0 112px;
+    min-width: 0;
+    min-height: 44px;
+    gap: 4px;
     border-right: 1px solid var(--v2-hairline);
     border-bottom: 0;
-    padding: 0 8px;
-    scroll-snap-align: start;
+    padding: 0 3px;
   }
 
   .zaki-dashboard-command__product:last-child {
@@ -13907,7 +13965,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   }
 
   .zaki-dashboard-command__product-name {
-    max-width: 58px;
+    max-width: none;
   }
 
   .zaki-dashboard-command__product-marker {

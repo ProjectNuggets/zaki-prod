@@ -37,13 +37,30 @@ export function normalizeBillingInterval(value, fallback = "monthly") {
   return BILLING_INTERVALS.includes(fallback) ? fallback : "monthly";
 }
 
+export function stripeRecurringIntervalForBillingInterval(interval) {
+  return normalizeBillingInterval(interval, "monthly") === "yearly" ? "year" : "month";
+}
+
+// Price IDs arrive through operator-controlled configuration. Do not rely on
+// the env-var name alone: a monthly Price pasted into a yearly key would charge
+// monthly while the app labelled the subscription yearly.
+export function stripePriceMatchesBillingInterval(price, interval) {
+  return Boolean(
+    price?.active === true &&
+      price?.recurring?.interval === stripeRecurringIntervalForBillingInterval(interval) &&
+      price?.recurring?.interval_count === 1
+  );
+}
+
 export function buildStripePricingCatalog({
   studentMonthly = "",
   studentYearly = "",
   personalMonthly = "",
   personalYearly = "",
   proMonthly = "",
+  proYearly = "",
   proMaxMonthly = "",
+  proMaxYearly = "",
 } = {}) {
   const priceByPlanInterval = {
     student: {
@@ -56,11 +73,11 @@ export function buildStripePricingCatalog({
     },
     pro: {
       monthly: normalizePriceId(proMonthly),
-      yearly: "",
+      yearly: normalizePriceId(proYearly),
     },
     pro_max: {
       monthly: normalizePriceId(proMaxMonthly),
-      yearly: "",
+      yearly: normalizePriceId(proMaxYearly),
     },
   };
 
@@ -120,6 +137,18 @@ export function resolveStripePriceDetailsById(catalog, priceId) {
   const interval = normalizeBillingInterval(found.interval, "monthly");
   if (!STRIPE_BILLING_PLANS.includes(tier)) return null;
   return { tier, interval };
+}
+
+export function buildStripePricingDisplayRefs(catalog, accessMonthly = "") {
+  const refs = STRIPE_BILLING_PLANS.flatMap((tier) =>
+    BILLING_INTERVALS.map((interval) => [
+      tier,
+      interval,
+      normalizePriceId(catalog?.priceByPlanInterval?.[tier]?.[interval]),
+    ])
+  );
+  refs.push(["access", "monthly", normalizePriceId(accessMonthly)]);
+  return refs.filter(([, , priceId]) => Boolean(priceId));
 }
 
 export function buildTopupPackCatalog(rawJson = "") {

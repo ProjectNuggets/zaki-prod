@@ -1,7 +1,10 @@
 import "@testing-library/jest-dom";
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { useEffect } from "react";
+import { MemoryRouter, useLocation } from "react-router-dom";
+import ar from "@/i18n/locales/ar.json";
+import en from "@/i18n/locales/en.json";
 
 // ── i18n: return defaultValue (with {{var}} interpolation) or the key ──
 jest.mock("react-i18next", () => ({
@@ -84,11 +87,37 @@ jest.mock("@/app/components/ui/skeleton", () => ({
 }));
 
 import { BrainPage } from "./BrainPage";
+import {
+  consumeWebsiteCommandIntentFromUrl,
+  PENDING_INTENT_KEY,
+  writePendingIntent,
+} from "@/lib/pendingIntent";
 
 function renderPage(initialEntry = "/brain") {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <BrainPage />
+    </MemoryRouter>,
+  );
+}
+
+function WebsiteCommandIntentBridge() {
+  const location = useLocation();
+
+  useEffect(() => {
+    consumeWebsiteCommandIntentFromUrl({
+      pathname: location.pathname,
+      search: location.search,
+    });
+  }, [location.pathname, location.search]);
+
+  return <BrainPage />;
+}
+
+function renderWebsiteCommandPage(initialEntry: string) {
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <WebsiteCommandIntentBridge />
     </MemoryRouter>,
   );
 }
@@ -109,8 +138,86 @@ const POPULATED: GraphResult = {
 
 describe("BrainPage", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     mockUser = { id: 1 };
     mockGraph = { data: undefined, isLoading: true, isError: false };
+  });
+
+  it("shows preserved Brain work and moves it to Spaces as an editable draft", () => {
+    mockGraph = { ...POPULATED };
+    writePendingIntent({
+      productId: "brain",
+      taskKind: "memory",
+      prompt: "Remember the launch constraints from this note",
+      source: "website_home_command",
+      returnTo: "/brain",
+    });
+
+    renderPage();
+
+    expect(screen.getByRole("region", { name: /preserved work/i })).toHaveTextContent(
+      "Remember the launch constraints from this note"
+    );
+    fireEvent.click(screen.getByRole("button", { name: /continue in spaces/i }));
+    expect(JSON.parse(window.localStorage.getItem(PENDING_INTENT_KEY) || "null")).toMatchObject({
+      productId: "spaces",
+      prompt: "Remember the launch constraints from this note",
+      replayMode: "draft",
+    });
+  });
+
+  it("shows a direct website Brain command consumed after the page mounts", () => {
+    mockGraph = { ...POPULATED };
+
+    renderWebsiteCommandPage(
+      "/brain?source=website_home_command&intent=memory&prompt=Remember%20this%20launch%20constraint",
+    );
+
+    expect(screen.getByRole("region", { name: /preserved work/i })).toHaveTextContent(
+      "Remember this launch constraint",
+    );
+  });
+
+  it("keeps a direct website Brain command visible for an empty corpus", () => {
+    mockGraph = {
+      data: { nodes: [], edges: [], total_nodes_in_corpus: 0 },
+      isLoading: false,
+      isError: false,
+    };
+
+    renderWebsiteCommandPage(
+      "/brain?source=website_home_command&intent=memory&prompt=Remember%20this%20first%20memory",
+    );
+
+    expect(screen.getByTestId("brain-empty-state")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: /preserved work/i })).toHaveTextContent(
+      "Remember this first memory",
+    );
+  });
+
+  it.each([
+    ["English", en],
+    ["Arabic", ar],
+  ])("provides complete Brain status and recovery copy in %s", (_localeName, locale) => {
+    const status = locale.brain.status as Record<string, string>;
+    for (const key of [
+      "ariaLabel",
+      "scope",
+      "userScoped",
+      "memories",
+      "view",
+      "unavailable",
+      "graphOverview",
+      "memoryUnavailable",
+      "cachedData",
+      "semanticDegraded",
+      "semanticReady",
+    ]) {
+      expect(status[key]?.trim()).toBeTruthy();
+    }
+    expect(locale.brain.recovery.ariaLabel).toBeTruthy();
+    expect(locale.brain.recovery.title).toBeTruthy();
+    expect(locale.brain.recovery.continueInSpaces).toBeTruthy();
   });
 
   it("shows the skeleton while the initial graph probe is loading", () => {

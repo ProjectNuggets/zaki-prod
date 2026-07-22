@@ -4,8 +4,67 @@
 // Hire/Career remain implemented behind the scenes but are hidden from every release surface.
 // WP-K also locks: the chat lane is named "Spaces" everywhere, and no rail control is inert.
 
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { RELEASE_VIEWPORTS, signInForRelease } from "./support/release-harness";
+import {
+  RELEASE_PRODUCT_REGISTRY,
+  RELEASE_VIEWPORTS,
+  mockReleaseShell,
+  signInForRelease,
+} from "./support/release-harness";
+
+test.describe("Anonymous future-product gates", () => {
+  test("Design and Minutes stay gated even when internal product flags are enabled", async ({ page }, testInfo) => {
+    const productRegistry = {
+      ...RELEASE_PRODUCT_REGISTRY,
+      products: RELEASE_PRODUCT_REGISTRY.products.map((product) =>
+        product.productId === "design" || product.productId === "minutes"
+          ? { ...product, state: "enabled" as const }
+          : product
+      ),
+    };
+
+    await mockReleaseShell(page, { productRegistry });
+    // This handler is deliberately registered last: Playwright gives it
+    // precedence over the signed-in shell fixture's refresh response.
+    await page.route("**/api/auth/refresh", async (route) => {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "authentication_required" }),
+      });
+    });
+
+    await page.setViewportSize(
+      testInfo.project.name === "chromium-mobile"
+        ? RELEASE_VIEWPORTS.mobile
+        : RELEASE_VIEWPORTS.desktop
+    );
+
+    for (const product of ["design", "minutes"] as const) {
+      await page.goto(`/${product}`, { waitUntil: "domcontentloaded" });
+
+      const gate = page.getByTestId(`product-gate-${product}`);
+      await expect(gate).toBeVisible({ timeout: 20_000 });
+      await expect(gate).toHaveAttribute("data-product-gate", "coming_soon");
+      await expect(page.locator(`[data-product-id="${product}"]`)).toHaveCount(0);
+      await expect(page.getByText("Sign in to open Minutes")).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+      const accessibility = await new AxeBuilder({ page }).analyze();
+      expect(
+        accessibility.violations.filter((violation) =>
+          ["critical", "serious"].includes(violation.impact ?? "")
+        )
+      ).toEqual([]);
+
+      await page.screenshot({
+        path: `e2e/__screenshots__/future-products/${testInfo.project.name}-${product}-anonymous-gate.png`,
+        fullPage: false,
+      });
+    }
+  });
+});
 
 test.describe("ZAKI release product visibility", () => {
   test.beforeEach(async ({ page }) => {
@@ -92,6 +151,78 @@ test.describe("ZAKI release product visibility", () => {
       path: testInfo.outputPath("dashboard-390x844.png"),
       fullPage: false,
     });
+  });
+
+  test("mobile dashboard keeps every product tab and status item discoverable", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.locator(".zaki-app-v2")).toBeVisible({ timeout: 20_000 });
+
+    const strip = page.getByTestId("zaki-dashboard-command-strip");
+    const statusStrip = page.locator(".zaki-dashboard-v2 > .v2-status-strip");
+    const viewports = [
+      { width: 320, height: 844 },
+      { width: 375, height: 844 },
+      RELEASE_VIEWPORTS.mobile,
+    ] as const;
+
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+
+      await expect
+        .poll(() =>
+          strip.evaluate((element) => {
+            const host = element.getBoundingClientRect();
+            const tabs = Array.from(element.querySelectorAll<HTMLElement>("[role='tab']"));
+            return {
+              hasHorizontalOverflow: element.scrollWidth > element.clientWidth + 1,
+              everyTabContained: tabs.every((tab) => {
+                const rect = tab.getBoundingClientRect();
+                return rect.left >= host.left - 1 && rect.right <= host.right + 1;
+              }),
+              everyTabIsTouchSized: tabs.every((tab) => tab.getBoundingClientRect().height >= 44),
+              everyTabLabelUnclipped: tabs.every((tab) => {
+                const label = tab.querySelector<HTMLElement>(
+                  ".zaki-dashboard-command__product-name"
+                );
+                return label != null && label.scrollWidth <= label.clientWidth + 1;
+              }),
+            };
+          })
+        )
+        .toEqual({
+          hasHorizontalOverflow: false,
+          everyTabContained: true,
+          everyTabIsTouchSized: true,
+          everyTabLabelUnclipped: true,
+        });
+
+      await expect
+        .poll(() =>
+          statusStrip.evaluate((element) => {
+            const host = element.getBoundingClientRect();
+            const items = Array.from(
+              element.querySelectorAll<HTMLElement>(".v2-status-strip__item")
+            );
+            return {
+              hasHorizontalOverflow: element.scrollWidth > element.clientWidth + 1,
+              everyItemContained: items.every((item) => {
+                const rect = item.getBoundingClientRect();
+                return rect.left >= host.left - 1 && rect.right <= host.right + 1;
+              }),
+            };
+          })
+        )
+        .toEqual({ hasHorizontalOverflow: false, everyItemContained: true });
+
+      await strip.getByRole("tab", { name: "Minutes" }).click();
+      await expect(strip.getByRole("tab", { name: "Minutes" })).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
+      await expect(page.getByTestId("zaki-dashboard-product-hint")).toContainText(
+        "Minutes is coming soon"
+      );
+    }
   });
 
   test("hidden routes redirect home while Design and Minutes render their release gates", async ({ page }) => {

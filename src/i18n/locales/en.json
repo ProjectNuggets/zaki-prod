@@ -1,7 +1,9 @@
 {
   "language": {
     "english": "English",
-    "arabic": "Arabic"
+    "arabic": "Arabic",
+    "switchToEnglish": "Switch to English",
+    "switchToArabic": "Switch to Arabic"
   },
   "settings": {
     "language": "Language"
@@ -285,6 +287,30 @@
       "proactiveUpdates": {
         "name": "Proactive updates",
         "helper": "Allow Nullalis to send outbound updates where a connected channel and approval policy permit it."
+      },
+      "proactiveCheckins": {
+        "name": "Proactive check-ins",
+        "helper": "Periodically check for useful updates. Check-ins are delivered through your connected Telegram account and do not appear in web chat.",
+        "success": {
+          "enabled": "Proactive check-ins are on.",
+          "disabled": "Proactive check-ins are off."
+        },
+        "errors": {
+          "update": "Could not update proactive check-ins. Try again."
+        },
+        "status": {
+          "loading": "Loading check-in status…",
+          "unavailable": "Unavailable · Try again later",
+          "off": "Off · Delivery through Telegram",
+          "operatorDisabled": "On · Temporarily unavailable",
+          "needsTelegram": "On · Connect Telegram to receive check-ins",
+          "sendFailed": "On · Last delivery failed; verify Telegram",
+          "enqueued": "On · Last update queued for Telegram",
+          "sentAt": "On · Last update sent {{when}}",
+          "sent": "On · Last update sent",
+          "idle": "On · Last check complete, nothing to send",
+          "activeEvery": "On · Every {{minutes}} min through Telegram"
+        }
       },
       "voiceReplies": {
         "name": "Voice replies",
@@ -688,6 +714,7 @@
   },
   "chat": {
     "streamingStatus": "ZAKI is replying…",
+    "anonymousReplyInterrupted": "This reply was interrupted before it arrived. Send the message again to continue.",
     "thinking": "Thinking",
     "researching": "Researching",
     "thinkingPhrases": [
@@ -777,6 +804,8 @@
       "contextCompactAria": "Context at {{percent}} percent. Click to compact.",
       "contextCompactHint": "Click to compact and free space.",
       "contextCompactBusy": "Compacting...",
+      "lastTurnWarning": "This is likely your last turn before this capacity window resets. Capacity returns {{reset}}.",
+      "lastTurnWarningWithoutReset": "This is likely your last turn before this capacity window resets.",
       "approvals": "Approvals",
       "approvalsAria": "{{count}} pending approvals",
       "browser": "Browser",
@@ -1285,7 +1314,7 @@
       "free": "Chat Free: weekly usage included",
       "personal": "Personal: $15/month",
       "pro": "Pro: $45/month",
-      "pro_max": "Pro Max: $99/month"
+      "pro_max": "Pro Max: $95/month"
     },
     "currentPlan": "You’re currently on {{plan}}",
     "currentPlanSignedOut": "You’re viewing plans signed out",
@@ -1387,7 +1416,7 @@
       },
       "pro_max": {
         "label": "Pro Max",
-        "price": "$99 / month",
+        "price": "$95 / month",
         "blurb": "The highest current limits and first access when gated products are ready.",
         "features": [
           "Highest weekly and burst limits",
@@ -1784,6 +1813,16 @@
   "app": {
     "loadingSession": "Loading session...",
     "openNavigationMenu": "Open navigation menu",
+    "recovery": {
+      "eyebrow": "Storage unavailable",
+      "title": "Work could not be saved",
+      "body": "Your browser blocked local storage. Copy this text now and continue in a new Space so it is not lost.",
+      "workLabel": "Unsaved work",
+      "copyFailed": "Automatic copy failed. Select and copy the text manually before continuing.",
+      "copyAndOpenSpaces": "Copy and open Spaces",
+      "selectWork": "Select work",
+      "openSpacesManually": "Open Spaces after copying"
+    },
     "legal": {
       "title": "Updated terms require your consent",
       "body": "We updated Terms, Privacy & Compliance (policy {{policyVersion}}). Please review and accept to continue using ZAKI.",
@@ -1831,6 +1870,24 @@
   "brain": {
     "title": "Your Brain",
     "subtitle": "Everything ZAKI remembers",
+    "status": {
+      "ariaLabel": "Brain status",
+      "scope": "Scope",
+      "userScoped": "Personal brain",
+      "memories": "Memories",
+      "view": "View",
+      "unavailable": "Unavailable",
+      "graphOverview": "Graph + overview",
+      "memoryUnavailable": "Memory unavailable",
+      "cachedData": "Using cached memory",
+      "semanticDegraded": "Semantic degraded",
+      "semanticReady": "Semantic ready"
+    },
+    "recovery": {
+      "ariaLabel": "Preserved work",
+      "title": "Your work is still here",
+      "continueInSpaces": "Continue in Spaces"
+    },
     "tabs": {
       "timeline": "Timeline",
       "graph": "Graph"
@@ -2000,6 +2057,7 @@
       "syncing": "Syncing",
       "plan": "Plan",
       "weeklyReset": "Weekly reset",
+      "dailyReset": "Daily reset",
       "identity": "Identity",
       "agentLive": "Agent live · #{{id}}"
     },
@@ -2055,6 +2113,8 @@
       "submitComingSoon": "{{product}} coming soon",
       "creditsExhaustedTitle": "Weekly usage is full.",
       "creditsExhaustedCopy": "Your draft stays saved here. Sign up, wait for the weekly reset, or pick a plan with more room.",
+      "anonymousCreditsExhaustedTitle": "Free chats are used up for today.",
+      "anonymousCreditsExhaustedCopy": "Your draft stays here. Sign in to keep going now, or wait for the daily reset.",
       "capacityWindowTitle": "{{hours}}h Agent window is {{percent}}% used.",
       "capacityWindowCopy": "Your draft stays saved here. More room opens at {{reset}}.",
       "capacityWindowCopySoon": "Your draft stays saved here. More room opens soon.",
@@ -2440,9 +2500,108 @@
     "limitReached": "You can pin up to {{limit}} memories per thread.",
     "unpinAria": "Unpin {{label}}"
   },
+  "minutes": {
+    "kicker": "Meeting archive",
+    "title": "Minutes",
+    "subtitle": "Review captured meetings, speaker-attributed transcripts, and retained summaries.",
+    "readOnly": "Read only",
+    "readOnlyMeta": "Read only",
+    "readFailedMeta": "Read failed",
+    "authRequiredMeta": "Auth required",
+    "summaryFallbackMeta": "Summary fallback",
+    "readLimitMeta": "Read limit",
+    "kind": {
+      "meeting": "Meeting",
+      "transcript": "Transcript",
+      "summary": "Summary"
+    },
+    "searchLabel": "Search Minutes",
+    "searchPlaceholder": "Search summaries and transcripts",
+    "searching": "Searching…",
+    "searchAction": "Search",
+    "searchError": "Search is unavailable. Your meeting list is still here.",
+    "searchResults": "Search results",
+    "openResult": "Open result",
+    "searchEmpty": "No retained Minutes items match that search.",
+    "loadMoreSearch": "Load more search results",
+    "loadingMoreSearch": "Loading more results…",
+    "loading": "Loading Minutes",
+    "authTitle": "Your Minutes session ended",
+    "authBody": "Sign in again to continue reviewing your retained meetings.",
+    "signInAgain": "Sign in again",
+    "registryErrorMeta": "Access check failed",
+    "registryErrorTitle": "Minutes access could not be checked",
+    "registryErrorBody": "The product registry is temporarily unavailable. Try the access check again.",
+    "operationalErrorMeta": "Service unavailable",
+    "operationalErrorTitle": "Minutes is temporarily unavailable",
+    "operationalErrorBody": "Minutes is in maintenance or degraded mode. Try again when the read service is available.",
+    "errorTitle": "Minutes could not be loaded",
+    "errorBody": "The read service is temporarily unavailable. Your meeting data was not changed.",
+    "retry": "Try again",
+    "emptyTitle": "No captured meetings yet",
+    "emptyMeta": "0 meetings",
+    "emptyBody": "When a consented meeting is captured, its transcript and summary will appear here with their retention dates.",
+    "partialArchiveTitle": "More meeting records are available",
+    "partialArchiveMeta": "Partial archive",
+    "partialArchiveBody": "This page contains related Minutes items. Load the next page to continue to the meeting list.",
+    "meetings": "Meetings",
+    "openSummary": "Open summary",
+    "openTranscript": "Open transcript",
+    "openMeeting": "Meeting details",
+    "partialSummary": "Summary not available yet.",
+    "loadOlder": "Load older meetings",
+    "loadingOlder": "Loading older meetings…",
+    "loadOlderError": "Older meetings could not be loaded. The meetings above are still available.",
+    "loadingDetail": "Loading meeting detail",
+    "detailErrorTitle": "This item is not available",
+    "captureVerified": "Visible capture verified",
+    "platform": "Platform",
+    "platforms": {
+      "google_meet": "Google Meet",
+      "teams": "Microsoft Teams",
+      "zoom": "Zoom",
+      "jitsi": "Jitsi"
+    },
+    "attendees": "Attendees",
+    "tooLargeTitle": "Transcript exceeds the read limit",
+    "tooLargeBody": "This transcript is too large to open in full.",
+    "openSummaryInstead": "Open summary instead",
+    "summaryLimitTitle": "Summary cannot be opened",
+    "summaryLimitBody": "Neither the full transcript nor its summary can be opened within the current read limit.",
+    "itemLimitTitle": "This item exceeds the read limit",
+    "itemLimitBody": "This item cannot be opened within the current read limit.",
+    "retainedUntil": "Retained until",
+    "selectPrompt": "Choose a summary or transcript to review it here."
+  },
+  "design": {
+    "back": "Back to projects",
+    "stop": "Stop",
+    "workbenchTitle": "ZAKI Design workbench",
+    "failedTitle": "Workspace could not start",
+    "failedBody": "The isolated Design session did not become ready. You can retry safely.",
+    "retry": "Retry",
+    "startingTitle": "Preparing your workspace",
+    "startingBody": "Restoring project files and starting an isolated worker.",
+    "kicker": "ZAKI Design",
+    "title": "Your design projects",
+    "subtitle": "Open a project to start its isolated workspace. Files are restored per user and saved when the session stops.",
+    "engineReady": "Engine ready",
+    "engineUnavailable": "Engine unavailable",
+    "engineChecking": "Checking engine",
+    "newProject": "New project",
+    "projectScope": "Private to your account",
+    "projectName": "Project name",
+    "projectPlaceholder": "Website redesign",
+    "createAndOpen": "Create and open",
+    "projects": "Projects",
+    "refresh": "Refresh",
+    "open": "Open",
+    "loadingProjects": "Loading projects…",
+    "empty": "No projects yet. Create one above."
+  },
   "memoryImport": {
     "title": "Bring your memory",
-    "subtitle": "Ask another assistant for a structured dump, then paste it here. ZAKI will save what matters.",
+    "subtitle": "Ask another assistant for a structured dump, then carry its response into your Agent reply.",
     "step1Label": "Step 1: copy this prompt",
     "step1Hint": "Paste this into ChatGPT, Claude, Gemini, or any assistant that knows you.",
     "step2Label": "Step 2: paste the response",
@@ -2450,8 +2609,10 @@
     "copyAction": "Copy prompt",
     "copied": "Copied",
     "copyError": "Couldn't copy. Select the prompt and copy manually.",
-    "importAction": "Send to ZAKI",
-    "importError": "Couldn't send the import. Try again."
+    "importAction": "Continue in Agent",
+    "importError": "Couldn't continue in Agent. Try again.",
+    "sendFailed": "Couldn't send that import. Try again.",
+    "partialSendFailed": "Part {{part}} of {{total}} didn't send. The next unsent part is back in your composer."
   },
   "chatErrors": {
     "rateLimited": {
