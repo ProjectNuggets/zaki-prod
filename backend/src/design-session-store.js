@@ -4,6 +4,18 @@ const SESSION_STATES = new Set([
   "REQUESTED", "STARTING", "RESTORING", "READY", "ACTIVE", "IDLE",
   "DRAINING", "CHECKPOINTING", "STOPPED", "FAILED",
 ]);
+// A stop is already in flight against a live worker, so a second stop rides along with it
+// rather than starting its own.
+const DRAINING_SESSION_STATES = new Set(["DRAINING", "CHECKPOINTING"]);
+// Terminal: no worker is left to stop, either because it is already gone or because it never
+// existed. Nothing here needs the controller.
+const TERMINAL_SESSION_STATES = new Set(["STOPPED", "FAILED"]);
+
+// Exported so callers answer "is there anything left to stop?" from this list instead of
+// keeping a second copy that drifts out of step with the store's own conflict rule.
+export function isTerminalDesignSessionState(state) {
+  return TERMINAL_SESSION_STATES.has(String(state || ""));
+}
 
 export class DesignSessionStoreError extends Error {
   constructor(code, message, status = 409) {
@@ -166,7 +178,9 @@ export async function beginDesignSessionDrain({
     }
     // FAILED belongs here with the other terminal states: a session that never started has
     // nothing left to drain, so stopping it is a no-op success, not a state conflict.
-    if (["DRAINING", "CHECKPOINTING", "STOPPED", "FAILED"].includes(session.state)) return session;
+    if (DRAINING_SESSION_STATES.has(session.state) || isTerminalDesignSessionState(session.state)) {
+      return session;
+    }
     throw new DesignSessionStoreError("DESIGN_SESSION_STATE_CONFLICT", "Design session cannot be stopped from its current state.");
   });
 }
@@ -264,6 +278,13 @@ export async function commitDesignCheckpoint({
   });
 }
 
+// `expectedState` is optional and off by default: a caller recording what the controller just
+// observed is reporting news, and the generation is enough to place it. A caller putting a
+// state *back* is making a claim about what the row still holds, and the generation cannot
+// carry that claim — a stop settles into STOPPED without bumping checkpoint_generation, so a
+// generation-only CAS reads identically whether nobody touched the row or another request
+// already finished the stop. Passing `expectedState` makes the write land only while the row
+// is still in the state the caller read.
 export async function updateDesignSessionObservedState({
   dbQuery,
   sessionId,
@@ -273,10 +294,15 @@ export async function updateDesignSessionObservedState({
   state,
   generation,
   requestId,
+  expectedState = null,
 }) {
   const normalizedState = String(state || "");
   if (!SESSION_STATES.has(normalizedState)) {
     throw new DesignSessionStoreError("DESIGN_SESSION_INPUT_INVALID", "session state is invalid.", 400);
+  }
+  const normalizedExpectedState = expectedState == null ? null : String(expectedState);
+  if (normalizedExpectedState !== null && !SESSION_STATES.has(normalizedExpectedState)) {
+    throw new DesignSessionStoreError("DESIGN_SESSION_INPUT_INVALID", "expected session state is invalid.", 400);
   }
   const result = await dbQuery(
     `
@@ -291,6 +317,7 @@ export async function updateDesignSessionObservedState({
          AND owner_user_id = $3
          AND tenant_id = $4
          AND checkpoint_generation = $6
+         AND ($8::text IS NULL OR state = $8)
        RETURNING session_id
     `,
     [
@@ -301,6 +328,7 @@ export async function updateDesignSessionObservedState({
       normalizedState,
       generationNumber(generation, "generation"),
       nullableText(requestId),
+      normalizedExpectedState,
     ]
   );
   return Boolean(result.rows[0]);

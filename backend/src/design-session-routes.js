@@ -2,6 +2,7 @@ import express from "express";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { normalizeDesignProxyPath } from "./design-proxy-path.js";
+import { isTerminalDesignSessionState } from "./design-session-store.js";
 
 const OPAQUE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
@@ -76,7 +77,7 @@ export function buildDesignSessionRouter({
             desiredGeneration: session.generation,
             requestId,
           });
-      if (["STOPPED", "FAILED"].includes(result.session.state)) {
+      if (isTerminalDesignSessionState(result.session.state)) {
         appendWorkbenchRevocation(res, revokeWorkbenchAccess, session.sessionId);
       } else if (!recoveringStop && typeof issueWorkbenchAccess === "function") {
         res.append("set-cookie", issueWorkbenchAccess({
@@ -235,7 +236,7 @@ export function buildDesignSessionRouter({
         requestId,
       });
       await updateSessionStateBestEffort(updateSessionState, dbQuery, session, result, requestId);
-      if (["STOPPED", "FAILED"].includes(result.session.state)) {
+      if (isTerminalDesignSessionState(result.session.state)) {
         appendWorkbenchRevocation(res, revokeWorkbenchAccess, session.sessionId);
       }
       return res.json(result);
@@ -274,13 +275,17 @@ export function buildDesignSessionRouter({
         expectedGeneration: session.generation,
         requestId,
       });
-      if (drainingSession.state === "STOPPED") {
+      // The store treats every terminal state as a no-op success for stop, so answer all of
+      // them here. FAILED especially: that row never had a worker, and asking the controller
+      // to stop one it never started turns the store's clean no-op into an error the user
+      // sees. Terminality is the store's call, not a second list kept in step by hand.
+      if (isTerminalDesignSessionState(drainingSession.state)) {
         appendWorkbenchRevocation(res, revokeWorkbenchAccess, drainingSession.sessionId);
         return res.json({
           session: {
             id: drainingSession.sessionId,
             projectId: drainingSession.projectId,
-            state: "STOPPED",
+            state: drainingSession.state,
             generation: drainingSession.generation,
           },
         });
@@ -305,7 +310,7 @@ export function buildDesignSessionRouter({
         throw error;
       }
       await updateSessionStateBestEffort(updateSessionState, dbQuery, session, result, requestId);
-      if (["STOPPED", "FAILED"].includes(result.session.state)) {
+      if (isTerminalDesignSessionState(result.session.state)) {
         appendWorkbenchRevocation(res, revokeWorkbenchAccess, drainingSession.sessionId);
       }
       return res.json(result);
@@ -383,10 +388,20 @@ async function updateSessionStateBestEffort(updateSessionState, dbQuery, session
   }
 }
 
-// The hub writes DRAINING before it asks the controller to stop. When the controller never
-// accepted the stop, that write is a lie the session cannot recover from: a later ensure
-// reads DRAINING, re-drives stop instead of start, and the session is latched toward stop
-// forever. Put the state back so the next ensure reconciles it into existence again.
+// The hub writes DRAINING before it asks the controller to stop. If that write stands over a
+// stop that never happened, the session is latched: a later ensure reads DRAINING, re-drives
+// stop instead of start, and the session never comes back. So a throw from controller.stop
+// puts the state back.
+//
+// What a throw does not establish is that the stop was refused. A timeout can land after the
+// controller already deleted the worker, and this reverts on every throw — so the revert is a
+// guess, and it is only safe because it is conditional. `expectedState` holds it to the state
+// beginSessionDrain left behind, which means a concurrent request that carried the stop
+// through to STOPPED wins and this write silently does nothing. The generation cannot draw
+// that line by itself: a stop does not bump it, so a generation-only CAS cannot tell "nobody
+// moved this row" from "somebody already finished the stop". Losing that distinction would
+// republish a live state over a session whose worker is gone, and the proxy admits live
+// states — it would forward to a dead pod until the next ensure healed it.
 async function revertSessionDrainBestEffort(
   updateSessionState, dbQuery, session, drainingSession, requestId
 ) {
@@ -401,6 +416,7 @@ async function revertSessionDrainBestEffort(
       state: session.state,
       generation: session.generation,
       requestId,
+      expectedState: drainingSession.state,
     });
   } catch (error) {
     console.warn("[Design] Session drain could not be reverted:", {

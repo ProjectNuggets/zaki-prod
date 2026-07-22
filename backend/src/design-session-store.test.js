@@ -166,4 +166,58 @@ describe("design session store", () => {
     })).resolves.toBe(true);
     expect(dbQuery.mock.calls[0]?.[0]).toContain("checkpoint_generation = $6");
   });
+
+  test("leaves the state guard inert when no expected state is given", async () => {
+    const dbQuery = jest.fn().mockResolvedValue({ rows: [{ session_id: "sess_01" }] });
+    await expect(updateDesignSessionObservedState({
+      dbQuery,
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      state: "READY",
+      generation: 7,
+      requestId: "req_state_02",
+    })).resolves.toBe(true);
+    // Reporting an observation carries no claim about the prior state, so the guard is passed as
+    // NULL and the generation alone places the write.
+    expect(dbQuery.mock.calls[0]?.[1]?.[7]).toBeNull();
+  });
+
+  test("guards a state revert with the expected state so a concurrent transition wins", async () => {
+    // rows: [] models the row having already moved on (e.g. another request finished the stop),
+    // so the guarded UPDATE matches nothing and reports it did not write.
+    const dbQuery = jest.fn().mockResolvedValue({ rows: [] });
+    await expect(updateDesignSessionObservedState({
+      dbQuery,
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      state: "ACTIVE",
+      generation: 7,
+      requestId: "req_revert_01",
+      expectedState: "DRAINING",
+    })).resolves.toBe(false);
+    // A stop settles into STOPPED without bumping the generation, so the generation CAS cannot
+    // tell "nobody moved this row" from "the stop already finished". The state predicate draws
+    // that line: the write lands only while the row is still the state the caller read.
+    expect(dbQuery.mock.calls[0]?.[0]).toContain("($8::text IS NULL OR state = $8)");
+    expect(dbQuery.mock.calls[0]?.[1]?.[7]).toBe("DRAINING");
+  });
+
+  test("rejects an invalid expected state before touching the database", async () => {
+    const dbQuery = jest.fn();
+    await expect(updateDesignSessionObservedState({
+      dbQuery,
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      state: "ACTIVE",
+      generation: 7,
+      expectedState: "NOT_A_STATE",
+    })).rejects.toMatchObject({ code: "DESIGN_SESSION_INPUT_INVALID" });
+    expect(dbQuery).not.toHaveBeenCalled();
+  });
 });

@@ -2,7 +2,30 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, jest, test } from "@jest/globals";
 import { buildDesignSessionRouter } from "./design-session-routes.js";
+import { updateDesignSessionObservedState } from "./design-session-store.js";
 import { createDesignWorkbenchAccess } from "./design-workbench-access.js";
+
+// A faithful stand-in for the one row the stop route writes through the real store function.
+// It honors the store's UPDATE ... WHERE checkpoint_generation = $6 AND ($8 IS NULL OR
+// state = $8) semantics, so a revert only lands when the generation matches and — if a state
+// guard is supplied — the row still holds that state. This is what lets a route test prove the
+// compare-and-swap actually discriminates instead of trusting a hand-written mock to say so.
+function makeObservedStateRowDb(initial) {
+  const row = { state: initial.state, generation: Number(initial.generation) };
+  const dbQuery = jest.fn(async (_sql, params) => {
+    const newState = params[4];
+    const generation = Number(params[5]);
+    const expectedState = params[7];
+    const generationMatches = row.generation === generation;
+    const stateMatches = expectedState == null || row.state === expectedState;
+    if (generationMatches && stateMatches) {
+      row.state = newState;
+      return { rows: [{ session_id: "sess_01" }] };
+    }
+    return { rows: [] };
+  });
+  return { row, dbQuery };
+}
 import { resolveDesignQuotaPolicy } from "./design-quota.js";
 import { resolvePlatformWalletPlanForUser } from "./platform-entitlement-context.js";
 
@@ -870,6 +893,182 @@ describe("Design public session routes", () => {
 
     expect(response.status).toBe(503);
     expect(updateSessionState).not.toHaveBeenCalled();
+  });
+
+  test("does not resurrect a session another request already moved to STOPPED when the drain revert fires", async () => {
+    // R1 read the row ACTIVE @ gen 7 and committed DRAINING. While R1's controller.stop hung, a
+    // concurrent ensure re-drove the stop through to STOPPED @ gen 7 and deleted the pod — a stop
+    // does not bump the generation. Then R1's stop finally throws. The revert must not put ACTIVE
+    // back over a session whose worker is already gone, or the proxy would forward to a dead pod.
+    const preDrainSession = {
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      state: "ACTIVE",
+      generation: 7,
+    };
+    const { row, dbQuery } = makeObservedStateRowDb({ state: "STOPPED", generation: 7 });
+    const controllerStop = jest.fn().mockRejectedValue(
+      Object.assign(new Error("controller stop timed out"), {
+        code: "DESIGN_CONTROLLER_UNAVAILABLE",
+        status: 503,
+      }),
+    );
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn(),
+      readSessionBinding: jest.fn().mockResolvedValue(preDrainSession),
+      beginSessionDrain: jest.fn().mockResolvedValue({ ...preDrainSession, state: "DRAINING" }),
+      updateSessionState: updateDesignSessionObservedState,
+      runInTransaction: jest.fn(),
+      dbQuery,
+      createSessionId: jest.fn(),
+      controller: { ensure: jest.fn(), status: jest.fn(), stop: controllerStop },
+      getRequestId: () => "req_stop_race",
+    }));
+
+    const response = await request(app)
+      .post("/api/design/sessions/sess_01/stop")
+      .send({ projectId: "project_01" });
+
+    expect(response.status).toBe(503);
+    // The guarded CAS matched nothing because the row is no longer DRAINING; the terminal STOPPED
+    // stands. Without the state predicate the generation-only CAS would have overwritten it here.
+    expect(row.state).toBe("STOPPED");
+  });
+
+  test("reverts to the pre-drain state when the row is still DRAINING and the controller refuses", async () => {
+    // The un-raced path: nothing else touched the row, so the guarded revert still restores the
+    // exact state the drain replaced, keeping the fix from over-correcting into a no-op.
+    const preDrainSession = {
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      state: "ACTIVE",
+      generation: 7,
+    };
+    const { row, dbQuery } = makeObservedStateRowDb({ state: "DRAINING", generation: 7 });
+    const controllerStop = jest.fn().mockRejectedValue(
+      Object.assign(new Error("controller is down"), {
+        code: "DESIGN_CONTROLLER_UNAVAILABLE",
+        status: 503,
+      }),
+    );
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn(),
+      readSessionBinding: jest.fn().mockResolvedValue(preDrainSession),
+      beginSessionDrain: jest.fn().mockResolvedValue({ ...preDrainSession, state: "DRAINING" }),
+      updateSessionState: updateDesignSessionObservedState,
+      runInTransaction: jest.fn(),
+      dbQuery,
+      createSessionId: jest.fn(),
+      controller: { ensure: jest.fn(), status: jest.fn(), stop: controllerStop },
+      getRequestId: () => "req_stop_revert",
+    }));
+
+    const response = await request(app)
+      .post("/api/design/sessions/sess_01/stop")
+      .send({ projectId: "project_01" });
+
+    expect(response.status).toBe(503);
+    expect(row.state).toBe("ACTIVE");
+  });
+
+  test("short-circuits a FAILED stop without calling the controller", async () => {
+    // A FAILED row never had a worker. The store counts stopping it a clean no-op; the route must
+    // agree instead of dispatching controller.stop for a worker that never existed and turning the
+    // no-op into an error the user sees.
+    const session = {
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      state: "FAILED",
+      generation: 7,
+    };
+    const controllerStop = jest.fn();
+    const revokeWorkbenchAccess = jest.fn().mockReturnValue("zaki_design_workbench=; Max-Age=0");
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn(),
+      readSessionBinding: jest.fn().mockResolvedValue(session),
+      beginSessionDrain: jest.fn().mockResolvedValue(session),
+      updateSessionState: jest.fn(),
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: jest.fn(),
+      controller: { ensure: jest.fn(), status: jest.fn(), stop: controllerStop },
+      getRequestId: () => "req_stop_failed",
+      revokeWorkbenchAccess,
+    }));
+
+    const response = await request(app)
+      .post("/api/design/sessions/sess_01/stop")
+      .send({ projectId: "project_01" });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      session: {
+        id: "sess_01",
+        projectId: "project_01",
+        state: "FAILED",
+        generation: 7,
+      },
+    });
+    expect(controllerStop).not.toHaveBeenCalled();
+    expect(revokeWorkbenchAccess).toHaveBeenCalledWith("sess_01");
+    expect(response.headers["set-cookie"]?.[0]).toContain("zaki_design_workbench=");
+  });
+
+  test("short-circuits an already STOPPED stop without calling the controller", async () => {
+    // The terminal short-circuit is driven by the store's terminal-state helper, not a literal
+    // "STOPPED" check — this locks STOPPED in alongside FAILED so generalizing the branch cannot
+    // silently drop it.
+    const session = {
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      state: "STOPPED",
+      generation: 8,
+    };
+    const controllerStop = jest.fn();
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn(),
+      readSessionBinding: jest.fn().mockResolvedValue(session),
+      beginSessionDrain: jest.fn().mockResolvedValue(session),
+      updateSessionState: jest.fn(),
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: jest.fn(),
+      controller: { ensure: jest.fn(), status: jest.fn(), stop: controllerStop },
+      getRequestId: () => "req_stop_stopped",
+    }));
+
+    const response = await request(app)
+      .post("/api/design/sessions/sess_01/stop")
+      .send({ projectId: "project_01" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.session).toEqual({
+      id: "sess_01",
+      projectId: "project_01",
+      state: "STOPPED",
+      generation: 8,
+    });
+    expect(controllerStop).not.toHaveBeenCalled();
   });
 
   test("marks a never-started session FAILED when the controller cannot ensure it", async () => {
