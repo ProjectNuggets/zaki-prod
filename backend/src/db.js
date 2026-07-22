@@ -1485,8 +1485,12 @@ export async function initDb() {
     await migrationClient.query(MINUTES_CALENDAR_CONNECTIONS_DDL);
     console.log("[DB] Minutes calendar connection store ready");
   } catch (err) {
-    console.warn("[DB] Minutes calendar connection table creation failed:", err.message);
-    failClosedMinutesControlSchema("calendar-store", err);
+    // WARN-and-continue, NOT fail-closed on the control gate: this table is dark
+    // and independent of the (live) Minutes control feature. Failing the whole
+    // initDb here would process.exit(1) and crash-loop control's boot over an
+    // unrelated dark table. The calendar routes stay 404 (their own configured()
+    // guard) until the table + key + OAuth client are all provisioned.
+    console.warn("[DB] Minutes calendar connection table creation failed (feature stays dark):", err.message);
   }
 
   // --- V1 beta cutover audit + reversible workspace archive registry ---

@@ -213,6 +213,8 @@ import {
   eraseMinutesAccountForErasure,
   isMinutesControlEnabled,
 } from "./minutes-control-routes.js";
+import { buildMinutesCalendarRouter } from "./minutes-calendar-routes.js";
+import { resolveCalendarEncryptionKey } from "./minutes-calendar-store.js";
 import { hasMinutesControlAccountState } from "./minutes-control-state.js";
 import { reconcileMinutesControlRecoveries } from "./minutes-control-reconciler.js";
 import { resolveMinutesControlAccountErasure } from "./minutes-control-account-erasure.js";
@@ -741,6 +743,25 @@ function getMinutesControlRecoveryEncryptionKey() {
     fallbackToken: process.env.MINUTES_CONTROL_RECOVERY_KEY,
     readFileSync: fs.readFileSync,
   });
+}
+// WP-M10 calendar auto-join gate. Independent of the control gate; dark until an
+// operator flips ZAKI_MINUTES_CALENDAR_ENABLED AND provisions the encryption key
+// + Google OAuth client. A missing/invalid key resolves to "" so the router's
+// own `configured()` guard 404s the feature rather than crashing a dark deploy.
+const ZAKI_MINUTES_CALENDAR_ENABLED =
+  isMinutesEnabled(process.env.ZAKI_MINUTES_CALENDAR_ENABLED) && ZAKI_MINUTES_ENABLED;
+function getCalendarEncryptionKey() {
+  if (!ZAKI_MINUTES_CALENDAR_ENABLED) return "";
+  try {
+    return resolveCalendarEncryptionKey({
+      keyFile: process.env.MINUTES_CALENDAR_ENCRYPTION_KEY_FILE,
+      fallbackKey: process.env.MINUTES_CALENDAR_ENCRYPTION_KEY,
+      readFileSync: fs.readFileSync,
+    });
+  } catch {
+    console.warn("[Minutes] calendar enabled but encryption key is unavailable — feature stays dark");
+    return "";
+  }
 }
 function boundedMinutesControlNumber(value, fallback, min, max) {
   const number = Number(value);
@@ -5117,6 +5138,24 @@ function getGoogleOAuthRedirectUri(req) {
     protocol: req.protocol,
     host: req.get("host"),
   });
+}
+
+// The calendar connect flow uses its OWN callback path (registered separately in
+// the Google console), never the login callback — routing a calendar-scoped code
+// into the login callback would mint a session + run the consent/age gate. Prefer
+// an explicit override (parity with login's GOOGLE_OAUTH_REDIRECT_URI) so a
+// proxied deploy can pin the exact byte-registered URI; else derive from the
+// public URL. The authorize and exchange calls both use this, so they always
+// agree even under a poisoned Host header — Google's registered-URI check is the
+// backstop.
+const MINUTES_CALENDAR_OAUTH_REDIRECT_URI = (process.env.MINUTES_CALENDAR_OAUTH_REDIRECT_URI || "").trim();
+const CALENDAR_OAUTH_REDIRECT_BASE = String(MINUTES_CALENDAR_OAUTH_REDIRECT_URI || ZAKI_PUBLIC_URL || "").trim();
+function getCalendarOAuthRedirectUri(req) {
+  if (MINUTES_CALENDAR_OAUTH_REDIRECT_URI) return MINUTES_CALENDAR_OAUTH_REDIRECT_URI;
+  const base = String(ZAKI_PUBLIC_URL || `${req.protocol}://${req.get("host") || "localhost"}`)
+    .trim()
+    .replace(/\/+$/, "");
+  return `${base}/api/minutes/calendar/connect/callback`;
 }
 
 function ensureGoogleOAuthConfigured() {
@@ -18595,6 +18634,28 @@ app.use("/api/minutes", buildMinutesControlRouter({
   fetchWithTimeout,
   resolvePlan: resolvePlatformWalletPlanForUser,
   recordFailure: (event) => logStructured("warn", "minutes.control.failed", event),
+}));
+
+// WP-M10 calendar auto-join connect flow (dark until ZAKI_MINUTES_CALENDAR_ENABLED
+// + the encryption key + Google OAuth client are provisioned). The callback is an
+// unauthenticated browser redirect — its identity comes from the HMAC-signed
+// state (bound to the session user at /start) + the path-scoped nonce cookie.
+app.use("/api/minutes", buildMinutesCalendarRouter({
+  // Also require a stable redirect base: without it the request-derived
+  // redirect_uri can't byte-match the Google-console registration, so keep the
+  // feature dark (404) rather than shipping a redirect_uri_mismatch flow.
+  enabled: ZAKI_MINUTES_CALENDAR_ENABLED && Boolean(CALENDAR_OAUTH_REDIRECT_BASE),
+  oauthClientId: GOOGLE_CLIENT_ID,
+  oauthClientSecret: GOOGLE_CLIENT_SECRET,
+  oauthStateSecret: GOOGLE_OAUTH_STATE_SECRET,
+  encryptionKey: getCalendarEncryptionKey(),
+  buildRedirectUri: getCalendarOAuthRedirectUri,
+  resolveUser: requireAuthUser,
+  isSecure: isSecureCookieRequest,
+  appUrl: getAppUrl(),
+  exchangeCode: ({ code, redirectUri }) => exchangeGoogleOAuthCode({ code, redirectUri }),
+  fetchImpl: (url, opts) => fetchWithTimeout(url, opts, 10_000, "calendar token revoke"),
+  recordFailure: (event) => logStructured("warn", "minutes.calendar.failed", event),
 }));
 
 // =============================================================================
