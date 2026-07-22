@@ -271,4 +271,78 @@ describe("DesignControllerClient", () => {
       requestId: "req_stalled",
     })).rejects.toMatchObject({ code: "DESIGN_CONTROLLER_UNAVAILABLE" });
   });
+
+  test("names a controller capacity rejection instead of calling it unavailable", async () => {
+    const fetchWithTimeout = jest.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: { code: "CAPACITY_EXHAUSTED", message: "no design worker slot is available" },
+    }), { status: 429, headers: { "content-type": "application/json" } }));
+    const client = new DesignControllerClient({
+      baseUrl: "http://controller.internal:7460",
+      token: "hub-controller-secret",
+      fetchWithTimeout,
+      timeoutMs: 180000,
+    });
+
+    await expect(client.ensure({
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      desiredGeneration: 0,
+      requestId: "req_capacity",
+    })).rejects.toMatchObject({
+      status: 429,
+      code: "DESIGN_CONTROLLER_CAPACITY_EXHAUSTED",
+    });
+  });
+
+  // The controller seals its errors as { error: { code, message } }. Pair a capacity code with
+  // a non-429 status so only the body can carry the signal — the status branch cannot mask it.
+  test("classifies a capacity rejection the controller paired with a non-429 status", async () => {
+    const fetchWithTimeout = jest.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: { code: "CAPACITY_EXHAUSTED", message: "no design worker slot is available" },
+    }), { status: 503, headers: { "content-type": "application/json" } }));
+    const client = new DesignControllerClient({
+      baseUrl: "http://controller.internal:7460",
+      token: "hub-controller-secret",
+      fetchWithTimeout,
+      timeoutMs: 180000,
+    });
+
+    await expect(client.ensure({
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      desiredGeneration: 0,
+      requestId: "req_capacity_body",
+    })).rejects.toMatchObject({
+      status: 429,
+      code: "DESIGN_CONTROLLER_CAPACITY_EXHAUSTED",
+    });
+  });
+
+  test("still calls a genuine controller outage unavailable", async () => {
+    const fetchWithTimeout = jest.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: { code: "CONTROLLER_UNAVAILABLE", message: "session reconciliation failed" },
+    }), { status: 503, headers: { "content-type": "application/json" } }));
+    const client = new DesignControllerClient({
+      baseUrl: "http://controller.internal:7460",
+      token: "hub-controller-secret",
+      fetchWithTimeout,
+      timeoutMs: 180000,
+    });
+
+    await expect(client.ensure({
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      desiredGeneration: 0,
+      requestId: "req_outage",
+    })).rejects.toMatchObject({
+      status: 503,
+      code: "DESIGN_CONTROLLER_UNAVAILABLE",
+    });
+  });
 });

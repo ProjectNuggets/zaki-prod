@@ -2,6 +2,7 @@ import express from "express";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { normalizeDesignProxyPath } from "./design-proxy-path.js";
+import { isTerminalDesignSessionState } from "./design-session-store.js";
 
 const OPAQUE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
@@ -36,14 +37,19 @@ export function buildDesignSessionRouter({
     }
     next();
   });
+  // ROUTE CLASS: USER. Authenticated end user acting on their own project; every binding is
+  // scoped to resolveUser's zakiUser.id. A future MCP tool over this route inherits exactly
+  // that posture — caller-authenticated, owner-scoped — and must never be exposed to an
+  // operator/service credential that could ensure a session for another user's project.
   const ensureHandler = async (req, res) => {
     const projectId = validOpaqueId(req.body?.projectId) ? req.body.projectId : null;
     if (!projectId) return invalidRequest(res, getRequestId(req));
     const auth = await resolveUser(req, res);
     if (!auth?.zakiUser?.id) return;
     const requestId = getRequestId(req);
+    let session = null;
     try {
-      const session = await ensureSession({
+      session = await ensureSession({
         runInTransaction,
         userId: auth.zakiUser.id,
         projectId,
@@ -71,7 +77,7 @@ export function buildDesignSessionRouter({
             desiredGeneration: session.generation,
             requestId,
           });
-      if (["STOPPED", "FAILED"].includes(result.session.state)) {
+      if (isTerminalDesignSessionState(result.session.state)) {
         appendWorkbenchRevocation(res, revokeWorkbenchAccess, session.sessionId);
       } else if (!recoveringStop && typeof issueWorkbenchAccess === "function") {
         res.append("set-cookie", issueWorkbenchAccess({
@@ -86,6 +92,7 @@ export function buildDesignSessionRouter({
         .status(["READY", "ACTIVE"].includes(result.session.state) ? 200 : 202)
         .json(result);
     } catch (error) {
+      await failUnstartedSessionBestEffort(updateSessionState, dbQuery, session, requestId);
       return sessionFailure(res, error, requestId);
     }
   };
@@ -229,7 +236,7 @@ export function buildDesignSessionRouter({
         requestId,
       });
       await updateSessionStateBestEffort(updateSessionState, dbQuery, session, result, requestId);
-      if (["STOPPED", "FAILED"].includes(result.session.state)) {
+      if (isTerminalDesignSessionState(result.session.state)) {
         appendWorkbenchRevocation(res, revokeWorkbenchAccess, session.sessionId);
       }
       return res.json(result);
@@ -240,6 +247,10 @@ export function buildDesignSessionRouter({
   router.get("/:sessionId", async (req, res) => statusHandler(req, res, req.query));
   router.post("/:sessionId/status", lifecycleJson, async (req, res) => statusHandler(req, res, req.body));
 
+  // ROUTE CLASS: USER. Authenticated end user stopping their own session; the binding is
+  // re-read under the caller's zakiUser.id before anything drains. A future MCP tool over
+  // this route inherits that posture and must not accept an operator credential — stopping
+  // another tenant's worker is not an operator convenience, it is data loss.
   router.post("/:sessionId/stop", lifecycleJson, async (req, res) => {
     const input = parseBoundSessionRequest(req.params.sessionId, req.body);
     if (!input) return invalidRequest(res, getRequestId(req));
@@ -264,30 +275,42 @@ export function buildDesignSessionRouter({
         expectedGeneration: session.generation,
         requestId,
       });
-      if (drainingSession.state === "STOPPED") {
+      // The store treats every terminal state as a no-op success for stop, so answer all of
+      // them here. FAILED especially: that row never had a worker, and asking the controller
+      // to stop one it never started turns the store's clean no-op into an error the user
+      // sees. Terminality is the store's call, not a second list kept in step by hand.
+      if (isTerminalDesignSessionState(drainingSession.state)) {
         appendWorkbenchRevocation(res, revokeWorkbenchAccess, drainingSession.sessionId);
         return res.json({
           session: {
             id: drainingSession.sessionId,
             projectId: drainingSession.projectId,
-            state: "STOPPED",
+            state: drainingSession.state,
             generation: drainingSession.generation,
           },
         });
       }
-      const result = await controller.stop({
-        sessionId: drainingSession.sessionId,
-        projectId: drainingSession.projectId,
-        userId: drainingSession.userId,
-        tenantId: drainingSession.tenantId,
-        expectedGeneration: drainingSession.generation,
-        ...(drainingSession.state === "CHECKPOINTING"
-          ? { committedGeneration: drainingSession.generation }
-          : {}),
-        requestId,
-      });
+      let result;
+      try {
+        result = await controller.stop({
+          sessionId: drainingSession.sessionId,
+          projectId: drainingSession.projectId,
+          userId: drainingSession.userId,
+          tenantId: drainingSession.tenantId,
+          expectedGeneration: drainingSession.generation,
+          ...(drainingSession.state === "CHECKPOINTING"
+            ? { committedGeneration: drainingSession.generation }
+            : {}),
+          requestId,
+        });
+      } catch (error) {
+        await revertSessionDrainBestEffort(
+          updateSessionState, dbQuery, session, drainingSession, requestId
+        );
+        throw error;
+      }
       await updateSessionStateBestEffort(updateSessionState, dbQuery, session, result, requestId);
-      if (["STOPPED", "FAILED"].includes(result.session.state)) {
+      if (isTerminalDesignSessionState(result.session.state)) {
         appendWorkbenchRevocation(res, revokeWorkbenchAccess, drainingSession.sessionId);
       }
       return res.json(result);
@@ -365,6 +388,69 @@ async function updateSessionStateBestEffort(updateSessionState, dbQuery, session
   }
 }
 
+// The hub writes DRAINING before it asks the controller to stop. If that write stands over a
+// stop that never happened, the session is latched: a later ensure reads DRAINING, re-drives
+// stop instead of start, and the session never comes back. So a throw from controller.stop
+// puts the state back.
+//
+// What a throw does not establish is that the stop was refused. A timeout can land after the
+// controller already deleted the worker, and this reverts on every throw — so the revert is a
+// guess, and it is only safe because it is conditional. `expectedState` holds it to the state
+// beginSessionDrain left behind, which means a concurrent request that carried the stop
+// through to STOPPED wins and this write silently does nothing. The generation cannot draw
+// that line by itself: a stop does not bump it, so a generation-only CAS cannot tell "nobody
+// moved this row" from "somebody already finished the stop". Losing that distinction would
+// republish a live state over a session whose worker is gone, and the proxy admits live
+// states — it would forward to a dead pod until the next ensure healed it.
+async function revertSessionDrainBestEffort(
+  updateSessionState, dbQuery, session, drainingSession, requestId
+) {
+  if (session.state === drainingSession.state) return;
+  try {
+    await updateSessionState({
+      dbQuery,
+      sessionId: session.sessionId,
+      projectId: session.projectId,
+      userId: session.userId,
+      tenantId: session.tenantId,
+      state: session.state,
+      generation: session.generation,
+      requestId,
+      expectedState: drainingSession.state,
+    });
+  } catch (error) {
+    console.warn("[Design] Session drain could not be reverted:", {
+      requestId,
+      code: error?.code || "DESIGN_SESSION_DRAIN_REVERT_FAILED",
+    });
+  }
+}
+
+// A session still in REQUESTED has no worker behind it. If the controller could not start
+// one, record FAILED so the row stops advertising a start that is never coming. A session
+// that already reached a live state keeps it — a transient ensure failure is not evidence
+// the worker died. Sweeping rows abandoned mid-flight is D4.1, not this fix.
+async function failUnstartedSessionBestEffort(updateSessionState, dbQuery, session, requestId) {
+  if (session?.state !== "REQUESTED") return;
+  try {
+    await updateSessionState({
+      dbQuery,
+      sessionId: session.sessionId,
+      projectId: session.projectId,
+      userId: session.userId,
+      tenantId: session.tenantId,
+      state: "FAILED",
+      generation: session.generation,
+      requestId,
+    });
+  } catch (error) {
+    console.warn("[Design] Failed session state could not be recorded:", {
+      requestId,
+      code: error?.code || "DESIGN_SESSION_FAILURE_RECORD_FAILED",
+    });
+  }
+}
+
 function parseBoundSessionRequest(sessionId, value) {
   if (!validOpaqueId(sessionId) || !validOpaqueId(value?.projectId)) return null;
   return { sessionId, projectId: value.projectId };
@@ -409,15 +495,32 @@ function copyResponseHeaders(upstream, res) {
   }
 }
 
+// Internal controller-client codes are not a public contract. Map the ones this route
+// promises callers; anything unmapped still forwards verbatim, as it did before.
+const PUBLIC_FAILURE_CODES = {
+  DESIGN_CONTROLLER_CAPACITY_EXHAUSTED: "design_capacity_exhausted",
+  DESIGN_CONTROLLER_UNAVAILABLE: "design_session_unavailable",
+};
+
 function sessionFailure(res, error, requestId) {
   const status = Number(error?.status);
   const safeStatus = Number.isInteger(status) && status >= 400 && status <= 599 ? status : 503;
+  const code = PUBLIC_FAILURE_CODES[error?.code] || error?.code || "design_session_unavailable";
   return res.status(safeStatus).json({
-    code: error?.code || "design_session_unavailable",
-    message: safeStatus === 404 ? "Design session was not found." : "Design session is temporarily unavailable.",
+    code,
+    message: sessionFailureMessage(code, safeStatus),
     retryable: safeStatus >= 500,
     requestId,
   });
+}
+
+// "Temporarily unavailable" invites a retry. Never say it about a full cluster: retrying
+// cannot free a slot, so name the one action that can.
+function sessionFailureMessage(code, safeStatus) {
+  if (code === "design_capacity_exhausted") {
+    return "Design has no free workspace slot right now. Stop another Design session, then try again.";
+  }
+  return safeStatus === 404 ? "Design session was not found." : "Design session is temporarily unavailable.";
 }
 
 function invalidRequest(res, requestId) {

@@ -157,10 +157,11 @@ export class DesignControllerClient {
     );
     const payload = await boundedJson(response, this.timeoutMs);
     if (!response.ok) {
+      const failure = controllerFailure(response.status, payload);
       throw new DesignControllerClientError(
-        "DESIGN_CONTROLLER_UNAVAILABLE",
+        failure.code,
         `Design controller returned status ${response.status}.`,
-        response.status >= 500 ? 503 : response.status
+        failure.status
       );
     }
     if (!validSessionResponse(payload, input)) {
@@ -171,6 +172,18 @@ export class DesignControllerClient {
     }
     return payload;
   }
+}
+
+// A worker slot the cluster cannot grant and a controller that fell over are different
+// failures: the first can never succeed on retry, the second usually can. Keep them apart
+// here, at the only place the controller's status and body are both still in hand.
+// The status is derived from the classification so a capacity failure can never be
+// reported as retryable, whichever status the controller chose to pair with the code.
+function controllerFailure(status, payload) {
+  if (status === 429 || payload?.error?.code === "CAPACITY_EXHAUSTED") {
+    return { code: "DESIGN_CONTROLLER_CAPACITY_EXHAUSTED", status: 429 };
+  }
+  return { code: "DESIGN_CONTROLLER_UNAVAILABLE", status: status >= 500 ? 503 : status };
 }
 
 function lifecycleBindingBody(input) {
