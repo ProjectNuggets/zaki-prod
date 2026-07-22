@@ -158,4 +158,36 @@ describe("MinutesControls", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     await waitFor(() => expect(mockControl).toHaveBeenCalledTimes(2));
   });
+
+  test("the Forever preset sends the platform max symmetrically and never touches audio", async () => {
+    renderControls();
+
+    expect(await screen.findByRole("heading", { name: "Minutes controls" })).toBeInTheDocument();
+    // Seeded at 30/30 → the "30 days" preset is selected, not a Custom option.
+    const keep = screen.getByRole("combobox", { name: "Keep each meeting for" });
+    expect((keep as HTMLSelectElement).value).toBe("30");
+    expect(screen.queryByRole("option", { name: /^Custom/ })).not.toBeInTheDocument();
+
+    fireEvent.change(keep, { target: { value: "3650" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Allow ZAKI Minutes to request a visible capture bot." }));
+    fireEvent.click(screen.getByRole("button", { name: "Save consent" }));
+
+    await waitFor(() => expect(mockConsent).toHaveBeenCalled());
+    // Forever = 3650 for BOTH transcript and summary (symmetric, so the engine's
+    // summary <= transcript check can never 422); audio stays at its seeded 0.
+    expect(mockConsent.mock.calls[0]?.[0]?.retention).toEqual({ audio_days: 0, transcript_days: 3650, summary_days: 3650 });
+  });
+
+  test("an off-preset saved policy is surfaced as Custom, not snapped onto a preset", async () => {
+    mockControl.mockResolvedValue({
+      ...AVAILABLE,
+      policy: { ...AVAILABLE.policy, retention: { audio_days: 0, transcript_days: 45, summary_days: 45 } },
+    });
+    renderControls();
+
+    expect(await screen.findByRole("heading", { name: "Minutes controls" })).toBeInTheDocument();
+    const keep = screen.getByRole("combobox", { name: "Keep each meeting for" });
+    expect((keep as HTMLSelectElement).value).toBe("45");
+    expect(screen.getByRole("option", { name: "Custom (45 days)" })).toBeInTheDocument();
+  });
 });
