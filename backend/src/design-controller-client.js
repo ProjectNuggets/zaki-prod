@@ -180,7 +180,7 @@ export class DesignControllerClient {
 // The status is derived from the classification so a capacity failure can never be
 // reported as retryable, whichever status the controller chose to pair with the code.
 function controllerFailure(status, payload) {
-  if (status === 429 || (isRecord(payload) && payload.code === "CAPACITY_EXHAUSTED")) {
+  if (status === 429 || payload?.error?.code === "CAPACITY_EXHAUSTED") {
     return { code: "DESIGN_CONTROLLER_CAPACITY_EXHAUSTED", status: 429 };
   }
   return { code: "DESIGN_CONTROLLER_UNAVAILABLE", status: status >= 500 ? 503 : status };
