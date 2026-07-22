@@ -107,6 +107,42 @@ assert.match(runtimeConfig, /MutationObserver/);
 assert.match(runtimeConfig, /attributeFilter:\s*\["href"\]/);
 assert.match(nginx, /location = \/site\/runtime-config\.js \{\s*add_header Cache-Control "no-store" always;/);
 
+// Legacy V4 URL coverage: every URL the live site's sitemap indexed must stay
+// reachable on V5 — either served directly by the payload or 301-redirected to
+// a V5 route. The inventory fixture is the contract; deleting the redirect map
+// from nginx.conf must fail this check.
+const legacyInventory = JSON.parse(
+  readFileSync(join(websiteRoot, "scripts", "legacy-url-inventory.json"), "utf8")
+);
+const redirects = new Map();
+for (const match of nginx.matchAll(/location = (\S+) \{ return 301 "?([^";\s]+)"?; \}/g)) {
+  redirects.set(match[1], match[2]);
+}
+const servedByV5 = (path) => {
+  const clean = path.split(/[?#]/, 1)[0];
+  const local = clean === "/" ? "index.html" : clean.endsWith("/") ? `${clean.slice(1)}index.html` : clean.slice(1);
+  return existsSync(join(root, local));
+};
+assert.ok(
+  redirects.size >= 30,
+  `nginx.conf: legacy 301 redirect map missing or gutted (found ${redirects.size} exact redirects)`
+);
+assert.match(nginx, /location \^~ \/ar\/ \{ return 301 \/; \}/, "nginx.conf: /ar/ fallback redirect missing");
+assert.match(nginx, /location \^~ \/how-to\/ \{ return 301 \/; \}/, "nginx.conf: /how-to/ fallback redirect missing");
+for (const legacyPath of [...legacyInventory.sitemapPaths, ...legacyInventory.legacyRouterExtras]) {
+  if (servedByV5(legacyPath)) continue;
+  const target = redirects.get(legacyPath);
+  assert.ok(target, `legacy URL ${legacyPath} is neither served by V5 nor 301-redirected in nginx.conf`);
+  assert.ok(servedByV5(target), `nginx.conf: redirect target ${target} for ${legacyPath} is not a V5 route`);
+  if (legacyPath.length > 1 && legacyPath.endsWith("/")) {
+    assert.equal(
+      redirects.get(legacyPath.slice(0, -1)),
+      target,
+      `nginx.conf: missing or mismatched slashless twin redirect for ${legacyPath}`
+    );
+  }
+}
+
 for (const plan of ["Free", "Personal", "Pro", "Pro MAX"]) assert.match(pricing, new RegExp(`>${plan}<`));
 for (const price of ["$0", "$15", "$45", "$95"]) assert.ok(pricing.includes(price), `pricing includes ${price}`);
 assert.match(pricing, /app\.chatzaki\.com\/pricing/);
