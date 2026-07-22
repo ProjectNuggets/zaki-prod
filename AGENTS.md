@@ -54,7 +54,7 @@ The user-facing product set is exactly four spokes:
 
 - ZAKI Agent — live
 - ZAKI Chat/Spaces — live
-- ZAKI Design — waitlist
+- ZAKI Design — coming soon
 - ZAKI Minutes — coming soon
 
 Brain is the Agent memory view. It remains user-facing as part of Agent and is
