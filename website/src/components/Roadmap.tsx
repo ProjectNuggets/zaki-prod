@@ -6,8 +6,8 @@ type Status = "shipped" | "building" | "next";
 
 const items: { title: { en: string; ar: string }; desc: { en: string; ar: string }; status: Status }[] = [
   {
-    title: { en: "Chat, Agent, and Brain", ar: "Chat وAgent وBrain" },
-    desc: { en: "The public path is live: start in Chat, continue in Agent, and inspect memory in Brain.", ar: "المسار العام متاح: ابدأ في Chat، تابع في Agent، وراجع الذاكرة في Brain." },
+    title: { en: "Agent and Chat/Spaces", ar: "Agent وChat/Spaces" },
+    desc: { en: "The live spokes are ready: start in Chat/Spaces, continue in Agent, and inspect Agent memory in Brain.", ar: "المسارات المباشرة جاهزة: ابدأ في Chat/Spaces، تابع في Agent، وراجع ذاكرة Agent في Brain." },
     status: "shipped",
   },
   {
@@ -21,13 +21,13 @@ const items: { title: { en: string; ar: string }; desc: { en: string; ar: string
     status: "building",
   },
   {
-    title: { en: "Learn and Career gated", ar: "Learn وCareer بوصول مقيد" },
-    desc: { en: "These products stay gated until entitlement, memory, usage, UI, and E2E agree.", ar: "هذه المنتجات تبقى مقيدة حتى تتفق الصلاحيات والذاكرة والاستخدام والواجهة والاختبارات." },
+    title: { en: "Design waitlist", ar: "قائمة انتظار Design" },
+    desc: { en: "Design remains gated until the service health, project flow, product registry, and tests are proven.", ar: "Design يبقى مقيّدًا حتى تثبت صحة الخدمة وتدفق المشاريع وسجل المنتجات والاختبارات." },
     status: "building",
   },
   {
-    title: { en: "Design waitlist", ar: "قائمة انتظار Design" },
-    desc: { en: "Design remains early access until the service health, project flow, product registry, and tests are proven.", ar: "Design يبقى وصولًا مبكرًا حتى تثبت صحة الخدمة وتدفق المشاريع وسجل المنتجات والاختبارات." },
+    title: { en: "Minutes coming soon", ar: "Minutes قريبًا" },
+    desc: { en: "Minutes stays coming soon until the capture, transcript, summary, and follow-up flow is ready end to end.", ar: "Minutes يبقى قريبًا حتى يجهز مسار الالتقاط والنص والملخص والمتابعة من البداية إلى النهاية." },
     status: "next",
   },
   {

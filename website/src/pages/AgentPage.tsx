@@ -46,15 +46,9 @@ export function AgentPage() {
                 </a>
                 <a className="mega-card" href={signupUrl}>
                   <span className="mega-ic" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="M10 4 3 7l7 3 7-3-7-3zM5 9v4c0 1 2.2 2 5 2s5-1 5-2V9" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /></svg></span>
-                  <span className="mega-tt">Learn <span className="status soon">Soon</span></span>
-                  <span className="mega-role">ZAKI in growth</span>
-                  <span className="mega-d">Understand, practice, and progress in a way that adapts to you.</span>
-                </a>
-                <a className="mega-card" href={signupUrl}>
-                  <span className="mega-ic" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><rect x="3" y="6" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.3" /><path d="M7 6V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="1.3" /></svg></span>
-                  <span className="mega-tt">Career <span className="status soon">Soon</span></span>
-                  <span className="mega-role">ZAKI in motion</span>
-                  <span className="mega-d">Find stronger matches and keep the follow-up moving — you approve.</span>
+                  <span className="mega-tt">Minutes <span className="status soon">Soon</span></span>
+                  <span className="mega-role">ZAKI in meetings</span>
+                  <span className="mega-d">Turn conversations into decisions, owners, and follow-ups.</span>
                 </a>
                 <Link className="mega-card mega-mem" to="/#memory" role="menuitem">
                   <span className="mega-ic" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.3" /><circle cx="10" cy="10" r="2.4" fill="currentColor" /></svg></span>
@@ -85,8 +79,7 @@ export function AgentPage() {
         <Link className="mm-link" to="/agent">Agent <span className="mm-role">In action · Live</span></Link>
         <Link className="mm-link" to="/spaces">Spaces <span className="mm-role">In context · Live</span></Link>
         <a className="mm-link" href={signupUrl}>Design <span className="mm-role">In creation · Soon</span></a>
-        <a className="mm-link" href={signupUrl}>Learn <span className="mm-role">In growth · Soon</span></a>
-        <a className="mm-link" href={signupUrl}>Career <span className="mm-role">In motion · Soon</span></a>
+        <a className="mm-link" href={signupUrl}>Minutes <span className="mm-role">Meeting notes · Soon</span></a>
         <Link className="mm-link" to="/#memory">Memory <span className="mm-role">Continuity layer</span></Link>
         <div className="mm-sub">
           <a href="#boundary">Security</a>
@@ -289,8 +282,7 @@ export function AgentPage() {
               <Link to="/agent">Agent</Link>
               <Link to="/spaces">Spaces</Link>
               <a href={signupUrl}>Design</a>
-              <a href={signupUrl}>Learn</a>
-              <a href={signupUrl}>Career</a>
+              <a href={signupUrl}>Minutes</a>
             </div>
             <div className="fcol">
               <span className="fcol-k">Company</span>

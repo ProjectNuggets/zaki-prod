@@ -53,8 +53,8 @@ const features = [
     icon: Layers,
     title: { en: "Public, gated, waitlist", ar: "عام، مقيد، انتظار" },
     description: {
-      en: "Agent, Chat, and Brain are public. Learn and Career stay gated. Design stays waitlist until the service is proven.",
-      ar: "Agent وChat وBrain عامة. Learn وCareer مقيدة. Design قائمة انتظار حتى تثبت الخدمة.",
+      en: "The four visible spokes are Agent, Chat/Spaces, Design, and Minutes. Brain remains the Agent memory view.",
+      ar: "المسارات الأربعة المرئية هي Agent وChat/Spaces وDesign وMinutes. يبقى Brain عرض ذاكرة Agent.",
     },
     stat: { en: "No false availability", ar: "لا توفر مزيف" },
   },

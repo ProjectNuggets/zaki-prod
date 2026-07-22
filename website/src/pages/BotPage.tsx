@@ -153,7 +153,7 @@ export function BotPage({ locale }: { locale: Locale }) {
                 {isArabic ? "تحديثات المنتجات القادمة" : "Future product updates"}
               </p>
               <h2 className="font-display mt-4 text-[28px] font-extrabold tracking-[-0.04em] text-zk-text md:text-[34px]">
-                {isArabic ? "تابع Learn وDesign وHire" : "Follow Learn, Design, and Hire"}
+                {isArabic ? "تابع Design وMinutes" : "Follow Design and Minutes"}
               </h2>
               <p className="mt-3 max-w-[44ch] text-sm leading-7 text-zk-text-secondary">
                 {isArabic

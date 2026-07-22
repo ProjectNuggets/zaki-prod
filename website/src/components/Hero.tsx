@@ -7,9 +7,8 @@ const laneLabels = {
   chat: { en: "Chat", ar: "الدردشة" },
   agent: { en: "Agent", ar: "الوكيل" },
   brain: { en: "Brain", ar: "الذاكرة" },
-  learn: { en: "Learn", ar: "التعلّم" },
   design: { en: "Design", ar: "التصميم" },
-  hire: { en: "Career", ar: "Career" },
+  minutes: { en: "Minutes", ar: "المحاضر" },
 } as const;
 
 const localizedStatus = {
@@ -17,6 +16,7 @@ const localizedStatus = {
   Included: { en: "included", ar: "مشمول" },
   "Private access": { en: "private access", ar: "وصول خاص" },
   Waitlist: { en: "waitlist", ar: "انتظار" },
+  "Coming soon": { en: "coming soon", ar: "قريبًا" },
 } as const;
 
 export function Hero({ locale }: { locale: Locale }) {
@@ -63,7 +63,7 @@ export function Hero({ locale }: { locale: Locale }) {
                     <input type="hidden" name="source" value="website_home_command" />
                     <input type="hidden" name="intent" value="anonymous_command" />
                     <input type="hidden" name="product" value="spaces" />
-                    <div className="grid grid-cols-3 border-b border-zk-border md:grid-cols-6">
+                    <div className="grid grid-cols-3 border-b border-zk-border md:grid-cols-5">
                       {lanes.map((lane, index) => (
                         <button
                           key={lane.label}
@@ -125,9 +125,9 @@ export function Hero({ locale }: { locale: Locale }) {
                 </div>
                 <div className="grid gap-0">
                   {[
-                    [isArabic ? "المتاح الآن" : "Available now", isArabic ? "الدردشة و Agent و Brain" : "Chat, Agent, and Brain"],
+                    [isArabic ? "المتاح الآن" : "Available now", isArabic ? "Agent وChat/Spaces" : "Agent and Chat/Spaces"],
                     [isArabic ? "بعد تسجيل الدخول" : "After sign in", isArabic ? "الحفظ، الرفع، التصدير" : "Save, upload, export"],
-                    [isArabic ? "مسارات مقيّدة" : "Gated lanes", isArabic ? "Learn وCareer وصول خاص، Design انتظار" : "Learn and Career private access, Design waitlist"],
+                    [isArabic ? "المسارات الأربعة" : "Four spokes", isArabic ? "Agent وChat/Spaces وDesign وMinutes" : "Agent, Chat/Spaces, Design, Minutes"],
                   ].map(([label, value]) => (
                     <div key={label} className="grid grid-cols-[24px_1fr] gap-3 border-b border-zk-border px-4 py-4 md:px-5">
                       <CircleDot className="mt-0.5 size-3.5 text-zk-accent" strokeWidth={1.5} />

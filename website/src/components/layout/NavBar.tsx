@@ -109,7 +109,7 @@ export function NavBar({ locale }: { locale: Locale }) {
 
           <Link
             to={getLocaleSwitchPath(location.pathname, isArabic ? "en" : "ar")}
-            className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-zk-text-tertiary transition-colors hover:text-zk-text"
+            className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-zk-text-secondary transition-colors hover:text-zk-text"
           >
             {isArabic ? "EN" : "عربي"}
           </Link>
@@ -127,7 +127,7 @@ export function NavBar({ locale }: { locale: Locale }) {
         <div className="flex items-center gap-2 md:hidden">
           <Link
             to={getLocaleSwitchPath(location.pathname, isArabic ? "en" : "ar")}
-            className="text-[10px] uppercase tracking-[0.16em] text-zk-text-tertiary transition-colors hover:text-zk-text"
+            className="text-[10px] uppercase tracking-[0.16em] text-zk-text-secondary transition-colors hover:text-zk-text"
           >
             {isArabic ? "EN" : "عربي"}
           </Link>

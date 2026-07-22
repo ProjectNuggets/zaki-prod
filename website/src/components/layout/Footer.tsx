@@ -23,14 +23,16 @@ export function Footer({ locale }: { locale: Locale }) {
 
         {/* Product */}
         <div>
-          <p className="font-mono-ui text-[11px] uppercase tracking-[0.24em] text-zk-text-tertiary">
+          <p className="font-mono-ui text-[11px] uppercase tracking-[0.24em] text-zk-text-secondary">
             {isArabic ? "المنتج" : "Product"}
           </p>
           <div className="mt-4 flex flex-col gap-2.5 text-sm text-zk-text-secondary">
             <Link to={isArabic ? "/ar/product/" : "/product/"} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "نظرة المنتج" : "Product overview"}</Link>
             <a href={productHandoffUrl("chat")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "ZAKI Chat" : "ZAKI Chat"}</a>
             <a href={productHandoffUrl("agent")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "زكي Agent" : "ZAKI Agent"}</a>
-            <a href={productHandoffUrl("brain")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "ZAKI Brain" : "ZAKI Brain"}</a>
+            <a href={productHandoffUrl("design")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">ZAKI Design</a>
+            <a href={productHandoffUrl("minutes")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">ZAKI Minutes</a>
+            <a href={productHandoffUrl("brain")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "Brain · ذاكرة Agent" : "Brain · Agent memory"}</a>
             <a href={appHandoffUrl("/settings", "website_footer", "dashboard")} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "Settings" : "Settings"}</a>
             <Link to={isArabic ? "/ar/pricing/" : "/pricing/"} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "الأسعار" : "Pricing"}</Link>
             <Link to={isArabic ? "/ar/story/" : "/story/"} className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">{isArabic ? "لماذا زكي" : "Why ZAKI"}</Link>
@@ -40,7 +42,7 @@ export function Footer({ locale }: { locale: Locale }) {
 
         {/* Website */}
         <div>
-          <p className="font-mono-ui text-[11px] uppercase tracking-[0.24em] text-zk-text-tertiary">
+          <p className="font-mono-ui text-[11px] uppercase tracking-[0.24em] text-zk-text-secondary">
             {isArabic ? "الموقع" : "Website"}
           </p>
           <div className="mt-4 flex flex-col gap-2.5 text-sm text-zk-text-secondary">
@@ -53,7 +55,7 @@ export function Footer({ locale }: { locale: Locale }) {
 
         {/* Legal */}
         <div>
-          <p className="font-mono-ui text-[11px] uppercase tracking-[0.24em] text-zk-text-tertiary">
+          <p className="font-mono-ui text-[11px] uppercase tracking-[0.24em] text-zk-text-secondary">
             {isArabic ? "القانون" : "Legal"}
           </p>
           <div className="mt-4 flex flex-col gap-2.5 text-sm text-zk-text-secondary">
@@ -66,7 +68,7 @@ export function Footer({ locale }: { locale: Locale }) {
 
       {/* Bottom bar */}
       <div className="mx-auto max-w-6xl border-t border-zk-border px-5 py-5 md:px-8">
-        <p className="text-xs text-zk-text-tertiary">
+        <p className="text-xs text-zk-text-secondary">
           © {new Date().getFullYear()}{" "}
           <a href="https://www.novanuggets.com" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-zk-text hover:underline decoration-zk-border-strong underline-offset-4">Nova Nuggets</a>.{" "}
           {isArabic ? "جميع الحقوق محفوظة." : "All rights reserved."}
