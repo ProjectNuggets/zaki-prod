@@ -1,0 +1,412 @@
+import { getContent, type Locale } from "./content";
+import {
+  getAlternatesForRoute,
+  getRouteDefinition,
+  resolveRenderablePath,
+} from "./routeRegistry";
+import {
+  getContactContent,
+  getLegalContent,
+} from "./routeContent";
+import { getWebsiteRuntimeConfig } from "./runtimeConfig";
+
+export const SITE_URL = getWebsiteRuntimeConfig().siteUrl;
+export const APP_URL = getWebsiteRuntimeConfig().appBaseUrl;
+export const DEFAULT_OG_IMAGE = `${SITE_URL}/zaki/assets/og-cover.png`;
+export const SEO_UPDATED_AT = "2026-06-17T00:00:00Z";
+
+export type RouteSeo = {
+  title: string;
+  description: string;
+  canonical: string;
+  lang: Locale;
+  dir: "ltr" | "rtl";
+  imageAlt: string;
+  localeTag: string;
+  altLocaleTag: string;
+  keywords: string;
+  schema: unknown[];
+  alternates: Record<string, string>;
+  updatedAt: string;
+};
+
+function buildFaqSchema(locale: Locale) {
+  const t = getContent(locale);
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: t.faq.items.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: item.answer,
+      },
+    })),
+  };
+}
+
+function buildCommonSchema(locale: Locale, description: string) {
+  return [
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "ZAKI AI",
+      url: SITE_URL,
+      inLanguage: locale,
+      description,
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: "Nova Nuggets",
+      url: "https://www.novanuggets.com",
+      logo: `${SITE_URL}/favicon.svg`,
+      sameAs: ["https://instagram.com/chatzaki.ai"],
+    },
+  ];
+}
+
+function toAbsoluteUrl(pathname: string) {
+  if (pathname === "/") return `${SITE_URL}/`;
+  return `${SITE_URL}${pathname.endsWith("/") ? pathname.slice(0, -1) : pathname}/`;
+}
+
+function buildAlternates(pathname: string) {
+  const route = getRouteDefinition(pathname);
+  if (!route) {
+    return {
+      en: `${SITE_URL}/`,
+      ar: `${SITE_URL}/ar/`,
+      "x-default": `${SITE_URL}/`,
+    };
+  }
+
+  return Object.fromEntries(
+    Object.entries(getAlternatesForRoute(route)).map(([hreflang, href]) => [
+      hreflang,
+      toAbsoluteUrl(href),
+    ])
+  );
+}
+
+function buildWebPageSchema(name: string, url: string, locale: Locale, description: string) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name,
+    url,
+    inLanguage: locale,
+    description,
+  };
+}
+
+export function getRouteSeo(pathname: string): RouteSeo {
+  const route = resolveRenderablePath(pathname);
+  const routeDefinition = getRouteDefinition(route);
+  const locale: Locale = routeDefinition?.locale ?? (route.startsWith("/ar") ? "ar" : "en");
+  const dir = locale === "ar" ? "rtl" : "ltr";
+  const alternates = buildAlternates(route);
+  const faqSchema = buildFaqSchema(locale);
+  const localeTag = locale === "ar" ? "ar_AR" : "en_US";
+  const altLocaleTag =
+    routeDefinition?.requiresAlternates && locale === "ar"
+      ? "en_US"
+      : routeDefinition?.requiresAlternates
+        ? "ar_AR"
+        : localeTag;
+
+  if (route === "/agent/") {
+    const description = "ZAKI Agent delegates the whole task — it plans, acts, and follows through. Funny, loyal, and it never sends without you.";
+    return {
+      title: "ZAKI Agent — Never build alone.",
+      description,
+      canonical: `${SITE_URL}/agent/`,
+      lang: "en",
+      dir: "ltr",
+      imageAlt: "ZAKI Agent in action",
+      localeTag: "en_US",
+      altLocaleTag: "en_US",
+      keywords: "ZAKI Agent, AI agent, task automation, personal AI assistant",
+      schema: [...buildCommonSchema("en", description)],
+      alternates: { en: `${SITE_URL}/agent/`, "x-default": `${SITE_URL}/agent/` },
+      updatedAt: SEO_UPDATED_AT,
+    };
+  }
+
+  if (route === "/spaces/") {
+    const description = "ZAKI Spaces keeps every project in its own world — its own threads, docs, and memory. One mind across all of them, and it never mixes them up.";
+    return {
+      title: "ZAKI Spaces — Many worlds. One mind. Zero mix-ups.",
+      description,
+      canonical: `${SITE_URL}/spaces/`,
+      lang: "en",
+      dir: "ltr",
+      imageAlt: "ZAKI Spaces context isolation",
+      localeTag: "en_US",
+      altLocaleTag: "en_US",
+      keywords: "ZAKI Spaces, AI workspace, context isolation, shared AI",
+      schema: [...buildCommonSchema("en", description)],
+      alternates: { en: `${SITE_URL}/spaces/`, "x-default": `${SITE_URL}/spaces/` },
+      updatedAt: SEO_UPDATED_AT,
+    };
+  }
+
+  if (route === "/product/" || route === "/ar/product/") {
+    const description =
+      locale === "ar"
+        ? "المسارات الأربعة المرئية في زكي: Agent وChat/Spaces وDesign وMinutes، مع بقاء Brain عرض ذاكرة Agent."
+        : "ZAKI is an intelligence layer for people building their next chapter: Agent acts, Spaces keep work focused, and Brain remembers what matters.";
+    return {
+      title:
+        locale === "ar"
+          ? "منتج زكي | Chat وAgent وBrain"
+          : "ZAKI Product — One login. One memory. Every surface.",
+      description,
+      canonical: locale === "ar" ? `${SITE_URL}/ar/product/` : `${SITE_URL}/product/`,
+      lang: locale,
+      dir,
+      imageAlt: locale === "ar" ? "صفحة منتج زكي" : "ZAKI product page",
+      localeTag,
+      altLocaleTag,
+      keywords:
+        locale === "ar"
+          ? "زكي, منتج زكي, ZAKI Agent, ZAKI Brain, Chat"
+          : "ZAKI product, ZAKI Agent, ZAKI Brain, AI Chat, persistent intelligence",
+      schema: [
+        ...buildCommonSchema(locale, description),
+        {
+          "@context": "https://schema.org",
+          "@type": "WebPage",
+          name: "ZAKI Product",
+          url: locale === "ar" ? `${SITE_URL}/ar/product/` : `${SITE_URL}/product/`,
+          inLanguage: locale,
+          description,
+        },
+        faqSchema,
+      ],
+      alternates,
+      updatedAt: SEO_UPDATED_AT,
+    };
+  }
+
+  if (
+    route === "/pricing/" ||
+    route === "/ar/pricing/" ||
+    route === "/use-cases/" ||
+    route === "/ar/use-cases/"
+  ) {
+    const isPricing = route.includes("/pricing/");
+    const title = isPricing
+      ? locale === "ar"
+        ? "أسعار زكي | ابدأ مجانًا"
+        : "ZAKI Pricing | Start Free"
+        : locale === "ar"
+        ? "استخدامات زكي | Chat وAgent وBrain"
+        : "ZAKI Use Cases — Less overhead. More momentum.";
+    const description = isPricing
+      ? locale === "ar"
+        ? "ابدأ من Chat مجانًا، واستخدم Agent وBrain للاستمرارية والذاكرة عندما يحتاج العمل إلى حساب."
+        : "ZAKI pricing: Free, Personal $15, Pro $45, Pro Max $99. Start free and upgrade for more room, deeper memory, and priority."
+      : locale === "ar"
+        ? "استخدم زكي عبر Agent وChat/Spaces، وتابع Design وMinutes عبر بواباتهما، مع بقاء Brain عرض ذاكرة Agent."
+        : "How founders, adventurers, and operators use ZAKI: an agent that acts, spaces for focused work, and a memory that carries context forward.";
+    const pricingTitle =
+      locale === "ar" ? "أسعار زكي | ابدأ مجانًا" : "ZAKI Pricing — Free, Personal, Pro, and Pro Max";
+    const canonical = toAbsoluteUrl(route);
+    return {
+      title: isPricing ? pricingTitle : title,
+      description,
+      canonical,
+      lang: locale,
+      dir,
+      imageAlt: title,
+      localeTag,
+      altLocaleTag,
+      keywords: isPricing
+        ? "ZAKI pricing, AI chat pricing, ZAKI Agent pricing"
+        : "ZAKI use cases, AI assistant use cases, bilingual AI work",
+      schema: [
+        ...buildCommonSchema(locale, description),
+        buildWebPageSchema(title, canonical, locale, description),
+      ],
+      alternates,
+      updatedAt: SEO_UPDATED_AT,
+    };
+  }
+
+  if (route === "/faq/" || route === "/ar/faq/") {
+    const description =
+      locale === "ar"
+        ? "اعرف ما يتضمنه زكي V1: Chat وAgent وBrain والتحكم في الذاكرة والأسعار والخصوصية والأسطح القادمة."
+        : "See what ZAKI includes: Agent, Chat/Spaces, Design, Minutes, the Agent Brain view, and what's live versus coming.";
+    return {
+      title:
+        locale === "ar"
+          ? "الأسئلة الشائعة | زكي وSpaces"
+          : "ZAKI FAQ | Chat, Agent, and Personal AI",
+      description,
+      canonical: locale === "ar" ? `${SITE_URL}/ar/faq/` : `${SITE_URL}/faq/`,
+      lang: locale,
+      dir,
+      imageAlt: locale === "ar" ? "صفحة الأسئلة الشائعة لزكي" : "ZAKI FAQ page",
+      localeTag,
+      altLocaleTag,
+      keywords:
+        locale === "ar"
+          ? "الأسئلة الشائعة, زكي, Spaces, تحديثات زكي"
+          : "ZAKI FAQ, Spaces, ZAKI Agent, Personal AI FAQ",
+      schema: [...buildCommonSchema(locale, description), faqSchema],
+      alternates,
+      updatedAt: SEO_UPDATED_AT,
+    };
+  }
+
+  if (route === "/story/" || route === "/ar/story/") {
+    const description =
+      locale === "ar"
+        ? "لماذا يوجد زكي: كيف يجمع بين Spaces كمساحات عمل منظّمة وبين زكي كوكيل ذكاء شخصي مستمر يتشكل علنًا."
+        : "How ZAKI was designed — by a council of AI agents debating what a personal intelligence owes you: memory that lasts, judgment that thinks twice, and a promise to never leave you building alone.";
+    const canonical = toAbsoluteUrl(route);
+    return {
+      title:
+        locale === "ar"
+          ? "لماذا زكي | ZAKI · ذكاء عربي أولًا"
+          : "ZAKI Story — Designed by agents. Built to remember.",
+      description,
+      canonical,
+      lang: locale,
+      dir,
+      imageAlt: locale === "ar" ? "صفحة حكاية زكي" : "ZAKI story page",
+      localeTag,
+      altLocaleTag,
+      keywords:
+        locale === "ar"
+          ? "حكاية زكي, قصة زكي, ذكاء عربي, ZAKI story"
+          : "ZAKI story, why ZAKI, AI memory architecture, designed by agents, Arabic-first AI",
+      schema: [
+        ...buildCommonSchema(locale, description),
+        buildWebPageSchema("ZAKI Story", canonical, locale, description),
+      ],
+      alternates,
+      updatedAt: SEO_UPDATED_AT,
+    };
+  }
+
+  if (route === "/contact/" || route === "/ar/contact/") {
+    const content = getContactContent(locale);
+    const canonical = toAbsoluteUrl(route);
+    return {
+      title: content.seo.title,
+      description: content.seo.description,
+      canonical,
+      lang: locale,
+      dir,
+      imageAlt: content.seo.imageAlt,
+      localeTag,
+      altLocaleTag,
+      keywords: content.seo.keywords,
+      schema: [
+        ...buildCommonSchema(locale, content.seo.description),
+        buildWebPageSchema(content.title, canonical, locale, content.seo.description),
+      ],
+      alternates,
+      updatedAt: SEO_UPDATED_AT,
+    };
+  }
+
+  if (
+    route === "/privacy/" ||
+    route === "/ar/privacy/" ||
+    route === "/terms/" ||
+    route === "/ar/terms/" ||
+    route === "/compliance/" ||
+    route === "/ar/compliance/"
+  ) {
+    const legalKey =
+      route.includes("/privacy/")
+        ? "privacy"
+        : route.includes("/terms/")
+          ? "terms"
+          : "compliance";
+    const content = getLegalContent(legalKey, locale);
+    const canonical = toAbsoluteUrl(route);
+    return {
+      title: content.seo.title,
+      description: content.seo.description,
+      canonical,
+      lang: locale,
+      dir,
+      imageAlt: content.seo.imageAlt,
+      localeTag,
+      altLocaleTag,
+      keywords: content.seo.keywords,
+      schema: [
+        ...buildCommonSchema(locale, content.seo.description),
+        buildWebPageSchema(content.title, canonical, locale, content.seo.description),
+      ],
+      alternates,
+      updatedAt: SEO_UPDATED_AT,
+    };
+  }
+
+  const description =
+    locale === "ar"
+      ? "زكي هو وكيل ذكاء شخصي بذاكرة مستمرة، أتمتة مجدولة، وثلاثة أوضاع تختار النموذج المناسب لمهمتك تلقائيًا. ابدأ مجانًا."
+      : "ZAKI is the intelligence layer for your next chapter: one login for an agent that acts, spaces for focused work, and a memory you own.";
+
+  return {
+    title:
+      locale === "ar"
+        ? "زكي | مساعد شخصي ذكي ومشغّل سلس"
+        : "ZAKI — Never build alone",
+    description,
+    canonical: locale === "ar" ? `${SITE_URL}/ar/` : `${SITE_URL}/`,
+    lang: locale,
+    dir,
+    imageAlt: locale === "ar" ? "واجهة زكي الرئيسية" : "ZAKI homepage experience",
+    localeTag,
+    altLocaleTag,
+      keywords:
+        locale === "ar"
+          ? "زكي, ZAKI, Spaces, مساعد شخصي ذكي, ذكاء مستمر"
+          : "ZAKI, Spaces, Personal AI Operator, smooth operator, persistent AI",
+    schema: [
+      ...buildCommonSchema(locale, description),
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        name: "ZAKI AI",
+        applicationCategory: "BusinessApplication",
+        operatingSystem: "Web",
+        inLanguage: ["en", "ar"],
+        description,
+        url: SITE_URL,
+        offers: [
+          {
+            "@type": "Offer",
+            category: "Chat",
+            price: "0",
+            priceCurrency: "USD",
+            url: `${APP_URL}/?source=website_schema&intent=dashboard`,
+          },
+          {
+            "@type": "Offer",
+            category: "Agent",
+            price: "0",
+            priceCurrency: "USD",
+            url: `${APP_URL}/?source=website_schema&intent=dashboard`,
+          },
+        ],
+        featureList: [
+          locale === "ar" ? "Spaces متاحة الآن" : "Spaces are live now",
+          locale === "ar" ? "ZAKI Agent بذاكرة واستمرارية" : "ZAKI Agent with memory and follow-through",
+          locale === "ar" ? "ذاكرة ومتابعة عبر Agent" : "account memory and follow-through",
+          locale === "ar" ? "ذاكرة وتحكم أوضح" : "Clearer memory and control",
+        ],
+      },
+    ],
+    alternates,
+    updatedAt: SEO_UPDATED_AT,
+  };
+}

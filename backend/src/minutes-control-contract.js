@@ -317,15 +317,30 @@ const BrowserConsentInput = z.strictObject({
   idempotency_key: Identifier,
 });
 
+// The browser-facing admitted-platform set MUST track the engine's
+// ZAKI_MINUTES_ADMITTED_PLATFORMS for this deployment: a Hub that accepts a
+// platform the engine's bot egress cannot safely join would reserve a prepaid
+// hold for a bot that then can't capture. Defaults to Meet-only so production
+// stays single-provider until an operator widens BOTH sets together. Read per
+// request (cheap) so a config change needs no schema rebuild.
+export function browserAdmittedPlatforms() {
+  const sealed = new Set(["google_meet", "zoom", "teams", "jitsi"]);
+  const admitted = (process.env.MINUTES_ADMITTED_PLATFORMS || "google_meet")
+    .split(",")
+    .map((token) => token.trim().toLowerCase())
+    .filter((token) => sealed.has(token));
+  return admitted.length ? new Set(admitted) : new Set(["google_meet"]);
+}
+
 const BrowserCaptureInput = z.strictObject({
-  // Staging launches a single provider only. The runtime's egress policy is
-  // intentionally Google-Meet-specific, so accepting another platform here
-  // would reserve a hold for a bot that cannot safely join it.
-  platform: z.literal("google_meet"),
+  platform: z.enum(["google_meet", "zoom", "teams", "jitsi"]),
   meeting_url: z.string().url().max(2_048).regex(/^https:\/\//),
   visible_bot_attested: z.literal(true),
   idempotency_key: Identifier,
 }).superRefine((value, context) => {
+  if (!browserAdmittedPlatforms().has(value.platform)) {
+    context.addIssue({ code: "custom", message: "platform is not admitted by this deployment", path: ["platform"] });
+  }
   if (!meetingUrlMatchesPlatform(value.platform, value.meeting_url)) {
     context.addIssue({ code: "custom", message: "meeting URL must match the declared platform", path: ["meeting_url"] });
   }

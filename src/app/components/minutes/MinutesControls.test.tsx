@@ -98,10 +98,12 @@ describe("MinutesControls", () => {
     }));
     expect(await screen.findByRole("heading", { name: "Request a visible bot" })).toBeInTheDocument();
     expect(screen.getByText(/ZAKI Notetaker must be visibly present/)).toBeInTheDocument();
-    expect(screen.getByText("Google Meet")).toBeInTheDocument();
+    // Platform is detected from the link, not a picker — before a URL is typed it reads "From the link".
+    expect(screen.getByText("From the link")).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Platform" })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Meeting URL"), { target: { value: "https://meet.google.com/abc-defg-hij" } });
+    expect(screen.getByText("Google Meet")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("checkbox", { name: "I confirm the bot will be visible and attendees will be told before capture starts." }));
     fireEvent.click(screen.getByRole("button", { name: "Request capture" }));
 
@@ -113,6 +115,30 @@ describe("MinutesControls", () => {
       idempotencyKey: expect.stringMatching(/^minutes-capture-/),
     }));
     expect(await screen.findByText("Capture requested")).toBeInTheDocument();
+  });
+
+  test("detects Microsoft Teams from the pasted link and sends platform=teams", async () => {
+    renderControls();
+    expect(await screen.findByRole("heading", { name: "Minutes controls" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Allow ZAKI Minutes to request a visible capture bot." }));
+    fireEvent.click(screen.getByRole("button", { name: "Save consent" }));
+    expect(await screen.findByRole("heading", { name: "Request a visible bot" })).toBeInTheDocument();
+
+    // An unrecognized link blocks the request; a Teams link is detected and sent as teams.
+    fireEvent.change(screen.getByLabelText("Meeting URL"), { target: { value: "https://example.com/not-a-meeting" } });
+    expect(screen.getByText("Paste a Google Meet or Microsoft Teams meeting link.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Request capture" })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Meeting URL"), { target: { value: "https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0" } });
+    expect(screen.getByText("Microsoft Teams")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "I confirm the bot will be visible and attendees will be told before capture starts." }));
+    fireEvent.click(screen.getByRole("button", { name: "Request capture" }));
+
+    await waitFor(() => expect(mockCapture).toHaveBeenCalled());
+    expect(mockCapture.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
+      platform: "teams",
+      meetingUrl: "https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0",
+    }));
   });
 
   test("hides the capture form after a saved consent disables capture", async () => {

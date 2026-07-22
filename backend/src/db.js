@@ -1477,6 +1477,18 @@ export async function initDb() {
     failClosedMinutesControlSchema("control-state", err);
   }
 
+  // WP-M10 calendar auto-join connection store (dark until the poller ships).
+  // Holds one row per user with an AES-256-GCM-encrypted Google refresh token —
+  // no calendar content, no meeting content. Independent of the control gate.
+  try {
+    const { MINUTES_CALENDAR_CONNECTIONS_DDL } = await import("./minutes-calendar-store.js");
+    await migrationClient.query(MINUTES_CALENDAR_CONNECTIONS_DDL);
+    console.log("[DB] Minutes calendar connection store ready");
+  } catch (err) {
+    console.warn("[DB] Minutes calendar connection table creation failed:", err.message);
+    failClosedMinutesControlSchema("calendar-store", err);
+  }
+
   // --- V1 beta cutover audit + reversible workspace archive registry ---
   // Dynamic import keeps this DDL colocated with the service while avoiding import cycles.
   try {

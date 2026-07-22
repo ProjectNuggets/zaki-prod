@@ -1,0 +1,3681 @@
+/* Nova Nuggets mascot — living guide */
+
+:root {
+  /* motion tokens — the house signature */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-inout: cubic-bezier(0.76, 0, 0.24, 1);
+  --dur-1: 0.2s;
+  --dur-2: 0.34s;
+  --dur-3: 0.5s;
+  --dur-4: 0.7s;
+}
+
+.cs-ai-mascot {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 2147483200;
+  width: 118px;
+  height: 118px;
+  pointer-events: none;
+  transform: translate3d(var(--cs-mx, 72vw), var(--cs-my, 28vh), 0) scale(calc(var(--cs-mscale, 1) * var(--cs-msqx, 1)), calc(var(--cs-mscale, 1) * var(--cs-msqy, 1)));
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  --bubble-bg: rgba(14, 14, 12, 0.97);
+  --bubble-fg: #ffffff;
+  --bubble-border: rgba(255, 255, 255, 0.22);
+}
+
+.cs-ai-mascot.is-ready {
+  opacity: 1;
+}
+
+/* During the welcome screen, ZAKI's particle portrait is the primary face.
+   The red device returns after entry as a spawned agent, not the brand mascot. */
+.cs-guide-locked .cs-ai-mascot {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Product evidence and reading-led sections carry their own product signal.
+   The companion fades out there instead of competing with names, controls, or copy. */
+.cs-ai-mascot.is-product-evidence {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.cs-ai-mascot.is-presentation-quiet {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.cs-ai-mascot.is-product-evidence .cs-ai-mascot__bubble,
+.cs-ai-mascot.is-presentation-quiet .cs-ai-mascot__bubble {
+  opacity: 0 !important;
+  animation: none !important;
+}
+
+.cs-current-outcome {
+  font-family: "Geist Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  opacity: 0.72;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .cs-current-outcome {
+    max-width: 12ch;
+    font-size: 10px;
+    line-height: 1.35;
+    text-align: right;
+    white-space: normal;
+  }
+}
+
+.cs-ai-mascot canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.cs-ai-mascot[data-tone="light"] {
+  --bubble-bg: rgba(253, 251, 242, 0.97);
+  --bubble-fg: var(--ink, #0e0e0c);
+  --bubble-border: rgba(14, 14, 12, 0.24);
+}
+
+/* ---------- speech bubble ---------- */
+
+.cs-ai-mascot__bubble {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  min-width: 150px;
+  max-width: 250px;
+  padding: 11px 14px;
+  border: 1px solid var(--bubble-border);
+  border-radius: 10px;
+  background: var(--bubble-bg);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.22);
+  color: var(--bubble-fg);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+  transform: translate(calc(-50% + var(--cs-bx, 0px)), 8px) scale(calc(0.96 / var(--cs-mscale, 1)));
+  opacity: 0;
+  transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
+}
+
+.cs-ai-mascot__bubble::after {
+  position: absolute;
+  /* the bubble may slide sideways (--cs-bx) to stay on-screen; the tail
+     compensates so it keeps pointing at the mascot */
+  left: clamp(12px, calc(50% - var(--cs-bx, 0px)), calc(100% - 12px));
+  top: 100%;
+  width: 12px;
+  height: 12px;
+  border-right: 1px solid var(--bubble-border);
+  border-bottom: 1px solid var(--bubble-border);
+  background: var(--bubble-bg);
+  content: "";
+  transform: translate(-50%, -6px) rotate(45deg);
+}
+
+/* flip below when the mascot hugs the top edge */
+.cs-ai-mascot.bubble-low .cs-ai-mascot__bubble {
+  bottom: auto;
+  top: calc(100% + 8px);
+}
+
+.cs-ai-mascot.bubble-low .cs-ai-mascot__bubble::after {
+  top: auto;
+  bottom: 100%;
+  transform: translate(-50%, 6px) rotate(225deg);
+}
+
+.cs-ai-mascot__bubble.is-leaving {
+  animation: cs-bubble-despop 0.18s var(--ease-out) forwards;
+}
+
+@keyframes cs-bubble-despop {
+  to {
+    opacity: 0;
+    transform: translateX(calc(-50% + var(--cs-bx, 0px))) scale(calc(0.85 / var(--cs-mscale, 1)));
+  }
+}
+
+.cs-ai-mascot.has-bubble .cs-ai-mascot__bubble {
+  opacity: 1;
+  transform: translate(calc(-50% + var(--cs-bx, 0px)), 0) scale(calc(1 / var(--cs-mscale, 1)));
+  transform-origin: 50% 100%;
+  animation: cs-bubble-pop 0.34s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cs-ai-mascot__bubble span {
+  display: inline-block;
+  /* base state is VISIBLE — the keyframe's `from` (via fill-mode both)
+     hides it during the stagger. If the animation ever stalls (busy main
+     thread, throttled tab, iOS quirks) the words still show instead of
+     leaving an empty black bubble. */
+  animation: cs-bubble-word 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--i) * 30ms + 50ms);
+}
+
+/* ---------- gate ---------- */
+
+.cs-guide-locked,
+.cs-guide-locked body {
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
+}
+
+.cs-guide-locked body {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100% !important;
+}
+
+.cs-ai-guiding,
+.cs-ai-guiding body {
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
+  touch-action: none !important;
+}
+
+.cs-guide-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 2147482800;
+  touch-action: manipulation;
+  display: grid;
+  place-items: stretch;
+  padding: clamp(64px, 9vh, 92px) 20px clamp(88px, 13vh, 130px);
+  background: var(--bg, var(--accent, #fff48d));
+  color: var(--ink, #0e0e0c);
+  transition: opacity 0.55s ease, transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cs-guide-gate.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-14px);
+}
+
+/* mobile exit: the avatar's ink body lunges forward as a circle that swallows
+   the screen, then drops like a curtain to unveil the home top-to-bottom */
+.cs-swallow-veil {
+  position: fixed;
+  z-index: 2147483199; /* just under the mascot, above everything else */
+  border-radius: 50%;
+  background: var(--ink, #0e0e0c);
+  transform: scale(0.04);
+  pointer-events: none;
+  transition: transform 0.55s cubic-bezier(0.6, 0.05, 0.85, 0.4);
+  will-change: transform;
+}
+
+.cs-swallow-veil.is-full {
+  transform: scale(1);
+}
+
+.cs-swallow-veil.is-leaving {
+  transition: transform 0.68s cubic-bezier(0.72, 0, 0.26, 1);
+  transform: scale(1) translateY(108%);
+}
+
+/* Echo: the flood contracts back into the avatar (sonar returning) */
+.cs-swallow-veil.is-iris {
+  transition: transform 0.58s cubic-bezier(0.65, 0, 0.75, 0.5);
+  transform: scale(0.02);
+}
+
+.cs-echo-ring {
+  position: fixed;
+  z-index: 2147483198;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border: 3px solid var(--ink, #0e0e0c);
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0.9;
+  transition: transform 0.85s cubic-bezier(0.2, 0.6, 0.3, 1), opacity 0.85s ease;
+}
+
+.cs-echo-ring.is-out {
+  transform: scale(170);
+  opacity: 0;
+}
+
+/* Vortex: multi-arm whirlpool spins in (solid core, trailing arms), snaps
+   solid once it covers, then unwinds back off revealing the home */
+.cs-veil--spin {
+  background:
+    radial-gradient(circle at 50% 50%, var(--ink, #0e0e0c) 0 20%, transparent 58%),
+    repeating-conic-gradient(var(--ink, #0e0e0c) 0deg 46deg, rgba(var(--ink-rgb, 14, 14, 12), 0.38) 46deg 120deg);
+  transform: scale(0.04) rotate(-900deg);
+}
+
+.cs-veil--spin.is-full {
+  transform: scale(1) rotate(0deg);
+  background: var(--ink, #0e0e0c);
+  transition: transform 0.72s cubic-bezier(0.5, 0.08, 0.65, 0.35), background 0s linear 0.62s;
+}
+
+.cs-veil--spin.is-unwind {
+  background:
+    radial-gradient(circle at 50% 50%, var(--ink, #0e0e0c) 0 20%, transparent 58%),
+    repeating-conic-gradient(var(--ink, #0e0e0c) 0deg 46deg, rgba(var(--ink-rgb, 14, 14, 12), 0.38) 46deg 120deg);
+  transition: transform 0.78s cubic-bezier(0.55, 0, 0.75, 0.4), background 0s linear;
+  transform: scale(0.03) rotate(900deg);
+}
+
+/* Puff: fog — blurred, oversized, sinks away */
+.cs-veil--fog {
+  filter: blur(22px);
+  transition: transform 0.75s cubic-bezier(0.25, 0.6, 0.3, 1);
+}
+
+.cs-veil--fog.is-full {
+  transform: scale(1.22);
+}
+
+.cs-veil--fog.is-sink {
+  transition: transform 0.85s cubic-bezier(0.6, 0.05, 0.5, 1), filter 0.85s ease;
+  transform: scale(1.22) translateY(115%);
+  filter: blur(38px);
+}
+
+/* Halo: flattened ring closes over, sweeps off like an eclipse shadow */
+.cs-veil--halo {
+  transform: scale(0.05) scaleY(0.5) rotate(-16deg);
+  transition: transform 0.62s cubic-bezier(0.55, 0.1, 0.7, 0.4);
+}
+
+.cs-veil--halo.is-full {
+  transform: scale(1.15) scaleY(1) rotate(-8deg);
+}
+
+.cs-veil--halo.is-sweep {
+  transition: transform 0.8s cubic-bezier(0.6, 0, 0.35, 1);
+  transform: translate(-135%, -14%) scale(1.15) rotate(-10deg);
+}
+
+/* Fuzz: full-screen canvas of accumulating static that falls like sand */
+.cs-noise-veil {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2147483199;
+  pointer-events: none;
+}
+
+.cs-noise-veil.is-leaving {
+  transition: transform 0.72s cubic-bezier(0.7, 0, 0.4, 1);
+  transform: translateY(103%);
+}
+
+/* Bit: pixel grid powers on, scanlines off */
+.cs-pix-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483199;
+  display: grid;
+  pointer-events: none;
+}
+
+.cs-pix-veil i {
+  background: var(--ink, #0e0e0c);
+  opacity: 0;
+  transition: opacity 0.12s steps(2, end);
+}
+
+.cs-pix-veil.is-on i {
+  opacity: 1;
+}
+
+.cs-pix-veil.is-off i {
+  opacity: 0;
+}
+
+/* Spike: shutter blades slam in and reopen */
+.cs-blade-veil {
+  position: fixed;
+  inset: -12% -10%;
+  z-index: 2147483199;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.cs-blade-veil i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--ink, #0e0e0c);
+  transition: transform 0.4s cubic-bezier(0.6, 0.05, 0.8, 0.4);
+}
+
+.cs-guide-choice {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+  gap: 10px;
+  text-align: center;
+}
+
+.cs-guide-choice__eyebrow {
+  margin: 0;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+/* The main stage belongs to ZAKI. Its silhouette is built by the same live
+   particle engine used in the landing hero, with a static fallback below it. */
+.cs-guide-stage {
+  position: relative;
+  flex: 0 0 auto;
+  width: 100%;
+  height: clamp(285px, 39vh, 440px);
+  margin-top: clamp(18px, 4vh, 44px);
+  display: grid;
+  place-items: center;
+}
+
+.cs-guide-face {
+  position: relative;
+  width: min(450px, 85vw);
+  height: 100%;
+  max-height: 420px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.cs-guide-face canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 1;
+}
+
+.cs-guide-face__fallback {
+  position: absolute;
+  inset: 5%;
+  width: 90%;
+  height: 90%;
+  object-fit: contain;
+  filter: brightness(0) contrast(1.08);
+  opacity: 0.16;
+  transition: opacity 0.35s ease;
+}
+
+.cs-guide-face.is-live .cs-guide-face__fallback {
+  opacity: 0;
+}
+
+/* the driver's name, right under it — the character-select label */
+.cs-guide-stage__name {
+  margin: 0;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: clamp(20px, 2.4vh, 26px);
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  text-indent: 0.34em;
+  text-transform: uppercase;
+  color: var(--ink, #0e0e0c);
+}
+
+.cs-guide-choice__tag {
+  margin: 2px 0 0;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  opacity: 0.6;
+}
+
+.cs-guide-choice__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.cs-guide-choice__label i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink, #0e0e0c);
+  animation: cs-live-dot 1.4s ease-in-out infinite;
+}
+
+.cs-guide-choice__orb {
+  grid-area: 1 / 1;
+  width: 8px;
+  height: 8px;
+}
+
+/* theme wave: the incoming palette floods from the candidate outward */
+.cs-theme-wave {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: clip-path 0.72s cubic-bezier(0.3, 0.6, 0.3, 1), opacity 0.3s ease;
+}
+
+.cs-theme-wave.is-done {
+  opacity: 0;
+}
+
+/* the control dock: arrows + four ZAKI product drivers + the go button */
+.cs-guide-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: fit-content;
+  bottom: clamp(58px, 8vh, 76px);
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  background: var(--ink, #0e0e0c);
+  color: var(--accent, #fff48d);
+  border-radius: 100px;
+  padding: 12px 12px 12px 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  z-index: 3;
+}
+
+.cs-guide-dock__thumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.cs-guide-choice .cs-guide-dock button.cs-guide-slot {
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  min-width: 0;
+  padding: 5px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--paper, #EFE3D2);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb, 13, 11, 9), 0.16);
+  box-shadow: none;
+  opacity: 0.72;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease;
+}
+
+.cs-guide-choice .cs-guide-dock button.cs-guide-slot:hover {
+  transform: translateY(-2px);
+  opacity: 0.9;
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb, 13, 11, 9), 0.42);
+}
+
+.cs-guide-choice .cs-guide-dock button.cs-guide-slot.is-active {
+  opacity: 1;
+  transform: scale(1.08);
+  box-shadow: inset 0 0 0 2px var(--accent, #D24430), 0 0 0 3px rgba(var(--accent-rgb, 210, 68, 48), 0.18);
+}
+
+.cs-guide-choice .cs-guide-dock button.cs-guide-slot.is-active:hover {
+  transform: scale(1.08);
+}
+
+.cs-guide-choice .cs-guide-dock button.cs-guide-slot {
+  position: relative;
+  overflow: visible;
+}
+
+.cs-guide-choice .cs-guide-dock .cs-guide-slot__bot {
+  display: block;
+  width: 34px;
+  height: 40px;
+  object-fit: contain;
+  image-rendering: auto;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.22));
+}
+
+.cs-guide-choice .cs-guide-dock .cs-guide-slot__role {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Product cues stay in the same ink-and-ember language as the rest of ZAKI. */
+.cs-guide-choice .cs-guide-dock button.cs-guide-slot[data-slot="original"] .cs-guide-slot__role {
+  left: 10px;
+  top: 15px;
+  width: 28px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--ink, #0D0B09);
+  box-shadow: inset 0 1px 0 rgba(248, 242, 233, 0.22);
+}
+
+.cs-guide-choice .cs-guide-dock button.cs-guide-slot[data-slot="original"] .cs-guide-slot__role::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 2px;
+  width: 8px;
+  height: 2px;
+  background: var(--paper, #EFE3D2);
+  box-shadow: 14px 0 0 var(--paper, #EFE3D2);
+}
+
+.cs-guide-choice .cs-guide-dock button.cs-guide-slot[data-slot="anillos"] .cs-guide-slot__role {
+  right: 1px;
+  top: 2px;
+  width: 14px;
+  height: 10px;
+  border: 1.5px solid var(--ink, #0D0B09);
+  border-radius: 5px;
+  background: var(--bg, #F8F2E9);
+  box-shadow: inset 0 -2px 0 var(--accent, #D24430);
+}
+
+.cs-guide-choice .cs-guide-dock button.cs-guide-slot[data-slot="anillos"] .cs-guide-slot__role::after {
+  content: "";
+  position: absolute;
+  right: 2px;
+  bottom: -4px;
+  width: 4px;
+  height: 4px;
+  background: var(--bg, #F8F2E9);
+  border-right: 1.5px solid var(--ink, #0D0B09);
+  border-bottom: 1.5px solid var(--ink, #0D0B09);
+  transform: skewY(34deg);
+}
+
+.cs-guide-choice .cs-guide-dock button.cs-guide-slot[data-slot="orbital"] .cs-guide-slot__role {
+  right: 1px;
+  bottom: 1px;
+  width: 13px;
+  height: 16px;
+  border: 1.5px solid var(--ink, #0D0B09);
+  border-radius: 2px;
+  background: repeating-linear-gradient(to bottom, var(--bg, #F8F2E9) 0 3px, rgba(var(--ink-rgb, 13, 11, 9), 0.28) 3px 4px);
+}
+
+.cs-guide-choice .cs-guide-dock button.cs-guide-slot[data-slot="orbital"] .cs-guide-slot__role::after {
+  content: "";
+  position: absolute;
+  left: -3px;
+  top: 8px;
+  width: 17px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent, #D24430);
+  box-shadow: 0 0 0 1px var(--ink, #0D0B09);
+  transform: rotate(-38deg);
+}
+
+.cs-guide-choice .cs-guide-dock button.cs-guide-slot[data-slot="espiral"] .cs-guide-slot__role {
+  left: 5px;
+  bottom: 7px;
+  width: 27px;
+  height: 4px;
+  border-radius: 3px 1px 1px 3px;
+  background: linear-gradient(90deg, var(--ink, #0D0B09) 0 24%, var(--paper, #EFE3D2) 24% 72%, var(--accent, #D24430) 72% 100%);
+  box-shadow: 0 0 0 1px rgba(var(--ink-rgb, 13, 11, 9), 0.46);
+  transform: rotate(-42deg);
+  transform-origin: left center;
+}
+
+.cs-guide-choice .cs-guide-dock button.cs-guide-slot[data-slot="espiral"] .cs-guide-slot__role::after {
+  content: "";
+  position: absolute;
+  right: -3px;
+  top: -2px;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid var(--ink, #0D0B09);
+}
+
+.cs-guide-choice .cs-guide-dock button.cs-guide-arrow {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  min-width: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent, #fff48d);
+  color: var(--ink, #0e0e0c);
+  padding: 0 0 1px;
+}
+
+.cs-guide-choice .cs-guide-dock button.cs-guide-arrow:hover {
+  box-shadow: none;
+  transform: scale(1.1);
+}
+
+.cs-guide-choice .cs-guide-dock button.cs-guide-arrow:active {
+  transform: scale(0.92);
+}
+
+.cs-guide-dock__rule {
+  width: 1px;
+  height: 34px;
+  background: rgba(var(--accent-rgb, 255, 244, 141), 0.25);
+}
+
+.cs-guide-dock__id {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  text-align: left;
+  min-width: 92px;
+}
+
+.cs-guide-dock__id .cs-guide-choice__variant {
+  margin: 0;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.cs-guide-dock__id .cs-guide-choice__tag {
+  margin: 0;
+  font-style: normal;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  opacity: 0.55;
+}
+
+.cs-guide-choice .cs-guide-dock button.cs-guide-dock__go {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  width: auto;
+  min-width: 0;
+  border: 0;
+  border-radius: 100px;
+  padding: 14px 22px;
+  background: var(--accent-strong, #A33227);
+  color: var(--bg, #F8F2E9);
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.cs-guide-choice .cs-guide-dock button.cs-guide-dock__go:hover {
+  box-shadow: none;
+  transform: scale(1.04);
+}
+
+.cs-guide-choice .cs-guide-dock button.cs-guide-dock__game {
+  position: absolute;
+  right: 0;
+  top: -62px;
+  z-index: 4;
+}
+
+.cs-guide-choice__hint {
+  position: fixed;
+  right: clamp(18px, 3vw, 44px);
+  bottom: 28px;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.cs-guide-choice__title {
+  margin: 0;
+  font-size: clamp(2.8rem, 5.6vw, 5.2rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 0.96;
+}
+
+.cs-guide-choice__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  margin-top: 6px;
+}
+
+.cs-guide-choice button {
+  display: grid;
+  gap: 5px;
+  width: min(272px, 100%);
+  padding: 18px 22px 16px;
+  border: 2px solid var(--ink, #0e0e0c);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--ink, #0e0e0c);
+  font: inherit;
+  cursor: pointer;
+  justify-items: start;
+  text-align: left;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease, background 0.22s ease, color 0.22s ease;
+}
+
+.cs-guide-choice button:hover {
+  transform: translateY(-4px) rotate(-0.4deg);
+  box-shadow: 0 18px 44px rgba(14, 14, 12, 0.22);
+}
+
+.cs-guide-choice button[data-mode="guided"] {
+  background: var(--ink, #0e0e0c);
+  color: var(--accent, #fff48d);
+}
+
+.cs-choice-num {
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  opacity: 0.55;
+}
+
+.cs-choice-name {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.cs-choice-desc {
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  opacity: 0.66;
+}
+
+.cs-guide-choice__hint {
+  margin: 4px 0 0;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.45;
+}
+
+@keyframes cs-live-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+/* ---------- skip control ---------- */
+
+.cs-guide-skip.is-entering {
+  opacity: 0 !important;
+  transform: translateX(-50%) translateY(10px);
+}
+
+.cs-guide-skip {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: 2147483210;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 15px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(var(--ink-rgb, 14, 14, 12), 0.82);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: var(--accent, #fff48d);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transform: translateX(-50%);
+  opacity: 0.55;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.cs-guide-skip:hover {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-2px);
+}
+
+.cs-guide-skip span {
+  padding: 2px 7px;
+  border: 1px solid rgba(var(--accent-rgb, 255, 244, 141), 0.5);
+  border-radius: 5px;
+  font-size: 10px;
+}
+
+/* over a dark section the chips flip to accent-on-ink, like the mascot */
+.cs-sound-chip.is-tone-flip,
+.cs-guide-skip.is-tone-flip {
+  background: var(--accent, #fff48d);
+  color: var(--ink, #0e0e0c);
+}
+
+.cs-quote-chip.is-tone-flip {
+  background: var(--accent, #fff48d) !important;
+  color: var(--ink, #0e0e0c) !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35) !important;
+}
+
+.cs-guide-skip.is-tone-flip span {
+  border-color: rgba(var(--ink-rgb, 14, 14, 12), 0.5);
+}
+
+.cs-guide-skip.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---------- overlay fx ---------- */
+
+/* Document-coordinate layer: effects that mark content scroll WITH it */
+#cs-doc-fx {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2147483080;
+  width: 100%;
+  height: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.cs-mascot-tether {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 2147483050;
+  height: 7px;
+  margin-top: -3px;
+  /* a string of dots, not a line — it's made of the same stuff as the mascot */
+  background: radial-gradient(circle 2.1px at 5px 50%, var(--accent, #fff48d) 96%, transparent) repeat-x left center / 11px 7px;
+  filter: drop-shadow(0 0 2.5px rgba(14, 14, 12, 0.55)) drop-shadow(0 0 8px rgba(var(--accent-rgb, 255, 244, 141), 0.35));
+  mask-image: linear-gradient(90deg, #000 0%, #000 82%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 82%, transparent 100%);
+  pointer-events: none;
+  transform-origin: 0 50%;
+}
+
+.cs-impact-ring {
+  position: absolute;
+  z-index: 2147483045;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--accent, #fff48d);
+  border-radius: 50%;
+  pointer-events: none;
+  filter: drop-shadow(0 0 6px rgba(14, 14, 12, 0.4));
+  transform: translate(-50%, -50%) scale(0.35);
+  animation: cs-impact-ring 900ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.cs-impact-ring::after {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  color: var(--accent, #fff48d);
+  content: attr(data-label);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-shadow: 0 1px 6px rgba(14, 14, 12, 0.66);
+  text-transform: uppercase;
+  transform: translate(-50%, calc(-50% - 22px));
+  white-space: nowrap;
+}
+
+.cs-dot-stream {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+}
+
+.cs-dot-stream i {
+  position: fixed;
+  left: var(--sx);
+  top: var(--sy);
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  background: var(--ink, #0e0e0c);
+  transform: translate(-50%, -50%) scale(1);
+  animation: cs-dot-fly var(--duration) cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: var(--delay);
+}
+
+.cs-dot-stream.is-spit i {
+  background: var(--accent, #fff48d);
+  box-shadow: 0 0 14px rgba(var(--accent-rgb, 255, 244, 141), 0.6);
+}
+
+.cs-mascot-trail {
+  position: fixed;
+  z-index: 2147483190;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(14, 14, 12, 0.55);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  animation: cs-trail-fade 0.6s ease-out forwards;
+}
+
+.cs-mascot-trail.is-light {
+  background: rgba(var(--accent-rgb, 255, 244, 141), 0.7);
+}
+
+/* ---------- stamps / scan ---------- */
+
+.cs-guide-stamp {
+  position: absolute;
+  z-index: 2147483080;
+  padding: 7px 13px;
+  border: 2px solid var(--ink, #0e0e0c);
+  border-radius: 7px;
+  background: var(--accent, #fff48d);
+  color: var(--ink, #0e0e0c);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  pointer-events: none;
+  text-transform: uppercase;
+  transform: translate(-50%, -50%) rotate(var(--rot, -4deg));
+  animation: cs-stamp-slam 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 12px 30px rgba(14, 14, 12, 0.3);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.cs-guide-stamp.is-light {
+  border-color: var(--accent, #fff48d);
+  background: var(--ink, #0e0e0c);
+  color: var(--accent, #fff48d);
+}
+
+.cs-guide-stamp.is-leaving {
+  opacity: 0;
+  transform: translate(-50%, -60%) rotate(var(--rot, -4deg)) scale(0.9);
+}
+
+.cs-scan-beam {
+  position: absolute;
+  z-index: 2147483040;
+  width: 42px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgba(var(--accent-rgb, 255, 244, 141), 0), rgba(var(--accent-rgb, 255, 244, 141), 0.34), rgba(var(--accent-rgb, 255, 244, 141), 0));
+  pointer-events: none;
+  mix-blend-mode: difference;
+}
+
+/* ---------- FAQ shards / recycle ---------- */
+
+.cs-faq-shard-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483100;
+  pointer-events: none;
+}
+
+/* raw words of the broken question — no chrome, they ARE the text */
+.cs-faq-piece {
+  position: fixed;
+  pointer-events: none;
+  transform-origin: center;
+  white-space: nowrap;
+  will-change: transform, opacity;
+}
+
+.cs-recycle-chip {
+  position: absolute;
+  z-index: 2147483100;
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 16px;
+  border: 2px solid var(--ink, #0e0e0c);
+  border-radius: 999px;
+  background: var(--accent, #fff48d);
+  box-shadow: 0 16px 40px rgba(14, 14, 12, 0.26);
+  color: var(--ink, #0e0e0c);
+  font-size: 13px;
+  font-weight: 900;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  animation: cs-stamp-slam 0.46s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.cs-recycle-chip.is-leaving {
+  opacity: 0;
+  transform: translate(-50%, -62%) scale(0.92);
+}
+
+/* ---------- toolkit ---------- */
+
+.cs-pill-core {
+  box-shadow:
+    0 0 0 2px rgba(var(--accent-rgb, 255, 244, 141), 0.85),
+    0 0 22px rgba(var(--accent-rgb, 255, 244, 141), 0.35) !important;
+}
+
+/* ---------- contact ---------- */
+
+.cs-quote-chip {
+  position: fixed;
+  z-index: 2147483100;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 116px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--accent, #fff48d);
+  border-radius: 999px;
+  background: var(--ink, #0e0e0c);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
+  color: var(--accent, #fff48d);
+  font-size: 12px;
+  font-weight: 900;
+  pointer-events: none;
+  text-transform: uppercase;
+}
+
+.cs-cta-armed {
+  box-shadow:
+    0 0 0 2px rgba(14, 14, 12, 0.85),
+    0 0 34px rgba(14, 14, 12, 0.3) !important;
+}
+
+/* ---------- keyframes ---------- */
+
+@keyframes cs-bubble-pop {
+  0% { transform: translate(calc(-50% + var(--cs-bx, 0px)), 10px) scale(calc(0.82 / var(--cs-mscale, 1))) rotate(-1deg); }
+  62% { transform: translate(calc(-50% + var(--cs-bx, 0px)), -3px) scale(calc(1.04 / var(--cs-mscale, 1))) rotate(0.6deg); }
+  100% { transform: translate(calc(-50% + var(--cs-bx, 0px)), 0) scale(calc(1 / var(--cs-mscale, 1))) rotate(0deg); }
+}
+
+@keyframes cs-bubble-word {
+  0% { opacity: 0; transform: translateY(7px) rotate(-1deg); }
+  100% { opacity: 1; transform: translateY(0) rotate(0deg); }
+}
+
+@keyframes cs-impact-ring {
+  0% { opacity: 0.95; transform: translate(-50%, -50%) scale(0.35); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(7.4); }
+}
+
+@keyframes cs-dot-fly {
+  70% { opacity: 0.9; }
+  to {
+    left: var(--tx);
+    top: var(--ty);
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.12);
+  }
+}
+
+@keyframes cs-trail-fade {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+}
+
+@keyframes cs-stamp-slam {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--rot, -4deg)) scale(2.1);
+  }
+  62% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(var(--rot, -4deg)) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(var(--rot, -4deg)) scale(1);
+  }
+}
+
+/* ---------- responsive / a11y ---------- */
+
+@media (max-width: 760px) {
+  .cs-ai-mascot {
+    width: 78px;
+    height: 78px;
+  }
+
+  .cs-guide-choice {
+    padding: 20px;
+  }
+
+  .cs-guide-choice button {
+    flex: 1;
+  }
+
+  .cs-guide-skip {
+    bottom: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-ai-mascot,
+  .cs-ai-mascot *,
+  .cs-mascot-trail,
+  .cs-guide-stamp,
+  .cs-recycle-chip {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  Live chat — talk to the site
+ * ------------------------------------------------------------------ */
+
+.cs-ai-mascot.is-chattable {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.cs-chat-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483090;
+  background: rgba(10, 10, 8, 0.45);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.cs-chat-veil.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.cs-chat {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 2147483100;
+  width: min(600px, calc(100vw - 40px));
+  max-height: min(680px, 84vh);
+  display: flex;
+  flex-direction: column;
+  background: var(--ink, #0e0e0c);
+  border: 2px solid var(--accent, #fff48d);
+  border-radius: 20px;
+  box-shadow: 0 34px 90px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  opacity: 0;
+  transform: translate(-50%, -46%) scale(0.96);
+  pointer-events: none;
+  transition: opacity 0.24s ease, transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cs-chat.is-open {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  pointer-events: auto;
+}
+
+.cs-chat__head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  font-family: "Geist Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent, #fff48d);
+}
+
+.cs-chat__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent, #fff48d);
+  animation: cs-chat-pulse 1.8s ease-in-out infinite;
+}
+
+.cs-chat.is-busy .cs-chat__dot {
+  animation-duration: 0.5s;
+}
+
+@keyframes cs-chat-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.78); }
+}
+
+.cs-chat__title { flex: 1; }
+
+.cs-chat__close {
+  border: 0;
+  background: transparent;
+  color: var(--accent, #fff48d);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.cs-chat__log {
+  flex: 1;
+  max-height: none;
+  min-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  scrollbar-width: thin;
+}
+
+.cs-chat__msg {
+  max-width: 82%;
+  padding: 11px 15px;
+  font-size: 14.5px;
+  line-height: 1.45;
+  border-radius: 14px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.cs-chat__msg--site {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f2f0e6;
+  border-radius: 14px 14px 14px 4px;
+}
+
+.cs-chat__msg--user {
+  align-self: flex-end;
+  background: var(--accent, #fff48d);
+  color: var(--ink, #0e0e0c);
+  font-weight: 600;
+  border-radius: 14px 14px 4px 14px;
+}
+
+.cs-chat__form {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.cs-chat__input {
+  flex: 1;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 100px;
+  padding: 10px 15px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #f2f0e6;
+  outline: none;
+}
+
+.cs-chat__input:focus-visible {
+  border-color: var(--accent, #fff48d);
+}
+
+.cs-chat__send {
+  border: 0;
+  background: var(--accent, #fff48d);
+  color: var(--ink, #0e0e0c);
+  width: 40px;
+  border-radius: 50%;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cs-chat.is-busy .cs-chat__send { opacity: 0.5; }
+
+/* ---------- gate: character select ---------- */
+
+.cs-guide-choice__picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 26px;
+}
+
+.cs-guide-choice button.cs-guide-arrow {
+  width: 44px;
+  height: 44px;
+  border: 2px solid var(--ink, #0e0e0c);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink, #0e0e0c);
+  font-size: 24px;
+  line-height: 1;
+  font-family: inherit;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  justify-items: center;
+  text-align: center;
+  padding: 0 0 3px;
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), background 0.18s ease, color 0.18s ease;
+}
+
+.cs-guide-choice button.cs-guide-arrow:hover {
+  background: var(--ink, #0e0e0c);
+  color: var(--accent, #fff48d);
+  transform: scale(1.08);
+  box-shadow: none;
+}
+
+.cs-guide-choice button.cs-guide-arrow:active {
+  transform: scale(0.94);
+}
+
+.cs-guide-choice__variant {
+  margin: -14px 0 0;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+
+
+.cs-guide-choice__desc {
+  margin: -6px 0 0;
+  max-width: 560px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.55;
+}
+
+.cs-guide-choice__desc b {
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 14px;
+  letter-spacing: 0.06em;
+}
+
+.cs-guide-choice__manual {
+  position: fixed;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: fit-content;
+  bottom: 24px;
+  z-index: 3;
+  border: 0;
+  background: transparent;
+  padding: 6px 2px;
+  color: var(--ink, #0e0e0c);
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.2s ease;
+}
+
+.cs-guide-choice__manual:hover {
+  opacity: 1;
+}
+
+/* responsive gate copy: full story on desktop, one breath on phones */
+.cs-copy-brief {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .cs-copy-full {
+    display: none;
+  }
+
+  .cs-copy-brief {
+    display: inline;
+  }
+}
+
+/* gate chrome: top bar + footer stay put while the card gets eaten */
+.cs-guide-gate__bar,
+.cs-guide-gate__foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px clamp(18px, 3vw, 44px);
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0;
+  transition: opacity 0.7s ease 0.2s;
+}
+
+.cs-guide-gate.is-in .cs-guide-gate__bar,
+.cs-guide-gate.is-in .cs-guide-gate__foot {
+  opacity: 1;
+}
+
+.cs-guide-gate__bar {
+  top: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+}
+
+.cs-guide-gate__foot {
+  bottom: 0;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+.cs-guide-gate__foot span {
+  opacity: 0.6;
+}
+
+.cs-guide-gate__logo {
+  font-family: "Bricolage Grotesque", sans-serif;
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-transform: none;
+}
+
+.cs-guide-gate__count {
+  text-align: center;
+  opacity: 0.7;
+}
+
+.cs-guide-gate__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  justify-self: end;
+  white-space: nowrap;
+}
+
+.cs-guide-gate__live em {
+  font-style: normal;
+}
+
+.cs-guide-gate__live i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink, #0e0e0c);
+  animation: cs-live-dot 1.4s ease-in-out infinite;
+}
+
+/* the agent strip: every driver visible at once, the chosen one alive */
+.cs-guide-choice button.cs-guide-choice__manual {
+  display: inline-block;
+  width: auto;
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: center;
+  box-shadow: none;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+
+.cs-guide-choice__sub {
+  display: none;
+  margin: 0;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  opacity: 0.6;
+}
+
+.cs-guide-choice button.cs-guide-choice__manual:hover {
+  transform: none;
+  box-shadow: none;
+  opacity: 1;
+}
+
+.cs-chat__li {
+  display: block;
+  position: relative;
+  padding-left: 16px;
+}
+
+.cs-chat__li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.55em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent, #fff48d);
+}
+
+.cs-guide-choice__tagline {
+  margin: -12px 0 0;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+/* ---------- deep scan ---------- */
+
+.cs-deepscan {
+  position: absolute;
+  z-index: 2147483040;
+  pointer-events: none;
+  border-radius: 10px;
+  overflow: visible;
+}
+
+.cs-deepscan__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(var(--ink-rgb, 14, 14, 12), 0.09) 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(90deg, rgba(var(--ink-rgb, 14, 14, 12), 0.09) 0 1px, transparent 1px 22px);
+  clip-path: inset(0 0 100% 0);
+}
+
+.cs-deepscan__beam {
+  position: absolute;
+  left: -12px;
+  right: -12px;
+  top: -14px;
+  height: 28px;
+  background: linear-gradient(180deg, rgba(var(--accent-rgb, 255, 244, 141), 0), rgba(var(--accent-rgb, 255, 244, 141), 0.3) 50%, rgba(var(--accent-rgb, 255, 244, 141), 0));
+  border-bottom: 2.5px solid var(--ink, #0e0e0c);
+  filter: drop-shadow(0 3px 10px rgba(var(--accent-rgb, 255, 244, 141), 0.65));
+}
+
+.cs-deepscan__readout {
+  position: absolute;
+  right: -6px;
+  top: -32px;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  background: var(--ink, #0e0e0c);
+  color: var(--accent, #fff48d);
+  padding: 6px 12px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+
+.cs-deepscan__readout.is-done {
+  background: var(--accent, #fff48d);
+  color: var(--ink, #0e0e0c);
+  transition: background 0.25s ease, color 0.25s ease;
+}
+
+.cs-deepscan__tick {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 2.5px solid var(--ink, #0e0e0c);
+  border-radius: 50%;
+  background: var(--accent, #fff48d);
+  animation: cs-tickpulse 1.1s ease-out forwards;
+}
+
+@keyframes cs-tickpulse {
+  0% { transform: scale(0.3); opacity: 0; }
+  30% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+/* ---------- sound toggles ---------- */
+
+.cs-guide-gate button.cs-sound-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  margin-top: 2px;
+  border: 1.5px solid rgba(var(--ink-rgb, 14, 14, 12), 0.45);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink, #0e0e0c);
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 7px 14px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.cs-guide-gate button.cs-sound-toggle:hover,
+.cs-guide-gate button.cs-sound-toggle[aria-pressed="true"] {
+  transform: none;
+  box-shadow: none;
+  opacity: 1;
+  background: var(--ink, #0e0e0c);
+  color: var(--accent, #fff48d);
+}
+
+.cs-sound-chip {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 2147483205;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(var(--ink-rgb, 14, 14, 12), 0.82);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: var(--accent, #fff48d);
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  cursor: pointer;
+  opacity: 0.45;
+  transition: opacity 0.25s ease;
+}
+
+.cs-sound-chip:hover {
+  opacity: 1;
+}
+
+/* the chip only makes sense once you are inside */
+.cs-guide-locked .cs-sound-chip {
+  display: none;
+}
+
+/* guided chat pills */
+.cs-chat__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.cs-chat__pill {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #f4f1e4;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 100px;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.cs-chat__pill:hover,
+.cs-chat__pill:focus-visible {
+  background: var(--accent, #fff48d);
+  border-color: var(--accent, #fff48d);
+  color: #0e0e0c;
+  transform: translateY(-1px);
+}
+
+.cs-chat.is-busy .cs-chat__pill {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.cs-chat__msg--site a {
+  color: var(--accent, #fff48d);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* chat visual cards */
+.cs-chat__card {
+  align-self: stretch;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1.5px solid rgba(var(--accent-rgb, 255, 244, 141), 0.5);
+  border-radius: 16px;
+  padding: 16px 16px 14px;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.4s ease, transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cs-chat__card.is-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cs-chat__card-title {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent, #fff48d);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cs-chat__card-badge {
+  background: var(--ok, #46c98b);
+  color: #0e0e0c;
+  font-weight: 700;
+  border-radius: 100px;
+  padding: 3px 10px;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+}
+
+.cs-chat__card-note {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: rgba(255, 255, 255, 0.45);
+  margin-top: 12px;
+  line-height: 1.5;
+}
+
+/* timeline */
+.cs-chat__tl-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 7px 0;
+}
+
+.cs-chat__tl-name {
+  width: 118px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #f2f0e6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cs-chat__tl-bar {
+  flex: 1;
+  height: 10px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+}
+
+.cs-chat__tl-bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 100px;
+  background: var(--accent, #fff48d);
+  transition: width 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cs-chat__card.is-in .cs-chat__tl-bar i { width: var(--w); }
+
+.cs-chat__tl-wk {
+  width: 64px;
+  text-align: right;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* roi */
+.cs-chat__roi-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+}
+
+.cs-chat__roi-label {
+  width: 118px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #f2f0e6;
+}
+
+.cs-chat__roi-bar {
+  flex: 1;
+  height: 14px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+}
+
+.cs-chat__roi-bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.55);
+  transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cs-chat__roi-bar.is-good i { background: var(--ok, #46c98b); }
+.cs-chat__card.is-in .cs-chat__roi-bar i { width: var(--w); }
+
+.cs-chat__roi-val {
+  width: 84px;
+  text-align: right;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* projects */
+.cs-chat__proj-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.cs-chat__proj {
+  display: block;
+  border: 1.5px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  overflow: hidden;
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.04);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.cs-chat__proj:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent, #fff48d);
+}
+
+.cs-chat__proj-name {
+  display: block;
+  padding: 8px 10px 1px;
+  font-weight: 700;
+  font-size: 13px;
+  color: #f2f0e6;
+}
+
+.cs-chat__proj-metric {
+  display: block;
+  padding: 0 10px 9px;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--accent, #fff48d);
+}
+
+/* estimate */
+.cs-chat__est-range {
+  font-weight: 800;
+  font-size: 34px;
+  letter-spacing: -0.03em;
+  color: #fdfbf2;
+  line-height: 1;
+}
+
+.cs-chat__est-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 12px;
+}
+
+.cs-chat__est-meta span {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 100px;
+  padding: 3px 10px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.cs-chat__est-phases {
+  display: flex;
+  gap: 4px;
+  height: 10px;
+}
+
+.cs-chat__est-phases i {
+  border-radius: 100px;
+  background: var(--accent, #fff48d);
+  opacity: 0;
+  transform: scaleX(0.4);
+  transform-origin: left;
+  transition: opacity 0.4s ease, transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cs-chat__card.is-in .cs-chat__est-phases i {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.cs-chat__est-cta {
+  display: inline-block;
+  margin-top: 14px;
+  background: var(--accent, #fff48d);
+  color: #0e0e0c;
+  font-weight: 700;
+  font-size: 13.5px;
+  text-decoration: none;
+  padding: 10px 18px;
+  border-radius: 100px;
+}
+
+.cs-chat__pill--ghost {
+  opacity: 0.62;
+  border-style: dashed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-chat__card,
+  .cs-chat__card.is-in { opacity: 1; transform: none; }
+  .cs-chat__tl-bar i, .cs-chat__roi-bar i { transition: none; width: var(--w); }
+  .cs-chat__est-phases i { transition: none; }
+}
+
+/* gate: the guided button's border breathes — a quiet halo, no theatrics */
+.cs-guide-choice button[data-mode="guided"] {
+  animation: cs-halo 3s ease-in-out infinite;
+}
+
+@keyframes cs-halo {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--ink-rgb, 14, 14, 12), 0), 0 0 0 0 rgba(var(--ink-rgb, 14, 14, 12), 0); }
+  50% { box-shadow: 0 0 0 5px rgba(var(--ink-rgb, 14, 14, 12), 0.16), 0 0 0 11px rgba(var(--ink-rgb, 14, 14, 12), 0.05); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-guide-choice button[data-mode="guided"] { animation: none; }
+}
+
+/* nav pet — tiny live character in the header, click to recolor the world */
+.cs-nav-pet {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+  line-height: 0;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.cs-nav-pet canvas {
+  width: 44px;
+  height: 44px;
+  display: block;
+}
+
+.cs-nav-pet:hover {
+  transform: scale(1.12) rotate(-6deg);
+}
+
+.cs-nav-pet.is-born {
+  animation: cs-navborn 0.5s var(--ease-back) backwards;
+}
+
+@keyframes cs-navborn {
+  0% { transform: scale(0.4); opacity: 0; }
+  70% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.cs-nav-pet.is-spin {
+  animation: cs-navspin 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes cs-navspin {
+  0% { transform: rotate(0) scale(1); }
+  50% { transform: rotate(200deg) scale(0.72); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-nav-pet.is-spin { animation: none; }
+}
+
+/* ------------------------------------------------------------------ *
+ *  Mobile pass (≤640px) — gate, bubble, chips, chat
+ * ------------------------------------------------------------------ */
+
+@media (max-width: 640px) {
+  .cs-ai-mascot[data-mode="work"] .cs-ai-mascot__bubble {
+    display: none;
+  }
+
+  .cs-nav-pet {
+    display: none;
+  }
+
+  /* bubble can never be wider than the screen */
+  .cs-ai-mascot__bubble {
+    min-width: 130px;
+    max-width: min(250px, calc(100vw - 20px));
+    font-size: 13px;
+    padding: 10px 12px;
+  }
+
+  /* gate on the phone: same v2 anatomy — headline up top, the giant
+     driver on its ghost name, and the dock folded into two rows */
+  .cs-guide-gate {
+    padding: 74px 16px calc(212px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .cs-guide-choice {
+    gap: 0;
+    justify-content: flex-start;
+  }
+
+  .cs-guide-choice__eyebrow {
+    font-size: 11px;
+    margin-bottom: 10px;
+  }
+
+  .cs-guide-choice__title {
+    font-size: clamp(3.4rem, 15vw, 4.4rem);
+    line-height: 0.92;
+    letter-spacing: -0.04em;
+    max-width: 100%;
+    text-wrap: balance;
+  }
+
+  .cs-guide-choice__sub {
+    display: block;
+    margin-top: 16px;
+    font-size: 11px;
+  }
+
+  .cs-guide-gate__bar {
+    font-size: 10px;
+    padding: 14px 16px;
+  }
+
+  .cs-guide-gate button.cs-sound-toggle {
+    padding: 6px 12px;
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  .cs-guide-gate__live i,
+  .cs-guide-gate__live em {
+    display: none;
+  }
+
+  .cs-guide-gate__logo {
+    font-size: 19px;
+  }
+
+  .cs-guide-stage {
+    height: 245px;
+    margin-top: auto;
+  }
+
+  .cs-guide-stage__name {
+    font-size: 18px;
+    margin-top: auto;
+  }
+}
+
+/* short phones (SE & friends): tighter type and perch so the rhythm survives */
+@media (max-width: 640px) and (max-height: 700px) {
+  .cs-guide-gate {
+    padding-top: 60px;
+    padding-bottom: calc(204px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .cs-guide-choice__title {
+    font-size: 3rem;
+  }
+
+  .cs-guide-stage {
+    height: 150px;
+  }
+
+  .cs-guide-dock {
+    bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (max-width: 640px) {
+  .cs-guide-choice__tag {
+    font-size: 11px;
+  }
+
+  .cs-guide-dock {
+    left: 12px;
+    right: 12px;
+    margin: 0;
+    width: auto;
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px;
+    border-radius: 26px;
+    padding: 12px;
+  }
+
+  .cs-guide-dock__thumbs {
+    gap: 4px;
+  }
+
+  .cs-guide-dock__thumbs {
+    position: relative;
+    flex: 1 1 auto;
+    height: 62px;
+    padding: 0;
+    gap: 0;
+  }
+
+  .cs-guide-choice .cs-guide-dock button.cs-guide-slot {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 48px;
+    height: 48px;
+    padding: 5px;
+    transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
+  }
+
+  .cs-guide-choice .cs-guide-dock button.cs-guide-arrow {
+    width: 34px;
+    height: 34px;
+  }
+
+  .cs-guide-dock__rule {
+    display: none;
+  }
+
+  .cs-guide-dock__id {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-left: 6px;
+  }
+
+  .cs-guide-choice .cs-guide-dock button.cs-guide-dock__go {
+    flex: 1 1 100%;
+    justify-content: center;
+    padding: 13px 14px;
+    font-size: 14px;
+    gap: 7px;
+  }
+
+  .cs-guide-choice .cs-guide-dock button.cs-guide-dock__game {
+    position: static;
+  }
+
+  .cs-guide-gate--four .cs-guide-choice .cs-guide-dock button.cs-guide-arrow {
+    display: none;
+  }
+
+  .cs-guide-gate--four .cs-guide-dock__thumbs {
+    display: grid;
+    flex: 1 1 100%;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    height: auto;
+    gap: 6px;
+    order: 1;
+    width: 100%;
+  }
+
+  .cs-guide-gate--four .cs-guide-choice .cs-guide-dock button.cs-guide-slot {
+    position: relative;
+    left: auto;
+    top: auto;
+    width: 50px;
+    height: 50px;
+    justify-self: center;
+    transform: none !important;
+    opacity: 0.7;
+  }
+
+  .cs-guide-gate--four .cs-guide-choice .cs-guide-dock button.cs-guide-slot.is-active {
+    opacity: 1;
+    outline: 2px solid rgba(var(--accent-rgb, 255, 244, 141), 0.55);
+    outline-offset: 2px;
+  }
+
+  .cs-guide-gate--four .cs-guide-choice .cs-guide-dock button.cs-guide-dock__go {
+    order: 2;
+  }
+
+  .cs-guide-gate--four .cs-guide-choice .cs-guide-dock button.cs-guide-dock__game {
+    flex: 0 1 auto;
+    order: 3;
+    margin: 0 auto;
+    padding: 8px 12px;
+    font-size: 11px;
+    opacity: 0.72;
+  }
+
+  .cs-guide-dock__id {
+    padding-left: 2px;
+  }
+
+  .cs-guide-choice button.cs-guide-choice__manual {
+    left: 0;
+    right: 0;
+    bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+    font-size: 10px;
+  }
+
+  .cs-guide-choice__hint {
+    display: none;
+  }
+
+  .cs-guide-choice__actions button[data-mode] {
+    flex: 1 1 100%;
+    width: 100%;
+    padding: 12px 16px 11px;
+  }
+
+  .cs-guide-choice button.cs-guide-choice__manual {
+    flex: none;
+    width: auto;
+  }
+
+  .cs-choice-name {
+    font-size: 19px;
+  }
+
+  .cs-choice-desc {
+    font-size: 10.5px;
+  }
+
+  .cs-guide-choice__variant {
+    font-size: 12px;
+  }
+
+  .cs-guide-gate {
+    place-items: stretch;
+  }
+
+  /* chips: skip bottom-center, sound tucked bottom-left — both smaller */
+  .cs-guide-skip {
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    padding: 7px 12px;
+    font-size: 10px;
+    opacity: 0.8;
+  }
+
+  /* mobile action bar: sound (icon) left · quote center · play (icon) right.
+     Same solid pill language as the quote CTA — full-ink, accent glyph, 46px. */
+  .cs-sound-chip {
+    left: 14px;
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    width: 46px;
+    height: 46px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--ink, #0e0e0c);
+    color: var(--accent, #fff48d);
+    box-shadow: 0 4px 18px rgba(var(--ink-rgb, 14, 14, 12), 0.25);
+    opacity: 1;
+  }
+
+  .cs-sound-chip .cs-chip-label {
+    display: none;
+  }
+
+  .cs-sound-chip .cs-chip-ico {
+    display: block;
+    width: 20px;
+    height: 20px;
+  }
+
+  /* the play chip IS the tour transport on mobile — the floating skip chip
+     retires and the same right-slot button flips play ↔ skip */
+  .cs-guide-skip {
+    display: none !important;
+  }
+
+  .cs-play-chip .cs-ico-skip,
+  .cs-play-chip .cs-chip-time {
+    display: none;
+  }
+
+  html.cs-ai-guiding .cs-play-chip {
+    width: auto;
+    padding: 0 16px;
+    gap: 7px;
+    border-radius: 100px;
+  }
+
+  html.cs-ai-guiding .cs-play-chip .cs-ico-play {
+    display: none;
+  }
+
+  html.cs-ai-guiding .cs-play-chip .cs-ico-skip {
+    display: block;
+  }
+
+  html.cs-ai-guiding .cs-play-chip .cs-chip-time {
+    display: block;
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+
+  /* chat: near-fullscreen sheet */
+  .cs-chat {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
+    border-radius: 16px;
+  }
+
+  .cs-chat__log {
+    min-height: 140px;
+    padding: 12px;
+  }
+
+  .cs-chat__msg {
+    max-width: 90%;
+    font-size: 14px;
+  }
+
+  .cs-chat__pills {
+    gap: 6px;
+    padding: 10px 12px 12px;
+  }
+
+  .cs-chat__pill {
+    font-size: 10px;
+    padding: 6px 10px;
+  }
+
+  .cs-chat__card {
+    padding: 13px 13px 12px;
+  }
+
+  .cs-chat__proj-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cs-chat__tl-name,
+  .cs-chat__roi-label {
+    width: 84px;
+    font-size: 11px;
+  }
+
+  .cs-chat__tl-wk {
+    width: 48px;
+  }
+
+  .cs-chat__roi-val {
+    width: 64px;
+  }
+
+  .cs-chat__est-range {
+    font-size: 28px;
+  }
+}
+
+/* theme changes tint the world smoothly (armed one frame after boot) */
+html.cs-theme-ready,
+html.cs-theme-ready body {
+  transition: background-color 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* gate entrance: children cascade in top-to-bottom */
+.cs-guide-choice > * {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cs-guide-gate.is-in .cs-guide-choice > * {
+  opacity: 1;
+  transform: none;
+}
+
+.cs-guide-gate.is-in .cs-guide-choice > :nth-child(2) { transition-delay: 0.07s; }
+.cs-guide-gate.is-in .cs-guide-choice > :nth-child(3) { transition-delay: 0.14s; }
+.cs-guide-gate.is-in .cs-guide-choice > :nth-child(4) { transition-delay: 0.2s; }
+.cs-guide-gate.is-in .cs-guide-choice > :nth-child(5) { transition-delay: 0.27s; }
+.cs-guide-gate.is-in .cs-guide-choice > :nth-child(6) { transition-delay: 0.34s; }
+.cs-guide-gate.is-in .cs-guide-choice > :nth-child(7) { transition-delay: 0.4s; }
+.cs-guide-gate.is-in .cs-guide-choice > :nth-child(8) { transition-delay: 0.46s; }
+
+/* the chosen button arms itself before the curtain drops */
+.cs-guide-choice button.is-chosen {
+  transform: scale(0.96) !important;
+  background: var(--accent-strong, #A33227) !important;
+  color: var(--bg, #F8F2E9) !important;
+  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), background 0.16s ease;
+}
+
+/* The staff pass is the frame. Workers stay unframed, like an assigned role
+   rather than a second UI card nested inside it. */
+.cs-worker-card__portrait {
+  position: relative;
+  width: 64px;
+  height: 66px;
+  flex: none;
+  display: grid;
+  place-items: end center;
+  overflow: visible;
+}
+
+.cs-worker-card__portrait img {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 56px;
+  height: 66px;
+  object-fit: contain;
+  transform: translateY(2px);
+  filter: drop-shadow(0 2px 0 rgba(var(--ink-rgb, 13, 11, 9), 0.12));
+}
+
+.cs-worker-card__accessory {
+  position: absolute;
+  inset: -1px;
+  z-index: 2;
+  width: 66px;
+  height: 68px;
+  overflow: visible;
+  color: var(--ink, #0D0B09);
+  pointer-events: none;
+}
+
+/* Current Work is product evidence, not a gallery of unrelated reference UIs. */
+.cs-product-mock {
+  position: absolute;
+  top: 34px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1.5vw, 16px);
+  padding: clamp(16px, 2vw, 24px);
+  overflow: hidden;
+  font-family: "DM Mono", "Geist Mono", ui-monospace, monospace;
+}
+
+.cs-product-mock__top,
+.cs-product-mock__approval,
+.cs-product-mock__decision,
+.cs-product-mock__brief-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cs-product-mock__top {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cs-product-mock__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cs-product-mock__badge::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
+.cs-product-mock--agent,
+.cs-product-mock--minutes {
+  background: #170d0c;
+  color: var(--paper, #EFE3D2);
+}
+
+.cs-product-mock--spaces,
+.cs-product-mock--design {
+  background: var(--paper, #EFE3D2);
+  color: var(--ink, #0D0B09);
+}
+
+.cs-product-mock--agent .cs-product-mock__badge,
+.cs-product-mock--minutes .cs-product-mock__badge {
+  color: var(--accent, #D24430);
+}
+
+.cs-product-mock__goal,
+.cs-product-mock__approval,
+.cs-product-mock__decision,
+.cs-product-mock__brief {
+  border: 1px solid rgba(248, 242, 233, 0.22);
+  background: rgba(248, 242, 233, 0.06);
+}
+
+.cs-product-mock--spaces .cs-product-mock__goal,
+.cs-product-mock--spaces .cs-product-mock__approval,
+.cs-product-mock--spaces .cs-product-mock__decision,
+.cs-product-mock--spaces .cs-product-mock__brief,
+.cs-product-mock--design .cs-product-mock__goal,
+.cs-product-mock--design .cs-product-mock__approval,
+.cs-product-mock--design .cs-product-mock__decision,
+.cs-product-mock--design .cs-product-mock__brief {
+  border-color: rgba(var(--ink-rgb, 13, 11, 9), 0.2);
+  background: rgba(var(--ink-rgb, 13, 11, 9), 0.04);
+}
+
+.cs-product-mock__goal {
+  display: grid;
+  gap: 7px;
+  padding: 12px 13px;
+}
+
+.cs-product-mock__goal span,
+.cs-product-mock__approval span,
+.cs-product-mock__decision span,
+.cs-product-mock__brief-head span,
+.cs-product-mock__sources > span:first-child {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.cs-product-mock__goal strong,
+.cs-product-mock__approval strong,
+.cs-product-mock__decision strong,
+.cs-product-mock__brief strong {
+  font-family: "Bricolage Grotesque", system-ui, sans-serif;
+  font-size: clamp(15px, 1.6vw, 20px);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.cs-product-mock__flow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+}
+
+.cs-product-mock__flow i {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  min-width: 0;
+  min-height: 30px;
+  border: 1px solid rgba(248, 242, 233, 0.28);
+  font-size: 9px;
+  font-style: normal;
+  letter-spacing: 0.04em;
+}
+
+.cs-product-mock__flow i:nth-of-type(2) {
+  border-color: var(--accent, #D24430);
+  background: var(--accent, #D24430);
+  color: var(--ink, #0D0B09);
+}
+
+.cs-product-mock__flow b {
+  width: 12px;
+  height: 1px;
+  background: rgba(248, 242, 233, 0.45);
+}
+
+.cs-product-mock__approval {
+  margin-top: auto;
+  padding: 11px 12px;
+}
+
+.cs-product-mock__approval strong,
+.cs-product-mock__decision strong {
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.cs-product-mock__approval em {
+  flex: none;
+  padding: 5px 7px;
+  background: var(--accent, #D24430);
+  color: var(--ink, #0D0B09);
+  font-size: 9px;
+  font-style: normal;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cs-product-mock__spaces-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(90px, 0.8fr);
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+.cs-product-mock__thread,
+.cs-product-mock__sources {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 11px;
+  border: 1px solid rgba(var(--ink-rgb, 13, 11, 9), 0.18);
+}
+
+.cs-product-mock__message {
+  max-width: 88%;
+  padding: 7px 8px;
+  background: rgba(var(--ink-rgb, 13, 11, 9), 0.08);
+  font-family: "Bricolage Grotesque", system-ui, sans-serif;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.cs-product-mock__message--zaki {
+  margin-left: auto;
+  background: var(--accent, #D24430);
+  color: var(--ink, #0D0B09);
+}
+
+.cs-product-mock__source {
+  padding: 7px 8px;
+  border-left: 2px solid var(--accent, #D24430);
+  background: rgba(var(--ink-rgb, 13, 11, 9), 0.05);
+  font-size: 9px;
+}
+
+.cs-product-mock__decision {
+  padding: 10px 11px;
+}
+
+.cs-product-mock__timeline {
+  display: grid;
+  gap: 8px;
+  flex: 1;
+}
+
+.cs-product-mock__moment {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 10px;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(248, 242, 233, 0.17);
+  font-size: 10px;
+}
+
+.cs-product-mock__moment time {
+  color: var(--accent, #D24430);
+  font-size: 9px;
+}
+
+.cs-product-mock__brief {
+  display: grid;
+  gap: 12px;
+  flex: 1;
+  padding: 13px;
+}
+
+.cs-product-mock__swatches {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 0.7fr;
+  gap: 8px;
+  min-height: 58px;
+}
+
+.cs-product-mock__swatches i {
+  display: block;
+  border: 1px solid rgba(var(--ink-rgb, 13, 11, 9), 0.35);
+  background: var(--ink, #0D0B09);
+}
+
+.cs-product-mock__swatches i:nth-child(2) { background: var(--accent, #D24430); }
+.cs-product-mock__swatches i:nth-child(3) { background: var(--bg, #F8F2E9); }
+
+.cs-product-mock__direction {
+  padding-top: 10px;
+  border-top: 1px solid rgba(var(--ink-rgb, 13, 11, 9), 0.2);
+  font-family: "Bricolage Grotesque", system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* The sticky stack now shows product evidence rather than abstract process art. */
+.cs-stack-product {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1.45vw, 16px);
+  min-height: 0;
+  aspect-ratio: 4 / 3;
+  padding: clamp(17px, 2vw, 27px);
+  overflow: hidden;
+  border: 1px solid rgba(248, 242, 233, 0.2);
+  border-radius: 8px;
+  background: #170d0c;
+  color: #f8f2e9;
+  font-family: "DM Mono", "Geist Mono", ui-monospace, monospace;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.18);
+}
+
+.cs-stack-product--spaces {
+  border-color: rgba(var(--ink-rgb, 13, 11, 9), 0.2);
+  background: #efe3d2;
+  color: var(--ink, #0d0b09);
+  box-shadow: 0 18px 44px rgba(13, 11, 9, 0.12);
+}
+
+.cs-stack-product--output {
+  background: #201211;
+}
+
+.cs-stack-product__top,
+.cs-stack-product__approval,
+.cs-stack-product__decision,
+.cs-stack-product__brief-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cs-stack-product__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  color: var(--accent, #d24430);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cs-stack-product__badge::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
+.cs-stack-product__goal,
+.cs-stack-product__approval,
+.cs-stack-product__decision,
+.cs-stack-product__brief,
+.cs-stack-product__thread,
+.cs-stack-product__sources,
+.cs-stack-product__minutes {
+  border: 1px solid rgba(248, 242, 233, 0.22);
+  background: rgba(248, 242, 233, 0.06);
+}
+
+.cs-stack-product--spaces .cs-stack-product__decision,
+.cs-stack-product--spaces .cs-stack-product__thread,
+.cs-stack-product--spaces .cs-stack-product__sources {
+  border-color: rgba(var(--ink-rgb, 13, 11, 9), 0.18);
+  background: rgba(var(--ink-rgb, 13, 11, 9), 0.04);
+}
+
+.cs-stack-product__goal {
+  display: grid;
+  gap: 8px;
+  padding: 13px;
+}
+
+.cs-stack-product__goal span,
+.cs-stack-product__approval span,
+.cs-stack-product__decision span,
+.cs-stack-product__sources > span,
+.cs-stack-product__brief-head span,
+.cs-stack-product__minutes-label {
+  opacity: 0.62;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.cs-stack-product__goal strong,
+.cs-stack-product__decision strong,
+.cs-stack-product__brief strong {
+  font-family: "Bricolage Grotesque", system-ui, sans-serif;
+  font-size: clamp(16px, 1.7vw, 22px);
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+}
+
+.cs-stack-product__flow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+}
+
+.cs-stack-product__flow i {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  min-width: 0;
+  min-height: 30px;
+  border: 1px solid rgba(248, 242, 233, 0.28);
+  font-size: 9px;
+  font-style: normal;
+}
+
+.cs-stack-product__flow i:nth-of-type(2) {
+  border-color: var(--accent, #d24430);
+  background: var(--accent, #d24430);
+  color: var(--ink, #0d0b09);
+}
+
+.cs-stack-product__flow b {
+  width: 11px;
+  height: 1px;
+  flex: none;
+  background: rgba(248, 242, 233, 0.5);
+}
+
+.cs-stack-product__approval,
+.cs-stack-product__decision {
+  margin-top: auto;
+  padding: 11px 12px;
+}
+
+.cs-stack-product__approval strong,
+.cs-stack-product__decision strong {
+  font-family: "Bricolage Grotesque", system-ui, sans-serif;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.cs-stack-product__approval em {
+  flex: none;
+  padding: 5px 7px;
+  background: var(--accent, #d24430);
+  color: var(--ink, #0d0b09);
+  font-size: 9px;
+  font-style: normal;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cs-stack-product__spaces-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(104px, 0.8fr);
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+.cs-stack-product__thread,
+.cs-stack-product__sources {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 11px;
+}
+
+.cs-stack-product__message {
+  max-width: 88%;
+  padding: 7px 8px;
+  background: rgba(var(--ink-rgb, 13, 11, 9), 0.09);
+  font-family: "Bricolage Grotesque", system-ui, sans-serif;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.cs-stack-product__message--zaki {
+  margin-left: auto;
+  background: var(--accent, #d24430);
+  color: var(--ink, #0d0b09);
+}
+
+.cs-stack-product__source {
+  padding: 7px 8px;
+  border-left: 2px solid var(--accent, #d24430);
+  background: rgba(var(--ink-rgb, 13, 11, 9), 0.05);
+  font-size: 9px;
+}
+
+.cs-stack-product__output-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(118px, 0.92fr);
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+.cs-stack-product__minutes,
+.cs-stack-product__brief {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 12px;
+}
+
+.cs-stack-product__moment {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(248, 242, 233, 0.16);
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.cs-stack-product__moment time { color: var(--accent, #d24430); font-size: 9px; }
+
+.cs-stack-product__brief {
+  background: #efe3d2;
+  color: var(--ink, #0d0b09);
+}
+
+.cs-stack-product__brief-head { font-size: 9px; }
+
+.cs-stack-product__swatches {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 0.7fr;
+  gap: 6px;
+  min-height: 48px;
+}
+
+.cs-stack-product__swatches i { display: block; background: var(--ink, #0d0b09); }
+.cs-stack-product__swatches i:nth-child(2) { background: var(--accent, #d24430); }
+.cs-stack-product__swatches i:nth-child(3) { border: 1px solid rgba(var(--ink-rgb, 13, 11, 9), 0.25); background: var(--bg, #f8f2e9); }
+
+.cs-stack-product__direction {
+  padding-top: 9px;
+  border-top: 1px solid rgba(var(--ink-rgb, 13, 11, 9), 0.2);
+  font-family: "Bricolage Grotesque", system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.22;
+}
+
+/* Product evidence uses one quiet, instrument-like surface language. */
+.cs-current-evidence {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: 1px solid var(--ink, #0d0b09);
+  border-radius: 8px;
+  background: #170d0c;
+  box-shadow: 7px 7px 0 rgba(var(--ink-rgb, 13, 11, 9), 0.14);
+}
+
+.cs-current-evidence__chrome {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border-bottom: 1px solid rgba(248, 242, 233, 0.18);
+  background: #170d0c;
+}
+
+.cs-current-evidence__chrome > span:last-child {
+  margin-left: 8px;
+  color: rgba(248, 242, 233, 0.68) !important;
+  font-family: "DM Mono", "Geist Mono", ui-monospace, monospace !important;
+  font-size: 10px !important;
+  font-weight: 700;
+  letter-spacing: 0.09em !important;
+}
+
+.cs-product-mock,
+.cs-stack-product {
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+.cs-product-mock__goal,
+.cs-product-mock__approval,
+.cs-product-mock__decision,
+.cs-product-mock__brief,
+.cs-product-mock__thread,
+.cs-product-mock__sources,
+.cs-stack-product__goal,
+.cs-stack-product__approval,
+.cs-stack-product__decision,
+.cs-stack-product__brief,
+.cs-stack-product__thread,
+.cs-stack-product__sources,
+.cs-stack-product__minutes {
+  border-radius: 2px;
+}
+
+.cs-product-mock__top,
+.cs-stack-product__top {
+  font-weight: 700;
+  letter-spacing: 0.11em;
+}
+
+.cs-product-mock__goal,
+.cs-stack-product__goal {
+  border-left: 2px solid var(--accent, #d24430);
+}
+
+.cs-product-mock__approval,
+.cs-stack-product__approval,
+.cs-stack-product__decision {
+  border-color: rgba(248, 242, 233, 0.28);
+}
+
+.cs-product-mock--spaces .cs-product-mock__decision,
+.cs-stack-product--spaces .cs-stack-product__decision {
+  border-color: rgba(var(--ink-rgb, 13, 11, 9), 0.26);
+}
+
+.cs-product-mock__context {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 20px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(248, 242, 233, 0.32);
+  color: rgba(248, 242, 233, 0.76);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cs-product-mock__context span { opacity: 0.58; }
+.cs-product-mock__context b { color: var(--paper, #efe3d2); font-weight: 700; }
+.cs-product-mock__context em {
+  margin-left: auto;
+  color: var(--accent, #d24430);
+  font-size: 8px;
+  font-style: normal;
+}
+
+.cs-stack-product__agent-log {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid rgba(248, 242, 233, 0.2);
+  border-bottom: 1px solid rgba(248, 242, 233, 0.2);
+}
+
+.cs-stack-product__agent-log-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 39px;
+  border-bottom: 1px solid rgba(248, 242, 233, 0.12);
+}
+
+.cs-stack-product__agent-log-row:last-child { border-bottom: 0; }
+
+.cs-stack-product__agent-log-index {
+  color: var(--accent, #d24430);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.cs-stack-product__agent-log-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cs-stack-product__agent-log-copy span {
+  color: rgba(248, 242, 233, 0.62);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cs-stack-product__agent-log-copy strong {
+  overflow: hidden;
+  color: var(--paper, #efe3d2);
+  font-family: "Bricolage Grotesque", system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.05;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cs-stack-product__agent-log-state {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent, #d24430);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb, 210, 68, 48), 0.13);
+}
+
+.cs-stack-product__agent-log-row:nth-child(2) .cs-stack-product__agent-log-state {
+  animation: cs-evidence-pulse 1.8s ease-in-out infinite;
+}
+
+.cs-stack-product__agent-log-row:last-child .cs-stack-product__agent-log-state {
+  background: var(--ok, #219171);
+  box-shadow: 0 0 0 3px rgba(33, 145, 113, 0.14);
+}
+
+@keyframes cs-evidence-pulse {
+  50% { transform: scale(1.5); opacity: 0.72; }
+}
+
+.cs-stack-product__spaces-grid,
+.cs-stack-product__output-grid {
+  border-top: 1px solid rgba(248, 242, 233, 0.18);
+  border-bottom: 1px solid rgba(248, 242, 233, 0.18);
+  padding: 10px 0;
+}
+
+.cs-stack-product--spaces .cs-stack-product__spaces-grid {
+  border-color: rgba(var(--ink-rgb, 13, 11, 9), 0.18);
+}
+
+.cs-stack-product__message,
+.cs-product-mock__message {
+  border-radius: 2px;
+}
+
+.cs-stack-product__brief {
+  box-shadow: inset 2px 0 0 var(--accent, #d24430);
+}
+
+.cs-stack-product__direction {
+  color: rgba(var(--ink-rgb, 13, 11, 9), 0.72);
+}
+
+@media (max-width: 640px) {
+  .cs-current-evidence { border-radius: 6px; box-shadow: 4px 4px 0 rgba(var(--ink-rgb, 13, 11, 9), 0.12); }
+  .cs-product-mock__context { gap: 7px; font-size: 8px; }
+  .cs-product-mock__context em { display: none; }
+  .cs-stack-product__agent-log-row { grid-template-columns: 22px minmax(0, 1fr) auto; gap: 7px; min-height: 35px; }
+  .cs-stack-product__agent-log-copy strong { font-size: 11px; }
+  .cs-stack-product__spaces-grid,
+  .cs-stack-product__output-grid { padding: 8px 0; }
+}
+
+@media (max-width: 640px) {
+  .cs-stack-product { gap: 9px; padding: 15px; }
+  .cs-stack-product__goal strong { font-size: 17px; }
+  .cs-stack-product__spaces-grid,
+  .cs-stack-product__output-grid { grid-template-columns: minmax(0, 1.1fr) minmax(92px, 0.9fr); gap: 8px; }
+  .cs-stack-product__thread,
+  .cs-stack-product__sources,
+  .cs-stack-product__minutes,
+  .cs-stack-product__brief { padding: 9px; gap: 7px; }
+  .cs-stack-product__message { font-size: 10px; }
+  .cs-stack-product__source,
+  .cs-stack-product__moment { font-size: 9px; }
+}
+
+/* The chat's product answer shares the same native visual language. */
+.cs-chat__proj-visual {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  background: #201211;
+  color: var(--accent, #D24430);
+  font-family: "DM Mono", "Geist Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.cs-chat__proj-visual--spaces,
+.cs-chat__proj-visual--design { background: #EFE3D2; color: #0D0B09; }
+.cs-chat__proj-visual--minutes { background: #170D0C; color: #EFE3D2; }
+
+/* The Nova Nuggets mark returns at the end as a quiet, living signature. */
+footer[data-dark] > :not(.cs-footer-face) {
+  position: relative;
+  z-index: 1;
+}
+
+.cs-footer-face {
+  position: absolute;
+  right: clamp(12px, 5vw, 84px);
+  bottom: -8%;
+  width: min(34vw, 430px);
+  aspect-ratio: 1;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.82;
+}
+
+.cs-footer-face canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.cs-footer-face__fallback {
+  position: absolute;
+  inset: 7%;
+  width: 86%;
+  height: 86%;
+  object-fit: contain;
+  filter: none;
+  opacity: 0.14;
+}
+
+.cs-footer-face.is-live .cs-footer-face__fallback {
+  opacity: 0;
+}
+
+@media (max-width: 640px) {
+  .cs-footer-face {
+    right: -1%;
+    bottom: 42%;
+    width: min(48vw, 210px);
+    opacity: 0.38;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-guide-choice > * { opacity: 1; transform: none; transition: none; }
+  html.cs-theme-ready, html.cs-theme-ready body { transition: none; }
+}
+
+/* chat thinking indicator — three breathing dots */
+.cs-chat__typing {
+  display: inline-flex;
+  gap: 5px;
+  padding: 3px 2px;
+}
+
+.cs-chat__typing i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent, #fff48d);
+  animation: cs-chat-pulse 1.1s ease-in-out infinite;
+}
+
+.cs-chat__typing i:nth-child(2) { animation-delay: 0.18s; }
+.cs-chat__typing i:nth-child(3) { animation-delay: 0.36s; }
+
+/* play chip sits beside the sound chip, with breathing room */
+.cs-play-chip {
+  left: 136px !important;
+}
+
+/* desktop: both chips wear the nav-CTA outfit (solid ink pill) and live
+   bottom-right — sound rightmost, play beside it */
+@media (min-width: 641px) {
+  .cs-sound-chip {
+    left: auto;
+    right: 16px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+    background: var(--ink, #0e0e0c);
+    color: var(--accent, #fff48d);
+    padding: 11px 20px;
+    opacity: 1;
+  }
+
+  .cs-play-chip {
+    left: auto !important;
+    right: 136px;
+  }
+
+  /* the tour's ESC chip wears the same CTA outfit */
+  .cs-guide-skip {
+    background: var(--ink, #0e0e0c);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    font-size: 14px;
+    letter-spacing: 0;
+    text-transform: none;
+    padding: 11px 20px;
+    opacity: 1;
+  }
+
+  .cs-guide-skip span {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+}
+
+/* chip icons + tour countdown only exist on the mobile action bar; desktop
+   keeps text chips and its own skip pill */
+.cs-chip-ico,
+.cs-chip-time {
+  display: none;
+}
+
+.cs-sound-chip .cs-ico-on {
+  display: none;
+}
+
+.cs-sound-chip[aria-pressed="true"] .cs-ico-on {
+  display: block;
+}
+
+.cs-sound-chip[aria-pressed="true"] .cs-ico-off {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .cs-play-chip {
+    left: auto !important;
+    right: 14px;
+  }
+}
+
+/* mid-tour nav confirm: stopping the tour is a choice, not an accident */
+.cs-guide-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483300;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(var(--ink-rgb, 14, 14, 12), 0.45);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.cs-guide-confirm.is-in {
+  opacity: 1;
+}
+
+.cs-guide-confirm__card {
+  width: min(420px, 100%);
+  background: var(--ink, #0e0e0c);
+  color: #faf7ea;
+  border: 2px solid var(--accent, #fff48d);
+  border-radius: 22px;
+  padding: 26px 26px 22px;
+  text-align: center;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.4);
+  transform: translateY(14px) scale(0.96);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cs-guide-confirm.is-in .cs-guide-confirm__card {
+  transform: none;
+}
+
+.cs-guide-confirm__card h3 {
+  margin: 0 0 10px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.cs-guide-confirm__card p {
+  margin: 0 0 20px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: #cfcfc4;
+}
+
+.cs-guide-confirm__actions {
+  display: grid;
+  gap: 10px;
+}
+
+.cs-guide-confirm__actions button {
+  border: 0;
+  border-radius: 100px;
+  padding: 13px 22px;
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.cs-guide-confirm__actions button:hover {
+  transform: scale(1.04);
+}
+
+.cs-guide-confirm__actions [data-confirm-stop] {
+  background: var(--accent, #fff48d);
+  color: var(--ink, #0e0e0c);
+}
+
+.cs-guide-confirm__actions [data-confirm-stay] {
+  background: transparent;
+  color: var(--accent, #fff48d);
+  border: 1.5px solid rgba(var(--accent-rgb, 255, 244, 141), 0.55);
+}
+
+/* lead form modal — same card language as the tour confirm, left-aligned */
+.cs-lead-modal__card {
+  width: min(520px, 100%);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  text-align: left;
+  position: relative;
+}
+
+.cs-lead-modal__close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  border: 0;
+  background: transparent;
+  color: #cfcfc4;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.cs-lead-modal__close:hover {
+  color: var(--accent, #fff48d);
+}
+
+.cs-lead-modal__hp {
+  position: absolute;
+  left: -5000px;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.cs-lead-modal__form {
+  display: grid;
+  gap: 14px;
+}
+
+.cs-lead-modal__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 480px) {
+  .cs-lead-modal__row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cs-lead-modal__form label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #cfcfc4;
+}
+
+.cs-lead-modal__form input,
+.cs-lead-modal__form select,
+.cs-lead-modal__form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1.5px solid rgba(var(--accent-rgb, 255, 244, 141), 0.28);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #faf7ea;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  padding: 11px 14px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.cs-lead-modal__form input:focus,
+.cs-lead-modal__form select:focus,
+.cs-lead-modal__form textarea:focus {
+  border-color: var(--accent, #fff48d);
+}
+
+.cs-lead-modal__form select {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.cs-lead-modal__form select option {
+  color: #0e0e0c;
+}
+
+.cs-lead-modal__form textarea {
+  resize: vertical;
+  min-height: 90px;
+}
+
+.cs-lead-modal__error {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #ff9d8a;
+}
+
+.cs-lead-modal__form [data-lead-submit] {
+  border: 0;
+  border-radius: 100px;
+  padding: 14px 22px;
+  background: var(--accent, #fff48d);
+  color: var(--ink, #0e0e0c);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.cs-lead-modal__form [data-lead-submit]:hover {
+  transform: scale(1.03);
+}
+
+.cs-lead-modal__form [data-lead-submit]:disabled {
+  opacity: 0.6;
+  cursor: default;
+  transform: none;
+}
+
+/* single-choice gate: the guided button centers and breathes */
+.cs-guide-choice__actions--solo {
+  justify-content: center;
+}
+
+.cs-guide-choice__actions--solo button {
+  min-width: min(320px, 100%);
+}
+
+.cs-play-chip.is-pulsing {
+  animation: cs-play-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes cs-play-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); box-shadow: 0 0 0 6px rgba(var(--ink-rgb, 14, 14, 12), 0.12); }
+}
+
+.cs-guide-choice__beat {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  background: var(--ink, #0e0e0c);
+  color: var(--accent, #fff48d);
+  border-radius: 100px;
+  padding: 8px 16px;
+  display: inline-block;
+  margin: 12px 0 0;
+}
+
+/* game-mode chip: target icon replaces the play/skip transport icons */
+.cs-play-chip .cs-ico-game { display: none; }
+.cs-play-chip.is-game .cs-ico-game {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  vertical-align: -2px;
+  margin-right: 2px;
+}
+.cs-play-chip.is-game .cs-ico-play,
+.cs-play-chip.is-game .cs-ico-skip,
+.cs-play-chip.is-game .cs-chip-time { display: none !important; }
+
+/* The welcome owns the playful choice. Once the site begins, evidence and
+   reading take precedence over persistent floating controls. ZEE Shot remains
+   available from the footer for people who actively seek it out. */
+.cs-sound-chip,
+.cs-play-chip,
+.cs-quote-chip,
+#cs-cookie-note {
+  display: none !important;
+}
+
+#cs-root a:focus-visible,
+#cs-root button:focus-visible,
+.cs-guide-gate button:focus-visible {
+  outline: 3px solid var(--accent) !important;
+  outline-offset: 4px;
+}
