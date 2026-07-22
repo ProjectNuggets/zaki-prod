@@ -46,6 +46,16 @@ function numberField(value: number, update: (value: number) => void, min: number
   </label>;
 }
 
+// "Forever" is the platform maximum the WP-M8 reaper enforces (3650 days ≈ 10y),
+// not literal permanence — the fine print says so rather than the contract lying.
+const RETENTION_FOREVER_DAYS = 3650;
+const RETENTION_PRESETS = [30, 60, 90, 180, 360, RETENTION_FOREVER_DAYS] as const;
+
+function retentionPresetLabel(days: number, t: (key: string, opts: { defaultValue: string }) => string) {
+  if (days === RETENTION_FOREVER_DAYS) return t("minutes.retentionForever", { defaultValue: "Forever" });
+  return t("minutes.retentionDays", { defaultValue: `${days} days` });
+}
+
 function ConsentForm({
   initialRetention,
   onReady,
@@ -66,6 +76,11 @@ function ConsentForm({
   const validRetention = Number.isInteger(retention.audio_days) && retention.audio_days >= 0 && retention.audio_days <= 365 &&
     Number.isInteger(retention.transcript_days) && retention.transcript_days >= 1 && retention.transcript_days <= 3650 &&
     Number.isInteger(retention.summary_days) && retention.summary_days >= 1 && retention.summary_days <= retention.transcript_days;
+  // The GET /control seed is a deployment default, not the user's saved policy, and may
+  // carry an off-preset or asymmetric value — surface it verbatim as "Custom" rather than
+  // silently snapping it onto a preset the user never chose.
+  const isCustomRetention = retention.transcript_days !== retention.summary_days ||
+    !RETENTION_PRESETS.includes(retention.transcript_days as (typeof RETENTION_PRESETS)[number]);
 
   return <section aria-labelledby="minutes-consent-heading" className="border-b border-[var(--v2-hairline)] pb-5">
     <div className="mb-3">
@@ -88,12 +103,29 @@ function ConsentForm({
         <input type="checkbox" checked={agentReadEnabled} onChange={(event) => setAgentReadEnabled(event.target.checked)} className="mt-1 size-4 accent-[var(--v2-accent)]" />
         <span>{t("minutes.agentReadConsent", { defaultValue: "Allow my ZAKI agent to read retained Minutes items." })}</span>
       </label>
-      <div className="grid gap-2 sm:grid-cols-3">
-        {numberField(retention.audio_days, (audio_days) => setRetention((value) => ({ ...value, audio_days })), 0, 365, t("minutes.audioRetention", { defaultValue: "Audio days" }))}
-        {numberField(retention.transcript_days, (transcript_days) => setRetention((value) => ({ ...value, transcript_days })), 1, 3650, t("minutes.transcriptRetention", { defaultValue: "Transcript days" }))}
-        {numberField(retention.summary_days, (summary_days) => setRetention((value) => ({ ...value, summary_days })), 1, 3650, t("minutes.summaryRetention", { defaultValue: "Summary days" }))}
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label className="grid gap-1 text-xs text-[var(--v2-ink-2)]">
+          <span>{t("minutes.retentionKeep", { defaultValue: "Keep each meeting for" })}</span>
+          <select
+            value={retention.transcript_days}
+            onChange={(event) => {
+              const days = Number(event.target.value);
+              // Presets are symmetric — transcript === summary — so a preset can never
+              // trip the engine's summary_days <= transcript_days check. Audio is left
+              // untouched: it is its own privacy control and any value > 0 turns
+              // recording on, which a retention preset must never do silently.
+              setRetention((value) => ({ ...value, transcript_days: days, summary_days: days }));
+            }}
+            className="min-h-10 border border-[var(--v2-hairline)] bg-[var(--v2-bg)] px-2 text-sm text-[var(--v2-ink-1)] outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--v2-accent)]"
+          >
+            {isCustomRetention ? <option value={retention.transcript_days}>{t("minutes.retentionCustom", { defaultValue: `Custom (${retention.transcript_days} days)` })}</option> : null}
+            {RETENTION_PRESETS.map((days) => <option key={days} value={days}>{retentionPresetLabel(days, t)}</option>)}
+          </select>
+        </label>
+        {numberField(retention.audio_days, (audio_days) => setRetention((value) => ({ ...value, audio_days })), 0, 365, t("minutes.audioRetention", { defaultValue: "Audio days (0 = no recording)" }))}
       </div>
-      {!validRetention ? <p role="alert" className="text-xs text-[var(--v2-danger)]">{t("minutes.retentionInvalid", { defaultValue: "Summary retention cannot exceed transcript retention." })}</p> : null}
+      <p className="text-xs leading-5 text-[var(--v2-ink-2)]">{t("minutes.retentionForeverHint", { defaultValue: "“Forever” keeps meetings until you delete them (system maximum ≈ 10 years). Transcript and summary share one window; changes apply to future captures only." })}</p>
+      {!validRetention ? <p role="alert" className="text-xs text-[var(--v2-danger)]">{t("minutes.retentionInvalid", { defaultValue: "Choose a retention window and keep audio between 0 and 365 days." })}</p> : null}
       {consent.isError ? <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]"><CircleAlert className="size-3.5" aria-hidden />{t("minutes.consentUnavailable", { defaultValue: "Consent could not be saved." })}<V2Button size="sm" type="button" onClick={() => consent.variables && consent.mutate(consent.variables)}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div> : null}
       {consent.isSuccess ? <p role="status" className="text-xs text-[var(--v2-accent)]">{consent.data.state === "ready" ? t("minutes.consentSaved", { defaultValue: "Consent saved." }) : t("minutes.consentDisabled", { defaultValue: "Capture remains disabled by this consent." })}</p> : null}
       <V2Button type="submit" size="sm" variant="primary" disabled={!validRetention || consent.isPending}>{consent.isPending ? t("minutes.savingConsent", { defaultValue: "Saving consent…" }) : t("minutes.saveConsent", { defaultValue: "Save consent" })}</V2Button>
