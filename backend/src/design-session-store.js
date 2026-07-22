@@ -164,7 +164,9 @@ export async function beginDesignSessionDrain({
     if (session.generation !== normalized.expectedGeneration) {
       throw new DesignSessionStoreError("DESIGN_CHECKPOINT_CAS_CONFLICT", "Checkpoint generation changed.");
     }
-    if (["DRAINING", "CHECKPOINTING", "STOPPED"].includes(session.state)) return session;
+    // FAILED belongs here with the other terminal states: a session that never started has
+    // nothing left to drain, so stopping it is a no-op success, not a state conflict.
+    if (["DRAINING", "CHECKPOINTING", "STOPPED", "FAILED"].includes(session.state)) return session;
     throw new DesignSessionStoreError("DESIGN_SESSION_STATE_CONFLICT", "Design session cannot be stopped from its current state.");
   });
 }

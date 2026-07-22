@@ -36,14 +36,19 @@ export function buildDesignSessionRouter({
     }
     next();
   });
+  // ROUTE CLASS: USER. Authenticated end user acting on their own project; every binding is
+  // scoped to resolveUser's zakiUser.id. A future MCP tool over this route inherits exactly
+  // that posture — caller-authenticated, owner-scoped — and must never be exposed to an
+  // operator/service credential that could ensure a session for another user's project.
   const ensureHandler = async (req, res) => {
     const projectId = validOpaqueId(req.body?.projectId) ? req.body.projectId : null;
     if (!projectId) return invalidRequest(res, getRequestId(req));
     const auth = await resolveUser(req, res);
     if (!auth?.zakiUser?.id) return;
     const requestId = getRequestId(req);
+    let session = null;
     try {
-      const session = await ensureSession({
+      session = await ensureSession({
         runInTransaction,
         userId: auth.zakiUser.id,
         projectId,
@@ -86,6 +91,7 @@ export function buildDesignSessionRouter({
         .status(["READY", "ACTIVE"].includes(result.session.state) ? 200 : 202)
         .json(result);
     } catch (error) {
+      await failUnstartedSessionBestEffort(updateSessionState, dbQuery, session, requestId);
       return sessionFailure(res, error, requestId);
     }
   };
@@ -240,6 +246,10 @@ export function buildDesignSessionRouter({
   router.get("/:sessionId", async (req, res) => statusHandler(req, res, req.query));
   router.post("/:sessionId/status", lifecycleJson, async (req, res) => statusHandler(req, res, req.body));
 
+  // ROUTE CLASS: USER. Authenticated end user stopping their own session; the binding is
+  // re-read under the caller's zakiUser.id before anything drains. A future MCP tool over
+  // this route inherits that posture and must not accept an operator credential — stopping
+  // another tenant's worker is not an operator convenience, it is data loss.
   router.post("/:sessionId/stop", lifecycleJson, async (req, res) => {
     const input = parseBoundSessionRequest(req.params.sessionId, req.body);
     if (!input) return invalidRequest(res, getRequestId(req));
@@ -275,17 +285,25 @@ export function buildDesignSessionRouter({
           },
         });
       }
-      const result = await controller.stop({
-        sessionId: drainingSession.sessionId,
-        projectId: drainingSession.projectId,
-        userId: drainingSession.userId,
-        tenantId: drainingSession.tenantId,
-        expectedGeneration: drainingSession.generation,
-        ...(drainingSession.state === "CHECKPOINTING"
-          ? { committedGeneration: drainingSession.generation }
-          : {}),
-        requestId,
-      });
+      let result;
+      try {
+        result = await controller.stop({
+          sessionId: drainingSession.sessionId,
+          projectId: drainingSession.projectId,
+          userId: drainingSession.userId,
+          tenantId: drainingSession.tenantId,
+          expectedGeneration: drainingSession.generation,
+          ...(drainingSession.state === "CHECKPOINTING"
+            ? { committedGeneration: drainingSession.generation }
+            : {}),
+          requestId,
+        });
+      } catch (error) {
+        await revertSessionDrainBestEffort(
+          updateSessionState, dbQuery, session, drainingSession, requestId
+        );
+        throw error;
+      }
       await updateSessionStateBestEffort(updateSessionState, dbQuery, session, result, requestId);
       if (["STOPPED", "FAILED"].includes(result.session.state)) {
         appendWorkbenchRevocation(res, revokeWorkbenchAccess, drainingSession.sessionId);
@@ -365,6 +383,58 @@ async function updateSessionStateBestEffort(updateSessionState, dbQuery, session
   }
 }
 
+// The hub writes DRAINING before it asks the controller to stop. When the controller never
+// accepted the stop, that write is a lie the session cannot recover from: a later ensure
+// reads DRAINING, re-drives stop instead of start, and the session is latched toward stop
+// forever. Put the state back so the next ensure reconciles it into existence again.
+async function revertSessionDrainBestEffort(
+  updateSessionState, dbQuery, session, drainingSession, requestId
+) {
+  if (session.state === drainingSession.state) return;
+  try {
+    await updateSessionState({
+      dbQuery,
+      sessionId: session.sessionId,
+      projectId: session.projectId,
+      userId: session.userId,
+      tenantId: session.tenantId,
+      state: session.state,
+      generation: session.generation,
+      requestId,
+    });
+  } catch (error) {
+    console.warn("[Design] Session drain could not be reverted:", {
+      requestId,
+      code: error?.code || "DESIGN_SESSION_DRAIN_REVERT_FAILED",
+    });
+  }
+}
+
+// A session still in REQUESTED has no worker behind it. If the controller could not start
+// one, record FAILED so the row stops advertising a start that is never coming. A session
+// that already reached a live state keeps it — a transient ensure failure is not evidence
+// the worker died. Sweeping rows abandoned mid-flight is D4.1, not this fix.
+async function failUnstartedSessionBestEffort(updateSessionState, dbQuery, session, requestId) {
+  if (session?.state !== "REQUESTED") return;
+  try {
+    await updateSessionState({
+      dbQuery,
+      sessionId: session.sessionId,
+      projectId: session.projectId,
+      userId: session.userId,
+      tenantId: session.tenantId,
+      state: "FAILED",
+      generation: session.generation,
+      requestId,
+    });
+  } catch (error) {
+    console.warn("[Design] Failed session state could not be recorded:", {
+      requestId,
+      code: error?.code || "DESIGN_SESSION_FAILURE_RECORD_FAILED",
+    });
+  }
+}
+
 function parseBoundSessionRequest(sessionId, value) {
   if (!validOpaqueId(sessionId) || !validOpaqueId(value?.projectId)) return null;
   return { sessionId, projectId: value.projectId };
@@ -409,15 +479,32 @@ function copyResponseHeaders(upstream, res) {
   }
 }
 
+// Internal controller-client codes are not a public contract. Map the ones this route
+// promises callers; anything unmapped still forwards verbatim, as it did before.
+const PUBLIC_FAILURE_CODES = {
+  DESIGN_CONTROLLER_CAPACITY_EXHAUSTED: "design_capacity_exhausted",
+  DESIGN_CONTROLLER_UNAVAILABLE: "design_session_unavailable",
+};
+
 function sessionFailure(res, error, requestId) {
   const status = Number(error?.status);
   const safeStatus = Number.isInteger(status) && status >= 400 && status <= 599 ? status : 503;
+  const code = PUBLIC_FAILURE_CODES[error?.code] || error?.code || "design_session_unavailable";
   return res.status(safeStatus).json({
-    code: error?.code || "design_session_unavailable",
-    message: safeStatus === 404 ? "Design session was not found." : "Design session is temporarily unavailable.",
+    code,
+    message: sessionFailureMessage(code, safeStatus),
     retryable: safeStatus >= 500,
     requestId,
   });
+}
+
+// "Temporarily unavailable" invites a retry. Never say it about a full cluster: retrying
+// cannot free a slot, so name the one action that can.
+function sessionFailureMessage(code, safeStatus) {
+  if (code === "design_capacity_exhausted") {
+    return "Design has no free workspace slot right now. Stop another Design session, then try again.";
+  }
+  return safeStatus === 404 ? "Design session was not found." : "Design session is temporarily unavailable.";
 }
 
 function invalidRequest(res, requestId) {

@@ -35,6 +35,33 @@ describe("design session store", () => {
     expect(query.mock.calls[0]?.[0]).toContain("state IN ('REQUESTED', 'STARTING', 'RESTORING', 'READY', 'ACTIVE', 'IDLE')");
   });
 
+  test("treats stopping a session that never started as already terminal", async () => {
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [{
+          session_id: "sess_01",
+          project_id: "project_01",
+          owner_user_id: "42",
+          tenant_id: "default",
+          state: "FAILED",
+          checkpoint_generation: "0",
+        }],
+      });
+    const runInTransaction = (callback) => callback({ query });
+
+    await expect(beginDesignSessionDrain({
+      runInTransaction,
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      expectedGeneration: 0,
+      requestId: "req_stop_failed",
+    })).resolves.toMatchObject({ state: "FAILED", generation: 0 });
+  });
+
   test("creates or reuses one authoritative session per owned project", async () => {
     const query = jest
       .fn()

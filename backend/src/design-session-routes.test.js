@@ -784,4 +784,269 @@ describe("Design public session routes", () => {
       process.off("uncaughtException", unhandled);
     }
   });
+
+  test("reverts the drain when the controller refuses to stop, so a later ensure is not latched", async () => {
+    const session = {
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      state: "READY",
+      generation: 7,
+    };
+    const controllerStop = jest.fn().mockRejectedValue(
+      Object.assign(new Error("controller is down"), {
+        code: "DESIGN_CONTROLLER_UNAVAILABLE",
+        status: 503,
+      }),
+    );
+    const updateSessionState = jest.fn().mockResolvedValue(true);
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn(),
+      readSessionBinding: jest.fn().mockResolvedValue(session),
+      beginSessionDrain: jest.fn().mockResolvedValue({ ...session, state: "DRAINING" }),
+      updateSessionState,
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: jest.fn(),
+      controller: { ensure: jest.fn(), status: jest.fn(), stop: controllerStop },
+      getRequestId: () => "req_stop_fail",
+    }));
+
+    const response = await request(app)
+      .post("/api/design/sessions/sess_01/stop")
+      .send({ projectId: "project_01" });
+
+    expect(response.status).toBe(503);
+    expect(updateSessionState).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: "sess_01",
+      projectId: "project_01",
+      state: "READY",
+      generation: 7,
+      requestId: "req_stop_fail",
+    }));
+  });
+
+  test("leaves an already terminal stop alone when the controller refuses", async () => {
+    const session = {
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+      state: "DRAINING",
+      generation: 7,
+    };
+    const updateSessionState = jest.fn().mockResolvedValue(true);
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn(),
+      readSessionBinding: jest.fn().mockResolvedValue(session),
+      beginSessionDrain: jest.fn().mockResolvedValue(session),
+      updateSessionState,
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: jest.fn(),
+      controller: {
+        ensure: jest.fn(),
+        status: jest.fn(),
+        stop: jest.fn().mockRejectedValue(
+          Object.assign(new Error("controller is down"), {
+            code: "DESIGN_CONTROLLER_UNAVAILABLE",
+            status: 503,
+          }),
+        ),
+      },
+      getRequestId: () => "req_stop_draining",
+    }));
+
+    const response = await request(app)
+      .post("/api/design/sessions/sess_01/stop")
+      .send({ projectId: "project_01" });
+
+    expect(response.status).toBe(503);
+    expect(updateSessionState).not.toHaveBeenCalled();
+  });
+
+  test("marks a never-started session FAILED when the controller cannot ensure it", async () => {
+    const updateSessionState = jest.fn().mockResolvedValue(true);
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn().mockResolvedValue({
+        sessionId: "sess_01",
+        projectId: "project_01",
+        userId: "42",
+        tenantId: "default",
+        state: "REQUESTED",
+        generation: 0,
+      }),
+      readSessionBinding: jest.fn(),
+      beginSessionDrain: jest.fn(),
+      updateSessionState,
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: () => "sess_01",
+      controller: {
+        ensure: jest.fn().mockRejectedValue(
+          Object.assign(new Error("controller is down"), {
+            code: "DESIGN_CONTROLLER_UNAVAILABLE",
+            status: 503,
+          }),
+        ),
+        status: jest.fn(),
+        stop: jest.fn(),
+      },
+      getRequestId: () => "req_ensure_fail",
+    }));
+
+    const response = await request(app)
+      .post("/api/design/sessions")
+      .send({ projectId: "project_01" });
+
+    expect(response.status).toBe(503);
+    expect(updateSessionState).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: "sess_01",
+      projectId: "project_01",
+      state: "FAILED",
+      generation: 0,
+      requestId: "req_ensure_fail",
+    }));
+  });
+
+  test("does not mark a live session FAILED when a transient ensure fails", async () => {
+    const updateSessionState = jest.fn().mockResolvedValue(true);
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn().mockResolvedValue({
+        sessionId: "sess_01",
+        projectId: "project_01",
+        userId: "42",
+        tenantId: "default",
+        state: "READY",
+        generation: 3,
+      }),
+      readSessionBinding: jest.fn(),
+      beginSessionDrain: jest.fn(),
+      updateSessionState,
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: () => "sess_01",
+      controller: {
+        ensure: jest.fn().mockRejectedValue(
+          Object.assign(new Error("controller is down"), {
+            code: "DESIGN_CONTROLLER_UNAVAILABLE",
+            status: 503,
+          }),
+        ),
+        status: jest.fn(),
+        stop: jest.fn(),
+      },
+      getRequestId: () => "req_ensure_transient",
+    }));
+
+    const response = await request(app)
+      .post("/api/design/sessions")
+      .send({ projectId: "project_01" });
+
+    expect(response.status).toBe(503);
+    expect(updateSessionState).not.toHaveBeenCalled();
+  });
+
+  test("admits a capacity rejection as a non-retryable capacity failure, not an outage", async () => {
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn().mockResolvedValue({
+        sessionId: "sess_01",
+        projectId: "project_01",
+        userId: "42",
+        tenantId: "default",
+        state: "REQUESTED",
+        generation: 0,
+      }),
+      readSessionBinding: jest.fn(),
+      beginSessionDrain: jest.fn(),
+      updateSessionState: jest.fn().mockResolvedValue(true),
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: () => "sess_01",
+      controller: {
+        ensure: jest.fn().mockRejectedValue(
+          Object.assign(new Error("Design controller returned status 429."), {
+            code: "DESIGN_CONTROLLER_CAPACITY_EXHAUSTED",
+            status: 429,
+          }),
+        ),
+        status: jest.fn(),
+        stop: jest.fn(),
+      },
+      getRequestId: () => "req_capacity",
+    }));
+
+    const response = await request(app)
+      .post("/api/design/sessions")
+      .send({ projectId: "project_01" });
+
+    expect(response.status).toBe(429);
+    expect(response.body).toEqual({
+      code: "design_capacity_exhausted",
+      message: "Design has no free workspace slot right now. Stop another Design session, then try again.",
+      retryable: false,
+      requestId: "req_capacity",
+    });
+  });
+
+  test("still reports a controller outage as a retryable temporary failure", async () => {
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn().mockResolvedValue({
+        sessionId: "sess_01",
+        projectId: "project_01",
+        userId: "42",
+        tenantId: "default",
+        state: "REQUESTED",
+        generation: 0,
+      }),
+      readSessionBinding: jest.fn(),
+      beginSessionDrain: jest.fn(),
+      updateSessionState: jest.fn().mockResolvedValue(true),
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: () => "sess_01",
+      controller: {
+        ensure: jest.fn().mockRejectedValue(
+          Object.assign(new Error("Design controller returned status 503."), {
+            code: "DESIGN_CONTROLLER_UNAVAILABLE",
+            status: 503,
+          }),
+        ),
+        status: jest.fn(),
+        stop: jest.fn(),
+      },
+      getRequestId: () => "req_outage",
+    }));
+
+    const response = await request(app)
+      .post("/api/design/sessions")
+      .send({ projectId: "project_01" });
+
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual({
+      code: "design_session_unavailable",
+      message: "Design session is temporarily unavailable.",
+      retryable: true,
+      requestId: "req_outage",
+    });
+  });
 });
