@@ -108,14 +108,14 @@ assert.match(runtimeConfig, /attributeFilter:\s*\["href"\]/);
 assert.match(nginx, /location = \/site\/runtime-config\.js \{\s*add_header Cache-Control "no-store" always;/);
 
 for (const plan of ["Free", "Personal", "Pro", "Pro MAX"]) assert.match(pricing, new RegExp(`>${plan}<`));
-for (const price of ["$0", "$15", "$45", "$99"]) assert.ok(pricing.includes(price), `pricing includes ${price}`);
+for (const price of ["$0", "$15", "$45", "$95"]) assert.ok(pricing.includes(price), `pricing includes ${price}`);
 assert.match(pricing, /app\.chatzaki\.com\/pricing/);
 assert.match(policies, /2026-07-12\.v4/g);
 assert.match(read("robots.txt"), /Sitemap: https:\/\/chatzaki\.com\/sitemap\.xml/);
 assert.match(read("sitemap.xml"), /https:\/\/chatzaki\.com\/compliance\//);
 
 assert.doesNotMatch(publicHtml, /novanuggets\.com|hello@novanuggets\.com/i);
-assert.doesNotMatch(publicHtml + mascot, /\$95|pro-95|Your next hire|24\/7 · no breaks|same (?:ZAKI )?brain|under 2 seconds|1,200 invoices|always with sources/i);
+assert.doesNotMatch(publicHtml + mascot, /\$99|pro-95|Your next hire|24\/7 · no breaks|same (?:ZAKI )?brain|under 2 seconds|1,200 invoices|always with sources/i);
 assert.doesNotMatch(pricing, />Power<|Request access/i);
 assert.doesNotMatch(html, /site\/assets\/work\/|raw\.githubusercontent/);
 assert.doesNotMatch(playHtml, /site\/assets\/work\/|raw\.githubusercontent/);
