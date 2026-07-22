@@ -176,7 +176,7 @@ export function saveMinutesConsent(input: {
 }
 
 export function requestMinutesCapture(input: {
-  platform: "google_meet";
+  platform: "google_meet" | "teams";
   meetingUrl: string;
   visibleBotAttested: true;
   idempotencyKey: string;
