@@ -1,14 +1,66 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  hkdfSync,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
 import express from "express";
 
 const OPAQUE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const CURSOR_TOKEN = /^[A-Za-z0-9_-]{1,1024}$/;
+const CURSOR_IV_BYTES = 12;
+const CURSOR_TAG_BYTES = 16;
+// Fixed HKDF info string: domain-separates the cursor key from any other use of
+// the secret and stretches it to exactly the AES-256 key size.
+const CURSOR_KEY_INFO = "zaki-design-read-cursor.v1";
+const TITLE_MAX_BYTES = 512;
 
 export class BadCursorError extends Error {
   constructor() {
     super("Design read cursor is invalid.");
     this.name = "BadCursorError";
   }
+}
+
+/**
+ * Startup resolution of the dedicated cursor secret. The cursor key is never the
+ * hub callback token — the contract's key-separation rule ("never reuse the
+ * BFF<->engine internal token, worker token or receipt-signing key"), the same
+ * rule the controller enforces on its side with assertDistinctTokens.
+ *
+ * - Read plane enabled without a secret: throw. The hub must not boot into a
+ *   state where it falls back to a shared credential for pagination cursors.
+ * - Secret (or previous secret) equal to the callback token: throw.
+ * - No secret while the read plane is disabled: return null — callers skip
+ *   mounting the read routes entirely rather than mounting them with a
+ *   borrowed key.
+ */
+export function resolveDesignReadCursorSecrets({ readEnabled, secret, previousSecret, callbackToken }) {
+  const cursorSecret = String(secret || "").trim();
+  const previousCursorSecret = String(previousSecret || "").trim();
+  if (!cursorSecret) {
+    if (readEnabled) {
+      throw new Error(
+        "ZAKI_DESIGN_READ_ENABLED=true requires DESIGN_READ_CURSOR_SECRET to be set. " +
+          "The Design read cursor secret is dedicated; the hub callback token " +
+          "(ZAKI_DESIGN_HUB_CALLBACK_TOKEN) is never reused as a cursor key."
+      );
+    }
+    return null;
+  }
+  const callback = String(callbackToken || "").trim();
+  if (callback && (cursorSecret === callback || previousCursorSecret === callback)) {
+    throw new Error(
+      "DESIGN_READ_CURSOR_SECRET (and DESIGN_READ_CURSOR_SECRET_PREVIOUS) must be distinct from " +
+        "ZAKI_DESIGN_HUB_CALLBACK_TOKEN — cursor keys and bearer credentials are separate capabilities."
+    );
+  }
+  return {
+    cursorSecret,
+    ...(previousCursorSecret ? { previousCursorSecret } : {}),
+  };
 }
 
 export function buildDesignInternalReadRouter({ callbackToken, source }) {
@@ -90,14 +142,22 @@ export function buildDesignInternalReadRouter({ callbackToken, source }) {
   return router;
 }
 
-export function createDesignInternalReadSource({ dbQuery, cursorSecret }) {
-  const secret = requiredToken(cursorSecret);
+export function createDesignInternalReadSource({ dbQuery, cursorSecret, previousCursorSecret }) {
+  const current = deriveCursorKey(requiredToken(cursorSecret));
+  const previous = String(previousCursorSecret || "").trim()
+    ? deriveCursorKey(requiredToken(previousCursorSecret))
+    : null;
+  // Decrypt-only rotation: the previous secret can open outstanding cursors so
+  // active pagination survives a rotation, but new cursors are minted only under
+  // the current secret.
+  const keys = { current, decrypt: previous ? [current, previous] : [current] };
   return {
     async index({ userId, since, limit, cursor }) {
       // No LEFT JOIN on zaki_users: an unknown user and a known user with no
-      // projects both return zero rows -> the same empty page (non-enumeration).
+      // projects both return zero rows -> the same empty page (non-enumeration,
+      // matching the sealed Minutes profile's owner-scoped index query).
       const controls = { since: since ?? null };
-      const offset = cursor ? decodeCursor(cursor, { route: "index", userId, controls, secret }).offset : 0;
+      const offset = cursor ? decodeCursor(cursor, { route: "index", userId, controls, keys }).offset : 0;
       const result = await dbQuery(
         `
           SELECT project_id, name, status, metadata_json, updated_at
@@ -110,7 +170,7 @@ export function createDesignInternalReadSource({ dbQuery, cursorSecret }) {
         `,
         [Number(userId), since || null, limit + 1, offset]
       );
-      return pageFrom(result.rows, limit, { route: "index", userId, offset, controls, secret });
+      return pageFrom(result.rows, limit, { route: "index", userId, offset, controls, keys });
     },
     async item({ userId, itemId }) {
       const result = await dbQuery(
@@ -145,7 +205,7 @@ export function createDesignInternalReadSource({ dbQuery, cursorSecret }) {
     },
     async search({ userId, query, limit, cursor }) {
       const controls = { q: query };
-      const offset = cursor ? decodeCursor(cursor, { route: "search", userId, controls, secret }).offset : 0;
+      const offset = cursor ? decodeCursor(cursor, { route: "search", userId, controls, keys }).offset : 0;
       const result = await dbQuery(
         `
           SELECT project_id, name, status, metadata_json, updated_at
@@ -158,12 +218,12 @@ export function createDesignInternalReadSource({ dbQuery, cursorSecret }) {
         `,
         [Number(userId), `%${escapeLike(query)}%`, limit + 1, offset]
       );
-      return pageFrom(result.rows, limit, { route: "search", userId, offset, controls, secret });
+      return pageFrom(result.rows, limit, { route: "search", userId, offset, controls, keys });
     },
   };
 }
 
-function pageFrom(rows, limit, { route, userId, offset, controls, secret }) {
+function pageFrom(rows, limit, { route, userId, offset, controls, keys }) {
   const hasMore = rows.length > limit;
   const items = rows.slice(0, limit).map(projectIndexItem);
   const page = { items, truncated: hasMore };
@@ -173,7 +233,7 @@ function pageFrom(rows, limit, { route, userId, offset, controls, secret }) {
     // updated_at hits. No snapshot binding (unlike Minutes) because there is no
     // evaluation snapshot to pin; page drift under concurrent mutation is acceptable
     // here. Move to keyset if a user's project count ever makes offset paging costly.
-    page.next_cursor = encodeCursor({ route, userId, offset: offset + items.length, controls, secret });
+    page.next_cursor = encodeCursor({ route, userId, offset: offset + items.length, controls, keys });
   }
   return page;
 }
@@ -189,29 +249,53 @@ function controlsDigest(controls) {
   return createHash("sha256").update(canonical).digest("hex");
 }
 
-function encodeCursor({ route, userId, offset, controls, secret }) {
+function deriveCursorKey(secret) {
+  return Buffer.from(hkdfSync("sha256", secret, Buffer.alloc(0), CURSOR_KEY_INFO, 32));
+}
+
+// The cursor is opaque on the wire: base64url(iv || AES-256-GCM ciphertext || tag).
+// HMAC-over-plaintext gave integrity but leaked the payload (the internal user id
+// was readable with no key); GCM gives the same tamper rejection plus
+// confidentiality. The GCM tag replaces the HMAC as the integrity check.
+function encodeCursor({ route, userId, offset, controls, keys }) {
   const payload = Buffer.from(
     JSON.stringify({ v: 1, route, user: userId, offset, controls: controlsDigest(controls) }),
     "utf8"
   );
-  const signature = createHmac("sha256", secret).update(payload).digest();
-  return Buffer.concat([payload, signature]).toString("base64url");
+  const iv = randomBytes(CURSOR_IV_BYTES);
+  const cipher = createCipheriv("aes-256-gcm", keys.current, iv);
+  const ciphertext = Buffer.concat([cipher.update(payload), cipher.final()]);
+  return Buffer.concat([iv, ciphertext, cipher.getAuthTag()]).toString("base64url");
 }
 
-function decodeCursor(value, { route, userId, controls, secret }) {
+function decryptCursor(raw, key) {
+  const iv = raw.subarray(0, CURSOR_IV_BYTES);
+  const tag = raw.subarray(raw.length - CURSOR_TAG_BYTES);
+  const ciphertext = raw.subarray(CURSOR_IV_BYTES, raw.length - CURSOR_TAG_BYTES);
+  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+}
+
+function decodeCursor(value, { route, userId, controls, keys }) {
   let raw;
   try {
     raw = Buffer.from(value, "base64url");
   } catch {
     throw new BadCursorError();
   }
-  if (raw.length <= 32) throw new BadCursorError();
-  const payload = raw.subarray(0, raw.length - 32);
-  const signature = raw.subarray(raw.length - 32);
-  const expected = createHmac("sha256", secret).update(payload).digest();
-  if (signature.length !== expected.length || !timingSafeEqual(signature, expected)) {
-    throw new BadCursorError();
+  if (raw.length <= CURSOR_IV_BYTES + CURSOR_TAG_BYTES) throw new BadCursorError();
+  let payload = null;
+  for (const key of keys.decrypt) {
+    try {
+      payload = decryptCursor(raw, key);
+      break;
+    } catch {
+      payload = null;
+    }
   }
+  // Tampered, truncated, or foreign-key cursors all fail GCM authentication.
+  if (!payload) throw new BadCursorError();
   let decoded;
   try {
     decoded = JSON.parse(payload.toString("utf8"));
@@ -238,9 +322,30 @@ function projectIndexItem(row) {
   return {
     id: String(row.project_id),
     kind: "project",
-    title: String(row.name || "Untitled design workspace").slice(0, 512),
+    title: clampTitle(row.name || "Untitled design workspace"),
     updated_at: toIso(row.updated_at),
   };
+}
+
+// <= 512 UTF-8 BYTES, truncated on a code-point boundary — not 512 UTF-16 code
+// units (`.slice(0, 512)`), under which 512 CJK code units are 1,536 bytes and a
+// worst-case 200-item page overruns the shared 270,336-byte response ceiling.
+// Control characters are scrubbed first so the JSON-serialized form of a title is
+// at most 2x its raw bytes (only `"` and `\` escapes remain); that 2x bound is
+// what keeps a full page under the ceiling with no separate server-side byte
+// check — see the Design profile README in zaki-design-engine for the arithmetic.
+function clampTitle(value) {
+  const text = String(value).replace(/[\u0000-\u001f\u007f]/g, " ");
+  if (Buffer.byteLength(text, "utf8") <= TITLE_MAX_BYTES) return text;
+  let bytes = 0;
+  let end = 0;
+  for (const character of text) {
+    const size = Buffer.byteLength(character, "utf8");
+    if (bytes + size > TITLE_MAX_BYTES) break;
+    bytes += size;
+    end += character.length;
+  }
+  return text.slice(0, end);
 }
 
 function safeMetadata(value) {

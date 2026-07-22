@@ -5,9 +5,12 @@ import {
   BadCursorError,
   buildDesignInternalReadRouter,
   createDesignInternalReadSource,
+  resolveDesignReadCursorSecrets,
 } from "./design-internal-read-routes.js";
 
-const CURSOR_SECRET = "design-hub-callback-secret-value";
+// A dedicated cursor secret — deliberately NOT a callback token (key separation).
+const CURSOR_SECRET = "design-read-cursor-secret-0001";
+const PREVIOUS_CURSOR_SECRET = "design-read-cursor-secret-0000";
 
 function projectRow(id, updatedAt) {
   return {
@@ -206,5 +209,152 @@ describe("createDesignInternalReadSource", () => {
     await expect(
       source.index({ userId: "42", since: "2026-06-01T00:00:00.000Z", limit: 1, cursor: page.next_cursor })
     ).rejects.toBeInstanceOf(BadCursorError);
+  });
+
+  test("the cursor is opaque ciphertext: no payload field or user id is readable without the key", async () => {
+    const dbQuery = jest.fn().mockResolvedValue({
+      rows: [projectRow("p2", "2026-07-02T00:00:00.000Z"), projectRow("p1", "2026-07-01T00:00:00.000Z")],
+    });
+    const source = createDesignInternalReadSource({ dbQuery, cursorSecret: CURSOR_SECRET });
+    const page = await source.index({ userId: "31337", since: undefined, limit: 1 });
+    const raw = Buffer.from(page.next_cursor, "base64url");
+
+    // base64url(iv || ciphertext || tag): decoding it yields no JSON and none of
+    // the payload's field names or values (the old HMAC form exposed
+    // {"user":"31337",...} to anyone, keyless).
+    expect(() => JSON.parse(raw.toString("utf8"))).toThrow();
+    const visible = raw.toString("utf8");
+    expect(visible).not.toContain('"user"');
+    expect(visible).not.toContain('"route"');
+    expect(visible).not.toContain("31337");
+
+    // Semantic security: the same page minted twice yields different wire bytes
+    // (random IV), so cursors cannot be correlated across responses either.
+    const again = await source.index({ userId: "31337", since: undefined, limit: 1 });
+    expect(again.next_cursor).not.toBe(page.next_cursor);
+
+    // ...and it still round-trips through the real decode path.
+    await source.index({ userId: "31337", since: undefined, limit: 1, cursor: page.next_cursor });
+    expect(dbQuery.mock.calls[2][1]).toEqual([31337, null, 2, 1]);
+  });
+
+  test("accepts a cursor minted under the previous secret (decrypt-only rotation)", async () => {
+    const outstanding = await mintCursor(PREVIOUS_CURSOR_SECRET);
+
+    // After rotation the outstanding cursor still resumes...
+    const dbQuery = jest.fn().mockResolvedValue({ rows: [] });
+    const rotated = createDesignInternalReadSource({
+      dbQuery,
+      cursorSecret: CURSOR_SECRET,
+      previousCursorSecret: PREVIOUS_CURSOR_SECRET,
+    });
+    await rotated.index({ userId: "42", since: undefined, limit: 1, cursor: outstanding });
+    expect(dbQuery.mock.calls[0][1]).toEqual([42, null, 2, 1]);
+
+    // ...but once the previous secret is dropped, the old cursor is dead.
+    const dropped = createDesignInternalReadSource({ dbQuery: jest.fn(), cursorSecret: CURSOR_SECRET });
+    await expect(
+      dropped.index({ userId: "42", limit: 1, cursor: outstanding })
+    ).rejects.toBeInstanceOf(BadCursorError);
+  });
+
+  test("new cursors are minted under the current secret, not the previous one", async () => {
+    const dbQuery = jest.fn().mockResolvedValue({
+      rows: [projectRow("p2", "2026-07-02T00:00:00.000Z"), projectRow("p1", "2026-07-01T00:00:00.000Z")],
+    });
+    const rotated = createDesignInternalReadSource({
+      dbQuery,
+      cursorSecret: CURSOR_SECRET,
+      previousCursorSecret: PREVIOUS_CURSOR_SECRET,
+    });
+    const page = await rotated.index({ userId: "42", since: undefined, limit: 1 });
+
+    // A source knowing only the CURRENT secret must accept it: proof it was not
+    // minted under the previous (decrypt-only) key.
+    const currentOnly = createDesignInternalReadSource({ dbQuery, cursorSecret: CURSOR_SECRET });
+    await currentOnly.index({ userId: "42", since: undefined, limit: 1, cursor: page.next_cursor });
+    expect(dbQuery.mock.calls[1][1]).toEqual([42, null, 2, 1]);
+  });
+
+  test("clamps titles to 512 UTF-8 bytes on a code-point boundary, not 512 UTF-16 units", async () => {
+    const cjk = "題".repeat(600); // 600 chars x 3 bytes = 1,800 UTF-8 bytes
+    const emoji = "\u{1f4a0}".repeat(200); // 200 chars x 4 bytes = 800 UTF-8 bytes
+    const dbQuery = jest.fn().mockResolvedValue({
+      rows: [projectRow("p1", "2026-07-01T00:00:00.000Z"), projectRow("p2", "2026-07-02T00:00:00.000Z")],
+    });
+    dbQuery.mockResolvedValueOnce({
+      rows: [
+        { ...projectRow("p1", "2026-07-01T00:00:00.000Z"), name: cjk },
+        { ...projectRow("p2", "2026-07-02T00:00:00.000Z"), name: emoji },
+        { ...projectRow("p3", "2026-07-03T00:00:00.000Z"), name: "control\u0000\u0001chars" },
+      ],
+    });
+    const source = createDesignInternalReadSource({ dbQuery, cursorSecret: CURSOR_SECRET });
+
+    const page = await source.index({ userId: "42", since: undefined, limit: 3 });
+
+    const [cjkTitle, emojiTitle, scrubbedTitle] = page.items.map((item) => item.title);
+    // 170 x 3 = 510 bytes; a 171st character would cross 512.
+    expect(cjkTitle).toBe("題".repeat(170));
+    expect(Buffer.byteLength(cjkTitle, "utf8")).toBeLessThanOrEqual(512);
+    // 128 x 4 = exactly 512 bytes; no split surrogate pair at the boundary.
+    expect(emojiTitle).toBe("\u{1f4a0}".repeat(128));
+    expect(Buffer.byteLength(emojiTitle, "utf8")).toBe(512);
+    expect(() => new TextEncoder().encode(emojiTitle)).not.toThrow();
+    // Control characters cannot reach the wire (bounds JSON escape inflation to 2x).
+    expect(scrubbedTitle).toBe("control  chars");
+  });
+});
+
+describe("resolveDesignReadCursorSecrets", () => {
+  test("read plane enabled without a dedicated secret fails loudly at startup", () => {
+    expect(() =>
+      resolveDesignReadCursorSecrets({
+        readEnabled: true,
+        secret: "",
+        previousSecret: "",
+        callbackToken: "hub-callback-token-value",
+      })
+    ).toThrow(/DESIGN_READ_CURSOR_SECRET/);
+  });
+
+  test("never accepts the callback token as the cursor secret", () => {
+    expect(() =>
+      resolveDesignReadCursorSecrets({
+        readEnabled: true,
+        secret: "hub-callback-token-value",
+        callbackToken: "hub-callback-token-value",
+      })
+    ).toThrow(/distinct/);
+    expect(() =>
+      resolveDesignReadCursorSecrets({
+        readEnabled: false,
+        secret: CURSOR_SECRET,
+        previousSecret: "hub-callback-token-value",
+        callbackToken: "hub-callback-token-value",
+      })
+    ).toThrow(/distinct/);
+  });
+
+  test("resolves null (routes unmounted) when the plane is off and no secret exists", () => {
+    expect(
+      resolveDesignReadCursorSecrets({
+        readEnabled: false,
+        secret: "",
+        previousSecret: "",
+        callbackToken: "hub-callback-token-value",
+      })
+    ).toBeNull();
+  });
+
+  test("passes a configured secret pair through", () => {
+    expect(
+      resolveDesignReadCursorSecrets({
+        readEnabled: true,
+        secret: CURSOR_SECRET,
+        previousSecret: PREVIOUS_CURSOR_SECRET,
+        callbackToken: "hub-callback-token-value",
+      })
+    ).toEqual({ cursorSecret: CURSOR_SECRET, previousCursorSecret: PREVIOUS_CURSOR_SECRET });
   });
 });

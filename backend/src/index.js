@@ -253,6 +253,7 @@ import { buildDesignControllerCallbackRouter } from "./design-controller-callbac
 import {
   buildDesignInternalReadRouter,
   createDesignInternalReadSource,
+  resolveDesignReadCursorSecrets,
 } from "./design-internal-read-routes.js";
 import { buildDesignSessionRouter } from "./design-session-routes.js";
 import {
@@ -805,6 +806,18 @@ const DESIGN_CONTROLLER_TOKEN = (
 const DESIGN_HUB_CALLBACK_TOKEN = (
   process.env.ZAKI_DESIGN_HUB_CALLBACK_TOKEN || ""
 ).trim();
+const ZAKI_DESIGN_READ_ENABLED = process.env.ZAKI_DESIGN_READ_ENABLED === "true";
+// Dedicated Design read cursor secret (never the callback token — key
+// separation). Fails startup loudly if the read plane is enabled without it;
+// resolves to null (read routes not mounted) when the plane is off and no
+// secret is configured. `_PREVIOUS` is accepted for decrypt only, so rotating
+// the secret does not kill outstanding pagination.
+const DESIGN_READ_CURSOR_SECRETS = resolveDesignReadCursorSecrets({
+  readEnabled: ZAKI_DESIGN_READ_ENABLED,
+  secret: process.env.DESIGN_READ_CURSOR_SECRET,
+  previousSecret: process.env.DESIGN_READ_CURSOR_SECRET_PREVIOUS,
+  callbackToken: DESIGN_HUB_CALLBACK_TOKEN,
+});
 const ZAKI_LEARNING_WEBHOOK_BASE_URL = (
   process.env.ZAKI_LEARNING_WEBHOOK_BASE_URL ||
   ZAKI_AGENT_WEBHOOK_BASE_URL ||
@@ -18631,13 +18644,18 @@ if (ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED) {
       runInTransaction: withDbTransaction,
     })
   );
-  app.use(
-    "/internal/design/read/v1",
-    buildDesignInternalReadRouter({
-      callbackToken: DESIGN_HUB_CALLBACK_TOKEN,
-      source: createDesignInternalReadSource({ dbQuery, cursorSecret: DESIGN_HUB_CALLBACK_TOKEN }),
-    })
-  );
+  // Mounted only when the dedicated cursor secret exists: the read plane never
+  // borrows the callback token as a cursor key (resolveDesignReadCursorSecrets
+  // has already thrown at startup if ZAKI_DESIGN_READ_ENABLED=true without it).
+  if (DESIGN_READ_CURSOR_SECRETS) {
+    app.use(
+      "/internal/design/read/v1",
+      buildDesignInternalReadRouter({
+        callbackToken: DESIGN_HUB_CALLBACK_TOKEN,
+        source: createDesignInternalReadSource({ dbQuery, ...DESIGN_READ_CURSOR_SECRETS }),
+      })
+    );
+  }
 }
 
 const unavailableDesignSessionController = {
