@@ -39,6 +39,36 @@ describe("Minutes zaki-control.v1 adapter contract", () => {
     );
   });
 
+  test("admits an extra provider only when MINUTES_ADMITTED_PLATFORMS declares it", () => {
+    const teams = {
+      platform: "teams",
+      meeting_url: "https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0",
+      visible_bot_attested: true,
+      idempotency_key: "capture-teams-01",
+    };
+    const prev = process.env.MINUTES_ADMITTED_PLATFORMS;
+    try {
+      // Default deployment is Meet-only, so it refuses teams.
+      delete process.env.MINUTES_ADMITTED_PLATFORMS;
+      expect(() => parseMinutesBrowserCapture(teams)).toThrow(
+        expect.objectContaining({ code: "minutes_control_invalid_request" })
+      );
+      // A deployment that declares teams admits it...
+      process.env.MINUTES_ADMITTED_PLATFORMS = "google_meet,teams";
+      expect(parseMinutesBrowserCapture(teams)).toEqual(teams);
+      // ...but still refuses a platform it did NOT declare, and a URL/platform mismatch.
+      expect(() => parseMinutesBrowserCapture({
+        ...teams, platform: "zoom", meeting_url: "https://acme.zoom.us/j/12345678901",
+      })).toThrow(expect.objectContaining({ code: "minutes_control_invalid_request" }));
+      expect(() => parseMinutesBrowserCapture({
+        ...teams, meeting_url: "https://meet.google.com/abc-defg-hij",
+      })).toThrow(expect.objectContaining({ code: "minutes_control_invalid_request" }));
+    } finally {
+      if (prev === undefined) delete process.env.MINUTES_ADMITTED_PLATFORMS;
+      else process.env.MINUTES_ADMITTED_PLATFORMS = prev;
+    }
+  });
+
   test("seals the engine's exact ZAKI Notetaker identity in a server-owned attestation", () => {
     const request = {
       api_version: "zaki-control.v1",
