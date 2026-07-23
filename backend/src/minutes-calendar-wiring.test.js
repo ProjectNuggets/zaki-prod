@@ -29,6 +29,14 @@ describe("Minutes calendar auto-join sweep startup wiring", () => {
 
     // (b) lease_owner is a UUID column — regression guard for the 22P02 UUID-lease bug.
     expect(sweepSection).toContain("const CALENDAR_POLLER_LEASE_OWNER = crypto.randomUUID();");
+
+    // (c) Defense-in-depth: the poller drives createMinutesCaptureForUser directly,
+    // bypassing the requireControlEnabled gate the browser routes use, so it must NOT
+    // arm when the control plane is inactive — mirrors dependencies.enabled at the
+    // sweep level (else a calendar-enabled-but-control-disabled misconfig would refresh
+    // Google tokens and list calendars every 60s for a plane that cannot fire).
+    expect(sweepSection).toContain("if (calendarControlDeps.enabled) {");
+    expect(indexSource).toContain('console.log("[Minutes] calendar auto-join sweep NOT armed');
   });
 
   test("watchdogs the sweep and shares the browser control-plane wiring", () => {

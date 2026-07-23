@@ -21892,7 +21892,11 @@ server.listen(PORT, () => {
       // columns into the poller.
       loadZakiUser: ({ userId }) => dbGet(`SELECT ${_ZAKI_USER_COLS} FROM zaki_users WHERE id = $1`, [String(userId)]),
       fireCapture: ({ context, input }) => createMinutesCaptureForUser({ context, input, dependencies: calendarControlDeps }),
-      recordFailure: (event) => logStructured("warn", "minutes.calendar.autojoin_failed", event),
+      // A lost recordFire stamp (stage "record_fire") leaves a dispatched bot's row
+      // reclaimable and leans on engine idempotency to avoid a double bot — more
+      // severe than a transient refresh/list failure, so log it at error, not warn.
+      recordFailure: (event) =>
+        logStructured(event?.stage === "record_fire" ? "error" : "warn", "minutes.calendar.autojoin_failed", event),
     };
     const CALENDAR_SWEEP_WATCHDOG_MS = 45_000; // < the 60s interval
     let calendarSweepRunning = false;
@@ -21915,11 +21919,21 @@ server.listen(PORT, () => {
         calendarSweepRunning = false;
       }
     };
-    setTimeout(() => {
-      void runCalendarSweep();
-      setInterval(() => { void runCalendarSweep(); }, CALENDAR_SWEEP_INTERVAL_MS);
-    }, 25_000);
-    console.log("[Minutes] calendar auto-join sweep armed");
+    // Defense-in-depth: the poller drives createMinutesCaptureForUser directly,
+    // bypassing the requireControlEnabled gate the browser control routes sit behind
+    // (minutes-control-routes.js). If the control plane is inactive, do NOT arm the
+    // poller — otherwise a calendar-enabled-but-control-disabled misconfig would
+    // refresh Google tokens and list calendars every 60s for a plane that cannot fire.
+    // Mirrors the browser guard (dependencies.enabled) at the sweep level.
+    if (calendarControlDeps.enabled) {
+      setTimeout(() => {
+        void runCalendarSweep();
+        setInterval(() => { void runCalendarSweep(); }, CALENDAR_SWEEP_INTERVAL_MS);
+      }, 25_000);
+      console.log("[Minutes] calendar auto-join sweep armed");
+    } else {
+      console.log("[Minutes] calendar auto-join sweep NOT armed — minutes control plane disabled");
+    }
   }
 
   // Agent-usage reconciliation sweep (Wave 2 metering completeness): debit the unit wallet for

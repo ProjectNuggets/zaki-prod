@@ -93,6 +93,21 @@ describe("pollConnection safety gates", () => {
     expect(s.skipped[0]).toEqual({ eventId: "e1", reason: "fire_upstream" });
   });
 
+  test("a lost recordFire stamp is surfaced (not swallowed) and never un-fires the dispatched bot", async () => {
+    // The audit UPDATE that stamps capture_id fails AFTER the bot is dispatched. The
+    // bot must stay fired (a lost stamp must never un-fire it), and the failure must
+    // be surfaced via recordFailure(stage "record_fire") — the row is now reclaimable,
+    // so the reliance on engine idempotency to avoid a double bot has to be observable.
+    const recordFire = jest.fn().mockRejectedValue(Object.assign(new Error("db down"), { code: "record_fire_failed" }));
+    const { deps } = makeDeps({ recordFire });
+    const s = await pollConnection({ connection, deps });
+    expect(s.fired).toEqual([{ eventId: "e1", captureId: "capture-01" }]);
+    expect(recordFire).toHaveBeenCalledWith({ dedupKey: expect.any(String), captureId: "capture-01" });
+    expect(deps.recordFailure).toHaveBeenCalledWith(
+      expect.objectContaining({ stage: "record_fire", userId: "42", code: "record_fire_failed", captureId: "capture-01" })
+    );
+  });
+
   test("the dedup key is identical for two attendees of the same meeting-occurrence (one bot per meeting)", () => {
     const a = fireDedupKey({ tenantId: "default", meetingUrl: soonEvent.meetUrl, occurrenceStart: soonEvent.occurrenceStart });
     const b = fireDedupKey({ tenantId: "default", meetingUrl: soonEvent.meetUrl, occurrenceStart: soonEvent.occurrenceStart });
