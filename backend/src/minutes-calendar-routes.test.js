@@ -106,6 +106,9 @@ describe("minutes calendar routes", () => {
     });
     expect(r.status).toBe(302);
     expect(r.headers.get("location")).toContain("calendar=connected");
+    // Must redirect to the APP origin (absolute), not a relative path — on split
+    // app/api hosts a relative redirect lands on the API host, which is a blank 500.
+    expect(r.headers.get("location")).toMatch(/^https:\/\/app-staging\.example\/settings\?/);
     expect(calls.upsert).toHaveLength(1);
     expect(calls.upsert[0]).toEqual(expect.objectContaining({ userId: "42", refreshToken: "1//rt-abc", googleSub: "g-sub-1" }));
   });

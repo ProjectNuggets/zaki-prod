@@ -104,9 +104,15 @@ export function buildMinutesCalendarRouter(dependencies = {}) {
   const settleReturn = (req, base, params) => {
     const target = new URL(String(base || "/settings"), appUrl || "http://localhost");
     for (const [k, v] of Object.entries(params || {})) target.searchParams.set(k, v);
-    // Return only the path+query+hash so we never redirect off-origin, while
-    // preserving any deep-link anchor (e.g. /settings#calendar).
-    return `${target.pathname}${target.search}${target.hash}`;
+    const pathOnly = `${target.pathname}${target.search}${target.hash}`;
+    // The callback runs on the API origin, but the SPA lives on the APP origin
+    // (split app/api hosts, e.g. api-staging vs app-staging). A relative redirect
+    // would land on the API host, which doesn't serve the SPA (blank 500). Redirect
+    // to the configured app origin, taking ONLY the path/query/hash from returnTo so
+    // a crafted absolute returnTo can't open-redirect off the app origin (host is
+    // always appUrl). Falls back to a relative path when appUrl is unset (single-host).
+    const appOrigin = String(appUrl || "").replace(/\/+$/, "");
+    return appOrigin ? `${appOrigin}${pathOnly}` : pathOnly;
   };
 
   // res.setHeader REPLACES; a bearer resolver (legacy-TYP path) may have already
