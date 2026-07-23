@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, CalendarClock, CircleAlert, Eraser, Link2, RefreshCw, Square, Unplug } from "lucide-react";
+import { Bot, CalendarClock, CircleAlert, CircleCheck, Eraser, Link2, RefreshCw, Square, Unplug } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { V2Button, V2Panel, V2PanelBody, V2PanelHead } from "@/app/components/v2";
 import {
@@ -249,12 +249,13 @@ function CalendarAutojoin() {
   return <section aria-labelledby="minutes-calendar-heading" className="border-b border-[var(--v2-hairline)] py-5">
     {heading}
 
-    {callback ? <p role="status" className={`mb-3 text-xs ${callback.status === "connected" ? "text-[var(--v2-accent)]" : "text-[var(--v2-danger)]"}`}>
-      {callback.status === "connected"
-        ? t("minutes.calendarConnected", { defaultValue: "Google Calendar connected." })
-        : callback.reason === "cancelled"
-          ? t("minutes.calendarConnectCancelled", { defaultValue: "Calendar connection was cancelled." })
-          : t("minutes.calendarConnectError", { defaultValue: "Calendar could not be connected. Please try again." })}
+    {/* Only surface the OAuth callback result for FAILURES — a successful connect
+        is already self-evident from the connected state below, so a "connected"
+        banner would just repeat "Google Calendar connected" twice. */}
+    {callback && callback.status !== "connected" ? <p role="alert" className="mb-3 text-xs text-[var(--v2-danger)]">
+      {callback.reason === "cancelled"
+        ? t("minutes.calendarConnectCancelled", { defaultValue: "Calendar connection was cancelled." })
+        : t("minutes.calendarConnectError", { defaultValue: "Calendar could not be connected. Please try again." })}
     </p> : null}
 
     {!conn.connected ? <div className="grid gap-2">
@@ -264,7 +265,7 @@ function CalendarAutojoin() {
       <div><V2Button size="sm" variant="primary" disabled={connect.isPending} onClick={() => connect.mutate()}><Link2 className="size-3.5" aria-hidden />{connect.isPending ? t("minutes.calendarConnecting", { defaultValue: "Connecting…" }) : needsReconnect ? t("minutes.calendarReconnect", { defaultValue: "Reconnect Google Calendar" }) : t("minutes.calendarConnect", { defaultValue: "Connect Google Calendar" })}</V2Button></div>
     </div> : <div className="grid gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs text-[var(--v2-ink-2)]">{t("minutes.calendarConnectedMeta", { defaultValue: "Google Calendar connected" })}</span>
+        <span className="flex items-center gap-1.5 text-xs text-[var(--v2-ink-2)]"><CircleCheck className="size-3.5 text-[var(--v2-accent)]" aria-hidden />{t("minutes.calendarConnectedMeta", { defaultValue: "Google Calendar connected" })}</span>
         <V2Button size="sm" disabled={disconnect.isPending} onClick={() => disconnect.mutate()}><Unplug className="size-3.5" aria-hidden />{disconnect.isPending ? t("minutes.calendarDisconnecting", { defaultValue: "Disconnecting…" }) : t("minutes.calendarDisconnect", { defaultValue: "Disconnect" })}</V2Button>
       </div>
 
