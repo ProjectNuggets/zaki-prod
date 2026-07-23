@@ -62,22 +62,32 @@ export function meetUrlOfEvent(event) {
 //  organizer — only meetings the user organizes
 //  accepted  — organizer OR the user has accepted (skip declined/tentative/needsAction)
 //  all       — any event with a Meet link (still excludes cancelled)
+//
+// Operates on the NORMALIZED event that listUpcomingMeetEvents emits (isOrganizer,
+// responseStatus, status) — NOT the raw Google event. The poller only ever holds
+// the normalized shape, so reading raw fields here would make every organizer/
+// accepted decision silently false. Keep this consuming the normalized contract.
 export function eventPassesScope(event, joinScope) {
   if (String(event?.status || "") === "cancelled") return false;
-  const isOrganizer = Boolean(event?.organizer?.self);
+  const isOrganizer = Boolean(event?.isOrganizer);
   if (joinScope === "organizer") return isOrganizer;
   if (joinScope === "all") return true;
   // default: "accepted"
   if (isOrganizer) return true;
-  const self = (Array.isArray(event?.attendees) ? event.attendees : []).find((a) => a?.self);
-  return self?.responseStatus === "accepted";
+  return event?.responseStatus === "accepted";
 }
 
-// The occurrence start (RFC3339) — dateTime for timed events; date-only all-day
-// events are excluded (no Meet meeting to join at a wall-clock start).
+// The occurrence start as a canonical UTC instant (RFC3339 Z). dateTime for timed
+// events; date-only all-day events are excluded (no wall-clock start to join at).
+// Normalizing to a UTC instant is load-bearing: the dedup key + engine
+// idempotency key are derived from this string, and two attendees' calendars can
+// render the SAME instant with different offsets (…-04:00 vs …+01:00). Without
+// normalization those hash differently → two bots in one meeting.
 export function occurrenceStartOf(event) {
   const dt = event?.start?.dateTime;
-  return dt ? String(dt) : null;
+  if (!dt) return null;
+  const ms = new Date(dt).getTime();
+  return Number.isNaN(ms) ? null : new Date(ms).toISOString();
 }
 
 // List upcoming events with a Meet link in [timeMin, timeMax], expanding
@@ -90,6 +100,10 @@ export async function listUpcomingMeetEvents(
   const url = new URL("https://www.googleapis.com/calendar/v3/calendars/primary/events");
   url.searchParams.set("singleEvents", "true");
   url.searchParams.set("orderBy", "startTime");
+  // Force UTC so start.dateTime comes back with a Z offset regardless of each
+  // calendar's own default zone — every attendee sees the same instant string
+  // (occurrenceStartOf normalizes too; this makes them agree at the source).
+  url.searchParams.set("timeZone", "UTC");
   url.searchParams.set("timeMin", timeMinIso);
   url.searchParams.set("timeMax", timeMaxIso);
   url.searchParams.set("maxResults", String(Math.max(1, Math.min(250, Number(maxResults) || 50))));

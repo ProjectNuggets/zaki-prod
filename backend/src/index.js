@@ -210,12 +210,25 @@ import {
 import { resolveMinutesReadToken } from "./minutes-read-secret.js";
 import {
   buildMinutesControlRouter,
+  buildMinutesControlDependencies,
+  createMinutesCaptureForUser,
   eraseMinutesAccountForErasure,
   isMinutesControlEnabled,
 } from "./minutes-control-routes.js";
 import { buildMinutesCalendarRouter } from "./minutes-calendar-routes.js";
-import { resolveCalendarEncryptionKey } from "./minutes-calendar-store.js";
-import { mirrorCapturePolicy } from "./minutes-calendar-autojoin.js";
+import {
+  resolveCalendarEncryptionKey,
+  decryptCalendarRefreshToken,
+  markCalendarConnectionInvalidGrant,
+} from "./minutes-calendar-store.js";
+import { mirrorCapturePolicy, getAutojoinFireContext } from "./minutes-calendar-autojoin.js";
+import { refreshCalendarAccessToken, listUpcomingMeetEvents, eventPassesScope } from "./minutes-calendar-google.js";
+import {
+  runCalendarAutojoinSweep,
+  claimCalendarConnectionsForPoll,
+  claimAutojoinFire,
+  recordAutojoinFireCapture,
+} from "./minutes-calendar-scheduler.js";
 import { hasMinutesControlAccountState } from "./minutes-control-state.js";
 import { reconcileMinutesControlRecoveries } from "./minutes-control-reconciler.js";
 import { resolveMinutesControlAccountErasure } from "./minutes-control-account-erasure.js";
@@ -18618,7 +18631,10 @@ app.use(
 // The evidence gate intentionally remains false in all current environments.
 // This router is mounted ahead of read so its signed raw callback path is not
 // consumed by a generic JSON parser or the read-plane router.
-app.use("/api/minutes", buildMinutesControlRouter({
+// Built once so the calendar auto-join poller (below) can drive
+// createMinutesCaptureForUser with the EXACT same control-plane wiring as the
+// browser routes — one source of truth, no drift-prone second dep list.
+const minutesControlOptions = {
   enabled: ZAKI_MINUTES_CONTROL_ACTIVE,
   baseUrl: MINUTES_ENGINE_BASE_URL,
   controlSigningKey: getMinutesEngineControlSigningKey(),
@@ -18636,9 +18652,10 @@ app.use("/api/minutes", buildMinutesControlRouter({
   resolvePlan: resolvePlatformWalletPlanForUser,
   recordFailure: (event) => logStructured("warn", "minutes.control.failed", event),
   // Mirror the capture policy Hub-side on each consent save so the calendar
-  // auto-join poller can gate + re-ensure. Only when calendar is enabled.
+  // auto-join poller can gate on capture_enabled. Only when calendar is enabled.
   recordCapturePolicyMirror: ZAKI_MINUTES_CALENDAR_ENABLED ? mirrorCapturePolicy : undefined,
-}));
+};
+app.use("/api/minutes", buildMinutesControlRouter(minutesControlOptions));
 
 // WP-M10 calendar auto-join connect flow (dark until ZAKI_MINUTES_CALENDAR_ENABLED
 // + the encryption key + Google OAuth client are provisioned). The callback is an
@@ -21835,6 +21852,74 @@ server.listen(PORT, () => {
       void runMinutesRecoverySweep();
       setInterval(() => { void runMinutesRecoverySweep(); }, MINUTES_RECOVERY_SWEEP_INTERVAL_MS);
     }, 20_000);
+  }
+
+  // WP-M10 calendar auto-join sweep (dark until ZAKI_MINUTES_CALENDAR_ENABLED +
+  // the encryption key + the Google OAuth client are all provisioned). This is
+  // the ONLY path that sends an unattended bot into a meeting, so it runs behind
+  // the exact same evidence gate as the connect flow. It runs on every replica;
+  // claimCalendarConnectionsForPoll leases rows (FOR UPDATE SKIP LOCKED) and the
+  // per-meeting dedup claim guarantees one bot per meeting across all replicas —
+  // no leader election needed.
+  const calendarEncryptionKey = getCalendarEncryptionKey();
+  if (ZAKI_MINUTES_CALENDAR_ENABLED && calendarEncryptionKey && GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET) {
+    const CALENDAR_SWEEP_INTERVAL_MS = 60_000;
+    const CALENDAR_LEASE_MS = 120_000;
+    // A per-process UUID owner (the lease_owner column is UUID). Not read back for
+    // correctness — reclaim keys off lease_expires_at — so a random id is fine.
+    const CALENDAR_POLLER_LEASE_OWNER = crypto.randomUUID();
+    // A 2-arg fetch (url, opts) the Google client expects, wrapped with our timeout.
+    const calendarFetch = (url, opts) => fetchWithTimeout(url, opts, 10_000, "calendar poll");
+    // The poller drives createMinutesCaptureForUser with the identical control-plane
+    // dependencies the browser routes use — same reserve/create/persist/compensate.
+    const calendarControlDeps = buildMinutesControlDependencies(minutesControlOptions);
+    const calendarSweepDeps = {
+      tenantId: "default",
+      claimConnections: ({ limit }) =>
+        claimCalendarConnectionsForPoll({ limit, leaseOwner: CALENDAR_POLLER_LEASE_OWNER, leaseMs: CALENDAR_LEASE_MS }, { dbQuery }),
+      getFireContext: ({ userId }) => getAutojoinFireContext({ userId }, { dbQuery }),
+      decryptRefreshToken: (connection) => decryptCalendarRefreshToken({ connection, encryptionKey: calendarEncryptionKey }),
+      refreshAccessToken: ({ refreshToken }) =>
+        refreshCalendarAccessToken({ refreshToken, clientId: GOOGLE_CLIENT_ID, clientSecret: GOOGLE_CLIENT_SECRET, fetchImpl: calendarFetch }),
+      listEvents: ({ accessToken, timeMinIso, timeMaxIso }) =>
+        listUpcomingMeetEvents({ accessToken, timeMinIso, timeMaxIso, fetchImpl: calendarFetch }),
+      eventPassesScope,
+      markInvalidGrant: ({ userId }) => markCalendarConnectionInvalidGrant({ userId }, { dbQuery }),
+      claimFire: (fire) => claimAutojoinFire(fire, { dbQuery }),
+      recordFire: (fire) => recordAutojoinFireCapture(fire, { dbQuery }),
+      // Same column projection the auth path hands the browser routes — an exact
+      // zakiUser shape for reserveCapture/resolvePlan, without dragging credential
+      // columns into the poller.
+      loadZakiUser: ({ userId }) => dbGet(`SELECT ${_ZAKI_USER_COLS} FROM zaki_users WHERE id = $1`, [String(userId)]),
+      fireCapture: ({ context, input }) => createMinutesCaptureForUser({ context, input, dependencies: calendarControlDeps }),
+      recordFailure: (event) => logStructured("warn", "minutes.calendar.autojoin_failed", event),
+    };
+    const CALENDAR_SWEEP_WATCHDOG_MS = 45_000; // < the 60s interval
+    let calendarSweepRunning = false;
+    const runCalendarSweep = async () => {
+      if (calendarSweepRunning) return; // no overlapping sweeps
+      calendarSweepRunning = true;
+      try {
+        // Watchdog: a wedged DB/engine call must never freeze the running flag
+        // (which would silently kill this replica's poller for the process life).
+        // The race lets the finally clear the flag; a leaked query drains on its own.
+        const summaries = await Promise.race([
+          runCalendarAutojoinSweep({ deps: calendarSweepDeps }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("calendar sweep watchdog timeout")), CALENDAR_SWEEP_WATCHDOG_MS)),
+        ]);
+        const fired = summaries.reduce((n, s) => n + (s.fired?.length || 0), 0);
+        if (fired > 0) logStructured("info", "minutes.calendar.autojoin_sweep", { connections: summaries.length, fired });
+      } catch (err) {
+        logStructured("error", "minutes.calendar.autojoin_sweep_failed", { message: err?.message || String(err) });
+      } finally {
+        calendarSweepRunning = false;
+      }
+    };
+    setTimeout(() => {
+      void runCalendarSweep();
+      setInterval(() => { void runCalendarSweep(); }, CALENDAR_SWEEP_INTERVAL_MS);
+    }, 25_000);
+    console.log("[Minutes] calendar auto-join sweep armed");
   }
 
   // Agent-usage reconciliation sweep (Wave 2 metering completeness): debit the unit wallet for

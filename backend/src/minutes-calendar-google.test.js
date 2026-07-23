@@ -50,20 +50,24 @@ describe("meetUrlOfEvent", () => {
 });
 
 describe("eventPassesScope", () => {
-  const organized = { organizer: { self: true }, status: "confirmed" };
-  const acceptedInvite = { attendees: [{ self: true, responseStatus: "accepted" }], status: "confirmed" };
-  const declinedInvite = { attendees: [{ self: true, responseStatus: "declined" }], status: "confirmed" };
-  const tentative = { attendees: [{ self: true, responseStatus: "tentative" }], status: "confirmed" };
+  // NORMALIZED shape (what listUpcomingMeetEvents emits + what the poller passes) —
+  // isOrganizer/responseStatus, NOT raw organizer/attendees.
+  const organized = { isOrganizer: true, responseStatus: null, status: "confirmed" };
+  const acceptedInvite = { isOrganizer: false, responseStatus: "accepted", status: "confirmed" };
+  const declinedInvite = { isOrganizer: false, responseStatus: "declined", status: "confirmed" };
+  const tentative = { isOrganizer: false, responseStatus: "tentative", status: "confirmed" };
+  const needsAction = { isOrganizer: false, responseStatus: "needsAction", status: "confirmed" };
 
   test("organizer scope: only self-organized", () => {
     expect(eventPassesScope(organized, "organizer")).toBe(true);
     expect(eventPassesScope(acceptedInvite, "organizer")).toBe(false);
   });
-  test("accepted scope (default): organizer or accepted; not declined/tentative", () => {
+  test("accepted scope (default): organizer or accepted; not declined/tentative/needsAction", () => {
     expect(eventPassesScope(organized, "accepted")).toBe(true);
     expect(eventPassesScope(acceptedInvite, "accepted")).toBe(true);
     expect(eventPassesScope(declinedInvite, "accepted")).toBe(false);
     expect(eventPassesScope(tentative, "accepted")).toBe(false);
+    expect(eventPassesScope(needsAction, "accepted")).toBe(false);
   });
   test("all scope: any non-cancelled", () => {
     expect(eventPassesScope(declinedInvite, "all")).toBe(true);
@@ -71,6 +75,26 @@ describe("eventPassesScope", () => {
   test("a cancelled event never qualifies, under any scope", () => {
     expect(eventPassesScope({ ...organized, status: "cancelled" }, "organizer")).toBe(false);
     expect(eventPassesScope({ ...organized, status: "cancelled" }, "all")).toBe(false);
+  });
+});
+
+// Regression guard for the shape-mismatch bug: the REAL listUpcomingMeetEvents
+// output must satisfy the REAL eventPassesScope for organizer + accepted scopes
+// (the poller wires exactly these two together, unmocked).
+describe("listUpcomingMeetEvents output ⇄ eventPassesScope integration", () => {
+  test("normalized organizer + accepted events pass their scopes end-to-end", async () => {
+    const items = [
+      { id: "org", iCalUID: "org", start: { dateTime: "2026-07-23T10:00:00Z" }, hangoutLink: "https://meet.google.com/a", organizer: { self: true }, status: "confirmed" },
+      { id: "acc", iCalUID: "acc", start: { dateTime: "2026-07-23T11:00:00Z" }, hangoutLink: "https://meet.google.com/b", attendees: [{ self: true, responseStatus: "accepted" }], status: "confirmed" },
+      { id: "dec", iCalUID: "dec", start: { dateTime: "2026-07-23T12:00:00Z" }, hangoutLink: "https://meet.google.com/c", attendees: [{ self: true, responseStatus: "declined" }], status: "confirmed" },
+    ];
+    const out = await listUpcomingMeetEvents({ accessToken: "at", timeMinIso: "a", timeMaxIso: "b", fetchImpl: async () => jsonRes({ items }) });
+    const byId = Object.fromEntries(out.map((e) => [e.eventId, e]));
+    expect(eventPassesScope(byId.org, "organizer")).toBe(true);
+    expect(eventPassesScope(byId.acc, "organizer")).toBe(false);
+    expect(eventPassesScope(byId.org, "accepted")).toBe(true);
+    expect(eventPassesScope(byId.acc, "accepted")).toBe(true);
+    expect(eventPassesScope(byId.dec, "accepted")).toBe(false);
   });
 });
 
@@ -86,9 +110,20 @@ describe("listUpcomingMeetEvents", () => {
     const fetchImpl = async (url) => { seenUrl = url; return jsonRes({ items }); };
     const out = await listUpcomingMeetEvents({ accessToken: "at", timeMinIso: "2026-07-23T00:00:00Z", timeMaxIso: "2026-07-24T00:00:00Z", fetchImpl });
     expect(out).toHaveLength(1);
-    expect(out[0]).toEqual(expect.objectContaining({ eventId: "e1", icalUid: "u1", occurrenceStart: "2026-07-23T10:00:00Z", meetUrl: "https://meet.google.com/aaa", isOrganizer: true }));
+    // occurrenceStart is normalized to a canonical UTC instant (…-04:00 and Z for
+    // the same instant must produce the SAME string, so the dedup key agrees).
+    expect(out[0]).toEqual(expect.objectContaining({ eventId: "e1", icalUid: "u1", occurrenceStart: "2026-07-23T10:00:00.000Z", meetUrl: "https://meet.google.com/aaa", isOrganizer: true }));
     expect(seenUrl).toContain("singleEvents=true");
     expect(seenUrl).toContain("orderBy=startTime");
+    expect(seenUrl).toContain("timeZone=UTC");
+  });
+  test("the same instant expressed in two offsets normalizes to one occurrenceStart (dedup agreement)", async () => {
+    const east = { id: "e", iCalUID: "u", start: { dateTime: "2026-07-23T10:00:00-04:00" }, hangoutLink: "https://meet.google.com/x", organizer: { self: true }, status: "confirmed" };
+    const london = { id: "e", iCalUID: "u", start: { dateTime: "2026-07-23T15:00:00+01:00" }, hangoutLink: "https://meet.google.com/x", organizer: { self: true }, status: "confirmed" };
+    const a = await listUpcomingMeetEvents({ accessToken: "at", timeMinIso: "a", timeMaxIso: "b", fetchImpl: async () => jsonRes({ items: [east] }) });
+    const b = await listUpcomingMeetEvents({ accessToken: "at", timeMinIso: "a", timeMaxIso: "b", fetchImpl: async () => jsonRes({ items: [london] }) });
+    expect(a[0].occurrenceStart).toBe(b[0].occurrenceStart);
+    expect(a[0].occurrenceStart).toBe("2026-07-23T14:00:00.000Z");
   });
   test("a 401 from events.list flags invalidGrant (token died mid-flight)", async () => {
     const fetchImpl = async () => jsonRes({ error: { message: "unauthorized" } }, false, 401);
@@ -98,8 +133,12 @@ describe("listUpcomingMeetEvents", () => {
 });
 
 describe("occurrenceStartOf", () => {
-  test("returns the dateTime for a timed event, null for all-day", () => {
-    expect(occurrenceStartOf({ start: { dateTime: "2026-07-23T10:00:00Z" } })).toBe("2026-07-23T10:00:00Z");
+  test("returns a canonical UTC instant for a timed event, null for all-day", () => {
+    expect(occurrenceStartOf({ start: { dateTime: "2026-07-23T10:00:00Z" } })).toBe("2026-07-23T10:00:00.000Z");
+    expect(occurrenceStartOf({ start: { dateTime: "2026-07-23T10:00:00-04:00" } })).toBe("2026-07-23T14:00:00.000Z");
     expect(occurrenceStartOf({ start: { date: "2026-07-23" } })).toBeNull();
+  });
+  test("a malformed dateTime yields null (not NaN), so it is skipped rather than mis-keyed", () => {
+    expect(occurrenceStartOf({ start: { dateTime: "not-a-date" } })).toBeNull();
   });
 });
