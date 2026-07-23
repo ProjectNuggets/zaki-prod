@@ -34,6 +34,7 @@ import { trackProductEvent } from "@/lib/productTelemetry";
 import { transcribeAudio, type AgentSessionMode } from "@/lib/api";
 import { applyExpansion } from "@/lib/expansionShortcuts";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/app/components/ui/tooltip";
+import { TypeToConfirmDialog } from "@/app/components/ui/zaki";
 import {
   getDisplayOrder,
   resolveCanonical,
@@ -352,6 +353,7 @@ export function InputArea({
   const [menuOpen, setMenuOpen] = useState(false);
   const [scheduleFollowUpOpen, setScheduleFollowUpOpen] = useState(false);
   const [pinContextOpen, setPinContextOpen] = useState(false);
+  const [fullAutonomyTurnConfirmOpen, setFullAutonomyTurnConfirmOpen] = useState(false);
   const [zakiAutonomy, setZakiAutonomy] =
     useState<ZakiTurnAutonomyLevel>(zakiDefaultAutonomy);
   const [zakiReasoningEffort, setZakiReasoningEffort] =
@@ -410,6 +412,7 @@ export function InputArea({
   }, [zakiBotMode, zakiDefaultReasoningEffort]);
 
   useEffect(() => {
+    setFullAutonomyTurnConfirmOpen(false);
     if (!zakiBotMode) return;
     zakiAutonomyTouchedRef.current = false;
     zakiReasoningTouchedRef.current = false;
@@ -706,6 +709,15 @@ export function InputArea({
   }, []);
 
   const startRecording = useCallback(async () => {
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      toast.error(t("input.voice.errorNoBrowser"));
+      void trackProductEvent({ event: "voice_dictate_failed", source: "chat_input" });
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       // Prefer webm (Chrome/Edge), fall back to mp4 (Safari/iOS), then wav
@@ -740,6 +752,15 @@ export function InputArea({
           const b64 = btoa(binary);
           const format = mimeType.includes("webm") ? "webm" : mimeType.includes("mp4") ? "m4a" : "wav";
           const result = await transcribeAudio(b64, format);
+          if (!result.response.ok) {
+            toast.error(
+              t("input.voice.errorUnavailable", {
+                defaultValue: "Voice input is unavailable right now. Try again later.",
+              })
+            );
+            void trackProductEvent({ event: "voice_dictate_failed", source: "chat_input" });
+            return;
+          }
           const transcribedText = result.data?.text?.trim();
           if (transcribedText) {
             setInputValue((prev) => (prev ? `${prev} ${transcribedText}` : transcribedText));
@@ -777,7 +798,7 @@ export function InputArea({
       toast.error(t("input.voice.errorMicAccess"));
       void trackProductEvent({ event: "voice_dictate_failed", source: "chat_input" });
     }
-  }, [clearRecordingTimers]);
+  }, [clearRecordingTimers, t]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
@@ -1088,6 +1109,15 @@ export function InputArea({
   const handleCycleZakiMode = useCallback(() => {
     handleSelectZakiMode(nextCycleValue(ZAKI_MODE_ORDER, effectiveZakiMode));
   }, [effectiveZakiMode, handleSelectZakiMode]);
+  const handleCycleZakiAutonomy = useCallback(() => {
+    const nextAutonomy = nextCycleValue(ZAKI_AUTONOMY_ORDER, zakiAutonomy);
+    if (nextAutonomy === "full") {
+      setFullAutonomyTurnConfirmOpen(true);
+      return;
+    }
+    zakiAutonomyTouchedRef.current = true;
+    setZakiAutonomy(nextAutonomy);
+  }, [zakiAutonomy]);
 
   return (
     <div
@@ -1776,12 +1806,7 @@ export function InputArea({
                   "zaki-turn-chip zaki-turn-chip--autonomy",
                   `is-autonomy-${zakiAutonomy}`
                 )}
-                onClick={() => {
-                  zakiAutonomyTouchedRef.current = true;
-                  setZakiAutonomy((current) =>
-                    nextCycleValue(ZAKI_AUTONOMY_ORDER, current)
-                  );
-                }}
+                onClick={handleCycleZakiAutonomy}
                 aria-label={t("input.zaki.autonomyAria", {
                   defaultValue: "Autonomy level: {{value}}",
                   value: ZAKI_AUTONOMY_LABELS[zakiAutonomy],
@@ -1916,9 +1941,21 @@ export function InputArea({
               </TooltipContent>
             </Tooltip>
           ) : null}
-          {/* Mic button — STT voice input stays on non-Agent chat surfaces; the V2 Agent composer reserves this row for turn controls. */}
-          {!zakiBotMode && !isStopMode ? (
+          {/* Voice dictation belongs in both Chat and Agent. It only inserts a
+              transcript into the composer; sending remains an explicit user action. */}
+          {!isStopMode ? (
             <>
+              <span className="sr-only" role="status" aria-live="polite">
+                {isTranscribing
+                  ? t("input.voice.transcribingStatus", {
+                      defaultValue: "Transcribing voice input.",
+                    })
+                  : isRecording
+                    ? t("input.voice.recordingStatus", {
+                        defaultValue: "Recording voice input.",
+                      })
+                    : ""}
+              </span>
               {isRecording ? (
                 <>
                   <span
@@ -1930,8 +1967,8 @@ export function InputArea({
                   <button
                     type="button"
                     onClick={cancelRecording}
-                    className="zaki-button-bounce size-11 sm:size-9 rounded-[2px] flex items-center justify-center border border-zaki-strong bg-zaki-elevated hover:bg-zaki-sunken focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2 transition-colors"
-                    aria-label={t("input.voice.stop")}
+                    className="zaki-button-bounce zaki-voice-control size-11 sm:size-9 rounded-[2px] flex items-center justify-center border border-zaki-strong bg-zaki-elevated hover:bg-zaki-sunken focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2 transition-colors"
+                    aria-label={t("input.voice.discard", { defaultValue: "Discard recording" })}
                   >
                     <X className="size-4 text-zaki-muted" />
                   </button>
@@ -1942,12 +1979,22 @@ export function InputArea({
                 onClick={isRecording ? stopRecording : startRecording}
                 disabled={isTranscribing || isSending}
                 className={cn(
-                  "zaki-button-bounce size-11 sm:size-9 rounded-[2px] flex items-center justify-center border focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2 disabled:opacity-60 transition-colors",
+                  "zaki-button-bounce zaki-voice-control size-11 sm:size-9 rounded-[2px] flex items-center justify-center border focus-visible:ring-2 focus-visible:ring-zaki-accent focus-visible:ring-offset-2 disabled:opacity-60 transition-colors",
                   isRecording
                     ? "bg-zaki-brand hover:bg-zaki-brand-hover border-zaki-brand/30"
                     : "bg-zaki-elevated hover:bg-zaki-sunken border-zaki-strong"
                 )}
-                aria-label={isRecording ? t("input.voice.stop") : isTranscribing ? t("input.voice.listening") : t("input.voice.tapToRecord")}
+                aria-label={
+                  isRecording
+                    ? t("input.voice.finish", { defaultValue: "Finish recording" })
+                    : isTranscribing
+                      ? t("input.voice.transcribingStatus", {
+                          defaultValue: "Transcribing voice input.",
+                        })
+                      : t("input.voice.tapToRecord")
+                }
+                data-testid="voice-dictate-button"
+                data-recording={isRecording ? "true" : "false"}
               >
                 {isTranscribing ? (
                   <span className="size-4 animate-spin rounded-[2px] border-2 border-zaki-muted border-t-transparent" />
@@ -2031,6 +2078,27 @@ export function InputArea({
         onPin={pinMemory}
         onUnpin={unpinMemory}
         limit={pinLimit}
+      />
+      <TypeToConfirmDialog
+        isOpen={fullAutonomyTurnConfirmOpen}
+        title={t("input.zaki.autonomyConfirm.title", {
+          defaultValue: "Use full autonomy for this turn",
+        })}
+        body={t("input.zaki.autonomyConfirm.body", {
+          defaultValue:
+            "Full autonomy lets this Agent turn proceed without asking for approval when its policy permits it. Type FULL to use it for this turn.",
+        })}
+        confirmPhrase="FULL"
+        confirmLabel={t("input.zaki.autonomyConfirm.confirm", {
+          defaultValue: "Use full autonomy",
+        })}
+        cancelLabel={t("common.cancel", { defaultValue: "Cancel" })}
+        onCancel={() => setFullAutonomyTurnConfirmOpen(false)}
+        onConfirm={() => {
+          setFullAutonomyTurnConfirmOpen(false);
+          zakiAutonomyTouchedRef.current = true;
+          setZakiAutonomy("full");
+        }}
       />
     </div>
   );

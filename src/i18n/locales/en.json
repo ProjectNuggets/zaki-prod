@@ -58,6 +58,11 @@
       "on": "On",
       "off": "Off"
     },
+    "channels": {
+      "comingSoon": "Coming soon",
+      "comingSoonDescription": "Coming soon — not yet available for sending or receiving.",
+      "comingSoonLead": "This channel is coming soon and is not available for setup in this release."
+    },
     "account": {
       "signIn": "Sign in",
       "signOut": "Sign out",
@@ -256,6 +261,8 @@
       "loading": "Loading Agent settings...",
       "loadingShort": "Loading",
       "ready": "Tenant defaults",
+      "unavailableShort": "Unavailable",
+      "unavailable": "Unable to load Agent settings. Your saved defaults have not been changed.",
       "defaultsNotice": "Defaults for new Agent turns and supported channel runtimes. Composer chips can still override the next Agent send only.",
       "resetDefaults": "Reset to defaults",
       "reasoningEffort": {
@@ -274,6 +281,11 @@
           "read_only": "Read only",
           "supervised": "Supervised",
           "full": "Full autonomy"
+        },
+        "fullConfirm": {
+          "title": "Enable full autonomy",
+          "body": "Full autonomy allows new Agent runs to proceed without asking for approval when their policy permits it. Type FULL to make it your default.",
+          "confirm": "Enable full autonomy"
         }
       },
       "groupActivation": {
@@ -313,8 +325,8 @@
         }
       },
       "voiceReplies": {
-        "name": "Voice replies",
-        "helper": "Use text-to-speech replies for supported voice-note or audio-capable channel turns."
+        "name": "Audio replies on connected channels",
+        "helper": "Allow audio replies where a connected channel supports them. This does not affect voice input in ZAKI or the manual Read Aloud button."
       },
       "sessionTimeout": {
         "name": "Session timeout",
@@ -724,6 +736,17 @@
       "Processing",
       "Working on it"
     ],
+    "agentWorking": {
+      "gatheringContext": "Gathering context",
+      "phrases": [
+        "Looking into it",
+        "Following the thread",
+        "Turning the idea over",
+        "Checking the cupboards",
+        "Picking up flowers",
+        "Let me work my brain"
+      ]
+    },
     "copyCode": "Copy code",
     "copyEmail": "Copy email",
     "copyTable": "Copy table",
@@ -813,15 +836,25 @@
       "memory": "Memory",
       "memoryAria": "{{count}} pinned memories",
       "output": "Output",
-      "outputAria": "{{count}} outputs available"
+      "outputAria": "{{count}} outputs available",
+      "autonomyConfirm": {
+        "title": "Use full autonomy for this turn",
+        "body": "Full autonomy lets this Agent turn proceed without asking for approval when its policy permits it. Type FULL to use it for this turn.",
+        "confirm": "Use full autonomy"
+      }
     },
     "voice": {
       "tapToRecord": "Tap to record",
       "recording": "Recording…",
+      "recordingStatus": "Recording voice input.",
       "listening": "Listening…",
+      "transcribingStatus": "Transcribing voice input.",
       "stop": "Stop",
+      "finish": "Finish recording",
+      "discard": "Discard recording",
       "errorMicAccess": "Microphone access denied",
       "errorGeneric": "Voice capture failed",
+      "errorUnavailable": "Voice input is unavailable right now. Try again later.",
       "errorNoBrowser": "Voice not supported in this browser"
     },
     "placeholders": [

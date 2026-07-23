@@ -102,6 +102,16 @@ export const USER_MANAGED_CHANNELS: AgentChannelControlId[] = [
   "whatsapp",
 ];
 
+// The settings UI must not mistake stored credentials for a working product.
+// Telegram is the only release-ready channel with verified inbound and outbound
+// delivery. Keep the remaining cards visible as roadmap context, but do not let
+// a user save credentials, test, or bind a channel that cannot serve them yet.
+const RELEASE_READY_CHANNELS = new Set<SettingsChannelId>(["telegram"]);
+
+export function isChannelReadyForRelease(channel: SettingsChannelId) {
+  return RELEASE_READY_CHANNELS.has(channel);
+}
+
 export const CHANNEL_ACTIVATION_FIELDS: Partial<Record<
   AgentChannelControlId,
   Array<{
@@ -328,17 +338,25 @@ export function SettingsChannelsSection({
   handleDisconnectChannelControl,
 }: SettingsChannelsSectionProps) {
   const { t } = useTranslation();
+  const comingSoonLabel = t("settingsModal.channels.comingSoon", {
+    defaultValue: "Coming soon",
+  });
+  const comingSoonDescription = t("settingsModal.channels.comingSoonDescription", {
+    defaultValue: "Coming soon — not yet available for sending or receiving.",
+  });
+  const comingSoonLead = t("settingsModal.channels.comingSoonLead", {
+    defaultValue: "This channel is coming soon and is not available for setup in this release.",
+  });
 
   const settingsChannelRows = useMemo<SettingsChannelViewModel[]>(() => {
     return SETTINGS_CHANNELS.flatMap((config) => {
+      const releaseReady = isChannelReadyForRelease(config.id);
       const launch = isAgentLaunchChannelId(config.id)
         ? agentChannelsById.get(config.id) ?? null
         : null;
       const control = channelControlsById.get(config.id) ?? null;
       const controlDisabledInBuild =
         control?.build_enabled === false || control?.status === "disabled_in_build";
-
-      if (config.id === "whatsapp" && (!control || controlDisabledInBuild)) return [];
 
       const bindings = launch?.bindings?.items ?? [];
       const secretRefs = control?.secret_refs ?? [];
@@ -354,6 +372,7 @@ export function SettingsChannelsSection({
         .filter((secret) => !secret.present)
         .map((secret) => secret.key);
       const credentialFormVisible =
+        releaseReady &&
         Boolean(control) &&
         channelControlsAvailable &&
         !controlDisabledInBuild;
@@ -368,13 +387,14 @@ export function SettingsChannelsSection({
         credentialFormVisible &&
         Boolean(control?.endpoints?.test || control) &&
         (isConnected || hasRequiredSecrets);
-      const hasLiveProbe = channelHasLiveProbe(config.id);
+      const hasLiveProbe = releaseReady && channelHasLiveProbe(config.id);
       const canDisconnectChannel =
         credentialFormVisible &&
         (config.id === "telegram" || Boolean(control?.endpoints?.disconnect || control)) &&
         (isConnected || presentSecrets > 0);
       const canManageBindings = Boolean(
-        isAgentLaunchChannelId(config.id) &&
+        releaseReady &&
+          isAgentLaunchChannelId(config.id) &&
           launch?.bindings_supported &&
           launch?.status !== "disabled_in_build" &&
           launch?.status !== "unavailable"
@@ -382,14 +402,19 @@ export function SettingsChannelsSection({
 
       let statusLabel = control ? getChannelControlStatusLabel(control) : getChannelStatusLabel(launch);
       let statusTone = control ? getChannelControlTone(control) : getChannelTone(launch);
-      if (!control && config.id !== "telegram" && !channelControlsLoading) {
+      if (!releaseReady) {
+        statusLabel = comingSoonLabel;
+        statusTone = "default";
+      } else if (!control && config.id !== "telegram" && !channelControlsLoading) {
         statusLabel = channelControlsAvailable ? "Status only" : "Control plane unavailable";
         statusTone = channelControlsAvailable ? "default" : "danger";
       }
 
       let ownershipLabel = "Status only";
       let ownershipTone: V2BadgeTone = "default";
-      if (credentialFormVisible) {
+      if (!releaseReady) {
+        ownershipLabel = comingSoonLabel;
+      } else if (credentialFormVisible) {
         ownershipLabel = "Your tokens";
         ownershipTone = "success";
       } else if (controlDisabledInBuild) {
@@ -408,16 +433,23 @@ export function SettingsChannelsSection({
       if (!channelControlsAvailable && config.id !== "telegram") {
         notes.push("Credential actions are unavailable while the channel control plane is offline.");
       }
+      if (!releaseReady) {
+        notes.push(comingSoonDescription);
+      }
       if (missingSecrets.length > 0 && credentialFormVisible) {
         notes.push(`Missing required fields: ${missingSecrets.join(", ")}.`);
       }
-      const credentialSummary = credentialFormVisible
+      const credentialSummary = !releaseReady
+        ? comingSoonLabel
+        : credentialFormVisible
         ? `${presentSecrets}/${totalRequiredSecrets} credential fields saved`
         : ownershipLabel;
       const bindingSummary = canManageBindings
         ? `${bindings.length} ${bindings.length === 1 ? "binding" : "bindings"}`
         : "Not available";
-      const panelLead = credentialFormVisible
+      const panelLead = !releaseReady
+        ? comingSoonLead
+        : credentialFormVisible
         ? "Save or rotate this channel's write-only token fields."
         : config.id === "telegram"
           ? "Telegram setup is unavailable until the channel control plane responds."
@@ -425,6 +457,9 @@ export function SettingsChannelsSection({
 
       return [{
         ...config,
+        description: releaseReady
+          ? config.description
+          : `${config.description} ${comingSoonDescription}`,
         launch,
         control,
         bindings,
@@ -454,6 +489,9 @@ export function SettingsChannelsSection({
     channelControlsAvailable,
     channelControlsById,
     channelControlsLoading,
+    comingSoonDescription,
+    comingSoonLabel,
+    comingSoonLead,
     expandedChannelId,
   ]);
 

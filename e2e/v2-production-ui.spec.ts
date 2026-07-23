@@ -135,6 +135,8 @@ test.describe("V2 production-final app surfaces", () => {
     await expect(page.getByTestId("zaki-composer-reasoning")).toBeVisible();
     await expect(page.getByTestId("zaki-composer-autonomy")).toBeVisible();
     await expect(page.getByTestId("zaki-context-meter")).toBeVisible();
+    await expect(page.getByTestId("voice-dictate-button")).toBeVisible();
+    await expect(page.getByTestId("voice-dictate-button")).toHaveAccessibleName(/tap to record/i);
 
     await openInspectorIfNeeded(page);
     const inspector = page.locator(".zaki-agent-inspector").first();
@@ -162,6 +164,7 @@ test.describe("V2 production-final app surfaces", () => {
     await expect(page.getByTestId("zaki-composer-upload")).toBeVisible();
     await expect(page.getByTestId("zaki-turn-controls")).toBeVisible();
     await expect(page.getByTestId("zaki-context-meter")).toBeVisible();
+    await expect(page.getByTestId("voice-dictate-button")).toBeVisible();
     await attachViewportShot(page, testInfo, "agent-390x844");
   });
 
@@ -243,6 +246,7 @@ test.describe("V2 production-final app surfaces", () => {
     await expect(page.getByTestId("settings-channels").getByText("Telegram", { exact: true })).toBeVisible();
     await expect(page.getByTestId("settings-channels").getByText("Slack", { exact: true }).first()).toBeVisible();
     await expect(page.getByTestId("settings-channels").getByText("Discord", { exact: true }).first()).toBeVisible();
+    await expect(page.getByTestId("settings-channels").getByText("WhatsApp", { exact: true })).toBeVisible();
     await expect(page.getByTestId("settings-channels").getByText("Email", { exact: true })).toHaveCount(0);
     const telegramChannel = page.getByTestId("settings-channel-telegram");
     await telegramChannel.getByRole("button", { name: "Manage Telegram" }).click();
@@ -253,14 +257,16 @@ test.describe("V2 production-final app surfaces", () => {
     await expect(telegramPanel.getByText("Last connection test")).toBeVisible();
     await expect(telegramPanel.getByText("Provider connection verified.")).toBeVisible();
     await attachViewportShot(page, testInfo, "settings-telegram-liveness-1440x1000");
-    const slackChannel = page.getByTestId("settings-channel-slack");
-    await slackChannel.getByRole("button", { name: "Manage Slack" }).click();
-    const slackPanel = page.getByTestId("settings-channel-panel-slack");
-    await expect(slackPanel.getByText(/Bot User OAuth Token \(xoxb-/i)).toBeVisible();
-    await expect(slackPanel.getByText(/Both the Bot token and Signing secret are required for first-time setup/i)).toBeVisible();
-    await expect(slackPanel.getByText(/workspace OAuth app-install is not available yet/i)).toBeVisible();
-    await expect(slackPanel.getByLabel("Slack Bot token")).toHaveAttribute("type", "password");
-    await attachViewportShot(page, testInfo, "settings-slack-1440x1000");
+    for (const [id, label] of [
+      ["slack", "Slack"],
+      ["discord", "Discord"],
+      ["whatsapp", "WhatsApp"],
+    ]) {
+      const channel = page.getByTestId(`settings-channel-${id}`);
+      await expect(channel.getByText("Coming soon", { exact: true })).toBeVisible();
+      await expect(channel.getByRole("button", { name: `Manage ${label}` })).toHaveCount(0);
+    }
+    await expect(page.getByLabel("Slack Bot token")).toHaveCount(0);
     await expect(page.getByText("Gmail & Google Drive")).toHaveCount(0);
     await expect(page.getByText(/Composio/i)).toHaveCount(0);
     await openSettingsCategory(page, /Advanced credentials/, "settings-secrets");
@@ -321,13 +327,15 @@ test.describe("V2 production-final app surfaces", () => {
     await mobileTelegramPanel.getByRole("button", { name: "Test Telegram connection" }).click();
     await expect(mobileTelegramPanel.getByText("Provider connection verified.")).toBeVisible();
     await attachViewportShot(page, testInfo, "settings-telegram-liveness-390x844");
-    await page.getByTestId("settings-channel-slack").getByRole("button", { name: "Manage Slack" }).click();
-    const mobileSlackGuidance = page
-      .getByTestId("settings-channel-panel-slack")
-      .getByText(/Both the Bot token and Signing secret are required for first-time setup/i);
-    await mobileSlackGuidance.scrollIntoViewIfNeeded();
-    await expect(mobileSlackGuidance).toBeVisible();
-    await attachViewportShot(page, testInfo, "settings-slack-390x844");
+    for (const [id, label] of [
+      ["slack", "Slack"],
+      ["discord", "Discord"],
+      ["whatsapp", "WhatsApp"],
+    ]) {
+      const channel = page.getByTestId(`settings-channel-${id}`);
+      await expect(channel.getByText("Coming soon", { exact: true })).toBeVisible();
+      await expect(channel.getByRole("button", { name: `Manage ${label}` })).toHaveCount(0);
+    }
     await expect(page.getByTestId("settings-connections")).toHaveCount(0);
     await expect(page.getByText("Gmail & Google Drive")).toHaveCount(0);
     await expect(page.getByText(/Composio/i)).toHaveCount(0);

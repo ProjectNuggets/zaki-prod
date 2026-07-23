@@ -1952,31 +1952,54 @@ export function extractNullalisNarrationFrame(
   payload: Record<string, unknown>,
   now = Date.now()
 ): NullalisNarrationFrame | null {
-  if (!isNullalisNarrationPhase(payload.phase)) return null;
-  const phase = payload.phase.trim().toLowerCase() as NullalisNarrationPhase;
-  const stepIndex =
-    numericValue(payload.step_index ?? payload.stepIndex) ??
-    numericValue(payload.index);
-  const stepTotal =
-    numericValue(payload.step_total ?? payload.stepTotal ?? payload.total);
-  const durationMs = numericValue(payload.duration_ms ?? payload.durationMs);
+  const nested =
+    payload.content && typeof payload.content === "object" && !Array.isArray(payload.content)
+      ? (payload.content as Record<string, unknown>)
+      : null;
+  const nestedPhase = nested?.phase;
+  const rootPhase = payload.phase;
+  // WebSocket reports can wrap a valid runtime update in `content`; direct SSE
+  // carries the same fields at the root. An unrelated nested object must never
+  // override a valid root event.
+  const source = isNullalisNarrationPhase(nestedPhase)
+    ? nested!
+    : isNullalisNarrationPhase(rootPhase)
+      ? payload
+      : null;
+  if (!source) return null;
+  const phase = String(source.phase).trim().toLowerCase() as NullalisNarrationPhase;
+  const rootFallback = source === payload ? null : payload;
+  const readString = (...keys: string[]) => {
+    for (const record of [source, rootFallback]) {
+      if (!record) continue;
+      for (const key of keys) {
+        const value = record[key];
+        if (typeof value === "string" && value.trim()) return value.trim();
+      }
+    }
+    return null;
+  };
+  const readNumber = (...keys: string[]) => {
+    for (const record of [source, rootFallback]) {
+      if (!record) continue;
+      for (const key of keys) {
+        const value = numericValue(record[key]);
+        if (value != null) return value;
+      }
+    }
+    return null;
+  };
+  const stepIndex = readNumber("step_index", "stepIndex", "index");
+  const stepTotal = readNumber("step_total", "stepTotal", "total");
+  const durationMs = readNumber("duration_ms", "durationMs");
   return {
     id: `zaki-runtime-narration-${now}-${Math.random().toString(36).slice(2, 8)}`,
     phase,
-    label:
-      (typeof payload.label === "string" && payload.label.trim()) ||
-      (typeof payload.status === "string" && payload.status.trim()) ||
-      (typeof payload.message === "string" && payload.message.trim()) ||
+    label: readString("label", "status", "message") ||
       (phase === "thinking" ? "Thinking..." : phase.replace(/_/g, " ")),
-    tool:
-      typeof payload.tool === "string"
-        ? payload.tool
-        : typeof payload.tool_name === "string"
-          ? payload.tool_name
-          : typeof payload.toolName === "string"
-            ? payload.toolName
-            : null,
-    iteration: numericValue(payload.iteration),
+    source: "runtime",
+    tool: readString("tool", "tool_name", "toolName"),
+    iteration: readNumber("iteration"),
     durationMs,
     stepIndex,
     stepTotal,
@@ -6196,7 +6219,10 @@ export function ChatArea() {
   );
 
   const pushNullalisNarrationFrame = useCallback(
-    (payload: Record<string, unknown>) => {
+    (
+      payload: Record<string, unknown>,
+      transcriptEventType: "progress" | "status" = "progress"
+    ) => {
       if (!isZakiBotActiveSpace) return;
       const frame = extractNullalisNarrationFrame(payload);
       if (!frame) return;
@@ -6209,7 +6235,9 @@ export function ChatArea() {
             : "thinking"
       );
       setNullalisNarrationFrame(frame);
-      pushNullalisTranscriptEntry(extractNullalisTranscriptEntry("progress", payload, frame.timestamp));
+      pushNullalisTranscriptEntry(
+        extractNullalisTranscriptEntry(transcriptEventType, payload, frame.timestamp)
+      );
       if (frame.tool && frame.phase === "tool_start") {
         upsertZakiBotToolCall({
           type: "toolCallInvocation",
@@ -6227,6 +6255,21 @@ export function ChatArea() {
       upsertZakiBotProgressTool,
       upsertZakiBotToolCall,
     ]
+  );
+
+  // The Agent can receive the same runtime progress through direct SSE or the
+  // legacy WebSocket relay. Keep the visible working card on the one
+  // authoritative narration stream, while retaining the legacy status state
+  // only for its completion/cache bookkeeping.
+  const applyAgentRuntimeProgress = useCallback(
+    (payload: Record<string, unknown>, source: "progress" | "status") => {
+      if (extractNullalisNarrationFrame(payload)) {
+        pushNullalisNarrationFrame(payload, source);
+        return;
+      }
+      pushZakiBotProgressEvent(payload, source);
+    },
+    [pushNullalisNarrationFrame, pushZakiBotProgressEvent]
   );
 
   const upsertNullalisTaskItem = useCallback(
@@ -6510,11 +6553,11 @@ export function ChatArea() {
                 : ({ type: report?.type, content: report?.content } as Record<string, unknown>);
             if (report?.type === "removeStatusResponse") return;
             if (isZakiBotActiveSpace && report?.type === "progress") {
-              pushZakiBotProgressEvent(reportPayload, "progress");
+              applyAgentRuntimeProgress(reportPayload, "progress");
               return;
             }
             if (isZakiBotActiveSpace && report?.type === "statusResponse") {
-              pushZakiBotProgressEvent(reportPayload, "status");
+              applyAgentRuntimeProgress(reportPayload, "status");
               return;
             }
             if (isZakiBotActiveSpace && report?.type === "reasoning_summary") {
@@ -6570,14 +6613,14 @@ export function ChatArea() {
 
           if (payload?.type === "progress") {
             if (isZakiBotActiveSpace) {
-              pushZakiBotProgressEvent(payload, "progress");
+              applyAgentRuntimeProgress(payload, "progress");
             }
             return;
           }
 
           if (payload?.type === "statusResponse") {
             if (isZakiBotActiveSpace) {
-              pushZakiBotProgressEvent(payload, "status");
+              applyAgentRuntimeProgress(payload, "status");
             }
             return;
           }
@@ -6701,11 +6744,11 @@ export function ChatArea() {
     });
   }, [
     applyZakiBotToolResult,
+    applyAgentRuntimeProgress,
     finalizeZakiBotProgress,
     handleAgentArtifactEvent,
     handleNullalisApprovalRequired,
     isZakiBotActiveSpace,
-    pushZakiBotProgressEvent,
     pushNullalisTranscriptEntry,
     markZakiBotReplyStart,
     updateNullalisReasoningSummary,
@@ -7139,12 +7182,7 @@ export function ChatArea() {
       }
       if (isZakiAgentSpace) {
         if (eventType === "progress" || payloadType === "progress") {
-          const frame = extractNullalisNarrationFrame(payload);
-          if (frame) {
-            pushNullalisNarrationFrame(payload);
-            return {};
-          }
-          pushZakiBotProgressEvent(payload, "progress");
+          applyAgentRuntimeProgress(payload, "progress");
           return {};
         }
         if (eventType === "tool_start" || payloadType === "tool_start") {
@@ -7229,10 +7267,7 @@ export function ChatArea() {
           payloadType === "statusResponse" ||
           payloadType === "status"
         ) {
-          pushNullalisTranscriptEntry(
-            extractNullalisTranscriptEntry(eventType || payloadType, payload)
-          );
-          pushZakiBotProgressEvent(payload, "status");
+          applyAgentRuntimeProgress(payload, "status");
           return {};
         }
       }
@@ -7241,7 +7276,7 @@ export function ChatArea() {
       // route events to the wrong state.
       if (eventType === "progress" || payload?.type === "progress") {
         if (isZakiAgentSpace) {
-          pushZakiBotProgressEvent(payload, "progress");
+          applyAgentRuntimeProgress(payload, "progress");
         }
         return {};
       }
@@ -7255,7 +7290,7 @@ export function ChatArea() {
             upsertZakiBotToolCall(payload);
             return {};
           }
-          pushZakiBotProgressEvent(payload, "status");
+          applyAgentRuntimeProgress(payload, "status");
           return {};
         }
         return {};
@@ -7611,6 +7646,7 @@ export function ChatArea() {
   }, [
     appendAssistantAgentStep,
     appendAssistantGeneratedFile,
+    applyAgentRuntimeProgress,
     applyQuotaHeaders,
     applyZakiBotToolResult,
     authUserId,
@@ -7622,9 +7658,7 @@ export function ChatArea() {
     isMemoryPipelineEnabled,
     markZakiBotReplyStart,
     setAssistantAgentRunning,
-    pushNullalisNarrationFrame,
     pushNullalisTranscriptEntry,
-    pushZakiBotProgressEvent,
     queryModeEnabled,
     responseFormattingConfig.disableResponseEnvelope,
     spacesList,
@@ -8483,10 +8517,14 @@ export function ChatArea() {
       clearZakiBotProgressVisuals();
       {
         const now = Date.now();
+        const fallbackWorkingLabel = t("chat.agentWorking.gatheringContext", {
+          defaultValue: "Gathering context",
+        });
         const frame: NullalisNarrationFrame = {
           id: `zaki-runtime-start-${now}`,
           phase: "thinking",
-          label: "Thinking...",
+          label: fallbackWorkingLabel,
+          source: "fallback",
           tool: null,
           iteration: null,
           durationMs: null,
@@ -8500,7 +8538,7 @@ export function ChatArea() {
             id: `zaki-runtime-start-entry-${now}`,
             kind: "narration",
             intent: "thinking",
-            text: "Starting the request",
+            text: fallbackWorkingLabel,
             timestamp: now,
             importance: 20,
             phase: "thinking",

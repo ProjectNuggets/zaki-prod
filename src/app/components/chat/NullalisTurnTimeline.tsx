@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, LoaderCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
   NullalisNarrationFrame,
@@ -17,7 +17,6 @@ import {
   isContextGroupTool,
   type ContextGroupChild,
 } from "./blocks/ContextToolGroup";
-import { TextShimmer } from "./blocks/TextShimmer";
 import { displaySafeRuntimePreview } from "./rendering/agentReplyPresentation";
 
 const DEDUP_WINDOW_MS = 450;
@@ -373,6 +372,37 @@ function timelineStats(blocks: TimelineBlock[]) {
   };
 }
 
+function AgentWorkingPhrase({ phrases }: { phrases: readonly string[] }) {
+  const [phraseIndex, setPhraseIndex] = useState(0);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if (!mediaQuery) return;
+    const sync = () => setPrefersReducedMotion(mediaQuery.matches);
+    sync();
+    mediaQuery.addEventListener?.("change", sync);
+    return () => mediaQuery.removeEventListener?.("change", sync);
+  }, []);
+
+  useEffect(() => {
+    setPhraseIndex(0);
+    if (prefersReducedMotion || phrases.length < 2) return;
+    const interval = window.setInterval(() => {
+      setPhraseIndex((current) => (current + 1) % phrases.length);
+    }, 2400);
+    return () => window.clearInterval(interval);
+  }, [phrases, prefersReducedMotion]);
+
+  const phrase = phrases[phraseIndex] || null;
+  if (!phrase) return null;
+  return (
+    <span className="zaki-agent-lane__working-phrase" aria-hidden="true" data-testid="agent-working-phrase">
+      {phrase}
+    </span>
+  );
+}
+
 export function NullalisTurnTimeline({
   entries,
   frame,
@@ -382,6 +412,7 @@ export function NullalisTurnTimeline({
   turnDurationMs = null,
   compact = false,
   usage,
+  workingPhrases = [],
 }: {
   entries: NullalisTranscriptEntry[];
   frame: NullalisNarrationFrame | null;
@@ -393,6 +424,7 @@ export function NullalisTurnTimeline({
   model?: string | null;
   mode?: string | null;
   usage?: ZakiUsageSummary | null;
+  workingPhrases?: readonly string[];
 }) {
   const blocks = useMemo(() => composeTurnTimeline(entries), [entries]);
   const stats = timelineStats(blocks);
@@ -455,7 +487,7 @@ export function NullalisTurnTimeline({
     </div>
   );
 
-  // Empty while streaming → single Thinking shimmer.
+  // Empty while streaming → the single, truthful Agent working card.
   const showThinkingOnly = isStreaming && !hasContent;
 
   // Reveal phase: collapse trail into "Worked for Ns ›" details.
@@ -477,6 +509,7 @@ export function NullalisTurnTimeline({
 
   if (showThinkingOnly) {
     const liveLabel = displaySafeRuntimePreview(frame?.label) || "Thinking";
+    const isClientFallback = frame?.source === "fallback";
     const liveMeta = [
       framePhase,
       frame?.tool || "runtime",
@@ -488,6 +521,9 @@ export function NullalisTurnTimeline({
     return (
       <section
         className="zaki-agent-timeline zaki-agent-timeline--thinking zaki-agent-lane zaki-process-enter max-w-[92%] py-1 text-zaki-primary dark:text-zaki-dark-primary"
+        data-testid="agent-working-card"
+        data-source={isClientFallback ? "fallback" : "runtime"}
+        aria-busy="true"
         dir="auto"
       >
         <span className="sr-only" role="status" aria-live="polite" data-testid="agent-live-status">
@@ -495,7 +531,7 @@ export function NullalisTurnTimeline({
         </span>
         <div className="zaki-agent-lane__gutter" aria-hidden>
           <div className="zaki-agent-lane__rune z-rune" data-state="thinking">
-            <span className="glyph">◌</span>
+            <LoaderCircle className="zaki-agent-lane__spinner" strokeWidth={1.6} />
           </div>
         </div>
         <div className="zaki-agent-lane__body">
@@ -508,17 +544,19 @@ export function NullalisTurnTimeline({
           </div>
           <div className="zaki-agent-lane__narration-card">
             <div className="zaki-agent-lane__narration-head">
-              <span>narration</span>
-              <span>{frame?.tool || "session scoped"}</span>
+              <span>{isClientFallback ? "starting" : "runtime"}</span>
+              <span>{frame?.tool || (isClientFallback ? "Agent turn" : "session scoped")}</span>
             </div>
             <strong>{liveLabel}</strong>
             <small>
-              {frame?.tool
+              {isClientFallback
+                ? "Preparing your Agent turn."
+                : frame?.tool
                 ? "Live runtime signal from the active tool lane."
                 : "Live operational trail from the agent runtime."}
             </small>
+            {isClientFallback ? <AgentWorkingPhrase phrases={workingPhrases} /> : null}
           </div>
-          {!frame?.label ? <TextShimmer text="Thinking" /> : null}
         </div>
       </section>
     );
