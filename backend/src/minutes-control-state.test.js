@@ -257,6 +257,63 @@ describe("Minutes control callback state", () => {
     })).resolves.toBe(true);
   });
 
+  test("accepts awaiting_admission from requested when the joining callback was dropped (auto-join lifecycle)", async () => {
+    // The auto-join capture is persisted at `requested`; the engine's transient
+    // `joining` status callback is best-effort and was lost, so the hub never
+    // saw `joining`. The bot then reaches awaiting_admission (knocking). This
+    // forward skip must be accepted — otherwise the capture strands and fails.
+    const requested = { ...CAPTURE, state: "requested" };
+    const admitted = { ...CAPTURE, state: "awaiting_admission" };
+    const client = {
+      query: jest.fn().mockImplementation(async (sql) => {
+        if (sql.includes("SELECT * FROM zaki_minutes_control_captures")) return { rows: [requested] };
+        if (sql.includes("INSERT INTO zaki_minutes_control_callback_events")) return { rows: [{ event_id: "event-01" }] };
+        if (sql.includes("UPDATE zaki_minutes_control_captures")) return { rows: [admitted] };
+        throw new Error(`unexpected query: ${sql}`);
+      }),
+    };
+    await expect(applyMinutesControlCallback({
+      envelope: callback({
+        event_type: "minutes.capture.status",
+        data: {
+          subject: { tenant_id: "default", user_id: "42" },
+          operation_id: "op-capture-01",
+          capture_id: "capture-01",
+          meeting_id: "meeting-01",
+          state: "awaiting_admission",
+        },
+      }),
+      runInTransaction: runWith(client),
+    })).resolves.toEqual({ status: "accepted", eventId: "event-01" });
+    expect(client.query).toHaveBeenCalledWith(
+      expect.stringContaining("UPDATE zaki_minutes_control_captures"),
+      ["capture-01", "awaiting_admission", null]
+    );
+  });
+
+  test("still rejects a backward status transition (active → awaiting_admission)", async () => {
+    const client = {
+      query: jest.fn().mockImplementation(async (sql) => {
+        if (sql.includes("SELECT * FROM zaki_minutes_control_captures")) return { rows: [CAPTURE] };
+        if (sql.includes("INSERT INTO zaki_minutes_control_callback_events")) return { rows: [{ event_id: "event-01" }] };
+        throw new Error(`unexpected query: ${sql}`);
+      }),
+    };
+    await expect(applyMinutesControlCallback({
+      envelope: callback({
+        event_type: "minutes.capture.status",
+        data: {
+          subject: { tenant_id: "default", user_id: "42" },
+          operation_id: "op-capture-01",
+          capture_id: "capture-01",
+          meeting_id: "meeting-01",
+          state: "awaiting_admission",
+        },
+      }),
+      runInTransaction: runWith(client),
+    })).rejects.toMatchObject({ code: "invalid_state" });
+  });
+
   test("returns duplicate without a second state or wallet effect for the same event", async () => {
     const client = {
       query: jest.fn(),

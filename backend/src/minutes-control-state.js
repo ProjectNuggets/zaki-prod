@@ -71,15 +71,15 @@ CREATE TABLE IF NOT EXISTS zaki_minutes_control_usage_sequences (
 ${MINUTES_CONTROL_RECOVERY_DDL}
 `;
 
-const TRANSITIONS = new Map([
-  ["requested", new Set(["joining", "stopping", "completed", "failed"])],
-  ["joining", new Set(["awaiting_admission", "active", "failed"])],
-  ["awaiting_admission", new Set(["active", "failed"])],
-  ["active", new Set(["stopping", "completed", "failed"])],
-  ["stopping", new Set(["completed", "failed"])],
-  ["completed", new Set()],
-  ["failed", new Set()],
-]);
+// The engine's status callbacks are best-effort and at-least-once: an
+// intermediate status (notably `joining`) can be dropped or arrive out of
+// order. Requiring strictly adjacent transitions stranded a capture at
+// `requested` whenever `joining` was lost — every later `awaiting_admission`
+// callback was then rejected as invalid_state and the capture failed with zero
+// captured seconds. Accept any FORWARD move along the lifecycle (a skipped
+// intermediate is always safe) plus `failed` from any non-terminal state;
+// reject backward moves and any move out of a terminal state.
+const LIFECYCLE_ORDER = ["requested", "joining", "awaiting_admission", "active", "stopping", "completed"];
 
 export class MinutesControlStateError extends Error {
   constructor(message, { code = "invalid_state", status = 409, retryable = false, cause } = {}) {
@@ -429,7 +429,11 @@ async function promoteMinutesControlRecovery(client, envelope) {
 }
 
 function canTransition(from, to) {
-  return from === to || Boolean(TRANSITIONS.get(from)?.has(to));
+  if (from === to) return true;
+  if (to === "failed") return from !== "completed" && from !== "failed";
+  const fromIndex = LIFECYCLE_ORDER.indexOf(from);
+  const toIndex = LIFECYCLE_ORDER.indexOf(to);
+  return fromIndex >= 0 && toIndex > fromIndex;
 }
 
 async function applyStatusCallback(client, capture, data) {
