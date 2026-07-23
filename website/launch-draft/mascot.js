@@ -26,6 +26,12 @@
   var INK_LIGHT = __tok("--accent", "#D24430");
   var INK_LIGHT_RGB = __tok("--accent-rgb", "210,68,48");
   var PREFERS_REDUCED = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+  function refreshReducedMascot() {
+    if (!PREFERS_REDUCED || typeof window.__csRefreshStaticMascot !== "function") return;
+    window.__csRefreshStaticMascot();
+  }
+
   var HOME_AGENT_BOT = new Image();
   HOME_AGENT_BOT.decoding = "async";
   HOME_AGENT_BOT.src = "/site/assets/zaki-worker-full.png";
@@ -338,6 +344,7 @@
     chatGreeted: false,
     chatAbort: null,
     chatAnchored: false,
+    chatOpener: null,
     readingQuiet: false,
     wreckedFaqs: [],
   };
@@ -417,11 +424,57 @@
     node.style.setProperty(prop, value, "important");
   }
 
+  var FOCUSABLE_SELECTOR = [
+    "a[href]",
+    "button:not([disabled])",
+    "input:not([disabled]):not([type=hidden])",
+    "select:not([disabled])",
+    "textarea:not([disabled])",
+    "[tabindex]:not([tabindex='-1'])"
+  ].join(",");
+
+  function focusableChildren(root) {
+    if (!root) return [];
+    return Array.prototype.filter.call(root.querySelectorAll(FOCUSABLE_SELECTOR), function (node) {
+      return !node.hasAttribute("hidden") && node.getClientRects().length > 0;
+    });
+  }
+
+  function keepFocusInDialog(event, root) {
+    if (event.key !== "Tab") return false;
+    var items = focusableChildren(root);
+    if (!items.length) {
+      event.preventDefault();
+      if (root && root.focus) root.focus();
+      return true;
+    }
+    var first = items[0];
+    var last = items[items.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+      return true;
+    }
+    if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+      return true;
+    }
+    return false;
+  }
+
+  function focusDialog(root, preferred) {
+    window.setTimeout(function () {
+      var target = preferred || focusableChildren(root)[0] || root;
+      if (target && target.focus) target.focus();
+    }, 20);
+  }
+
   function ensureStyleLink() {
     if (document.querySelector('link[rel="stylesheet"][href*="/mascot.css"]')) return;
     var link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "/mascot.css?v=20260711-evidence-premium-3";
+    link.href = "/mascot.css?v=20260723-v5";
     document.head.appendChild(link);
   }
 
@@ -430,9 +483,14 @@
    * ------------------------------------------------------------------ */
 
   function createMascot() {
-    var node = document.createElement("div");
+    var node = document.createElement("button");
+    node.type = "button";
     node.className = "cs-ai-mascot";
     node.dataset.mode = "hero";
+    node.setAttribute("aria-label", "Talk to ZAKI");
+    node.setAttribute("aria-haspopup", "dialog");
+    node.setAttribute("title", "Talk to ZAKI");
+    node.tabIndex = -1;
     node.innerHTML =
       '<canvas aria-hidden="true"></canvas>' +
       '<span class="cs-ai-mascot__bubble" aria-live="polite"></span>';
@@ -879,24 +937,43 @@
   function guideConfirmModal(opts) {
     if (document.querySelector(".cs-guide-confirm")) return;
     var name = "ZEE";
+    var opener = document.activeElement;
     var wrap = document.createElement("div");
     wrap.className = "cs-guide-confirm";
     wrap.innerHTML =
-      '<div class="cs-guide-confirm__card" role="dialog" aria-modal="true" aria-label="Stop the tour?">' +
-      "<h3>" + name + " is mid-tour.</h3>" +
+      '<div class="cs-guide-confirm__card" role="dialog" aria-modal="true" aria-labelledby="cs-guide-confirm-title" tabindex="-1">' +
+      '<h3 id="cs-guide-confirm-title">' + name + " is mid-tour.</h3>" +
       "<p>" + opts.body + "</p>" +
       '<div class="cs-guide-confirm__actions">' +
       '<button type="button" data-confirm-stop>' + opts.stopLabel + "</button>" +
       '<button type="button" data-confirm-stay>Keep riding</button>' +
       "</div></div>";
     document.body.appendChild(wrap);
+    var card = wrap.querySelector(".cs-guide-confirm__card");
     window.requestAnimationFrame(function () {
       window.requestAnimationFrame(function () { wrap.classList.add("is-in"); });
     });
+    var closed = false;
     function close() {
+      if (closed) return;
+      closed = true;
+      window.removeEventListener("keydown", onKey, true);
       wrap.classList.remove("is-in");
-      window.setTimeout(function () { wrap.remove(); }, 260);
+      window.setTimeout(function () {
+        wrap.remove();
+        if (opener && opener.isConnected && typeof opener.focus === "function") opener.focus();
+      }, 260);
     }
+    function onKey(event) {
+      if (keepFocusInDialog(event, card)) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        close();
+      }
+    }
+    window.addEventListener("keydown", onKey, true);
+    focusDialog(card, card.querySelector("[data-confirm-stay]"));
     onCleanup(function () { if (wrap.isConnected) close(); });
     wrap.addEventListener("click", function (e) {
       if (e.target.closest("[data-confirm-stop]")) {
@@ -1712,9 +1789,9 @@
     var wrap = document.createElement("div");
     wrap.className = "cs-guide-confirm cs-lead-modal";
     wrap.innerHTML =
-      '<div class="cs-guide-confirm__card cs-lead-modal__card" role="dialog" aria-modal="true" aria-label="Start with ZAKI">' +
+      '<div class="cs-guide-confirm__card cs-lead-modal__card" role="dialog" aria-modal="true" aria-labelledby="cs-lead-modal-title" tabindex="-1">' +
       '<button type="button" class="cs-lead-modal__close" aria-label="Close">×</button>' +
-      "<h3>Start with ZAKI</h3>" +
+      '<h3 id="cs-lead-modal-title">Start with ZAKI</h3>' +
       "<p>Tell us where ZAKI should start. We will open a ready-to-send email with the details you share.</p>" +
       '<form class="cs-lead-modal__form" novalidate>' +
       '<input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" class="cs-lead-modal__hp">' +
@@ -1760,6 +1837,13 @@
       }, 260);
     }
     function onKey(e) {
+      var card = wrap.querySelector(".cs-lead-modal__card");
+      if (keepFocusInDialog(e, card)) return;
+      if ((e.metaKey || e.ctrlKey) && String(e.key).toLowerCase() === "k") {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       if (e.key === "Escape") { e.stopPropagation(); close(); }
     }
     window.addEventListener("keydown", onKey, true);
@@ -1790,12 +1874,13 @@
       var card = wrap.querySelector(".cs-lead-modal__card");
       card.innerHTML =
         '<button type="button" class="cs-lead-modal__close" aria-label="Close">×</button>' +
-        '<h3>Email request ready.</h3>' +
+        '<h3 id="cs-lead-modal-title">Email request ready.</h3>' +
         "<p>Your email app should now have a draft addressed to the ZAKI team.</p>" +
         '<div class="cs-guide-confirm__actions"><button type="button" data-confirm-stay>Back to the site</button></div>';
       card.addEventListener("click", function (e2) {
         if (e2.target.closest(".cs-lead-modal__close") || e2.target.closest("[data-confirm-stay]")) close();
       });
+      focusDialog(card, card.querySelector(".cs-lead-modal__close"));
       sfx("pop");
       chomp(1);
     });
@@ -1908,17 +1993,8 @@
     document.head.appendChild(metaTheme);
     document.documentElement.style.backgroundColor = bgNow;
     document.body.style.backgroundColor = bgNow;
-    // the favicon is the driver's portrait — retint and reshape it too
-    // (mascot-svg.js; node replaced outright so browsers notice the swap)
-    if (window.CSMascotSVG) {
-      var favLink = document.querySelector('link[rel="icon"]');
-      if (favLink) favLink.remove();
-      favLink = document.createElement("link");
-      favLink.rel = "icon";
-      favLink.type = "image/svg+xml";
-      favLink.href = window.CSMascotSVG.dataURI(variant, { bg: bgNow, eyeScale: 1.25 });
-      document.head.appendChild(favLink);
-    }
+    // Keep the V4 brand mark as the stable site favicon. The guide can change
+    // its on-page personality without changing the browser-level identity.
     if (typeof window.__csRefreshTokens === "function") window.__csRefreshTokens();
     if (typeof window.__csRecolorOrganisms === "function") window.__csRecolorOrganisms();
     refreshGateFacePalette();
@@ -1953,6 +2029,7 @@
     refreshGateChoice();
     animateGateSwap(dir);
     chomp(0.7);
+    refreshReducedMascot();
   }
 
   function themeWaveFrom(c) {
@@ -2030,6 +2107,7 @@
      springs back, dots rush IN from the travel side and burst back out,
      and the dock thumbs ripple. All organic springs — no hard cuts. */
   function animateGateSwap(dir) {
+    if (PREFERS_REDUCED) return;
     var gate = state.gate;
     if (!gate) return;
     var nameEl = gate.querySelector(".cs-guide-stage__name");
@@ -2092,6 +2170,12 @@
   function initGateFace(gate) {
     var host = gate && gate.querySelector(".cs-guide-face");
     if (!host || host.__csFaceStarted) return;
+    // The image in the gate is the reduced-motion equivalent. Do not create
+    // a 5k/9k-particle renderer only to leave it visually still.
+    if (PREFERS_REDUCED) {
+      host.__csFaceStarted = true;
+      return;
+    }
     if (!window.createOrganism) {
       host.__csFaceRetry = window.setTimeout(function () { initGateFace(gate); }, 70);
       return;
@@ -2128,6 +2212,11 @@
 
   function mountFooterFace(host) {
     if (!host || host.__csFooterFaceStarted) return;
+    // Keep the footer's static mark for people who opt out of motion.
+    if (PREFERS_REDUCED) {
+      host.__csFooterFaceStarted = true;
+      return;
+    }
     if (!window.createOrganism) {
       host.__csFooterFaceRetry = window.setTimeout(function () { mountFooterFace(host); }, 100);
       return;
@@ -2932,6 +3021,7 @@
    * ------------------------------------------------------------------ */
 
   function chomp(strength) {
+    if (PREFERS_REDUCED) return;
     state.squash = Math.min(1.4, Math.max(state.squash, strength || 1));
     sfx("chomp");
   }
@@ -3768,6 +3858,8 @@
       card.style.transform = card.__base;
       card.style.opacity = depth > 4 ? "0" : "1";
       card.style.pointerEvents = depth === 0 ? "auto" : "none";
+      card.setAttribute("aria-hidden", depth === 0 ? "false" : "true");
+      card.inert = depth !== 0;
     });
   }
 
@@ -3952,6 +4044,7 @@
   }
 
   function initToolkitPlay() {
+    if (PREFERS_REDUCED) return;
     window.setInterval(function () {
       if (guide.running || state.chatOpen || state.playCatching || state.anchor) return;
       if (!(state.guideMode === "manual" || state.guideDone)) return;
@@ -4052,6 +4145,7 @@
   }
 
   function initDeckPlay(deck) {
+    if (PREFERS_REDUCED) return;
     // top card leans toward the cursor; deck slowly self-browses when idle
     deck.style.perspective = "700px";
     deck.addEventListener("pointermove", function (e) {
@@ -4101,9 +4195,19 @@
   function initWorkforceDeck() {
     var deck = document.getElementById("cs-worker-deck");
     if (!deck) return;
+    deck.setAttribute("role", "group");
+    deck.setAttribute("aria-label", "Digital workforce profiles. Press Enter or Space to show the next profile.");
+    deck.setAttribute("aria-live", "polite");
+    deck.tabIndex = 0;
     decorateWorkerCards(deck);
     layoutDeck();
     deck.addEventListener("click", function () {
+      state.deckUserAt = performance.now();
+      if (!guide.running) cycleDeck();
+    });
+    deck.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
       state.deckUserAt = performance.now();
       if (!guide.running) cycleDeck();
     });
@@ -4520,6 +4624,35 @@
     if (stampNode) stampNode.remove();
   }
 
+  function setGateBackgroundInert(gate, locked) {
+    Array.prototype.forEach.call(document.body.children, function (child) {
+      if (child === gate || child.tagName === "SCRIPT" || child.tagName === "STYLE") return;
+      if (locked) {
+        if (child.__csGateA11y) return;
+        child.__csGateA11y = {
+          ariaHidden: child.getAttribute("aria-hidden"),
+          inert: Boolean(child.inert)
+        };
+        child.inert = true;
+        child.setAttribute("aria-hidden", "true");
+        return;
+      }
+      var prior = child.__csGateA11y;
+      if (!prior) return;
+      child.inert = prior.inert;
+      if (prior.ariaHidden === null) child.removeAttribute("aria-hidden");
+      else child.setAttribute("aria-hidden", prior.ariaHidden);
+      delete child.__csGateA11y;
+    });
+  }
+
+  function finishGateAccessibility(gate) {
+    setGateBackgroundInert(gate, false);
+    var main = document.getElementById("main-content");
+    if (main && main.focus) main.focus();
+    refreshReducedMascot();
+  }
+
   function openGameSoon() {
     if (window.__csGame && window.__csGame.open) {
       window.__csGame.open({ beat: window.__csGameBeat || null });
@@ -4531,10 +4664,18 @@
   function createChoice() {
     var gate = document.createElement("div");
     gate.className = "cs-guide-gate cs-guide-gate--four";
+    gate.setAttribute("role", "dialog");
+    gate.setAttribute("aria-modal", "true");
+    gate.setAttribute("aria-labelledby", "cs-guide-choice-title");
+    gate.setAttribute("aria-describedby", "cs-guide-choice-description");
+    gate.tabIndex = -1;
     var slotsHtml = MASCOT_VARIANTS.map(function (v) {
       var active = v === state.mascotVariant;
+      var selectorAvatar = v === "original"
+        ? "/site/assets/zee-agent-sunglasses.png"
+        : "/site/assets/zaki-worker-full.png";
       return '<button type="button" class="cs-guide-slot' + (active ? " is-active" : "") + '" data-slot="' + v + '" aria-label="ZAKI ' + (MASCOT_NAMES[v] || v) + ' agent">' +
-        '<img class="cs-guide-slot__bot" src="/site/assets/zaki-worker-full.png" alt="" aria-hidden="true">' +
+        '<img class="cs-guide-slot__bot" src="' + selectorAvatar + '" alt="" aria-hidden="true">' +
         '<span class="cs-guide-slot__role" aria-hidden="true"></span>' +
         "</button>";
     }).join("");
@@ -4545,8 +4686,8 @@
       "</div>" +
       '<div class="cs-guide-choice">' +
       '<p class="cs-guide-choice__eyebrow">( Choose a ZAKI agent )</p>' +
-      '<h2 class="cs-guide-choice__title">ZAKI is Awake.</h2>' +
-      '<p class="cs-guide-choice__sub">Pick the first agent ZAKI should put to work.</p>' +
+      '<h2 id="cs-guide-choice-title" class="cs-guide-choice__title">ZAKI is Awake.</h2>' +
+      '<p id="cs-guide-choice-description" class="cs-guide-choice__sub">Pick the first agent ZAKI should put to work.</p>' +
       '<div class="cs-guide-stage">' +
       '<div class="cs-guide-face" aria-hidden="true"><img class="cs-guide-face__fallback" src="/site/assets/nova-nuggets-particle-mark.png" alt=""></div>' +
       "</div>" +
@@ -4566,6 +4707,7 @@
     state.gate = gate;
     document.documentElement.classList.add("cs-guide-locked");
     document.body.appendChild(gate);
+    setGateBackgroundInert(gate, true);
     initGateFace(gate);
     // Each choice is a subagent type; ZAKI remains the primary presence.
     Array.prototype.forEach.call(gate.querySelectorAll(".cs-guide-slot"), function (slot) {
@@ -4589,6 +4731,10 @@
       }
     }, { passive: true });
     refreshGateChoice();
+    focusDialog(gate, gate.querySelector(".cs-guide-slot.is-active"));
+    gate.addEventListener("keydown", function (event) {
+      keepFocusInDialog(event, gate);
+    });
     // staggered entrance (label → picker → title → buttons → hint)
     window.requestAnimationFrame(function () {
       window.requestAnimationFrame(function () { gate.classList.add("is-in"); });
@@ -4644,6 +4790,7 @@
       gameButton.classList.add("is-chosen");
       sfx("pop");
       document.documentElement.classList.remove("cs-guide-locked");
+      finishGateAccessibility(gate);
       gate.classList.add("is-hidden");
       var veil = document.getElementById("cs-boot-veil");
       if (veil) veil.remove();
@@ -4715,6 +4862,7 @@
       window.setTimeout(function () { gate.classList.add("is-hidden"); }, hideAt);
       window.setTimeout(function () {
         document.documentElement.classList.remove("cs-guide-locked");
+        finishGateAccessibility(gate);
         // the reveal engine only runs on scroll — kick the birth cascade now
         if (window.__csApp && window.__csApp.applyScroll) {
           try { window.__csApp.applyScroll(); } catch (e) {}
@@ -4794,8 +4942,8 @@
     services: {
       related: ["projects", "workforce", "quote"],
       variants: [
-        "ZAKI is the product family for your digital life. **Agent** and **Spaces** are available now; **Minutes** and **Design** are coming next. Agent runs goals with your personal Brain, while Spaces keeps project context in a separate scoped store. [[go:process]]",
-        "Think of ZAKI as a family with clear boundaries: Agent for visible action and personal memory, Spaces for scoped project context, with Minutes and Design coming next. [[go:process]]",
+        "ZAKI is the product family for visible work. **Agent** and **Spaces** are available now; **Minutes** and **Design** are rolling out through staged access. Agent runs goals with your personal Brain, while Spaces keeps project context in a separate scoped store. [[go:process]]",
+        "Think of ZAKI as a family with clear boundaries: Agent for visible action and personal memory, Spaces for scoped project context, Minutes for meeting follow-through, and Design for creative projects. [[go:process]]",
       ],
     },
     pricing: {
@@ -4830,8 +4978,8 @@
         ] } };
       },
       variants: [
-        "The current family is **Agent**, **Spaces**, **Minutes** and **Design**. Agent and Spaces are available now; Minutes and Design are coming next. Agent uses the personal Brain, while Spaces has a separate project-scoped store. [[go:cases]]",
-        "Four products, clear availability: Agent and Spaces now, Minutes and Design next. Click Current work to inspect each product page. [[go:cases]]",
+        "The current family is **Agent**, **Spaces**, **Minutes** and **Design**. Agent and Spaces are available now; Minutes and Design are in staged access. Agent uses the personal Brain, while Spaces has a separate project-scoped store. [[go:cases]]",
+        "Four products, clear availability: Agent and Spaces are available now; Minutes and Design are rolling out through staged access. Click Current work to inspect each product page. [[go:cases]]",
       ],
     },
     workforce: {
@@ -4848,7 +4996,7 @@
         } };
       },
       variants: [
-        "The 'next hire' idea stays because it is useful: ZAKI can take on roles in your digital life — research, follow-up, meeting capture, support, documents, QA and the quiet work between decisions.",
+        "ZAKI can take on useful work in your digital life — research, follow-up, meeting capture, support, documents, QA, and the quiet work between decisions.",
         "A digital worker is not a person replacement. It is a loop ZAKI can run: remember the context, do the next useful step, and bring you back when judgment is needed.",
       ],
     },
@@ -4946,19 +5094,32 @@
     return document.querySelector(".cs-chat");
   }
 
+  function hasBlockingModal() {
+    return Boolean(document.querySelector(
+      ".cs-guide-confirm, .cs-lead-modal, .cs-game.is-open, .zee-run.is-open"
+    ));
+  }
+
   function buildChatPanel() {
     var panel = chatPanel();
     if (panel) return panel;
     var veil = document.createElement("div");
     veil.className = "cs-chat-veil";
+    veil.setAttribute("aria-hidden", "true");
     veil.addEventListener("click", closeChat);
     document.body.appendChild(veil);
     panel = document.createElement("div");
     panel.className = "cs-chat";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-modal", "true");
+    panel.setAttribute("aria-labelledby", "cs-chat-title");
+    panel.setAttribute("aria-hidden", "true");
+    panel.setAttribute("inert", "");
+    panel.tabIndex = -1;
     panel.innerHTML =
       '<div class="cs-chat__head">' +
       '<span class="cs-chat__dot"></span>' +
-      '<span class="cs-chat__title">ZAKI — live session</span>' +
+      '<span id="cs-chat-title" class="cs-chat__title">ZAKI — live session</span>' +
       '<button type="button" class="cs-chat__close" aria-label="Close chat">×</button>' +
       "</div>" +
       '<div class="cs-chat__log" role="log" aria-live="polite" data-lenis-prevent></div>' +
@@ -4970,6 +5131,7 @@
     panel.querySelector(".cs-chat__close").addEventListener("click", closeChat);
     // keep the site's global key handlers away from the input
     panel.addEventListener("keydown", function (e) {
+      if (keepFocusInDialog(e, panel)) return;
       if (e.key === "Escape") { closeChat(); return; }
       e.stopPropagation();
     });
@@ -5000,13 +5162,19 @@
   }
 
   function openChat() {
-    if (state.chatOpen || !chatAllowed()) return;
+    if (state.chatOpen || !chatAllowed() || hasBlockingModal()) return;
+    state.chatOpener = document.activeElement || mascotEl();
     var panel = buildChatPanel();
     state.chatOpen = true;
     sfx("pop");
+    panel.removeAttribute("aria-hidden");
+    panel.removeAttribute("inert");
     panel.classList.add("is-open");
     var veil = document.querySelector(".cs-chat-veil");
-    if (veil) veil.classList.add("is-open");
+    if (veil) {
+      veil.removeAttribute("aria-hidden");
+      veil.classList.add("is-open");
+    }
     if (!state.chatGreeted) {
       state.chatGreeted = true;
       chatBubble("site", "Oh — you found the talk button. I'm the site. Pick a question below; I answer fast.");
@@ -5023,6 +5191,7 @@
         return { x: rect.left + 10, y: Math.max(70, rect.top - 40) };
       };
     }
+    refreshReducedMascot();
   }
 
   function closeChat() {
@@ -5030,12 +5199,25 @@
     state.chatOpen = false;
     sfx("flip");
     var panel = chatPanel();
-    if (panel) panel.classList.remove("is-open");
+    if (panel) {
+      panel.setAttribute("aria-hidden", "true");
+      panel.setAttribute("inert", "");
+      panel.classList.remove("is-open");
+    }
     var veil = document.querySelector(".cs-chat-veil");
-    if (veil) veil.classList.remove("is-open");
+    if (veil) {
+      veil.setAttribute("aria-hidden", "true");
+      veil.classList.remove("is-open");
+    }
     if (state.chatAbort) { state.chatAbort.abort(); state.chatAbort = null; }
     state.chatBusy = false;
     if (state.chatAnchored) { state.chatAnchored = false; state.anchor = null; }
+    refreshReducedMascot();
+    var opener = state.chatOpener;
+    state.chatOpener = null;
+    if (opener && opener.isConnected && typeof opener.focus === "function") {
+      window.setTimeout(function () { opener.focus(); }, 0);
+    }
   }
 
   function renderPills(items) {
@@ -5260,6 +5442,10 @@
   function initChat() {
     window.addEventListener("keydown", function (e) {
       if ((e.metaKey || e.ctrlKey) && String(e.key).toLowerCase() === "k") {
+        if (hasBlockingModal()) {
+          e.preventDefault();
+          return;
+        }
         if (!chatAllowed()) return;
         e.preventDefault();
         if (state.chatOpen) closeChat();
@@ -5370,8 +5556,8 @@
     playChip.setAttribute("aria-label", "Play ZEE Run");
     playChip.addEventListener("click", function () {
       // Mobile action bar: this slot is the tour transport — play starts
-      // the drive, skip stops it — and AFTER the tour it becomes the Dot
-      // Shot launcher. Desktop is always the game link.
+      // the drive, skip stops it — and AFTER the tour it becomes the ZEE Run
+      // launcher. Desktop is always the game link.
       if (window.matchMedia("(max-width: 640px)").matches) {
         if (state.gate) return; // the gate owns the first start
         if (guide.running) { abortGuide(); return; }
@@ -5448,10 +5634,12 @@
     collectBlocks();
     window.setTimeout(collectBlocks, 1200);
     window.addEventListener("resize", collectBlocks);
-    window.addEventListener("mousemove", function (event) {
-      state.pointer.x = event.clientX;
-      state.pointer.y = event.clientY;
-    }, { passive: true });
+    if (!PREFERS_REDUCED) {
+      window.addEventListener("mousemove", function (event) {
+        state.pointer.x = event.clientX;
+        state.pointer.y = event.clientY;
+      }, { passive: true });
+    }
     window.addEventListener("click", onIdleClick, true);
 
     var startPoint = gatePoint();
@@ -5493,31 +5681,32 @@
       // While the gate is up the mascot sits ON the orb (no spring): before
       // our CSS loads the gate is not fixed-positioned yet, and a spring
       // would fly the mascot across the page from a bogus start point.
-      if (state.tick <= 3 || state.guideMode === "unset") {
+      if (PREFERS_REDUCED || state.tick <= 3 || state.guideMode === "unset") {
         state.pos.x = target.x;
         state.pos.y = target.y;
         state.vel.x = 0;
         state.vel.y = 0;
+      } else {
+        // critically-ish damped spring — frame-rate independent, tiny overshoot
+        // while idle; overdamped during the tour so long jumps between beats
+        // never dive past the anchor and climb back (user-reported)
+        var k = 52, c = guide.running ? 15.6 : 12.6;
+        state.vel.x += (k * (target.x - state.pos.x) - c * state.vel.x) * dt;
+        state.vel.y += (k * (target.y - state.pos.y) - c * state.vel.y) * dt;
+        var vmax = 2800;
+        var vlen = Math.sqrt(state.vel.x * state.vel.x + state.vel.y * state.vel.y);
+        if (vlen > vmax) {
+          state.vel.x *= vmax / vlen;
+          state.vel.y *= vmax / vlen;
+        }
+        state.pos.x += state.vel.x * dt;
+        state.pos.y += state.vel.y * dt;
       }
-
-      // critically-ish damped spring — frame-rate independent, tiny overshoot
-      // while idle; overdamped during the tour so long jumps between beats
-      // never dive past the anchor and climb back (user-reported)
-      var k = 52, c = guide.running ? 15.6 : 12.6;
-      state.vel.x += (k * (target.x - state.pos.x) - c * state.vel.x) * dt;
-      state.vel.y += (k * (target.y - state.pos.y) - c * state.vel.y) * dt;
-      var vmax = 2800;
-      var vlen = Math.sqrt(state.vel.x * state.vel.x + state.vel.y * state.vel.y);
-      if (vlen > vmax) {
-        state.vel.x *= vmax / vlen;
-        state.vel.y *= vmax / vlen;
-      }
-      state.pos.x += state.vel.x * dt;
-      state.pos.y += state.vel.y * dt;
 
       mascot.dataset.mode = state.mode;
       mascot.dataset.tone = state.lightInk ? "light" : "dark";
       mascot.classList.toggle("is-chattable", chatAllowed() && !state.chatOpen);
+      mascot.tabIndex = chatAllowed() && !state.chatOpen ? 0 : -1;
       var evidenceQuiet = suppressForEvidence && !guide.running && !state.anchor;
       // The worker is a visual cue, not a persistent UI control. It belongs
       // in the opening and the workforce moment; product proof and reading
@@ -5542,9 +5731,15 @@
       var restTarget = state.swallowing ? state.swallowing
         : (state.gate && state.guideMode === "unset") ? (isMobile() ? 3.0 : 3.4)
         : (state.mode === "contact" && !state.anchor && !guide.running && !state.chatOpen) ? (isMobile() ? 1.7 : 2.9) : 1;
-      // spring, not lerp: the giant rest settles like a living thing
-      state.restVel = (state.restVel || 0) + (90 * (restTarget - state.restScale) - 13 * (state.restVel || 0)) * dt;
-      state.restScale += state.restVel * dt;
+      // Spring, not lerp: the giant rest settles like a living thing. For
+      // reduced motion, land on the same resting state without the travel.
+      if (PREFERS_REDUCED) {
+        state.restScale = restTarget;
+        state.restVel = 0;
+      } else {
+        state.restVel = (state.restVel || 0) + (90 * (restTarget - state.restScale) - 13 * (state.restVel || 0)) * dt;
+        state.restScale += state.restVel * dt;
+      }
       if (Math.abs(state.restScale - 1) > 0.004) {
         mascot.style.setProperty("--cs-mscale", state.restScale.toFixed(3));
       } else if (mascot.style.getPropertyValue("--cs-mscale")) {
@@ -5578,7 +5773,7 @@
 
       // chomp squash — underdamped spring back to 0 so release overshoots
       // into a small stretch. Squash flattens (x wide, y short).
-      if (state.squash !== 0 || Math.abs(state.squashVel) > 0.001) {
+      if (!PREFERS_REDUCED && (state.squash !== 0 || Math.abs(state.squashVel) > 0.001)) {
         var sk = 210, sc = 16;
         state.squashVel += (sk * (0 - state.squash) - sc * state.squashVel) * dt;
         state.squash += state.squashVel * dt;
@@ -5601,9 +5796,25 @@
       maybeTrail();
       drawNavPet(state.tick * 0.018);
       drawMascot(canvas, ctx);
-      window.requestAnimationFrame(frame);
+      if (!PREFERS_REDUCED) window.requestAnimationFrame(frame);
     }
 
+    if (PREFERS_REDUCED) {
+      var staticFrameQueued = false;
+      var renderStaticMascot = function () {
+        if (staticFrameQueued) return;
+        staticFrameQueued = true;
+        window.requestAnimationFrame(function () {
+          staticFrameQueued = false;
+          frame(performance.now());
+        });
+      };
+      window.__csRefreshStaticMascot = renderStaticMascot;
+      // A stable image can still reposition when the user deliberately
+      // changes the viewport or scroll position; it never self-animates.
+      window.addEventListener("scroll", renderStaticMascot, { passive: true });
+      window.addEventListener("resize", renderStaticMascot);
+    }
     window.requestAnimationFrame(frame);
   }
 

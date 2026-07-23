@@ -1,0 +1,18 @@
+{
+  "id": "/",
+  "name": "ZAKI",
+  "short_name": "ZAKI",
+  "description": "The ZAKI website for Agent, Spaces, Minutes, and Design.",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#F8F2E9",
+  "theme_color": "#F8F2E9",
+  "icons": [
+    {
+      "src": "/site/assets/favicon.svg?v=20260723-v5",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
