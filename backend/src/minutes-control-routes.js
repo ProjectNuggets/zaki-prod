@@ -431,7 +431,10 @@ export function isMinutesControlEnabled(value) {
   return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
 }
 
-export function buildMinutesControlRouter({
+// The control-plane dependency object, extracted so the calendar auto-join poller
+// can drive createMinutesCaptureForUser with the EXACT same wiring the browser
+// router uses (single source of truth — no second, drift-prone dep list).
+export function buildMinutesControlDependencies({
   enabled,
   baseUrl,
   controlSigningKey,
@@ -461,9 +464,7 @@ export function buildMinutesControlRouter({
   client = DEFAULT_CLIENT,
   now = () => new Date(),
 } = {}) {
-  if (typeof resolveUser !== "function") throw new Error("Minutes control auth resolver is required.");
-  if (typeof getRequestId !== "function") throw new Error("Minutes control request-id resolver is required.");
-  const dependencies = {
+  return {
     enabled: Boolean(enabled), baseUrl, controlSigningKey, callbackHmacKey, authHeaderName, timeoutMs, tokenTtlSeconds, policy,
     captureReserveUnits, captureHoldTtlMs, captureMaxSeconds, resolveUser, getRequestId, fetchWithTimeout, resolvePlan,
     reserveCapture, recordCapture, recordCompensation,
@@ -471,6 +472,13 @@ export function buildMinutesControlRouter({
     forgetMeeting, applyCallback, recordFailure, client, now,
     recoveryEncryptionKey, recordCapturePolicyMirror,
   };
+}
+
+export function buildMinutesControlRouter(options = {}) {
+  const { resolveUser, getRequestId } = options;
+  if (typeof resolveUser !== "function") throw new Error("Minutes control auth resolver is required.");
+  if (typeof getRequestId !== "function") throw new Error("Minutes control request-id resolver is required.");
+  const dependencies = buildMinutesControlDependencies(options);
   const router = express.Router();
   const browserJson = express.json({ limit: "16kb", strict: true });
   const requireMinutesUser = (req, res, next) => authenticate(req, res, next, dependencies);

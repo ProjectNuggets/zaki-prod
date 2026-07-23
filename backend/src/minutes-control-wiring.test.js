@@ -11,7 +11,10 @@ describe("Minutes control-plane startup wiring", () => {
       indexSource.indexOf("// MINUTES CONTROL BFF"),
       indexSource.indexOf("// MINUTES READ BFF")
     );
-    expect(controlSection).toContain('app.use("/api/minutes", buildMinutesControlRouter({');
+    // Options are built once (const minutesControlOptions) so the calendar
+    // auto-join poller shares the exact same control wiring, then mounted.
+    expect(controlSection).toContain("const minutesControlOptions = {");
+    expect(controlSection).toContain('app.use("/api/minutes", buildMinutesControlRouter(minutesControlOptions));');
     expect(controlSection).toContain("enabled: ZAKI_MINUTES_CONTROL_ACTIVE");
     expect(controlSection).toContain("controlSigningKey: getMinutesEngineControlSigningKey()");
     expect(controlSection).toContain("recoveryEncryptionKey: getMinutesControlRecoveryEncryptionKey()");
