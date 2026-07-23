@@ -560,9 +560,10 @@ export async function initDb() {
     // Add UNIQUE(owner_user_id) so ensureDesignSession's ON CONFLICT (owner_user_id) upsert has an
     // arbiter. Deliberately KEEP the existing UNIQUE(project_id): each per-user session pins one
     // stable SEED project and the focused project it inserts always belongs to the same user, so
-    // seeds stay unique and no spurious project_id conflict is possible. Keeping it also makes
-    // reverting the flag to "project" (ON CONFLICT (project_id)) safe — dropping it would otherwise
-    // 42P10 ("no unique constraint matching ON CONFLICT") on every session create after a rollback.
+    // seeds stay unique and no spurious project_id conflict is possible — and keeping it means the
+    // legacy ON CONFLICT (project_id) upsert still has its arbiter after a revert (which would
+    // otherwise 42P10). The else-branch below drops UNIQUE(owner_user_id) on revert, so the two
+    // together make ZAKI_DESIGN_SESSION_SCOPE a clean, reversible switch in BOTH directions.
     await migrationClient.query(`
       DO $$ BEGIN
         IF NOT EXISTS (
@@ -572,6 +573,14 @@ export async function initDb() {
             ADD CONSTRAINT zaki_design_sessions_owner_user_id_key UNIQUE (owner_user_id);
         END IF;
       END $$;
+    `);
+  } else {
+    // Flag at (or reverted to) "project" scope: drop the per-user UNIQUE so the legacy
+    // ON CONFLICT (project_id) upsert works. A lingering UNIQUE(owner_user_id) is a NON-arbiter index
+    // that would raise 23505 when a user opens a 2nd project (that INSERT reuses their owner_user_id).
+    // Idempotent no-op when the constraint was never added (prod default / feature-off).
+    await migrationClient.query(`
+      ALTER TABLE zaki_design_sessions DROP CONSTRAINT IF EXISTS zaki_design_sessions_owner_user_id_key;
     `);
   }
 
