@@ -4,6 +4,27 @@ import { startPostgresNotificationListener } from "./db-notifications.js";
 
 let pool = null;
 
+// Runtime pool guardrails. Without these, checked-out clients inherit Postgres
+// defaults (statement_timeout=0 = no limit), so a wedged query hangs any caller
+// — request path or background sweep — forever (WP-M10 poller review).
+//
+// pg applies statement_timeout / idle_in_transaction_session_timeout server-side
+// on every new connection, so the DB itself cancels a runaway; no per-client
+// SET handler needed. The migration client checks out from this same pool and so
+// inherits statement_timeout=30s, then explicitly raises it to 120s (see below),
+// so large boot DDL is unaffected. 30s comfortably clears every runtime query.
+//
+// ponytail: server-side statement_timeout only. Skipped client-side query_timeout
+// — at pool level it also fires on migration DDL (the migration can't override a
+// client-side timer the way it overrides the server-side SET), so it would kill
+// legitimate long migrations. Add it (above 120s) if a dead-socket black hole,
+// which the server-side timeout can't see, ever becomes a real failure mode.
+export const RUNTIME_POOL_TIMEOUTS = {
+  statement_timeout: 30_000,
+  idle_in_transaction_session_timeout: 60_000,
+  connectionTimeoutMillis: 10_000,
+};
+
 function enabledFlag(value) {
   return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
 }
@@ -69,6 +90,7 @@ export async function initDb() {
     pool = new Pool({
       connectionString,
       ssl: sslConfig,
+      ...RUNTIME_POOL_TIMEOUTS,
     });
   }
 
@@ -84,6 +106,8 @@ export async function initDb() {
     // Fail-fast backstop: a hung DDL/lock-wait would otherwise block every other
     // replica on the advisory lock forever. On timeout the query errors → initDb
     // throws → boot exit(1) → session ends → advisory lock auto-releases.
+    // Raises the 30s runtime default (RUNTIME_POOL_TIMEOUTS) this client inherited
+    // on checkout — boot DDL legitimately needs longer than a request-path query.
     await migrationClient.query("SET statement_timeout = '120s'");
     await migrationClient.query("SELECT pg_advisory_lock($1)", [
       MIGRATION_LOCK_KEY,
