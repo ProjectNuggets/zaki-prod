@@ -273,6 +273,7 @@ import {
   beginDesignSessionDrain,
   ensureDesignSession,
   readDesignSessionBinding,
+  touchDesignSessionActivity,
   updateDesignSessionObservedState,
 } from "./design-session-store.js";
 import { reapIdleDesignSessions } from "./design-session-reaper.js";
@@ -18786,6 +18787,7 @@ app.use(
     readSessionBinding: readDesignSessionBinding,
     beginSessionDrain: beginDesignSessionDrain,
     updateSessionState: updateDesignSessionObservedState,
+    touchSessionActivity: touchDesignSessionActivity,
     runInTransaction: withDbTransaction,
     dbQuery,
     createSessionId: () => `design-session-${crypto.randomUUID()}`,

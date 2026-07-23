@@ -14,6 +14,7 @@ export function buildDesignSessionRouter({
   readSessionBinding,
   beginSessionDrain,
   updateSessionState,
+  touchSessionActivity,
   runInTransaction,
   dbQuery,
   createSessionId,
@@ -173,6 +174,13 @@ export function buildDesignSessionRouter({
         ...(body === undefined ? {} : { body }),
         requestId,
       });
+      // The request reached the worker, so this session is doing real design work right now.
+      // Refresh its idle signal (updated_at) so the reaper's `updated_at < now - idleTtl`
+      // predicate keeps counting it active — the status poll bumps updated_at, but the proxy
+      // route did not, so a working session whose client stopped polling (closed/backgrounded/
+      // throttled tab) could otherwise go stale and be descaled mid-work. Best effort and
+      // un-awaited: never add latency to the proxy path.
+      touchSessionActivityBestEffort(touchSessionActivity, dbQuery, session, requestId);
       const settleDelivery = (deliveryStatus) => settleSessionProxyBestEffort(settleProxy, {
         req,
         auth,
@@ -366,6 +374,29 @@ async function settleSessionProxyBestEffort(settleProxy, input) {
       code: error?.code || "DESIGN_PROXY_METER_RECEIPT_FAILED",
     });
   }
+}
+
+// Fire-and-forget refresh of a session's idle signal after it did proxied work, so the reaper
+// cannot descale a session that is actively working but whose client stopped polling. Un-awaited
+// by design (no added proxy latency) and fully self-contained — a synchronous throw from
+// validation or a rejected query is swallowed here, so it can never leak an unhandled rejection
+// past the response. A no-op when no touch function is wired (keeps the dep optional).
+function touchSessionActivityBestEffort(touchSessionActivity, dbQuery, session, requestId) {
+  if (typeof touchSessionActivity !== "function") return;
+  Promise.resolve()
+    .then(() => touchSessionActivity({
+      dbQuery,
+      sessionId: session.sessionId,
+      projectId: session.projectId,
+      userId: session.userId,
+      tenantId: session.tenantId,
+    }))
+    .catch((error) => {
+      console.warn("[Design] Session activity touch could not be recorded:", {
+        requestId,
+        code: error?.code || "DESIGN_SESSION_ACTIVITY_TOUCH_FAILED",
+      });
+    });
 }
 
 async function updateSessionStateBestEffort(updateSessionState, dbQuery, session, result, requestId) {

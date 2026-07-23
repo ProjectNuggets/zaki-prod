@@ -494,6 +494,20 @@ export async function initDb() {
     ON zaki_design_sessions(owner_user_id, state, updated_at DESC);
   `);
 
+  // The idle-session reaper scans `state = ANY(<non-terminal states>) AND updated_at < <cutoff>`
+  // with NO owner_user_id predicate, so the owner-leading index above cannot serve it. This
+  // composite is keyed exactly on the reaper's scan (state, then updated_at for the range +
+  // ORDER BY). Deliberately NOT partial: the reaper binds the state set as a parameter
+  // (`state = ANY($1)`), which a generic plan cannot prove is a subset of a partial `WHERE state
+  // NOT IN (...)` predicate — so a partial index would be skipped under a generic plan and fall
+  // back to a full scan of the owner index. A plain composite is usable under every plan mode,
+  // and this table holds at most one row per project, so the terminal rows it also indexes cost
+  // almost nothing. (Pre-enable optimization for B0b; the reaper is still flag-gated off.)
+  await migrationClient.query(`
+    CREATE INDEX IF NOT EXISTS idx_zaki_design_sessions_state_updated
+    ON zaki_design_sessions(state, updated_at);
+  `);
+
   await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS access_code_orders (
       id BIGSERIAL PRIMARY KEY,

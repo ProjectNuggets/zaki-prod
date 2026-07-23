@@ -354,6 +354,103 @@ describe("Design public session routes", () => {
     }));
   });
 
+  test("refreshes the session's idle signal after proxied work so the reaper cannot descale it mid-work", async () => {
+    // Data-loss window: the idle reaper reaps ACTIVE/READY rows once updated_at falls past the
+    // TTL. The status poll bumps updated_at; the proxy route did not — so a session doing real
+    // work whose client stopped polling could go stale and be descaled mid-work. The proxy must
+    // now bump updated_at itself (through the store touch) once the request reaches the worker.
+    const controllerProxy = jest.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+    const touchSessionActivity = jest.fn().mockResolvedValue(true);
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn(),
+      readSessionBinding: jest.fn().mockResolvedValue({
+        sessionId: "sess_01",
+        projectId: "project_01",
+        userId: "42",
+        tenantId: "default",
+        state: "ACTIVE",
+        generation: 7,
+      }),
+      updateSessionState: jest.fn(),
+      touchSessionActivity,
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: jest.fn(),
+      controller: { ensure: jest.fn(), status: jest.fn(), stop: jest.fn(), proxy: controllerProxy },
+      getRequestId: () => "req_proxy_touch",
+    }));
+
+    const response = await request(app)
+      .get("/api/design/sessions/sess_01/proxy/api/projects/project_01?include=files")
+      .set("x-zaki-project-id", "project_01")
+      .set("authorization", "Bearer browser-auth");
+    // The touch is fire-and-forget (never blocks the response); flush the microtask before asserting.
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(response.status).toBe(200);
+    expect(controllerProxy).toHaveBeenCalledTimes(1);
+    expect(touchSessionActivity).toHaveBeenCalledTimes(1);
+    // Bumps updated_at for exactly the caller's own resolved binding — same identity tuple the
+    // proxy just served, so the refresh is owner/tenant-scoped, not a lifecycle write.
+    expect(touchSessionActivity).toHaveBeenCalledWith({
+      dbQuery: expect.any(Function),
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+    });
+  });
+
+  test("does not refresh the idle signal when the request never reaches the worker", async () => {
+    // The refresh must track delivered work, not mere arrival: a mutation the meter denies never
+    // reaches the pod, so it is not activity and must not keep a truly-abandoned session alive.
+    const controllerProxy = jest.fn();
+    const touchSessionActivity = jest.fn().mockResolvedValue(true);
+    const authorizeProxy = jest.fn().mockResolvedValue({
+      allowed: false,
+      status: 402,
+      body: { code: "design_meter_denied", requestId: "req_proxy_touch_denied" },
+    });
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      resolveUser: jest.fn().mockResolvedValue({ zakiUser: { id: 42 } }),
+      ensureSession: jest.fn(),
+      readSessionBinding: jest.fn().mockResolvedValue({
+        sessionId: "sess_01",
+        projectId: "project_01",
+        userId: "42",
+        tenantId: "default",
+        state: "ACTIVE",
+        generation: 7,
+      }),
+      updateSessionState: jest.fn(),
+      touchSessionActivity,
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: jest.fn(),
+      controller: { ensure: jest.fn(), status: jest.fn(), stop: jest.fn(), proxy: controllerProxy },
+      getRequestId: () => "req_proxy_touch_denied",
+      authorizeProxy,
+    }));
+
+    const response = await request(app)
+      .post("/api/design/sessions/sess_01/proxy/api/projects/project_01/files")
+      .set("x-zaki-project-id", "project_01")
+      .send({ name: "concept.html" });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(response.status).toBe(402);
+    expect(controllerProxy).not.toHaveBeenCalled();
+    expect(touchSessionActivity).not.toHaveBeenCalled();
+  });
+
   test("hydrates canonical billing identity for a session-bound workbench credential", async () => {
     let receivedBody = "";
     const controllerProxy = jest.fn().mockImplementation(async (input) => {
