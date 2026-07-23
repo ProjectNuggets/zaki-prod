@@ -179,9 +179,32 @@ describe("createDesignInternalReadSource", () => {
 
   test("rejects a tampered cursor", async () => {
     const cursor = await mintCursor(CURSOR_SECRET);
-    const tampered = `${cursor.slice(0, -1)}${cursor.endsWith("A") ? "B" : "A"}`;
+    // Tamper a ciphertext BYTE, not the base64url text. Flipping the last char is
+    // non-deterministic: the final char of a 203-char (152-byte) cursor holds 2
+    // padding bits the decoder discards, so "A"->"B" is a no-op ~1/16 of mints and
+    // leaves a VALID cursor (the old intermittent flake). A byte between the 12-byte
+    // IV and the 16-byte GCM tag always fails authentication.
+    const raw = Buffer.from(cursor, "base64url");
+    raw[12] ^= 0xff;
     const source = createDesignInternalReadSource({ dbQuery: jest.fn(), cursorSecret: CURSOR_SECRET });
-    await expect(source.index({ userId: "42", limit: 1, cursor: tampered })).rejects.toBeInstanceOf(BadCursorError);
+    await expect(
+      source.index({ userId: "42", limit: 1, cursor: raw.toString("base64url") })
+    ).rejects.toBeInstanceOf(BadCursorError);
+  });
+
+  test("decodeCursor rejects known-malformed cursors as BadCursorError", async () => {
+    // Fixed inputs, no minting/RNG: the decode contract must fail closed on every
+    // shape of bad cursor (tampered, truncated, foreign text) with BadCursorError,
+    // never a raw TypeError.
+    const source = createDesignInternalReadSource({ dbQuery: jest.fn(), cursorSecret: CURSOR_SECRET });
+    const malformed = [
+      Buffer.alloc(60).toString("base64url"), // valid length, zeroed iv/ct/tag -> GCM auth fails
+      Buffer.alloc(20).toString("base64url"), // <= IV(12)+TAG(16) -> length guard
+      "@".repeat(64), // non-base64url text -> decodes to garbage that fails GCM
+    ];
+    for (const cursor of malformed) {
+      await expect(source.index({ userId: "42", limit: 1, cursor })).rejects.toBeInstanceOf(BadCursorError);
+    }
   });
 
   test("rejects a cursor minted for a different user", async () => {
