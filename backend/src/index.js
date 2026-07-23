@@ -215,6 +215,7 @@ import {
 } from "./minutes-control-routes.js";
 import { buildMinutesCalendarRouter } from "./minutes-calendar-routes.js";
 import { resolveCalendarEncryptionKey } from "./minutes-calendar-store.js";
+import { mirrorCapturePolicy } from "./minutes-calendar-autojoin.js";
 import { hasMinutesControlAccountState } from "./minutes-control-state.js";
 import { reconcileMinutesControlRecoveries } from "./minutes-control-reconciler.js";
 import { resolveMinutesControlAccountErasure } from "./minutes-control-account-erasure.js";
@@ -18634,6 +18635,9 @@ app.use("/api/minutes", buildMinutesControlRouter({
   fetchWithTimeout,
   resolvePlan: resolvePlatformWalletPlanForUser,
   recordFailure: (event) => logStructured("warn", "minutes.control.failed", event),
+  // Mirror the capture policy Hub-side on each consent save so the calendar
+  // auto-join poller can gate + re-ensure. Only when calendar is enabled.
+  recordCapturePolicyMirror: ZAKI_MINUTES_CALENDAR_ENABLED ? mirrorCapturePolicy : undefined,
 }));
 
 // WP-M10 calendar auto-join connect flow (dark until ZAKI_MINUTES_CALENDAR_ENABLED

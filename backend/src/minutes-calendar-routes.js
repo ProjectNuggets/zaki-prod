@@ -14,6 +14,10 @@ import {
   getCalendarConnectionStatus as defaultGetStatus,
   takeCalendarRefreshTokenForRevocation as defaultTakeForRevocation,
 } from "./minutes-calendar-store.js";
+import {
+  getAutojoinStatus as defaultGetAutojoinStatus,
+  saveAutojoinConsent as defaultSaveAutojoinConsent,
+} from "./minutes-calendar-autojoin.js";
 
 // WP-M10 slice 2b — the route glue mounting the calendar OAuth mechanics (slice
 // 2) + the encrypted store (slice 1). Dependency-injected like
@@ -69,6 +73,8 @@ export function buildMinutesCalendarRouter(dependencies = {}) {
   const upsert = store.upsertCalendarConnection || defaultUpsert;
   const getStatus = store.getCalendarConnectionStatus || defaultGetStatus;
   const takeForRevocation = store.takeCalendarRefreshTokenForRevocation || defaultTakeForRevocation;
+  const getAutojoin = store.getAutojoinStatus || defaultGetAutojoinStatus;
+  const saveAutojoin = store.saveAutojoinConsent || defaultSaveAutojoinConsent;
 
   const router = express.Router();
 
@@ -232,7 +238,35 @@ export function buildMinutesCalendarRouter(dependencies = {}) {
       }
       res.json({ disconnected: true, revoked });
     } catch {
-      res.status(502).json({ error: "calendar_disconnect_failed" });
+      if (!res.headersSent) res.status(502).json({ error: "calendar_disconnect_failed" });
+    }
+  });
+
+  // GET /calendar/autojoin — the standing-consent + scope settings view.
+  router.get("/calendar/autojoin", async (req, res) => {
+    if (!guard(req, res)) return;
+    try {
+      const auth = await resolveUser(req, res);
+      if (!auth) return;
+      res.json(await getAutojoin({ userId: String(auth.zakiUser?.id || "") }));
+    } catch {
+      if (!res.headersSent) res.status(502).json({ error: "calendar_autojoin_unavailable" });
+    }
+  });
+
+  // POST /calendar/autojoin — grant/withdraw the standing auto-join consent and
+  // set the meeting scope. Bearer-authed SPA fetch (POST = CSRF-safe here).
+  router.post("/calendar/autojoin", async (req, res) => {
+    if (!guard(req, res)) return;
+    try {
+      const auth = await resolveUser(req, res);
+      if (!auth) return;
+      const userId = String(auth.zakiUser?.id || "");
+      const body = req.body && typeof req.body === "object" ? req.body : {};
+      await saveAutojoin({ userId, enabled: Boolean(body.enabled), joinScope: body.joinScope ?? body.join_scope });
+      res.json(await getAutojoin({ userId }));
+    } catch {
+      if (!res.headersSent) res.status(502).json({ error: "calendar_autojoin_save_failed" });
     }
   });
 

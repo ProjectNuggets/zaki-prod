@@ -1493,6 +1493,16 @@ export async function initDb() {
     console.warn("[DB] Minutes calendar connection table creation failed (feature stays dark):", err.message);
   }
 
+  // WP-M10 auto-join standing consent + join-scope + Hub capture-policy mirror.
+  // Dark + independent of the control gate; warn-and-continue for the same reason.
+  try {
+    const { MINUTES_CALENDAR_AUTOJOIN_DDL } = await import("./minutes-calendar-autojoin.js");
+    await migrationClient.query(MINUTES_CALENDAR_AUTOJOIN_DDL);
+    console.log("[DB] Minutes calendar auto-join store ready");
+  } catch (err) {
+    console.warn("[DB] Minutes calendar auto-join table creation failed (feature stays dark):", err.message);
+  }
+
   // --- V1 beta cutover audit + reversible workspace archive registry ---
   // Dynamic import keeps this DDL colocated with the service while avoiding import cycles.
   try {
