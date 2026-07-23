@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { MessageBubble, type Message } from "../index";
@@ -88,6 +89,12 @@ export function ChatView({
   getReaction,
 }: ChatViewProps) {
   const { t, i18n } = useTranslation();
+  const agentWorkingPhrases = useMemo(() => {
+    const translated = t("chat.agentWorking.phrases", { returnObjects: true });
+    return Array.isArray(translated)
+      ? translated.filter((phrase): phrase is string => typeof phrase === "string" && Boolean(phrase.trim()))
+      : [];
+  }, [i18n.language, t]);
   // Unified timeline surface: Nullalis (native reasoning) or bot mode
   // (sidecar-driven narration) both render through NullalisTurnTimeline.
   // Bot mode is treated as a Nullalis-compatible mode for rendering.
@@ -130,6 +137,7 @@ export function ChatView({
           turnStartedAt={turnStartedAt}
           turnDurationMs={turnDurationMs}
           usage={zakiUsageSummary}
+          workingPhrases={agentWorkingPhrases}
         />
         <TaskChecklist tasks={nullalisTaskItems} />
       </div>

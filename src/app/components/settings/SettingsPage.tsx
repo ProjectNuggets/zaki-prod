@@ -181,7 +181,7 @@ const DEFAULT_AGENT_SETTINGS: AgentSettingsDraft = {
   voice_replies: false,
   session_timeout_minutes: 30,
   assistant_mode: "balanced",
-  autonomy: "full",
+  autonomy: "supervised",
   dream_enabled: true,
   query_expansion_enabled: false,
   selected_model: null,
@@ -189,8 +189,8 @@ const DEFAULT_AGENT_SETTINGS: AgentSettingsDraft = {
 
 // "Reset to defaults" restores exactly the controls the Agent (tenant defaults)
 // panel edits, using DEFAULT_AGENT_SETTINGS as the source of truth — the
-// canonical frontend defaults, which mirror the backend bot-settings contract
-// (backend/src/bot-bff.test.js fixture). The disabled proactive_updates toggle
+// canonical frontend defaults, which mirror the backend safety default. The
+// disabled proactive_updates toggle
 // (paused for launch) and the Memory & Data-owned dream/query toggles are not
 // controls of this panel and are intentionally excluded.
 const AGENT_DEFAULTS_RESET_PATCH = {
@@ -610,7 +610,10 @@ export function SettingsPage() {
   const [agentSettingsDraft, setAgentSettingsDraft] =
     useState<AgentSettingsDraft>(DEFAULT_AGENT_SETTINGS);
   const [agentSettingsLoading, setAgentSettingsLoading] = useState(true);
+  const [agentSettingsAvailable, setAgentSettingsAvailable] = useState(true);
+  const [agentSettingsLoadAttempt, setAgentSettingsLoadAttempt] = useState(0);
   const [agentSettingsSaving, setAgentSettingsSaving] = useState(false);
+  const [fullAutonomyConfirmOpen, setFullAutonomyConfirmOpen] = useState(false);
   const [heartbeatState, setHeartbeatState] = useState<BotHeartbeatState | null>(null);
   const [heartbeatLoading, setHeartbeatLoading] = useState(true);
   const [heartbeatSaving, setHeartbeatSaving] = useState(false);
@@ -934,13 +937,16 @@ export function SettingsPage() {
       .then(({ response, data }) => {
         if (!active) return;
         if (!response.ok || data?.error) {
+          setAgentSettingsAvailable(false);
           setAgentSettingsDraft(DEFAULT_AGENT_SETTINGS);
           return;
         }
+        setAgentSettingsAvailable(true);
         setAgentSettingsDraft(normalizeAgentSettingsProfile(data));
       })
       .catch(() => {
         if (!active) return;
+        setAgentSettingsAvailable(false);
         setAgentSettingsDraft(DEFAULT_AGENT_SETTINGS);
       })
       .finally(() => {
@@ -949,7 +955,7 @@ export function SettingsPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [agentSettingsLoadAttempt]);
 
   useEffect(() => {
     let active = true;
@@ -1586,6 +1592,8 @@ export function SettingsPage() {
     patch: BotSettingsPatch,
     options?: { successMessage?: string }
   ): Promise<boolean> => {
+    if (!agentSettingsAvailable) return Promise.resolve(false);
+
     const run = async (): Promise<boolean> => {
       const previousDraft = agentSettingsDraftRef.current;
       setAgentSettingsSaving(true);
@@ -1682,7 +1690,13 @@ export function SettingsPage() {
   const heartbeatStatusLabel = getHeartbeatStatusLabel(heartbeatState, heartbeatLoading, t);
 
   const handleResetAgentDefaults = () => {
-    if (agentSettingsLoading || agentSettingsSaving || isAtAgentDefaults) return;
+    if (
+      agentSettingsLoading ||
+      !agentSettingsAvailable ||
+      agentSettingsSaving ||
+      isAtAgentDefaults
+    )
+      return;
     setSessionTimeoutError(null);
     setSessionTimeoutDraft(String(AGENT_DEFAULTS_RESET_PATCH.session_timeout_minutes));
     setAgentSettingsDraft((current) => ({ ...current, ...AGENT_DEFAULTS_RESET_PATCH }));
@@ -1694,7 +1708,7 @@ export function SettingsPage() {
   };
 
   const commitSessionTimeoutDraft = async () => {
-    if (agentSettingsLoading) return;
+    if (agentSettingsLoading || !agentSettingsAvailable) return;
     const parsed = Number(sessionTimeoutDraft);
     if (
       !Number.isInteger(parsed) ||
@@ -2518,20 +2532,26 @@ export function SettingsPage() {
               meta={
                 agentSettingsLoading
                   ? t("settingsModal.agentSettings.loadingShort", { defaultValue: "Loading" })
-                  : t("settingsModal.agentSettings.ready", { defaultValue: "Tenant defaults" })
+                  : agentSettingsAvailable
+                    ? t("settingsModal.agentSettings.ready", { defaultValue: "Tenant defaults" })
+                    : t("settingsModal.agentSettings.unavailableShort", {
+                        defaultValue: "Unavailable",
+                      })
               }
               action={
-                <V2Button
-                  size="sm"
-                  variant="ghost"
-                  data-testid="settings-agent-reset"
-                  disabled={agentSettingsLoading || agentSettingsSaving || isAtAgentDefaults}
-                  onClick={handleResetAgentDefaults}
-                >
-                  {t("settingsModal.agentSettings.resetDefaults", {
-                    defaultValue: "Reset to defaults",
-                  })}
-                </V2Button>
+                agentSettingsAvailable ? (
+                  <V2Button
+                    size="sm"
+                    variant="ghost"
+                    data-testid="settings-agent-reset"
+                    disabled={agentSettingsLoading || agentSettingsSaving || isAtAgentDefaults}
+                    onClick={handleResetAgentDefaults}
+                  >
+                    {t("settingsModal.agentSettings.resetDefaults", {
+                      defaultValue: "Reset to defaults",
+                    })}
+                  </V2Button>
+                ) : null
               }
             >
               {agentSettingsLoading ? (
@@ -2540,7 +2560,24 @@ export function SettingsPage() {
                     defaultValue: "Loading Agent settings...",
                   })}
                 </p>
-              ) : null}
+              ) : !agentSettingsAvailable ? (
+                <div className="zaki-settings-v2__control-stack" role="alert">
+                  <p className="v2-body-sm">
+                    {t("settingsModal.agentSettings.unavailable", {
+                      defaultValue:
+                        "Unable to load Agent settings. Your saved defaults have not been changed.",
+                    })}
+                  </p>
+                  <V2Button
+                    size="sm"
+                    variant="default"
+                    onClick={() => setAgentSettingsLoadAttempt((attempt) => attempt + 1)}
+                  >
+                    {t("common.retry", { defaultValue: "Retry" })}
+                  </V2Button>
+                </div>
+              ) : (
+                <>
               <p className="v2-body-sm">
                 {t("settingsModal.agentSettings.defaultsNotice", {
                   defaultValue:
@@ -2610,6 +2647,10 @@ export function SettingsPage() {
                   disabled={agentSettingsLoading || agentSettingsSaving}
                   onChange={(event) => {
                     const autonomy = event.target.value as NonNullable<BotSettingsProfile["autonomy"]>;
+                    if (autonomy === "full" && agentSettingsDraft.autonomy !== "full") {
+                      setFullAutonomyConfirmOpen(true);
+                      return;
+                    }
                     setAgentSettingsDraft((current) => ({ ...current, autonomy }));
                     void patchAgentSettings({ autonomy });
                   }}
@@ -2689,18 +2730,18 @@ export function SettingsPage() {
               </V2SettingsRow>
               <V2SettingsRow
                 name={t("settingsModal.agentSettings.voiceReplies.name", {
-                  defaultValue: "Voice replies",
+                  defaultValue: "Audio replies on connected channels",
                 })}
                 description={t("settingsModal.agentSettings.voiceReplies.helper", {
                   defaultValue:
-                    "Use text-to-speech replies for supported voice-note or audio-capable channel turns.",
+                    "Allow audio replies where a connected channel supports them. This does not affect voice input in ZAKI or the manual Read Aloud button.",
                 })}
               >
                 <input
                   className="v2-toggle"
                   type="checkbox"
                   aria-label={t("settingsModal.agentSettings.voiceReplies.name", {
-                    defaultValue: "Voice replies",
+                    defaultValue: "Audio replies on connected channels",
                   })}
                   checked={agentSettingsDraft.voice_replies}
                   disabled={agentSettingsLoading || agentSettingsSaving}
@@ -2765,6 +2806,8 @@ export function SettingsPage() {
                   </V2Badge>
                 </div>
               </V2SettingsRow>
+                </>
+              )}
               </V2SettingsBlock>
             </ActiveSettingsSection>
 
@@ -3293,6 +3336,7 @@ export function SettingsPage() {
                   </V2Button>
                 </div>
               </V2SettingsRow>
+              {agentSettingsAvailable ? (
               <details className="zaki-settings-v2__advanced-details">
                 <summary>
                   {t("settingsModal.memoryData.advanced.title", {
@@ -3337,6 +3381,20 @@ export function SettingsPage() {
                   />
                 </V2SettingsRow>
               </details>
+              ) : (
+                <GatedRow
+                  name={t("settingsModal.memoryData.advanced.title", {
+                    defaultValue: "Advanced Agent memory behavior",
+                  })}
+                  reason={t("settingsModal.agentSettings.unavailable", {
+                    defaultValue:
+                      "Unable to load Agent settings. Your saved defaults have not been changed.",
+                  })}
+                  badge={t("settingsModal.agentSettings.unavailableShort", {
+                    defaultValue: "Unavailable",
+                  })}
+                />
+              )}
               <div className="zaki-settings-v2__actions">
                 <V2Button size="sm" disabled={isExporting} onClick={() => void handleExport()}>
                   {isExporting
@@ -3388,6 +3446,27 @@ export function SettingsPage() {
               err instanceof Error ? err.message : t("settingsModal.privacy.errors.deleteAccount")
             );
           }
+        }}
+      />
+      <TypeToConfirmDialog
+        isOpen={fullAutonomyConfirmOpen}
+        title={t("settingsModal.agentSettings.autonomy.fullConfirm.title", {
+          defaultValue: "Enable full autonomy",
+        })}
+        body={t("settingsModal.agentSettings.autonomy.fullConfirm.body", {
+          defaultValue:
+            "Full autonomy allows new Agent runs to proceed without asking for approval when their policy permits it. Type FULL to make it your default.",
+        })}
+        confirmPhrase="FULL"
+        confirmLabel={t("settingsModal.agentSettings.autonomy.fullConfirm.confirm", {
+          defaultValue: "Enable full autonomy",
+        })}
+        cancelLabel={t("common.cancel", { defaultValue: "Cancel" })}
+        onCancel={() => setFullAutonomyConfirmOpen(false)}
+        onConfirm={() => {
+          setFullAutonomyConfirmOpen(false);
+          setAgentSettingsDraft((current) => ({ ...current, autonomy: "full" }));
+          void patchAgentSettings({ autonomy: "full" });
         }}
       />
     </>

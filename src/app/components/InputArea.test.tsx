@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom";
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { toast } from "sonner";
 import { InputArea } from "./InputArea";
 
 const navigateMock = jest.fn();
@@ -64,6 +65,10 @@ jest.mock("sonner", () => ({
     info: jest.fn(),
     error: jest.fn(),
   },
+}));
+
+jest.mock("@/lib/productTelemetry", () => ({
+  trackProductEvent: jest.fn(),
 }));
 
 describe("InputArea primary action button", () => {
@@ -235,9 +240,9 @@ describe("InputArea primary action button", () => {
     expect(screen.queryByTestId("zaki-composer-open-approvals")).not.toBeInTheDocument();
     expect(screen.queryByTestId("zaki-composer-open-browser")).not.toBeInTheDocument();
     expect(screen.queryByTestId("zaki-composer-open-output")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "input.voice.tapToRecord" })
-    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("voice-dictate-button")).toHaveAccessibleName(
+      "input.voice.tapToRecord"
+    );
 
     fireEvent.click(screen.getByTestId("zaki-composer-mode"));
     expect(onZakiModeChange).toHaveBeenCalledWith("execute");
@@ -254,11 +259,60 @@ describe("InputArea primary action button", () => {
     const autonomy = screen.getByTestId("zaki-composer-autonomy");
     expect(autonomy).toHaveTextContent("supervised");
     fireEvent.click(autonomy);
+    expect(autonomy).toHaveTextContent("supervised");
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    const confirm = screen.getByRole("button", {
+      name: "input.zaki.autonomyConfirm.confirm",
+    });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(screen.getByPlaceholderText("FULL"), {
+      target: { value: "FULL" },
+    });
+    fireEvent.click(confirm);
     expect(autonomy).toHaveTextContent("full");
 
     fireEvent.click(screen.getByRole("button", { name: "input.menu.addOptions" }));
     fireEvent.click(screen.getByTestId("zaki-composer-pin-context"));
     expect(screen.getAllByText("pinContext.title").length).toBeGreaterThan(0);
+  });
+
+  it("names unsupported voice capture instead of blaming microphone permissions", () => {
+    const mediaDevicesDescriptor = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+    const mediaRecorderDescriptor = Object.getOwnPropertyDescriptor(globalThis, "MediaRecorder");
+
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: undefined,
+    });
+    Object.defineProperty(globalThis, "MediaRecorder", {
+      configurable: true,
+      value: undefined,
+    });
+
+    try {
+      render(
+        <InputArea
+          onSend={jest.fn()}
+          attachments={[]}
+          setAttachments={jest.fn()}
+          zakiBotMode
+        />
+      );
+
+      fireEvent.click(screen.getByTestId("voice-dictate-button"));
+      expect(toast.error).toHaveBeenCalledWith("input.voice.errorNoBrowser");
+    } finally {
+      if (mediaDevicesDescriptor) {
+        Object.defineProperty(navigator, "mediaDevices", mediaDevicesDescriptor);
+      } else {
+        Reflect.deleteProperty(navigator, "mediaDevices");
+      }
+      if (mediaRecorderDescriptor) {
+        Object.defineProperty(globalThis, "MediaRecorder", mediaRecorderDescriptor);
+      } else {
+        Reflect.deleteProperty(globalThis, "MediaRecorder");
+      }
+    }
   });
 
   it("drafts a polished artifact request from the ZAKI plus menu", () => {

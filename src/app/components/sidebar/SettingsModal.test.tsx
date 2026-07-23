@@ -14,6 +14,7 @@ import {
   deleteAgentChannelBinding,
   disconnectBotTelegram,
   disconnectAgentChannelControl,
+  fetchBotSettings,
   fetchBotHeartbeat,
   fetchAgentChannelControls,
   fetchAgentExtensionDevices,
@@ -46,6 +47,7 @@ jest.mock("@/lib/api", () => ({
       voice_replies: false,
       session_timeout_minutes: 30,
       assistant_mode: "balanced",
+      autonomy: "supervised",
       dream_enabled: true,
       query_expansion_enabled: false,
       selected_model: null,
@@ -337,7 +339,7 @@ jest.mock("@/lib/api", () => ({
       voice_replies: payload?.voice_replies ?? false,
       session_timeout_minutes: payload?.session_timeout_minutes ?? 30,
       assistant_mode: payload?.assistant_mode ?? "balanced",
-      autonomy: payload?.autonomy ?? "full",
+      autonomy: payload?.autonomy ?? "supervised",
       dream_enabled: payload?.dream_enabled ?? true,
       query_expansion_enabled: payload?.query_expansion_enabled ?? false,
       selected_model: payload?.selected_model ?? null,
@@ -1463,7 +1465,7 @@ describe("SettingsPage", () => {
       expect.objectContaining({ proactive_updates: expect.any(Boolean) })
     );
 
-    fireEvent.click(screen.getByLabelText("Voice replies"));
+    fireEvent.click(screen.getByLabelText("Audio replies on connected channels"));
     await waitFor(() => {
       expect(updateBotSettingsMock).toHaveBeenCalledWith({ voice_replies: true });
     });
@@ -1527,9 +1529,9 @@ describe("SettingsPage", () => {
     expect(resetButton).toBeDisabled();
 
     // Move a control off-default to enable the reset affordance.
-    fireEvent.change(screen.getByLabelText("Autonomy"), { target: { value: "supervised" } });
+    fireEvent.change(screen.getByLabelText("Autonomy"), { target: { value: "read_only" } });
     await waitFor(() => {
-      expect(updateBotSettingsMock).toHaveBeenCalledWith({ autonomy: "supervised" });
+      expect(updateBotSettingsMock).toHaveBeenCalledWith({ autonomy: "read_only" });
     });
     await waitFor(() => {
       expect(resetButton).not.toBeDisabled();
@@ -1542,7 +1544,7 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(updateBotSettingsMock).toHaveBeenCalledWith({
         assistant_mode: "balanced",
-        autonomy: "full",
+        autonomy: "supervised",
         group_activation: "mention",
         voice_replies: false,
         session_timeout_minutes: 30,
@@ -1555,6 +1557,58 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(resetButton).toBeDisabled();
     });
+  });
+
+  it("requires typed confirmation before enabling full autonomy", async () => {
+    const updateBotSettingsMock = updateBotSettings as jest.MockedFunction<typeof updateBotSettings>;
+    updateBotSettingsMock.mockClear();
+    await renderSettingsPage("/settings#settings-agent");
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Autonomy")).toHaveValue("supervised");
+    });
+
+    fireEvent.change(screen.getByLabelText("Autonomy"), { target: { value: "full" } });
+
+    const confirmation = screen.getByRole("alertdialog");
+    const confirmButton = within(confirmation).getByRole("button", {
+      name: "Enable full autonomy",
+    });
+    expect(confirmButton).toBeDisabled();
+    expect(updateBotSettingsMock).not.toHaveBeenCalledWith({ autonomy: "full" });
+
+    fireEvent.click(within(confirmation).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(updateBotSettingsMock).not.toHaveBeenCalledWith({ autonomy: "full" });
+
+    fireEvent.change(screen.getByLabelText("Autonomy"), { target: { value: "full" } });
+    fireEvent.change(screen.getByPlaceholderText("FULL"), { target: { value: "FULL" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enable full autonomy" }));
+
+    await waitFor(() => {
+      expect(updateBotSettingsMock).toHaveBeenCalledWith({ autonomy: "full" });
+    });
+  });
+
+  it("keeps Agent settings read-only until their saved profile loads", async () => {
+    const fetchBotSettingsMock = fetchBotSettings as jest.MockedFunction<typeof fetchBotSettings>;
+    const updateBotSettingsMock = updateBotSettings as jest.MockedFunction<typeof updateBotSettings>;
+    fetchBotSettingsMock.mockRejectedValueOnce(new Error("settings_unavailable"));
+    updateBotSettingsMock.mockClear();
+    await renderSettingsPage("/settings#settings-agent");
+
+    expect(
+      await screen.findByText("Unable to load Agent settings. Your saved defaults have not been changed.")
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Autonomy")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("settings-agent-reset")).not.toBeInTheDocument();
+    expect(updateBotSettingsMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => {
+      expect(screen.getByLabelText("Autonomy")).toBeInTheDocument();
+    });
+    expect(updateBotSettingsMock).not.toHaveBeenCalled();
   });
 
   it("keeps the Agent settings tab focused on controls instead of navigation chips", async () => {
@@ -1723,13 +1777,23 @@ describe("SettingsPage", () => {
     });
   });
 
-  it("wires Agent channel identity bindings to the channel BFF", async () => {
+  it("keeps non-release-ready channels visible but not configurable", async () => {
+    const connectMock = connectAgentChannelControl as jest.MockedFunction<
+      typeof connectAgentChannelControl
+    >;
+    const testMock = testAgentChannelControl as jest.MockedFunction<typeof testAgentChannelControl>;
+    const disconnectMock = disconnectAgentChannelControl as jest.MockedFunction<
+      typeof disconnectAgentChannelControl
+    >;
     const upsertBindingMock = upsertAgentChannelBinding as jest.MockedFunction<
       typeof upsertAgentChannelBinding
     >;
     const deleteBindingMock = deleteAgentChannelBinding as jest.MockedFunction<
       typeof deleteAgentChannelBinding
     >;
+    connectMock.mockClear();
+    testMock.mockClear();
+    disconnectMock.mockClear();
     upsertBindingMock.mockClear();
     deleteBindingMock.mockClear();
     await renderSettingsPage("/settings#settings-channels");
@@ -1738,82 +1802,37 @@ describe("SettingsPage", () => {
       expect(screen.getByTestId("settings-channels")).toBeInTheDocument();
     });
 
-    fireEvent.click(
-      within(screen.getByTestId("settings-channel-slack")).getByRole("button", {
-        name: "Manage Slack",
-      })
-    );
+    for (const [id, label] of [
+      ["slack", "Slack"],
+      ["discord", "Discord"],
+      ["whatsapp", "WhatsApp"],
+    ]) {
+      const row = within(screen.getByTestId(`settings-channel-${id}`));
+      expect(row.getByText("Coming soon")).toBeInTheDocument();
+      expect(row.queryByRole("button", { name: `Manage ${label}` })).not.toBeInTheDocument();
+      expect(row.queryByText(/not yet available for sending or receiving/i)).toBeInTheDocument();
+      expect(screen.queryByTestId(`settings-channel-panel-${id}`)).not.toBeInTheDocument();
+    }
 
-    // Chip trim (settings-batch spec, item #14) demotes the ownership and
-    // bindings-count chips off the collapsed row into the expanded tray's
-    // summary grid. Assert the info is genuinely still reachable here — demoted,
-    // not deleted. Slack is the fixture channel carrying a binding.
-    const slackRow = within(screen.getByTestId("settings-channel-slack"));
-    expect(slackRow.getByText("Owner")).toBeInTheDocument();
-    expect(slackRow.getByText("Your tokens")).toBeInTheDocument();
-    expect(slackRow.getByText("Bindings")).toBeInTheDocument();
-    expect(slackRow.getByText("1 binding")).toBeInTheDocument();
-
-    const slackBindingEditor = screen.getByTestId("settings-channel-bindings-slack");
-    expect(slackBindingEditor).not.toBeNull();
-    const saveBindingButton = within(slackBindingEditor as HTMLElement).getByRole("button", {
-      name: "Bind Slack identity",
-    });
-    expect(saveBindingButton).toBeDisabled();
-
-    fireEvent.change(screen.getByLabelText("Slack principal key"), {
-      target: { value: " U999 " },
-    });
-    fireEvent.change(screen.getByLabelText("Slack scope key"), {
-      target: { value: " C999 " },
-    });
-    fireEvent.change(screen.getByLabelText("Slack thread key"), {
-      target: { value: " thread-99 " },
-    });
-
-    expect(saveBindingButton).toBeEnabled();
-    fireEvent.click(saveBindingButton);
-
-    await waitFor(() => {
-      expect(upsertBindingMock).toHaveBeenCalledWith("slack", {
-        account_id: "main",
-        principal_key: "U999",
-        scope_key: "C999",
-        thread_key: "thread-99",
-      });
-    });
-
-    const existingBindingRow = screen.getByText(/main \/ U123 \/ C123/).closest("div");
-    expect(existingBindingRow).not.toBeNull();
-    fireEvent.click(
-      within(existingBindingRow as HTMLElement).getByRole("button", { name: "Delete Slack binding" })
-    );
-
-    await waitFor(() => {
-      expect(deleteBindingMock).toHaveBeenCalledWith("slack", "bnd_1");
-    });
+    expect(screen.queryByLabelText("Slack Bot token")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Discord Bot token")).not.toBeInTheDocument();
+    expect(connectMock).not.toHaveBeenCalled();
+    expect(testMock).not.toHaveBeenCalled();
+    expect(disconnectMock).not.toHaveBeenCalled();
+    expect(upsertBindingMock).not.toHaveBeenCalled();
+    expect(deleteBindingMock).not.toHaveBeenCalled();
   });
 
-  it("wires Agent channel credential save, test, and disconnect actions", async () => {
-    const connectMock = connectAgentChannelControl as jest.MockedFunction<
-      typeof connectAgentChannelControl
-    >;
+  it("wires verified Telegram credential save, test, and disconnect actions", async () => {
     const connectTelegramMock = connectBotTelegram as jest.MockedFunction<typeof connectBotTelegram>;
     const testMock = testAgentChannelControl as jest.MockedFunction<typeof testAgentChannelControl>;
-    const disconnectMock = disconnectAgentChannelControl as jest.MockedFunction<
-      typeof disconnectAgentChannelControl
-    >;
     const disconnectTelegramMock = disconnectBotTelegram as jest.MockedFunction<typeof disconnectBotTelegram>;
-    connectMock.mockClear();
     connectTelegramMock.mockClear();
     testMock.mockClear();
-    disconnectMock.mockClear();
     disconnectTelegramMock.mockClear();
     await renderSettingsPage("/settings#settings-channels");
 
-    await waitFor(() => {
-      expect(screen.getByTestId("settings-channel-slack")).toBeInTheDocument();
-    });
+    await waitFor(() => expect(screen.getByTestId("settings-channel-telegram")).toBeInTheDocument());
 
     fireEvent.click(
       within(screen.getByTestId("settings-channel-telegram")).getByRole("button", {
@@ -1845,59 +1864,7 @@ describe("SettingsPage", () => {
     await waitFor(() => {
       expect(disconnectTelegramMock).toHaveBeenCalled();
     });
-
-    fireEvent.click(
-      within(screen.getByTestId("settings-channel-slack")).getByRole("button", {
-        name: "Manage Slack",
-      })
-    );
-
-    const slackControl = within(screen.getByTestId("settings-channel-panel-slack"));
-    expect(
-      slackControl.getByText(/Bot User OAuth Token \(xoxb-/i)
-    ).toBeInTheDocument();
-    expect(
-      slackControl.getByText(/workspace OAuth app-install is not available yet/i)
-    ).toBeInTheDocument();
-    expect(
-      slackControl.getByText(/Both the Bot token and Signing secret are required for first-time setup/i)
-    ).toBeInTheDocument();
-    const saveCredentialsButton = slackControl.getByRole("button", {
-      name: "Update Slack credentials",
-    });
-    expect(saveCredentialsButton).toBeDisabled();
-
-    const slackBotToken = slackControl.getByLabelText("Slack Bot token");
-    const slackSigningSecret = slackControl.getByLabelText("Slack Signing secret");
-    expect(slackBotToken).toHaveAttribute("type", "password");
-    expect(slackSigningSecret).toHaveAttribute("type", "password");
-
-    fireEvent.change(slackBotToken, {
-      target: { value: " xoxb-settings-test " },
-    });
-    fireEvent.change(slackSigningSecret, {
-      target: { value: " signing-secret " },
-    });
-    expect(saveCredentialsButton).toBeEnabled();
-    fireEvent.click(saveCredentialsButton);
-
-    await waitFor(() => {
-      expect(connectMock).toHaveBeenCalledWith("slack", {
-        slack_bot_token: "xoxb-settings-test",
-        slack_signing_secret: "signing-secret",
-      });
-    });
-
-    fireEvent.click(slackControl.getByRole("button", { name: "Test Slack connection" }));
-    await waitFor(() => {
-      expect(testMock).toHaveBeenCalledWith("slack");
-    });
-
-    fireEvent.click(slackControl.getByRole("button", { name: "Disconnect Slack" }));
-    await waitFor(() => {
-      expect(disconnectMock).toHaveBeenCalledWith("slack");
-    });
-  }, 15_000);
+  });
 
   it("shows a user-safe error when a live channel test rejects saved credentials", async () => {
     const testMock = testAgentChannelControl as jest.MockedFunction<typeof testAgentChannelControl>;
@@ -1932,7 +1899,7 @@ describe("SettingsPage", () => {
     expect(toast.success).not.toHaveBeenCalled();
   });
 
-  it("downgrades a connected channel badge to needs-attention when the last live test failed", async () => {
+  it("does not brand a stored non-release-ready channel as connected", async () => {
     const fetchChannelControlsMock = fetchAgentChannelControls as jest.MockedFunction<
       typeof fetchAgentChannelControls
     >;
@@ -1950,11 +1917,9 @@ describe("SettingsPage", () => {
             status: "connected",
             secret_refs: [
               { key: "slack_bot_token", label: "Bot token", required: true, present: true },
-              { key: "slack_signing_secret", label: "Signing secret", required: true, present: true },
             ],
             config: {},
-            // Stored state says connected, but the last live /test failed.
-            last_test: { ok: false, detail: "provider_auth_rejected", checked_at_s: 1730000000 },
+            last_test: { ok: true, detail: "provider_reachable", checked_at_s: 1730000000 },
           },
         ],
       },
@@ -1962,61 +1927,13 @@ describe("SettingsPage", () => {
 
     await renderSettingsPage("/settings#settings-channels");
 
-    await waitFor(() => {
-      expect(screen.getByTestId("settings-channel-slack")).toBeInTheDocument();
-    });
-
-    const slackRow = within(screen.getByTestId("settings-channel-slack"));
-    const badge = slackRow.getByText("Needs attention");
-    expect(badge).toBeInTheDocument();
-    expect(badge).toHaveClass("v2-badge--warn");
-    // The badge must NOT read as healthy just because stored state is connected.
+    const slackRow = within(await screen.findByTestId("settings-channel-slack"));
+    expect(slackRow.getByText("Coming soon")).toBeInTheDocument();
     expect(slackRow.queryByText("Connected")).not.toBeInTheDocument();
+    expect(slackRow.queryByRole("button", { name: "Manage Slack" })).not.toBeInTheDocument();
   });
 
-  it("degrades gracefully when a live test response omits last_test (pre-liveness engine)", async () => {
-    const testMock = testAgentChannelControl as jest.MockedFunction<typeof testAgentChannelControl>;
-    // An old engine that predates channel liveness returns no last_test field.
-    testMock.mockResolvedValueOnce({
-      response: { ok: true } as Response,
-      data: { channel: "slack" },
-    });
-
-    await renderSettingsPage("/settings#settings-channels");
-
-    await waitFor(() => {
-      expect(screen.getByTestId("settings-channel-slack")).toBeInTheDocument();
-    });
-
-    (toast as unknown as jest.Mock).mockClear();
-    (toast.error as jest.Mock).mockClear();
-    (toast.success as jest.Mock).mockClear();
-
-    fireEvent.click(
-      within(screen.getByTestId("settings-channel-slack")).getByRole("button", {
-        name: "Manage Slack",
-      })
-    );
-    fireEvent.click(
-      within(screen.getByTestId("settings-channel-panel-slack")).getByRole("button", {
-        name: "Test Slack connection",
-      })
-    );
-
-    await waitFor(() => {
-      expect(testMock).toHaveBeenCalledWith("slack");
-    });
-    // No throw / error toast — a neutral "unknown" toast instead.
-    await waitFor(() => {
-      expect(toast).toHaveBeenCalledWith(
-        "Test request sent, but this engine did not report a live result."
-      );
-    });
-    expect(toast.error).not.toHaveBeenCalled();
-    expect(toast.success).not.toHaveBeenCalled();
-  });
-
-  it("shows an in-flight Testing... affordance while a channel test is running", async () => {
+  it("shows an in-flight Testing... affordance for verified Telegram only", async () => {
     const testMock = testAgentChannelControl as jest.MockedFunction<typeof testAgentChannelControl>;
     let resolveTest: (value: Awaited<ReturnType<typeof testAgentChannelControl>>) => void = () => {};
     testMock.mockImplementationOnce(
@@ -2028,17 +1945,15 @@ describe("SettingsPage", () => {
 
     await renderSettingsPage("/settings#settings-channels");
 
-    await waitFor(() => {
-      expect(screen.getByTestId("settings-channel-slack")).toBeInTheDocument();
-    });
+    await waitFor(() => expect(screen.getByTestId("settings-channel-telegram")).toBeInTheDocument());
 
     fireEvent.click(
-      within(screen.getByTestId("settings-channel-slack")).getByRole("button", {
-        name: "Manage Slack",
+      within(screen.getByTestId("settings-channel-telegram")).getByRole("button", {
+        name: "Manage Telegram",
       })
     );
-    const panel = within(screen.getByTestId("settings-channel-panel-slack"));
-    fireEvent.click(panel.getByRole("button", { name: "Test Slack connection" }));
+    const panel = within(screen.getByTestId("settings-channel-panel-telegram"));
+    fireEvent.click(panel.getByRole("button", { name: "Test Telegram connection" }));
 
     await waitFor(() => {
       expect(panel.getByRole("button", { name: "Testing..." })).toBeDisabled();
@@ -2047,94 +1962,12 @@ describe("SettingsPage", () => {
     await act(async () => {
       resolveTest({
         response: { ok: true } as Response,
-        data: { channel: "slack", last_test: { ok: true, detail: "provider_reachable" } },
+        data: { channel: "telegram", last_test: { ok: true, detail: "provider_reachable" } },
       });
     });
 
     await waitFor(() => {
-      expect(panel.getByRole("button", { name: "Test Slack connection" })).toBeEnabled();
-    });
-  });
-
-  it("connects Discord through the generic channel-control path with token and optional guild", async () => {
-    const connectMock = connectAgentChannelControl as jest.MockedFunction<
-      typeof connectAgentChannelControl
-    >;
-    const fetchChannelControlsMock = fetchAgentChannelControls as jest.MockedFunction<
-      typeof fetchAgentChannelControls
-    >;
-    connectMock.mockClear();
-    await renderSettingsPage("/settings#settings-channels");
-
-    await waitFor(() => {
-      expect(screen.getByTestId("settings-channel-discord")).toBeInTheDocument();
-    });
-
-    fireEvent.click(
-      within(screen.getByTestId("settings-channel-discord")).getByRole("button", {
-        name: "Manage Discord",
-      })
-    );
-
-    const discordPanel = within(screen.getByTestId("settings-channel-panel-discord"));
-    expect(discordPanel.getByText(/Discord Developer Portal/i)).toBeInTheDocument();
-    expect(discordPanel.getByText(/OAuth2.*invite it to your server/i)).toBeInTheDocument();
-    expect(discordPanel.queryByLabelText("Discord Application ID")).not.toBeInTheDocument();
-
-    const saveDiscordButton = discordPanel.getByRole("button", {
-      name: "Save Discord credentials",
-    });
-    expect(saveDiscordButton).toBeDisabled();
-    fireEvent.change(discordPanel.getByLabelText("Discord Guild ID"), {
-      target: { value: " 123456789012345678 " },
-    });
-    expect(saveDiscordButton).toBeDisabled();
-    expect(
-      discordPanel.getByText("Enter every missing required credential before saving.")
-    ).toBeInTheDocument();
-    fireEvent.change(discordPanel.getByLabelText("Discord Bot token"), {
-      target: { value: " MTAxMjM0NTY3ODkwMTIzNDU2Nzg5MA.abc " },
-    });
-    expect(saveDiscordButton).toBeEnabled();
-
-    fetchChannelControlsMock.mockResolvedValueOnce({
-      response: { ok: true } as Response,
-      data: {
-        channels: [
-          {
-            channel: "discord",
-            label: "Discord",
-            build_enabled: true,
-            operator_configured: true,
-            user_managed: true,
-            user_connected: true,
-            status: "connected",
-            secret_refs: [
-              {
-                key: "discord_bot_token",
-                label: "Bot token",
-                required: true,
-                present: true,
-              },
-            ],
-            config: { guild_id: "123456789012345678" },
-            last_test: null,
-          },
-        ],
-      },
-    });
-    fireEvent.click(saveDiscordButton);
-
-    await waitFor(() => {
-      expect(connectMock).toHaveBeenCalledWith("discord", {
-        discord_bot_token: "MTAxMjM0NTY3ODkwMTIzNDU2Nzg5MA.abc",
-        guild_id: "123456789012345678",
-      });
-    });
-    await waitFor(() => {
-      expect(
-        within(screen.getByTestId("settings-channel-discord")).getAllByText("Connected")
-      ).not.toHaveLength(0);
+      expect(panel.getByRole("button", { name: "Test Telegram connection" })).toBeEnabled();
     });
   });
 
@@ -2206,69 +2039,20 @@ describe("SettingsPage", () => {
 
     await waitFor(() => {
       expect(
-        within(screen.getByTestId("settings-channels")).getAllByText("Control plane unavailable")
+        within(screen.getByTestId("settings-channels")).getAllByText("Coming soon")
           .length
       ).toBeGreaterThan(0);
     });
 
     const channels = within(screen.getByTestId("settings-channels"));
-    expect(channels.queryByRole("button", { name: "Save Slack credentials" })).not.toBeInTheDocument();
-    expect(channels.queryByRole("button", { name: "Test Slack" })).not.toBeInTheDocument();
-    expect(channels.queryByRole("button", { name: "Check Slack credentials" })).not.toBeInTheDocument();
-    expect(channels.queryByRole("button", { name: "Disconnect Slack" })).not.toBeInTheDocument();
+    expect(channels.queryByRole("button", { name: "Manage Slack" })).not.toBeInTheDocument();
+    expect(channels.queryByRole("button", { name: "Manage Discord" })).not.toBeInTheDocument();
+    expect(channels.queryByRole("button", { name: "Manage WhatsApp" })).not.toBeInTheDocument();
+    expect(channels.getByRole("button", { name: "Manage Telegram" })).toBeInTheDocument();
     expect(
       channels.getAllByText("Credential actions are unavailable until the channel control plane responds.")
         .length
     ).toBeGreaterThan(0);
-  });
-
-  it("shows user token setup fields for supported channel controls", async () => {
-    const fetchChannelControlsMock = fetchAgentChannelControls as jest.MockedFunction<
-      typeof fetchAgentChannelControls
-    >;
-    fetchChannelControlsMock.mockResolvedValueOnce({
-      response: { ok: true } as Response,
-      data: {
-        channels: [
-          {
-            channel: "slack",
-            label: "Slack",
-            build_enabled: true,
-            operator_configured: false,
-            user_managed: true,
-            user_connected: false,
-            status: "not_connected",
-            secret_refs: [
-              { key: "slack_bot_token", label: "Bot token", required: true, present: false },
-              { key: "slack_signing_secret", label: "Signing secret", required: true, present: false },
-            ],
-            config: {},
-            last_test: null,
-          },
-        ],
-      },
-    });
-
-    await renderSettingsPage("/settings#settings-channels");
-
-    await waitFor(() => {
-      expect(screen.getByTestId("settings-channel-slack")).toBeInTheDocument();
-    });
-
-    fireEvent.click(
-      within(screen.getByTestId("settings-channel-slack")).getByRole("button", {
-        name: "Manage Slack",
-      })
-    );
-
-    const slackPanel = within(screen.getByTestId("settings-channel-panel-slack"));
-    expect(slackPanel.getByTestId("settings-channel-credentials-slack")).toBeInTheDocument();
-    expect(slackPanel.getByLabelText("Slack Bot token")).toBeInTheDocument();
-    expect(slackPanel.getByLabelText("Slack Signing secret")).toBeInTheDocument();
-    expect(slackPanel.getByLabelText("Slack App token")).toBeInTheDocument();
-    expect(slackPanel.getByLabelText("Slack Workspace ID")).toBeInTheDocument();
-    expect(slackPanel.getByRole("button", { name: "Update Slack credentials" })).toBeDisabled();
-    expect(slackPanel.getByText("Bind Slack identity")).toBeInTheDocument();
   });
 
   it("keeps future provider and model controls hidden from end-user settings", async () => {

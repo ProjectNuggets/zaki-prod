@@ -92,6 +92,8 @@ export type NullalisNarrationFrame = {
   id: string;
   phase: NullalisNarrationPhase;
   label: string;
+  /** Client fallback until the runtime emits an authoritative progress signal. */
+  source?: "fallback" | "runtime";
   tool?: string | null;
   iteration?: number | null;
   durationMs?: number | null;

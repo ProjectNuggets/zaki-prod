@@ -29,7 +29,7 @@ jest.mock("react-i18next", () => ({
 import { ChatView } from "./ChatView";
 
 describe("ChatView", () => {
-  it("renders a Thinking shimmer while streaming with no timeline content", () => {
+  it("renders one fallback Agent working card while streaming before runtime progress arrives", () => {
     render(
       <ChatView
         messages={[
@@ -39,11 +39,28 @@ describe("ChatView", () => {
         isHistoryLoading={false}
         isStreaming
         botMode
+        nullalisNarrationFrame={{
+          id: "fallback-1",
+          phase: "thinking",
+          label: "Gathering context",
+          source: "fallback",
+          tool: null,
+          iteration: null,
+          durationMs: null,
+          stepIndex: null,
+          stepTotal: null,
+          timestamp: Date.now(),
+        }}
         firstMessageTransition={false}
       />
     );
 
-    expect(screen.getAllByText("Thinking").length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId("agent-working-card")).toHaveLength(1);
+    expect(screen.getByTestId("agent-working-card")).toHaveAttribute("data-source", "fallback");
+    expect(screen.getByText("Gathering context")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-live-status")).toHaveTextContent(
+      "thinking: Gathering context"
+    );
   });
 
   it("surfaces the active agent narration frame when the turn has no concrete tool rows yet", () => {
@@ -60,6 +77,7 @@ describe("ChatView", () => {
           id: "n1",
           phase: "thinking",
           label: "Reading backend contract",
+          source: "runtime",
           tool: "agent_bff",
           timestamp: Date.now(),
         }}

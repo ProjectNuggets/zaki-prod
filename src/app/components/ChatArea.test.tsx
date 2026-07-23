@@ -4097,7 +4097,53 @@ describe("ChatArea Component", () => {
       phase: "tool_start",
       label: "Running bash...",
       tool: "bash",
+      source: "runtime",
       timestamp: 123,
+    });
+  });
+
+  it("maps nested WebSocket narration frames with the same runtime semantics as SSE", () => {
+    const frame = extractNullalisNarrationFrame(
+      {
+        type: "reportStreamEvent",
+        content: {
+          phase: "tool_start",
+          label: "Running bash...",
+          tool: "bash",
+          step_index: 1,
+          step_total: 3,
+        },
+      },
+      456
+    );
+
+    expect(frame).toMatchObject({
+      phase: "tool_start",
+      label: "Running bash...",
+      tool: "bash",
+      stepIndex: 1,
+      stepTotal: 3,
+      source: "runtime",
+      timestamp: 456,
+    });
+  });
+
+  it("retains a valid root narration frame when an unrelated nested payload is present", () => {
+    const frame = extractNullalisNarrationFrame(
+      {
+        type: "progress",
+        phase: "thinking",
+        label: "Gathering context",
+        content: { kind: "metadata", label: "not a narration phase" },
+      },
+      789
+    );
+
+    expect(frame).toMatchObject({
+      phase: "thinking",
+      label: "Gathering context",
+      source: "runtime",
+      timestamp: 789,
     });
   });
 

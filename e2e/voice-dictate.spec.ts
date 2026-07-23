@@ -239,10 +239,10 @@ test.describe("voice dictation", () => {
     await expect(micButton).toBeVisible();
     await micButton.click();
 
-    // Now showing the stop-recording variant
-    const stopButtons = page.getByRole("button", { name: "Stop" });
-    await expect(stopButtons).toHaveCount(2);
-    await stopButtons.last().click();
+    // Finish records/transcribes; discard is deliberately a separate action.
+    const finishRecording = page.getByRole("button", { name: "Finish recording" });
+    await expect(finishRecording).toHaveCount(1);
+    await finishRecording.click();
 
     const input = page.locator("#chat-input");
     await expect(input).toHaveValue("hello from voice dictation");
@@ -252,5 +252,30 @@ test.describe("voice dictation", () => {
 
     await expect.poll(() => telemetryEvents).toContain("voice_dictate_started");
     await expect.poll(() => telemetryEvents).toContain("voice_dictate_completed");
+  });
+
+  test("names an unavailable transcription service and leaves the draft untouched", async ({ page }) => {
+    await mockMediaRecorder(page);
+    await mockAppShell(page);
+    await bootstrapSession(page);
+
+    // Last registered handler wins, so this models the staging/prod capability
+    // endpoint returning its normal unavailable response without exposing internals.
+    await page.route("**/api/agent/voice/transcribe", (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "voice_unavailable" }),
+      }),
+    );
+
+    await page.goto("/spaces/zaky/threads/t-1");
+    await page.getByRole("button", { name: /tap to record/i }).click();
+    await page.getByRole("button", { name: "Finish recording" }).click();
+
+    await expect(
+      page.getByText("Voice input is unavailable right now. Try again later."),
+    ).toBeVisible();
+    await expect(page.locator("#chat-input")).toHaveValue("");
   });
 });
