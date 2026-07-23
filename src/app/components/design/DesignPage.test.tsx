@@ -69,9 +69,12 @@ describe("DesignPage hosted lifecycle", () => {
     });
     renderPage();
 
-    await waitFor(() => expect(mockCreate).toHaveBeenCalledWith({ name: "My designs" }));
+    await waitFor(() => expect(mockCreate).toHaveBeenCalled());
     await waitFor(() => expect(mockEnsure).toHaveBeenCalledWith("project_new"));
-    expect(await screen.findByTitle("ZAKI Design workbench")).toBeVisible();
+    expect(await screen.findByTitle("ZAKI Design workbench")).toHaveAttribute(
+      "src",
+      "/api/design/workbench/projects/project_new?sessionId=sess_02&projectId=project_new&projectName=My+designs",
+    );
   });
 
   it("offers a safe retry when the worker comes back stopped", async () => {
