@@ -1527,6 +1527,16 @@ export async function initDb() {
     console.warn("[DB] Minutes calendar auto-join table creation failed (feature stays dark):", err.message);
   }
 
+  // WP-M10 slice 5 — the poller's per-(tenant, meeting-occurrence) fire ledger
+  // (the dedup claim: one bot per meeting across replicas). Same dark pattern.
+  try {
+    const { MINUTES_CALENDAR_AUTOJOIN_FIRES_DDL } = await import("./minutes-calendar-scheduler.js");
+    await migrationClient.query(MINUTES_CALENDAR_AUTOJOIN_FIRES_DDL);
+    console.log("[DB] Minutes calendar auto-join fire ledger ready");
+  } catch (err) {
+    console.warn("[DB] Minutes calendar auto-join fire ledger creation failed (feature stays dark):", err.message);
+  }
+
   // --- V1 beta cutover audit + reversible workspace archive registry ---
   // Dynamic import keeps this DDL colocated with the service while avoiding import cycles.
   try {

@@ -1,0 +1,234 @@
+import { createHash } from "node:crypto";
+import { dbQuery as defaultDbQuery } from "./db.js";
+
+// WP-M10 slice 5b — the auto-join scheduler. For each connected+consenting user it
+// reads upcoming Meet events and, at meeting start, fires the extracted
+// createMinutesCaptureForUser server-side. This is the ONE place that sends an
+// unattended bot into a real meeting, so every gate is re-checked here.
+//
+// SAFETY GATES (all must hold, re-checked at fire time):
+//  1. getAutojoinFireContext.shouldFire — enabled + CURRENT consent + capture-enabled
+//     mirror + a mirrored policy_version (slice 3).
+//  2. The event is Meet, passes join_scope, and is within the fire window.
+//  3. A per-(tenant, meeting-occurrence) dedup claim wins — one bot per meeting per
+//     tenant across up to 20 replicas (the engine's native_meeting_id is
+//     tenant-scoped, so two attendees firing = a collision / double bot).
+//  4. A live, non-revoked calendar connection (invalid_grant stops + marks dead).
+//
+// ponytail: no re-ensure-before-fire. The engine 422s a create if the deployment's
+// capture_notice_policy_version drifts from the version it stored at the user's last
+// consent — but that drift only happens if a notice bump ships WITHOUT re-consent
+// (itself a consent bug), and the 422 is a benign self-heal here: the dedup row is
+// already claimed, createMinutesCaptureForUser returns {ok:false}, we log+skip — no
+// bad bot, no retry storm. A blind re-ensure is worse: ensure is a full state-SET and
+// the slice-3 mirror doesn't carry agent_read_enabled, so it would silently disable
+// agent-read for anyone who had it on. Upgrade path if drift is ever observed: mirror
+// agent_read_enabled (slice-3 schema), then re-ensure with the real value before fire.
+//
+// Meet-only until Teams. Injected deps keep it unit-testable.
+
+export const MINUTES_CALENDAR_AUTOJOIN_FIRES_DDL = `
+CREATE TABLE IF NOT EXISTS zaki_calendar_autojoin_fires (
+  dedup_key TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL,
+  user_id BIGINT NOT NULL REFERENCES zaki_users(id) ON DELETE CASCADE,
+  meeting_url TEXT NOT NULL,
+  occurrence_start TIMESTAMPTZ NOT NULL,
+  capture_id TEXT,
+  fired_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_zaki_calendar_autojoin_fires_user
+  ON zaki_calendar_autojoin_fires (user_id, fired_at DESC);
+`;
+
+const DEFAULT_LEAD_MS = 60_000;       // arm up to 60s before start
+const DEFAULT_GRACE_MS = 600_000;     // still join up to 10min after start
+const DEFAULT_ARM_AHEAD_MS = 900_000; // look 15min ahead per poll
+
+// One bot per (tenant, meeting URL, occurrence) — matches the engine's
+// tenant-scoped native_meeting_id collision domain, keyed to the occurrence so a
+// recurring series fires once per instance.
+export function fireDedupKey({ tenantId, meetingUrl, occurrenceStart }) {
+  return createHash("sha256")
+    .update(`${tenantId}\x00${meetingUrl}\x00${occurrenceStart}`, "utf8")
+    .digest("hex");
+}
+
+// Lease a batch of active connections for this replica to poll — FOR UPDATE SKIP
+// LOCKED so up to 20 replicas never grab the same row. Oldest-polled first.
+export async function claimCalendarConnectionsForPoll(
+  { limit = 50, leaseOwner, leaseMs = 120_000 },
+  { dbQuery = defaultDbQuery } = {}
+) {
+  const { rows } = await dbQuery(
+    // lease_owner is a UUID column — bind $1 as ::uuid (the owner is a per-process
+    // randomUUID, matching the recovery reconciler's lease pattern).
+    `UPDATE zaki_calendar_connections c
+       SET lease_owner = $1::uuid, lease_expires_at = NOW() + ($2::bigint * INTERVAL '1 millisecond'), last_polled_at = NOW()
+     WHERE c.user_id IN (
+       SELECT user_id FROM zaki_calendar_connections
+       WHERE status = 'active' AND (lease_expires_at IS NULL OR lease_expires_at < NOW())
+       ORDER BY last_polled_at NULLS FIRST
+       LIMIT $3
+       FOR UPDATE SKIP LOCKED
+     )
+     RETURNING c.user_id, c.status, c.refresh_ciphertext, c.refresh_iv, c.refresh_tag`,
+    [leaseOwner, Number(leaseMs), Number(limit)]
+  );
+  return rows;
+}
+
+// How long a claimed-but-unfired row (capture_id still NULL) is honored before a
+// later poll may reclaim it. Longer than any real fire (seconds); short enough
+// that a transient fire failure or a mid-fire process crash self-heals within the
+// ~11-min fire window (≈4 retry chances). A capture_id stamp makes the claim
+// permanent; a reclaim only ever happens when no bot was confirmed.
+const FIRE_CLAIM_STALE_MS = 120_000;
+
+// Claim the per-(tenant, meeting-occurrence) fire. First writer wins. A conflicting
+// row is RE-claimable only if it never produced a capture (capture_id IS NULL) AND
+// is older than the stale window — so a transient fire failure or a crash between
+// claim and fire retries, while a confirmed capture (or an in-flight fresh claim)
+// still blocks a second bot. The engine's idempotency_key (= dedupKey) is the
+// backstop for the rare lost-response reclaim: a re-fire dedups engine-side.
+export async function claimAutojoinFire(
+  { dedupKey, tenantId, userId, meetingUrl, occurrenceStart, staleMs = FIRE_CLAIM_STALE_MS },
+  { dbQuery = defaultDbQuery } = {}
+) {
+  const { rows } = await dbQuery(
+    `INSERT INTO zaki_calendar_autojoin_fires (dedup_key, tenant_id, user_id, meeting_url, occurrence_start)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (dedup_key) DO UPDATE
+       SET fired_at = NOW(), user_id = EXCLUDED.user_id
+       WHERE zaki_calendar_autojoin_fires.capture_id IS NULL
+         AND zaki_calendar_autojoin_fires.fired_at < NOW() - ($6::bigint * INTERVAL '1 millisecond')
+     RETURNING dedup_key`,
+    [dedupKey, tenantId, String(userId), meetingUrl, occurrenceStart, Number(staleMs)]
+  );
+  return rows.length > 0;
+}
+
+export async function recordAutojoinFireCapture(
+  { dedupKey, captureId },
+  { dbQuery = defaultDbQuery } = {}
+) {
+  await dbQuery(`UPDATE zaki_calendar_autojoin_fires SET capture_id = $2 WHERE dedup_key = $1`, [dedupKey, String(captureId)]);
+}
+
+function inFireWindow(occurrenceStartMs, nowMs, leadMs, graceMs) {
+  // fire while now is in [start - lead, start + grace]
+  return nowMs >= occurrenceStartMs - leadMs && nowMs <= occurrenceStartMs + graceMs;
+}
+
+// Process ONE user's connection: the full gated fire decision. Returns a summary
+// (never throws for an expected outcome). deps are injected closures.
+export async function pollConnection({ connection, deps }) {
+  const {
+    getFireContext, decryptRefreshToken, refreshAccessToken, listEvents,
+    markInvalidGrant, claimFire, fireCapture, loadZakiUser,
+    tenantId = "default", now = () => new Date(),
+    leadMs = DEFAULT_LEAD_MS, graceMs = DEFAULT_GRACE_MS, armAheadMs = DEFAULT_ARM_AHEAD_MS,
+    recordFailure = () => {},
+  } = deps;
+  const userId = String(connection.user_id);
+  const summary = { userId, fired: [], skipped: [], reason: null };
+
+  // Gate 1: consent + capture-enabled mirror + policy_version.
+  const ctx = await getFireContext({ userId });
+  if (!ctx.shouldFire) { summary.reason = ctx.reason || "not_fireable"; return summary; }
+
+  // Gate 5: a live connection + a usable access token.
+  let accessToken;
+  try {
+    const refreshToken = await decryptRefreshToken(connection);
+    ({ accessToken } = await refreshAccessToken({ refreshToken }));
+  } catch (err) {
+    if (err?.invalidGrant) { await markInvalidGrant({ userId }); summary.reason = "invalid_grant"; return summary; }
+    recordFailure({ stage: "refresh", userId, code: err?.code || "refresh_failed" });
+    summary.reason = "refresh_failed";
+    return summary;
+  }
+
+  const nowMs = now().getTime();
+  const timeMinIso = new Date(nowMs - graceMs).toISOString();
+  const timeMaxIso = new Date(nowMs + armAheadMs).toISOString();
+  let events;
+  try {
+    events = await listEvents({ accessToken, timeMinIso, timeMaxIso });
+  } catch (err) {
+    if (err?.invalidGrant) { await markInvalidGrant({ userId }); summary.reason = "invalid_grant"; return summary; }
+    recordFailure({ stage: "list", userId, code: err?.code || "list_failed" });
+    summary.reason = "list_failed";
+    return summary;
+  }
+
+  for (const ev of events) {
+    // Gate 2: scope + fire window. (The client already filtered Meet-only +
+    // cancelled; scope is applied here so the poller owns the join_scope decision.)
+    if (!deps.eventPassesScope(ev, ctx.joinScope)) { summary.skipped.push({ eventId: ev.eventId, reason: "scope" }); continue; }
+    const startMs = new Date(ev.occurrenceStart).getTime();
+    if (!inFireWindow(startMs, nowMs, leadMs, graceMs)) { summary.skipped.push({ eventId: ev.eventId, reason: "window" }); continue; }
+
+    const dedupKey = fireDedupKey({ tenantId, meetingUrl: ev.meetUrl, occurrenceStart: ev.occurrenceStart });
+
+    // Gate 3: claim the per-meeting dedup. INSERT ... ON CONFLICT (dedup_key) DO
+    // UPDATE ... WHERE capture_id IS NULL AND fired_at is stale → the first writer
+    // wins; a later poll RE-claims only a still-unfired, stale row (a crash/transient
+    // self-heal). A confirmed capture — or a fresh in-flight claim — blocks everyone
+    // else, so one bot per meeting. See claimAutojoinFire for the reclaim predicate.
+    const won = await claimFire({ dedupKey, tenantId, userId, meetingUrl: ev.meetUrl, occurrenceStart: ev.occurrenceStart });
+    if (!won) { summary.skipped.push({ eventId: ev.eventId, reason: "already_claimed" }); continue; }
+
+    // Re-check the gate immediately before firing (consent could have toggled
+    // between the top-of-poll read and now, after the dedup row was claimed).
+    const fresh = await getFireContext({ userId });
+    if (!fresh.shouldFire) { summary.skipped.push({ eventId: ev.eventId, reason: "revoked_before_fire" }); continue; }
+
+    const zakiUser = await loadZakiUser({ userId });
+    if (!zakiUser) { summary.skipped.push({ eventId: ev.eventId, reason: "no_user" }); continue; }
+
+    const result = await fireCapture({
+      context: { userId, tenantId, requestId: `autojoin-${dedupKey.slice(0, 24)}`, zakiUser },
+      // Stable idempotency key = the dedup key, so a retry for this occurrence is
+      // idempotent at the engine too.
+      input: { platform: "google_meet", meeting_url: ev.meetUrl, idempotency_key: dedupKey },
+    });
+    if (result?.ok) {
+      summary.fired.push({ eventId: ev.eventId, captureId: result.capture.captureId });
+      // Stamp the capture id onto the claimed fire row. This is what makes the claim
+      // permanent: once capture_id is non-NULL, claimAutojoinFire's reclaim predicate
+      // (capture_id IS NULL AND fired_at stale) can never re-fire this occurrence.
+      // Never throw — the bot is already dispatched, so a failed stamp must not
+      // un-fire it. But do NOT swallow: if this UPDATE fails the row stays reclaimable
+      // and a later tick MAY re-fire (~4 chances in the ~11-min window). The engine's
+      // idempotency_key (= dedupKey) is the backstop that dedups such a re-fire down to
+      // one bot; we surface the lost stamp via recordFailure (stage "record_fire",
+      // logged at error) so this reliance is observable in ops, not silent.
+      try {
+        await deps.recordFire?.({ dedupKey, captureId: result.capture.captureId });
+      } catch (err) {
+        recordFailure({ stage: "record_fire", userId, code: err?.code || "record_fire_failed", captureId: result.capture.captureId });
+      }
+    } else {
+      recordFailure({ stage: "fire", userId, code: result?.kind || "fire_failed" });
+      summary.skipped.push({ eventId: ev.eventId, reason: `fire_${result?.kind || "failed"}` });
+    }
+  }
+  return summary;
+}
+
+// The sweep: claim a batch of active connections (leased, one replica per row via
+// FOR UPDATE SKIP LOCKED) and poll each. Injected claimConnections does the lease.
+export async function runCalendarAutojoinSweep({ deps }) {
+  const { claimConnections, limit = 50 } = deps;
+  const connections = await claimConnections({ limit });
+  const summaries = [];
+  for (const connection of connections) {
+    try {
+      summaries.push(await pollConnection({ connection, deps }));
+    } catch (err) {
+      deps.recordFailure?.({ stage: "poll", userId: String(connection.user_id), code: err?.code || "poll_crashed" });
+    }
+  }
+  return summaries;
+}
