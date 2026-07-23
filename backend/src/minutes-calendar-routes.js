@@ -77,6 +77,11 @@ export function buildMinutesCalendarRouter(dependencies = {}) {
   const saveAutojoin = store.saveAutojoinConsent || defaultSaveAutojoinConsent;
 
   const router = express.Router();
+  // POST /calendar/autojoin reads req.body. This router is mounted WITHOUT any
+  // app-level body parser (index.js applies express.json per-route, and the
+  // calendar mount had none), so the router must parse its own JSON — else
+  // req.body is undefined and every save silently records enabled:false.
+  const jsonBody = express.json({ limit: "16kb", strict: true });
 
   const configured = () =>
     Boolean(
@@ -256,7 +261,7 @@ export function buildMinutesCalendarRouter(dependencies = {}) {
 
   // POST /calendar/autojoin — grant/withdraw the standing auto-join consent and
   // set the meeting scope. Bearer-authed SPA fetch (POST = CSRF-safe here).
-  router.post("/calendar/autojoin", async (req, res) => {
+  router.post("/calendar/autojoin", jsonBody, async (req, res) => {
     if (!guard(req, res)) return;
     try {
       const auth = await resolveUser(req, res);

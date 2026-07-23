@@ -11,6 +11,11 @@ const mockCapture = jest.fn();
 const mockCaptureStatus = jest.fn();
 const mockStop = jest.fn();
 const mockForget = jest.fn();
+const mockCalConn = jest.fn();
+const mockCalAutojoin = jest.fn();
+const mockCalConnect = jest.fn();
+const mockCalDisconnect = jest.fn();
+const mockCalSave = jest.fn();
 
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -35,6 +40,11 @@ jest.mock("@/lib/minutesApi", () => ({
   getMinutesCaptureStatus: (...args: unknown[]) => mockCaptureStatus(...args),
   stopMinutesCapture: (...args: unknown[]) => mockStop(...args),
   forgetMinutesMeeting: (...args: unknown[]) => mockForget(...args),
+  getCalendarConnection: (...args: unknown[]) => mockCalConn(...args),
+  getCalendarAutojoin: (...args: unknown[]) => mockCalAutojoin(...args),
+  startCalendarConnect: (...args: unknown[]) => mockCalConnect(...args),
+  disconnectCalendar: (...args: unknown[]) => mockCalDisconnect(...args),
+  saveCalendarAutojoin: (...args: unknown[]) => mockCalSave(...args),
 }));
 
 const AVAILABLE = {
@@ -71,6 +81,13 @@ describe("MinutesControls", () => {
       erasedAt: "2026-07-19T10:00:00.000Z",
       counts: { meetingRows: 1, transcriptRows: 1, summaryRows: 1, recordingObjects: 0 },
     });
+    // Default the calendar card INVISIBLE (dark 404), so the pre-existing tests are
+    // unaffected; the calendar suite overrides these per test.
+    mockCalConn.mockReset().mockRejectedValue(new MinutesApiError(404, "not_found", "not enabled"));
+    mockCalAutojoin.mockReset().mockRejectedValue(new MinutesApiError(404, "not_found", "not enabled"));
+    mockCalConnect.mockReset();
+    mockCalDisconnect.mockReset();
+    mockCalSave.mockReset();
   });
 
   test("does not hint at a capture bot while the default-false BFF gate is closed", async () => {
@@ -215,5 +232,132 @@ describe("MinutesControls", () => {
     const keep = screen.getByRole("combobox", { name: "Keep each meeting for" });
     expect((keep as HTMLSelectElement).value).toBe("45");
     expect(screen.getByRole("option", { name: "Custom (45 days)" })).toBeInTheDocument();
+  });
+});
+
+const CONNECTED_AUTOJOIN = {
+  enabled: false,
+  joinScope: "accepted" as const,
+  consentVersion: "2026-07-23.calendar-autojoin-consent.v1",
+  hasConsent: false,
+  isCurrent: true,
+  requiresReconsent: false,
+  consentedAt: null,
+};
+
+describe("CalendarAutojoin", () => {
+  beforeEach(() => {
+    mockControl.mockReset().mockResolvedValue(AVAILABLE);
+    mockConsent.mockReset().mockResolvedValue({ state: "ready", policyVersion: "minutes-capture-consent-v1" });
+    mockCapture.mockReset();
+    mockCaptureStatus.mockReset();
+    mockStop.mockReset();
+    mockForget.mockReset();
+    mockCalConn.mockReset();
+    mockCalAutojoin.mockReset();
+    mockCalConnect.mockReset();
+    mockCalDisconnect.mockReset();
+    mockCalSave.mockReset();
+  });
+  // jsdom's window.location is non-configurable (can't stub) and .assign is a
+  // read-only no-op — so navigation is asserted via the API call, and the callback
+  // URL is driven through the real history API (which DOES update location.search).
+  afterEach(() => { window.history.replaceState(null, "", "/"); });
+
+  test("stays invisible when the calendar feature is dark (404)", async () => {
+    mockCalConn.mockRejectedValue(new MinutesApiError(404, "not_found", "not enabled"));
+    renderControls();
+    expect(await screen.findByRole("heading", { name: "Minutes controls" })).toBeInTheDocument();
+    await waitFor(() => expect(mockCalConn).toHaveBeenCalled());
+    expect(screen.queryByRole("heading", { name: "Calendar auto-join" })).not.toBeInTheDocument();
+  });
+
+  test("hides the whole card if the autojoin route goes dark (404) even while connected", async () => {
+    mockCalConn.mockResolvedValue({ connected: true, status: "active" });
+    mockCalAutojoin.mockRejectedValue(new MinutesApiError(404, "not_found", "not enabled"));
+    renderControls();
+    expect(await screen.findByRole("heading", { name: "Minutes controls" })).toBeInTheDocument();
+    // Dark-invisible contract: once the autojoin 404 lands, a 404 from EITHER route
+    // hides the whole card — never a stray "unavailable" error.
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Calendar auto-join" })).not.toBeInTheDocument());
+    expect(screen.queryByText("Auto-join settings are unavailable.")).not.toBeInTheDocument();
+  });
+
+  test("not connected → Connect starts the OAuth flow with the current page as returnTo", async () => {
+    mockCalConn.mockResolvedValue({ connected: false });
+    mockCalConnect.mockResolvedValue({ authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth?x=1" });
+    renderControls();
+
+    const connectBtn = await screen.findByRole("button", { name: "Connect Google Calendar" });
+    fireEvent.click(connectBtn);
+    // returnTo is the current page (jsdom default "/") so the callback lands back here;
+    // on success the component navigates the top window to the returned authorize URL.
+    await waitFor(() => expect(mockCalConnect).toHaveBeenCalledWith("/"));
+  });
+
+  test("a dead grant (invalid_grant) shows a reconnect prompt", async () => {
+    mockCalConn.mockResolvedValue({ connected: false, status: "invalid_grant" });
+    renderControls();
+    expect(await screen.findByText("Your Google Calendar access ended. Reconnect to keep auto-join working.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reconnect Google Calendar" })).toBeInTheDocument();
+  });
+
+  test("connected → saving sends the chosen scope and standing-consent flag", async () => {
+    mockCalConn.mockResolvedValue({ connected: true, status: "active", scopes: ["calendar.events.readonly"] });
+    mockCalAutojoin.mockResolvedValue(CONNECTED_AUTOJOIN);
+    mockCalSave.mockResolvedValue({ ...CONNECTED_AUTOJOIN, enabled: true, joinScope: "organizer" });
+    renderControls();
+
+    const toggle = await screen.findByRole("checkbox", { name: /Automatically send the visible notetaker/ });
+    fireEvent.click(toggle);
+    fireEvent.change(screen.getByRole("combobox", { name: "Which meetings" }), { target: { value: "organizer" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save auto-join" }));
+
+    await waitFor(() => expect(mockCalSave).toHaveBeenCalled());
+    expect(mockCalSave.mock.calls[0]?.[0]).toEqual({ enabled: true, joinScope: "organizer" });
+    expect(await screen.findByText("Auto-join is on.")).toBeInTheDocument();
+  });
+
+  test("the scope selector is disabled until auto-join is enabled", async () => {
+    mockCalConn.mockResolvedValue({ connected: true, status: "active" });
+    mockCalAutojoin.mockResolvedValue(CONNECTED_AUTOJOIN);
+    renderControls();
+    const scope = await screen.findByRole("combobox", { name: "Which meetings" });
+    expect(scope).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Automatically send the visible notetaker/ }));
+    expect(scope).not.toBeDisabled();
+  });
+
+  test("connected → Disconnect calls the disconnect endpoint", async () => {
+    mockCalConn.mockResolvedValue({ connected: true, status: "active" });
+    mockCalAutojoin.mockResolvedValue(CONNECTED_AUTOJOIN);
+    mockCalDisconnect.mockResolvedValue({ disconnected: true, revoked: true });
+    renderControls();
+    fireEvent.click(await screen.findByRole("button", { name: "Disconnect" }));
+    await waitFor(() => expect(mockCalDisconnect).toHaveBeenCalled());
+  });
+
+  test("a requiresReconsent status prompts a re-confirm", async () => {
+    mockCalConn.mockResolvedValue({ connected: true, status: "active" });
+    mockCalAutojoin.mockResolvedValue({ ...CONNECTED_AUTOJOIN, enabled: true, isCurrent: false, requiresReconsent: true });
+    renderControls();
+    expect(await screen.findByText("The auto-join terms changed. Re-confirm below to keep auto-join on.")).toBeInTheDocument();
+  });
+
+  test("reads the OAuth callback result from the URL and clears it", async () => {
+    window.history.replaceState(null, "", "/settings?calendar=connected");
+    mockCalConn.mockResolvedValue({ connected: true, status: "active" });
+    mockCalAutojoin.mockResolvedValue(CONNECTED_AUTOJOIN);
+    renderControls();
+    expect(await screen.findByText("Google Calendar connected.")).toBeInTheDocument();
+    // The param is stripped so a refresh won't replay the banner (real history API).
+    expect(window.location.search).toBe("");
+  });
+
+  test("surfaces a cancelled OAuth callback distinctly", async () => {
+    window.history.replaceState(null, "", "/settings?calendar=error&reason=cancelled");
+    mockCalConn.mockResolvedValue({ connected: false });
+    renderControls();
+    expect(await screen.findByText("Calendar connection was cancelled.")).toBeInTheDocument();
   });
 });
