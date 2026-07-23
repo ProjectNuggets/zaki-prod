@@ -1,16 +1,22 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Bot, CircleAlert, Eraser, RefreshCw, Square } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Bot, CalendarClock, CircleAlert, Eraser, Link2, RefreshCw, Square, Unplug } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { V2Button, V2Panel, V2PanelBody, V2PanelHead } from "@/app/components/v2";
 import {
   MinutesApiError,
+  disconnectCalendar,
   forgetMinutesMeeting,
+  getCalendarAutojoin,
+  getCalendarConnection,
   getMinutesCaptureStatus,
   getMinutesControl,
   requestMinutesCapture,
+  saveCalendarAutojoin,
   saveMinutesConsent,
+  startCalendarConnect,
   stopMinutesCapture,
+  type CalendarJoinScope,
   type MinutesCaptureResult,
   type MinutesControlRetention,
 } from "@/lib/minutesApi";
@@ -30,6 +36,13 @@ function idempotencyKey(prefix: string) {
 
 function isDarkLaunchError(error: unknown) {
   return error instanceof MinutesApiError && error.code === "minutes_control_disabled";
+}
+
+// The calendar routes 404 when the feature is dark/unconfigured. Like the control
+// panel's dark-launch handling, an unavailable calendar card is simply invisible —
+// it must never hint at a feature that isn't wired.
+function isCalendarUnavailable(error: unknown) {
+  return error instanceof MinutesApiError && error.status === 404;
 }
 
 function numberField(value: number, update: (value: number) => void, min: number, max: number, label: string) {
@@ -130,6 +143,146 @@ function ConsentForm({
       {consent.isSuccess ? <p role="status" className="text-xs text-[var(--v2-accent)]">{consent.data.state === "ready" ? t("minutes.consentSaved", { defaultValue: "Consent saved." }) : t("minutes.consentDisabled", { defaultValue: "Capture remains disabled by this consent." })}</p> : null}
       <V2Button type="submit" size="sm" variant="primary" disabled={!validRetention || consent.isPending}>{consent.isPending ? t("minutes.savingConsent", { defaultValue: "Saving consent…" }) : t("minutes.saveConsent", { defaultValue: "Save consent" })}</V2Button>
     </form>
+  </section>;
+}
+
+const JOIN_SCOPES: readonly CalendarJoinScope[] = ["organizer", "accepted", "all"] as const;
+
+function joinScopeLabel(scope: CalendarJoinScope, t: (key: string, opts: { defaultValue: string }) => string) {
+  switch (scope) {
+    case "organizer": return t("minutes.calendarScopeOrganizer", { defaultValue: "Only meetings I organize" });
+    case "all": return t("minutes.calendarScopeAll", { defaultValue: "Every meeting with a Meet link" });
+    default: return t("minutes.calendarScopeAccepted", { defaultValue: "Meetings I organize or have accepted" });
+  }
+}
+
+// WP-M10 slice 6 — the calendar auto-join settings card. Connect a Google Calendar,
+// grant standing auto-join consent, and choose which meetings qualify (join_scope).
+// The poller (slice 5) then sends the visible notetaker to upcoming Meet meetings.
+// Dark-invisible: a 404 from either route hides the card entirely.
+function CalendarAutojoin() {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const connection = useQuery({
+    queryKey: ["minutes", "calendar", "connection"],
+    queryFn: getCalendarConnection,
+    retry: false,
+    gcTime: 0,
+  });
+  const autojoin = useQuery({
+    queryKey: ["minutes", "calendar", "autojoin"],
+    queryFn: getCalendarAutojoin,
+    retry: false,
+    gcTime: 0,
+    enabled: connection.data?.connected === true,
+  });
+
+  const [enabled, setEnabled] = useState(false);
+  const [joinScope, setJoinScope] = useState<CalendarJoinScope>("accepted");
+  useEffect(() => {
+    if (autojoin.data) {
+      setEnabled(autojoin.data.enabled);
+      setJoinScope(autojoin.data.joinScope);
+    }
+  }, [autojoin.data]);
+
+  // OAuth callback result: the connect flow lands the browser back at returnTo with
+  // ?calendar=connected | ?calendar=error&reason=…. Read it once, then strip it from
+  // the URL so a refresh doesn't replay the banner.
+  const [callback, setCallback] = useState<{ status: string; reason?: string } | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("calendar");
+    if (!status) return;
+    setCallback({ status, reason: params.get("reason") ?? undefined });
+    params.delete("calendar");
+    params.delete("reason");
+    const query = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+  }, []);
+
+  const connect = useMutation({
+    mutationFn: () =>
+      startCalendarConnect(typeof window !== "undefined" ? window.location.pathname + window.location.hash : undefined),
+    onSuccess: (result) => {
+      if (result?.authorizeUrl && typeof window !== "undefined") window.location.assign(result.authorizeUrl);
+    },
+  });
+  const disconnect = useMutation({
+    mutationFn: disconnectCalendar,
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ["minutes", "calendar", "autojoin"] });
+      void connection.refetch();
+    },
+  });
+  const save = useMutation({
+    mutationFn: () => saveCalendarAutojoin({ enabled, joinScope }),
+    onSuccess: (data) => queryClient.setQueryData(["minutes", "calendar", "autojoin"], data),
+  });
+
+  // Invisible while loading or when the feature is dark (404) on EITHER route — a
+  // 404 from the autojoin route (e.g. the deployment goes dark mid-session) must
+  // also hide the whole card, never leave a stray "unavailable" error behind.
+  if (connection.isLoading || isCalendarUnavailable(connection.error) || isCalendarUnavailable(autojoin.error)) return null;
+
+  const heading = <div className="mb-3">
+    <h3 id="minutes-calendar-heading" className="flex items-center gap-1.5 text-sm font-semibold"><CalendarClock className="size-4" aria-hidden />{t("minutes.calendarTitle", { defaultValue: "Calendar auto-join" })}</h3>
+    <p className="mt-1 text-xs leading-5 text-[var(--v2-ink-2)]">{t("minutes.calendarBody", { defaultValue: "Connect Google Calendar to send the visible notetaker to your upcoming Google Meet meetings automatically." })}</p>
+  </div>;
+
+  if (connection.isError || !connection.data) {
+    return <section aria-labelledby="minutes-calendar-heading" className="border-b border-[var(--v2-hairline)] py-5">
+      {heading}
+      <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]"><CircleAlert className="size-3.5" aria-hidden />{t("minutes.calendarUnavailable", { defaultValue: "Calendar status is unavailable." })}<V2Button size="sm" onClick={() => void connection.refetch()}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div>
+    </section>;
+  }
+
+  const conn = connection.data;
+  const needsReconnect = !conn.connected && (conn.status === "invalid_grant" || conn.status === "revoked");
+
+  return <section aria-labelledby="minutes-calendar-heading" className="border-b border-[var(--v2-hairline)] py-5">
+    {heading}
+
+    {callback ? <p role="status" className={`mb-3 text-xs ${callback.status === "connected" ? "text-[var(--v2-accent)]" : "text-[var(--v2-danger)]"}`}>
+      {callback.status === "connected"
+        ? t("minutes.calendarConnected", { defaultValue: "Google Calendar connected." })
+        : callback.reason === "cancelled"
+          ? t("minutes.calendarConnectCancelled", { defaultValue: "Calendar connection was cancelled." })
+          : t("minutes.calendarConnectError", { defaultValue: "Calendar could not be connected. Please try again." })}
+    </p> : null}
+
+    {!conn.connected ? <div className="grid gap-2">
+      {needsReconnect ? <p className="text-xs text-[var(--v2-danger)]">{t("minutes.calendarReconnectNeeded", { defaultValue: "Your Google Calendar access ended. Reconnect to keep auto-join working." })}</p> : null}
+      <p className="text-xs leading-5 text-[var(--v2-ink-2)]">{t("minutes.calendarConnectExplainer", { defaultValue: "You grant access once here. Each meeting still shows the visible in-meeting bot notice. ZAKI does not notify other attendees for you — you are responsible for any notice your workplace or local law requires." })}</p>
+      {connect.isError ? <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]"><CircleAlert className="size-3.5" aria-hidden />{t("minutes.calendarConnectStartFailed", { defaultValue: "Could not start the connection." })}<V2Button size="sm" onClick={() => connect.mutate()}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div> : null}
+      <div><V2Button size="sm" variant="primary" disabled={connect.isPending} onClick={() => connect.mutate()}><Link2 className="size-3.5" aria-hidden />{connect.isPending ? t("minutes.calendarConnecting", { defaultValue: "Connecting…" }) : needsReconnect ? t("minutes.calendarReconnect", { defaultValue: "Reconnect Google Calendar" }) : t("minutes.calendarConnect", { defaultValue: "Connect Google Calendar" })}</V2Button></div>
+    </div> : <div className="grid gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs text-[var(--v2-ink-2)]">{t("minutes.calendarConnectedMeta", { defaultValue: "Google Calendar connected" })}</span>
+        <V2Button size="sm" disabled={disconnect.isPending} onClick={() => disconnect.mutate()}><Unplug className="size-3.5" aria-hidden />{disconnect.isPending ? t("minutes.calendarDisconnecting", { defaultValue: "Disconnecting…" }) : t("minutes.calendarDisconnect", { defaultValue: "Disconnect" })}</V2Button>
+      </div>
+
+      {autojoin.isLoading ? <p className="text-xs text-[var(--v2-ink-2)]">{t("minutes.calendarLoadingSettings", { defaultValue: "Loading auto-join settings…" })}</p>
+        : autojoin.isError || !autojoin.data ? <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]"><CircleAlert className="size-3.5" aria-hidden />{t("minutes.calendarAutojoinUnavailable", { defaultValue: "Auto-join settings are unavailable." })}<V2Button size="sm" onClick={() => void autojoin.refetch()}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div>
+        : <form className="grid gap-3" onSubmit={(event) => { event.preventDefault(); save.mutate(); }}>
+          {autojoin.data.requiresReconsent ? <p className="text-xs text-[var(--v2-danger)]">{t("minutes.calendarReconsent", { defaultValue: "The auto-join terms changed. Re-confirm below to keep auto-join on." })}</p> : null}
+          <label className="flex items-start gap-2 text-sm text-[var(--v2-ink-1)]">
+            <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} className="mt-1 size-4 accent-[var(--v2-accent)]" />
+            <span>{t("minutes.calendarAutojoinConsent", { defaultValue: "Automatically send the visible notetaker to my upcoming Meet meetings (standing consent)." })}</span>
+          </label>
+          <label className="grid gap-1 text-xs text-[var(--v2-ink-2)]">
+            <span>{t("minutes.calendarScopeLabel", { defaultValue: "Which meetings" })}</span>
+            <select value={joinScope} onChange={(event) => setJoinScope(event.target.value as CalendarJoinScope)} disabled={!enabled} className="min-h-10 border border-[var(--v2-hairline)] bg-[var(--v2-bg)] px-2 text-sm text-[var(--v2-ink-1)] outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--v2-accent)] disabled:opacity-60">
+              {JOIN_SCOPES.map((scope) => <option key={scope} value={scope}>{joinScopeLabel(scope, t)}</option>)}
+            </select>
+          </label>
+          <p className="text-xs leading-5 text-[var(--v2-ink-2)]">{t("minutes.calendarAutojoinFinePrint", { defaultValue: "Auto-join also requires capture consent (above) to stay on. Only Google Meet links are joined for now. Each meeting still shows the visible bot notice." })}</p>
+          {save.isError ? <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]"><CircleAlert className="size-3.5" aria-hidden />{t("minutes.calendarAutojoinSaveFailed", { defaultValue: "Auto-join settings could not be saved." })}<V2Button size="sm" type="button" onClick={() => save.mutate()}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div> : null}
+          {save.isSuccess ? <p role="status" className="text-xs text-[var(--v2-accent)]">{save.data.enabled ? t("minutes.calendarAutojoinOn", { defaultValue: "Auto-join is on." }) : t("minutes.calendarAutojoinOff", { defaultValue: "Auto-join is off." })}</p> : null}
+          <div><V2Button type="submit" size="sm" variant="primary" disabled={save.isPending}>{save.isPending ? t("minutes.savingConsent", { defaultValue: "Saving…" }) : t("minutes.calendarSaveAutojoin", { defaultValue: "Save auto-join" })}</V2Button></div>
+        </form>}
+    </div>}
   </section>;
 }
 
@@ -250,6 +403,7 @@ export function MinutesControls({ meetings, onForgot }: MinutesControlsProps) {
     </V2PanelHead>
     <V2PanelBody>
       <ConsentForm initialRetention={initialRetention} onReady={setCaptureEnabled} />
+      <CalendarAutojoin />
       <CaptureForm enabled={captureEnabled} />
       <ForgetMeetingList meetings={meetings} onForgot={onForgot} />
     </V2PanelBody>

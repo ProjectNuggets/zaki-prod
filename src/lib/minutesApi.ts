@@ -211,3 +211,57 @@ export function forgetMinutesMeeting(meetingId: string, idempotencyKey: string) 
     { method: "POST", body: JSON.stringify({ idempotency_key: idempotencyKey }) },
   );
 }
+
+// ── WP-M10 calendar auto-join ───────────────────────────────────────────────
+// These routes 404 when the calendar feature is dark (unconfigured); the UI
+// treats a 404 as "not available" and hides the card entirely.
+export type CalendarConnectionStatus = "active" | "revoked" | "invalid_grant";
+export type CalendarConnection = {
+  connected: boolean;
+  status?: CalendarConnectionStatus;
+  scopes?: string[];
+  connectedAt?: string;
+};
+export type CalendarJoinScope = "organizer" | "accepted" | "all";
+export type CalendarAutojoin = {
+  enabled: boolean;
+  joinScope: CalendarJoinScope;
+  consentVersion: string;
+  hasConsent: boolean;
+  isCurrent: boolean;
+  requiresReconsent: boolean;
+  consentedAt: string | null;
+};
+
+export function getCalendarConnection() {
+  return minutesRequest<CalendarConnection>("/api/minutes/calendar/connect/status", { method: "GET" });
+}
+
+// Returns the Google authorize URL the SPA then navigates to (top-level), which
+// sets the path-scoped nonce cookie. returnTo is where the callback lands the
+// browser afterward (same-origin path only, enforced server-side).
+export function startCalendarConnect(returnTo?: string) {
+  const query = returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : "";
+  return minutesRequest<{ authorizeUrl: string }>(
+    `/api/minutes/calendar/connect/start${query}`,
+    { method: "GET" },
+  );
+}
+
+export function disconnectCalendar() {
+  return minutesRequest<{ disconnected: true; revoked: boolean }>(
+    "/api/minutes/calendar/disconnect",
+    { method: "POST" },
+  );
+}
+
+export function getCalendarAutojoin() {
+  return minutesRequest<CalendarAutojoin>("/api/minutes/calendar/autojoin", { method: "GET" });
+}
+
+export function saveCalendarAutojoin(input: { enabled: boolean; joinScope: CalendarJoinScope }) {
+  return minutesRequest<CalendarAutojoin>("/api/minutes/calendar/autojoin", {
+    method: "POST",
+    body: JSON.stringify({ enabled: input.enabled, joinScope: input.joinScope }),
+  });
+}

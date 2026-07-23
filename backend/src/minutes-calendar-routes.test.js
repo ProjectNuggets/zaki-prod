@@ -49,7 +49,9 @@ function idToken({ sub, email }) {
 let server, base, current;
 beforeAll(async () => {
   const app = express();
-  app.use(express.json());
+  // Deliberately NO app-level body parser — this mirrors the real index.js mount
+  // (which has none), so POST /calendar/autojoin proves the ROUTER parses its own
+  // JSON body. An app.use(express.json()) here would mask that regression.
   // A single mount whose deps we swap per test via `current`.
   app.use("/api/minutes", (req, res, next) => current.router(req, res, next));
   await new Promise((r) => { server = app.listen(0, r); });
