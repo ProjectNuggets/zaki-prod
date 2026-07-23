@@ -33,11 +33,13 @@ export async function ensureDesignSession({
   tenantId,
   requestId,
   createSessionId,
+  sessionScope = "project",
 }) {
   const ownerUserId = positiveUserId(userId);
   const normalizedProjectId = opaqueId(projectId, "projectId");
   const normalizedTenantId = opaqueId(tenantId, "tenantId");
   const sessionId = opaqueId(createSessionId(), "sessionId");
+  const perUser = sessionScope === "user";
   return runInTransaction(async (transaction) => {
     const ownedProject = await transaction.query(
       `
@@ -53,8 +55,33 @@ export async function ensureDesignSession({
     if (!ownedProject.rows[0]) {
       throw new DesignSessionStoreError("DESIGN_PROJECT_NOT_FOUND", "Design project was not found.", 404);
     }
+    // B1 "pod user allocation": one session per USER (perUser) serves all their projects out of one
+    // workspace — the fix for cross-session divergence. ON CONFLICT (owner_user_id) reuses the user's
+    // existing session and does NOT overwrite project_id, so the row keeps its stable "seed" project.
+    // That seed anchors the project-scoped checkpoint key (a cross-service contract with the
+    // controller — see hub-client.ts checkpointObjectKey), which is why B1 leaves the key untouched.
+    // ponytail: seed-scoped checkpoint. Deleting the seed project ends the session (FK CASCADE) and
+    // orphans the workspace; the durable fix is session-scoped checkpoints (hub+controller lockstep).
+    // The legacy one-session-per-project path (ON CONFLICT (project_id)) stays reachable via
+    // sessionScope="project" for a future "separated agents per user" product.
     const result = await transaction.query(
+      perUser
+        ? `
+        INSERT INTO zaki_design_sessions
+          (session_id, project_id, owner_user_id, tenant_id, state,
+           checkpoint_generation, last_request_id, created_at, updated_at, last_seen_at)
+        VALUES ($1, $2, $3, $4, 'REQUESTED', 0, $5, NOW(), NOW(), NOW())
+        ON CONFLICT (owner_user_id)
+        DO UPDATE SET
+          last_request_id = EXCLUDED.last_request_id,
+          last_seen_at = NOW(),
+          updated_at = NOW()
+        WHERE zaki_design_sessions.tenant_id = EXCLUDED.tenant_id
+        RETURNING session_id, project_id, owner_user_id, tenant_id, state,
+                  checkpoint_generation, checkpoint_sha256, checkpoint_bytes,
+                  checkpoint_object_key
       `
+        : `
         INSERT INTO zaki_design_sessions
           (session_id, project_id, owner_user_id, tenant_id, state,
            checkpoint_generation, last_request_id, created_at, updated_at, last_seen_at)
@@ -87,9 +114,27 @@ export async function readDesignSessionBinding({
   userId,
   tenantId,
   lock = false,
+  sessionScope = "project",
 }) {
+  // Per-user sessions serve ALL of the owner's projects, so the request's projectId is a focus
+  // pointer forwarded to the worker — NOT part of the session identity. Validating by
+  // (session, user, tenant) lets a per-user session be found for any project the user is viewing;
+  // keeping the project predicate would 404 every project except the row's stable seed project.
+  // Cross-user isolation is unchanged: owner_user_id is still enforced, and a session is one user's.
+  const perUser = sessionScope === "user";
   const result = await dbQuery(
+    perUser
+      ? `
+      SELECT session_id, project_id, owner_user_id, tenant_id, state,
+             checkpoint_generation, checkpoint_sha256, checkpoint_bytes,
+             checkpoint_object_key
+        FROM zaki_design_sessions
+       WHERE session_id = $1
+         AND owner_user_id = $2
+         AND tenant_id = $3
+       ${lock ? "FOR UPDATE" : ""}
     `
+      : `
       SELECT session_id, project_id, owner_user_id, tenant_id, state,
              checkpoint_generation, checkpoint_sha256, checkpoint_bytes,
              checkpoint_object_key
@@ -100,12 +145,18 @@ export async function readDesignSessionBinding({
          AND tenant_id = $4
        ${lock ? "FOR UPDATE" : ""}
     `,
-    [
-      opaqueId(sessionId, "sessionId"),
-      opaqueId(projectId, "projectId"),
-      positiveUserId(userId),
-      opaqueId(tenantId, "tenantId"),
-    ]
+    perUser
+      ? [
+          opaqueId(sessionId, "sessionId"),
+          positiveUserId(userId),
+          opaqueId(tenantId, "tenantId"),
+        ]
+      : [
+          opaqueId(sessionId, "sessionId"),
+          opaqueId(projectId, "projectId"),
+          positiveUserId(userId),
+          opaqueId(tenantId, "tenantId"),
+        ]
   );
   return result.rows[0] ? normalizeSessionRow(result.rows[0]) : null;
 }

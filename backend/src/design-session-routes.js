@@ -8,6 +8,7 @@ const OPAQUE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
 export function buildDesignSessionRouter({
   enabled,
+  sessionScope = "project",
   resolveUser,
   resolveBillingUserById,
   ensureSession,
@@ -57,6 +58,7 @@ export function buildDesignSessionRouter({
         tenantId: "default",
         requestId,
         createSessionId,
+        sessionScope,
       });
       const recoveringStop = ["DRAINING", "CHECKPOINTING"].includes(session.state);
       const finalizingCheckpoint = session.state === "CHECKPOINTING";
@@ -110,7 +112,15 @@ export function buildDesignSessionRouter({
     const proxyAccess = req.get("authorization")
       ? null
       : await resolveProxyAccess?.(req, sessionId);
-    if (proxyAccess && !matchesProxyRequest(proxyAccess, sessionId, projectId)) {
+    // Per-user sessions serve every project the user owns, so the workbench cookie binds (user,
+    // session) only — the request's projectId is a focus pointer, not part of the cookie identity.
+    // Asserting cookie.pid === request project (the per-project posture) would reject every project
+    // except the session's seed. matchesProxyRequest still enforces the session match in both modes.
+    const projectScopedCookie = sessionScope !== "user";
+    if (
+      proxyAccess &&
+      !matchesProxyRequest(proxyAccess, sessionId, projectId, { requireProject: projectScopedCookie })
+    ) {
       return invalidWorkbenchAccess(res, getRequestId(req));
     }
     let auth = proxyAccess ? null : await resolveUser(req, res);
@@ -124,6 +134,7 @@ export function buildDesignSessionRouter({
         projectId,
         userId: ownerUserId,
         tenantId: "default",
+        sessionScope,
       });
       if (!session) return notFound(res, requestId);
       if (proxyAccess && proxyAccess.generation !== session.generation) {
@@ -233,6 +244,7 @@ export function buildDesignSessionRouter({
         projectId: input.projectId,
         userId: auth.zakiUser.id,
         tenantId: "default",
+        sessionScope,
       });
       if (!session) return notFound(res, requestId);
       const result = await controller.status({
@@ -272,6 +284,7 @@ export function buildDesignSessionRouter({
         projectId: input.projectId,
         userId: auth.zakiUser.id,
         tenantId: "default",
+        sessionScope,
       });
       if (!session) return notFound(res, requestId);
       const drainingSession = await beginSessionDrain({
@@ -570,12 +583,16 @@ function invalidWorkbenchAccess(res, requestId) {
   });
 }
 
-function matchesProxyRequest(access, sessionId, projectId) {
+function matchesProxyRequest(access, sessionId, projectId, { requireProject = true } = {}) {
   return Boolean(
     access &&
     validOpaqueId(access.userId) &&
     access.sessionId === sessionId &&
-    access.projectId === projectId &&
+    // Per-user sessions (requireProject=false): the cookie binds (user, session); projectId is a
+    // per-request focus pointer, so we validate its shape but not equality. Per-project
+    // (requireProject=true): the cookie is bound to one project and must match exactly.
+    validOpaqueId(access.projectId) &&
+    (!requireProject || access.projectId === projectId) &&
     Number.isSafeInteger(access.generation) &&
     access.generation >= 0
   );

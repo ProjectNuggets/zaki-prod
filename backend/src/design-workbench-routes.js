@@ -4,7 +4,8 @@ import { pipeline } from "node:stream/promises";
 
 const OPAQUE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
-export function buildDesignWorkbenchRouter({ enabled, resolveAccess, controller, getRequestId }) {
+export function buildDesignWorkbenchRouter({ enabled, resolveAccess, controller, getRequestId, sessionScope = "project" }) {
+  const perUserSession = sessionScope === "user";
   const router = express.Router();
   router.use(async (req, res) => {
     const requestId = getRequestId(req);
@@ -21,11 +22,15 @@ export function buildDesignWorkbenchRouter({ enabled, resolveAccess, controller,
       return workbenchAuthRequired(res, requestId);
     }
     const access = await resolveAccess(req, navigationBinding?.sessionId);
+    // Per-user sessions serve every project the user owns, so a navigation to project B under the
+    // credential minted for the session's seed project A is legitimate — the projectId in the URL is
+    // a focus pointer, not a credential axis. The session-id match still binds the navigation to the
+    // authenticated session; only the project-equality check is dropped in per-user mode.
     if (
       !access?.userId ||
       (navigationBinding && (
         access.sessionId !== navigationBinding.sessionId ||
-        access.projectId !== navigationBinding.projectId
+        (!perUserSession && access.projectId !== navigationBinding.projectId)
       ))
     ) {
       return workbenchAuthRequired(res, requestId);

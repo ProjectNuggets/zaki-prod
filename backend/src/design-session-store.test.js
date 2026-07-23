@@ -153,6 +153,57 @@ describe("design session store", () => {
     ]);
   });
 
+  test("B1 sessionScope=user: one session per USER via ON CONFLICT (owner_user_id)", async () => {
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ project_id: "project_02" }] })
+      .mockResolvedValueOnce({
+        rows: [{
+          session_id: "sess_seed",
+          project_id: "project_01", // reused session keeps its stable SEED project, not project_02
+          owner_user_id: "42",
+          tenant_id: "default",
+          state: "READY",
+          checkpoint_generation: "3",
+        }],
+      });
+    const runInTransaction = (callback) => callback({ query });
+
+    await expect(ensureDesignSession({
+      runInTransaction,
+      userId: 42,
+      projectId: "project_02",
+      tenantId: "default",
+      requestId: "req_u1",
+      createSessionId: () => "sess_new",
+      sessionScope: "user",
+    })).resolves.toMatchObject({
+      sessionId: "sess_seed",
+      projectId: "project_01",
+      userId: "42",
+    });
+    // still validates the user owns the project they are focusing
+    expect(query.mock.calls[0]?.[0]).toContain("FOR UPDATE");
+    // per-user conflict target, NOT the legacy per-project one
+    expect(query.mock.calls[1]?.[0]).toContain("ON CONFLICT (owner_user_id)");
+    expect(query.mock.calls[1]?.[0]).not.toContain("ON CONFLICT (project_id)");
+  });
+
+  test("B1 sessionScope=user: readBinding validates (session, user, tenant), drops projectId", async () => {
+    const dbQuery = jest.fn().mockResolvedValue({ rows: [] });
+    await expect(readDesignSessionBinding({
+      dbQuery,
+      sessionId: "sess_01",
+      projectId: "project_focused", // a project other than the seed — must still resolve
+      userId: "42",
+      tenantId: "default",
+      sessionScope: "user",
+    })).resolves.toBeNull();
+    // no project_id predicate; params carry only (session, user, tenant)
+    expect(dbQuery.mock.calls[0]?.[0]).not.toContain("project_id = $2");
+    expect(dbQuery.mock.calls[0]?.[1]).toEqual(["sess_01", 42, "default"]);
+  });
+
   test("records controller state only at the hub-owned generation", async () => {
     const dbQuery = jest.fn().mockResolvedValue({ rows: [{ session_id: "sess_01" }] });
     await expect(updateDesignSessionObservedState({

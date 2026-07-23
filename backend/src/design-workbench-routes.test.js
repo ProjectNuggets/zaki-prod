@@ -77,6 +77,27 @@ describe("Design workbench routes", () => {
     expect(controller.workbench).not.toHaveBeenCalled();
   });
 
+  test("B1 sessionScope=user: serves a project navigation other than the seed under the same session", async () => {
+    const controller = { workbench: jest.fn().mockResolvedValue(new Response("bundle", { status: 200 })) };
+    const app = express();
+    app.use("/api/design/workbench", buildDesignWorkbenchRouter({
+      enabled: true,
+      sessionScope: "user",
+      // credential minted for the session's seed (project_01); user now opens project_02
+      resolveAccess: jest.fn().mockReturnValue({
+        userId: "42", sessionId: "sess_01", projectId: "project_01", generation: 7,
+      }),
+      controller,
+      getRequestId: () => "req_peruser",
+    }));
+
+    const response = await request(app)
+      .get("/api/design/workbench/projects/project_02?sessionId=sess_01&projectId=project_02&projectName=Other");
+
+    expect(response.status).toBe(200);
+    expect(controller.workbench).toHaveBeenCalled();
+  });
+
   test("rejects a root bootstrap whose query does not match its session credential", async () => {
     const controller = { workbench: jest.fn().mockResolvedValue(new Response("unexpected")) };
     const app = express();

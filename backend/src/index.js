@@ -834,6 +834,12 @@ const ZAKI_DESIGN_ENABLED = isDesignEnabled(process.env.ZAKI_DESIGN_ENABLED);
 const ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED = isDesignEnabled(
   process.env.ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED
 );
+// B1 "pod user allocation": "user" = one session per USER serving all their projects (the divergence
+// fix); "project" = the legacy one-session-per-project topology (kept for a future "separated agents
+// per user" product). Defaults to "project" so prod-on-V1 behaviour is unchanged unless a cell opts
+// in. Must be kept in lockstep with the flag-gated UNIQUE(owner_user_id) migration in db.js.
+const ZAKI_DESIGN_SESSION_SCOPE =
+  String(process.env.ZAKI_DESIGN_SESSION_SCOPE || "").trim() === "user" ? "user" : "project";
 const DESIGN_CONTROLLER_BASE_URL = (
   process.env.ZAKI_DESIGN_CONTROLLER_BASE_URL || ""
 ).trim().replace(/\/+$/, "");
@@ -18775,6 +18781,7 @@ app.use(
   "/api/design/workbench",
   buildDesignWorkbenchRouter({
     enabled: ZAKI_DESIGN_ENABLED && ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED,
+    sessionScope: ZAKI_DESIGN_SESSION_SCOPE,
     resolveAccess: (req, sessionId) => designWorkbenchAccess?.resolve(req, sessionId) ?? null,
     controller: designSessionController || unavailableDesignSessionController,
     getRequestId: getOrCreateRequestId,
@@ -18798,6 +18805,7 @@ app.use(
   "/api/design/sessions",
   buildDesignSessionRouter({
     enabled: ZAKI_DESIGN_ENABLED && ZAKI_DESIGN_SESSION_CONTROLLER_ENABLED,
+    sessionScope: ZAKI_DESIGN_SESSION_SCOPE,
     resolveUser: requireAuthUser,
     resolveBillingUserById: resolveDesignBillingUserById,
     ensureSession: ensureDesignSession,

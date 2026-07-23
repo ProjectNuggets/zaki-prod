@@ -532,6 +532,40 @@ export async function initDb() {
     ON zaki_design_sessions(state, updated_at);
   `);
 
+  // B1 "pod user allocation": when ZAKI_DESIGN_SESSION_SCOPE=user, swap the design-session uniqueness
+  // from one-per-PROJECT (the inline UNIQUE on project_id, db.js CREATE TABLE above) to one-per-USER,
+  // so a single pod/workspace serves all of a user's projects — the fix for cross-session workspace
+  // divergence. FLAG-GATED: prod runs on V1 and does NOT set this env, so its one-session-per-project
+  // constraint is left completely untouched. Idempotent + safe to re-run. We dedup first (keep the
+  // newest session per user) so the new UNIQUE(owner_user_id) can be added without violation.
+  if (String(process.env.ZAKI_DESIGN_SESSION_SCOPE || "").trim() === "user") {
+    await migrationClient.query(`
+      DELETE FROM zaki_design_sessions
+       WHERE session_id IN (
+         SELECT session_id FROM (
+           SELECT session_id,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY owner_user_id ORDER BY updated_at DESC, session_id DESC
+                  ) AS rn
+             FROM zaki_design_sessions
+         ) ranked WHERE ranked.rn > 1
+       );
+    `);
+    await migrationClient.query(`
+      ALTER TABLE zaki_design_sessions DROP CONSTRAINT IF EXISTS zaki_design_sessions_project_id_key;
+    `);
+    await migrationClient.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'zaki_design_sessions_owner_user_id_key'
+        ) THEN
+          ALTER TABLE zaki_design_sessions
+            ADD CONSTRAINT zaki_design_sessions_owner_user_id_key UNIQUE (owner_user_id);
+        END IF;
+      END $$;
+    `);
+  }
+
   await migrationClient.query(`
     CREATE TABLE IF NOT EXISTS access_code_orders (
       id BIGSERIAL PRIMARY KEY,
