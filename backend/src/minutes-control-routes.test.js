@@ -74,6 +74,7 @@ function buildApp(overrides = {}) {
     forgetMeeting: overrides.forgetMeeting || jest.fn(),
     releaseCapture: overrides.releaseCapture || jest.fn(),
     recordCapturePolicyMirror: overrides.recordCapturePolicyMirror,
+    readCapturePolicyMirror: overrides.readCapturePolicyMirror,
     client,
     now: () => new Date("2026-05-28T13:46:40.000Z"),
   }));
@@ -131,6 +132,34 @@ describe("Minutes control BFF routes", () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ source: "read-plane" });
     expect(resolveUser).not.toHaveBeenCalled();
+  });
+
+  test("GET /control reflects the saved consent from the Hub mirror (owner-scoped)", async () => {
+    const readCapturePolicyMirror = jest.fn().mockResolvedValue({ captureEnabled: true, agentReadEnabled: true });
+    const { app } = buildApp({ readCapturePolicyMirror });
+    const response = await request(app)
+      .get("/api/minutes/control")
+      .set("x-zaki-user-id", "999")
+      .set("x-zaki-control-token", "browser-controlled");
+    expect(response.status).toBe(200);
+    expect(readCapturePolicyMirror).toHaveBeenCalledWith({ userId: "42" });
+    expect(response.body.consent).toEqual({ capture_enabled: true, agent_read_enabled: true });
+  });
+
+  test("GET /control defaults consent to unchecked when the mirror is dark or read fails", async () => {
+    // No mirror dep (calendar dark) → unchecked, never a spurious enabled.
+    const dark = await request(buildApp().app)
+      .get("/api/minutes/control")
+      .set("x-zaki-user-id", "999")
+      .set("x-zaki-control-token", "browser-controlled");
+    expect(dark.body.consent).toEqual({ capture_enabled: false, agent_read_enabled: false });
+    // A mirror read failure must not fail the otherwise-static control route.
+    const failing = await request(buildApp({ readCapturePolicyMirror: jest.fn().mockRejectedValue(new Error("mirror db down")) }).app)
+      .get("/api/minutes/control")
+      .set("x-zaki-user-id", "999")
+      .set("x-zaki-control-token", "browser-controlled");
+    expect(failing.status).toBe(200);
+    expect(failing.body.consent).toEqual({ capture_enabled: false, agent_read_enabled: false });
   });
 
   test("authenticates before parsing a control consent body", async () => {

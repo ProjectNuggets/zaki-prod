@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS zaki_calendar_autojoin (
   consent_at TIMESTAMPTZ,
   -- Hub mirror of the engine capture policy, refreshed on every successful ensure.
   mirror_capture_enabled BOOLEAN,
+  mirror_agent_read_enabled BOOLEAN,
   mirror_audio_days INTEGER,
   mirror_transcript_days INTEGER,
   mirror_summary_days INTEGER,
@@ -40,6 +41,8 @@ CREATE TABLE IF NOT EXISTS zaki_calendar_autojoin (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- Additive column for tables created before the settings UI reflected agent-read.
+ALTER TABLE zaki_calendar_autojoin ADD COLUMN IF NOT EXISTS mirror_agent_read_enabled BOOLEAN;
 -- Append-only audit: the standing consent must be provable for compliance.
 CREATE TABLE IF NOT EXISTS zaki_calendar_autojoin_events (
   event_id BIGSERIAL PRIMARY KEY,
@@ -107,7 +110,7 @@ export async function saveAutojoinConsent(
 // Refresh the Hub capture-policy mirror. Called after a successful /control/consent
 // ensure. Never creates a row that "enables" auto-join — only fills the mirror.
 export async function mirrorCapturePolicy(
-  { userId, captureEnabled, retention, policyVersion },
+  { userId, captureEnabled, agentReadEnabled, retention, policyVersion },
   { dbQuery = defaultDbQuery } = {}
 ) {
   const uid = requireUserId(userId);
@@ -115,11 +118,12 @@ export async function mirrorCapturePolicy(
   await dbQuery(
     `WITH up AS (
        INSERT INTO zaki_calendar_autojoin
-         (user_id, mirror_capture_enabled, mirror_audio_days, mirror_transcript_days,
-          mirror_summary_days, mirror_policy_version, mirror_updated_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+         (user_id, mirror_capture_enabled, mirror_agent_read_enabled, mirror_audio_days,
+          mirror_transcript_days, mirror_summary_days, mirror_policy_version, mirror_updated_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
        ON CONFLICT (user_id) DO UPDATE SET
          mirror_capture_enabled = EXCLUDED.mirror_capture_enabled,
+         mirror_agent_read_enabled = EXCLUDED.mirror_agent_read_enabled,
          mirror_audio_days = EXCLUDED.mirror_audio_days,
          mirror_transcript_days = EXCLUDED.mirror_transcript_days,
          mirror_summary_days = EXCLUDED.mirror_summary_days,
@@ -129,13 +133,26 @@ export async function mirrorCapturePolicy(
        RETURNING user_id
      )
      INSERT INTO zaki_calendar_autojoin_events (user_id, event, consent_version)
-     SELECT user_id, 'policy_mirrored', $6 FROM up`,
-    [uid, Boolean(captureEnabled),
+     SELECT user_id, 'policy_mirrored', $7 FROM up`,
+    [uid, Boolean(captureEnabled), Boolean(agentReadEnabled),
       Number.isFinite(Number(r.audio_days)) ? Number(r.audio_days) : null,
       Number.isFinite(Number(r.transcript_days)) ? Number(r.transcript_days) : null,
       Number.isFinite(Number(r.summary_days)) ? Number(r.summary_days) : null,
       policyVersion ? String(policyVersion) : null]
   );
+}
+
+// The saved capture consent for the settings UI to reflect, so the form stops
+// resetting its checkboxes to unchecked (re-saving blank silently disables
+// consent). Booleans only; a missing row or NULL mirror reads as false.
+// ponytail: reads the Hub mirror, not the engine — zaki-control.v1 has no
+// policy-read; the mirror is refreshed on every successful consent ensure.
+export async function getMinutesConsentMirror({ userId }, deps = {}) {
+  const row = await getRow({ userId }, deps);
+  return {
+    captureEnabled: row?.mirror_capture_enabled === true,
+    agentReadEnabled: row?.mirror_agent_read_enabled === true,
+  };
 }
 
 async function getRow({ userId }, { dbQuery = defaultDbQuery } = {}) {

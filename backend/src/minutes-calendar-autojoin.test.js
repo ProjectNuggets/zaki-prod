@@ -4,6 +4,7 @@ import {
   DEFAULT_JOIN_SCOPE,
   saveAutojoinConsent,
   mirrorCapturePolicy,
+  getMinutesConsentMirror,
   getAutojoinStatus,
   getAutojoinFireContext,
 } from "./minutes-calendar-autojoin.js";
@@ -19,11 +20,11 @@ function mockDb() {
       const uid = params[0];
       const cur = rows.get(uid) || { user_id: uid };
       if (/mirror_capture_enabled/.test(text)) {
-        // mirrorCapturePolicy: params = [uid, capEnabled, audio, transcript, summary, policyVersion]
+        // mirrorCapturePolicy: params = [uid, capEnabled, agentRead, audio, transcript, summary, policyVersion]
         Object.assign(cur, {
-          mirror_capture_enabled: params[1], mirror_audio_days: params[2],
-          mirror_transcript_days: params[3], mirror_summary_days: params[4],
-          mirror_policy_version: params[5],
+          mirror_capture_enabled: params[1], mirror_agent_read_enabled: params[2],
+          mirror_audio_days: params[3], mirror_transcript_days: params[4],
+          mirror_summary_days: params[5], mirror_policy_version: params[6],
         });
         rows.set(uid, cur);
         events.push({ user_id: uid, event: "policy_mirrored" });
@@ -126,5 +127,12 @@ describe("capture-policy mirror + poller fire-context", () => {
     await saveAutojoinConsent({ userId: 42, enabled: true }, db);
     await mirrorCapturePolicy({ userId: 42, captureEnabled: true, retention: {}, policyVersion: null }, db);
     expect((await getAutojoinFireContext({ userId: 42 }, db)).reason).toBe("policy_unmirrored");
+  });
+
+  test("getMinutesConsentMirror reflects the saved capture + agent-read flags (unknown → false)", async () => {
+    const { db } = mockDb();
+    expect(await getMinutesConsentMirror({ userId: 42 }, db)).toEqual({ captureEnabled: false, agentReadEnabled: false });
+    await mirrorCapturePolicy({ userId: 42, captureEnabled: true, agentReadEnabled: true, retention: { transcript_days: 30 }, policyVersion: "v1" }, db);
+    expect(await getMinutesConsentMirror({ userId: 42 }, db)).toEqual({ captureEnabled: true, agentReadEnabled: true });
   });
 });

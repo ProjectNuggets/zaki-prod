@@ -109,6 +109,12 @@ export type MinutesControlStatus = {
     capture_notice_policy_version: string;
     retention: MinutesControlRetention;
   };
+  // The user's saved consent, so the form reflects reality instead of resetting
+  // to unchecked. Absent from older backends → normalized to false (see below).
+  consent: {
+    capture_enabled: boolean;
+    agent_read_enabled: boolean;
+  };
 };
 
 function isMinutesControlStatus(value: unknown): value is MinutesControlStatus {
@@ -150,12 +156,21 @@ export type MinutesForgetResult = {
   };
 };
 
+function readSavedConsent(value: unknown): MinutesControlStatus["consent"] {
+  const consent = (value as { consent?: unknown }).consent;
+  if (consent && typeof consent === "object") {
+    const { capture_enabled, agent_read_enabled } = consent as Record<string, unknown>;
+    return { capture_enabled: capture_enabled === true, agent_read_enabled: agent_read_enabled === true };
+  }
+  return { capture_enabled: false, agent_read_enabled: false };
+}
+
 export async function getMinutesControl() {
   const control = await minutesRequest<unknown>("/api/minutes/control", { method: "GET" });
   if (!isMinutesControlStatus(control)) {
     throw new MinutesApiError(502, "minutes_control_invalid_response", "Minutes controls are temporarily unavailable.", true);
   }
-  return control;
+  return { ...control, consent: readSavedConsent(control) };
 }
 
 export function saveMinutesConsent(input: {
