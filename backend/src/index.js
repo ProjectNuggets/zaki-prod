@@ -221,7 +221,7 @@ import {
   decryptCalendarRefreshToken,
   markCalendarConnectionInvalidGrant,
 } from "./minutes-calendar-store.js";
-import { mirrorCapturePolicy, getAutojoinFireContext } from "./minutes-calendar-autojoin.js";
+import { mirrorCapturePolicy, getMinutesConsentMirror, getAutojoinFireContext } from "./minutes-calendar-autojoin.js";
 import { refreshCalendarAccessToken, listUpcomingMeetEvents, eventPassesScope } from "./minutes-calendar-google.js";
 import {
   runCalendarAutojoinSweep,
@@ -18656,6 +18656,10 @@ const minutesControlOptions = {
   // Mirror the capture policy Hub-side on each consent save so the calendar
   // auto-join poller can gate on capture_enabled. Only when calendar is enabled.
   recordCapturePolicyMirror: ZAKI_MINUTES_CALENDAR_ENABLED ? mirrorCapturePolicy : undefined,
+  // Read that same mirror back so GET /control can reflect saved consent in the
+  // settings form. Gated with the write: dark calendar → no mirror → checkboxes
+  // default unchecked (today's behavior), never a spurious "enabled".
+  readCapturePolicyMirror: ZAKI_MINUTES_CALENDAR_ENABLED ? getMinutesConsentMirror : undefined,
 };
 app.use("/api/minutes", buildMinutesControlRouter(minutesControlOptions));
 

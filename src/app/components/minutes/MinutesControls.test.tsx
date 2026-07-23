@@ -53,6 +53,7 @@ const AVAILABLE = {
     capture_notice_policy_version: "minutes-capture-consent-v1",
     retention: { audio_days: 0, transcript_days: 30, summary_days: 30 },
   },
+  consent: { capture_enabled: false, agent_read_enabled: false },
 };
 
 function renderControls({ meetings = [], onForgot = jest.fn() }: {
@@ -219,6 +220,18 @@ describe("MinutesControls", () => {
     // Forever = 3650 for BOTH transcript and summary (symmetric, so the engine's
     // summary <= transcript check can never 422); audio stays at its seeded 0.
     expect(mockConsent.mock.calls[0]?.[0]?.retention).toEqual({ audio_days: 0, transcript_days: 3650, summary_days: 3650 });
+  });
+
+  test("renders the saved consent checked and opens the capture form without a re-save", async () => {
+    mockControl.mockResolvedValue({ ...AVAILABLE, consent: { capture_enabled: true, agent_read_enabled: true } });
+    renderControls();
+
+    expect(await screen.findByRole("heading", { name: "Minutes controls" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Allow ZAKI Minutes to request a visible capture bot." })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Allow my ZAKI agent to read retained Minutes items." })).toBeChecked();
+    // Saved capture consent unlocks the capture form on load — the footgun was
+    // that this stayed locked until the user re-checked and re-saved.
+    expect(screen.getByRole("heading", { name: "Request a visible bot" })).toBeInTheDocument();
   });
 
   test("an off-preset saved policy is surfaced as Custom, not snapped onto a preset", async () => {

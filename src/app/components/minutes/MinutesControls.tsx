@@ -71,14 +71,19 @@ function retentionPresetLabel(days: number, t: (key: string, opts: { defaultValu
 
 function ConsentForm({
   initialRetention,
+  initialConsent,
   onReady,
 }: {
   initialRetention: MinutesControlRetention;
+  initialConsent: { capture_enabled: boolean; agent_read_enabled: boolean };
   onReady: (captureEnabled: boolean) => void;
 }) {
   const { t } = useTranslation();
-  const [captureEnabled, setCaptureEnabled] = useState(false);
-  const [agentReadEnabled, setAgentReadEnabled] = useState(false);
+  // Seed from the saved consent so the boxes reflect reality — re-saving them
+  // blank would silently DISABLE consent. Initializing here means clicking Save
+  // without a change is idempotent, so no toggle-tracking is needed.
+  const [captureEnabled, setCaptureEnabled] = useState(initialConsent.capture_enabled);
+  const [agentReadEnabled, setAgentReadEnabled] = useState(initialConsent.agent_read_enabled);
   const [retention, setRetention] = useState<MinutesControlRetention>(initialRetention);
   const consent = useMutation({
     mutationFn: saveMinutesConsent,
@@ -381,7 +386,13 @@ export function MinutesControls({ meetings, onForgot }: MinutesControlsProps) {
   const [captureEnabled, setCaptureEnabled] = useState(false);
   const [initialRetention, setInitialRetention] = useState<MinutesControlRetention | null>(null);
   useEffect(() => {
-    if (controls.data && !initialRetention) setInitialRetention(controls.data.policy.retention);
+    if (controls.data && !initialRetention) {
+      setInitialRetention(controls.data.policy.retention);
+      // Reflect saved capture consent so the CaptureForm opens unlocked without a
+      // re-save. Seeded once alongside the retention snapshot; a later Save updates
+      // it via onReady.
+      setCaptureEnabled(controls.data.consent.capture_enabled);
+    }
   }, [controls.data, initialRetention]);
 
   // A 404 from the default-false BFF is intentionally invisible: the product
@@ -402,7 +413,7 @@ export function MinutesControls({ meetings, onForgot }: MinutesControlsProps) {
       <span>{t("minutes.controlsMeta", { defaultValue: "Visible bot / owner only" })}</span>
     </V2PanelHead>
     <V2PanelBody>
-      <ConsentForm initialRetention={initialRetention} onReady={setCaptureEnabled} />
+      <ConsentForm initialRetention={initialRetention} initialConsent={controls.data.consent} onReady={setCaptureEnabled} />
       <CalendarAutojoin />
       <CaptureForm enabled={captureEnabled} />
       <ForgetMeetingList meetings={meetings} onForgot={onForgot} />

@@ -461,6 +461,7 @@ export function buildMinutesControlDependencies({
   applyCallback = defaultApplyMinutesControlCallback,
   recordFailure,
   recordCapturePolicyMirror,
+  readCapturePolicyMirror,
   client = DEFAULT_CLIENT,
   now = () => new Date(),
 } = {}) {
@@ -470,7 +471,7 @@ export function buildMinutesControlDependencies({
     reserveCapture, recordCapture, recordCompensation,
     markRecoveryCapture, markRecoveryPreSpawnOutcome, decryptRecoveryRequest,
     forgetMeeting, applyCallback, recordFailure, client, now,
-    recoveryEncryptionKey, recordCapturePolicyMirror,
+    recoveryEncryptionKey, recordCapturePolicyMirror, readCapturePolicyMirror,
   };
 }
 
@@ -553,11 +554,29 @@ export function buildMinutesControlRouter(options = {}) {
     }
   );
 
-  router.get("/control", requireControlEnabled, requireMinutesUser, (req, res) => {
+  router.get("/control", requireControlEnabled, requireMinutesUser, async (req, res) => {
+    const context = req.minutesControlContext;
     const policyView = browserControlPolicy(dependencies);
+    // Reflect the user's SAVED consent so the settings form doesn't reset its
+    // checkboxes to unchecked — re-saving them blank silently disables consent.
+    // Best-effort mirror read: a miss or failure degrades to false (unchecked),
+    // never a spurious "enabled", and never fails this otherwise-static route.
+    let consent = { capture_enabled: false, agent_read_enabled: false };
+    if (context && typeof dependencies.readCapturePolicyMirror === "function") {
+      try {
+        const mirror = await dependencies.readCapturePolicyMirror({ userId: context.userId });
+        consent = {
+          capture_enabled: mirror?.captureEnabled === true,
+          agent_read_enabled: mirror?.agentReadEnabled === true,
+        };
+      } catch (error) {
+        emitFailure(dependencies, { requestId: context.requestId, operation: "control_consent_read", failure: error?.code || "unavailable" });
+      }
+    }
     res.status(200).json({
       available: true,
       policy: policyView,
+      consent,
     });
   });
 
@@ -596,6 +615,9 @@ export function buildMinutesControlRouter(options = {}) {
             // while the engine has capture OFF — opening the unattended fire gate.
             // response.state==="ready" is the authoritative persisted state.
             captureEnabled: input.capture_enabled && response.state === "ready",
+            // agent_read is a separate consent with no unattended-fire path, so it
+            // mirrors the accepted request verbatim (no ready-state fire-open guard).
+            agentReadEnabled: input.agent_read_enabled,
             retention: input.retention,
             policyVersion: response.policy_version,
           });
