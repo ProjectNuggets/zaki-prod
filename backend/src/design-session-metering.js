@@ -98,20 +98,40 @@ export function createDesignSessionProxyAuthorizer({
       anonymousSessionId: null,
       anonymousKeyHash: null,
     };
-    const result = await issueMeterGrantForIdentity({
-      identity,
-      tenantId: session.tenantId,
-      product: "design",
-      action,
-      estimatedUnits: estimateDesignMeterUnitsForIngress(meterRequest, action),
-      requestId,
-      idempotencyKey: readDesignIdempotencyKey(req, action, requestId),
-      metadata: {
-        surface: "design_session_proxy",
-        route: targetPath.split("?")[0],
+    let result;
+    try {
+      result = await issueMeterGrantForIdentity({
+        identity,
+        tenantId: session.tenantId,
+        product: "design",
+        action,
+        estimatedUnits: estimateDesignMeterUnitsForIngress(meterRequest, action),
+        requestId,
+        idempotencyKey: readDesignIdempotencyKey(req, action, requestId),
+        metadata: {
+          surface: "design_session_proxy",
+          route: targetPath.split("?")[0],
+          method,
+        },
+      });
+    } catch (error) {
+      // FAIL-OPEN (metering policy #70): the grant issuer THREW — an infrastructure failure (DB,
+      // product registry, upstream meter service), NOT a policy decision. A metering outage must
+      // never 500 the whole design product and block every mutation (create project / start run);
+      // that is exactly the "every create/run dies while reads work" failure. Allow the mutation and
+      // emit an observable, pageable warning instead of hard-failing the user. A genuine policy
+      // DENIAL still returns allowed:false below and is enforced normally — only THROWS fail open.
+      console.warn(JSON.stringify({
+        level: "warn",
+        event: "design.meter.fail_open",
+        requestId,
+        action: normalizeMeterAction(action),
         method,
-      },
-    });
+        route: targetPath.split("?")[0],
+        message: error instanceof Error ? error.message : String(error),
+      }));
+      return { allowed: true, action, grant: null, meterFailOpen: true };
+    }
     if (!result.allowed) {
       return {
         allowed: false,
