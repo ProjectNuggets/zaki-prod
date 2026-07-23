@@ -539,21 +539,30 @@ export async function initDb() {
   // constraint is left completely untouched. Idempotent + safe to re-run. We dedup first (keep the
   // newest session per user) so the new UNIQUE(owner_user_id) can be added without violation.
   if (String(process.env.ZAKI_DESIGN_SESSION_SCOPE || "").trim() === "user") {
+    // Dedup to one session per user before adding UNIQUE(owner_user_id). Prefer a LIVE (non-terminal)
+    // session over a STOPPED/FAILED one so we never delete an active session's row (which would orphan
+    // its running pod and point the user at a terminal session); tie-break by freshness then id.
     await migrationClient.query(`
       DELETE FROM zaki_design_sessions
        WHERE session_id IN (
          SELECT session_id FROM (
            SELECT session_id,
                   ROW_NUMBER() OVER (
-                    PARTITION BY owner_user_id ORDER BY updated_at DESC, session_id DESC
+                    PARTITION BY owner_user_id
+                    ORDER BY (CASE WHEN state IN ('STOPPED', 'FAILED') THEN 1 ELSE 0 END) ASC,
+                             updated_at DESC,
+                             session_id DESC
                   ) AS rn
              FROM zaki_design_sessions
          ) ranked WHERE ranked.rn > 1
        );
     `);
-    await migrationClient.query(`
-      ALTER TABLE zaki_design_sessions DROP CONSTRAINT IF EXISTS zaki_design_sessions_project_id_key;
-    `);
+    // Add UNIQUE(owner_user_id) so ensureDesignSession's ON CONFLICT (owner_user_id) upsert has an
+    // arbiter. Deliberately KEEP the existing UNIQUE(project_id): each per-user session pins one
+    // stable SEED project and the focused project it inserts always belongs to the same user, so
+    // seeds stay unique and no spurious project_id conflict is possible. Keeping it also makes
+    // reverting the flag to "project" (ON CONFLICT (project_id)) safe — dropping it would otherwise
+    // 42P10 ("no unique constraint matching ON CONFLICT") on every session create after a rollback.
     await migrationClient.query(`
       DO $$ BEGIN
         IF NOT EXISTS (
