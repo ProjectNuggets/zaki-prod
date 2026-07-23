@@ -4,6 +4,7 @@ import {
   commitDesignCheckpoint,
   ensureDesignSession,
   readDesignSessionBinding,
+  touchDesignSessionActivity,
   updateDesignSessionObservedState,
 } from "./design-session-store.js";
 
@@ -217,6 +218,52 @@ describe("design session store", () => {
       state: "ACTIVE",
       generation: 7,
       expectedState: "NOT_A_STATE",
+    })).rejects.toMatchObject({ code: "DESIGN_SESSION_INPUT_INVALID" });
+    expect(dbQuery).not.toHaveBeenCalled();
+  });
+
+  test("touches only the freshness columns for the caller's own session, no state or generation CAS", async () => {
+    const dbQuery = jest.fn().mockResolvedValue({ rows: [{ session_id: "sess_01" }] });
+    await expect(touchDesignSessionActivity({
+      dbQuery,
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+    })).resolves.toBe(true);
+    const [sql, params] = dbQuery.mock.calls[0];
+    // Bumps updated_at (the reaper's idle predicate) and last_seen_at (mirrors the poll)...
+    expect(sql).toContain("updated_at = NOW()");
+    expect(sql).toContain("last_seen_at = NOW()");
+    // ...and nothing else: proxied work is a heartbeat, not a lifecycle transition. No state
+    // write and no checkpoint_generation CAS, so it can never move the row or race a stop.
+    expect(sql).not.toContain("SET state");
+    expect(sql).not.toContain("checkpoint_generation");
+    // Scoped by the full identity tuple, so it can only ever refresh the caller's own row.
+    expect(sql).toContain("owner_user_id = $3");
+    expect(sql).toContain("tenant_id = $4");
+    expect(params).toEqual(["sess_01", "project_01", 42, "default"]);
+  });
+
+  test("reports no match when the scoped touch updates nothing", async () => {
+    const dbQuery = jest.fn().mockResolvedValue({ rows: [] });
+    await expect(touchDesignSessionActivity({
+      dbQuery,
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "42",
+      tenantId: "default",
+    })).resolves.toBe(false);
+  });
+
+  test("rejects an invalid identity before touching the database", async () => {
+    const dbQuery = jest.fn();
+    await expect(touchDesignSessionActivity({
+      dbQuery,
+      sessionId: "sess_01",
+      projectId: "project_01",
+      userId: "0",
+      tenantId: "default",
     })).rejects.toMatchObject({ code: "DESIGN_SESSION_INPUT_INVALID" });
     expect(dbQuery).not.toHaveBeenCalled();
   });

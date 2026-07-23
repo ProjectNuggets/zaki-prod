@@ -286,8 +286,10 @@ import {
   beginDesignSessionDrain,
   ensureDesignSession,
   readDesignSessionBinding,
+  touchDesignSessionActivity,
   updateDesignSessionObservedState,
 } from "./design-session-store.js";
+import { reapIdleDesignSessions } from "./design-session-reaper.js";
 import {
   createDesignProject,
   extractDesignProjectFromPayload,
@@ -18802,6 +18804,7 @@ app.use(
     readSessionBinding: readDesignSessionBinding,
     beginSessionDrain: beginDesignSessionDrain,
     updateSessionState: updateDesignSessionObservedState,
+    touchSessionActivity: touchDesignSessionActivity,
     runInTransaction: withDbTransaction,
     dbQuery,
     createSessionId: () => `design-session-${crypto.randomUUID()}`,
@@ -21987,5 +21990,48 @@ server.listen(PORT, () => {
         );
       }, LEARNING_RETENTION_CLEANUP_INTERVAL_MS);
     }, 60_000);
+  }
+
+  // Design idle-session reaper (B0b — auto-descale). Drives controller.stop for
+  // sessions whose client stopped polling (updated_at past the idle TTL); the
+  // controller best-effort checkpoints then force-deletes the pod (B0a), freeing the
+  // single design-sessions namespace slot. Gated off by default; staging sets
+  // ZAKI_DESIGN_SESSION_REAPER_ENABLED=1. A `running` flag prevents overlap; the sweep
+  // is multi-replica safe (controller de-dups stops; observed-state write is a CAS).
+  if (
+    (process.env.ZAKI_DESIGN_SESSION_REAPER_ENABLED === "1" ||
+      process.env.ZAKI_DESIGN_SESSION_REAPER_ENABLED === "true") &&
+    designSessionController
+  ) {
+    const DESIGN_REAPER_INTERVAL_MS = 60 * 1000;
+    const idleTtlMs = Math.max(
+      60_000,
+      Number(process.env.ZAKI_DESIGN_SESSION_IDLE_TTL_MS) || 15 * 60 * 1000
+    );
+    let designReaperRunning = false;
+    const runDesignReaperSweep = async () => {
+      if (designReaperRunning) return; // no overlapping sweeps
+      designReaperRunning = true;
+      try {
+        const r = await reapIdleDesignSessions({
+          dbQuery,
+          controller: designSessionController,
+          updateSessionState: updateDesignSessionObservedState,
+          idleTtlMs,
+          logStructured,
+        });
+        if (r.reaped > 0 || r.failed > 0) {
+          logStructured("info", "design.reaper.sweep", r);
+        }
+      } catch (err) {
+        logStructured("error", "design.reaper.sweep_failed", { message: err?.message || String(err) });
+      } finally {
+        designReaperRunning = false;
+      }
+    };
+    setTimeout(() => {
+      void runDesignReaperSweep();
+      setInterval(() => { void runDesignReaperSweep(); }, DESIGN_REAPER_INTERVAL_MS);
+    }, 55_000);
   }
 });

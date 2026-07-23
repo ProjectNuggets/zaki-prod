@@ -334,6 +334,42 @@ export async function updateDesignSessionObservedState({
   return Boolean(result.rows[0]);
 }
 
+// Cheapest possible activity touch: bump only the freshness columns for a session the caller
+// has already resolved and owner/tenant-scoped. `updated_at` is what the idle reaper's
+// abandonment predicate (`updated_at < now - idleTtl`) reads; `last_seen_at` mirrors it as the
+// status poll does. Deliberately NO state change and NO generation CAS — proxied design work is
+// not a lifecycle transition, it is a heartbeat, and without this the reaper would misclassify a
+// session doing real work but whose client stopped polling as idle and descale it mid-work.
+// Scoped by the full identity tuple so it can only ever refresh the caller's own row (tenant
+// isolation preserved). Returns whether a row matched.
+export async function touchDesignSessionActivity({
+  dbQuery,
+  sessionId,
+  projectId,
+  userId,
+  tenantId,
+}) {
+  const result = await dbQuery(
+    `
+      UPDATE zaki_design_sessions
+         SET last_seen_at = NOW(),
+             updated_at = NOW()
+       WHERE session_id = $1
+         AND project_id = $2
+         AND owner_user_id = $3
+         AND tenant_id = $4
+      RETURNING session_id
+    `,
+    [
+      opaqueId(sessionId, "sessionId"),
+      opaqueId(projectId, "projectId"),
+      positiveUserId(userId),
+      opaqueId(tenantId, "tenantId"),
+    ]
+  );
+  return Boolean(result.rows[0]);
+}
+
 export function designCheckpointObjectKey(projectId, generation) {
   const normalizedProjectId = opaqueId(projectId, "projectId");
   const normalizedGeneration = generationNumber(generation, "generation");

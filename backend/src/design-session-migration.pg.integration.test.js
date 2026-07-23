@@ -78,6 +78,17 @@ d("Design session migration — real PostgreSQL expand-contract safety", () => {
           AND indexname = 'idx_zaki_design_sessions_owner_state'`
     );
     expect(index?.indexname).toBe("idx_zaki_design_sessions_owner_state");
+
+    // The reaper-serving composite index is provisioned by the same migration, keyed on the
+    // reaper's ownerless (state, updated_at) scan.
+    const reaperIndex = await db.dbGet(
+      `SELECT indexname
+         FROM pg_indexes
+        WHERE schemaname = current_schema()
+          AND tablename = 'zaki_design_sessions'
+          AND indexname = 'idx_zaki_design_sessions_state_updated'`
+    );
+    expect(reaperIndex?.indexname).toBe("idx_zaki_design_sessions_state_updated");
     expect(repeatMigrationMs).toBeLessThan(10_000);
   }, 15_000);
 });
