@@ -341,6 +341,7 @@ export function buildMinutesControlRouter({
   forgetMeeting = defaultForgetMinutesControlMeeting,
   applyCallback = defaultApplyMinutesControlCallback,
   recordFailure,
+  recordCapturePolicyMirror,
   client = DEFAULT_CLIENT,
   now = () => new Date(),
 } = {}) {
@@ -352,7 +353,7 @@ export function buildMinutesControlRouter({
     reserveCapture, recordCapture, recordCompensation,
     markRecoveryCapture, markRecoveryPreSpawnOutcome, decryptRecoveryRequest,
     forgetMeeting, applyCallback, recordFailure, client, now,
-    recoveryEncryptionKey,
+    recoveryEncryptionKey, recordCapturePolicyMirror,
   };
   const router = express.Router();
   const browserJson = express.json({ limit: "16kb", strict: true });
@@ -457,6 +458,27 @@ export function buildMinutesControlRouter({
         return;
       }
       const response = await parseUpstreamSuccess(upstream, parseMinutesEnsureResponse, context);
+      // WP-M10: mirror the just-persisted capture policy Hub-side so the calendar
+      // auto-join poller can gate on capture_enabled and re-ensure with the same
+      // policy_version before firing. Best-effort — a mirror-write failure must
+      // never fail the user's consent save.
+      if (typeof dependencies.recordCapturePolicyMirror === "function") {
+        try {
+          await dependencies.recordCapturePolicyMirror({
+            userId: context.userId,
+            // The ENGINE's confirmed outcome, never the request: idempotency_key is
+            // client-supplied and the engine is idempotent, so a replayed key with a
+            // flipped capture_enabled would otherwise let the mirror say "enabled"
+            // while the engine has capture OFF — opening the unattended fire gate.
+            // response.state==="ready" is the authoritative persisted state.
+            captureEnabled: input.capture_enabled && response.state === "ready",
+            retention: input.retention,
+            policyVersion: response.policy_version,
+          });
+        } catch (mirrorError) {
+          dependencies.recordFailure?.({ stage: "consent_mirror", code: "calendar_policy_mirror_failed" });
+        }
+      }
       res.status(200).json({ state: response.state, policyVersion: response.policy_version });
     } catch (error) {
       if (isControlInputError(error)) {

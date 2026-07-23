@@ -73,6 +73,7 @@ function buildApp(overrides = {}) {
     applyCallback,
     forgetMeeting: overrides.forgetMeeting || jest.fn(),
     releaseCapture: overrides.releaseCapture || jest.fn(),
+    recordCapturePolicyMirror: overrides.recordCapturePolicyMirror,
     client,
     now: () => new Date("2026-05-28T13:46:40.000Z"),
   }));
@@ -145,6 +146,44 @@ describe("Minutes control BFF routes", () => {
     expect(response.status).toBe(401);
     expect(resolveUser).toHaveBeenCalledTimes(1);
     expect(client.ensure).not.toHaveBeenCalled();
+  });
+
+  test("WP-M10: mirrors capture-enabled from the ENGINE's confirmed state, not the request (idempotent-replay fire-open guard)", async () => {
+    const recordCapturePolicyMirror = jest.fn().mockResolvedValue(undefined);
+    // Engine confirms capture DISABLED (e.g. an idempotent replay or an entitlement
+    // override), even though the request said capture_enabled:true.
+    const { app } = buildApp({
+      recordCapturePolicyMirror,
+      client: {
+        ensure: jest.fn().mockResolvedValue(jsonResponse({
+          api_version: "zaki-control.v1", request_id: "req-control-01", operation_id: "op-ensure-01",
+          subject: { tenant_id: "default", user_id: "42" }, state: "disabled", policy_version: "minutes-capture-consent-v1",
+        })),
+      },
+    });
+    const res = await request(app)
+      .post("/api/minutes/control/consent")
+      .set("x-zaki-user-id", "999")
+      .set("x-zaki-control-token", "browser-controlled")
+      .send({ capture_enabled: true, agent_read_enabled: false, retention: { audio_days: 0, transcript_days: 30, summary_days: 30 }, idempotency_key: "consent-replay" });
+    expect(res.status).toBe(200);
+    expect(recordCapturePolicyMirror).toHaveBeenCalledWith(expect.objectContaining({
+      userId: "42",
+      captureEnabled: false, // NOT the request's true — the engine said disabled
+      policyVersion: "minutes-capture-consent-v1",
+    }));
+  });
+
+  test("WP-M10: a mirror-write failure never fails the consent save", async () => {
+    const recordCapturePolicyMirror = jest.fn().mockRejectedValue(new Error("mirror db down"));
+    const { app } = buildApp({ recordCapturePolicyMirror });
+    const res = await request(app)
+      .post("/api/minutes/control/consent")
+      .set("x-zaki-user-id", "999")
+      .set("x-zaki-control-token", "browser-controlled")
+      .send({ capture_enabled: true, agent_read_enabled: false, retention: { audio_days: 0, transcript_days: 30, summary_days: 30 }, idempotency_key: "consent-mirrorfail" });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ state: "ready", policyVersion: "minutes-capture-consent-v1" });
   });
 
   test("derives consent identity from auth and forwards only a bounded contract policy", async () => {

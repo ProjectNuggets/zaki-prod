@@ -32,6 +32,8 @@ function makeDeps(overrides = {}) {
       upsertCalendarConnection: async (a) => { calls.upsert.push(a); },
       getCalendarConnectionStatus: async ({ userId }) => ({ connected: userId === "42", status: "active" }),
       takeCalendarRefreshTokenForRevocation: async (a) => { calls.take.push(a); return "1//rt-abc"; },
+      saveAutojoinConsent: async (a) => { calls.autojoinSave = a; },
+      getAutojoinStatus: async ({ userId }) => ({ enabled: userId === "42", joinScope: "accepted", isCurrent: true }),
     },
     recordFailure: () => {},
     ...overrides.deps,
@@ -47,6 +49,7 @@ function idToken({ sub, email }) {
 let server, base, current;
 beforeAll(async () => {
   const app = express();
+  app.use(express.json());
   // A single mount whose deps we swap per test via `current`.
   app.use("/api/minutes", (req, res, next) => current.router(req, res, next));
   await new Promise((r) => { server = app.listen(0, r); });
@@ -146,6 +149,21 @@ describe("minutes calendar routes", () => {
     });
     expect(r.headers.get("location")).toContain("reason=no_refresh_token");
     expect(calls.upsert).toHaveLength(0);
+  });
+
+  test("GET/POST /calendar/autojoin reads and saves the standing consent + scope (auth required)", async () => {
+    const calls = mount();
+    const un = await fetch(`${base}/api/minutes/calendar/autojoin`);
+    expect(un.status).toBe(401);
+    const got = await (await fetch(`${base}/api/minutes/calendar/autojoin`, { headers: { "x-test-user": "42" } })).json();
+    expect(got).toEqual(expect.objectContaining({ enabled: true, joinScope: "accepted" }));
+    const saved = await fetch(`${base}/api/minutes/calendar/autojoin`, {
+      method: "POST",
+      headers: { "x-test-user": "42", "content-type": "application/json" },
+      body: JSON.stringify({ enabled: true, joinScope: "organizer" }),
+    });
+    expect(saved.status).toBe(200);
+    expect(calls.autojoinSave).toEqual(expect.objectContaining({ userId: "42", enabled: true, joinScope: "organizer" }));
   });
 
   test("disconnect revokes the specific token and deletes the row (auth required)", async () => {
