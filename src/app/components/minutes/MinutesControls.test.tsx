@@ -357,13 +357,16 @@ describe("CalendarAutojoin", () => {
     expect(await screen.findByText("The auto-join terms changed. Re-confirm below to keep auto-join on.")).toBeInTheDocument();
   });
 
-  test("reads the OAuth callback result from the URL and clears it", async () => {
+  test("a successful OAuth callback shows the connected state (no redundant banner) and clears the URL", async () => {
     window.history.replaceState(null, "", "/settings?calendar=connected");
     mockCalConn.mockResolvedValue({ connected: true, status: "active" });
     mockCalAutojoin.mockResolvedValue(CONNECTED_AUTOJOIN);
     renderControls();
-    expect(await screen.findByText("Google Calendar connected.")).toBeInTheDocument();
-    // The param is stripped so a refresh won't replay the banner (real history API).
+    // The connected state itself is the confirmation — no separate "connected" banner
+    // (that repeated the text twice). The Disconnect action proves the connected state.
+    expect(await screen.findByRole("button", { name: "Disconnect" })).toBeInTheDocument();
+    expect(screen.queryByText("Google Calendar connected.")).not.toBeInTheDocument();
+    // The param is stripped so a refresh won't replay anything (real history API).
     expect(window.location.search).toBe("");
   });
 
