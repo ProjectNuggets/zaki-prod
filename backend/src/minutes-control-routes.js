@@ -291,6 +291,122 @@ async function compensateUnpersistedCapture({ dependencies, context, response, r
   }
 }
 
+// WP-M10 slice 4: the reserve → create → persist → compensate capture pipeline,
+// extracted from the browser POST /captures handler so a server-side scheduler
+// (calendar auto-join) can fire a capture WITHOUT a live HTTP request. It is
+// res-decoupled — it returns a discriminated result the caller maps (the browser
+// route → an HTTP response; the poller → its own handling) — and it NEVER throws
+// for an expected outcome. The visible-bot attestation is built server-side from
+// context.userId (the browser tick never fed it), so a scheduler-built context
+// with a standing-consent user reproduces exactly the same trusted attestation.
+// `input` is already-validated: { platform, meeting_url, idempotency_key }.
+export async function createMinutesCaptureForUser({ context, input, dependencies }) {
+  let reservation;
+  let engineCreateStarted = false;
+  let recoveryOutcomeKnown = false;
+  try {
+    const fundingWindow = validateMinutesCaptureFundingWindow({
+      maxCaptureSeconds: dependencies.captureMaxSeconds,
+      reservedUnits: Number(dependencies.captureReserveUnits),
+      holdTtlMs: Number(dependencies.captureHoldTtlMs),
+    });
+    if (!fundingWindow.ok) {
+      emitFailure(dependencies, { requestId: context.requestId, operation: "capture", failure: "invalid_metering_window" });
+      return { ok: false, kind: "funding_window" };
+    }
+    const policyView = browserControlPolicy(dependencies);
+    const recoveryRequest = {
+      platform: input.platform,
+      meetingUrl: input.meeting_url,
+      captureAttestation: {
+        bot_visible: true,
+        bot_display_name: MINUTES_CONTROL_NOTETAKER_NAME,
+        policy_version: policyView.capture_notice_policy_version,
+        attested_at: dependencies.now().toISOString(),
+        attested_by_user_id: context.userId,
+      },
+      metering: { reservation_id: null, unit: "bot_minute", reserved_units: dependencies.captureReserveUnits },
+    };
+    reservation = await dependencies.reserveCapture({
+      zakiUser: context.zakiUser, tenantId: context.tenantId, requestId: context.requestId,
+      idempotencyKey: input.idempotency_key, reservedUnits: dependencies.captureReserveUnits,
+      holdTtlMs: dependencies.captureHoldTtlMs, resolvePlan: dependencies.resolvePlan,
+      recoveryRequest, recoveryEncryptionKey: dependencies.recoveryEncryptionKey,
+    });
+    const recoveryState = String(reservation.recoveryIntent?.state || "");
+    if (["blocked", "terminal"].includes(recoveryState)) {
+      throw new MinutesControlStateError("Minutes capture recovery is not eligible for another create.", {
+        code: "upstream_unavailable", status: 503, retryable: true,
+      });
+    }
+    let createRequest = {
+      ...recoveryRequest,
+      metering: { ...recoveryRequest.metering, reservation_id: String(reservation.hold.id) },
+    };
+    if (reservation.recoveryIntent) {
+      createRequest = dependencies.decryptRecoveryRequest({
+        recovery: reservation.recoveryIntent, encryptionKey: dependencies.recoveryEncryptionKey,
+      });
+    }
+    const createContext = reservation.recoveryIntent?.request_id
+      ? { ...context, requestId: String(reservation.recoveryIntent.request_id) }
+      : context;
+    engineCreateStarted = true;
+    const upstream = await dependencies.client.createCapture({
+      ...clientOptions(dependencies, createContext), idempotencyKey: input.idempotency_key, ...createRequest,
+    });
+    if (!upstream?.ok) {
+      if (reservation.recoveryIntent) {
+        await dependencies.markRecoveryPreSpawnOutcome({
+          recoveryId: reservation.recoveryIntent.recovery_id, state: "create_uncertain",
+          errorCode: [400, 422].includes(Number(upstream?.status)) ? "engine_create_rejected"
+            : Number(upstream?.status) === 409 ? "engine_create_conflict" : "engine_create_unavailable",
+          retryAfterMs: 0,
+        });
+      }
+      recoveryOutcomeKnown = Boolean(reservation.recoveryIntent);
+      return { ok: false, kind: "upstream", upstream };
+    }
+    const response = await parseUpstreamSuccess(upstream, parseMinutesCaptureResponse, createContext);
+    if (String(response.metering.reservation_id) !== String(reservation.hold.id)) {
+      throw new MinutesControlContractError("Minutes upstream changed the capture reservation.", "minutes_control_upstream_binding_mismatch");
+    }
+    try {
+      await dependencies.recordCapture({
+        response, userId: context.userId, tenantId: context.tenantId,
+        reservationId: reservation.hold.id, recoveryIntentId: reservation.recoveryIntent?.recovery_id,
+      });
+      recoveryOutcomeKnown = true;
+    } catch (error) {
+      await compensateUnpersistedCapture({ dependencies, context, response, reservation });
+      recoveryOutcomeKnown = true;
+      throw new MinutesControlStateError("Minutes capture persistence failed after engine creation.", {
+        code: "upstream_unavailable", status: 503, retryable: true, cause: error,
+      });
+    }
+    return {
+      ok: true,
+      capture: { captureId: response.capture_id, meetingId: response.meeting_id, state: response.state },
+    };
+  } catch (error) {
+    if (engineCreateStarted && !recoveryOutcomeKnown && reservation?.recoveryIntent?.recovery_id) {
+      try {
+        await dependencies.markRecoveryPreSpawnOutcome({
+          recoveryId: reservation.recoveryIntent.recovery_id, state: "create_uncertain",
+          errorCode: error?.code || "engine_create_ambiguous", retryAfterMs: 0,
+        });
+      } catch (recoveryError) {
+        emitFailure(dependencies, { requestId: context.requestId, operation: "capture_recovery_uncertain", failure: recoveryError?.code || "unavailable" });
+      }
+    }
+    if (error?.code === "quota_exhausted") return { ok: false, kind: "quota_exhausted" };
+    if (error?.code === "idempotency_conflict") return { ok: false, kind: "idempotency_conflict" };
+    if (isControlInputError(error)) return { ok: false, kind: "input_error" };
+    emitFailure(dependencies, { requestId: context.requestId, operation: "capture", failure: error?.code || "unavailable" });
+    return { ok: false, kind: "unavailable" };
+  }
+}
+
 function controlUnavailable(res, dependencies, req) {
   const requestId = dependencies.getRequestId(req);
   res.set("Cache-Control", "no-store");
@@ -494,172 +610,42 @@ export function buildMinutesControlRouter({
   router.post("/captures", requireControlEnabled, requireMinutesUser, browserJson, async (req, res) => {
     const context = req.minutesControlContext;
     if (!context) return;
-    let reservation;
+    // Thin adapter over the extracted, res-decoupled createMinutesCaptureForUser:
+    // parse the browser body (its own input-error path), fire the pipeline, then
+    // map the discriminated result to the exact same HTTP responses as before.
     let input;
-    let engineCreateStarted = false;
-    let recoveryOutcomeKnown = false;
     try {
-      const fundingWindow = validateMinutesCaptureFundingWindow({
-        maxCaptureSeconds: dependencies.captureMaxSeconds,
-        reservedUnits: Number(dependencies.captureReserveUnits),
-        holdTtlMs: Number(dependencies.captureHoldTtlMs),
-      });
-      if (!fundingWindow.ok) {
-        emitFailure(dependencies, { requestId: context.requestId, operation: "capture", failure: "invalid_metering_window" });
-        sendBrowserError(res, 503, "minutes_control_unavailable", "Minutes controls are temporarily unavailable.", context.requestId, true);
-        return;
-      }
       input = parseMinutesBrowserCapture(req.body);
-      const policyView = browserControlPolicy(dependencies);
-      const recoveryRequest = {
-        platform: input.platform,
-        meetingUrl: input.meeting_url,
-        captureAttestation: {
-          bot_visible: true,
-          bot_display_name: MINUTES_CONTROL_NOTETAKER_NAME,
-          policy_version: policyView.capture_notice_policy_version,
-          attested_at: dependencies.now().toISOString(),
-          attested_by_user_id: context.userId,
-        },
-        metering: {
-          // The hold id is attached below after the atomic reserve completes.
-          reservation_id: null,
-          unit: "bot_minute",
-          reserved_units: dependencies.captureReserveUnits,
-        },
-      };
-      reservation = await dependencies.reserveCapture({
-        zakiUser: context.zakiUser,
-        tenantId: context.tenantId,
-        requestId: context.requestId,
-        idempotencyKey: input.idempotency_key,
-        reservedUnits: dependencies.captureReserveUnits,
-        holdTtlMs: dependencies.captureHoldTtlMs,
-        resolvePlan: dependencies.resolvePlan,
-        recoveryRequest,
-        recoveryEncryptionKey: dependencies.recoveryEncryptionKey,
-      });
-      const recoveryState = String(reservation.recoveryIntent?.state || "");
-      if (["blocked", "terminal"].includes(recoveryState)) {
-        throw new MinutesControlStateError("Minutes capture recovery is not eligible for another create.", {
-          code: "upstream_unavailable",
-          status: 503,
-          retryable: true,
-        });
-      }
-      // Test doubles may not create a recovery row, in which case the
-      // in-memory request below remains the authoritative outbound payload.
-      let createRequest = {
-        ...recoveryRequest,
-        metering: {
-          ...recoveryRequest.metering,
-          reservation_id: String(reservation.hold.id),
-        },
-      };
-      if (reservation.recoveryIntent) {
-        createRequest = dependencies.decryptRecoveryRequest({
-          recovery: reservation.recoveryIntent,
-          encryptionKey: dependencies.recoveryEncryptionKey,
-        });
-      }
-      // An engine idempotency replay is bound to the original request id. A
-      // browser retry gets a new Hub request id, but must reuse the immutable
-      // one stored with its recovery intent or a valid replay response would
-      // look untrusted and be needlessly reclassified as ambiguous.
-      const createContext = reservation.recoveryIntent?.request_id
-        ? { ...context, requestId: String(reservation.recoveryIntent.request_id) }
-        : context;
-      engineCreateStarted = true;
-      const upstream = await dependencies.client.createCapture({
-        ...clientOptions(dependencies, createContext),
-        idempotencyKey: input.idempotency_key,
-        ...createRequest,
-      });
-      if (!upstream?.ok) {
-        if (reservation.recoveryIntent) {
-          await dependencies.markRecoveryPreSpawnOutcome({
-            recoveryId: reservation.recoveryIntent.recovery_id,
-            state: "create_uncertain",
-            // A browser request owns no reconciliation lease. Keep every
-            // post-reservation response durable until the worker can repeat
-            // the exact idempotent create and, for only verified 400/422,
-            // perform a lease-fenced release in the same DB transaction.
-            errorCode: [400, 422].includes(Number(upstream?.status))
-              ? "engine_create_rejected"
-              : Number(upstream?.status) === 409
-                ? "engine_create_conflict"
-                : "engine_create_unavailable",
-            retryAfterMs: 0,
-          });
-        }
-        recoveryOutcomeKnown = Boolean(reservation.recoveryIntent);
-        mapUpstreamFailure(res, upstream, context.requestId);
-        return;
-      }
-      const response = await parseUpstreamSuccess(upstream, parseMinutesCaptureResponse, createContext);
-      if (String(response.metering.reservation_id) !== String(reservation.hold.id)) {
-        throw new MinutesControlContractError("Minutes upstream changed the capture reservation.", "minutes_control_upstream_binding_mismatch");
-      }
-      try {
-        await dependencies.recordCapture({
-          response,
-          userId: context.userId,
-          tenantId: context.tenantId,
-          reservationId: reservation.hold.id,
-          recoveryIntentId: reservation.recoveryIntent?.recovery_id,
-        });
-        recoveryOutcomeKnown = true;
-      } catch (error) {
-        // The engine has already created a real capture. Keep the paid hold in
-        // place, durably record reconciliation when possible, and issue the
-        // engine's idempotent stop before returning an unavailable response.
-        // Never release the hold here: stop is asynchronous and a failed or
-        // delayed compensation must not turn an untracked capture into free use.
-        await compensateUnpersistedCapture({ dependencies, context, response, reservation });
-        recoveryOutcomeKnown = true;
-        throw new MinutesControlStateError("Minutes capture persistence failed after engine creation.", {
-          code: "upstream_unavailable",
-          status: 503,
-          retryable: true,
-          cause: error,
-        });
-      }
-      res.status(202).json({
-        captureId: response.capture_id,
-        meetingId: response.meeting_id,
-        state: response.state,
-      });
     } catch (error) {
-      if (engineCreateStarted && !recoveryOutcomeKnown && reservation?.recoveryIntent?.recovery_id) {
-        try {
-          await dependencies.markRecoveryPreSpawnOutcome({
-            recoveryId: reservation.recoveryIntent.recovery_id,
-            state: "create_uncertain",
-            errorCode: error?.code || "engine_create_ambiguous",
-            retryAfterMs: 0,
-          });
-        } catch (recoveryError) {
-          emitFailure(dependencies, {
-            requestId: context.requestId,
-            operation: "capture_recovery_uncertain",
-            failure: recoveryError?.code || "unavailable",
-          });
-        }
-      }
-      if (error?.code === "quota_exhausted") {
-        sendBrowserError(res, 429, "minutes_control_quota_exhausted", "Minutes capture quota is exhausted.", context.requestId);
-        return;
-      }
-      if (error?.code === "idempotency_conflict") {
-        sendBrowserError(res, 409, "minutes_control_conflict", "This Minutes request conflicts with its current state.", context.requestId);
-        return;
-      }
       if (isControlInputError(error)) {
         sendBrowserError(res, 400, "minutes_control_invalid_request", "The Minutes control request is invalid.", context.requestId);
         return;
       }
       emitFailure(dependencies, { requestId: context.requestId, operation: "capture", failure: error?.code || "unavailable" });
       sendBrowserError(res, 503, "minutes_control_unavailable", "Minutes controls are temporarily unavailable.", context.requestId, true);
+      return;
+    }
+    const result = await createMinutesCaptureForUser({ context, input, dependencies });
+    if (result.ok) {
+      res.status(202).json({ captureId: result.capture.captureId, meetingId: result.capture.meetingId, state: result.capture.state });
+      return;
+    }
+    switch (result.kind) {
+      case "upstream":
+        mapUpstreamFailure(res, result.upstream, context.requestId);
+        return;
+      case "quota_exhausted":
+        sendBrowserError(res, 429, "minutes_control_quota_exhausted", "Minutes capture quota is exhausted.", context.requestId);
+        return;
+      case "idempotency_conflict":
+        sendBrowserError(res, 409, "minutes_control_conflict", "This Minutes request conflicts with its current state.", context.requestId);
+        return;
+      case "input_error":
+        sendBrowserError(res, 400, "minutes_control_invalid_request", "The Minutes control request is invalid.", context.requestId);
+        return;
+      default: // funding_window | unavailable
+        sendBrowserError(res, 503, "minutes_control_unavailable", "Minutes controls are temporarily unavailable.", context.requestId, true);
+        return;
     }
   });
 

@@ -3,7 +3,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, jest, test } from "@jest/globals";
 import { bypassMinutesReadBodyParser } from "./minutes-read-routes.js";
-import { buildMinutesControlRouter } from "./minutes-control-routes.js";
+import { buildMinutesControlRouter, createMinutesCaptureForUser } from "./minutes-control-routes.js";
 
 const CALLBACK_SECRET = "w".repeat(32);
 const HOLD_ID = "00000000-0000-4000-8000-000000000001";
@@ -523,5 +523,63 @@ describe("forget meeting id normalization", () => {
     expect(response.status).toBe(200);
     expect(client.eraseMeeting).toHaveBeenCalledWith(expect.objectContaining({ meetingId: "6" }));
     expect(forgetMeeting).toHaveBeenCalledWith(expect.objectContaining({ meetingId: "6" }));
+  });
+
+  // WP-M10 slice 4: the extracted, res-decoupled pipeline the calendar poller will call.
+  describe("createMinutesCaptureForUser (server-side, non-HTTP)", () => {
+    function captureDeps(overrides = {}) {
+      return {
+        baseUrl: "http://minutes-api:8056", controlSigningKey: "c".repeat(32), callbackHmacKey: CALLBACK_SECRET,
+        timeoutMs: 5_000, tokenTtlSeconds: 60,
+        policy: { capture_notice_policy_version: "minutes-capture-consent-v1", retention: { audio_days: 0, transcript_days: 30, summary_days: 30 } },
+        captureReserveUnits: 60, captureHoldTtlMs: 3_900_000, captureMaxSeconds: 3_600,
+        getRequestId: () => "req-control-01", fetchWithTimeout: jest.fn(),
+        resolvePlan: jest.fn(), recoveryEncryptionKey: "r".repeat(32),
+        reserveCapture: jest.fn().mockResolvedValue({ hold: { id: HOLD_ID } }),
+        recordCapture: jest.fn().mockResolvedValue({ capture_id: "capture-01" }),
+        markRecoveryPreSpawnOutcome: jest.fn().mockResolvedValue({}),
+        decryptRecoveryRequest: jest.fn(),
+        recordFailure: jest.fn(),
+        now: () => new Date("2026-05-28T13:46:40.000Z"),
+        client: {
+          createCapture: jest.fn().mockResolvedValue(jsonResponse({
+            api_version: "zaki-control.v1", request_id: "req-control-01", operation_id: "op-capture-01",
+            subject: { tenant_id: "default", user_id: "42" }, capture_id: "capture-01", meeting_id: "meeting-01",
+            state: "requested", metering: { reservation_id: HOLD_ID },
+          }, 202)),
+        },
+        ...overrides,
+      };
+    }
+    const context = { userId: "42", tenantId: "default", requestId: "req-control-01", zakiUser: { id: 42, plan_tier: "personal" } };
+    const input = { platform: "google_meet", meeting_url: "https://meet.google.com/abc-defg-hij", idempotency_key: "sched-01" };
+
+    test("reserves, creates, persists, and returns a capture result — building the visible-bot attestation server-side", async () => {
+      const dependencies = captureDeps();
+      const result = await createMinutesCaptureForUser({ context, input, dependencies });
+      expect(result).toEqual({ ok: true, capture: { captureId: "capture-01", meetingId: "meeting-01", state: "requested" } });
+      expect(dependencies.reserveCapture).toHaveBeenCalled();
+      expect(dependencies.recordCapture).toHaveBeenCalled();
+      // The attestation is server-built from context.userId (never a browser tick).
+      expect(dependencies.client.createCapture).toHaveBeenCalledWith(expect.objectContaining({
+        captureAttestation: expect.objectContaining({ bot_visible: true, attested_by_user_id: "42" }),
+      }));
+    });
+
+    test("returns a discriminated upstream failure (never throws) so the caller maps it", async () => {
+      const dependencies = captureDeps({ client: { createCapture: jest.fn().mockResolvedValue(jsonResponse({ error: "conflict" }, 409)) } });
+      const result = await createMinutesCaptureForUser({ context, input, dependencies });
+      expect(result.ok).toBe(false);
+      expect(result.kind).toBe("upstream");
+      expect(result.upstream.status).toBe(409);
+      expect(dependencies.recordCapture).not.toHaveBeenCalled();
+    });
+
+    test("a bad funding window returns funding_window without reserving a paid hold", async () => {
+      const dependencies = captureDeps({ captureReserveUnits: 0 }); // can't fund the engine max
+      const result = await createMinutesCaptureForUser({ context, input, dependencies });
+      expect(result).toEqual({ ok: false, kind: "funding_window" });
+      expect(dependencies.reserveCapture).not.toHaveBeenCalled();
+    });
   });
 });
