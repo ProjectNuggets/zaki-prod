@@ -88,7 +88,7 @@ export function buildDesignControllerCallbackRouter({
         });
       }
       const generation = input.expectedGeneration + 1;
-      const objectKey = designCheckpointObjectKey(input.projectId, generation);
+      const objectKey = designCheckpointObjectKey(input.sessionId, generation);
       return res.json({ generation, objectKey });
     } catch (error) {
       return callbackFailure(req, res, error, "DESIGN_UPLOAD_GRANT_FAILED", "Design upload grant is unavailable.");
@@ -99,7 +99,7 @@ export function buildDesignControllerCallbackRouter({
     const input = parseCheckpointRequest(req.params.sessionId, req.body);
     if (!input) return invalidRequest(res);
     try {
-      const objectKey = designCheckpointObjectKey(input.projectId, input.generation);
+      const objectKey = designCheckpointObjectKey(input.sessionId, input.generation);
       await commitCheckpoint({
         runInTransaction,
         ...input,
