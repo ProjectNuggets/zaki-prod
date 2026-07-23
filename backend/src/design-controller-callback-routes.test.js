@@ -13,7 +13,7 @@ function createApp(overrides = {}) {
     generation: 7,
     checkpointSha256: "a".repeat(64),
     checkpointBytes: 1024,
-    checkpointObjectKey: "projects/project_01/checkpoints/0000000007.tgz",
+    checkpointObjectKey: "sessions/sess_01/checkpoints/0000000007.tgz",
   });
   const app = express();
   const commitCheckpoint = overrides.commitCheckpoint || jest.fn().mockResolvedValue({
@@ -62,7 +62,7 @@ describe("Design controller callback routes", () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
       generation: 7,
-      objectKey: "projects/project_01/checkpoints/0000000007.tgz",
+      objectKey: "sessions/sess_01/checkpoints/0000000007.tgz",
       sha256: "a".repeat(64),
     });
     expect(readSessionBinding).toHaveBeenCalledWith(expect.objectContaining({
@@ -87,7 +87,7 @@ describe("Design controller callback routes", () => {
     expect(upload.status).toBe(200);
     expect(upload.body).toEqual({
       generation: 8,
-      objectKey: "projects/project_01/checkpoints/0000000008.tgz",
+      objectKey: "sessions/sess_01/checkpoints/0000000008.tgz",
     });
 
     const commit = await request(app)
@@ -113,7 +113,7 @@ describe("Design controller callback routes", () => {
       generation: 8,
       bytes: 4096,
       sha256: "b".repeat(64),
-      objectKey: "projects/project_01/checkpoints/0000000008.tgz",
+      objectKey: "sessions/sess_01/checkpoints/0000000008.tgz",
       requestId: "req_commit_01",
     }));
   });

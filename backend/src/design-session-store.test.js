@@ -111,7 +111,7 @@ describe("design session store", () => {
           checkpoint_generation: "8",
           checkpoint_sha256: "b".repeat(64),
           checkpoint_bytes: "4096",
-          checkpoint_object_key: "projects/project_01/checkpoints/0000000008.tgz",
+          checkpoint_object_key: "sessions/sess_01/checkpoints/0000000008.tgz",
         }],
       });
     const runInTransaction = (callback) => callback({ query });
@@ -126,7 +126,7 @@ describe("design session store", () => {
       generation: 8,
       bytes: 4096,
       sha256: "b".repeat(64),
-      objectKey: "projects/project_01/checkpoints/0000000008.tgz",
+      objectKey: "sessions/sess_01/checkpoints/0000000008.tgz",
       requestId: "req_02",
     })).resolves.toEqual({ committed: false, idempotent: true, generation: 8 });
     expect(query.mock.calls[0]?.[0]).toContain("owner_user_id = $3");

@@ -258,7 +258,7 @@ export async function commitDesignCheckpoint({
     generation: generationNumber(generation, "generation"),
     bytes: byteCount(bytes),
     sha256: sha256Value(sha256),
-    objectKey: checkpointObjectKey(objectKey, projectId, generation),
+    objectKey: checkpointObjectKey(objectKey, sessionId, generation),
   };
   if (normalized.generation !== normalized.expectedGeneration + 1) {
     throw new DesignSessionStoreError("DESIGN_CHECKPOINT_GENERATION_INVALID", "Checkpoint generation is not monotonic.", 400);
@@ -421,10 +421,14 @@ export async function touchDesignSessionActivity({
   return Boolean(result.rows[0]);
 }
 
-export function designCheckpointObjectKey(projectId, generation) {
-  const normalizedProjectId = opaqueId(projectId, "projectId");
+// SESSION-scoped checkpoint key. Under per-user sessions (B1) the project_id is a mutable "seed"
+// that can be deleted (orphaning the workspace), so the durable workspace identity is the immutable
+// sessionId, not a project. The controller re-derives this exact string to validate the grant
+// (session-controller hub-client.ts checkpointObjectKey + checkpoint-signer.ts regex) — keep in lockstep.
+export function designCheckpointObjectKey(sessionId, generation) {
+  const normalizedSessionId = opaqueId(sessionId, "sessionId");
   const normalizedGeneration = generationNumber(generation, "generation");
-  return `projects/${normalizedProjectId}/checkpoints/${String(normalizedGeneration).padStart(10, "0")}.tgz`;
+  return `sessions/${normalizedSessionId}/checkpoints/${String(normalizedGeneration).padStart(10, "0")}.tgz`;
 }
 
 function normalizeSessionRow(row) {
@@ -487,8 +491,8 @@ function sha256Value(value) {
   return normalized;
 }
 
-function checkpointObjectKey(value, projectId, generation) {
-  const expected = designCheckpointObjectKey(projectId, generation);
+function checkpointObjectKey(value, sessionId, generation) {
+  const expected = designCheckpointObjectKey(sessionId, generation);
   if (value !== expected) {
     throw new DesignSessionStoreError("DESIGN_SESSION_INPUT_INVALID", "checkpoint object key is invalid.", 400);
   }
