@@ -40,7 +40,7 @@ export function V2SettingsNav({
     <aside className={cn("v2-settings-nav", className)}>
       <div className="v2-settings-nav__head">
         <div>{eyebrow}</div>
-        <h1>{title}</h1>
+        <p className="v2-settings-nav__title">{title}</p>
       </div>
       <nav ref={navRef} aria-label={ariaLabel} className="v2-settings-nav__list">
         {items.map(({ href, label, meta, icon: Icon, tone = "default", group }, index) => {

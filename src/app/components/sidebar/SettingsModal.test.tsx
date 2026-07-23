@@ -15,6 +15,7 @@ import {
   disconnectBotTelegram,
   disconnectAgentChannelControl,
   fetchBotHeartbeat,
+  fetchBotSettings,
   fetchAgentChannelControls,
   fetchAgentExtensionDevices,
   listAgentSecrets,
@@ -1184,6 +1185,21 @@ describe("SettingsPage", () => {
     );
   });
 
+  it("switches directly to the selected category without retaining the previous settings panel", async () => {
+    await renderSettingsPage();
+
+    fireEvent.click(screen.getByRole("link", { name: "Agent" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("settings-location")).toHaveTextContent(
+        "/settings#settings-agent"
+      );
+    });
+    expect(screen.getByTestId("settings-agent")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-account")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Agent" })).toHaveAttribute("aria-current", "page");
+  });
+
   it("renders the route-level V2 settings nav with configurable categories only", async () => {
     await renderSettingsPage();
 
@@ -1481,6 +1497,27 @@ describe("SettingsPage", () => {
     fireEvent.blur(sessionTimeoutInput);
     await waitFor(() => {
       expect(updateBotSettingsMock).toHaveBeenCalledWith({ session_timeout_minutes: 45 });
+    });
+  });
+
+  it("does not present fallback Agent defaults as loaded settings when the profile request fails", async () => {
+    const fetchBotSettingsMock = fetchBotSettings as jest.MockedFunction<typeof fetchBotSettings>;
+    fetchBotSettingsMock.mockResolvedValueOnce({
+      response: { ok: false } as Response,
+      data: { error: "agent_settings_unavailable" },
+    });
+
+    await renderSettingsPage("/settings#settings-agent");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Unable to load Agent settings. Your saved defaults have not been changed."
+    );
+    expect(screen.queryByLabelText("Autonomy")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("settings-agent-reset")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => {
+      expect(screen.getByLabelText("Autonomy")).toBeEnabled();
     });
   });
 

@@ -610,6 +610,8 @@ export function SettingsPage() {
   const [agentSettingsDraft, setAgentSettingsDraft] =
     useState<AgentSettingsDraft>(DEFAULT_AGENT_SETTINGS);
   const [agentSettingsLoading, setAgentSettingsLoading] = useState(true);
+  const [agentSettingsAvailable, setAgentSettingsAvailable] = useState(true);
+  const [agentSettingsLoadAttempt, setAgentSettingsLoadAttempt] = useState(0);
   const [agentSettingsSaving, setAgentSettingsSaving] = useState(false);
   const [heartbeatState, setHeartbeatState] = useState<BotHeartbeatState | null>(null);
   const [heartbeatLoading, setHeartbeatLoading] = useState(true);
@@ -934,13 +936,16 @@ export function SettingsPage() {
       .then(({ response, data }) => {
         if (!active) return;
         if (!response.ok || data?.error) {
+          setAgentSettingsAvailable(false);
           setAgentSettingsDraft(DEFAULT_AGENT_SETTINGS);
           return;
         }
+        setAgentSettingsAvailable(true);
         setAgentSettingsDraft(normalizeAgentSettingsProfile(data));
       })
       .catch(() => {
         if (!active) return;
+        setAgentSettingsAvailable(false);
         setAgentSettingsDraft(DEFAULT_AGENT_SETTINGS);
       })
       .finally(() => {
@@ -949,7 +954,7 @@ export function SettingsPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [agentSettingsLoadAttempt]);
 
   useEffect(() => {
     let active = true;
@@ -1586,6 +1591,8 @@ export function SettingsPage() {
     patch: BotSettingsPatch,
     options?: { successMessage?: string }
   ): Promise<boolean> => {
+    if (!agentSettingsAvailable) return Promise.resolve(false);
+
     const run = async (): Promise<boolean> => {
       const previousDraft = agentSettingsDraftRef.current;
       setAgentSettingsSaving(true);
@@ -1682,7 +1689,13 @@ export function SettingsPage() {
   const heartbeatStatusLabel = getHeartbeatStatusLabel(heartbeatState, heartbeatLoading, t);
 
   const handleResetAgentDefaults = () => {
-    if (agentSettingsLoading || agentSettingsSaving || isAtAgentDefaults) return;
+    if (
+      agentSettingsLoading ||
+      !agentSettingsAvailable ||
+      agentSettingsSaving ||
+      isAtAgentDefaults
+    )
+      return;
     setSessionTimeoutError(null);
     setSessionTimeoutDraft(String(AGENT_DEFAULTS_RESET_PATCH.session_timeout_minutes));
     setAgentSettingsDraft((current) => ({ ...current, ...AGENT_DEFAULTS_RESET_PATCH }));
@@ -1694,7 +1707,7 @@ export function SettingsPage() {
   };
 
   const commitSessionTimeoutDraft = async () => {
-    if (agentSettingsLoading) return;
+    if (agentSettingsLoading || !agentSettingsAvailable) return;
     const parsed = Number(sessionTimeoutDraft);
     if (
       !Number.isInteger(parsed) ||
@@ -2518,20 +2531,26 @@ export function SettingsPage() {
               meta={
                 agentSettingsLoading
                   ? t("settingsModal.agentSettings.loadingShort", { defaultValue: "Loading" })
-                  : t("settingsModal.agentSettings.ready", { defaultValue: "Tenant defaults" })
+                  : agentSettingsAvailable
+                    ? t("settingsModal.agentSettings.ready", { defaultValue: "Tenant defaults" })
+                    : t("settingsModal.agentSettings.unavailableShort", {
+                        defaultValue: "Unavailable",
+                      })
               }
               action={
-                <V2Button
-                  size="sm"
-                  variant="ghost"
-                  data-testid="settings-agent-reset"
-                  disabled={agentSettingsLoading || agentSettingsSaving || isAtAgentDefaults}
-                  onClick={handleResetAgentDefaults}
-                >
-                  {t("settingsModal.agentSettings.resetDefaults", {
-                    defaultValue: "Reset to defaults",
-                  })}
-                </V2Button>
+                agentSettingsAvailable ? (
+                  <V2Button
+                    size="sm"
+                    variant="ghost"
+                    data-testid="settings-agent-reset"
+                    disabled={agentSettingsLoading || agentSettingsSaving || isAtAgentDefaults}
+                    onClick={handleResetAgentDefaults}
+                  >
+                    {t("settingsModal.agentSettings.resetDefaults", {
+                      defaultValue: "Reset to defaults",
+                    })}
+                  </V2Button>
+                ) : null
               }
             >
               {agentSettingsLoading ? (
@@ -2540,7 +2559,24 @@ export function SettingsPage() {
                     defaultValue: "Loading Agent settings...",
                   })}
                 </p>
-              ) : null}
+              ) : !agentSettingsAvailable ? (
+                <div className="zaki-settings-v2__control-stack" role="alert">
+                  <p className="v2-body-sm">
+                    {t("settingsModal.agentSettings.unavailable", {
+                      defaultValue:
+                        "Unable to load Agent settings. Your saved defaults have not been changed.",
+                    })}
+                  </p>
+                  <V2Button
+                    size="sm"
+                    variant="default"
+                    onClick={() => setAgentSettingsLoadAttempt((attempt) => attempt + 1)}
+                  >
+                    {t("common.retry", { defaultValue: "Retry" })}
+                  </V2Button>
+                </div>
+              ) : (
+                <>
               <p className="v2-body-sm">
                 {t("settingsModal.agentSettings.defaultsNotice", {
                   defaultValue:
@@ -2765,6 +2801,8 @@ export function SettingsPage() {
                   </V2Badge>
                 </div>
               </V2SettingsRow>
+                </>
+              )}
               </V2SettingsBlock>
             </ActiveSettingsSection>
 
@@ -3293,6 +3331,7 @@ export function SettingsPage() {
                   </V2Button>
                 </div>
               </V2SettingsRow>
+              {agentSettingsAvailable ? (
               <details className="zaki-settings-v2__advanced-details">
                 <summary>
                   {t("settingsModal.memoryData.advanced.title", {
@@ -3337,6 +3376,20 @@ export function SettingsPage() {
                   />
                 </V2SettingsRow>
               </details>
+              ) : (
+                <GatedRow
+                  name={t("settingsModal.memoryData.advanced.title", {
+                    defaultValue: "Advanced Agent memory behavior",
+                  })}
+                  reason={t("settingsModal.agentSettings.unavailable", {
+                    defaultValue:
+                      "Unable to load Agent settings. Your saved defaults have not been changed.",
+                  })}
+                  badge={t("settingsModal.agentSettings.unavailableShort", {
+                    defaultValue: "Unavailable",
+                  })}
+                />
+              )}
               <div className="zaki-settings-v2__actions">
                 <V2Button size="sm" disabled={isExporting} onClick={() => void handleExport()}>
                   {isExporting

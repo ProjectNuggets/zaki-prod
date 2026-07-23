@@ -2950,6 +2950,8 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 .v2-settings-nav {
   position: sticky;
   top: 0;
+  display: flex;
+  flex-direction: column;
   height: calc(100dvh - 78px);
   min-height: 0;
   border-right: 1px solid var(--v2-hairline);
@@ -2977,7 +2979,8 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   text-transform: uppercase;
 }
 
-.v2-settings-nav__head h1 {
+.v2-settings-nav__title {
+  margin: 0;
   color: var(--v2-ink-1);
   font-family: var(--v2-font-mono);
   font-size: 15px;
@@ -2987,7 +2990,11 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
 .v2-settings-nav__list {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 10px 0;
   position: relative;
   z-index: 1;
@@ -3011,7 +3018,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
   grid-template-columns: 15px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  min-height: 34px;
+  min-height: 44px;
   padding: 0 18px;
   border-left: 2px solid transparent;
   color: var(--v2-ink-2);
@@ -4228,6 +4235,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
     position: sticky;
     top: 0;
     z-index: 20;
+    display: block;
     height: auto;
     border-right: 0;
     border-bottom: 1px solid var(--v2-hairline);
@@ -4241,6 +4249,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
     display: flex;
     flex-direction: row;
     gap: 4px;
+    overflow-y: hidden;
     overflow-x: auto;
     padding: 8px;
     scroll-padding-inline: 8px;
@@ -4248,7 +4257,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
   .v2-settings-nav__list a {
     flex: 0 0 150px;
-    min-height: 38px;
+    min-height: 44px;
     padding: 0 8px;
     border-left: 0;
     border: 1px solid transparent;
@@ -4392,7 +4401,7 @@ body.zaki-agent-focus-active .zaki-product-rail__button:not([aria-current="page"
 
   .v2-settings-nav__list a {
     flex-basis: 128px;
-    min-height: 42px;
+    min-height: 44px;
   }
 
   .v2-settings-block {
