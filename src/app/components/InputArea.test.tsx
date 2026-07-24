@@ -1,10 +1,12 @@
 import "@testing-library/jest-dom";
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
+import { transcribeAudio } from "@/lib/api";
 import { InputArea } from "./InputArea";
 
 const navigateMock = jest.fn();
+const mockTranscribeAudio = jest.mocked(transcribeAudio);
 let entitlementsData = {
   data: {
     plan: { tier: "free", status: "inactive" },
@@ -71,9 +73,17 @@ jest.mock("@/lib/productTelemetry", () => ({
   trackProductEvent: jest.fn(),
 }));
 
+jest.mock("@/lib/api", () => ({
+  ...jest.requireActual("@/lib/api"),
+  transcribeAudio: jest.fn(),
+}));
+
 describe("InputArea primary action button", () => {
   beforeEach(() => {
     navigateMock.mockReset();
+    mockTranscribeAudio.mockReset();
+    jest.mocked(toast.error).mockReset();
+    jest.mocked(toast.info).mockReset();
     entitlementsData = {
       data: {
         plan: { tier: "free", status: "inactive" },
@@ -301,6 +311,290 @@ describe("InputArea primary action button", () => {
 
       fireEvent.click(screen.getByTestId("voice-dictate-button"));
       expect(toast.error).toHaveBeenCalledWith("input.voice.errorNoBrowser");
+    } finally {
+      if (mediaDevicesDescriptor) {
+        Object.defineProperty(navigator, "mediaDevices", mediaDevicesDescriptor);
+      } else {
+        Reflect.deleteProperty(navigator, "mediaDevices");
+      }
+      if (mediaRecorderDescriptor) {
+        Object.defineProperty(globalThis, "MediaRecorder", mediaRecorderDescriptor);
+      } else {
+        Reflect.deleteProperty(globalThis, "MediaRecorder");
+      }
+    }
+  });
+
+  it("releases the microphone when recorder setup is unsupported", async () => {
+    const mediaDevicesDescriptor = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+    const mediaRecorderDescriptor = Object.getOwnPropertyDescriptor(globalThis, "MediaRecorder");
+    const stopTrack = jest.fn();
+    const stream = { getTracks: () => [{ stop: stopTrack }] } as unknown as MediaStream;
+
+    class UnsupportedMediaRecorder {
+      static isTypeSupported() {
+        return false;
+      }
+
+      constructor() {
+        const error = new Error("No supported recording codec");
+        error.name = "NotSupportedError";
+        throw error;
+      }
+    }
+
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: jest.fn().mockResolvedValue(stream) },
+    });
+    Object.defineProperty(globalThis, "MediaRecorder", {
+      configurable: true,
+      value: UnsupportedMediaRecorder,
+    });
+
+    try {
+      render(
+        <InputArea
+          onSend={jest.fn()}
+          attachments={[]}
+          setAttachments={jest.fn()}
+          zakiBotMode
+        />
+      );
+
+      fireEvent.click(screen.getByTestId("voice-dictate-button"));
+
+      await waitFor(() => expect(stopTrack).toHaveBeenCalledTimes(1));
+      expect(toast.error).toHaveBeenCalledWith("input.voice.errorNoBrowser");
+      expect(toast.error).not.toHaveBeenCalledWith("input.voice.errorMicAccess");
+    } finally {
+      if (mediaDevicesDescriptor) {
+        Object.defineProperty(navigator, "mediaDevices", mediaDevicesDescriptor);
+      } else {
+        Reflect.deleteProperty(navigator, "mediaDevices");
+      }
+      if (mediaRecorderDescriptor) {
+        Object.defineProperty(globalThis, "MediaRecorder", mediaRecorderDescriptor);
+      } else {
+        Reflect.deleteProperty(globalThis, "MediaRecorder");
+      }
+    }
+  });
+
+  it("rejects a raw Opus default recording rather than mislabeling it as Ogg", async () => {
+    const mediaDevicesDescriptor = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+    const mediaRecorderDescriptor = Object.getOwnPropertyDescriptor(globalThis, "MediaRecorder");
+    const stopTrack = jest.fn();
+    const stream = { getTracks: () => [{ stop: stopTrack }] } as unknown as MediaStream;
+
+    class RawOpusMediaRecorder {
+      static isTypeSupported() {
+        return false;
+      }
+
+      mimeType = "audio/opus";
+    }
+
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: jest.fn().mockResolvedValue(stream) },
+    });
+    Object.defineProperty(globalThis, "MediaRecorder", {
+      configurable: true,
+      value: RawOpusMediaRecorder,
+    });
+
+    try {
+      render(
+        <InputArea
+          onSend={jest.fn()}
+          attachments={[]}
+          setAttachments={jest.fn()}
+          zakiBotMode
+        />
+      );
+
+      fireEvent.click(screen.getByTestId("voice-dictate-button"));
+
+      await waitFor(() => expect(stopTrack).toHaveBeenCalledTimes(1));
+      expect(toast.error).toHaveBeenCalledWith("input.voice.errorNoBrowser");
+      expect(mockTranscribeAudio).not.toHaveBeenCalled();
+    } finally {
+      if (mediaDevicesDescriptor) {
+        Object.defineProperty(navigator, "mediaDevices", mediaDevicesDescriptor);
+      } else {
+        Reflect.deleteProperty(navigator, "mediaDevices");
+      }
+      if (mediaRecorderDescriptor) {
+        Object.defineProperty(globalThis, "MediaRecorder", mediaRecorderDescriptor);
+      } else {
+        Reflect.deleteProperty(globalThis, "MediaRecorder");
+      }
+    }
+  });
+
+  it("cancels active dictation when a typed Agent turn starts streaming", async () => {
+    const mediaDevicesDescriptor = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+    const mediaRecorderDescriptor = Object.getOwnPropertyDescriptor(globalThis, "MediaRecorder");
+    const blobArrayBufferDescriptor = Object.getOwnPropertyDescriptor(Blob.prototype, "arrayBuffer");
+    const readCapturedAudio = jest.fn(async () => new Uint8Array([1, 2, 3]).buffer);
+    const stopTrack = jest.fn();
+    const stopRecorder = jest.fn();
+    const stream = { getTracks: () => [{ stop: stopTrack }] } as unknown as MediaStream;
+
+    class FakeMediaRecorder {
+      static isTypeSupported() {
+        return true;
+      }
+
+      state: "inactive" | "recording" = "inactive";
+      ondataavailable: ((event: { data: Blob }) => void) | null = null;
+      onstop: (() => void) | null = null;
+
+      start() {
+        this.state = "recording";
+      }
+
+      stop() {
+        stopRecorder();
+        this.state = "inactive";
+        this.ondataavailable?.({ data: new Blob(["captured audio"], { type: "audio/webm" }) });
+        this.onstop?.();
+      }
+    }
+
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: jest.fn().mockResolvedValue(stream) },
+    });
+    Object.defineProperty(globalThis, "MediaRecorder", {
+      configurable: true,
+      value: FakeMediaRecorder,
+    });
+    Object.defineProperty(Blob.prototype, "arrayBuffer", {
+      configurable: true,
+      value: readCapturedAudio,
+    });
+
+    const onSend = jest.fn();
+    try {
+      const { rerender } = render(
+        <InputArea
+          onSend={onSend}
+          attachments={[]}
+          setAttachments={jest.fn()}
+          zakiBotMode
+          isSending={false}
+        />
+      );
+
+      fireEvent.change(screen.getByRole("combobox"), { target: { value: "send this draft" } });
+      fireEvent.click(screen.getByTestId("voice-dictate-button"));
+      await waitFor(() =>
+        expect(screen.getByTestId("voice-dictate-button")).toHaveAttribute("data-recording", "true")
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+      expect(onSend).toHaveBeenCalledTimes(1);
+
+      rerender(
+        <InputArea
+          onSend={onSend}
+          attachments={[]}
+          setAttachments={jest.fn()}
+          zakiBotMode
+          isSending
+        />
+      );
+
+      await waitFor(() => expect(stopRecorder).toHaveBeenCalledTimes(1));
+      expect(stopTrack).toHaveBeenCalledTimes(1);
+      expect(readCapturedAudio).not.toHaveBeenCalled();
+      expect(mockTranscribeAudio).not.toHaveBeenCalled();
+    } finally {
+      if (mediaDevicesDescriptor) {
+        Object.defineProperty(navigator, "mediaDevices", mediaDevicesDescriptor);
+      } else {
+        Reflect.deleteProperty(navigator, "mediaDevices");
+      }
+      if (mediaRecorderDescriptor) {
+        Object.defineProperty(globalThis, "MediaRecorder", mediaRecorderDescriptor);
+      } else {
+        Reflect.deleteProperty(globalThis, "MediaRecorder");
+      }
+      if (blobArrayBufferDescriptor) {
+        Object.defineProperty(Blob.prototype, "arrayBuffer", blobArrayBufferDescriptor);
+      } else {
+        Reflect.deleteProperty(Blob.prototype, "arrayBuffer");
+      }
+    }
+  });
+
+  it("releases a late microphone permission grant after a typed Agent send", async () => {
+    const mediaDevicesDescriptor = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+    const mediaRecorderDescriptor = Object.getOwnPropertyDescriptor(globalThis, "MediaRecorder");
+    const stopTrack = jest.fn();
+    const mediaRecorderCreated = jest.fn();
+    const stream = { getTracks: () => [{ stop: stopTrack }] } as unknown as MediaStream;
+    let resolveMicrophoneRequest!: (stream: MediaStream) => void;
+
+    class FakeMediaRecorder {
+      static isTypeSupported() {
+        return true;
+      }
+
+      state: "inactive" | "recording" = "inactive";
+      ondataavailable: ((event: { data: Blob }) => void) | null = null;
+      onstop: (() => void) | null = null;
+
+      constructor() {
+        mediaRecorderCreated();
+      }
+
+      start() {
+        this.state = "recording";
+      }
+
+      stop() {
+        this.state = "inactive";
+        this.onstop?.();
+      }
+    }
+
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: jest.fn(
+          () => new Promise<MediaStream>((resolve) => { resolveMicrophoneRequest = resolve; })
+        ),
+      },
+    });
+    Object.defineProperty(globalThis, "MediaRecorder", {
+      configurable: true,
+      value: FakeMediaRecorder,
+    });
+
+    const onSend = jest.fn();
+    try {
+      render(
+        <InputArea
+          onSend={onSend}
+          attachments={[]}
+          setAttachments={jest.fn()}
+          zakiBotMode
+          isSending={false}
+        />
+      );
+
+      fireEvent.change(screen.getByRole("combobox"), { target: { value: "send this draft" } });
+      fireEvent.click(screen.getByTestId("voice-dictate-button"));
+
+      fireEvent.click(screen.getByRole("button", { name: "input.sendAria" }));
+      expect(onSend).toHaveBeenCalledTimes(1);
+      resolveMicrophoneRequest(stream);
+
+      await waitFor(() => expect(stopTrack).toHaveBeenCalledTimes(1));
+      expect(mediaRecorderCreated).not.toHaveBeenCalled();
     } finally {
       if (mediaDevicesDescriptor) {
         Object.defineProperty(navigator, "mediaDevices", mediaDevicesDescriptor);
