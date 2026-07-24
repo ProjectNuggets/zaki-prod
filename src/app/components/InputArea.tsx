@@ -44,9 +44,62 @@ import { toast } from "sonner";
 import { SlashCommandPalette } from "./chat/SlashCommandPalette";
 
 const MAX_RECORDING_SECONDS = 60;
+const PREFERRED_MEDIA_RECORDER_MIME_TYPES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/mp4",
+  "audio/ogg;codecs=opus",
+  "audio/ogg",
+  "audio/wav",
+] as const;
 const SLASH_LISTBOX_ID = "slash-command-listbox";
 
 const slashOptionId = (index: number) => `slash-command-option-${index}`;
+
+type VoiceRecordingFormat = "webm" | "m4a" | "ogg" | "wav";
+
+function preferredMediaRecorderMimeType(): string | null {
+  if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
+    return null;
+  }
+  try {
+    return (
+      PREFERRED_MEDIA_RECORDER_MIME_TYPES.find((mimeType) =>
+        MediaRecorder.isTypeSupported(mimeType)
+      ) ?? null
+    );
+  } catch {
+    return null;
+  }
+}
+
+function voiceRecordingFormat(mimeType: string): VoiceRecordingFormat | null {
+  const normalized = mimeType.toLowerCase();
+  if (normalized.includes("webm")) return "webm";
+  if (normalized.includes("mp4") || normalized.includes("m4a")) return "m4a";
+  if (normalized.includes("ogg")) return "ogg";
+  if (normalized.includes("wav")) return "wav";
+  return null;
+}
+
+function stopRecordingStream(stream: MediaStream | null) {
+  stream?.getTracks().forEach((track) => {
+    try {
+      track.stop();
+    } catch {
+      // A failed stop must not prevent us from releasing the remaining tracks.
+    }
+  });
+}
+
+function isUnsupportedRecordingSetupError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    (error as { name?: unknown }).name === "NotSupportedError"
+  );
+}
 
 function detectSlash(value: string): { active: boolean; filter: string } {
   if (!value.startsWith("/")) return { active: false, filter: "" };
@@ -694,6 +747,10 @@ export function InputArea({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingCancelledRef = useRef(false);
+  // Incrementing this invalidates a microphone request that is still waiting
+  // on browser permission. A MediaStream can arrive after its UI has gone
+  // away, so a recorder ref alone cannot safely represent an active attempt.
+  const recordingAttemptRef = useRef(0);
   const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -718,25 +775,45 @@ export function InputArea({
       void trackProductEvent({ event: "voice_dictate_failed", source: "chat_input" });
       return;
     }
+    const recordingAttempt = ++recordingAttemptRef.current;
+    recordingCancelledRef.current = false;
+    let stream: MediaStream | null = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Prefer webm (Chrome/Edge), fall back to mp4 (Safari/iOS), then wav
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/mp4")
-          ? "audio/mp4"
-          : "audio/wav";
-      const recorder = new MediaRecorder(stream, { mimeType });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (recordingAttempt !== recordingAttemptRef.current) {
+        stopRecordingStream(stream);
+        stream = null;
+        return;
+      }
+      const requestedMimeType = preferredMediaRecorderMimeType();
+      // When no preferred codec is available, let the browser choose its own
+      // default. Passing a made-up MIME type makes MediaRecorder throw after
+      // the mic is already open.
+      const recorder = requestedMimeType
+        ? new MediaRecorder(stream, { mimeType: requestedMimeType })
+        : new MediaRecorder(stream);
+      const mimeType = recorder.mimeType || requestedMimeType || "";
+      const format = voiceRecordingFormat(mimeType);
+      if (!format) {
+        stopRecordingStream(stream);
+        stream = null;
+        toast.error(t("input.voice.errorNoBrowser"));
+        void trackProductEvent({ event: "voice_dictate_failed", source: "chat_input" });
+        return;
+      }
       audioChunksRef.current = [];
-      recordingCancelledRef.current = false;
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
       recorder.onstop = async () => {
         // Stop all tracks to release the mic
-        stream.getTracks().forEach((t) => t.stop());
-        clearRecordingTimers();
-        if (recordingCancelledRef.current) return;
+        stopRecordingStream(stream);
+        const isCurrentAttempt = recordingAttempt === recordingAttemptRef.current;
+        if (mediaRecorderRef.current === recorder) {
+          mediaRecorderRef.current = null;
+          clearRecordingTimers();
+        }
+        if (!isCurrentAttempt || recordingCancelledRef.current) return;
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
         if (blob.size === 0) {
           toast.info(t("input.voice.errorGeneric"));
@@ -750,7 +827,6 @@ export function InputArea({
           let binary = "";
           bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
           const b64 = btoa(binary);
-          const format = mimeType.includes("webm") ? "webm" : mimeType.includes("mp4") ? "m4a" : "wav";
           const result = await transcribeAudio(b64, format);
           if (!result.response.ok) {
             toast.error(
@@ -794,8 +870,18 @@ export function InputArea({
           setIsRecording(false);
         }
       }, MAX_RECORDING_SECONDS * 1000);
-    } catch {
-      toast.error(t("input.voice.errorMicAccess"));
+    } catch (error) {
+      stopRecordingStream(stream);
+      if (recordingAttempt !== recordingAttemptRef.current) return;
+      mediaRecorderRef.current = null;
+      clearRecordingTimers();
+      toast.error(
+        t(
+          isUnsupportedRecordingSetupError(error)
+            ? "input.voice.errorNoBrowser"
+            : "input.voice.errorMicAccess"
+        )
+      );
       void trackProductEvent({ event: "voice_dictate_failed", source: "chat_input" });
     }
   }, [clearRecordingTimers, t]);
@@ -809,23 +895,31 @@ export function InputArea({
   }, []);
 
   const cancelRecording = useCallback(() => {
+    recordingCancelledRef.current = true;
+    recordingAttemptRef.current += 1;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-      recordingCancelledRef.current = true;
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       clearRecordingTimers();
     }
   }, [clearRecordingTimers]);
 
+  // A parent-driven stream transition removes the recorder controls from the
+  // composer. Never leave a live microphone behind that invisible transition.
+  useEffect(() => {
+    if (isSending) cancelRecording();
+  }, [cancelRecording, isSending]);
+
   // Release any pending timers and stop an active recorder on unmount.
   useEffect(() => {
     return () => {
       clearRecordingTimers();
+      recordingCancelledRef.current = true;
+      recordingAttemptRef.current += 1;
       if (
         mediaRecorderRef.current &&
         mediaRecorderRef.current.state !== "inactive"
       ) {
-        recordingCancelledRef.current = true;
         mediaRecorderRef.current.stop();
       }
     };
@@ -861,6 +955,10 @@ export function InputArea({
       const isOverride = textOverride !== undefined;
       const text = isOverride ? textOverride : inputValue;
       if (!text.trim() && attachments.length === 0) return;
+      // A typed send wins over any active or pending dictation. Invalidate the
+      // attempt before the parent switches the composer into streaming mode so
+      // a late microphone permission grant cannot become an invisible upload.
+      cancelRecording();
       // Prepend pinned-memory context so the agent sees the user's
       // explicitly-pinned brain entries on every turn. Skip the prefix
       // for programmatic overrides (compact, quick replies) and any
@@ -900,6 +998,7 @@ export function InputArea({
     [
       isSending,
       sendLocked,
+      cancelRecording,
       inputValue,
       attachments,
       onSend,

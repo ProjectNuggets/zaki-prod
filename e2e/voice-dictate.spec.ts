@@ -13,7 +13,14 @@ async function bootstrapSession(page: Page) {
 async function mockMediaRecorder(page: Page) {
   // Stub getUserMedia + MediaRecorder so the mic button works without real mic access.
   await page.addInitScript(() => {
-    const fakeStream = { getTracks: () => [{ stop: () => {} }] } as unknown as MediaStream;
+    const testState = { recorderStops: 0, trackStops: 0 };
+    Object.defineProperty(window, "__voiceDictateTest", {
+      configurable: true,
+      value: testState,
+    });
+    const fakeStream = {
+      getTracks: () => [{ stop: () => { testState.trackStops += 1; } }],
+    } as unknown as MediaStream;
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
       value: { getUserMedia: async () => fakeStream },
@@ -27,6 +34,7 @@ async function mockMediaRecorder(page: Page) {
       constructor(_stream: MediaStream, _opts?: { mimeType?: string }) {}
       start() { this.state = "recording"; }
       stop() {
+        testState.recorderStops += 1;
         this.state = "inactive";
         const blob = new Blob([new Uint8Array([1, 2, 3, 4])], { type: "audio/webm" });
         this.ondataavailable?.({ data: blob });
@@ -277,5 +285,43 @@ test.describe("voice dictation", () => {
       page.getByText("Voice input is unavailable right now. Try again later."),
     ).toBeVisible();
     await expect(page.locator("#chat-input")).toHaveValue("");
+  });
+
+  test("cancels dictation before a typed Agent turn starts", async ({ page }) => {
+    await mockMediaRecorder(page);
+    await mockAppShell(page);
+    await bootstrapSession(page);
+
+    let transcribeCalled = false;
+    await page.route("**/api/agent/voice/transcribe", (route) => {
+      transcribeCalled = true;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ text: "this must not be inserted" }),
+      });
+    });
+    await page.route("**/api/agent/chat/stream", (route) =>
+      route.fulfill({
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+        body: "event: done\ndata: {}\n\n",
+      }),
+    );
+
+    await page.goto("/spaces/zaky/threads/t-1");
+    await page.locator("#chat-input").fill("Send the typed draft instead");
+    await page.getByRole("button", { name: /tap to record/i }).click();
+    await expect(page.getByRole("button", { name: "Finish recording" })).toBeVisible();
+
+    await page.locator('button[type="submit"]').click();
+
+    await expect.poll(() => page.evaluate(() => {
+      const state = (window as typeof window & {
+        __voiceDictateTest?: { recorderStops: number; trackStops: number };
+      }).__voiceDictateTest;
+      return state ? [state.recorderStops, state.trackStops] : null;
+    })).toEqual([1, 1]);
+    expect(transcribeCalled).toBe(false);
   });
 });
