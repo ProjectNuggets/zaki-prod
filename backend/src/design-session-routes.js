@@ -3,6 +3,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { normalizeDesignProxyPath } from "./design-proxy-path.js";
 import { isTerminalDesignSessionState } from "./design-session-store.js";
+import { reconcileWorkerProjects } from "./design-worker-reconcile.js";
 
 const OPAQUE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
@@ -29,6 +30,46 @@ export function buildDesignSessionRouter({
 }) {
   const router = express.Router();
   const lifecycleJson = express.json({ limit: "32kb", strict: true });
+
+  // The worker's project DB is ephemeral (emptyDir + checkpoint-restore), so a restore that
+  // predates the user's latest project — or a fresh pod — leaves the worker missing projects the
+  // registry still owns, and project-scoped requests 404/500. Reconcile the worker against the
+  // registry once per (session, generation): the guard makes it run on the first proxied request
+  // after any restart (generation bumps) and stay out of the hot path thereafter. In-memory and
+  // per-pod, so a hub restart or a second replica just reconciles again — idempotent by design.
+  // ponytail: Map is keyed by sessionId (overwritten on generation change), so it holds ~one entry
+  // per distinct session this pod has served — fine at staging scale; add eviction if that grows.
+  const reconcileGuard = new Map();
+  const reconcileWorkerProjectsOnce = (session, requestId) => {
+    const cached = reconcileGuard.get(session.sessionId);
+    if (cached && cached.generation === session.generation) return cached.promise;
+    const promise = reconcileWorkerProjects({
+      controller,
+      dbQuery,
+      session,
+      requestId,
+      log: (fields) => console.warn(JSON.stringify({ level: "info", ...fields })),
+    }).then((result) => {
+      // A skipped reconcile (worker list unreadable) leaves nothing cached so a later request
+      // retries; a completed one latches this generation.
+      if (result?.skipped) reconcileGuard.delete(session.sessionId);
+      return result;
+    }).catch((error) => {
+      reconcileGuard.delete(session.sessionId);
+      console.warn(JSON.stringify({
+        level: "warn",
+        event: "design.worker.reconcile_error",
+        sessionId: session.sessionId,
+        generation: session.generation,
+        message: error?.message,
+        requestId,
+      }));
+      return { seeded: 0, present: 0, skipped: true };
+    });
+    reconcileGuard.set(session.sessionId, { generation: session.generation, promise });
+    return promise;
+  };
+
   router.use((req, res, next) => {
     if (!enabled) {
       return res.status(404).json({
@@ -156,6 +197,10 @@ export function buildDesignSessionRouter({
           requestId,
         });
       }
+      // Session is proxyable (worker up + restore-ready), so before this request can hit a project
+      // the worker may have lost to an ephemeral restart, make sure the registry's projects exist
+      // in the worker. Runs once per (session, generation); a failure here never blocks the proxy.
+      await reconcileWorkerProjectsOnce(session, requestId);
       const method = req.method.toUpperCase();
       const body = proxyBody(req, method);
       const authorization = await authorizeSessionProxy({
