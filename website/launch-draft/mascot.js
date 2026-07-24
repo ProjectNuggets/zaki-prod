@@ -2167,49 +2167,6 @@
     organism.setPalette(__tok("--org-a", "#3a3a22"), __tok("--org-b", "#131309"));
   }
 
-  function initGateFace(gate) {
-    var host = gate && gate.querySelector(".cs-guide-face");
-    if (!host || host.__csFaceStarted) return;
-    // The image in the gate is the reduced-motion equivalent. Do not create
-    // a 5k/9k-particle renderer only to leave it visually still.
-    if (PREFERS_REDUCED) {
-      host.__csFaceStarted = true;
-      return;
-    }
-    if (!window.createOrganism) {
-      host.__csFaceRetry = window.setTimeout(function () { initGateFace(gate); }, 70);
-      return;
-    }
-    host.__csFaceStarted = true;
-    try {
-      var organism = window.createOrganism(host, {
-        count: window.innerWidth < 760 ? 5000 : 9000,
-        blending: "normal",
-        colorA: __tok("--org-a", "#3a3a22"),
-        colorB: __tok("--org-b", "#131309"),
-        alpha: 2.2,
-        freq: 1.6,
-        amp: 0.28,
-        speed: 0.82,
-        rotation: 0.02,
-        dprMax: 1.5,
-      });
-      organism.setShape("img:/site/assets/nova-nuggets-particle-mark.png");
-      host.__csFaceOrganism = organism;
-      host.classList.add("is-live");
-    } catch (e) {
-      // The static mark stays visible on low-power or WebGL-blocked browsers.
-    }
-  }
-
-  function destroyGateFace(gate) {
-    var host = gate && gate.querySelector(".cs-guide-face");
-    if (!host) return;
-    if (host.__csFaceRetry) window.clearTimeout(host.__csFaceRetry);
-    if (host.__csFaceOrganism && host.__csFaceOrganism.destroy) host.__csFaceOrganism.destroy();
-    host.__csFaceOrganism = null;
-  }
-
   function mountFooterFace(host) {
     if (!host || host.__csFooterFaceStarted) return;
     // Keep the footer's static mark for people who opt out of motion.
@@ -4653,6 +4610,52 @@
     refreshReducedMascot();
   }
 
+  // The page shell listens for this boundary before it starts its hero work.
+  // Keep a durable state value as well as the event: the selected path can
+  // finish before a late-loading consumer attaches its listener.
+  function emitGateUnlocked(mode, source) {
+    if (window.__csGateUnlocked) return;
+    if (!window.__csGateUnlockPending) {
+      window.__csGateUnlockPending = {
+        mode: mode || state.guideMode || "manual",
+        source: source || "choice",
+        at: Date.now(),
+      };
+    }
+
+    var attempts = 0;
+    function publishWhenUsable() {
+      if (window.__csGateUnlocked) return;
+      var pageReady = document.getElementById("cs-root") && window.__csApp;
+      var gate = state.gate;
+      var gateStillBlocks = document.documentElement.classList.contains("cs-guide-locked") ||
+        (gate && !gate.classList.contains("is-hidden"));
+      if (!pageReady || gateStillBlocks) {
+        // The page can take a beat to mount its component after the gate is
+        // painted. Never publish an unlock into a shell that cannot use it.
+        if (attempts < 120) {
+          attempts += 1;
+          window.setTimeout(publishWhenUsable, 25);
+        }
+        return;
+      }
+
+      var detail = window.__csGateUnlockPending;
+      window.__csGateUnlocked = detail;
+      window.__csGateUnlockPending = null;
+      var event;
+      try {
+        event = new CustomEvent("cs:gate-unlocked", { detail: detail });
+      } catch (e) {
+        event = document.createEvent("CustomEvent");
+        event.initCustomEvent("cs:gate-unlocked", false, false, detail);
+      }
+      window.dispatchEvent(event);
+    }
+
+    window.requestAnimationFrame(publishWhenUsable);
+  }
+
   function openGameSoon() {
     if (window.__csGame && window.__csGame.open) {
       window.__csGame.open({ beat: window.__csGameBeat || null });
@@ -4708,7 +4711,8 @@
     document.documentElement.classList.add("cs-guide-locked");
     document.body.appendChild(gate);
     setGateBackgroundInert(gate, true);
-    initGateFace(gate);
+    // The gate portrait is the static fallback image already in this markup.
+    // Do not mount a WebGL renderer before the visitor makes a choice.
     // Each choice is a subagent type; ZAKI remains the primary presence.
     Array.prototype.forEach.call(gate.querySelectorAll(".cs-guide-slot"), function (slot) {
       slot.addEventListener("click", function () {
@@ -4797,8 +4801,8 @@
       if (window.__csApp && window.__csApp.applyScroll) {
         try { window.__csApp.applyScroll(); } catch (e) {}
       }
+      emitGateUnlocked("manual", "game");
       window.setTimeout(function () {
-        destroyGateFace(gate);
         gate.remove();
         state.gate = null;
       }, 260);
@@ -4859,7 +4863,17 @@
       var hideAt = typeof dissolve === "object" ? dissolve.hide : dissolve;
       var guideAt = typeof dissolve === "object" ? dissolve.guide : hideAt;
       var swallowAt = hideAt ? Math.max(0, hideAt - 190) : 0;
-      window.setTimeout(function () { gate.classList.add("is-hidden"); }, hideAt);
+      var gateHidden = false;
+      var gateAccessibilityReleased = false;
+      function emitWhenGateIsUsable() {
+        if (!gateHidden || !gateAccessibilityReleased) return;
+        emitGateUnlocked(state.guideMode, state.guideMode + "-choice");
+      }
+      window.setTimeout(function () {
+        gate.classList.add("is-hidden");
+        gateHidden = true;
+        emitWhenGateIsUsable();
+      }, hideAt);
       window.setTimeout(function () {
         document.documentElement.classList.remove("cs-guide-locked");
         finishGateAccessibility(gate);
@@ -4871,6 +4885,8 @@
         // its own opacity via !important)
         var heroOrg = document.getElementById("hero-organism");
         if (heroOrg) heroOrg.style.opacity = "1";
+        gateAccessibilityReleased = true;
+        emitWhenGateIsUsable();
       }, swallowAt);
       if (state.guideMode === "manual") state.anchor = null; // idle takes it home
       // challenge links go straight into the arena
@@ -4878,7 +4894,6 @@
         window.setTimeout(function () { window.__csGame.open({ beat: window.__csGameBeat }); }, 900 + guideAt);
       }
       window.setTimeout(function () {
-        destroyGateFace(gate);
         gate.remove();
         state.gate = null;
       }, 640 + hideAt);
@@ -5501,6 +5516,7 @@
       window.setTimeout(function () {
         var veil = document.getElementById("cs-boot-veil");
         if (veil) veil.remove();
+        emitGateUnlocked("manual", "game-beat");
       }, 90);
       window.setTimeout(function () {
         if (window.__csGame) window.__csGame.open({ beat: window.__csGameBeat });
