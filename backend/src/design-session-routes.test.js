@@ -596,6 +596,49 @@ describe("Design public session routes", () => {
     expect(controllerProxy).not.toHaveBeenCalled();
   });
 
+  test("per-user proxy accepts a header-less SSE stream via the cookie's bound project", async () => {
+    // EventSource cannot set x-zaki-project-id, so the run-progress/memory streams arrive with no
+    // project header. In user scope the request must still proxy (using the cookie's project) — else
+    // the stream 400s and run output never reaches the UI.
+    const controllerProxy = jest.fn().mockResolvedValue(new Response("data: {}\n\n", {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    }));
+    const authorizeProxy = jest.fn().mockResolvedValue({ allowed: true, action: null, grant: null });
+    const workbenchAccess = createDesignWorkbenchAccess({ secret: "controller-secret-at-least-16", secure: false });
+    const cookie = workbenchAccess.issue({
+      userId: "42", sessionId: "sess_01", projectId: "project_01", generation: 7,
+    }).split(";")[0];
+    const app = express();
+    app.use("/api/design/sessions", buildDesignSessionRouter({
+      enabled: true,
+      sessionScope: "user",
+      resolveUser: jest.fn(),
+      resolveBillingUserById: jest.fn().mockResolvedValue({ id: "42" }),
+      resolveProxyAccess: (req, sessionId) => workbenchAccess.resolve(req, sessionId),
+      ensureSession: jest.fn(),
+      readSessionBinding: jest.fn().mockResolvedValue({
+        sessionId: "sess_01", projectId: "project_01", userId: "42",
+        tenantId: "default", state: "READY", generation: 7,
+      }),
+      updateSessionState: jest.fn(),
+      runInTransaction: jest.fn(),
+      dbQuery: jest.fn(),
+      createSessionId: jest.fn(),
+      controller: { ensure: jest.fn(), status: jest.fn(), stop: jest.fn(), proxy: controllerProxy },
+      getRequestId: () => "req_sse_stream",
+      authorizeProxy,
+    }));
+
+    // No .set("x-zaki-project-id", ...) — mirrors a real EventSource request.
+    const response = await request(app)
+      .get("/api/design/sessions/sess_01/proxy/api/projects/project_02/events")
+      .set("cookie", cookie);
+
+    expect(response.status).toBe(200);
+    expect(controllerProxy).toHaveBeenCalledTimes(1);
+  });
+
   test("allows read-only artifact delivery and rejects artifact mutations", async () => {
     const controllerProxy = jest.fn().mockResolvedValue(new Response("asset", {
       status: 206,

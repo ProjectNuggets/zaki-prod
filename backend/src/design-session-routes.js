@@ -145,14 +145,20 @@ export function buildDesignSessionRouter({
 
   router.all("/:sessionId/proxy/*", async (req, res) => {
     const sessionId = req.params.sessionId;
-    const projectId = String(req.get("x-zaki-project-id") || "");
     const targetPath = proxyTargetPath(req, sessionId, req.method.toUpperCase());
-    if (!validOpaqueId(sessionId) || !validOpaqueId(projectId) || !targetPath) {
-      return invalidRequest(res, getRequestId(req));
-    }
     const proxyAccess = req.get("authorization")
       ? null
       : await resolveProxyAccess?.(req, sessionId);
+    // EventSource (SSE) cannot set request headers, so the run-progress and memory streams reach the
+    // proxy with no x-zaki-project-id and would be rejected 400 — which is exactly what stops run
+    // output/artifacts from ever reaching the UI. In per-user mode the workbench cookie already binds
+    // the session, and the request project is only a focus pointer (the worker resolves the real
+    // project from the target path), so fall back to the cookie's bound project when the header is
+    // absent. Header-bearing requests (every fetch() the hosted transport rewrites) are unchanged.
+    const projectId = String(req.get("x-zaki-project-id") || "") || proxyAccess?.projectId || "";
+    if (!validOpaqueId(sessionId) || !validOpaqueId(projectId) || !targetPath) {
+      return invalidRequest(res, getRequestId(req));
+    }
     // Per-user sessions serve every project the user owns, so the workbench cookie binds (user,
     // session) only — the request's projectId is a focus pointer, not part of the cookie identity.
     // Asserting cookie.pid === request project (the per-project posture) would reject every project
