@@ -328,7 +328,10 @@ function createOrganism(container, options = {}) {
   const renderer = new THREE.WebGLRenderer({
     antialias: false,
     alpha: opts.background === null,
-    powerPreference: "high-performance",
+    // The launch shell now runs a compact, single-scene budget. Let the
+    // browser select its stable default GPU lane instead of forcing the most
+    // demanding context on embedded Chromium runtimes.
+    powerPreference: "default",
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, opts.dprMax));
   if (opts.background !== null) renderer.setClearColor(new THREE.Color(opts.background), 1);
@@ -571,6 +574,11 @@ function createOrganism(container, options = {}) {
       geometry.dispose();
       material.dispose();
       renderer.dispose();
+      // dispose releases Three resources, but does not guarantee that the
+      // browser immediately returns the WebGL context. The launch shell
+      // intentionally recreates a single scene as visitors move between
+      // chapters, so release that context deterministically when supported.
+      if (renderer.forceContextLoss) renderer.forceContextLoss();
       renderer.domElement.remove();
     },
   };

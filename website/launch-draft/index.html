@@ -39,6 +39,11 @@
   setTimeout(function () {
     if (!document.querySelector('.cs-guide-gate')) {
       document.documentElement.classList.remove('cs-guide-locked');
+      if (!window.__csGateUnlocked) {
+        var detail = { mode: 'manual', source: 'boot-failsafe', at: Date.now() };
+        window.__csGateUnlocked = detail;
+        try { window.dispatchEvent(new CustomEvent('cs:gate-unlocked', { detail: detail })); } catch (e) {}
+      }
     }
   }, 6500);
   try {
@@ -500,7 +505,7 @@ try {
   <!-- HERO -->
   <header id="top" data-screen-label="Hero" style="position:relative;min-height:100svh;display:flex;flex-direction:column;justify-content:center;padding:120px clamp(18px,4vw,44px) 60px;overflow:hidden">
     <!-- centerpiece: living particle organism (three.js) -->
-    <div id="hero-organism" data-organism="" data-org-birth="" data-org-variant="ink" data-org-count="15000" data-org-shape="text:ZAKI" data-org-cycle="text:ZAKI, organic, text:BRAIN, organic" data-org-mobile-shape="organic" data-org-mobile-cycle="organic" data-plx="-0.04" data-plx-c="" style="position:absolute;right:clamp(0px,4vw,80px);top:50%;transform:translateY(-50%);width:clamp(440px,60vw,940px);height:clamp(440px,60vw,940px);z-index:1;pointer-events:none;opacity:0;transition:opacity 1.5s cubic-bezier(.16,1,.3,1) .25s"></div>
+    <div id="hero-organism" data-organism="" data-org-birth="" data-org-variant="ink" data-org-count="6000" data-org-mobile-count="3000" data-org-shape="text:ZAKI" data-org-cycle="text:ZAKI, organic, text:BRAIN, organic" data-org-mobile-shape="organic" data-org-mobile-cycle="organic" data-plx="-0.04" data-plx-c="" style="position:absolute;right:clamp(0px,4vw,80px);top:50%;transform:translateY(-50%);width:clamp(440px,60vw,940px);height:clamp(440px,60vw,940px);z-index:1;pointer-events:none;opacity:0;transition:opacity 1.5s cubic-bezier(.16,1,.3,1) .25s"></div>
     <div data-plx="0.12" style="position:absolute;right:clamp(18px,6vw,90px);top:18%;width:clamp(96px,12vw,150px);height:clamp(96px,12vw,150px);z-index:3">
       <div style="position:absolute;inset:0;animation:cs-spin 13s linear infinite"><svg viewBox="0 0 100 100" style="width:100%;height:100%"><defs><path id="cs-c33" d="M50,50 m-40,0 a40,40 0 1,1 80,0 a40,40 0 1,1 -80,0"></path></defs><text style="font-family:'Geist Mono',monospace;font-size:8.4px;letter-spacing:2.1px;fill:var(--ink);text-transform:uppercase;font-weight:500"><textPath href="#cs-c33" startOffset="0">ZAKI · DON'T START ALONE · LIFE HACKING · </textPath></text></svg></div>
       <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center"><span style="width:38%;height:38%;border-radius:50%;background:var(--ink)"></span></div>
@@ -771,7 +776,7 @@ try {
   <!-- KINETIC STATEMENT BAND -->  <!-- KINETIC STATEMENT BAND -->
   <section data-dark="" data-screen-label="Statement" style="position:relative;background:var(--ink);color:var(--accent);padding:clamp(70px,13vw,180px) clamp(18px,4vw,44px);overflow:hidden">
     <canvas data-particles="" style="position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none"></canvas>
-    <div data-organism="" data-org-variant="glow" data-org-count="16000" data-org-cycle="organic, organic, organic, organic" style="position:absolute;right:-6%;top:50%;transform:translateY(-50%);width:min(56%,720px);height:100%;z-index:0;pointer-events:none"></div>
+    <div data-organism="" data-org-variant="glow" data-org-count="5000" data-org-mobile-count="2500" data-org-cycle="organic, organic, organic, organic" style="position:absolute;right:-6%;top:50%;transform:translateY(-50%);width:min(56%,720px);height:100%;z-index:0;pointer-events:none"></div>
     <div style="position:relative;z-index:1;max-width:1320px;margin:0 auto">
       <div style="font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:clamp(24px,3vw,40px)"><span data-scramble="">( One brain, many jobs )</span></div>
       <p style="margin:0;font-weight:700;font-size:clamp(2.6rem,9vw,9rem);line-height:.9;letter-spacing:-.04em;text-transform:uppercase">
@@ -1110,7 +1115,7 @@ class Component extends DCLogic {
       this.initMagnetic();
       this.initMarquee();
       this.initLottie();
-      this.initOrganism();
+      this.waitForGateThenInitOrganism();
       this.initColliders();
       this.initChapters();
       this.initParticles();
@@ -1252,6 +1257,40 @@ class Component extends DCLogic {
     });
   }
 
+  waitForGateThenInitOrganism() {
+    if (this._organismBooted || this._destroyed) return;
+    const html = document.documentElement;
+    const begin = () => {
+      if (this._organismBooted || this._destroyed) return;
+      this._organismBooted = true;
+      if (this._gateUnlockObserver) this._gateUnlockObserver.disconnect();
+      if (this._gateRemovalObserver) this._gateRemovalObserver.disconnect();
+      if (this._onGateUnlocked) window.removeEventListener('cs:gate-unlocked', this._onGateUnlocked);
+      this.initOrganism();
+    };
+
+    // The gate owns first paint. Do not allocate a WebGL context behind it;
+    // mascot.js emits the event after it has released modal isolation. The
+    // class observer is the fail-open path if a delayed/older gate cannot
+    // emit an event.
+    if (window.__csGateUnlocked || (!html.classList.contains('cs-guide-locked') && !document.querySelector('.cs-guide-gate'))) {
+      begin();
+      return;
+    }
+    this._onGateUnlocked = begin;
+    window.addEventListener('cs:gate-unlocked', this._onGateUnlocked, { once: true });
+    const failOpen = () => {
+      // A normal gate removes the lock while its exit animation is still
+      // visible. Wait for its explicit release event; only take this branch
+      // when there is no gate at all (the boot fail-open/older-script case).
+      if (!html.classList.contains('cs-guide-locked') && !document.querySelector('.cs-guide-gate')) begin();
+    };
+    this._gateUnlockObserver = new MutationObserver(failOpen);
+    this._gateUnlockObserver.observe(html, { attributes: true, attributeFilter: ['class'] });
+    this._gateRemovalObserver = new MutationObserver(failOpen);
+    this._gateRemovalObserver.observe(document.body, { childList: true });
+  }
+
   async initOrganism() {
     const els = Array.prototype.slice.call(this.root.querySelectorAll('[data-organism]'));
     if (!els.length) return;
@@ -1264,28 +1303,64 @@ class Component extends DCLogic {
       };
       const create = await this._waitFor(function(){ return window.createOrganism; }, 6000);
       if (!create || this._destroyed) return;
-      this.organisms = []; this._orgIvs = [];
-      els.forEach(c => {
+      this.organisms = []; this._orgEls = els;
+      const unmount = (c) => {
+        if (!c) return;
+        const org = c.__csOrg;
+        if (c.__csOrgCycle) window.clearInterval(c.__csOrgCycle);
+        c.__csOrgCycle = null;
+        if (org && org.destroy) {
+          try { org.destroy(); } catch (e) {}
+        }
+        c.__csOrg = null;
+        if (this.organisms) this.organisms = this.organisms.filter(item => item !== org);
+        if (this._activeOrganism === c) this._activeOrganism = null;
+      };
+      const mount = (c) => {
+        if (!c || c.__csOrg || this._destroyed) return;
+        // The V5 composition uses one live WebGL scene at a time. An offscreen
+        // scene is rebuilt when it returns instead of retaining a second GPU
+        // context behind the user.
+        if (this._activeOrganism && this._activeOrganism !== c) unmount(this._activeOrganism);
         const variant = c.getAttribute('data-org-variant') || 'ink';
         const cfg = variant === 'glow'
           ? { blending: 'additive', background: null, colorA: CS_ORG.ga, colorB: CS_ORG.gb, alpha: 1 }
           : { blending: 'normal', background: null, colorA: CS_ORG.a, colorB: CS_ORG.b, alpha: 2.4 };
-        cfg.count = mobile ? 8000 : (parseInt(c.getAttribute('data-org-count'), 10) || 18000);
-        cfg.freq = 1.6; cfg.amp = 0.34; cfg.speed = 1.0; cfg.rotation = 0.05; cfg.dprMax = 1.6;
-        const org = create(c, cfg);
+        const countAttr = mobile ? 'data-org-mobile-count' : 'data-org-count';
+        cfg.count = parseInt(c.getAttribute(countAttr), 10) || (mobile ? 2800 : 6000);
+        cfg.freq = 1.6; cfg.amp = 0.34; cfg.speed = 1.0; cfg.rotation = 0.05; cfg.dprMax = mobile ? 1 : 1.25;
+        let org;
+        try { org = create(c, cfg); } catch (e) { c.dataset.orgFallback = 'static'; return; }
         org.__csVariant = variant;
         this.organisms.push(org);
         c.__csOrg = org;
-        if (window.__csOrgIO) window.__csOrgIO.observe(c);
+        this._activeOrganism = c;
         const shape = mobile ? (c.getAttribute('data-org-mobile-shape') || c.getAttribute('data-org-shape')) : c.getAttribute('data-org-shape');
         if (shape) org.setShape(resolve(shape));
         const cycle = mobile ? (c.getAttribute('data-org-mobile-cycle') || c.getAttribute('data-org-cycle')) : c.getAttribute('data-org-cycle');
         if (cycle && !reduce) {
           const shapes = cycle.split(',').map(resolve);
           let i = 0;
-          this._orgIvs.push(setInterval(() => { i = (i + 1) % shapes.length; org.setShape(shapes[i]); }, 4200));
+          c.__csOrgCycle = setInterval(() => { i = (i + 1) % shapes.length; org.setShape(shapes[i]); }, 4200);
         }
-      });
+      };
+      this._unmountOrganism = unmount;
+      this._mountOrganism = mount;
+
+      // The hero is the only visual that can become live after the gate.
+      // Every other organism stays a zero-cost DOM placeholder until it nears
+      // the viewport, and the prior scene is disposed before a new one mounts.
+      const hero = els.find(c => c.id === 'hero-organism') || els[0];
+      mount(hero);
+      if (window.IntersectionObserver) {
+        this._organismObserver = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) mount(entry.target);
+            else unmount(entry.target);
+          });
+        }, { rootMargin: '180px 0px' });
+        els.forEach(c => this._organismObserver.observe(c));
+      }
     } catch (e) { console.warn('[organism] init failed', e); }
   }
 
@@ -1716,8 +1791,12 @@ class Component extends DCLogic {
     if (this._onMove) window.removeEventListener('mousemove', this._onMove);
     if (this._loopRAF) cancelAnimationFrame(this._loopRAF);
     this._destroyed = true;
-    if (this._orgIvs) this._orgIvs.forEach(iv => clearInterval(iv));
-    if (this.organisms) this.organisms.forEach(o => { try { o.destroy(); } catch (e) {} });
+    if (this._gateUnlockObserver) this._gateUnlockObserver.disconnect();
+    if (this._gateRemovalObserver) this._gateRemovalObserver.disconnect();
+    if (this._onGateUnlocked) window.removeEventListener('cs:gate-unlocked', this._onGateUnlocked);
+    if (this._organismObserver) this._organismObserver.disconnect();
+    if (this._unmountOrganism && this._orgEls) this._orgEls.forEach(c => this._unmountOrganism(c));
+    else if (this.organisms) this.organisms.forEach(o => { try { o.destroy(); } catch (e) {} });
     if (this._chaptersEl && this._chaptersEl.parentNode) this._chaptersEl.parentNode.removeChild(this._chaptersEl);
     if (this._lottieAnims) this._lottieAnims.forEach(a => { try { a.destroy(); } catch (e) {} });
     if (this.lenis) { try { this.lenis.destroy(); } catch (e) {} }

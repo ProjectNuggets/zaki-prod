@@ -2181,7 +2181,7 @@
     host.__csFooterFaceStarted = true;
     try {
       var organism = window.createOrganism(host, {
-        count: window.innerWidth < 760 ? 3600 : 6500,
+        count: window.innerWidth < 760 ? 1400 : 2800,
         blending: "normal",
         colorA: __tok("--org-glow-a", "#FCBDAC"),
         colorB: __tok("--accent", "#D24430"),
@@ -2190,7 +2190,7 @@
         amp: 0.22,
         speed: 0.56,
         rotation: -0.015,
-        dprMax: 1.5,
+        dprMax: 1,
       });
       organism.setShape("img:/site/assets/nova-nuggets-particle-mark.png");
       host.__csFooterFaceOrganism = organism;
@@ -2198,6 +2198,21 @@
     } catch (e) {
       // The static mark remains visible where WebGL is unavailable.
     }
+  }
+
+  function unmountFooterFace(host) {
+    if (!host) return;
+    if (host.__csFooterFaceRetry) window.clearTimeout(host.__csFooterFaceRetry);
+    host.__csFooterFaceRetry = null;
+    if (!host.__csFooterFaceOrganism) {
+      host.__csFooterFaceStarted = false;
+      host.classList.remove("is-live");
+      return;
+    }
+    try { host.__csFooterFaceOrganism.destroy(); } catch (e) {}
+    host.__csFooterFaceOrganism = null;
+    host.__csFooterFaceStarted = false;
+    host.classList.remove("is-live");
   }
 
   function initFooterFace() {
@@ -2209,10 +2224,12 @@
       return;
     }
     var observer = new IntersectionObserver(function (entries) {
-      if (!entries.some(function (entry) { return entry.isIntersecting; })) return;
-      observer.disconnect();
-      mountFooterFace(host);
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) mountFooterFace(host);
+        else unmountFooterFace(host);
+      });
     }, { rootMargin: "280px 0px" });
+    host.__csFooterFaceObserver = observer;
     observer.observe(host);
   }
 
