@@ -9,7 +9,13 @@
 
   function rewriteAppLink(link) {
     var current = new URL(link.getAttribute("href"));
-    link.setAttribute("href", appBase + current.pathname + current.search + current.hash);
+    var rewrittenHref = appBase + current.pathname + current.search + current.hash;
+    // The observer below watches href mutations. Avoid writing the same value
+    // on a local/default-origin link, otherwise its own mutation is observed
+    // forever and can starve the browser renderer.
+    if (link.getAttribute("href") !== rewrittenHref) {
+      link.setAttribute("href", rewrittenHref);
+    }
   }
 
   function rewriteAppLinks(root) {

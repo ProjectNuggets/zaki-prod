@@ -2167,6 +2167,51 @@
     organism.setPalette(__tok("--org-a", "#3a3a22"), __tok("--org-b", "#131309"));
   }
 
+  function initGateFace(gate) {
+    // The welcome mark is a small, self-contained bit of orientation. Keep the
+    // static asset in place for reduced-motion and WebGL-blocked visitors.
+    if (!gate || gate !== state.gate || !gate.isConnected || PREFERS_REDUCED) return;
+    var host = gate.querySelector(".cs-guide-face");
+    if (!host || host.__csFaceStarted) return;
+    if (!window.createOrganism) {
+      host.__csFaceRetry = window.setTimeout(function () { initGateFace(gate); }, 70);
+      return;
+    }
+    host.__csFaceStarted = true;
+    try {
+      var organism = window.createOrganism(host, {
+        // This is intentionally much smaller than the historical 9k-particle
+        // gate: it is visible at the welcome size without competing with the
+        // first product scene that begins after the visitor chooses.
+        count: window.innerWidth < 760 ? 1400 : 2800,
+        blending: "normal",
+        colorA: __tok("--org-a", "#3a3a22"),
+        colorB: __tok("--org-b", "#131309"),
+        alpha: 2.2,
+        freq: 1.6,
+        amp: 0.28,
+        speed: 0.82,
+        rotation: 0.02,
+        dprMax: 1,
+      });
+      organism.setShape("img:/site/assets/nova-nuggets-particle-mark.png");
+      host.__csFaceOrganism = organism;
+      host.classList.add("is-live");
+    } catch (e) {
+      // The static mark remains visible if this browser cannot make a context.
+    }
+  }
+
+  function destroyGateFace(gate) {
+    var host = gate && gate.querySelector(".cs-guide-face");
+    if (!host) return;
+    if (host.__csFaceRetry) window.clearTimeout(host.__csFaceRetry);
+    host.__csFaceRetry = null;
+    if (host.__csFaceOrganism && host.__csFaceOrganism.destroy) host.__csFaceOrganism.destroy();
+    host.__csFaceOrganism = null;
+    host.classList.remove("is-live");
+  }
+
   function mountFooterFace(host) {
     if (!host || host.__csFooterFaceStarted) return;
     // Keep the footer's static mark for people who opt out of motion.
@@ -4631,6 +4676,9 @@
   // Keep a durable state value as well as the event: the selected path can
   // finish before a late-loading consumer attaches its listener.
   function emitGateUnlocked(mode, source) {
+    // The hero listens for this boundary. Release the welcome context before
+    // any consumer can respond and allocate the product scene.
+    destroyGateFace(state.gate);
     if (window.__csGateUnlocked) return;
     if (!window.__csGateUnlockPending) {
       window.__csGateUnlockPending = {
@@ -4728,8 +4776,7 @@
     document.documentElement.classList.add("cs-guide-locked");
     document.body.appendChild(gate);
     setGateBackgroundInert(gate, true);
-    // The gate portrait is the static fallback image already in this markup.
-    // Do not mount a WebGL renderer before the visitor makes a choice.
+    initGateFace(gate);
     // Each choice is a subagent type; ZAKI remains the primary presence.
     Array.prototype.forEach.call(gate.querySelectorAll(".cs-guide-slot"), function (slot) {
       slot.addEventListener("click", function () {

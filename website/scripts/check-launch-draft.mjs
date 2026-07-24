@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 
 const websiteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const root = resolve(websiteRoot, process.argv[2] || "launch-draft");
@@ -147,7 +148,10 @@ assert.match(html, /_gateRemovalObserver\.observe\(document\.body, \{ childList:
 assert.match(html, /new IntersectionObserver\([\s\S]{0,500}rootMargin: '180px 0px'/, "offscreen organisms are instantiated on proximity");
 assert.match(html, /this\._activeOrganism && this\._activeOrganism !== c\) unmount\(this\._activeOrganism\)/, "only one organism renderer can stay live");
 assert.match(mascot, /function emitGateUnlocked\([\s\S]{0,1600}cs:gate-unlocked/, "gate publishes a durable unlock event");
-assert.doesNotMatch(mascot, /function initGateFace\(/, "gate does not allocate a WebGL face at first paint");
+assert.match(mascot, /function initGateFace\(gate\)[\s\S]{0,1600}PREFERS_REDUCED\) return;[\s\S]{0,1000}count: window\.innerWidth < 760 \? 1400 : 2800/, "welcome gate restores a bounded animated mark with a reduced-motion fallback");
+assert.match(mascot, /function destroyGateFace\(gate\)[\s\S]{0,900}__csFaceOrganism\.destroy\(\)/, "welcome gate releases its renderer");
+assert.match(mascot, /initGateFace\(gate\);/, "welcome gate starts its bounded animation after mounting");
+assert.match(mascot, /function emitGateUnlocked\(mode, source\) \{\s*\/\/ The hero listens for this boundary\.[\s\S]{0,240}destroyGateFace\(state\.gate\);\s*if \(window\.__csGateUnlocked\) return;/, "welcome renderer is released before the unlock signal starts the hero");
 assert.match(mascot, /count: window\.innerWidth < 760 \? 1400 : 2800/, "footer renderer has a constrained budget");
 assert.match(mascot, /function unmountFooterFace\([\s\S]{0,900}__csFooterFaceOrganism\.destroy\(\)/, "footer releases its renderer after it leaves view");
 assert.match(organism, /powerPreference: "default"/, "organisms leave GPU lane selection to the browser");
@@ -156,6 +160,51 @@ assert.match(runtimeConfig, /APP_BASE_URL/);
 assert.match(runtimeConfig, /a\[href\^="https:\/\/app\.chatzaki\.com"\]/);
 assert.match(runtimeConfig, /MutationObserver/);
 assert.match(runtimeConfig, /attributeFilter:\s*\["href"\]/);
+assert.match(runtimeConfig, /if \(link\.getAttribute\("href"\) !== rewrittenHref\) \{\s*link\.setAttribute\("href", rewrittenHref\);\s*\}/, "same-origin CTA rewrites do not feed the href observer forever");
+
+function runRuntimeConfig(appBase) {
+  let href = "https://app.chatzaki.com/agent?source=website#start";
+  let writes = 0;
+  let observerCallback;
+  const selector = 'a[href^="https://app.chatzaki.com"]';
+  const link = {
+    getAttribute(name) { return name === "href" ? href : null; },
+    setAttribute(name, value) {
+      assert.equal(name, "href");
+      writes += 1;
+      href = value;
+    },
+    matches(value) { return value === selector && href.startsWith("https://app.chatzaki.com"); }
+  };
+  function RuntimeMutationObserver(callback) {
+    observerCallback = callback;
+  }
+  RuntimeMutationObserver.prototype.observe = function () {};
+
+  runInNewContext(runtimeConfig, {
+    URL,
+    Node: { ELEMENT_NODE: 1 },
+    MutationObserver: RuntimeMutationObserver,
+    window: { __ZAKI_WEBSITE_ENV__: { APP_BASE_URL: appBase } },
+    document: {
+      documentElement: { dataset: {} },
+      querySelectorAll(value) { return value === selector ? [link] : []; }
+    }
+  });
+  return {
+    get href() { return href; },
+    get writes() { return writes; },
+    triggerHrefMutation() { observerCallback([{ type: "attributes", target: link, addedNodes: [] }]); }
+  };
+}
+
+const localRuntime = runRuntimeConfig("https://app.chatzaki.com");
+assert.equal(localRuntime.writes, 0, "same-origin initial CTA rewrite is a no-op");
+localRuntime.triggerHrefMutation();
+assert.equal(localRuntime.writes, 0, "same-origin href mutation does not feed the observer loop");
+const stagingRuntime = runRuntimeConfig("https://app-staging.chatzaki.ai");
+assert.equal(stagingRuntime.writes, 1, "staging runtime config still rewrites the CTA origin");
+assert.equal(stagingRuntime.href, "https://app-staging.chatzaki.ai/agent?source=website#start");
 assert.match(nginx, /location = \/site\/runtime-config\.js \{\s*add_header Cache-Control "no-store" always;/);
 assert.match(nginx, /map \$host \$zaki_robots_tag \{\s*default "";\s*staging\.chatzaki\.com "noindex, nofollow, noarchive";/, "nginx.conf: staging noindex map");
 assert.match(nginx, /add_header X-Robots-Tag \$zaki_robots_tag always;/, "nginx.conf: staging robots header");
