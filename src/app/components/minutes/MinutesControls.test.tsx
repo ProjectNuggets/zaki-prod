@@ -74,7 +74,9 @@ describe("MinutesControls", () => {
     mockControl.mockReset().mockResolvedValue(AVAILABLE);
     mockConsent.mockReset().mockResolvedValue({ state: "ready", policyVersion: "minutes-capture-consent-v1" });
     mockCapture.mockReset().mockResolvedValue({ captureId: "capture-01", meetingId: "meeting-01", state: "requested" });
-    mockCaptureStatus.mockReset();
+    // The status query auto-fires once a capture exists — default it to a live, non-terminal
+    // state so unrelated capture tests don't trip the "query data cannot be undefined" error.
+    mockCaptureStatus.mockReset().mockResolvedValue({ captureId: "capture-01", meetingId: "meeting-01", state: "requested", capturedSecondsTotal: 0, terminal: false });
     mockStop.mockReset();
     mockForget.mockReset().mockResolvedValue({
       status: "completed",
@@ -157,6 +159,26 @@ describe("MinutesControls", () => {
       platform: "teams",
       meetingUrl: "https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0",
     }));
+  });
+
+  test("polls the live capture state and nudges the user to admit the waiting bot", async () => {
+    mockCaptureStatus.mockResolvedValue({ captureId: "capture-01", meetingId: "meeting-01", state: "awaiting_admission", capturedSecondsTotal: 0, terminal: false });
+    renderControls();
+
+    expect(await screen.findByRole("heading", { name: "Minutes controls" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Allow ZAKI Minutes to request a visible capture bot." }));
+    fireEvent.click(screen.getByRole("button", { name: "Save consent" }));
+    expect(await screen.findByRole("heading", { name: "Request a visible bot" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Meeting URL"), { target: { value: "https://meet.google.com/abc-defg-hij" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "I confirm the bot will be visible and attendees will be told before capture starts." }));
+    fireEvent.click(screen.getByRole("button", { name: "Request capture" }));
+
+    // The status query auto-fires once a capture exists (no manual click) and surfaces the
+    // live state as a badge plus an admit nudge while the bot waits in the meeting lobby.
+    await waitFor(() => expect(mockCaptureStatus).toHaveBeenCalledWith("capture-01"));
+    expect(await screen.findByText("Waiting to be admitted")).toBeInTheDocument();
+    expect(screen.getByText(/waiting room/)).toBeInTheDocument();
   });
 
   test("hides the capture form after a saved consent disables capture", async () => {

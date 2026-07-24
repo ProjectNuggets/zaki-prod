@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, CalendarClock, CircleAlert, CircleCheck, Eraser, Link2, RefreshCw, Square, Unplug } from "lucide-react";
+import { Bot, CalendarClock, CircleAlert, CircleCheck, DoorOpen, Eraser, Link2, RefreshCw, Square, Unplug } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { V2Button, V2Panel, V2PanelBody, V2PanelHead } from "@/app/components/v2";
+import { V2Badge, V2Button, V2Panel, V2PanelBody, V2PanelHead, type V2BadgeTone } from "@/app/components/v2";
 import {
   MinutesApiError,
   disconnectCalendar,
@@ -18,6 +18,7 @@ import {
   stopMinutesCapture,
   type CalendarJoinScope,
   type MinutesCaptureResult,
+  type MinutesCaptureStatus,
   type MinutesControlRetention,
 } from "@/lib/minutesApi";
 
@@ -145,7 +146,7 @@ function ConsentForm({
       <p className="text-xs leading-5 text-[var(--v2-ink-2)]">{t("minutes.retentionForeverHint", { defaultValue: "“Forever” keeps meetings until you delete them (system maximum ≈ 10 years). Transcript and summary share one window; changes apply to future captures only." })}</p>
       {!validRetention ? <p role="alert" className="text-xs text-[var(--v2-danger)]">{t("minutes.retentionInvalid", { defaultValue: "Choose a retention window and keep audio between 0 and 365 days." })}</p> : null}
       {consent.isError ? <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]"><CircleAlert className="size-3.5" aria-hidden />{t("minutes.consentUnavailable", { defaultValue: "Consent could not be saved." })}<V2Button size="sm" type="button" onClick={() => consent.variables && consent.mutate(consent.variables)}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div> : null}
-      {consent.isSuccess ? <p role="status" className="text-xs text-[var(--v2-accent)]">{consent.data.state === "ready" ? t("minutes.consentSaved", { defaultValue: "Consent saved." }) : t("minutes.consentDisabled", { defaultValue: "Capture remains disabled by this consent." })}</p> : null}
+      {consent.isSuccess ? <p role="status" className="text-xs text-[var(--v2-success)]">{consent.data.state === "ready" ? t("minutes.consentSaved", { defaultValue: "Consent saved." }) : t("minutes.consentDisabled", { defaultValue: "Capture remains disabled by this consent." })}</p> : null}
       <V2Button type="submit" size="sm" variant="primary" disabled={!validRetention || consent.isPending}>{consent.isPending ? t("minutes.savingConsent", { defaultValue: "Saving consent…" }) : t("minutes.saveConsent", { defaultValue: "Save consent" })}</V2Button>
     </form>
   </section>;
@@ -265,7 +266,7 @@ function CalendarAutojoin() {
       <div><V2Button size="sm" variant="primary" disabled={connect.isPending} onClick={() => connect.mutate()}><Link2 className="size-3.5" aria-hidden />{connect.isPending ? t("minutes.calendarConnecting", { defaultValue: "Connecting…" }) : needsReconnect ? t("minutes.calendarReconnect", { defaultValue: "Reconnect Google Calendar" }) : t("minutes.calendarConnect", { defaultValue: "Connect Google Calendar" })}</V2Button></div>
     </div> : <div className="grid gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-xs text-[var(--v2-ink-2)]"><CircleCheck className="size-3.5 text-[var(--v2-accent)]" aria-hidden />{t("minutes.calendarConnectedMeta", { defaultValue: "Google Calendar connected" })}</span>
+        <span className="flex items-center gap-1.5 text-xs text-[var(--v2-ink-2)]"><CircleCheck className="size-3.5 text-[var(--v2-success)]" aria-hidden />{t("minutes.calendarConnectedMeta", { defaultValue: "Google Calendar connected" })}</span>
         <V2Button size="sm" disabled={disconnect.isPending} onClick={() => disconnect.mutate()}><Unplug className="size-3.5" aria-hidden />{disconnect.isPending ? t("minutes.calendarDisconnecting", { defaultValue: "Disconnecting…" }) : t("minutes.calendarDisconnect", { defaultValue: "Disconnect" })}</V2Button>
       </div>
 
@@ -285,7 +286,7 @@ function CalendarAutojoin() {
           </label>
           <p className="text-xs leading-5 text-[var(--v2-ink-2)]">{t("minutes.calendarAutojoinFinePrint", { defaultValue: "Auto-join also requires capture consent (above) to stay on. Only Google Meet links are joined for now. Each meeting still shows the visible bot notice." })}</p>
           {save.isError ? <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]"><CircleAlert className="size-3.5" aria-hidden />{t("minutes.calendarAutojoinSaveFailed", { defaultValue: "Auto-join settings could not be saved." })}<V2Button size="sm" type="button" onClick={() => save.mutate()}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div> : null}
-          {save.isSuccess ? <p role="status" className="text-xs text-[var(--v2-accent)]">{save.data.enabled ? t("minutes.calendarAutojoinOn", { defaultValue: "Auto-join is on." }) : t("minutes.calendarAutojoinOff", { defaultValue: "Auto-join is off." })}</p> : null}
+          {save.isSuccess ? <p role="status" className="text-xs text-[var(--v2-success)]">{save.data.enabled ? t("minutes.calendarAutojoinOn", { defaultValue: "Auto-join is on." }) : t("minutes.calendarAutojoinOff", { defaultValue: "Auto-join is off." })}</p> : null}
           <div><V2Button type="submit" size="sm" variant="primary" disabled={save.isPending}>{save.isPending ? t("minutes.savingConsent", { defaultValue: "Saving…" }) : t("minutes.calendarSaveAutojoin", { defaultValue: "Save auto-join" })}</V2Button></div>
         </form>}
     </div>}
@@ -314,6 +315,29 @@ const PLATFORM_LABELS: Record<"google_meet" | "teams", string> = {
   teams: "Microsoft Teams",
 };
 
+// Human label + badge tone for a live capture state. `live` (non-terminal) states
+// pulse the badge dot; awaiting_admission is the one the user must act on (amber).
+// `default` covers "requested" and any unmapped state so the switch stays total.
+function captureStateMeta(
+  state: MinutesCaptureStatus["state"],
+  t: (key: string, opts: { defaultValue: string }) => string,
+): { tone: V2BadgeTone; label: string; live: boolean } {
+  switch (state) {
+    case "joining": return { tone: "default", label: t("minutes.captureStateJoining", { defaultValue: "Joining…" }), live: true };
+    case "awaiting_admission": return { tone: "warn", label: t("minutes.captureStateAwaiting", { defaultValue: "Waiting to be admitted" }), live: true };
+    case "active": return { tone: "success", label: t("minutes.captureStateActive", { defaultValue: "Capturing" }), live: true };
+    case "stopping": return { tone: "default", label: t("minutes.captureStateStopping", { defaultValue: "Stopping…" }), live: true };
+    case "completed": return { tone: "success", label: t("minutes.captureStateCompleted", { defaultValue: "Completed" }), live: false };
+    case "failed": return { tone: "danger", label: t("minutes.captureStateFailed", { defaultValue: "Failed" }), live: false };
+    default: return { tone: "default", label: t("minutes.captureStateRequested", { defaultValue: "Requested" }), live: true };
+  }
+}
+
+function CaptureStatePill({ state, t }: { state: MinutesCaptureStatus["state"]; t: (key: string, opts: { defaultValue: string }) => string }) {
+  const meta = captureStateMeta(state, t);
+  return <V2Badge tone={meta.tone} dot pulse={meta.live}>{meta.label}</V2Badge>;
+}
+
 function CaptureForm({ enabled }: { enabled: boolean }) {
   const { t } = useTranslation();
   const [meetingUrl, setMeetingUrl] = useState("");
@@ -321,10 +345,20 @@ function CaptureForm({ enabled }: { enabled: boolean }) {
   const [capture, setCapture] = useState<MinutesCaptureResult | null>(null);
   const platform = detectPlatform(meetingUrl);
   const requestCapture = useMutation({ mutationFn: requestMinutesCapture, onSuccess: setCapture });
-  const status = useMutation({ mutationFn: getMinutesCaptureStatus });
+  // Poll live capture state while a capture exists and hasn't gone terminal, so the
+  // user watches it advance (joining → awaiting_admission → active) without clicking.
+  // refetchInterval returns false at terminal to stop; it also self-pauses on hidden tabs.
+  const status = useQuery({
+    queryKey: ["minutes", "capture", capture?.captureId ?? "none"],
+    queryFn: () => getMinutesCaptureStatus(capture!.captureId),
+    enabled: Boolean(capture?.captureId),
+    retry: false,
+    gcTime: 0,
+    refetchInterval: (query) => (query.state.data?.terminal ? false : 5000),
+  });
   const stop = useMutation({
     mutationFn: ({ captureId, idempotencyKey }: { captureId: string; idempotencyKey: string }) => stopMinutesCapture(captureId, idempotencyKey),
-    onSuccess: () => status.reset(),
+    onSuccess: () => { void status.refetch(); },
   });
 
   if (!enabled) return <p className="mt-4 text-xs text-[var(--v2-ink-2)]">{t("minutes.captureDisabledByConsent", { defaultValue: "Enable capture consent to request a meeting bot." })}</p>;
@@ -355,7 +389,22 @@ function CaptureForm({ enabled }: { enabled: boolean }) {
       {requestCapture.isError ? <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]"><CircleAlert className="size-3.5" aria-hidden />{t("minutes.captureUnavailable", { defaultValue: "The capture request could not be sent." })}<V2Button size="sm" type="button" onClick={() => requestCapture.variables && requestCapture.mutate(requestCapture.variables)}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div> : null}
       <V2Button type="submit" size="sm" variant="primary" disabled={!meetingUrl || !platform || !visibleBotAttested || requestCapture.isPending}><Bot className="size-3.5" aria-hidden />{requestCapture.isPending ? t("minutes.requestingCapture", { defaultValue: "Requesting…" }) : t("minutes.requestCapture", { defaultValue: "Request capture" })}</V2Button>
     </form>
-    {capture ? <div className="mt-4 border border-[var(--v2-hairline)] bg-[var(--v2-bg)] p-3" aria-live="polite"><p className="text-sm font-medium">{t("minutes.captureRequested", { defaultValue: "Capture requested" })}</p><p className="mt-1 font-mono text-[10px] text-[var(--v2-ink-2)]">{capture.captureId}</p>{status.data ? <p className="mt-2 text-xs text-[var(--v2-ink-2)]">{t("minutes.captureState", { defaultValue: "State" })}: {status.data.state}{status.data.failureCode ? ` (${status.data.failureCode})` : ""}</p> : null}{status.isError ? <div role="alert" className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]">{t("minutes.captureStatusUnavailable", { defaultValue: "Capture status is unavailable." })}<V2Button size="sm" onClick={() => status.variables && status.mutate(status.variables)}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div> : null}{stop.isError ? <div role="alert" className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]">{t("minutes.stopUnavailable", { defaultValue: "The stop request could not be sent." })}<V2Button size="sm" onClick={() => stop.variables && stop.mutate(stop.variables)}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div> : null}{stop.isSuccess ? <p role="status" className="mt-2 text-xs text-[var(--v2-accent)]">{t("minutes.stopRequested", { defaultValue: "Stop request sent. Check status for completion." })}</p> : null}<div className="mt-3 flex flex-wrap gap-2"><V2Button size="sm" onClick={() => status.mutate(capture.captureId)}><RefreshCw className="size-3.5" aria-hidden />{t("minutes.checkCaptureStatus", { defaultValue: "Check status" })}</V2Button><V2Button size="sm" disabled={Boolean(status.data?.terminal) || stop.isPending} onClick={() => stop.mutate({ captureId: capture.captureId, idempotencyKey: idempotencyKey("minutes-stop") })}><Square className="size-3.5" aria-hidden />{t("minutes.stopCapture", { defaultValue: "Stop capture" })}</V2Button></div></div> : null}
+    {capture ? <div className="mt-4 border border-[var(--v2-hairline)] bg-[var(--v2-bg)] p-3" aria-live="polite">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-medium">{t("minutes.captureRequested", { defaultValue: "Capture requested" })}</p>
+        {status.data ? <CaptureStatePill state={status.data.state} t={t} /> : null}
+      </div>
+      <p className="mt-1 font-mono text-[10px] text-[var(--v2-ink-2)]">{capture.captureId}</p>
+      {status.data?.failureCode ? <p className="mt-1 font-mono text-[10px] text-[var(--v2-ink-3)]">{status.data.failureCode}</p> : null}
+      {status.data?.state === "awaiting_admission" ? <p className="mt-2 flex items-start gap-1.5 text-xs text-[var(--v2-warn)]"><DoorOpen className="mt-px size-3.5 shrink-0" aria-hidden />{t("minutes.captureAwaitingAdmissionHint", { defaultValue: "ZAKI Notetaker is in the waiting room — admit it from your meeting to start the capture." })}</p> : null}
+      {status.isError ? <div role="alert" className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]">{t("minutes.captureStatusUnavailable", { defaultValue: "Capture status is unavailable." })}<V2Button size="sm" onClick={() => void status.refetch()}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div> : null}
+      {stop.isError ? <div role="alert" className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]">{t("minutes.stopUnavailable", { defaultValue: "The stop request could not be sent." })}<V2Button size="sm" onClick={() => stop.variables && stop.mutate(stop.variables)}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div> : null}
+      {stop.isSuccess ? <p role="status" className="mt-2 text-xs text-[var(--v2-success)]">{t("minutes.stopRequested", { defaultValue: "Stop request sent. The capture will finish shortly." })}</p> : null}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <V2Button size="sm" onClick={() => void status.refetch()}><RefreshCw className="size-3.5" aria-hidden />{t("minutes.checkCaptureStatus", { defaultValue: "Refresh status" })}</V2Button>
+        <V2Button size="sm" disabled={Boolean(status.data?.terminal) || stop.isPending} onClick={() => stop.mutate({ captureId: capture.captureId, idempotencyKey: idempotencyKey("minutes-stop") })}><Square className="size-3.5" aria-hidden />{t("minutes.stopCapture", { defaultValue: "Stop capture" })}</V2Button>
+      </div>
+    </div> : null}
   </section>;
 }
 
@@ -377,7 +426,7 @@ function ForgetMeetingList({ meetings, onForgot }: MinutesControlsProps) {
     <p className="mt-1 text-xs leading-5 text-[var(--v2-ink-2)]">{t("minutes.forgetBody", { defaultValue: "This permanently requests removal of the meeting, transcript, summary, and recording objects." })}</p>
     <ul className="mt-3 grid gap-2">{meetings.map((meeting) => <li key={meeting.id} className="flex flex-wrap items-center justify-between gap-2 border border-[var(--v2-hairline)] bg-[var(--v2-bg)] p-2"><span className="min-w-0 truncate text-sm">{meeting.title}</span>{target?.id === meeting.id ? <span className="flex flex-wrap items-center gap-2 text-xs"><span>{t("minutes.forgetConfirm", { defaultValue: "Forget permanently?" })}</span><V2Button size="sm" variant="primary" disabled={forget.isPending} onClick={() => forget.mutate({ meetingId: meeting.id, key: idempotencyKey("minutes-forget") })}>{t("minutes.forgetAction", { defaultValue: "Forget" })}</V2Button><V2Button size="sm" disabled={forget.isPending} onClick={() => setTarget(null)}>{t("common.cancel", { defaultValue: "Cancel" })}</V2Button></span> : <V2Button size="sm" onClick={() => setTarget(meeting)}><Eraser className="size-3.5" aria-hidden />{t("minutes.forgetAction", { defaultValue: "Forget" })}</V2Button>}</li>)}</ul>
     {forget.isError ? <div role="alert" className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]"><CircleAlert className="size-3.5" aria-hidden />{t("minutes.forgetUnavailable", { defaultValue: "The deletion request could not be completed." })}<V2Button size="sm" onClick={() => forget.variables && forget.mutate(forget.variables)}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div> : null}
-    {receipt ? <p role="status" className="mt-3 text-xs text-[var(--v2-accent)]">{t("minutes.forgetCompleted", { defaultValue: "Deletion receipt recorded." })}</p> : null}
+    {receipt ? <p role="status" className="mt-3 text-xs text-[var(--v2-success)]">{t("minutes.forgetCompleted", { defaultValue: "Deletion receipt recorded." })}</p> : null}
   </section>;
 }
 
