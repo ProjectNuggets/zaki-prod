@@ -204,7 +204,12 @@ describe("MinutesControls", () => {
     expect(await screen.findByRole("heading", { name: "Forget retained meetings" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Forget" }));
     expect(screen.getByText("Forget permanently?")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Forget" }));
+    // The destructive confirm is a danger-variant button and takes focus, so keyboard
+    // users land on it instead of tabbing down from the top of the panel.
+    const confirmForget = screen.getByRole("button", { name: "Forget" });
+    expect(confirmForget).toHaveClass("v2-btn--danger");
+    expect(confirmForget).toHaveFocus();
+    fireEvent.click(confirmForget);
 
     await waitFor(() => expect(mockForget).toHaveBeenCalled());
     expect(mockForget.mock.calls[0]?.slice(0, 2)).toEqual([
