@@ -126,6 +126,7 @@ function ConsentForm({
         <label className="grid gap-1 text-xs text-[var(--v2-ink-2)]">
           <span>{t("minutes.retentionKeep", { defaultValue: "Keep each meeting for" })}</span>
           <select
+            aria-describedby="minutes-retention-hint"
             value={retention.transcript_days}
             onChange={(event) => {
               const days = Number(event.target.value);
@@ -143,7 +144,7 @@ function ConsentForm({
         </label>
         {numberField(retention.audio_days, (audio_days) => setRetention((value) => ({ ...value, audio_days })), 0, 365, t("minutes.audioRetention", { defaultValue: "Audio days (0 = no recording)" }))}
       </div>
-      <p className="text-xs leading-5 text-[var(--v2-ink-2)]">{t("minutes.retentionForeverHint", { defaultValue: "“Forever” keeps meetings until you delete them (system maximum ≈ 10 years). Transcript and summary share one window; changes apply to future captures only." })}</p>
+      <p id="minutes-retention-hint" className="text-xs leading-5 text-[var(--v2-ink-2)]">{t("minutes.retentionForeverHint", { defaultValue: "“Forever” keeps meetings until you delete them (system maximum ≈ 10 years). Transcript and summary share one window; changes apply to future captures only." })}</p>
       {!validRetention ? <p role="alert" className="text-xs text-[var(--v2-danger)]">{t("minutes.retentionInvalid", { defaultValue: "Choose a retention window and keep audio between 0 and 365 days." })}</p> : null}
       {consent.isError ? <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]"><CircleAlert className="size-3.5" aria-hidden />{t("minutes.consentUnavailable", { defaultValue: "Consent could not be saved." })}<V2Button size="sm" type="button" onClick={() => consent.variables && consent.mutate(consent.variables)}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div> : null}
       {consent.isSuccess ? <p role="status" className="text-xs text-[var(--v2-success)]">{consent.data.state === "ready" ? t("minutes.consentSaved", { defaultValue: "Consent saved." }) : t("minutes.consentDisabled", { defaultValue: "Capture remains disabled by this consent." })}</p> : null}
@@ -270,12 +271,12 @@ function CalendarAutojoin() {
         <V2Button size="sm" disabled={disconnect.isPending} onClick={() => disconnect.mutate()}><Unplug className="size-3.5" aria-hidden />{disconnect.isPending ? t("minutes.calendarDisconnecting", { defaultValue: "Disconnecting…" }) : t("minutes.calendarDisconnect", { defaultValue: "Disconnect" })}</V2Button>
       </div>
 
-      {autojoin.isLoading ? <p className="text-xs text-[var(--v2-ink-2)]">{t("minutes.calendarLoadingSettings", { defaultValue: "Loading auto-join settings…" })}</p>
+      {autojoin.isLoading ? <div className="h-40 animate-pulse bg-[var(--v2-bg-raised)]" aria-label={t("minutes.calendarLoadingSettings", { defaultValue: "Loading auto-join settings…" })} />
         : autojoin.isError || !autojoin.data ? <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]"><CircleAlert className="size-3.5" aria-hidden />{t("minutes.calendarAutojoinUnavailable", { defaultValue: "Auto-join settings are unavailable." })}<V2Button size="sm" onClick={() => void autojoin.refetch()}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div>
         : <form className="grid gap-3" onSubmit={(event) => { event.preventDefault(); save.mutate(); }}>
           {autojoin.data.requiresReconsent ? <p className="text-xs text-[var(--v2-danger)]">{t("minutes.calendarReconsent", { defaultValue: "The auto-join terms changed. Re-confirm below to keep auto-join on." })}</p> : null}
           <label className="flex items-start gap-2 text-sm text-[var(--v2-ink-1)]">
-            <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} className="mt-1 size-4 accent-[var(--v2-accent)]" />
+            <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} aria-describedby="minutes-autojoin-fineprint" className="mt-1 size-4 accent-[var(--v2-accent)]" />
             <span>{t("minutes.calendarAutojoinConsent", { defaultValue: "Automatically send the visible notetaker to my upcoming Meet meetings (standing consent)." })}</span>
           </label>
           <label className="grid gap-1 text-xs text-[var(--v2-ink-2)]">
@@ -284,7 +285,7 @@ function CalendarAutojoin() {
               {JOIN_SCOPES.map((scope) => <option key={scope} value={scope}>{joinScopeLabel(scope, t)}</option>)}
             </select>
           </label>
-          <p className="text-xs leading-5 text-[var(--v2-ink-2)]">{t("minutes.calendarAutojoinFinePrint", { defaultValue: "Auto-join also requires capture consent (above) to stay on. Only Google Meet links are joined for now. Each meeting still shows the visible bot notice." })}</p>
+          <p id="minutes-autojoin-fineprint" className="text-xs leading-5 text-[var(--v2-ink-2)]">{t("minutes.calendarAutojoinFinePrint", { defaultValue: "Auto-join also requires capture consent (above) to stay on. Only Google Meet links are joined for now. Each meeting still shows the visible bot notice." })}</p>
           {save.isError ? <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]"><CircleAlert className="size-3.5" aria-hidden />{t("minutes.calendarAutojoinSaveFailed", { defaultValue: "Auto-join settings could not be saved." })}<V2Button size="sm" type="button" onClick={() => save.mutate()}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div> : null}
           {save.isSuccess ? <p role="status" className="text-xs text-[var(--v2-success)]">{save.data.enabled ? t("minutes.calendarAutojoinOn", { defaultValue: "Auto-join is on." }) : t("minutes.calendarAutojoinOff", { defaultValue: "Auto-join is off." })}</p> : null}
           <div><V2Button type="submit" size="sm" variant="primary" disabled={save.isPending}>{save.isPending ? t("minutes.savingConsent", { defaultValue: "Saving…" }) : t("minutes.calendarSaveAutojoin", { defaultValue: "Save auto-join" })}</V2Button></div>
@@ -424,7 +425,7 @@ function ForgetMeetingList({ meetings, onForgot }: MinutesControlsProps) {
   return <section aria-labelledby="minutes-forget-heading" className="pt-5">
     <h3 id="minutes-forget-heading" className="text-sm font-semibold">{t("minutes.forgetTitle", { defaultValue: "Forget retained meetings" })}</h3>
     <p className="mt-1 text-xs leading-5 text-[var(--v2-ink-2)]">{t("minutes.forgetBody", { defaultValue: "This permanently requests removal of the meeting, transcript, summary, and recording objects." })}</p>
-    <ul className="mt-3 grid gap-2">{meetings.map((meeting) => <li key={meeting.id} className="flex flex-wrap items-center justify-between gap-2 border border-[var(--v2-hairline)] bg-[var(--v2-bg)] p-2"><span className="min-w-0 truncate text-sm">{meeting.title}</span>{target?.id === meeting.id ? <span className="flex flex-wrap items-center gap-2 text-xs"><span>{t("minutes.forgetConfirm", { defaultValue: "Forget permanently?" })}</span><V2Button size="sm" variant="primary" disabled={forget.isPending} onClick={() => forget.mutate({ meetingId: meeting.id, key: idempotencyKey("minutes-forget") })}>{t("minutes.forgetAction", { defaultValue: "Forget" })}</V2Button><V2Button size="sm" disabled={forget.isPending} onClick={() => setTarget(null)}>{t("common.cancel", { defaultValue: "Cancel" })}</V2Button></span> : <V2Button size="sm" onClick={() => setTarget(meeting)}><Eraser className="size-3.5" aria-hidden />{t("minutes.forgetAction", { defaultValue: "Forget" })}</V2Button>}</li>)}</ul>
+    <ul className="mt-3 grid gap-2">{meetings.map((meeting) => <li key={meeting.id} className="flex flex-wrap items-center justify-between gap-2 border border-[var(--v2-hairline)] bg-[var(--v2-bg)] p-2"><span className="min-w-0 truncate text-sm">{meeting.title}</span>{target?.id === meeting.id ? <span className="flex flex-wrap items-center gap-2 text-xs"><span>{t("minutes.forgetConfirm", { defaultValue: "Forget permanently?" })}</span><V2Button size="sm" variant="danger" autoFocus disabled={forget.isPending} onClick={() => forget.mutate({ meetingId: meeting.id, key: idempotencyKey("minutes-forget") })}>{t("minutes.forgetAction", { defaultValue: "Forget" })}</V2Button><V2Button size="sm" disabled={forget.isPending} onClick={() => setTarget(null)}>{t("common.cancel", { defaultValue: "Cancel" })}</V2Button></span> : <V2Button size="sm" onClick={() => setTarget(meeting)}><Eraser className="size-3.5" aria-hidden />{t("minutes.forgetAction", { defaultValue: "Forget" })}</V2Button>}</li>)}</ul>
     {forget.isError ? <div role="alert" className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--v2-danger)]"><CircleAlert className="size-3.5" aria-hidden />{t("minutes.forgetUnavailable", { defaultValue: "The deletion request could not be completed." })}<V2Button size="sm" onClick={() => forget.variables && forget.mutate(forget.variables)}>{t("minutes.retry", { defaultValue: "Try again" })}</V2Button></div> : null}
     {receipt ? <p role="status" className="mt-3 text-xs text-[var(--v2-success)]">{t("minutes.forgetCompleted", { defaultValue: "Deletion receipt recorded." })}</p> : null}
   </section>;
