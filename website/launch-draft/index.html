@@ -6,28 +6,29 @@
 
 
 
-<title>ZAKI — Don't start your next chapter alone</title>
+<title>ZAKI — Visible AI work for goals, projects, meetings, and design</title>
 <meta name="robots" content="index,follow">
 <meta name="zaki-website-version" content="5.0.0">
-<meta name="description" content="ZAKI Agent and Spaces are available now for visible AI work and shared project context. Minutes and Design are coming next.">
+<meta name="description" content="ZAKI Agent and Spaces are available now. Minutes and Design are rolling out through staged access for visible work across goals, projects, meetings, and creative direction.">
 <link rel="canonical" href="https://chatzaki.com/">
 <meta name="theme-color" content="#F8F2E9">
-<link rel="icon" type="image/svg+xml" href="/site/assets/favicon.svg">
-<link rel="apple-touch-icon" href="/site/assets/apple-touch-icon.png">
+<link rel="icon" type="image/svg+xml" href="/site/assets/favicon.svg?v=20260723-v5">
+<link rel="apple-touch-icon" href="/site/assets/apple-touch-icon.png?v=20260723-v5">
+<link rel="manifest" href="/site.webmanifest?v=20260723-v5">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://chatzaki.com/">
 <meta property="og:site_name" content="ZAKI">
-<meta property="og:title" content="ZAKI — Don't start your next chapter alone">
-<meta property="og:description" content="Agent and Spaces are available now. Minutes and Design are coming next.">
+<meta property="og:title" content="ZAKI — Visible AI work for goals, projects, meetings, and design">
+<meta property="og:description" content="Agent and Spaces are available now; Minutes and Design are rolling out through staged access for visible work across goals, projects, meetings, and creative direction.">
 <meta property="og:image" content="https://chatzaki.com/site/assets/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@novanuggets">
-<meta name="twitter:title" content="ZAKI — Don't start your next chapter alone">
-<meta name="twitter:description" content="Agent and Spaces are available now. Minutes and Design are coming next.">
+<meta name="twitter:title" content="ZAKI — Visible AI work for goals, projects, meetings, and design">
+<meta name="twitter:description" content="Agent and Spaces are available now; Minutes and Design are rolling out through staged access for visible work across goals, projects, meetings, and creative direction.">
 <meta name="twitter:image" content="https://chatzaki.com/site/assets/og.png">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Nova Nuggets","url":"https://chatzaki.com","email":"support@chatzaki.com","sameAs":["https://github.com/novanuggets","https://x.com/novanuggets","https://www.linkedin.com/company/nova-nuggets/"]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://chatzaki.com/#organization","name":"Nova Nuggets","url":"https://chatzaki.com","email":"support@chatzaki.com","sameAs":["https://github.com/novanuggets","https://x.com/novanuggets","https://www.linkedin.com/company/nova-nuggets/"]},{"@type":"WebSite","@id":"https://chatzaki.com/#website","name":"ZAKI","url":"https://chatzaki.com/","description":"Visible AI work across goals, scoped projects, meetings, and creative direction.","publisher":{"@id":"https://chatzaki.com/#organization"}}]}</script>
 <style>x-dc{display:none!important}</style>
 <script>
 (function(){
@@ -38,6 +39,11 @@
   setTimeout(function () {
     if (!document.querySelector('.cs-guide-gate')) {
       document.documentElement.classList.remove('cs-guide-locked');
+      if (!window.__csGateUnlocked) {
+        var detail = { mode: 'manual', source: 'boot-failsafe', at: Date.now() };
+        window.__csGateUnlocked = detail;
+        try { window.dispatchEvent(new CustomEvent('cs:gate-unlocked', { detail: detail })); } catch (e) {}
+      }
     }
   }, 6500);
   try {
@@ -60,8 +66,8 @@ html{background:var(--bg)}
   --bg:#F8F2E9; --bg-rgb:248,242,233;
   --paper:#EFE3D2;
   --ink:#0D0B09; --ink-rgb:13,11,9;
-  --ink-soft:#544737; --ink-mute:#88735A;
-  --accent:#D24430; --accent-rgb:210,68,48;
+  --ink-soft:#544737; --ink-mute:#745E46;
+  --accent:#E86B56; --accent-rgb:232,107,86;
   --accent-strong:#A33227;
   --ok:#219171;
   --org-a:#A33227; --org-b:#1A0808;
@@ -70,6 +76,12 @@ html{background:var(--bg)}
 #cs-physics-box, #cs-physics-box *{user-select:none;-webkit-user-select:none}
 #cs-physics-box [data-pill]{cursor:grab}
 #cs-physics-box [data-pill]:active{cursor:grabbing}
+.cs-sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}
+  #cs-physics-box{height:auto!important;min-height:0!important;padding:20px!important;display:flex!important;flex-wrap:wrap!important;align-content:flex-start!important;gap:8px!important}
+  #cs-physics-box [data-pill]{position:static!important;transform:none!important}
+}
 :where(a,button,input,summary):focus-visible{outline:2.5px solid var(--ink);outline-offset:3px;border-radius:4px}
 .cs-skip{position:fixed;left:14px;top:-60px;z-index:2147483300;background:var(--ink);color:var(--accent);font-weight:700;padding:10px 18px;border-radius:100px;text-decoration:none;transition:top .2s ease}
 .cs-skip:focus-visible{top:14px}
@@ -87,9 +99,9 @@ try {
 <script defer src="/site/js/react.js?v=1783091630"></script>
 <script defer src="/site/js/react-dom.js?v=1783091630"></script>
 <script defer src="/site/js/dc-runtime.js?v=1783091630"></script>
-<link rel="stylesheet" href="/mascot.css?v=20260713-brandmark-1">
-<script defer src="/mascot.js?v=20260713-brandmark-1"></script>
-<script defer src="/zee-run.js?v=20260712-runner-9"></script>
+<link rel="stylesheet" href="/mascot.css?v=20260723-v5">
+<script defer src="/mascot.js?v=20260723-v5"></script>
+<script defer src="/zee-run.js?v=20260723-v5"></script>
   <script src="/env.js"></script>
   <script defer src="/site/runtime-config.js?v=5.0.0"></script>
 </head>
@@ -462,7 +474,8 @@ try {
 </style>
 </helmet>
 <div id="cs-root" style="position:relative;width:100%;background:var(--bg)">
-<a class="cs-skip" href="#work">Skip to content</a>
+<a class="cs-skip" href="#main-content">Skip to content</a>
+<main id="main-content" tabindex="-1">
 
 
 
@@ -492,7 +505,7 @@ try {
   <!-- HERO -->
   <header id="top" data-screen-label="Hero" style="position:relative;min-height:100svh;display:flex;flex-direction:column;justify-content:center;padding:120px clamp(18px,4vw,44px) 60px;overflow:hidden">
     <!-- centerpiece: living particle organism (three.js) -->
-    <div id="hero-organism" data-organism="" data-org-birth="" data-org-variant="ink" data-org-count="15000" data-org-shape="text:ZAKI" data-org-cycle="text:ZAKI, organic, text:BRAIN, organic" data-org-mobile-shape="organic" data-org-mobile-cycle="organic" data-plx="-0.04" data-plx-c="" style="position:absolute;right:clamp(0px,4vw,80px);top:50%;transform:translateY(-50%);width:clamp(440px,60vw,940px);height:clamp(440px,60vw,940px);z-index:1;pointer-events:none;opacity:0;transition:opacity 1.5s cubic-bezier(.16,1,.3,1) .25s"></div>
+    <div id="hero-organism" data-organism="" data-org-birth="" data-org-variant="ink" data-org-count="6000" data-org-mobile-count="3000" data-org-shape="text:ZAKI" data-org-cycle="text:ZAKI, organic, text:BRAIN, organic" data-org-mobile-shape="organic" data-org-mobile-cycle="organic" data-plx="-0.04" data-plx-c="" style="position:absolute;right:clamp(0px,4vw,80px);top:50%;transform:translateY(-50%);width:clamp(440px,60vw,940px);height:clamp(440px,60vw,940px);z-index:1;pointer-events:none;opacity:0;transition:opacity 1.5s cubic-bezier(.16,1,.3,1) .25s"></div>
     <div data-plx="0.12" style="position:absolute;right:clamp(18px,6vw,90px);top:18%;width:clamp(96px,12vw,150px);height:clamp(96px,12vw,150px);z-index:3">
       <div style="position:absolute;inset:0;animation:cs-spin 13s linear infinite"><svg viewBox="0 0 100 100" style="width:100%;height:100%"><defs><path id="cs-c33" d="M50,50 m-40,0 a40,40 0 1,1 80,0 a40,40 0 1,1 -80,0"></path></defs><text style="font-family:'Geist Mono',monospace;font-size:8.4px;letter-spacing:2.1px;fill:var(--ink);text-transform:uppercase;font-weight:500"><textPath href="#cs-c33" startOffset="0">ZAKI · DON'T START ALONE · LIFE HACKING · </textPath></text></svg></div>
       <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center"><span style="width:38%;height:38%;border-radius:50%;background:var(--ink)"></span></div>
@@ -508,7 +521,7 @@ try {
 
     <div data-reveal="" data-reveal-delay="300" style="position:relative;z-index:2;opacity:0;transform:translateY(18px);transition:opacity .8s cubic-bezier(.16,1,.3,1),transform .8s cubic-bezier(.16,1,.3,1);display:flex;align-items:center;gap:clamp(20px,3vw,40px);flex-wrap:wrap;margin-top:clamp(32px,5vw,56px)">
       <a href="#contact" data-lead="" data-bouncy="" style="cursor:none;display:inline-flex;align-items:center;gap:10px;background:var(--ink);color:var(--accent);text-decoration:none;font-weight:700;font-size:clamp(15px,1.3vw,18px);padding:18px 32px;border-radius:100px;transition:transform .45s cubic-bezier(.34,1.56,.64,1)" style-hover="transform:scale(1.06) rotate(-1.5deg)">Start with ZAKI →</a>
-      <span style="max-width:400px;font-size:clamp(15px,1.2vw,17px);line-height:1.5;font-weight:500">ZAKI is a grow-with-you AI agent for the digital life you already live: plans, conversations, meetings, memory and creation moving through one brain.</span>
+      <span style="max-width:400px;font-size:clamp(15px,1.2vw,17px);line-height:1.5;font-weight:500">ZAKI is a product family for the digital life you already live: goals, project conversations, meetings, and creative work—with distinct context boundaries and visible controls.</span>
     </div>
   </header>
 
@@ -612,7 +625,7 @@ try {
             <div style="margin-top:18px"><span style="display:inline-block;font-family:'Geist Mono',monospace;font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;border:1.5px solid rgba(var(--ink-rgb),.4);border-radius:100px;padding:6px 14px">Minutes + Design</span></div>
           </div>
           <div class="cs-stack-product cs-stack-product--output">
-            <div class="cs-stack-product__top"><span>ZAKI / Minutes + Design</span><span class="cs-stack-product__badge">Coming next</span></div>
+            <div class="cs-stack-product__top"><span>ZAKI / Minutes + Design</span><span class="cs-stack-product__badge">Staged access</span></div>
             <div class="cs-stack-product__output-grid"><div class="cs-stack-product__minutes"><span class="cs-stack-product__minutes-label">Weekly sync</span><div class="cs-stack-product__moment"><time>09:04</time><span>Launch timing settled</span></div><div class="cs-stack-product__moment"><time>09:12</time><span>Decision: pilot with two teams</span></div><div class="cs-stack-product__moment"><time>09:18</time><span>Owner: Ayesha, Friday</span></div></div><div class="cs-stack-product__brief"><div class="cs-stack-product__brief-head"><span>Brief</span><span>v0.1</span></div><strong>Give the release a clear direction.</strong><div class="cs-stack-product__swatches"><i></i><i></i><i></i></div><div class="cs-stack-product__direction">Focused, tangible, ready to iterate.</div></div></div>
             <div class="cs-stack-product__approval"><span>Recap</span><strong>3 decisions · 2 owners</strong><em>Draft</em></div>
           </div>
@@ -763,7 +776,7 @@ try {
   <!-- KINETIC STATEMENT BAND -->  <!-- KINETIC STATEMENT BAND -->
   <section data-dark="" data-screen-label="Statement" style="position:relative;background:var(--ink);color:var(--accent);padding:clamp(70px,13vw,180px) clamp(18px,4vw,44px);overflow:hidden">
     <canvas data-particles="" style="position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none"></canvas>
-    <div data-organism="" data-org-variant="glow" data-org-count="16000" data-org-cycle="organic, organic, organic, organic" style="position:absolute;right:-6%;top:50%;transform:translateY(-50%);width:min(56%,720px);height:100%;z-index:0;pointer-events:none"></div>
+    <div data-organism="" data-org-variant="glow" data-org-count="5000" data-org-mobile-count="2500" data-org-cycle="organic, organic, organic, organic" style="position:absolute;right:-6%;top:50%;transform:translateY(-50%);width:min(56%,720px);height:100%;z-index:0;pointer-events:none"></div>
     <div style="position:relative;z-index:1;max-width:1320px;margin:0 auto">
       <div style="font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:clamp(24px,3vw,40px)"><span data-scramble="">( One brain, many jobs )</span></div>
       <p style="margin:0;font-weight:700;font-size:clamp(2.6rem,9vw,9rem);line-height:.9;letter-spacing:-.04em;text-transform:uppercase">
@@ -851,7 +864,7 @@ try {
         <!-- RIGHT: swapping preview -->
         <div data-reveal="" data-reveal-delay="120" style="opacity:0;transform:translateY(30px);transition:transform .8s cubic-bezier(.16,1,.3,1);position:sticky;top:100px">
           <div class="cs-current-evidence">
-            <div data-item="0" style="position:absolute;inset:0;opacity:1;transform:scale(1);transition:opacity .55s cubic-bezier(.16,1,.3,1),transform .7s cubic-bezier(.16,1,.3,1)">
+            <div data-item="0" aria-hidden="false" style="position:absolute;inset:0;opacity:1;transform:scale(1);transition:opacity .55s cubic-bezier(.16,1,.3,1),transform .7s cubic-bezier(.16,1,.3,1)">
               <div class="cs-current-evidence__chrome"><span style="width:7px;height:7px;border-radius:50%;background:rgba(var(--accent-rgb),.9)"></span><span style="width:7px;height:7px;border-radius:50%;background:rgba(var(--accent-rgb),.45)"></span><span style="width:7px;height:7px;border-radius:50%;background:rgba(var(--accent-rgb),.2)"></span><span>ZAKI / Agent</span></div>
               <div class="cs-product-mock cs-product-mock--agent">
                 <div class="cs-product-mock__top"><span>Private loop</span><span class="cs-product-mock__badge">Running</span></div>
@@ -860,7 +873,7 @@ try {
                 <div class="cs-product-mock__approval"><span>Approval needed</span><strong>Send concise update</strong><em>Ready</em></div>
               </div>
             </div>
-            <div data-item="1" style="position:absolute;inset:0;opacity:0;transform:scale(1.04);transition:opacity .55s cubic-bezier(.16,1,.3,1),transform .7s cubic-bezier(.16,1,.3,1)">
+            <div data-item="1" aria-hidden="true" inert style="position:absolute;inset:0;opacity:0;transform:scale(1.04);transition:opacity .55s cubic-bezier(.16,1,.3,1),transform .7s cubic-bezier(.16,1,.3,1)">
               <div class="cs-current-evidence__chrome"><span style="width:7px;height:7px;border-radius:50%;background:rgba(var(--accent-rgb),.9)"></span><span style="width:7px;height:7px;border-radius:50%;background:rgba(var(--accent-rgb),.45)"></span><span style="width:7px;height:7px;border-radius:50%;background:rgba(var(--accent-rgb),.2)"></span><span>ZAKI / Spaces</span></div>
               <div class="cs-product-mock cs-product-mock--spaces">
                 <div class="cs-product-mock__top"><span>Product launch</span><span class="cs-product-mock__badge">3 sources</span></div>
@@ -868,18 +881,18 @@ try {
                 <div class="cs-product-mock__decision"><span>Decision</span><strong>Ship the onboarding sequence</strong></div>
               </div>
             </div>
-            <div data-item="2" style="position:absolute;inset:0;opacity:0;transform:scale(1.04);transition:opacity .55s cubic-bezier(.16,1,.3,1),transform .7s cubic-bezier(.16,1,.3,1)">
+            <div data-item="2" aria-hidden="true" inert style="position:absolute;inset:0;opacity:0;transform:scale(1.04);transition:opacity .55s cubic-bezier(.16,1,.3,1),transform .7s cubic-bezier(.16,1,.3,1)">
               <div class="cs-current-evidence__chrome"><span style="width:7px;height:7px;border-radius:50%;background:rgba(var(--accent-rgb),.9)"></span><span style="width:7px;height:7px;border-radius:50%;background:rgba(var(--accent-rgb),.45)"></span><span style="width:7px;height:7px;border-radius:50%;background:rgba(var(--accent-rgb),.2)"></span><span>ZAKI / Minutes</span></div>
               <div class="cs-product-mock cs-product-mock--minutes">
-                <div class="cs-product-mock__top"><span>Weekly sync</span><span class="cs-product-mock__badge">Coming next</span></div>
+                <div class="cs-product-mock__top"><span>Weekly sync</span><span class="cs-product-mock__badge">Staged access</span></div>
                 <div class="cs-product-mock__timeline"><div class="cs-product-mock__moment"><time>Capture</time><span>3 decisions extracted</span></div><div class="cs-product-mock__moment"><time>Owner</time><span>Ayesha, Friday</span></div><div class="cs-product-mock__moment"><time>Follow-up</time><span>Partner brief queued</span></div></div>
                 <div class="cs-product-mock__approval"><span>Recap</span><strong>Owners and next steps ready</strong><em>Preview</em></div>
               </div>
             </div>
-            <div data-item="3" style="position:absolute;inset:0;opacity:0;transform:scale(1.04);transition:opacity .55s cubic-bezier(.16,1,.3,1),transform .7s cubic-bezier(.16,1,.3,1)">
+            <div data-item="3" aria-hidden="true" inert style="position:absolute;inset:0;opacity:0;transform:scale(1.04);transition:opacity .55s cubic-bezier(.16,1,.3,1),transform .7s cubic-bezier(.16,1,.3,1)">
               <div class="cs-current-evidence__chrome"><span style="width:7px;height:7px;border-radius:50%;background:rgba(var(--accent-rgb),.9)"></span><span style="width:7px;height:7px;border-radius:50%;background:rgba(var(--accent-rgb),.45)"></span><span style="width:7px;height:7px;border-radius:50%;background:rgba(var(--accent-rgb),.2)"></span><span>ZAKI / Design</span></div>
               <div class="cs-product-mock cs-product-mock--design">
-                <div class="cs-product-mock__top"><span>Feature launch</span><span class="cs-product-mock__badge">Coming next</span></div>
+                <div class="cs-product-mock__top"><span>Feature launch</span><span class="cs-product-mock__badge">Staged access</span></div>
                 <div class="cs-product-mock__brief"><div class="cs-product-mock__brief-head"><span>Direction</span><span>v0.1</span></div><strong>Give the release a clear visual direction.</strong><div class="cs-product-mock__swatches"><i></i><i></i><i></i></div><div class="cs-product-mock__direction">Iterations: v0.1 -> v0.2 -> review</div></div><div class="cs-product-mock__approval"><span>Artifact</span><strong>Landing visual system</strong><em>Preview</em></div>
               </div>
             </div>
@@ -908,7 +921,8 @@ try {
         <h2 style="margin:0;font-weight:700;font-size:clamp(2.2rem,5.6vw,5rem);line-height:.96;letter-spacing:-.035em">ZAKI toolkit</h2>
         <span style="font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:var(--ink);animation:cs-blink 1.4s step-end infinite"></span>Drag &amp; throw — the vocabulary of the ZAKI product family</span>
       </div>
-      <div id="cs-physics-box" style="position:relative;height:clamp(340px,46vw,520px);border:2.5px solid var(--ink);border-radius:26px;background:var(--ink);overflow:hidden;touch-action:none">
+      <p id="cs-toolkit-summary" class="cs-sr-only">ZAKI toolkit vocabulary: Agent, Brain memory, Goal engine, Spaces, Minutes, Design, approvals, meeting capture, follow-up, research, creation, continuity, user control, and signature motion. The animated display is decorative.</p>
+      <div id="cs-physics-box" aria-hidden="true" style="position:relative;height:clamp(340px,46vw,520px);border:2.5px solid var(--ink);border-radius:26px;background:var(--ink);overflow:hidden;touch-action:none">
         <span data-pill="" style="position:absolute;top:0;left:0;will-change:transform;display:inline-flex;align-items:center;gap:7px;background:var(--accent);color:var(--ink);font-weight:700;font-size:clamp(15px,1.6vw,21px);letter-spacing:-.01em;padding:12px 20px;border-radius:100px;white-space:nowrap"><span style="width:8px;height:8px;border-radius:50%;background:var(--ink)"></span>Agent</span>
         <span data-pill="" style="position:absolute;top:0;left:0;will-change:transform;display:inline-flex;align-items:center;background:var(--paper);color:var(--ink);font-weight:700;font-size:clamp(15px,1.6vw,21px);letter-spacing:-.01em;padding:12px 20px;border-radius:100px;white-space:nowrap">Brain memory</span>
         <span data-pill="" style="position:absolute;top:0;left:0;will-change:transform;display:inline-flex;align-items:center;background:transparent;color:var(--accent);border:2px solid var(--accent);font-weight:700;font-size:clamp(15px,1.6vw,21px);letter-spacing:-.01em;padding:12px 20px;border-radius:100px;white-space:nowrap">Goal engine</span> <span data-pill="" style="position:absolute;top:0;left:0;will-change:transform;display:inline-flex;align-items:center;background:transparent;color:var(--accent);border:2px solid var(--accent);font-weight:700;font-size:clamp(15px,1.6vw,21px);letter-spacing:-.01em;padding:12px 20px;border-radius:100px;white-space:nowrap">Spaces</span> <span data-pill="" style="position:absolute;top:0;left:0;will-change:transform;display:inline-flex;align-items:center;background:var(--paper);color:var(--ink);font-weight:700;font-size:clamp(15px,1.6vw,21px);letter-spacing:-.01em;padding:12px 20px;border-radius:100px;white-space:nowrap">Minutes</span>
@@ -934,7 +948,7 @@ try {
       </div>
       <div data-faq="" data-open="0" data-reveal="" style="opacity:0;transform:translateY(20px);transition:opacity .7s cubic-bezier(.16,1,.3,1),transform .7s cubic-bezier(.16,1,.3,1);border-top:2.5px solid var(--ink);padding:clamp(20px,2.4vw,30px) 0">
         <div data-faq-q="" style="cursor:none;display:flex;justify-content:space-between;align-items:center;gap:24px"><span style="font-weight:700;font-size:clamp(1.2rem,2.4vw,2rem);letter-spacing:-.02em">What is ZAKI?</span><span data-faq-ic="" style="flex-shrink:0;font-weight:700;font-size:30px;line-height:1;transition:transform .4s cubic-bezier(.34,1.56,.64,1)">+</span></div>
-        <div data-faq-a="" style="font-size:16px;line-height:1.6;font-weight:500;color:var(--ink-soft);max-width:760px">ZAKI is an AI product family for your digital life. Agent and Spaces are available now for visible work and project context. Minutes and Design are coming next.</div>
+        <div data-faq-a="" style="font-size:16px;line-height:1.6;font-weight:500;color:var(--ink-soft);max-width:760px">ZAKI is an AI product family for visible work. Agent and Spaces are available now; Minutes and Design are rolling out through staged access across meetings and creative direction.</div>
       </div>
       <div data-faq="" data-open="0" data-reveal="" style="opacity:0;transform:translateY(20px);transition:opacity .7s cubic-bezier(.16,1,.3,1),transform .7s cubic-bezier(.16,1,.3,1);border-top:2.5px solid var(--ink);padding:clamp(20px,2.4vw,30px) 0">
         <div data-faq-q="" style="cursor:none;display:flex;justify-content:space-between;align-items:center;gap:24px"><span style="font-weight:700;font-size:clamp(1.2rem,2.4vw,2rem);letter-spacing:-.02em">Is ZAKI just chat?</span><span data-faq-ic="" style="flex-shrink:0;font-weight:700;font-size:30px;line-height:1;transition:transform .4s cubic-bezier(.34,1.56,.64,1)">+</span></div>
@@ -942,7 +956,7 @@ try {
       </div>
       <div data-faq="" data-open="0" data-reveal="" style="opacity:0;transform:translateY(20px);transition:opacity .7s cubic-bezier(.16,1,.3,1),transform .7s cubic-bezier(.16,1,.3,1);border-top:2.5px solid var(--ink);padding:clamp(20px,2.4vw,30px) 0">
         <div data-faq-q="" style="cursor:none;display:flex;justify-content:space-between;align-items:center;gap:24px"><span style="font-weight:700;font-size:clamp(1.2rem,2.4vw,2rem);letter-spacing:-.02em">What products are in the family?</span><span data-faq-ic="" style="flex-shrink:0;font-weight:700;font-size:30px;line-height:1;transition:transform .4s cubic-bezier(.34,1.56,.64,1)">+</span></div>
-        <div data-faq-a="" style="font-size:16px;line-height:1.6;font-weight:500;color:var(--ink-soft);max-width:760px">Agent and Spaces are available now. Minutes and Design are coming next. Agent writes the personal Brain; Spaces keeps a separate project-scoped store.</div>
+        <div data-faq-a="" style="font-size:16px;line-height:1.6;font-weight:500;color:var(--ink-soft);max-width:760px">Agent and Spaces are available now. Minutes and Design are in staged access. Agent writes the personal Brain; Spaces keeps a separate project-scoped store, while Minutes and Design keep their work inside their own product surfaces.</div>
       </div>
       <div data-faq="" data-open="0" data-reveal="" style="opacity:0;transform:translateY(20px);transition:opacity .7s cubic-bezier(.16,1,.3,1),transform .7s cubic-bezier(.16,1,.3,1);border-top:2.5px solid var(--ink);padding:clamp(20px,2.4vw,30px) 0">
         <div data-faq-q="" style="cursor:none;display:flex;justify-content:space-between;align-items:center;gap:24px"><span style="font-weight:700;font-size:clamp(1.2rem,2.4vw,2rem);letter-spacing:-.02em">What does it cost?</span><span data-faq-ic="" style="flex-shrink:0;font-weight:700;font-size:30px;line-height:1;transition:transform .4s cubic-bezier(.34,1.56,.64,1)">+</span></div>
@@ -973,11 +987,13 @@ try {
     </div>
   </section>
 
+  </main>
+
   <!-- FOOTER -->
   <footer data-dark="" style="position:relative;background:var(--ink);color:var(--accent);padding:clamp(40px,6vw,80px) clamp(18px,4vw,44px) clamp(22px,3vw,38px);overflow:hidden">
     <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:20px;margin-bottom:clamp(34px,6vw,70px);font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:.06em;text-transform:uppercase">
       <div style="line-height:1.7">ZAKI by Nova Nuggets®<br><span style="color:var(--ink-mute)">Agent × Spaces × Minutes × Design</span></div>
-      <div style="display:flex;gap:20px;flex-wrap:wrap"><a href="/products/agent/" style="text-decoration:none">Agent</a><a href="/products/spaces/" style="text-decoration:none">Spaces</a><a href="/products/minutes/" style="text-decoration:none">Minutes</a><a href="/products/design/" style="text-decoration:none">Design</a><a href="/pricing/" style="text-decoration:none">Pricing</a><a href="/#how" style="text-decoration:none">Story</a><a href="/#faq" style="text-decoration:none">FAQ</a><a href="/privacy/" style="text-decoration:none">Privacy</a><a href="/terms/" style="text-decoration:none">Terms</a><a href="/play/" style="text-decoration:none">ZEE Run</a></div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap"><a href="/products/agent/" style="text-decoration:none">Agent</a><a href="/products/spaces/" style="text-decoration:none">Spaces</a><a href="/products/minutes/" style="text-decoration:none">Minutes</a><a href="/products/design/" style="text-decoration:none">Design</a><a href="/pricing/" style="text-decoration:none">Pricing</a><a href="/#how" style="text-decoration:none">Story</a><a href="/#faq" style="text-decoration:none">FAQ</a><a href="/privacy/" style="text-decoration:none">Privacy</a><a href="/terms/" style="text-decoration:none">Terms &amp; Conditions</a><a href="/play/" style="text-decoration:none">ZEE Run</a></div>
     </div>
     <div class="cs-footer-face" aria-hidden="true"><img class="cs-footer-face__fallback" src="/site/assets/nova-nuggets-particle-mark.png" alt=""></div>
     <div data-fillword="" style="font-weight:700;font-size:clamp(2.6rem,15vw,15rem);line-height:.8;letter-spacing:-.05em;color:transparent;-webkit-text-stroke:2px var(--accent);transition:color .6s ease,-webkit-text-stroke .6s ease">ZAKI</div>
@@ -1090,27 +1106,31 @@ class Component extends DCLogic {
     this.onResize = () => { this.measure(); this.applyScroll(); };
     window.addEventListener('resize', this.onResize);
 
-    this.initLenis();
-    this.initCursor();
-    this.initMagnetic();
-    this.initMarquee();
     this.initFAQ();
-    this.initLottie();
-    this.initOrganism();
-    this.initColliders();
     this.initShowcase();
-    this.initChapters();
-    this.initParticles();
-    this.initPhysics();
     this.initAnchors();
+    if (!this._reduce) {
+      this.initLenis();
+      this.initCursor();
+      this.initMagnetic();
+      this.initMarquee();
+      this.initLottie();
+      this.waitForGateThenInitOrganism();
+      this.initColliders();
+      this.initChapters();
+      this.initParticles();
+      this.initPhysics();
+    }
     this.initPreloader();
     setTimeout(() => { if (!this._revealReady) { this._revealReady = true; const _p = document.getElementById('cs-pre'); if (_p) _p.style.display = 'none'; this.applyScroll(); } }, 2600);
     this.measure();
     this.applyScroll();
     setTimeout(() => { this.measure(); this.applyScroll(); }, 120);
 
-    this.loop = this.loop.bind(this);
-    this._loopRAF = requestAnimationFrame(this.loop);
+    if (!this._reduce) {
+      this.loop = this.loop.bind(this);
+      this._loopRAF = requestAnimationFrame(this.loop);
+    }
   }
 
   initLenis() {
@@ -1237,6 +1257,40 @@ class Component extends DCLogic {
     });
   }
 
+  waitForGateThenInitOrganism() {
+    if (this._organismBooted || this._destroyed) return;
+    const html = document.documentElement;
+    const begin = () => {
+      if (this._organismBooted || this._destroyed) return;
+      this._organismBooted = true;
+      if (this._gateUnlockObserver) this._gateUnlockObserver.disconnect();
+      if (this._gateRemovalObserver) this._gateRemovalObserver.disconnect();
+      if (this._onGateUnlocked) window.removeEventListener('cs:gate-unlocked', this._onGateUnlocked);
+      this.initOrganism();
+    };
+
+    // The gate owns first paint. Do not allocate a WebGL context behind it;
+    // mascot.js emits the event after it has released modal isolation. The
+    // class observer is the fail-open path if a delayed/older gate cannot
+    // emit an event.
+    if (window.__csGateUnlocked || (!html.classList.contains('cs-guide-locked') && !document.querySelector('.cs-guide-gate'))) {
+      begin();
+      return;
+    }
+    this._onGateUnlocked = begin;
+    window.addEventListener('cs:gate-unlocked', this._onGateUnlocked, { once: true });
+    const failOpen = () => {
+      // A normal gate removes the lock while its exit animation is still
+      // visible. Wait for its explicit release event; only take this branch
+      // when there is no gate at all (the boot fail-open/older-script case).
+      if (!html.classList.contains('cs-guide-locked') && !document.querySelector('.cs-guide-gate')) begin();
+    };
+    this._gateUnlockObserver = new MutationObserver(failOpen);
+    this._gateUnlockObserver.observe(html, { attributes: true, attributeFilter: ['class'] });
+    this._gateRemovalObserver = new MutationObserver(failOpen);
+    this._gateRemovalObserver.observe(document.body, { childList: true });
+  }
+
   async initOrganism() {
     const els = Array.prototype.slice.call(this.root.querySelectorAll('[data-organism]'));
     if (!els.length) return;
@@ -1249,28 +1303,64 @@ class Component extends DCLogic {
       };
       const create = await this._waitFor(function(){ return window.createOrganism; }, 6000);
       if (!create || this._destroyed) return;
-      this.organisms = []; this._orgIvs = [];
-      els.forEach(c => {
+      this.organisms = []; this._orgEls = els;
+      const unmount = (c) => {
+        if (!c) return;
+        const org = c.__csOrg;
+        if (c.__csOrgCycle) window.clearInterval(c.__csOrgCycle);
+        c.__csOrgCycle = null;
+        if (org && org.destroy) {
+          try { org.destroy(); } catch (e) {}
+        }
+        c.__csOrg = null;
+        if (this.organisms) this.organisms = this.organisms.filter(item => item !== org);
+        if (this._activeOrganism === c) this._activeOrganism = null;
+      };
+      const mount = (c) => {
+        if (!c || c.__csOrg || this._destroyed) return;
+        // The V5 composition uses one live WebGL scene at a time. An offscreen
+        // scene is rebuilt when it returns instead of retaining a second GPU
+        // context behind the user.
+        if (this._activeOrganism && this._activeOrganism !== c) unmount(this._activeOrganism);
         const variant = c.getAttribute('data-org-variant') || 'ink';
         const cfg = variant === 'glow'
           ? { blending: 'additive', background: null, colorA: CS_ORG.ga, colorB: CS_ORG.gb, alpha: 1 }
           : { blending: 'normal', background: null, colorA: CS_ORG.a, colorB: CS_ORG.b, alpha: 2.4 };
-        cfg.count = mobile ? 8000 : (parseInt(c.getAttribute('data-org-count'), 10) || 18000);
-        cfg.freq = 1.6; cfg.amp = 0.34; cfg.speed = 1.0; cfg.rotation = 0.05; cfg.dprMax = 1.6;
-        const org = create(c, cfg);
+        const countAttr = mobile ? 'data-org-mobile-count' : 'data-org-count';
+        cfg.count = parseInt(c.getAttribute(countAttr), 10) || (mobile ? 2800 : 6000);
+        cfg.freq = 1.6; cfg.amp = 0.34; cfg.speed = 1.0; cfg.rotation = 0.05; cfg.dprMax = mobile ? 1 : 1.25;
+        let org;
+        try { org = create(c, cfg); } catch (e) { c.dataset.orgFallback = 'static'; return; }
         org.__csVariant = variant;
         this.organisms.push(org);
         c.__csOrg = org;
-        if (window.__csOrgIO) window.__csOrgIO.observe(c);
+        this._activeOrganism = c;
         const shape = mobile ? (c.getAttribute('data-org-mobile-shape') || c.getAttribute('data-org-shape')) : c.getAttribute('data-org-shape');
         if (shape) org.setShape(resolve(shape));
         const cycle = mobile ? (c.getAttribute('data-org-mobile-cycle') || c.getAttribute('data-org-cycle')) : c.getAttribute('data-org-cycle');
         if (cycle && !reduce) {
           const shapes = cycle.split(',').map(resolve);
           let i = 0;
-          this._orgIvs.push(setInterval(() => { i = (i + 1) % shapes.length; org.setShape(shapes[i]); }, 4200));
+          c.__csOrgCycle = setInterval(() => { i = (i + 1) % shapes.length; org.setShape(shapes[i]); }, 4200);
         }
-      });
+      };
+      this._unmountOrganism = unmount;
+      this._mountOrganism = mount;
+
+      // The hero is the only visual that can become live after the gate.
+      // Every other organism stays a zero-cost DOM placeholder until it nears
+      // the viewport, and the prior scene is disposed before a new one mounts.
+      const hero = els.find(c => c.id === 'hero-organism') || els[0];
+      mount(hero);
+      if (window.IntersectionObserver) {
+        this._organismObserver = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) mount(entry.target);
+            else unmount(entry.target);
+          });
+        }, { rootMargin: '180px 0px' });
+        els.forEach(c => this._organismObserver.observe(c));
+      }
     } catch (e) { console.warn('[organism] init failed', e); }
   }
 
@@ -1351,7 +1441,13 @@ class Component extends DCLogic {
     };
     if (!pre) { this._revealReady = true; return; }
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduce) { if (num) num.textContent = '100'; finish(); return; }
+    if (reduce) {
+      if (num) num.textContent = '100';
+      if (pre) { pre.style.transition = 'none'; pre.style.display = 'none'; }
+      this._revealReady = true;
+      this.applyScroll();
+      return;
+    }
     let v = 0;
     const iv = setInterval(() => {
       v += 4 + Math.random() * 7;
@@ -1370,6 +1466,8 @@ class Component extends DCLogic {
         const on = parseInt(it.getAttribute('data-item'), 10) === i;
         it.style.opacity = on ? '1' : '0';
         it.style.transform = on ? 'scale(1)' : 'scale(1.04)';
+        it.setAttribute('aria-hidden', on ? 'false' : 'true');
+        it.inert = !on;
       });
     };
     rows.forEach(row => {
@@ -1511,10 +1609,15 @@ class Component extends DCLogic {
       const inNav = !!a.closest('#cs-nav');
       a.addEventListener('click', (e) => {
         const id = a.getAttribute('href'); e.preventDefault();
-        if (id === '#' || id === '#top') { inNav ? this.wipeTo(document.getElementById('cs-root')) : (this.lenis ? this.lenis.scrollTo(0, { duration: 0.9, easing: (t) => 1 - Math.pow(1 - t, 3) }) : window.scrollTo(0, 0)); return; }
+        if (id === '#' || id === '#top') { inNav && !this._reduce ? this.wipeTo(document.getElementById('cs-root')) : (this.lenis ? this.lenis.scrollTo(0, { duration: 0.9, easing: (t) => 1 - Math.pow(1 - t, 3) }) : window.scrollTo(0, 0)); return; }
         const t = document.querySelector(id);
         if (!t) return;
-        if (inNav) this.wipeTo(t);
+        if (id === '#main-content') {
+          t.focus({ preventScroll: true });
+          window.scrollTo(0, Math.max(0, t.getBoundingClientRect().top + (window.scrollY || 0)));
+          return;
+        }
+        if (inNav && !this._reduce) this.wipeTo(t);
         else this.lenis ? this.lenis.scrollTo(t, { offset: -10, duration: 0.9, easing: (t) => 1 - Math.pow(1 - t, 3) }) : window.scrollTo(0, t.getBoundingClientRect().top + (window.scrollY || 0) - 10);
       });
     });
@@ -1688,8 +1791,12 @@ class Component extends DCLogic {
     if (this._onMove) window.removeEventListener('mousemove', this._onMove);
     if (this._loopRAF) cancelAnimationFrame(this._loopRAF);
     this._destroyed = true;
-    if (this._orgIvs) this._orgIvs.forEach(iv => clearInterval(iv));
-    if (this.organisms) this.organisms.forEach(o => { try { o.destroy(); } catch (e) {} });
+    if (this._gateUnlockObserver) this._gateUnlockObserver.disconnect();
+    if (this._gateRemovalObserver) this._gateRemovalObserver.disconnect();
+    if (this._onGateUnlocked) window.removeEventListener('cs:gate-unlocked', this._onGateUnlocked);
+    if (this._organismObserver) this._organismObserver.disconnect();
+    if (this._unmountOrganism && this._orgEls) this._orgEls.forEach(c => this._unmountOrganism(c));
+    else if (this.organisms) this.organisms.forEach(o => { try { o.destroy(); } catch (e) {} });
     if (this._chaptersEl && this._chaptersEl.parentNode) this._chaptersEl.parentNode.removeChild(this._chaptersEl);
     if (this._lottieAnims) this._lottieAnims.forEach(a => { try { a.destroy(); } catch (e) {} });
     if (this.lenis) { try { this.lenis.destroy(); } catch (e) {} }

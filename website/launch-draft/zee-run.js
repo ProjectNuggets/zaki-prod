@@ -65,7 +65,8 @@
     obstacles: [],
     sparks: [],
     player: null,
-    flash: 0
+    flash: 0,
+    opener: null
   };
 
   function bridge() { return window.__csGameBridge || null; }
@@ -124,14 +125,51 @@
     document.head.appendChild(style);
   }
 
+  function focusableIn(root) {
+    return Array.prototype.slice.call(root.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')).filter(function (node) {
+      return !node.hidden && node.offsetParent !== null;
+    });
+  }
+
+  function trapFocus(event) {
+    if (event.key !== "Tab" || !game.root) return;
+    var items = focusableIn(game.root);
+    if (!items.length) { event.preventDefault(); game.root.focus(); return; }
+    var first = items[0], last = items[items.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
+
+  function setBackgroundInert(locked) {
+    Array.prototype.forEach.call(document.body.children, function (node) {
+      if (node === game.root || node.tagName === "SCRIPT" || node.tagName === "STYLE") return;
+      if (locked) {
+        if (node.__csZeeRunA11y) return;
+        node.__csZeeRunA11y = { hidden: node.getAttribute("aria-hidden"), inert: Boolean(node.inert) };
+        node.inert = true;
+        node.setAttribute("aria-hidden", "true");
+        return;
+      }
+      var prior = node.__csZeeRunA11y;
+      if (!prior) return;
+      node.inert = prior.inert;
+      if (prior.hidden === null) node.removeAttribute("aria-hidden");
+      else node.setAttribute("aria-hidden", prior.hidden);
+      delete node.__csZeeRunA11y;
+    });
+  }
+
   function build() {
     if (game.root) return;
     injectCss();
     var root = document.createElement("section");
     root.className = "zee-run";
+    root.setAttribute("role", "dialog");
+    root.setAttribute("aria-modal", "true");
     root.setAttribute("aria-label", "ZEE Run game");
+    root.tabIndex = -1;
     root.innerHTML =
-      '<canvas aria-label="ZEE running and jumping over digital-life obstacles"></canvas>' +
+      '<canvas tabindex="0" aria-label="ZEE running and jumping over digital-life obstacles. Press Space, Enter, or Arrow Up to jump."></canvas>' +
       '<div class="zee-run__hud">' +
         '<div class="zee-run__metric">Score <b data-score>000</b></div>' +
         '<div class="zee-run__logo" data-mode-label>ZAKI / ZEE RUN</div>' +
@@ -153,6 +191,7 @@
       event.preventDefault();
       if (game.mode === "playing") requestJump();
     });
+    root.addEventListener("keydown", trapFocus);
     root.querySelector("[data-exit]").addEventListener("click", exit);
     window.addEventListener("keydown", onKey, true);
     window.addEventListener("resize", resize);
@@ -182,8 +221,17 @@
   function card(html) {
     ui.card.innerHTML = html;
     ui.card.hidden = false;
+    window.setTimeout(function () {
+      if (!game.open || game.mode === "playing") return;
+      var target = focusableIn(ui.card)[0];
+      if (target) target.focus({ preventScroll: true });
+      else if (game.root) game.root.focus({ preventScroll: true });
+    }, 0);
   }
-  function hideCard() { ui.card.hidden = true; }
+  function hideCard() {
+    ui.card.hidden = true;
+    if (game.canvas) game.canvas.focus({ preventScroll: true });
+  }
 
   function showIntro() {
     game.mode = "intro";
@@ -555,6 +603,12 @@
 
   function onKey(event) {
     if (!game.open) return;
+    if ((event.metaKey || event.ctrlKey) && String(event.key).toLowerCase() === "k") {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (event.key === "Tab") { trapFocus(event); return; }
     if (event.key === "Escape") {
       event.preventDefault();
       exit();
@@ -574,6 +628,7 @@
   function open() {
     build();
     if (game.open) return;
+    game.opener = document.activeElement;
     game.open = true;
     window.__csGameEverOpened = true;
     document.documentElement.classList.add("cs-gaming");
@@ -583,6 +638,8 @@
     resize();
     updateHud();
     game.root.classList.add("is-open");
+    setBackgroundInert(true);
+    game.root.focus({ preventScroll: true });
     showIntro();
     game.last = 0;
     game.raf = requestAnimationFrame(loop);
@@ -593,9 +650,12 @@
     game.open = false;
     cancelAnimationFrame(game.raf);
     game.root.classList.remove("is-open");
+    setBackgroundInert(false);
     document.documentElement.classList.remove("cs-gaming");
     document.documentElement.style.overflow = "";
     if (window.__lenis && window.__lenis.start) { try { window.__lenis.start(); } catch (e) {} }
+    if (game.opener && game.opener.isConnected && game.opener.focus) game.opener.focus({ preventScroll: true });
+    game.opener = null;
   }
 
   function exit() {

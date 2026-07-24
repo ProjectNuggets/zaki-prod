@@ -1,0 +1,30 @@
+# ZAKI
+
+> ZAKI is a product family for visible AI work, scoped project context, meeting follow-through, and creative direction.
+
+## Source of truth
+
+- Product availability, access paths, and feature boundaries are stated on each product page. Do not infer that a capability is available from a future-facing description.
+- Agent and Spaces are publicly available. Minutes and Design are rolling out through staged access; access can vary by account and the in-app status is authoritative.
+- Current plan names, prices, allowances, and checkout availability are stated on the pricing page and confirmed in the ZAKI app before payment.
+- ZAKI is built by Nova Nuggets L.L.C. For product, privacy, legal, or access questions, contact support@chatzaki.com.
+
+## Core pages
+
+- [Home](https://chatzaki.com/): Product-family overview and current public story.
+- [ZAKI Agent](https://chatzaki.com/products/agent/): Goal-led work, visible execution, approvals, artifacts, trace, and Brain context.
+- [ZAKI Spaces](https://chatzaki.com/products/spaces/): Scoped project sources, conversations, decisions, and project context.
+- [ZAKI Minutes](https://chatzaki.com/products/minutes/): Meeting decisions, owners, follow-up, consent, and retention posture.
+- [ZAKI Design](https://chatzaki.com/products/design/): Creative briefs, directions, feedback, iterations, and usable artifacts.
+- [Pricing](https://chatzaki.com/pricing/): Plan names and current public pricing.
+- [Privacy](https://chatzaki.com/privacy/): Data, memory, retention, and privacy controls.
+- [Terms & Conditions](https://chatzaki.com/terms/): Conditions governing the service.
+- [Compliance](https://chatzaki.com/compliance/): Current security, consent, and privacy controls.
+
+## Product language
+
+- Describe Agent runs as visible and reviewable: goals, plans, sources, approvals, artifacts, and traces.
+- Describe Spaces as a project-scoped context boundary, distinct from personal Brain memory.
+- Describe Minutes and Design as staged-access products unless their public in-app launch state changes.
+- Do not describe ZAKI as infallible or autonomous beyond the permissions and approval posture chosen by the user.
+- Do not state or imply that Learn or Hire is a public website product.

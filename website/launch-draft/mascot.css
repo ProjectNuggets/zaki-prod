@@ -565,24 +565,11 @@
 
 /* Product cues stay in the same ink-and-ember language as the rest of ZAKI. */
 .cs-guide-choice .cs-guide-dock button.cs-guide-slot[data-slot="original"] .cs-guide-slot__role {
-  left: 10px;
-  top: 15px;
-  width: 28px;
-  height: 7px;
-  border-radius: 2px;
-  background: var(--ink, #0D0B09);
-  box-shadow: inset 0 1px 0 rgba(248, 242, 233, 0.22);
+  display: none;
 }
 
 .cs-guide-choice .cs-guide-dock button.cs-guide-slot[data-slot="original"] .cs-guide-slot__role::after {
-  content: "";
-  position: absolute;
-  left: 3px;
-  top: 2px;
-  width: 8px;
-  height: 2px;
-  background: var(--paper, #EFE3D2);
-  box-shadow: 14px 0 0 var(--paper, #EFE3D2);
+  content: none;
 }
 
 .cs-guide-choice .cs-guide-dock button.cs-guide-slot[data-slot="anillos"] .cs-guide-slot__role {
@@ -1184,11 +1171,19 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto !important; }
   .cs-ai-mascot,
   .cs-ai-mascot *,
   .cs-mascot-trail,
   .cs-guide-stamp,
-  .cs-recycle-chip {
+  .cs-recycle-chip,
+  .cs-guide-gate,
+  .cs-guide-gate *,
+  .cs-chat,
+  .cs-chat *,
+  .cs-worker-card,
+  .cs-sound-chip,
+  .cs-play-chip {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
@@ -1202,6 +1197,34 @@
 .cs-ai-mascot.is-chattable {
   pointer-events: auto;
   cursor: pointer;
+}
+
+button.cs-ai-mascot {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+button.cs-ai-mascot:focus-visible {
+  outline: 3px solid var(--accent, #D24430);
+  outline-offset: 6px;
+}
+
+button.cs-ai-mascot:focus-visible::after {
+  position: absolute;
+  right: calc(100% + 12px);
+  top: 50%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: var(--ink, #0D0B09);
+  color: var(--bg, #F8F2E9);
+  content: "Talk to ZAKI";
+  font: 700 10px/1 ui-monospace, "Geist Mono", monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transform: translateY(-50%);
+  white-space: nowrap;
 }
 
 .cs-chat-veil {

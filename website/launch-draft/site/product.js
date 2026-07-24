@@ -47,38 +47,38 @@
     },
     minutes: {
       name: "Minutes",
-      status: "Coming next",
-      statusClass: "z-status--next",
+      status: "Staged access",
+      statusClass: "z-status--staged",
       kicker: "ZAKI / Minutes",
       title: "Turn a meeting into its next moves.",
-      summary: "ZAKI Minutes is being built to turn a meeting into decisions, owners, and a follow-up draft while keeping the transcript, consent state, and retention controls visible.",
-      cta: "Join the Minutes waitlist",
-      evidenceLabel: "Meeting receipt",
-      evidenceChip: "Draft preview",
+      summary: "ZAKI Minutes is rolling out in staged access for meeting capture, reviewable next moves, and visible meeting-state controls.",
+      cta: "Explore staged access",
+      evidenceLabel: "Meeting workflow",
+      evidenceChip: "Staged rollout",
       mode: "minutes",
       proofTitle: "Capture less. Carry more forward.",
-      proofCopy: "Minutes is deliberately focused on the handoff after a conversation. It keeps the meeting state visible, extracts what changed, and leaves the user in control of the record and the follow-up.",
+      proofCopy: "The staged Minutes workflow is focused on the handoff after a conversation: what changed, who owns the next move, and what a user can review before it moves forward.",
       proofs: [
         ["01", "Make the capture visible", "ZAKI joins as an identified meeting participant. Recording and processing state should never be ambiguous to the user."],
         ["02", "Extract what changed", "Minutes separates decisions, actions, owners, and open questions from the full speaker-aware transcript."],
         ["03", "Keep follow-up reviewable", "The first release prepares a ready-to-send draft. The user reviews it and chooses when and where to send it."],
-        ["04", "Keep retention controllable", "Raw transcripts stay in Minutes with a visible retention window, deletion control, and a retry path when processing fails." ]
+        ["04", "Keep retention reviewable", "The rollout keeps meeting state and follow-up review visible; account-level retention and deletion controls remain the source of truth." ]
       ],
       brain: false
     },
     design: {
       name: "Design",
-      status: "Coming next",
-      statusClass: "z-status--next",
+      status: "Staged access",
+      statusClass: "z-status--staged",
       kicker: "ZAKI / Design",
       title: "Turn a brief into something you can use.",
-      summary: "ZAKI Design is being built to turn intent, audience, and references into a clear creative direction, then keep feedback, iterations, and the usable artifact in one project.",
-      cta: "Join the Design waitlist",
+      summary: "ZAKI Design is rolling out in staged access for creative direction, feedback, iterations, and usable project artifacts.",
+      cta: "Explore staged access",
       evidenceLabel: "Creative direction",
-      evidenceChip: "Iteration 03",
+      evidenceChip: "Staged rollout",
       mode: "design",
       proofTitle: "Direction before decoration.",
-      proofCopy: "Design is built around the decisions that make creative work coherent. The brief, chosen direction, feedback, and artifact remain visible as the work moves from an idea to something usable.",
+      proofCopy: "The staged Design workflow is built around the decisions that make creative work coherent: the brief, direction, feedback, and artifact stay connected as the work moves forward.",
       proofs: [
         ["01", "Start from the purpose", "Ground the work in its audience, objective, message, references, and constraints before choosing a visual answer."],
         ["02", "Choose a direction", "Make typography, color, hierarchy, and rhythm explicit enough that the team can react to one coherent system."],
@@ -92,10 +92,11 @@
   var data = products[product];
   if (!data) return;
 
-  document.title = "ZAKI " + data.name + " — ZAKI Website V5";
   document.querySelectorAll("[data-product-name]").forEach(function (node) { node.textContent = data.name; });
   document.querySelectorAll("[data-status]").forEach(function (node) {
-    node.textContent = data.status;
+    var indicator = node.querySelector("i") || document.createElement("i");
+    indicator.setAttribute("aria-hidden", "true");
+    node.replaceChildren(indicator, document.createTextNode(data.status));
     if (data.statusClass) node.classList.add(data.statusClass);
   });
   document.querySelector("[data-kicker]").textContent = data.kicker;
@@ -145,12 +146,12 @@
   }
   if (data.mode === "minutes") {
     document.querySelectorAll("[data-minutes-handoff]").forEach(function (link) {
-      link.href = "https://app.chatzaki.com/?source=website_product_minutes&intent=waitlist";
+      link.href = "https://app.chatzaki.com/minutes?source=website_product_minutes&intent=minutes";
     });
   }
   if (data.mode === "design") {
     document.querySelectorAll("[data-design-handoff]").forEach(function (link) {
-      link.href = "https://app.chatzaki.com/?source=website_product_design&intent=design_waitlist";
+      link.href = "https://app.chatzaki.com/design?source=website_product_design&intent=design";
     });
   }
   document.querySelector("[data-year]").textContent = new Date().getFullYear();
